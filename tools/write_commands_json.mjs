@@ -5,7 +5,7 @@ import { pathToFileURL } from "node:url";
 import path from "node:path";
 
 // Modules that call `define` on import. Later waves add the command groups here.
-const COMMAND_MODULES = [];
+const COMMAND_MODULES = ["src/commands/scroll.ts", "src/commands/mode.ts"];
 
 export async function write_commands_json(out_dir) {
   const root = path.resolve(import.meta.dirname, "..");
