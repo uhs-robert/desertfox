@@ -4,7 +4,7 @@ OasisFox is a keyboard-first Firefox extension. It has a small scope and one com
 
 The extension works on its own. Oasis Dots adds an optional native host. Through it, Hyprland, Quickshell and the shell list and run the same commands, and which-key can show in the Quickshell HUD.
 
-Status: design only. No code exists yet. [spike.md](spike.md) holds the measurements this design rests on, and [keymap.md](keymap.md) maps every binding in the owner's current browser config to a command here.
+Status: phase 1 is built on the `feat/phase-1-core` branch. [spike.md](spike.md) holds the measurements this design rests on, and [keymap.md](keymap.md) maps every binding in the owner's current browser config to a command here.
 
 ## Constraints from Firefox
 
@@ -207,7 +207,7 @@ Firefox reads `~/.mozilla/managed-storage/<extension id>.json` and gives its `da
 Firefox reads the file only when the extension loads. The spike confirmed this: an edit is invisible until the extension reloads, and Firefox sends no change event. So:
 
 - A `config.reload` command reloads the extension. The new config applies in about 1 s. The reload resets the mode and any open hints.
-- After a reload, the key listeners in open tabs are cut off. OasisFox loads them again into every open tab, unless Firefox does that by itself. Phase 1 tests which one happens.
+- After a reload, the key listeners in open tabs are cut off. Firefox loads the content script into open tabs by itself after `runtime.reload`, so the reinjection step stays only as a fallback (see [spike.md](spike.md), "Phase 1 measurements").
 - In Oasis Dots, a `just oasisfox-config` recipe runs the tool, and a key can run the recipe and then `config.reload`.
 - Users without a shell can import the merged file through the options page. OasisFox stores it in `storage.local`. Managed storage wins when both exist.
 
@@ -258,7 +258,7 @@ The config file is code, so whoever can write it can run code on pages. The file
 
 A Firefox shortcut enters at step 4 through `commands.onCommand`.
 
-The content script must have the keymap before the first key. It reads the compiled prefix tree from `storage.local` at start, buffers keys until the read returns, then replays them. Phase 1 measures that read. If it is slow, the background registers the tree as inline code with Firefox's `contentScripts.register`, so it is present at injection.
+The content script must have the keymap before the first key. It reads the compiled prefix tree from `storage.local` at start, buffers keys until the read returns, then replays them. Phase 1 measured that read at 6-10 ms (median 8), so buffering is enough and inline registration is not needed (see [spike.md](spike.md), "Phase 1 measurements").
 
 ## Bundles and loading
 
@@ -359,5 +359,5 @@ Firefox keeps the background awake while the port is open, which also helps a la
 
 - Moving a tab to another window by prompt (old key `wa`) is assumed unused.
 - The current config sets the new tab page to Tabliss. OasisFox can replace the new tab page with `chrome_url_overrides`, but focus then starts in the address bar. Decide in phase 3.
-- Phase 1 measures the `storage.local` read at content script start, which decides between buffering keys and inline registration.
-- Phase 1 tests whether Firefox loads the content script again into open tabs after `config.reload`.
+- Answered: the `storage.local` read takes 6-10 ms (median 8), so buffering stays and inline registration is not needed. See [spike.md](spike.md), "Phase 1 measurements".
+- Answered: Firefox reloads content scripts into open tabs after `runtime.reload` itself, and the reinjection step stays as a fallback. See [spike.md](spike.md), "Phase 1 measurements".

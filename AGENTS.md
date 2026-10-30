@@ -46,14 +46,14 @@ This repository is public.
 
 ## Commands
 
-Phase 1 adds these recipes. Until they exist, this section describes the plan.
-
 ```bash
 just build       # bundle the extension
 just test        # unit tests: registry, parser, prefix tree, config merge
 just key-test    # real key presses in a nested Hyprland, about a minute
 just sign        # sign as unlisted on addons.mozilla.org
 just install     # install through the Firefox policy file (needs sudo)
+just install-profile <dir>  # install into one Firefox profile directory
+just build-config [dir]     # compile the user config into the managed storage config
 ```
 
 Run `just test` before every commit. Run `just key-test` after a change to keys, modes, the content script or config reload. It needs a nested Hyprland and runs on demand only.
