@@ -1,0 +1,45 @@
+{
+  "format_version": 1,
+  "commands": [
+    { "id": "tab.next", "label": "Next Tab", "intent": "Go to the next tab." },
+    { "id": "tab.prev", "label": "Previous Tab", "intent": "Go to the previous tab." },
+    {
+      "id": "tab.close",
+      "label": "Close Tab",
+      "intent": "Close the current tab.",
+      "params": [{ "name": "focus", "type": "enum", "values": ["right", "left"], "default": "right" }],
+      "count": "repeat"
+    },
+    {
+      "id": "tab.reopen_in_container",
+      "label": "Reopen in Container",
+      "intent": "Reopen the tab in a container.",
+      "params": [{ "name": "container", "type": "string", "values": { "from": "containers" } }]
+    },
+    {
+      "id": "open.url",
+      "name": "open",
+      "aliases": ["o"],
+      "label": "Open URL",
+      "intent": "Open a URL.",
+      "params": [
+        { "name": "url", "type": "string", "rest": true },
+        { "name": "where", "type": "enum", "values": ["current", "new_tab", "background"], "default": "current" },
+        { "name": "container", "type": "string", "values": { "from": "containers" }, "when": { "where": ["new_tab", "background"] } }
+      ]
+    },
+    {
+      "id": "open.search",
+      "name": "search",
+      "aliases": ["s"],
+      "label": "Search",
+      "intent": "Search with an engine.",
+      "params": [
+        { "name": "engine", "type": "enum", "values": { "from": "search_engines" } },
+        { "name": "query", "type": "string", "rest": true, "default": { "from": "selection" } },
+        { "name": "where", "type": "enum", "values": ["current", "new_tab", "background"], "default": "current" },
+        { "name": "depth", "type": "int", "default": 1 }
+      ]
+    }
+  ]
+}

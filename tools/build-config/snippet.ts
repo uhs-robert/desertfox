@@ -1,0 +1,137 @@
+// Turns a snippet file into a registry-shaped entry. The header is the leading
+// run of `// key: value` lines. The whole file stays as the code text.
+//
+// Grammar chosen here, because the design shows one example only:
+//   param: <name> <type> [rest] [default=<value>] [values=a,b,c]
+//   flag:  --<name> [-<c>] <type> [rest] [default=<value>] [values=a,b,c]
+// A bare `default=` word that names a context source (current_url, selection,
+// clipboard) is that source. A double-quoted default is always a literal string.
+
+import type { ContextSourceName, ParamDef, ParamType, ParamValue } from "../../src/shared/command.ts";
+import type { SnippetEntry } from "../../src/shared/config.ts";
+
+const PARAM_TYPES: readonly string[] = ["int", "float", "string", "bool", "enum"];
+const CONTEXT_SOURCES: readonly string[] = ["current_url", "selection", "clipboard"];
+const SINGLE_KEYS = ["id", "label", "intent", "name"] as const;
+const REPEAT_KEYS = ["matches", "param", "flag"] as const;
+const HEADER_LINE = /^\/\/\s*([a-z_]+)\s*:\s*(.*?)\s*$/;
+
+function parse_value(raw: string, type: ParamType): ParamValue | undefined {
+  if (type === "int") return /^-?\d+$/.test(raw) ? Number(raw) : undefined;
+  if (type === "float") return raw !== "" && Number.isFinite(Number(raw)) ? Number(raw) : undefined;
+  if (type === "bool") return raw === "true" ? true : raw === "false" ? false : undefined;
+  return raw.length >= 2 && raw.startsWith('"') && raw.endsWith('"') ? raw.slice(1, -1) : raw;
+}
+
+function parse_param_words(words: string[], name: string, where: string, problems: string[]): ParamDef | undefined {
+  const [type_word, ...options] = words;
+  if (!type_word || !PARAM_TYPES.includes(type_word)) {
+    problems.push(`${where}: "${name}" needs a type, one of ${PARAM_TYPES.join(", ")}`);
+    return undefined;
+  }
+  const type = type_word as ParamType;
+  const param: ParamDef = { name, type };
+  for (const option of options) {
+    if (option === "rest") {
+      param.rest = true;
+    } else if (option.startsWith("values=")) {
+      param.values = option.slice("values=".length).split(",").filter(Boolean);
+    } else if (option.startsWith("default=")) {
+      const raw = option.slice("default=".length);
+      if (type === "string" && CONTEXT_SOURCES.includes(raw)) {
+        param.default = { from: raw as ContextSourceName };
+      } else {
+        const value = parse_value(raw, type);
+        if (value === undefined) problems.push(`${where}: default "${raw}" is not a ${type}`);
+        else param.default = value;
+      }
+    } else {
+      problems.push(`${where}: unknown option "${option}" on "${name}"`);
+    }
+  }
+  if (type === "enum" && !Array.isArray(param.values)) problems.push(`${where}: enum "${name}" needs values=a,b,c`);
+  if (param.rest && type !== "string") problems.push(`${where}: only a string param can be rest`);
+  return param;
+}
+
+function parse_param_line(line: string, where: string, problems: string[]): ParamDef | undefined {
+  const [name, ...words] = line.split(/\s+/);
+  if (!name || !/^[a-z][a-z0-9_]*$/.test(name)) {
+    problems.push(`${where}: param name "${name ?? ""}" must be lowercase with underscores`);
+    return undefined;
+  }
+  return parse_param_words(words, name, where, problems);
+}
+
+function parse_flag_line(line: string, where: string, problems: string[]): ParamDef | undefined {
+  const [long_word, ...rest_words] = line.split(/\s+/);
+  const long_match = long_word?.match(/^--([a-z][a-z0-9_]*)$/);
+  if (!long_match?.[1]) {
+    problems.push(`${where}: flag "${long_word ?? ""}" must look like --name`);
+    return undefined;
+  }
+  let short: string | undefined;
+  const short_match = rest_words[0]?.match(/^-([A-Za-z])$/);
+  if (short_match) {
+    short = short_match[1];
+    rest_words.shift();
+  }
+  const param = parse_param_words(rest_words, long_match[1], where, problems);
+  if (param) param.flag = short ? { short } : {};
+  return param;
+}
+
+export function parse_snippet(file: string, text: string, problems: string[]): SnippetEntry | undefined {
+  const problems_before = problems.length;
+  const single = new Map<string, string>();
+  const repeated = new Map<string, { line_number: number; value: string }[]>();
+
+  const lines = text.split("\n");
+  for (const [index, line] of lines.entries()) {
+    if (!line.startsWith("//")) break;
+    const match = line.match(HEADER_LINE);
+    if (!match?.[1]) continue;
+    const [, key, value = ""] = match;
+    if ((SINGLE_KEYS as readonly string[]).includes(key)) {
+      if (single.has(key)) problems.push(`${file}:${index + 1}: header "${key}" appears twice`);
+      single.set(key, value);
+    } else if ((REPEAT_KEYS as readonly string[]).includes(key)) {
+      repeated.set(key, [...(repeated.get(key) ?? []), { line_number: index + 1, value }]);
+    } else {
+      problems.push(`${file}:${index + 1}: unknown header "${key}"`);
+    }
+  }
+
+  for (const required of ["id", "label", "intent"]) {
+    if (!single.get(required)) problems.push(`${file}: header "${required}" is missing`);
+  }
+  const matches = (repeated.get("matches") ?? []).map((entry) => entry.value).filter(Boolean);
+  if (matches.length === 0) problems.push(`${file}: header "matches" is missing`);
+
+  const params: ParamDef[] = [];
+  for (const key of ["param", "flag"] as const) {
+    for (const { line_number, value } of repeated.get(key) ?? []) {
+      const where = `${file}:${line_number}`;
+      const param = key === "param" ? parse_param_line(value, where, problems) : parse_flag_line(value, where, problems);
+      if (param) params.push(param);
+    }
+  }
+  const seen_names = new Set<string>();
+  for (const param of params) {
+    if (seen_names.has(param.name)) problems.push(`${file}: param "${param.name}" is defined twice`);
+    seen_names.add(param.name);
+  }
+  if (problems.length > problems_before) return undefined;
+
+  const entry: SnippetEntry = {
+    id: single.get("id") ?? "",
+    label: single.get("label") ?? "",
+    intent: single.get("intent") ?? "",
+    matches,
+    code: text,
+  };
+  const name = single.get("name");
+  if (name) entry.name = name;
+  if (params.length > 0) entry.params = params;
+  return entry;
+}
