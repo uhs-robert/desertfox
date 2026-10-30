@@ -119,6 +119,13 @@ function settings_schema(): Schema {
       ignore_sites: { type: "array", items: { type: "string" }, description: "Match patterns where OasisFox starts in ignore mode" },
       search_prefixes: { ...prefix_pair_schema("here"), default: DEFAULT_SETTINGS.search_prefixes },
       container_prefixes: { ...prefix_pair_schema("reopen"), default: DEFAULT_SETTINGS.container_prefixes },
+      home_page: { type: "string", minLength: 1, description: "URL that page.home opens" },
+      default_engine: {
+        type: "string",
+        minLength: 1,
+        default: DEFAULT_SETTINGS.default_engine,
+        description: "Search engine that open.clipboard uses for text that is not a URL. Must name a defined engine",
+      },
       new_tab_page: { type: "string", description: "Reserved" },
     },
     additionalProperties: false,

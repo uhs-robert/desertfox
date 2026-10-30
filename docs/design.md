@@ -103,6 +103,7 @@ type Invocation = { id: string; args?: Record<string, unknown>; count?: number }
 
 - A key binding is one invocation, or an array of invocations that run in order. Pipes have no replacement, because context sources cover the cases the config uses. If a binding ever needs one command's result, a command declares `returns` with a type, and a later step in the array takes it with `{ from: "previous" }`. The keymap loader checks the types. This is not built until a binding needs it.
 - If a binding leaves a required param out, the command line opens and asks for it, with completion for that param's type. This replaces 89 old bindings that opened the command line with text already typed. A binding can prefill the prompt from a context source, for example the current URL for editing.
+- A binding can also carry `prompt: { param, prefill? }`. The key then opens the command palette with the whole command typed in and the param prefilled. Phase 1 refuses such a binding.
 - The command line parses a command name, flags and positional words into an invocation, as described below.
 - Flags exist only on the command line. Keymaps and the native host use the `args` object.
 

@@ -1,4 +1,5 @@
 import type { CommandContext } from "../shared/command.ts";
+import type { FocusPage } from "../shared/messages.ts";
 import { define } from "../shared/registry/index.ts";
 
 export type BrowserDeps = {
@@ -30,9 +31,9 @@ export const browser_browser_deps: BrowserDeps = {
   close_window: (window_id) => browser.windows.remove(window_id),
   focus_window: async (window_id) => void (await browser.windows.update(window_id, { focused: true })),
   activate_tab: async (tab_id) => void (await browser.tabs.update(tab_id, { active: true })),
-  // A fixed string, not user input. Pages the content script cannot run on reject, which is fine.
+  // Pages without a content script reject, which is fine.
   focus_page_content: async (tab_id) => {
-    await browser.tabs.executeScript(tab_id, { code: "window.focus();" }).catch(() => undefined);
+    await browser.tabs.sendMessage(tab_id, { type: "focus_page" } satisfies FocusPage).catch(() => undefined);
   },
 };
 

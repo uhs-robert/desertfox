@@ -22,6 +22,10 @@ export type Settings = {
   search_prefixes: { here: string; new_tab: string };
   // Prefixes of keys generated from `container_keys`: reopen, prompt in new tab.
   container_prefixes: { reopen: string; new_tab: string };
+  // Page that `page.home` opens. Without it the command refuses.
+  home_page?: string;
+  // Search engine name that `open.clipboard` uses when the clipboard text is not a URL.
+  default_engine: string;
   // Reserved. Decided in phase 3.
   new_tab_page?: string;
 };
@@ -32,6 +36,7 @@ export const DEFAULT_SETTINGS: Settings = {
   ignore_sites: [],
   search_prefixes: { here: "s", new_tab: "S" },
   container_prefixes: { reopen: "c", new_tab: "C" },
+  default_engine: "search",
 };
 
 // A snippet becomes a registry entry. The header fills the metadata, the body is the code.

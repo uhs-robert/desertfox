@@ -105,6 +105,8 @@ const SETTING_CHECKS: Record<keyof Settings, (value: unknown) => boolean> = {
   ignore_sites: (value) => Array.isArray(value) && value.every((site) => typeof site === "string" && site !== ""),
   search_prefixes: (value) => is_prefix_pair(value, "here"),
   container_prefixes: (value) => is_prefix_pair(value, "reopen"),
+  home_page: (value) => typeof value === "string" && value !== "",
+  default_engine: (value) => typeof value === "string" && value !== "",
   new_tab_page: (value) => typeof value === "string",
 };
 
@@ -114,6 +116,8 @@ const SETTING_EXPECTATIONS: Record<keyof Settings, string> = {
   ignore_sites: "a list of match pattern strings",
   search_prefixes: '{"here": "...", "new_tab": "..."} with non-empty strings',
   container_prefixes: '{"reopen": "...", "new_tab": "..."} with non-empty strings',
+  home_page: "a non-empty URL string",
+  default_engine: "the name of a search engine",
   new_tab_page: "a string",
 };
 

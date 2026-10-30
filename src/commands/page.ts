@@ -1,7 +1,9 @@
+import { get_config } from "../background/startup.ts";
 import { stop_page } from "../content/handlers/stop.ts";
 import { define } from "../shared/registry/index.ts";
 import { open_in, WHERE_PARAM } from "./open_target.ts";
 import type { Where } from "./open_target.ts";
+import { home_page_url } from "./url_build.ts";
 
 function require_tab_id(tab_id: number | undefined): number {
   if (tab_id === undefined) throw new Error("No tab");
@@ -47,14 +49,11 @@ define("page.stop", {
 define("page.home", {
   name: "home",
   label: "Home Page",
-  intent: "Open the Firefox home page.",
+  intent: "Open the home_page from settings.jsonc.",
   params: [WHERE_PARAM],
   runs_in: "background",
-  needs: ["browserSettings"],
   run: async (ctx, args) => {
-    const setting = await browser.browserSettings.homepageOverride.get({});
-    const home_url = String(setting.value).split("|")[0];
-    if (!home_url) throw new Error("Firefox has no home page set");
+    const home_url = home_page_url((await get_config()).settings.home_page);
     await open_in(ctx, home_url, args.where as Where);
   },
 });

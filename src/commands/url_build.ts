@@ -93,3 +93,21 @@ export function subreddit_search_url(page_url: string, query: string, sub: strin
 export function engine_search_url(template: string, query: string): string {
   return template.split(QUERY_PLACEHOLDER).join(encodeURIComponent(query));
 }
+
+// Refusals are thrown: the router shows the message to the user.
+export function home_page_url(home_page: string | undefined): string {
+  if (!home_page) throw new Error("set home_page in settings.jsonc");
+  return home_page;
+}
+
+export function clipboard_target(
+  text: string,
+  default_engine: string,
+  engines: Record<string, { url: string }>,
+): string {
+  const trimmed = text.trim();
+  if (URL.canParse(trimmed)) return trimmed;
+  const engine = engines[default_engine];
+  if (!engine) throw new Error(`The clipboard is not a URL and the default_engine setting names no search engine: "${default_engine}"`);
+  return engine_search_url(engine.url, trimmed);
+}

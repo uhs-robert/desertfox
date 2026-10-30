@@ -2,7 +2,8 @@ import { get_config } from "../background/startup.ts";
 import { define } from "../shared/registry/index.ts";
 import { CONTAINER_PARAM, open_in, WHERE_PARAM } from "./open_target.ts";
 import type { Where } from "./open_target.ts";
-import { engine_search_url } from "./url_build.ts";
+import { DEFAULT_SETTINGS } from "../shared/config.ts";
+import { clipboard_target, engine_search_url } from "./url_build.ts";
 
 const container_of = (args: Record<string, unknown>) => (typeof args.container === "string" ? args.container : undefined);
 
@@ -41,12 +42,16 @@ define("open.search", {
 define("open.clipboard", {
   name: "paste",
   label: "Open Clipboard",
-  intent: "Open the URL on the clipboard.",
+  intent: "Open the URL on the clipboard. Text that is not a URL is searched with the default_engine setting.",
   params: [WHERE_PARAM, CONTAINER_PARAM],
   runs_in: "background",
   run: async (ctx, args) => {
-    const text = (await navigator.clipboard.readText()).trim();
-    if (!URL.canParse(text)) throw new Error("The clipboard does not hold a URL");
-    await open_in(ctx, text, args.where as Where, container_of(args));
+    const { search_engines, settings } = await get_config();
+    const target = clipboard_target(
+      await navigator.clipboard.readText(),
+      settings.default_engine ?? DEFAULT_SETTINGS.default_engine,
+      search_engines,
+    );
+    await open_in(ctx, target, args.where as Where, container_of(args));
   },
 });

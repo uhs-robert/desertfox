@@ -13,7 +13,6 @@ const ids_in = (keymap: KeymapConfig) =>
   ).map((invocation) => invocation.id);
 
 const used_ids = [...new Set(ids_in(DEFAULT_KEYMAP))];
-// Waves 4a and 4b define these. Until the merge the registry lacks them.
 const missing_ids = used_ids.filter((id) => !registry.get(id));
 
 function compile(keymap: KeymapConfig) {
@@ -25,7 +24,8 @@ function compile(keymap: KeymapConfig) {
   });
 }
 
-test("the default keymap compiles against the full registry with no warnings", { skip: missing_ids.length > 0 && `waits for the merge of waves 4a and 4b, missing: ${missing_ids.join(", ")}` }, () => {
+test("the default keymap compiles against the full registry with no warnings", () => {
+  assert.deepEqual(missing_ids, []);
   const { warnings, compiled } = compile(DEFAULT_KEYMAP);
   assert.deepEqual(warnings, []);
   assert.ok(compiled.modes.normal && compiled.modes.ignore && compiled.modes.browser && compiled.modes.insert);

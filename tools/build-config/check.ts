@@ -102,6 +102,12 @@ export function check_config(
     return `${file}: ${section.replace(/^keymap\./, "keymap ")} "${key}"`;
   };
 
+  const default_engine = merged.settings.default_engine;
+  if (default_engine !== undefined && !engine_names.includes(default_engine)) {
+    const file = merged.origins.get(origin_key("settings", "default_engine")) ?? "config";
+    problems.push(`${file}: default_engine: unknown search engine "${default_engine}"`);
+  }
+
   for (const [mode, entries] of Object.entries(merged.keymap)) {
     if (mode === "search_keys" || mode === "container_keys") {
       for (const [key, name] of Object.entries(entries as Record<string, string>)) {

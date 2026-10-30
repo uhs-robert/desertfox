@@ -13,6 +13,7 @@ import { plan_steps } from "./plan_steps.ts";
 import { run_content_invocation } from "./run_content.ts";
 import { read_context_source } from "./context.ts";
 import { show_toast } from "./toast.ts";
+import { focus_page_content } from "./handlers/focus.ts";
 import { blur_focused_element } from "./handlers/page.ts";
 
 const script_started_ms = performance.now();
@@ -157,6 +158,10 @@ function start(): void {
     const message = raw as BackgroundToContent;
     if (message.type === "ping") return Promise.resolve(true);
     if (message.type === "get_selection") return Promise.resolve(read_context_source("selection"));
+    if (message.type === "focus_page") {
+      focus_page_content();
+      return Promise.resolve(true);
+    }
     if (message.type === "run_in_content") {
       // The router already applied the count, so each invocation runs once.
       for (const invocation of message.invocations) run_content_step(invocation, "ignore");
