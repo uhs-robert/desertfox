@@ -4,10 +4,10 @@ import { define } from "../shared/registry/index.ts";
 define("scroll.lines", {
   name: "scroll",
   label: "Scroll Lines",
-  intent: "Scroll the page down by lines. A negative number scrolls up. A count prefix sets the number of lines.",
+  intent: "Scroll the page down by lines. A negative number scrolls up. A count prefix repeats the scroll.",
   params: [{ name: "count", type: "int", default: 1 }],
   runs_in: "content",
-  count: scroll_lines.count,
+  count: "repeat",
   run: scroll_lines.run,
 });
 
@@ -20,7 +20,7 @@ define("scroll.pixels", {
     { name: "dy", type: "int", default: 0 },
   ],
   runs_in: "content",
-  count: scroll_pixels.count,
+  count: "repeat",
   run: scroll_pixels.run,
 });
 
@@ -30,7 +30,7 @@ define("scroll.pages", {
   intent: "Scroll down by a fraction of the visible height. A negative fraction scrolls up.",
   params: [{ name: "fraction", type: "float", default: 1 }],
   runs_in: "content",
-  count: scroll_pages.count,
+  count: "repeat",
   run: scroll_pages.run,
 });
 
@@ -43,6 +43,5 @@ define("scroll.to", {
     { name: "axis", type: "enum", values: ["x", "y"], default: SCROLL_TO_DEFAULT_AXIS },
   ],
   runs_in: "content",
-  count: scroll_to.count,
   run: scroll_to.run,
 });

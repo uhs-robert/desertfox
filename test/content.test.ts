@@ -11,7 +11,7 @@ import { create_matcher } from "../src/shared/keys/index.ts";
 import { COMPILED_KEYMAP_VERSION } from "../src/shared/index.ts";
 import type { CompiledKeymap, TreeLeaf } from "../src/shared/index.ts";
 
-const leaf = (id: string): TreeLeaf => ({ kind: "leaf", steps: [{ invocation: { id }, runs_in: "content" }] });
+const leaf = (id: string): TreeLeaf => ({ kind: "leaf", steps: [{ invocation: { id }, runs_in: "content", count_rule: "ignore" }] });
 
 const keymap: CompiledKeymap = {
   format_version: COMPILED_KEYMAP_VERSION,
@@ -145,7 +145,7 @@ test("count rules", () => {
 });
 
 test("plan steps batches background runs in order", () => {
-  const step = (id: string, runs_in: "content" | "background") => ({ invocation: { id }, runs_in }) as const;
+  const step = (id: string, runs_in: "content" | "background") => ({ invocation: { id }, runs_in, count_rule: "ignore" }) as const;
   const segments = plan_steps([step("a", "background"), step("b", "background"), step("c", "content"), step("d", "background")], 2);
   assert.deepEqual(segments.map((s) => s.runs_in), ["background", "content", "background"]);
   assert.deepEqual(segments[0], { runs_in: "background", invocations: [{ id: "a", count: 2 }, { id: "b", count: 2 }] });

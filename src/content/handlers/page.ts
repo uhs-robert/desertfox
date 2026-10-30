@@ -26,10 +26,8 @@ export const page_focus_input: ContentHandler = {
     if (!target) throw new Error("No text field on this page");
     target.focus();
   },
-  count: "ignore",
 };
 
 export const page_blur: ContentHandler = {
   run: blur_focused_element,
-  count: "ignore",
 };

@@ -51,23 +51,20 @@ const scroll_by = (dx: number, dy: number) => {
 };
 
 export const scroll_lines: ContentHandler = {
-  run: (args) => scroll_by(0, Number(args.count ?? 1) * LINE_PIXELS),
-  count: { param: "count" },
+  run: (args) => scroll_by(0, Number(args.count) * LINE_PIXELS),
 };
 
 export const scroll_pixels: ContentHandler = {
-  run: (args) => scroll_by(Number(args.dx ?? 0), Number(args.dy ?? 0)),
-  count: "ignore",
+  run: (args) => scroll_by(Number(args.dx), Number(args.dy)),
 };
 
 export const scroll_pages: ContentHandler = {
-  run: (args) => scroll_by(0, Number(args.fraction ?? 1) * scroll_target("y").clientHeight),
-  count: "ignore",
+  run: (args) => scroll_by(0, Number(args.fraction) * scroll_target("y").clientHeight),
 };
 
 export const scroll_to: ContentHandler = {
   run: (args) => {
-    const axis = (args.axis ?? SCROLL_TO_DEFAULT_AXIS) as ScrollAxis;
+    const axis = args.axis as ScrollAxis;
     const target = scroll_target(axis);
     const percent = Number(args.percent);
     if (axis === "x") {
@@ -76,5 +73,4 @@ export const scroll_to: ContentHandler = {
       target.scrollTo({ top: percent_to_offset(percent, target.scrollHeight, target.clientHeight), behavior: "instant" });
     }
   },
-  count: "ignore",
 };

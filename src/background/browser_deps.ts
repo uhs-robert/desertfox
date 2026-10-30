@@ -7,10 +7,7 @@ import type { ReinjectDeps } from "./reload.ts";
 import { deliver_refusal } from "./refusal.ts";
 import type { RouterDeps } from "./router.ts";
 
-// Not in the shared messages yet: the content script answers with the selected text.
-export type GetSelectionRequest = { type: "get_selection" };
-
-export function send_to_tab(tab_id: number, message: BackgroundToContent | GetSelectionRequest): Promise<unknown> {
+export function send_to_tab(tab_id: number, message: BackgroundToContent): Promise<unknown> {
   return browser.tabs.sendMessage(tab_id, message);
 }
 

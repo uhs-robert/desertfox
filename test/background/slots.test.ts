@@ -4,7 +4,7 @@ import { apply_slot_plan, plan_slots, slot_table } from "../../src/background/sl
 import type { TreeBranch, TreeNode } from "../../src/shared/prefix_tree.ts";
 
 function leaf(id: string): TreeNode {
-  return { kind: "leaf", steps: [{ invocation: { id }, runs_in: "background" }] };
+  return { kind: "leaf", steps: [{ invocation: { id }, runs_in: "background", count_rule: "ignore" }] };
 }
 const root = (children: Record<string, TreeNode>): TreeBranch => ({ kind: "branch", children });
 

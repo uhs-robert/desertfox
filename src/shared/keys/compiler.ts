@@ -1,6 +1,6 @@
 // Compiles the merged keymap into the prefix tree the content script walks.
 
-import type { RunsIn } from "../command.ts";
+import type { CountBehavior, RunsIn } from "../command.ts";
 import { COMPILED_KEYMAP_VERSION } from "../prefix_tree.ts";
 import type { CompiledKeymap, LeafStep, TreeBranch } from "../prefix_tree.ts";
 import { DEFAULT_SETTINGS } from "../config.ts";
@@ -9,7 +9,7 @@ import type { KeyBinding } from "../invocation.ts";
 import type { KeymapConfig, KeymapMode } from "../keymap.ts";
 import { parse_sequence } from "./notation.ts";
 
-export type CommandInfo = { runs_in: RunsIn; label: string };
+export type CommandInfo = { runs_in: RunsIn; label: string; count: CountBehavior };
 
 // Returns undefined for an id the registry does not know.
 export type ResolveCommand = (command_id: string) => CommandInfo | undefined;
@@ -78,7 +78,7 @@ function to_steps(mode: KeymapMode, entry: Entry, resolve: ResolveCommand, warni
       return undefined;
     }
     label ??= info.label;
-    steps.push({ invocation, runs_in: info.runs_in });
+    steps.push({ invocation, runs_in: info.runs_in, count_rule: info.count });
   }
   if (steps.length === 0) {
     warnings.push(`${mode}: skipped "${entry.sequence}": empty binding`);

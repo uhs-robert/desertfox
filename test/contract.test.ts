@@ -48,7 +48,7 @@ const open_search: CommandDef = {
 const leaf: TreeLeaf = {
   kind: "leaf",
   label: tab_close.label,
-  steps: [{ invocation: { id: tab_close.id, args: { focus: "left" } }, runs_in: tab_close.runs_in }],
+  steps: [{ invocation: { id: tab_close.id, args: { focus: "left" } }, runs_in: tab_close.runs_in, count_rule: "ignore" }],
 };
 
 const keymap: CompiledKeymap = {

@@ -89,7 +89,7 @@ test("event token equals the parsed notation token", () => {
 });
 
 const resolve = (id: string) =>
-  id.startsWith("bad.") ? undefined : { runs_in: id.startsWith("scroll") ? ("content" as const) : ("background" as const), label: id.toUpperCase() };
+  id.startsWith("bad.") ? undefined : { runs_in: id.startsWith("scroll") ? ("content" as const) : ("background" as const), label: id.toUpperCase(), count: "ignore" as const };
 
 const compile = (keymap: KeymapConfig, settings = {}) => compile_keymap(keymap, settings, resolve);
 
@@ -102,7 +102,7 @@ test("compiler builds the tree with steps, runs_in and label", () => {
   const g = compiled.modes.normal!.children["g"]!;
   assert.equal(g.kind, "branch");
   const gg = g.kind === "branch" ? g.children["g"] : undefined;
-  assert.deepEqual(gg, { kind: "leaf", label: "SCROLL.TO", steps: [{ invocation: { id: "scroll.to" }, runs_in: "content" }] });
+  assert.deepEqual(gg, { kind: "leaf", label: "SCROLL.TO", steps: [{ invocation: { id: "scroll.to" }, runs_in: "content", count_rule: "ignore" }] });
   assert.ok(compiled.modes.browser!.children["<A-j>"]);
   assert.equal(compiled.modes.insert, undefined);
   assert.equal(compiled.which_key_delay_ms, 300);

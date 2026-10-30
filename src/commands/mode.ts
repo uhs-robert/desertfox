@@ -9,7 +9,6 @@ define("mode.set", {
   params: [{ name: "mode", type: "enum", values: SETTABLE_MODES }],
   runs_in: "content",
   modes: ["normal", "insert", "ignore"],
-  count: mode_set.count,
   run: mode_set.run,
 });
 
@@ -19,7 +18,6 @@ define("mode.escape", {
   intent: "Leave insert mode, drop the focus from the field and return to normal mode.",
   runs_in: "content",
   modes: ["normal", "insert"],
-  count: mode_escape.count,
   run: mode_escape.run,
 });
 
@@ -28,7 +26,6 @@ define("mode.pass_next", {
   label: "Pass Next Key",
   intent: "Give the next key to the page instead of OasisFox.",
   runs_in: "content",
-  count: mode_pass_next.count,
   run: mode_pass_next.run,
 });
 
@@ -38,7 +35,6 @@ define("page.focus_input", {
   label: "Focus Input",
   intent: "Focus the first visible text field on the page, preferring one in view.",
   runs_in: "content",
-  count: page_focus_input.count,
   run: page_focus_input.run,
 });
 
@@ -47,6 +43,5 @@ define("page.blur", {
   label: "Blur",
   intent: "Drop the focus from the focused element.",
   runs_in: "content",
-  count: page_blur.count,
   run: page_blur.run,
 });

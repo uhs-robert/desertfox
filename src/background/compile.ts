@@ -14,7 +14,7 @@ import { merge_keymaps } from "./keymap_merge.ts";
 export type CompileInput = {
   config: MergedConfig;
   default_keymap: KeymapConfig;
-  get_command: (command_id: string) => Pick<CommandDef, "id" | "label" | "params" | "runs_in"> | undefined;
+  get_command: (command_id: string) => Pick<CommandDef, "id" | "label" | "params" | "runs_in" | "count"> | undefined;
   enum_sources: EnumSources;
 };
 
@@ -24,7 +24,7 @@ export function compile_config(input: CompileInput): CompileOutput {
   const keymap = merge_keymaps(input.default_keymap, input.config.keymap);
   const { compiled, warnings } = compile_keymap(keymap, input.config.settings, (command_id) => {
     const command = input.get_command(command_id);
-    return command && { runs_in: command.runs_in, label: command.label };
+    return command && { runs_in: command.runs_in, label: command.label, count: command.count ?? "ignore" };
   });
 
   for (const [mode, root] of Object.entries(compiled.modes) as [string, TreeBranch][]) {

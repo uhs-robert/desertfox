@@ -1,7 +1,7 @@
 // Content script entry: a capture listener on keydown, the compiled keymap from
 // storage, and the modes. Runs in the top frame and in same-origin frames.
 
-import type { BackgroundToContent, CompiledKeymap, ContentToBackground, Invocation, RunResponse, TreeLeaf } from "../shared/index.ts";
+import type { BackgroundToContent, CompiledKeymap, ContentToBackground, CountBehavior, Invocation, RunResponse, TreeLeaf } from "../shared/index.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY, COMPILED_KEYMAP_VERSION } from "../shared/index.ts";
 import { create_matcher, event_to_token } from "../shared/keys/index.ts";
 import { is_editable_element } from "./editable.ts";
@@ -35,20 +35,18 @@ async function send_to_background(message: ContentToBackground): Promise<RunResp
   }
 }
 
-function run_content_invocations(invocations: Invocation[]): void {
-  for (const invocation of invocations) {
-    try {
-      run_content_invocation(invocation);
-    } catch (error) {
-      show_toast(message_of(error));
-    }
+function run_content_step(invocation: Invocation, count_rule: CountBehavior): void {
+  try {
+    run_content_invocation(invocation, count_rule);
+  } catch (error) {
+    show_toast(message_of(error));
   }
 }
 
 async function run_leaf(leaf: TreeLeaf, count: number | undefined): Promise<void> {
   for (const segment of plan_steps(leaf.steps, count)) {
     if (segment.runs_in === "content") {
-      run_content_invocations([segment.invocation]);
+      run_content_step(segment.invocation, segment.count_rule);
       continue;
     }
     const response = await send_to_background({ type: "run", invocations: segment.invocations, mode: page_mode.get_mode() });
@@ -157,7 +155,10 @@ function start(): void {
     const message = raw as BackgroundToContent;
     if (message.type === "ping") return Promise.resolve(true);
     if (message.type === "get_selection") return Promise.resolve(read_context_source("selection"));
-    if (message.type === "run_in_content") run_content_invocations(message.invocations);
+    if (message.type === "run_in_content") {
+      // The router already applied the count, so each invocation runs once.
+      for (const invocation of message.invocations) run_content_step(invocation, "ignore");
+    }
     else if (message.type === "refusal") show_toast(message.refusal.message);
     else if (message.type === "set_mode") page_mode.set_mode(message.mode);
     else if (message.type === "tree_updated") void read_keymap().then((keymap) => install_matcher(keymap, false));
