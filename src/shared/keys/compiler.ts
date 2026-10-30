@@ -16,7 +16,7 @@ export type ResolveCommand = (command_id: string) => CommandInfo | undefined;
 
 export type CompileResult = { compiled: CompiledKeymap; warnings: string[] };
 
-type Entry = { sequence: string; tokens: string[]; binding: KeyBinding };
+type Entry = { sequence: string; tokens: string[]; binding: KeyBinding; source_index: number };
 
 const MODES: KeymapMode[] = ["normal", "insert", "ignore", "hint", "cmdline", "browser"];
 
@@ -44,7 +44,7 @@ function entries_for_mode(
 ): Entry[] {
   const sources = [mode === "normal" ? generated_bindings(keymap, settings) : {}, keymap[mode] ?? {}];
   const by_normalized_sequence = new Map<string, Entry>();
-  for (const source of sources) {
+  for (const [source_index, source] of sources.entries()) {
     for (const [sequence, binding] of Object.entries(source)) {
       const parsed = parse_sequence(sequence);
       if (parsed.error !== undefined) {
@@ -55,7 +55,11 @@ function entries_for_mode(
       if (binding === null) {
         by_normalized_sequence.delete(normalized);
       } else {
-        by_normalized_sequence.set(normalized, { sequence, tokens: parsed.tokens, binding });
+        const earlier = by_normalized_sequence.get(normalized);
+        if (earlier && earlier.source_index === source_index) {
+          warnings.push(`${mode}: "${sequence}" and "${earlier.sequence}" are the same keys, kept "${sequence}"`);
+        }
+        by_normalized_sequence.set(normalized, { sequence, tokens: parsed.tokens, binding, source_index });
       }
     }
   }

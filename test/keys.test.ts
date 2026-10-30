@@ -119,7 +119,7 @@ test("compiler warns on duplicates, unknown commands and bad notation, and honou
   const { compiled, warnings } = compile({
     normal: { J: { id: "a.b" }, "<S-j>": { id: "c.d" }, x: { id: "bad.cmd" }, "<S-1>": { id: "a.b" }, k: null },
   });
-  assert.equal(warnings.length, 2);
+  assert.equal(warnings.length, 3);
   assert.ok(warnings.some((warning) => warning.includes('unknown command "bad.cmd"')));
   assert.ok(warnings.some((warning) => warning.includes("<S-1>")));
   assert.equal((compiled.modes.normal!.children["J"] as { steps: { invocation: { id: string } }[] }).steps[0]!.invocation.id, "c.d");
@@ -205,4 +205,11 @@ test("firefox shortcut strings", () => {
   assert.ok(to_firefox_shortcut("<M-j>").error);
   assert.ok(to_firefox_shortcut("<A-j>x").error);
   assert.ok(to_firefox_shortcut("<A-[>").error);
+});
+
+test("two notations for the same keys warn and the last one wins", () => {
+  const { compiled, warnings } = compile({ normal: { J: { id: "a.b" }, "<S-j>": { id: "c.d" } } });
+  assert.equal(warnings.length, 1);
+  assert.ok(warnings[0]!.includes('"<S-j>"') && warnings[0]!.includes('"J"'));
+  assert.equal((compiled.modes.normal!.children["J"] as { steps: { invocation: { id: string } }[] }).steps[0]!.invocation.id, "c.d");
 });
