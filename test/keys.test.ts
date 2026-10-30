@@ -1,0 +1,215 @@
+import assert from "node:assert/strict";
+import { test } from "node:test";
+import {
+  compile_keymap,
+  create_matcher,
+  event_to_token,
+  parse_sequence,
+  to_firefox_shortcut,
+} from "../src/shared/keys/index.ts";
+import type { KeyEventLike } from "../src/shared/keys/index.ts";
+import type { KeymapConfig } from "../src/shared/index.ts";
+
+const tokens_of = (sequence: string) => parse_sequence(sequence).tokens;
+
+const press = (key: string, mods: Partial<KeyEventLike> = {}): KeyEventLike => ({
+  key,
+  code: "",
+  ctrlKey: false,
+  altKey: false,
+  shiftKey: false,
+  metaKey: false,
+  ...mods,
+});
+
+test("parse real key sequences from docs/keymap.md", () => {
+  assert.deepEqual(tokens_of("gx0"), ["g", "x", "0"]);
+  assert.deepEqual(tokens_of("gx$"), ["g", "x", "$"]);
+  assert.deepEqual(tokens_of("<<"), ["<", "<"]);
+  assert.deepEqual(tokens_of(">>"), [">", ">"]);
+  assert.deepEqual(tokens_of("<AC-Escape>"), ["<AC-Escape>"]);
+  assert.deepEqual(tokens_of("<CA-Escape>"), ["<AC-Escape>"]);
+  assert.deepEqual(tokens_of("<AC-`>"), ["<AC-`>"]);
+  assert.deepEqual(tokens_of("<S-Insert>"), ["<S-Insert>"]);
+  assert.deepEqual(tokens_of("<C-[>"), ["<C-[>"]);
+  assert.deepEqual(tokens_of("<F1>"), ["<F1>"]);
+  assert.deepEqual(tokens_of("<A-,>"), ["<A-,>"]);
+  assert.deepEqual(tokens_of("sgth"), ["s", "g", "t", "h"]);
+  assert.deepEqual(tokens_of("<C-x>g;,^"), ["<C-x>", "g", ";", ",", "^"]);
+});
+
+test("shift on a letter without other modifiers is the capital letter", () => {
+  assert.deepEqual(tokens_of("<S-j>"), ["J"]);
+  assert.deepEqual(tokens_of("J"), ["J"]);
+  assert.deepEqual(tokens_of("<C-J>"), ["<C-j>"]);
+  assert.deepEqual(tokens_of("<CS-j>"), ["<CS-j>"]);
+});
+
+test("notation errors", () => {
+  assert.ok(parse_sequence("").error);
+  assert.ok(parse_sequence("<S-1>").error);
+  assert.ok(parse_sequence("g x").error);
+});
+
+test("event to token", () => {
+  assert.equal(event_to_token(press("j")), "j");
+  assert.equal(event_to_token(press("J", { shiftKey: true })), "J");
+  assert.equal(event_to_token(press("$", { shiftKey: true })), "$");
+  assert.equal(event_to_token(press("<", { shiftKey: true })), "<");
+  assert.equal(event_to_token(press("j", { altKey: true })), "<A-j>");
+  assert.equal(event_to_token(press("J", { altKey: true, shiftKey: true })), "<AS-j>");
+  assert.equal(event_to_token(press("x", { ctrlKey: true })), "<C-x>");
+  assert.equal(event_to_token(press("[", { ctrlKey: true })), "<C-[>");
+  assert.equal(event_to_token(press("!", { ctrlKey: true, shiftKey: true })), "<C-!>");
+  assert.equal(event_to_token(press("Escape")), "<Escape>");
+  assert.equal(event_to_token(press("Escape", { shiftKey: true })), "<S-Escape>");
+  assert.equal(event_to_token(press("Escape", { altKey: true, ctrlKey: true })), "<AC-Escape>");
+  assert.equal(event_to_token(press("Insert", { shiftKey: true })), "<S-Insert>");
+  assert.equal(event_to_token(press("F1")), "<F1>");
+  assert.equal(event_to_token(press(" ")), "<Space>");
+  assert.equal(event_to_token(press("Shift", { shiftKey: true })), null);
+  assert.equal(event_to_token(press("Dead")), null);
+});
+
+test("chords on another script fall back to the physical letter", () => {
+  assert.equal(event_to_token(press("в", { ctrlKey: true, code: "KeyD" })), "<C-d>");
+  assert.equal(event_to_token(press("в", { code: "KeyD" })), "в");
+});
+
+test("event token equals the parsed notation token", () => {
+  const cases: [string, KeyEventLike][] = [
+    ["<A-j>", press("j", { altKey: true })],
+    ["<AC-Escape>", press("Escape", { altKey: true, ctrlKey: true })],
+    ["<AC-`>", press("`", { altKey: true, ctrlKey: true })],
+    ["J", press("J", { shiftKey: true })],
+    ["<C-[>", press("[", { ctrlKey: true })],
+    ["<Space>", press(" ")],
+  ];
+  for (const [sequence, event] of cases) assert.deepEqual(tokens_of(sequence), [event_to_token(event)]);
+});
+
+const resolve = (id: string) =>
+  id.startsWith("bad.") ? undefined : { runs_in: id.startsWith("scroll") ? ("content" as const) : ("background" as const), label: id.toUpperCase() };
+
+const compile = (keymap: KeymapConfig, settings = {}) => compile_keymap(keymap, settings, resolve);
+
+test("compiler builds the tree with steps, runs_in and label", () => {
+  const { compiled, warnings } = compile({
+    normal: { gg: { id: "scroll.to" }, "gx$": [{ id: "tab.a" }, { id: "scroll.b" }] },
+    browser: { "<A-j>": { id: "tab.next" } },
+  });
+  assert.deepEqual(warnings, []);
+  const g = compiled.modes.normal!.children["g"]!;
+  assert.equal(g.kind, "branch");
+  const gg = g.kind === "branch" ? g.children["g"] : undefined;
+  assert.deepEqual(gg, { kind: "leaf", label: "SCROLL.TO", steps: [{ invocation: { id: "scroll.to" }, runs_in: "content" }] });
+  assert.ok(compiled.modes.browser!.children["<A-j>"]);
+  assert.equal(compiled.modes.insert, undefined);
+  assert.equal(compiled.which_key_delay_ms, 300);
+});
+
+test("compiler skips the longer entry when a shorter binding is its prefix", () => {
+  const { compiled, warnings } = compile({ normal: { gg: { id: "a.b" }, g: { id: "c.d" }, gz: { id: "e.f" } } });
+  assert.equal(warnings.length, 2);
+  assert.ok(warnings.every((warning) => warning.includes("already a complete binding")));
+  assert.equal(compiled.modes.normal!.children["g"]!.kind, "leaf");
+});
+
+test("compiler warns on duplicates, unknown commands and bad notation, and honours null", () => {
+  const { compiled, warnings } = compile({
+    normal: { J: { id: "a.b" }, "<S-j>": { id: "c.d" }, x: { id: "bad.cmd" }, "<S-1>": { id: "a.b" }, k: null },
+  });
+  assert.equal(warnings.length, 3);
+  assert.ok(warnings.some((warning) => warning.includes('unknown command "bad.cmd"')));
+  assert.ok(warnings.some((warning) => warning.includes("<S-1>")));
+  assert.equal((compiled.modes.normal!.children["J"] as { steps: { invocation: { id: string } }[] }).steps[0]!.invocation.id, "c.d");
+});
+
+test("search_keys and container_keys generate bindings, explicit ones win", () => {
+  const { compiled, warnings } = compile({
+    search_keys: { a: "arch" },
+    container_keys: { a: "Family" },
+    normal: { sa: { id: "custom.one" } },
+  });
+  assert.deepEqual(warnings, []);
+  const children = compiled.modes.normal!.children;
+  const s = children["s"];
+  assert.equal(s?.kind === "branch" && (s.children["a"] as { steps: { invocation: { id: string } }[] }).steps[0]!.invocation.id, "custom.one");
+  assert.ok(children["S"] && children["c"] && children["C"]);
+});
+
+const walk = (matcher: ReturnType<typeof create_matcher>, mode: string, keys: string[]) =>
+  keys.map((key) => matcher.feed(mode, key));
+
+const matcher_for = (keymap: KeymapConfig) => create_matcher(compile(keymap).compiled);
+const leaf_id = (result: ReturnType<ReturnType<typeof create_matcher>["feed"]>) =>
+  result.kind === "match" ? result.leaf.steps[0]!.invocation.id : result.kind;
+
+test("matcher: single key, sequence, pending and mismatch reset", () => {
+  const matcher = matcher_for({ normal: { J: { id: "tab.next" }, gg: { id: "scroll.top" }, "g0": { id: "tab.first" } } });
+  assert.equal(leaf_id(matcher.feed("normal", "J")), "tab.next");
+  assert.equal(matcher.feed("normal", "g").kind, "pending");
+  assert.equal(leaf_id(matcher.feed("normal", "g")), "scroll.top");
+  assert.equal(matcher.feed("normal", "g").kind, "pending");
+  assert.equal(matcher.feed("normal", "z").kind, "no_match");
+  assert.equal(leaf_id(matcher.feed("normal", "J")), "tab.next");
+  assert.equal(matcher.feed("normal", "g").kind, "pending");
+  assert.equal(leaf_id(matcher.feed("normal", "0")), "tab.first");
+  assert.equal(matcher.feed("normal", "q").kind, "no_match");
+});
+
+test("matcher: counts", () => {
+  const matcher = matcher_for({ normal: { J: { id: "tab.next" }, "0": { id: "scroll.left" }, "g0": { id: "tab.first" } } });
+  const first = matcher.feed("normal", "3");
+  assert.deepEqual([first.kind, first.kind === "pending" && first.count], ["pending", 3]);
+  matcher.feed("normal", "1");
+  const thirty_one = matcher.feed("normal", "J");
+  assert.equal(thirty_one.kind === "match" && thirty_one.count, 31);
+  assert.equal(leaf_id(matcher.feed("normal", "0")), "scroll.left");
+  const ten = walk(matcher, "normal", ["1", "0", "J"]).at(-1)!;
+  assert.equal(ten.kind === "match" && ten.count, 10);
+  const after_g = walk(matcher, "normal", ["2", "g", "0"]).at(-1)!;
+  assert.equal(after_g.kind === "match" && after_g.count, 2);
+  assert.equal(leaf_id(after_g), "tab.first");
+});
+
+test("matcher: a bound digit wins at the start, a mismatch drops the count, other modes have no counts", () => {
+  const matcher = matcher_for({ normal: { "1": { id: "bound.one" }, J: { id: "tab.next" } }, ignore: { "<S-Escape>": { id: "mode.set" }, "5": { id: "five" } } });
+  assert.equal(leaf_id(matcher.feed("normal", "1")), "bound.one");
+  matcher.feed("normal", "4");
+  assert.equal(matcher.feed("normal", "z").kind, "no_match");
+  const plain = matcher.feed("normal", "J");
+  assert.equal(plain.kind === "match" && plain.count, undefined);
+  assert.equal(leaf_id(matcher.feed("ignore", "5")), "five");
+  assert.equal(matcher.feed("hint", "a").kind, "no_match");
+});
+
+test("matcher: a mode change resets the walk", () => {
+  const matcher = matcher_for({ normal: { gg: { id: "a.b" } }, ignore: { g: { id: "c.d" } } });
+  matcher.feed("normal", "g");
+  assert.equal(leaf_id(matcher.feed("ignore", "g")), "c.d");
+  assert.equal(matcher.feed("normal", "g").kind, "pending");
+});
+
+test("firefox shortcut strings", () => {
+  assert.equal(to_firefox_shortcut("<A-j>").shortcut, "Alt+J");
+  assert.equal(to_firefox_shortcut("<A-,>").shortcut, "Alt+Comma");
+  assert.ok(to_firefox_shortcut("<AC-Escape>").error);
+  assert.equal(to_firefox_shortcut("<CS-k>").shortcut, "Ctrl+Shift+K");
+  assert.equal(to_firefox_shortcut("<AC-5>").shortcut, "Ctrl+Alt+5");
+  assert.equal(to_firefox_shortcut("<A-ArrowDown>").shortcut, "Alt+Down");
+  assert.equal(to_firefox_shortcut("<F1>").shortcut, "F1");
+  assert.ok(to_firefox_shortcut("j").error);
+  assert.ok(to_firefox_shortcut("J").error);
+  assert.ok(to_firefox_shortcut("<S-Insert>").error);
+  assert.ok(to_firefox_shortcut("<M-j>").error);
+  assert.ok(to_firefox_shortcut("<A-j>x").error);
+  assert.ok(to_firefox_shortcut("<A-[>").error);
+});
+
+test("two notations for the same keys warn and the last one wins", () => {
+  const { compiled, warnings } = compile({ normal: { J: { id: "a.b" }, "<S-j>": { id: "c.d" } } });
+  assert.equal(warnings.length, 1);
+  assert.ok(warnings[0]!.includes('"<S-j>"') && warnings[0]!.includes('"J"'));
+  assert.equal((compiled.modes.normal!.children["J"] as { steps: { invocation: { id: string } }[] }).steps[0]!.invocation.id, "c.d");
+});
