@@ -10,6 +10,7 @@ import { is_ignored_site } from "./match_pattern.ts";
 import { page_mode } from "./page_mode.ts";
 import { plan_steps } from "./plan_steps.ts";
 import { run_content_invocation } from "./run_content.ts";
+import { read_context_source } from "./context.ts";
 import { show_toast } from "./toast.ts";
 import { blur_focused_element } from "./handlers/page.ts";
 
@@ -51,7 +52,8 @@ async function run_leaf(leaf: TreeLeaf, count: number | undefined): Promise<void
       continue;
     }
     const response = await send_to_background({ type: "run", invocations: segment.invocations, mode: page_mode.get_mode() });
-    if (!response.ok) show_toast(response.refusal.message);
+    // The background already shows a refusal toast itself, so a returned refusal is not shown again.
+    if (!response.ok) return;
   }
 }
 
@@ -74,6 +76,7 @@ function cancel(event: Event): void {
 }
 
 function on_keydown(event: KeyboardEvent): void {
+  if (!extension_context_alive()) return stop_listening();
   if (!event.isTrusted || event.isComposing) return;
   const token = event_to_token(event);
   if (token === null) return;
@@ -90,6 +93,26 @@ function on_keypress(event: KeyboardEvent): void {
 function on_keyup(event: KeyboardEvent): void {
   if (!cancelled_codes.delete(event.code)) return;
   cancel(event);
+}
+
+const on_focusin = (event: Event) => follow_focus(true, event);
+const on_focusout = (event: Event) => follow_focus(false, event);
+
+// After the extension reloads, the old script's listeners still fire but its runtime is gone.
+function extension_context_alive(): boolean {
+  try {
+    return browser.runtime.id !== undefined;
+  } catch {
+    return false;
+  }
+}
+
+function stop_listening(): void {
+  window.removeEventListener("keydown", on_keydown, true);
+  window.removeEventListener("keypress", on_keypress, true);
+  window.removeEventListener("keyup", on_keyup, true);
+  window.removeEventListener("focusin", on_focusin, true);
+  window.removeEventListener("focusout", on_focusout, true);
 }
 
 function follow_focus(entered: boolean, event: Event): void {
@@ -122,13 +145,18 @@ function start(): void {
   window.addEventListener("keydown", on_keydown, true);
   window.addEventListener("keypress", on_keypress, true);
   window.addEventListener("keyup", on_keyup, true);
-  window.addEventListener("focusin", (event) => follow_focus(true, event), true);
-  window.addEventListener("focusout", (event) => follow_focus(false, event), true);
+  window.addEventListener("focusin", on_focusin, true);
+  window.addEventListener("focusout", on_focusout, true);
 
-  page_mode.listen((mode) => void send_to_background({ type: "mode_changed", mode }));
+  page_mode.listen((mode) => {
+    if (!extension_context_alive()) return stop_listening();
+    void send_to_background({ type: "mode_changed", mode });
+  });
 
   browser.runtime.onMessage.addListener((raw: unknown) => {
     const message = raw as BackgroundToContent;
+    if (message.type === "ping") return Promise.resolve(true);
+    if (message.type === "get_selection") return Promise.resolve(read_context_source("selection"));
     if (message.type === "run_in_content") run_content_invocations(message.invocations);
     else if (message.type === "refusal") show_toast(message.refusal.message);
     else if (message.type === "set_mode") page_mode.set_mode(message.mode);
@@ -143,4 +171,10 @@ function start(): void {
     });
 }
 
-if (can_reach_top_document()) start();
+// A second injection into the same page must not add a second set of listeners.
+const LOADED_FLAG = "oasisfox_content_loaded";
+const loaded_flags = window as unknown as Record<string, boolean>;
+if (can_reach_top_document() && !loaded_flags[LOADED_FLAG]) {
+  loaded_flags[LOADED_FLAG] = true;
+  start();
+}

@@ -51,4 +51,14 @@ export type TreeUpdated = {
   type: "tree_updated";
 };
 
-export type BackgroundToContent = RunInContent | ShowRefusal | SetMode | TreeUpdated;
+// Asks for the page selection. The content script answers with a string.
+export type GetSelection = {
+  type: "get_selection";
+};
+
+// Presence check before the background injects the content script. Any truthy answer counts.
+export type Ping = {
+  type: "ping";
+};
+
+export type BackgroundToContent = RunInContent | ShowRefusal | SetMode | TreeUpdated | GetSelection | Ping;
