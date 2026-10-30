@@ -46,8 +46,8 @@ export function root_url(page_url: string): string | undefined {
   return url ? `${url.origin}/` : undefined;
 }
 
-export function archive_url(page_url: string): string {
-  return `https://web.archive.org/web/${page_url}`;
+export function archive_url(page_url: string): string | undefined {
+  return parse_http_url(page_url) ? `https://web.archive.org/web/${page_url}` : undefined;
 }
 
 export function isdown_url(page_url: string): string | undefined {
@@ -55,7 +55,8 @@ export function isdown_url(page_url: string): string | undefined {
   return url ? `https://www.isitdownrightnow.com/${url.hostname}.html` : undefined;
 }
 
-export function translate_url(page_url: string): string {
+export function translate_url(page_url: string): string | undefined {
+  if (!parse_http_url(page_url)) return undefined;
   return `https://translate.google.com/translate?sl=auto&tl=en&u=${encodeURIComponent(page_url)}`;
 }
 
@@ -100,13 +101,25 @@ export function home_page_url(home_page: string | undefined): string {
   return home_page;
 }
 
+const CLIPBOARD_URL_SCHEMES = ["http:", "https:", "ftp:", "file:"];
+const LOCALHOST_WITH_PORT = /^localhost:\d+(?:[/?#]\S*)?$/;
+
+// Other schemes (javascript:, data:) and text with a colon ("TODO: fix") are not worth opening, so they search.
+function clipboard_url(text: string): string | undefined {
+  if (LOCALHOST_WITH_PORT.test(text)) return `http://${text}`;
+  if (URL.canParse(text)) return CLIPBOARD_URL_SCHEMES.includes(new URL(text).protocol) ? text : undefined;
+  const looks_like_domain = text.includes(".") && !/\s/.test(text);
+  return looks_like_domain && URL.canParse(`https://${text}`) ? `https://${text}` : undefined;
+}
+
 export function clipboard_target(
   text: string,
   default_engine: string,
   engines: Record<string, { url: string }>,
 ): string {
   const trimmed = text.trim();
-  if (URL.canParse(trimmed)) return trimmed;
+  const url = clipboard_url(trimmed);
+  if (url !== undefined) return url;
   const engine = engines[default_engine];
   if (!engine) throw new Error(`The clipboard is not a URL and the default_engine setting names no search engine: "${default_engine}"`);
   return engine_search_url(engine.url, trimmed);

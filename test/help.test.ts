@@ -59,3 +59,15 @@ test("warnings pass through and a missing keymap gives no keys", () => {
   assert.deepEqual(model.warnings, ["normal: skipped \"x\""]);
   assert.ok(model.groups.every((group) => group.commands.every((command) => command.keys.length === 0)));
 });
+
+test("a key row shows the binding prompt", () => {
+  const { commands } = sample();
+  const registry_compiled = compile_keymap(
+    { normal: { o: { id: "open.url", prompt: { param: "url", prefill: { from: "current_url" } } } } },
+    {},
+    () => ({ runs_in: "background", label: "Open URL", count: "ignore" }),
+  ).compiled;
+  const model = build_help_model(commands, registry_compiled, []);
+  const open = model.groups.find((group) => group.name === "open")!.commands[0]!;
+  assert.deepEqual(open.keys, [{ mode: "normal", keys: "o", args: "prompts for url, prefilled from current_url" }]);
+});

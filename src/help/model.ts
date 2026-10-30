@@ -2,6 +2,7 @@
 
 import type { CommandMeta, ParamDef, ParamValue } from "../shared/command.ts";
 import type { KeymapMode } from "../shared/keymap.ts";
+import type { Prompt } from "../shared/invocation.ts";
 import type { CompiledKeymap, TreeNode } from "../shared/prefix_tree.ts";
 import { is_context_source, is_dynamic_values } from "../shared/registry/params.ts";
 import { usage_line } from "../shared/registry/usage.ts";
@@ -46,9 +47,10 @@ function param_row(param: ParamDef): ParamRow {
   };
 }
 
-function describe_args(args: Record<string, unknown> | undefined, count: number | undefined): string {
+function describe_args(args: Record<string, unknown> | undefined, count: number | undefined, prompt: Prompt | undefined): string {
   const parts = Object.entries(args ?? {}).map(([name, value]) => `${name}=${JSON.stringify(value)}`);
   if (count !== undefined) parts.push(`count=${count}`);
+  if (prompt) parts.push(prompt.prefill ? `prompts for ${prompt.param}, prefilled from ${prompt.prefill.from}` : `prompts for ${prompt.param}`);
   return parts.join(" ");
 }
 
@@ -60,7 +62,7 @@ function collect_keys(node: TreeNode, path: string[], mode: KeymapMode, into: Ma
   }
   for (const step of node.steps) {
     const rows = into.get(step.invocation.id) ?? [];
-    rows.push({ mode, keys: path.join(""), args: describe_args(step.invocation.args, step.invocation.count) });
+    rows.push({ mode, keys: path.join(""), args: describe_args(step.invocation.args, step.invocation.count, step.invocation.prompt) });
     into.set(step.invocation.id, rows);
   }
 }

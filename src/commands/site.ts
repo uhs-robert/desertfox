@@ -54,7 +54,7 @@ define("site.archive", {
   intent: "Open the page in the Internet Archive.",
   params: [WHERE_PARAM],
   runs_in: "background",
-  run: (ctx, args) => open_built(ctx, args.where, "", archive_url),
+  run: (ctx, args) => open_built(ctx, args.where, "This address is not a web page", archive_url),
 });
 
 define("site.isdown", {
@@ -72,5 +72,5 @@ define("site.translate", {
   intent: "Translate the page into English with Google Translate.",
   params: [WHERE_PARAM],
   runs_in: "background",
-  run: (ctx, args) => open_built(ctx, args.where, "", translate_url),
+  run: (ctx, args) => open_built(ctx, args.where, "This address is not a web page", translate_url),
 });

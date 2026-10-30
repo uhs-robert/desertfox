@@ -80,3 +80,17 @@ test("the settings schema lists both settings", () => {
   const properties = (build_schemas(commands).settings as { properties: Record<string, unknown> }).properties;
   assert.ok("home_page" in properties && "default_engine" in properties);
 });
+
+test("open.clipboard searches text that only parses as a URL", () => {
+  for (const text of ["javascript:alert(1)", "TODO: fix thing", "data:text/html,hi", "rust"]) {
+    assert.equal(clipboard_target(text, "search", engines), `https://s.example/?q=${encodeURIComponent(text)}`, text);
+  }
+});
+
+test("open.clipboard opens web schemes, bare domains and localhost with a port", () => {
+  assert.equal(clipboard_target("ftp://f.example/x", "search", engines), "ftp://f.example/x");
+  assert.equal(clipboard_target("file:///tmp/a.html", "search", engines), "file:///tmp/a.html");
+  assert.equal(clipboard_target("example.com/path", "search", engines), "https://example.com/path");
+  assert.equal(clipboard_target("localhost:3000", "search", engines), "http://localhost:3000");
+  assert.equal(clipboard_target("two words.com", "search", engines), "https://s.example/?q=two%20words.com");
+});

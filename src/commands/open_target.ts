@@ -16,26 +16,46 @@ export const CONTAINER_PARAM: ParamDef = {
   when: { where: ["new_tab", "background", "new_window"] },
 };
 
-async function container_store_id(container: string | undefined): Promise<string | undefined> {
-  if (container === undefined) return undefined;
-  const [identity] = await browser.contextualIdentities.query({ name: container });
-  if (!identity) throw new Error(`No container named "${container}"`);
-  return identity.cookieStoreId;
+export const DEFAULT_CONTAINER_NAME = "default";
+export const DEFAULT_COOKIE_STORE_ID = "firefox-default";
+
+export type FindContainerStoreId = (container_name: string) => Promise<string | undefined>;
+
+// Tolerates a browser with containers turned off: the lookup then finds nothing.
+export const find_container_store_id: FindContainerStoreId = async (container_name) => {
+  const identities = await browser.contextualIdentities.query({ name: container_name }).catch(() => undefined);
+  return Array.isArray(identities) ? identities.find((identity) => identity.name === container_name)?.cookieStoreId : undefined;
+};
+
+// The one container-to-cookie-store lookup. `default` is the container-less store. Undefined in, undefined out.
+export async function resolve_container_store_id(
+  container_name: string | undefined,
+  find: FindContainerStoreId = find_container_store_id,
+): Promise<string | undefined> {
+  if (container_name === undefined) return undefined;
+  if (container_name === DEFAULT_CONTAINER_NAME) return DEFAULT_COOKIE_STORE_ID;
+  const store_id = await find(container_name);
+  if (store_id === undefined) throw new Error(`No container named "${container_name}"`);
+  return store_id;
+}
+
+export function require_tab_id(ctx: CommandContext): number {
+  if (ctx.tab_id === undefined) throw new Error("No tab");
+  return ctx.tab_id;
 }
 
 export async function current_tab_url(ctx: CommandContext): Promise<string> {
-  const tab = ctx.tab_id === undefined ? undefined : await browser.tabs.get(ctx.tab_id);
-  if (!tab?.url) throw new Error("This tab has no address");
+  const tab = await browser.tabs.get(require_tab_id(ctx));
+  if (!tab.url) throw new Error("This tab has no address");
   return tab.url;
 }
 
 export async function open_in(ctx: CommandContext, url: string, where: Where, container?: string): Promise<void> {
   if (where === "current") {
-    if (ctx.tab_id === undefined) throw new Error("No tab to open in");
-    await browser.tabs.update(ctx.tab_id, { url });
+    await browser.tabs.update(require_tab_id(ctx), { url });
     return;
   }
-  const cookie_store_id = await container_store_id(container);
+  const cookie_store_id = await resolve_container_store_id(container);
   const store = cookie_store_id === undefined ? {} : { cookieStoreId: cookie_store_id };
   if (where === "new_window") {
     await browser.windows.create({ url, ...store });

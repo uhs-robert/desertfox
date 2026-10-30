@@ -28,7 +28,7 @@ export function format_page_link(format: CopyFormat, facts: PageLinkFacts): stri
     case "markdown":
       return `[${link_text(title)}](${url.replace(/\)/g, "%29")})`;
     case "org":
-      return `[[${url}][${link_text(title)}]]`;
+      return `[[${url.replace(/]/g, "%5D")}][${link_text(title)}]]`;
   }
 }
 

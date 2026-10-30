@@ -67,3 +67,9 @@ test("subreddit comes from /r/<name>, an explicit sub wins, and all is the fallb
 test("engine template encodes the query at every placeholder", () => {
   assert.equal(engine_search_url("https://e.com/?q=%s&r=%s", "a&b/c d"), "https://e.com/?q=a%26b%2Fc%20d&r=a%26b%2Fc%20d");
 });
+
+test("archive and translate refuse non-http pages", () => {
+  assert.equal(archive_url("about:preferences"), undefined);
+  assert.equal(translate_url("about:preferences"), undefined);
+  assert.equal(archive_url("https://a.com/x"), "https://web.archive.org/web/https://a.com/x");
+});

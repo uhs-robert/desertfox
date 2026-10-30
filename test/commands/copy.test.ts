@@ -24,3 +24,7 @@ test("a missing link falls back to the plain URL", () => {
   assert.equal(format_page_link("canonical", bare), facts.url);
   assert.equal(format_page_link("short", bare), facts.url);
 });
+
+test("org format percent-encodes a closing bracket in the URL", () => {
+  assert.equal(format_page_link("org", { ...facts, url: "https://a.com/p?x=[1]" }), "[[https://a.com/p?x=[1%5D][A (draft) page]]");
+});
