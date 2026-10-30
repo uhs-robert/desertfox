@@ -1,0 +1,12 @@
+{
+  "type": "object",
+  "properties": {
+    "format_version": { "type": "integer" },
+    "keymap": { "type": "object" },
+    "search_engines": { "type": "object" },
+    "command_aliases": { "type": "object" },
+    "settings": { "type": "object" },
+    "snippets": { "type": "array" },
+    "css": { "type": "string" }
+  }
+}

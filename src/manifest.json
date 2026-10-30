@@ -1,0 +1,82 @@
+{
+  "manifest_version": 2,
+  "name": "OasisFox",
+  "version": "0.1.0",
+  "description": "Keyboard-first Firefox extension built around one command registry.",
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "oasisfox@uhs-robert",
+      "strict_min_version": "140.0",
+      "data_collection_permissions": {
+        "required": [
+          "none"
+        ]
+      }
+    }
+  },
+  "background": {
+    "scripts": [
+      "background.js"
+    ],
+    "persistent": true
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_start",
+      "all_frames": true,
+      "match_about_blank": true
+    }
+  ],
+  "permissions": [
+    "tabs",
+    "storage",
+    "notifications",
+    "clipboardWrite",
+    "bookmarks",
+    "contextualIdentities",
+    "cookies",
+    "sessions",
+    "<all_urls>"
+  ],
+  "storage": {
+    "managed_schema": "managed_schema.json"
+  },
+  "commands": {
+    "slot_1": {
+      "description": "OasisFox shortcut slot 1. The background assigns the chord."
+    },
+    "slot_2": {
+      "description": "OasisFox shortcut slot 2. The background assigns the chord."
+    },
+    "slot_3": {
+      "description": "OasisFox shortcut slot 3. The background assigns the chord."
+    },
+    "slot_4": {
+      "description": "OasisFox shortcut slot 4. The background assigns the chord."
+    },
+    "slot_5": {
+      "description": "OasisFox shortcut slot 5. The background assigns the chord."
+    },
+    "slot_6": {
+      "description": "OasisFox shortcut slot 6. The background assigns the chord."
+    },
+    "slot_7": {
+      "description": "OasisFox shortcut slot 7. The background assigns the chord."
+    },
+    "slot_8": {
+      "description": "OasisFox shortcut slot 8. The background assigns the chord."
+    },
+    "slot_9": {
+      "description": "OasisFox shortcut slot 9. The background assigns the chord."
+    },
+    "slot_10": {
+      "description": "OasisFox shortcut slot 10. The background assigns the chord."
+    }
+  }
+}

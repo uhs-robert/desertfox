@@ -1,0 +1,100 @@
+// Command definition: the one shape the registry stores, the validator checks
+// and `commands.json` is cut from. Types only.
+
+export type ParamType = "int" | "float" | "string" | "bool" | "enum";
+
+// Runtime modes. `browser` is not here: it is a keymap section, see KeymapMode.
+export type Mode = "normal" | "insert" | "ignore" | "hint" | "cmdline";
+
+export type RunsIn = "background" | "content";
+
+export type ContextSourceName = "current_url" | "selection" | "clipboard";
+
+export type ContextSource = { from: ContextSourceName };
+
+export type ParamValue = string | number | boolean;
+
+export type ParamDefault = ParamValue | ContextSource;
+
+// Value lists filled at run time from the user's config or from Firefox.
+export type DynamicValues = { from: "search_engines" | "containers" };
+
+export type ParamFlag = {
+  // The long name is the param name. `short` is one character.
+  short?: string;
+};
+
+// The param is valid only if the named sibling param has one of these values.
+export type ParamWhen = Record<string, readonly ParamValue[]>;
+
+export type ParamDef = {
+  name: string;
+  type: ParamType;
+  // Allowed values. Required for `enum`. A `string` param may use it for completion only.
+  values?: readonly string[] | DynamicValues;
+  // Only on the last `string` param: takes all remaining words.
+  rest?: boolean;
+  flag?: ParamFlag;
+  // Only a trailing run of params may have a default.
+  default?: ParamDefault;
+  // Exactly one key, so `{ param: [values] }`.
+  when?: ParamWhen;
+};
+
+// A preset flag sets fixed values on existing params and has no handler.
+export type FlagPreset = {
+  short?: string;
+  long: string;
+  sets: Record<string, ParamValue>;
+  label: string;
+};
+
+export type CountBehavior =
+  | "repeat" // run the command that many times
+  | "ignore" // drop the count
+  | { param: string }; // fill this param with the count
+
+// "content": a content script must run in the tab. Any other string is an optional permission name.
+export type Need = "content" | (string & {});
+
+export type CommandContext = {
+  tab_id: number | undefined;
+  window_id: number | undefined;
+  frame_id: number;
+  mode: Mode;
+};
+
+// Args reach `run` after the one validator has checked them and filled defaults.
+export type CheckedArgs = Record<string, unknown>;
+
+export type CommandRun = (ctx: CommandContext, args: CheckedArgs) => Promise<void> | void;
+
+export type CommandDef = {
+  // `group.name`, lowercase with underscores.
+  id: string;
+  // Command line name, set by hand, never derived from the id.
+  name?: string;
+  aliases?: readonly string[];
+  label: string;
+  intent: string;
+  params?: readonly ParamDef[];
+  flags?: readonly FlagPreset[];
+  runs_in: RunsIn;
+  needs?: readonly Need[];
+  // Default when omitted: "ignore".
+  count?: CountBehavior;
+  // Modes where a key can run the command. Default when omitted: ["normal"].
+  modes?: readonly Mode[];
+  run: CommandRun;
+};
+
+// A `commands.json` entry: the definition without the handler and the router fields.
+export type CommandMeta = Pick<
+  CommandDef,
+  "id" | "name" | "aliases" | "label" | "intent" | "params" | "flags" | "count" | "modes"
+>;
+
+export type CommandsFile = {
+  format_version: 1;
+  commands: CommandMeta[];
+};
