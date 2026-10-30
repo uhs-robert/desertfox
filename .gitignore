@@ -3,3 +3,4 @@ spike/results/
 /.logs/
 node_modules/
 dist/
+web-ext-artifacts/
