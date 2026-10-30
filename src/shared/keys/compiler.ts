@@ -123,6 +123,7 @@ export function compile_keymap(keymap: KeymapConfig, settings: Partial<Settings>
     format_version: COMPILED_KEYMAP_VERSION,
     modes,
     ignore_sites: settings.ignore_sites ?? DEFAULT_SETTINGS.ignore_sites,
+    mode_indicator: settings.mode_indicator ?? DEFAULT_SETTINGS.mode_indicator,
     which_key_delay_ms: settings.which_key_delay_ms ?? DEFAULT_SETTINGS.which_key_delay_ms,
   };
   return { compiled, warnings };

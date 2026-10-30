@@ -9,6 +9,8 @@ The content script. It runs at `document_start` in the top frame and in same-ori
 - `plan_steps.ts`, `invocation_args.ts`: split a leaf into ordered runs and apply a command's count rule. Pure.
 - `scroll_target.ts`, `match_pattern.ts`, `editable.ts`: pure helpers for scroll choice, `ignore_sites` and focus.
 - `handlers/`: one plain function per content command. `handler_map.ts` is the only id-to-code link. The definitions in `src/commands` import the same handler objects, so the count rule lives in one place.
+- `surface.ts`: the closed shadow root and default variables that the toast and the mode indicator share.
 - `toast.ts`: the message surface for refusals.
+- `mode_label.ts`, `mode_indicator.ts`: the badge text (pure) and the badge, top frame only. It follows the `mode_indicator` setting.
 
 The key test reads `data-oasisfox-tree-read-ms` and `data-oasisfox-tree-ready-at-ms` on the document element.

@@ -55,6 +55,7 @@ const keymap: CompiledKeymap = {
   format_version: 1,
   modes: { normal: { kind: "branch", children: { D: leaf } } },
   ignore_sites: [],
+  mode_indicator: "always",
   which_key_delay_ms: DEFAULT_SETTINGS.which_key_delay_ms,
 };
 

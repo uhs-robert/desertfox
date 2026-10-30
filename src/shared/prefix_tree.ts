@@ -3,6 +3,7 @@
 
 import type { CountBehavior, RunsIn } from "./command.ts";
 import type { BoundInvocation } from "./invocation.ts";
+import type { ModeIndicator } from "./config.ts";
 import type { KeymapMode } from "./keymap.ts";
 
 export const COMPILED_KEYMAP_STORAGE_KEY = "oasisfox_compiled_keymap";
@@ -38,6 +39,7 @@ export type CompiledKeymap = {
   modes: Partial<Record<KeymapMode, TreeBranch>>;
   // Settings the content script needs before it can handle a key.
   ignore_sites: string[];
+  mode_indicator: ModeIndicator;
   which_key_delay_ms: number;
 };
 

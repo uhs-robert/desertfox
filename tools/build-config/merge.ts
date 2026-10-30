@@ -2,6 +2,7 @@
 // as written: the background's keymap compiler expands them.
 // A later layer wins per key. Nothing here knows the command list.
 
+import { MODE_INDICATOR_VALUES } from "../../src/shared/config.ts";
 import type { SearchEngine, Settings } from "../../src/shared/config.ts";
 import type { KeymapConfig, ModeBindings } from "../../src/shared/keymap.ts";
 import { is_plain_object } from "./errors.ts";
@@ -103,6 +104,7 @@ const SETTING_CHECKS: Record<keyof Settings, (value: unknown) => boolean> = {
   which_key_delay_ms: (value) => typeof value === "number" && Number.isFinite(value) && value >= 0,
   hint_letters: (value) => typeof value === "string" && new Set(value).size === value.length && value.length >= 2,
   ignore_sites: (value) => Array.isArray(value) && value.every((site) => typeof site === "string" && site !== ""),
+  mode_indicator: (value) => (MODE_INDICATOR_VALUES as readonly unknown[]).includes(value),
   search_prefixes: (value) => is_prefix_pair(value, "here"),
   container_prefixes: (value) => is_prefix_pair(value, "reopen"),
   home_page: (value) => typeof value === "string" && value !== "",
@@ -114,6 +116,7 @@ const SETTING_EXPECTATIONS: Record<keyof Settings, string> = {
   which_key_delay_ms: "a number of milliseconds, 0 or more",
   hint_letters: "a string of 2 or more distinct letters",
   ignore_sites: "a list of match pattern strings",
+  mode_indicator: '"always", "not_normal" or "off"',
   search_prefixes: '{"here": "...", "new_tab": "..."} with non-empty strings',
   container_prefixes: '{"reopen": "...", "new_tab": "..."} with non-empty strings',
   home_page: "a non-empty URL string",

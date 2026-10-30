@@ -5,6 +5,7 @@ import { args_for_count } from "../src/content/invocation_args.ts";
 import { create_cancelled_keys } from "../src/content/cancelled_keys.ts";
 import { create_key_flow } from "../src/content/key_flow.ts";
 import { is_ignored_site, matches_pattern } from "../src/content/match_pattern.ts";
+import { mode_label } from "../src/content/mode_label.ts";
 import { create_mode_state } from "../src/content/mode_state.ts";
 import { plan_steps } from "../src/content/plan_steps.ts";
 import { percent_to_offset, pick_scroll_target } from "../src/content/scroll_target.ts";
@@ -19,6 +20,7 @@ const browser_chords = { kind: "branch", children: { "<A-j>": leaf("next_tab") }
 const keymap: CompiledKeymap = {
   format_version: COMPILED_KEYMAP_VERSION,
   ignore_sites: [],
+  mode_indicator: "always",
   which_key_delay_ms: 0,
   modes: {
     normal: { kind: "branch", children: { j: leaf("down"), g: { kind: "branch", children: { g: leaf("top") } } } },
@@ -241,4 +243,30 @@ test("percent offsets clamp", () => {
   assert.equal(percent_to_offset(50, 1000, 400), 300);
   assert.equal(percent_to_offset(-5, 1000, 400), 0);
   assert.equal(percent_to_offset(100, 300, 400), 0);
+});
+
+test("mode label follows the mode_indicator setting", () => {
+  assert.equal(mode_label("normal", false, "always"), "NORMAL");
+  assert.equal(mode_label("normal", false, "not_normal"), undefined);
+  assert.equal(mode_label("insert", false, "always"), "INSERT");
+  assert.equal(mode_label("insert", false, "not_normal"), "INSERT");
+  assert.equal(mode_label("ignore", false, "not_normal"), "IGNORE");
+  assert.equal(mode_label("normal", true, "always"), "PASS");
+  assert.equal(mode_label("normal", true, "not_normal"), "PASS");
+  assert.equal(mode_label("hint", false, "always"), undefined);
+  assert.equal(mode_label("insert", false, "off"), undefined);
+  assert.equal(mode_label("normal", true, "off"), undefined);
+});
+
+test("display listener fires on mode changes and on pass-next arming and use", () => {
+  const state = create_mode_state();
+  let fired = 0;
+  state.listen_display(() => fired++);
+  state.arm_pass_next();
+  assert.equal(state.is_pass_next_armed(), true);
+  assert.equal(state.take_pass_next(), true);
+  assert.equal(state.take_pass_next(), false);
+  state.set_mode("ignore");
+  state.set_mode("ignore");
+  assert.equal(fired, 3);
 });

@@ -3,7 +3,7 @@
 
 import type { CommandMeta, ParamDef } from "../../src/shared/command.ts";
 import { COMMAND_ID_PATTERN } from "../../src/shared/registry/index.ts";
-import { DEFAULT_SETTINGS } from "../../src/shared/config.ts";
+import { DEFAULT_SETTINGS, MODE_INDICATOR_VALUES } from "../../src/shared/config.ts";
 import { KEYMAP_MODES } from "./merge.ts";
 import type { DataKind } from "./source_files.ts";
 
@@ -117,6 +117,7 @@ function settings_schema(): Schema {
       which_key_delay_ms: { type: "number", minimum: 0, default: DEFAULT_SETTINGS.which_key_delay_ms },
       hint_letters: { type: "string", minLength: 2, default: DEFAULT_SETTINGS.hint_letters },
       ignore_sites: { type: "array", items: { type: "string" }, description: "Match patterns where OasisFox starts in ignore mode" },
+      mode_indicator: { enum: [...MODE_INDICATOR_VALUES], default: DEFAULT_SETTINGS.mode_indicator, description: "When the mode badge shows: always (NORMAL too), not_normal, or off" },
       search_prefixes: { ...prefix_pair_schema("here"), default: DEFAULT_SETTINGS.search_prefixes },
       container_prefixes: { ...prefix_pair_schema("reopen"), default: DEFAULT_SETTINGS.container_prefixes },
       home_page: { type: "string", minLength: 1, description: "URL that page.home opens" },

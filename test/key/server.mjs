@@ -20,6 +20,12 @@ addEventListener("keydown", (event) => send("keydown", { key: event.key }));
 addEventListener("input", (event) => send("input", { value: event.target.value }));
 addEventListener("focus", () => send("window_focus"));
 const root = document.documentElement;
+// The indicator host is in the page, its text is in a closed shadow root, so the label is an attribute.
+let last_indicator = "";
+new MutationObserver(() => {
+  const label = root.querySelector("[data-oasisfox-mode]")?.getAttribute("data-oasisfox-mode") ?? "";
+  if (label !== last_indicator) send("indicator", { label: (last_indicator = label) });
+}).observe(root, { childList: true });
 const report_tree_read = () => {
   const ms = root.getAttribute("data-oasisfox-tree-read-ms");
   if (ms === null) return false;

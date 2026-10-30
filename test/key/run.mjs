@@ -200,6 +200,17 @@ async function main() {
       expect(!find_event(mark, (event) => event.type === "keydown" && event.key === "j"), "the page saw j in normal mode");
     });
 
+    await run_case("the mode badge shows NORMAL, then IGNORE, then NORMAL", async () => {
+      const is_label = (label) => (event) => event.type === "indicator" && event.page_id === "c" && event.label === label;
+      expect(events.some(is_label("NORMAL")), "no NORMAL badge at start");
+      let mark = events.length;
+      await send_keys(...SHIFT_ESCAPE);
+      await wait_event(mark, is_label("IGNORE"), "the IGNORE badge");
+      mark = events.length;
+      await send_keys(...SHIFT_ESCAPE);
+      await wait_event(mark, is_label("NORMAL"), "the NORMAL badge after leaving ignore");
+    });
+
     await open_page("field", "f", { new_tab: true });
     await run_case("typing in a field is not swallowed", async () => {
       const typed = "jkxGddqrgg 3j";

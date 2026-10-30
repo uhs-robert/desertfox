@@ -13,11 +13,16 @@ export type SearchEngine = {
   label: string;
 };
 
+export const MODE_INDICATOR_VALUES = ["always", "not_normal", "off"] as const;
+export type ModeIndicator = (typeof MODE_INDICATOR_VALUES)[number];
+
 export type Settings = {
   which_key_delay_ms: number;
   hint_letters: string;
   // Match patterns for pages where OasisFox starts in ignore mode.
   ignore_sites: string[];
+  // The mode badge: always (NORMAL too), only outside normal mode, or never.
+  mode_indicator: ModeIndicator;
   // Prefixes of keys generated from `search_keys`: this tab, new tab.
   search_prefixes: { here: string; new_tab: string };
   // Prefixes of keys generated from `container_keys`: reopen, prompt in new tab.
@@ -34,6 +39,7 @@ export const DEFAULT_SETTINGS: Settings = {
   which_key_delay_ms: 300,
   hint_letters: "asdfghjkl",
   ignore_sites: [],
+  mode_indicator: "always",
   search_prefixes: { here: "s", new_tab: "S" },
   container_prefixes: { reopen: "c", new_tab: "C" },
   default_engine: "search",

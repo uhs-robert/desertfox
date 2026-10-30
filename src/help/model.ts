@@ -108,4 +108,5 @@ export const STYLE_VARIABLES: { name: string; meaning: string }[] = [
 
 export const STYLE_CLASSES: { name: string; meaning: string }[] = [
   { name: "oasisfox-toast", meaning: "The message toast a refused command shows in the page" },
+  { name: "oasisfox-mode", meaning: "The badge that names the mode (NORMAL, INSERT, IGNORE, PASS)" },
 ];
