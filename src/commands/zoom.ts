@@ -1,5 +1,6 @@
 import type { CommandContext } from "../shared/command.ts";
 import { define } from "../shared/registry/index.ts";
+import { require_tab_id } from "./open_target.ts";
 
 export const ZOOM_MIN = 0.3;
 export const ZOOM_MAX = 5;
@@ -15,16 +16,12 @@ export function clamp_zoom(level: number): number {
 }
 
 export function make_zoom_handlers(deps: ZoomDeps) {
-  function tab_id_of(ctx: CommandContext): number {
-    if (ctx.tab_id === undefined) throw new Error("no active tab");
-    return ctx.tab_id;
-  }
   return {
     by: async (ctx: CommandContext, args: { delta: number }) => {
-      const tab_id = tab_id_of(ctx);
+      const tab_id = require_tab_id(ctx);
       await deps.set_zoom(tab_id, clamp_zoom((await deps.get_zoom(tab_id)) + args.delta));
     },
-    set: (ctx: CommandContext, args: { level: number }) => deps.set_zoom(tab_id_of(ctx), clamp_zoom(args.level)),
+    set: (ctx: CommandContext, args: { level: number }) => deps.set_zoom(require_tab_id(ctx), clamp_zoom(args.level)),
   };
 }
 

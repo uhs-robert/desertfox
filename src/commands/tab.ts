@@ -1,6 +1,7 @@
 import type { CommandContext } from "../shared/command.ts";
 import { define } from "../shared/registry/index.ts";
-import { find_container_store_id, resolve_container_store_id } from "./open_target.ts";
+import type { FindContainerStoreId } from "./open_target.ts";
+import { find_container_store_id, require_tab_id, resolve_container_store_id } from "./open_target.ts";
 
 export type TabInfo = {
   id: number;
@@ -25,14 +26,15 @@ export type TabDeps = {
   // False when the closed-tab list is empty.
   restore_last_closed_tab: () => Promise<boolean>;
   // Undefined when no container has the name.
-  find_container_store_id: (container_name: string) => Promise<string | undefined>;
+  find_container_store_id: FindContainerStoreId;
 };
 
 type Position = { tabs: TabInfo[]; current: TabInfo };
 
 export function make_tab_handlers(deps: TabDeps) {
   async function position_of(ctx: CommandContext): Promise<Position> {
-    if (ctx.window_id === undefined || ctx.tab_id === undefined) throw new Error("no active tab");
+    if (ctx.window_id === undefined) throw new Error("No window");
+    require_tab_id(ctx);
     const tabs = await deps.tabs_in_window(ctx.window_id);
     const current = tabs.find((tab) => tab.id === ctx.tab_id);
     if (!current) throw new Error("the active tab is gone");
@@ -102,7 +104,7 @@ export function make_tab_handlers(deps: TabDeps) {
     reopen_in_container: async (ctx: CommandContext, args: { container: string }) => {
       const { current } = await position_of(ctx);
       if (current.url === undefined || ctx.window_id === undefined) throw new Error("this tab has no address to reopen");
-      const cookie_store_id = await resolve_container_store_id(args.container, deps.find_container_store_id) as string;
+      const cookie_store_id = await resolve_container_store_id(args.container, deps.find_container_store_id);
       await deps.open_tab({ window_id: ctx.window_id, url: current.url, index: current.index, pinned: current.pinned, cookie_store_id });
       await deps.remove([current.id]);
     },

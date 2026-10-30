@@ -102,11 +102,13 @@ export function home_page_url(home_page: string | undefined): string {
 }
 
 const CLIPBOARD_URL_SCHEMES = ["http:", "https:", "ftp:", "file:"];
-const LOCALHOST_WITH_PORT = /^localhost:\d+(?:[/?#]\S*)?$/;
+const HOST_WITH_PORT = /^(localhost|[^\s:/?#]+\.[^\s:/?#]+):\d+(?:[/?#]\S*)?$/;
 
 // Other schemes (javascript:, data:) and text with a colon ("TODO: fix") are not worth opening, so they search.
 function clipboard_url(text: string): string | undefined {
-  if (LOCALHOST_WITH_PORT.test(text)) return `http://${text}`;
+  // Checked first: "example.com:8080" would otherwise parse as the scheme "example.com:".
+  const host_with_port = HOST_WITH_PORT.exec(text);
+  if (host_with_port) return `${host_with_port[1] === "localhost" ? "http" : "https"}://${text}`;
   if (URL.canParse(text)) return CLIPBOARD_URL_SCHEMES.includes(new URL(text).protocol) ? text : undefined;
   const looks_like_domain = text.includes(".") && !/\s/.test(text);
   return looks_like_domain && URL.canParse(`https://${text}`) ? `https://${text}` : undefined;

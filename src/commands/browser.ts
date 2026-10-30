@@ -1,6 +1,7 @@
 import type { CommandContext } from "../shared/command.ts";
 import type { FocusPage } from "../shared/messages.ts";
 import { define } from "../shared/registry/index.ts";
+import { require_tab_id } from "./open_target.ts";
 
 export type BrowserDeps = {
   window_ids: () => Promise<number[]>;
@@ -18,10 +19,11 @@ export function make_browser_handlers(deps: BrowserDeps) {
     // Firefox has no call that moves focus out of the address bar. Re-focusing the window and tab, then the
     // page, is the best attempt. The key test decides whether it works.
     focus_page: async (ctx: CommandContext) => {
-      if (ctx.window_id === undefined || ctx.tab_id === undefined) throw new Error("no active tab");
+      const tab_id = require_tab_id(ctx);
+      if (ctx.window_id === undefined) throw new Error("No window");
       await deps.focus_window(ctx.window_id);
-      await deps.activate_tab(ctx.tab_id);
-      await deps.focus_page_content(ctx.tab_id);
+      await deps.activate_tab(tab_id);
+      await deps.focus_page_content(tab_id);
     },
   };
 }

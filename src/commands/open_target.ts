@@ -28,6 +28,8 @@ export const find_container_store_id: FindContainerStoreId = async (container_na
 };
 
 // The one container-to-cookie-store lookup. `default` is the container-less store. Undefined in, undefined out.
+export async function resolve_container_store_id(container_name: string, find?: FindContainerStoreId): Promise<string>;
+export async function resolve_container_store_id(container_name: string | undefined, find?: FindContainerStoreId): Promise<string | undefined>;
 export async function resolve_container_store_id(
   container_name: string | undefined,
   find: FindContainerStoreId = find_container_store_id,

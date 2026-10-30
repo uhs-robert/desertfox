@@ -45,7 +45,7 @@ define("site.subreddit", {
   intent: "Search a subreddit. Without --sub, search the one the page is in, or all of Reddit.",
   params: [QUERY_PARAM, { name: "sub", type: "string", default: DEFAULT_SUBREDDIT, flag: { short: "s" } }, WHERE_PARAM],
   runs_in: "background",
-  run: (ctx, args) => open_built(ctx, args.where, "", (page_url) => subreddit_search_url(page_url, args.query as string, args.sub as string)),
+  run: (ctx, args) => open_built(ctx, args.where, "This address has no subreddit search", (page_url) => subreddit_search_url(page_url, args.query as string, args.sub as string)),
 });
 
 define("site.archive", {

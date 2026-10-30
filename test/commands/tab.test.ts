@@ -153,5 +153,5 @@ test("reopen_in_container refuses an unknown container and keeps the tab", async
 
 test("a missing active tab refuses", async () => {
   const { handlers } = make_fake(make_tabs(2));
-  await assert.rejects(handlers.next({ tab_id: undefined, window_id: 1, frame_id: 0, mode: "normal" }), /no active tab/);
+  await assert.rejects(handlers.next({ tab_id: undefined, window_id: 1, frame_id: 0, mode: "normal" }), /No tab/);
 });

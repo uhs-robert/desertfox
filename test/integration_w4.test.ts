@@ -94,3 +94,8 @@ test("open.clipboard opens web schemes, bare domains and localhost with a port",
   assert.equal(clipboard_target("localhost:3000", "search", engines), "http://localhost:3000");
   assert.equal(clipboard_target("two words.com", "search", engines), "https://s.example/?q=two%20words.com");
 });
+
+test("open.clipboard opens host:port, which parses as a scheme", () => {
+  assert.equal(clipboard_target("example.com:8080", "search", engines), "https://example.com:8080");
+  assert.equal(clipboard_target("localhost:3000/a?b=1", "search", engines), "http://localhost:3000/a?b=1");
+});
