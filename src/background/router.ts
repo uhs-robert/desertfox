@@ -1,7 +1,7 @@
 // The one entry for run requests: content scripts, Firefox shortcuts and later callers.
 
 import type { CheckedArgs, CommandContext, CommandDef, ContextSourceName, Mode } from "../shared/command.ts";
-import type { Invocation } from "../shared/invocation.ts";
+import type { BoundInvocation } from "../shared/invocation.ts";
 import type { BackgroundToContent, Refusal, RunResponse } from "../shared/messages.ts";
 import { check_args } from "../shared/registry/check_args.ts";
 import type { EnumSources } from "../shared/registry/check_args.ts";
@@ -24,7 +24,7 @@ export type RouterDeps = {
 };
 
 export type RouteRequest = {
-  invocations: Invocation[];
+  invocations: BoundInvocation[];
   mode: Mode;
   // The tab the caller says it came from. The active tab wins when there is one.
   sender_tab_id?: number;
@@ -61,10 +61,12 @@ export function create_router(deps: RouterDeps): Router {
     return { ok: true };
   }
 
-  async function run_one(invocation: Invocation, request: RouteRequest): Promise<Outcome> {
+  async function run_one(invocation: BoundInvocation, request: RouteRequest): Promise<Outcome> {
     const { active, context } = await read_now(request);
     const command = deps.get_command(invocation.id);
     if (!command) return refuse(`unknown command "${invocation.id}"`);
+
+    if (invocation.prompt) return refuse(`${command.label} needs the command line (phase 2)`);
 
     const missing_need = await first_unmet_need(command, context.tab_id);
     if (missing_need) return refuse(`${command.label} needs ${missing_need}`);

@@ -1,6 +1,6 @@
 import "./command_modules.ts";
 import type { ContentToBackground } from "../shared/messages.ts";
-import type { Invocation } from "../shared/invocation.ts";
+import type { BoundInvocation } from "../shared/invocation.ts";
 import { make_router_deps, reinject_deps } from "./browser_deps.ts";
 import { repair_tabs_after_reload } from "./reload.ts";
 import { create_router } from "./router.ts";
@@ -27,7 +27,7 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
 browser.commands.onCommand.addListener(async (slot_name: string) => {
   await get_config();
   const stored = await browser.storage.local.get(SLOT_TABLE_STORAGE_KEY);
-  const invocations: Invocation[] | undefined = (stored[SLOT_TABLE_STORAGE_KEY] as SlotTable | undefined)?.[slot_name];
+  const invocations: BoundInvocation[] | undefined = (stored[SLOT_TABLE_STORAGE_KEY] as SlotTable | undefined)?.[slot_name];
   if (invocations) await router.run({ invocations, mode: "normal" });
 });
 

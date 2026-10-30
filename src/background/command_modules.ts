@@ -3,3 +3,4 @@
 import "../commands/config.ts";
 import "../commands/scroll.ts";
 import "../commands/mode.ts";
+import "../commands/help.ts";

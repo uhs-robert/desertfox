@@ -2,7 +2,7 @@
 // and `tabs.sendMessage`. The `type` field selects the shape.
 
 import type { Mode } from "./command.ts";
-import type { Invocation } from "./invocation.ts";
+import type { BoundInvocation, Invocation } from "./invocation.ts";
 
 // Why a command did not run. The content script shows `message` as a toast,
 // the background falls back to a notification where no content script exists.
@@ -16,7 +16,7 @@ export type Refusal = {
 export type RunRequest = {
   type: "run";
   // Runs in order. Tab and frame come from the message sender.
-  invocations: Invocation[];
+  invocations: BoundInvocation[];
   mode: Mode;
 };
 

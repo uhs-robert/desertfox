@@ -137,3 +137,21 @@ test("content runs and refusals go to the sender frame, or frame 0", async () =>
   await router.run({ invocations: [{ id: "scroll.lines" }], mode: "normal" });
   assert.deepEqual(frames, [3, 3, 0]);
 });
+
+test("a prompt binding refuses with the phase 2 message even when no param is missing", async () => {
+  const { deps, log } = make_fake({
+    "bookmark.add": {
+      label: "Add Bookmark",
+      intent: "x",
+      params: [{ name: "url", type: "string", default: { from: "current_url" } }],
+      runs_in: "background",
+      run: () => assert.fail(),
+    },
+  });
+  const response = await create_router(deps).run({
+    invocations: [{ id: "bookmark.add", prompt: { param: "url", prefill: { from: "current_url" } } }],
+    mode: "normal",
+  });
+  assert.equal(response.ok, false);
+  assert.deepEqual(log, ["refuse 7 Add Bookmark needs the command line (phase 2)"]);
+});

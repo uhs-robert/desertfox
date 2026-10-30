@@ -2,7 +2,7 @@
 // COMPILED_KEYMAP_STORAGE_KEY and the content script reads it before the first key.
 
 import type { CountBehavior, RunsIn } from "./command.ts";
-import type { Invocation } from "./invocation.ts";
+import type { BoundInvocation } from "./invocation.ts";
 import type { KeymapMode } from "./keymap.ts";
 
 export const COMPILED_KEYMAP_STORAGE_KEY = "oasisfox_compiled_keymap";
@@ -11,7 +11,7 @@ export const COMPILED_KEYMAP_VERSION = 1;
 
 // One step of a binding. The side that runs it and the count rule are resolved at compile time.
 export type LeafStep = {
-  invocation: Invocation;
+  invocation: BoundInvocation;
   runs_in: RunsIn;
   // How a numeric prefix applies, copied from the registry because the content script has none.
   count_rule: CountBehavior;

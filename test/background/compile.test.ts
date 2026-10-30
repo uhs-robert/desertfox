@@ -56,3 +56,31 @@ test("a content binding that lacks a required param compiles to a background ste
   });
   assert.equal((compiled.modes.normal!.children.i as TreeLeaf).steps[0]!.runs_in, "background");
 });
+
+test("a prompt leaf goes to the background so the router can refuse it", () => {
+  const { registry } = make_fake({
+    "mode.set": { label: "Mode", intent: "x", params: [{ name: "mode", type: "enum" as const, values: ["normal", "ignore"], default: "normal" }], runs_in: "content", run: () => {} },
+  });
+  const { compiled, warnings } = compile_config({
+    config: { ...empty_config(), keymap: { normal: { i: { id: "mode.set", prompt: { param: "mode" } } } } },
+    default_keymap: {},
+    get_command: (id) => registry.get(id),
+    enum_sources: { search_engines: [], containers: [] },
+  });
+  const step = (compiled.modes.normal!.children.i as TreeLeaf).steps[0]!;
+  assert.equal(step.runs_in, "background");
+  assert.deepEqual(step.invocation.prompt, { param: "mode" });
+  assert.deepEqual(warnings, []);
+});
+
+test("a prompt naming a missing param warns and skips", () => {
+  const { registry } = make_fake(commands);
+  const { compiled, warnings } = compile_config({
+    config: { ...empty_config(), keymap: { normal: { o: { id: "open.url", prompt: { param: "link" } } } } },
+    default_keymap: {},
+    get_command: (id) => registry.get(id),
+    enum_sources: { search_engines: [], containers: [] },
+  });
+  assert.equal(compiled.modes.normal, undefined);
+  assert.match(warnings[0]!, /prompt names "link"/);
+});

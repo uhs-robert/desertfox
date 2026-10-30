@@ -38,6 +38,25 @@ function param_schema(param: ParamDef): Schema {
   return { ...schema, description: param.name };
 }
 
+function prompt_schema(param_names: string[] | undefined): Schema {
+  return {
+    type: "object",
+    description: "Phase 2: the key opens the command line with this command typed in and this param to fill",
+    properties: {
+      param: param_names ? { enum: param_names } : { type: "string" },
+      prefill: {
+        type: "object",
+        description: "Text the prompt starts with",
+        properties: { from: { enum: ["current_url", "selection", "clipboard"] } },
+        required: ["from"],
+        additionalProperties: false,
+      },
+    },
+    required: ["param"],
+    additionalProperties: false,
+  };
+}
+
 function invocation_schema(command: CommandMeta): Schema {
   const properties = Object.fromEntries((command.params ?? []).map((param) => [param.name, param_schema(param)]));
   return {
@@ -47,6 +66,7 @@ function invocation_schema(command: CommandMeta): Schema {
       id: { const: command.id },
       args: { type: "object", properties, additionalProperties: false },
       count: { type: "integer", minimum: 1 },
+      prompt: prompt_schema((command.params ?? []).map((param) => param.name)),
     },
     required: ["id"],
     additionalProperties: false,
@@ -61,6 +81,7 @@ function keymap_schema(commands: CommandMeta[]): Schema {
       id: { type: "string", pattern: COMMAND_ID_PATTERN.source },
       args: { type: "object" },
       count: { type: "integer", minimum: 1 },
+      prompt: prompt_schema(undefined),
     },
     required: ["id"],
     additionalProperties: false,

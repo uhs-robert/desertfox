@@ -1,1 +1,19 @@
-export {};
+import type { CommandsFile } from "../shared/command.ts";
+import { COMPILED_KEYMAP_STORAGE_KEY } from "../shared/prefix_tree.ts";
+import type { CompiledKeymap } from "../shared/prefix_tree.ts";
+import { WARNINGS_STORAGE_KEY } from "../background/storage_keys.ts";
+import { build_help_model } from "./model.ts";
+import { render_help } from "./render.ts";
+
+async function main(): Promise<void> {
+  const commands_file = (await (await fetch(browser.runtime.getURL("commands.json"))).json()) as CommandsFile;
+  const stored = await browser.storage.local.get([COMPILED_KEYMAP_STORAGE_KEY, WARNINGS_STORAGE_KEY]);
+  const model = build_help_model(
+    commands_file.commands,
+    stored[COMPILED_KEYMAP_STORAGE_KEY] as CompiledKeymap | undefined,
+    (stored[WARNINGS_STORAGE_KEY] as string[] | undefined) ?? [],
+  );
+  render_help(document.body, model);
+}
+
+void main();

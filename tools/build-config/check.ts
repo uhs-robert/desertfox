@@ -6,6 +6,7 @@
 import type { CommandMeta } from "../../src/shared/command.ts";
 import type { SnippetEntry } from "../../src/shared/config.ts";
 import { to_firefox_shortcut, parse_sequence } from "../../src/shared/keys/index.ts";
+import { find_param, is_context_source, CONTEXT_SOURCE_NAMES } from "../../src/shared/registry/params.ts";
 import { check_args, create_registry, DefineError, type Registry } from "../../src/shared/registry/index.ts";
 import { is_plain_object } from "./errors.ts";
 import { origin_key, type MergedData } from "./merge.ts";
@@ -44,7 +45,7 @@ function check_invocation(invocation: unknown, registry: Registry, engine_names:
   if (!is_plain_object(invocation)) return ["a binding is an invocation object or an array of them"];
   const errors: string[] = [];
   for (const key of Object.keys(invocation)) {
-    if (!["id", "args", "count"].includes(key)) errors.push(`unknown field "${key}" (known: id, args, count)`);
+    if (!["id", "args", "count", "prompt"].includes(key)) errors.push(`unknown field "${key}" (known: id, args, count, prompt)`);
   }
   if (invocation.count !== undefined && !(Number.isInteger(invocation.count) && (invocation.count as number) >= 1)) {
     errors.push(`count must be a positive integer, got ${JSON.stringify(invocation.count)}`);
@@ -57,6 +58,28 @@ function check_invocation(invocation: unknown, registry: Registry, engine_names:
 
   const result = check_args(command, invocation.args as Record<string, unknown> | undefined, { search_engines: engine_names });
   if (!result.ok && result.missing_param === undefined) errors.push(result.error);
+  if (invocation.prompt !== undefined) errors.push(...check_prompt(invocation.prompt, command));
+  return errors;
+}
+
+function check_prompt(prompt: unknown, command: CommandMeta): string[] {
+  if (!is_plain_object(prompt)) return ["prompt must be an object { param, prefill? }"];
+  const errors: string[] = [];
+  for (const key of Object.keys(prompt)) {
+    if (!["param", "prefill"].includes(key)) errors.push(`prompt: unknown field "${key}" (known: param, prefill)`);
+  }
+  const param = typeof prompt.param === "string" ? find_param(command, prompt.param) : undefined;
+  if (!param) {
+    const names = (command.params ?? []).map((candidate) => candidate.name).join(", ") || "none";
+    errors.push(`prompt: param ${JSON.stringify(prompt.param)} is not a param of ${command.id} (params: ${names})`);
+  }
+  if (prompt.prefill !== undefined) {
+    if (!is_context_source(prompt.prefill)) {
+      errors.push(`prompt: prefill must be { "from": ${CONTEXT_SOURCE_NAMES.map((name) => `"${name}"`).join(" | ")} }`);
+    } else if (param && param.type !== "string") {
+      errors.push(`prompt: prefill needs a string param, "${param.name}" is ${param.type}`);
+    }
+  }
   return errors;
 }
 
