@@ -1,6 +1,6 @@
 // Assigns `browser` mode chords to the manifest's Firefox shortcut slots.
 
-import type { Invocation } from "../shared/invocation.ts";
+import type { BoundInvocation } from "../shared/invocation.ts";
 import type { TreeBranch } from "../shared/prefix_tree.ts";
 import { to_firefox_shortcut } from "../shared/keys/firefox_shortcut.ts";
 
@@ -10,7 +10,7 @@ export function slot_name(index: number): string {
   return `slot_${index + 1}`;
 }
 
-export type SlotAssignment = { slot_name: string; shortcut: string; invocations: Invocation[] };
+export type SlotAssignment = { slot_name: string; shortcut: string; invocations: BoundInvocation[] };
 
 export type SlotPlan = {
   assignments: SlotAssignment[];
@@ -52,7 +52,7 @@ export function plan_slots(browser_root: TreeBranch | undefined, slot_count = SL
   return { assignments, unused_slot_names, warnings };
 }
 
-export type SlotTable = Record<string, Invocation[]>;
+export type SlotTable = Record<string, BoundInvocation[]>;
 
 export function slot_table(plan: SlotPlan): SlotTable {
   return Object.fromEntries(plan.assignments.map((assignment) => [assignment.slot_name, assignment.invocations]));

@@ -298,3 +298,43 @@ test("contract: build_commands_file output feeds build-config", () => {
   const config = build_config(config_dir, read_commands_file(commands_path));
   assert.deepEqual(Object.keys(config.keymap.normal ?? {}), ["sa", "D"]);
 });
+
+test("a valid prompt passes and reaches the merged keymap", () => {
+  const dir = config_dir_with({
+    "keymap.jsonc": JSON.stringify({
+      normal: { O: { id: "open.url", args: { where: "new_tab" }, prompt: { param: "url", prefill: { from: "current_url" } } } },
+    }),
+  });
+  assert.deepEqual(build_config(dir, commands).keymap.normal?.["O"], {
+    id: "open.url",
+    args: { where: "new_tab" },
+    prompt: { param: "url", prefill: { from: "current_url" } },
+  });
+});
+
+test("a prompt is checked against the command", () => {
+  const dir = config_dir_with({
+    "keymap.jsonc": JSON.stringify({
+      normal: {
+        a: { id: "open.url", prompt: { param: "link" } },
+        b: { id: "open.url", prompt: { param: "url", prefill: { from: "history" } } },
+        c: { id: "open.url", prompt: { param: "where", prefill: { from: "clipboard" } } },
+        d: { id: "open.url", prompt: "url" },
+        e: { id: "open.url", prompt: { param: "url", extra: 1 } },
+        f: { id: "open.url", prompt: {} },
+      },
+    }),
+  });
+  const text = problems_of(dir).join("\n");
+  assert.match(text, /keymap normal "a": prompt: param "link" is not a param of open\.url \(params: url, where, container\)/);
+  assert.match(text, /keymap normal "b": prompt: prefill must be/);
+  assert.match(text, /keymap normal "c": prompt: prefill needs a string param, "where" is enum/);
+  assert.match(text, /keymap normal "d": prompt must be an object/);
+  assert.match(text, /keymap normal "e": prompt: unknown field "extra"/);
+  assert.match(text, /keymap normal "f": prompt: param undefined is not a param/);
+});
+
+test("the keymap schema offers prompt with the command's param names", () => {
+  const keymap_text = JSON.stringify(build_schemas(commands).keymap);
+  assert.match(keymap_text, /"prompt":\{[^}]*"param":\{"enum":\["url","where","container"\]\}/);
+});

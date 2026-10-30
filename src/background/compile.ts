@@ -6,6 +6,8 @@ import type { CommandDef } from "../shared/command.ts";
 import type { MergedConfig } from "../shared/config.ts";
 import type { KeymapConfig } from "../shared/keymap.ts";
 import type { CompiledKeymap, TreeBranch, TreeNode } from "../shared/prefix_tree.ts";
+import type { Prompt } from "../shared/invocation.ts";
+import { find_param, is_context_source } from "../shared/registry/params.ts";
 import { check_args } from "../shared/registry/check_args.ts";
 import type { EnumSources } from "../shared/registry/check_args.ts";
 import { compile_keymap } from "../shared/keys/compiler.ts";
@@ -50,6 +52,16 @@ function keep_node(node: TreeNode, path: string[], mode: string, input: CompileI
   for (const step of node.steps) {
     const command = input.get_command(step.invocation.id);
     if (!command) continue;
+    const prompt_error = prompt_problem(step.invocation.prompt, command);
+    if (prompt_error) {
+      warnings.push(`${mode}: skipped "${path.join("")}": ${prompt_error}`);
+      return false;
+    }
+    if (step.invocation.prompt) {
+      // Only the router can refuse a prompt until phase 2, so the step goes to the background.
+      step.runs_in = "background";
+      continue;
+    }
     const result = check_args(command, step.invocation.args, input.enum_sources);
     if (result.ok) {
       // Defaults filled in, so a content-side leaf runs without the registry.
@@ -63,4 +75,11 @@ function keep_node(node: TreeNode, path: string[], mode: string, input: CompileI
     }
   }
   return true;
+}
+
+function prompt_problem(prompt: Prompt | undefined, command: Pick<CommandDef, "id" | "params">): string | undefined {
+  if (!prompt) return undefined;
+  if (!find_param(command, prompt.param)) return `prompt names "${prompt.param}", which is not a param of ${command.id}`;
+  if (prompt.prefill !== undefined && !is_context_source(prompt.prefill)) return `prompt prefill is not a known context source`;
+  return undefined;
 }

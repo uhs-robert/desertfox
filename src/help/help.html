@@ -1,5 +1,44 @@
 <!doctype html>
 <html lang="en">
-<head><meta charset="utf-8"><title>OasisFox help</title></head>
+<head>
+<meta charset="utf-8">
+<title>OasisFox help</title>
+<style>
+  body { margin: 0; }
+  /* The defaults sit on an inner element, like every OasisFox surface. */
+  .oasisfox-help {
+    --oasisfox-bg: #1d2021;
+    --oasisfox-fg: #e6e1d6;
+    --oasisfox-accent: #e69a4c;
+    --oasisfox-font: 15px/1.5 system-ui, sans-serif;
+    --oasisfox-radius: 6px;
+    min-height: 100vh;
+    box-sizing: border-box;
+    padding: 1rem 2rem 4rem;
+    background: var(--oasisfox-bg);
+    color: var(--oasisfox-fg);
+    font: var(--oasisfox-font);
+  }
+  .oasisfox-help-page { max-width: 60rem; }
+  .oasisfox-help h1, .oasisfox-help h2 { color: var(--oasisfox-accent); }
+  .oasisfox-help h3 { margin: 0 0 .25rem; }
+  .oasisfox-help-command {
+    margin: 1rem 0;
+    padding: .75rem 1rem;
+    border: 1px solid color-mix(in srgb, var(--oasisfox-fg) 25%, transparent);
+    border-radius: var(--oasisfox-radius);
+  }
+  .oasisfox-help-usage, .oasisfox-help kbd, .oasisfox-help code {
+    font-family: ui-monospace, monospace;
+  }
+  .oasisfox-help-usage { margin: .25rem 0; }
+  .oasisfox-help kbd { color: var(--oasisfox-accent); }
+  .oasisfox-help-mode { display: inline-block; min-width: 4.5rem; margin-right: .5rem; opacity: .6; }
+  .oasisfox-help-muted { opacity: .6; }
+  .oasisfox-help-warnings { color: var(--oasisfox-accent); }
+  .oasisfox-help table { border-collapse: collapse; margin: .5rem 0; }
+  .oasisfox-help th, .oasisfox-help td { padding: .1rem 1rem .1rem 0; text-align: left; vertical-align: top; }
+</style>
+</head>
 <body><script src="help.js"></script></body>
 </html>
