@@ -3,7 +3,8 @@
 The content script. It runs at `document_start` in the top frame and in same-origin frames.
 
 - `main.ts`: the capture listener, the storage read, messages and mode wiring. Not unit tested, it needs a DOM.
-- `key_flow.ts`: decides per key token whether the page keeps the key, holds keys until the keymap is read, replays them. Pure.
+- `key_flow.ts`: decides per key token whether the page keeps the key, runs `browser` chords, holds plain keys until the keymap is read and replays them. Pure.
+- `cancelled_keys.ts`: the keys whose keydown was cancelled, so their keypress and keyup are cancelled too. Pure.
 - `mode_state.ts`, `page_mode.ts`: the modes and the pass-next flag. `page_mode` is the one shared instance.
 - `plan_steps.ts`, `invocation_args.ts`: split a leaf into ordered runs and apply a command's count rule. Pure.
 - `scroll_target.ts`, `match_pattern.ts`, `editable.ts`: pure helpers for scroll choice, `ignore_sites` and focus.

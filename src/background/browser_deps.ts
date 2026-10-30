@@ -7,8 +7,9 @@ import type { ReinjectDeps } from "./reload.ts";
 import { deliver_refusal } from "./refusal.ts";
 import type { RouterDeps } from "./router.ts";
 
-export function send_to_tab(tab_id: number, message: BackgroundToContent): Promise<unknown> {
-  return browser.tabs.sendMessage(tab_id, message);
+// Without a frame id the message reaches every frame, which shows a toast in each.
+export function send_to_tab(tab_id: number, message: BackgroundToContent, frame_id?: number): Promise<unknown> {
+  return browser.tabs.sendMessage(tab_id, message, frame_id === undefined ? {} : { frameId: frame_id });
 }
 
 // A tab with no content script rejects the send, so a ping settles the question without content's help.
@@ -51,7 +52,7 @@ export function make_router_deps(get_search_engine_names: () => Promise<string[]
     read_clipboard: () => navigator.clipboard.readText(),
     has_permission: (permission) => browser.permissions.contains({ permissions: [permission as browser._manifest.OptionalPermission] }),
     send_to_tab,
-    show_refusal: (tab_id, refusal) => deliver_refusal(channels, tab_id, refusal),
+    show_refusal: (tab_id, refusal, frame_id) => deliver_refusal(channels, tab_id, refusal, frame_id),
   };
 }
 

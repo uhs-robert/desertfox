@@ -106,3 +106,34 @@ test("a throwing handler refuses with its message", async () => {
   await create_router(deps).run({ invocations: [{ id: "a.b" }], mode: "normal" });
   assert.deepEqual(log, ["refuse 7 boom"]);
 });
+
+test("the active tab is read again for each repeat and each invocation", async () => {
+  let active = 1;
+  const seen: number[] = [];
+  const { deps } = make_fake(
+    {
+      "tab.next": { label: "Next", intent: "x", runs_in: "background", count: "repeat", run: (ctx) => void (seen.push(ctx.tab_id!), active++) },
+    },
+    { active_tab: async () => ({ tab_id: active, window_id: 1, url: undefined }) },
+  );
+  await create_router(deps).run({ invocations: [{ id: "tab.next", count: 2 }, { id: "tab.next" }], mode: "normal" });
+  assert.deepEqual(seen, [1, 2, 3]);
+});
+
+test("content runs and refusals go to the sender frame, or frame 0", async () => {
+  const frames: (number | undefined)[] = [];
+  const { deps } = make_fake(
+    {
+      "scroll.lines": { label: "Scroll", intent: "x", runs_in: "content", run: () => {} },
+      "open.url": { label: "Open", intent: "x", params: [{ name: "url", type: "string" }], runs_in: "background", run: () => {} },
+    },
+    {
+      send_to_tab: async (_tab, _message, frame_id) => void frames.push(frame_id),
+      show_refusal: async (_tab, _refusal, frame_id) => void frames.push(frame_id),
+    },
+  );
+  const router = create_router(deps);
+  await router.run({ invocations: [{ id: "scroll.lines" }, { id: "open.url" }], mode: "normal", frame_id: 3 });
+  await router.run({ invocations: [{ id: "scroll.lines" }], mode: "normal" });
+  assert.deepEqual(frames, [3, 3, 0]);
+});

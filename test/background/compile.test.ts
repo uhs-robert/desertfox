@@ -43,3 +43,16 @@ test("bad args warn and skip, defaults are filled, prompt bindings stay", () => 
   assert.equal(warnings.filter((w) => w.includes("nope")).length, 2);
   assert.equal(warnings.filter((w) => w.includes("focus")).length, 1);
 });
+
+test("a content binding that lacks a required param compiles to a background step", () => {
+  const { registry } = make_fake({
+    "mode.set": { label: "Mode", intent: "x", params: [{ name: "mode", type: "enum" as const, values: ["normal", "ignore"] }], runs_in: "content", run: () => {} },
+  });
+  const { compiled } = compile_config({
+    config: { ...empty_config(), keymap: { normal: { i: { id: "mode.set" } } } },
+    default_keymap: {},
+    get_command: (id) => registry.get(id),
+    enum_sources: { search_engines: [], containers: [] },
+  });
+  assert.equal((compiled.modes.normal!.children.i as TreeLeaf).steps[0]!.runs_in, "background");
+});

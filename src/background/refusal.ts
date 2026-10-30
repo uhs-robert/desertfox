@@ -1,7 +1,7 @@
 import type { BackgroundToContent, Refusal } from "../shared/messages.ts";
 
 export type RefusalChannels = {
-  send_to_tab: (tab_id: number, message: BackgroundToContent) => Promise<unknown>;
+  send_to_tab: (tab_id: number, message: BackgroundToContent, frame_id?: number) => Promise<unknown>;
   notify: (refusal: Refusal) => Promise<unknown>;
 };
 
@@ -13,10 +13,11 @@ export async function deliver_refusal(
   channels: RefusalChannels,
   tab_id: number | undefined,
   refusal: Refusal,
+  frame_id?: number,
 ): Promise<RefusalPath> {
   if (tab_id !== undefined) {
     try {
-      await channels.send_to_tab(tab_id, { type: "refusal", refusal });
+      await channels.send_to_tab(tab_id, { type: "refusal", refusal }, frame_id);
       return "toast";
     } catch {
       // Falls through to the notification.

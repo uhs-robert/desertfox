@@ -5,6 +5,7 @@ import type { BackgroundToContent, CompiledKeymap, ContentToBackground, CountBeh
 import { COMPILED_KEYMAP_STORAGE_KEY, COMPILED_KEYMAP_VERSION } from "../shared/index.ts";
 import { create_matcher, event_to_token } from "../shared/keys/index.ts";
 import { is_editable_element } from "./editable.ts";
+import { create_cancelled_keys } from "./cancelled_keys.ts";
 import { create_key_flow } from "./key_flow.ts";
 import { is_ignored_site } from "./match_pattern.ts";
 import { page_mode } from "./page_mode.ts";
@@ -63,10 +64,10 @@ const key_flow = create_key_flow({
     page_mode.escape();
     blur_focused_element();
   },
+  in_editable_field: () => is_editable_element(document.activeElement),
 });
 
-// Physical keys whose keydown was cancelled: their keypress and keyup are cancelled too.
-const cancelled_codes = new Set<string>();
+const cancelled_keys = create_cancelled_keys();
 
 function cancel(event: Event): void {
   event.preventDefault();
@@ -78,19 +79,17 @@ function on_keydown(event: KeyboardEvent): void {
   if (!event.isTrusted || event.isComposing) return;
   const token = event_to_token(event);
   if (token === null) return;
-  if (key_flow.handle_token(token) === "cancel") {
-    cancelled_codes.add(event.code);
-    cancel(event);
-  }
+  const decision = key_flow.handle_token(token);
+  cancelled_keys.record_keydown(event.code, decision);
+  if (decision === "cancel") cancel(event);
 }
 
 function on_keypress(event: KeyboardEvent): void {
-  if (cancelled_codes.has(event.code)) cancel(event);
+  if (cancelled_keys.cancels_keypress(event.code)) cancel(event);
 }
 
 function on_keyup(event: KeyboardEvent): void {
-  if (!cancelled_codes.delete(event.code)) return;
-  cancel(event);
+  if (cancelled_keys.take_keyup(event.code)) cancel(event);
 }
 
 const on_focusin = (event: Event) => follow_focus(true, event);
@@ -121,10 +120,12 @@ function follow_focus(entered: boolean, event: Event): void {
 
 function install_matcher(keymap: CompiledKeymap | undefined, first_load: boolean): void {
   const usable = keymap?.format_version === COMPILED_KEYMAP_VERSION ? keymap : undefined;
-  key_flow.set_matcher(create_matcher(usable ?? { format_version: COMPILED_KEYMAP_VERSION, modes: {}, ignore_sites: [], which_key_delay_ms: 0 }));
-  if (!first_load) return;
-  if (usable && is_ignored_site(usable.ignore_sites, location.href)) page_mode.set_mode("ignore");
-  else if (is_editable_element(document.activeElement)) page_mode.focus_entered_editable();
+  // The mode comes first, so keys held during the load replay in the right mode.
+  if (first_load) {
+    if (usable && is_ignored_site(usable.ignore_sites, location.href)) page_mode.set_mode("ignore");
+    else if (is_editable_element(document.activeElement)) page_mode.focus_entered_editable();
+  }
+  key_flow.set_matcher(create_matcher(usable ?? { format_version: COMPILED_KEYMAP_VERSION, modes: {}, ignore_sites: [], which_key_delay_ms: 0 }), usable?.modes.browser);
 }
 
 async function read_keymap(): Promise<CompiledKeymap | undefined> {
@@ -148,6 +149,7 @@ function start(): void {
 
   page_mode.listen((mode) => {
     if (!extension_context_alive()) return stop_listening();
+    key_flow.reset_sequence();
     void send_to_background({ type: "mode_changed", mode });
   });
 

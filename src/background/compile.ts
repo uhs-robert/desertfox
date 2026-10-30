@@ -57,8 +57,10 @@ function keep_node(node: TreeNode, path: string[], mode: string, input: CompileI
     } else if (result.missing_param === undefined) {
       warnings.push(`${mode}: skipped "${path.join("")}": ${result.error}`);
       return false;
+    } else {
+      // A missing param means the binding wants a prompt. Sending it to the background makes the router refuse it until phase 2.
+      step.runs_in = "background";
     }
-    // A missing param means the binding wants a prompt. It stays and the router refuses it until phase 2.
   }
   return true;
 }
