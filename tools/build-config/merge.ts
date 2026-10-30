@@ -82,11 +82,11 @@ function merge_search_engines(layers: DataLayer[], origins: Origins, problems: s
     const valid =
       is_plain_object(value) &&
       typeof value.url === "string" &&
-      value.url !== "" &&
+      value.url.includes("%s") &&
       typeof value.label === "string" &&
       value.label !== "" &&
       Object.keys(value).every((key) => key === "url" || key === "label");
-    if (!valid) problems.push(`${where}: an engine is {"url": "...", "label": "..."} and nothing else`);
+    if (!valid) problems.push(`${where}: an engine is {"url": "...%s...", "label": "..."} and nothing else`);
     return valid;
   }) as Record<string, SearchEngine>;
 }

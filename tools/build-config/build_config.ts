@@ -3,7 +3,7 @@
 import { readFileSync } from "node:fs";
 import type { CommandMeta, CommandsFile } from "../../src/shared/command.ts";
 import { CONFIG_FORMAT_VERSION, type MergedConfig, type SnippetEntry } from "../../src/shared/config.ts";
-import { check_merged, check_snippet_entries } from "./check.ts";
+import { check_config } from "./check.ts";
 import { ConfigErrors, is_plain_object } from "./errors.ts";
 import { merge_layers } from "./merge.ts";
 import { parse_snippet } from "./snippet.ts";
@@ -37,8 +37,7 @@ export function build_config(config_dir: string, commands: CommandMeta[]): Merge
     }
   }
 
-  check_snippet_entries(snippets, commands, snippet_paths, problems);
-  check_merged(merged, snippets, commands, problems);
+  check_config(merged, snippets, snippet_paths, commands, problems);
   if (problems.length > 0) throw new ConfigErrors(problems);
 
   return {

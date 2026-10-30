@@ -3,10 +3,12 @@ import { cpSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSyn
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
+import { design_registry } from "./registry/fixtures.ts";
 import { build_config, read_commands_file } from "../tools/build-config/build_config.ts";
 import { ConfigErrors } from "../tools/build-config/errors.ts";
 import { write_managed_storage, write_schemas } from "../tools/build-config/output.ts";
 import { build_schemas } from "../tools/build-config/schemas.ts";
+import { build_commands_file } from "../src/shared/registry/index.ts";
 import { parse_snippet } from "../tools/build-config/snippet.ts";
 
 const FIXTURES = join(import.meta.dirname, "fixtures", "build-config");
@@ -115,17 +117,17 @@ test("bad bindings name the file and the key", () => {
         h: { id: "tab.next", count: 0 },
       },
     }),
-    "search_engines.jsonc": '{ "alpha": { "url": "u", "label": "A" } }',
+    "search_engines.jsonc": '{ "alpha": { "url": "u%s", "label": "A" } }',
   });
   const text = problems_of(dir).join("\n");
   assert.match(text, /keymap\.jsonc: keymap normal "a": unknown command id "tab\.nope"/);
-  assert.match(text, /keymap normal "b": tab\.close: "focus" must be one of right, left/);
-  assert.match(text, /keymap normal "c": tab\.close has no param "depth"/);
-  assert.match(text, /keymap normal "d": tab\.close: "focus" must be a string/);
-  assert.match(text, /keymap normal "e": .*search engine "ghost"/);
-  assert.match(text, /keymap normal "f": open\.url: "container" is valid only when where is new_tab or background/);
-  assert.match(text, /keymap normal "g": open\.search: "depth" must be an integer/);
+  assert.match(text, /keymap normal "b": focus expects one of right, left/);
+  assert.match(text, /keymap normal "c": tab\.close: unknown arg "depth"/);
+  assert.match(text, /keymap normal "d": focus expects text/);
+  assert.match(text, /keymap normal "e": engine expects one of alpha/);
+  assert.match(text, /keymap normal "g": .*depth/);
   assert.match(text, /keymap normal "h": count must be a positive integer/);
+  assert.match(text, /keymap normal "f": --container needs --where/);
 });
 
 test("a search key naming a missing engine is an error", () => {
@@ -199,7 +201,7 @@ test("bindings can run a snippet command and check its args", () => {
     { "keymap.d/90-snippet.jsonc": '{ "normal": { "gi": { "id": "myapp.toggle_ids", "args": { "all": "yes" } } } }' },
     join(FIXTURES, "full"),
   );
-  assert.match(problems_of(dir).join("\n"), /"all" must be true or false/);
+  assert.match(problems_of(dir).join("\n"), /--all expects true or false/);
 });
 
 test("output is the managed storage document", () => {
@@ -224,4 +226,75 @@ test("one schema per data file lists command ids and params", () => {
   const keymap_text = readFileSync(join(dir, "keymap.schema.json"), "utf8");
   assert.match(keymap_text, /"const": "tab\.close"/);
   assert.match(keymap_text, /"right"/);
+});
+
+const SNIPPET_HEADER = "// label: L\n// intent: I\n// matches: *://*/*\n";
+
+test("a binding that leaves out a required param is valid, it asks for the prompt", () => {
+  const dir = config_dir_with({
+    "keymap.jsonc": '{ "normal": { "o": { "id": "open.url" }, "s": { "id": "open.search" } } }',
+  });
+  assert.doesNotThrow(() => build_config(dir, commands));
+});
+
+test("keymap keys are parsed, in every mode", () => {
+  const dir = config_dir_with({
+    "keymap.jsonc": JSON.stringify({
+      normal: { "a b": { id: "tab.next" } },
+      browser: { j: { id: "tab.next" }, "<A-j>": { id: "tab.next" } },
+    }),
+  });
+  const text = problems_of(dir).join("\n");
+  assert.match(text, /keymap normal "a b"/);
+  assert.match(text, /keymap browser "j": .*Ctrl or Alt/);
+  assert.doesNotMatch(text, /"<A-j>"/);
+});
+
+test("generator keys must be one key", () => {
+  const dir = config_dir_with({
+    "keymap.jsonc": '{ "search_keys": { "ab": "alpha" }, "container_keys": { "c d": "Work" } }',
+    "search_engines.jsonc": '{ "alpha": { "url": "u%s", "label": "A" } }',
+  });
+  const text = problems_of(dir).join("\n");
+  assert.match(text, /search_keys "ab": must be one key/);
+  assert.match(text, /container_keys "c d"/);
+});
+
+test("a search engine url needs the %s placeholder", () => {
+  const dir = config_dir_with({ "search_engines.jsonc": '{ "alpha": { "url": "https://a.example/", "label": "A" } }' });
+  assert.match(problems_of(dir).join("\n"), /alpha: an engine is/);
+});
+
+test("a snippet name or alias that clashes with a built-in name is rejected", () => {
+  const dir = config_dir_with({
+    "snippets/a.js": `// id: myapp.one\n// name: search\n${SNIPPET_HEADER}`,
+    "snippets/b.js": `// id: myapp.two\n// name: fine\n${SNIPPET_HEADER}`,
+    "snippets/c.js": `// id: myapp.three\n// name: tab.next\n${SNIPPET_HEADER}`,
+  });
+  const text = problems_of(dir).join("\n");
+  assert.match(text, /a\.js: command "myapp\.one": name: "search" is already used by "open\.search"/);
+  assert.match(text, /c\.js: .*"tab\.next"/);
+  assert.doesNotMatch(text, /b\.js/);
+});
+
+test("snippet flags get the define-time checks", () => {
+  const dir = config_dir_with({
+    "snippets/a.js": `// id: myapp.one\n${SNIPPET_HEADER}// flag: --help bool\n`,
+    "snippets/b.js": `// id: myapp.two\n${SNIPPET_HEADER}// flag: --x -q bool\n// flag: --y -q bool\n`,
+  });
+  const text = problems_of(dir).join("\n");
+  assert.match(text, /a\.js: .*--help is reserved/);
+  assert.match(text, /b\.js: .*-q is already used/);
+});
+
+test("contract: build_commands_file output feeds build-config", () => {
+  const dir = mkdtempSync(join(tmpdir(), "oasisfox-contract-"));
+  const commands_path = join(dir, "commands.json");
+  writeFileSync(commands_path, JSON.stringify(build_commands_file(design_registry())));
+  const config_dir = config_dir_with({
+    "keymap.jsonc": '{ "normal": { "sa": { "id": "open.search", "args": { "engine": "alpha", "where": "new_tab", "container": "Work" } }, "D": { "id": "tab.close", "args": { "focus": "left" } } } }',
+    "search_engines.jsonc": '{ "alpha": { "url": "u%s", "label": "A" } }',
+  });
+  const config = build_config(config_dir, read_commands_file(commands_path));
+  assert.deepEqual(Object.keys(config.keymap.normal ?? {}), ["sa", "D"]);
 });

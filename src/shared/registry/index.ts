@@ -4,7 +4,7 @@ import { create_registry } from "./define.ts";
 export const registry = create_registry();
 export const define = registry.define;
 
-export { create_registry, DefineError } from "./define.ts";
+export { COMMAND_ID_PATTERN, create_registry, DefineError } from "./define.ts";
 export type { CommandInput, Registry } from "./define.ts";
 export { check_args } from "./check_args.ts";
 export type { CheckResult, EnumSources } from "./check_args.ts";

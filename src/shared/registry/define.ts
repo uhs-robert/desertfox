@@ -30,7 +30,7 @@ export type Registry = {
   list(): CommandDef[];
 };
 
-const ID_PATTERN = /^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$/;
+export const COMMAND_ID_PATTERN = /^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$/;
 const PARAM_NAME_PATTERN = /^[a-z][a-z0-9_]*$/;
 const LONG_FLAG_PATTERN = /^[a-z][a-z0-9_-]*$/;
 const COMMAND_WORD_PATTERN = /^[^\s'"\\-][^\s'"\\]*$/;
@@ -47,7 +47,7 @@ export function create_registry(): Registry {
     const fail = (field: string, problem: string): never => {
       throw new DefineError(id, field, problem);
     };
-    if (!ID_PATTERN.test(id)) fail("id", "must be group.name, lowercase with underscores");
+    if (!COMMAND_ID_PATTERN.test(id)) fail("id", "must be group.name, lowercase with underscores");
     if (commands_by_id.has(id)) fail("id", "already defined");
 
     check_words(id, input, commands_by_word, fail);

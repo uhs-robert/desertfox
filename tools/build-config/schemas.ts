@@ -2,6 +2,7 @@
 // completes command ids, args and setting names.
 
 import type { CommandMeta, ParamDef } from "../../src/shared/command.ts";
+import { COMMAND_ID_PATTERN } from "../../src/shared/registry/index.ts";
 import { DEFAULT_SETTINGS } from "../../src/shared/config.ts";
 import { KEYMAP_MODES } from "./merge.ts";
 import type { DataKind } from "./source_files.ts";
@@ -57,7 +58,7 @@ function keymap_schema(commands: CommandMeta[]): Schema {
     type: "object",
     description: "A snippet command",
     properties: {
-      id: { type: "string", pattern: "^[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]*$" },
+      id: { type: "string", pattern: COMMAND_ID_PATTERN.source },
       args: { type: "object" },
       count: { type: "integer", minimum: 1 },
     },
