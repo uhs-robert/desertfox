@@ -1,0 +1,55 @@
+import type { CommandContext } from "../shared/command.ts";
+import { define } from "../shared/registry/index.ts";
+
+export const ZOOM_MIN = 0.3;
+export const ZOOM_MAX = 5;
+
+export type ZoomDeps = {
+  get_zoom: (tab_id: number) => Promise<number>;
+  set_zoom: (tab_id: number, level: number) => Promise<void>;
+};
+
+// Rounded to 2 places so repeated 0.1 steps do not drift to 1.2000000000000002.
+export function clamp_zoom(level: number): number {
+  return Math.round(Math.min(Math.max(level, ZOOM_MIN), ZOOM_MAX) * 100) / 100;
+}
+
+export function make_zoom_handlers(deps: ZoomDeps) {
+  function tab_id_of(ctx: CommandContext): number {
+    if (ctx.tab_id === undefined) throw new Error("no active tab");
+    return ctx.tab_id;
+  }
+  return {
+    by: async (ctx: CommandContext, args: { delta: number }) => {
+      const tab_id = tab_id_of(ctx);
+      await deps.set_zoom(tab_id, clamp_zoom((await deps.get_zoom(tab_id)) + args.delta));
+    },
+    set: (ctx: CommandContext, args: { level: number }) => deps.set_zoom(tab_id_of(ctx), clamp_zoom(args.level)),
+  };
+}
+
+export const browser_zoom_deps: ZoomDeps = {
+  get_zoom: (tab_id) => browser.tabs.getZoom(tab_id),
+  set_zoom: (tab_id, level) => browser.tabs.setZoom(tab_id, level),
+};
+
+const handlers = make_zoom_handlers(browser_zoom_deps);
+
+define("zoom.by", {
+  name: "zoomby",
+  label: "Zoom By",
+  intent: "Change the page zoom by an amount, where 0.1 is ten percent. The zoom stays between 30% and 500%. A count prefix repeats it.",
+  params: [{ name: "delta", type: "float" }],
+  runs_in: "background",
+  count: "repeat",
+  run: (ctx, args) => handlers.by(ctx, args as { delta: number }),
+});
+
+define("zoom.set", {
+  name: "zoom",
+  label: "Set Zoom",
+  intent: "Set the page zoom to a level, where 1 is 100%. The level is limited to 0.3 through 5.",
+  params: [{ name: "level", type: "float" }],
+  runs_in: "background",
+  run: (ctx, args) => handlers.set(ctx, args as { level: number }),
+});
