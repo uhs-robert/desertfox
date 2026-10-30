@@ -14,6 +14,12 @@ const COMMAND_MODULES = [
   "src/commands/browser.ts",
   "src/commands/zoom.ts",
   "src/commands/bookmark.ts",
+  "src/commands/page.ts",
+  "src/commands/url.ts",
+  "src/commands/open.ts",
+  "src/commands/copy.ts",
+  "src/commands/site.ts",
+  "src/commands/phase_2.ts",
 ];
 
 export async function write_commands_json(out_dir) {
