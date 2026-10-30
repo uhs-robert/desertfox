@@ -166,7 +166,7 @@ The tool reads `~/.config/oasisfox/` by default. Every data file is JSONC (JSON 
 | File | Holds |
 | --- | --- |
 | `keymap.jsonc` | Every key: bindings per mode, plus the `search_keys` and `container_keys` shortcuts. `null` removes a default binding. |
-| `search_engines.jsonc` | Search engines: URL template and label. Data only, no keys. |
+| `search_engines.jsonc` | Search engines: URL template and label. The template uses `%s` for the query. Data only, no keys. |
 | `command_aliases.jsonc` | Extra command line names, for example `"g": "open.search"`. |
 | `settings.jsonc` | Settings such as the which-key delay and the new tab page. |
 | `snippets/*.js` | One custom command per file. See [Snippets](#snippets). |
@@ -180,13 +180,13 @@ Every key lives in `keymap.jsonc`. The other files hold only data. Two shortcut 
 // keymap.jsonc
 {
   "search_keys": { "a": "arch", "b": "brave" },                       // sa/Sa, sb/Sb
-  "container_keys": { "a": "Family", "c": "Client", "p": "Personal" },  // ca/cA, cc/cC, cp/cP
+  "container_keys": { "a": "Family", "c": "Client", "p": "Personal" },  // ca/Ca, cc/Cc, cp/Cp
   "normal": { "J": { "id": "tab.next" } }
 }
 ```
 
 - `sa` searches with the `arch` engine in this tab, and `Sa` in a new tab.
-- `ca` reopens the current page in the Family container, and `cA` opens a prompt prefilled with the current URL in a new Family tab.
+- `ca` reopens the current page in the Family container, and `Ca` opens a prompt prefilled with the current URL in a new Family tab.
 - Containers themselves need no file. Firefox lists their names, colors and icons through `contextualIdentities.query()`, and completion and `--container` use that list. A name in `container_keys` that does not exist gets a warning at load and is skipped.
 - The prefixes for generated bindings (`s` and `S`, `c` and `C`) are settings. An explicit binding in the keymap wins over a generated one.
 
