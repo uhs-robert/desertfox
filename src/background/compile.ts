@@ -2,7 +2,7 @@
 // Each binding's args go through the one validator here, so a bad entry is
 // skipped with a warning and the content script never sees it.
 
-import type { CommandDef } from "../shared/command.ts";
+import type { CommandDef, Mode } from "../shared/command.ts";
 import type { MergedConfig } from "../shared/config.ts";
 import type { KeymapConfig } from "../shared/keymap.ts";
 import type { CompiledKeymap, TreeBranch, TreeNode } from "../shared/prefix_tree.ts";
@@ -16,7 +16,7 @@ import { merge_keymaps } from "./keymap_merge.ts";
 export type CompileInput = {
   config: MergedConfig;
   default_keymap: KeymapConfig;
-  get_command: (command_id: string) => Pick<CommandDef, "id" | "label" | "params" | "runs_in" | "count"> | undefined;
+  get_command: (command_id: string) => Pick<CommandDef, "id" | "label" | "params" | "runs_in" | "count" | "modes"> | undefined;
   enum_sources: EnumSources;
 };
 
@@ -52,6 +52,11 @@ function keep_node(node: TreeNode, path: string[], mode: string, input: CompileI
   for (const step of node.steps) {
     const command = input.get_command(step.invocation.id);
     if (!command) continue;
+    const mode_error = mode_problem(mode, command);
+    if (mode_error) {
+      warnings.push(`${mode}: skipped "${path.join("")}": ${mode_error}`);
+      return false;
+    }
     const prompt_error = prompt_problem(step.invocation.prompt, command);
     if (prompt_error) {
       warnings.push(`${mode}: skipped "${path.join("")}": ${prompt_error}`);
@@ -75,6 +80,14 @@ function keep_node(node: TreeNode, path: string[], mode: string, input: CompileI
     }
   }
   return true;
+}
+
+// Firefox shortcuts fire in the tab's normal mode, so a `browser` binding needs a command that runs there.
+function mode_problem(keymap_mode: string, command: Pick<CommandDef, "id" | "modes">): string | undefined {
+  const runtime_mode = keymap_mode === "browser" ? "normal" : keymap_mode;
+  const allowed = command.modes ?? ["normal"];
+  if (allowed.includes(runtime_mode as Mode)) return undefined;
+  return `${command.id} runs in ${allowed.join(", ")} mode, not ${runtime_mode}`;
 }
 
 function prompt_problem(prompt: Prompt | undefined, command: Pick<CommandDef, "id" | "params">): string | undefined {

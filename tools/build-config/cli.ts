@@ -11,7 +11,7 @@ import { build_schemas } from "./schemas.ts";
 const { values, positionals } = parseArgs({
   allowPositionals: true,
   options: {
-    commands: { type: "string", default: "dist/commands.json" },
+    commands: { type: "string", default: join(import.meta.dirname, "..", "..", "dist", "commands.json") },
     out: { type: "string", default: join(homedir(), ".mozilla", "managed-storage", `${EXTENSION_ID}.json`) },
     schemas: { type: "string" },
   },

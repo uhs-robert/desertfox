@@ -84,3 +84,20 @@ test("a prompt naming a missing param warns and skips", () => {
   assert.equal(compiled.modes.normal, undefined);
   assert.match(warnings[0]!, /prompt names "link"/);
 });
+
+test("a binding in a mode the command does not allow is warned about and skipped", () => {
+  const { registry } = make_fake({
+    "tab.close": { label: "Close", intent: "x", runs_in: "background", run: () => {} },
+    "mode.leave": { label: "Leave", intent: "x", runs_in: "content", modes: ["normal", "ignore"], run: () => {} },
+  });
+  const { compiled, warnings } = compile_config({
+    config: empty_config(),
+    default_keymap: { normal: { D: { id: "tab.close" } }, ignore: { D: { id: "tab.close" }, L: { id: "mode.leave" } }, browser: { "<A-j>": { id: "tab.close" } } },
+    get_command: (id) => registry.get(id),
+    enum_sources: { search_engines: [], containers: [] },
+  });
+  assert.ok(compiled.modes.normal!.children.D);
+  assert.deepEqual(Object.keys(compiled.modes.ignore!.children), ["L"]);
+  assert.ok(compiled.modes.browser!.children["<A-j>"]);
+  assert.equal(warnings.filter((w) => w.includes("ignore") && w.includes("tab.close")).length, 1);
+});

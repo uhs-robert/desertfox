@@ -16,7 +16,7 @@ export type RouterDeps = {
   active_tab: () => Promise<ActiveTab | undefined>;
   has_content_script: (tab_id: number) => Promise<boolean>;
   // Undefined when the content script cannot answer.
-  ask_selection: (tab_id: number) => Promise<string | undefined>;
+  ask_selection: (tab_id: number, frame_id: number) => Promise<string | undefined>;
   read_clipboard: () => Promise<string>;
   has_permission: (permission: string) => Promise<boolean>;
   send_to_tab: (tab_id: number, message: BackgroundToContent, frame_id?: number) => Promise<unknown>;
@@ -45,7 +45,10 @@ export function create_router(deps: RouterDeps): Router {
   async function read_now(request: RouteRequest): Promise<Now> {
     const active = await deps.active_tab();
     const tab_id = active?.tab_id ?? request.sender_tab_id;
-    const context: CommandContext = { tab_id, window_id: active?.window_id, frame_id: request.frame_id ?? 0, mode: request.mode };
+    // The sender frame exists only in the sender tab. Another tab gets its top frame.
+    const same_tab = tab_id !== undefined && tab_id === request.sender_tab_id;
+    const frame_id = same_tab ? (request.frame_id ?? 0) : 0;
+    const context: CommandContext = { tab_id, window_id: active?.window_id, frame_id, mode: request.mode };
     return { active, context };
   }
 
@@ -77,7 +80,7 @@ export function create_router(deps: RouterDeps): Router {
       return refuse(checked.missing_param === undefined ? checked.error : `${command.label} needs the command line (phase 2)`);
     }
 
-    const filled = await fill_context_sources(checked.args, context.tab_id, active);
+    const filled = await fill_context_sources(checked.args, context, active);
     if (!filled.ok) return filled;
 
     if (command.runs_in === "content") return run_in_content(command, filled.args, counted.times, context);
@@ -112,7 +115,7 @@ export function create_router(deps: RouterDeps): Router {
 
   async function fill_context_sources(
     args: CheckedArgs,
-    tab_id: number | undefined,
+    context: CommandContext,
     active: ActiveTab | undefined,
   ): Promise<{ ok: true; args: CheckedArgs } | { ok: false; message: string }> {
     const filled: CheckedArgs = {};
@@ -121,17 +124,17 @@ export function create_router(deps: RouterDeps): Router {
         filled[name] = value;
         continue;
       }
-      const text = await read_source(value.from, tab_id, active);
+      const text = await read_source(value.from, context, active);
       if (text === undefined) return { ok: false, message: `${name}: ${value.from} is not available here` };
       filled[name] = text;
     }
     return { ok: true, args: filled };
   }
 
-  async function read_source(source: ContextSourceName, tab_id: number | undefined, active: ActiveTab | undefined) {
+  async function read_source(source: ContextSourceName, context: CommandContext, active: ActiveTab | undefined) {
     if (source === "current_url") return active?.url;
     if (source === "clipboard") return deps.read_clipboard();
-    const selection = tab_id === undefined ? undefined : await deps.ask_selection(tab_id);
+    const selection = context.tab_id === undefined ? undefined : await deps.ask_selection(context.tab_id, context.frame_id ?? 0);
     return selection === "" ? undefined : selection;
   }
 

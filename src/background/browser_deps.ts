@@ -45,8 +45,8 @@ export function make_router_deps(get_search_engine_names: () => Promise<string[]
       return tab?.id === undefined ? undefined : { tab_id: tab.id, window_id: tab.windowId ?? -1, url: tab.url };
     },
     has_content_script,
-    ask_selection: async (tab_id) => {
-      const answer: unknown = await send_to_tab(tab_id, { type: "get_selection" }).catch(() => undefined);
+    ask_selection: async (tab_id, frame_id) => {
+      const answer: unknown = await send_to_tab(tab_id, { type: "get_selection" }, frame_id).catch(() => undefined);
       return typeof answer === "string" ? answer : undefined;
     },
     read_clipboard: () => navigator.clipboard.readText(),

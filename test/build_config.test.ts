@@ -338,3 +338,20 @@ test("the keymap schema offers prompt with the command's param names", () => {
   const keymap_text = JSON.stringify(build_schemas(commands).keymap);
   assert.match(keymap_text, /"prompt":\{[^}]*"param":\{"enum":\["url","where","container"\]\}/);
 });
+
+test("a binding in a mode the command does not allow is a problem", () => {
+  const dir = config_dir_with({ "keymap.jsonc": '{ "ignore": { "x": { "id": "tab.close" } } }' });
+  assert.match(problems_of(dir).join("\n"), /tab\.close runs in normal mode, not ignore/);
+});
+
+test("a built-in binding matches exactly one branch of the keymap schema", () => {
+  const schema = build_schemas(commands).keymap as { properties: { normal: { additionalProperties: { anyOf: { oneOf?: { properties?: { id: Record<string, unknown> } }[] }[] } } } };
+  const branches = schema.properties.normal.additionalProperties.anyOf[1]!.oneOf!;
+  const id_matches = (branch: { properties?: { id: Record<string, unknown> } }, id: string): boolean => {
+    const rule = branch.properties!.id as { const?: string; pattern?: string; not?: { enum: string[] } };
+    if (rule.const !== undefined) return rule.const === id;
+    return new RegExp(rule.pattern!).test(id) && !rule.not!.enum.includes(id);
+  };
+  assert.equal(branches.filter((branch) => id_matches(branch, "tab.close")).length, 1);
+  assert.equal(branches.filter((branch) => id_matches(branch, "site.custom")).length, 1);
+});

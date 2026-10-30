@@ -36,13 +36,26 @@ test("no browser section resets every slot", () => {
 test("apply updates used slots, resets the rest and reports refusals", async () => {
   const calls: string[] = [];
   const plan = plan_slots(root({ "<A-j>": leaf("a.b"), "<A-k>": leaf("a.b") }), 3);
-  const warnings = await apply_slot_plan(plan, {
+  const { warnings } = await apply_slot_plan(plan, {
     update: async ({ name, shortcut }) => {
       calls.push(`update ${name} ${shortcut}`);
       if (shortcut === "Alt+K") throw new Error("taken");
     },
     reset: async (name) => void calls.push(`reset ${name}`),
   });
-  assert.deepEqual(calls, ["reset slot_3", "update slot_1 Alt+J", "update slot_2 Alt+K"]);
+  assert.deepEqual(calls, ["reset slot_3", "update slot_1 Alt+J", "update slot_2 Alt+K", "reset slot_2"]);
   assert.equal(warnings.length, 1);
+});
+
+test("a refused slot is reset and left out of the slot table", async () => {
+  const plan = plan_slots(root({ "<A-j>": leaf("a.b"), "<A-k>": leaf("c.d") }), 3);
+  const reset: string[] = [];
+  const { applied } = await apply_slot_plan(plan, {
+    update: async ({ shortcut }) => {
+      if (shortcut === "Alt+K") throw new Error("taken");
+    },
+    reset: async (name) => void reset.push(name),
+  });
+  assert.ok(reset.includes("slot_2"));
+  assert.deepEqual(Object.keys(slot_table({ ...plan, assignments: applied })), ["slot_1"]);
 });

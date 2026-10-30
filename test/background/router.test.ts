@@ -133,7 +133,7 @@ test("content runs and refusals go to the sender frame, or frame 0", async () =>
     },
   );
   const router = create_router(deps);
-  await router.run({ invocations: [{ id: "scroll.lines" }, { id: "open.url" }], mode: "normal", frame_id: 3 });
+  await router.run({ invocations: [{ id: "scroll.lines" }, { id: "open.url" }], mode: "normal", sender_tab_id: 7, frame_id: 3 });
   await router.run({ invocations: [{ id: "scroll.lines" }], mode: "normal" });
   assert.deepEqual(frames, [3, 3, 0]);
 });
@@ -154,4 +154,24 @@ test("a prompt binding refuses with the phase 2 message even when no param is mi
   });
   assert.equal(response.ok, false);
   assert.deepEqual(log, ["refuse 7 Add Bookmark needs the command line (phase 2)"]);
+});
+
+test("get_selection goes to the sender frame", async () => {
+  const asked: [number, number][] = [];
+  const { deps } = make_fake(
+    { "open.go": { label: "Go", intent: "x", params: [{ name: "q", type: "string", default: { from: "selection" } }], runs_in: "background", run: () => {} } },
+    { ask_selection: async (tab_id, frame_id) => (asked.push([tab_id, frame_id]), "text") },
+  );
+  await create_router(deps).run({ invocations: [{ id: "open.go" }], mode: "normal", sender_tab_id: 7, frame_id: 3 });
+  assert.deepEqual(asked, [[7, 3]]);
+});
+
+test("a sender frame is not used in a different tab", async () => {
+  const frames: (number | undefined)[] = [];
+  const { deps } = make_fake(
+    { "scroll.lines": { label: "Scroll", intent: "x", runs_in: "content", run: () => {} } },
+    { send_to_tab: async (_tab, _message, frame_id) => void frames.push(frame_id) },
+  );
+  await create_router(deps).run({ invocations: [{ id: "scroll.lines" }], mode: "normal", sender_tab_id: 99, frame_id: 3 });
+  assert.deepEqual(frames, [0]);
 });

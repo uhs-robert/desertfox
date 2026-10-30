@@ -78,7 +78,7 @@ function keymap_schema(commands: CommandMeta[]): Schema {
     type: "object",
     description: "A snippet command",
     properties: {
-      id: { type: "string", pattern: COMMAND_ID_PATTERN.source },
+      id: { type: "string", pattern: COMMAND_ID_PATTERN.source, not: { enum: commands.map((command) => command.id) } },
       args: { type: "object" },
       count: { type: "integer", minimum: 1 },
       prompt: prompt_schema(undefined),

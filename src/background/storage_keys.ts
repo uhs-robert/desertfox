@@ -14,3 +14,6 @@ export const RELOAD_PENDING_STORAGE_KEY = "oasisfox_reload_pending";
 
 // What the startup found in open tabs after a reload. The key test reads it.
 export const REINJECT_REPORT_STORAGE_KEY = "oasisfox_reinject_report";
+
+// Prefix of one key per tab: the mode its content script last reported. Removed when the tab closes.
+export const TAB_MODE_STORAGE_PREFIX = "oasisfox_tab_mode_";

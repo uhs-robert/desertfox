@@ -58,19 +58,25 @@ export function slot_table(plan: SlotPlan): SlotTable {
   return Object.fromEntries(plan.assignments.map((assignment) => [assignment.slot_name, assignment.invocations]));
 }
 
-// Returns a warning per slot Firefox refused (another extension or Firefox itself owns the chord).
+// Returns a warning per slot Firefox refused (another extension or Firefox itself owns the chord)
+// and the assignments that took effect. A refused slot is reset, because it still holds its old chord.
 export async function apply_slot_plan(
   plan: SlotPlan,
   commands: Pick<typeof browser.commands, "update" | "reset">,
-): Promise<string[]> {
+): Promise<{ warnings: string[]; applied: SlotAssignment[] }> {
   const warnings: string[] = [];
+  const applied: SlotAssignment[] = [];
   for (const name of plan.unused_slot_names) {
     await commands.reset(name).catch(() => undefined);
   }
   for (const assignment of plan.assignments) {
-    await commands.update({ name: assignment.slot_name, shortcut: assignment.shortcut }).catch((error: unknown) => {
+    try {
+      await commands.update({ name: assignment.slot_name, shortcut: assignment.shortcut });
+      applied.push(assignment);
+    } catch (error) {
       warnings.push(`browser: Firefox refused "${assignment.shortcut}": ${String(error)}`);
-    });
+      await commands.reset(assignment.slot_name).catch(() => undefined);
+    }
   }
-  return warnings;
+  return { warnings, applied };
 }

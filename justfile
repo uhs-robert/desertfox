@@ -15,8 +15,8 @@ install_deps:
     @test -d node_modules || npm install --no-audit --no-fund
 
 # Merge the config directory (default ~/.config/oasisfox) into the managed storage file.
-build-config dir="" *flags="": install_deps
-    node tools/build-config/cli.ts {{dir}} {{flags}}
+build-config dir="" *flags="": build
+    node tools/build-config/cli.ts {{ if dir == "" { "" } else { quote(dir) } }} {{flags}}
 
 # Real key presses in a nested session, about a minute. Needs SHADOW_SH, the nested-session driver script.
 key-test: build

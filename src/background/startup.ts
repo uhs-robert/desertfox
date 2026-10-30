@@ -31,13 +31,14 @@ async function initialize(): Promise<MergedConfig> {
   });
 
   const plan = plan_slots(compiled.modes.browser);
-  const all_warnings = [...loaded.warnings, ...warnings, ...plan.warnings, ...(await apply_slot_plan(plan, browser.commands))];
+  const applied_slots = await apply_slot_plan(plan, browser.commands);
+  const all_warnings = [...loaded.warnings, ...warnings, ...plan.warnings, ...applied_slots.warnings];
   for (const warning of all_warnings) console.warn(`oasisfox: ${warning}`);
 
   await browser.storage.local.set({
     [COMPILED_KEYMAP_STORAGE_KEY]: compiled,
     [WARNINGS_STORAGE_KEY]: all_warnings,
-    [SLOT_TABLE_STORAGE_KEY]: slot_table(plan),
+    [SLOT_TABLE_STORAGE_KEY]: slot_table({ ...plan, assignments: applied_slots.applied }),
   });
   await tell_tabs_tree_changed();
   return loaded.config;

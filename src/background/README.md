@@ -7,6 +7,7 @@ The background page. It loads the config, compiles the keymap, assigns the Firef
 - `config_load.ts`, `keymap_merge.ts`, `compile.ts`: managed config over imported config, default keymap under user keymap, and the args check per binding.
 - `default_keymap.ts`: the shipped keys. A binding with `prompt` compiles to a background step, and the router refuses it until phase 2.
 - `slots.ts`: `browser` chords to the 10 manifest slots.
+- `tab_modes.ts`: the mode each tab last reported, in `storage.local`, and the ignore-mode gate for Firefox shortcuts.
 - `router.ts`: the one entry for run requests. Its pieces are `count.ts` and `refusal.ts`.
 - `reload.ts`: the marker and the tab repair behind `config.reload`.
 - `browser_deps.ts`: the only file that wires the router to Firefox calls.

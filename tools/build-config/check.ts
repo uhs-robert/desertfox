@@ -3,7 +3,7 @@
 // `check_args`, with one difference: a missing param is valid, because it is how
 // a binding asks for the prompt.
 
-import type { CommandMeta } from "../../src/shared/command.ts";
+import type { CommandMeta, Mode } from "../../src/shared/command.ts";
 import type { SnippetEntry } from "../../src/shared/config.ts";
 import { to_firefox_shortcut, parse_sequence } from "../../src/shared/keys/index.ts";
 import { find_param, is_context_source, CONTEXT_SOURCE_NAMES } from "../../src/shared/registry/params.ts";
@@ -41,7 +41,7 @@ function build_registry(commands: CommandMeta[], snippets: SnippetEntry[], snipp
   return registry;
 }
 
-function check_invocation(invocation: unknown, registry: Registry, engine_names: string[]): string[] {
+function check_invocation(invocation: unknown, registry: Registry, engine_names: string[], mode: string): string[] {
   if (!is_plain_object(invocation)) return ["a binding is an invocation object or an array of them"];
   const errors: string[] = [];
   for (const key of Object.keys(invocation)) {
@@ -55,6 +55,11 @@ function check_invocation(invocation: unknown, registry: Registry, engine_names:
   const command = registry.get(invocation.id);
   if (!command) return [...errors, `unknown command id "${invocation.id}"`];
   if (invocation.args !== undefined && !is_plain_object(invocation.args)) return [...errors, "args must be an object"];
+
+  // Firefox shortcuts fire in the tab's normal mode.
+  const runtime_mode = mode === "browser" ? "normal" : mode;
+  const allowed = command.modes ?? ["normal"];
+  if (!allowed.includes(runtime_mode as Mode)) errors.push(`${command.id} runs in ${allowed.join(", ")} mode, not ${runtime_mode}`);
 
   const result = check_args(command, invocation.args as Record<string, unknown> | undefined, { search_engines: engine_names });
   if (!result.ok && result.missing_param === undefined) errors.push(result.error);
@@ -128,7 +133,7 @@ export function check_config(
       const invocations = Array.isArray(binding) ? binding : [binding];
       if (invocations.length === 0) problems.push(`${location}: an empty array runs nothing`);
       for (const invocation of invocations) {
-        for (const message of check_invocation(invocation, registry, engine_names)) problems.push(`${location}: ${message}`);
+        for (const message of check_invocation(invocation, registry, engine_names, mode)) problems.push(`${location}: ${message}`);
       }
     }
   }
