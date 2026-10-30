@@ -3,3 +3,9 @@
 import "../commands/config.ts";
 import "../commands/scroll.ts";
 import "../commands/mode.ts";
+import "../commands/page.ts";
+import "../commands/url.ts";
+import "../commands/open.ts";
+import "../commands/copy.ts";
+import "../commands/site.ts";
+import "../commands/phase_2.ts";
