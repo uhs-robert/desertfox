@@ -57,3 +57,12 @@ test("the keys the owner approved are all bound", () => {
   assert.deepEqual(Object.keys(DEFAULT_KEYMAP.browser ?? {}), ["<A-j>", "<A-k>"]);
   assert.deepEqual(DEFAULT_KEYMAP.ignore?.["<S-Escape>"], { id: "mode.set", args: { mode: "normal" } });
 });
+
+test("the q group holds the OasisFox commands", () => {
+  const { warnings, compiled } = compile(DEFAULT_KEYMAP);
+  assert.deepEqual(warnings, []);
+  assert.deepEqual(DEFAULT_KEYMAP.normal?.qr, { id: "config.reload" });
+  assert.deepEqual(DEFAULT_KEYMAP.normal?.qh, { id: "help.open" });
+  assert.deepEqual(DEFAULT_KEYMAP.normal?.qi, { id: "mode.set", args: { mode: "ignore" } });
+  assert.ok(compiled.modes.normal);
+});
