@@ -10,6 +10,7 @@ import { create_key_flow } from "./key_flow.ts";
 import { mode_label } from "./mode_label.ts";
 import { show_mode_label } from "./mode_indicator.ts";
 import { is_ignored_site } from "./match_pattern.ts";
+import { wire_mode_reports } from "./mode_report.ts";
 import { page_mode } from "./page_mode.ts";
 import { plan_steps } from "./plan_steps.ts";
 import { run_content_invocation } from "./run_content.ts";
@@ -160,7 +161,7 @@ function start(): void {
   window.addEventListener("focusin", on_focusin, true);
   window.addEventListener("focusout", on_focusout, true);
 
-  page_mode.listen((mode) => {
+  wire_mode_reports(page_mode, (mode) => {
     if (!extension_context_alive()) return stop_listening();
     key_flow.reset_sequence();
     void send_to_background({ type: "mode_changed", mode });

@@ -6,10 +6,29 @@ import { TAB_MODE_STORAGE_PREFIX } from "./storage_keys.ts";
 
 type ModeStorage = Pick<typeof browser.storage.local, "get" | "set" | "remove">;
 
+const TOP_FRAME = 0;
+
 const key_of = (tab_id: number): string => TAB_MODE_STORAGE_PREFIX + tab_id;
 
 export async function remember_tab_mode(storage: ModeStorage, tab_id: number, mode: Mode): Promise<void> {
   await storage.set({ [key_of(tab_id)]: mode });
+}
+
+// Only the top frame sets the tab's mode: a field focused in an iframe must not hide ignore mode.
+export async function remember_reported_mode(storage: ModeStorage, tab_id: number, frame_id: number | undefined, mode: Mode): Promise<void> {
+  if (frame_id === TOP_FRAME) await remember_tab_mode(storage, tab_id, mode);
+}
+
+// A new page starts in normal mode and its content script reports again, so the old page's mode must not outlive it.
+export async function forget_mode_on_navigation(storage: ModeStorage, tab_id: number, change: { status?: string | undefined }): Promise<void> {
+  if (change.status === "loading") await forget_tab_mode(storage, tab_id);
+}
+
+// Tab ids are reused after a browser restart, so a new background run starts from nothing.
+export async function forget_all_tab_modes(storage: ModeStorage): Promise<void> {
+  const stored = await storage.get(null);
+  const keys = Object.keys(stored).filter((key) => key.startsWith(TAB_MODE_STORAGE_PREFIX));
+  if (keys.length > 0) await storage.remove(keys);
 }
 
 export async function forget_tab_mode(storage: ModeStorage, tab_id: number): Promise<void> {

@@ -6,6 +6,7 @@ import { create_cancelled_keys } from "../src/content/cancelled_keys.ts";
 import { create_key_flow } from "../src/content/key_flow.ts";
 import { is_ignored_site, matches_pattern } from "../src/content/match_pattern.ts";
 import { mode_label } from "../src/content/mode_label.ts";
+import { wire_mode_reports } from "../src/content/mode_report.ts";
 import { create_mode_state } from "../src/content/mode_state.ts";
 import { plan_steps } from "../src/content/plan_steps.ts";
 import { percent_to_offset, pick_scroll_target } from "../src/content/scroll_target.ts";
@@ -269,4 +270,12 @@ test("display listener fires on mode changes and on pass-next arming and use", (
   state.set_mode("ignore");
   state.set_mode("ignore");
   assert.equal(fired, 3);
+});
+
+test("the mode is reported at start and on every change", () => {
+  const state = create_mode_state();
+  const reports: string[] = [];
+  wire_mode_reports(state, (mode) => reports.push(mode));
+  state.set_mode("ignore");
+  assert.deepEqual(reports, ["normal", "ignore"]);
 });

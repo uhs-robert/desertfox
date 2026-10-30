@@ -7,8 +7,11 @@ import { create_router } from "./router.ts";
 import { SLOT_TABLE_STORAGE_KEY } from "./storage_keys.ts";
 import { get_config, get_search_engine_names } from "./startup.ts";
 import { registry } from "../shared/registry/index.ts";
-import { forget_tab_mode, recall_tab_mode, remember_tab_mode, shortcut_allowed } from "./tab_modes.ts";
+import { forget_all_tab_modes, forget_mode_on_navigation, forget_tab_mode, recall_tab_mode, remember_reported_mode, shortcut_allowed } from "./tab_modes.ts";
 import type { SlotTable } from "./slots.ts";
+
+// Mode reports wait for this, so the clear never removes a fresh report.
+const modes_cleared = forget_all_tab_modes(browser.storage.local);
 
 const router = create_router(make_router_deps(get_search_engine_names));
 
@@ -16,7 +19,8 @@ const router = create_router(make_router_deps(get_search_engine_names));
 browser.runtime.onMessage.addListener((message: unknown, sender) => {
   const request = message as ContentToBackground;
   if (request?.type === "mode_changed" && sender.tab?.id !== undefined) {
-    return remember_tab_mode(browser.storage.local, sender.tab.id, request.mode);
+    const tab_id = sender.tab.id;
+    return modes_cleared.then(() => remember_reported_mode(browser.storage.local, tab_id, sender.frameId, request.mode));
   }
   if (request?.type !== "run") return undefined;
   return get_config().then(() =>
@@ -38,6 +42,8 @@ browser.commands.onCommand.addListener(async (slot_name: string) => {
   const mode = active?.id === undefined ? "normal" : await recall_tab_mode(browser.storage.local, active.id);
   if (shortcut_allowed(mode, invocations, (id) => registry.get(id))) await router.run({ invocations, mode });
 });
+
+browser.tabs.onUpdated.addListener((tab_id, change) => forget_mode_on_navigation(browser.storage.local, tab_id, change));
 
 browser.tabs.onRemoved.addListener((tab_id) => forget_tab_mode(browser.storage.local, tab_id));
 
