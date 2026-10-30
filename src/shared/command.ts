@@ -81,7 +81,7 @@ export type CommandDef = {
   flags?: readonly FlagPreset[];
   runs_in: RunsIn;
   needs?: readonly Need[];
-  // Default when omitted: "ignore".
+  // Absent means "ignore". The registry applies this default.
   count?: CountBehavior;
   // Modes where a key can run the command. Default when omitted: ["normal"].
   modes?: readonly Mode[];

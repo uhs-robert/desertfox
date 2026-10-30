@@ -17,6 +17,8 @@ export type LeafStep = {
 
 export type TreeLeaf = {
   kind: "leaf";
+  // The command label, for which-key. The content script cannot load commands.json.
+  label?: string;
   steps: LeafStep[];
 };
 

@@ -38,6 +38,7 @@
     "storage",
     "notifications",
     "clipboardWrite",
+    "clipboardRead",
     "bookmarks",
     "contextualIdentities",
     "cookies",
