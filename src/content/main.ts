@@ -1,7 +1,7 @@
 // Content script entry: a capture listener on keydown, the compiled keymap from
 // storage, and the modes. Runs in the top frame and in same-origin frames.
 
-import type { BackgroundToContent, CompiledKeymap, ContentToBackground, CountBehavior, Invocation, ModeIndicator, RunResponse, TreeLeaf } from "../shared/index.ts";
+import type { BackgroundToContent, CompiledKeymap, ContentToBackground, CountBehavior, Invocation, Mode, ModeIndicator, RunResponse, TreeLeaf } from "../shared/index.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY, COMPILED_KEYMAP_VERSION, DEFAULT_SETTINGS } from "../shared/index.ts";
 import { create_matcher, event_to_token } from "../shared/keys/index.ts";
 import { is_editable_element } from "./editable.ts";
@@ -9,6 +9,7 @@ import { create_cancelled_keys } from "./cancelled_keys.ts";
 import { create_key_flow } from "./key_flow.ts";
 import { mode_label } from "./mode_label.ts";
 import { show_mode_label } from "./mode_indicator.ts";
+import type { BadgeColors } from "./mode_indicator.ts";
 import { is_ignored_site } from "./match_pattern.ts";
 import { wire_mode_reports } from "./mode_report.ts";
 import { page_mode } from "./page_mode.ts";
@@ -21,9 +22,13 @@ import { blur_focused_element } from "./handlers/page.ts";
 
 // Until the tree is read the setting is unknown, and the default applies.
 let mode_indicator: ModeIndicator = DEFAULT_SETTINGS.mode_indicator;
+// Absent until the tree is read, and the badge keeps its plain colors.
+let mode_colors: Partial<Record<Mode, BadgeColors>> | undefined;
 
 function refresh_mode_indicator(): void {
-  show_mode_label(mode_label(page_mode.get_mode(), page_mode.is_pass_next_armed(), mode_indicator));
+  const mode = page_mode.get_mode();
+  const pass_next_armed = page_mode.is_pass_next_armed();
+  show_mode_label(mode_label(mode, pass_next_armed, mode_indicator), pass_next_armed ? undefined : mode_colors?.[mode]);
 }
 
 const script_started_ms = performance.now();
@@ -133,6 +138,7 @@ function install_matcher(keymap: CompiledKeymap | undefined, first_load: boolean
   const usable = keymap?.format_version === COMPILED_KEYMAP_VERSION ? keymap : undefined;
   // A tree stored before the setting existed has no value, which means the default.
   mode_indicator = usable?.mode_indicator ?? DEFAULT_SETTINGS.mode_indicator;
+  mode_colors = usable?.mode_colors;
   // The mode comes first, so keys held during the load replay in the right mode.
   if (first_load) {
     if (usable && is_ignored_site(usable.ignore_sites, location.href)) page_mode.set_mode("ignore");

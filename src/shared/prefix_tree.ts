@@ -5,6 +5,7 @@ import type { CountBehavior, RunsIn } from "./command.ts";
 import type { BoundInvocation } from "./invocation.ts";
 import type { ModeIndicator } from "./config.ts";
 import type { KeymapMode } from "./keymap.ts";
+import type { ModeColors } from "./mode_colors.ts";
 
 export const COMPILED_KEYMAP_STORAGE_KEY = "oasisfox_compiled_keymap";
 
@@ -40,6 +41,8 @@ export type CompiledKeymap = {
   // Settings the content script needs before it can handle a key.
   ignore_sites: string[];
   mode_indicator: ModeIndicator;
+  // Badge colors from the palette setting. A tree stored before 0.1.1 has none, and the badge keeps its plain colors.
+  mode_colors?: ModeColors;
   which_key_delay_ms: number;
 };
 

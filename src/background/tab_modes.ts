@@ -15,8 +15,10 @@ export async function remember_tab_mode(storage: ModeStorage, tab_id: number, mo
 }
 
 // Only the top frame sets the tab's mode: a field focused in an iframe must not hide ignore mode.
-export async function remember_reported_mode(storage: ModeStorage, tab_id: number, frame_id: number | undefined, mode: Mode): Promise<void> {
-  if (frame_id === TOP_FRAME) await remember_tab_mode(storage, tab_id, mode);
+export async function remember_reported_mode(storage: ModeStorage, tab_id: number, frame_id: number | undefined, mode: Mode): Promise<boolean> {
+  if (frame_id !== TOP_FRAME) return false;
+  await remember_tab_mode(storage, tab_id, mode);
+  return true;
 }
 
 // A new page starts in normal mode and its content script reports again, so the old page's mode must not outlive it.
@@ -35,10 +37,15 @@ export async function forget_tab_mode(storage: ModeStorage, tab_id: number): Pro
   await storage.remove(key_of(tab_id));
 }
 
+// Undefined for a tab that never reported, for example an about: page where no content script runs.
+export async function recall_reported_mode(storage: ModeStorage, tab_id: number): Promise<Mode | undefined> {
+  const stored = await storage.get(key_of(tab_id));
+  return stored[key_of(tab_id)] as Mode | undefined;
+}
+
 // A tab that never reported a mode is in normal mode.
 export async function recall_tab_mode(storage: ModeStorage, tab_id: number): Promise<Mode> {
-  const stored = await storage.get(key_of(tab_id));
-  return (stored[key_of(tab_id)] as Mode | undefined) ?? "normal";
+  return (await recall_reported_mode(storage, tab_id)) ?? "normal";
 }
 
 // In ignore mode a shortcut runs only if its commands can run there, which is how a binding leaves ignore mode.
