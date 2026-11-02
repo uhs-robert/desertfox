@@ -21,12 +21,12 @@ export function create_mode_state(initial: Mode = "normal") {
     listen: (listener: (mode: Mode) => void) => {
       on_change = listener;
     },
-    // Only normal mode follows focus. Ignore, hint and command line modes keep the keys.
     // Fires after any change a mode indicator shows: the mode or the pass-next flag.
     listen_display: (listener: () => void) => {
       on_display_change = listener;
     },
     is_pass_next_armed: () => pass_next_armed,
+    // Only normal mode follows focus. Ignore, hint and command line modes keep the keys.
     focus_entered_editable: () => {
       if (mode === "normal") set_mode("insert");
     },
