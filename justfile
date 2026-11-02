@@ -37,6 +37,8 @@ sign: build
         exit 2
     fi
     rm -rf web-ext-artifacts
+    # web-ext 10.7.0 does not create the folder before it downloads the xpi.
+    mkdir -p web-ext-artifacts
     npx --yes web-ext@10.7.0 sign --channel=unlisted --source-dir dist --artifacts-dir web-ext-artifacts
     ls web-ext-artifacts/*.xpi
 
