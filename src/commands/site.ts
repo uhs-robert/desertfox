@@ -12,7 +12,7 @@ import {
 } from "./url_build.ts";
 import type { CommandContext } from "../shared/index.ts";
 
-const QUERY_PARAM = { name: "query", type: "string", rest: true } as const;
+const QUERY_PARAM = { name: "query", type: "string", rest: true, main: true } as const;
 
 // Opens the URL a builder makes from the current page. The builder returns undefined when the page has no answer.
 async function open_built(ctx: CommandContext, where: unknown, refusal: string, build: (page_url: string) => string | undefined) {
@@ -42,8 +42,8 @@ define("site.repo", {
 define("site.subreddit", {
   name: "subreddit",
   label: "Search Subreddit",
-  intent: "Search a subreddit. Without --sub, search the one the page is in, or all of Reddit.",
-  params: [QUERY_PARAM, { name: "sub", type: "string", default: DEFAULT_SUBREDDIT, flag: { short: "s" } }, WHERE_PARAM],
+  intent: "Search a subreddit. Without a sub, search the one the page is in, or all of Reddit.",
+  params: [QUERY_PARAM, { name: "sub", type: "string", default: DEFAULT_SUBREDDIT, flag: {} }, WHERE_PARAM],
   runs_in: "background",
   run: (ctx, args) => open_built(ctx, args.where, "This address has no subreddit search", (page_url) => subreddit_search_url(page_url, args.query as string, args.sub as string)),
 });

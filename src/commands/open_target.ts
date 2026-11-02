@@ -2,18 +2,18 @@
 
 import type { CommandContext, ParamDef } from "../shared/index.ts";
 
-export const WHERE = ["current", "new_tab", "background", "new_window"] as const;
+export const WHERE = ["here", "tab", "background", "window"] as const;
 export type Where = (typeof WHERE)[number];
 
-export const WHERE_PARAM: ParamDef = { name: "where", type: "enum", values: WHERE, default: "current", flag: { short: "w" } };
+export const WHERE_PARAM: ParamDef = { name: "where", type: "enum", values: WHERE, default: "here", flag: {} };
 
 // Firefox cannot change the container of an open tab, so the param needs a new tab or window.
 export const CONTAINER_PARAM: ParamDef = {
   name: "container",
   type: "string",
   values: { from: "containers" },
-  flag: { short: "c" },
-  when: { where: ["new_tab", "background", "new_window"] },
+  flag: {},
+  when: { where: ["tab", "background", "window"] },
 };
 
 export const DEFAULT_CONTAINER_NAME = "default";
@@ -53,16 +53,16 @@ export async function current_tab_url(ctx: CommandContext): Promise<string> {
 }
 
 export async function open_in(ctx: CommandContext, url: string, where: Where, container?: string): Promise<void> {
-  if (where === "current") {
+  if (where === "here") {
     await browser.tabs.update(require_tab_id(ctx), { url });
     return;
   }
   const cookie_store_id = await resolve_container_store_id(container);
   const store = cookie_store_id === undefined ? {} : { cookieStoreId: cookie_store_id };
-  if (where === "new_window") {
+  if (where === "window") {
     await browser.windows.create({ url, ...store });
     return;
   }
   const opener = ctx.tab_id === undefined ? {} : { openerTabId: ctx.tab_id };
-  await browser.tabs.create({ url, active: where === "new_tab", ...opener, ...store });
+  await browser.tabs.create({ url, active: where === "tab", ...opener, ...store });
 }

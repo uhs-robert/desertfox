@@ -49,13 +49,13 @@ define("open.search", {
   params: [
     { name: "engine", type: "enum", values: from_engines },
     { name: "query", type: "string", rest: true, default: { from: "selection" } },
-    { name: "where", type: "enum", values: WHERE, default: "current", flag: { short: "w" } },
+    { name: "where", type: "enum", values: WHERE, default: "here", flag: { short: "w" } },
     { name: "container", type: "string", values: from_containers, flag: { short: "c" },
-      when: { where: ["new_tab", "background", "new_window"] } },
+      when: { where: ["tab", "background", "window"] } },
   ],
   flags: [
     { short: "b", long: "background", sets: { where: "background" }, label: "Open in a background tab" },
-    { short: "t", long: "tab", sets: { where: "new_tab" }, label: "Open in a new tab" },
+    { short: "t", long: "tab", sets: { where: "tab" }, label: "Open in a new tab" },
   ],
   runs_in: "background",
   run: async (ctx, { engine, query, where, container }) => { /* ... */ },
@@ -68,7 +68,7 @@ The fields follow the Oasis action library (`home/hypr/.config/hypr/lib/act/init
 - `name`: the command line name, set by hand, for example `search`. It is optional. The full id always works on the command line. Names are never derived from the id, because derived names collide (`tab.close` and `window.close`).
 - `aliases`: more command line names, for example `s`.
 - `label`: a short title. Which-key, the palette and completion show it.
-- `intent`: one sentence. Help, which-key hover and completion details show it.
+- `intent`: one plain sentence on one line. Help, the status page, which-key hover and completion details show it. The registry rejects an empty or multi-line one.
 - `params`: typed and ordered. The types are `int`, `float`, `string`, `bool` and `enum`. A later phase adds `key` (one key press, for marks). Only a trailing run of params can have defaults.
 - `rest`: on the last `string` param, it takes all remaining words, so a query needs no quotes.
 - `flag`: makes a param a flag on the command line instead of a positional word. The long name is the param name (`--where`). `short` adds a one-letter form (`-w`). A `bool` param with `flag` is a switch, `--private`, and `--no-private` turns it off.

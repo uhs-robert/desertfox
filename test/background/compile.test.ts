@@ -18,7 +18,7 @@ const commands = {
     intent: "x",
     params: [
       { name: "engine", type: "enum" as const, values: { from: "search_engines" as const } },
-      { name: "where", type: "enum" as const, values: ["current", "new_tab"], default: "current" },
+      { name: "where", type: "enum" as const, values: ["here", "tab"], default: "here" },
     ],
     runs_in: "background" as const,
     run: () => {},

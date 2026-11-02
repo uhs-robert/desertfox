@@ -31,7 +31,7 @@ define("bookmark.add", {
   name: "bookmarkadd",
   label: "Add Bookmark",
   intent: "Bookmark a url, the current page by default, titled with the page title.",
-  params: [{ name: "url", type: "string", default: { from: "current_url" } }],
+  params: [{ name: "url", type: "string", main: true, default: { from: "current_url" } }],
   runs_in: "background",
   run: (ctx, args) => handlers.add(ctx, args as { url: string }),
 });

@@ -26,7 +26,7 @@ export const DEFAULT_KEYMAP: KeymapConfig = {
     ri: { id: "site.isdown" },
     xp: { id: "page.stop" },
     gh: { id: "page.home" },
-    gH: { id: "page.home", args: { where: "new_tab" } },
+    gH: { id: "page.home", args: { where: "tab" } },
 
     J: { id: "tab.next" },
     K: { id: "tab.prev" },
@@ -51,7 +51,7 @@ export const DEFAULT_KEYMAP: KeymapConfig = {
     "<A-m>": { id: "tab.mute_toggle" },
 
     // The t group works on tabs. Plain `t` is only a prefix.
-    tt: { id: "open.url", args: { where: "new_tab" }, prompt: { param: "url" } },
+    tt: { id: "open.url", args: { where: "tab" }, prompt: { param: "url" } },
     tT: { id: "tab.switch", prompt: { param: "tab" } },
     td: { id: "tab.duplicate" },
     tm: { id: "tab.move", prompt: { param: "offset" } },
@@ -70,7 +70,7 @@ export const DEFAULT_KEYMAP: KeymapConfig = {
     wc: { id: "window.close" },
     wd: { id: "tab.duplicate" },
     wD: { id: "tab.detach" },
-    wh: { id: "hint.run", args: { action: "new_window" } },
+    wh: { id: "hint.run", args: { action: "window" } },
     wu: { id: "window.undo_close" },
     U: { id: "window.undo_close" },
 
@@ -84,12 +84,12 @@ export const DEFAULT_KEYMAP: KeymapConfig = {
     gU: { id: "url.root" },
     gi: { id: "page.focus_input" },
 
-    p: { id: "open.clipboard", args: { where: "current" } },
-    P: { id: "open.clipboard", args: { where: "new_tab" } },
+    p: { id: "open.clipboard", args: { where: "here" } },
+    P: { id: "open.clipboard", args: { where: "tab" } },
     aa: { id: "bookmark.add" },
     ab: { id: "bookmark.add", prompt: { param: "url", prefill: { from: "current_url" } } },
-    b: { id: "bookmark.open", args: { where: "current" }, prompt: { param: "bookmark" } },
-    B: { id: "bookmark.open", args: { where: "new_tab" }, prompt: { param: "bookmark" } },
+    b: { id: "bookmark.open", args: { where: "here" }, prompt: { param: "bookmark" } },
+    B: { id: "bookmark.open", args: { where: "tab" }, prompt: { param: "bookmark" } },
 
     zi: { id: "zoom.by", args: { delta: 0.1 } },
     "z+": { id: "zoom.by", args: { delta: 0.1 } },
@@ -121,10 +121,10 @@ export const DEFAULT_KEYMAP: KeymapConfig = {
     qi: { id: "mode.set", args: { mode: "ignore" } },
     qb: { id: "page.blur" },
 
-    o: { id: "open.url", args: { where: "current" }, prompt: { param: "url" } },
-    O: { id: "open.url", args: { where: "new_tab" }, prompt: { param: "url" } },
-    go: { id: "open.url", args: { where: "current" }, prompt: { param: "url", prefill: { from: "current_url" } } },
-    gO: { id: "open.url", args: { where: "new_tab" }, prompt: { param: "url", prefill: { from: "current_url" } } },
+    o: { id: "open.url", args: { where: "here" }, prompt: { param: "url" } },
+    O: { id: "open.url", args: { where: "tab" }, prompt: { param: "url" } },
+    go: { id: "open.url", args: { where: "here" }, prompt: { param: "url", prefill: { from: "current_url" } } },
+    gO: { id: "open.url", args: { where: "tab" }, prompt: { param: "url", prefill: { from: "current_url" } } },
     f: { id: "hint.run", args: { action: "open" } },
     F: { id: "hint.run", args: { action: "background" } },
     v: { id: "hint.run", args: { action: "select" } },

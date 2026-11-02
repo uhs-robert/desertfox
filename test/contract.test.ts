@@ -5,7 +5,7 @@ import { test } from "node:test";
 import type { CommandDef, CompiledKeymap, TreeLeaf } from "../src/shared/index.ts";
 import { CONFIG_FORMAT_VERSION, DEFAULT_SETTINGS } from "../src/shared/index.ts";
 
-const WHERE = ["current", "new_tab", "background", "new_window"] as const;
+const WHERE = ["here", "tab", "background", "window"] as const;
 
 const tab_close: CommandDef = {
   id: "tab.close",
@@ -28,18 +28,18 @@ const open_search: CommandDef = {
   params: [
     { name: "engine", type: "enum", values: { from: "search_engines" } },
     { name: "query", type: "string", rest: true, default: { from: "selection" } },
-    { name: "where", type: "enum", values: WHERE, default: "current", flag: { short: "w" } },
+    { name: "where", type: "enum", values: WHERE, default: "here", flag: { short: "w" } },
     {
       name: "container",
       type: "string",
       values: { from: "containers" },
       flag: { short: "c" },
-      when: { where: ["new_tab", "background", "new_window"] },
+      when: { where: ["tab", "background", "window"] },
     },
   ],
   flags: [
     { short: "b", long: "background", sets: { where: "background" }, label: "Open in a background tab" },
-    { short: "t", long: "tab", sets: { where: "new_tab" }, label: "Open in a new tab" },
+    { short: "t", long: "tab", sets: { where: "tab" }, label: "Open in a new tab" },
   ],
   runs_in: "background",
   run: async () => {},
