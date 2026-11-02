@@ -334,7 +334,7 @@ async function main() {
     });
 
     // part A: scroll align
-    await run_case("scroll.align puts the focused button at the top, center and bottom", async () => {
+    await run_case("scroll.align puts the field just left at the top, center and bottom", async () => {
       writeFileSync(join(config_dir, "keymap.jsonc"), JSON.stringify({
         normal: {
           Zt: { id: "scroll.align", args: { position: "top" } },
@@ -359,8 +359,9 @@ async function main() {
         await sleep(300);
         return events.filter(scroll_of("align")).at(-1).field_top ?? reported.field_top;
       };
-      // A button stays in normal mode when focused; a text field would switch to insert mode, where Z keys type.
-      await field_top_after(["-k", "Tab"]);
+      await field_top_after(["gi"]);
+      await send_keys("-k", "Escape");
+      await sleep(300);
       const top = await field_top_after(["Zt"]);
       expect(Math.abs(top) <= 2, `Zt left the field at ${top}`);
       const center = await field_top_after(["Zz"]);

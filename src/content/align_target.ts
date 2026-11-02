@@ -12,13 +12,14 @@ export type AlignSelection<Ref> = {
 };
 
 // Order: the focused element unless it is the page itself, then the selection's field, then the
-// element around the selection.
+// element around the selection, then the element just blurred.
 export function choose_align_target<Ref>(
   focused: AlignFocus<Ref> | undefined,
   selection: AlignSelection<Ref> | undefined,
+  remembered: Ref | undefined,
 ): Ref | undefined {
   if (focused && !focused.is_page_root) return focused.ref;
-  return selection?.editable ?? selection?.parent;
+  return selection?.editable ?? selection?.parent ?? remembered;
 }
 
 export const SCROLL_BLOCK: Record<AlignPosition, ScrollLogicalPosition> = {

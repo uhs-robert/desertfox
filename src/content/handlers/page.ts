@@ -1,10 +1,18 @@
 import { is_editable_element } from "../editable.ts";
 import type { ContentHandler } from "./types.ts";
 
+let last_blurred: HTMLElement | undefined;
+
+// The element the last blur took focus from, kept so scroll.align can still find the field the user left.
+export const last_blurred_element = () => last_blurred;
+
 export function blur_focused_element(): void {
   let focused = document.activeElement;
   while (focused?.shadowRoot?.activeElement) focused = focused.shadowRoot.activeElement;
-  if (focused instanceof HTMLElement) focused.blur();
+  if (focused instanceof HTMLElement && focused !== document.body) {
+    last_blurred = focused;
+    focused.blur();
+  }
 }
 
 const is_visible = (element: Element) => {

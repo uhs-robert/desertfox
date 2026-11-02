@@ -1,5 +1,6 @@
 import type { AlignFocus, AlignPosition, AlignSelection } from "../align_target.ts";
 import { choose_align_target, SCROLL_BLOCK } from "../align_target.ts";
+import { last_blurred_element } from "./page.ts";
 import type { ContentHandler } from "./types.ts";
 
 function focused_element(): AlignFocus<Element> | undefined {
@@ -12,13 +13,15 @@ function focused_element(): AlignFocus<Element> | undefined {
 function selection_target(): AlignSelection<Element> | undefined {
   const node = getSelection()?.focusNode;
   const parent = node instanceof HTMLElement ? node : node?.parentElement;
-  if (!parent) return undefined;
+  // A blurred field leaves the selection on body, which says nothing about where the user was.
+  if (!parent || parent === document.body || parent === document.documentElement) return undefined;
   return { parent, editable: (parent.isContentEditable && parent.closest("[contenteditable]")) || undefined };
 }
 
 export const scroll_align: ContentHandler = {
   run: (args) => {
-    const target = choose_align_target(focused_element(), selection_target());
+    const blurred = last_blurred_element();
+    const target = choose_align_target(focused_element(), selection_target(), blurred?.isConnected ? blurred : undefined);
     if (!target) throw new Error("Nothing focused or selected to align");
     target.scrollIntoView({ block: SCROLL_BLOCK[args.position as AlignPosition], behavior: "instant" });
   },
