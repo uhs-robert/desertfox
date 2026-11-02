@@ -231,3 +231,34 @@ test("a sink that handles a token keeps it from the keymap", () => {
   assert.deepEqual(page.decisions, ["a:cancel", "<Escape>:cancel"]);
   assert.equal(page.state.get_mode(), "normal");
 });
+
+test("toasts and badge updates requested before the ui bundle loads are kept and run in order, without holding keys", async () => {
+  const page = make_page();
+  const drawn: string[] = [];
+  page.host.run_command("ui.badge", "ui", { label: "NORMAL" }, "ui missing", false);
+  page.host.run_command("ui.toast", "ui", { message: "first" }, "ui missing", false);
+  page.host.run_command("ui.toast", "ui", { message: "second" }, "ui missing", false);
+  assert.equal(page.loads.length, 1);
+  assert.equal(page.host.is_loading(), false);
+  page.press("x");
+  assert.deepEqual(page.events, ["run log_x"]);
+  page.loads[0]!.finish(true, () => {
+    page.host.api.register_handler("ui.badge", (args) => drawn.push(`badge ${args.label}`));
+    page.host.api.register_handler("ui.toast", (args) => drawn.push(`toast ${args.message}`));
+  });
+  await page.settle();
+  assert.deepEqual(drawn, ["badge NORMAL", "toast first", "toast second"]);
+  page.host.run_command("ui.toast", "ui", { message: "third" }, "ui missing", false);
+  assert.equal(drawn.at(-1), "toast third");
+  assert.equal(page.loads.length, 1);
+});
+
+test("when the ui bundle cannot load, the error is reported once and does not ask for the bundle again by itself", async () => {
+  const page = make_page();
+  page.host.run_command("ui.toast", "ui", { message: "lost" }, "ui missing", false);
+  page.loads[0]!.finish(false);
+  await page.settle();
+  assert.deepEqual(page.errors, ["OasisFox could not load ui"]);
+  assert.equal(page.host.has_handler("ui.toast"), false);
+  assert.equal(page.loads.length, 1);
+});

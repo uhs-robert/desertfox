@@ -8,16 +8,17 @@ Status values:
 - `later`: phase 3.
 - `dropped`: not built. The last column gives the reason.
 
-The shipped defaults bind every `v1` row whose command exists, with four kinds of exception:
+The shipped defaults bind every `v1` row whose command exists, with three kinds of exception:
 
 - Rows that name a search engine or a container (`s`, `S`, `,`, `c`, `C` keys). The user's config generates them from `search_keys` and `container_keys`.
-- The motion, edit and history keys of the `caret`, `visual` and `cmdline` modes (`h j k l w b e` and so on, `y`, `o`, `s`, `<CR>`, `<C-u>`, `<Up>`, `<Down>`). They wait for their commands.
 - `;f`, because `hint.run` has no link text param yet.
 - `ZZ`, because closing every window cannot be undone. Bind it in the config.
 
+The `caret`, `visual` and `cmdline` rows bind placeholder commands that refuse until their piece builds them.
+
 A note "(prompts)" means the binding leaves a param out, so the command line asks for it.
 
-dropped: 8 | later: 15 | v1: 230
+dropped: 8 | later: 15 | v1: 267
 
 | mode | key | status | OasisFox |
 | --- | --- | --- | --- |
@@ -191,6 +192,43 @@ dropped: 8 | later: 15 | v1: 230
 | cmdline | `<S-Tab>` | v1 | `cmdline.prev_completion` (new in phase 2) |
 | cmdline | `<C-p>` | v1 | `cmdline.prev_completion` (new in phase 2) |
 | cmdline | `<Escape>` | v1 | `mode.escape` (new in phase 2) |
+| caret | `h` | v1 | `caret.move char back` (new in phase 2) |
+| caret | `l` | v1 | `caret.move char` (new in phase 2) |
+| caret | `j` | v1 | `caret.move line` (new in phase 2) |
+| caret | `k` | v1 | `caret.move line back` (new in phase 2) |
+| caret | `w` | v1 | `caret.move word` (new in phase 2) |
+| caret | `b` | v1 | `caret.move word back` (new in phase 2) |
+| caret | `e` | v1 | `caret.move word_end` (new in phase 2) |
+| caret | `W` | v1 | `caret.move word big` (new in phase 2) |
+| caret | `B` | v1 | `caret.move word back big` (new in phase 2) |
+| caret | `E` | v1 | `caret.move word_end big` (new in phase 2) |
+| caret | `0` | v1 | `caret.move line_start` (new in phase 2) |
+| caret | `^` | v1 | `caret.move line_first` (new in phase 2) |
+| caret | `$` | v1 | `caret.move line_end` (new in phase 2) |
+| caret | `gg` | v1 | `caret.move start` (new in phase 2) |
+| caret | `G` | v1 | `caret.move end` (new in phase 2) |
+| visual | `h` | v1 | `caret.move char back` (new in phase 2) |
+| visual | `l` | v1 | `caret.move char` (new in phase 2) |
+| visual | `j` | v1 | `caret.move line` (new in phase 2) |
+| visual | `k` | v1 | `caret.move line back` (new in phase 2) |
+| visual | `w` | v1 | `caret.move word` (new in phase 2) |
+| visual | `b` | v1 | `caret.move word back` (new in phase 2) |
+| visual | `e` | v1 | `caret.move word_end` (new in phase 2) |
+| visual | `W` | v1 | `caret.move word big` (new in phase 2) |
+| visual | `B` | v1 | `caret.move word back big` (new in phase 2) |
+| visual | `E` | v1 | `caret.move word_end big` (new in phase 2) |
+| visual | `0` | v1 | `caret.move line_start` (new in phase 2) |
+| visual | `^` | v1 | `caret.move line_first` (new in phase 2) |
+| visual | `$` | v1 | `caret.move line_end` (new in phase 2) |
+| visual | `gg` | v1 | `caret.move start` (new in phase 2) |
+| visual | `G` | v1 | `caret.move end` (new in phase 2) |
+| visual | `y` | v1 | `visual.act yank` (new in phase 2) |
+| visual | `o` | v1 | `visual.act swap` (new in phase 2) |
+| visual | `s` | v1 | `visual.act search` (new in phase 2) |
+| cmdline | `<Enter>` | v1 | `cmdline.submit` (new in phase 2) |
+| cmdline | `<ArrowUp>` | v1 | `cmdline.history prev` (new in phase 2) |
+| cmdline | `<ArrowDown>` | v1 | `cmdline.history next` (new in phase 2) |
+| cmdline | `<C-u>` | v1 | `cmdline.clear` (new in phase 2) |
 | hint | `<Escape>` | v1 | `mode.escape` (new in phase 2) |
 | hint | `<C-[>` | v1 | `mode.escape` (new in phase 2) |
 | caret | `v` | v1 | `mode.set mode=visual` (new in phase 2) |

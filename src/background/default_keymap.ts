@@ -3,7 +3,26 @@ import type { KeymapConfig } from "../shared/keymap.ts";
 // Every `v1` row of docs/keymap.md whose command exists, except the rows that need the user's own data.
 // Search engine keys (`s`, `S`, `,`) and container keys (`c`) come from the user's config.
 // Keys of the phase 2 stubs (`o O T b B f F ; : g? V`) are bound now and refuse until hints, the command line, the picker and caret mode exist.
-// The caret, visual, hint and cmdline sections hold only the keys whose commands exist. Their motion and edit keys wait for those commands.
+// The caret, visual and cmdline commands are placeholders too: they load their bundle and refuse until it registers them.
+// The caret and visual motions. `0` and `$` are line ends, `^` the first non-blank, `gg` and `G` the ends of the text.
+const MOTIONS: Record<string, { id: string; args: Record<string, unknown> }> = {
+  h: { id: "caret.move", args: { unit: "char", direction: "back" } },
+  l: { id: "caret.move", args: { unit: "char" } },
+  j: { id: "caret.move", args: { unit: "line" } },
+  k: { id: "caret.move", args: { unit: "line", direction: "back" } },
+  w: { id: "caret.move", args: { unit: "word" } },
+  b: { id: "caret.move", args: { unit: "word", direction: "back" } },
+  e: { id: "caret.move", args: { unit: "word_end" } },
+  W: { id: "caret.move", args: { unit: "word", big: true } },
+  B: { id: "caret.move", args: { unit: "word", direction: "back", big: true } },
+  E: { id: "caret.move", args: { unit: "word_end", big: true } },
+  "0": { id: "caret.move", args: { unit: "line_start" } },
+  "^": { id: "caret.move", args: { unit: "line_first" } },
+  $: { id: "caret.move", args: { unit: "line_end" } },
+  gg: { id: "caret.move", args: { unit: "start" } },
+  G: { id: "caret.move", args: { unit: "end" } },
+};
+
 export const DEFAULT_KEYMAP: KeymapConfig = {
   normal: {
     h: { id: "scroll.pixels", args: { dx: -50 } },
@@ -149,13 +168,22 @@ export const DEFAULT_KEYMAP: KeymapConfig = {
     "<S-Tab>": { id: "cmdline.prev_completion" },
     "<C-p>": { id: "cmdline.prev_completion" },
     "<A-ArrowUp>": { id: "cmdline.prev_completion" },
+    "<Enter>": { id: "cmdline.submit" },
+    "<ArrowUp>": { id: "cmdline.history", args: { direction: "prev" } },
+    "<ArrowDown>": { id: "cmdline.history", args: { direction: "next" } },
+    "<C-u>": { id: "cmdline.clear" },
   },
   caret: {
     v: { id: "mode.set", args: { mode: "visual" } },
     "<Escape>": { id: "mode.escape" },
     "<C-[>": { id: "mode.escape" },
+    ...MOTIONS,
   },
   visual: {
+    ...MOTIONS,
+    y: { id: "visual.act", args: { action: "yank" } },
+    o: { id: "visual.act", args: { action: "swap" } },
+    s: { id: "visual.act", args: { action: "search" } },
     "<Escape>": { id: "mode.escape" },
     "<C-[>": { id: "mode.escape" },
   },

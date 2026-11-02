@@ -9,6 +9,7 @@ const MAX_BYTES = {
   "caret.js": 24 * 1024,
   "whichkey.js": 8 * 1024,
   "cmdline.js": 4 * 1024,
+  "ui.js": 8 * 1024,
   "cmdline_page.js": 48 * 1024,
 };
 
@@ -26,6 +27,7 @@ const minified_entries = {
   caret: "src/content/caret/main.ts",
   whichkey: "src/content/whichkey/main.ts",
   cmdline: "src/cmdline/host.ts",
+  ui: "src/content/ui/main.ts",
   cmdline_page: "src/cmdline/page.ts",
 };
 for (const [name, entry] of Object.entries(minified_entries)) {

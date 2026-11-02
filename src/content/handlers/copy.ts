@@ -1,4 +1,4 @@
-import { show_toast } from "../toast.ts";
+import { show_toast } from "../ui_proxy.ts";
 import type { ContentHandler } from "./types.ts";
 
 export const COPY_FORMATS = ["plain", "canonical", "short", "title", "markdown", "org"] as const;

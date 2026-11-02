@@ -78,4 +78,5 @@ test("help.html loads the content script after help.js", () => {
   const help = html.indexOf('<script src="help.js"></script>');
   const content = html.indexOf('<script src="content.js"></script>');
   assert.ok(help >= 0 && content > help);
+  assert.ok(html.indexOf('<script src="ui.js"></script>') > content, "the badge and toast bundle loads by tag, because executeScript is refused here");
 });

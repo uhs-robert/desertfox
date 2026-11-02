@@ -10,15 +10,14 @@ import { is_editable_element } from "./editable.ts";
 import { create_cancelled_keys } from "./cancelled_keys.ts";
 import { create_key_flow } from "./key_flow.ts";
 import { mode_label } from "./mode_label.ts";
-import { show_mode_label } from "./mode_indicator.ts";
 import type { BadgeColors } from "./mode_indicator.ts";
+import { show_mode_label, show_toast } from "./ui_proxy.ts";
 import { is_ignored_site } from "./match_pattern.ts";
 import { wire_mode_reports } from "./mode_report.ts";
 import { page_mode } from "./page_mode.ts";
 import { plan_steps } from "./plan_steps.ts";
 import { run_content_invocation } from "./run_content.ts";
 import { read_context_source } from "./context.ts";
-import { show_toast } from "./toast.ts";
 import { focus_page_content } from "./handlers/focus.ts";
 import { blur_focused_element } from "./handlers/page.ts";
 
@@ -90,7 +89,8 @@ const key_flow = create_key_flow({
 bundles.connect({
   request_bundle: async (name) => (await send_to_background({ type: "load_bundle", name })).ok,
   on_idle: key_flow.release,
-  show_error: show_toast,
+  // The toast needs the ui bundle, so without it an error has nowhere to show.
+  show_error: (message) => (bundles.has_handler("ui.toast") ? show_toast(message) : console.error(message)),
   on_sink_missing: (mode) => {
     page_mode.set_mode("normal");
     show_toast(`${mode} mode is not available yet (phase 2)`);

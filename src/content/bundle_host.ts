@@ -37,21 +37,22 @@ export function create_bundle_host() {
 
   // A second call joins the first load. A failed load is forgotten, so the next call tries again.
   // Keys stay held until `after` has run, because `after` may change the mode they replay in.
-  function after_load(name: BundleName, after: (loaded: boolean) => void): void {
+  // `hold` false is for work that does not decide how keys replay, such as drawing, so keys do not wait for it.
+  function after_load(name: BundleName, after: (loaded: boolean) => void, hold = true): void {
     let started = loads.get(name);
     if (!started) {
       started = deps.request_bundle(name);
       loads.set(name, started);
       void started.then((loaded) => loaded || loads.delete(name));
     }
-    waiting++;
+    if (hold) waiting++;
     void started.then((loaded) => {
       try {
         after(loaded);
       } catch (error) {
         deps.show_error((error as Error).message);
       }
-      waiting--;
+      if (hold) waiting--;
       deps.on_idle();
     });
   }
@@ -62,15 +63,16 @@ export function create_bundle_host() {
     },
     is_loading: () => waiting > 0,
     sink_of: (mode: Mode) => sinks.get(mode),
+    has_handler: (command_id: string) => handlers.has(command_id),
     // Runs a command whose code sits in a bundle, loading the bundle first if needed. `missing` is the refusal for a bundle that registers nothing.
-    run_command: (command_id: string, name: BundleName, args: Record<string, unknown>, missing: string): void => {
+    run_command: (command_id: string, name: BundleName, args: Record<string, unknown>, missing: string, hold = true): void => {
       const run = handlers.get(command_id);
       if (run) return run(args);
       after_load(name, (loaded) => {
         const registered = handlers.get(command_id);
         if (!registered) throw new Error(loaded ? missing : `OasisFox could not load ${name}`);
         registered(args);
-      });
+      }, hold);
     },
     // Called on every mode change: the mode left drops its sink, and a mode with a sink loads its bundle.
     enter_mode: (next: Mode): void => {

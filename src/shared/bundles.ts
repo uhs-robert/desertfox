@@ -1,8 +1,8 @@
-// Scripts loaded on first use, not at page load. Each name is a file `<name>.js` in the extension.
+// Scripts loaded on first use, not at page load. `ui` holds the badge and the toast. Each name is a file `<name>.js` in the extension.
 
 import type { Mode } from "./command.ts";
 
-export const BUNDLE_NAMES = ["hints", "caret", "whichkey", "cmdline"] as const;
+export const BUNDLE_NAMES = ["hints", "caret", "whichkey", "cmdline", "ui"] as const;
 export type BundleName = (typeof BUNDLE_NAMES)[number];
 
 // The modes whose keys go to a sink, and the bundle that registers it.
