@@ -14,6 +14,7 @@ addEventListener("scroll", () => {
   clearTimeout(scroll_timer);
   scroll_timer = setTimeout(() => send("scroll", {
     y: scrollY, max_y: document.documentElement.scrollHeight - innerHeight,
+    field_top: document.getElementById("field")?.getBoundingClientRect().top,
   }), 150);
 });
 addEventListener("keydown", (event) => send("keydown", { key: event.key }));
@@ -65,6 +66,9 @@ export function start_server() {
     const id = url.searchParams.get("id") ?? "none";
     if (url.pathname === "/field") {
       return response.end(page(`field ${id}`, '<input id="field" autofocus>', "<script>addEventListener('load', () => document.getElementById('field').focus())</script>"));
+    }
+    if (url.pathname === "/aligned") {
+      return response.end(page(`aligned ${id}`, `${tall_filler}<button id="field">target</button>${tall_filler}`));
     }
     if (url.pathname === "/swallow") return response.end(page(`swallow ${id}`, tall_filler, CANCEL_KEYS_IN_CAPTURE));
     response.end(page(`page ${id}`, tall_filler));
