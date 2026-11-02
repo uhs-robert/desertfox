@@ -333,41 +333,6 @@ async function main() {
       expect((await scroll_delta_after("after_reload", ["j"])) === single_j_pixels, "j moved a different distance");
     });
 
-    // part B: toolbar badge
-    // The sampler reports each change of the active tab's badge text to the test server.
-    // A no-cors text/plain POST needs no host permission.
-    await evaluate_in_background(rdp, EXTENSION_ID, `(() => {
-      let last;
-      setInterval(async () => {
-        const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
-        const text = tab && (await browser.browserAction.getBadgeText({ tabId: tab.id }));
-        if (text === last) return;
-        last = text;
-        fetch("http://127.0.0.1:${server.port}/report", { method: "POST", mode: "no-cors", body: JSON.stringify({ type: "toolbar_badge", text }) });
-      }, 50);
-      return "sampling";
-    })()`);
-    const badge_is = (text) => (event) => event.type === "toolbar_badge" && event.text === text;
-    await open_page("field", "badge_field", { new_tab: true });
-    await run_case("the toolbar badge follows insert, normal and ignore mode", async () => {
-      // The field page focuses its input on load, so the tab starts in insert mode.
-      await wait_event(0, badge_is("IN"), "IN on a focused field");
-      let mark = events.length;
-      await send_keys("-k", "Escape");
-      await wait_event(mark, badge_is("NO"), "NO after Escape");
-      mark = events.length;
-      await send_keys(...SHIFT_ESCAPE);
-      await wait_event(mark, badge_is("IG"), "IG after Shift+Escape");
-      mark = events.length;
-      await send_keys(...SHIFT_ESCAPE);
-      await wait_event(mark, badge_is("NO"), "NO after leaving ignore");
-      mark = events.length;
-      await send_keys("gi");
-      await wait_event(mark, badge_is("IN"), "IN after gi");
-      // Leave the field so the next part's keys reach the key handler, not the input.
-      await send_keys("-k", "Escape");
-    });
-
     // part C: help and options pages
     // The pages are extension pages, so the test reads them through the background's view list.
     const extension_view = (name) => `(browser.extension.getViews({ type: "tab" }).find((view) => view.location.pathname === "/${name}"))`;

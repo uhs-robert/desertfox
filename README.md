@@ -6,7 +6,7 @@ Status: phase 1 is built. Release 0.1.1 adds the toolbar button, the status page
 
 ## What 0.1.1 adds
 
-- A toolbar button that shows the tab's mode as `NO`, `IN` or `IG`. The tooltip spells the mode out. The `mode_indicator` setting (`always`, `not_normal`, `off`) controls it and the page badge. The `palette` setting picks the badge colors from the 16 oasis.nvim palettes (default `moonlight`, light or dark follows the system theme).
+- A toolbar button titled "OasisFox". The `mode_indicator` setting (`always`, `not_normal`, `off`) controls the page badge. The `palette` setting picks the badge colors from the 16 oasis.nvim palettes (default `moonlight`, light or dark follows the system theme).
 - A read-only status page in the add-on options. It shows the config source, the settings in force, the keymap warnings and the rebuild steps.
 - The help page takes keys, so `j`, `k` and `gg` scroll it.
 - `zt`, `zz` and `zb` scroll the focused field to the top, center or bottom of the view. After `gi` and `Escape` they align the field you just left. Zoom reset moved from `zz` to `z=`.

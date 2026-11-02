@@ -6,7 +6,6 @@ The background page. It loads the config, compiles the keymap, assigns the Firef
 - `startup.ts`: load, compile, publish to `storage.local`, tell open tabs.
 - `config_load.ts`, `keymap_merge.ts`, `compile.ts`: managed config over imported config, default keymap under user keymap, and the args check per binding.
 - `default_keymap.ts`: the shipped keys, one for each `v1` row of `docs/keymap.md` whose command exists. Keys that need the user's engines or containers are left to the config. A binding with `prompt` compiles to a background step, and the router refuses it until phase 2.
-- `toolbar_badge.ts`: the toolbar button's text, tooltip and colors per tab, from the tab's mode, the `mode_indicator` setting and the `palette` setting. Pure except the apply function. It reapplies after config load and `config.reload`.
 - `slots.ts`: `browser` chords to the 10 manifest slots.
 - `tab_modes.ts`: the mode each tab last reported, in `storage.local`, and the ignore-mode gate for Firefox shortcuts.
 - `router.ts`: the one entry for run requests. Its pieces are `count.ts` and `refusal.ts`.

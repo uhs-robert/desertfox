@@ -37,15 +37,10 @@ export async function forget_tab_mode(storage: ModeStorage, tab_id: number): Pro
   await storage.remove(key_of(tab_id));
 }
 
-// Undefined for a tab that never reported, for example an about: page where no content script runs.
-export async function recall_reported_mode(storage: ModeStorage, tab_id: number): Promise<Mode | undefined> {
-  const stored = await storage.get(key_of(tab_id));
-  return stored[key_of(tab_id)] as Mode | undefined;
-}
-
-// A tab that never reported a mode is in normal mode.
+// A tab that never reported a mode is in normal mode, for example an about: page where no content script runs.
 export async function recall_tab_mode(storage: ModeStorage, tab_id: number): Promise<Mode> {
-  return (await recall_reported_mode(storage, tab_id)) ?? "normal";
+  const stored = await storage.get(key_of(tab_id));
+  return (stored[key_of(tab_id)] as Mode | undefined) ?? "normal";
 }
 
 // In ignore mode a shortcut runs only if its commands can run there, which is how a binding leaves ignore mode.

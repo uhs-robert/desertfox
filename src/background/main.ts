@@ -5,7 +5,7 @@ import { make_router_deps, reinject_deps } from "./browser_deps.ts";
 import { repair_tabs_after_reload } from "./reload.ts";
 import { create_router } from "./router.ts";
 import { SLOT_TABLE_STORAGE_KEY } from "./storage_keys.ts";
-import { clear_toolbar_badge, get_config, get_search_engine_names, on_color_scheme_change, refresh_all_toolbar_badges, show_toolbar_badge } from "./startup.ts";
+import { get_config, get_search_engine_names } from "./startup.ts";
 import { registry } from "../shared/registry/index.ts";
 import { forget_all_tab_modes, forget_mode_on_navigation, forget_tab_mode, recall_tab_mode, remember_reported_mode, shortcut_allowed } from "./tab_modes.ts";
 import type { SlotTable } from "./slots.ts";
@@ -20,9 +20,7 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
   const request = message as ContentToBackground;
   if (request?.type === "mode_changed" && sender.tab?.id !== undefined) {
     const tab_id = sender.tab.id;
-    return modes_cleared.then(async () => {
-      if (await remember_reported_mode(browser.storage.local, tab_id, sender.frameId, request.mode)) await show_toolbar_badge(tab_id, request.mode);
-    });
+    return modes_cleared.then(() => remember_reported_mode(browser.storage.local, tab_id, sender.frameId, request.mode));
   }
   if (request?.type !== "run") return undefined;
   return get_config().then(() =>
@@ -45,15 +43,8 @@ browser.commands.onCommand.addListener(async (slot_name: string) => {
   if (shortcut_allowed(mode, invocations, (id) => registry.get(id))) await router.run({ invocations, mode });
 });
 
-browser.tabs.onUpdated.addListener(async (tab_id, change) => {
-  await forget_mode_on_navigation(browser.storage.local, tab_id, change);
-  if (change.status === "loading") await clear_toolbar_badge(tab_id);
-});
+browser.tabs.onUpdated.addListener((tab_id, change) => forget_mode_on_navigation(browser.storage.local, tab_id, change));
 
 browser.tabs.onRemoved.addListener((tab_id) => forget_tab_mode(browser.storage.local, tab_id));
 
 void get_config().then(() => repair_tabs_after_reload(reinject_deps));
-
-// After the mode clear, so a stale mode from the last run never reaches a badge.
-void modes_cleared.then(refresh_all_toolbar_badges);
-on_color_scheme_change(() => void refresh_all_toolbar_badges());
