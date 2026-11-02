@@ -7,7 +7,7 @@ The content script. It runs at `document_start` in the top frame and in same-ori
 - `cancelled_keys.ts`: the keys whose keydown was cancelled, so their keypress and keyup are cancelled too. Pure.
 - `mode_state.ts`, `page_mode.ts`: the modes and the pass-next flag. `page_mode` is the one shared instance.
 - `plan_steps.ts`, `invocation_args.ts`: split a leaf into ordered runs and apply a command's count rule. Pure.
-- `scroll_target.ts`, `match_pattern.ts`, `editable.ts`: pure helpers for scroll choice, `ignore_sites` and focus.
+- `scroll_target.ts`, `editable.ts`: pure helpers for scroll choice and focus. `match_pattern.ts` re-exports `src/shared/match_pattern.ts` until `main.ts` imports the shared path.
 - `handlers/`: one plain function per content command. `handler_map.ts` is the only id-to-code link. The definitions in `src/commands` import the same handler objects, so the count rule lives in one place.
 - `surface.ts`: the closed shadow root and default variables that the toast and the mode indicator share.
 - `toast.ts`: the message surface for refusals.

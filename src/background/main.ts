@@ -5,10 +5,11 @@ import { make_router_deps, reinject_deps } from "./browser_deps.ts";
 import { repair_tabs_after_reload } from "./reload.ts";
 import { create_router } from "./router.ts";
 import { SLOT_TABLE_STORAGE_KEY } from "./storage_keys.ts";
-import { get_config, get_search_engine_names } from "./startup.ts";
+import { get_config, get_search_engine_names, snippets } from "./startup.ts";
 import { registry } from "../shared/registry/index.ts";
 import { forget_all_tab_modes, forget_mode_on_navigation, forget_tab_mode, recall_tab_mode, remember_reported_mode, shortcut_allowed } from "./tab_modes.ts";
 import type { SlotTable } from "./slots.ts";
+import type { SnippetCall } from "./snippets.ts";
 
 // Mode reports wait for this, so the clear never removes a fresh report.
 const modes_cleared = forget_all_tab_modes(browser.storage.local);
@@ -21,6 +22,9 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
   if (request?.type === "mode_changed" && sender.tab?.id !== undefined) {
     const tab_id = sender.tab.id;
     return modes_cleared.then(() => remember_reported_mode(browser.storage.local, tab_id, sender.frameId, request.mode));
+  }
+  if ((message as SnippetCall)?.type === "snippet_run") {
+    return get_config().then(() => snippets.handle_call(message as SnippetCall, sender.tab?.id));
   }
   if (request?.type !== "run") return undefined;
   return get_config().then(() =>

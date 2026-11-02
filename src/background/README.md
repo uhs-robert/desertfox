@@ -9,6 +9,7 @@ The background page. It loads the config, compiles the keymap, assigns the Firef
 - `slots.ts`: `browser` chords to the 10 manifest slots.
 - `tab_modes.ts`: the mode each tab last reported, in `storage.local`, and the ignore-mode gate for Firefox shortcuts.
 - `router.ts`: the one entry for run requests. Its pieces are `count.ts` and `refusal.ts`.
+- `snippets.ts`: the user's snippets as commands. `matches` is checked here against the tab URL, the code runs in the top frame only, and `oasisfox.run` calls come back through the `snippet_run` message with the caller's depth (limit 5).
 - `reload.ts`: the marker and the tab repair behind `config.reload`.
 - `browser_deps.ts`: the only file that wires the router to Firefox calls.
 - `command_modules.ts`: one import per command group. Add the group to `COMMAND_MODULES` in `tools/write_commands_json.mjs` too.

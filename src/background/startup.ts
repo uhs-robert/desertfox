@@ -4,12 +4,15 @@ import { DEFAULT_SETTINGS } from "../shared/config.ts";
 import type { MergedConfig } from "../shared/config.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY } from "../shared/prefix_tree.ts";
 import { registry } from "../shared/registry/index.ts";
-import { container_names } from "./browser_deps.ts";
+import { container_names, make_router_deps, snippet_deps } from "./browser_deps.ts";
 import { compile_config } from "./compile.ts";
 import { load_config } from "./config_load.ts";
 import { DEFAULT_KEYMAP } from "./default_keymap.ts";
 import { CONFIG_STATUS_STORAGE_KEY, SLOT_TABLE_STORAGE_KEY, WARNINGS_STORAGE_KEY } from "./storage_keys.ts";
 import { apply_slot_plan, plan_slots, slot_table } from "./slots.ts";
+import { create_snippets } from "./snippets.ts";
+
+export const snippets = create_snippets(registry, snippet_deps, make_router_deps(get_search_engine_names));
 
 // Derived from storage on every start, so a restart loses nothing.
 let loaded_config: Promise<MergedConfig> | undefined;
@@ -24,6 +27,8 @@ export async function get_search_engine_names(): Promise<string[]> {
 
 async function initialize(): Promise<MergedConfig> {
   const loaded = await load_config();
+  // Before the compile, so a key bound to a snippet resolves.
+  const snippet_warnings = snippets.register(loaded.config.snippets);
   const { compiled, warnings } = compile_config({
     config: loaded.config,
     default_keymap: DEFAULT_KEYMAP,
@@ -33,7 +38,7 @@ async function initialize(): Promise<MergedConfig> {
 
   const plan = plan_slots(compiled.modes.browser);
   const applied_slots = await apply_slot_plan(plan, browser.commands);
-  const all_warnings = [...loaded.warnings, ...warnings, ...plan.warnings, ...applied_slots.warnings];
+  const all_warnings = [...loaded.warnings, ...snippet_warnings, ...warnings, ...plan.warnings, ...applied_slots.warnings];
   for (const warning of all_warnings) console.warn(`oasisfox: ${warning}`);
 
   await browser.storage.local.set({

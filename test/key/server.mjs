@@ -23,9 +23,15 @@ addEventListener("focus", () => send("window_focus"));
 const root = document.documentElement;
 // The indicator host is in the page, its text is in a closed shadow root, so the label is an attribute.
 let last_indicator = "";
+// The toast host is the other floating surface: no mode attribute, and its text sits in a closed shadow root.
+const toast_host = () => [...root.children].find((child) => child.style.zIndex === "2147483647" && !child.hasAttribute("data-oasisfox-mode"));
+let toast_shown = false;
 new MutationObserver(() => {
   const label = root.querySelector("[data-oasisfox-mode]")?.getAttribute("data-oasisfox-mode") ?? "";
   if (label !== last_indicator) send("indicator", { label: (last_indicator = label) });
+  const toast_now = Boolean(toast_host());
+  if (toast_now !== toast_shown) send(toast_now ? "toast" : "toast_gone");
+  toast_shown = toast_now;
 }).observe(root, { childList: true });
 const report_tree_read = () => {
   const ms = root.getAttribute("data-oasisfox-tree-read-ms");
