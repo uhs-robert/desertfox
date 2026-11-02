@@ -1,3 +1,4 @@
+import { scroll_align } from "../content/handlers/align.ts";
 import { scroll_lines, scroll_pages, scroll_pixels, scroll_to, SCROLL_TO_DEFAULT_AXIS } from "../content/handlers/scroll.ts";
 import { define } from "../shared/registry/index.ts";
 
@@ -44,4 +45,13 @@ define("scroll.to", {
   ],
   runs_in: "content",
   run: scroll_to.run,
+});
+
+define("scroll.align", {
+  name: "align",
+  label: "Align Focus",
+  intent: "Scroll the focused element, or else the selection, to the top, center or bottom of the view.",
+  params: [{ name: "position", type: "enum", values: ["top", "center", "bottom"], default: "center" }],
+  runs_in: "content",
+  run: scroll_align.run,
 });

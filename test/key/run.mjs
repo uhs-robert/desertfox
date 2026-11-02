@@ -413,6 +413,51 @@ async function main() {
       expect(text.includes("Config source") && text.includes("Managed storage file"), `options page text: ${String(text).slice(0, 120)}`);
     });
 
+    // part A: scroll align
+    await run_case("scroll.align puts the field just left at the top, center and bottom", async () => {
+      writeFileSync(join(config_dir, "keymap.jsonc"), JSON.stringify({
+        normal: {
+          Zt: { id: "scroll.align", args: { position: "top" } },
+          Zz: { id: "scroll.align", args: { position: "center" } },
+          Zb: { id: "scroll.align", args: { position: "bottom" } },
+        },
+        browser: { "<A-,>": { id: "browser.focus_page" } },
+      }));
+      build_test_config(config_dir, managed_file);
+      const session_home = readFileSync(join(work_dir, "session_home"), "utf8").trim();
+      cpSync(managed_file, join(session_home, ".mozilla", "managed-storage", `${EXTENSION_ID}.json`));
+      await open_page("aligned", "align", { new_tab: true });
+      // evaluate_in_background hangs after its first use in a run, so wait out the reload instead of polling.
+      await send_keys("qr");
+      await sleep(8000);
+      await sleep(1000);
+
+      const field_top_after = async (keys) => {
+        const mark = events.length;
+        await send_keys(...keys);
+        const reported = await wait_event(mark, scroll_of("align"), `scroll after ${keys.join(" ")}`);
+        await sleep(300);
+        return events.filter(scroll_of("align")).at(-1).field_top ?? reported.field_top;
+      };
+      await field_top_after(["gi"]);
+      await send_keys("-k", "Escape");
+      await sleep(300);
+      const top = await field_top_after(["Zt"]);
+      expect(Math.abs(top) <= 2, `Zt left the field at ${top}`);
+      const center = await field_top_after(["Zz"]);
+      expect(center > 100, `Zz left the field at ${center}`);
+      const bottom = await field_top_after(["Zb"]);
+      expect(bottom > center, `Zb left the field at ${bottom}, Zz at ${center}`);
+      measurements.align_field_tops = { top, center, bottom };
+    });
+
+    await run_case("scroll.align with nothing focused leaves the scroll position alone", async () => {
+      await open_page("page", "align_plain", { new_tab: true });
+      const mark = events.length;
+      await send_keys("Zt");
+      await expect_no_scroll(mark, "align_plain");
+    });
+
     const tree_read_ms = [];
     for (let index = 0; index < FRESH_LOAD_COUNT; index++) {
       const id = `fresh_${String(index).padStart(2, "0")}`;
