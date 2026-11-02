@@ -4,6 +4,7 @@ import type { BackgroundToContent, Refusal } from "../shared/messages.ts";
 import type { EnumSources } from "../shared/registry/check_args.ts";
 import { registry } from "../shared/registry/index.ts";
 import type { BundleLoaderDeps } from "./bundle_loader.ts";
+import { create_load_log } from "./load_log.ts";
 import type { ReinjectDeps } from "./reload.ts";
 import { BUNDLE_LOADS_STORAGE_KEY } from "./storage_keys.ts";
 import { deliver_refusal } from "./refusal.ts";
@@ -79,6 +80,11 @@ export const reinject_deps: ReinjectDeps = {
   },
 };
 
+const bundle_load_log = create_load_log(
+  { get: (key) => browser.storage.local.get(key), set: (items) => browser.storage.local.set(items) },
+  BUNDLE_LOADS_STORAGE_KEY,
+);
+
 // Document start runs the script at once, so a page that is still loading does not hold the keys the bundle waits for.
 export const bundle_loader_deps: BundleLoaderDeps = {
   inject: async ({ tab_id, frame_id }, file) => {
@@ -88,9 +94,7 @@ export const bundle_loader_deps: BundleLoaderDeps = {
       await browser.tabs.executeScript(tab_id, { file, frameId: frame_id, matchAboutBlank: true, runAt: "document_start" });
       ok = true;
     } finally {
-      const stored = await browser.storage.local.get(BUNDLE_LOADS_STORAGE_KEY);
-      const earlier = (stored[BUNDLE_LOADS_STORAGE_KEY] as unknown[] | undefined) ?? [];
-      await browser.storage.local.set({ [BUNDLE_LOADS_STORAGE_KEY]: [...earlier, { tab_id, frame_id, file, ok, ms: performance.now() - started_ms }].slice(-20) });
+      void bundle_load_log.record({ tab_id, frame_id, file, ok, ms: performance.now() - started_ms });
     }
   },
   timeout_ms: 10_000,
