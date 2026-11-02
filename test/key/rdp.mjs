@@ -45,15 +45,39 @@ export async function install_temporary_addon(rdp, addon_path) {
   return reply.addon;
 }
 
-// Runs async code in the add-on's background page and returns its JSON result.
-export async function evaluate_in_background(rdp, addon_id, async_code) {
+// Console actor per connection and add-on.
+const console_actors = new Map();
+
+async function attach_console(rdp, addon_id) {
   const { addons } = await rdp.request("root", { type: "listAddons" });
   const addon = addons.find((entry) => entry.id === addon_id);
   if (!addon) throw new Error(`rdp: add-on ${addon_id} is not listed`);
   const watcher = await rdp.request(addon.actor, { type: "getWatcher", isServerTargetSwitchingEnabled: false });
   await rdp.request(watcher.actor, { type: "watchTargets", targetType: "frame" }, (reply) => reply.type === undefined);
   const available = await rdp.next_from(watcher.actor, (reply) => reply.type === "target-available-form" && reply.target?.consoleActor);
-  const console_actor = available.target.consoleActor;
+  return available.target.consoleActor;
+}
+
+// Runs async code in the add-on's background page and returns its JSON result.
+// Firefox sends the console actor once per watcher, so later calls reuse the first one. A reload kills it, so a dead actor is dropped and attached again.
+export async function evaluate_in_background(rdp, addon_id, async_code) {
+  if (!console_actors.has(rdp)) console_actors.set(rdp, new Map());
+  const actors = console_actors.get(rdp);
+  for (let attempt = 0; ; attempt++) {
+    const console_actor = actors.get(addon_id) ?? (await attach_console(rdp, addon_id));
+    actors.set(addon_id, console_actor);
+    try {
+      const value = await run_in_console(rdp, console_actor, async_code);
+      if (value?.error?.includes("is not defined") && attempt === 0) throw new Error("dead global");
+      return value;
+    } catch (error) {
+      actors.delete(addon_id);
+      if (attempt >= 1) throw error;
+    }
+  }
+}
+
+async function run_in_console(rdp, console_actor, async_code) {
   const slot = `__key_test_${Math.random().toString(36).slice(2)}`;
   const start = `globalThis.${slot} = undefined; (async () => ${async_code})().then((value) => { globalThis.${slot} = JSON.stringify(value ?? null); }, (error) => { globalThis.${slot} = JSON.stringify({ error: String(error) }); }); "started"`;
   await evaluate(rdp, console_actor, start);

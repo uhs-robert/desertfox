@@ -1,5 +1,44 @@
 <!doctype html>
 <html lang="en">
-<head><meta charset="utf-8"><title>OasisFox options</title></head>
+<head>
+<meta charset="utf-8">
+<title>OasisFox status</title>
+<style>
+  body { margin: 0; }
+  /* The defaults sit on an inner element, like every OasisFox surface. */
+  .oasisfox-options {
+    --oasisfox-bg: #1d2021;
+    --oasisfox-fg: #e6e1d6;
+    --oasisfox-accent: #e69a4c;
+    --oasisfox-font: 15px/1.5 system-ui, sans-serif;
+    --oasisfox-radius: 6px;
+    min-height: 100vh;
+    box-sizing: border-box;
+    padding: 1rem 2rem 4rem;
+    background: var(--oasisfox-bg);
+    color: var(--oasisfox-fg);
+    font: var(--oasisfox-font);
+  }
+  .oasisfox-options-page { max-width: 60rem; }
+  .oasisfox-options h1, .oasisfox-options h2 { color: var(--oasisfox-accent); }
+  .oasisfox-options h3 { margin: 0 0 .25rem; }
+  .oasisfox-options-command {
+    margin: 1rem 0;
+    padding: .75rem 1rem;
+    border: 1px solid color-mix(in srgb, var(--oasisfox-fg) 25%, transparent);
+    border-radius: var(--oasisfox-radius);
+  }
+  .oasisfox-options-usage, .oasisfox-options kbd, .oasisfox-options code {
+    font-family: ui-monospace, monospace;
+  }
+  .oasisfox-options-usage { margin: .25rem 0; }
+  .oasisfox-options kbd { color: var(--oasisfox-accent); }
+  .oasisfox-options-mode { display: inline-block; min-width: 4.5rem; margin-right: .5rem; opacity: .6; }
+  .oasisfox-options-muted { opacity: .6; }
+  .oasisfox-options-warnings { color: var(--oasisfox-accent); }
+  .oasisfox-options table { border-collapse: collapse; margin: .5rem 0; }
+  .oasisfox-options th, .oasisfox-options td { padding: .1rem 1rem .1rem 0; text-align: left; vertical-align: top; }
+</style>
+</head>
 <body><script src="options.js"></script></body>
 </html>

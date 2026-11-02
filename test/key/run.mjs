@@ -333,6 +333,51 @@ async function main() {
       expect((await scroll_delta_after("after_reload", ["j"])) === single_j_pixels, "j moved a different distance");
     });
 
+    // part C: help and options pages
+    // The pages are extension pages, so the test reads them through the background's view list.
+    const extension_view = (name) => `(browser.extension.getViews({ type: "tab" }).find((view) => view.location.pathname === "/${name}"))`;
+
+    await run_case("the help page takes j, gg and ignore mode", async () => {
+      await send_keys("qh");
+      let state;
+      for (let attempt = 0; attempt < 40 && !state?.ready; attempt++) {
+        await sleep(250);
+        state = await evaluate_in_background(rdp, EXTENSION_ID, `(() => { const view = ${extension_view("help.html")}; return { ready: !!view && !!view.document.querySelector("h1") }; })()`).catch(() => undefined);
+      }
+      expect(state?.ready, "the help page never rendered");
+      await sleep(800);
+      const probe = () => evaluate_in_background(rdp, EXTENSION_ID, `(() => { const view = ${extension_view("help.html")}; return { y: view.scrollY, badge: view.document.querySelector("[data-oasisfox-mode]")?.getAttribute("data-oasisfox-mode") ?? null }; })()`);
+      await send_keys("j", "j", "j");
+      await sleep(600);
+      const scrolled = await probe();
+      expect(scrolled.y > 0, `j did not scroll the help page (y=${scrolled.y})`);
+      await send_keys("gg");
+      await sleep(600);
+      expect((await probe()).y === 0, "gg did not return to the top");
+      await send_keys(...SHIFT_ESCAPE);
+      await sleep(600);
+      const ignored = await probe();
+      expect(ignored.badge === "IGNORE", `badge after <S-Escape> was ${ignored.badge}`);
+      await send_keys(...SHIFT_ESCAPE);
+      await sleep(300);
+    });
+
+    await run_case("the options page opens and shows the config source", async () => {
+      const status = { source: "managed", settings: {}, managed_file_hint: "" };
+      const text = await evaluate_in_background(rdp, EXTENSION_ID, `(async () => {
+        await browser.storage.local.set({ oasisfox_config_status: ${JSON.stringify(status)} });
+        await browser.runtime.openOptionsPage();
+        for (let attempt = 0; attempt < 40; attempt++) {
+          await new Promise((resolve) => setTimeout(resolve, 250));
+          const view = ${extension_view("options.html")};
+          const heading = view?.document.querySelector("h2");
+          if (heading) return view.document.body.textContent;
+        }
+        return "";
+      })()`);
+      expect(text.includes("Config source") && text.includes("Managed storage file"), `options page text: ${String(text).slice(0, 120)}`);
+    });
+
     const tree_read_ms = [];
     for (let index = 0; index < FRESH_LOAD_COUNT; index++) {
       const id = `fresh_${String(index).padStart(2, "0")}`;
