@@ -1,10 +1,11 @@
-// Command line text to an Invocation. Values stay strings except switches;
-// `check_args` coerces them.
+// The one grammar for command text, shared by the command line and the config
+// (`parse_binding.ts` adds the leading `:` on top). Values stay strings except
+// switches and `@source` markers; `check_args` coerces them.
 
-import type { CommandDef, ParamDef } from "../command.ts";
+import type { CommandDef, ContextSourceName, ParamDef } from "../command.ts";
 import type { Invocation } from "../invocation.ts";
 import type { Registry } from "./define.ts";
-import { positional_params } from "./params.ts";
+import { CONTEXT_SOURCE_NAMES } from "./params.ts";
 import { usage_line } from "./usage.ts";
 
 export type ParseResult =
@@ -14,8 +15,9 @@ export type ParseResult =
 
 export type Token = {
   text: string;
-  // The first character was quoted or escaped, so the word is never a flag.
-  literal: boolean;
+  // Index in `text` of the first quoted or escaped character, or null when none was.
+  // A quoted word is always free text, never a param name, switch, value word or @source.
+  quoted_from: number | null;
 };
 
 // Shell rules: single quotes are literal, double quotes allow \" \\ \$ and \`,
@@ -23,8 +25,13 @@ export type Token = {
 export function tokenize(text: string): Token[] | { error: string } {
   const tokens: Token[] = [];
   let current: Token | null = null;
-  const add = (char: string, quoted: boolean): void => {
-    current ??= { text: "", literal: quoted };
+  const start_quote = (): Token => {
+    current ??= { text: "", quoted_from: null };
+    current.quoted_from ??= current.text.length;
+    return current;
+  };
+  const add = (char: string): void => {
+    current ??= { text: "", quoted_from: null };
     current.text += char;
   };
   let index = 0;
@@ -37,27 +44,26 @@ export function tokenize(text: string): Token[] | { error: string } {
     } else if (char === "'") {
       const close = text.indexOf("'", index + 1);
       if (close < 0) return { error: "unterminated ' quote" };
-      current ??= { text: "", literal: true };
-      current.text += text.slice(index + 1, close);
+      start_quote().text += text.slice(index + 1, close);
       index = close + 1;
     } else if (char === '"') {
-      current ??= { text: "", literal: true };
+      const quoted = start_quote();
       index += 1;
       for (;;) {
         const inner = text[index];
         if (inner === undefined) return { error: 'unterminated " quote' };
         if (inner === '"') break;
         if (inner === "\\" && '"\\$`'.includes(text[index + 1] ?? "")) index += 1;
-        current.text += text[index];
+        quoted.text += text[index];
         index += 1;
       }
       index += 1;
     } else if (char === "\\") {
       if (index + 1 >= text.length) return { error: "backslash at the end of the line" };
-      add(text[index + 1] as string, true);
+      start_quote().text += text[index + 1];
       index += 2;
     } else {
-      add(char, false);
+      add(char);
       index += 1;
     }
   }
@@ -65,10 +71,10 @@ export function tokenize(text: string): Token[] | { error: string } {
   return tokens;
 }
 
-type FlagTarget =
-  | { kind: "param"; param: ParamDef }
-  | { kind: "no_param"; param: ParamDef }
-  | { kind: "preset"; sets: Record<string, string | number | boolean> };
+// Params the grammar reads. `main` is the one param a bare free word fills.
+export type GrammarParam = ParamDef & { main?: boolean };
+
+const PARAM_NAME_WORD = /^[a-z][a-z0-9_]*$/;
 
 export function parse_command_line(registry: Registry, text: string): ParseResult {
   const tokens = tokenize(text);
@@ -81,97 +87,45 @@ export function parse_command_line(registry: Registry, text: string): ParseResul
 }
 
 function parse_words(command: CommandDef, words: Token[]): ParseResult {
+  const params = (command.params ?? []) as readonly GrammarParam[];
+  const command_word = command.name ?? command.id;
   const args: Record<string, unknown> = {};
-  const set_by = new Map<string, string>();
-  const positional_words: string[] = [];
-
-  const set = (param_name: string, value: unknown, written_as: string): string | null => {
-    const earlier = set_by.get(param_name);
-    if (earlier) return `${earlier} and ${written_as} both set ${param_name}`;
-    set_by.set(param_name, written_as);
-    args[param_name] = value;
-    return null;
-  };
   const error = (message: string): ParseResult => ({ kind: "error", error: message });
+  const main = params.find((param) => param.main);
 
-  let flags_ended = false;
-  for (let index = 0; index < words.length; index += 1) {
-    const word = words[index] as Token;
-    if (flags_ended || word.literal || !word.text.startsWith("-") || word.text === "-") {
-      positional_words.push(word.text);
-      continue;
-    }
-    if (word.text === "--") {
-      flags_ended = true;
-      continue;
-    }
-    if (word.text === "-h" || word.text === "--help") return { kind: "help", usage: usage_line(command) };
-
-    const is_long = word.text.startsWith("--");
-    if (!is_long && /^-\d/.test(word.text) && !find_target(command, word.text[1] as string, false)) {
-      positional_words.push(word.text);
-      continue;
+  for (const word of words) {
+    if (word.quoted_from === null && (word.text === "-h" || word.text === "--help")) {
+      return { kind: "help", usage: usage_line(command) };
     }
 
-    const names = is_long ? [word.text.slice(2)] : [...word.text.slice(1)];
-    for (let name_index = 0; name_index < names.length; name_index += 1) {
-      let name = names[name_index] as string;
-      let attached_value: string | undefined;
-      if (is_long) {
-        const equals = name.indexOf("=");
-        if (equals >= 0) {
-          attached_value = name.slice(equals + 1);
-          name = name.slice(0, equals);
-        }
-      }
-      const written_as = is_long ? `--${name}` : `-${name}`;
-      const target = find_target(command, name, is_long);
-      if (!target) return error(`unknown flag ${written_as}`);
+    const equals = word.text.indexOf("=");
+    const name = equals > 0 ? word.text.slice(0, equals) : "";
+    if (PARAM_NAME_WORD.test(name) && (word.quoted_from === null || word.quoted_from > equals)) {
+      const param = params.find((candidate) => candidate.name === name);
+      if (!param) return error(`unknown param "${name}" for ${command_word}`);
+      if (Object.hasOwn(args, param.name)) return error(`${name} is set twice`);
+      const value = value_of(word.text.slice(equals + 1), word.quoted_from === null);
+      if (typeof value === "object" && "error" in value) return error(value.error);
+      args[name] = value;
+      continue;
+    }
 
-      if (target.kind === "preset") {
-        if (attached_value !== undefined) return error(`${written_as} takes no value`);
-        for (const [param_name, value] of Object.entries(target.sets)) {
-          const problem = set(param_name, value, written_as);
-          if (problem) return error(problem);
-        }
-      } else if (target.kind === "no_param") {
-        if (attached_value !== undefined) return error(`${written_as} takes no value`);
-        const problem = set(target.param.name, false, written_as);
-        if (problem) return error(problem);
-      } else if (target.param.type === "bool") {
-        const switch_value = attached_value ?? true;
-        if (typeof switch_value === "string" && switch_value !== "true" && switch_value !== "false") {
-          return error(`${written_as} takes true or false, got "${switch_value}"`);
-        }
-        const problem = set(target.param.name, switch_value === "false" ? false : true, written_as);
-        if (problem) return error(problem);
-      } else {
-        let value = attached_value;
-        if (value === undefined) {
-          const last_name = name_index === names.length - 1;
-          const next = words[index + 1];
-          if (!last_name || !next) return error(`${written_as} needs a value`);
-          value = next.text;
-          index += 1;
-        }
-        const problem = set(target.param.name, value, written_as);
-        if (problem) return error(problem);
+    if (word.quoted_from === null) {
+      const named = params.filter((param) => word_names_param(param, word.text));
+      if (named.length > 1) return error(`"${word.text}" fits ${named.map((param) => param.name).join(" and ")}, write name=value`);
+      const [param] = named;
+      if (param) {
+        if (Object.hasOwn(args, param.name)) return error(`${param.name} is set twice`);
+        args[param.name] = param.type === "bool" ? true : word.text;
+        continue;
       }
     }
-  }
 
-  const positionals = positional_params(command);
-  const rest_param = positionals.find((param) => param.rest);
-  const plain = rest_param ? positionals.filter((param) => param !== rest_param) : positionals;
-  if (!rest_param && positional_words.length > plain.length) {
-    return error(`too many words, "${positional_words[plain.length]}" has no param`);
-  }
-  plain.forEach((param, position) => {
-    const word = positional_words[position];
-    if (word !== undefined) args[param.name] = word;
-  });
-  if (rest_param && positional_words.length > plain.length) {
-    args[rest_param.name] = positional_words.slice(plain.length).join(" ");
+    if (!main) return error(`"${word.text}" is not a value, switch or param of ${command_word}`);
+    if (Object.hasOwn(args, main.name)) return error(`${main.name} is set twice, quote text that has spaces`);
+    const value = value_of(word.text, word.quoted_from === null);
+    if (typeof value === "object" && "error" in value) return error(value.error);
+    args[main.name] = value;
   }
 
   const invocation: Invocation = { id: command.id };
@@ -179,14 +133,16 @@ function parse_words(command: CommandDef, words: Token[]): ParseResult {
   return { kind: "invocation", invocation };
 }
 
-function find_target(command: CommandDef, name: string, is_long: boolean): FlagTarget | undefined {
-  for (const preset of command.flags ?? []) {
-    if (is_long ? preset.long === name : preset.short === name) return { kind: "preset", sets: preset.sets };
-  }
-  for (const param of command.params ?? []) {
-    if (!param.flag) continue;
-    if (is_long ? param.name === name : param.flag.short === name) return { kind: "param", param };
-    if (is_long && param.type === "bool" && name === `no-${param.name}`) return { kind: "no_param", param };
-  }
-  return undefined;
+// A bare word names a switch by its name and an enum param by one of its fixed values.
+function word_names_param(param: GrammarParam, word: string): boolean {
+  if (param.type === "bool") return param.name === word;
+  return param.type === "enum" && Array.isArray(param.values) && param.values.includes(word);
+}
+
+// An unquoted `@name` is a context source the router fills in when the key is pressed.
+function value_of(text: string, unquoted: boolean): string | { from: ContextSourceName } | { error: string } {
+  if (!unquoted || !text.startsWith("@")) return text;
+  const source = CONTEXT_SOURCE_NAMES.find((name) => name === text.slice(1));
+  if (source) return { from: source };
+  return { error: `unknown source "${text}" (known: ${CONTEXT_SOURCE_NAMES.map((name) => `@${name}`).join(", ")}), quote text that starts with @` };
 }

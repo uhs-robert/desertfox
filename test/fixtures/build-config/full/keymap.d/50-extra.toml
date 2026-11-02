@@ -1,0 +1,4 @@
+[normal]
+K = ""
+D = "tab.close right"
+gz = ["tab.next", "tab.next"]

@@ -1,19 +1,21 @@
 // Checks merged data against `commands.json`. Commands and snippets go through
-// the real registry, so they get the define-time checks. Bindings go through
-// `check_args`, with one difference: a missing param is valid, because it is how
-// a binding asks for the prompt.
+// the real registry, so they get the define-time checks. Binding strings are
+// parsed by the registry's grammar, then go through `check_args`, with one
+// difference: a missing param is valid, because it is how a binding asks for
+// the prompt.
 
 import type { CommandMeta, Mode } from "../../src/shared/command.ts";
 import type { SnippetEntry } from "../../src/shared/config.ts";
 import { to_firefox_shortcut, parse_sequence } from "../../src/shared/keys/index.ts";
-import { find_param, is_context_source, CONTEXT_SOURCE_NAMES } from "../../src/shared/registry/params.ts";
+import { find_param } from "../../src/shared/registry/params.ts";
 import { check_args, create_registry, DefineError, type Registry } from "../../src/shared/registry/index.ts";
-import { is_plain_object } from "./errors.ts";
+import { parse_binding } from "../../src/shared/registry/parse_binding.ts";
+import type { BoundInvocation, Prompt } from "../../src/shared/invocation.ts";
 import { origin_key, type MergedData } from "./merge.ts";
 
 const no_op = () => {};
 
-function build_registry(commands: CommandMeta[], snippets: SnippetEntry[], snippet_files: string[], problems: string[]): Registry {
+export function build_registry(commands: CommandMeta[], snippets: SnippetEntry[], snippet_files: string[], problems: string[]): Registry {
   const registry = create_registry();
   const define = (source: string, entry: CommandMeta & { runs_in: "background" | "content" }) => {
     const { id, ...input } = entry;
@@ -41,49 +43,30 @@ function build_registry(commands: CommandMeta[], snippets: SnippetEntry[], snipp
   return registry;
 }
 
-function check_invocation(invocation: unknown, registry: Registry, engine_names: string[], mode: string): string[] {
-  if (!is_plain_object(invocation)) return ["a binding is an invocation object or an array of them"];
+function check_invocation(invocation: BoundInvocation, registry: Registry, engine_names: string[], mode: string): string[] {
   const errors: string[] = [];
-  for (const key of Object.keys(invocation)) {
-    if (!["id", "args", "count", "prompt"].includes(key)) errors.push(`unknown field "${key}" (known: id, args, count, prompt)`);
-  }
-  if (invocation.count !== undefined && !(Number.isInteger(invocation.count) && (invocation.count as number) >= 1)) {
-    errors.push(`count must be a positive integer, got ${JSON.stringify(invocation.count)}`);
-  }
-  if (typeof invocation.id !== "string") return [...errors, "id must be a string"];
-
   const command = registry.get(invocation.id);
-  if (!command) return [...errors, `unknown command id "${invocation.id}"`];
-  if (invocation.args !== undefined && !is_plain_object(invocation.args)) return [...errors, "args must be an object"];
+  if (!command) return [`unknown command id "${invocation.id}"`];
 
   // Firefox shortcuts fire in the tab's normal mode.
   const runtime_mode = mode === "browser" ? "normal" : mode;
   const allowed = command.modes ?? ["normal"];
   if (!allowed.includes(runtime_mode as Mode)) errors.push(`${command.id} runs in ${allowed.join(", ")} mode, not ${runtime_mode}`);
 
-  const result = check_args(command, invocation.args as Record<string, unknown> | undefined, { search_engines: engine_names });
+  const result = check_args(command, invocation.args, { search_engines: engine_names });
   if (!result.ok && result.missing_param === undefined) errors.push(result.error);
   if (invocation.prompt !== undefined) errors.push(...check_prompt(invocation.prompt, command));
   return errors;
 }
 
-function check_prompt(prompt: unknown, command: CommandMeta): string[] {
-  if (!is_plain_object(prompt)) return ["prompt must be an object { param, prefill? }"];
+function check_prompt(prompt: Prompt, command: CommandMeta): string[] {
   const errors: string[] = [];
-  for (const key of Object.keys(prompt)) {
-    if (!["param", "prefill"].includes(key)) errors.push(`prompt: unknown field "${key}" (known: param, prefill)`);
-  }
-  const param = typeof prompt.param === "string" ? find_param(command, prompt.param) : undefined;
+  const param = find_param(command, prompt.param);
   if (!param) {
     const names = (command.params ?? []).map((candidate) => candidate.name).join(", ") || "none";
-    errors.push(`prompt: param ${JSON.stringify(prompt.param)} is not a param of ${command.id} (params: ${names})`);
-  }
-  if (prompt.prefill !== undefined) {
-    if (!is_context_source(prompt.prefill)) {
-      errors.push(`prompt: prefill must be { "from": ${CONTEXT_SOURCE_NAMES.map((name) => `"${name}"`).join(" | ")} }`);
-    } else if (param && param.type !== "string") {
-      errors.push(`prompt: prefill needs a string param, "${param.name}" is ${param.type}`);
-    }
+    errors.push(`param "${prompt.param}" is not a param of ${command.id} (params: ${names})`);
+  } else if (prompt.prefill !== undefined && param.type !== "string") {
+    errors.push(`${prompt.prefill ? `@${prompt.prefill.from}` : "a source"} needs a string param, "${param.name}" is ${param.type}`);
   }
   return errors;
 }
@@ -93,19 +76,38 @@ function key_error(mode: string, sequence: string): string | undefined {
   return parse_sequence(sequence).error;
 }
 
-export function check_config(
-  merged: MergedData,
-  snippets: SnippetEntry[],
-  snippet_files: string[],
-  commands: CommandMeta[],
-  problems: string[],
-) {
-  const registry = build_registry(commands, snippets, snippet_files, problems);
-  const engine_names = Object.keys(merged.search_engines);
-  const where = (section: string, key: string) => {
-    const file = merged.origins.get(origin_key(section, key)) ?? "config";
-    return `${file}: ${section.replace(/^keymap\./, "keymap ")} "${key}"`;
+function location_of(merged: MergedData, section: string, key: string): string {
+  const file = merged.origins.get(origin_key(section, key)) ?? "config";
+  return `${file}: ${section.replace(/^keymap\./, "keymap ")} "${key}"`;
+}
+
+// Turns the binding strings of every mode into invocations, in place. The
+// extension and the stored file only ever see invocations.
+export function resolve_bindings(merged: MergedData, registry: Registry, problems: string[]) {
+  const location = (mode: string, sequence: string) => location_of(merged, `keymap.${mode}`, sequence);
+  const resolve_text = (text: string, where: string): BoundInvocation | undefined => {
+    const result = parse_binding(registry, text);
+    if (result.kind === "error") problems.push(`${where}: ${result.error}`);
+    else return result.binding;
   };
+  for (const [mode, entries] of Object.entries(merged.keymap)) {
+    if (mode === "search_keys" || mode === "container_keys") continue;
+    const bindings = entries as Record<string, unknown>;
+    for (const [sequence, entry] of Object.entries(bindings)) {
+      if (typeof entry === "string") {
+        const binding = resolve_text(entry, location(mode, sequence));
+        if (binding) bindings[sequence] = binding;
+      } else if (Array.isArray(entry)) {
+        const parsed = entry.map((text: string) => resolve_text(text, location(mode, sequence)));
+        if (parsed.every((binding) => binding !== undefined)) bindings[sequence] = parsed;
+      }
+    }
+  }
+}
+
+export function check_config(merged: MergedData, registry: Registry, problems: string[]) {
+  const engine_names = Object.keys(merged.search_engines);
+  const where = (section: string, key: string) => location_of(merged, section, key);
 
   const default_engine = merged.settings.default_engine;
   if (default_engine !== undefined && !engine_names.includes(default_engine)) {
@@ -131,8 +133,9 @@ export function check_config(
       if (error) problems.push(`${location}: ${error}`);
       if (binding === null) continue;
       const invocations = Array.isArray(binding) ? binding : [binding];
-      if (invocations.length === 0) problems.push(`${location}: an empty array runs nothing`);
       for (const invocation of invocations) {
+        // A string here failed to parse, and resolve_bindings already reported it.
+        if (typeof invocation === "string") continue;
         for (const message of check_invocation(invocation, registry, engine_names, mode)) problems.push(`${location}: ${message}`);
       }
     }

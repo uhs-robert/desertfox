@@ -4,7 +4,8 @@ The command registry and everything that reads a command definition. Pure TypeSc
 
 - `define.ts`: `create_registry` and the define-time checks. Every rejection is a `DefineError` that names the command and the field. Snippet commands go through the same `define`, so they share the name check.
 - `check_args.ts`: the one validator. Runtime enum lists (engines, containers) arrive as an `EnumSources` argument.
-- `command_line.ts`: text to `Invocation`. It never checks `when` or types. Call `check_args` on the result.
+- `command_line.ts`: the one grammar for command text, text to `Invocation`. It never checks `when` or types. Call `check_args` on the result.
+- `parse_binding.ts`: the same grammar for a config binding, plus the leading `:` that turns into a stored `prompt`.
 - `usage.ts`: the usage line shown for `-h`.
 - `commands_file.ts`: the `commands.json` content.
 - `params.ts`: small readers over params shared by the files above.
