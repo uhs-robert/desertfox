@@ -28,9 +28,9 @@ export type Settings = {
   // Colors of both mode badges: the oasis.nvim palette. Light or dark follows the system theme.
   palette: PaletteName;
   // Prefixes of keys generated from `search_keys`: this tab, new tab.
-  search_prefixes: { here: string; new_tab: string };
+  search_prefixes: { here: string; tab: string };
   // Prefixes of keys generated from `container_keys`: reopen, prompt in new tab.
-  container_prefixes: { reopen: string; new_tab: string };
+  container_prefixes: { reopen: string; tab: string };
   // Page that `page.home` opens. Without it the command refuses.
   home_page?: string;
   // Search engine name that `open.clipboard` uses when the clipboard text is not a URL.
@@ -45,8 +45,8 @@ export const DEFAULT_SETTINGS: Settings = {
   ignore_sites: [],
   mode_indicator: "always",
   palette: DEFAULT_PALETTE,
-  search_prefixes: { here: "s", new_tab: "S" },
-  container_prefixes: { reopen: "c", new_tab: "C" },
+  search_prefixes: { here: "s", tab: "S" },
+  container_prefixes: { reopen: "c", tab: "C" },
   default_engine: "search",
 };
 

@@ -37,7 +37,7 @@ function keymap_schema(commands: CommandMeta[]): Schema {
 
 function prefix_pair_schema(first_key: string): Schema {
   const prefix = { type: "string", minLength: 1 };
-  return { type: "object", properties: { [first_key]: prefix, new_tab: prefix }, required: [first_key, "new_tab"], additionalProperties: false };
+  return { type: "object", properties: { [first_key]: prefix, tab: prefix }, required: [first_key, "tab"], additionalProperties: false };
 }
 
 function settings_schema(): Schema {

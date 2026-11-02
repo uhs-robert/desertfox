@@ -54,7 +54,7 @@ test("the content side focuses the window, then blurs the active element", () =>
 
 test("page.home opens the home_page setting or refuses", () => {
   assert.equal(home_page_url("https://home.example/"), "https://home.example/");
-  assert.throws(() => home_page_url(undefined), /set home_page in settings\.jsonc/);
+  assert.throws(() => home_page_url(undefined), /set home_page in settings\.toml/);
 });
 
 const engines = { search: { url: "https://s.example/?q=%s" }, other: { url: "https://o.example/?q=%s" } };

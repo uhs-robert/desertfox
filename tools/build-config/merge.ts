@@ -131,8 +131,8 @@ const SETTING_EXPECTATIONS: Record<keyof Settings, string> = {
   ignore_sites: "a list of match pattern strings",
   mode_indicator: '"always", "not_normal" or "off"',
   palette: `one of ${PALETTE_NAMES.join(", ")}`,
-  search_prefixes: '{"here": "...", "new_tab": "..."} with non-empty strings',
-  container_prefixes: '{"reopen": "...", "new_tab": "..."} with non-empty strings',
+  search_prefixes: '{"here": "...", "tab": "..."} with non-empty strings',
+  container_prefixes: '{"reopen": "...", "tab": "..."} with non-empty strings',
   home_page: "a non-empty URL string",
   default_engine: "the name of a search engine",
   new_tab_page: "a string",
@@ -141,7 +141,7 @@ const SETTING_EXPECTATIONS: Record<keyof Settings, string> = {
 function is_prefix_pair(value: unknown, first_key: string): boolean {
   if (!is_plain_object(value)) return false;
   const keys = Object.keys(value).sort();
-  if (keys.join() !== [first_key, "new_tab"].sort().join()) return false;
+  if (keys.join() !== [first_key, "tab"].sort().join()) return false;
   return Object.values(value).every((prefix) => typeof prefix === "string" && prefix !== "");
 }
 
