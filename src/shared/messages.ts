@@ -1,6 +1,7 @@
 // Messages between content script and background, sent with `runtime.sendMessage`
 // and `tabs.sendMessage`. The `type` field selects the shape.
 
+import type { BundleName } from "./bundles.ts";
 import type { Mode } from "./command.ts";
 import type { BoundInvocation, Invocation } from "./invocation.ts";
 
@@ -25,7 +26,13 @@ export type ModeChanged = {
   mode: Mode;
 };
 
-export type ContentToBackground = RunRequest | ModeChanged;
+// Asks the background to inject a bundle into the sender's frame. The answer is a RunResponse: ok once the script has run.
+export type LoadBundle = {
+  type: "load_bundle";
+  name: BundleName;
+};
+
+export type ContentToBackground = RunRequest | ModeChanged | LoadBundle;
 
 export type RunResponse = { ok: true } | { ok: false; refusal: Refusal };
 

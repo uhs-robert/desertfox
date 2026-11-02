@@ -1,6 +1,6 @@
 // Registered in phase 1 so keys, help and the command line know them. Running one refuses.
 
-import { NEEDS_COMMAND_LINE, needs_command_line, needs_hints } from "../content/handlers/phase_2.ts";
+import { cmdline_next_completion, cmdline_open, cmdline_prev_completion, help_whichkey, hint_run, NEEDS_COMMAND_LINE } from "../content/handlers/phase_2.ts";
 import { define } from "../shared/registry/index.ts";
 import { WHERE_PARAM } from "./open_target.ts";
 
@@ -24,7 +24,7 @@ define("hint.run", {
     { name: "rapid", type: "bool", default: false },
   ],
   runs_in: "content",
-  run: needs_hints.run,
+  run: hint_run.run,
 });
 
 define("cmdline.open", {
@@ -32,7 +32,7 @@ define("cmdline.open", {
   label: "Command Line",
   intent: "Open the command line.",
   runs_in: "content",
-  run: needs_command_line.run,
+  run: cmdline_open.run,
 });
 
 define("cmdline.next_completion", {
@@ -41,7 +41,7 @@ define("cmdline.next_completion", {
   intent: "Select the next completion in the command line.",
   runs_in: "content",
   modes: ["cmdline"],
-  run: needs_command_line.run,
+  run: cmdline_next_completion.run,
 });
 
 define("cmdline.prev_completion", {
@@ -50,7 +50,7 @@ define("cmdline.prev_completion", {
   intent: "Select the previous completion in the command line.",
   runs_in: "content",
   modes: ["cmdline"],
-  run: needs_command_line.run,
+  run: cmdline_prev_completion.run,
 });
 
 define("help.whichkey", {
@@ -58,7 +58,7 @@ define("help.whichkey", {
   label: "Which Key",
   intent: "List the keys that can follow the keys typed so far.",
   runs_in: "content",
-  run: needs_command_line.run,
+  run: help_whichkey.run,
 });
 
 define("tab.switch", {

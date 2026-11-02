@@ -8,16 +8,16 @@ define("mode.set", {
   intent: "Switch to a mode. Ignore mode passes every key to the page until a binding leaves it.",
   params: [{ name: "mode", type: "enum", values: SETTABLE_MODES }],
   runs_in: "content",
-  modes: ["normal", "insert", "ignore"],
+  modes: ["normal", "insert", "ignore", "caret"],
   run: mode_set.run,
 });
 
 define("mode.escape", {
   name: "escape",
   label: "Escape",
-  intent: "Leave insert mode, drop the focus from the field and return to normal mode.",
+  intent: "Leave insert, hint, command line, caret or visual mode, drop the focus from the field and return to normal mode.",
   runs_in: "content",
-  modes: ["normal", "insert"],
+  modes: ["normal", "insert", "hint", "cmdline", "caret", "visual"],
   run: mode_escape.run,
 });
 

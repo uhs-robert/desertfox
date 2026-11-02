@@ -1,8 +1,9 @@
 // Decides, for one key token, whether the page keeps the key. Holds keys that
-// arrive before the compiled keymap is read, and replays them once it is.
+// arrive before the compiled keymap is read or while a bundle loads, and replays them in order once they can run.
 
 import type { Mode, TreeBranch, TreeLeaf } from "../shared/index.ts";
 import type { MatchResult } from "../shared/keys/index.ts";
+import type { Sink } from "./bundle_host.ts";
 
 export type KeyDecision = "cancel" | "pass";
 
@@ -14,6 +15,9 @@ export type KeyFlowDeps = {
   run_leaf: (leaf: TreeLeaf, count: number | undefined) => void;
   leave_insert: () => void;
   in_editable_field: () => boolean;
+  // A bundle is loading, and the mode its keys replay in is not known yet.
+  is_loading: () => boolean;
+  sink_of: (mode: Mode) => Sink | undefined;
 };
 
 const MAX_HELD_KEYS = 32;
@@ -24,7 +28,7 @@ const is_chord = (token: string) => /^<(?:[SCAM]-)*[CAM]-/.test(token);
 export function create_key_flow(deps: KeyFlowDeps) {
   let matcher: Matcher | undefined;
   let browser_chords: TreeBranch | undefined;
-  let held_tokens: string[] = [];
+  const held_tokens: string[] = [];
   let sequence_in_progress = false;
 
   const reset_sequence = () => {
@@ -40,6 +44,13 @@ export function create_key_flow(deps: KeyFlowDeps) {
     reset_sequence();
     deps.run_leaf(node, undefined);
     return true;
+  };
+
+  const hold = (token: string): KeyDecision => {
+    // Plain keys outside a field wait. Cancelling them keeps the page from acting twice on replay.
+    if (is_chord(token) || deps.in_editable_field()) return "pass";
+    if (held_tokens.length < MAX_HELD_KEYS) held_tokens.push(token);
+    return "cancel";
   };
 
   const step = (active: Matcher, token: string): KeyDecision => {
@@ -59,20 +70,28 @@ export function create_key_flow(deps: KeyFlowDeps) {
     return "pass";
   };
 
+  const decide = (active: Matcher, token: string): KeyDecision => {
+    // A sink takes the token before the keymap, and "pass" lets the keymap see it.
+    if (deps.sink_of(deps.get_mode())?.on_token(token) === "handled") {
+      reset_sequence();
+      return "cancel";
+    }
+    return run_browser_chord(token) ? "cancel" : step(active, token);
+  };
+
+  // A replayed key can start another load, and the keys behind it wait for that load too.
+  const replay = () => {
+    while (matcher && held_tokens.length > 0 && !deps.is_loading()) decide(matcher, held_tokens.shift()!);
+  };
+
   return {
     handle_token: (token: string): KeyDecision => {
       if (deps.take_pass_next()) {
         reset_sequence();
         return "pass";
       }
-      if (!matcher) {
-        // Plain keys outside a field wait for the keymap. Cancelling them keeps the page from acting twice on replay.
-        if (is_chord(token) || deps.in_editable_field()) return "pass";
-        if (held_tokens.length < MAX_HELD_KEYS) held_tokens.push(token);
-        return "cancel";
-      }
-      if (run_browser_chord(token)) return "cancel";
-      return step(matcher, token);
+      if (!matcher || deps.is_loading()) return hold(token);
+      return decide(matcher, token);
     },
     reset_sequence,
     // The first call also replays the held keys. Later calls swap the keymap.
@@ -80,9 +99,8 @@ export function create_key_flow(deps: KeyFlowDeps) {
       matcher = next;
       browser_chords = next_browser_chords;
       sequence_in_progress = false;
-      const replay = held_tokens;
-      held_tokens = [];
-      for (const token of replay) step(next, token);
+      replay();
     },
+    release: replay,
   };
 }

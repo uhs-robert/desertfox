@@ -2,7 +2,8 @@ import type { KeymapConfig } from "../shared/keymap.ts";
 
 // Every `v1` row of docs/keymap.md whose command exists, except the rows that need the user's own data.
 // Search engine keys (`s`, `S`, `,`) and container keys (`c`) come from the user's config.
-// Keys of the phase 2 stubs (`o O T b B f F ; : g?`) are bound now and refuse until hints, the command line and the picker exist.
+// Keys of the phase 2 stubs (`o O T b B f F ; : g? V`) are bound now and refuse until hints, the command line, the picker and caret mode exist.
+// The caret, visual, hint and cmdline sections hold only the keys whose commands exist. Their motion and edit keys wait for those commands.
 export const DEFAULT_KEYMAP: KeymapConfig = {
   normal: {
     h: { id: "scroll.pixels", args: { dx: -50 } },
@@ -134,6 +135,29 @@ export const DEFAULT_KEYMAP: KeymapConfig = {
     ";l": { id: "hint.run", args: { filter: "links" } },
     ":": { id: "cmdline.open" },
     "g?": { id: "help.whichkey" },
+    V: { id: "mode.set", args: { mode: "caret" } },
+  },
+  hint: {
+    "<Escape>": { id: "mode.escape" },
+    "<C-[>": { id: "mode.escape" },
+  },
+  cmdline: {
+    "<Escape>": { id: "mode.escape" },
+    "<Tab>": { id: "cmdline.next_completion" },
+    "<C-n>": { id: "cmdline.next_completion" },
+    "<A-ArrowDown>": { id: "cmdline.next_completion" },
+    "<S-Tab>": { id: "cmdline.prev_completion" },
+    "<C-p>": { id: "cmdline.prev_completion" },
+    "<A-ArrowUp>": { id: "cmdline.prev_completion" },
+  },
+  caret: {
+    v: { id: "mode.set", args: { mode: "visual" } },
+    "<Escape>": { id: "mode.escape" },
+    "<C-[>": { id: "mode.escape" },
+  },
+  visual: {
+    "<Escape>": { id: "mode.escape" },
+    "<C-[>": { id: "mode.escape" },
   },
   insert: {
     "<Escape>": { id: "mode.escape" },

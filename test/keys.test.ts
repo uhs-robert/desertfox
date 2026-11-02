@@ -185,6 +185,20 @@ test("matcher: a bound digit wins at the start, a mismatch drops the count, othe
   assert.equal(matcher.feed("hint", "a").kind, "no_match");
 });
 
+test("matcher: caret and visual modes take counts, hint and cmdline modes do not", () => {
+  const matcher = matcher_for({ caret: { w: { id: "caret.word" }, "0": { id: "caret.line_start" } }, visual: { w: { id: "visual.word" } }, hint: { w: { id: "hint.w" }, "3": { id: "hint.three" } } });
+  const counted = matcher.feed("caret", "3");
+  assert.equal(counted.kind, "pending");
+  const word = matcher.feed("caret", "w");
+  assert.equal(word.kind === "match" && word.count, 3);
+  assert.equal(leaf_id(matcher.feed("caret", "0")), "caret.line_start");
+  matcher.feed("visual", "1");
+  matcher.feed("visual", "2");
+  const visual_word = matcher.feed("visual", "w");
+  assert.equal(visual_word.kind === "match" && visual_word.count, 12);
+  assert.equal(leaf_id(matcher.feed("hint", "3")), "hint.three");
+});
+
 test("matcher: a mode change resets the walk", () => {
   const matcher = matcher_for({ normal: { gg: { id: "a.b" } }, ignore: { g: { id: "c.d" } } });
   matcher.feed("normal", "g");

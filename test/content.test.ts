@@ -40,6 +40,8 @@ function make_flow(in_field = false) {
     take_pass_next: state.take_pass_next,
     run_leaf: (matched, count) => ran.push(`${matched.steps[0]?.invocation.id}${count ?? ""}`),
     leave_insert: () => state.escape(),
+    is_loading: () => false,
+    sink_of: () => undefined,
   });
   // The same wiring main.ts does.
   state.listen(() => flow.reset_sequence());
@@ -255,6 +257,9 @@ test("mode label follows the mode_indicator setting", () => {
   assert.equal(mode_label("normal", true, "always"), "PASS");
   assert.equal(mode_label("normal", true, "not_normal"), "PASS");
   assert.equal(mode_label("hint", false, "always"), undefined);
+  assert.equal(mode_label("cmdline", false, "always"), undefined);
+  assert.equal(mode_label("caret", false, "always"), "CARET");
+  assert.equal(mode_label("visual", false, "not_normal"), "VISUAL");
   assert.equal(mode_label("insert", false, "off"), undefined);
   assert.equal(mode_label("normal", true, "off"), undefined);
 });

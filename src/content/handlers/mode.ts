@@ -3,7 +3,7 @@ import { page_mode } from "../page_mode.ts";
 import type { ContentHandler } from "./types.ts";
 import { blur_focused_element } from "./page.ts";
 
-export const SETTABLE_MODES = ["normal", "insert", "ignore"] as const;
+export const SETTABLE_MODES = ["normal", "insert", "ignore", "caret", "visual"] as const;
 
 export const mode_set: ContentHandler = {
   run: (args) => page_mode.set_mode(args.mode as Mode),

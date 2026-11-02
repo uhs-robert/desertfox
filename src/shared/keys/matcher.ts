@@ -9,8 +9,8 @@ export type MatchResult =
 
 const MAX_COUNT_DIGITS = 6;
 
-// Only normal mode has counts. In ignore or insert mode a digit is just a key.
-const COUNT_MODE = "normal";
+// Only the modes that move through the page have counts. In the others a digit is just a key.
+const COUNT_MODES = ["normal", "caret", "visual"];
 
 export function create_matcher(keymap: CompiledKeymap) {
   let walk_mode = "";
@@ -35,7 +35,7 @@ export function create_matcher(keymap: CompiledKeymap) {
 
     const is_digit = /^[0-9]$/.test(token);
     const key_is_count_digit =
-      mode === COUNT_MODE &&
+      COUNT_MODES.includes(mode) &&
       typed.length === 0 &&
       is_digit &&
       count_digits.length < MAX_COUNT_DIGITS &&

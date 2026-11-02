@@ -1,7 +1,8 @@
 import "./command_modules.ts";
 import type { ContentToBackground } from "../shared/messages.ts";
 import type { BoundInvocation } from "../shared/invocation.ts";
-import { make_router_deps, reinject_deps } from "./browser_deps.ts";
+import { bundle_loader_deps, make_router_deps, reinject_deps } from "./browser_deps.ts";
+import { create_bundle_loader } from "./bundle_loader.ts";
 import { repair_tabs_after_reload } from "./reload.ts";
 import { create_router } from "./router.ts";
 import { SLOT_TABLE_STORAGE_KEY } from "./storage_keys.ts";
@@ -14,6 +15,7 @@ import type { SlotTable } from "./slots.ts";
 const modes_cleared = forget_all_tab_modes(browser.storage.local);
 
 const router = create_router(make_router_deps(get_search_engine_names));
+const bundle_loader = create_bundle_loader(bundle_loader_deps);
 
 // Listeners register in the first turn, so no event is missed while the config loads.
 browser.runtime.onMessage.addListener((message: unknown, sender) => {
@@ -22,6 +24,7 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
     const tab_id = sender.tab.id;
     return modes_cleared.then(() => remember_reported_mode(browser.storage.local, tab_id, sender.frameId, request.mode));
   }
+  if (request?.type === "load_bundle") return bundle_loader.answer(sender, request.name);
   if (request?.type !== "run") return undefined;
   return get_config().then(() =>
     router.run({

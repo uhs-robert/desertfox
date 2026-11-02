@@ -11,13 +11,13 @@ Status values:
 The shipped defaults bind every `v1` row whose command exists, with four kinds of exception:
 
 - Rows that name a search engine or a container (`s`, `S`, `,`, `c`, `C` keys). The user's config generates them from `search_keys` and `container_keys`.
-- `V`, because caret mode does not exist yet.
+- The motion, edit and history keys of the `caret`, `visual` and `cmdline` modes (`h j k l w b e` and so on, `y`, `o`, `s`, `<CR>`, `<C-u>`, `<Up>`, `<Down>`). They wait for their commands.
 - `;f`, because `hint.run` has no link text param yet.
 - `ZZ`, because closing every window cannot be undone. Bind it in the config.
 
 A note "(prompts)" means the binding leaves a param out, so the command line asks for it.
 
-dropped: 8 | later: 15 | v1: 218
+dropped: 8 | later: 15 | v1: 230
 
 | mode | key | status | OasisFox |
 | --- | --- | --- | --- |
@@ -46,7 +46,7 @@ dropped: 8 | later: 15 | v1: 218
 | normal | `u` | v1 | `tab.undo_close` |
 | normal | `U` | v1 | `window.undo_close` |
 | normal | `v` | v1 | `hint.run action=select` (enters visual) |
-| normal | `V` | v1 | `mode.set mode=caret` (then `v` selects) |
+| normal | `V` | v1 | `mode.set mode=caret` (then `v` selects, new in phase 2) |
 | normal | `.` | later | `command.repeat` |
 | normal | `:` | v1 | `cmdline.open` |
 | normal | `<<` | v1 | `tab.move offset=-1` |
@@ -184,8 +184,20 @@ dropped: 8 | later: 15 | v1: 218
 | normal | `,,` | v1 | `open.search engine=search` (prompts) |
 | normal | `,<` | v1 | `open.search engine=search where=tab` (prompts) |
 | normal | `,r` | dropped | no config file to reload |
-| ex | `<A-ArrowDown>` | v1 | `cmdline.next_completion` (cmdline mode) |
-| ex | `<A-ArrowUp>` | v1 | `cmdline.prev_completion` (cmdline mode) |
+| cmdline | `<A-ArrowDown>` | v1 | `cmdline.next_completion` |
+| cmdline | `<A-ArrowUp>` | v1 | `cmdline.prev_completion` |
+| cmdline | `<Tab>` | v1 | `cmdline.next_completion` (new in phase 2) |
+| cmdline | `<C-n>` | v1 | `cmdline.next_completion` (new in phase 2) |
+| cmdline | `<S-Tab>` | v1 | `cmdline.prev_completion` (new in phase 2) |
+| cmdline | `<C-p>` | v1 | `cmdline.prev_completion` (new in phase 2) |
+| cmdline | `<Escape>` | v1 | `mode.escape` (new in phase 2) |
+| hint | `<Escape>` | v1 | `mode.escape` (new in phase 2) |
+| hint | `<C-[>` | v1 | `mode.escape` (new in phase 2) |
+| caret | `v` | v1 | `mode.set mode=visual` (new in phase 2) |
+| caret | `<Escape>` | v1 | `mode.escape` (new in phase 2) |
+| caret | `<C-[>` | v1 | `mode.escape` (new in phase 2) |
+| visual | `<Escape>` | v1 | `mode.escape` (new in phase 2) |
+| visual | `<C-[>` | v1 | `mode.escape` (new in phase 2) |
 | normal | `sa` | v1 | `open.search engine=arch` (prompts) |
 | normal | `Sa` | v1 | `open.search engine=arch where=tab` (prompts) |
 | normal | `sb` | v1 | `open.search engine=brave` (prompts) |
