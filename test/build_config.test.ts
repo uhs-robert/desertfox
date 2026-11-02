@@ -52,6 +52,11 @@ test("a later .d file wins over an earlier one, in name order", () => {
   assert.deepEqual(build_config(dir, commands).keymap.normal?.["J"], { id: "tab.prev" });
 });
 
+test("a binding can start with an alias from command_aliases.toml", () => {
+  const dir = config_dir_with({ "keymap.d/20-alias.toml": '[normal]\nJ = "nt"' }, join(FIXTURES, "full"));
+  assert.deepEqual(build_config(dir, commands).keymap.normal?.["J"], { id: "tab.next" });
+});
+
 test("search_keys and container_keys stay as written, not expanded", () => {
   const keymap = full().keymap;
   assert.deepEqual(keymap.search_keys, { a: "alpha", b: "beta" });
@@ -81,7 +86,7 @@ test("palette must name an oasis palette", () => {
 
 test("settings, aliases, css and the format version come through", () => {
   const config = full();
-  assert.equal(config.format_version, 1);
+  assert.equal(config.format_version, 2);
   assert.deepEqual(config.settings, { which_key_delay_ms: 150, hint_letters: "abcdef" });
   assert.deepEqual(config.command_aliases, { nt: "tab.next" });
   assert.equal(config.css, "body { color: red; }\n\n:root { --oasisfox-bg: black; }\n");

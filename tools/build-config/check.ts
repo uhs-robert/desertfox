@@ -86,8 +86,17 @@ function location_of(merged: MergedData, section: string, key: string): string {
 export function resolve_bindings(merged: MergedData, registry: Registry, problems: string[], warnings: string[]) {
   const sources = { search_engines: Object.keys(merged.search_engines) };
   const location = (mode: string, sequence: string) => location_of(merged, `keymap.${mode}`, sequence);
+  // Aliases that check_config rejects (spaces, a taken word, an unknown target) stay out, so they are reported once, there.
+  const with_aliases: Registry = {
+    ...registry,
+    find: (word) => {
+      const found = registry.find(word);
+      const target = merged.command_aliases[word];
+      return found ?? (target !== undefined && !/\s/.test(word) ? registry.get(target) : undefined);
+    },
+  };
   const resolve_text = (text: string, where: string): BoundInvocation | undefined => {
-    const result = parse_binding(registry, text, sources);
+    const result = parse_binding(with_aliases, text, sources);
     if (result.kind === "error") problems.push(`${where}: ${result.error}`);
     else {
       for (const warning of result.warnings ?? []) warnings.push(`${where}: ${warning}`);
