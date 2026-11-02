@@ -5,7 +5,7 @@
 // the prompt.
 
 import type { CommandMeta, Mode } from "../../src/shared/command.ts";
-import type { SnippetEntry } from "../../src/shared/config.ts";
+import { with_fallback_engines, type SnippetEntry } from "../../src/shared/config.ts";
 import { to_firefox_shortcut, parse_sequence } from "../../src/shared/keys/index.ts";
 import { find_param } from "../../src/shared/registry/params.ts";
 import { check_args, create_registry, DefineError, type Registry } from "../../src/shared/registry/index.ts";
@@ -84,7 +84,7 @@ function location_of(merged: MergedData, section: string, key: string): string {
 // Turns the binding strings of every mode into invocations, in place. The
 // extension and the stored file only ever see invocations.
 export function resolve_bindings(merged: MergedData, registry: Registry, problems: string[], warnings: string[]) {
-  const sources = { search_engines: Object.keys(merged.search_engines) };
+  const sources = { search_engines: Object.keys(with_fallback_engines(merged.search_engines)) };
   const location = (mode: string, sequence: string) => location_of(merged, `keymap.${mode}`, sequence);
   // Aliases that check_config rejects (spaces, a taken word, an unknown target) stay out, so they are reported once, there.
   const with_aliases: Registry = {
@@ -119,7 +119,7 @@ export function resolve_bindings(merged: MergedData, registry: Registry, problem
 }
 
 export function check_config(merged: MergedData, registry: Registry, problems: string[]) {
-  const engine_names = Object.keys(merged.search_engines);
+  const engine_names = Object.keys(with_fallback_engines(merged.search_engines));
   const where = (section: string, key: string) => location_of(merged, section, key);
 
   const default_engine = merged.settings.default_engine;
