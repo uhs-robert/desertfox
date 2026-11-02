@@ -8,9 +8,15 @@ Status values:
 - `later`: phase 3.
 - `dropped`: not built. The last column gives the reason.
 
+The shipped defaults bind every `v1` row whose command exists, with three kinds of exception:
+
+- Rows that name a search engine or a container (`s`, `S`, `,`, `c`, `C` keys). The user's config generates them from `search_keys` and `container_keys`.
+- `V`, because caret mode does not exist yet.
+- `;f`, because `hint.run` has no link text param yet.
+
 A note "(prompts)" means the binding leaves a param out, so the command line asks for it.
 
-dropped: 8 | later: 15 | v1: 209
+dropped: 8 | later: 15 | v1: 218
 
 | mode | key | status | OasisFox |
 | --- | --- | --- | --- |
@@ -74,10 +80,14 @@ dropped: 8 | later: 15 | v1: 209
 | normal | `tf` | v1 | `tab.goto index=1` |
 | normal | `tl` | v1 | `tab.goto index=-1` |
 | browser | `<A-,>` | v1 | `browser.focus_page` (Firefox shortcut slot) |
+| browser | `<A-j>` | v1 | `tab.next` (Firefox shortcut slot, new in 0.1.1) |
+| browser | `<A-k>` | v1 | `tab.prev` (Firefox shortcut slot, new in 0.1.1) |
 | normal | `<S-Insert>` | v1 | `mode.set mode=ignore` |
 | normal | `<AC-Escape>` | v1 | `mode.set mode=ignore` |
 | normal | `<AC-`>` | v1 | `mode.set mode=ignore` |
 | normal | `<S-Escape>` | v1 | `mode.set mode=ignore` |
+| ignore | `<S-Escape>` | v1 | `mode.set mode=normal` (new in 0.1.1) |
+| insert | `<Escape>` | v1 | `mode.escape` (new in 0.1.1) |
 | normal | `<Escape>` | v1 | `mode.escape` |
 | normal | `<C-[>` | v1 | `mode.escape` |
 | normal | `<A-p>` | v1 | `tab.pin_toggle` |
@@ -152,11 +162,16 @@ dropped: 8 | later: 15 | v1: 209
 | normal | `zM` | v1 | `zoom.by delta=0.5` |
 | normal | `zr` | v1 | `zoom.by delta=-0.5` |
 | normal | `zR` | v1 | `zoom.by delta=-0.5` |
-| normal | `zz` | v1 | `zoom.set level=1` |
-| normal | `z=` | v1 | `zoom.set level=1` |
+| normal | `zz` | v1 | `scroll.align position=center` (changed in 0.1.1, was zoom reset) |
+| normal | `zt` | v1 | `scroll.align position=top` (new in 0.1.1) |
+| normal | `z=` | v1 | `zoom.set level=1` (zoom reset moved here from `zz` in 0.1.1) |
 | normal | `zO` | v1 | `zoom.set level=0.3` |
+| normal | `qr` | v1 | `config.reload` (new in 0.1.1) |
+| normal | `qh` | v1 | `help.open` (new in 0.1.1) |
+| normal | `qi` | v1 | `mode.set mode=ignore` (new in 0.1.1) |
+| normal | `qb` | v1 | `page.blur` (new in 0.1.1, moved from `zb`) |
 | normal | `ZZ` | v1 | `browser.close_all` |
-| normal | `zb` | v1 | `page.blur` |
+| normal | `zb` | v1 | `scroll.align position=bottom` (changed in 0.1.1, was blur) |
 | normal | `;b` | v1 | `hint.run filter=clickable` |
 | normal | `;B` | v1 | `hint.run action=background` |
 | normal | `;c` | dropped | needs a shell (owner decision) |

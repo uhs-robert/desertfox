@@ -2,7 +2,17 @@
 
 A keyboard-first Firefox extension with one command registry. Keys, the command line, completion, help and which-key all read the same command definitions. It works on its own, and integrates with Oasis Dots (Hyprland and Quickshell) through an optional native host.
 
-Status: phase 1 in progress.
+Status: phase 1 is built. Release 0.1.1 adds the toolbar button, the status page and the keys below.
+
+## What 0.1.1 adds
+
+- A toolbar button that shows the tab's mode as `NOR`, `INS` or `IGN`. The tooltip spells the mode out. The `mode_indicator` setting (`always`, `not_normal`, `off`) controls it and the page badge. The `palette` setting picks the badge colors from the 16 oasis.nvim palettes (default `moonlight`, light or dark follows the system theme).
+- A read-only status page in the add-on options. It shows the config source, the settings in force, the keymap warnings and the rebuild steps.
+- The help page takes keys, so `j`, `k` and `gg` scroll it.
+- `zt`, `zz` and `zb` scroll the focused field to the top, center or bottom of the view. After `gi` and `Escape` they align the field you just left. Zoom reset moved from `zz` to `z=`.
+- `page.blur` moved from `zb` to `qb`. The `q` group holds OasisFox's own commands: `qr` reload config, `qh` help, `qi` ignore mode, `qb` blur.
+- The plain keys `r`, `t` and `x` are now prefixes: `rr` reload, `rh` hard reload, `ri` site check, `tt` open in a new tab, `tT tm td tn tp ta tf tl` for tabs, `xx` close tab, `xp` stop loading.
+- The defaults bind every `v1` row of the binding map whose command exists, except the search engine and container keys, which come from your config. See [docs/keymap.md](docs/keymap.md).
 
 - [docs/design.md](docs/design.md): architecture, scope and roadmap.
 - [docs/spike.md](docs/spike.md): what Firefox allows, measured.

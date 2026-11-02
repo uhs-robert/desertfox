@@ -458,6 +458,40 @@ async function main() {
       await expect_no_scroll(mark, "align_plain");
     });
 
+    // The default t, x and r groups. Plain t, x and r are prefixes only.
+    await open_page("page", "d_reload", { new_tab: true });
+    await run_case("rr reloads the page", async () => {
+      const mark = events.length;
+      await send_keys("rr");
+      await wait_event(mark, (event) => event.type === "tree_read" && event.page_id === "d_reload", "d_reload to load again after rr");
+    });
+
+    await run_case("tt refuses its prompt without opening a tab", async () => {
+      const mark = events.length;
+      await send_keys("tt");
+      await sleep(1000);
+      expect(visible_events(mark).length === 0, "tt switched tabs");
+      expect(!find_event(mark, (event) => event.type === "tree_read"), "tt loaded a page");
+    });
+
+    await run_case("x alone does nothing", async () => {
+      const mark = events.length;
+      await send_keys("x");
+      await sleep(1000);
+      expect(visible_events(mark).length === 0, "x closed or switched a tab");
+      await send_keys("-k", "Escape");
+      expect(await scroll_delta_after("d_reload", ["j"]) > 0, "the page stopped taking keys after x");
+    });
+
+    await run_case("xx closes the tab", async () => {
+      await open_page("page", "d_close", { new_tab: true });
+      const mark = events.length;
+      await send_keys("xx");
+      const shown = await wait_event(mark, (event) => event.type === "visibility" && event.state === "visible" && event.page_id !== "d_close", "another tab after xx");
+      expect(shown.page_id !== "d_close", "d_close is still the visible tab");
+      expect(await scroll_delta_after(shown.page_id, ["j"]) > 0, "the tab left after xx does not take keys");
+    });
+
     const tree_read_ms = [];
     for (let index = 0; index < FRESH_LOAD_COUNT; index++) {
       const id = `fresh_${String(index).padStart(2, "0")}`;
