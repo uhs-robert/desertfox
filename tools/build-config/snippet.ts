@@ -2,8 +2,8 @@
 // run of `// key: value` lines. The whole file stays as the code text.
 //
 // Grammar chosen here, because the design shows one example only:
-//   param: <name> <type> [rest] [default=<value>] [values=a,b,c]
-//   flag:  --<name> [-<c>] <type> [rest] [default=<value>] [values=a,b,c]
+//   param: <name> <type> [main] [rest] [default=<value>] [values=a,b,c]
+// `main` marks the one free-text param a bare word fills, as in the command grammar.
 // A bare `default=` word that names a context source (current_url, selection,
 // clipboard) is that source. A double-quoted default is always a literal string.
 
@@ -13,7 +13,7 @@ import type { SnippetEntry } from "../../src/shared/config.ts";
 const PARAM_TYPES: readonly string[] = ["int", "float", "string", "bool", "enum"];
 const CONTEXT_SOURCES: readonly string[] = ["current_url", "selection", "clipboard"];
 const SINGLE_KEYS = ["id", "label", "intent", "name"] as const;
-const REPEAT_KEYS = ["matches", "param", "flag"] as const;
+const REPEAT_KEYS = ["matches", "param"] as const;
 const HEADER_LINE = /^\/\/\s*([a-z_]+)\s*:\s*(.*?)\s*$/;
 
 function parse_value(raw: string, type: ParamType): ParamValue | undefined {
@@ -32,7 +32,9 @@ function parse_param_words(words: string[], name: string, where: string, problem
   const type = type_word as ParamType;
   const param: ParamDef = { name, type };
   for (const option of options) {
-    if (option === "rest") {
+    if (option === "main") {
+      param.main = true;
+    } else if (option === "rest") {
       param.rest = true;
     } else if (option.startsWith("values=")) {
       param.values = option.slice("values=".length).split(",").filter(Boolean);
@@ -63,24 +65,6 @@ function parse_param_line(line: string, where: string, problems: string[]): Para
   return parse_param_words(words, name, where, problems);
 }
 
-function parse_flag_line(line: string, where: string, problems: string[]): ParamDef | undefined {
-  const [long_word, ...rest_words] = line.split(/\s+/);
-  const long_match = long_word?.match(/^--([a-z][a-z0-9_]*)$/);
-  if (!long_match?.[1]) {
-    problems.push(`${where}: flag "${long_word ?? ""}" must look like --name`);
-    return undefined;
-  }
-  let short: string | undefined;
-  const short_match = rest_words[0]?.match(/^-([A-Za-z])$/);
-  if (short_match) {
-    short = short_match[1];
-    rest_words.shift();
-  }
-  const param = parse_param_words(rest_words, long_match[1], where, problems);
-  if (param) param.flag = short ? { short } : {};
-  return param;
-}
-
 export function parse_snippet(file: string, text: string, problems: string[]): SnippetEntry | undefined {
   const problems_before = problems.length;
   const single = new Map<string, string>();
@@ -109,12 +93,9 @@ export function parse_snippet(file: string, text: string, problems: string[]): S
   if (matches.length === 0) problems.push(`${file}: header "matches" is missing`);
 
   const params: ParamDef[] = [];
-  for (const key of ["param", "flag"] as const) {
-    for (const { line_number, value } of repeated.get(key) ?? []) {
-      const where = `${file}:${line_number}`;
-      const param = key === "param" ? parse_param_line(value, where, problems) : parse_flag_line(value, where, problems);
-      if (param) params.push(param);
-    }
+  for (const { line_number, value } of repeated.get("param") ?? []) {
+    const param = parse_param_line(value, `${file}:${line_number}`, problems);
+    if (param) params.push(param);
   }
   const seen_names = new Set<string>();
   for (const param of params) {

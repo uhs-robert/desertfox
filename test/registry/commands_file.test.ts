@@ -8,7 +8,7 @@ test("commands.json holds the meta fields and no handler", () => {
   assert.equal(file.format_version, 1);
   assert.deepEqual(file.commands.map((command) => command.id), ["tab.close", "open.search"]);
   const search = file.commands[1]!;
-  assert.deepEqual(Object.keys(search).sort(), ["aliases", "count", "flags", "id", "intent", "label", "modes", "name", "params"]);
+  assert.deepEqual(Object.keys(search).sort(), ["aliases", "count", "id", "intent", "label", "modes", "name", "params"]);
   assert.equal(search.name, "search");
   assert.deepEqual(file.commands[0]!.modes, ["normal"]);
   assert.equal("name" in file.commands[0]!, false);

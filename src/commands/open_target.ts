@@ -5,14 +5,13 @@ import type { CommandContext, ParamDef } from "../shared/index.ts";
 export const WHERE = ["here", "tab", "background", "window"] as const;
 export type Where = (typeof WHERE)[number];
 
-export const WHERE_PARAM: ParamDef = { name: "where", type: "enum", values: WHERE, default: "here", flag: {} };
+export const WHERE_PARAM: ParamDef = { name: "where", type: "enum", values: WHERE, default: "here" };
 
 // Firefox cannot change the container of an open tab, so the param needs a new tab or window.
 export const CONTAINER_PARAM: ParamDef = {
   name: "container",
   type: "string",
   values: { from: "containers" },
-  flag: {},
   when: { where: ["tab", "background", "window"] },
 };
 

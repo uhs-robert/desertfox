@@ -22,7 +22,10 @@ const config_dir = resolve(positionals[0] ?? join(homedir(), ".config", "oasisfo
 try {
   const commands = read_commands_file(values.commands);
   if (values.schemas) write_schemas(values.schemas, build_schemas(commands));
-  write_managed_storage(values.out, build_config(config_dir, commands));
+  const warnings: string[] = [];
+  const config = build_config(config_dir, commands, warnings);
+  for (const warning of warnings) console.error(`warning: ${warning}`);
+  write_managed_storage(values.out, config);
   console.log(`wrote ${values.out}${values.schemas ? ` and schemas in ${values.schemas}` : ""}`);
 } catch (error) {
   if (!(error instanceof ConfigErrors)) throw error;

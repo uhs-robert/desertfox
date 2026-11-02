@@ -24,11 +24,13 @@ Write your keys in TOML in `~/.config/oasisfox/`, then run `just build-config`. 
 J = "tab.next"                  # a command name or id
 o = "open"                      # asks for the URL
 O = "open tab"                  # a bare word sets the param it names
+sa = "search arch"              # the first bare word picks the engine
+gt = "tab.goto 1"               # a bare number sets a command's only number param
 gO = ":open tab @current_url"   # a leading ":" types it into the command line and waits
 y = ""                          # "" removes a default binding
 ```
 
-`@current_url`, `@selection` and `@clipboard` are filled in when you press the key. Quote text that has spaces. Any param can be written `name=value`. Files `search_engines.toml`, `command_aliases.toml` and `settings.toml` sit beside the keymap, and each can have a `.d/` directory of later files. See [docs/design.md](docs/design.md#config) for the full format.
+`@current_url`, `@selection` and `@clipboard` are filled in when you press the key. The first free word starts the main value (the URL, the query) and the rest of the line joins into it, so `search arch pacman mirrors` searches for "pacman mirrors". A query that starts with an engine name needs `query="..."`. Quote other text that has spaces or `=`. Any param can be written `name=value`. Files `search_engines.toml`, `command_aliases.toml` and `settings.toml` sit beside the keymap, and each can have a `.d/` directory of later files. See [docs/design.md](docs/design.md#config) for the full format.
 
 - [docs/design.md](docs/design.md): architecture, scope and roadmap.
 - [docs/spike.md](docs/spike.md): what Firefox allows, measured.

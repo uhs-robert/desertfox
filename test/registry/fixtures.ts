@@ -20,19 +20,14 @@ export const open_search_input: CommandInput = {
   aliases: ["s"],
   params: [
     { name: "engine", type: "enum", values: { from: "search_engines" } },
-    { name: "query", type: "string", rest: true, default: { from: "selection" } },
-    { name: "where", type: "enum", values: WHERE, default: "here", flag: { short: "w" } },
+    { name: "query", type: "string", rest: true, main: true, default: { from: "selection" } },
+    { name: "where", type: "enum", values: WHERE, default: "here" },
     {
       name: "container",
       type: "string",
       values: { from: "containers" },
-      flag: { short: "c" },
       when: { where: ["tab", "background", "window"] },
     },
-  ],
-  flags: [
-    { short: "b", long: "background", sets: { where: "background" }, label: "Open in a background tab" },
-    { short: "t", long: "tab", sets: { where: "tab" }, label: "Open in a new tab" },
   ],
   runs_in: "background",
   run: () => {},

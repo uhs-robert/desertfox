@@ -43,7 +43,7 @@ define("site.subreddit", {
   name: "subreddit",
   label: "Search Subreddit",
   intent: "Search a subreddit. Without a sub, search the one the page is in, or all of Reddit.",
-  params: [QUERY_PARAM, { name: "sub", type: "string", default: DEFAULT_SUBREDDIT, flag: {} }, WHERE_PARAM],
+  params: [QUERY_PARAM, { name: "sub", type: "string", default: DEFAULT_SUBREDDIT }, WHERE_PARAM],
   runs_in: "background",
   run: (ctx, args) => open_built(ctx, args.where, "This address has no subreddit search", (page_url) => subreddit_search_url(page_url, args.query as string, args.sub as string)),
 });
