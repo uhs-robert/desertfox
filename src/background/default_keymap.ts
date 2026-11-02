@@ -73,7 +73,6 @@ export const DEFAULT_KEYMAP: KeymapConfig = {
     wh: { id: "hint.run", args: { action: "new_window" } },
     wu: { id: "window.undo_close" },
     U: { id: "window.undo_close" },
-    ZZ: { id: "browser.close_all" },
 
     yy: { id: "copy.url", args: { format: "plain" } },
     yc: { id: "copy.url", args: { format: "canonical" } },

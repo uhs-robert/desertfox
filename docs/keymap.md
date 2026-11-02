@@ -8,11 +8,12 @@ Status values:
 - `later`: phase 3.
 - `dropped`: not built. The last column gives the reason.
 
-The shipped defaults bind every `v1` row whose command exists, with three kinds of exception:
+The shipped defaults bind every `v1` row whose command exists, with four kinds of exception:
 
 - Rows that name a search engine or a container (`s`, `S`, `,`, `c`, `C` keys). The user's config generates them from `search_keys` and `container_keys`.
 - `V`, because caret mode does not exist yet.
 - `;f`, because `hint.run` has no link text param yet.
+- `ZZ`, because closing every window cannot be undone. Bind it in the config.
 
 A note "(prompts)" means the binding leaves a param out, so the command line asks for it.
 
@@ -170,7 +171,7 @@ dropped: 8 | later: 15 | v1: 218
 | normal | `qh` | v1 | `help.open` (new in 0.1.1) |
 | normal | `qi` | v1 | `mode.set mode=ignore` (new in 0.1.1) |
 | normal | `qb` | v1 | `page.blur` (new in 0.1.1, moved from `zb`) |
-| normal | `ZZ` | v1 | `browser.close_all` |
+| normal | `ZZ` | v1 | `browser.close_all` (config only: closing every window cannot be undone, so no default key) |
 | normal | `zb` | v1 | `scroll.align position=bottom` (changed in 0.1.1, was blur) |
 | normal | `;b` | v1 | `hint.run filter=clickable` |
 | normal | `;B` | v1 | `hint.run action=background` |

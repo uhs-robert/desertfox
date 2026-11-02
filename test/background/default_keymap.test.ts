@@ -98,7 +98,8 @@ test("every v1 row of docs/keymap.md whose command exists is bound, except rows 
     .filter((row) => !(DEFAULT_KEYMAP[row.mode as keyof KeymapConfig] as Record<string, unknown> | undefined)?.[row.key])
     .map((row) => `${row.mode} ${row.key}`);
   // `;f` needs a link text param that hint.run lacks. `V` needs caret mode. `ex` rows belong to the command line.
-  assert.deepEqual(unbound.sort(), ["normal V", "normal ;f", "ex <A-ArrowDown>", "ex <A-ArrowUp>"].sort());
+  // `ZZ` closes every window with no undo, so users bind it in their config.
+  assert.deepEqual(unbound.sort(), ["normal V", "normal ;f", "normal ZZ", "ex <A-ArrowDown>", "ex <A-ArrowUp>"].sort());
 });
 
 test("no default binds a command that does not exist", () => {
