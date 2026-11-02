@@ -1,6 +1,6 @@
 # Binding map
 
-Every key the owner binds in the current browser config (2026-10-30), with its status and the OasisFox invocation that replaces it. Search engine keywords move into the engine list as data and are not listed here.
+Every key bound in the current browser config (2026-10-30), with its status and the OasisFox invocation that replaces it. Search engine keywords move into the engine list as data and are not listed here.
 
 Status values:
 
@@ -65,7 +65,7 @@ dropped: 8 | later: 15 | v1: 218
 | normal | `wd` | v1 | `tab.duplicate` |
 | normal | `wD` | v1 | `tab.detach` |
 | normal | `wh` | v1 | `hint.run action=window` |
-| normal | `wi` | dropped | needs a shell (owner decision) |
+| normal | `wi` | dropped | needs a shell |
 | normal | `wn` | v1 | `window.new` |
 | normal | `wo` | v1 | `window.new` (prompts for url) |
 | normal | `wp` | v1 | `window.new private=true` |
@@ -175,12 +175,12 @@ dropped: 8 | later: 15 | v1: 218
 | normal | `zb` | v1 | `scroll.align position=bottom` (changed in 0.1.1, was blur) |
 | normal | `;b` | v1 | `hint.run filter=clickable` |
 | normal | `;B` | v1 | `hint.run action=background` |
-| normal | `;c` | dropped | needs a shell (owner decision) |
+| normal | `;c` | dropped | needs a shell |
 | normal | `;f` | v1 | `hint.run action=open` (prompts for link text filter) |
 | normal | `;i` | v1 | `hint.run filter=inputs` |
 | normal | `;l` | v1 | `hint.run filter=links` |
-| normal | `;x` | dropped | needs a shell (owner decision) |
-| normal | `;:` | dropped | needs a shell (owner decision) |
+| normal | `;x` | dropped | needs a shell |
+| normal | `;:` | dropped | needs a shell |
 | normal | `,,` | v1 | `open.search engine=search` (prompts) |
 | normal | `,<` | v1 | `open.search engine=search where=tab` (prompts) |
 | normal | `,r` | dropped | no config file to reload |
