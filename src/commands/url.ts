@@ -13,7 +13,7 @@ define("url.parent", {
   run: async (ctx, args) => {
     const parent = parent_url(await current_tab_url(ctx), args.levels as number);
     if (parent === undefined) throw new Error("This address has no parent");
-    await open_in(ctx, parent, "current");
+    await open_in(ctx, parent, "here");
   },
 });
 
@@ -25,6 +25,6 @@ define("url.root", {
   run: async (ctx) => {
     const root = root_url(await current_tab_url(ctx));
     if (root === undefined) throw new Error("This address has no site root");
-    await open_in(ctx, root, "current");
+    await open_in(ctx, root, "here");
   },
 });

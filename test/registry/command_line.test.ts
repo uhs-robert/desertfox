@@ -38,20 +38,20 @@ test("first word is a name, an alias or a full id", () => {
 });
 
 test("flag forms: --long value, --long=value, -s value", () => {
-  assert.deepEqual(parsed("s --where new_tab arch q").args, { engine: "arch", query: "q", where: "new_tab" });
-  assert.deepEqual(parsed("s --where=new_tab arch q").args, { engine: "arch", query: "q", where: "new_tab" });
-  assert.deepEqual(parsed("s -w new_tab arch q").args, { engine: "arch", query: "q", where: "new_tab" });
+  assert.deepEqual(parsed("s --where tab arch q").args, { engine: "arch", query: "q", where: "tab" });
+  assert.deepEqual(parsed("s --where=tab arch q").args, { engine: "arch", query: "q", where: "tab" });
+  assert.deepEqual(parsed("s -w tab arch q").args, { engine: "arch", query: "q", where: "tab" });
   assert.deepEqual(parsed("s arch q -c Work").args, { engine: "arch", query: "q", container: "Work" });
 });
 
 test("preset long forms", () => {
   assert.deepEqual(parsed("s --background arch q").args, { engine: "arch", query: "q", where: "background" });
-  assert.deepEqual(parsed("s --tab arch q").args, { engine: "arch", query: "q", where: "new_tab" });
+  assert.deepEqual(parsed("s --tab arch q").args, { engine: "arch", query: "q", where: "tab" });
 });
 
 test("combined short switches", () => {
   assert.deepEqual(parsed("s -bc Work arch q").args, { engine: "arch", query: "q", where: "background", container: "Work" });
-  assert.match(error_of("s -wb new_tab arch"), /-w needs a value/);
+  assert.match(error_of("s -wb tab arch"), /-w needs a value/);
   assert.match(error_of("s -bx arch"), /unknown flag -x/);
 });
 
@@ -78,10 +78,10 @@ test("shell quoting", () => {
     { text: "j\\k", literal: true },
     { text: "lm no", literal: false },
   ]);
-  assert.deepEqual(parsed(`s -c "My Work" -w new_tab arch "two words"`).args, {
+  assert.deepEqual(parsed(`s -c "My Work" -w tab arch "two words"`).args, {
     engine: "arch",
     query: "two words",
-    where: "new_tab",
+    where: "tab",
     container: "My Work",
   });
   assert.deepEqual(parsed(`s --container="My Work" arch q`).args?.["container"], "My Work");
@@ -92,8 +92,8 @@ test("shell quoting", () => {
 
 test("two flags that set the same param are an error", () => {
   assert.equal(error_of("s -b -t arch q"), "-b and -t both set where");
-  assert.equal(error_of("s -b --where new_tab arch q"), "-b and --where both set where");
-  assert.equal(error_of("s --tab -w current arch q"), "--tab and -w both set where");
+  assert.equal(error_of("s -b --where tab arch q"), "-b and --where both set where");
+  assert.equal(error_of("s --tab -w here arch q"), "--tab and -w both set where");
   assert.equal(error_of("s -w a -w b arch q"), "-w and -w both set where");
 });
 
@@ -139,5 +139,5 @@ test("when conditions are the validator's job", () => {
   const invocation = parsed("s -c Work arch q");
   const result = check_args(registry.get(invocation.id)!, invocation.args, search_sources);
   assert.deepEqual(result.ok, false);
-  assert.equal(result.ok ? "" : result.error, "--container needs --where new_tab, background or new_window");
+  assert.equal(result.ok ? "" : result.error, "--container needs --where tab, background or window");
 });

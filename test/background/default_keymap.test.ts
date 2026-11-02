@@ -105,3 +105,15 @@ test("every v1 row of docs/keymap.md whose command exists is bound, except rows 
 test("no default binds a command that does not exist", () => {
   assert.deepEqual(missing_ids, []);
 });
+
+test("every command has a one-line description that ends with a period", () => {
+  for (const command of registry.list()) {
+    assert.match(command.intent, /^[^\r\n]*\.$/, command.id);
+  }
+});
+
+test("the default keymap names places and hint actions by the new words", () => {
+  const old_words = ["current", "new_tab", "new_window"];
+  const written = JSON.stringify(DEFAULT_KEYMAP);
+  for (const word of old_words) assert.ok(!written.includes(`"${word}"`), word);
+});

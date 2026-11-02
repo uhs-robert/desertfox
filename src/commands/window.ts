@@ -40,10 +40,10 @@ const handlers = make_window_handlers(browser_window_deps);
 define("window.new", {
   name: "winnew",
   label: "New Window",
-  intent: "Open a new window, blank unless a url is given. With private=true the window is private.",
+  intent: "Open a new window, blank unless a url is given. With private on, the window is private.",
   params: [
-    { name: "url", type: "string", default: "" },
-    { name: "private", type: "bool", default: false, flag: { short: "p" } },
+    { name: "url", type: "string", main: true, default: "" },
+    { name: "private", type: "bool", default: false, flag: {} },
   ],
   runs_in: "background",
   run: (_ctx, args) => handlers.create(args as { url: string; private: boolean }),

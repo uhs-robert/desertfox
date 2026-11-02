@@ -17,7 +17,7 @@ test("defaults fill, context sources stay markers", () => {
   const result = check_args(open_search, { engine: "arch" }, search_sources);
   assert.deepEqual(result, {
     ok: true,
-    args: { engine: "arch", query: { from: "selection" }, where: "current" },
+    args: { engine: "arch", query: { from: "selection" }, where: "here" },
   });
 });
 
@@ -30,7 +30,7 @@ test("a context source marker is accepted for a string param", () => {
 test("enum values are checked, static and runtime", () => {
   assert.match(error_of(check_args(tab_close, { focus: "up" })), /focus expects one of right, left, got "up"/);
   assert.match(error_of(check_args(open_search, { engine: "bing" }, search_sources)), /engine expects one of arch, ddg/);
-  assert.match(error_of(check_args(open_search, { engine: "arch", where: "tab" }, search_sources)), /--where expects one of current/);
+  assert.match(error_of(check_args(open_search, { engine: "arch", where: "elsewhere" }, search_sources)), /--where expects one of here/);
 });
 
 test("a missing runtime list skips the membership check", () => {
@@ -48,11 +48,11 @@ test("unknown args are rejected", () => {
 
 test("when: error names the flags", () => {
   const result = check_args(open_search, { engine: "arch", container: "Work" }, search_sources);
-  assert.equal(error_of(result), "--container needs --where new_tab, background or new_window");
-  assert.equal(check_args(open_search, { engine: "arch", container: "Work", where: "new_tab" }, search_sources).ok, true);
+  assert.equal(error_of(result), "--container needs --where tab, background or window");
+  assert.equal(check_args(open_search, { engine: "arch", container: "Work", where: "tab" }, search_sources).ok, true);
   assert.equal(
-    error_of(check_args(open_search, { engine: "arch", container: "Work", where: "current" }, search_sources)),
-    "--container needs --where new_tab, background or new_window",
+    error_of(check_args(open_search, { engine: "arch", container: "Work", where: "here" }, search_sources)),
+    "--container needs --where tab, background or window",
   );
 });
 

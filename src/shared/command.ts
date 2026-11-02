@@ -34,6 +34,8 @@ export type ParamDef = {
   values?: readonly string[] | DynamicValues;
   // Only on the last `string` param: takes all remaining words.
   rest?: boolean;
+  // The one free-text param that config and the command line take as a bare word. At most one per command, `string` only.
+  main?: boolean;
   flag?: ParamFlag;
   // Only a trailing run of params may have a default.
   default?: ParamDefault;

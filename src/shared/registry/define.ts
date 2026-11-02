@@ -51,7 +51,9 @@ export function create_registry(): Registry {
     if (commands_by_id.has(id)) fail("id", "already defined");
 
     check_words(id, input, commands_by_word, fail);
+    check_intent(input, fail);
     check_params(input, fail);
+    check_bare_words(input, fail);
     check_flags(input, fail);
     check_count_and_modes(input, fail);
 
@@ -88,6 +90,25 @@ function check_words(id: string, input: CommandInput, taken: Map<string, Command
   }
 }
 
+// The description shows on the help page and the status page, so it is one plain sentence.
+function check_intent(input: CommandInput, fail: Fail): void {
+  if (input.intent.trim() === "") fail("intent", "must not be empty");
+  if (/[\r\n]/.test(input.intent)) fail("intent", "must be one line");
+}
+
+// Config and the command line let a bare word stand for an enum value or a bool, so the words of one command must not repeat.
+function check_bare_words(input: CommandInput, fail: Fail): void {
+  const owner_of_word = new Map<string, string>();
+  for (const param of input.params ?? []) {
+    const words = param.type === "bool" ? [param.name] : (static_values(param) ?? []).filter(() => param.type === "enum");
+    for (const word of words) {
+      const owner = owner_of_word.get(word);
+      if (owner !== undefined) fail(`params.${param.name}`, `bare word "${word}" is also used by param "${owner}"`);
+      owner_of_word.set(word, param.name);
+    }
+  }
+}
+
 function check_params(input: CommandInput, fail: Fail): void {
   const params = input.params ?? [];
   const names = new Set<string>();
@@ -116,6 +137,11 @@ function check_params(input: CommandInput, fail: Fail): void {
     }
     if (param.when) check_when(input, param, at, fail);
   });
+
+  const mains = params.filter((param) => param.main);
+  if (mains.length > 1) fail("params.main", `only one param can be main, found ${mains.map((param) => param.name).join(", ")}`);
+  const main = mains[0];
+  if (main && main.type !== "string") fail(`params.${main.name}.main`, "only a string param can be main");
 }
 
 function check_param_shape(param: ParamDef, at: string, fail: Fail): void {

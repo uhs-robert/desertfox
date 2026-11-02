@@ -10,8 +10,8 @@ const container_of = (args: Record<string, unknown>) => (typeof args.container =
 define("open.url", {
   name: "open",
   label: "Open URL",
-  intent: "Open a URL in this tab, a new tab, a background tab or a new window.",
-  params: [{ name: "url", type: "string" }, WHERE_PARAM, CONTAINER_PARAM],
+  intent: "Open a URL here, in a new tab, in a background tab or in a new window.",
+  params: [{ name: "url", type: "string", main: true }, WHERE_PARAM, CONTAINER_PARAM],
   runs_in: "background",
   run: (ctx, args) => open_in(ctx, args.url as string, args.where as Where, container_of(args)),
 });
@@ -23,13 +23,9 @@ define("open.search", {
   intent: "Search with a keyword engine from the search engine list. The query defaults to the selection.",
   params: [
     { name: "engine", type: "enum", values: { from: "search_engines" } },
-    { name: "query", type: "string", rest: true, default: { from: "selection" } },
+    { name: "query", type: "string", rest: true, main: true, default: { from: "selection" } },
     WHERE_PARAM,
     CONTAINER_PARAM,
-  ],
-  flags: [
-    { short: "b", long: "background", sets: { where: "background" }, label: "Open in a background tab" },
-    { short: "t", long: "tab", sets: { where: "new_tab" }, label: "Open in a new tab" },
   ],
   runs_in: "background",
   run: async (ctx, args) => {
