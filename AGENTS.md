@@ -52,6 +52,7 @@ just test        # unit tests: registry, parser, prefix tree, config merge
 just key-test    # real key presses in a nested Hyprland, about a minute
 just sign        # sign as unlisted on addons.mozilla.org
 just install     # install through the Firefox policy file (needs sudo)
+just release     # sign and install, reading the AMO key from rbw when unset
 just install-profile <dir>  # install into one Firefox profile directory
 just build-config [dir]     # compile the user config into the managed storage config
 ```

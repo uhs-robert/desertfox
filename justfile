@@ -59,3 +59,32 @@ install-profile profile_dir:
 # Install the signed add-on for every profile through Firefox's policy file. Needs sudo and jq.
 install:
     bash tools/install_policy.sh
+
+# Entry in the rbw vault that holds the AMO key: the secret as password, the issuer in the notes.
+export AMO_RBW_ENTRY := env("AMO_RBW_ENTRY", "Firefox AMO API Key")
+
+# Sign dist/ and install it for every profile. Fills the AMO key from rbw when either variable is empty.
+release:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [ -z "${WEB_EXT_API_KEY:-}" ] || [ -z "${WEB_EXT_API_SECRET:-}" ]; then
+        for tool in rbw jq; do
+            command -v "$tool" >/dev/null || { echo "release needs $tool to read the AMO key from rbw. Install it, or set WEB_EXT_API_KEY and WEB_EXT_API_SECRET." >&2; exit 1; }
+        done
+        rbw unlocked >/dev/null 2>&1 || { echo "release needs an unlocked rbw vault. Run 'rbw unlock', then retry." >&2; exit 1; }
+        entry_json=$(rbw get --raw "$AMO_RBW_ENTRY") || { echo "release could not read the rbw entry '$AMO_RBW_ENTRY'." >&2; exit 1; }
+        WEB_EXT_API_KEY=$(jq -r '.notes // ""' <<<"$entry_json" | grep -o -m1 'user:[0-9]*:[0-9]*' || true)
+        if [ -z "$WEB_EXT_API_KEY" ]; then
+            echo "The notes of rbw entry '$AMO_RBW_ENTRY' hold no issuer (user:N:N)." >&2
+            exit 1
+        fi
+        WEB_EXT_API_SECRET=$(jq -r '.data.password // ""' <<<"$entry_json")
+        unset entry_json
+        if [ -z "$WEB_EXT_API_SECRET" ]; then
+            echo "The password of rbw entry '$AMO_RBW_ENTRY' is empty." >&2
+            exit 1
+        fi
+        export WEB_EXT_API_KEY WEB_EXT_API_SECRET
+    fi
+    just sign
+    just install
