@@ -28,3 +28,11 @@ test("a version 1 file, written before the open_target rename, is rejected", () 
   assert.equal(picked.source, "defaults");
   assert.equal(picked.warnings.length, 1);
 });
+test("a snippet that cannot be run safely is dropped with a warning", () => {
+  const good = { id: "app.ok", label: "Ok", intent: "Does it.", matches: ["https://a.test/*"], code: "1" };
+  const no_matches = { ...good, id: "app.none", matches: [] };
+  const no_code = { id: "app.nocode", label: "x", intent: "x", matches: ["https://a.test/*"] };
+  const picked = pick_config({ format_version: CONFIG_FORMAT_VERSION, snippets: [good, no_matches, no_code, "text"] }, undefined);
+  assert.deepEqual(picked.config.snippets, [good]);
+  assert.equal(picked.warnings.length, 3);
+});

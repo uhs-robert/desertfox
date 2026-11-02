@@ -4,7 +4,7 @@ import { takes_typing } from "../src/content/editable.ts";
 import { args_for_count } from "../src/content/invocation_args.ts";
 import { create_cancelled_keys } from "../src/content/cancelled_keys.ts";
 import { create_key_flow } from "../src/content/key_flow.ts";
-import { is_ignored_site, matches_pattern } from "../src/content/match_pattern.ts";
+import { is_ignored_site, matches_pattern } from "../src/shared/match_pattern.ts";
 import { mode_label } from "../src/content/mode_label.ts";
 import { wire_mode_reports } from "../src/content/mode_report.ts";
 import { create_mode_state } from "../src/content/mode_state.ts";
