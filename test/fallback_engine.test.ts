@@ -50,6 +50,7 @@ test("clipboard text searches DuckDuckGo with the default setting and the fallba
 test("build-config: duck is a known engine without a search_engines.toml", () => {
   const ok = config_dir_with({ "settings.toml": 'default_engine = "duck"', "keymap.toml": '[search_keys]\nd = "duck"' });
   assert.doesNotThrow(() => build_config(ok, commands));
+  assert.deepEqual(build_config(ok, commands).search_engines, {});
 });
 
 test("build-config: an unknown default_engine still fails", () => {
