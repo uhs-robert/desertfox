@@ -11,11 +11,15 @@ const common = { bundle: true, format: "iife", target: "firefox140", logLevel: "
 
 await build({ ...common, entryPoints: { background: "src/background/main.ts" }, outdir: "dist", sourcemap: true });
 await build({ ...common, entryPoints: { help: "src/help/main.ts" }, outdir: "dist", sourcemap: true });
+await build({ ...common, entryPoints: { options: "src/options/main.ts" }, outdir: "dist", sourcemap: true });
 await build({ ...common, entryPoints: { content: "src/content/main.ts" }, outdir: "dist", minify: true });
 
-for (const file of ["manifest.json", "managed_schema.json", "help/help.html"]) {
+for (const file of ["manifest.json", "managed_schema.json", "help/help.html", "options/options.html"]) {
   await copyFile(`src/${file}`, `dist/${file.split("/").pop()}`);
 }
+
+await mkdir("dist/icons", { recursive: true });
+await copyFile("src/icons/oasisfox.svg", "dist/icons/oasisfox.svg");
 
 const command_count = await write_commands_json("dist");
 

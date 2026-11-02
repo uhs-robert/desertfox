@@ -333,6 +333,124 @@ async function main() {
       expect((await scroll_delta_after("after_reload", ["j"])) === single_j_pixels, "j moved a different distance");
     });
 
+    // part C: help and options pages
+    // The pages are extension pages, so the test reads them through the background's view list.
+    const extension_view = (name) => `(browser.extension.getViews({ type: "tab" }).find((view) => view.location.pathname === "/${name}"))`;
+
+    await run_case("the help page takes j, gg and ignore mode", async () => {
+      await send_keys("qh");
+      let state;
+      for (let attempt = 0; attempt < 40 && !state?.ready; attempt++) {
+        await sleep(250);
+        state = await evaluate_in_background(rdp, EXTENSION_ID, `(() => { const view = ${extension_view("help.html")}; return { ready: !!view && !!view.document.querySelector("h1") }; })()`).catch(() => undefined);
+      }
+      expect(state?.ready, "the help page never rendered");
+      await sleep(800);
+      const probe = () => evaluate_in_background(rdp, EXTENSION_ID, `(() => { const view = ${extension_view("help.html")}; return { y: view.scrollY, badge: view.document.querySelector("[data-oasisfox-mode]")?.getAttribute("data-oasisfox-mode") ?? null }; })()`);
+      await send_keys("j", "j", "j");
+      await sleep(600);
+      const scrolled = await probe();
+      expect(scrolled.y > 0, `j did not scroll the help page (y=${scrolled.y})`);
+      await send_keys("gg");
+      await sleep(600);
+      expect((await probe()).y === 0, "gg did not return to the top");
+      await send_keys(...SHIFT_ESCAPE);
+      await sleep(600);
+      const ignored = await probe();
+      expect(ignored.badge === "IGNORE", `badge after <S-Escape> was ${ignored.badge}`);
+      await send_keys(...SHIFT_ESCAPE);
+      await sleep(300);
+    });
+
+    await run_case("the options page opens and shows the config source", async () => {
+      const status = { source: "managed", settings: {}, managed_file_hint: "" };
+      const text = await evaluate_in_background(rdp, EXTENSION_ID, `(async () => {
+        await browser.storage.local.set({ oasisfox_config_status: ${JSON.stringify(status)} });
+        await browser.runtime.openOptionsPage();
+        for (let attempt = 0; attempt < 40; attempt++) {
+          await new Promise((resolve) => setTimeout(resolve, 250));
+          const view = ${extension_view("options.html")};
+          const heading = view?.document.querySelector("h2");
+          if (heading) return view.document.body.textContent;
+        }
+        return "";
+      })()`);
+      expect(text.includes("Config source") && text.includes("Managed storage file"), `options page text: ${String(text).slice(0, 120)}`);
+    });
+
+    // part A: scroll align
+    await run_case("scroll.align puts the field just left at the top, center and bottom", async () => {
+      await open_page("aligned", "align", { new_tab: true });
+      const field_top_after = async (keys) => {
+        const mark = events.length;
+        await send_keys(...keys);
+        const reported = await wait_event(mark, scroll_of("align"), `scroll after ${keys.join(" ")}`);
+        await sleep(300);
+        return events.filter(scroll_of("align")).at(-1).field_top ?? reported.field_top;
+      };
+      await field_top_after(["gi"]);
+      await send_keys("-k", "Escape");
+      await sleep(300);
+      const top = await field_top_after(["zt"]);
+      expect(Math.abs(top) <= 2, `zt left the field at ${top}`);
+      const center = await field_top_after(["zz"]);
+      expect(center > 100, `zz left the field at ${center}`);
+      const bottom = await field_top_after(["zb"]);
+      expect(bottom > center, `zb left the field at ${bottom}, zz at ${center}`);
+      measurements.align_field_tops = { top, center, bottom };
+    });
+
+    await run_case("scroll.align with nothing focused leaves the scroll position alone", async () => {
+      await open_page("page", "align_plain", { new_tab: true });
+      const mark = events.length;
+      await send_keys("zt");
+      await expect_no_scroll(mark, "align_plain");
+    });
+
+    await run_case("z= resets the zoom to 100 percent", async () => {
+      const active_zoom = `(async () => { const [tab] = await browser.tabs.query({ active: true, currentWindow: true }); return browser.tabs.getZoom(tab.id); })()`;
+      await send_keys("zI");
+      await sleep(500);
+      expect(await evaluate_in_background(rdp, EXTENSION_ID, active_zoom) === 3, "zI did not zoom to 300 percent");
+      await send_keys("z=");
+      await sleep(500);
+      expect(await evaluate_in_background(rdp, EXTENSION_ID, active_zoom) === 1, "z= did not reset the zoom");
+    });
+
+    // The default t, x and r groups. Plain t, x and r are prefixes only.
+    await open_page("page", "d_reload", { new_tab: true });
+    await run_case("rr reloads the page", async () => {
+      const mark = events.length;
+      await send_keys("rr");
+      await wait_event(mark, (event) => event.type === "tree_read" && event.page_id === "d_reload", "d_reload to load again after rr");
+    });
+
+    await run_case("tt refuses its prompt without opening a tab", async () => {
+      const mark = events.length;
+      await send_keys("tt");
+      await sleep(1000);
+      expect(visible_events(mark).length === 0, "tt switched tabs");
+      expect(!find_event(mark, (event) => event.type === "tree_read"), "tt loaded a page");
+    });
+
+    await run_case("x alone does nothing", async () => {
+      const mark = events.length;
+      await send_keys("x");
+      await sleep(1000);
+      expect(visible_events(mark).length === 0, "x closed or switched a tab");
+      await send_keys("-k", "Escape");
+      expect(await scroll_delta_after("d_reload", ["j"]) > 0, "the page stopped taking keys after x");
+    });
+
+    await run_case("xx closes the tab", async () => {
+      await open_page("page", "d_close", { new_tab: true });
+      const mark = events.length;
+      await send_keys("xx");
+      const shown = await wait_event(mark, (event) => event.type === "visibility" && event.state === "visible" && event.page_id !== "d_close", "another tab after xx");
+      expect(shown.page_id !== "d_close", "d_close is still the visible tab");
+      expect(await scroll_delta_after(shown.page_id, ["j"]) > 0, "the tab left after xx does not take keys");
+    });
+
     const tree_read_ms = [];
     for (let index = 0; index < FRESH_LOAD_COUNT; index++) {
       const id = `fresh_${String(index).padStart(2, "0")}`;

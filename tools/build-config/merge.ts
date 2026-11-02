@@ -4,6 +4,7 @@
 
 import { MODE_INDICATOR_VALUES } from "../../src/shared/config.ts";
 import type { SearchEngine, Settings } from "../../src/shared/config.ts";
+import { is_palette_name, PALETTE_NAMES } from "../../src/shared/mode_colors.ts";
 import type { KeymapConfig, ModeBindings } from "../../src/shared/keymap.ts";
 import { is_plain_object } from "./errors.ts";
 import type { DataLayer } from "./source_files.ts";
@@ -105,6 +106,7 @@ const SETTING_CHECKS: Record<keyof Settings, (value: unknown) => boolean> = {
   hint_letters: (value) => typeof value === "string" && new Set(value).size === value.length && value.length >= 2,
   ignore_sites: (value) => Array.isArray(value) && value.every((site) => typeof site === "string" && site !== ""),
   mode_indicator: (value) => (MODE_INDICATOR_VALUES as readonly unknown[]).includes(value),
+  palette: is_palette_name,
   search_prefixes: (value) => is_prefix_pair(value, "here"),
   container_prefixes: (value) => is_prefix_pair(value, "reopen"),
   home_page: (value) => typeof value === "string" && value !== "",
@@ -117,6 +119,7 @@ const SETTING_EXPECTATIONS: Record<keyof Settings, string> = {
   hint_letters: "a string of 2 or more distinct letters",
   ignore_sites: "a list of match pattern strings",
   mode_indicator: '"always", "not_normal" or "off"',
+  palette: `one of ${PALETTE_NAMES.join(", ")}`,
   search_prefixes: '{"here": "...", "new_tab": "..."} with non-empty strings',
   container_prefixes: '{"reopen": "...", "new_tab": "..."} with non-empty strings',
   home_page: "a non-empty URL string",

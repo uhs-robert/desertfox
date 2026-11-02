@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "OasisFox",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Keyboard-first Firefox extension built around one command registry.",
   "browser_specific_settings": {
     "gecko": {
@@ -45,6 +45,14 @@
     "sessions",
     "<all_urls>"
   ],
+  "browser_action": {
+    "default_title": "OasisFox",
+    "default_icon": "icons/oasisfox.svg"
+  },
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
+  },
   "storage": {
     "managed_schema": "managed_schema.json"
   },

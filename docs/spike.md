@@ -49,3 +49,17 @@ A second test checked whether Firefox reads `~/.mozilla/managed-storage/<extensi
 - `browser.focus_page` works. With the address bar focused, the `<A-,>` chord ran it, and the next `j` scrolled the page.
 - A chord that the content script cancels does not also fire the Firefox shortcut. On a page that cancels every key in its own capture listener, and on a normal page, `<A-j>` and `<A-k>` switched tabs exactly once. Tab counts cannot show which side ran the action. The count shows no double action.
 - `<A-j>` and `<A-k>` also switch tabs from an `about:support` page, where no content script runs.
+
+## Extension pages and `tabs.sendMessage` (0.1.1)
+
+Question: does `tabs.sendMessage` reach a page of the extension itself, so the help page can run `content.js` as a plain script tag? Manifest `content_scripts` never match `moz-extension://` pages.
+
+Setup: Firefox 159, temporary add-on, the nested session. A scratch build added `<script src="content.js">` to `help.html`, plus a probe script that reported `scrollY` to the background. The background opened the help page in a tab and sent messages to it. Real `j`, `G`, `gg` and `<S-Escape>` presses came from `wtype`.
+
+Result: delivery works. No fallback is needed.
+
+- `tabs.sendMessage(tab_id, { type: "ping" })` returned `true`, so `has_content_script` is right for the help page.
+- `run_in_content` with `scroll.lines count=5` reached the page and scrolled it.
+- `j` scrolled by 50 px, `G` reached the bottom and `gg` returned to 0.
+- `mode_changed` arrived at the background with `sender.tab.id` set and `frameId` 0, for `normal` and then `ignore` after `<S-Escape>`. The stored per-tab mode followed.
+- `repair_tabs_after_reload` skips the help tab, because its URL does not match `INJECTABLE_URL` (`https?|file|ftp`). It cannot throw or loop on it. After an extension reload Firefox closes extension pages, so there is nothing to repair.

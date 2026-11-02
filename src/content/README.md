@@ -11,6 +11,6 @@ The content script. It runs at `document_start` in the top frame and in same-ori
 - `handlers/`: one plain function per content command. `handler_map.ts` is the only id-to-code link. The definitions in `src/commands` import the same handler objects, so the count rule lives in one place.
 - `surface.ts`: the closed shadow root and default variables that the toast and the mode indicator share.
 - `toast.ts`: the message surface for refusals.
-- `mode_label.ts`, `mode_indicator.ts`: the badge text (pure) and the badge, top frame only. It follows the `mode_indicator` setting.
+- `mode_label.ts`, `mode_indicator.ts`: the badge text (pure) and the badge, top frame only. It follows the `mode_indicator` setting and sits 8 px above the bottom edge. Its colors come from `mode_colors` in the compiled keymap, which the background cuts from the `palette` setting (the page picks dark or light from the system theme), so this bundle holds no palette table.
 
 The key test reads `data-oasisfox-tree-read-ms` and `data-oasisfox-tree-ready-at-ms` on the document element.

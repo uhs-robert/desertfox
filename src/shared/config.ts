@@ -4,6 +4,8 @@
 
 import type { CommandMeta } from "./command.ts";
 import type { KeymapConfig } from "./keymap.ts";
+import { DEFAULT_PALETTE } from "./mode_colors.ts";
+import type { PaletteName } from "./mode_colors.ts";
 
 export const CONFIG_FORMAT_VERSION = 1;
 
@@ -23,6 +25,8 @@ export type Settings = {
   ignore_sites: string[];
   // The mode badge: always (NORMAL too), only outside normal mode, or never.
   mode_indicator: ModeIndicator;
+  // Colors of both mode badges: the oasis.nvim palette. Light or dark follows the system theme.
+  palette: PaletteName;
   // Prefixes of keys generated from `search_keys`: this tab, new tab.
   search_prefixes: { here: string; new_tab: string };
   // Prefixes of keys generated from `container_keys`: reopen, prompt in new tab.
@@ -40,6 +44,7 @@ export const DEFAULT_SETTINGS: Settings = {
   hint_letters: "asdfghjkl",
   ignore_sites: [],
   mode_indicator: "always",
+  palette: DEFAULT_PALETTE,
   search_prefixes: { here: "s", new_tab: "S" },
   container_prefixes: { reopen: "c", new_tab: "C" },
   default_engine: "search",

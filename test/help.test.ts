@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { build_help_model } from "../src/help/model.ts";
 import { compile_keymap } from "../src/shared/keys/compiler.ts";
@@ -70,4 +71,11 @@ test("a key row shows the binding prompt", () => {
   const model = build_help_model(commands, registry_compiled, []);
   const open = model.groups.find((group) => group.name === "open")!.commands[0]!;
   assert.deepEqual(open.keys, [{ mode: "normal", keys: "o", args: "prompts for url, prefilled from current_url" }]);
+});
+
+test("help.html loads the content script after help.js", () => {
+  const html = readFileSync(new URL("../src/help/help.html", import.meta.url), "utf8");
+  const help = html.indexOf('<script src="help.js"></script>');
+  const content = html.indexOf('<script src="content.js"></script>');
+  assert.ok(help >= 0 && content > help);
 });

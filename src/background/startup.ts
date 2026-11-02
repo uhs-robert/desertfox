@@ -1,5 +1,6 @@
 // Loads the config, compiles the keymap and publishes the result.
 
+import { DEFAULT_SETTINGS } from "../shared/config.ts";
 import type { MergedConfig } from "../shared/config.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY } from "../shared/prefix_tree.ts";
 import { registry } from "../shared/registry/index.ts";
@@ -7,7 +8,7 @@ import { container_names } from "./browser_deps.ts";
 import { compile_config } from "./compile.ts";
 import { load_config } from "./config_load.ts";
 import { DEFAULT_KEYMAP } from "./default_keymap.ts";
-import { SLOT_TABLE_STORAGE_KEY, WARNINGS_STORAGE_KEY } from "./storage_keys.ts";
+import { CONFIG_STATUS_STORAGE_KEY, SLOT_TABLE_STORAGE_KEY, WARNINGS_STORAGE_KEY } from "./storage_keys.ts";
 import { apply_slot_plan, plan_slots, slot_table } from "./slots.ts";
 
 // Derived from storage on every start, so a restart loses nothing.
@@ -38,6 +39,11 @@ async function initialize(): Promise<MergedConfig> {
   await browser.storage.local.set({
     [COMPILED_KEYMAP_STORAGE_KEY]: compiled,
     [WARNINGS_STORAGE_KEY]: all_warnings,
+    [CONFIG_STATUS_STORAGE_KEY]: {
+      source: loaded.source,
+      settings: { ...DEFAULT_SETTINGS, ...loaded.config.settings },
+      managed_file_hint: `~/.mozilla/managed-storage/${browser.runtime.id}.json`,
+    },
     [SLOT_TABLE_STORAGE_KEY]: slot_table({ ...plan, assignments: applied_slots.applied }),
   });
   await tell_tabs_tree_changed();
