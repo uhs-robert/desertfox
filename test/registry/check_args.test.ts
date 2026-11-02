@@ -42,6 +42,18 @@ test("a missing required param is reported by name", () => {
   assert.deepEqual(result, { ok: false, error: "missing <engine>", missing_param: "engine" });
 });
 
+test("a bool param left out is off, not missing", () => {
+  const registry = create_registry();
+  const toggle = registry.define("myapp.toggle", {
+    label: "Toggle",
+    intent: "Toggle.",
+    runs_in: "content",
+    run: () => {},
+    params: [{ name: "all", type: "bool" }],
+  });
+  assert.deepEqual(check_args(toggle, undefined), { ok: true, args: {} });
+});
+
 test("unknown args are rejected", () => {
   assert.match(error_of(check_args(tab_close, { focus: "left", extra: 1 })), /tab.close: unknown arg "extra"/);
 });

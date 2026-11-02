@@ -60,7 +60,7 @@ export function check_args(
     if (!error) args[param.name] = value;
   }
   for (const param of params) {
-    if (args[param.name] === undefined && !param.when) {
+    if (args[param.name] === undefined && !param.when && param.type !== "bool") {
       return { ok: false, error: `missing <${param.name}>`, missing_param: param.name };
     }
   }
