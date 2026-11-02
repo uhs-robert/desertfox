@@ -33,11 +33,20 @@ export type Settings = {
   container_prefixes: { reopen: string; tab: string };
   // Page that `page.home` opens. Without it the command refuses.
   home_page?: string;
-  // Search engine name that `open.clipboard` uses when the clipboard text is not a URL.
+  // Search engine name that `open.clipboard` uses when the clipboard text is not a URL. The default names the built-in fallback engine.
   default_engine: string;
   // Reserved. Decided in phase 3.
   new_tab_page?: string;
 };
+
+export const FALLBACK_ENGINE_NAME = "duck";
+
+export const FALLBACK_ENGINE: SearchEngine = { url: "https://duckduckgo.com/?q=%s", label: "DuckDuckGo" };
+
+// A user engine with the fallback's name replaces it whole. Nothing removes the fallback, so the default engine always resolves.
+export function with_fallback_engines(user_engines: Record<string, SearchEngine>): Record<string, SearchEngine> {
+  return { [FALLBACK_ENGINE_NAME]: FALLBACK_ENGINE, ...user_engines };
+}
 
 export const DEFAULT_SETTINGS: Settings = {
   which_key_delay_ms: 300,
@@ -47,7 +56,7 @@ export const DEFAULT_SETTINGS: Settings = {
   palette: DEFAULT_PALETTE,
   search_prefixes: { here: "s", tab: "S" },
   container_prefixes: { reopen: "c", tab: "C" },
-  default_engine: "search",
+  default_engine: FALLBACK_ENGINE_NAME,
 };
 
 // A snippet becomes a registry entry. The header fills the metadata, the body is the code.

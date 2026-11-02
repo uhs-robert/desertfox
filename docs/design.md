@@ -115,7 +115,7 @@ One grammar covers the command line and every binding in the config. The text is
 - Any param can be written `name=value`, split at the first `=`: `scroll.to percent=100 axis=x`. This is the only way to set free text and to turn a switch off (`rapid=false`).
 - A command marks at most one param `main`. The first bare word that is no value, switch or number fills it, and the rest of the line joins into it: `search arch pacman mirrors` gives the query `pacman mirrors`. Enum words, switches and `name=value` still work before the main value starts. After it starts, they are part of the text. A quoted main value works too.
 - When a command has exactly one number param, a bare number sets it: `tab.goto 1`, `tab.move -1`, `zoom.set 1.5`. A negative number is a value, never a flag. A command with two number params needs `name=value` for them.
-- An enum whose values come from a runtime list works as bare words too. In `search`, the first bare word picks the engine when it matches an engine name: `search arch pacman`. Build time knows the names from `search_engines.toml`, and the command line from the loaded engines. A query that starts with an engine name needs `query="..."`. `tools/build-config` warns when a binding hits that case.
+- An enum whose values come from a runtime list works as bare words too. In `search`, the first bare word picks the engine when it matches an engine name: `search arch pacman`. Build time knows the names from `search_engines.toml` plus the built-in `duck`, and the command line from the loaded engines. A query that starts with an engine name needs `query="..."`. `tools/build-config` warns when a binding hits that case.
 - Quote a value that has spaces or `=` with shell rules: `open tab "https://a.example/?q=a b"`. A quoted word is always free text, so it is never a param name, a value word or a `@source`.
 - An unquoted `@current_url`, `@selection` or `@clipboard` is a context source. The router fills it in when the key is pressed. It works as the main word or after `name=`.
 - A leading `:` (config only) makes the binding type its command into the command line and wait. `gO = ":open tab @current_url"` shows `open tab https://this.page/...`. The stored file names one param to fill: the one that holds a `@source` (which becomes the prefill), else the `main` param, else the first param. A command with no params cannot take a `:`.
@@ -167,7 +167,7 @@ The tool reads `~/.config/oasisfox/` by default. Every data file is TOML. A left
 | File | Holds |
 | --- | --- |
 | `keymap.toml` | Every key: bindings per mode, plus the `search_keys` and `container_keys` shortcuts. `""` removes a default binding. |
-| `search_engines.toml` | Search engines: URL template and label. The template uses `%s` for the query. Data only, no keys. |
+| `search_engines.toml` | Search engines: URL template and label. The template uses `%s` for the query. Data only, no keys. The built-in `duck` needs no entry, and an entry named `duck` replaces it. See [Starting engines](#starting-engines). |
 | `command_aliases.toml` | Extra command line names, for example `g = "open.search"`. |
 | `settings.toml` | Settings such as the which-key delay and the new tab page. |
 | `snippets/*.js` | One custom command per file. See [Snippets](#snippets). |
@@ -199,6 +199,12 @@ y = ""                          # removes a default binding
 - `ca` reopens the current page in the Family container, and `Ca` opens a prompt prefilled with the current URL in a new Family tab.
 - Containers themselves need no file. Firefox lists their names, colors and icons through `contextualIdentities.query()`, and completion and the `container` param use that list. A name in `container_keys` that does not exist gets a warning at load and is skipped.
 - The prefixes for generated bindings (`s` and `S`, `c` and `C`) are settings. An explicit binding in the keymap wins over a generated one.
+
+#### Starting engines
+
+OasisFox has one built-in engine, `duck` (DuckDuckGo), and the `default_engine` setting defaults to it. So clipboard search works with no config. It is added when the config loads and when `tools/build-config` checks names, so the merged file stays as written. An entry named `duck` in `search_engines.toml` replaces the built-in whole. Nothing hides or removes it.
+
+[`examples/engines.toml`](../examples/engines.toml) lists 40 engines, `duck` among them. Copy it to `~/.config/oasisfox/search_engines.toml` and edit it. A TOML file cannot include another file. A `search_engines.d/` file also works, but it beats the main file, so copy into the main file to change an entry. A fuller real example: [https://github.com/uhs-robert/oasis-dots/blob/main/home/oasisfox/.config/oasisfox/search_engines.toml](https://github.com/uhs-robert/oasis-dots/blob/main/home/oasisfox/.config/oasisfox/search_engines.toml).
 
 ### Merge and checks
 
