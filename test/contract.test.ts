@@ -1,0 +1,66 @@
+// The design.md registry examples as CommandDef values. `tsc` fails the build
+// when a shared type drifts from the design, so this file is the contract check.
+import assert from "node:assert/strict";
+import { test } from "node:test";
+import type { CommandDef, CompiledKeymap, TreeLeaf } from "../src/shared/index.ts";
+import { CONFIG_FORMAT_VERSION, DEFAULT_SETTINGS } from "../src/shared/index.ts";
+
+const WHERE = ["current", "new_tab", "background", "new_window"] as const;
+
+const tab_close: CommandDef = {
+  id: "tab.close",
+  label: "Close Tab",
+  intent: "Close the current tab and focus the tab on the chosen side.",
+  params: [{ name: "focus", type: "enum", values: ["right", "left"], default: "right" }],
+  runs_in: "background",
+  count: "repeat",
+  run: async (_ctx, { focus }) => {
+    void focus;
+  },
+};
+
+const open_search: CommandDef = {
+  id: "open.search",
+  label: "Search",
+  intent: "Search with a keyword engine from the search engine list.",
+  name: "search",
+  aliases: ["s"],
+  params: [
+    { name: "engine", type: "enum", values: { from: "search_engines" } },
+    { name: "query", type: "string", rest: true, default: { from: "selection" } },
+    { name: "where", type: "enum", values: WHERE, default: "current", flag: { short: "w" } },
+    {
+      name: "container",
+      type: "string",
+      values: { from: "containers" },
+      flag: { short: "c" },
+      when: { where: ["new_tab", "background", "new_window"] },
+    },
+  ],
+  flags: [
+    { short: "b", long: "background", sets: { where: "background" }, label: "Open in a background tab" },
+    { short: "t", long: "tab", sets: { where: "new_tab" }, label: "Open in a new tab" },
+  ],
+  runs_in: "background",
+  run: async () => {},
+};
+
+const leaf: TreeLeaf = {
+  kind: "leaf",
+  label: tab_close.label,
+  steps: [{ invocation: { id: tab_close.id, args: { focus: "left" } }, runs_in: tab_close.runs_in, count_rule: "ignore" }],
+};
+
+const keymap: CompiledKeymap = {
+  format_version: 1,
+  modes: { normal: { kind: "branch", children: { D: leaf } } },
+  ignore_sites: [],
+  mode_indicator: "always",
+  which_key_delay_ms: DEFAULT_SETTINGS.which_key_delay_ms,
+};
+
+test("design examples satisfy the shared contracts", () => {
+  assert.equal(CONFIG_FORMAT_VERSION, 1);
+  assert.equal(open_search.params?.length, 4);
+  assert.equal(keymap.modes.normal?.children["D"]?.kind, "leaf");
+});

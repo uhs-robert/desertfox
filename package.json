@@ -1,0 +1,20 @@
+{
+  "name": "oasisfox",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Keyboard-first Firefox extension built around one command registry.",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "node tools/build.mjs",
+    "test": "node --test --no-warnings \"test/**/*.test.ts\""
+  },
+  "devDependencies": {
+    "@types/firefox-webext-browser": "^143.0.1",
+    "@types/node": "^26.6.6",
+    "esbuild": "^0.25.0",
+    "jsonc-parser": "^3.3.1",
+    "typescript": "^5.9.0"
+  }
+}

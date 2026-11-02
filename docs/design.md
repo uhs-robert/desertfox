@@ -4,7 +4,7 @@ OasisFox is a keyboard-first Firefox extension. It has a small scope and one com
 
 The extension works on its own. Oasis Dots adds an optional native host. Through it, Hyprland, Quickshell and the shell list and run the same commands, and which-key can show in the Quickshell HUD.
 
-Status: design only. No code exists yet. [spike.md](spike.md) holds the measurements this design rests on, and [keymap.md](keymap.md) maps every binding in the owner's current browser config to a command here.
+Status: phase 1 is built on the `feat/phase-1-core` branch. [spike.md](spike.md) holds the measurements this design rests on, and [keymap.md](keymap.md) maps every binding in the owner's current browser config to a command here.
 
 ## Constraints from Firefox
 
@@ -103,6 +103,7 @@ type Invocation = { id: string; args?: Record<string, unknown>; count?: number }
 
 - A key binding is one invocation, or an array of invocations that run in order. Pipes have no replacement, because context sources cover the cases the config uses. If a binding ever needs one command's result, a command declares `returns` with a type, and a later step in the array takes it with `{ from: "previous" }`. The keymap loader checks the types. This is not built until a binding needs it.
 - If a binding leaves a required param out, the command line opens and asks for it, with completion for that param's type. This replaces 89 old bindings that opened the command line with text already typed. A binding can prefill the prompt from a context source, for example the current URL for editing.
+- A binding can also carry `prompt: { param, prefill? }`. The key then opens the command palette with the whole command typed in and the param prefilled. Phase 1 refuses such a binding.
 - The command line parses a command name, flags and positional words into an invocation, as described below.
 - Flags exist only on the command line. Keymaps and the native host use the `args` object.
 
@@ -153,6 +154,7 @@ The keymap is data, not code. It maps a mode and a key sequence to an invocation
 - The background checks each entry against the registry when it loads. A bad entry logs a warning and is skipped, so one typo does not break the rest. The help page lists the warnings.
 - Key notation is vim style: `<C-x>`, `<A-j>`, `<S-Escape>`. Sequences match through a prefix tree. A complete match runs at once, with no timeout.
 - The modes are normal, insert, ignore, hint and cmdline. Caret and visual modes arrive in phase 2, see [Caret and visual](#caret-and-visual). Insert mode follows `focusin` and `focusout` on editable elements instead of checking the focused element on every key.
+- A mode badge sits in the bottom right corner. The `mode_indicator` setting controls it: `always` (the default), `not_normal` or `off`.
 - `browser` mode holds the chords for the Firefox shortcuts. The manifest reserves a fixed number of shortcut slots, and the background assigns the chords to them with `commands.update`. The content script also catches these chords. If it cancels a chord, Firefox does not fire the shortcut as well, which the spike's key-blocking page showed.
 
 ## Config
@@ -166,7 +168,7 @@ The tool reads `~/.config/oasisfox/` by default. Every data file is JSONC (JSON 
 | File | Holds |
 | --- | --- |
 | `keymap.jsonc` | Every key: bindings per mode, plus the `search_keys` and `container_keys` shortcuts. `null` removes a default binding. |
-| `search_engines.jsonc` | Search engines: URL template and label. Data only, no keys. |
+| `search_engines.jsonc` | Search engines: URL template and label. The template uses `%s` for the query. Data only, no keys. |
 | `command_aliases.jsonc` | Extra command line names, for example `"g": "open.search"`. |
 | `settings.jsonc` | Settings such as the which-key delay and the new tab page. |
 | `snippets/*.js` | One custom command per file. See [Snippets](#snippets). |
@@ -180,13 +182,13 @@ Every key lives in `keymap.jsonc`. The other files hold only data. Two shortcut 
 // keymap.jsonc
 {
   "search_keys": { "a": "arch", "b": "brave" },                       // sa/Sa, sb/Sb
-  "container_keys": { "a": "Family", "c": "Client", "p": "Personal" },  // ca/cA, cc/cC, cp/cP
+  "container_keys": { "a": "Family", "c": "Client", "p": "Personal" },  // ca/Ca, cc/Cc, cp/Cp
   "normal": { "J": { "id": "tab.next" } }
 }
 ```
 
 - `sa` searches with the `arch` engine in this tab, and `Sa` in a new tab.
-- `ca` reopens the current page in the Family container, and `cA` opens a prompt prefilled with the current URL in a new Family tab.
+- `ca` reopens the current page in the Family container, and `Ca` opens a prompt prefilled with the current URL in a new Family tab.
 - Containers themselves need no file. Firefox lists their names, colors and icons through `contextualIdentities.query()`, and completion and `--container` use that list. A name in `container_keys` that does not exist gets a warning at load and is skipped.
 - The prefixes for generated bindings (`s` and `S`, `c` and `C`) are settings. An explicit binding in the keymap wins over a generated one.
 
@@ -206,7 +208,7 @@ Firefox reads `~/.mozilla/managed-storage/<extension id>.json` and gives its `da
 Firefox reads the file only when the extension loads. The spike confirmed this: an edit is invisible until the extension reloads, and Firefox sends no change event. So:
 
 - A `config.reload` command reloads the extension. The new config applies in about 1 s. The reload resets the mode and any open hints.
-- After a reload, the key listeners in open tabs are cut off. OasisFox loads them again into every open tab, unless Firefox does that by itself. Phase 1 tests which one happens.
+- After a reload, the key listeners in open tabs are cut off. Firefox loads the content script into open tabs by itself after `runtime.reload`, so the reinjection step stays only as a fallback (see [spike.md](spike.md), "Phase 1 measurements").
 - In Oasis Dots, a `just oasisfox-config` recipe runs the tool, and a key can run the recipe and then `config.reload`.
 - Users without a shell can import the merged file through the options page. OasisFox stores it in `storage.local`. Managed storage wins when both exist.
 
@@ -257,7 +259,7 @@ The config file is code, so whoever can write it can run code on pages. The file
 
 A Firefox shortcut enters at step 4 through `commands.onCommand`.
 
-The content script must have the keymap before the first key. It reads the compiled prefix tree from `storage.local` at start, buffers keys until the read returns, then replays them. Phase 1 measures that read. If it is slow, the background registers the tree as inline code with Firefox's `contentScripts.register`, so it is present at injection.
+The content script must have the keymap before the first key. It reads the compiled prefix tree from `storage.local` at start, buffers keys until the read returns, then replays them. Phase 1 measured that read at 6-10 ms (median 8), so buffering is enough and inline registration is not needed (see [spike.md](spike.md), "Phase 1 measurements").
 
 ## Bundles and loading
 
@@ -358,5 +360,5 @@ Firefox keeps the background awake while the port is open, which also helps a la
 
 - Moving a tab to another window by prompt (old key `wa`) is assumed unused.
 - The current config sets the new tab page to Tabliss. OasisFox can replace the new tab page with `chrome_url_overrides`, but focus then starts in the address bar. Decide in phase 3.
-- Phase 1 measures the `storage.local` read at content script start, which decides between buffering keys and inline registration.
-- Phase 1 tests whether Firefox loads the content script again into open tabs after `config.reload`.
+- Answered: the `storage.local` read takes 6-10 ms (median 8), so buffering stays and inline registration is not needed. See [spike.md](spike.md), "Phase 1 measurements".
+- Answered: Firefox reloads content scripts into open tabs after `runtime.reload` itself, and the reinjection step stays as a fallback. See [spike.md](spike.md), "Phase 1 measurements".
