@@ -24,9 +24,7 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
     return modes_cleared.then(() => remember_reported_mode(browser.storage.local, tab_id, sender.frameId, request.mode));
   }
   if ((message as SnippetCall)?.type === "snippet_run") {
-    // Snippets run in the top frame, so a call from another frame cannot be one of theirs.
-    if (sender.frameId !== 0) return Promise.resolve({ ok: false, message: "oasisfox.run works from the top frame only" });
-    return get_config().then(() => snippets.handle_call(message as SnippetCall, sender.tab?.id));
+    return get_config().then(() => snippets.handle_call(message as SnippetCall, { tab_id: sender.tab?.id, frame_id: sender.frameId }));
   }
   if (request?.type !== "run") return undefined;
   return get_config().then(() =>

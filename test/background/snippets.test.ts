@@ -33,7 +33,7 @@ function setup(entries: SnippetEntry[], tab_url: string | null = PAGE_URL) {
       const sandbox = {
         location: { href: tab_url },
         log: (text: string) => fake.log.push(text),
-        browser: { runtime: { sendMessage: (call: SnippetCall) => snippets.handle_call(call, tab_id) } },
+        browser: { runtime: { sendMessage: (call: SnippetCall) => snippets.handle_call(call, { tab_id, frame_id: 0 }) } },
       };
       return runInNewContext(code, sandbox);
     },
@@ -199,4 +199,15 @@ test("the browser call injects into frame 0 only", async () => {
   await snippet_deps.execute_in_top_frame(3, "1");
   assert.deepEqual(calls, [[3, { code: "1", frameId: 0, runAt: "document_idle" }]]);
   delete (globalThis as unknown as { browser?: unknown }).browser;
+});
+
+test("a snippet_run message from a frame other than the top one is refused", async () => {
+  const { fake } = setup([snippet("app.show", "log('ran')")]);
+  const snippets = create_snippets(fake.registry, { tab_url: async () => PAGE_URL, execute_in_top_frame: async () => null }, fake.deps);
+  const call = { type: "snippet_run", command_text: "other.note hi", depth: 1 } as const;
+  assert.equal((await snippets.handle_call(call, { tab_id: 7, frame_id: 3 })).ok, false);
+  assert.equal((await snippets.handle_call(call, { tab_id: 7, frame_id: undefined })).ok, false);
+  assert.ok(!fake.log.includes("note hi"));
+  assert.equal((await snippets.handle_call(call, { tab_id: 7, frame_id: 0 })).ok, true);
+  assert.ok(fake.log.includes("note hi"));
 });

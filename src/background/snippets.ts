@@ -19,12 +19,14 @@ export type SnippetDeps = {
 // Sent by `oasisfox.run` inside a snippet. `depth` is the level of the calling snippet.
 export type SnippetCall = { type: "snippet_run"; command_text: string; depth: number };
 
+export type SnippetSender = { tab_id: number | undefined; frame_id: number | undefined };
+
 export type SnippetAnswer = { ok: true } | { ok: false; message: string };
 
 export type Snippets = {
   // Defines the commands. Returns a warning for each one the registry rejects.
   register: (entries: readonly SnippetEntry[]) => string[];
-  handle_call: (call: SnippetCall, sender_tab_id: number | undefined) => Promise<SnippetAnswer>;
+  handle_call: (call: SnippetCall, sender: SnippetSender) => Promise<SnippetAnswer>;
 };
 
 const message_of = (error: unknown) => (error instanceof Error ? error.message : String(error));
@@ -105,7 +107,9 @@ export function create_snippets(registry: Registry, deps: SnippetDeps, router_de
     return warnings;
   }
 
-  async function handle_call(call: SnippetCall, sender_tab_id: number | undefined): Promise<SnippetAnswer> {
+  async function handle_call(call: SnippetCall, sender: SnippetSender): Promise<SnippetAnswer> {
+    // Snippets run in the top frame, so a call from another frame cannot be one of theirs.
+    if (sender.frame_id !== 0) return { ok: false, message: "oasisfox.run works from the top frame only" };
     if (!Number.isInteger(call.depth) || call.depth < 1 || typeof call.command_text !== "string") {
       return { ok: false, message: "oasisfox.run needs a command text" };
     }
@@ -125,7 +129,7 @@ export function create_snippets(registry: Registry, deps: SnippetDeps, router_de
     const response = await nested_router.run({
       invocations: [parsed.invocation],
       mode: "normal",
-      ...(sender_tab_id === undefined ? {} : { sender_tab_id }),
+      ...(sender.tab_id === undefined ? {} : { sender_tab_id: sender.tab_id }),
     });
     return response.ok ? { ok: true } : { ok: false, message: response.refusal.message };
   }
