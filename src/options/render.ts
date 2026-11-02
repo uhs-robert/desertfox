@@ -26,6 +26,8 @@ export function render_options(root: HTMLElement, model: OptionsModel): void {
   if (model.warnings.length === 0) page.append(el("p", "oasisfox-options-muted", "No warnings."));
   else page.append(el("ul", "oasisfox-options-warnings", ...model.warnings.map((warning) => el("li", undefined, warning))));
   page.append(
+    el("h2", undefined, "Commands"),
+    el("table", undefined, ...model.commands.map((row) => el("tr", undefined, el("td", undefined, el("code", undefined, row.id)), el("td", undefined, row.label), el("td", undefined, row.intent)))),
     el("h2", undefined, "Change the config"),
     el("p", undefined, "This page is read-only. Edit the config files, then:"),
     el("ol", undefined, ...model.rebuild_steps.map((step) => el("li", undefined, el("code", undefined, step)))),
