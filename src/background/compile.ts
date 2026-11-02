@@ -10,6 +10,7 @@ import type { Prompt } from "../shared/invocation.ts";
 import { find_param, is_context_source } from "../shared/registry/params.ts";
 import { check_args } from "../shared/registry/check_args.ts";
 import type { EnumSources } from "../shared/registry/check_args.ts";
+import { DEFAULT_PALETTE, is_palette_name, palette_or_default, resolve_mode_colors } from "../shared/mode_colors.ts";
 import { compile_keymap } from "../shared/keys/compiler.ts";
 import { merge_keymaps } from "./keymap_merge.ts";
 
@@ -28,6 +29,12 @@ export function compile_config(input: CompileInput): CompileOutput {
     const command = input.get_command(command_id);
     return command && { runs_in: command.runs_in, label: command.label, count: command.count ?? "ignore" };
   });
+
+  const requested_palette = input.config.settings.palette;
+  if (requested_palette !== undefined && !is_palette_name(requested_palette)) {
+    warnings.push(`settings: palette "${String(requested_palette)}" is not an oasis palette, using ${DEFAULT_PALETTE}`);
+  }
+  compiled.mode_colors = resolve_mode_colors(palette_or_default(requested_palette));
 
   for (const [mode, root] of Object.entries(compiled.modes) as [string, TreeBranch][]) {
     check_branch(root, [], mode, input, warnings);

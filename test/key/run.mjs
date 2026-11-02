@@ -343,6 +343,39 @@ async function main() {
     measurements.tree_read_ms = tree_read_ms;
     const sorted = [...tree_read_ms].sort((left, right) => left - right);
     measurements.tree_read_summary = { loads: sorted.length, min: sorted[0], median: (sorted[(sorted.length - 1) >> 1] + sorted[sorted.length >> 1]) / 2, max: sorted.at(-1) };
+
+    // part B: toolbar badge
+    // The sampler reports each change of the active tab's badge text to the test server.
+    // A no-cors text/plain POST needs no host permission.
+    await evaluate_in_background(rdp, EXTENSION_ID, `(() => {
+      let last;
+      setInterval(async () => {
+        const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
+        const text = tab && (await browser.browserAction.getBadgeText({ tabId: tab.id }));
+        if (text === last) return;
+        last = text;
+        fetch("http://127.0.0.1:${server.port}/report", { method: "POST", mode: "no-cors", body: JSON.stringify({ type: "toolbar_badge", text }) });
+      }, 50);
+      return "sampling";
+    })()`);
+    const badge_is = (text) => (event) => event.type === "toolbar_badge" && event.text === text;
+    await open_page("field", "badge_field", { new_tab: true });
+    await run_case("the toolbar badge follows insert, normal and ignore mode", async () => {
+      // The field page focuses its input on load, so the tab starts in insert mode.
+      await wait_event(0, badge_is("INS"), "INS on a focused field");
+      let mark = events.length;
+      await send_keys("-k", "Escape");
+      await wait_event(mark, badge_is("NOR"), "NOR after Escape");
+      mark = events.length;
+      await send_keys(...SHIFT_ESCAPE);
+      await wait_event(mark, badge_is("IGN"), "IGN after Shift+Escape");
+      mark = events.length;
+      await send_keys(...SHIFT_ESCAPE);
+      await wait_event(mark, badge_is("NOR"), "NOR after leaving ignore");
+      mark = events.length;
+      await send_keys("gi");
+      await wait_event(mark, badge_is("INS"), "INS after gi");
+    });
   } finally {
     rdp?.close();
     await shadow("down", SHADOW_NAME).catch((error) => console.error(`shadow down failed: ${error.message}`));
