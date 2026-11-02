@@ -6,6 +6,9 @@ export const IMPORTED_CONFIG_STORAGE_KEY = "oasisfox_imported_config";
 // Strings for the help page: config, keymap and shortcut slot problems from the last load.
 export const WARNINGS_STORAGE_KEY = "oasisfox_warnings";
 
+// Where the config came from and the settings in force, for the options page. Written at every startup.
+export const CONFIG_STATUS_STORAGE_KEY = "oasisfox_config_status";
+
 // Slot name to the invocations its chord runs. `commands.onCommand` reads it, because the background can restart.
 export const SLOT_TABLE_STORAGE_KEY = "oasisfox_slot_table";
 
