@@ -59,3 +59,22 @@ test("grammar errors pass through, and help is not a binding", () => {
   assert.equal(error_of(""), "empty command line");
   assert.match(error_of("open --help"), /not a binding/);
 });
+
+test("runtime lists reach the grammar and warnings come back with the binding", () => {
+  const sources = { search_engines: ["arch", "ddg"] };
+  const result = parse_binding(registry, "search engine=ddg arch linux", sources);
+  assert.equal(result.kind, "binding");
+  assert.equal(result.kind === "binding" && result.warnings?.length, 1);
+  const picked = parse_binding(registry, ":search arch pacman", sources);
+  assert.deepEqual(picked.kind === "binding" && picked.binding, {
+    id: "open.search",
+    args: { engine: "arch", query: "pacman" },
+    prompt: { param: "query" },
+  });
+});
+
+test("a bare number binds the only number param, negative included", () => {
+  assert.deepEqual(binding_of("tab.move -1"), { id: "tab.move", args: { offset: "-1" } });
+  assert.deepEqual(binding_of("tab.goto 1"), { id: "tab.goto", args: { index: "1" } });
+  assert.deepEqual(binding_of(":tab.move -1").prompt, { param: "offset" });
+});

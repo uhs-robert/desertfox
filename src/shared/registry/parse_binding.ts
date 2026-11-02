@@ -4,19 +4,21 @@
 
 import type { ContextSource } from "../command.ts";
 import type { BoundInvocation, Prompt } from "../invocation.ts";
-import { parse_command_line, type GrammarParam } from "./command_line.ts";
+import type { EnumSources } from "./check_args.ts";
+import { parse_command_line } from "./command_line.ts";
 import type { Registry } from "./define.ts";
 import { is_context_source } from "./params.ts";
 
-export type BindingResult = { kind: "binding"; binding: BoundInvocation } | { kind: "error"; error: string };
+export type BindingResult = { kind: "binding"; binding: BoundInvocation; warnings?: string[] } | { kind: "error"; error: string };
 
-export function parse_binding(registry: Registry, text: string): BindingResult {
+export function parse_binding(registry: Registry, text: string, sources: EnumSources = {}): BindingResult {
   const trimmed = text.trimStart();
   const types_into_command_line = trimmed.startsWith(":");
-  const parsed = parse_command_line(registry, types_into_command_line ? trimmed.slice(1) : trimmed);
+  const parsed = parse_command_line(registry, types_into_command_line ? trimmed.slice(1) : trimmed, sources);
   if (parsed.kind === "error") return parsed;
   if (parsed.kind === "help") return { kind: "error", error: "-h and --help are for the command line, not a binding" };
-  if (!types_into_command_line) return { kind: "binding", binding: parsed.invocation };
+  const warnings = parsed.warnings?.length ? { warnings: parsed.warnings } : {};
+  if (!types_into_command_line) return { kind: "binding", binding: parsed.invocation, ...warnings };
 
   const prompt = prompt_for(registry, parsed.invocation.id, parsed.invocation.args ?? {});
   if (typeof prompt === "string") return { kind: "error", error: prompt };
@@ -24,7 +26,7 @@ export function parse_binding(registry: Registry, text: string): BindingResult {
   const binding: BoundInvocation = { id, prompt: prompt.prompt };
   const kept = Object.fromEntries(Object.entries(args).filter(([name]) => name !== prompt.moved_to_prefill));
   if (Object.keys(kept).length > 0) binding.args = kept;
-  return { kind: "binding", binding };
+  return { kind: "binding", binding, ...warnings };
 }
 
 // The stored form names one param to fill. Pick the one that holds an @source,
@@ -35,7 +37,7 @@ function prompt_for(
   id: string,
   args: Record<string, unknown>,
 ): { prompt: Prompt; moved_to_prefill?: string } | string {
-  const params = (registry.get(id)?.params ?? []) as readonly GrammarParam[];
+  const params = registry.get(id)?.params ?? [];
   const with_source = params.find((param) => param.type === "string" && is_context_source(args[param.name]));
   const main = params.find((param) => param.main);
   const chosen = with_source ?? main ?? params[0];

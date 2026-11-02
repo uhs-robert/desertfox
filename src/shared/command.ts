@@ -19,11 +19,6 @@ export type ParamDefault = ParamValue | ContextSource;
 // Value lists filled at run time from the user's config or from Firefox.
 export type DynamicValues = { from: "search_engines" | "containers" };
 
-export type ParamFlag = {
-  // The long name is the param name. `short` is one character.
-  short?: string;
-};
-
 // The param is valid only if the named sibling param has one of these values.
 export type ParamWhen = Record<string, readonly ParamValue[]>;
 
@@ -32,23 +27,14 @@ export type ParamDef = {
   type: ParamType;
   // Allowed values. Required for `enum`. A `string` param may use it for completion only.
   values?: readonly string[] | DynamicValues;
-  // Only on the last `string` param: takes all remaining words.
+  // A `string` param that takes all remaining words.
   rest?: boolean;
   // The one free-text param that config and the command line take as a bare word. At most one per command, `string` only.
   main?: boolean;
-  flag?: ParamFlag;
-  // Only a trailing run of params may have a default.
+  // A param with no default and no `when` is required.
   default?: ParamDefault;
   // Exactly one key, so `{ param: [values] }`.
   when?: ParamWhen;
-};
-
-// A preset flag sets fixed values on existing params and has no handler.
-export type FlagPreset = {
-  short?: string;
-  long: string;
-  sets: Record<string, ParamValue>;
-  label: string;
 };
 
 export type CountBehavior =
@@ -80,7 +66,6 @@ export type CommandDef = {
   label: string;
   intent: string;
   params?: readonly ParamDef[];
-  flags?: readonly FlagPreset[];
   runs_in: RunsIn;
   needs?: readonly Need[];
   // Absent means "ignore". The registry applies this default.
@@ -93,7 +78,7 @@ export type CommandDef = {
 // A `commands.json` entry: the definition without the handler and the router fields.
 export type CommandMeta = Pick<
   CommandDef,
-  "id" | "name" | "aliases" | "label" | "intent" | "params" | "flags" | "count" | "modes"
+  "id" | "name" | "aliases" | "label" | "intent" | "params" | "count" | "modes"
 >;
 
 export type CommandsFile = {

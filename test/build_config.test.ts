@@ -165,8 +165,8 @@ test("an alias must name a known command and a free name", () => {
 test("snippet header becomes a registry-shaped entry", () => {
   const snippet = full().snippets[0];
   assert.deepEqual(snippet?.params, [
-    { name: "query", type: "string", default: { from: "selection" } },
-    { name: "all", type: "bool", flag: { short: "a" } },
+    { name: "query", type: "string", main: true, default: { from: "selection" } },
+    { name: "all", type: "bool" },
   ]);
   assert.equal(snippet?.id, "myapp.toggle_ids");
   assert.equal(snippet?.name, "ids");
@@ -197,7 +197,8 @@ test("snippet enum values and literal defaults parse", () => {
     "// matches: *://*/*",
     "// param: mode enum values=x,y default=y",
     '// param: word string default="selection"',
-    "// flag: --depth -d int default=2",
+    "// param: depth int default=2",
+    "// param: target string main",
     "",
   ].join("\n");
   const entry = parse_snippet("s.js", text, problems);
@@ -205,7 +206,8 @@ test("snippet enum values and literal defaults parse", () => {
   assert.deepEqual(entry?.params, [
     { name: "mode", type: "enum", values: ["x", "y"], default: "y" },
     { name: "word", type: "string", default: "selection" },
-    { name: "depth", type: "int", default: 2, flag: { short: "d" } },
+    { name: "depth", type: "int", default: 2 },
+    { name: "target", type: "string", main: true },
   ]);
 });
 
@@ -296,14 +298,16 @@ test("a snippet name or alias that clashes with a built-in name is rejected", ()
   assert.doesNotMatch(text, /b\.js/);
 });
 
-test("snippet flags get the define-time checks", () => {
+test("snippet params get the define-time checks", () => {
   const dir = config_dir_with({
-    "snippets/a.js": `// id: myapp.one\n${SNIPPET_HEADER}// flag: --help bool\n`,
-    "snippets/b.js": `// id: myapp.two\n${SNIPPET_HEADER}// flag: --x -q bool\n// flag: --y -q bool\n`,
+    "snippets/a.js": `// id: myapp.one\n${SNIPPET_HEADER}// param: a string main\n// param: b string main\n`,
+    "snippets/b.js": `// id: myapp.two\n${SNIPPET_HEADER}// param: n int main\n`,
+    "snippets/c.js": `// id: myapp.three\n${SNIPPET_HEADER}// flag: --x bool\n`,
   });
   const text = problems_of(dir).join("\n");
-  assert.match(text, /a\.js: .*--help is reserved/);
-  assert.match(text, /b\.js: .*-q is already used/);
+  assert.match(text, /a\.js: .*only one param can be main/);
+  assert.match(text, /b\.js: .*only a string param can be main/);
+  assert.match(text, /c\.js:\d+: unknown header "flag"/);
 });
 
 test("contract: build_commands_file output feeds build-config", () => {
@@ -356,4 +360,22 @@ test("an unbind marker later in the layers beats an earlier binding, and arrays 
   const text = problems_of(dir).join("\n");
   assert.match(text, /keymap\.normal\["gz"\] must be a command string/);
   assert.match(text, /keymap\.normal\["gy"\] must be a command string/);
+});
+
+test("a bare engine name picks the engine, and a query that starts with one draws a warning", () => {
+  const dir = config_dir_with({
+    "keymap.toml": [
+      "[normal]",
+      'a = "search alpha rust lifetimes"',
+      'b = "search engine=beta alpha centauri"',
+      'c = "search engine=beta query=\\"alpha centauri\\""',
+    ].join("\n"),
+    "search_engines.toml": 'alpha = { url = "a%s", label = "A" }\nbeta = { url = "b%s", label = "B" }',
+  });
+  const warnings: string[] = [];
+  const normal = build_config(dir, commands, warnings).keymap.normal;
+  assert.deepEqual(normal?.["a"], { id: "open.search", args: { engine: "alpha", query: "rust lifetimes" } });
+  assert.deepEqual(normal?.["b"], { id: "open.search", args: { engine: "beta", query: "alpha centauri" } });
+  assert.equal(warnings.length, 1);
+  assert.match(warnings[0]!, /keymap normal "b": query starts with "alpha", which is also a value of engine, write query="..."/);
 });

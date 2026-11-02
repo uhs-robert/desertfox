@@ -22,7 +22,8 @@ export function read_commands_file(path: string): CommandMeta[] {
   return (parsed as CommandsFile).commands;
 }
 
-export function build_config(config_dir: string, commands: CommandMeta[]): MergedConfig {
+// Warnings are for config that builds but may not mean what it says.
+export function build_config(config_dir: string, commands: CommandMeta[], warnings: string[] = []): MergedConfig {
   const problems: string[] = [];
   const sources = read_source_files(config_dir, problems);
   const merged = merge_layers(sources.layers, problems);
@@ -38,7 +39,7 @@ export function build_config(config_dir: string, commands: CommandMeta[]): Merge
   }
 
   const registry = build_registry(commands, snippets, snippet_paths, problems);
-  resolve_bindings(merged, registry, problems);
+  resolve_bindings(merged, registry, problems, warnings);
   check_config(merged, registry, problems);
   if (problems.length > 0) throw new ConfigErrors(problems);
 

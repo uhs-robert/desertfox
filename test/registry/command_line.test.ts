@@ -1,17 +1,18 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { check_args, parse_command_line, tokenize } from "../../src/shared/registry/index.ts";
+import { check_args, parse_command_line, tokenize, usage_line } from "../../src/shared/registry/index.ts";
+import type { EnumSources } from "../../src/shared/registry/index.ts";
 import { grammar_registry, search_sources } from "./grammar_registry.ts";
 
 const registry = grammar_registry();
 
-function parsed(text: string) {
-  const result = parse_command_line(registry, text);
+function parsed(text: string, sources: EnumSources = search_sources) {
+  const result = parse_command_line(registry, text, sources);
   assert.equal(result.kind, "invocation", JSON.stringify(result));
   return result.kind === "invocation" ? result.invocation : never();
 }
-function error_of(text: string): string {
-  const result = parse_command_line(registry, text);
+function error_of(text: string, sources: EnumSources = search_sources): string {
+  const result = parse_command_line(registry, text, sources);
   assert.equal(result.kind, "error", JSON.stringify(result));
   return result.kind === "error" ? result.error : "";
 }
@@ -42,7 +43,6 @@ test("a bare word that is one param's enum value sets that param, in any order",
   assert.deepEqual(parsed("hint links background").args, { filter: "links", action: "background" });
   assert.deepEqual(parsed("tab.close left").args, { focus: "left" });
   assert.deepEqual(parsed("open tab https://github.com").args, { where: "tab", url: "https://github.com" });
-  assert.deepEqual(parsed("open https://github.com tab").args, { url: "https://github.com", where: "tab" });
 });
 
 test("a bare bool name turns the switch on and name=value turns it off", () => {
@@ -58,10 +58,81 @@ test("name=value works for any param, with the first = as the split", () => {
   assert.deepEqual(parsed("tab.move offset=-1").args, { offset: "-1" });
 });
 
-test("the main value is the one bare free word", () => {
+test("the main value starts at the first free word and runs to the end of the line", () => {
   assert.deepEqual(parsed("s engine=arch rust").args, { engine: "arch", query: "rust" });
-  assert.equal(error_of("s engine=arch rust lifetimes"), "query is set twice, quote text that has spaces");
+  assert.deepEqual(parsed("s engine=arch rust lifetimes").args, { engine: "arch", query: "rust lifetimes" });
+  assert.deepEqual(parsed("search arch pacman mirrors").args, { engine: "arch", query: "pacman mirrors" });
   assert.equal(error_of("hint nope"), '"nope" is not a value, switch or param of hint');
+});
+
+test("enum words and switches work before the main value and are text after it", () => {
+  assert.deepEqual(parsed("search tab arch pacman").args, { where: "tab", engine: "arch", query: "pacman" });
+  assert.deepEqual(parsed("search arch pacman tab").args, { engine: "arch", query: "pacman tab" });
+  assert.deepEqual(parsed("search arch pacman where=tab").args, { engine: "arch", query: "pacman where=tab" });
+  assert.deepEqual(parsed("open https://a.example tab").args, { url: "https://a.example tab" });
+  assert.deepEqual(parsed("search arch a -h").args, { engine: "arch", query: "a -h" });
+});
+
+test("quoted and unquoted words mix in the main value", () => {
+  assert.deepEqual(parsed(`search arch "pacman mirrors"`).args, { engine: "arch", query: "pacman mirrors" });
+  assert.deepEqual(parsed(`search arch pacman "mirror list" now`).args, { engine: "arch", query: "pacman mirror list now" });
+  assert.deepEqual(parsed(`search arch "tab" x`).args, { engine: "arch", query: "tab x" });
+  assert.deepEqual(parsed(`search arch query="arch linux"`).args, { engine: "arch", query: "arch linux" });
+  assert.equal(error_of(`search arch query=a b`), "query is set twice, quote text that has spaces");
+});
+
+test("a source cannot join other words", () => {
+  assert.deepEqual(parsed("search arch @selection").args, { engine: "arch", query: { from: "selection" } });
+  assert.match(error_of("search arch @selection now"), /"@selection" is a source and cannot join other words/);
+  assert.deepEqual(parsed("search arch now @selection").args, { engine: "arch", query: "now @selection" });
+});
+
+test("a bare word picks a runtime-list enum value when the list holds it", () => {
+  assert.deepEqual(parsed("search arch pacman").args, { engine: "arch", query: "pacman" });
+  assert.deepEqual(parsed("search pacman").args, { query: "pacman" });
+  assert.deepEqual(parsed("search arch", {}).args, { query: "arch" });
+  assert.deepEqual(parsed("search ddg where=tab").args, { engine: "ddg", where: "tab" });
+});
+
+test("a query that starts with an engine name needs query=, and the parser warns", () => {
+  const result = parse_command_line(registry, "search engine=ddg arch linux", search_sources);
+  assert.equal(result.kind, "invocation");
+  if (result.kind !== "invocation") return;
+  assert.deepEqual(result.invocation.args, { engine: "ddg", query: "arch linux" });
+  assert.deepEqual(result.warnings, ['query starts with "arch", which is also a value of engine, write query="..." to say so']);
+  const quoted = parse_command_line(registry, `search engine=ddg query="arch linux"`, search_sources);
+  assert.equal(quoted.kind === "invocation" && quoted.warnings, undefined);
+  const fresh = parse_command_line(registry, "search arch linux", search_sources);
+  assert.equal(fresh.kind === "invocation" && fresh.warnings, undefined);
+});
+
+test("a command with one number param takes a bare number, negative included", () => {
+  assert.deepEqual(parsed("tab.goto 1").args, { index: "1" });
+  assert.deepEqual(parsed("tab.move -1").args, { offset: "-1" });
+  assert.deepEqual(parsed("zoom.set 1.5").args, { level: "1.5" });
+  assert.deepEqual(parsed("zoom.set -0.5").args, { level: "-0.5" });
+  assert.equal(check_args(registry.get("tab.move")!, parsed("tab.move -1").args).ok, true);
+  assert.deepEqual(check_args(registry.get("tab.move")!, parsed("tab.move -1").args), { ok: true, args: { offset: -1 } });
+});
+
+test("a negative number is a value even next to a switch", () => {
+  assert.deepEqual(parsed("tab.shift wrap -1").args, { wrap: true, offset: "-1" });
+  assert.deepEqual(parsed("tab.shift -1 wrap").args, { offset: "-1", wrap: true });
+});
+
+test("bare number edge cases", () => {
+  assert.match(error_of("scroll.by 5"), /"5" is not a value, switch or param of scroll\.by, a bare number needs a command with one number param/);
+  assert.deepEqual(parsed("scroll.by dx=5 dy=-5").args, { dx: "5", dy: "-5" });
+  assert.equal(error_of("tab.move 1 2"), '"2" is not a value, switch or param of tab.move');
+  assert.equal(error_of("tab.move offset=1 2"), '"2" is not a value, switch or param of tab.move');
+  assert.equal(error_of(`tab.move "1"`), '"1" is not a value, switch or param of tab.move');
+  assert.equal(error_of("tab.move -x"), '"-x" is not a value, switch or param of tab.move');
+  assert.equal(error_of("tab.move 1.2.3"), '"1.2.3" is not a value, switch or param of tab.move');
+  assert.equal(check_args(registry.get("tab.move")!, parsed("tab.move 1.5").args).ok, false);
+});
+
+test("a number goes to the main value when the command has no number param", () => {
+  assert.deepEqual(parsed("open 5 text").args, { url: "5 text" });
 });
 
 test("a quoted word is always free text, never a value word, switch or name=value", () => {
@@ -117,4 +188,9 @@ test("when conditions are the validator's job", () => {
   const result = check_args(registry.get(invocation.id)!, invocation.args, search_sources);
   assert.deepEqual(result.ok, false);
   assert.equal(result.ok ? "" : result.error, "container needs where tab, background or window");
+});
+
+test("the usage line lists switches, enum values and the main word", () => {
+  assert.equal(usage_line(registry.get("hint.run")!), "hint [open|background|window] [links|inputs|custom] [selector=<selector>] [rapid]");
+  assert.equal(usage_line(registry.get("open.search")!), "search engine query [here|tab|background|window]");
 });
