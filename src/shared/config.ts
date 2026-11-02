@@ -7,7 +7,7 @@ import type { KeymapConfig } from "./keymap.ts";
 import { DEFAULT_PALETTE } from "./mode_colors.ts";
 import type { PaletteName } from "./mode_colors.ts";
 
-export const CONFIG_FORMAT_VERSION = 1;
+export const CONFIG_FORMAT_VERSION = 2;
 
 export type SearchEngine = {
   // URL template with the query placeholder.

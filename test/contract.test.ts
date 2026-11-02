@@ -55,7 +55,7 @@ const keymap: CompiledKeymap = {
 };
 
 test("design examples satisfy the shared contracts", () => {
-  assert.equal(CONFIG_FORMAT_VERSION, 1);
+  assert.equal(CONFIG_FORMAT_VERSION, 2);
   assert.equal(open_search.params?.length, 4);
   assert.equal(keymap.modes.normal?.children["D"]?.kind, "leaf");
 });
