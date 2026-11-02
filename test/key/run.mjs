@@ -415,23 +415,7 @@ async function main() {
 
     // part A: scroll align
     await run_case("scroll.align puts the field just left at the top, center and bottom", async () => {
-      writeFileSync(join(config_dir, "keymap.jsonc"), JSON.stringify({
-        normal: {
-          Zt: { id: "scroll.align", args: { position: "top" } },
-          Zz: { id: "scroll.align", args: { position: "center" } },
-          Zb: { id: "scroll.align", args: { position: "bottom" } },
-        },
-        browser: { "<A-,>": { id: "browser.focus_page" } },
-      }));
-      build_test_config(config_dir, managed_file);
-      const session_home = readFileSync(join(work_dir, "session_home"), "utf8").trim();
-      cpSync(managed_file, join(session_home, ".mozilla", "managed-storage", `${EXTENSION_ID}.json`));
       await open_page("aligned", "align", { new_tab: true });
-      // evaluate_in_background hangs after its first use in a run, so wait out the reload instead of polling.
-      await send_keys("qr");
-      await sleep(8000);
-      await sleep(1000);
-
       const field_top_after = async (keys) => {
         const mark = events.length;
         await send_keys(...keys);
@@ -442,20 +426,30 @@ async function main() {
       await field_top_after(["gi"]);
       await send_keys("-k", "Escape");
       await sleep(300);
-      const top = await field_top_after(["Zt"]);
-      expect(Math.abs(top) <= 2, `Zt left the field at ${top}`);
-      const center = await field_top_after(["Zz"]);
-      expect(center > 100, `Zz left the field at ${center}`);
-      const bottom = await field_top_after(["Zb"]);
-      expect(bottom > center, `Zb left the field at ${bottom}, Zz at ${center}`);
+      const top = await field_top_after(["zt"]);
+      expect(Math.abs(top) <= 2, `zt left the field at ${top}`);
+      const center = await field_top_after(["zz"]);
+      expect(center > 100, `zz left the field at ${center}`);
+      const bottom = await field_top_after(["zb"]);
+      expect(bottom > center, `zb left the field at ${bottom}, zz at ${center}`);
       measurements.align_field_tops = { top, center, bottom };
     });
 
     await run_case("scroll.align with nothing focused leaves the scroll position alone", async () => {
       await open_page("page", "align_plain", { new_tab: true });
       const mark = events.length;
-      await send_keys("Zt");
+      await send_keys("zt");
       await expect_no_scroll(mark, "align_plain");
+    });
+
+    await run_case("z= resets the zoom to 100 percent", async () => {
+      const active_zoom = `(async () => { const [tab] = await browser.tabs.query({ active: true, currentWindow: true }); return browser.tabs.getZoom(tab.id); })()`;
+      await send_keys("zI");
+      await sleep(500);
+      expect(await evaluate_in_background(rdp, EXTENSION_ID, active_zoom) === 3, "zI did not zoom to 300 percent");
+      await send_keys("z=");
+      await sleep(500);
+      expect(await evaluate_in_background(rdp, EXTENSION_ID, active_zoom) === 1, "z= did not reset the zoom");
     });
 
     // The default t, x and r groups. Plain t, x and r are prefixes only.

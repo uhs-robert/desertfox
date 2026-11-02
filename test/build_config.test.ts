@@ -73,11 +73,12 @@ test("null in the keymap stays in the output to remove a default binding", () =>
 test("mode_indicator must be always, not_normal or off", () => {
   const dir = config_dir_with({ "settings.jsonc": '{ "mode_indicator": "yes" }' });
 
+  assert.match(problems_of(dir).join("\n"), /settings\.jsonc: mode_indicator: .*not_normal/);
+});
+
 test("palette must name an oasis palette", () => {
   const dir = config_dir_with({ "settings.jsonc": '{ "palette": "neon" }' });
   assert.match(problems_of(dir).join("\n"), /settings\.jsonc: palette: .*moonlight/);
-});
-  assert.match(problems_of(dir).join("\n"), /settings\.jsonc: mode_indicator: .*not_normal/);
 });
 
 test("settings, aliases, css and the format version come through", () => {

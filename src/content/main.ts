@@ -173,6 +173,11 @@ function start(): void {
     void send_to_background({ type: "mode_changed", mode });
   });
 
+  // Coming back from the back-forward cache runs no start-up, and the background's per-tab mode is stale.
+  window.addEventListener("pageshow", (event) => {
+    if (event.persisted) void send_to_background({ type: "mode_changed", mode: page_mode.get_mode() });
+  });
+
   page_mode.listen_display(refresh_mode_indicator);
 
   browser.runtime.onMessage.addListener((raw: unknown) => {

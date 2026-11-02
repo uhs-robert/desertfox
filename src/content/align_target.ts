@@ -9,17 +9,22 @@ export type AlignSelection<Ref> = {
   editable: Ref | undefined;
   // The element around the selection focus.
   parent: Ref;
+  // The element around the selection contains the element just blurred. Escape from a field leaves the
+  // selection on the field's wrapper, so the blurred field is the better target.
+  holds_remembered: boolean;
 };
 
-// Order: the focused element unless it is the page itself, then the selection's field, then the
-// element around the selection, then the element just blurred.
+// Order: the focused element unless it is the page itself, then the selection's field, then the blurred
+// element when the selection sits around it, then the element around the selection, then the blurred element.
 export function choose_align_target<Ref>(
   focused: AlignFocus<Ref> | undefined,
   selection: AlignSelection<Ref> | undefined,
   remembered: Ref | undefined,
 ): Ref | undefined {
   if (focused && !focused.is_page_root) return focused.ref;
-  return selection?.editable ?? selection?.parent ?? remembered;
+  if (selection?.editable) return selection.editable;
+  if (selection?.holds_remembered) return remembered;
+  return selection?.parent ?? remembered;
 }
 
 export const SCROLL_BLOCK: Record<AlignPosition, ScrollLogicalPosition> = {
