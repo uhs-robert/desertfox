@@ -4,7 +4,7 @@ OasisFox is a keyboard-first Firefox extension. It has a small scope and one com
 
 The extension works on its own. Oasis Dots adds an optional native host. Through it, Hyprland, Quickshell and the shell list and run the same commands, and which-key can show in the Quickshell HUD.
 
-Status: phase 1 is built on the `feat/phase-1-core` branch. [spike.md](spike.md) holds the measurements this design rests on, and [keymap.md](keymap.md) maps every binding in the owner's current browser config to a command here.
+Status: phase 1 is built on the `feat/phase-1-core` branch. [spike.md](spike.md) holds the measurements this design rests on, and [keymap.md](keymap.md) maps every binding in the current browser config to a command here.
 
 ## Constraints from Firefox
 

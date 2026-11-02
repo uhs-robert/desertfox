@@ -1,4 +1,4 @@
-// Mode badge colors from the oasis.nvim palettes, so the page badge matches the owner's editor.
+// Mode badge colors from the oasis.nvim palettes, so the page badge matches the editor.
 // Each palette keeps five colors per variant, in the order of PALETTE_COLOR_ORDER. They are the ones
 // oasis.nvim's lualine theme uses: its normal and insert section colors, the core and surface
 // backgrounds, and the dim foreground.

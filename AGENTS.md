@@ -17,7 +17,7 @@ Read the design for an area before you change it.
 | Measured Firefox behavior              | [`docs/spike.md`](docs/spike.md)         |
 | The phase 0 test harness               | `spike/` (throwaway, do not build on it) |
 
-If code and the design disagree, stop and ask the owner. Do not change the design to match the code without the owner's approval.
+If code and the design disagree, stop and ask the maintainer. Do not change the design to match the code without the maintainer's approval.
 
 ## Architecture rules
 
@@ -35,8 +35,8 @@ If code and the design disagree, stop and ask the owner. Do not change the desig
 This repository is public.
 
 - Do not name other vim-style browser extensions in code, docs, commits or PRs. Do not copy their code, because copied code brings its license with it.
-- Never commit private config or personal data, for example the owner's site helpers or snippets.
-- Never assume the owner's tools (Oasis, Hyprland, a particular terminal). Oasis features stay optional behind the native host.
+- Never commit private config or personal data, for example personal site helpers or snippets.
+- Never assume a personal toolset (Oasis, Hyprland, a particular terminal). Oasis features stay optional behind the native host.
 
 ## Code style
 
