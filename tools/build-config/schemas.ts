@@ -1,8 +1,7 @@
 // JSON Schemas for the data files, cut from `commands.json`, so an editor
-// completes command ids, args and setting names.
+// (Taplo reads them for TOML) completes command names and setting names.
 
-import type { CommandMeta, ParamDef } from "../../src/shared/command.ts";
-import { COMMAND_ID_PATTERN } from "../../src/shared/registry/index.ts";
+import type { CommandMeta } from "../../src/shared/command.ts";
 import { DEFAULT_SETTINGS, MODE_INDICATOR_VALUES } from "../../src/shared/config.ts";
 import { PALETTE_NAMES } from "../../src/shared/mode_colors.ts";
 import { KEYMAP_MODES } from "./merge.ts";
@@ -12,83 +11,15 @@ type Schema = Record<string, unknown>;
 
 const DRAFT = "http://json-schema.org/draft-07/schema#";
 
-function param_schema(param: ParamDef): Schema {
-  const context_source: Schema = {
-    type: "object",
-    properties: { from: { enum: ["current_url", "selection", "clipboard"] } },
-    required: ["from"],
-    additionalProperties: false,
-  };
-  let value_schema: Schema;
-  switch (param.type) {
-    case "int":
-      value_schema = { type: "integer" };
-      break;
-    case "float":
-      value_schema = { type: "number" };
-      break;
-    case "bool":
-      value_schema = { type: "boolean" };
-      break;
-    case "enum":
-    case "string":
-      value_schema = Array.isArray(param.values) && param.type === "enum" ? { enum: param.values } : { type: "string" };
-      break;
-  }
-  const schema = param.type === "string" ? { anyOf: [value_schema, context_source] } : value_schema;
-  return { ...schema, description: param.name };
-}
-
-function prompt_schema(param_names: string[] | undefined): Schema {
-  return {
-    type: "object",
-    description: "Phase 2: the key opens the command line with this command typed in and this param to fill",
-    properties: {
-      param: param_names ? { enum: param_names } : { type: "string" },
-      prefill: {
-        type: "object",
-        description: "Text the prompt starts with",
-        properties: { from: { enum: ["current_url", "selection", "clipboard"] } },
-        required: ["from"],
-        additionalProperties: false,
-      },
-    },
-    required: ["param"],
-    additionalProperties: false,
-  };
-}
-
-function invocation_schema(command: CommandMeta): Schema {
-  const properties = Object.fromEntries((command.params ?? []).map((param) => [param.name, param_schema(param)]));
-  return {
-    type: "object",
-    description: command.intent,
-    properties: {
-      id: { const: command.id },
-      args: { type: "object", properties, additionalProperties: false },
-      count: { type: "integer", minimum: 1 },
-      prompt: prompt_schema((command.params ?? []).map((param) => param.name)),
-    },
-    required: ["id"],
-    additionalProperties: false,
-  };
-}
-
+// A binding is a command string, so the editor can offer the command names but
+// cannot check the arguments. The build tool checks those.
 function keymap_schema(commands: CommandMeta[]): Schema {
-  const snippet_invocation: Schema = {
-    type: "object",
-    description: "A snippet command",
-    properties: {
-      id: { type: "string", pattern: COMMAND_ID_PATTERN.source, not: { enum: commands.map((command) => command.id) } },
-      args: { type: "object" },
-      count: { type: "integer", minimum: 1 },
-      prompt: prompt_schema(undefined),
-    },
-    required: ["id"],
-    additionalProperties: false,
+  const command_text: Schema = {
+    type: "string",
+    description: 'A command and its arguments, for example "open tab https://example.com". A leading ":" types it into the command line. "" removes a default binding',
+    examples: commands.map((command) => command.name ?? command.id),
   };
-  const invocation: Schema = { oneOf: [...commands.map(invocation_schema), snippet_invocation] };
-  const binding: Schema = { anyOf: [{ type: "null" }, invocation, { type: "array", items: invocation }] };
+  const binding: Schema = { anyOf: [command_text, { type: "array", minItems: 1, items: { type: "string", minLength: 1 } }] };
   const mode_bindings: Schema = { type: "object", additionalProperties: binding };
   const string_map: Schema = { type: "object", additionalProperties: { type: "string", minLength: 1 } };
   return {
@@ -106,7 +37,7 @@ function keymap_schema(commands: CommandMeta[]): Schema {
 
 function prefix_pair_schema(first_key: string): Schema {
   const prefix = { type: "string", minLength: 1 };
-  return { type: "object", properties: { [first_key]: prefix, new_tab: prefix }, required: [first_key, "new_tab"], additionalProperties: false };
+  return { type: "object", properties: { [first_key]: prefix, tab: prefix }, required: [first_key, "tab"], additionalProperties: false };
 }
 
 function settings_schema(): Schema {

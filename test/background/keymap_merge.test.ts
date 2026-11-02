@@ -28,7 +28,7 @@ test("a null removes a binding generated from search_keys", () => {
       intent: "x",
       params: [
         { name: "engine", type: "enum", values: { from: "search_engines" } },
-        { name: "where", type: "enum", values: ["current", "new_tab"], default: "current" },
+        { name: "where", type: "enum", values: ["here", "tab"], default: "here" },
       ],
       runs_in: "background",
       run: () => {},

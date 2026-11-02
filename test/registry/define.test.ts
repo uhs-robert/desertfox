@@ -63,111 +63,31 @@ test("names are one word without a leading dash", () => {
   rejects("a.b", { ...base, aliases: ["-x"] }, /aliases\[0\]: /);
 });
 
-test("short flags are one character", () => {
-  const long_short: CommandInput = { ...base, params: [{ name: "x", type: "bool", flag: { short: "xy" } }] };
-  rejects("a.b", long_short, /params\[0\]\.flag\.short: "xy" must be one character/);
-  const preset_short: CommandInput = { ...open_search_input, flags: [{ short: "bb", long: "back", sets: { where: "background" }, label: "x" }] };
-  rejects("a.b", preset_short, /flags\[0\]\.short: .*one character/);
-});
-
-test("short and long flag names are unique within a command", () => {
-  const two_params: CommandInput = {
-    ...base,
-    params: [
-      { name: "a", type: "bool", flag: { short: "x" } },
-      { name: "b", type: "bool", flag: { short: "x" } },
-    ],
-  };
-  rejects("a.b", two_params, /params\[1\]\.flag\.short: -x is already used/);
-  const preset_vs_param: CommandInput = {
-    ...open_search_input,
-    flags: [{ long: "where", sets: { where: "background" }, label: "x" }],
-  };
-  rejects("a.b", preset_vs_param, /flags\[0\]\.long: --where is already used/);
-  const two_presets: CommandInput = {
-    ...open_search_input,
-    flags: [
-      { short: "b", long: "background", sets: { where: "background" }, label: "x" },
-      { short: "b", long: "back2", sets: { where: "current" }, label: "x" },
-    ],
-  };
-  rejects("a.b", two_presets, /flags\[1\]\.short: -b is already used/);
-  const no_prefix: CommandInput = {
-    ...base,
-    params: [{ name: "private", type: "bool", flag: {} }],
-    flags: [{ long: "no-private", sets: { private: true }, label: "x" }],
-  };
-  rejects("a.b", no_prefix, /--no-private is already used/);
-});
-
-test("-h and --help are reserved", () => {
-  rejects("a.b", { ...base, params: [{ name: "x", type: "bool", flag: { short: "h" } }] }, /-h is reserved/);
-  rejects("a.b", { ...base, params: [{ name: "help", type: "bool", flag: {} }] }, /--help is reserved/);
-  rejects("a.b", { ...open_search_input, flags: [{ long: "help", sets: { where: "current" }, label: "x" }] }, /--help is reserved/);
-  rejects("a.b", { ...open_search_input, flags: [{ short: "h", long: "hot", sets: { where: "current" }, label: "x" }] }, /-h is reserved/);
-});
-
-test("only a trailing run of positional params has defaults", () => {
-  const gap: CommandInput = {
+test("params may have defaults in any order", () => {
+  const mixed: CommandInput = {
     ...base,
     params: [
       { name: "a", type: "string", default: "x" },
       { name: "b", type: "string" },
+      { name: "c", type: "bool", default: false },
     ],
   };
-  rejects("a.b", gap, /params\.b: .*trailing run/);
-  const ok: CommandInput = {
-    ...base,
-    params: [
-      { name: "a", type: "string" },
-      { name: "b", type: "string", default: "x" },
-      { name: "c", type: "bool", flag: {} },
-      { name: "d", type: "string", default: "y" },
-    ],
-  };
-  assert.doesNotThrow(() => create_registry().define("a.b", ok));
+  assert.doesNotThrow(() => create_registry().define("a.b", mixed));
 });
 
-test("rest only on the last positional string param", () => {
-  const rest = (params: NonNullable<CommandInput["params"]>): CommandInput => ({ ...base, params });
-  rejects("a.b", rest([{ name: "a", type: "int", rest: true }]), /params\[0\]\.rest: .*string/);
-  rejects(
-    "a.b",
-    rest([
-      { name: "a", type: "string", rest: true },
-      { name: "b", type: "string" },
-    ]),
-    /params\[0\]\.rest: .*last positional/,
-  );
-  rejects("a.b", rest([{ name: "a", type: "string", rest: true, flag: {} }]), /params\[0\]\.rest: .*flag/);
+test("rest is only for a string param", () => {
+  rejects("a.b", { ...base, params: [{ name: "a", type: "int", rest: true }] }, /params\[0\]\.rest: .*string/);
   assert.doesNotThrow(() =>
-    create_registry().define(
-      "a.b",
-      rest([
-        { name: "a", type: "string", rest: true },
-        { name: "b", type: "bool", flag: {} },
-      ]),
-    ),
+    create_registry().define("a.b", { ...base, params: [{ name: "a", type: "string", rest: true }, { name: "b", type: "bool" }] }),
   );
-});
-
-test("a preset flag sets only existing params with valid values", () => {
-  const preset = (sets: Record<string, string | number | boolean>): CommandInput => ({
-    ...open_search_input,
-    flags: [{ long: "go", sets, label: "x" }],
-  });
-  rejects("a.b", preset({ nope: "x" }), /flags\[0\]\.sets: names "nope"/);
-  rejects("a.b", preset({ where: "elsewhere" }), /flags\[0\]\.sets\.where: "elsewhere" is not one of/);
-  rejects("a.b", preset({ where: 3 }), /flags\[0\]\.sets\.where: 3 is not a enum/);
-  rejects("a.b", preset({}), /flags\[0\]\.sets: .*at least one/);
 });
 
 test("when names exactly one other existing param with valid values", () => {
   const with_when = (when: Record<string, readonly (string | number | boolean)[]>): CommandInput => ({
     ...base,
     params: [
-      { name: "where", type: "enum", values: ["a", "b"], default: "a", flag: {} },
-      { name: "other", type: "string", flag: {}, when },
+      { name: "where", type: "enum", values: ["a", "b"], default: "a" },
+      { name: "other", type: "string", when },
     ],
   });
   rejects("a.b", with_when({}), /params\[1\]\.when: must name exactly one/);
@@ -199,4 +119,32 @@ test("count must name an existing param, modes must be known", () => {
   rejects("a.b", { ...base, modes: ["browser" as never] }, /modes: unknown mode "browser"/);
   rejects("a.b", { ...base, modes: [] }, /modes: .*empty/);
   rejects("a.b", { ...base, runs_in: "both" as never }, /runs_in/);
+});
+
+test("the description is one non-empty line", () => {
+  rejects("a.b", { ...base, intent: " " }, /intent: .*empty/);
+  rejects("a.b", { ...base, intent: "One.\nTwo." }, /intent: .*one line/);
+});
+
+test("at most one param is main, and it is a string", () => {
+  const two_mains: CommandInput = {
+    ...base,
+    params: [{ name: "a", type: "string", main: true }, { name: "b", type: "string", main: true }],
+  };
+  rejects("a.b", two_mains, /params\.main: only one param can be main, found a, b/);
+  rejects("a.b", { ...base, params: [{ name: "n", type: "int", main: true }] }, /params\.n\.main: .*string/);
+  assert.doesNotThrow(() => create_registry().define("a.b", { ...base, params: [{ name: "a", type: "string", main: true }] }));
+});
+
+test("a bare word names one param: enum values and bool names do not repeat", () => {
+  const shared_value: CommandInput = {
+    ...base,
+    params: [{ name: "a", type: "enum", values: ["x", "y"] }, { name: "b", type: "enum", values: ["y", "z"] }],
+  };
+  rejects("a.b", shared_value, /params\.b: bare word "y" is also used by param "a"/);
+  const bool_is_value: CommandInput = {
+    ...base,
+    params: [{ name: "a", type: "enum", values: ["rapid"] }, { name: "rapid", type: "bool" }],
+  };
+  rejects("a.b", bool_is_value, /params\.rapid: bare word "rapid" is also used by param "a"/);
 });

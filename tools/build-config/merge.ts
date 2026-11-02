@@ -1,6 +1,7 @@
 // Merges the layers of each data kind. `search_keys` and `container_keys` stay
 // as written: the background's keymap compiler expands them.
-// A later layer wins per key. Nothing here knows the command list.
+// A later layer wins per key. Nothing here knows the command list, so binding
+// strings stay strings until `resolve_bindings` in check.ts parses them.
 
 import { MODE_INDICATOR_VALUES } from "../../src/shared/config.ts";
 import type { SearchEngine, Settings } from "../../src/shared/config.ts";
@@ -71,12 +72,22 @@ function merge_keymap(layers: DataLayer[], origins: Origins, problems: string[])
           problems.push(`${layer.file}: ${section}["${key}"] must be a non-empty string`);
           continue;
         }
-        target[key] = entry;
+        if (!generator_sections.includes(section) && !is_command_text(entry)) {
+          problems.push(`${layer.file}: keymap.${section}["${key}"] must be a command string, "" to unbind, or a list of command strings`);
+          continue;
+        }
+        // TOML has no null: "" is the unbind marker, stored as null.
+        target[key] = entry === "" ? null : entry;
         origins.set(origin_key(`keymap.${section}`, key), layer.file);
       }
     }
   }
   return merged as KeymapConfig;
+}
+
+function is_command_text(entry: unknown): boolean {
+  if (typeof entry === "string") return true;
+  return Array.isArray(entry) && entry.length > 0 && entry.every((item) => typeof item === "string" && item.trim() !== "");
 }
 
 function merge_search_engines(layers: DataLayer[], origins: Origins, problems: string[]) {
@@ -88,7 +99,7 @@ function merge_search_engines(layers: DataLayer[], origins: Origins, problems: s
       typeof value.label === "string" &&
       value.label !== "" &&
       Object.keys(value).every((key) => key === "url" || key === "label");
-    if (!valid) problems.push(`${where}: an engine is {"url": "...%s...", "label": "..."} and nothing else`);
+    if (!valid) problems.push(`${where}: an engine is { url = "...%s...", label = "..." } and nothing else`);
     return valid;
   }) as Record<string, SearchEngine>;
 }
@@ -120,8 +131,8 @@ const SETTING_EXPECTATIONS: Record<keyof Settings, string> = {
   ignore_sites: "a list of match pattern strings",
   mode_indicator: '"always", "not_normal" or "off"',
   palette: `one of ${PALETTE_NAMES.join(", ")}`,
-  search_prefixes: '{"here": "...", "new_tab": "..."} with non-empty strings',
-  container_prefixes: '{"reopen": "...", "new_tab": "..."} with non-empty strings',
+  search_prefixes: '{"here": "...", "tab": "..."} with non-empty strings',
+  container_prefixes: '{"reopen": "...", "tab": "..."} with non-empty strings',
   home_page: "a non-empty URL string",
   default_engine: "the name of a search engine",
   new_tab_page: "a string",
@@ -130,7 +141,7 @@ const SETTING_EXPECTATIONS: Record<keyof Settings, string> = {
 function is_prefix_pair(value: unknown, first_key: string): boolean {
   if (!is_plain_object(value)) return false;
   const keys = Object.keys(value).sort();
-  if (keys.join() !== [first_key, "new_tab"].sort().join()) return false;
+  if (keys.join() !== [first_key, "tab"].sort().join()) return false;
   return Object.values(value).every((prefix) => typeof prefix === "string" && prefix !== "");
 }
 

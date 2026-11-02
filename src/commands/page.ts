@@ -26,8 +26,8 @@ define("page.forward", {
 define("page.reload", {
   name: "reload",
   label: "Reload",
-  intent: "Reload the page. With hard set, skip the cache.",
-  params: [{ name: "hard", type: "bool", default: false, flag: {} }],
+  intent: "Reload the page. With hard on, skip the cache.",
+  params: [{ name: "hard", type: "bool", default: false }],
   runs_in: "background",
   run: async (ctx, args) => browser.tabs.reload(require_tab_id(ctx), { bypassCache: args.hard === true }),
 });
@@ -44,7 +44,7 @@ define("page.stop", {
 define("page.home", {
   name: "home",
   label: "Home Page",
-  intent: "Open the home_page from settings.jsonc.",
+  intent: "Open the home page from the settings.",
   params: [WHERE_PARAM],
   runs_in: "background",
   run: async (ctx, args) => {

@@ -1,10 +1,9 @@
 // Reads the config directory: the main file of each data kind, then its `.d`
 // files in name order. Rejects names the tool does not know.
 
-import { parse, printParseErrorCode, type ParseError } from "jsonc-parser";
+import { parse, TomlError } from "smol-toml";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { is_plain_object } from "./errors.ts";
 
 export const DATA_KINDS = ["keymap", "search_engines", "command_aliases", "settings"] as const;
 export type DataKind = (typeof DATA_KINDS)[number];
@@ -18,7 +17,7 @@ export type SourceFiles = {
 };
 
 const KNOWN_TOP_LEVEL = new Set<string>([
-  ...DATA_KINDS.flatMap((kind) => [`${kind}.jsonc`, `${kind}.d`]),
+  ...DATA_KINDS.flatMap((kind) => [`${kind}.toml`, `${kind}.d`]),
   "snippets",
   "style.css",
   "style.d",
@@ -28,40 +27,39 @@ function sorted_entries(dir: string): string[] {
   return readdirSync(dir).filter((name) => !name.startsWith(".")).sort();
 }
 
-function parse_jsonc_file(path: string, problems: string[]): Record<string, unknown> | undefined {
-  const text = readFileSync(path, "utf8");
-  const parse_errors: ParseError[] = [];
-  const value: unknown = parse(text, parse_errors, { allowTrailingComma: true });
-  if (parse_errors.length > 0) {
-    for (const error of parse_errors) {
-      const line = text.slice(0, error.offset).split("\n").length;
-      problems.push(`${path}:${line}: ${printParseErrorCode(error.error)}`);
-    }
+function parse_toml_file(path: string, problems: string[]): Record<string, unknown> | undefined {
+  try {
+    // smol-toml builds tables without a prototype. Clone to plain objects, as JSON.parse would give.
+    return structuredClone(parse(readFileSync(path, "utf8")));
+  } catch (error) {
+    if (!(error instanceof TomlError)) throw error;
+    problems.push(`${path}:${error.line}:${error.column}: ${error.message.split("\n")[0]}`);
     return undefined;
   }
-  if (!is_plain_object(value)) {
-    problems.push(`${path}: the top level must be an object`);
-    return undefined;
-  }
-  return value;
+}
+
+// The tool no longer reads JSONC. Name the file to write instead of calling it unknown.
+function jsonc_problem(path: string): string {
+  return `${path}: JSONC is no longer read, use ${path.replace(/\.jsonc$/, ".toml")}`;
 }
 
 function read_data_layers(config_dir: string, kind: DataKind, problems: string[]): DataLayer[] {
   const paths: string[] = [];
-  const main_path = join(config_dir, `${kind}.jsonc`);
+  const main_path = join(config_dir, `${kind}.toml`);
   if (existsSync(main_path)) paths.push(main_path);
 
   const d_dir = join(config_dir, `${kind}.d`);
   if (existsSync(d_dir)) {
     for (const name of sorted_entries(d_dir)) {
-      if (name.endsWith(".jsonc")) paths.push(join(d_dir, name));
-      else problems.push(`${join(d_dir, name)}: unknown file, only .jsonc files belong in ${kind}.d`);
+      if (name.endsWith(".toml")) paths.push(join(d_dir, name));
+      else if (name.endsWith(".jsonc")) problems.push(jsonc_problem(join(d_dir, name)));
+      else problems.push(`${join(d_dir, name)}: unknown file, only .toml files belong in ${kind}.d`);
     }
   }
 
   const layers: DataLayer[] = [];
   for (const path of paths) {
-    const data = parse_jsonc_file(path, problems);
+    const data = parse_toml_file(path, problems);
     if (data) layers.push({ file: path, data });
   }
   return layers;
@@ -85,9 +83,9 @@ export function read_source_files(config_dir: string, problems: string[]): Sourc
   }
 
   for (const name of sorted_entries(config_dir)) {
-    if (!KNOWN_TOP_LEVEL.has(name)) {
-      problems.push(`${join(config_dir, name)}: unknown file or directory (known: ${[...KNOWN_TOP_LEVEL].join(", ")})`);
-    }
+    if (KNOWN_TOP_LEVEL.has(name)) continue;
+    if (DATA_KINDS.some((kind) => name === `${kind}.jsonc`)) problems.push(jsonc_problem(join(config_dir, name)));
+    else problems.push(`${join(config_dir, name)}: unknown file or directory (known: ${[...KNOWN_TOP_LEVEL].join(", ")})`);
   }
 
   const layers = Object.fromEntries(

@@ -4,7 +4,7 @@ import { define } from "../shared/registry/index.ts";
 define("copy.url", {
   name: "copy",
   label: "Copy URL",
-  intent: "Copy the page address to the clipboard, as plain text, a canonical or short link, the title, or a markdown or org link.",
+  intent: "Copy the page address, title or a link in one of six formats to the clipboard.",
   params: [{ name: "format", type: "enum", values: COPY_FORMATS, default: "plain" }],
   runs_in: "content",
   run: copy_url.run,

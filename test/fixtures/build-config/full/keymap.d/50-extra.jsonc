@@ -1,7 +1,0 @@
-{
-  "normal": {
-    "K": null,
-    "D": { "id": "tab.close", "args": { "focus": "right" } },
-    "gz": [{ "id": "tab.next" }, { "id": "tab.next" }]
-  }
-}

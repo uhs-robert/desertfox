@@ -293,10 +293,13 @@ async function main() {
     });
 
     await run_case("config.reload keeps keys working in open tabs", async () => {
-      writeFileSync(join(config_dir, "keymap.jsonc"), JSON.stringify({
-        normal: { m: { id: "scroll.to", args: { percent: 50 } } },
-        browser: { "<A-,>": { id: "browser.focus_page" } },
-      }));
+      writeFileSync(join(config_dir, "keymap.toml"), [
+        "[normal]",
+        'm = "scroll.to percent=50"',
+        "[browser]",
+        '"<A-,>" = "browser.focus_page"',
+        "",
+      ].join("\n"));
       build_test_config(config_dir, managed_file);
       const session_home = readFileSync(join(work_dir, "session_home"), "utf8").trim();
       cpSync(managed_file, join(session_home, ".mozilla", "managed-storage", `${EXTENSION_ID}.json`));

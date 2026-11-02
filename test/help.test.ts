@@ -16,7 +16,7 @@ function sample() {
     name: "open", label: "Open URL", intent: "Open a URL.", runs_in: "background",
     params: [
       { name: "url", type: "string", default: { from: "clipboard" } },
-      { name: "where", type: "enum", values: ["current", "new_tab"], default: "current", flag: { short: "w" } },
+      { name: "where", type: "enum", values: ["here", "tab"], default: "here" },
     ],
     run: () => {},
   });
@@ -37,10 +37,10 @@ test("the model groups commands by id group and lists params", () => {
   const model = build_help_model(commands, compiled, []);
   assert.deepEqual(model.groups.map((group) => group.name), ["help", "open", "scroll"]);
   const open = model.groups[1]!.commands[0]!;
-  assert.equal(open.usage, "open [-w|--where <where>] <url>");
+  assert.equal(open.usage, "open url=<url> [here|tab]");
   assert.deepEqual(open.params, [
     { name: "url", type: "string", default: "from clipboard", values: "" },
-    { name: "where", type: "enum", default: "current", values: "current, new_tab" },
+    { name: "where", type: "enum", default: "here", values: "here, tab" },
   ]);
 });
 

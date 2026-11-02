@@ -16,12 +16,12 @@ define("hint.run", {
     {
       name: "action",
       type: "enum",
-      values: ["open", "background", "new_window", "select", "copy_link", "copy_text", "delete", "focus"],
+      values: ["open", "background", "window", "select", "copy_link", "copy_text", "delete", "focus"],
       default: "open",
     },
     { name: "filter", type: "enum", values: ["all", "clickable", "inputs", "links", "custom"], default: "clickable" },
-    { name: "selector", type: "string", flag: {}, when: { filter: ["custom"] } },
-    { name: "rapid", type: "bool", default: false, flag: {} },
+    { name: "selector", type: "string", when: { filter: ["custom"] } },
+    { name: "rapid", type: "bool", default: false },
   ],
   runs_in: "content",
   run: needs_hints.run,
@@ -65,7 +65,7 @@ define("tab.switch", {
   name: "tab",
   label: "Switch Tab",
   intent: "Switch to an open tab chosen by title or address.",
-  params: [{ name: "tab", type: "string", rest: true }],
+  params: [{ name: "tab", type: "string", rest: true, main: true }],
   runs_in: "background",
   run: refuse_needing_command_line,
 });
@@ -74,7 +74,7 @@ define("bookmark.open", {
   name: "bookmark",
   label: "Open Bookmark",
   intent: "Open a bookmark chosen by title or address.",
-  params: [{ name: "bookmark", type: "string", rest: true }, WHERE_PARAM],
+  params: [{ name: "bookmark", type: "string", rest: true, main: true }, WHERE_PARAM],
   runs_in: "background",
   run: refuse_needing_command_line,
 });

@@ -1,4 +1,4 @@
-import type { CommandsFile } from "../shared/command.ts";
+import { load_commands_file } from "../shared/load_commands.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY } from "../shared/prefix_tree.ts";
 import type { CompiledKeymap } from "../shared/prefix_tree.ts";
 import { WARNINGS_STORAGE_KEY } from "../background/storage_keys.ts";
@@ -6,7 +6,7 @@ import { build_help_model } from "./model.ts";
 import { render_help } from "./render.ts";
 
 async function main(): Promise<void> {
-  const commands_file = (await (await fetch(browser.runtime.getURL("commands.json"))).json()) as CommandsFile;
+  const commands_file = await load_commands_file();
   const stored = await browser.storage.local.get([COMPILED_KEYMAP_STORAGE_KEY, WARNINGS_STORAGE_KEY]);
   const model = build_help_model(
     commands_file.commands,

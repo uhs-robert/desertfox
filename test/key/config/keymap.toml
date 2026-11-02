@@ -1,0 +1,3 @@
+# Test keymap: the defaults plus one chord that runs focus_page.
+[browser]
+"<A-,>" = "browser.focus_page"

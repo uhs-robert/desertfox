@@ -3,13 +3,7 @@
 
 import type { CommandDef, ParamDef, ParamValue } from "../command.ts";
 import type { Mode } from "../command.ts";
-import {
-  find_param,
-  is_context_source,
-  is_dynamic_values,
-  positional_params,
-  static_values,
-} from "./params.ts";
+import { find_param, is_context_source, is_dynamic_values, static_values } from "./params.ts";
 
 export type CommandInput = Omit<CommandDef, "id">;
 
@@ -32,12 +26,9 @@ export type Registry = {
 
 export const COMMAND_ID_PATTERN = /^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$/;
 const PARAM_NAME_PATTERN = /^[a-z][a-z0-9_]*$/;
-const LONG_FLAG_PATTERN = /^[a-z][a-z0-9_-]*$/;
 const COMMAND_WORD_PATTERN = /^[^\s'"\\-][^\s'"\\]*$/;
 const PARAM_TYPES = ["int", "float", "string", "bool", "enum"];
 const MODES: readonly Mode[] = ["normal", "insert", "ignore", "hint", "cmdline"];
-const RESERVED_SHORT = "h";
-const RESERVED_LONG = "help";
 
 export function create_registry(): Registry {
   const commands_by_id = new Map<string, CommandDef>();
@@ -51,8 +42,9 @@ export function create_registry(): Registry {
     if (commands_by_id.has(id)) fail("id", "already defined");
 
     check_words(id, input, commands_by_word, fail);
+    check_intent(input, fail);
     check_params(input, fail);
-    check_flags(input, fail);
+    check_bare_words(input, fail);
     check_count_and_modes(input, fail);
 
     const command: CommandDef = { ...input, id, count: input.count ?? "ignore", modes: input.modes ?? ["normal"] };
@@ -88,6 +80,25 @@ function check_words(id: string, input: CommandInput, taken: Map<string, Command
   }
 }
 
+// The description shows on the help page and the status page, so it is one plain sentence.
+function check_intent(input: CommandInput, fail: Fail): void {
+  if (input.intent.trim() === "") fail("intent", "must not be empty");
+  if (/[\r\n]/.test(input.intent)) fail("intent", "must be one line");
+}
+
+// Config and the command line let a bare word stand for an enum value or a bool, so the words of one command must not repeat.
+function check_bare_words(input: CommandInput, fail: Fail): void {
+  const owner_of_word = new Map<string, string>();
+  for (const param of input.params ?? []) {
+    const words = param.type === "bool" ? [param.name] : (static_values(param) ?? []).filter(() => param.type === "enum");
+    for (const word of words) {
+      const owner = owner_of_word.get(word);
+      if (owner !== undefined) fail(`params.${param.name}`, `bare word "${word}" is also used by param "${owner}"`);
+      owner_of_word.set(word, param.name);
+    }
+  }
+}
+
 function check_params(input: CommandInput, fail: Fail): void {
   const params = input.params ?? [];
   const names = new Set<string>();
@@ -99,23 +110,16 @@ function check_params(input: CommandInput, fail: Fail): void {
     check_param_shape(param, at, fail);
   });
 
-  const positionals = positional_params(input);
-  const first_default = positionals.findIndex((param) => param.default !== undefined);
-  if (first_default >= 0) {
-    const gap = positionals.slice(first_default).find((param) => param.default === undefined);
-    if (gap) fail(`params.${gap.name}`, "has no default but follows a param with one; only a trailing run may have defaults");
-  }
-
   params.forEach((param, index) => {
     const at = `params[${index}]`;
-    if (param.rest) {
-      const last_positional = positionals[positionals.length - 1];
-      if (param.type !== "string") fail(`${at}.rest`, "only a string param can take the rest");
-      if (param.flag) fail(`${at}.rest`, "a flag param cannot take the rest");
-      if (last_positional !== param) fail(`${at}.rest`, "only the last positional param can take the rest");
-    }
+    if (param.rest && param.type !== "string") fail(`${at}.rest`, "only a string param can take the rest");
     if (param.when) check_when(input, param, at, fail);
   });
+
+  const mains = params.filter((param) => param.main);
+  if (mains.length > 1) fail("params.main", `only one param can be main, found ${mains.map((param) => param.name).join(", ")}`);
+  const main = mains[0];
+  if (main && main.type !== "string") fail(`params.${main.name}.main`, "only a string param can be main");
 }
 
 function check_param_shape(param: ParamDef, at: string, fail: Fail): void {
@@ -170,49 +174,6 @@ function check_when(input: CommandInput, param: ParamDef, at: string, fail: Fail
     const problem = value_problem(sibling, value);
     if (problem) fail(`${at}.when.${sibling_name}`, problem);
   }
-}
-
-function check_flags(input: CommandInput, fail: Fail): void {
-  const short_owner = new Map<string, string>();
-  const long_owner = new Map<string, string>();
-  const claim_short = (field: string, short: string | undefined): void => {
-    if (short === undefined) return;
-    if ([...short].length !== 1 || short === "-") fail(field, `"${short}" must be one character`);
-    if (short === RESERVED_SHORT) fail(field, `-${RESERVED_SHORT} is reserved for help`);
-    const owner = short_owner.get(short);
-    if (owner) fail(field, `-${short} is already used by ${owner}`);
-    short_owner.set(short, field);
-  };
-  const claim_long = (field: string, long: string): void => {
-    if (long === RESERVED_LONG) fail(field, `--${RESERVED_LONG} is reserved for help`);
-    const owner = long_owner.get(long);
-    if (owner) fail(field, `--${long} is already used by ${owner}`);
-    long_owner.set(long, field);
-  };
-
-  (input.params ?? []).forEach((param, index) => {
-    if (!param.flag) return;
-    claim_short(`params[${index}].flag.short`, param.flag.short);
-    claim_long(`params[${index}]`, param.name);
-    if (param.type === "bool") claim_long(`params[${index}] (--no-${param.name})`, `no-${param.name}`);
-  });
-
-  (input.flags ?? []).forEach((preset, index) => {
-    const at = `flags[${index}]`;
-    if (!LONG_FLAG_PATTERN.test(preset.long)) fail(`${at}.long`, `"${preset.long}" must be lowercase, with - or _`);
-    claim_short(`${at}.short`, preset.short);
-    claim_long(`${at}.long`, preset.long);
-    const entries = Object.entries(preset.sets);
-    if (entries.length === 0) fail(`${at}.sets`, "must set at least one param");
-    for (const [param_name, value] of entries) {
-      const target = find_param(input, param_name);
-      if (!target) fail(`${at}.sets`, `names "${param_name}", which is not a param`);
-      else {
-        const problem = value_problem(target, value);
-        if (problem) fail(`${at}.sets.${param_name}`, problem);
-      }
-    }
-  });
 }
 
 function check_count_and_modes(input: CommandInput, fail: Fail): void {

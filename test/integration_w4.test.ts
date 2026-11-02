@@ -54,7 +54,7 @@ test("the content side focuses the window, then blurs the active element", () =>
 
 test("page.home opens the home_page setting or refuses", () => {
   assert.equal(home_page_url("https://home.example/"), "https://home.example/");
-  assert.throws(() => home_page_url(undefined), /set home_page in settings\.jsonc/);
+  assert.throws(() => home_page_url(undefined), /set home_page in settings\.toml/);
 });
 
 const engines = { search: { url: "https://s.example/?q=%s" }, other: { url: "https://o.example/?q=%s" } };
@@ -70,10 +70,10 @@ test("open.clipboard refuses with the setting name when the engine is missing", 
 });
 
 test("build-config: home_page and default_engine are checked", () => {
-  const ok = config_dir_with({ "settings.jsonc": '{ "home_page": "https://h.example/", "default_engine": "alpha" }' });
+  const ok = config_dir_with({ "settings.toml": 'home_page = "https://h.example/"\ndefault_engine = "alpha"' });
   assert.equal(problems_of(ok), "");
-  assert.match(problems_of(config_dir_with({ "settings.jsonc": '{ "home_page": 3 }' })), /home_page: expected/);
-  assert.match(problems_of(config_dir_with({ "settings.jsonc": '{ "default_engine": "ghost" }' })), /default_engine: unknown search engine "ghost"/);
+  assert.match(problems_of(config_dir_with({ "settings.toml": "home_page = 3" })), /home_page: expected/);
+  assert.match(problems_of(config_dir_with({ "settings.toml": 'default_engine = "ghost"' })), /default_engine: unknown search engine "ghost"/);
 });
 
 test("the settings schema lists both settings", () => {

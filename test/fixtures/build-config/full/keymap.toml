@@ -1,0 +1,16 @@
+# Main keymap. The command text is the same grammar as the command line.
+[search_keys]
+a = "alpha"
+b = "beta"
+
+[container_keys]
+x = "Work"
+y = "Home"
+
+[normal]
+J = "tab.next"
+K = "tab.prev"
+D = "tab.close left"
+
+[browser]
+"<A-j>" = "tab.next"

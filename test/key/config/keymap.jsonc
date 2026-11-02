@@ -1,6 +1,0 @@
-// Test keymap: the defaults plus one chord that runs focus_page.
-{
-  "browser": {
-    "<A-,>": { "id": "browser.focus_page" }
-  }
-}

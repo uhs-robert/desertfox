@@ -214,7 +214,7 @@ define("tab.undo_close", {
 define("tab.move", {
   name: "tabmove",
   label: "Move Tab",
-  intent: "Move the tab by an offset, right when positive and left when negative. It stops at either end. A count prefix repeats it.",
+  intent: "Move the tab right by a positive offset or left by a negative one. A count prefix repeats it.",
   params: [{ name: "offset", type: "int" }],
   runs_in: "background",
   count: "repeat",
@@ -240,8 +240,7 @@ define("tab.detach", {
 define("tab.goto", {
   name: "tabgoto",
   label: "Go To Tab",
-  intent:
-    "Switch to the tab at an index, where 1 is the first and -1 the last. Index 0, the default, switches to the next tab. A count prefix fills the index.",
+  intent: "Switch to the tab at an index, where 1 is the first and -1 the last. Index 0 means the next tab.",
   params: [{ name: "index", type: "int", default: NEXT_TAB_INDEX }],
   runs_in: "background",
   count: { param: "index" },
@@ -275,7 +274,7 @@ define("tab.mute_toggle", {
 define("tab.close", {
   name: "tabclose",
   label: "Close Tab",
-  intent: "Close the tab and focus the tab to its right, or to its left with focus=left. A count prefix repeats it.",
+  intent: "Close the tab and focus the tab to its right, or to its left when focus is left. A count prefix repeats it.",
   params: [{ name: "focus", type: "enum", values: ["right", "left"], default: "right" }],
   runs_in: "background",
   count: "repeat",
@@ -294,8 +293,8 @@ define("tab.close_side", {
 define("tab.reopen_in_container", {
   name: "reopen",
   label: "Reopen In Container",
-  intent: "Open this page in a container at the same place in the tab bar and close the old tab. The container default means no container.",
-  params: [{ name: "container", type: "string", values: { from: "containers" } }],
+  intent: "Reopen this page in a container in the same place and close the old tab. The container default means none.",
+  params: [{ name: "container", type: "string", main: true, values: { from: "containers" } }],
   runs_in: "background",
   run: (ctx, args) => handlers.reopen_in_container(ctx, args as { container: string }),
 });

@@ -7,7 +7,6 @@ import {
   is_context_source,
   is_dynamic_values,
   join_alternatives,
-  param_label,
   static_values,
 } from "./params.ts";
 
@@ -61,7 +60,7 @@ export function check_args(
     if (!error) args[param.name] = value;
   }
   for (const param of params) {
-    if (args[param.name] === undefined && !param.flag && !param.when) {
+    if (args[param.name] === undefined && !param.when && param.type !== "bool") {
       return { ok: false, error: `missing <${param.name}>`, missing_param: param.name };
     }
   }
@@ -75,10 +74,9 @@ function fail(error: string): CheckResult {
 type Coerced = { ok: true; value: unknown } | { ok: false; error: string };
 
 function coerce(param: ParamDef, given: unknown, sources: EnumSources): Coerced {
-  const label = param_label(param);
   const bad = (expected: string): Coerced => ({
     ok: false,
-    error: `${label} expects ${expected}, got ${JSON.stringify(given)}`,
+    error: `${param.name} expects ${expected}, got ${JSON.stringify(given)}`,
   });
 
   if (param.type === "string" && is_context_source(given)) return { ok: true, value: given };
@@ -118,7 +116,5 @@ function when_error(command: Pick<CommandDef, "params">, param: ParamDef, args: 
   const sibling_value = args[sibling_name];
   if (is_context_source(sibling_value)) return null;
   if (sibling_value !== undefined && allowed.includes(sibling_value as ParamValue)) return null;
-  const sibling = find_param(command, sibling_name);
-  const sibling_label = sibling ? param_label(sibling) : sibling_name;
-  return `${param_label(param)} needs ${sibling_label} ${join_alternatives(allowed)}`;
+  return `${param.name} needs ${sibling_name} ${join_alternatives(allowed)}`;
 }

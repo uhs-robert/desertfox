@@ -97,7 +97,7 @@ export function engine_search_url(template: string, query: string): string {
 
 // Refusals are thrown: the router shows the message to the user.
 export function home_page_url(home_page: string | undefined): string {
-  if (!home_page) throw new Error("set home_page in settings.jsonc");
+  if (!home_page) throw new Error("set home_page in settings.toml");
   return home_page;
 }
 

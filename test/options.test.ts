@@ -42,3 +42,12 @@ test("the rebuild steps name the command, the managed file and config.reload", (
   assert.match(steps[2]!, /config\.reload.*qr/);
   assert.match(build_options_model(undefined, []).rebuild_steps[1]!, /oasisfox@uhs-robert\.json/);
 });
+
+test("the status page lists every command with its id, label and intent, sorted by id", () => {
+  const meta = (id: string, label: string, intent: string) => ({ id, label, intent, name: id, runs_in: "background" as const });
+  const model = build_options_model(undefined, [], [meta("tab.next", "Next Tab", "Go to the next tab."), meta("open.url", "Open URL", "Open a URL.")]);
+  assert.deepEqual(model.commands, [
+    { id: "open.url", label: "Open URL", intent: "Open a URL." },
+    { id: "tab.next", label: "Next Tab", intent: "Go to the next tab." },
+  ]);
+});
