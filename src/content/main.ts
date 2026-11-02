@@ -12,7 +12,7 @@ import { create_key_flow } from "./key_flow.ts";
 import { mode_label } from "./mode_label.ts";
 import type { BadgeColors } from "./mode_indicator.ts";
 import { show_mode_label, show_toast } from "./ui_proxy.ts";
-import { is_ignored_site } from "./match_pattern.ts";
+import { is_ignored_site } from "../shared/match_pattern.ts";
 import { wire_mode_reports } from "./mode_report.ts";
 import { page_mode } from "./page_mode.ts";
 import { plan_steps } from "./plan_steps.ts";
