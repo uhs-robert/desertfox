@@ -38,7 +38,8 @@
           "type": "string",
           "values": {
             "from": "containers"
-          }
+          },
+          "main": true
         }
       ]
     },
@@ -54,20 +55,7 @@
         {
           "name": "url",
           "type": "string",
-          "rest": true
-        },
-        {
-          "name": "where",
-          "type": "enum",
-          "values": [
-            "current",
-            "new_tab",
-            "background"
-          ],
-          "default": "current",
-          "flag": {
-            "short": "w"
-          }
+          "main": true
         },
         {
           "name": "container",
@@ -75,15 +63,24 @@
           "values": {
             "from": "containers"
           },
-          "flag": {
-            "short": "c"
-          },
           "when": {
             "where": [
-              "new_tab",
-              "background"
+              "tab",
+              "background",
+              "window"
             ]
           }
+        },
+        {
+          "name": "where",
+          "type": "enum",
+          "values": [
+            "here",
+            "tab",
+            "background",
+            "window"
+          ],
+          "default": "here"
         }
       ]
     },
@@ -106,31 +103,26 @@
         {
           "name": "query",
           "type": "string",
-          "rest": true,
           "default": {
             "from": "selection"
-          }
+          },
+          "main": true
         },
         {
           "name": "where",
           "type": "enum",
           "values": [
-            "current",
-            "new_tab",
-            "background"
+            "here",
+            "tab",
+            "background",
+            "window"
           ],
-          "default": "current",
-          "flag": {
-            "short": "w"
-          }
+          "default": "here"
         },
         {
           "name": "depth",
           "type": "int",
-          "default": 1,
-          "flag": {
-            "short": "d"
-          }
+          "default": 1
         }
       ]
     }

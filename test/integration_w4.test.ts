@@ -70,10 +70,10 @@ test("open.clipboard refuses with the setting name when the engine is missing", 
 });
 
 test("build-config: home_page and default_engine are checked", () => {
-  const ok = config_dir_with({ "settings.jsonc": '{ "home_page": "https://h.example/", "default_engine": "alpha" }' });
+  const ok = config_dir_with({ "settings.toml": 'home_page = "https://h.example/"\ndefault_engine = "alpha"' });
   assert.equal(problems_of(ok), "");
-  assert.match(problems_of(config_dir_with({ "settings.jsonc": '{ "home_page": 3 }' })), /home_page: expected/);
-  assert.match(problems_of(config_dir_with({ "settings.jsonc": '{ "default_engine": "ghost" }' })), /default_engine: unknown search engine "ghost"/);
+  assert.match(problems_of(config_dir_with({ "settings.toml": "home_page = 3" })), /home_page: expected/);
+  assert.match(problems_of(config_dir_with({ "settings.toml": 'default_engine = "ghost"' })), /default_engine: unknown search engine "ghost"/);
 });
 
 test("the settings schema lists both settings", () => {

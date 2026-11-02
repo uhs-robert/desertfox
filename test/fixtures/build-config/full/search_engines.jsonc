@@ -1,4 +1,0 @@
-{
-  "alpha": { "url": "https://alpha.example/?q=%s", "label": "Alpha" },
-  "beta": { "url": "https://beta.example/?q=%s", "label": "Beta" }
-}

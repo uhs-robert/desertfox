@@ -1,0 +1,1 @@
+beta = { url = "https://beta2.example/?q=%s", label = "Beta Two" }

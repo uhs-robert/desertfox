@@ -14,6 +14,22 @@ Status: phase 1 is built. Release 0.1.1 adds the toolbar button, the status page
 - The plain keys `r`, `t` and `x` are now prefixes: `rr` reload, `rh` hard reload, `ri` site check, `tt` open in a new tab, `tT tm td tn tp ta tf tl` for tabs, `xx` close tab, `xp` stop loading.
 - The defaults bind every `v1` row of the binding map whose command exists, except the search engine and container keys, which come from your config. See [docs/keymap.md](docs/keymap.md).
 
+## Config
+
+Write your keys in TOML in `~/.config/oasisfox/`, then run `just build-config`. The tool checks the files and writes the merged config that Firefox reads from managed storage. A binding is one line of command text, the same words you type in the command line:
+
+```toml
+# ~/.config/oasisfox/keymap.toml
+[normal]
+J = "tab.next"                  # a command name or id
+o = "open"                      # asks for the URL
+O = "open tab"                  # a bare word sets the param it names
+gO = ":open tab @current_url"   # a leading ":" types it into the command line and waits
+y = ""                          # "" removes a default binding
+```
+
+`@current_url`, `@selection` and `@clipboard` are filled in when you press the key. Quote text that has spaces. Any param can be written `name=value`. Files `search_engines.toml`, `command_aliases.toml` and `settings.toml` sit beside the keymap, and each can have a `.d/` directory of later files. See [docs/design.md](docs/design.md#config) for the full format.
+
 - [docs/design.md](docs/design.md): architecture, scope and roadmap.
 - [docs/spike.md](docs/spike.md): what Firefox allows, measured.
 - [docs/keymap.md](docs/keymap.md): every current browser binding and what replaces it.

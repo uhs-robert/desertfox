@@ -104,33 +104,34 @@ type Invocation = { id: string; args?: Record<string, unknown>; count?: number }
 
 - A key binding is one invocation, or an array of invocations that run in order. Pipes have no replacement, because context sources cover the cases the config uses. If a binding ever needs one command's result, a command declares `returns` with a type, and a later step in the array takes it with `{ from: "previous" }`. The keymap loader checks the types. This is not built until a binding needs it.
 - If a binding leaves a required param out, the command line opens and asks for it, with completion for that param's type. This replaces 89 old bindings that opened the command line with text already typed. A binding can prefill the prompt from a context source, for example the current URL for editing.
-- A binding can also carry `prompt: { param, prefill? }`. The key then opens the command palette with the whole command typed in and the param prefilled. Phase 1 refuses such a binding.
-- The command line parses a command name, flags and positional words into an invocation, as described below.
-- Flags exist only on the command line. Keymaps and the native host use the `args` object.
+- A binding that starts with `:` carries `prompt: { param, prefill? }` in the stored file. The key types its command into the command line and waits, and the user edits it and presses Enter. Phase 1 refuses such a binding.
+- The command line and the config parse the same grammar into an invocation, as described below. Keymaps and the native host also accept the `args` object.
 
 ### Command line syntax
 
-`search -b arch rust lifetimes` becomes:
+One grammar covers the command line and every binding in the config. The text is what the user types and what a `:` key shows. `search engine=arch background "rust lifetimes"` becomes:
 
 ```json
-{ "id": "open.search", "args": { "engine": "arch", "query": "rust lifetimes", "where": "background" } }
+{ "id": "open.search", "args": { "engine": "arch", "where": "background", "query": "rust lifetimes" } }
 ```
 
-- The first word is a `name`, an alias or a full id.
-- Flags take the forms `--long value`, `--long=value` and `-s value`. Short switches combine, for example `-bp`.
-- `--` ends the flags, so a query can start with a dash.
-- Words are quoted with shell rules.
-- Two flags that set the same param are an error with a message, for example "-b and -t both set where".
-- A param whose `when` condition does not hold is an error with a message, for example "--container needs --where new_tab, background or new_window".
-- `-h` or `--help` on any command shows a usage line generated from the definition: `search [-b|--background] [-t|--tab] [-w|--where <where>] [-c|--container <name>] <engine> <query...>`.
-- The `oasisfox run` script uses the same parser, so `oasisfox run search -b arch rust` works from a shell.
+- The first word is a `name`, an alias or a full id. The config uses the short `name`, and the build tool maps it to the id.
+- A bare word that is one enum param's value sets that param, in any order: `hint rapid background links`. A bare word that is a bool param's name turns it on. A word that fits two params of one command is an error, and `name=value` settles it.
+- Any param can be written `name=value`, split at the first `=`: `scroll.to percent=100 axis=x`. This is the only way to set free text and to turn a switch off (`rapid=false`).
+- A command marks at most one param `main`. One bare word that is no value or switch fills it: the URL of `open`, the query of `search`. A second free word is an error.
+- Quote a value that has spaces or `=` with shell rules: `open tab "https://a.example/?q=a b"`. A quoted word is always free text, so it is never a param name, a value word or a `@source`.
+- An unquoted `@current_url`, `@selection` or `@clipboard` is a context source. The router fills it in when the key is pressed. It works as the main word or after `name=`.
+- A leading `:` (config only) makes the binding type its command into the command line and wait. `gO = ":open tab @current_url"` shows `open tab https://this.page/...`. The stored file names one param to fill: the one that holds a `@source` (which becomes the prefill), else the `main` param, else the first param. A command with no params cannot take a `:`.
+- Unknown params, a param set twice and an unknown source are errors with a message.
+- A param whose `when` condition does not hold is an error with a message, for example "container needs where tab, background or window".
+- There are no `--flags`, no `-x` short flags and no flag presets. `-h` or `--help` on the command line shows a usage line.
+- The `oasisfox run` script uses the same parser.
 
 Completion reads the same definition:
 
-- A word that starts with `-` completes to the command's flags, with their labels. Flags already used drop out.
-- Completion hides a flag whose `when` condition does not hold yet, and the flags of a set once one of them is used.
-- A flag that takes a value completes that value from its source, for example `-w` offers the `where` values and `-c` offers the containers.
-- Otherwise the next positional param completes by its type, for example engine names, then the query.
+- A word that has no `=` completes to the command's enum values and switches, with their labels. Values already set drop out.
+- A `name=` prefix completes that param's value from its source, for example the containers.
+- Otherwise the main param completes by its type, for example engine names, then the query.
 
 ## Keys and modes
 
@@ -164,43 +165,54 @@ The user config is a directory of files, one file per kind of setting. `tools/bu
 
 ### Source files
 
-The tool reads `~/.config/oasisfox/` by default. Every data file is JSONC (JSON with comments and trailing commas).
+The tool reads `~/.config/oasisfox/` by default. Every data file is TOML. A leftover `.jsonc` file is an error that names the `.toml` file to write.
 
 | File | Holds |
 | --- | --- |
-| `keymap.jsonc` | Every key: bindings per mode, plus the `search_keys` and `container_keys` shortcuts. `null` removes a default binding. |
-| `search_engines.jsonc` | Search engines: URL template and label. The template uses `%s` for the query. Data only, no keys. |
-| `command_aliases.jsonc` | Extra command line names, for example `"g": "open.search"`. |
-| `settings.jsonc` | Settings such as the which-key delay and the new tab page. |
+| `keymap.toml` | Every key: bindings per mode, plus the `search_keys` and `container_keys` shortcuts. `""` removes a default binding. |
+| `search_engines.toml` | Search engines: URL template and label. The template uses `%s` for the query. Data only, no keys. |
+| `command_aliases.toml` | Extra command line names, for example `g = "open.search"`. |
+| `settings.toml` | Settings such as the which-key delay and the new tab page. |
 | `snippets/*.js` | One custom command per file. See [Snippets](#snippets). |
 | `style.css` | Custom CSS for the OasisFox surfaces. See [Styles](#styles). |
 
-Each data file can also have a matching directory, for example `keymap.d/`. The tool merges the main file first, then the files in the directory in name order. A later entry wins for the same key. This is how private config joins without editing public files: a private repo links `keymap.d/50-private.jsonc` and `snippets/` files into place.
+Each data file can also have a matching directory, for example `keymap.d/`. The tool merges the main file first, then the files in the directory in name order. A later entry wins for the same key. This is how private config joins without editing public files: a private repo links `keymap.d/50-private.toml` and `snippets/` files into place.
 
-Every key lives in `keymap.jsonc`. The other files hold only data. Two shortcut sections remove most repetition:
+Every key lives in `keymap.toml`. The other files hold only data. A binding is one line of command text, in the grammar of [Command line syntax](#command-line-syntax), or a list of them that run in order. TOML quotes any key that has symbols, so `"<C-[>"` and `"$"` are quoted and `gx` is not. Two shortcut sections remove most repetition:
 
-```jsonc
-// keymap.jsonc
-{
-  "search_keys": { "a": "arch", "b": "brave" },                       // sa/Sa, sb/Sb
-  "container_keys": { "a": "Family", "c": "Client", "p": "Personal" },  // ca/Ca, cc/Cc, cp/Cp
-  "normal": { "J": { "id": "tab.next" } }
-}
+```toml
+# keymap.toml
+[search_keys]                   # sa/Sa, sb/Sb
+a = "arch"
+b = "brave"
+
+[container_keys]                # ca/Ca, cc/Cc, cp/Cp
+a = "Family"
+c = "Client"
+p = "Personal"
+
+[normal]
+J = "tab.next"
+b = "bookmark.open"
+gO = ":open tab @current_url"   # types the command into the command line and waits
+y = ""                          # removes a default binding
 ```
 
 - `sa` searches with the `arch` engine in this tab, and `Sa` in a new tab.
 - `ca` reopens the current page in the Family container, and `Ca` opens a prompt prefilled with the current URL in a new Family tab.
-- Containers themselves need no file. Firefox lists their names, colors and icons through `contextualIdentities.query()`, and completion and `--container` use that list. A name in `container_keys` that does not exist gets a warning at load and is skipped.
+- Containers themselves need no file. Firefox lists their names, colors and icons through `contextualIdentities.query()`, and completion and the `container` param use that list. A name in `container_keys` that does not exist gets a warning at load and is skipped.
 - The prefixes for generated bindings (`s` and `S`, `c` and `C`) are settings. An explicit binding in the keymap wins over a generated one.
 
 ### Merge and checks
 
-The merged file has one section per kind: `keymap`, `search_engines`, `command_aliases`, `settings`, `snippets` and `css`, plus a format version. The tool:
+The merged file has one section per kind: `keymap`, `search_engines`, `command_aliases`, `settings`, `snippets` and `css`, plus a format version. The stored keymap holds invocations, so the extension never parses command text. The tool:
 
-- rejects unknown files and unknown sections with a message, so a misspelled file name does not vanish silently.
-- checks every binding, alias and snippet against `commands.json` and reports errors before the extension loads.
+- rejects unknown files and unknown sections with a message, so a misspelled file name does not vanish silently. A TOML syntax error names the file, line and column.
+- parses every binding string with the registry grammar, then checks it, every alias and every snippet against `commands.json` and reports errors before the extension loads.
 - reads snippet code and CSS as text and escapes it, so nobody edits code inside JSON.
-- generates a JSON Schema for each data file from `commands.json`, so an editor completes command ids, args and setting names.
+- generates a JSON Schema for each data file from `commands.json`, so an editor with TOML schema support (Taplo) completes command names and setting names.
+
+The TOML parser (`smol-toml`) is a dev dependency of the tool only. None of it reaches the extension bundles.
 
 ### Delivery
 
