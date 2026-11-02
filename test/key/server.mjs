@@ -23,9 +23,15 @@ addEventListener("focus", () => send("window_focus"));
 const root = document.documentElement;
 // The indicator host is in the page, its text is in a closed shadow root, so the label is an attribute.
 let last_indicator = "";
+// The toast host is the other floating surface: no mode attribute, and its text sits in a closed shadow root.
+const toast_host = () => [...root.children].find((child) => child.style.zIndex === "2147483647" && !child.hasAttribute("data-oasisfox-mode"));
+let toast_shown = false;
 new MutationObserver(() => {
   const label = root.querySelector("[data-oasisfox-mode]")?.getAttribute("data-oasisfox-mode") ?? "";
   if (label !== last_indicator) send("indicator", { label: (last_indicator = label) });
+  const toast_now = Boolean(toast_host());
+  if (toast_now !== toast_shown) send(toast_now ? "toast" : "toast_gone");
+  toast_shown = toast_now;
 }).observe(root, { childList: true });
 const report_tree_read = () => {
   const ms = root.getAttribute("data-oasisfox-tree-read-ms");
@@ -69,6 +75,10 @@ export function start_server() {
     }
     if (url.pathname === "/aligned") {
       return response.end(page(`aligned ${id}`, `${tall_filler}<input id="field">${tall_filler}`));
+    }
+    if (url.pathname === "/framed") {
+      const frame = '<iframe id="inner" src="/page?id=inner" style="width:300px;height:200px"></iframe>';
+      return response.end(page(`framed ${id}`, frame, "<script>addEventListener('load', () => document.getElementById('inner').contentWindow.focus())</script>"));
     }
     if (url.pathname === "/swallow") return response.end(page(`swallow ${id}`, tall_filler, CANCEL_KEYS_IN_CAPTURE));
     response.end(page(`page ${id}`, tall_filler));

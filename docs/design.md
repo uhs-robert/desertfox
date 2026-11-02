@@ -256,7 +256,9 @@ window.wrappedJSObject.my_app.toggle_ids(args.query);
 - The router checks args, then runs the code in the tab's content script with `tabs.executeScript`, with `args` defined. `window.wrappedJSObject` reaches the page's own functions.
 - `matches` limits where the command runs. On other pages the router refuses with a message.
 - Errors from the code are caught and shown as a message, with the snippet id.
-- Snippets have no storage and no extension APIs of their own. A snippet can run other commands through `oasisfox.run(id, args)`.
+- Snippets have no storage of their own. The code runs in the content script world, so the body's scope hides `browser` and `chrome`. That guards against accidents and is not a sandbox: `globalThis.browser` still reaches the extension APIs, and the code is the user's own.
+- A snippet runs other commands with `oasisfox.run(command_text)`, which takes the same text as the command line, for example `await oasisfox.run("open tab https://example.com")`. It rejects when the command fails. Snippets can call snippets up to 5 levels deep.
+- A relative URL in `fetch` resolves against the extension, not the page. Build the address from `location.origin`, for example `fetch(location.origin + "/api/items")`.
 - Snippet ids cannot use a group name that OasisFox uses.
 
 The config file is code, so whoever can write it can run code on pages. The file lives in the user's home directory and only the user's own tools write it, so this adds no new access. An import through the options page shows the snippet ids and asks before it stores them.

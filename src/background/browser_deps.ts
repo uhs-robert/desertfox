@@ -6,6 +6,7 @@ import { registry } from "../shared/registry/index.ts";
 import type { ReinjectDeps } from "./reload.ts";
 import { deliver_refusal } from "./refusal.ts";
 import type { RouterDeps } from "./router.ts";
+import type { SnippetDeps } from "./snippets.ts";
 
 // Without a frame id the message reaches every frame, which shows a toast in each.
 export function send_to_tab(tab_id: number, message: BackgroundToContent, frame_id?: number): Promise<unknown> {
@@ -55,6 +56,15 @@ export function make_router_deps(get_search_engine_names: () => Promise<string[]
     show_refusal: (tab_id, refusal, frame_id) => deliver_refusal(channels, tab_id, refusal, frame_id),
   };
 }
+
+// Frame 0 is the top frame: a snippet never runs in an iframe, whatever frame the key came from.
+export const snippet_deps: SnippetDeps = {
+  tab_url: async (tab_id) => (await browser.tabs.get(tab_id)).url,
+  execute_in_top_frame: async (tab_id, code) => {
+    const [result] = await browser.tabs.executeScript(tab_id, { code, frameId: 0, runAt: "document_idle" });
+    return result;
+  },
+};
 
 export const reinject_deps: ReinjectDeps = {
   list_tabs: async () => {
