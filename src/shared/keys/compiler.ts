@@ -27,11 +27,11 @@ function generated_bindings(keymap: KeymapConfig, settings: Partial<Settings>): 
   const bindings: Record<string, KeyBinding> = {};
   for (const [last_key, engine] of Object.entries(keymap.search_keys ?? {})) {
     bindings[search_prefixes.here + last_key] = { id: "open.search", args: { engine, where: "here" } };
-    bindings[search_prefixes.new_tab + last_key] = { id: "open.search", args: { engine, where: "tab" } };
+    bindings[search_prefixes.tab + last_key] = { id: "open.search", args: { engine, where: "tab" } };
   }
   for (const [last_key, container] of Object.entries(keymap.container_keys ?? {})) {
     bindings[container_prefixes.reopen + last_key] = { id: "tab.reopen_in_container", args: { container } };
-    bindings[container_prefixes.new_tab + last_key] = { id: "open.url", args: { where: "tab", container } };
+    bindings[container_prefixes.tab + last_key] = { id: "open.url", args: { where: "tab", container } };
   }
   return bindings;
 }
