@@ -373,6 +373,18 @@ async function main() {
       expect(levels === 5, `the looping snippet ran ${levels} times`);
     });
 
+    await run_case("a snippet key pressed inside an iframe runs in the top frame only", async () => {
+      const focus_mark = events.length;
+      await open_page("framed", "framed", { new_tab: true });
+      await wait_event(focus_mark, (event) => event.type === "window_focus" && event.page_id === "inner", "the iframe to take focus");
+      const mark = events.length;
+      await send_keys(",s");
+      await wait_event(mark, (event) => event.type === "snippet_ran" && event.page_id === "framed", "the snippet report from the top frame");
+      await sleep(500);
+      const in_frame = snippet_events(mark, "snippet_ran").filter((event) => event.page_id === "inner" || event.top !== true);
+      expect(in_frame.length === 0, "the snippet ran inside the iframe");
+    });
+
     // part C: help and options pages
     // The pages are extension pages, so the test reads them through the background's view list.
     const extension_view = (name) => `(browser.extension.getViews({ type: "tab" }).find((view) => view.location.pathname === "/${name}"))`;

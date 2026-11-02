@@ -59,6 +59,15 @@ test("a snippet runs on a matching page and receives its args", async () => {
   assert.deepEqual(fake.log, ["got abc true"]);
 });
 
+test("the body sees neither browser nor chrome, but oasisfox.run still works", async () => {
+  const { press, fake } = setup([
+    snippet("app.peek", "log(typeof browser + ' ' + typeof chrome + ' ' + typeof send + ' ' + typeof expected_url); await oasisfox.run('other.note hi')"),
+  ]);
+  assert.deepEqual(await press("app.peek"), { ok: true });
+  assert.ok(fake.log.includes("undefined undefined undefined undefined"));
+  assert.ok(fake.log.includes("note hi"));
+});
+
 test("top-level await works in the body", async () => {
   const { press, fake } = setup([snippet("app.wait", "await Promise.resolve(); log('after await')")]);
   assert.deepEqual(await press("app.wait"), { ok: true });
@@ -150,7 +159,7 @@ test("the code is refused when the page changed after the match check", async ()
       tab_url: async () => PAGE_URL,
       execute_in_top_frame: async (_tab_id, code) => {
         code_seen.push(code);
-        return runInNewContext(code, { location: { href: "https://evil.test/" }, browser: {}, log: () => {} });
+        return runInNewContext(code, { location: { href: "https://evil.test/" }, browser: { runtime: { sendMessage: () => undefined } }, log: () => {} });
       },
     },
     fake.deps,
@@ -162,10 +171,17 @@ test("the code is refused when the page changed after the match check", async ()
   assert.ok(fake.log.some((line) => line.includes("the page changed before the snippet ran")));
 });
 
-test("a clashing snippet is skipped with a warning", () => {
-  const { warnings } = setup([snippet("other.note", "log(1)"), snippet("app.ok", "log(2)")]);
+test("a snippet in a built-in group is skipped with a warning", () => {
+  const { warnings, executions } = setup([snippet("other.mine", "log(1)")]);
   assert.equal(warnings.length, 1);
-  assert.match(warnings[0] ?? "", /other\.note/);
+  assert.match(warnings[0] ?? "", /group "other"/);
+  assert.equal(executions.length, 0);
+});
+
+test("a clashing snippet is skipped with a warning", () => {
+  const { warnings } = setup([snippet("app.ok", "log(2)"), snippet("app.ok", "log(3)")]);
+  assert.equal(warnings.length, 1);
+  assert.match(warnings[0] ?? "", /app\.ok/);
 });
 
 test("the browser call injects into frame 0 only", async () => {

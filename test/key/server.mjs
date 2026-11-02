@@ -76,6 +76,10 @@ export function start_server() {
     if (url.pathname === "/aligned") {
       return response.end(page(`aligned ${id}`, `${tall_filler}<input id="field">${tall_filler}`));
     }
+    if (url.pathname === "/framed") {
+      const frame = '<iframe id="inner" src="/page?id=inner" style="width:300px;height:200px"></iframe>';
+      return response.end(page(`framed ${id}`, frame, "<script>addEventListener('load', () => document.getElementById('inner').contentWindow.focus())</script>"));
+    }
     if (url.pathname === "/swallow") return response.end(page(`swallow ${id}`, tall_filler, CANCEL_KEYS_IN_CAPTURE));
     response.end(page(`page ${id}`, tall_filler));
   });

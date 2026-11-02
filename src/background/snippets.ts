@@ -33,23 +33,24 @@ const message_of = (error: unknown) => (error instanceof Error ? error.message :
 // answers null on success and the error text otherwise, because a rejection from `executeScript`
 // would lose the difference between a syntax error and a thrown one.
 // The URL guard covers a navigation between the match check and the injection.
+// The body's function takes `browser`, `chrome` and the wrapper's own names as parameters that
+// stay undefined, so the body does not see them. This guards against accidents, it is not a sandbox:
+// `globalThis.browser` is still there.
 export function wrap_snippet_code(code: string, args: CheckedArgs, depth: number, checked_url: string): string {
-  return `(async () => {
-if (location.href !== ${JSON.stringify(checked_url)}) return "the page changed before the snippet ran";
-const args = ${JSON.stringify(args)};
-const oasisfox = { run: async (command_text) => {
-  const answer = await browser.runtime.sendMessage({ type: "snippet_run", command_text, depth: ${depth} });
-  if (!answer || !answer.ok) throw new Error(answer ? answer.message : "OasisFox did not answer");
-} };
+  return `(async (send, expected_url) => {
+if (location.href !== expected_url) return "the page changed before the snippet ran";
+return await (async (args, oasisfox, browser, chrome, send, expected_url) => {
 try {
-  await (async () => {
 ${code}
-  })();
   return null;
 } catch (error) {
   try { return String((error && error.message) || error); } catch { return "unreadable error"; }
 }
-})()`;
+})(${JSON.stringify(args)}, { run: async (command_text) => {
+  const answer = await send({ type: "snippet_run", command_text, depth: ${depth} });
+  if (!answer || !answer.ok) throw new Error(answer ? answer.message : "OasisFox did not answer");
+} });
+})(browser.runtime.sendMessage.bind(browser.runtime), ${JSON.stringify(checked_url)})`;
 }
 
 export function create_snippets(registry: Registry, deps: SnippetDeps, router_deps: RouterDeps): Snippets {
@@ -80,7 +81,12 @@ export function create_snippets(registry: Registry, deps: SnippetDeps, router_de
 
   function register(entries: readonly SnippetEntry[]): string[] {
     const warnings: string[] = [];
+    const built_in_groups = new Set(registry.list().map((command) => command.id.split(".")[0]));
     for (const entry of entries) {
+      if (built_in_groups.has(entry.id.split(".")[0])) {
+        warnings.push(`snippet ${entry.id} skipped: the group "${entry.id.split(".")[0]}" is used by OasisFox commands`);
+        continue;
+      }
       try {
         registry.define(entry.id, {
           ...(entry.name === undefined ? {} : { name: entry.name }),
