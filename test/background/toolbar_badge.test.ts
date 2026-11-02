@@ -21,14 +21,14 @@ function fake_api() {
 }
 
 test("toolbar text and title per mode under always", () => {
-  assert.deepEqual(toolbar_badge("normal", "always", colors, "dark"), { text: "NOR", title: "OasisFox: NORMAL mode", color: ["#7fa3c9", "#0c0e13"] });
-  assert.equal(toolbar_badge("insert", "always", colors, "dark")?.text, "INS");
+  assert.deepEqual(toolbar_badge("normal", "always", colors, "dark"), { text: "NO", title: "OasisFox: NORMAL mode", color: ["#7fa3c9", "#0c0e13"] });
+  assert.equal(toolbar_badge("insert", "always", colors, "dark")?.text, "IN");
   assert.equal(toolbar_badge("ignore", "always", colors, "dark")?.title, "OasisFox: IGNORE mode");
 });
 
 test("not_normal clears only normal, off clears everything, hint and cmdline never show", () => {
   assert.equal(toolbar_badge("normal", "not_normal", colors, "dark"), undefined);
-  assert.equal(toolbar_badge("insert", "not_normal", colors, "dark")?.text, "INS");
+  assert.equal(toolbar_badge("insert", "not_normal", colors, "dark")?.text, "IN");
   for (const mode of ["normal", "insert", "ignore", "hint", "cmdline"] as Mode[]) {
     assert.equal(toolbar_badge(mode, "off", colors, "dark"), undefined);
   }
@@ -44,7 +44,7 @@ test("the system theme picks the color variant and ignore uses the muted pair", 
 test("apply sets text, title and colors for the given tab, and clearing resets text and title", async () => {
   const { api, calls } = fake_api();
   await apply_toolbar_badge(api, 7, toolbar_badge("insert", "always", colors, "dark"));
-  assert.deepEqual(calls.sort(), ["bg 7 #ffa0a0", "fg 7 #0c0e13", "text 7 INS", "title 7 OasisFox: INSERT mode"]);
+  assert.deepEqual(calls.sort(), ["bg 7 #ffa0a0", "fg 7 #0c0e13", "text 7 IN", "title 7 OasisFox: INSERT mode"]);
   calls.length = 0;
   await apply_toolbar_badge(api, 7, undefined);
   assert.deepEqual(calls.sort(), ["text 7 ", "title 7 null"]);
@@ -56,7 +56,7 @@ test("refresh re-applies each reported tab with the new setting and leaves unrep
   const deps = { api, tab_ids: async () => [1, 2, 3], reported_mode: async (id: number) => modes[id] };
   await refresh_toolbar_badges(deps, { ...empty_config(), settings: { mode_indicator: "not_normal" } }, "dark");
   assert.ok(calls.includes("text 1 "));
-  assert.ok(calls.includes("text 2 INS"));
+  assert.ok(calls.includes("text 2 IN"));
   assert.ok(calls.includes("text 3 "));
 });
 

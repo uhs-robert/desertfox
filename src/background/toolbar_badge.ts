@@ -11,9 +11,9 @@ export type ColorScheme = "dark" | "light";
 export type ToolbarBadge = { text: string; title: string; color: ColorPair };
 
 const BADGE_TEXTS: Record<ModeColorMode, { text: string; name: string }> = {
-  normal: { text: "NOR", name: "NORMAL" },
-  insert: { text: "INS", name: "INSERT" },
-  ignore: { text: "IGN", name: "IGNORE" },
+  normal: { text: "NO", name: "NORMAL" },
+  insert: { text: "IN", name: "INSERT" },
+  ignore: { text: "IG", name: "IGNORE" },
 };
 
 const is_badge_mode = (mode: Mode): mode is ModeColorMode => mode in BADGE_TEXTS;

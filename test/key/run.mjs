@@ -351,19 +351,19 @@ async function main() {
     await open_page("field", "badge_field", { new_tab: true });
     await run_case("the toolbar badge follows insert, normal and ignore mode", async () => {
       // The field page focuses its input on load, so the tab starts in insert mode.
-      await wait_event(0, badge_is("INS"), "INS on a focused field");
+      await wait_event(0, badge_is("IN"), "IN on a focused field");
       let mark = events.length;
       await send_keys("-k", "Escape");
-      await wait_event(mark, badge_is("NOR"), "NOR after Escape");
+      await wait_event(mark, badge_is("NO"), "NO after Escape");
       mark = events.length;
       await send_keys(...SHIFT_ESCAPE);
-      await wait_event(mark, badge_is("IGN"), "IGN after Shift+Escape");
+      await wait_event(mark, badge_is("IG"), "IG after Shift+Escape");
       mark = events.length;
       await send_keys(...SHIFT_ESCAPE);
-      await wait_event(mark, badge_is("NOR"), "NOR after leaving ignore");
+      await wait_event(mark, badge_is("NO"), "NO after leaving ignore");
       mark = events.length;
       await send_keys("gi");
-      await wait_event(mark, badge_is("INS"), "INS after gi");
+      await wait_event(mark, badge_is("IN"), "IN after gi");
       // Leave the field so the next part's keys reach the key handler, not the input.
       await send_keys("-k", "Escape");
     });
