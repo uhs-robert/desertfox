@@ -73,7 +73,8 @@ function entries_for_mode(
 // The label of a binding is the label its author wrote, else one derived from the command and the args the binding sets.
 // The args are the authored ones: defaults the validator fills in later must not show up in the label.
 // Prompted params, free strings and numbers are never named. Hand labels cover the keys that set them.
-function derived_label(invocation: BoundInvocation, info: CommandInfo, settings: Partial<Settings>, sources: LabelSources): string {
+// A value phrase that an ancestor group name already says as whole words is dropped: under "Search in new tab", a row reads "Google", not "Google in new tab".
+function derived_label(invocation: BoundInvocation, info: CommandInfo, settings: Partial<Settings>, sources: LabelSources, ancestor_names: string[]): string {
   let label = info.label;
   const phrases: string[] = [];
   for (const param of info.params ?? []) {
@@ -92,7 +93,12 @@ function derived_label(invocation: BoundInvocation, info: CommandInfo, settings:
       phrases.push(param.name.replaceAll("_", " "));
     }
   }
-  return [label, ...phrases].join(" ");
+  return [label, ...phrases.filter((phrase) => !ancestor_names.some((name) => says_phrase(name, phrase)))].join(" ");
+}
+
+function says_phrase(name: string, phrase: string): boolean {
+  const escaped = phrase.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`(?<![\\p{L}\\p{N}_])${escaped}(?![\\p{L}\\p{N}_])`, "iu").test(name);
 }
 
 // A label is one line of text. Null when `label` is fine.
@@ -102,7 +108,7 @@ export function label_problem(label: string): string | null {
   return null;
 }
 
-function to_steps(mode: KeymapMode, entry: Entry, resolve: ResolveCommand, settings: Partial<Settings>, sources: LabelSources, warnings: string[]) {
+function to_steps(mode: KeymapMode, entry: Entry, resolve: ResolveCommand, settings: Partial<Settings>, sources: LabelSources, ancestor_names: string[], warnings: string[]) {
   const invocations = Array.isArray(entry.binding) ? entry.binding : [entry.binding];
   const steps: LeafStep[] = [];
   let label: string | undefined;
@@ -118,7 +124,7 @@ function to_steps(mode: KeymapMode, entry: Entry, resolve: ResolveCommand, setti
         warnings.push(`${mode}: skipped "${entry.sequence}": ${written_problem}`);
         return undefined;
       }
-      label = invocation.label ?? derived_label(invocation, info, settings, sources);
+      label = invocation.label ?? derived_label(invocation, info, settings, sources, ancestor_names);
       // A derived label can carry a bad engine label or value phrase. The key still works, so it falls back to the command label.
       const derived_problem = invocation.label === undefined ? label_problem(label) : null;
       if (derived_problem) {
@@ -137,8 +143,8 @@ function to_steps(mode: KeymapMode, entry: Entry, resolve: ResolveCommand, setti
   return { steps, label };
 }
 
-function insert_entry(root: TreeBranch, mode: KeymapMode, entry: Entry, resolve: ResolveCommand, settings: Partial<Settings>, sources: LabelSources, warnings: string[]) {
-  const resolved = to_steps(mode, entry, resolve, settings, sources, warnings);
+function insert_entry(root: TreeBranch, mode: KeymapMode, entry: Entry, resolve: ResolveCommand, settings: Partial<Settings>, sources: LabelSources, group_names: GroupName[], warnings: string[]) {
+  const resolved = to_steps(mode, entry, resolve, settings, sources, ancestor_group_names(entry.tokens, group_names), warnings);
   if (!resolved) return;
 
   let branch = root;
@@ -170,6 +176,12 @@ function parse_group_names(group_names: Record<string, string>, warnings: string
   });
 }
 
+// The names of every group above the key, nearest or not.
+function ancestor_group_names(tokens: string[], group_names: GroupName[]): string[] {
+  const prefixes = new Set(tokens.slice(0, -1).map((_, index) => tokens.slice(0, index + 1).join("")));
+  return group_names.filter(({ tokens: group_tokens }) => prefixes.has(group_tokens.join(""))).map(({ name }) => name);
+}
+
 function name_groups(root: TreeBranch, group_names: GroupName[]) {
   for (const { tokens, name } of group_names) {
     let node: TreeNode | undefined = root;
@@ -186,7 +198,7 @@ export function compile_keymap(keymap: KeymapConfig, settings: Partial<Settings>
   for (const mode of keymap_modes) {
     const root: TreeBranch = { kind: "branch", children: {} };
     for (const entry of entries_for_mode(mode, keymap, settings, warnings)) {
-      insert_entry(root, mode, entry, resolve, settings, label_sources, warnings);
+      insert_entry(root, mode, entry, resolve, settings, label_sources, group_names, warnings);
     }
     name_groups(root, group_names);
     if (Object.keys(root.children).length > 0) modes[mode] = root;

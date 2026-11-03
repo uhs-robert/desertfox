@@ -210,6 +210,39 @@ test("generated search keys are labeled with the engine label", () => {
   assert.equal(leaf_at("s", "a").label, "Arch Wiki");
 });
 
+test("a phrase that an ancestor group name says as whole words is dropped, in any case and anywhere in the name", () => {
+  const closing = { Xa: { id: "tab.close", args: { focus: "left" } }, Xb: { id: "tab.close", args: { focus: "left" } }, Ya: { id: "tab.close", args: { focus: "left" } } };
+  const { leaf_at } = labels_of(
+    { normal: { ...closing, XYa: { id: "tab.close", args: { focus: "left" } } }, group_names: { X: "Closing AND FOCUS LEFT now", Y: "Elsewhere" } },
+  );
+  assert.equal(leaf_at("X", "a").label, "Close tab");
+  assert.equal(leaf_at("Y", "a").label, "Close tab and focus left");
+  assert.equal(leaf_at("X", "Y", "a").label, "Close tab");
+});
+
+test("a name that holds the phrase only inside a word or only in part drops nothing", () => {
+  const { leaf_at } = labels_of({
+    normal: { Xa: { id: "tab.close", args: { focus: "left" } }, Ya: { id: "tab.close", args: { focus: "left" } } },
+    group_names: { X: "Land and focus leftover", Y: "Close and focus" },
+  });
+  assert.equal(leaf_at("X", "a").label, "Close tab and focus left");
+  assert.equal(leaf_at("Y", "a").label, "Close tab and focus left");
+});
+
+test("a hand label is kept, and a deeper group name counts for its own keys only", () => {
+  const { leaf_at } = labels_of({
+    normal: {
+      Xa: { id: "page.reload", args: { hard: true } },
+      Xb: { id: "tab.close", args: { focus: "left" }, label: "Close and focus left" },
+      Xca: { id: "tab.close", args: { focus: "left" } },
+    },
+    group_names: { X: "Hard", Xc: "Closing" },
+  });
+  assert.equal(leaf_at("X", "a").label, "Reload");
+  assert.equal(leaf_at("X", "b").label, "Close and focus left");
+  assert.equal(leaf_at("X", "c", "a").label, "Close tab and focus left");
+});
+
 test("a search binding without an engine takes the default engine label", () => {
   const { leaf_at } = labels_of({ normal: { ",,": { id: "open.search" } } }, { settings: { default_engine: "arch" } });
   assert.equal(leaf_at(",", ",").label, "Arch Wiki");
