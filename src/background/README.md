@@ -9,6 +9,7 @@ The background page. It loads the config, compiles the keymap, assigns the Firef
 - `slots.ts`: `browser` chords to the 10 manifest slots.
 - `tab_modes.ts`: the mode each tab last reported, in `storage.local`, and the ignore-mode gate for Firefox shortcuts.
 - `router.ts`: the one entry for run requests. Its pieces are `count.ts` and `refusal.ts`.
+- `list_keys.ts`: answers which-key. Given a mode and a typed prefix, it walks the compiled keymap in `storage.local` and returns a row per next key: the command label and intent, or a key count for a longer sequence.
 - `bundle_loader.ts`: injects a bundle into a frame when the content script asks, once per document. It joins repeat asks, answers a failure or a missed deadline with a refusal, and checks the bundle name because the sender is a page script.
 - `load_log.ts`: the last 20 bundle loads in storage, which the key test reads. Writes run one at a time and a storage failure is dropped, so the log never fails a load. Pure.
 - `snippets.ts`: the user's snippets as commands. `matches` is checked here against the tab URL, the code runs in the top frame only, and `oasisfox.run` calls come back through the `snippet_run` message with the caller's depth (limit 5).

@@ -2,7 +2,7 @@ import type { KeymapConfig } from "../shared/keymap.ts";
 
 // Every `v1` row of docs/keymap.md whose command exists, except the rows that need the user's own data.
 // Search engine keys (`s`, `S`, `,`) and container keys (`c`) come from the user's config.
-// Keys of the phase 2 stubs (`o O T b B f F ; : g? V`) are bound now and refuse until hints, the command line, the picker and caret mode exist.
+// Keys of the phase 2 stubs (`o O T b B f F ; : V`) are bound now and refuse until hints, the command line, the picker and caret mode exist.
 // The caret, visual and cmdline commands are placeholders too: they load their bundle and refuse until it registers them.
 // The caret and visual motions. `0` and `$` are line ends, `^` the first non-blank, `gg` and `G` the ends of the text.
 const MOTIONS: Record<string, { id: string; args: Record<string, unknown> }> = {
@@ -153,7 +153,7 @@ export const DEFAULT_KEYMAP: KeymapConfig = {
     ";i": { id: "hint.run", args: { filter: "inputs" } },
     ";l": { id: "hint.run", args: { filter: "links" } },
     ":": { id: "cmdline.open" },
-    "g?": { id: "help.whichkey" },
+    "g?": { id: "help.open" },
     V: { id: "mode.set", args: { mode: "caret" } },
   },
   hint: {

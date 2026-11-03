@@ -21,10 +21,3 @@ export const cmdline_history = from_bundle("cmdline.history", "cmdline", NEEDS_C
 export const cmdline_clear = from_bundle("cmdline.clear", "cmdline", NEEDS_COMMAND_LINE);
 export const caret_move = from_bundle("caret.move", "caret", NEEDS_CARET);
 export const visual_act = from_bundle("visual.act", "caret", NEEDS_CARET);
-
-// Which-key has no bundle yet. Its timer slot and bundle come with the which-key piece.
-export const help_whichkey: ContentHandler = {
-  run: () => {
-    throw new Error(NEEDS_COMMAND_LINE);
-  },
-};

@@ -146,7 +146,7 @@ dropped: 8 | later: 15 | v1: 267
 | normal | `g$` | v1 | `tab.goto index=-1` |
 | normal | `g0` | v1 | `tab.goto index=1` |
 | normal | `g;` | later | `page.change_jump` |
-| normal | `g?` | v1 | `help.whichkey` |
+| normal | `g?` | v1 | `help.open` |
 | normal | `g^` | v1 | `tab.goto index=1` |
 | normal | `dd` | v1 | `tab.close` |
 | normal | `dL` | v1 | `tab.close_side side=right` |

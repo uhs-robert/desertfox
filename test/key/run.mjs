@@ -8,6 +8,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { connect_rdp, evaluate_in_background, install_temporary_addon } from "./rdp.mjs";
+import { run_whichkey_cases } from "./p4_whichkey.mjs";
 import { start_server } from "./server.mjs";
 
 const run_execfile = promisify(execFile);
@@ -169,7 +170,7 @@ async function main() {
     // The padded bundles stand in for a 20 KB hints or caret bundle. They go into a copy, so dist/ stays as built.
     const extension_dir = join(work_dir, "extension");
     cpSync(dist_dir, extension_dir, { recursive: true });
-    for (const name of ["caret.js", "whichkey.js"]) writeFileSync(join(extension_dir, name), padded_bundle_text());
+    for (const name of ["caret.js"]) writeFileSync(join(extension_dir, name), padded_bundle_text());
     await install_temporary_addon(rdp, extension_dir);
     await sleep(1500);
     const read_injections = async (file) => {
@@ -423,7 +424,7 @@ async function main() {
         const ms = [];
         for (let run = 0; run < 15; run++) {
           const started = performance.now();
-          await browser.tabs.executeScript(tab.id, { file: "whichkey.js", runAt: "document_start" });
+          await browser.tabs.executeScript(tab.id, { file: "caret.js", runAt: "document_start" });
           ms.push(performance.now() - started);
         }
         return ms;
@@ -609,6 +610,8 @@ async function main() {
       expect(shown.page_id !== "d_close", "d_close is still the visible tab");
       expect(await scroll_delta_after(shown.page_id, ["j"]) > 0, "the tab left after xx does not take keys");
     });
+
+    await run_whichkey_cases({ rdp, extension_id: EXTENSION_ID, run_case, send_keys, open_page, wait_event, events, expect, sleep });
 
     const tree_read_ms = [];
     for (let index = 0; index < FRESH_LOAD_COUNT; index++) {

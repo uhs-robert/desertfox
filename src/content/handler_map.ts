@@ -6,7 +6,7 @@ import { copy_url } from "./handlers/copy.ts";
 import { page_blur, page_focus_input } from "./handlers/page.ts";
 import { scroll_align } from "./handlers/align.ts";
 import { scroll_lines, scroll_pages, scroll_pixels, scroll_to } from "./handlers/scroll.ts";
-import { caret_move, cmdline_clear, cmdline_history, cmdline_next_completion, cmdline_open, cmdline_prev_completion, cmdline_submit, help_whichkey, hint_run, visual_act } from "./handlers/phase_2.ts";
+import { caret_move, cmdline_clear, cmdline_history, cmdline_next_completion, cmdline_open, cmdline_prev_completion, cmdline_submit, hint_run, visual_act } from "./handlers/phase_2.ts";
 import { stop_page } from "./handlers/stop.ts";
 import type { ContentHandler } from "./handlers/types.ts";
 
@@ -32,5 +32,4 @@ export const content_handlers: Record<string, ContentHandler> = {
   "cmdline.clear": cmdline_clear,
   "caret.move": caret_move,
   "visual.act": visual_act,
-  "help.whichkey": help_whichkey,
 };
