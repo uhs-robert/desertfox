@@ -1,3 +1,4 @@
+import { fill_template } from "../shared/engines/fill.ts";
 import { github_repo_of, parse_http_url, path_segments, subreddit_of } from "../shared/engines/slots.ts";
 
 export { github_repo_of, subreddit_of };
@@ -7,7 +8,6 @@ export { github_repo_of, subreddit_of };
 
 export const GOOGLE_SEARCH_URL = "https://www.google.com/search?q=";
 export const DEFAULT_SUBREDDIT = "all";
-const QUERY_PLACEHOLDER = "%s";
 
 // Drops the query and fragment with the last path segment. A root path with a query or fragment loses only those.
 function parent_once(page_url: string): string | undefined {
@@ -77,8 +77,11 @@ export function subreddit_search_url(page_url: string, query: string, sub: strin
   return `https://www.reddit.com/r/${encodeURIComponent(chosen)}/search/?q=${encodeURIComponent(query)}&restrict_sr=1`;
 }
 
+// Step 3 gives engines page slots. Until then a template that needs the page is refused.
 export function engine_search_url(template: string, query: string): string {
-  return template.split(QUERY_PLACEHOLDER).join(encodeURIComponent(query));
+  const filled = fill_template(template, { query });
+  if (!filled.ok) throw new Error(filled.message);
+  return filled.url;
 }
 
 // Refusals are thrown: the router shows the message to the user.

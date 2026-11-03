@@ -5,7 +5,8 @@ import { dirname, join } from "node:path";
 import { test } from "node:test";
 import { build_config, read_commands_file } from "../tools/build-config/build_config.ts";
 import { ConfigErrors } from "../tools/build-config/errors.ts";
-import { write_managed_storage, write_schemas } from "../tools/build-config/output.ts";
+import { resolved_engines_text, write_managed_storage, write_schemas } from "../tools/build-config/output.ts";
+import { fill_template } from "../src/shared/engines/index.ts";
 import { build_schemas } from "../tools/build-config/schemas.ts";
 import { build_commands_file, create_registry } from "../src/shared/registry/index.ts";
 import { parse_snippet } from "../tools/build-config/snippet.ts";
@@ -38,7 +39,8 @@ const full = () => build_config(join(FIXTURES, "full"), commands);
 test("merge order: the .d file wins over the main file", () => {
   const normal = full().keymap.normal;
   assert.deepEqual(normal?.["D"], { id: "tab.close", args: { focus: "right" } });
-  assert.deepEqual(full().search_engines["beta"], { url: "https://beta2.example/?q=%s", label: "Beta Two" });
+  assert.equal(full().search_engines["beta"]?.url, "https://beta2.example/?q={query}");
+  assert.equal(full().search_engines["beta"]?.label, "Beta Two");
 });
 
 test("a later .d file wins over an earlier one, in name order", () => {
@@ -324,9 +326,99 @@ test("generator keys must be one key", () => {
   assert.match(text, /container_keys "c d"/);
 });
 
-test("a search engine url needs the %s placeholder", () => {
+test("a search engine url needs a query slot", () => {
   const dir = config_dir_with({ "search_engines.toml": 'alpha = { url = "https://a.example/", label = "A" }' });
-  assert.match(problems_of(dir).join("\n"), /alpha: an engine is/);
+  assert.match(problems_of(dir).join("\n"), /engine "alpha" has no \{query\} in its url/);
+});
+
+const GITHUB_TREE = [
+  "[github]",
+  'label = "GitHub"',
+  'url = "https://github.com/search?q={scope}{query}&type={type}"',
+  'scope = ""',
+  "[github.params.type]",
+  'default = "code"',
+  "children = true",
+  'values = { code = "code", issues = "issues", prs = "pullrequests" }',
+  "[github.repo]",
+  'label = "this repo"',
+  'scope = "repo:{repo} "',
+  'type = { only = ["code", "issues"] }',
+].join("\n");
+
+const engines_of = (toml: string) => build_config(config_dir_with({ "search_engines.toml": toml }), commands).search_engines;
+
+test("an engine tree builds a flat map keyed by the dotted name", () => {
+  const engines = engines_of(GITHUB_TREE);
+  assert.deepEqual(Object.keys(engines).sort(), ["github", "github.code", "github.issues", "github.prs", "github.repo", "github.repo.code", "github.repo.issues"]);
+  assert.equal(engines["github.repo.issues"]?.url, "https://github.com/search?q=repo:{repo} {query}&type=issues");
+  assert.equal(engines["github.repo.issues"]?.label, "GitHub: this repo: issues");
+  assert.deepEqual(engines["github.repo.issues"]?.slots, ["repo"]);
+});
+
+test("a flat legacy engine fills to the URL it gave before", () => {
+  const engines = engines_of('q = { url = "https://a.example/s?q=a+%s&x=1#f", label = "Q" }');
+  assert.deepEqual(fill_template(engines["q"]!.url, { query: "a b&c" }), { ok: true, url: "https://a.example/s?q=a+a%20b%26c&x=1#f" });
+});
+
+test("an unknown slot in an engine url is an error", () => {
+  assert.match(problems_of(config_dir_with({ "search_engines.toml": 'a = { url = "u?{query}{nope}", label = "A" }' })).join("\n"), /engine "a" uses the unknown slot \{nope\}/);
+});
+
+test("a param that no url uses is an error", () => {
+  const toml = ['[a]', 'label = "A"', 'url = "u?{query}"', "[a.params.type]", 'values = { x = "x" }'].join("\n");
+  assert.match(problems_of(config_dir_with({ "search_engines.toml": toml })).join("\n"), /param "type" is not used by any url under it/);
+});
+
+test("a value outside the declared list is an error, in a child and in only", () => {
+  const assigned = GITHUB_TREE.replace('type = { only = ["code", "issues"] }', 'type = "nope"');
+  assert.match(problems_of(config_dir_with({ "search_engines.toml": assigned })).join("\n"), /type = "nope" is outside the declared list/);
+  const narrowed = GITHUB_TREE.replace('["code", "issues"]', '["code", "ghost"]');
+  assert.match(problems_of(config_dir_with({ "search_engines.toml": narrowed })).join("\n"), /type\.only names ghost, outside the declared list/);
+});
+
+test("a fallback to a missing engine is an error", () => {
+  const dir = config_dir_with({ "search_engines.toml": 'a = { url = "u?{query}{repo}", label = "A", fallback = "ghost" }' });
+  assert.match(problems_of(dir).join("\n"), /engine "a" has fallback "ghost", which is not an engine/);
+});
+
+test("fallbacks that loop are an error", () => {
+  const toml = 'a = { url = "u?{query}", label = "A", fallback = "b" }\nb = { url = "v?{query}", label = "B", fallback = "a" }';
+  assert.match(problems_of(config_dir_with({ "search_engines.toml": toml })).join("\n"), /fallbacks loop: a -> b -> a/);
+});
+
+test("the default engine cannot need a page slot", () => {
+  const dir = config_dir_with({
+    "search_engines.toml": 'a = { url = "u?{query}{repo}", label = "A" }',
+    "settings.toml": 'default_engine = "a"',
+  });
+  assert.match(problems_of(dir).join("\n"), /default_engine "a" needs the page slot \{repo\}/);
+});
+
+test("a child named like a field is rejected as reserved", () => {
+  const toml = ['[a]', 'label = "A"', 'url = "u?{query}"', "[a.fallback]", 'url = "v?{query}"'].join("\n");
+  assert.match(problems_of(config_dir_with({ "search_engines.toml": toml })).join("\n"), /child name "fallback" is reserved/);
+});
+
+test("a later file replaces the table at one dotted path and leaves the parent", () => {
+  const dir = config_dir_with({
+    "search_engines.toml": GITHUB_TREE,
+    "search_engines.d/10-mine.toml": ["[github.repo]", 'label = "my repo"', 'scope = "repo:{repo} lang:ts "'].join("\n"),
+  });
+  const engines = build_config(dir, commands).search_engines;
+  assert.equal(engines["github.repo"]?.label, "GitHub: my repo");
+  assert.equal(engines["github.repo"]?.url, "https://github.com/search?q=repo:{repo} lang:ts {query}&type=code");
+  assert.equal(engines["github.issues"]?.url, "https://github.com/search?q={query}&type=issues");
+  // The narrowing lived in the replaced table, so all values are generated now.
+  assert.ok(engines["github.repo.prs"]);
+});
+
+test("the resolved engine file is sorted, one engine per line and stable", () => {
+  const dir = config_dir_with({ "search_engines.toml": `${GITHUB_TREE}\n[aaa]\nurl = "a?{query}"` });
+  const text = resolved_engines_text(build_config(dir, commands).search_engines);
+  const names = text.trimEnd().split("\n").map((line) => (JSON.parse(line) as { name: string }).name);
+  assert.deepEqual(names, [...names].sort());
+  assert.equal(text, resolved_engines_text(build_config(dir, commands).search_engines));
 });
 
 test("a snippet name or alias that clashes with a built-in name is rejected", () => {
