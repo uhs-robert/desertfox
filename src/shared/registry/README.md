@@ -2,7 +2,7 @@
 
 The command registry and everything that reads a command definition. Pure TypeScript with no browser APIs, so the background page and Node tools share it. `tools/write_commands_json.mjs` loads it straight from source.
 
-- `define.ts`: `create_registry` and the define-time checks. Every rejection is a `DefineError` that names the command and the field. Snippet commands go through the same `define`, so they share the name check.
+- `define.ts`: `create_registry` and the define-time checks. Every rejection is a `DefineError` that names the command and the field. It checks the `value_labels` of an enum param: each key is a value, the default has no phrase. Snippet commands go through the same `define`, so they share the name check.
 - `check_args.ts`: the one validator. Runtime enum lists (engines, containers) arrive as an `EnumSources` argument.
 - `command_line.ts`: the one grammar for command text, text to `Invocation`. It never checks `when` or types. Call `check_args` on the result. Pass the same `EnumSources` so a bare word can pick from a runtime list, for example an engine name.
 - `parse_binding.ts`: the same grammar for a config binding, plus the leading `:` that turns into a stored `prompt`. Warnings from the grammar come back with the binding.

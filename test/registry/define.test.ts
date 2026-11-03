@@ -149,3 +149,15 @@ test("a bare word names one param: enum values and bool names do not repeat", ()
   };
   rejects("a.b", bool_is_value, /params\.rapid: bare word "rapid" is also used by param "a"/);
 });
+
+test("value_labels: keys must be values, the default has no phrase, phrases are plain, dynamic lists take none", () => {
+  const param = (extra: object) => ({ ...base, params: [{ name: "side", type: "enum" as const, values: ["left", "right"], default: "right", ...extra }] });
+  const registry = create_registry();
+  assert.doesNotThrow(() => registry.define("tab.side", param({ value_labels: { left: "on the left" } })));
+  rejects("tab.a", param({ value_labels: { up: "above" } }), /value_labels\.up: is not one of the values/);
+  rejects("tab.b", param({ value_labels: { right: "on the right" } }), /value_labels\.right: the default value has no phrase/);
+  rejects("tab.c", param({ value_labels: { left: "" } }), /value_labels\.left: must be a non-empty phrase/);
+  rejects("tab.d", param({ value_labels: { left: " on the left" } }), /value_labels\.left: must be a non-empty phrase/);
+  rejects("tab.e", { ...base, params: [{ name: "engine", type: "enum", values: { from: "search_engines" }, value_labels: { a: "b" } }] }, /value_labels: only an enum with a fixed value list/);
+  rejects("tab.f", { ...base, params: [{ name: "n", type: "int", value_labels: { a: "b" } }] }, /value_labels: only an enum/);
+});

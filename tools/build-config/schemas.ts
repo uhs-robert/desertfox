@@ -19,7 +19,15 @@ function keymap_schema(commands: CommandMeta[]): Schema {
     description: 'A command and its arguments, for example "open tab https://example.com". A leading ":" types it into the command line. "" removes a default binding',
     examples: commands.map((command) => command.name ?? command.id),
   };
-  const binding: Schema = { anyOf: [command_text, { type: "array", minItems: 1, items: { type: "string", minLength: 1 } }] };
+  const command_list: Schema = { type: "array", minItems: 1, items: { type: "string", minLength: 1 } };
+  const labeled_binding: Schema = {
+    type: "object",
+    description: "A binding with the label which-key shows for it, instead of the label derived from the command",
+    properties: { run: { anyOf: [command_text, command_list] }, label: { type: "string", minLength: 1 } },
+    required: ["run"],
+    additionalProperties: false,
+  };
+  const binding: Schema = { anyOf: [command_text, command_list, labeled_binding] };
   const mode_bindings: Schema = { type: "object", additionalProperties: binding };
   const string_map: Schema = { type: "object", additionalProperties: { type: "string", minLength: 1 } };
   return {

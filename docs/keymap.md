@@ -16,6 +16,8 @@ The shipped defaults bind every `v1` row whose command exists, with three kinds 
 
 Which-key shows a group as `+Name`, for example `g` as `+Go`. A `group_names` section in `keymap.toml` maps a key sequence to its name. A group without one shows its prefix key.
 
+A key shows the command label plus a phrase for each arg its binding sets, for example `gO` as "Open URL in new tab". Keys that set numbers carry a `label` in the default keymap, such as `h` as "Scroll left". The rule is in [design.md](design.md#which-key).
+
 The `caret`, `visual` and `cmdline` rows bind placeholder commands that refuse until their piece builds them.
 
 A note "(prompts)" means the binding leaves a param out, so the command line asks for it.

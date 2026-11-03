@@ -34,7 +34,7 @@ const handlers = make_zoom_handlers(browser_zoom_deps);
 
 define("zoom.by", {
   name: "zoomby",
-  label: "Zoom By",
+  label: "Zoom by",
   intent: "Change the zoom by an amount, where 0.1 is ten percent. A count prefix repeats it.",
   params: [{ name: "delta", type: "float" }],
   runs_in: "background",
@@ -44,7 +44,7 @@ define("zoom.by", {
 
 define("zoom.set", {
   name: "zoom",
-  label: "Set Zoom",
+  label: "Set zoom",
   intent: "Set the page zoom to a level, where 1 is 100%. The level is limited to 0.3 through 5.",
   params: [{ name: "level", type: "float" }],
   runs_in: "background",

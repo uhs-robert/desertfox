@@ -4,9 +4,16 @@ import { define } from "../shared/registry/index.ts";
 
 define("mode.set", {
   name: "mode",
-  label: "Set Mode",
+  label: "Set mode",
   intent: "Switch to a mode. Ignore mode passes every key to the page until a binding leaves it.",
-  params: [{ name: "mode", type: "enum", values: SETTABLE_MODES }],
+  params: [
+    {
+      name: "mode",
+      type: "enum",
+      values: SETTABLE_MODES,
+      value_labels: Object.fromEntries(SETTABLE_MODES.map((mode) => [mode, `to ${mode}`])),
+    },
+  ],
   runs_in: "content",
   modes: ["normal", "insert", "ignore", "caret"],
   run: mode_set.run,
@@ -23,7 +30,7 @@ define("mode.escape", {
 
 define("mode.pass_next", {
   name: "passnext",
-  label: "Pass Next Key",
+  label: "Pass next key",
   intent: "Give the next key to the page instead of OasisFox.",
   runs_in: "content",
   run: mode_pass_next.run,
@@ -32,7 +39,7 @@ define("mode.pass_next", {
 // Defined here with the mode commands because both change what has the focus.
 define("page.focus_input", {
   name: "focusinput",
-  label: "Focus Input",
+  label: "Focus input",
   intent: "Focus the first visible text field on the page, preferring one in view.",
   runs_in: "content",
   run: page_focus_input.run,

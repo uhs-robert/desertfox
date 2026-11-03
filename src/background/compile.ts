@@ -27,8 +27,8 @@ export function compile_config(input: CompileInput): CompileOutput {
   const keymap = merge_keymaps(input.default_keymap, input.config.keymap);
   const { compiled, warnings } = compile_keymap(keymap, input.config.settings, (command_id) => {
     const command = input.get_command(command_id);
-    return command && { runs_in: command.runs_in, label: command.label, count: command.count ?? "ignore" };
-  });
+    return command && { runs_in: command.runs_in, label: command.label, count: command.count ?? "ignore", params: command.params ?? [] };
+  }, { engine_labels: Object.fromEntries(Object.entries(input.config.search_engines).flatMap(([name, engine]) => (typeof engine?.label === "string" ? [[name, engine.label]] : []))) });
 
   const requested_palette = input.config.settings.palette;
   if (requested_palette !== undefined && !is_palette_name(requested_palette)) {

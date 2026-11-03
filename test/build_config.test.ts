@@ -415,3 +415,34 @@ test("a bare engine name picks the engine, and a query that starts with one draw
   assert.equal(warnings.length, 1);
   assert.match(warnings[0]!, /keymap normal "b": query starts with "alpha", which is also a value of engine, write query="..."/);
 });
+
+test("a binding can be a table with run and label, and the label lands on the invocation", () => {
+  const dir = config_dir_with(
+    { "keymap.d/20-label.toml": '[normal]\nJ = { run = "tab.next", label = "Down a tab" }\nM = { run = ["tab.close left", "tab.prev"], label = "Close and step back" }\nL = { run = "tab.next" }' },
+    join(FIXTURES, "full"),
+  );
+  const normal = build_config(dir, commands).keymap.normal;
+  assert.deepEqual(normal?.["J"], { id: "tab.next", label: "Down a tab" });
+  assert.deepEqual(normal?.["M"], [{ id: "tab.close", args: { focus: "left" }, label: "Close and step back" }, { id: "tab.prev" }]);
+  assert.deepEqual(normal?.["L"], { id: "tab.next" });
+});
+
+test("a table binding with a bad label, an unknown field or a bad run is reported", () => {
+  const problem_for = (binding: string) => problems_of(config_dir_with({ "keymap.d/20-bad.toml": `[normal]\nJ = ${binding}` }, join(FIXTURES, "full")));
+  assert.match(problem_for('{ run = "tab.next", label = "" }').join("\n"), /normal "J": a label must not be empty/);
+  assert.match(problem_for('{ run = "tab.next", name = "x" }').join("\n"), /keymap\.normal\["J"\] must be a command string/);
+  assert.match(problem_for('{ label = "x" }').join("\n"), /keymap\.normal\["J"\] must be a command string/);
+  assert.match(problem_for('{ run = "no.such.command", label = "x" }').join("\n"), /normal "J"/);
+});
+
+test("the keymap schema accepts the table form", () => {
+  const schema = build_schemas(commands)["keymap"] as { properties: { normal: { additionalProperties: { anyOf: { type: string }[] } } } };
+  assert.ok(schema.properties.normal.additionalProperties.anyOf.some((form) => form.type === "object"));
+});
+
+test("a table binding whose run is not a string or a list of strings is a config error, not a crash", () => {
+  const dir = config_dir_with({ "keymap.d/20-bad.toml": '[normal]\nJ = { run = { run = "tab.next" } }\nM = { run = 3 }' }, join(FIXTURES, "full"));
+  const text = problems_of(dir).join("\n");
+  assert.match(text, /keymap\.normal\["J"\] must be a command string/);
+  assert.match(text, /keymap\.normal\["M"\] must be a command string/);
+});

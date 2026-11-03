@@ -82,7 +82,7 @@ test("zz, zt and zb align the focused field", () => {
   for (const [key, position] of Object.entries({ zz: "center", zt: "top", zb: "bottom" })) {
     assert.deepEqual(DEFAULT_KEYMAP.normal?.[key], { id: "scroll.align", args: { position } });
   }
-  assert.deepEqual(DEFAULT_KEYMAP.normal?.["z="], { id: "zoom.set", args: { level: 1 } });
+  assert.deepEqual(DEFAULT_KEYMAP.normal?.["z="], { id: "zoom.set", args: { level: 1 }, label: "Reset zoom" });
 });
 
 // Rows that name an engine or a container need the user's own data. The config supplies them.
@@ -170,7 +170,10 @@ test("s/ and the sG keys search with the selection and prompt when it is empty",
     sGu: { type: "users" },
     sGs: { type: "any", scope: "all" },
   };
-  for (const [key, args] of Object.entries(github_keys)) assert.deepEqual(normal[key], { id: "site.github", args: { query: selection, ...args } }, key);
+  for (const [key, args] of Object.entries(github_keys)) {
+    const { label: _label, ...binding } = normal[key] as { label?: string };
+    assert.deepEqual(binding, { id: "site.github", args: { query: selection, ...args } }, key);
+  }
   const log: string[] = [];
   const router = create_router({
     get_command: (id) => registry.get(id),

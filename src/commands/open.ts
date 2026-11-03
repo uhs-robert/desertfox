@@ -40,7 +40,7 @@ define("open.search", {
 
 define("open.clipboard", {
   name: "paste",
-  label: "Open Clipboard",
+  label: "Open clipboard",
   intent: "Open the URL on the clipboard. Text that is not a URL is searched with the default_engine setting.",
   params: [WHERE_PARAM, CONTAINER_PARAM],
   runs_in: "background",

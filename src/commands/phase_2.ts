@@ -18,8 +18,24 @@ define("hint.run", {
       type: "enum",
       values: [...WHERE, "select", "copy", "copy_text", "delete", "focus"],
       default: "here",
+      value_labels: {
+        tab: "in new tab",
+        background: "in background tab",
+        window: "in new window",
+        select: "to select",
+        copy: "to copy",
+        copy_text: "to copy text",
+        delete: "to delete",
+        focus: "to focus",
+      },
     },
-    { name: "filter", type: "enum", values: ["all", "clickable", "inputs", "links", "custom"], default: "clickable" },
+    {
+      name: "filter",
+      type: "enum",
+      values: ["all", "clickable", "inputs", "links", "custom"],
+      default: "clickable",
+      value_labels: { all: "for all elements", inputs: "for inputs", links: "for links", custom: "for a selector" },
+    },
     { name: "selector", type: "string", when: { filter: ["custom"] } },
     { name: "text", type: "string", default: "" },
     { name: "rapid", type: "bool", default: false },
@@ -30,7 +46,7 @@ define("hint.run", {
 
 define("cmdline.open", {
   name: "cmdline",
-  label: "Command Line",
+  label: "Command line",
   intent: "Open the command line, with text already typed if given.",
   params: [{ name: "text", type: "string", default: "" }],
   runs_in: "content",
@@ -39,7 +55,7 @@ define("cmdline.open", {
 
 define("cmdline.next_completion", {
   name: "nextcomp",
-  label: "Next Completion",
+  label: "Next completion",
   intent: "Select the next completion in the command line.",
   runs_in: "content",
   modes: ["cmdline"],
@@ -48,7 +64,7 @@ define("cmdline.next_completion", {
 
 define("cmdline.prev_completion", {
   name: "prevcomp",
-  label: "Previous Completion",
+  label: "Previous completion",
   intent: "Select the previous completion in the command line.",
   runs_in: "content",
   modes: ["cmdline"],
@@ -57,7 +73,7 @@ define("cmdline.prev_completion", {
 
 define("help.whichkey", {
   name: "whichkey",
-  label: "Which Key",
+  label: "Which key",
   intent: "List the keys at the top of the keymap.",
   runs_in: "content",
   modes: ["normal", "caret", "visual"],
@@ -66,7 +82,7 @@ define("help.whichkey", {
 
 define("tab.switch", {
   name: "tab",
-  label: "Switch Tab",
+  label: "Switch tab",
   intent: "Switch to an open tab chosen by title or address.",
   params: [{ name: "tab", type: "string", rest: true, main: true }],
   runs_in: "background",
@@ -75,7 +91,7 @@ define("tab.switch", {
 
 define("bookmark.open", {
   name: "bookmark",
-  label: "Open Bookmark",
+  label: "Open bookmark",
   intent: "Open a bookmark chosen by title or address.",
   params: [{ name: "bookmark", type: "string", rest: true, main: true }, WHERE_PARAM],
   runs_in: "background",
@@ -95,7 +111,7 @@ define("cmdline.history", {
   name: "history",
   label: "History",
   intent: "Put an earlier or later command from the command line history into the line.",
-  params: [{ name: "direction", type: "enum", values: ["prev", "next"] }],
+  params: [{ name: "direction", type: "enum", values: ["prev", "next"], value_labels: { prev: "to older entry", next: "to newer entry" } }],
   runs_in: "content",
   modes: ["cmdline"],
   run: cmdline_history.run,
@@ -103,7 +119,7 @@ define("cmdline.history", {
 
 define("cmdline.clear", {
   name: "clearline",
-  label: "Clear Line",
+  label: "Clear line",
   intent: "Delete the text typed in the command line.",
   runs_in: "content",
   modes: ["cmdline"],
@@ -112,15 +128,26 @@ define("cmdline.clear", {
 
 define("caret.move", {
   name: "move",
-  label: "Move Caret",
+  label: "Move caret",
   intent: "Move the caret in caret mode, or extend the selection in visual mode.",
   params: [
     {
       name: "unit",
       type: "enum",
       values: ["char", "word", "word_end", "line", "line_start", "line_first", "line_end", "start", "end"],
+      value_labels: {
+        char: "by character",
+        word: "by word",
+        word_end: "to word end",
+        line: "by line",
+        line_start: "to line start",
+        line_first: "to first non-blank",
+        line_end: "to line end",
+        start: "to text start",
+        end: "to text end",
+      },
     },
-    { name: "direction", type: "enum", values: ["forward", "back"], default: "forward" },
+    { name: "direction", type: "enum", values: ["forward", "back"], default: "forward", value_labels: { back: "backward" } },
     { name: "big", type: "bool", default: false },
   ],
   runs_in: "content",
@@ -131,9 +158,9 @@ define("caret.move", {
 
 define("visual.act", {
   name: "visualact",
-  label: "Act on Selection",
+  label: "Act on selection",
   intent: "Copy the selection, swap its ends or search for it.",
-  params: [{ name: "action", type: "enum", values: ["yank", "swap", "search"] }],
+  params: [{ name: "action", type: "enum", values: ["yank", "swap", "search"], value_labels: { yank: "to copy", swap: "to swap ends", search: "to search" } }],
   runs_in: "content",
   modes: ["visual"],
   run: visual_act.run,

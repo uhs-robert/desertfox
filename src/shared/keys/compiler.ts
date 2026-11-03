@@ -1,16 +1,20 @@
 // Compiles the merged keymap into the prefix tree the content script walks.
 
 import { MODES as RUNTIME_MODES } from "../command.ts";
-import type { CountBehavior, RunsIn } from "../command.ts";
+import type { CountBehavior, ParamDef, RunsIn } from "../command.ts";
 import { COMPILED_KEYMAP_VERSION } from "../prefix_tree.ts";
 import type { CompiledKeymap, LeafStep, TreeBranch, TreeNode } from "../prefix_tree.ts";
 import { DEFAULT_SETTINGS } from "../config.ts";
 import type { Settings } from "../config.ts";
-import type { KeyBinding } from "../invocation.ts";
+import type { BoundInvocation, KeyBinding } from "../invocation.ts";
 import type { KeymapConfig, KeymapMode } from "../keymap.ts";
+import { is_dynamic_values } from "../registry/params.ts";
 import { parse_sequence } from "./notation.ts";
 
-export type CommandInfo = { runs_in: RunsIn; label: string; count: CountBehavior };
+export type CommandInfo = { runs_in: RunsIn; label: string; count: CountBehavior; params?: readonly ParamDef[] };
+
+// Search engine name to the label the user gave it. A key that searches with an engine reads as that label.
+export type LabelSources = { engine_labels: Record<string, string> };
 
 // Returns undefined for an id the registry does not know.
 export type ResolveCommand = (command_id: string) => CommandInfo | undefined;
@@ -66,7 +70,39 @@ function entries_for_mode(
   return [...by_normalized_sequence.values()].sort((a, b) => a.tokens.length - b.tokens.length);
 }
 
-function to_steps(mode: KeymapMode, entry: Entry, resolve: ResolveCommand, warnings: string[]) {
+// The label of a binding is the label its author wrote, else one derived from the command and the args the binding sets.
+// The args are the authored ones: defaults the validator fills in later must not show up in the label.
+// Prompted params, free strings and numbers are never named. Hand labels cover the keys that set them.
+function derived_label(invocation: BoundInvocation, info: CommandInfo, settings: Partial<Settings>, sources: LabelSources): string {
+  let label = info.label;
+  const phrases: string[] = [];
+  for (const param of info.params ?? []) {
+    const value = invocation.args?.[param.name];
+    if (is_dynamic_values(param.values)) {
+      if (param.values.from === "containers" && typeof value === "string" && value !== "") {
+        return value === "default" ? "Default container" : value;
+      }
+      if (param.values.from === "search_engines") {
+        const engine = typeof value === "string" && value !== "" ? value : (settings.default_engine ?? DEFAULT_SETTINGS.default_engine);
+        label = sources.engine_labels[engine] ?? label;
+      }
+    } else if (param.type === "enum" && typeof value === "string" && value !== param.default) {
+      phrases.push(param.value_labels?.[value] ?? value.replaceAll("_", " "));
+    } else if (param.type === "bool" && value === true && value !== param.default) {
+      phrases.push(param.name.replaceAll("_", " "));
+    }
+  }
+  return [label, ...phrases].join(" ");
+}
+
+// A label is one line of text. Null when `label` is fine.
+export function label_problem(label: string): string | null {
+  if (label.trim() === "") return "a label must not be empty";
+  if (/\p{Cc}/u.test(label)) return "a label must not hold control characters";
+  return null;
+}
+
+function to_steps(mode: KeymapMode, entry: Entry, resolve: ResolveCommand, settings: Partial<Settings>, sources: LabelSources, warnings: string[]) {
   const invocations = Array.isArray(entry.binding) ? entry.binding : [entry.binding];
   const steps: LeafStep[] = [];
   let label: string | undefined;
@@ -76,8 +112,23 @@ function to_steps(mode: KeymapMode, entry: Entry, resolve: ResolveCommand, warni
       warnings.push(`${mode}: skipped "${entry.sequence}": unknown command "${invocation.id}"`);
       return undefined;
     }
-    label ??= info.label;
-    steps.push({ invocation, runs_in: info.runs_in, count_rule: info.count });
+    if (label === undefined) {
+      const written_problem = invocation.label === undefined ? null : label_problem(invocation.label);
+      if (written_problem) {
+        warnings.push(`${mode}: skipped "${entry.sequence}": ${written_problem}`);
+        return undefined;
+      }
+      label = invocation.label ?? derived_label(invocation, info, settings, sources);
+      // A derived label can carry a bad engine label or value phrase. The key still works, so it falls back to the command label.
+      const derived_problem = invocation.label === undefined ? label_problem(label) : null;
+      if (derived_problem) {
+        warnings.push(`${mode}: "${entry.sequence}" keeps the command label: ${derived_problem}`);
+        label = info.label;
+      }
+    }
+    // The label is for the leaf. The steps stay the plain invocations the router runs.
+    const { label: _label, ...plain } = invocation;
+    steps.push({ invocation: plain, runs_in: info.runs_in, count_rule: info.count });
   }
   if (steps.length === 0) {
     warnings.push(`${mode}: skipped "${entry.sequence}": empty binding`);
@@ -86,8 +137,8 @@ function to_steps(mode: KeymapMode, entry: Entry, resolve: ResolveCommand, warni
   return { steps, label };
 }
 
-function insert_entry(root: TreeBranch, mode: KeymapMode, entry: Entry, resolve: ResolveCommand, warnings: string[]) {
-  const resolved = to_steps(mode, entry, resolve, warnings);
+function insert_entry(root: TreeBranch, mode: KeymapMode, entry: Entry, resolve: ResolveCommand, settings: Partial<Settings>, sources: LabelSources, warnings: string[]) {
+  const resolved = to_steps(mode, entry, resolve, settings, sources, warnings);
   if (!resolved) return;
 
   let branch = root;
@@ -127,7 +178,7 @@ function name_groups(root: TreeBranch, group_names: GroupName[]) {
   }
 }
 
-export function compile_keymap(keymap: KeymapConfig, settings: Partial<Settings>, resolve: ResolveCommand): CompileResult {
+export function compile_keymap(keymap: KeymapConfig, settings: Partial<Settings>, resolve: ResolveCommand, label_sources: LabelSources = { engine_labels: {} }): CompileResult {
   const warnings: string[] = [];
   const modes: CompiledKeymap["modes"] = {};
   const keymap_modes: readonly KeymapMode[] = [...RUNTIME_MODES, "browser"];
@@ -135,7 +186,7 @@ export function compile_keymap(keymap: KeymapConfig, settings: Partial<Settings>
   for (const mode of keymap_modes) {
     const root: TreeBranch = { kind: "branch", children: {} };
     for (const entry of entries_for_mode(mode, keymap, settings, warnings)) {
-      insert_entry(root, mode, entry, resolve, warnings);
+      insert_entry(root, mode, entry, resolve, settings, label_sources, warnings);
     }
     name_groups(root, group_names);
     if (Object.keys(root.children).length > 0) modes[mode] = root;
