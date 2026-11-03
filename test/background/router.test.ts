@@ -48,6 +48,26 @@ test("an empty selection in a default opens the command line with the param left
   assert.deepEqual(log, ["cmdline 7 0 go "]);
 });
 
+test("a prefilled query that starts with an engine name keeps its -- guard", async () => {
+  const commands = {
+    "open.find": {
+      label: "Find",
+      intent: "x",
+      name: "find",
+      params: [
+        { name: "engine", type: "enum", values: { from: "search_engines" }, default: "" },
+        { name: "query", type: "string", main: true, default: { from: "selection" } },
+      ],
+      runs_in: "background",
+      run: () => assert.fail(),
+    },
+  } as const;
+  const { deps, log } = make_fake(commands, { ask_selection: async () => "arch linux" });
+  const binding = { id: "open.find", prompt: { param: "query", prefill: { from: "selection" } as const } };
+  await create_router(deps).run({ invocations: [binding], mode: "normal", may_prompt: true });
+  assert.deepEqual(log, ["cmdline 7 0 find -- arch linux"]);
+});
+
 test("an empty selection in an explicit @selection arg opens the line, a full one runs", async () => {
   const seen: unknown[] = [];
   const commands = { "site.find": { label: "Find", intent: "x", name: "find", params: [{ name: "query", type: "string", rest: true, main: true }, { name: "where", type: "string", default: "here" }], runs_in: "background", run: (_ctx: unknown, args: unknown) => void seen.push(args) } } as const;

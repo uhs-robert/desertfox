@@ -11,8 +11,8 @@ export async function p1_cases(t) {
   await run_case("colon then a command typed at once, then Enter, runs it with no key lost to the load", async () => {
     // Everything arrives within a few milliseconds of the colon, before cmdline.js has loaded.
     const mark = events.length;
-    await send_keys(":scrollpx dy=300", "-k", "Return");
-    const scrolled = await wait_event(mark, scroll_of("cmd"), "the page to scroll after :scrollpx dy=300", 8000);
+    await send_keys(":scroll.pixels --dy=300", "-k", "Return");
+    const scrolled = await wait_event(mark, scroll_of("cmd"), "the page to scroll after :scroll.pixels --dy=300", 8000);
     expect(scrolled.y === 300, `scrolled to ${scrolled.y}, expected 300`);
   });
 
@@ -47,7 +47,7 @@ export async function p1_cases(t) {
     // Still open: Ctrl-u clears the line, and the next command still goes to it instead of the page.
     const mark = events.length;
     await send_keys(...CTRL("u"));
-    await send_keys("scrollpx dy=-100000", "-k", "Return");
+    await send_keys("scroll.pixels --dy=-100000", "-k", "Return");
     await wait_event(mark, scroll_of("cmd"), "the corrected command to scroll", 8000);
     expect(last_scroll_y("cmd") === 0, `expected the top, at ${last_scroll_y("cmd")}`);
   });
@@ -61,12 +61,12 @@ export async function p1_cases(t) {
     const mark = events.length;
     await send_keys("-k", "Return");
     await wait_event(mark, scroll_of("cmd"), "the recalled command to scroll again");
-    expect(last_scroll_y("cmd") === 0, "the recalled command was not scrollpx dy=-100000");
+    expect(last_scroll_y("cmd") === 0, "the recalled command was not scroll.pixels --dy=-100000");
   });
 
   await run_case("the history on disk holds the run commands and no failed one", async () => {
     const stored = await evaluate_in_background(rdp, EXTENSION_ID, `(async () => (await browser.storage.local.get("oasisfox_cmdline_history")).oasisfox_cmdline_history ?? [])()`);
-    expect(Array.isArray(stored) && stored.includes("scrollpx dy=300") && stored.includes("scrollpx dy=-100000"), `history was ${JSON.stringify(stored)}`);
+    expect(Array.isArray(stored) && stored.includes("scroll.pixels --dy=300") && stored.includes("scroll.pixels --dy=-100000"), `history was ${JSON.stringify(stored)}`);
     expect(!stored.includes("nosuchcommand"), "a failed parse was stored");
   });
 

@@ -151,7 +151,7 @@ export function create_router(deps: RouterDeps): Router {
     const { tab_id, frame_id } = context;
     if (tab_id === undefined) return refuse(`${command.label} needs a tab`);
     try {
-      await deps.open_cmdline(tab_id, frame_id ?? 0, print_command(command, typed, { open_param }));
+      await deps.open_cmdline(tab_id, frame_id ?? 0, print_command(command, typed, { open_param, sources: await deps.get_enum_sources() }));
       return waiting;
     } catch {
       return refuse(`${command.label} needs a page OasisFox runs on`);
