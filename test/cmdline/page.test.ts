@@ -238,7 +238,7 @@ test("after the missing value is typed, the same open line submits once", async 
 
 test("an empty value on a required param without a default counts as missing", async (t) => {
   const { to_background, post_start, press_enter } = await load_page(t, "precheck_empty");
-  const host = post_start(TICKET, "move offset=");
+  const host = post_start(TICKET, "move --offset=");
   await host.opened();
   host.port.postMessage({ oasisfox_cmdline: { kind: "focused" } });
   press_enter();
