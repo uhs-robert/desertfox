@@ -86,6 +86,12 @@ test("a hyphen in a flag reads as an underscore in the name", () => {
   assert.deepEqual(result.kind === "invocation" && result.invocation.args, { unit: "word_end" });
 });
 
+test("a valued long flag reads a hyphen as an underscore too", () => {
+  const lookup = { find: () => ({ id: "a.b", params: [{ name: "count_of", type: "int" as const, default: 0 }] }) };
+  const result = parse_command_line(lookup, "a.b --count-of=1");
+  assert.deepEqual(result.kind === "invocation" && result.invocation.args, { count_of: "1" });
+});
+
 test("a flag set twice is an error", () => {
   assert.equal(error_of("open -t -w x"), "where is set twice");
   assert.equal(error_of("open --tab --where=window x"), "where is set twice");

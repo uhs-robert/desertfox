@@ -180,11 +180,11 @@ function read_flag(command_word: string, params: readonly ParamDef[], word: Toke
 
   if (head.startsWith("--")) {
     const name = head.slice(2);
+    const key = name.replaceAll("-", "_");
     if (value_text !== undefined) {
-      const param = PARAM_NAME_WORD.test(name) ? params.find((candidate) => candidate.name === name) : undefined;
+      const param = PARAM_NAME_WORD.test(key) ? params.find((candidate) => candidate.name === key) : undefined;
       return param ? valued(param, value_text) : { error: `unknown param "${name}" for ${command_word}` };
     }
-    const key = name.replaceAll("-", "_");
     const bool = params.find((param) => param.type === "bool" && param.name === key);
     if (bool) return { param: bool, value: true };
     const owner = params.find((param) => param.type === "enum" && static_values(param)?.includes(key));
