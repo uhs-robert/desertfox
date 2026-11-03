@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { collect, selector_for } from "../../src/content/hints/candidates.ts";
+import { collect, has_text, selector_for } from "../../src/content/hints/candidates.ts";
 
 type Fake = { name: string; local: string; shadow?: Fake[]; frame?: Fake[] | "cross_origin"; href?: boolean };
 
@@ -54,4 +54,10 @@ test("each filter has its own selector", () => {
   assert.match(selector_for("clickable", undefined), /textarea/);
   assert.match(selector_for("all", undefined), /h1/);
   assert.equal(selector_for("custom", ".post a"), ".post a");
+});
+
+test("has_text matches a lower-cased needle in the visible text, ignoring case", () => {
+  assert.equal(has_text({ innerText: "Read More", textContent: "" } as never, "more"), true);
+  assert.equal(has_text({ textContent: "Read More" } as never, "read"), true);
+  assert.equal(has_text({ textContent: "Read" } as never, "more"), false);
 });

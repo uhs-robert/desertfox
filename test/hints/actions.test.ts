@@ -7,9 +7,10 @@ function fixture(local: string, extra: Record<string, unknown> = {}) {
   const calls: string[] = [];
   const element = { localName: local, click: () => calls.push("click"), focus: () => calls.push("focus"), remove: () => calls.push("remove"), ...extra };
   const opened: [string, string][] = [];
-  const deps = { open_link: (url: string, place: string) => opened.push([url, place]) };
+  const copied: string[] = [];
+  const deps = { open_link: (url: string, place: string) => opened.push([url, place]), copy: (text: string) => copied.push(text) };
   const run = (action: HintAction) => perform(action, element as never, deps as never);
-  return { calls, opened, run };
+  return { calls, opened, copied, run };
 }
 
 test("here clicks a link", () => {
@@ -65,4 +66,18 @@ test("link_address refuses script addresses", () => {
   assert.equal(link_address({ href: "JavaScript:alert(1)" } as never), undefined);
   assert.equal(link_address({ href: "" } as never), undefined);
   assert.equal(link_address({ href: "https://a.test/" } as never), "https://a.test/");
+});
+
+test("copy writes the link address and copy_text writes the text", () => {
+  const link = fixture("a", { href: "https://a.test/x", textContent: "  A link " });
+  link.run("copy");
+  link.run("copy_text");
+  assert.deepEqual(link.copied, ["https://a.test/x", "A link"]);
+  assert.deepEqual(link.calls, []);
+});
+
+test("copy falls back to the text for an element with no address", () => {
+  const heading = fixture("h1", { textContent: "Title" });
+  heading.run("copy");
+  assert.deepEqual(heading.copied, ["Title"]);
 });

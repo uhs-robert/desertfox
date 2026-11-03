@@ -46,3 +46,7 @@ export function collect(root: ParentNode, selector: string, frames: Element[] = 
   }
   return found;
 }
+
+// The visible link text holds the needle, ignoring case. The needle arrives already lower-cased.
+export const has_text = (element: Element, lower_needle: string): boolean =>
+  ((element as HTMLElement).innerText || element.textContent || "").toLowerCase().includes(lower_needle);

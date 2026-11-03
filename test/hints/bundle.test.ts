@@ -20,7 +20,7 @@ test("the hints bundle registers a hint sink and hint.run, refuses unbuilt actio
   await import(`${bundle_url}?second`);
   assert.deepEqual(registered, ["hint.run"]);
   assert.deepEqual([...sinks.keys()], ["hint"]);
-  for (const action of ["select", "copy"]) assert.throws(() => handlers.get("hint.run")!({ action }), /not built yet/);
+  for (const action of ["select"]) assert.throws(() => handlers.get("hint.run")!({ action }), /not built yet/);
   assert.deepEqual(modes, []);
   assert.equal(sinks.get("hint")!.on_token("a"), "pass");
   sinks.get("hint")!.exit();

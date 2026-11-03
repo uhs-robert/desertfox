@@ -11,16 +11,17 @@ const refuse_needing_command_line = () => {
 define("hint.run", {
   name: "hint",
   label: "Hint",
-  intent: "Label the elements on the page with keys, then act on the one you pick: open it here, in a tab, in a background tab or in a window, delete it or focus it.",
+  intent: "Label the elements on the page with keys, then act on the one you pick: open it here, in a tab, in a background tab or in a window, copy its address or its text, delete it or focus it. Rapid keeps hint mode open for more picks. Text keeps only the links whose text holds it.",
   params: [
     {
       name: "action",
       type: "enum",
-      values: [...WHERE, "select", "copy", "delete", "focus"],
+      values: [...WHERE, "select", "copy", "copy_text", "delete", "focus"],
       default: "here",
     },
     { name: "filter", type: "enum", values: ["all", "clickable", "inputs", "links", "custom"], default: "clickable" },
     { name: "selector", type: "string", when: { filter: ["custom"] } },
+    { name: "text", type: "string", default: "" },
     { name: "rapid", type: "bool", default: false },
   ],
   runs_in: "content",
