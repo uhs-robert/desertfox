@@ -6,6 +6,7 @@ The command registry and everything that reads a command definition. Pure TypeSc
 - `check_args.ts`: the one validator. Runtime enum lists (engines, containers) arrive as an `EnumSources` argument.
 - `command_line.ts`: the one grammar for command text, text to `Invocation`. It never checks `when` or types. Call `check_args` on the result. Pass the same `EnumSources` so a bare word can pick from a runtime list, for example an engine name.
 - `parse_binding.ts`: the same grammar for a config binding, plus the leading `:` that turns into a stored `prompt`. Warnings from the grammar come back with the binding.
+- `print_command.ts`: the inverse of `command_line.ts`, an invocation back to text. It checks each line by parsing it again and falls back to `name=value` when a bare word would be misread. An open param prints with no value.
 - `usage.ts`: the usage line shown for `-h`, in the words the grammar reads.
 - `commands_file.ts`: the `commands.json` content.
 - `params.ts`: small readers over params shared by the files above.

@@ -64,3 +64,23 @@ test("Ctrl-u clears the line", () => {
   session.run("cmdline.clear", undefined);
   assert.equal(session.get_text(), "");
 });
+
+test("the pre-check keeps the line open with its message and sends nothing", () => {
+  const checked: string[] = [];
+  const session = create_session({
+    history: [],
+    parse: (text) => parse_command_line(lookup, text),
+    precheck: (invocation) => {
+      checked.push(invocation.id);
+      return invocation.args === undefined ? "missing <count>" : undefined;
+    },
+  });
+  session.edit("scroll");
+  assert.deepEqual(session.run("cmdline.submit", undefined), { kind: "render" });
+  assert.equal(session.get_message(), "missing <count>");
+  assert.equal(session.get_text(), "scroll");
+  session.edit("scroll 2");
+  assert.equal(session.get_message(), undefined);
+  assert.deepEqual(session.run("cmdline.submit", undefined), { kind: "submit", invocation: { id: "scroll.by", args: { count: "2" } }, text: "scroll 2" });
+  assert.deepEqual(checked, ["scroll.by", "scroll.by"]);
+});

@@ -12,3 +12,5 @@ export { parse_command_line, tokenize } from "./command_line.ts";
 export type { CommandLookup, ParseResult, Token } from "./command_line.ts";
 export { usage_line } from "./usage.ts";
 export { build_commands_file, command_meta } from "./commands_file.ts";
+export { print_command } from "./print_command.ts";
+export type { PrintOptions } from "./print_command.ts";

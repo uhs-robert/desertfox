@@ -10,7 +10,7 @@ Status values:
 
 The shipped defaults bind every `v1` row whose command exists, with three kinds of exception:
 
-- Rows that name a search engine or a container (`s`, `S`, `,`, `c`, `C` keys). The user's config generates them from `search_keys` and `container_keys`.
+- Rows that name a search engine or a container (`s`, `S`, `,`, `c`, `C` keys). The user's config generates them from `search_keys` and `container_keys`. The `s/` and `sg` site search rows are the exception and ship as defaults.
 - `;f`, because `hint.run` has no link text param yet.
 - `ZZ`, because closing every window cannot be undone. Bind it in the config.
 
@@ -20,7 +20,7 @@ The `caret`, `visual` and `cmdline` rows bind placeholder commands that refuse u
 
 A note "(prompts)" means the binding leaves a param out, so the command line asks for it.
 
-dropped: 8 | later: 15 | v1: 267
+dropped: 8 | later: 15 | v1: 269
 
 | mode | key | status | OasisFox |
 | --- | --- | --- | --- |
@@ -62,6 +62,8 @@ dropped: 8 | later: 15 | v1: 267
 | normal | `rr` | v1 | `page.reload` |
 | normal | `rh` | v1 | `page.reload hard=true` |
 | normal | `ri` | v1 | `site.isdown` |
+| normal | `s/` | v1 | `site.search query=@selection` (prompts when nothing is selected) |
+| normal | `sg` | v1 | `site.repo query=@selection` (prompts when nothing is selected) |
 | normal | `W` | v1 | `window.new` (prompts, url prefilled from current_url) |
 | normal | `wa` | dropped | assumed unused |
 | normal | `wc` | v1 | `window.close` |

@@ -14,7 +14,10 @@ const OPENED = {
   history: ["open https://private.example"],
   sources: { search_engines: [], containers: [] },
   // A snippet only the background knows, and an alias to it from `command_aliases.toml`.
-  commands: [{ id: "my.jira", name: "jira", label: "Jira", intent: "" }],
+  commands: [
+    { id: "my.jira", name: "jira", label: "Jira", intent: "" },
+    { id: "my.fetch", name: "fetch", label: "Fetch", intent: "", params: [{ name: "url", type: "string", main: true }] },
+  ],
   command_aliases: { j: "my.jira" },
   css: ".oasisfox-cmdline { --oasisfox-bg: red; }",
 };
@@ -27,6 +30,8 @@ async function load_page(t: TestContext, tag: string, { keymap = KEYMAP }: PageS
   const input_listeners: Record<string, (event: unknown) => void> = {};
   const to_parent: unknown[] = [];
   const head: { textContent: string }[] = [];
+  // Every message the page sends to the background, in order.
+  const to_background: string[] = [];
   // Setting the value puts the caret at the end, as Firefox does.
   let value = "";
   const input = {
@@ -68,7 +73,10 @@ async function load_page(t: TestContext, tag: string, { keymap = KEYMAP }: PageS
       runtime: {
         getURL: (path: string) => `https://extension.test/${path}`,
         // The background answers only the ticket it issued.
-        sendMessage: async (message: { type: string; ticket?: string }) => (message.type === "open_cmdline" && message.ticket === TICKET ? OPENED : undefined),
+        sendMessage: async (message: { type: string; ticket?: string }) => {
+          to_background.push(message.type);
+          return message.type === "open_cmdline" && message.ticket === TICKET ? OPENED : undefined;
+        },
       },
       storage: { local: { get: async () => ({ [COMPILED_KEYMAP_STORAGE_KEY]: keymap }) } },
     },
@@ -96,7 +104,7 @@ async function load_page(t: TestContext, tag: string, { keymap = KEYMAP }: PageS
   };
   const press_enter = () => input_listeners.keydown!({ isTrusted: true, isComposing: false, key: "Enter", code: "Enter", preventDefault: () => {} });
   const press = (key: string) => input_listeners.keydown!({ isTrusted: true, isComposing: false, key, code: key, preventDefault: () => {} });
-  return { input, to_parent, head, post_start, press_enter, press };
+  return { input, to_parent, to_background, head, post_start, press_enter, press };
 }
 
 // Port messages arrive on a later turn, and later still on a busy machine.
@@ -195,4 +203,34 @@ test("an Enter typed in the frame waits for the keys the host forwarded before i
   host.port.postMessage({ oasisfox_cmdline: { kind: "focused" } });
   await until(() => host.submits().length === 1);
   assert.deepEqual(host.submits(), submit_of("my.jira"));
+});
+
+test("Enter on a command that lacks a value shows the error, keeps the line open and sends nothing", async (t) => {
+  const { input, to_background, post_start, press_enter } = await load_page(t, "precheck_missing");
+  const host = post_start(TICKET, "fetch ");
+  await host.opened();
+  host.port.postMessage({ oasisfox_cmdline: { kind: "focused" } });
+  press_enter();
+  await settle();
+  assert.deepEqual(host.submits(), []);
+  // Nothing but the one ticket redemption: no history record, no run, no close.
+  assert.deepEqual(to_background, ["open_cmdline"]);
+  assert.equal(host.received.filter((data) => (data as { oasisfox_cmdline: { kind: string } }).oasisfox_cmdline.kind === "close").length, 0);
+  assert.equal(input.value, "fetch ");
+});
+
+test("after the missing value is typed, the same open line submits once", async (t) => {
+  const { input, to_background, post_start, press_enter } = await load_page(t, "precheck_then_valid");
+  const host = post_start(TICKET, "fetch ");
+  await host.opened();
+  host.port.postMessage({ oasisfox_cmdline: { kind: "focused" } });
+  press_enter();
+  await settle();
+  host.port.postMessage({ oasisfox_cmdline: { kind: "token", token: "x" } });
+  await until(() => input.value === "fetch x");
+  press_enter();
+  await until(() => host.submits().length === 1);
+  await settle();
+  assert.equal(host.submits().length, 1);
+  assert.deepEqual(to_background, ["open_cmdline", "record_cmdline"]);
 });

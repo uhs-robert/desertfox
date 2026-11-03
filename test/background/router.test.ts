@@ -38,22 +38,65 @@ test("context sources are filled", async () => {
   assert.deepEqual(seen, [{ query: "chosen text", page: "https://example.org/" }]);
 });
 
-test("an empty selection refuses", async () => {
+test("an empty selection in a default opens the command line with the param left open", async () => {
   const { deps, log } = make_fake(
-    { "open.go": { label: "Go", intent: "x", params: [{ name: "q", type: "string", default: { from: "selection" } }], runs_in: "background", run: () => {} } },
+    { "open.go": { label: "Go", intent: "x", name: "go", params: [{ name: "q", type: "string", main: true, default: { from: "selection" } }], runs_in: "background", run: () => assert.fail() } },
     { ask_selection: async () => "" },
   );
   const response = await create_router(deps).run({ invocations: [{ id: "open.go" }], mode: "normal" });
-  assert.equal(response.ok, false);
-  assert.match(log[0]!, /^refuse 7 q: selection is not available/);
+  assert.deepEqual(response, { ok: true });
+  assert.deepEqual(log, ["cmdline 7 0 go "]);
 });
 
-test("a missing required param refuses with the phase 2 message", async () => {
+test("an empty selection in an explicit @selection arg opens the line, a full one runs", async () => {
+  const seen: unknown[] = [];
+  const commands = { "site.find": { label: "Find", intent: "x", name: "find", params: [{ name: "query", type: "string", rest: true, main: true }, { name: "where", type: "string", default: "here" }], runs_in: "background", run: (_ctx: unknown, args: unknown) => void seen.push(args) } } as const;
+  const empty = make_fake(commands, { ask_selection: async () => "" });
+  const key = { id: "site.find", args: { query: { from: "selection" }, where: "tab" } };
+  assert.deepEqual(await create_router(empty.deps).run({ invocations: [key], mode: "normal" }), { ok: true });
+  assert.deepEqual(empty.log, ["cmdline 7 0 find where=tab "]);
+  const full = make_fake(commands);
+  await create_router(full.deps).run({ invocations: [key], mode: "normal" });
+  assert.deepEqual(seen, [{ query: "chosen text", where: "tab" }]);
+  assert.deepEqual(full.log, []);
+});
+
+test("a missing required param opens the command line with the command typed in", async () => {
   const { deps, log } = make_fake({
-    "open.url": { label: "Open", intent: "x", params: [{ name: "url", type: "string" }], runs_in: "background", run: () => assert.fail() },
+    "open.url": { label: "Open", intent: "x", name: "open", params: [{ name: "url", type: "string" }], runs_in: "background", run: () => assert.fail() },
   });
-  await create_router(deps).run({ invocations: [{ id: "open.url" }], mode: "normal" });
-  assert.deepEqual(log, ["refuse 7 Open needs the command line (phase 2)"]);
+  assert.deepEqual(await create_router(deps).run({ invocations: [{ id: "open.url" }], mode: "normal" }), { ok: true });
+  assert.deepEqual(log, ["cmdline 7 0 open url="]);
+});
+
+test("a prompt opens the line with the prefill resolved now, and runs nothing", async () => {
+  const { deps, log } = make_fake({
+    "open.url": { label: "Open", intent: "x", name: "open", params: [{ name: "url", type: "string" }, { name: "where", type: "string", default: "here" }], runs_in: "background", run: () => assert.fail() },
+  });
+  const binding = { id: "open.url", args: { where: "tab" }, prompt: { param: "url", prefill: { from: "current_url" } as const } };
+  await create_router(deps).run({ invocations: [binding], mode: "normal" });
+  const bare = { id: "open.url", prompt: { param: "url" } };
+  await create_router(deps).run({ invocations: [bare], mode: "normal" });
+  assert.deepEqual(log, ["cmdline 7 0 open url=https://example.org/ where=tab", "cmdline 7 0 open url="]);
+});
+
+test("a prompt with an empty selection prefills empty, and a count is dropped", async () => {
+  const { deps, log } = make_fake(
+    { "open.go": { label: "Go", intent: "x", name: "go", params: [{ name: "q", type: "string", main: true }], runs_in: "background", count: "repeat", run: () => assert.fail() } },
+    { ask_selection: async () => "" },
+  );
+  await create_router(deps).run({ invocations: [{ id: "open.go", count: 3, prompt: { param: "q", prefill: { from: "selection" } } }], mode: "normal" });
+  assert.deepEqual(log, ["cmdline 7 0 go "]);
+});
+
+test("opening the line on a tab with no content script refuses", async () => {
+  const { deps, log } = make_fake(
+    { "open.url": { label: "Open", intent: "x", name: "open", params: [{ name: "url", type: "string" }], runs_in: "background", run: () => assert.fail() } },
+    { open_cmdline: async () => { throw new Error("no receiver"); } },
+  );
+  const response = await create_router(deps).run({ invocations: [{ id: "open.url" }], mode: "normal" });
+  assert.equal(response.ok, false);
+  assert.deepEqual(log, ["refuse 7 Open needs a page OasisFox runs on"]);
 });
 
 test("a bad arg, an unknown id and an unmet need refuse", async () => {
@@ -120,7 +163,7 @@ test("the active tab is read again for each repeat and each invocation", async (
   assert.deepEqual(seen, [1, 2, 3]);
 });
 
-test("content runs and refusals go to the sender frame, or frame 0", async () => {
+test("content runs and the command line open go to the sender frame, or frame 0", async () => {
   const frames: (number | undefined)[] = [];
   const { deps } = make_fake(
     {
@@ -130,6 +173,7 @@ test("content runs and refusals go to the sender frame, or frame 0", async () =>
     {
       send_to_tab: async (_tab, _message, frame_id) => void frames.push(frame_id),
       show_refusal: async (_tab, _refusal, frame_id) => void frames.push(frame_id),
+      open_cmdline: async (_tab, frame_id) => void frames.push(frame_id),
     },
   );
   const router = create_router(deps);
@@ -138,7 +182,7 @@ test("content runs and refusals go to the sender frame, or frame 0", async () =>
   assert.deepEqual(frames, [3, 3, 0]);
 });
 
-test("a prompt binding refuses with the phase 2 message even when no param is missing", async () => {
+test("a prompt binding opens the line even when no param is missing", async () => {
   const { deps, log } = make_fake({
     "bookmark.add": {
       label: "Add Bookmark",
@@ -152,8 +196,8 @@ test("a prompt binding refuses with the phase 2 message even when no param is mi
     invocations: [{ id: "bookmark.add", prompt: { param: "url", prefill: { from: "current_url" } } }],
     mode: "normal",
   });
-  assert.equal(response.ok, false);
-  assert.deepEqual(log, ["refuse 7 Add Bookmark needs the command line (phase 2)"]);
+  assert.deepEqual(response, { ok: true });
+  assert.deepEqual(log, ["cmdline 7 0 bookmark.add url=https://example.org/"]);
 });
 
 test("get_selection goes to the sender frame", async () => {
