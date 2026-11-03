@@ -5,7 +5,9 @@ import {
   archive_url,
   DEFAULT_SUBREDDIT,
   isdown_url,
-  repo_search_url,
+  github_search_url,
+  GITHUB_SEARCH_SCOPES,
+  GITHUB_SEARCH_TYPES,
   site_search_url,
   subreddit_search_url,
   translate_url,
@@ -30,13 +32,26 @@ define("site.search", {
   run: (ctx, args) => open_built(ctx, args.where, "This address has no site", (page_url) => site_search_url(page_url, args.query as string)),
 });
 
-define("site.repo", {
-  name: "repo",
-  label: "Search This Repo",
-  intent: "Search the code of the GitHub repository the page belongs to.",
-  params: [QUERY_PARAM, WHERE_PARAM],
+define("site.github", {
+  name: "github",
+  label: "Search GitHub",
+  intent: "Search GitHub for code, issues, pull requests, commits, discussions, repositories or users. By default it searches the repository the page belongs to.",
+  params: [
+    QUERY_PARAM,
+    { name: "type", type: "enum", values: [...GITHUB_SEARCH_TYPES], default: "code" },
+    { name: "scope", type: "enum", values: [...GITHUB_SEARCH_SCOPES], default: "repo" },
+    WHERE_PARAM,
+  ],
   runs_in: "background",
-  run: (ctx, args) => open_built(ctx, args.where, "This page is not in a GitHub repository", (page_url) => repo_search_url(page_url, args.query as string)),
+  run: (ctx, args) =>
+    open_built(
+      ctx,
+      args.where,
+      args.scope === "repo" && (args.type === "repositories" || args.type === "users")
+        ? "Repositories and users are searched across GitHub"
+        : "This page is not in a GitHub repository",
+      (page_url) => github_search_url(page_url, args.type as string, args.scope as string, args.query as string),
+    ),
 });
 
 define("site.subreddit", {

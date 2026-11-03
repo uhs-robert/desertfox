@@ -72,10 +72,21 @@ export function github_repo_of(page_url: string): { owner: string; repo: string 
   return owner && repo ? { owner, repo } : undefined;
 }
 
-export function repo_search_url(page_url: string, query: string): string | undefined {
-  const found = github_repo_of(page_url);
-  if (!found) return undefined;
-  return `https://github.com/${found.owner}/${found.repo}/search?q=${encodeURIComponent(query)}&type=code`;
+export const GITHUB_SEARCH_TYPES = ["code", "issues", "pullrequests", "commits", "discussions", "repositories", "users", "any"] as const;
+export const GITHUB_SEARCH_SCOPES = ["repo", "all"] as const;
+
+// "any" leaves out `type`, so GitHub picks its default result type.
+// Repositories and users have no repo to search inside, so they refuse scope=repo.
+export function github_search_url(page_url: string, type: string, scope: string, query: string): string | undefined {
+  let qualified = query;
+  if (scope === "repo") {
+    if (type === "repositories" || type === "users") return undefined;
+    const found = github_repo_of(page_url);
+    if (!found) return undefined;
+    qualified = `repo:${found.owner}/${found.repo} ${query}`;
+  }
+  const type_param = type === "any" ? "" : `&type=${type}`;
+  return `https://github.com/search?q=${encodeURIComponent(qualified)}${type_param}`;
 }
 
 export function subreddit_of(page_url: string): string | undefined {
