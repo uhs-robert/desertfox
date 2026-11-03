@@ -57,6 +57,7 @@ function make_page() {
   host.connect({
     request_bundle: (name) => new Promise<boolean>((resolve) => loads.push({ name, finish: (loaded, register) => (register?.(), resolve(loaded)) })),
     on_idle: flow.release,
+    set_mode: state.set_mode,
     show_error: (message) => errors.push(message),
     on_sink_missing: (mode) => {
       events.push(`sink missing for ${mode}`);
@@ -262,4 +263,16 @@ test("when the ui bundle cannot load, the error is reported once and does not as
   assert.deepEqual(page.errors, ["OasisFox could not load ui"]);
   assert.equal(page.host.has_handler("ui.toast"), false);
   assert.equal(page.loads.length, 1);
+});
+
+test("a bundle enters hint mode with set_mode, its sink gets the keys, and set_mode normal leaves it", () => {
+  const page = make_page();
+  page.host.api.register_sink("hint", page.recording_sink("hint", ["a"]));
+  page.host.api.set_mode("hint");
+  assert.equal(page.state.get_mode(), "hint");
+  page.press("a");
+  assert.deepEqual(page.events, ["hint sink a"]);
+  page.host.api.set_mode("normal");
+  assert.equal(page.state.get_mode(), "normal");
+  assert.deepEqual(page.events, ["hint sink a", "hint sink exit"]);
 });
