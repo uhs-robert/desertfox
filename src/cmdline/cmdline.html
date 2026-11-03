@@ -12,21 +12,42 @@
         --oasisfox-fg: #e6e1d6;
         --oasisfox-accent: #e69a4c;
         --oasisfox-error: #e0645c;
+        /* Derived from the three above, so a theme that sets only those still gets a matching list. */
+        --oasisfox-muted: color-mix(in srgb, var(--oasisfox-fg) 60%, var(--oasisfox-bg));
+        --oasisfox-selection: color-mix(in srgb, var(--oasisfox-accent) 25%, var(--oasisfox-bg));
         --oasisfox-font: 15px/1.4 ui-monospace, monospace;
         box-sizing: border-box;
+        flex: none;
         background: var(--oasisfox-bg);
         color: var(--oasisfox-fg);
         font: var(--oasisfox-font);
         border-top: 2px solid var(--oasisfox-accent);
+        container-type: inline-size;
       }
-      .oasisfox-cmdline-note { padding: 0 .75rem; color: var(--oasisfox-error); }
+      .oasisfox-cmdline-note { padding: 0 .75rem; color: var(--oasisfox-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .oasisfox-cmdline-error .oasisfox-cmdline-note { color: var(--oasisfox-error); }
       .oasisfox-cmdline-row { display: flex; align-items: center; padding: .35rem .75rem; }
       .oasisfox-cmdline-prompt { color: var(--oasisfox-accent); margin-right: .5rem; }
       .oasisfox-cmdline-input { flex: 1; background: transparent; color: inherit; border: 0; outline: 0; font: inherit; }
+      /* Each row is 26px. A column for the keys goes at the right: --oasisfox-keys-width reserves its room. */
+      .oasisfox-cmdline-list { overflow: hidden; }
+      .oasisfox-cmdline-item { display: flex; align-items: center; gap: .75rem; height: 26px; padding: 0 calc(.75rem + var(--oasisfox-keys-width, 0px)) 0 .75rem; white-space: nowrap; }
+      .oasisfox-cmdline-selected { background: var(--oasisfox-selection); }
+      .oasisfox-cmdline-name { flex: 0 0 var(--oasisfox-name-width); overflow: hidden; text-overflow: ellipsis; }
+      .oasisfox-cmdline-name b { color: var(--oasisfox-accent); }
+      /* The description takes the space that is left, so it is the first to shrink. */
+      .oasisfox-cmdline-description { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--oasisfox-muted); }
+      .oasisfox-cmdline-args { flex: 0 1 auto; max-width: 45%; overflow: hidden; text-overflow: ellipsis; color: var(--oasisfox-muted); opacity: .8; }
+      .oasisfox-cmdline-args-short { display: none; }
+      @container (max-width: 40rem) {
+        .oasisfox-cmdline-args-full { display: none; }
+        .oasisfox-cmdline-args-short { display: inline; }
+      }
     </style>
   </head>
   <body>
     <div class="oasisfox-cmdline">
+      <div id="list" class="oasisfox-cmdline-list" hidden></div>
       <div id="note" class="oasisfox-cmdline-note" hidden></div>
       <div class="oasisfox-cmdline-row">
         <span class="oasisfox-cmdline-prompt">:</span>
