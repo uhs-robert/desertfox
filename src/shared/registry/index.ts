@@ -11,7 +11,7 @@ export type { CheckResult, EnumSources } from "./check_args.ts";
 export { parse_command_line, tokenize } from "./command_line.ts";
 export type { CommandLookup, ParseResult, Token } from "./command_line.ts";
 export { description_problem, first_sentence, summary_problem, summary_problems } from "./summary.ts";
-export { usage_line } from "./usage.ts";
+export { flag_alternatives, usage_line } from "./usage.ts";
 export { build_commands_file, command_meta } from "./commands_file.ts";
 export { print_command } from "./print_command.ts";
 export type { PrintOptions } from "./print_command.ts";
