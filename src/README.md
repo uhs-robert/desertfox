@@ -4,7 +4,7 @@ The code map. Read a folder's README before you change or research code in it.
 
 - [`background/`](background/README.md): the background page. Loads the config, compiles the keymap, routes run requests, answers which-key.
 - [`cmdline/`](cmdline/README.md): the command line page and its host bundle.
-- [`commands/`](commands/): the command definitions, one file per group, each made with `define` from the registry. No README.
+- [`commands/`](commands/): the command definitions, made with `define` from the registry, plus helpers (`open_target.ts`, `url_build.ts`). `phase_2.ts` holds commands that refuse to run. No README.
 - [`content/`](content/README.md): the content script. Captures keys, tracks the mode and loads the bundles.
   - [`content/caret/`](content/caret/README.md): caret and visual mode.
   - [`content/hints/`](content/hints/README.md): link hints.

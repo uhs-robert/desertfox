@@ -1,4 +1,4 @@
-// The `which-key` bundle: registers handlers. With a prefix it shows the keys that can follow, without one it hides the panel.
+// The `whichkey` bundle: registers handlers. With a prefix it shows the keys that can follow, without one it hides the panel.
 
 import type { BundleHostApi } from "../bundle_host.ts";
 import type { PendingPrefix } from "../key_flow.ts";
