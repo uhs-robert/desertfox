@@ -236,6 +236,32 @@ test("bindings can run a snippet command and check its args", () => {
   assert.match(problems_of(dir).join("\n"), /all expects true or false/);
 });
 
+const MODES_SNIPPET = (modes_line: string) =>
+  `// id: myapp.pick\n// label: L\n// intent: I\n// matches: *://*/*\n${modes_line}code();\n`;
+
+test("a snippet with a modes header binds in the modes it lists", () => {
+  const dir = config_dir_with({
+    "snippets/pick.js": MODES_SNIPPET("// modes: normal, visual\n"),
+    "keymap.d/90-pick.toml": '[visual]\nxv = "myapp.pick"\n[normal]\nxn = "myapp.pick"',
+  });
+  const config = build_config(dir, commands);
+  assert.deepEqual(config.keymap.visual?.["xv"], { id: "myapp.pick" });
+  assert.deepEqual(config.snippets[0]?.modes, ["normal", "visual"]);
+});
+
+test("a snippet without a modes header is still rejected in visual mode", () => {
+  const dir = config_dir_with({
+    "snippets/pick.js": MODES_SNIPPET(""),
+    "keymap.d/90-pick.toml": '[visual]\nxv = "myapp.pick"',
+  });
+  assert.match(problems_of(dir).join("\n"), /myapp\.pick runs in normal mode, not visual/);
+});
+
+test("a snippet modes header rejects an unknown mode name", () => {
+  const dir = config_dir_with({ "snippets/pick.js": MODES_SNIPPET("// modes: normal, vsual\n") });
+  assert.match(problems_of(dir).join("\n"), /pick\.js: header "modes": unknown mode "vsual"/);
+});
+
 test("output is the managed storage document", () => {
   const out = join(mkdtempSync(join(tmpdir(), "oasisfox-out-")), "managed", "oasisfox@uhs-robert.json");
   write_managed_storage(out, full());

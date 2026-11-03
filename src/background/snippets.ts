@@ -96,6 +96,7 @@ export function create_snippets(registry: Registry, deps: SnippetDeps, router_de
           label: entry.label,
           intent: entry.intent,
           ...(entry.params === undefined ? {} : { params: entry.params }),
+          ...(entry.modes === undefined ? {} : { modes: entry.modes }),
           runs_in: "background",
           run: (context, args) => run_snippet(entry, context, args, 1),
         });

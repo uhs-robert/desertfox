@@ -66,7 +66,7 @@ export const DEFAULT_SETTINGS: Settings = {
 };
 
 // A snippet becomes a registry entry. The header fills the metadata, the body is the code.
-export type SnippetEntry = Omit<CommandMeta, "count" | "modes"> & {
+export type SnippetEntry = Omit<CommandMeta, "count"> & {
   // Match patterns. On other pages the router refuses.
   matches: string[];
   // Source text, run in the tab's content script with `args` defined.
