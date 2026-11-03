@@ -3,6 +3,7 @@ import type { ContentToBackground } from "../shared/messages.ts";
 import type { BoundInvocation } from "../shared/invocation.ts";
 import { bundle_loader_deps, container_names, make_router_deps, reinject_deps } from "./browser_deps.ts";
 import { create_cmdline_service } from "./cmdline_service.ts";
+import { browser_complete_items_deps, create_complete_items } from "./complete_items.ts";
 import { requirement_lookup } from "./availability.ts";
 import { list_keys } from "./list_keys.ts";
 import { create_bundle_loader } from "./bundle_loader.ts";
@@ -31,6 +32,8 @@ const cmdline = create_cmdline_service({
   },
 });
 
+const complete_items = create_complete_items({ ...browser_complete_items_deps, is_opener: cmdline.is_opener, all_windows: async () => (await get_config()).settings.completion_all_windows === true });
+
 // Listeners register in the first turn, so no event is missed while the config loads.
 browser.runtime.onMessage.addListener((message: unknown, sender) => {
   const request = message as ContentToBackground;
@@ -41,6 +44,10 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
   if (request?.type === "load_bundle") return bundle_loader.answer(sender, request.name);
   if (request?.type === "issue_cmdline_ticket") return cmdline.issue_ticket(sender.tab?.id);
   if (request?.type === "open_cmdline") return get_config().then(() => cmdline.open(request.ticket, sender.tab?.id));
+  if (request?.type === "complete_items") {
+    const { id, windowId, incognito } = sender.tab ?? {};
+    return complete_items.answer(request.kind, id === undefined || windowId === undefined ? undefined : { tab_id: id, window_id: windowId, incognito: incognito === true });
+  }
   if (request?.type === "record_cmdline") return cmdline.record(request.text, sender.tab?.incognito === true);
   if (request?.type === "list_keys") {
     const tab = sender.tab;
@@ -72,8 +79,14 @@ browser.commands.onCommand.addListener(async (slot_name: string) => {
   if (shortcut_allowed(mode, invocations, (id) => registry.get(id))) await router.run({ invocations, mode, may_prompt: true });
 });
 
-browser.tabs.onUpdated.addListener((tab_id, change) => forget_mode_on_navigation(browser.storage.local, tab_id, change));
+browser.tabs.onUpdated.addListener((tab_id, change) => {
+  void cmdline.forget_opener_on_navigation(tab_id, change);
+  return forget_mode_on_navigation(browser.storage.local, tab_id, change);
+});
 
-browser.tabs.onRemoved.addListener((tab_id) => forget_tab_mode(browser.storage.local, tab_id));
+browser.tabs.onRemoved.addListener((tab_id) => {
+  void cmdline.forget_opener(tab_id);
+  return forget_tab_mode(browser.storage.local, tab_id);
+});
 
 void get_config().then(() => repair_tabs_after_reload(reinject_deps));

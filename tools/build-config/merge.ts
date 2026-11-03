@@ -140,6 +140,7 @@ const SETTING_CHECKS: Record<keyof Settings, (value: unknown) => boolean> = {
   home_page: (value) => typeof value === "string" && value !== "",
   default_engine: (value) => typeof value === "string" && value !== "",
   new_tab_page: (value) => typeof value === "string",
+  completion_all_windows: (value) => typeof value === "boolean",
 };
 
 const SETTING_EXPECTATIONS: Record<keyof Settings, string> = {
@@ -154,6 +155,7 @@ const SETTING_EXPECTATIONS: Record<keyof Settings, string> = {
   home_page: "a non-empty URL string",
   default_engine: "the name of a search engine",
   new_tab_page: "a string",
+  completion_all_windows: "true or false",
 };
 
 function is_prefix_pair(value: unknown, first_key: string): boolean {

@@ -6,7 +6,8 @@ import { create_matcher, event_to_token } from "../shared/keys/index.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY } from "../shared/prefix_tree.ts";
 import type { CompiledKeymap } from "../shared/prefix_tree.ts";
 import { check_args, parse_command_line } from "../shared/registry/index.ts";
-import type { CmdlineOpened, ContentToBackground } from "../shared/messages.ts";
+import type { CmdlineOpened, CompleteItemsAnswer, ContentToBackground } from "../shared/messages.ts";
+import { create_live_source } from "./completion/live.ts";
 import { create_completer } from "./completion/sources.ts";
 import { edit_forwarded, run_token, run_token_without_keymap } from "./key_input.ts";
 import type { TokenMatcher } from "./key_input.ts";
@@ -49,10 +50,18 @@ async function open_line(start: Start, port: MessagePort): Promise<void> {
   document.head.append(user_style);
   const keymap = stored[COMPILED_KEYMAP_STORAGE_KEY] as CompiledKeymap | undefined;
   const matcher: TokenMatcher | undefined = keymap?.modes.cmdline ? create_matcher(keymap) : undefined;
+  // Asks the background for tabs and bookmarks only when a subject needs them, and only here, after the ticket redeemed.
+  const live = create_live_source({
+    ask: (kind) => ask_background<CompleteItemsAnswer | undefined>({ type: "complete_items", kind }),
+    on_ready: () => {
+      session.source_ready();
+      render();
+    },
+  });
   const session: Session = create_session({
     history: opened.history,
     parse: (text) => parse_command_line(lookup, text, opened.sources),
-    complete: create_completer(lookup, opened.commands, opened.command_aliases, opened.sources, typeof start.mode === "string" ? start.mode : "normal"),
+    complete: create_completer(lookup, opened.commands, opened.command_aliases, opened.sources, typeof start.mode === "string" ? start.mode : "normal", live),
     // Only a missing value is caught here. The router still checks everything else when it runs the command.
     precheck: (invocation) => {
       const command = lookup.find(invocation.id);
@@ -79,8 +88,12 @@ async function open_line(start: Start, port: MessagePort): Promise<void> {
   };
 
   const carry_out = (effect: Effect) => {
-    if (effect.kind === "close") tell_host({ kind: "close" });
+    if (effect.kind === "close") {
+      live.close();
+      tell_host({ kind: "close" });
+    }
     else if (effect.kind === "submit") {
+      live.close();
       void ask_background({ type: "record_cmdline", text: effect.text });
       tell_host({ kind: "submit", invocation: effect.invocation });
     } else render();

@@ -2,7 +2,7 @@
 // Widths belong to the page's CSS: the description shrinks first, then the args collapse to "…".
 
 import type { Row } from "./completion/sources.ts";
-import type { Ranked } from "./completion/score.ts";
+import type { Ranked } from "../shared/score.ts";
 
 export const MAX_ROWS = 10;
 // Names longer than this are cut with an ellipsis, so one long name cannot take the whole row.

@@ -32,7 +32,7 @@ function make({ slow_set = false, stuck_ticket = "" } = {}) {
   });
   // Opens the line the way the host and the page do: a ticket for tab 7, redeemed from tab 7.
   const open = async () => (await service.open(await service.issue_ticket(7), 7))!;
-  return { service, open };
+  return { service, open, session_data };
 }
 
 test("history keeps order, oldest first", async () => {
@@ -117,4 +117,37 @@ test("a guessed ticket that is slow to look up does not hold up the real one", a
   const answer = await Promise.race([service.open(ticket, 7), new Promise((resolve) => setTimeout(() => resolve("held up"), 200))]);
   assert.notEqual(answer, "held up");
   assert.ok(answer);
+});
+
+test("a redeemed ticket marks its tab as an opener, and a refused one does not", async () => {
+  const { service, open, session_data } = make();
+  assert.equal(await service.is_opener(7), false);
+  const ticket = await service.issue_ticket(7);
+  assert.equal(await service.open(ticket, 8), undefined);
+  assert.equal(await service.open("guess", 7), undefined);
+  assert.equal(await service.is_opener(7), false);
+  assert.equal(await service.is_opener(8), false);
+  await open();
+  assert.equal(await service.is_opener(7), true);
+  assert.equal(await service.is_opener(undefined), false);
+  assert.equal(Object.keys(session_data).filter((key) => key.includes("opener")).length, 1);
+});
+
+test("closing the tab removes the opener marker", async () => {
+  const { service, open } = make();
+  await open();
+  await service.forget_opener(7);
+  assert.equal(await service.is_opener(7), false);
+});
+
+test("a new page in the tab removes the marker, a finished load or a title change does not", async () => {
+  const { service, open } = make();
+  await open();
+  await service.forget_opener_on_navigation(7, { status: "complete" });
+  await service.forget_opener_on_navigation(7, {});
+  assert.equal(await service.is_opener(7), true);
+  await service.forget_opener_on_navigation(8, { status: "loading" });
+  assert.equal(await service.is_opener(7), true);
+  await service.forget_opener_on_navigation(7, { status: "loading" });
+  assert.equal(await service.is_opener(7), false);
 });

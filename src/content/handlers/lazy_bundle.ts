@@ -7,11 +7,6 @@ export const NEEDS_COMMAND_LINE = "needs the command line";
 export const NEEDS_WHICH_KEY = "needs the which-key panel";
 export const NEEDS_CARET = "needs caret mode";
 
-// For the background commands that need the picker (`tab.switch`, `bookmark.open`), which has no code yet.
-export const refuse_needing_command_line = () => {
-  throw new Error(NEEDS_COMMAND_LINE);
-};
-
 // The code of these commands sits in a bundle that loads on the first run. A bundle that registers no handler yet refuses with `missing`.
 const from_bundle = (command_id: string, bundle: BundleName, missing: string): ContentHandler => ({
   run: (args) => bundles.run_command(command_id, bundle, args, missing),
