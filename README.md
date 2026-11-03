@@ -11,7 +11,7 @@ Status: phase 1 is built. Release 0.1.1 adds the toolbar button, the status page
 - The help page takes keys, so `j`, `k` and `gg` scroll it.
 - `zt`, `zz` and `zb` scroll the focused field to the top, center or bottom of the view. After `gi` and `Escape` they align the field you just left. Zoom reset moved from `zz` to `z=`.
 - `page.blur` moved from `zb` to `qb`. The `q` group holds OasisFox's own commands: `qr` reload config, `qh` help, `qi` ignore mode, `qb` blur.
-- The plain keys `r`, `t` and `x` are now prefixes: `rr` reload, `rh` hard reload, `ri` site check, `tt` open in a new tab, `tT tm td tn tp ta tf tl` for tabs, `xx` close tab, `xp` stop loading.
+- The plain keys `r`, `t` and `x` are now prefixes: `rr` reload, `rh` hard reload, `tt` open in a new tab, `tT tm td tn tp ta tf tl` for tabs, `xx` close tab, `xp` stop loading.
 - The default keymap binds the rows marked `bound` in [docs/keymap.md](docs/keymap.md), which also lists the later and dropped keys. The search engine and container keys come from your config.
 
 ## Config
