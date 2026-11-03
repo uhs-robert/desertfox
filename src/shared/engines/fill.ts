@@ -37,10 +37,6 @@ export function page_requirements(template: string): string[] {
   return [...new Set(needs)];
 }
 
-// An empty query still fills the template when every expression has a page slot to fall back on, as {query|url} has.
-export const fills_without_query = (template: string): boolean =>
-  expressions_of(template).every((expression) => expression.alternatives.some((name) => slot_of(name)?.kind === "page"));
-
 export type FillInput = { query?: string; page?: PageInfo };
 export type Filled = { ok: true; url: string } | { ok: false; message: string };
 

@@ -1,6 +1,7 @@
 // The Firefox side of the router and the startup: each function wraps one browser call.
 
 import type { MergedConfig } from "../shared/config.ts";
+import type { PageInfo } from "../shared/engines/index.ts";
 import type { BackgroundToContent, Refusal } from "../shared/messages.ts";
 import type { EnumSources } from "../shared/registry/check_args.ts";
 import { registry } from "../shared/registry/index.ts";
@@ -32,6 +33,13 @@ export async function notify(refusal: Refusal): Promise<void> {
   await browser.notifications.create({ type: "basic", title: "OasisFox", message: refusal.message });
 }
 
+// What the page slots read. `current_page` in commands/open_target.ts reads the same, but importing it here loops
+// through startup.ts.
+async function page_of(tab_id: number | undefined): Promise<PageInfo | undefined> {
+  const tab = tab_id === undefined ? undefined : await browser.tabs.get(tab_id).catch(() => undefined);
+  return tab?.url ? { url: tab.url, ...(tab.title ? { title: tab.title } : {}) } : undefined;
+}
+
 export async function container_names(): Promise<string[]> {
   // Returns false or rejects when containers are off.
   const identities = await browser.contextualIdentities.query({}).catch(() => undefined);
@@ -55,7 +63,7 @@ export function make_router_deps(get_config: () => Promise<MergedConfig>): Route
       const answer: unknown = await send_to_tab(tab_id, { type: "get_selection" }, frame_id).catch(() => undefined);
       return typeof answer === "string" ? answer : undefined;
     },
-    runs_with_empty: async (command_id, args, param) => runs_with_empty(await get_config(), command_id, args, param),
+    runs_with_empty: async (command_id, args, param, context) => runs_with_empty(await get_config(), command_id, args, param, await page_of(context.tab_id)),
     read_clipboard: () => navigator.clipboard.readText(),
     has_permission: (permission) => browser.permissions.contains({ permissions: [permission as browser._manifest.OptionalPermission] }),
     send_to_tab,

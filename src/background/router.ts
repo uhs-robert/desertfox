@@ -18,8 +18,8 @@ export type RouterDeps = {
   has_content_script: (tab_id: number) => Promise<boolean>;
   // Undefined when the content script cannot answer.
   ask_selection: (tab_id: number, frame_id: number) => Promise<string | undefined>;
-  // True when the command runs with the param empty, so an empty selection runs it instead of opening the command line.
-  runs_with_empty: (command_id: string, args: CheckedArgs, param: string) => Promise<boolean>;
+  // True when the command runs with the param empty on this tab, so an empty selection runs it instead of opening the command line.
+  runs_with_empty: (command_id: string, args: CheckedArgs, param: string, context: CommandContext) => Promise<boolean>;
   read_clipboard: () => Promise<string>;
   has_permission: (permission: string) => Promise<boolean>;
   send_to_tab: (tab_id: number, message: BackgroundToContent, frame_id?: number) => Promise<unknown>;
@@ -173,7 +173,7 @@ export function create_router(deps: RouterDeps): Router {
         continue;
       }
       const text = await read_source(value.from, context, active);
-      if (text === undefined && value.from === "selection" && (await deps.runs_with_empty(command_id, args, name))) {
+      if (text === undefined && value.from === "selection" && (await deps.runs_with_empty(command_id, args, name, context))) {
         filled[name] = "";
         continue;
       }
