@@ -3,6 +3,7 @@
 import { get_config } from "../background/startup.ts";
 import { DEFAULT_SETTINGS } from "../shared/config.ts";
 import type { CommandContext, ParamDef } from "../shared/index.ts";
+import type { PageInfo } from "../shared/engines/slots.ts";
 import { url_target } from "./url_build.ts";
 
 export const WHERE = ["here", "tab", "background", "window"] as const;
@@ -63,6 +64,12 @@ export async function current_tab_url(ctx: CommandContext): Promise<string> {
   const tab = await browser.tabs.get(require_tab_id(ctx));
   if (!tab.url) throw new Error("This tab has no address");
   return tab.url;
+}
+
+// What the page slots read. Undefined when the tab cannot be read, so page slots then refuse with their own message.
+export async function current_page(ctx: CommandContext): Promise<PageInfo | undefined> {
+  const tab = await browser.tabs.get(require_tab_id(ctx)).catch(() => undefined);
+  return tab?.url ? { url: tab.url, ...(tab.title ? { title: tab.title } : {}) } : undefined;
 }
 
 // For text a person typed or configured. URLs that code built need no such pass.

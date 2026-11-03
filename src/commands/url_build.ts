@@ -1,4 +1,6 @@
+import type { SearchEngine } from "../shared/config.ts";
 import { fill_template } from "../shared/engines/fill.ts";
+import type { FillInput } from "../shared/engines/fill.ts";
 import { github_repo_of, parse_http_url, path_segments, subreddit_of } from "../shared/engines/slots.ts";
 
 export { github_repo_of, subreddit_of };
@@ -77,11 +79,26 @@ export function subreddit_search_url(page_url: string, query: string, sub: strin
   return `https://www.reddit.com/r/${encodeURIComponent(chosen)}/search/?q=${encodeURIComponent(query)}&restrict_sr=1`;
 }
 
-// Step 3 gives engines page slots. Until then a template that needs the page is refused.
+// For typed text, which has no page behind it: a template that needs the page is refused.
 export function engine_search_url(template: string, query: string): string {
   const filled = fill_template(template, { query });
   if (!filled.ok) throw new Error(filled.message);
   return filled.url;
+}
+
+// Runs the named engine. When the page cannot fill its slots, the engine's fallback runs in its place, and so on down
+// the chain. The build rejects loops, but the guard stays: the stored config can come from elsewhere.
+export function engine_url(engines: Record<string, SearchEngine>, name: string, input: FillInput): string {
+  const tried: string[] = [];
+  for (let next: string | undefined = name; next !== undefined && !tried.includes(next); next = engines[next]?.fallback) {
+    const engine = engines[next];
+    if (!engine) throw new Error(`No search engine named "${next}"`);
+    tried.push(next);
+    const filled = fill_template(engine.url, input);
+    if (filled.ok) return filled.url;
+    if (engine.fallback === undefined) throw new Error(filled.message);
+  }
+  throw new Error(`The fallbacks of search engine "${name}" loop`);
 }
 
 // Refusals are thrown: the router shows the message to the user.

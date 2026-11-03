@@ -1,9 +1,9 @@
 import { get_config } from "../background/startup.ts";
 import { define } from "../shared/registry/index.ts";
-import { CONTAINER_PARAM, open_in, typed_url_target, WHERE_PARAM } from "./open_target.ts";
+import { CONTAINER_PARAM, current_page, open_in, typed_url_target, WHERE_PARAM } from "./open_target.ts";
 import type { Where } from "./open_target.ts";
 import { DEFAULT_SETTINGS } from "../shared/config.ts";
-import { engine_search_url, search_engine_name } from "./url_build.ts";
+import { engine_url, search_engine_name } from "./url_build.ts";
 
 const container_of = (args: Record<string, unknown>) => (typeof args.container === "string" ? args.container : undefined);
 
@@ -31,9 +31,10 @@ define("open.search", {
   run: async (ctx, args) => {
     const { search_engines, settings } = await get_config();
     const name = search_engine_name(args.engine, settings.default_engine ?? DEFAULT_SETTINGS.default_engine);
-    const engine = search_engines[name];
-    if (!engine) throw new Error(`No search engine named "${name}"`);
-    await open_in(ctx, engine_search_url(engine.url, args.query as string), args.where as Where, container_of(args));
+    if (!search_engines[name]) throw new Error(`No search engine named "${name}"`);
+    const page = await current_page(ctx);
+    const url = engine_url(search_engines, name, { query: args.query as string, ...(page ? { page } : {}) });
+    await open_in(ctx, url, args.where as Where, container_of(args));
   },
 });
 
