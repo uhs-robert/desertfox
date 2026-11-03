@@ -12,16 +12,16 @@ const args_of = (text: string) => {
 };
 
 test("caret and visual commands read as one-line command strings", () => {
-  assert.deepEqual(args_of("caret.move word"), { id: "caret.move", args: { unit: "word" } });
-  assert.deepEqual(args_of("move word back"), { id: "caret.move", args: { unit: "word", direction: "back" } });
-  assert.deepEqual(args_of("move word_end big"), { id: "caret.move", args: { unit: "word_end", big: true } });
-  assert.deepEqual(args_of("move line_start"), { id: "caret.move", args: { unit: "line_start" } });
+  assert.deepEqual(args_of("caret.move --word"), { id: "caret.move", args: { unit: "word" } });
+  assert.deepEqual(args_of("caret.move --word --back"), { id: "caret.move", args: { unit: "word", direction: "back" } });
+  assert.deepEqual(args_of("caret.move --word-end --big"), { id: "caret.move", args: { unit: "word_end", big: true } });
+  assert.deepEqual(args_of("caret.move --line-start"), { id: "caret.move", args: { unit: "line_start" } });
   assert.deepEqual(args_of("visual.act yank"), { id: "visual.act", args: { action: "yank" } });
-  assert.deepEqual(args_of("history prev"), { id: "cmdline.history", args: { direction: "prev" } });
+  assert.deepEqual(args_of("cmdline.history prev"), { id: "cmdline.history", args: { direction: "prev" } });
 });
 
 test("every default caret, visual and cmdline binding is the same command as its command string", () => {
-  const strings: Record<string, string> = { h: "move char back", l: "move char", j: "move line", k: "move line back", w: "move word", b: "move word back", e: "move word_end", W: "move word big", B: "move word back big", E: "move word_end big", "0": "move line_start", "^": "move line_first", $: "move line_end", gg: "move start", G: "move end" };
+  const strings: Record<string, string> = { h: "caret.move --char --back", l: "caret.move --char", j: "caret.move --line", k: "caret.move --line --back", w: "caret.move --word", b: "caret.move --word --back", e: "caret.move --word-end", W: "caret.move --word --big", B: "caret.move --word --back --big", E: "caret.move --word-end --big", "0": "caret.move --line-start", "^": "caret.move --line-first", $: "caret.move --line-end", gg: "caret.move --start", G: "caret.move --end" };
   for (const mode of ["caret", "visual"] as const) {
     for (const [key, text] of Object.entries(strings)) {
       const bound = DEFAULT_KEYMAP[mode]?.[key] as { id: string; args: Record<string, unknown> };

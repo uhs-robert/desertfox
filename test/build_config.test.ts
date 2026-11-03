@@ -134,27 +134,27 @@ test("bad bindings name the file and the key", () => {
     "keymap.toml": [
       "[normal]",
       'a = "tab.nope"',
-      'b = "tab.close up"',
-      'c = "tab.close depth=1"',
-      'd = "open.search engine=ghost"',
-      'e = "open.url container=Work"',
-      'f = "open.search engine=alpha depth=deep"',
+      'b = "tab.close --up"',
+      'c = "tab.close --depth=1"',
+      'd = "open.search --engine=ghost"',
+      'e = "open.url --container=Work"',
+      'f = "open.search --engine=alpha --depth=deep"',
       'g = { id = "tab.next" }',
       'h = "tab.next now"',
-      'i = "tab.close left right"',
-      'j = "open.url tab window"',
+      'i = "tab.close --left --right"',
+      'j = "open.url --tab --window"',
       "",
     ].join("\n"),
     "search_engines.toml": 'alpha = { url = "u%s", label = "A" }',
   });
   const text = problems_of(dir).join("\n");
   assert.match(text, /keymap\.toml: keymap normal "a": unknown command "tab\.nope"/);
-  assert.match(text, /keymap normal "b": "up" is not a value, switch or param of tab.close/);
+  assert.match(text, /keymap normal "b": unknown flag "--up" for tab\.close/);
   assert.match(text, /keymap normal "c": unknown param "depth" for tab\.close/);
   assert.match(text, /keymap normal "d": engine expects one of duck, alpha/);
   assert.match(text, /keymap normal "f": depth expects a whole number/);
   assert.match(text, /keymap\.normal\["g"\] must be a command string/);
-  assert.match(text, /keymap normal "h": "now" is not a value/);
+  assert.match(text, /keymap normal "h": "now" is not a flag or subject/);
   assert.match(text, /keymap normal "i": focus is set twice/);
   assert.match(text, /keymap normal "j": where is set twice/);
   assert.match(text, /keymap normal "e": container needs where tab, background or window/);
@@ -230,7 +230,7 @@ test("a snippet cannot use a group OasisFox uses", () => {
 
 test("bindings can run a snippet command and check its args", () => {
   const dir = config_dir_with(
-    { "keymap.d/90-snippet.toml": '[normal]\ngi = "myapp.toggle_ids all=yes"' },
+    { "keymap.d/90-snippet.toml": '[normal]\ngi = "myapp.toggle_ids --all=yes"' },
     join(FIXTURES, "full"),
   );
   assert.match(problems_of(dir).join("\n"), /all expects true or false/);
@@ -358,7 +358,7 @@ test("contract: build_commands_file output feeds build-config", () => {
   const dir = mkdtempSync(join(tmpdir(), "oasisfox-contract-"));
   const commands_path = join(dir, "commands.json");
   writeFileSync(commands_path, JSON.stringify(build_commands_file(registry)));
-  const config_dir = config_dir_with({ "keymap.toml": '[normal]\nD = "tab.close left"' });
+  const config_dir = config_dir_with({ "keymap.toml": '[normal]\nD = "tab.close --left"' });
   const config = build_config(config_dir, read_commands_file(commands_path));
   assert.deepEqual(config.keymap.normal?.["D"], { id: "tab.close", args: { focus: "left" } });
 });
@@ -370,7 +370,7 @@ test("a binding in a mode the command does not allow is a problem", () => {
 
 test("a leading colon stores a prompt, and the @source becomes its prefill", () => {
   const dir = config_dir_with({
-    "keymap.toml": '[normal]\ngO = ":open tab @current_url"\ngo = ":open"\ngp = "open @clipboard"\ngq = ":open url=@selection where=window"',
+    "keymap.toml": '[normal]\ngO = ":open --tab @current_url"\ngo = ":open"\ngp = "open @clipboard"\ngq = ":open --url=@selection --where=window"',
   });
   const normal = build_config(dir, commands).keymap.normal;
   assert.deepEqual(normal?.["gO"], {
@@ -384,7 +384,7 @@ test("a leading colon stores a prompt, and the @source becomes its prefill", () 
 });
 
 test("a colon binding needs a command with a param, and a source needs a text param", () => {
-  const dir = config_dir_with({ "keymap.toml": '[normal]\na = ":tab.next"\nb = "open.url where=@selection"\nc = ":nope"' });
+  const dir = config_dir_with({ "keymap.toml": '[normal]\na = ":tab.next"\nb = "open.url --where=@selection"\nc = ":nope"' });
   const text = problems_of(dir).join("\n");
   assert.match(text, /keymap normal "a": tab\.next has no param to type/);
   assert.match(text, /keymap normal "b": where expects text/);
@@ -398,13 +398,13 @@ test("an unbind marker later in the layers beats an earlier binding, and arrays 
   assert.match(text, /keymap\.normal\["gy"\] must be a command string/);
 });
 
-test("a bare engine name picks the engine, and a query that starts with one draws a warning", () => {
+test("the first bare word picks the engine, --engine= does too and -- stops the detection", () => {
   const dir = config_dir_with({
     "keymap.toml": [
       "[normal]",
       'a = "search alpha rust lifetimes"',
-      'b = "search engine=beta alpha centauri"',
-      'c = "search engine=beta query=\\"alpha centauri\\""',
+      'b = "search --engine=beta alpha centauri"',
+      'c = "search -- alpha centauri"',
     ].join("\n"),
     "search_engines.toml": 'alpha = { url = "a%s", label = "A" }\nbeta = { url = "b%s", label = "B" }',
   });
@@ -412,13 +412,13 @@ test("a bare engine name picks the engine, and a query that starts with one draw
   const normal = build_config(dir, commands, warnings).keymap.normal;
   assert.deepEqual(normal?.["a"], { id: "open.search", args: { engine: "alpha", query: "rust lifetimes" } });
   assert.deepEqual(normal?.["b"], { id: "open.search", args: { engine: "beta", query: "alpha centauri" } });
-  assert.equal(warnings.length, 1);
-  assert.match(warnings[0]!, /keymap normal "b": query starts with "alpha", which is also a value of engine, write query="..."/);
+  assert.deepEqual(normal?.["c"], { id: "open.search", args: { query: "alpha centauri" } });
+  assert.deepEqual(warnings, []);
 });
 
 test("a binding can be a table with run and label, and the label lands on the invocation", () => {
   const dir = config_dir_with(
-    { "keymap.d/20-label.toml": '[normal]\nJ = { run = "tab.next", label = "Down a tab" }\nM = { run = ["tab.close left", "tab.prev"], label = "Close and step back" }\nL = { run = "tab.next" }' },
+    { "keymap.d/20-label.toml": '[normal]\nJ = { run = "tab.next", label = "Down a tab" }\nM = { run = ["tab.close --left", "tab.prev"], label = "Close and step back" }\nL = { run = "tab.next" }' },
     join(FIXTURES, "full"),
   );
   const normal = build_config(dir, commands).keymap.normal;

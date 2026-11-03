@@ -39,7 +39,7 @@ export function build_config(config_dir: string, commands: CommandMeta[], warnin
   }
 
   const registry = build_registry(commands, snippets, snippet_paths, problems);
-  resolve_bindings(merged, registry, problems, warnings);
+  resolve_bindings(merged, registry, problems);
   check_config(merged, registry, problems);
   if (problems.length > 0) throw new ConfigErrors(problems);
 

@@ -3,6 +3,7 @@ import { create_registry } from "../../src/shared/registry/index.ts";
 import type { CommandInput, Registry } from "../../src/shared/registry/index.ts";
 
 const WHERE = ["here", "tab", "background", "window"];
+const WHERE_SHORT = { tab: "t", background: "b", window: "w" };
 
 const define = (registry: Registry, id: string, input: Omit<CommandInput, "label" | "intent" | "runs_in" | "run">) =>
   registry.define(id, { label: "L", intent: "I.", runs_in: "background", run: () => {}, ...input });
@@ -25,7 +26,7 @@ export function grammar_registry(): Registry {
   define(registry, "tab.shift", {
     params: [
       { name: "offset", type: "int" },
-      { name: "wrap", type: "bool", default: false },
+      { name: "wrap", type: "bool", default: false, short: "w" },
     ],
   });
   define(registry, "open.url", {
@@ -33,28 +34,28 @@ export function grammar_registry(): Registry {
     aliases: ["o"],
     params: [
       { name: "url", type: "string", main: true },
-      { name: "container", type: "string", values: { from: "containers" }, when: { where: ["tab", "background", "window"] } },
-      { name: "where", type: "enum", values: WHERE, default: "here" },
+      { name: "container", type: "string", values: { from: "containers" }, when: { where: ["tab", "background", "window"] }, short: "c" },
+      { name: "where", type: "enum", values: WHERE, default: "here", short: WHERE_SHORT },
     ],
   });
   define(registry, "open.search", {
     name: "search",
-    aliases: ["s"],
     params: [
       { name: "engine", type: "enum", values: { from: "search_engines" } },
       { name: "query", type: "string", default: { from: "selection" }, main: true },
-      { name: "where", type: "enum", values: WHERE, default: "here" },
+      { name: "where", type: "enum", values: WHERE, default: "here", short: WHERE_SHORT },
     ],
   });
   define(registry, "hint.run", {
     name: "hint",
     params: [
-      { name: "action", type: "enum", values: ["open", "background", "window"], default: "open" },
-      { name: "filter", type: "enum", values: ["links", "inputs", "custom"], default: "links" },
+      { name: "action", type: "enum", values: ["open", "background", "window"], default: "open", short: { background: "b", window: "w" } },
+      { name: "filter", type: "enum", values: ["links", "inputs", "custom"], default: "links", short: { inputs: "i", custom: "u" } },
       { name: "selector", type: "string", default: "a", when: { filter: ["custom"] } },
-      { name: "rapid", type: "bool", default: false },
+      { name: "rapid", type: "bool", default: false, short: "r" },
     ],
   });
+  define(registry, "mode.set", { name: "mode", params: [{ name: "mode", type: "enum", values: ["normal", "insert", "ignore"] }] });
   return registry;
 }
 

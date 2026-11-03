@@ -188,7 +188,7 @@ test("s/ and the sG keys search with the selection and prompt when it is empty",
     show_refusal: async () => undefined,
   });
   for (const key of ["s/", "sGc", "sGr"]) await router.run({ invocations: [normal[key] as { id: string }], mode: "normal", may_prompt: true });
-  assert.deepEqual(log, ["sitesearch ", "github type=code ", "github type=repositories "]);
+  assert.deepEqual(log, ["sitesearch ", "github ", "github --repositories "]);
 });
 
 test("a prompt binding with a bad fixed arg is skipped with a warning", () => {
