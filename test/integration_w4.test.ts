@@ -129,6 +129,12 @@ test("url_target gives host-like text https, local hosts http and keeps full URL
     "192.168.1.1": "http://192.168.1.1",
     "8.8.8.8": "https://8.8.8.8",
     "8.8.8.8:8080": "https://8.8.8.8:8080",
+    "nas:8080": "http://nas:8080",
+    "nas:8080/path": "http://nas:8080/path",
+    "mailto:x": "mailto:x",
+    "tel:5551234": "tel:5551234",
+    "[::12]": "https://[::12]",
+    "[::1:2]": "https://[::1:2]",
     "blob:https://a.example/uuid": "blob:https://a.example/uuid",
     "[::1]:3000/a": "http://[::1]:3000/a",
     "mailto:a@b.example": "mailto:a@b.example",
@@ -139,7 +145,7 @@ test("url_target gives host-like text https, local hosts http and keeps full URL
 });
 
 test("url_target searches plain words and unknown schemes", () => {
-  for (const text of ["rust", "foo bar", "javascript:alert(1)", "JavaScript:alert(1)", "data:text/html,hi", "about: config"]) {
+  for (const text of ["rust", "foo bar", "[abc]", "javascript:alert(1)", "JavaScript:alert(1)", "data:text/html,hi", "about: config"]) {
     assert.equal(url_target(text, "search", engines), `https://s.example/?q=${encodeURIComponent(text)}`, text);
   }
 });

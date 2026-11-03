@@ -71,3 +71,11 @@ test("open.url shows a notice when Firefox refuses an about: page, and does not 
   await assert.rejects(run("open.url", { url: "about:config", where: "here" }), /Firefox does not let extensions open about:config/);
   assert.deepEqual(opened, []);
 });
+
+test("open.url passes other errors on an about: page through unchanged", async () => {
+  install_browser([]);
+  (globalThis as unknown as { browser: { tabs: { update: unknown } } }).browser.tabs.update = async () => {
+    throw new Error("No tab with id 1");
+  };
+  await assert.rejects(run("open.url", { url: "about:config", where: "here" }), /No tab with id 1/);
+});

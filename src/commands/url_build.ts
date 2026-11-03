@@ -115,9 +115,9 @@ export function home_page_url(home_page: string | undefined): string {
 // Schemes that run code or carry inline data in the page are never opened from text.
 const SEARCHED_SCHEMES = ["javascript:", "data:"];
 // Hosts on this machine or the local network rarely have a certificate, so they get http. Public IPs get https like domains.
-const IP_OR_LOCAL_HOST = /^(localhost|\d{1,3}(?:\.\d{1,3}){3}|\[[0-9a-f:.]+\])(?::\d+)?(?:[/?#]\S*)?$/i;
+const IP_OR_LOCAL_HOST = /^(localhost|\d{1,3}(?:\.\d{1,3}){3}|\[[0-9a-f:.]*:[0-9a-f:.]*\])(?::\d+)?(?:[/?#]\S*)?$/i;
 const PRIVATE_IPV4 = /^(?:127\.|10\.|192\.168\.|172\.(?:1[6-9]|2\d|3[01])\.|169\.254\.)/;
-const PRIVATE_IPV6 = /^\[(?:::1|f[cd][0-9a-f]{2}:|fe[89ab][0-9a-f]:)/i;
+const PRIVATE_IPV6 = /^\[(?:::1\]|f[cd][0-9a-f]{2}:|fe[89ab][0-9a-f]:)/i;
 
 function is_private_host(host: string): boolean {
   return host.toLowerCase() === "localhost" || PRIVATE_IPV4.test(host) || PRIVATE_IPV6.test(host);
@@ -125,12 +125,15 @@ function is_private_host(host: string): boolean {
 
 // No whitespace anywhere, so prose like "TODO: fix thing" is not taken for a scheme.
 const SCHEME_URL = /^[a-z][a-z0-9+.-]*:\S+$/i;
+// A name with a port and no dot ("nas:8080") is a machine on the local network. Five digits at most, so "tel:5551234" stays a scheme.
+const LABEL_WITH_PORT = /^[a-z0-9-]+:\d{1,5}(?:[/?#]\S*)?$/i;
 const HOST_WITH_PORT = /^[^\s:/?#]+\.[^\s:/?#]+:\d+(?:[/?#]\S*)?$/;
 
 // Any parsable scheme opens as given (mailto:, view-source:, about:), except the two above. Prose with a colon searches.
 function typed_url(text: string): string | undefined {
   const ip_or_local = IP_OR_LOCAL_HOST.exec(text);
   if (ip_or_local) return `${is_private_host(ip_or_local[1]!) ? "http" : "https"}://${text}`;
+  if (LABEL_WITH_PORT.test(text)) return `http://${text}`;
   // Checked before the scheme parse: "example.com:8080" would otherwise parse as the scheme "example.com:".
   if (HOST_WITH_PORT.test(text)) return `https://${text}`;
   if (SCHEME_URL.test(text) && URL.canParse(text)) return SEARCHED_SCHEMES.includes(new URL(text).protocol) ? undefined : text;
