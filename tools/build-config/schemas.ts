@@ -2,7 +2,7 @@
 // (Taplo reads them for TOML) completes command names and setting names.
 
 import type { CommandMeta } from "../../src/shared/command.ts";
-import { DEFAULT_SETTINGS, MODE_INDICATOR_VALUES } from "../../src/shared/config.ts";
+import { DEFAULT_SETTINGS, MODE_INDICATOR_VALUES, WHICH_KEY_BORDER_VALUES } from "../../src/shared/config.ts";
 import { PALETTE_NAMES } from "../../src/shared/mode_colors.ts";
 import { KEYMAP_MODES } from "./merge.ts";
 import type { DataKind } from "./source_files.ts";
@@ -50,6 +50,7 @@ function settings_schema(): Schema {
       which_key_delay_ms: { type: "number", minimum: 0, default: DEFAULT_SETTINGS.which_key_delay_ms },
       hint_letters: { type: "string", minLength: 2, default: DEFAULT_SETTINGS.hint_letters },
       ignore_sites: { type: "array", items: { type: "string" }, description: "Match patterns where OasisFox starts in ignore mode" },
+      which_key_border: { enum: [...WHICH_KEY_BORDER_VALUES], default: DEFAULT_SETTINGS.which_key_border, description: "Corner style of the which-key panel border" },
       mode_indicator: { enum: [...MODE_INDICATOR_VALUES], default: DEFAULT_SETTINGS.mode_indicator, description: "When the mode badge shows: always (NORMAL too), not_normal, or off" },
       palette: { enum: [...PALETTE_NAMES], default: DEFAULT_SETTINGS.palette, description: "oasis.nvim palette for the mode badges. Light or dark follows the system theme" },
       search_prefixes: { ...prefix_pair_schema("here"), default: DEFAULT_SETTINGS.search_prefixes },

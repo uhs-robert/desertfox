@@ -18,7 +18,7 @@ const keymap: CompiledKeymap = {
   mode_indicator: "always",
   which_key_delay_ms: DELAY_MS,
   modes: {
-    normal: { kind: "branch", children: { j: leaf("down"), g: { kind: "branch", children: { g: leaf("top"), x: { kind: "branch", children: { x: leaf("close") } } } } } },
+    normal: { kind: "branch", children: { j: leaf("down"), g: { kind: "branch", children: { g: leaf("top"), t: leaf("tab"), x: { kind: "branch", children: { x: leaf("close") } } } } } },
     caret: { kind: "branch", children: { g: { kind: "branch", children: { g: leaf("start") } } } },
   },
 };
@@ -28,6 +28,7 @@ function make_page(delay_ms: number | undefined) {
   const state = create_mode_state();
   const shown: string[] = [];
   const hidden: boolean[] = [];
+  const ran: [string | undefined, number | undefined][] = [];
   let panel_up = false;
   const follow_prefix = create_which_key_timer(
     () => delay_ms,
@@ -48,12 +49,12 @@ function make_page(delay_ms: number | undefined) {
     is_loading: () => false,
     sink_of: () => undefined,
     leave_insert: () => state.escape(),
-    run_leaf: () => {},
+    run_leaf: (leaf, count) => void ran.push([leaf.steps[0]?.invocation.id, count]),
     on_prefix: follow_prefix,
   });
   state.listen(() => flow.reset_sequence());
   flow.set_matcher(create_matcher(keymap));
-  return { state, flow, shown, hidden, is_up: () => panel_up };
+  return { state, flow, shown, hidden, ran, is_up: () => panel_up };
 }
 
 test("a prefix key starts the timer and the panel shows after the delay", async () => {
@@ -168,4 +169,35 @@ test("Escape closes the panel and clears the prefix at any depth", async () => {
 test("Backspace with no prefix pending goes to the page", () => {
   const page = make_page(DELAY_MS);
   assert.equal(page.flow.handle_token("<Backspace>"), "pass");
+});
+
+test("Backspace keeps the count of a half-typed sequence", () => {
+  const page = make_page(DELAY_MS);
+  for (const token of ["3", "g", "x", "<Backspace>", "t"]) page.flow.handle_token(token);
+  assert.deepEqual(page.ran, [["tab", 3]]);
+});
+
+test("Backspace shows the parent panel at once, without the delay", async () => {
+  const page = make_page(DELAY_MS);
+  page.flow.handle_token("g");
+  page.flow.handle_token("x");
+  await sleep(DELAY_MS + 40);
+  page.flow.handle_token("<Backspace>");
+  await sleep(DELAY_MS / 3);
+  assert.deepEqual(page.shown, ["normal:gx", "normal:g"]);
+});
+
+test("a new keymap cancels a pending panel and hides one that is up", async () => {
+  const pending = make_page(DELAY_MS);
+  pending.flow.handle_token("g");
+  pending.flow.set_matcher(create_matcher(keymap));
+  await sleep(DELAY_MS + 40);
+  assert.deepEqual(pending.shown, []);
+
+  const up = make_page(DELAY_MS);
+  up.flow.handle_token("g");
+  await sleep(DELAY_MS + 40);
+  assert.equal(up.is_up(), true);
+  up.flow.set_matcher(create_matcher(keymap));
+  assert.equal(up.is_up(), false);
 });

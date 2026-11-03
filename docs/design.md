@@ -154,6 +154,7 @@ The keymap is data, not code. It maps a mode and a key sequence to an invocation
 - Key notation is vim style: `<C-x>`, `<A-j>`, `<S-Escape>`. Sequences match through a prefix tree. A complete match runs at once, with no timeout.
 - The modes are normal, insert, ignore, hint and cmdline. Caret and visual modes arrive in phase 2, see [Caret and visual](#caret-and-visual). Insert mode follows `focusin` and `focusout` on editable elements instead of checking the focused element on every key.
 - A mode badge sits in the bottom right corner, 8 px above the bottom edge. The `mode_indicator` setting controls it: `always` (the default), `not_normal` or `off`. The `palette` setting picks its colors from the 16 oasis.nvim palettes (default `moonlight`). Light or dark follows the system theme.
+- The which-key panel is a floating frame with a 1 px tinted border and its title set into the top border. The `which_key_border` setting picks the corners: `square` (the default), `round` or `chamfer`. A footer names the exit keys.
 - `browser` mode holds the chords for the Firefox shortcuts. The manifest reserves a fixed number of shortcut slots, and the background assigns the chords to them with `commands.update`. The content script also catches these chords. If it cancels a chord, Firefox does not fire the shortcut as well, which the spike's key-blocking page showed.
 
 ## Config
@@ -233,7 +234,7 @@ The background compiles the keymap into a prefix tree and writes it to `storage.
 
 ### Styles
 
-Every surface (which-key, the command line, hints and the mode indicator) draws from CSS custom properties, for example `--oasisfox-bg`, `--oasisfox-fg`, `--oasisfox-accent`, `--oasisfox-font` and `--oasisfox-radius`. The variables are the stable way to restyle OasisFox. Documented class names use the same `oasisfox-` prefix.
+Every surface (which-key, the command line, hints and the mode indicator) draws from CSS custom properties, for example `--oasisfox-bg`, `--oasisfox-fg`, `--oasisfox-accent` (titles and groups), `--oasisfox-secondary` (keys), `--oasisfox-font` and `--oasisfox-radius`. The variables are the stable way to restyle OasisFox. Documented class names use the same `oasisfox-` prefix.
 
 - The defaults are declared on an inner element of each surface, not on the shadow host. The host sits in the page, so page CSS can match it, and variables set there pass into the shadow root. The long prefix and the inner element together keep page CSS out.
 - `style.css` and `style.d/*.css` load after the built-in styles in every surface: inside the shadow roots for hints and which-key, and inside the command line page.

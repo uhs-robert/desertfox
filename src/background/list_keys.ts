@@ -1,6 +1,7 @@
 // Answers which-key: the keys that can follow a typed prefix, read from the compiled keymap the content script also uses.
 
 import type { CommandMeta } from "../shared/command.ts";
+import type { WhichKeyBorder } from "../shared/config.ts";
 import type { ListKeys, WhichKeyPanel, WhichKeyRow } from "../shared/messages.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY } from "../shared/prefix_tree.ts";
 import type { CompiledKeymap, TreeBranch, TreeNode } from "../shared/prefix_tree.ts";
@@ -35,22 +36,22 @@ function compare_rows(left: WhichKeyRow, right: WhichKeyRow): number {
 
 // A prefix that no longer leads anywhere gives no rows. The title names the whole chain of groups, each part like the group's own row:
 // `+Go >> +Close tabs`. A group without a name shows its key.
-export function panel_after_prefix(root: TreeBranch | undefined, prefix: string[], find_command: (id: string) => CommandMeta | undefined): WhichKeyPanel {
+export function panel_after_prefix(root: TreeBranch | undefined, prefix: string[], find_command: (id: string) => CommandMeta | undefined, border: WhichKeyBorder = "square"): WhichKeyPanel {
   let node: TreeNode | undefined = root;
   const chain: string[] = [];
   for (const token of prefix) {
     node = node?.kind === "branch" ? node.children[token] : undefined;
     if (node?.kind === "branch") chain.push(`+${node.label ?? token}`);
   }
-  if (node?.kind !== "branch") return { title: "", rows: [] };
+  if (node?.kind !== "branch") return { title: "", rows: [], border };
   const rows = Object.entries(node.children)
     .map(([token, child]) => row_of(token, child, find_command))
     .sort(compare_rows);
-  return { title: chain.length === 0 ? "keys" : chain.join(" >> "), rows };
+  return { title: chain.length === 0 ? "keys" : chain.join(" >> "), rows, border };
 }
 
 export async function list_keys(storage: KeymapStorage, find_command: (id: string) => CommandMeta | undefined, request: Pick<ListKeys, "mode" | "prefix">): Promise<WhichKeyPanel> {
   const stored = await storage.get(COMPILED_KEYMAP_STORAGE_KEY);
   const keymap = stored[COMPILED_KEYMAP_STORAGE_KEY] as CompiledKeymap | undefined;
-  return panel_after_prefix(keymap?.modes[request.mode as keyof CompiledKeymap["modes"]], request.prefix, find_command);
+  return panel_after_prefix(keymap?.modes[request.mode as keyof CompiledKeymap["modes"]], request.prefix, find_command, keymap?.which_key_border);
 }

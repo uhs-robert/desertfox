@@ -6,15 +6,15 @@ import type { PendingPrefix } from "./key_flow.ts";
 export type AskWhichKey = (prefix: PendingPrefix | undefined, is_current: () => boolean) => void;
 
 // `get_delay_ms` returns zero or nothing when which-key is off. Plain arguments rather than an object keep the content script small.
-export function create_which_key_timer(get_delay_ms: () => number | undefined, ask: AskWhichKey): (prefix: PendingPrefix | undefined) => void {
+export function create_which_key_timer(get_delay_ms: () => number | undefined, ask: AskWhichKey): (prefix: PendingPrefix | undefined, at_once?: boolean) => void {
   let timer: ReturnType<typeof setTimeout> | undefined;
   let epoch = 0;
-  return (prefix) => {
+  return (prefix, at_once) => {
     clearTimeout(timer);
     const mine = ++epoch;
     const is_current = () => mine === epoch;
     ask(undefined, is_current);
     const delay_ms = get_delay_ms();
-    if (prefix && delay_ms) timer = setTimeout(() => ask(prefix, is_current), delay_ms);
+    if (prefix && delay_ms) timer = setTimeout(() => ask(prefix, is_current), at_once ? 0 : delay_ms);
   };
 }

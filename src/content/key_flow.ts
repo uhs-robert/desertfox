@@ -21,8 +21,8 @@ export type KeyFlowDeps = {
   // A bundle is loading, and the mode its keys replay in is not known yet.
   is_loading: () => boolean;
   sink_of: (mode: Mode) => Sink | undefined;
-  // Called with the prefix after each key that leaves a sequence half-typed, and with nothing when the sequence ends or resets.
-  on_prefix: (prefix: PendingPrefix | undefined) => void;
+  // Called with the prefix after each key that leaves a sequence half-typed, and with nothing when the sequence ends or resets. `at_once` skips the pause before the panel.
+  on_prefix: (prefix: PendingPrefix | undefined, at_once?: boolean) => void;
 };
 
 const MAX_HELD_KEYS = 32;
@@ -36,6 +36,7 @@ export function create_key_flow(deps: KeyFlowDeps) {
   const held_tokens: string[] = [];
   let sequence_in_progress = false;
   let typed: string[] = [];
+  let count: number | undefined;
 
   const reset_sequence = () => {
     matcher?.reset();
@@ -67,14 +68,16 @@ export function create_key_flow(deps: KeyFlowDeps) {
     if (was_in_progress && token === "<Backspace>") {
       const kept = typed.slice(0, -1);
       reset_sequence();
-      for (const key of kept) step(active, key);
+      // The count goes back in as its digits, ahead of the kept keys.
+      for (const key of [...`${count ?? ""}`, ...kept]) step(active, key);
+      deps.on_prefix(kept.length > 0 ? { mode, typed: kept } : undefined, true);
       return "cancel";
     }
     let result = active.feed(mode, token);
     // A key that breaks a half-typed sequence gets one more try as a first key.
     if (result.kind === "no_match" && was_in_progress) result = active.feed(mode, token);
     sequence_in_progress = result.kind === "pending";
-    if (result.kind === "pending") typed = result.typed;
+    if (result.kind === "pending") ({ typed, count } = result);
     // A bare count (`3`) has typed nothing yet, so no keys can be listed.
     deps.on_prefix(result.kind === "pending" && result.typed.length > 0 ? { mode, typed: result.typed } : undefined);
     if (result.kind === "match") {
@@ -115,7 +118,8 @@ export function create_key_flow(deps: KeyFlowDeps) {
     set_matcher: (next: Matcher, next_browser_chords?: TreeBranch) => {
       matcher = next;
       browser_chords = next_browser_chords;
-      sequence_in_progress = false;
+      // A half-typed sequence of the old keymap means nothing in the new one, and neither does its panel.
+      reset_sequence();
       replay();
     },
     release: replay,

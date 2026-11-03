@@ -4,7 +4,7 @@
 // strings stay strings until `resolve_bindings` in check.ts parses them.
 
 import { MODES } from "../../src/shared/command.ts";
-import { MODE_INDICATOR_VALUES } from "../../src/shared/config.ts";
+import { MODE_INDICATOR_VALUES, WHICH_KEY_BORDER_VALUES } from "../../src/shared/config.ts";
 import type { SearchEngine, Settings } from "../../src/shared/config.ts";
 import { is_palette_name, PALETTE_NAMES } from "../../src/shared/mode_colors.ts";
 import type { KeymapConfig, ModeBindings } from "../../src/shared/keymap.ts";
@@ -115,6 +115,7 @@ function merge_command_aliases(layers: DataLayer[], origins: Origins, problems: 
 
 const SETTING_CHECKS: Record<keyof Settings, (value: unknown) => boolean> = {
   which_key_delay_ms: (value) => typeof value === "number" && Number.isFinite(value) && value >= 0,
+  which_key_border: (value) => (WHICH_KEY_BORDER_VALUES as readonly unknown[]).includes(value),
   hint_letters: (value) => typeof value === "string" && new Set(value).size === value.length && value.length >= 2,
   ignore_sites: (value) => Array.isArray(value) && value.every((site) => typeof site === "string" && site !== ""),
   mode_indicator: (value) => (MODE_INDICATOR_VALUES as readonly unknown[]).includes(value),
@@ -128,6 +129,7 @@ const SETTING_CHECKS: Record<keyof Settings, (value: unknown) => boolean> = {
 
 const SETTING_EXPECTATIONS: Record<keyof Settings, string> = {
   which_key_delay_ms: "a number of milliseconds, 0 or more",
+  which_key_border: '"square", "round" or "chamfer"',
   hint_letters: "a string of 2 or more distinct letters",
   ignore_sites: "a list of match pattern strings",
   mode_indicator: '"always", "not_normal" or "off"',
