@@ -8,6 +8,7 @@ export function command_meta(command: CommandDef): CommandMeta {
   if (command.params !== undefined) meta.params = command.params;
   if (command.count !== undefined) meta.count = command.count;
   if (command.modes !== undefined) meta.modes = command.modes;
+  if (command.completion !== undefined) meta.completion = command.completion;
   return meta;
 }
 

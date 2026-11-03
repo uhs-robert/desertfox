@@ -52,7 +52,7 @@ async function open_line(start: Start, port: MessagePort): Promise<void> {
   const session: Session = create_session({
     history: opened.history,
     parse: (text) => parse_command_line(lookup, text, opened.sources),
-    complete: create_completer(lookup, opened.commands, opened.command_aliases, opened.sources),
+    complete: create_completer(lookup, opened.commands, opened.command_aliases, opened.sources, typeof start.mode === "string" ? start.mode : "normal"),
     // Only a missing value is caught here. The router still checks everything else when it runs the command.
     precheck: (invocation) => {
       const command = lookup.find(invocation.id);

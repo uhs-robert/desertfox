@@ -79,6 +79,7 @@ The fields follow the Oasis action library (`home/hypr/.config/hypr/lib/act/init
 - `needs`: what must be true to run it. `content` means a content script in the tab. A permission name means an optional permission. The router refuses with a message instead of failing silently.
 - `count`: what a numeric prefix does. `repeat` runs the command that many times. A param name fills that param, for example `tab.goto` takes the count as its `index`. `ignore` drops it.
 - `modes`: the modes where a key can run the command. The default is normal.
+- `completion`: where the command line list offers the command. Absent means always. `hidden` means never, and a list of modes means only when the line was opened from one of them. Typing the name still runs the command.
 - `run`: the handler. It gets the context (tab, frame, mode) and the checked args.
 
 Validation is strict and happens in one place, the same as `Act.resolve` in Oasis. The command line, keys, the native host and the palette all pass through it.
@@ -93,7 +94,7 @@ Define-time checks cover names and params too:
 
 A set of options where at most one can apply, for example open, background tab or copy link for a hint, is one `enum` param with a value per option. Two flags from the set both set that param, so the command line rejects them together. No list of exclusions exists. This turns the hint command into five params: `action`, `filter`, `selector` (with `when: { filter: "custom" }`), `text` and the `rapid` switch.
 
-A build step writes `commands.json` from the registry: id, name, aliases, label, intent, params, count and modes. Help, the palette, which-key and the native `list` verb read it. The content script does not load it.
+A build step writes `commands.json` from the registry: id, name, aliases, label, intent, params, count, modes and completion. Help, the palette, which-key and the native `list` verb read it. The content script does not load it.
 
 ## Invocations and prompts
 

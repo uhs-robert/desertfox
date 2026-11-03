@@ -251,5 +251,9 @@ function check_count_and_modes(input: CommandInput, fail: Fail): void {
     if (!MODES.includes(mode)) fail("modes", `unknown mode "${String(mode)}"`);
   }
   if (input.modes?.length === 0) fail("modes", "must not be empty");
+  if (input.completion !== undefined && input.completion !== "hidden") {
+    for (const mode of input.completion) if (!MODES.includes(mode)) fail("completion", `unknown mode "${String(mode)}"`);
+    if (input.completion.length === 0) fail("completion", 'must not be empty, use "hidden"');
+  }
   if (input.needs?.some((need) => need === "")) fail("needs", "must not hold an empty name");
 }

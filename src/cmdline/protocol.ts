@@ -10,7 +10,8 @@ import type { Invocation } from "../shared/invocation.ts";
 export type HostToPage =
   // Sent once the page said it is ready, with the port in its transfer list. The page trades `ticket` with the
   // background for its data, so a forged `start` gets nothing. `tokens` are the keys typed while the page loaded, in order.
-  | { kind: "start"; ticket: string; text: string; tokens: string[] }
+  // `mode` is the mode the line was opened from, which decides the commands the list offers.
+  | { kind: "start"; ticket: string; text: string; tokens: string[]; mode: string }
   // A key that reached the host script instead of the page, for example after a click on the page.
   | { kind: "token"; token: string }
   // Sent once the host moved focus into the frame, after every key it forwarded. Later keys reach the page directly.

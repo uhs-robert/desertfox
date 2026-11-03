@@ -79,13 +79,16 @@ export type CommandDef = {
   count?: CountBehavior;
   // Modes where a key can run the command. Default when omitted: ["normal"].
   modes?: readonly Mode[];
+  // Where the command line list offers the command. Absent means always. "hidden" means never, for a command that
+  // makes no sense typed. A list of modes means only when the line was opened from one of them. Typing the name still runs it.
+  completion?: "hidden" | readonly Mode[];
   run: CommandRun;
 };
 
 // A `commands.json` entry: the definition without the handler and the router fields.
 export type CommandMeta = Pick<
   CommandDef,
-  "id" | "name" | "aliases" | "label" | "intent" | "params" | "count" | "modes"
+  "id" | "name" | "aliases" | "label" | "intent" | "params" | "count" | "modes" | "completion"
 >;
 
 export type CommandsFile = {
