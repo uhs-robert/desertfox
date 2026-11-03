@@ -122,7 +122,7 @@ One grammar covers the command line and every binding in the config. The text is
 - Quoted words are never flags, engines, values or `@source`s: `open '-b'` opens the text `-b`. Quote a value that has spaces or `=` with shell rules: `open -t "https://a.example/?q=a b"`.
 - When a command has exactly one number param, a bare number is its subject: `tab.goto 1`, `tab.move -1`, `zoom.set 1.5`. A negative number is a value, never a flag. A command with two number params needs `--name=value` for them.
 - A command whose only argument is a required value takes it as the bare subject: `mode ignore`, `cmdline.history prev`, `visual.act yank`. `mode --ignore` works too.
-- An enum whose values come from a runtime list, the search engine, is the first bare word, and only when it names an engine: `search arch pacman`. `--engine=arch` also works, and the printer writes it only when the bare word would not read back. `--` stops the engine check, so `search -- arch maps` searches the default engine for "arch maps". Build time knows the names from `search_engines.toml` plus the built-in `duck`, and the command line from the loaded engines. `tools/build-config` warns about an engine name that starts with `-`, because only `--engine=` can name it.
+- An enum whose values come from a runtime list, the search engine, is the first bare word, and only when it names an engine: `search arch pacman`. An engine name can hold dots (`search github.repo.issues foo`). `--engine=arch` also works, and the printer writes it only when the bare word would not read back. `--` stops the engine check, so `search -- arch maps` searches the default engine for "arch maps". Build time knows the resolved engine names from `search_engines.toml` plus the built-in `duck`, and the command line from the loaded engines. `tools/build-config` warns about an engine name that starts with `-`, because only `--engine=` can name it.
 - An unquoted `@current_url`, `@selection` or `@clipboard` is a context source. The router fills it in when the key is pressed. It works as the subject or after `=`.
 - A leading `:` (config only) makes the binding type its command into the command line and wait. `gO = ":open -t @current_url"` shows `open -t https://this.page/...`. The stored file names one param to fill: the one that holds a `@source` (which becomes the prefill), else the `main` param, else the first param. A command with no params cannot take a `:`.
 - Unknown flags, a param set twice and an unknown source are errors with a message.
@@ -176,7 +176,7 @@ The tool reads `~/.config/oasisfox/` by default. Every data file is TOML. A left
 | File | Holds |
 | --- | --- |
 | `keymap.toml` | Every key: bindings per mode, plus the `search_keys` and `container_keys` shortcuts. `""` removes a default binding. |
-| `search_engines.toml` | Search engines: URL template and label. The template uses `%s` for the query. Data only, no keys. The built-in `duck` needs no entry, and an entry named `duck` replaces it. See [Starting engines](#starting-engines). |
+| `search_engines.toml` | Search engines: a tree of named URL templates with slots (`{query}`, `{repo}`, and others). `%s` still reads as `{query}`. Data only, no keys. The built-in `duck` needs no entry, and an entry named `duck` replaces it. See [Starting engines](#starting-engines). |
 | `command_aliases.toml` | Extra command line names, for example `g = "open.search"`. |
 | `settings.toml` | Settings such as the which-key delay and the new tab page. |
 | `snippets/*.js` | One custom command per file. See [Snippets](#snippets). |
@@ -214,7 +214,19 @@ ww = { run = ":open -w @current_url", label = "New window, edit current URL" }
 
 OasisFox has one built-in engine, `duck` (DuckDuckGo), and the `default_engine` setting defaults to it. So clipboard search works with no config. It is added when the config loads and when `tools/build-config` checks names, so the merged file stays as written. An entry named `duck` in `search_engines.toml` replaces the built-in whole. Nothing hides or removes it.
 
-[`examples/engines.toml`](../examples/engines.toml) lists 40 engines, `duck` among them. Copy it to `~/.config/oasisfox/search_engines.toml` and edit it. A TOML file cannot include another file. A `search_engines.d/` file also works, but it beats the main file, so copy into the main file to change an entry. A fuller real example: [https://github.com/uhs-robert/oasis-dots/blob/main/home/oasisfox/.config/oasisfox/search_engines.toml](https://github.com/uhs-robert/oasis-dots/blob/main/home/oasisfox/.config/oasisfox/search_engines.toml).
+[`examples/engines.toml`](../examples/engines.toml) resolves to 66 engines, `duck` among them, and teaches the tree rules in two worked trees (GitHub and YouTube). Copy it to `~/.config/oasisfox/search_engines.toml` and edit it. A TOML file cannot include another file. A `search_engines.d/` file also works, and a later file replaces the table at the same dotted path (a later `[github.repo]` replaces only that node and leaves `github` alone).
+
+#### Engines
+
+An engine is a named URL template. It replaces the former site commands. No provider is built in except `duck`.
+
+- Slots. `{query}` is the typed or selected text, and `%s` means the same. Page slots read the current tab: `{url}`, `{host}`, `{title}`, `{repo}` (GitHub), `{subreddit}` and `{channel}` (YouTube). Each page slot is a small pure function in `src/shared/engines/slots.ts` with its own message for a page that cannot fill it. `{a|b}` takes the first slot that has a value, so `{query|url}` is the typed address, else this page. `{name:raw}` skips escaping, for a path such as `/web/{url:raw}`. Every other value takes `encodeURIComponent`.
+- Tree. A table inside an engine is a child, named with a dot (`github.repo.issues`). A child inherits every field and overrides by name. `label` does not inherit: the label is the chain of labels on the path ("GitHub: this repo: issues"), and a `label` field sets one link. A child cannot be named `url`, `label`, `params` or `fallback`, or like a field or param of its parent. A later file replaces the table at one dotted path.
+- Params. `[github.params.type]` declares `default`, `values` (name to URL text) and `children = true`, which generates one child per value. A field set to a value name picks it, and `type = { only = [...] }` narrows the values below that level. A hand-written child beats a generated one. A query pair whose whole value is one empty param (`&type=`) is left out.
+- Availability. An engine is available on a page only when every page slot in its URL can be filled. Which-key hides the keys of an unavailable engine, and a group left empty. A key still works when typed, and shows the slot message. An engine with `fallback = "<engine>"` never hides and runs the fallback when its slots cannot fill. Snippets can require slots with a `// requires: repo` header. The background filters the key list, so the content script is unchanged.
+- Resolution. `tools/build-config` resolves the tree into a flat map keyed by the dotted name and stores it, so the extension only fills page slots and the query. It also writes `<out>.engines.jsonl`, one sorted engine per line, so a config change shows as a diff. It rejects an unknown slot, a param no URL uses, a value outside the declared list, a fallback to a missing engine, a fallback loop and a default engine that needs a page slot.
+- Help. `help` lists the resolved tree with each engine's URL, slots and the file and level that set each field. `engine.show <name>` opens it at that engine.
+- Which tool. A result that is a URL is an engine. Page DOM or several steps is a snippet. Browser APIs (tabs, windows, bookmarks, containers) is a built-in command. A fuller real example: [https://github.com/uhs-robert/oasis-dots/blob/main/home/oasisfox/.config/oasisfox/search_engines.toml](https://github.com/uhs-robert/oasis-dots/blob/main/home/oasisfox/.config/oasisfox/search_engines.toml).
 
 ### Merge and checks
 
@@ -297,7 +309,7 @@ The content script must have the keymap before the first key. It reads the compi
 
 - `background.js`: the registry, the handlers, keymap validation and the shortcut slots.
 - `content.js`: the key listener, the prefix tree, the modes and scrolling. Target: under 15 KB minified.
-- Hints, which-key, caret and visual mode, and the site commands are separate files. Snippets run as their own code. The background injects one with `tabs.executeScript` on first use in a tab.
+- Hints, which-key, caret and visual mode are separate files. Snippets run as their own code. The background injects one with `tabs.executeScript` on first use in a tab.
 - `cmdline.html`: an extension page in an iframe. It has its own bundle with completion and fuzzy matching.
 
 ## Interfaces
@@ -323,7 +335,7 @@ The label of a key comes from one rule, applied to the args the binding sets (ne
 
 - A binding `label` wins. It exists in the TOML table form and on the bindings of the default keymap. On a key that runs several commands, the label sits on the first command.
 - A key that sets a container reads as the container name, and the container named `default` reads "Default container".
-- Otherwise the label is the command label. A search engine with a label in `search_engines.toml` replaces it, and a binding with no engine uses the default engine. Then each `enum` arg the binding sets to a non-default value adds its `value_labels` phrase, in param order ("Open URL in new tab"). A `bool` set to true adds the param name ("Reload hard"). Numbers, free strings and prompted params add nothing, so the keys that set them carry a hand `label` ("Scroll left", "Zoom in a lot"). A phrase that the name of any group above the key already says, as whole words and in any case, is left out: under a group named "Search in new tab", the key reads "Google", not "Google in new tab".
+- Otherwise the label is the command label. A search engine with a label in `search_engines.toml` replaces it (a child engine's label is the chain of labels on its path), and a binding with no engine uses the default engine. Then each `enum` arg the binding sets to a non-default value adds its `value_labels` phrase, in param order ("Open URL in new tab"). A `bool` set to true adds the param name ("Reload hard"). Numbers, free strings and prompted params add nothing, so the keys that set them carry a hand `label` ("Scroll left", "Zoom in a lot"). A phrase that the name of any group above the key already says, as whole words and in any case, is left out: under a group named "Search in new tab", the key reads "Google", not "Google in new tab".
 - A snippet key shows the `// label:` header of its snippet.
 
 Two keys in one group may share a label only when they run the same binding (`zi` and `z+`). The unit tests check this for every group of the default keymap and of a copy of the user config, and print each group's labels.
@@ -364,7 +376,7 @@ Firefox keeps the background awake while the port is open, which also helps a la
 
 | Phase | Contents |
 | --- | --- |
-| v1 | Snippets and `config.reload`, with the managed storage config and `tools/build-config`. Normal, insert and ignore modes. Scrolling, back and forward, reload, stop, home, parent and root URL. Tab and window commands, including containers and closed-tab undo. Search engines and the prompt for missing args. Bookmarks. Hints with every action above, rapid mode included. Copying the URL in 6 formats. Zoom. The site commands: site search, GitHub search, subreddit, archive, isdown and translate. |
+| v1 | Snippets and `config.reload`, with the managed storage config and `tools/build-config`. Normal, insert and ignore modes. Scrolling, back and forward, reload, stop, home, parent and root URL. Tab and window commands, including containers and closed-tab undo. Search engines and the prompt for missing args. Bookmarks. Hints with every action above, rapid mode included. Copying the URL in 6 formats. Zoom. Search engines with slots and children replace the former site commands (site search, GitHub, subreddit, archive, isdown, translate), which now ship as examples. |
 | Later | History completion. Marks and quickmarks. Changing the number in a URL, following next and previous page links, repeating the last command, the jump list, a QR code of the URL and view source. |
 | Dropped | Shell access, string eval, command strings with chaining and pipes, a config language, userChrome editing, rewriting Firefox prefs, an external editor, page-event hooks, per-site config, a key-grab mode, macros, a theme engine, an update nag, a tutorial and joke commands. |
 
