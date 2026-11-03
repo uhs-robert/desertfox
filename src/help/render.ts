@@ -28,9 +28,9 @@ function key_list(rows: KeyRow[]): HTMLElement {
 
 function params_table(command: CommandRow): HTMLElement | string {
   if (command.params.length === 0) return el("span", "oasisfox-help-muted", "no params");
-  const head = el("tr", undefined, ...["param", "type", "default", "values"].map((name) => el("th", undefined, name)));
+  const head = el("tr", undefined, ...["param", "type", "default", "values", "flags"].map((name) => el("th", undefined, name)));
   const body = command.params.map((param) =>
-    el("tr", undefined, ...[param.name, param.type, param.default, param.values].map((text) => el("td", undefined, text))),
+    el("tr", undefined, ...[param.name, param.type, param.default, param.values, param.flags].map((text) => el("td", undefined, text))),
   );
   return el("table", "oasisfox-help-params", head, ...body);
 }
