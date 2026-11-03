@@ -63,3 +63,11 @@ Result: delivery works. No fallback is needed.
 - `j` scrolled by 50 px, `G` reached the bottom and `gg` returned to 0.
 - `mode_changed` arrived at the background with `sender.tab.id` set and `frameId` 0, for `normal` and then `ignore` after `<S-Escape>`. The stored per-tab mode followed.
 - `repair_tabs_after_reload` skips the help tab, because its URL does not match `INJECTABLE_URL` (`https?|file|ftp`). It cannot throw or loop on it. After an extension reload Firefox closes extension pages, so there is nothing to repair.
+
+## Caret drawing (P7a)
+
+Question: does Firefox paint a caret for a collapsed selection in page text?
+
+Setup: Firefox 159 headless, one page, a screenshot after a script set the selection with `Selection.addRange`.
+
+Result: no. A collapsed range in plain text paints nothing. A one-character range paints as a highlighted block. So caret mode draws the caret as a one-character selection, which also makes `@selection` return that character. A caret on an empty line has no character and is not drawn.
