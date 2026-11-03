@@ -38,8 +38,8 @@ function compare_rows(left: WhichKeyRow, right: WhichKeyRow): number {
   return compare_code_points(left.keys.toLowerCase(), right.keys.toLowerCase()) || compare_code_points(right.keys, left.keys);
 }
 
-// A prefix that no longer leads anywhere gives no rows. The title names the whole chain of groups, each part like the group's own row:
-// `+Go >> +Close tabs`. A group without a name shows its key.
+// A prefix that no longer leads anywhere gives no rows. The title is the chain of groups, each part like the group's own row:
+// `["+Go", "+Close tabs"]`. A group without a name shows its key. The panel joins the chain.
 export function panel_after_prefix(root: TreeBranch | undefined, prefix: string[], find_command: (id: string) => CommandMeta | undefined, border: WhichKeyBorder = "square"): WhichKeyPanel {
   let node: TreeNode | undefined = root;
   const chain: string[] = [];
@@ -47,11 +47,11 @@ export function panel_after_prefix(root: TreeBranch | undefined, prefix: string[
     node = node?.kind === "branch" ? node.children[token] : undefined;
     if (node?.kind === "branch") chain.push(`+${node.label ?? token}`);
   }
-  if (node?.kind !== "branch") return { title: "", rows: [], border };
+  if (node?.kind !== "branch") return { title: [], rows: [], border };
   const rows = Object.entries(node.children)
     .map(([token, child]) => row_of(token, child, find_command))
     .sort(compare_rows);
-  return { title: chain.length === 0 ? "keys" : chain.join(" >> "), rows, border };
+  return { title: chain.length === 0 ? ["keys"] : chain, rows, border };
 }
 
 // What the active page can run. Keys whose command needs slots the page cannot fill are left out, and so are groups left empty.
