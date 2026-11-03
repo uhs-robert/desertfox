@@ -38,7 +38,8 @@ function paint(open: Session): void {
 
 // Only the caret's own character counts: its paragraph can be taller than the screen. Each scrollable ancestor scrolls first, then the window.
 function scroll_to_caret(open: Session): void {
-  for (let view = open.model.point_at(open.cursor.caret).node.parentElement; view; view = view.parentElement) {
+  const caret_node = open.model.point_at(open.cursor.caret).node;
+  for (let view = caret_node instanceof Element ? caret_node : caret_node.parentElement; view; view = view.parentElement) {
     const nested = view !== document.documentElement && view !== document.body;
     if (nested && view.scrollHeight <= view.clientHeight && view.scrollWidth <= view.clientWidth) continue;
     const box = character_box(open.model, open.cursor.caret);
@@ -65,8 +66,28 @@ function end_session(): void {
   clear_selection_colors();
 }
 
+// The span of characters the page's own selection covers, when it lies in the model's text.
+function page_span(model: TextModel): { first: number; last: number } | undefined {
+  const selection = getSelection()!;
+  if (selection.rangeCount === 0) return undefined;
+  const range = selection.getRangeAt(0);
+  const first = model.index_of(range.startContainer, range.startOffset);
+  const last = range.collapsed || range.endOffset === 0 ? first : model.index_of(range.endContainer, range.endOffset - 1);
+  return first === undefined || last === undefined ? undefined : { first, last };
+}
+
+// Something else moved the page selection since the last paint, such as a find or a click. Caret mode takes the start of it. Visual mode keeps its anchor and takes the end.
+function adopt_page_selection(open: Session): void {
+  const found = page_span(open.model);
+  const { from, to } = selected_span(open.cursor);
+  if (!found || (found.first === from && found.last === to - 1)) return;
+  open.cursor = with_caret(open.cursor, open.mode === "visual" ? found.last : found.first, open.mode === "visual");
+  open.goal_x = undefined;
+}
+
 function ensure_session(mode: "caret" | "visual"): Session | undefined {
   const mode_changed = !session || session.mode !== mode;
+  if (session) adopt_page_selection(session);
   session ??= start_session(mode);
   if (!session) {
     page.oasisfox_host.set_mode("normal");

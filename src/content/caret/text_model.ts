@@ -4,10 +4,12 @@
 
 export type TextModel = {
   text: string;
-  // Character index to a DOM text position, and the other way.
-  point_at: (index: number) => { node: Text; offset: number };
+  // Character index to a DOM position, and the other way. An empty line made by a <br> has no text node, so its position is the <br> in its parent.
+  point_at: (index: number) => DomPoint;
   index_of: (node: Node, offset: number) => number | undefined;
 };
+
+export type DomPoint = { node: Node; offset: number };
 
 type Segment = { node: Text; first_index: number; offsets: number[] };
 
@@ -25,6 +27,7 @@ const is_hidden = (element: Element) => {
 
 export function build_text_model(root: Node = document.body): TextModel {
   const segments: Segment[] = [];
+  const empty_lines = new Map<number, DomPoint>();
   let text = "";
   let last_block: Element | undefined;
   let after_space = true;
@@ -48,7 +51,10 @@ export function build_text_model(root: Node = document.body): TextModel {
   for (let node = walker.nextNode(); node; node = walker.nextNode()) {
     if (node.nodeType === Node.ELEMENT_NODE) {
       if (text !== "" && !text.endsWith("\n")) end_line();
-      else if (text !== "") text += "\n";
+      else if (text !== "") {
+        empty_lines.set(text.length, { node: node.parentNode!, offset: Array.prototype.indexOf.call(node.parentNode!.childNodes, node) });
+        text += "\n";
+      }
       continue;
     }
     const parent = node.parentElement!;
@@ -82,10 +88,10 @@ export function build_text_model(root: Node = document.body): TextModel {
     after_space = blank_before;
     last_block = block;
   }
-  return { text, point_at: (index) => point_at(segments, index), index_of: (node, offset) => index_of(segments, node, offset) };
+  return { text, point_at: (index) => empty_lines.get(index) ?? point_at(segments, index), index_of: (node, offset) => index_of(segments, empty_lines, node, offset) };
 }
 
-function point_at(segments: Segment[], index: number): { node: Text; offset: number } {
+function point_at(segments: Segment[], index: number): DomPoint {
   let low = 0;
   let high = segments.length - 1;
   while (low < high) {
@@ -98,7 +104,11 @@ function point_at(segments: Segment[], index: number): { node: Text; offset: num
   return { node: segment.node, offset: Math.max(offset, 0) };
 }
 
-function index_of(segments: Segment[], node: Node, offset: number): number | undefined {
+function index_of(segments: Segment[], empty_lines: Map<number, DomPoint>, node: Node, offset: number): number | undefined {
+  if (node.nodeType !== Node.TEXT_NODE) {
+    for (const [index, point] of empty_lines) if (point.node === node && point.offset === offset) return index;
+    return undefined;
+  }
   const segment = segments.find((candidate) => candidate.node === node);
   if (!segment) return undefined;
   const at = segment.offsets.findIndex((raw) => raw >= offset);
