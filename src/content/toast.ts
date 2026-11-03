@@ -1,5 +1,6 @@
 // One short message on the page.
 
+import { LAYERS } from "../shared/layers.ts";
 import { create_surface } from "./surface.ts";
 
 const TOAST_MS = 3000;
@@ -15,7 +16,7 @@ let surface: ReturnType<typeof create_surface> | undefined;
 let hide_timer: ReturnType<typeof setTimeout> | undefined;
 
 export function show_toast(message: string): void {
-  surface ??= create_surface("oasisfox-toast", STYLE);
+  surface ??= create_surface("oasisfox-toast", STYLE, LAYERS.toast);
   surface.text.textContent = message;
   document.documentElement.append(surface.host);
   clearTimeout(hide_timer);

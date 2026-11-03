@@ -3,6 +3,7 @@
 // It stays small because it runs inside the page's own script world.
 
 import type { BundleHostApi } from "../content/bundle_host.ts";
+import { LAYERS } from "../shared/layers.ts";
 import type { HostToPage, PageToHost } from "./protocol.ts";
 import { unwrap, wrap } from "./protocol.ts";
 
@@ -62,7 +63,7 @@ if (!page.oasisfox_cmdline_ready) {
 
   function mount(text: string) {
     const holder = document.createElement("div");
-    holder.style.cssText = `all:initial;position:fixed;left:0;right:0;bottom:0;height:${BAR_HEIGHT};z-index:2147483647;`;
+    holder.style.cssText = `all:initial;position:fixed;left:0;right:0;bottom:0;height:${BAR_HEIGHT};z-index:${LAYERS.command_line};`;
     const frame = document.createElement("iframe");
     frame.style.cssText = "all:initial;display:block;width:100%;height:100%;border:0;color-scheme:normal;";
     // Before the frame joins the page, so its only load is cmdline.html.
