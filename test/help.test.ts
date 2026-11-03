@@ -60,6 +60,23 @@ test("a key row writes its args the way the command line does, in the long style
   assert.deepEqual(open.keys, [{ mode: "normal", keys: "o", args: "--url=https://a.example --tab" }]);
 });
 
+test("a key row guards a query that starts with a configured engine name", () => {
+  const registry = create_registry();
+  registry.define("open.search", {
+    name: "search", label: "Search", intent: "Search.", runs_in: "background",
+    params: [{ name: "engine", type: "enum", values: { from: "search_engines" }, default: "" }, { name: "query", type: "string", main: true }],
+    run: () => {},
+  });
+  const { compiled } = compile_keymap({ normal: { s: { id: "open.search", args: { query: "arch linux" } } } }, {}, (id) => {
+    const command = registry.get(id);
+    return command && { runs_in: command.runs_in, label: command.label, count: "ignore" };
+  });
+  const commands = build_commands_file(registry).commands;
+  const row = (sources: { search_engines: string[] }) => build_help_model(commands, compiled, [], sources).groups[0]!.commands[0]!.keys[0]!.args;
+  assert.equal(row({ search_engines: ["arch"] }), "-- arch linux");
+  assert.equal(row({ search_engines: [] }), "arch linux");
+});
+
 test("warnings pass through and a missing keymap gives no keys", () => {
   const { commands } = sample();
   const model = build_help_model(commands, undefined, ["normal: skipped \"x\""]);
