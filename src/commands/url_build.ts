@@ -112,19 +112,28 @@ export function home_page_url(home_page: string | undefined): string {
   return home_page;
 }
 
-const KEPT_SCHEMES = ["http:", "https:", "ftp:", "file:"];
-// Local hosts rarely have a certificate, so they get http. The optional port and path follow.
-const LOCAL_HOST = /^(?:localhost|\d{1,3}(?:\.\d{1,3}){3})(?::\d+)?(?:[/?#]\S*)?$/;
-const HOST_WITH_PORT = /^[^\s:/?#]+\.[^\s:/?#]+:\d+(?:[/?#]\S*)?$/;
-const ABOUT_URL = /^about:\S+$/;
+// Schemes that run code or carry inline data in the page are never opened from text.
+const SEARCHED_SCHEMES = ["javascript:", "data:"];
+// Hosts on this machine or the local network rarely have a certificate, so they get http. Public IPs get https like domains.
+const IP_OR_LOCAL_HOST = /^(localhost|\d{1,3}(?:\.\d{1,3}){3}|\[[0-9a-f:.]+\])(?::\d+)?(?:[/?#]\S*)?$/i;
+const PRIVATE_IPV4 = /^(?:127\.|10\.|192\.168\.|172\.(?:1[6-9]|2\d|3[01])\.|169\.254\.)/;
+const PRIVATE_IPV6 = /^\[(?:::1|f[cd][0-9a-f]{2}:|fe[89ab][0-9a-f]:)/i;
 
-// Other schemes (javascript:, data:) and text with a colon ("TODO: fix") are not worth opening, so they search.
+function is_private_host(host: string): boolean {
+  return host.toLowerCase() === "localhost" || PRIVATE_IPV4.test(host) || PRIVATE_IPV6.test(host);
+}
+
+// No whitespace anywhere, so prose like "TODO: fix thing" is not taken for a scheme.
+const SCHEME_URL = /^[a-z][a-z0-9+.-]*:\S+$/i;
+const HOST_WITH_PORT = /^[^\s:/?#]+\.[^\s:/?#]+:\d+(?:[/?#]\S*)?$/;
+
+// Any parsable scheme opens as given (mailto:, view-source:, about:), except the two above. Prose with a colon searches.
 function typed_url(text: string): string | undefined {
-  if (LOCAL_HOST.test(text)) return `http://${text}`;
+  const ip_or_local = IP_OR_LOCAL_HOST.exec(text);
+  if (ip_or_local) return `${is_private_host(ip_or_local[1]!) ? "http" : "https"}://${text}`;
   // Checked before the scheme parse: "example.com:8080" would otherwise parse as the scheme "example.com:".
   if (HOST_WITH_PORT.test(text)) return `https://${text}`;
-  if (ABOUT_URL.test(text)) return text;
-  if (URL.canParse(text)) return KEPT_SCHEMES.includes(new URL(text).protocol) ? text : undefined;
+  if (SCHEME_URL.test(text) && URL.canParse(text)) return SEARCHED_SCHEMES.includes(new URL(text).protocol) ? undefined : text;
   const looks_like_domain = text.includes(".") && !/\s/.test(text);
   return looks_like_domain && URL.canParse(`https://${text}`) ? `https://${text}` : undefined;
 }
@@ -137,6 +146,7 @@ export function url_target(
   engines: Record<string, { url: string }>,
 ): string {
   const trimmed = text.trim();
+  if (trimmed === "") throw new Error("No URL");
   const url = typed_url(trimmed);
   if (url !== undefined) return url;
   const engine = engines[default_engine];

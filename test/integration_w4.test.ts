@@ -117,12 +117,33 @@ test("url_target gives host-like text https, local hosts http and keeps full URL
     "file:///tmp/a.html": "file:///tmp/a.html",
     "about:config": "about:config",
     "about:preferences#privacy": "about:preferences#privacy",
+    "ABOUT:config": "ABOUT:config",
+    "LOCALHOST:3000": "http://LOCALHOST:3000",
+    "[::1]": "http://[::1]",
+    "[fd00::1]/admin": "http://[fd00::1]/admin",
+    "[fe80::1]": "http://[fe80::1]",
+    "[2001:db8::1]": "https://[2001:db8::1]",
+    "10.0.0.5": "http://10.0.0.5",
+    "172.16.0.1": "http://172.16.0.1",
+    "172.32.0.1": "https://172.32.0.1",
+    "192.168.1.1": "http://192.168.1.1",
+    "8.8.8.8": "https://8.8.8.8",
+    "8.8.8.8:8080": "https://8.8.8.8:8080",
+    "blob:https://a.example/uuid": "blob:https://a.example/uuid",
+    "[::1]:3000/a": "http://[::1]:3000/a",
+    "mailto:a@b.example": "mailto:a@b.example",
+    "tel:+15551234": "tel:+15551234",
+    "view-source:https://a.example/": "view-source:https://a.example/",
   };
   for (const [text, expected] of Object.entries(cases)) assert.equal(url_target(text, "search", engines), expected, text);
 });
 
 test("url_target searches plain words and unknown schemes", () => {
-  for (const text of ["rust", "foo bar", "javascript:alert(1)", "about: config"]) {
+  for (const text of ["rust", "foo bar", "javascript:alert(1)", "JavaScript:alert(1)", "data:text/html,hi", "about: config"]) {
     assert.equal(url_target(text, "search", engines), `https://s.example/?q=${encodeURIComponent(text)}`, text);
   }
+});
+
+test("url_target refuses empty text", () => {
+  assert.throws(() => url_target("  ", "search", engines), /No URL/);
 });

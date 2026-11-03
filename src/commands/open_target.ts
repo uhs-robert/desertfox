@@ -60,7 +60,19 @@ export async function typed_url_target(text: string): Promise<string> {
   return url_target(text, settings.default_engine ?? DEFAULT_SETTINGS.default_engine, search_engines);
 }
 
+// Firefox refuses privileged pages such as about:config from extensions. The refusal is shown as a notice, so the text is never searched instead.
+const ABOUT_URL = /^about:/i;
+
 export async function open_in(ctx: CommandContext, url: string, where: Where, container?: string): Promise<void> {
+  try {
+    await open_in_unchecked(ctx, url, where, container);
+  } catch (error) {
+    if (!ABOUT_URL.test(url)) throw error;
+    throw new Error(`Firefox does not let extensions open ${url}`);
+  }
+}
+
+async function open_in_unchecked(ctx: CommandContext, url: string, where: Where, container?: string): Promise<void> {
   if (where === "here") {
     await browser.tabs.update(require_tab_id(ctx), { url });
     return;

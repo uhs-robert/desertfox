@@ -49,7 +49,7 @@ define("window.new", {
   runs_in: "background",
   run: async (_ctx, args) => {
     const { url, private: private_window } = args as { url: string; private: boolean };
-    await handlers.create({ url: url === "" ? "" : await typed_url_target(url), private: private_window });
+    await handlers.create({ url: url.trim() === "" ? "" : await typed_url_target(url), private: private_window });
   },
 });
 
