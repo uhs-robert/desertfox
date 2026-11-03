@@ -167,7 +167,7 @@ function register(host: BundleHostApi): void {
 
   host.register_handler("hint.run", (args) => {
     const action = args.action as HintAction;
-    if (UNBUILT_ACTIONS.includes(action)) throw new Error(`hint ${action} is not built yet (phase 2)`);
+    if (UNBUILT_ACTIONS.includes(action)) throw new Error(`hint ${action} is not built yet`);
     end_session();
     const filter = args.filter as HintFilter;
     const custom_selector = args.selector as string | undefined;

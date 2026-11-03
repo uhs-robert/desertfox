@@ -2,10 +2,15 @@ import type { BundleName } from "../../shared/bundles.ts";
 import { bundles } from "../bundles.ts";
 import type { ContentHandler } from "./types.ts";
 
-export const NEEDS_HINTS = "needs hints (phase 2)";
-export const NEEDS_COMMAND_LINE = "needs the command line (phase 2)";
+export const NEEDS_HINTS = "needs hints";
+export const NEEDS_COMMAND_LINE = "needs the command line";
 export const NEEDS_WHICH_KEY = "needs the which-key panel";
-export const NEEDS_CARET = "needs caret mode (phase 2)";
+export const NEEDS_CARET = "needs caret mode";
+
+// For the background commands that need the picker (`tab.switch`, `bookmark.open`), which has no code yet.
+export const refuse_needing_command_line = () => {
+  throw new Error(NEEDS_COMMAND_LINE);
+};
 
 // The code of these commands sits in a bundle that loads on the first run. A bundle that registers no handler yet refuses with `missing`.
 const from_bundle = (command_id: string, bundle: BundleName, missing: string): ContentHandler => ({

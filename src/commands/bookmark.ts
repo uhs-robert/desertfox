@@ -1,5 +1,7 @@
 import type { CommandContext } from "../shared/command.ts";
+import { refuse_needing_command_line } from "../content/handlers/lazy_bundle.ts";
 import { define } from "../shared/registry/index.ts";
+import { WHERE_PARAM } from "./open_target.ts";
 
 export type BookmarkDeps = {
   // The title of the tab when it shows this url.
@@ -33,4 +35,13 @@ define("bookmark.add", {
   params: [{ name: "url", type: "string", main: true, default: { from: "current_url" } }],
   runs_in: "background",
   run: (ctx, args) => handlers.add(ctx, args as { url: string }),
+});
+
+define("bookmark.open", {
+  name: "bookmark",
+  label: "Open bookmark",
+  intent: "Open a bookmark chosen by title or address.",
+  params: [{ name: "bookmark", type: "string", rest: true, main: true }, WHERE_PARAM],
+  runs_in: "background",
+  run: refuse_needing_command_line,
 });

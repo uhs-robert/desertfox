@@ -10,4 +10,4 @@ The `hints` bundle (`hints.js`). The background injects it into a frame on the f
 - `view.ts`: labels in a closed shadow root. They use the which-key colors: `--oasisfox-secondary` text and `--oasisfox-accent` border on the `--oasisfox-bg` background.
 - `follow.ts`: repositions the labels on the next animation frame after a scroll or resize in the top window or a frame window.
 
-The registry never imports this folder. The command and its params sit in `src/commands/phase_2.ts`.
+The registry never imports this folder. The command and its params sit in `src/commands/hint.ts`.

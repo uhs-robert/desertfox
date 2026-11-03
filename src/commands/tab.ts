@@ -1,4 +1,5 @@
 import type { CommandContext } from "../shared/command.ts";
+import { refuse_needing_command_line } from "../content/handlers/lazy_bundle.ts";
 import { define } from "../shared/registry/index.ts";
 import type { FindContainerStoreId } from "./open_target.ts";
 import { find_container_store_id, require_tab_id, resolve_container_store_id } from "./open_target.ts";
@@ -287,4 +288,13 @@ define("tab.reopen_in_container", {
   params: [{ name: "container", type: "string", main: true, values: { from: "containers" } }],
   runs_in: "background",
   run: (ctx, args) => handlers.reopen_in_container(ctx, args as { container: string }),
+});
+
+define("tab.switch", {
+  name: "tab",
+  label: "Switch tab",
+  intent: "Switch to an open tab chosen by title or address.",
+  params: [{ name: "tab", type: "string", rest: true, main: true }],
+  runs_in: "background",
+  run: refuse_needing_command_line,
 });
