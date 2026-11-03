@@ -1,24 +1,13 @@
+import { github_repo_of, parse_http_url, path_segments, subreddit_of } from "../shared/engines/slots.ts";
+
+export { github_repo_of, subreddit_of };
+
 // Pure URL math for the url, site and open commands. Each function returns
 // undefined when the page has no sensible answer, and the caller refuses.
 
 export const GOOGLE_SEARCH_URL = "https://www.google.com/search?q=";
-const GITHUB_HOSTS = ["github.com", "www.github.com"];
-const REDDIT_HOSTS = ["reddit.com", "www.reddit.com", "old.reddit.com"];
 export const DEFAULT_SUBREDDIT = "all";
 const QUERY_PLACEHOLDER = "%s";
-
-function parse_http_url(page_url: string): URL | undefined {
-  try {
-    const url = new URL(page_url);
-    return url.protocol === "http:" || url.protocol === "https:" ? url : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-function path_segments(url: URL): string[] {
-  return url.pathname.split("/").filter((segment) => segment !== "");
-}
 
 // Drops the query and fragment with the last path segment. A root path with a query or fragment loses only those.
 function parent_once(page_url: string): string | undefined {
@@ -65,13 +54,6 @@ export function site_search_url(page_url: string, query: string): string | undef
   return url ? `${GOOGLE_SEARCH_URL}${encodeURIComponent(`site:${url.hostname} ${query}`)}` : undefined;
 }
 
-export function github_repo_of(page_url: string): { owner: string; repo: string } | undefined {
-  const url = parse_http_url(page_url);
-  if (!url || !GITHUB_HOSTS.includes(url.hostname)) return undefined;
-  const [owner, repo] = path_segments(url);
-  return owner && repo ? { owner, repo } : undefined;
-}
-
 export const GITHUB_SEARCH_TYPES = ["code", "issues", "pullrequests", "commits", "discussions", "repositories", "users", "any"] as const;
 export const GITHUB_REPO_SCOPED_TYPES = ["code", "issues", "pullrequests", "commits", "discussions", "any"] as const;
 export const GITHUB_SEARCH_SCOPES = ["repo", "all"] as const;
@@ -87,13 +69,6 @@ export function github_search_url(page_url: string, type: string, scope: string 
   }
   const type_param = type === "any" ? "" : `&type=${type}`;
   return `https://github.com/search?q=${encodeURIComponent(qualified)}${type_param}`;
-}
-
-export function subreddit_of(page_url: string): string | undefined {
-  const url = parse_http_url(page_url);
-  if (!url || !REDDIT_HOSTS.includes(url.hostname)) return undefined;
-  const [prefix, name] = path_segments(url);
-  return prefix === "r" ? name : undefined;
 }
 
 // An explicit sub wins. The default "all" yields to the subreddit the page is on.
