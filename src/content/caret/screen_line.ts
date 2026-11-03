@@ -9,7 +9,7 @@ export function character_box(model: TextModel, index: number): DOMRect | undefi
   const { node, offset } = model.point_at(index);
   const range = document.createRange();
   range.setStart(node, offset);
-  range.setEnd(node, Math.min(offset + 1, node.length));
+  range.setEnd(node, Math.min(offset + 1, node.nodeType === Node.TEXT_NODE ? (node as Text).length : node.childNodes.length));
   const box = range.getBoundingClientRect();
   return box.height > 0 ? box : undefined;
 }
