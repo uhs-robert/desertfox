@@ -89,6 +89,7 @@ const key_flow = create_key_flow({
 bundles.connect({
   request_bundle: async (name) => (await send_to_background({ type: "load_bundle", name })).ok,
   on_idle: key_flow.release,
+  set_mode: page_mode.set_mode,
   // The toast needs the ui bundle, so without it an error has nowhere to show.
   show_error: (message) => (bundles.has_handler("ui.toast") ? show_toast(message) : console.error(message)),
   on_sink_missing: (mode) => {
