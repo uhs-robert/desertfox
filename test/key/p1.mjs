@@ -14,7 +14,7 @@ export async function p1_cases(t) {
     await send_keys(":scroll.pixels --dy=300", "-k", "Return");
     const scrolled = await wait_event(mark, scroll_of("cmd"), "the page to scroll after :scroll.pixels --dy=300", 8000);
     expect(scrolled.y === 300, `scrolled to ${scrolled.y}, expected 300`);
-  });
+  }, { setup: true });
 
   await run_case("the line is closed after Enter, so j scrolls the page again", async () => {
     await sleep(300);
@@ -50,7 +50,7 @@ export async function p1_cases(t) {
     await send_keys("scroll.pixels --dy=-100000", "-k", "Return");
     await wait_event(mark, scroll_of("cmd"), "the corrected command to scroll", 8000);
     expect(last_scroll_y("cmd") === 0, `expected the top, at ${last_scroll_y("cmd")}`);
-  });
+  }, { setup: true });
 
   await run_case("Up brings back the last command", async () => {
     // The page is at the top after the last command, so move away first or the recalled command would not scroll.

@@ -112,16 +112,20 @@ function padded_bundle_text() {
 const results = [];
 const measurements = {};
 
-async function run_case(name, body) {
-  // KEY_TEST_ONLY=<regex> runs only the cases whose name matches, for a quick repro.
-  if (process.env.KEY_TEST_ONLY && !new RegExp(process.env.KEY_TEST_ONLY).test(name)) return;
+// KEY_TEST_ONLY=<regex> runs only the cases whose name matches, for a quick repro.
+// A case passed { setup: true } leaves state that later cases read (a reloaded config, an open page,
+// the command history), so it runs under any filter and is reported as "SETUP".
+async function run_case(name, body, { setup = false } = {}) {
+  const selected = !process.env.KEY_TEST_ONLY || new RegExp(process.env.KEY_TEST_ONLY).test(name);
+  if (!selected && !setup) return;
+  const label = selected ? "" : "SETUP ";
   try {
     await body();
-    results.push({ name, pass: true });
-    console.log(`PASS ${name}`);
+    results.push({ name, pass: true, setup: !selected });
+    console.log(`${label}PASS ${name}`);
   } catch (error) {
-    results.push({ name, pass: false, reason: error.message });
-    console.log(`FAIL ${name}: ${error.message}`);
+    results.push({ name, pass: false, reason: error.message, setup: !selected });
+    console.log(`${label}FAIL ${name}: ${error.message}`);
   }
 }
 
@@ -291,7 +295,7 @@ async function main() {
       expect(single_j_pixels > 0, "j did not scroll down");
       const triple = await scroll_delta_after("c", ["3j"]);
       expect(Math.abs(triple - 3 * single_j_pixels) <= 3, `3j moved ${triple}px, j moved ${single_j_pixels}px`);
-    });
+    }, { setup: true });
 
     await run_case("G jumps to the bottom and gg to the top", async () => {
       await scroll_delta_after("c", ["G"]);
@@ -391,7 +395,7 @@ async function main() {
       mark = events.length;
       await send_keys(...ALT("j"));
       await expect_exactly_one_visible(mark, "a");
-    });
+    }, { setup: true });
 
     await run_case("focus_page from the address bar returns keys to the page", async () => {
       const before = last_scroll_y("a");
@@ -406,7 +410,7 @@ async function main() {
         await send_keys("-k", "Escape", "-k", "Escape");
         throw new Error(`j after the chord did not reach the page (scroll stayed at ${before})`);
       }
-    });
+    }, { setup: true });
 
     await run_case("config.reload keeps keys working in open tabs", async () => {
       writeFileSync(join(config_dir, "keymap.toml"), [
@@ -447,7 +451,7 @@ async function main() {
       await expect_exactly_one_visible(switch_mark, "b");
       const other_tab_delta = await scroll_delta_after("b", ["j"]);
       expect(other_tab_delta === single_j_pixels, `in an untouched tab j moved ${other_tab_delta}px, expected ${single_j_pixels}px`);
-    });
+    }, { setup: true });
 
     await run_case("keys work on a fresh load after the reload", async () => {
       await open_page("page", "after_reload", { new_tab: true });
@@ -591,7 +595,7 @@ async function main() {
       expect(ignored.badge === "IGNORE", `badge after <S-Escape> was ${ignored.badge}`);
       await send_keys(...SHIFT_ESCAPE);
       await sleep(300);
-    });
+    }, { setup: true });
 
     // The help page runs content.js from a script tag. The question is whether executeScript reaches it.
     await run_case("V on the help page does not leave it stuck in caret mode", async () => {
@@ -733,6 +737,8 @@ async function main() {
   }
 
   const failed = results.filter((result) => !result.pass);
+  const setup_ran = results.filter((result) => result.setup).length;
+  if (setup_ran > 0) console.log(`${setup_ran} setup cases ran only because KEY_TEST_ONLY filtered the run`);
   console.log(`${results.length - failed.length} of ${results.length} cases passed`);
   process.exit(failed.length === 0 ? 0 : 1);
 }
