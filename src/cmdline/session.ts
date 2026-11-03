@@ -36,6 +36,8 @@ export function create_session(deps: SessionDeps) {
   let list_shown = true;
   // The previewed row, or -1 before the first Tab, Up or Down.
   let selected = -1;
+  // True until the user types, clears or uses a completion key. A fresh line keeps Up and Down for the history, so `:` then Up still recalls the last command.
+  let fresh = true;
   // The text and caret the list was ranked for. While a row is previewed, `text` differs from it.
   let saved: { text: string; caret: number } | undefined;
 
@@ -86,6 +88,7 @@ export function create_session(deps: SessionDeps) {
 
   // Tab and Shift-Tab wrap around. A single match goes into the line at once, and then the list ranks the new text.
   const cycle = (step: 1 | -1): Effect => {
+    fresh = false;
     if (!completion) refresh();
     list_shown = true;
     const count = completion?.rows.length ?? 0;
@@ -104,7 +107,7 @@ export function create_session(deps: SessionDeps) {
   };
 
   const walk_history = (direction: unknown): Effect => {
-    if (rows().length > 0) return step_selection(direction);
+    if (!fresh && rows().length > 0) return step_selection(direction);
     const next = direction === "next" ? cursor.next() : cursor.prev(text);
     if (next !== undefined) {
       replace_text(next);
@@ -129,9 +132,22 @@ export function create_session(deps: SessionDeps) {
     },
     // The user typed or the page inserted a key: the history walk and any preview start over.
     edit: (next: string, next_caret = next.length) => {
+      fresh = false;
       replace_text(next);
       caret = next_caret;
       cursor.reset();
+      refresh();
+    },
+    // The text the line opens with, as opposed to typing. The line stays fresh.
+    open: (initial: string) => {
+      replace_text(initial);
+      caret = initial.length;
+      refresh();
+    },
+    // The caret moved without a change to the text, for example by an arrow key or a click.
+    set_caret: (next_caret: number) => {
+      if (next_caret === caret) return;
+      caret = next_caret;
       refresh();
     },
     // `command_id` is a leaf of the `cmdline` keymap. Ids this piece does not own do nothing.
@@ -146,6 +162,7 @@ export function create_session(deps: SessionDeps) {
         case "cmdline.prev_completion":
           return cycle(-1);
         case "cmdline.clear":
+          fresh = false;
           replace_text("");
           caret = 0;
           cursor.reset();

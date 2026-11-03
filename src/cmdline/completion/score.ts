@@ -106,7 +106,8 @@ export function score_candidate(query: string, candidate: Candidate): Hit | null
     score += best;
     if (in_name && in_name.score + NAME_HIT_BONUS === best) positions.push(...in_name.positions);
   }
-  if (candidate.name.toLowerCase() === query.trim().toLowerCase()) score += EXACT_NAME_BONUS;
+  const typed = query.trim().toLowerCase();
+  if ([candidate.name, ...(candidate.also_named ?? [])].some((name) => name.toLowerCase() === typed)) score += EXACT_NAME_BONUS;
   return { score, positions };
 }
 

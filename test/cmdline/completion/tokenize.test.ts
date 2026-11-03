@@ -69,3 +69,10 @@ test("the caret in the middle of a word replaces the whole word", () => {
   const context = cursor_context("tab.close --rig now", 14, lookup.find);
   assert.equal(context.kind === "flag" && `${context.word}:${context.start}-${context.end}`, "--ri:10-15");
 });
+
+test("a flag whose value is quoted keeps the flags open", () => {
+  assert.equal(shape('search --container="Work X" -'), "flag:-:28-29");
+  assert.equal(shape('search -c="Work X" -t'), "flag:-t:19-21");
+  // A quote before the equals sign makes the word text, as in the grammar.
+  assert.equal(shape('search "--container=Work" -').split(":")[0], "subject");
+});

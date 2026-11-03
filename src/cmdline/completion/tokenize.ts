@@ -25,6 +25,13 @@ const NUMBER_WORD = /^-?\d+(\.\d+)?$/;
 // A word the grammar reads as a flag attempt: a dash, one more character, and not a number.
 const is_flag_word = (text: string) => text.length >= 2 && text.startsWith("-") && !NUMBER_WORD.test(text);
 
+// A quoted value after the `=` of a flag still makes the word a flag: `--container="Work X"`.
+function is_flag_token(token: { text: string; quoted_from: number | null }): boolean {
+  if (token.quoted_from === null) return is_flag_word(token.text);
+  const equals = token.text.indexOf("=");
+  return equals > 0 && token.quoted_from > equals && is_flag_word(token.text.slice(0, equals));
+}
+
 // Where the word that ends at the end of `head` begins, or null while a quote is still open.
 function last_word_start(head: string): number | null {
   let start = 0;
@@ -70,9 +77,8 @@ export function cursor_context(text: string, caret: number, find: CommandLookup[
   let flags_open = true;
   let position = 0;
   for (const earlier of rest) {
-    const unquoted = earlier.quoted_from === null;
-    if (flags_open && unquoted && earlier.text === "--") flags_open = false;
-    else if (flags_open && unquoted && is_flag_word(earlier.text)) continue;
+    if (flags_open && earlier.quoted_from === null && earlier.text === "--") flags_open = false;
+    else if (flags_open && is_flag_token(earlier)) continue;
     else {
       flags_open = false;
       position += 1;

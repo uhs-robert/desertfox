@@ -88,6 +88,8 @@ async function open_line(start: Start, port: MessagePort): Promise<void> {
 
   // Returns true when the keymap took the token.
   const press = (token: string): boolean => {
+    // An arrow key or a click moves the caret with no input event, so the list would rank the old word.
+    if (input.value === session.get_text()) session.set_caret(input.selectionStart ?? input.value.length);
     const outcome = matcher ? run_token(matcher, session, token) : run_token_without_keymap(session, token);
     if (outcome.kind === "effect") carry_out(outcome.effect);
     return outcome.kind === "effect";
@@ -133,7 +135,7 @@ async function open_line(start: Start, port: MessagePort): Promise<void> {
       for (const token of waiting) press_forwarded(token);
     }
   };
-  session.edit(start.text);
+  session.open(start.text);
   render();
   input.focus();
   for (const token of start.tokens) press_forwarded(token);
