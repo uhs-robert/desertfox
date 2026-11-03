@@ -85,4 +85,18 @@ export async function run_cases({ run_case, expect, open_page, send_keys, sleep,
     expect(shown && shown.text === "s", `after w the caret is on "${shown?.text}", expected "s" (the word after needle)`);
     await send_keys("-k", "Escape");
   });
+
+  await run_case("j in visual mode passes two br empty lines (d, empty, empty, g)", async () => {
+    await open_page("caret_bug_lines", "lines_empty_line", { new_tab: true });
+    await send_keys("V");
+    await send_keys("v");
+    for (let step = 0; step < 6; step++) {
+      await send_keys("j");
+      await sleep(250);
+    }
+    const text = events.filter((event) => event.type === "selection" && event.page_id === "lines_empty_line").at(-1)?.text ?? "";
+    await send_keys("-k", "Escape");
+    await send_keys("-k", "Escape");
+    expect(text.trimEnd().endsWith("g"), `after v and 6 j the selection ends ${JSON.stringify(text.slice(-8))}, expected it to end on "g"`);
+  });
 }
