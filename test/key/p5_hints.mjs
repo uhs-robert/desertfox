@@ -2,7 +2,7 @@
 // The fixture page /hints holds a hidden link and a covered link before two plain ones, so the labels "a" and "s" belong to the plain links only when the visibility rules work.
 import { evaluate_in_background } from "./rdp.mjs";
 
-export async function run_cases({ rdp, extension_id, run_case, send_keys, open_page, wait_event, find_event, events, expect, sleep, scroll_delta_after, became_visible }) {
+export async function run_cases({ rdp, extension_id, run_case, send_keys, open_page, wait_event, find_event, events, expect, sleep, scroll_delta_after, became_visible, take_shot }) {
   const tab_count = () => evaluate_in_background(rdp, extension_id, `(async () => (await browser.tabs.query({})).length)()`);
   const close_tabs_with = (text) => evaluate_in_background(rdp, extension_id, `(async () => { for (const tab of await browser.tabs.query({})) if (tab.url.includes(${JSON.stringify(text)})) await browser.tabs.remove(tab.id); })()`);
   const loaded = (page_id) => (event) => event.type === "tree_read" && event.page_id === page_id;
@@ -44,4 +44,16 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, open_p
     expect(!find_event(mark, loaded("hint_one")), "a opened a link after Escape");
     expect((await scroll_delta_after("h_cancel", ["j"])) > 0, "keys did not work again after Escape");
   });
+
+  // Set OASISFOX_SHOT_DIR to also save a screenshot of the labels.
+  const shot_dir = process.env.OASISFOX_SHOT_DIR;
+  if (shot_dir) {
+    await run_case("screenshot of the hint labels", async () => {
+      await open_page("hints", "h_shot", { new_tab: true });
+      await send_keys("f");
+      await sleep(600);
+      await take_shot(`${shot_dir}/hints.png`);
+      await send_keys("-k", "Escape");
+    });
+  }
 }
