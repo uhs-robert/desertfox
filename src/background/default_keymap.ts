@@ -1,6 +1,6 @@
 import type { KeymapConfig } from "../shared/keymap.ts";
 
-// Every `v1` row of docs/keymap.md whose command exists, except the rows that need the user's own data.
+// The source of docs/keymap.md: `just docs-gen` regenerates its tables from this file.
 // Search engine keys (`s`, `S`, `,`) and container keys (`c`) come from the user's config. The site search key `s/` and the `sG` GitHub group are defaults and open the command line when nothing is selected.
 // Keys of the phase 2 stubs (`o O T b B f F ; : V`) are bound now and refuse until hints, the command line, the picker and caret mode exist.
 // The caret, visual and cmdline commands are placeholders too: they load their bundle and refuse until it registers them.

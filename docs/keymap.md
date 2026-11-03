@@ -1,327 +1,292 @@
 # Binding map
 
-Every key bound in the current browser config (2026-10-30), with its status and the OasisFox invocation that replaces it. Search engine keywords move into the engine list as data and are not listed here.
+The default keymap, generated from `src/background/default_keymap.ts` and `docs/keymap_planned.toml`. Do not edit between the markers. Run `just docs-gen` after a change to either source. `npm test` fails when the tables are stale.
 
 Status values:
 
-- `v1`: in the first release, phases 1 and 2.
-- `later`: phase 3.
-- `dropped`: not built. The last column gives the reason.
+- `bound`: the default keymap binds the key.
+- `later`: planned for phase 3. The key is not bound yet.
+- `dropped`: not built. The note gives the reason.
 
-The shipped defaults bind every `v1` row whose command exists, with three kinds of exception:
-
-- Rows that name a search engine or a container (`s`, `S`, `,`, `c`, `C` keys). The user's config generates them from `search_keys` and `container_keys`. The `s/` and `sG` site search rows are the exception and ship as defaults.
-- `;f`, because it needs the command line prompt to ask for the link text. `hint.run --text=...` already filters.
-- `ZZ`, because closing every window cannot be undone. Bind it in the config.
+Search engine keys (`s`, `S`, `,`) and container keys (`c`, `C`) come from the user's config, so no row lists them. The config generates them from `search_keys` and `container_keys`. Two defaults are left unbound on purpose. `;f` needs the command line prompt to ask for the link text, and `hint.run --text=...` already filters. `ZZ` closes every window with no undo, so users bind it in their config.
 
 Which-key shows a group as `+Name`, for example `g` as `+Go`. A `group_names` section in `keymap.toml` maps a key sequence to its name. A group without one shows its prefix key.
 
-A key shows the command label plus a phrase for each arg its binding sets, for example `gO` as "Open URL in new tab". Keys that set numbers carry a `label` in the default keymap, such as `h` as "Scroll left". The rule is in [design.md](design.md#which-key).
+A key shows the command label plus a phrase for each arg its binding sets, for example `gO` as "Open URL in new tab". Keys that set numbers carry a `label` in the default keymap, such as `h` as "Scroll left". The Label column shows that `label` or the command label. The rule is in [design.md](design.md#which-key).
 
 The `caret`, `visual` and `cmdline` rows bind placeholder commands that refuse until their piece builds them.
 
 A note "(prompts)" means the binding leaves a param out, so the command line asks for it.
 
-dropped: 8 | later: 15 | v1: 269
+<!-- BEGIN generated -->
 
-| mode | key | status | OasisFox |
-| --- | --- | --- | --- |
-| normal | `h` | v1 | `scroll.pixels --dx=-50` |
-| normal | `j` | v1 | `scroll.lines 10` |
-| normal | `k` | v1 | `scroll.lines -10` |
-| normal | `l` | v1 | `scroll.pixels --dx=50` |
-| normal | `H` | v1 | `page.back` |
-| normal | `J` | v1 | `tab.next` |
-| normal | `K` | v1 | `tab.prev` |
-| normal | `L` | v1 | `page.forward` |
-| normal | `$` | v1 | `scroll.to --x 100` |
-| normal | `^` | v1 | `scroll.to --x 0` |
-| normal | `b` | v1 | `bookmark.open` (prompts) |
-| normal | `B` | v1 | `bookmark.open --tab` (prompts) |
-| normal | `f` | v1 | `hint.run` |
-| normal | `F` | v1 | `hint.run --background` |
-| normal | `m` | later | `mark.add` (key param) |
-| normal | `M` | later | `quickmark.add` (key param) |
-| normal | `o` | v1 | `open.url` (prompts) |
-| normal | `O` | v1 | `open.url --tab` (prompts) |
-| normal | `p` | v1 | `open.clipboard` |
-| normal | `P` | v1 | `open.clipboard --tab` |
-| normal | `R` | v1 | `page.reload --hard` |
-| normal | `T` | v1 | `tab.switch` (prompts for tab) |
-| normal | `u` | v1 | `tab.undo_close` |
-| normal | `U` | v1 | `window.undo_close` |
-| normal | `v` | v1 | `hint.run --select` (enters visual) |
-| normal | `V` | v1 | `mode.set caret` (then `v` selects, new in phase 2) |
-| normal | `.` | later | `command.repeat` |
-| normal | `:` | v1 | `cmdline.open` |
-| normal | `<<` | v1 | `tab.move -1` |
-| normal | `>>` | v1 | `tab.move 1` |
-| normal | `[[` | later | `page.follow --direction=prev` |
-| normal | `[c` | later | `url.increment --step=-1` |
-| normal | `]]` | later | `page.follow --direction=next` |
-| normal | `]c` | later | `url.increment --step=1` |
-| normal | ``` | later | `mark.jump` (key param) |
-| normal | `rr` | v1 | `page.reload` |
-| normal | `rh` | v1 | `page.reload --hard` |
-| normal | `ri` | v1 | `site.isdown` |
-| normal | `s/` | v1 | `site.search @selection` (prompts when nothing is selected) |
-| normal | `sGc` | v1 | `site.github @selection` (prompts when nothing is selected) |
-| normal | `sGi` | v1 | `site.github --issues @selection` |
-| normal | `sGp` | v1 | `site.github --pullrequests @selection` |
-| normal | `sGm` | v1 | `site.github --commits @selection` |
-| normal | `sGd` | v1 | `site.github --discussions @selection` |
-| normal | `sGr` | v1 | `site.github --repositories @selection` |
-| normal | `sGu` | v1 | `site.github --users @selection` |
-| normal | `sGs` | v1 | `site.github --any --all @selection` (GitHub picks the result type) |
-| normal | `W` | v1 | `window.new` (prompts, url prefilled from current_url) |
-| normal | `wa` | dropped | assumed unused |
-| normal | `wc` | v1 | `window.close` |
-| normal | `wd` | v1 | `tab.duplicate` |
-| normal | `wD` | v1 | `tab.detach` |
-| normal | `wh` | v1 | `hint.run --window` |
-| normal | `wi` | dropped | needs a shell |
-| normal | `wn` | v1 | `window.new` |
-| normal | `wo` | v1 | `window.new` (prompts for url) |
-| normal | `wp` | v1 | `window.new --private` |
-| normal | `wu` | v1 | `window.undo_close` |
-| normal | `ww` | v1 | `window.new` (prompts, url prefilled from current_url) |
-| normal | `tt` | v1 | `open.url --tab` (prompts) |
-| normal | `tT` | v1 | `tab.switch` (prompts for tab) |
-| normal | `td` | v1 | `tab.duplicate` |
-| normal | `tm` | v1 | `tab.move` (prompts for offset) |
-| normal | `tn` | v1 | `tab.next` |
-| normal | `tp` | v1 | `tab.prev` |
-| normal | `ta` | v1 | `tab.goto_audible` |
-| normal | `tf` | v1 | `tab.goto 1` |
-| normal | `tl` | v1 | `tab.goto -1` |
-| browser | `<A-,>` | v1 | `browser.focus_page` (Firefox shortcut slot) |
-| browser | `<A-j>` | v1 | `tab.next` (Firefox shortcut slot, new in 0.1.1) |
-| browser | `<A-k>` | v1 | `tab.prev` (Firefox shortcut slot, new in 0.1.1) |
-| normal | `<S-Insert>` | v1 | `mode.set ignore` |
-| normal | `<AC-Escape>` | v1 | `mode.set ignore` |
-| normal | `<AC-`>` | v1 | `mode.set ignore` |
-| normal | `<S-Escape>` | v1 | `mode.set ignore` |
-| ignore | `<S-Escape>` | v1 | `mode.set normal` (new in 0.1.1) |
-| insert | `<Escape>` | v1 | `mode.escape` (new in 0.1.1) |
-| normal | `<Escape>` | v1 | `mode.escape` |
-| normal | `<C-[>` | v1 | `mode.escape` |
-| normal | `<A-p>` | v1 | `tab.pin` |
-| normal | `<A-m>` | v1 | `tab.mute` |
-| normal | `<C-u>` | v1 | `scroll.pages -0.5` |
-| normal | `<C-d>` | v1 | `scroll.pages 0.5` |
-| normal | `<C-f>` | v1 | `scroll.pages` |
-| normal | `<C-b>` | v1 | `scroll.pages -1` |
-| normal | `<C-v>` | v1 | `mode.pass_next` |
-| normal | `<C-o>` | later | `page.jump --step=-1` |
-| normal | `<C-i>` | later | `page.jump --step=1` |
-| normal | `<C-x>` | later | `url.increment --step=-1` |
-| normal | `<C-a>` | later | `url.increment --step=1` |
-| normal | `<F1>` | v1 | `help.open` |
-| normal | `yc` | v1 | `copy.url --canonical` |
-| normal | `ym` | v1 | `copy.url --markdown` |
-| normal | `yo` | v1 | `copy.url --org` |
-| normal | `yq` | later | `copy.qr` |
-| normal | `ys` | v1 | `copy.url --short` |
-| normal | `yt` | v1 | `copy.url --title` |
-| normal | `yy` | v1 | `copy.url` |
-| normal | `ab` | v1 | `bookmark.add` (prompts, prefilled from current_url) |
-| normal | `aa` | v1 | `bookmark.add` |
-| normal | `ca` | v1 | `tab.reopen_in_container Family` |
-| normal | `cA` | v1 | `open.url --tab --container=Family` (prompts, prefilled from current_url) |
-| normal | `cc` | v1 | `tab.reopen_in_container Client` |
-| normal | `cC` | v1 | `open.url --tab --container=Client` (prompts, prefilled from current_url) |
-| normal | `cd` | v1 | `tab.reopen_in_container default` |
-| normal | `cD` | v1 | `open.url --tab --container=default` (prompts, prefilled from current_url) |
-| normal | `cn` | v1 | `tab.reopen_in_container No` |
-| normal | `cN` | v1 | `open.url --tab --container=No` (prompts, prefilled from current_url) |
-| normal | `cp` | v1 | `tab.reopen_in_container Personal` |
-| normal | `cP` | v1 | `open.url --tab --container=Personal` (prompts, prefilled from current_url) |
-| normal | `cr` | v1 | `tab.reopen_in_container Research` |
-| normal | `cR` | v1 | `open.url --tab --container=Research` (prompts, prefilled from current_url) |
-| normal | `cw` | v1 | `tab.reopen_in_container Work` |
-| normal | `cW` | v1 | `open.url --tab --container=Work` (prompts, prefilled from current_url) |
-| normal | `G` | v1 | `scroll.to 100` |
-| normal | `ga` | v1 | `tab.goto_audible` |
-| normal | `gg` | v1 | `scroll.to 0` |
-| normal | `gf` | later | `page.view_source` |
-| normal | `gh` | v1 | `page.home` |
-| normal | `gH` | v1 | `page.home --tab` |
-| normal | `gi` | v1 | `page.focus_input` |
-| normal | `go` | v1 | `open.url` (prompts, prefilled from current_url) |
-| normal | `gO` | v1 | `open.url --tab` (prompts, prefilled from current_url) |
-| normal | `gt` | v1 | `tab.goto` (count is the index) |
-| normal | `gT` | v1 | `tab.prev` |
-| normal | `gu` | v1 | `url.parent` |
-| normal | `gU` | v1 | `url.root` |
-| normal | `gx0` | v1 | `tab.close --all-before` |
-| normal | `gx$` | v1 | `tab.close --all-after` |
-| normal | `g!` | dropped | joke binding |
-| normal | `g$` | v1 | `tab.goto -1` |
-| normal | `g0` | v1 | `tab.goto 1` |
-| normal | `g;` | later | `page.change_jump` |
-| normal | `g?` | v1 | `help.open` |
-| normal | `g^` | v1 | `tab.goto 1` |
-| normal | `dd` | v1 | `tab.close` |
-| normal | `dL` | v1 | `tab.close --all-after` |
-| normal | `dH` | v1 | `tab.close --all-before` |
-| normal | `D` | v1 | `tab.close --focus-previous` |
-| normal | `xx` | v1 | `tab.close` |
-| normal | `xp` | v1 | `page.stop` |
-| normal | `zi` | v1 | `zoom.by 0.1` |
-| normal | `z+` | v1 | `zoom.by 0.1` |
-| normal | `zI` | v1 | `zoom.set 3` |
-| normal | `zo` | v1 | `zoom.by -0.1` |
-| normal | `z-` | v1 | `zoom.by -0.1` |
-| normal | `zO` | dropped | duplicate key, the v1 `zO` row wins |
-| normal | `zm` | v1 | `zoom.by 0.5` |
-| normal | `zM` | v1 | `zoom.by 0.5` |
-| normal | `zr` | v1 | `zoom.by -0.5` |
-| normal | `zR` | v1 | `zoom.by -0.5` |
-| normal | `zz` | v1 | `scroll.align` (changed in 0.1.1, was zoom reset) |
-| normal | `zt` | v1 | `scroll.align --top` (new in 0.1.1) |
-| normal | `z=` | v1 | `zoom.set 1` (zoom reset moved here from `zz` in 0.1.1) |
-| normal | `zO` | v1 | `zoom.set 0.3` |
-| normal | `qr` | v1 | `config.reload` (new in 0.1.1) |
-| normal | `qh` | v1 | `help.open` (new in 0.1.1) |
-| normal | `qi` | v1 | `mode.set ignore` (new in 0.1.1) |
-| normal | `qb` | v1 | `page.blur` (new in 0.1.1, moved from `zb`) |
-| normal | `ZZ` | v1 | `browser.close_all` (config only: closing every window cannot be undone, so no default key) |
-| normal | `zb` | v1 | `scroll.align --bottom` (changed in 0.1.1, was blur) |
-| normal | `;b` | v1 | `hint.run` |
-| normal | `;B` | v1 | `hint.run --background` |
-| normal | `;r` | v1 | `hint.run --background --links --rapid` |
-| normal | `;c` | dropped | needs a shell |
-| normal | `;f` | v1 | `hint.run` (prompts for link text filter) |
-| normal | `;i` | v1 | `hint.run --inputs` |
-| normal | `;l` | v1 | `hint.run --links` |
-| normal | `;y` | v1 | `hint.run --copy --links` (copies the link address, `--copy-text` copies its text) |
-| normal | `;x` | dropped | needs a shell |
-| normal | `;:` | dropped | needs a shell |
-| normal | `,,` | v1 | `open.search search` (prompts) |
-| normal | `,<` | v1 | `open.search search --tab` (prompts) |
-| normal | `,r` | dropped | no config file to reload |
-| cmdline | `<A-ArrowDown>` | v1 | `cmdline.next_completion` |
-| cmdline | `<A-ArrowUp>` | v1 | `cmdline.prev_completion` |
-| cmdline | `<Tab>` | v1 | `cmdline.next_completion` (new in phase 2) |
-| cmdline | `<C-n>` | v1 | `cmdline.next_completion` (new in phase 2) |
-| cmdline | `<S-Tab>` | v1 | `cmdline.prev_completion` (new in phase 2) |
-| cmdline | `<C-p>` | v1 | `cmdline.prev_completion` (new in phase 2) |
-| cmdline | `<Escape>` | v1 | `mode.escape` (new in phase 2) |
-| caret | `h` | v1 | `caret.move --char --back` (new in phase 2) |
-| caret | `l` | v1 | `caret.move --char` (new in phase 2) |
-| caret | `j` | v1 | `caret.move --line` (new in phase 2) |
-| caret | `k` | v1 | `caret.move --line --back` (new in phase 2) |
-| caret | `w` | v1 | `caret.move --word` (new in phase 2) |
-| caret | `b` | v1 | `caret.move --word --back` (new in phase 2) |
-| caret | `e` | v1 | `caret.move --word-end` (new in phase 2) |
-| caret | `W` | v1 | `caret.move --word --big` (new in phase 2) |
-| caret | `B` | v1 | `caret.move --word --back --big` (new in phase 2) |
-| caret | `E` | v1 | `caret.move --word-end --big` (new in phase 2) |
-| caret | `0` | v1 | `caret.move --line-start` (new in phase 2) |
-| caret | `^` | v1 | `caret.move --line-first` (new in phase 2) |
-| caret | `$` | v1 | `caret.move --line-end` (new in phase 2) |
-| caret | `gg` | v1 | `caret.move --start` (new in phase 2) |
-| caret | `G` | v1 | `caret.move --end` (new in phase 2) |
-| visual | `h` | v1 | `caret.move --char --back` (new in phase 2) |
-| visual | `l` | v1 | `caret.move --char` (new in phase 2) |
-| visual | `j` | v1 | `caret.move --line` (new in phase 2) |
-| visual | `k` | v1 | `caret.move --line --back` (new in phase 2) |
-| visual | `w` | v1 | `caret.move --word` (new in phase 2) |
-| visual | `b` | v1 | `caret.move --word --back` (new in phase 2) |
-| visual | `e` | v1 | `caret.move --word-end` (new in phase 2) |
-| visual | `W` | v1 | `caret.move --word --big` (new in phase 2) |
-| visual | `B` | v1 | `caret.move --word --back --big` (new in phase 2) |
-| visual | `E` | v1 | `caret.move --word-end --big` (new in phase 2) |
-| visual | `0` | v1 | `caret.move --line-start` (new in phase 2) |
-| visual | `^` | v1 | `caret.move --line-first` (new in phase 2) |
-| visual | `$` | v1 | `caret.move --line-end` (new in phase 2) |
-| visual | `gg` | v1 | `caret.move --start` (new in phase 2) |
-| visual | `G` | v1 | `caret.move --end` (new in phase 2) |
-| visual | `y` | v1 | `visual.act yank` (new in phase 2) |
-| visual | `o` | v1 | `visual.act swap` (new in phase 2) |
-| visual | `s` | v1 | `visual.act search` (new in phase 2) |
-| cmdline | `<Enter>` | v1 | `cmdline.submit` (new in phase 2) |
-| cmdline | `<ArrowUp>` | v1 | `cmdline.history prev` (new in phase 2) |
-| cmdline | `<ArrowDown>` | v1 | `cmdline.history next` (new in phase 2) |
-| cmdline | `<C-u>` | v1 | `cmdline.clear` (new in phase 2) |
-| hint | `<Escape>` | v1 | `mode.escape` (new in phase 2) |
-| hint | `<C-[>` | v1 | `mode.escape` (new in phase 2) |
-| caret | `v` | v1 | `mode.set visual` (new in phase 2) |
-| caret | `<Escape>` | v1 | `mode.escape` (new in phase 2) |
-| caret | `<C-[>` | v1 | `mode.escape` (new in phase 2) |
-| visual | `<Escape>` | v1 | `mode.escape` (new in phase 2) |
-| visual | `<C-[>` | v1 | `mode.escape` (new in phase 2) |
-| normal | `sa` | v1 | `open.search arch` (prompts) |
-| normal | `Sa` | v1 | `open.search arch --tab` (prompts) |
-| normal | `sb` | v1 | `open.search brave` (prompts) |
-| normal | `Sb` | v1 | `open.search brave --tab` (prompts) |
-| normal | `sc` | v1 | `open.search crates` (prompts) |
-| normal | `Sc` | v1 | `open.search crates --tab` (prompts) |
-| normal | `sf` | v1 | `open.search flathub` (prompts) |
-| normal | `Sf` | v1 | `open.search flathub --tab` (prompts) |
-| normal | `sh` | v1 | `open.search hackernews` (prompts) |
-| normal | `Sh` | v1 | `open.search hackernews --tab` (prompts) |
-| normal | `si` | v1 | `open.search imdb` (prompts) |
-| normal | `Si` | v1 | `open.search imdb --tab` (prompts) |
-| normal | `sm` | v1 | `open.search mdn` (prompts) |
-| normal | `Sm` | v1 | `open.search mdn --tab` (prompts) |
-| normal | `sn` | v1 | `open.search npm` (prompts) |
-| normal | `Sn` | v1 | `open.search npm --tab` (prompts) |
-| normal | `so` | v1 | `open.search stackoverflow` (prompts) |
-| normal | `So` | v1 | `open.search stackoverflow --tab` (prompts) |
-| normal | `sq` | v1 | `open.search gpt` (prompts) |
-| normal | `Sq` | v1 | `open.search gpt --tab` (prompts) |
-| normal | `sr` | v1 | `open.search reddit` (prompts) |
-| normal | `Sr` | v1 | `open.search reddit --tab` (prompts) |
-| normal | `ss` | v1 | `open.search search` (prompts) |
-| normal | `Ss` | v1 | `open.search search --tab` (prompts) |
-| normal | `st` | v1 | `open.search translate` (prompts) |
-| normal | `St` | v1 | `open.search translate --tab` (prompts) |
-| normal | `sw` | v1 | `open.search wikipedia` (prompts) |
-| normal | `Sw` | v1 | `open.search wikipedia --tab` (prompts) |
-| normal | `sy` | v1 | `open.search youtube` (prompts) |
-| normal | `Sy` | v1 | `open.search youtube --tab` (prompts) |
-| normal | `sz` | v1 | `open.search wolframalpha` (prompts) |
-| normal | `Sz` | v1 | `open.search wolframalpha --tab` (prompts) |
-| normal | `sgg` | v1 | `open.search google` (prompts) |
-| normal | `Sgg` | v1 | `open.search google --tab` (prompts) |
-| normal | `sgc` | v1 | `open.search calendar` (prompts) |
-| normal | `Sgc` | v1 | `open.search calendar --tab` (prompts) |
-| normal | `sgd` | v1 | `open.search drive` (prompts) |
-| normal | `Sgd` | v1 | `open.search drive --tab` (prompts) |
-| normal | `sge` | v1 | `open.search gmail` (prompts) |
-| normal | `Sge` | v1 | `open.search gmail --tab` (prompts) |
-| normal | `sgi` | v1 | `open.search image` (prompts) |
-| normal | `Sgi` | v1 | `open.search image --tab` (prompts) |
-| normal | `sgm` | v1 | `open.search maps` (prompts) |
-| normal | `Sgm` | v1 | `open.search maps --tab` (prompts) |
-| normal | `sgr` | v1 | `open.search redditgoogle` (prompts) |
-| normal | `Sgr` | v1 | `open.search redditgoogle --tab` (prompts) |
-| normal | `sgth` | v1 | `open.search lasthour` (prompts) |
-| normal | `Sgth` | v1 | `open.search lasthour --tab` (prompts) |
-| normal | `sgtd` | v1 | `open.search lastday` (prompts) |
-| normal | `Sgtd` | v1 | `open.search lastday --tab` (prompts) |
-| normal | `sgtw` | v1 | `open.search lastweek` (prompts) |
-| normal | `Sgtw` | v1 | `open.search lastweek --tab` (prompts) |
-| normal | `sgtm` | v1 | `open.search lastmonth` (prompts) |
-| normal | `Sgtm` | v1 | `open.search lastmonth --tab` (prompts) |
-| normal | `sgty` | v1 | `open.search lastyear` (prompts) |
-| normal | `Sgty` | v1 | `open.search lastyear --tab` (prompts) |
-| normal | `sdd` | v1 | `open.search duck` (prompts) |
-| normal | `Sdd` | v1 | `open.search duck --tab` (prompts) |
-| normal | `sde` | v1 | `open.search define` (prompts) |
-| normal | `Sde` | v1 | `open.search define --tab` (prompts) |
-| normal | `sdu` | v1 | `open.search urbandictionary` (prompts) |
-| normal | `Sdu` | v1 | `open.search urbandictionary --tab` (prompts) |
-| normal | `sdy` | v1 | `open.search synonym` (prompts) |
-| normal | `Sdy` | v1 | `open.search synonym --tab` (prompts) |
-| normal | `sea` | v1 | `open.search amazon` (prompts) |
-| normal | `Sea` | v1 | `open.search amazon --tab` (prompts) |
-| normal | `spb` | v1 | `open.search gamebanana` (prompts) |
-| normal | `Spb` | v1 | `open.search gamebanana --tab` (prompts) |
-| normal | `spn` | v1 | `open.search nexusmods` (prompts) |
-| normal | `Spn` | v1 | `open.search nexusmods --tab` (prompts) |
-| normal | `spp` | v1 | `open.search proton` (prompts) |
-| normal | `Spp` | v1 | `open.search proton --tab` (prompts) |
-| normal | `sps` | v1 | `open.search steam` (prompts) |
-| normal | `Sps` | v1 | `open.search steam --tab` (prompts) |
+bound: 184 (normal 128, hint 2, cmdline 11, caret 18, visual 20, insert 1, ignore 1, browser 3) | later: 15 | dropped: 7
+
+### normal
+
+| Key | Status | Command | Label | Note |
+| --- | --- | --- | --- | --- |
+| `h` | bound | `scroll.pixels --dx=-50` | Scroll left |  |
+| `l` | bound | `scroll.pixels --dx=50` | Scroll right |  |
+| `j` | bound | `scroll 10` | Scroll down |  |
+| `k` | bound | `scroll -10` | Scroll up |  |
+| `gg` | bound | `scroll.to 0` | Scroll to top |  |
+| `G` | bound | `scroll.to 100` | Scroll to bottom |  |
+| `$` | bound | `scroll.to --x 100` | Scroll to right edge |  |
+| `^` | bound | `scroll.to --x 0` | Scroll to left edge |  |
+| `<C-d>` | bound | `scroll.pages 0.5` | Scroll half page down |  |
+| `<C-u>` | bound | `scroll.pages -0.5` | Scroll half page up |  |
+| `<C-f>` | bound | `scroll.pages` | Scroll page down |  |
+| `<C-b>` | bound | `scroll.pages -1` | Scroll page up |  |
+| `H` | bound | `page.back` | Back |  |
+| `L` | bound | `page.forward` | Forward |  |
+| `rr` | bound | `page.reload` | Reload |  |
+| `rh` | bound | `page.reload --hard` | Hard reload |  |
+| `R` | bound | `page.reload --hard` | Hard reload |  |
+| `ri` | bound | `site.isdown` | Is it down |  |
+| `s/` | bound | `site.search @selection` | Search this site |  |
+| `sGc` | bound | `github @selection` | Search GitHub code in this repo |  |
+| `sGi` | bound | `github --issues @selection` | Search GitHub issues in this repo |  |
+| `sGp` | bound | `github --pullrequests @selection` | Search GitHub pull requests in this repo |  |
+| `sGm` | bound | `github --commits @selection` | Search GitHub commits in this repo |  |
+| `sGd` | bound | `github --discussions @selection` | Search GitHub discussions in this repo |  |
+| `sGr` | bound | `github --repositories @selection` | Search GitHub |  |
+| `sGu` | bound | `github --users @selection` | Search GitHub |  |
+| `sGs` | bound | `github --any --all @selection` | Search all of GitHub |  |
+| `xp` | bound | `page.stop` | Stop loading |  |
+| `gh` | bound | `page.home` | Home page |  |
+| `gH` | bound | `page.home --tab` | Home page |  |
+| `J` | bound | `tab.next` | Next tab |  |
+| `K` | bound | `tab.prev` | Previous tab |  |
+| `gt` | bound | `tab.goto` | Next tab |  |
+| `gT` | bound | `tab.prev` | Previous tab |  |
+| `ga` | bound | `tab.goto_audible` | Go to audible tab |  |
+| `g0` | bound | `tab.goto 1` | First tab |  |
+| `g^` | bound | `tab.goto 1` | First tab |  |
+| `g$` | bound | `tab.goto -1` | Last tab |  |
+| `T` | bound | `tab` (prompts) | Switch tab |  |
+| `<<` | bound | `tab.move -1` | Move tab left |  |
+| `>>` | bound | `tab.move 1` | Move tab right |  |
+| `xx` | bound | `tab.close` | Close tab |  |
+| `dd` | bound | `tab.close` | Close tab |  |
+| `D` | bound | `tab.close --focus-previous` | Close tab |  |
+| `dL` | bound | `tab.close --all-after` | Close tabs after this one |  |
+| `dH` | bound | `tab.close --all-before` | Close tabs before this one |  |
+| `gx0` | bound | `tab.close --all-before` | Close tabs before this one |  |
+| `gx$` | bound | `tab.close --all-after` | Close tabs after this one |  |
+| `u` | bound | `tab.undo_close` | Reopen closed tab |  |
+| `<A-p>` | bound | `tab.pin` | Toggle pin |  |
+| `<A-m>` | bound | `tab.mute` | Toggle mute |  |
+| `tt` | bound | `open --tab` (prompts) | Open URL |  |
+| `tT` | bound | `tab` (prompts) | Switch tab |  |
+| `td` | bound | `tab.duplicate` | Duplicate tab |  |
+| `tm` | bound | `tab.move` (prompts) | Move tab |  |
+| `tn` | bound | `tab.next` | Next tab |  |
+| `tp` | bound | `tab.prev` | Previous tab |  |
+| `ta` | bound | `tab.goto_audible` | Go to audible tab |  |
+| `tf` | bound | `tab.goto 1` | First tab |  |
+| `tl` | bound | `tab.goto -1` | Last tab |  |
+| `W` | bound | `window.new` (prompts) | New window, edit current URL |  |
+| `ww` | bound | `window.new` (prompts) | New window, edit current URL |  |
+| `wo` | bound | `window.new` (prompts) | New window, enter URL |  |
+| `wn` | bound | `window.new` | New window |  |
+| `wp` | bound | `window.new --private` | New private window |  |
+| `wc` | bound | `window.close` | Close window |  |
+| `wd` | bound | `tab.duplicate` | Duplicate tab |  |
+| `wD` | bound | `tab.detach` | Detach tab |  |
+| `wh` | bound | `hint --window` | Click element in new window |  |
+| `wu` | bound | `window.undo_close` | Reopen closed window |  |
+| `U` | bound | `window.undo_close` | Reopen closed window |  |
+| `yy` | bound | `copy` | Copy URL |  |
+| `yc` | bound | `copy --canonical` | Copy URL |  |
+| `ym` | bound | `copy --markdown` | Copy URL |  |
+| `yo` | bound | `copy --org` | Copy URL |  |
+| `ys` | bound | `copy --short` | Copy URL |  |
+| `yt` | bound | `copy --title` | Copy URL |  |
+| `gu` | bound | `url.parent` | Parent URL |  |
+| `gU` | bound | `url.root` | Root URL |  |
+| `gi` | bound | `page.focus_input` | Focus input |  |
+| `p` | bound | `paste` | Open clipboard |  |
+| `P` | bound | `paste --tab` | Open clipboard |  |
+| `aa` | bound | `bookmark.add` | Add bookmark |  |
+| `ab` | bound | `bookmark.add` (prompts) | Add bookmark, edit URL |  |
+| `b` | bound | `bookmark` (prompts) | Open bookmark |  |
+| `B` | bound | `bookmark --tab` (prompts) | Open bookmark |  |
+| `zi` | bound | `zoom.by 0.1` | Zoom in |  |
+| `z+` | bound | `zoom.by 0.1` | Zoom in |  |
+| `zo` | bound | `zoom.by -0.1` | Zoom out |  |
+| `z-` | bound | `zoom.by -0.1` | Zoom out |  |
+| `zm` | bound | `zoom.by 0.5` | Zoom in a lot |  |
+| `zM` | bound | `zoom.by 0.5` | Zoom in a lot |  |
+| `zr` | bound | `zoom.by -0.5` | Zoom out a lot |  |
+| `zR` | bound | `zoom.by -0.5` | Zoom out a lot |  |
+| `z=` | bound | `zoom 1` | Reset zoom |  |
+| `zI` | bound | `zoom 3` | Zoom to 300% |  |
+| `zO` | bound | `zoom 0.3` | Zoom to 30% |  |
+| `zt` | bound | `scroll.align --top` | Align focus |  |
+| `zz` | bound | `scroll.align` | Align focus |  |
+| `zb` | bound | `scroll.align --bottom` | Align focus |  |
+| `<S-Escape>` | bound | `mode ignore` | Set mode |  |
+| `<S-Insert>` | bound | `mode ignore` | Set mode |  |
+| `<AC-Escape>` | bound | `mode ignore` | Set mode |  |
+| ``<AC-`>`` | bound | `mode ignore` | Set mode |  |
+| `<Escape>` | bound | `mode.escape` | Escape |  |
+| `<C-[>` | bound | `mode.escape` | Escape |  |
+| `<C-v>` | bound | `mode.pass_next` | Pass next key |  |
+| `<F1>` | bound | `help` | Help |  |
+| `qr` | bound | `config.reload` | Reload config |  |
+| `qh` | bound | `help` | Help |  |
+| `qi` | bound | `mode ignore` | Set mode |  |
+| `qb` | bound | `page.blur` | Blur |  |
+| `o` | bound | `open` (prompts) | Open URL |  |
+| `O` | bound | `open --tab` (prompts) | Open URL |  |
+| `go` | bound | `open` (prompts) | Open URL |  |
+| `gO` | bound | `open --tab` (prompts) | Open URL |  |
+| `f` | bound | `hint` | Click element |  |
+| `F` | bound | `hint --background` | Click element in background tab |  |
+| `v` | bound | `hint --select` | Select element |  |
+| `;b` | bound | `hint` | Click element |  |
+| `;B` | bound | `hint --background` | Click element in background tab |  |
+| `;y` | bound | `hint --copy --links` | Copy link address |  |
+| `;r` | bound | `hint --background --links --rapid` | Open links rapidly in background tabs |  |
+| `;i` | bound | `hint --inputs` | Click input |  |
+| `;l` | bound | `hint --links` | Click link |  |
+| `:` | bound | `cmdline.open` | Command line |  |
+| `g?` | bound | `help` | Help |  |
+| `V` | bound | `mode caret` | Set mode |  |
+| `m` | later | `mark.add` |  | phase 3, key param |
+| `M` | later | `quickmark.add` |  | phase 3, key param |
+| `.` | later | `command.repeat` |  | phase 3 |
+| `[[` | later | `page.follow --direction=prev` |  | phase 3 |
+| `[c` | later | `url.increment --step=-1` |  | phase 3 |
+| `]]` | later | `page.follow --direction=next` |  | phase 3 |
+| `]c` | later | `url.increment --step=1` |  | phase 3 |
+| `` ` `` | later | `mark.jump` |  | phase 3, key param |
+| `wa` | dropped |  |  | assumed unused |
+| `wi` | dropped |  |  | needs a shell |
+| `<C-o>` | later | `page.jump --step=-1` |  | phase 3 |
+| `<C-i>` | later | `page.jump --step=1` |  | phase 3 |
+| `<C-x>` | later | `url.increment --step=-1` |  | phase 3 |
+| `<C-a>` | later | `url.increment --step=1` |  | phase 3 |
+| `yq` | later | `copy.qr` |  | phase 3 |
+| `gf` | later | `page.view_source` |  | phase 3 |
+| `g!` | dropped |  |  | joke binding |
+| `g;` | later | `page.change_jump` |  | phase 3 |
+| `;c` | dropped |  |  | needs a shell |
+| `;x` | dropped |  |  | needs a shell |
+| `;:` | dropped |  |  | needs a shell |
+| `,r` | dropped |  |  | no config file to reload |
+
+Which-key group names:
+
+- `g`: Go
+- `gx`: Close tabs
+- `d`: Close
+- `x`: Stop or close
+- `r`: Reload
+- `>`: Move tab
+- `t`: Tabs
+- `w`: Windows
+- `y`: Copy
+- `a`: Bookmark
+- `z`: Zoom and scroll
+- `q`: OasisFox
+- `;`: Hints
+- `s`: Search here
+- `sG`: GitHub
+- `S`: Search in new tab
+- `c`: Reopen in container
+- `C`: Open in container
+
+### hint
+
+| Key | Status | Command | Label | Note |
+| --- | --- | --- | --- | --- |
+| `<Escape>` | bound | `mode.escape` | Escape |  |
+| `<C-[>` | bound | `mode.escape` | Escape |  |
+
+### cmdline
+
+| Key | Status | Command | Label | Note |
+| --- | --- | --- | --- | --- |
+| `<Escape>` | bound | `mode.escape` | Escape |  |
+| `<Tab>` | bound | `cmdline.next_completion` | Next completion |  |
+| `<C-n>` | bound | `cmdline.next_completion` | Next completion |  |
+| `<A-ArrowDown>` | bound | `cmdline.next_completion` | Next completion |  |
+| `<S-Tab>` | bound | `cmdline.prev_completion` | Previous completion |  |
+| `<C-p>` | bound | `cmdline.prev_completion` | Previous completion |  |
+| `<A-ArrowUp>` | bound | `cmdline.prev_completion` | Previous completion |  |
+| `<Enter>` | bound | `cmdline.submit` | Submit |  |
+| `<ArrowUp>` | bound | `cmdline.history prev` | History |  |
+| `<ArrowDown>` | bound | `cmdline.history next` | History |  |
+| `<C-u>` | bound | `cmdline.clear` | Clear line |  |
+
+### caret
+
+| Key | Status | Command | Label | Note |
+| --- | --- | --- | --- | --- |
+| `0` | bound | `caret.move --line-start` | Move caret |  |
+| `v` | bound | `mode visual` | Set mode |  |
+| `<Escape>` | bound | `mode.escape` | Escape |  |
+| `<C-[>` | bound | `mode.escape` | Escape |  |
+| `h` | bound | `caret.move --char --back` | Move caret |  |
+| `l` | bound | `caret.move --char` | Move caret |  |
+| `j` | bound | `caret.move --line` | Move caret |  |
+| `k` | bound | `caret.move --line --back` | Move caret |  |
+| `w` | bound | `caret.move --word` | Move caret |  |
+| `b` | bound | `caret.move --word --back` | Move caret |  |
+| `e` | bound | `caret.move --word-end` | Move caret |  |
+| `W` | bound | `caret.move --word --big` | Move caret by WORD |  |
+| `B` | bound | `caret.move --word --back --big` | Move caret by WORD backward |  |
+| `E` | bound | `caret.move --word-end --big` | Move caret to WORD end |  |
+| `^` | bound | `caret.move --line-first` | Move caret |  |
+| `$` | bound | `caret.move --line-end` | Move caret |  |
+| `gg` | bound | `caret.move --start` | Move caret |  |
+| `G` | bound | `caret.move --end` | Move caret |  |
+
+### visual
+
+| Key | Status | Command | Label | Note |
+| --- | --- | --- | --- | --- |
+| `0` | bound | `caret.move --line-start` | Move caret |  |
+| `h` | bound | `caret.move --char --back` | Move caret |  |
+| `l` | bound | `caret.move --char` | Move caret |  |
+| `j` | bound | `caret.move --line` | Move caret |  |
+| `k` | bound | `caret.move --line --back` | Move caret |  |
+| `w` | bound | `caret.move --word` | Move caret |  |
+| `b` | bound | `caret.move --word --back` | Move caret |  |
+| `e` | bound | `caret.move --word-end` | Move caret |  |
+| `W` | bound | `caret.move --word --big` | Move caret by WORD |  |
+| `B` | bound | `caret.move --word --back --big` | Move caret by WORD backward |  |
+| `E` | bound | `caret.move --word-end --big` | Move caret to WORD end |  |
+| `^` | bound | `caret.move --line-first` | Move caret |  |
+| `$` | bound | `caret.move --line-end` | Move caret |  |
+| `gg` | bound | `caret.move --start` | Move caret |  |
+| `G` | bound | `caret.move --end` | Move caret |  |
+| `y` | bound | `visual.act yank` | Act on selection |  |
+| `o` | bound | `visual.act swap` | Act on selection |  |
+| `s` | bound | `visual.act search` | Act on selection |  |
+| `<Escape>` | bound | `mode.escape` | Escape |  |
+| `<C-[>` | bound | `mode.escape` | Escape |  |
+
+### insert
+
+| Key | Status | Command | Label | Note |
+| --- | --- | --- | --- | --- |
+| `<Escape>` | bound | `mode.escape` | Escape |  |
+
+### ignore
+
+| Key | Status | Command | Label | Note |
+| --- | --- | --- | --- | --- |
+| `<S-Escape>` | bound | `mode normal` | Set mode |  |
+
+### browser
+
+| Key | Status | Command | Label | Note |
+| --- | --- | --- | --- | --- |
+| `<A-j>` | bound | `tab.next` | Next tab |  |
+| `<A-k>` | bound | `tab.prev` | Previous tab |  |
+| `<A-,>` | bound | `browser.focus_page` | Focus page |  |
+
+<!-- END generated -->

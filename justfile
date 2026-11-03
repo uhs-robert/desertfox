@@ -1,12 +1,16 @@
 default:
     @just --list
 
+# Regenerate the binding tables in docs/keymap.md from the default keymap.
+docs-gen: install_deps
+    npm run --silent docs:gen
+
 # Typecheck, then bundle the extension into dist/.
 build: install_deps
     npm run --silent typecheck
     npm run --silent build
 
-# Unit tests, run from TypeScript source by Node's type stripping.
+# Check docs/keymap.md is current, then run the unit tests from TypeScript source by Node's type stripping.
 test: install_deps
     npm run --silent test
 

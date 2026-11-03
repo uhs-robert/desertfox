@@ -1,0 +1,150 @@
+# Keys the default keymap does not bind, for docs/keymap.md.
+# A row is `later` (planned for a later phase) or `dropped` (will not be built).
+# A key bound in the default keymap cannot appear here: the generator fails on overlap.
+
+[[row]]
+mode = "normal"
+key = "m"
+status = "later"
+command = "mark.add"
+note = "phase 3, key param"
+
+[[row]]
+mode = "normal"
+key = "M"
+status = "later"
+command = "quickmark.add"
+note = "phase 3, key param"
+
+[[row]]
+mode = "normal"
+key = "."
+status = "later"
+command = "command.repeat"
+note = "phase 3"
+
+[[row]]
+mode = "normal"
+key = "[["
+status = "later"
+command = "page.follow --direction=prev"
+note = "phase 3"
+
+[[row]]
+mode = "normal"
+key = "[c"
+status = "later"
+command = "url.increment --step=-1"
+note = "phase 3"
+
+[[row]]
+mode = "normal"
+key = "]]"
+status = "later"
+command = "page.follow --direction=next"
+note = "phase 3"
+
+[[row]]
+mode = "normal"
+key = "]c"
+status = "later"
+command = "url.increment --step=1"
+note = "phase 3"
+
+[[row]]
+mode = "normal"
+key = "`"
+status = "later"
+command = "mark.jump"
+note = "phase 3, key param"
+
+[[row]]
+mode = "normal"
+key = "wa"
+status = "dropped"
+note = "assumed unused"
+
+[[row]]
+mode = "normal"
+key = "wi"
+status = "dropped"
+note = "needs a shell"
+
+[[row]]
+mode = "normal"
+key = "<C-o>"
+status = "later"
+command = "page.jump --step=-1"
+note = "phase 3"
+
+[[row]]
+mode = "normal"
+key = "<C-i>"
+status = "later"
+command = "page.jump --step=1"
+note = "phase 3"
+
+[[row]]
+mode = "normal"
+key = "<C-x>"
+status = "later"
+command = "url.increment --step=-1"
+note = "phase 3"
+
+[[row]]
+mode = "normal"
+key = "<C-a>"
+status = "later"
+command = "url.increment --step=1"
+note = "phase 3"
+
+[[row]]
+mode = "normal"
+key = "yq"
+status = "later"
+command = "copy.qr"
+note = "phase 3"
+
+[[row]]
+mode = "normal"
+key = "gf"
+status = "later"
+command = "page.view_source"
+note = "phase 3"
+
+[[row]]
+mode = "normal"
+key = "g!"
+status = "dropped"
+note = "joke binding"
+
+[[row]]
+mode = "normal"
+key = "g;"
+status = "later"
+command = "page.change_jump"
+note = "phase 3"
+
+[[row]]
+mode = "normal"
+key = ";c"
+status = "dropped"
+note = "needs a shell"
+
+[[row]]
+mode = "normal"
+key = ";x"
+status = "dropped"
+note = "needs a shell"
+
+[[row]]
+mode = "normal"
+key = ";:"
+status = "dropped"
+note = "needs a shell"
+
+[[row]]
+mode = "normal"
+key = ",r"
+status = "dropped"
+note = "no config file to reload"
