@@ -2,7 +2,7 @@
 
 import type { BundleHostApi } from "../bundle_host.ts";
 import type { PendingPrefix } from "../key_flow.ts";
-import type { ListKeys, WhichKeyRow } from "../../shared/messages.ts";
+import type { ListKeys, WhichKeyPanel } from "../../shared/messages.ts";
 import { hide_panel, show_panel } from "./panel.ts";
 
 type WhichKeyWindow = { oasisfox_host: BundleHostApi; oasisfox_whichkey_ready?: true };
@@ -16,9 +16,9 @@ const MODES_WITH_PANEL: readonly string[] = ["normal", "caret", "visual"];
 async function show(prefix: PendingPrefix, is_current: () => boolean): Promise<void> {
   if (!MODES_WITH_PANEL.includes(prefix.mode)) return;
   const request: ListKeys = { type: "list_keys", mode: prefix.mode, prefix: prefix.typed };
-  const rows = (await browser.runtime.sendMessage(request)) as WhichKeyRow[];
+  const { title, rows } = (await browser.runtime.sendMessage(request)) as WhichKeyPanel;
   // The next key may have arrived while the background answered.
-  if (is_current() && rows.length > 0) show_panel(rows);
+  if (is_current() && rows.length > 0) show_panel(title, rows);
 }
 
 // A second run would register a second copy of the handler.
@@ -29,4 +29,6 @@ if (!page.oasisfox_whichkey_ready) {
     if (!prefix) return hide_panel();
     void show(prefix, is_current).catch(() => undefined);
   });
+  // The command lists the first keys of the normal keymap, with no prefix typed.
+  page.oasisfox_host.register_handler("help.whichkey", () => void show({ mode: "normal", typed: [] }, () => true).catch(() => undefined));
 }

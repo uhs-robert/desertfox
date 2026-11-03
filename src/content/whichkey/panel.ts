@@ -1,40 +1,46 @@
-// The panel: one closed shadow root on the page, with a row per key. Hovering a row shows what the command does.
+// The panel: one closed shadow root on the page, with a title and a row per key. Hovering a row shows what the command does.
 
 import type { WhichKeyRow } from "../../shared/messages.ts";
 import { create_surface, SURFACE_DEFAULT_VARIABLES } from "../surface.ts";
-import { choose_layout } from "./layout.ts";
+import { choose_columns } from "./layout.ts";
 
 const STYLE = `
 .oasisfox-whichkey {${SURFACE_DEFAULT_VARIABLES}
-  position: fixed; box-sizing: border-box; padding: 8px 12px; overflow: auto;
+  position: fixed; right: 16px; bottom: 44px; box-sizing: border-box; padding: 8px 12px; overflow: auto;
+  max-width: calc(100vw - 32px); max-height: calc(100vh - 96px);
   background: var(--oasisfox-bg); color: var(--oasisfox-fg);
   font: var(--oasisfox-font); border-radius: var(--oasisfox-radius);
 }
-.oasisfox-whichkey.column { right: 16px; bottom: 44px; max-width: 40ch; max-height: calc(100vh - 96px); }
-.oasisfox-whichkey.grid { left: 16px; right: 16px; bottom: 44px; display: grid; grid-template-columns: repeat(auto-fill, minmax(26ch, 1fr)); gap: 2px 16px; max-height: 40vh; }
+.title { font-weight: bold; padding-bottom: 4px; color: var(--oasisfox-accent, #8ec07c); }
+.rows { display: grid; column-gap: 24px; }
 .row { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.key { color: var(--oasisfox-accent, #8ec07c); display: inline-block; min-width: 3ch; }`;
+.key { color: var(--oasisfox-fg); display: inline-block; min-width: 3ch; }
+.arrow { opacity: 0.6; padding: 0 6px; }
+.more, .more .key { color: var(--oasisfox-accent, #8ec07c); }`;
 
 let surface: ReturnType<typeof create_surface> | undefined;
 
-export function show_panel(rows: WhichKeyRow[]): void {
+const element = (class_name: string, text?: string) => Object.assign(document.createElement("div"), { className: class_name, textContent: text ?? "" });
+
+// Rows fill left to right, then down.
+export function show_panel(title: string, rows: WhichKeyRow[]): void {
   surface ??= create_surface("oasisfox-whichkey", STYLE);
-  const layout = choose_layout(rows.length, window.innerHeight);
-  surface.text.className = `oasisfox-whichkey ${layout}`;
-  surface.text.replaceChildren(
+  const columns = choose_columns(rows.length, window.innerHeight);
+  surface.text.className = "oasisfox-whichkey";
+  const list = element("rows");
+  list.style.gridTemplateColumns = `repeat(${columns}, auto)`;
+  list.append(
     ...rows.map((row) => {
-      const line = document.createElement("div");
-      line.className = "row";
+      const line = element(row.more ? "row more" : "row");
       line.title = row.description;
-      const keys = document.createElement("span");
-      keys.className = "key";
-      keys.textContent = row.keys;
-      line.append(keys, row.command);
+      const keys = element("key", row.keys);
+      line.append(keys, Object.assign(document.createElement("span"), { className: "arrow", textContent: "\u2192" }), row.command);
       return line;
     }),
   );
+  surface.text.replaceChildren(element("title", title), list);
   // The key test reads this attribute, because the shadow root is closed.
-  surface.host.setAttribute("data-oasisfox-whichkey", `${layout}:${rows.length}`);
+  surface.host.setAttribute("data-oasisfox-whichkey", `${columns}:${rows.length}`);
   document.documentElement.append(surface.host);
 }
 

@@ -611,7 +611,7 @@ async function main() {
       expect(await scroll_delta_after(shown.page_id, ["j"]) > 0, "the tab left after xx does not take keys");
     });
 
-    await run_whichkey_cases({ rdp, extension_id: EXTENSION_ID, run_case, send_keys, open_page, wait_event, events, expect, sleep });
+    await run_whichkey_cases({ rdp, extension_id: EXTENSION_ID, take_shot: (path) => shadow("shot", SHADOW_NAME, "--out", path), run_case, send_keys, open_page, wait_event, events, expect, sleep });
 
     const tree_read_ms = [];
     for (let index = 0; index < FRESH_LOAD_COUNT; index++) {

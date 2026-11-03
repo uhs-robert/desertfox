@@ -14,6 +14,8 @@ The shipped defaults bind every `v1` row whose command exists, with three kinds 
 - `;f`, because `hint.run` has no link text param yet.
 - `ZZ`, because closing every window cannot be undone. Bind it in the config.
 
+Which-key shows a group as `+Name`, for example `g` as `+Go`. A `group_names` section in `keymap.toml` maps a key sequence to its name. A group without one shows its prefix key.
+
 The `caret`, `visual` and `cmdline` rows bind placeholder commands that refuse until their piece builds them.
 
 A note "(prompts)" means the binding leaves a param out, so the command line asks for it.

@@ -1,6 +1,6 @@
 // Registered in phase 1 so keys, help and the command line know them. Running one refuses.
 
-import { caret_move, cmdline_clear, cmdline_history, cmdline_submit, visual_act, cmdline_next_completion, cmdline_open, cmdline_prev_completion, hint_run, NEEDS_COMMAND_LINE } from "../content/handlers/phase_2.ts";
+import { caret_move, cmdline_clear, cmdline_history, cmdline_submit, visual_act, cmdline_next_completion, cmdline_open, cmdline_prev_completion, help_whichkey, hint_run, NEEDS_COMMAND_LINE } from "../content/handlers/phase_2.ts";
 import { define } from "../shared/registry/index.ts";
 import { WHERE_PARAM } from "./open_target.ts";
 
@@ -51,6 +51,14 @@ define("cmdline.prev_completion", {
   runs_in: "content",
   modes: ["cmdline"],
   run: cmdline_prev_completion.run,
+});
+
+define("help.whichkey", {
+  name: "whichkey",
+  label: "Which Key",
+  intent: "List the keys at the top of the keymap.",
+  runs_in: "content",
+  run: help_whichkey.run,
 });
 
 define("tab.switch", {

@@ -48,7 +48,7 @@ function merge_map_layers(
 
 function merge_keymap(layers: DataLayer[], origins: Origins, problems: string[]): KeymapConfig {
   const merged: Record<string, Record<string, unknown>> = {};
-  const generator_sections = ["search_keys", "container_keys"];
+  const generator_sections = ["search_keys", "container_keys", "group_names"];
 
   for (const layer of layers) {
     for (const [section, value] of Object.entries(layer.data)) {

@@ -30,6 +30,7 @@ function keymap_schema(commands: CommandMeta[]): Schema {
       ...Object.fromEntries(KEYMAP_MODES.map((mode) => [mode, mode_bindings])),
       search_keys: { ...string_map, description: "Last key to search engine name" },
       container_keys: { ...string_map, description: "Last key to container name" },
+      group_names: { ...string_map, description: "Key sequence of a group to the name which-key shows for it" },
     },
     additionalProperties: false,
   };

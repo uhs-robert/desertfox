@@ -104,7 +104,7 @@ export function resolve_bindings(merged: MergedData, registry: Registry, problem
     }
   };
   for (const [mode, entries] of Object.entries(merged.keymap)) {
-    if (mode === "search_keys" || mode === "container_keys") continue;
+    if (mode === "search_keys" || mode === "container_keys" || mode === "group_names") continue;
     const bindings = entries as Record<string, unknown>;
     for (const [sequence, entry] of Object.entries(bindings)) {
       if (typeof entry === "string") {
@@ -129,6 +129,13 @@ export function check_config(merged: MergedData, registry: Registry, problems: s
   }
 
   for (const [mode, entries] of Object.entries(merged.keymap)) {
+    if (mode === "group_names") {
+      for (const sequence of Object.keys(entries as Record<string, string>)) {
+        const parsed = parse_sequence(sequence);
+        if (parsed.error !== undefined) problems.push(`${where("keymap.group_names", sequence)}: ${parsed.error}`);
+      }
+      continue;
+    }
     if (mode === "search_keys" || mode === "container_keys") {
       for (const [key, name] of Object.entries(entries as Record<string, string>)) {
         const parsed = parse_sequence(key);

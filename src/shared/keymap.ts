@@ -18,4 +18,6 @@ export type KeymapConfig = Keymap & {
   search_keys?: Record<string, string>;
   // Last key of the sequence to container name.
   container_keys?: Record<string, string>;
+  // Key sequence of a group to its name in which-key, for example `g` to `Go`. Applies to every mode that has the group.
+  group_names?: Record<string, string>;
 };

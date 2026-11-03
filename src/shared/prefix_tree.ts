@@ -28,6 +28,8 @@ export type TreeLeaf = {
 
 export type TreeBranch = {
   kind: "branch";
+  // The group name which-key shows. Without one it shows the prefix key.
+  label?: string;
   // Keyed by one normalized key token, for example `g` or `<A-j>`.
   children: Record<string, TreeNode>;
 };

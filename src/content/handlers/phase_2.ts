@@ -4,6 +4,7 @@ import type { ContentHandler } from "./types.ts";
 
 export const NEEDS_HINTS = "needs hints (phase 2)";
 export const NEEDS_COMMAND_LINE = "needs the command line (phase 2)";
+export const NEEDS_WHICH_KEY = "needs the which-key panel";
 export const NEEDS_CARET = "needs caret mode (phase 2)";
 
 // The code of these commands sits in a bundle that loads on the first run. A bundle that registers no handler yet refuses with `missing`.
@@ -21,3 +22,4 @@ export const cmdline_history = from_bundle("cmdline.history", "cmdline", NEEDS_C
 export const cmdline_clear = from_bundle("cmdline.clear", "cmdline", NEEDS_COMMAND_LINE);
 export const caret_move = from_bundle("caret.move", "caret", NEEDS_CARET);
 export const visual_act = from_bundle("visual.act", "caret", NEEDS_CARET);
+export const help_whichkey = from_bundle("help.whichkey", "whichkey", NEEDS_WHICH_KEY);

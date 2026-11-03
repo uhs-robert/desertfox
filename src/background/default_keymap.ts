@@ -24,6 +24,26 @@ const MOTIONS: Record<string, { id: string; args: Record<string, unknown> }> = {
 };
 
 export const DEFAULT_KEYMAP: KeymapConfig = {
+  // What which-key calls each group. `s S c C` name the groups that the search and container keys of a user config fill.
+  group_names: {
+    g: "Go",
+    gx: "Close tabs",
+    d: "Close",
+    x: "Stop or close",
+    r: "Reload",
+    ">": "Move tab",
+    t: "Tabs",
+    w: "Windows",
+    y: "Copy",
+    a: "Bookmark",
+    z: "Zoom and scroll",
+    q: "OasisFox",
+    ";": "Hints",
+    s: "Search here",
+    S: "Search in new tab",
+    c: "Reopen in container",
+    C: "Open in container",
+  },
   normal: {
     h: { id: "scroll.pixels", args: { dx: -50 } },
     l: { id: "scroll.pixels", args: { dx: 50 } },

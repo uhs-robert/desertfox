@@ -32,12 +32,15 @@ export type LoadBundle = {
   name: BundleName;
 };
 
-// Asks for the keys that can follow `prefix` in `mode`. The answer is a WhichKeyRow[].
+// Asks for the keys that can follow `prefix` in `mode`. The answer is a WhichKeyPanel.
 export type ListKeys = {
   type: "list_keys";
   mode: Mode;
   prefix: string[];
 };
+
+// What the panel shows: a title and the keys that can follow.
+export type WhichKeyPanel = { title: string; rows: WhichKeyRow[] };
 
 // One key that can follow a prefix. A key that starts a longer sequence has `more` and no description.
 export type WhichKeyRow = {

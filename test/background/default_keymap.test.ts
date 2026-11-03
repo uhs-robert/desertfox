@@ -5,11 +5,14 @@ import "../../src/background/command_modules.ts";
 import { compile_config } from "../../src/background/compile.ts";
 import { empty_config } from "../../src/background/config_load.ts";
 import { DEFAULT_KEYMAP } from "../../src/background/default_keymap.ts";
+import type { TreeBranch } from "../../src/shared/prefix_tree.ts";
 import type { KeymapConfig } from "../../src/shared/keymap.ts";
 import { registry } from "../../src/shared/registry/index.ts";
 
+const bindings_of = (keymap: KeymapConfig) => Object.entries(keymap).filter(([name]) => name !== "group_names");
+
 const ids_in = (keymap: KeymapConfig) =>
-  Object.values(keymap).flatMap((section) =>
+  bindings_of(keymap).flatMap(([, section]) => [section]).flatMap((section) =>
     Object.values(section as Record<string, unknown>).flatMap((binding) => [binding].flat() as { id: string }[]),
   ).map((invocation) => invocation.id);
 
@@ -35,12 +38,12 @@ test("the default keymap compiles against the full registry with no warnings", (
 test("the default bindings of commands that exist compile with no warnings", () => {
   const present = (section: Record<string, unknown>) =>
     Object.fromEntries(Object.entries(section).filter(([, binding]) => [binding].flat().every((step) => registry.get((step as { id: string }).id))));
-  const partial = Object.fromEntries(Object.entries(DEFAULT_KEYMAP).map(([mode, section]) => [mode, present(section)])) as KeymapConfig;
+  const partial = Object.fromEntries([...bindings_of(DEFAULT_KEYMAP).map(([mode, section]) => [mode, present(section)]), ["group_names", DEFAULT_KEYMAP.group_names]]) as KeymapConfig;
   assert.deepEqual(compile(partial).warnings, []);
 });
 
 test("every prompting default names a real param", () => {
-  for (const section of Object.values(DEFAULT_KEYMAP)) {
+  for (const [, section] of bindings_of(DEFAULT_KEYMAP)) {
     for (const binding of Object.values(section as Record<string, unknown>)) {
       for (const step of [binding].flat() as { id: string; prompt?: { param: string } }[]) {
         const command = registry.get(step.id);
@@ -133,4 +136,21 @@ test("the default keymap names places and hint actions by the new words", () => 
   const old_words = ["current", "new_tab", "new_window"];
   const written = JSON.stringify(DEFAULT_KEYMAP);
   for (const word of old_words) assert.ok(!written.includes(`"${word}"`), word);
+});
+
+test("every default group name labels a real group, so a typo cannot go quiet", () => {
+  const { compiled } = compile(DEFAULT_KEYMAP);
+  const labeled: string[] = [];
+  const walk = (node: TreeBranch, path: string) => {
+    for (const [token, child] of Object.entries(node.children)) {
+      if (child.kind !== "branch") continue;
+      if (child.label) labeled.push(path + token);
+      walk(child, path + token);
+    }
+  };
+  for (const root of Object.values(compiled.modes)) walk(root, "");
+  for (const prefix of Object.keys(DEFAULT_KEYMAP.group_names ?? {})) {
+    if (!["s", "S", "c", "C"].includes(prefix)) assert.ok(labeled.includes(prefix), prefix);
+  }
+  assert.ok(!compiled.modes.normal?.children.g || (compiled.modes.normal.children.g as TreeBranch).label === "Go");
 });

@@ -127,3 +127,45 @@ test("an answer that arrives after the next key finds its prefix no longer curre
     assert.equal(asked[0]?.(), false);
   });
 });
+
+test("Backspace drops the last key of the prefix and shows the parent group", async () => {
+  const page = make_page(DELAY_MS);
+  page.flow.handle_token("g");
+  page.flow.handle_token("x");
+  await sleep(DELAY_MS + 40);
+  assert.equal(page.flow.handle_token("<Backspace>"), "cancel");
+  assert.equal(page.is_up(), false);
+  await sleep(DELAY_MS + 40);
+  assert.deepEqual(page.shown, ["normal:gx", "normal:g"]);
+  // The shorter prefix is live: `g` completes `gg`.
+  assert.equal(page.flow.handle_token("g"), "cancel");
+});
+
+test("Backspace at the first level closes the panel and clears the prefix", async () => {
+  const page = make_page(DELAY_MS);
+  page.flow.handle_token("g");
+  await sleep(DELAY_MS + 40);
+  assert.equal(page.is_up(), true);
+  assert.equal(page.flow.handle_token("<Backspace>"), "cancel");
+  assert.equal(page.is_up(), false);
+  await sleep(DELAY_MS + 40);
+  assert.deepEqual(page.shown, ["normal:g"]);
+  // No prefix is left: `x` alone is not the group's `x`, so it is not matched here.
+  assert.equal(page.flow.handle_token("x"), "pass");
+});
+
+test("Escape closes the panel and clears the prefix at any depth", async () => {
+  const page = make_page(DELAY_MS);
+  page.flow.handle_token("g");
+  page.flow.handle_token("x");
+  await sleep(DELAY_MS + 40);
+  assert.equal(page.is_up(), true);
+  page.flow.handle_token("<Escape>");
+  assert.equal(page.is_up(), false);
+  assert.equal(page.flow.handle_token("x"), "pass");
+});
+
+test("Backspace with no prefix pending goes to the page", () => {
+  const page = make_page(DELAY_MS);
+  assert.equal(page.flow.handle_token("<Backspace>"), "pass");
+});

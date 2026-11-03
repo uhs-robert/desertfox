@@ -35,6 +35,7 @@ export function create_key_flow(deps: KeyFlowDeps) {
   let browser_chords: TreeBranch | undefined;
   const held_tokens: string[] = [];
   let sequence_in_progress = false;
+  let typed: string[] = [];
 
   const reset_sequence = () => {
     matcher?.reset();
@@ -62,10 +63,18 @@ export function create_key_flow(deps: KeyFlowDeps) {
   const step = (active: Matcher, token: string): KeyDecision => {
     const mode = deps.get_mode();
     const was_in_progress = sequence_in_progress;
+    // Backspace drops the last key of a half-typed sequence. The matcher cannot step back, so the shorter prefix is typed again.
+    if (was_in_progress && token === "<Backspace>") {
+      const kept = typed.slice(0, -1);
+      reset_sequence();
+      for (const key of kept) step(active, key);
+      return "cancel";
+    }
     let result = active.feed(mode, token);
     // A key that breaks a half-typed sequence gets one more try as a first key.
     if (result.kind === "no_match" && was_in_progress) result = active.feed(mode, token);
     sequence_in_progress = result.kind === "pending";
+    if (result.kind === "pending") typed = result.typed;
     // A bare count (`3`) has typed nothing yet, so no keys can be listed.
     deps.on_prefix(result.kind === "pending" && result.typed.length > 0 ? { mode, typed: result.typed } : undefined);
     if (result.kind === "match") {
