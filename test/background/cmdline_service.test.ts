@@ -2,13 +2,23 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { add_to_history, create_cmdline_service, HISTORY_LIMIT } from "../../src/background/cmdline_service.ts";
 
-function make() {
+const tick = () => new Promise((resolve) => setTimeout(resolve, 1));
+
+// `slow_set` makes every write take a timer turn, as a real storage write does.
+function make({ slow_set = false } = {}) {
   const data: Record<string, unknown> = {};
   const storage = {
     get: async (key: string) => (key in data ? { [key]: data[key] } : {}),
-    set: async (items: Record<string, unknown>) => void Object.assign(data, items),
+    set: async (items: Record<string, unknown>) => {
+      if (slow_set) await tick();
+      Object.assign(data, items);
+    },
   } as unknown as Parameters<typeof create_cmdline_service>[0]["storage"];
-  const service = create_cmdline_service({ storage, sources: async () => ({ search_engines: ["arch"], containers: [] }) });
+  const service = create_cmdline_service({
+    storage,
+    sources: async () => ({ search_engines: ["arch"], containers: [] }),
+    page_config: async () => ({ commands: [{ id: "my.snippet", label: "Mine", intent: "page" }], command_aliases: { g: "open.search" }, css: "a{}" }),
+  });
   return { service };
 }
 
@@ -47,4 +57,16 @@ test("records sent without waiting all land, in order", async () => {
 test("opening returns the lists that bare words read from", async () => {
   const { service } = make();
   assert.deepEqual((await service.open()).sources, { search_engines: ["arch"], containers: [] });
+});
+
+test("a line reopened before the last record is written still shows it", async () => {
+  const { service } = make({ slow_set: true });
+  void service.record("scroll down", false);
+  assert.deepEqual((await service.open()).history, ["scroll down"]);
+});
+
+test("opening returns the runtime commands, the configured aliases and the user CSS", async () => {
+  const { service } = make();
+  const opened = await service.open();
+  assert.deepEqual([opened.commands.map((command) => command.id), opened.command_aliases, opened.css], [["my.snippet"], { g: "open.search" }, "a{}"]);
 });

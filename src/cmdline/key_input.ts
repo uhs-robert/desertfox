@@ -11,15 +11,22 @@ export type KeyOutcome =
   | { kind: "unbound" };
 
 export function run_token(matcher: TokenMatcher, session: Session, token: string): KeyOutcome {
-  const result = matcher.feed("cmdline", token);
+  let result = matcher.feed("cmdline", token);
+  // A token that ends a half-typed sequence starts over at the root, so Enter after a stray prefix key still submits.
+  if (result.kind === "no_match") result = matcher.feed("cmdline", token);
   if (result.kind === "no_match") return { kind: "unbound" };
-  // The cmdline keymap has no sequences, so a half match is a key to swallow.
-  if (result.kind === "pending") {
-    matcher.reset();
-    return { kind: "effect", effect: { kind: "render" } };
-  }
+  // Swallowed, and the matcher stays on the sequence for the next token.
+  if (result.kind === "pending") return { kind: "effect", effect: { kind: "render" } };
   const invocation = result.leaf.steps[0]?.invocation;
   return { kind: "effect", effect: invocation ? session.run(invocation.id, invocation.args) : { kind: "render" } };
+}
+
+// With no stored keymap the line still needs a way to run and a way out.
+const KEYS_WITHOUT_KEYMAP: Record<string, string> = { "<Enter>": "cmdline.submit", "<Escape>": "mode.escape" };
+
+export function run_token_without_keymap(session: Session, token: string): KeyOutcome {
+  const command_id = KEYS_WITHOUT_KEYMAP[token];
+  return command_id ? { kind: "effect", effect: session.run(command_id, undefined) } : { kind: "unbound" };
 }
 
 export type TypedEdit = { insert: string } | { backspace: true };

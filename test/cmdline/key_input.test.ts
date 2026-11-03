@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { run_token, typed_edit } from "../../src/cmdline/key_input.ts";
+import { run_token, run_token_without_keymap, typed_edit } from "../../src/cmdline/key_input.ts";
 import { create_session } from "../../src/cmdline/session.ts";
 import { DEFAULT_KEYMAP } from "../../src/background/default_keymap.ts";
 import { create_matcher } from "../../src/shared/keys/index.ts";
@@ -8,16 +8,16 @@ import { COMPILED_KEYMAP_VERSION } from "../../src/shared/prefix_tree.ts";
 import type { CompiledKeymap, TreeBranch } from "../../src/shared/prefix_tree.ts";
 
 // A keymap with just the cmdline mode, built from the default bindings.
-function cmdline_keymap(): CompiledKeymap {
-  const children: TreeBranch["children"] = {};
-  for (const [token, binding] of Object.entries(DEFAULT_KEYMAP.cmdline ?? {})) {
-    children[token] = { kind: "leaf", steps: [{ invocation: binding as { id: string }, runs_in: "content", count_rule: "ignore" }] };
-  }
+const leaf = (id: string) => ({ kind: "leaf" as const, steps: [{ invocation: { id }, runs_in: "content" as const, count_rule: "ignore" as const }] });
+
+function cmdline_keymap(extra: TreeBranch["children"] = {}): CompiledKeymap {
+  const children: TreeBranch["children"] = { ...extra };
+  for (const [token, binding] of Object.entries(DEFAULT_KEYMAP.cmdline ?? {})) children[token] = leaf((binding as { id: string }).id);
   return { format_version: COMPILED_KEYMAP_VERSION, modes: { cmdline: { kind: "branch", children } }, ignore_sites: [], mode_indicator: "always", which_key_delay_ms: 0 };
 }
 
-const setup = () => ({
-  matcher: create_matcher(cmdline_keymap()),
+const setup = (extra: TreeBranch["children"] = {}) => ({
+  matcher: create_matcher(cmdline_keymap(extra)),
   session: create_session({ history: ["old"], parse: () => ({ kind: "error", error: "no" }) }),
 });
 
@@ -42,4 +42,28 @@ test("a forwarded token types a character, a space or a backspace, and drops oth
   assert.deepEqual(typed_edit("<Backspace>"), { backspace: true });
   assert.equal(typed_edit("<C-w>"), undefined);
   assert.equal(typed_edit("<F5>"), undefined);
+});
+
+test("a user sequence in cmdline mode waits for its second key", () => {
+  const { matcher, session } = setup({ "<C-x>": { kind: "branch", children: { "<C-k>": leaf("cmdline.clear") } } });
+  session.edit("open x");
+  assert.deepEqual(run_token(matcher, session, "<C-x>"), { kind: "effect", effect: { kind: "render" } });
+  run_token(matcher, session, "<C-k>");
+  assert.equal(session.get_text(), "");
+});
+
+test("a key that breaks a sequence runs as if typed alone", () => {
+  const { matcher, session } = setup({ "<C-x>": { kind: "branch", children: { "<C-k>": leaf("cmdline.clear") } } });
+  run_token(matcher, session, "<C-x>");
+  assert.deepEqual(run_token(matcher, session, "<Escape>"), { kind: "effect", effect: { kind: "close" } });
+  run_token(matcher, session, "<C-x>");
+  assert.deepEqual(run_token(matcher, session, "a"), { kind: "unbound" });
+});
+
+test("with no stored keymap Enter still submits and Escape still closes", () => {
+  const session = create_session({ history: [], parse: () => ({ kind: "invocation", invocation: { id: "scroll.down" } }) });
+  assert.deepEqual(run_token_without_keymap(session, "<Escape>"), { kind: "effect", effect: { kind: "close" } });
+  session.edit("scroll down");
+  assert.equal((run_token_without_keymap(session, "<Enter>") as { effect: { kind: string } }).effect.kind, "submit");
+  assert.deepEqual(run_token_without_keymap(session, "a"), { kind: "unbound" });
 });

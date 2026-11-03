@@ -1,28 +1,38 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import type { TestContext } from "node:test";
 
 type Sink = { on_token: (token: string) => "handled" | "pass"; exit: () => void };
+type Posted = { message: { oasisfox_cmdline: Record<string, unknown> }; origin: string; transfer: MessagePort[] };
 
 // Just enough DOM for the host script: elements that record what is done to them.
 function fake_element() {
   const element = {
     style: { cssText: "" },
     src: "",
+    name: "",
     removed: false,
     focused: false,
-    posted: [] as unknown[],
-    listeners: {} as Record<string, () => void>,
-    contentWindow: { postMessage: (message: unknown) => void element.posted.push(message) },
+    posted: [] as Posted[],
+    contentWindow: {
+      postMessage: (message: Posted["message"], origin: string, transfer: MessagePort[] = []) => void element.posted.push({ message, origin, transfer }),
+    },
     attachShadow: () => ({ append: () => {} }),
     append: () => {},
-    addEventListener: (type: string, listener: () => void) => void (element.listeners[type] = listener),
     focus: () => void (element.focused = true),
     remove: () => void (element.removed = true),
   };
   return element;
 }
 
-test("opening mounts the line and enters cmdline mode, and a close from the page leaves it", async () => {
+// Port messages arrive on a later turn, and later still on a busy machine.
+async function until(condition: () => boolean): Promise<void> {
+  for (let waited = 0; !condition() && waited < 2000; waited += 5) await new Promise((resolve) => setTimeout(resolve, 5));
+}
+// For a message that must not arrive: long enough for one that would.
+const settle = () => new Promise((resolve) => setTimeout(resolve, 50));
+
+async function load_host(t: TestContext, tag: string) {
   const modes: string[] = [];
   const handlers = new Map<string, (args: Record<string, unknown>) => void>();
   const sinks = new Map<string, Sink>();
@@ -30,7 +40,7 @@ test("opening mounts the line and enters cmdline mode, and a close from the page
   const window_listeners: Record<string, (event: unknown) => void> = {};
   const sent: unknown[] = [];
   Object.assign(globalThis, {
-    browser: { runtime: { getURL: (path: string) => `moz-extension://id/${path}`, sendMessage: async (message: unknown) => void sent.push(message) } },
+    browser: { runtime: { getURL: (path: string) => `https://extension.test/${path}`, sendMessage: async (message: unknown) => void sent.push(message) } },
     document: { body: { append: () => {} }, createElement: () => { const element = fake_element(); elements.push(element); return element; } },
     window: {
       oasisfox_host: {
@@ -43,27 +53,64 @@ test("opening mounts the line and enters cmdline mode, and a close from the page
   });
   // A query string makes Node evaluate the module again, as a fresh injection does.
   const host_url = new URL("../../src/cmdline/host.ts", import.meta.url).href;
-  await import(`${host_url}?open`);
+  await import(`${host_url}?${tag}`);
 
   handlers.get("cmdline.open")!({ text: "open " });
-  assert.deepEqual(modes, ["cmdline"]);
   const [holder, frame] = elements as [ReturnType<typeof fake_element>, ReturnType<typeof fake_element>];
+  // An open port keeps Node running, so a failed test would hang.
+  t.after(() => frame.posted.forEach((posted) => posted.transfer.forEach((port) => port.close())));
+  const on_window = (message: unknown, source: unknown) => window_listeners.message!({ data: { oasisfox_cmdline: message }, source });
+  return { modes, sent, holder, frame, sink: sinks.get("cmdline")!, on_window, ready: () => on_window({ kind: "ready" }, frame.contentWindow) };
+}
+
+test("opening mounts the line, hands over the kept keys with a port, and a close over the port leaves it", async (t) => {
+  const { modes, sent, holder, frame, sink, ready } = await load_host(t, "open");
+  assert.deepEqual(modes, ["cmdline"]);
 
   // Keys before the page is ready are kept and handed over, in order, with the start message.
-  const sink = sinks.get("cmdline")!;
   assert.equal(sink.on_token("s"), "handled");
   assert.equal(sink.on_token("c"), "handled");
-  const from_page = (message: unknown) => window_listeners.message!({ data: { oasisfox_cmdline: message }, source: frame.contentWindow });
-  from_page({ kind: "ready" });
-  const start = (frame.posted[0] as { oasisfox_cmdline: unknown }).oasisfox_cmdline as { kind: string; tokens: string[]; text: string };
-  assert.deepEqual([start.kind, start.text, start.tokens], ["start", "open ", ["s", "c"]]);
+  ready();
+  const [start] = frame.posted;
+  const { kind, secret, text, tokens } = start!.message.oasisfox_cmdline;
+  assert.deepEqual([kind, text, tokens], ["start", "open ", ["s", "c"]]);
+  assert.equal(start!.origin, "https://extension.test");
+  // The secret is the frame's name, which page scripts cannot read.
+  assert.equal(secret, frame.name);
+  assert.ok(frame.name.length >= 32);
 
-  // A message that does not come from the iframe is ignored.
-  window_listeners.message!({ data: { oasisfox_cmdline: { kind: "close" } }, source: {} });
-  assert.deepEqual(modes, ["cmdline"]);
-
-  from_page({ kind: "close" });
+  const page_port = start!.transfer[0]!;
+  page_port.postMessage({ oasisfox_cmdline: { kind: "close" } });
+  await until(() => modes.length === 2);
   assert.deepEqual(modes, ["cmdline", "normal"]);
   assert.equal(holder.removed, true);
   assert.deepEqual(sent, []);
+});
+
+test("a close or submit posted on the window is ignored, even from the frame", async (t) => {
+  const { modes, sent, frame, on_window, ready } = await load_host(t, "forged");
+  ready();
+  const invocation = { id: "open.url", args: { url: "https://evil.example" } };
+  on_window({ kind: "submit", invocation }, frame.contentWindow);
+  on_window({ kind: "close" }, frame.contentWindow);
+  on_window({ kind: "submit", invocation }, {});
+  await settle();
+  assert.deepEqual([modes, sent], [["cmdline"], []]);
+});
+
+test("a submit over the port runs, and later keys travel over the port, not the window", async (t) => {
+  const { modes, sent, frame, sink, ready } = await load_host(t, "submit");
+  ready();
+  const page_port = frame.posted[0]!.transfer[0]!;
+  const tokens: unknown[] = [];
+  page_port.onmessage = (event) => void tokens.push(event.data);
+  sink.on_token("x");
+  await until(() => tokens.length === 1);
+  assert.deepEqual(tokens, [{ oasisfox_cmdline: { kind: "token", token: "x" } }]);
+  assert.equal(frame.posted.length, 1);
+
+  page_port.postMessage({ oasisfox_cmdline: { kind: "submit", invocation: { id: "scroll.down" } } });
+  await until(() => sent.length === 1);
+  assert.deepEqual(modes, ["cmdline", "normal"]);
+  assert.deepEqual(sent, [{ type: "run", invocations: [{ id: "scroll.down" }], mode: "normal" }]);
 });

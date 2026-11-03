@@ -8,7 +8,7 @@ import { repair_tabs_after_reload } from "./reload.ts";
 import { create_router } from "./router.ts";
 import { SLOT_TABLE_STORAGE_KEY } from "./storage_keys.ts";
 import { get_config, get_search_engine_names, snippets } from "./startup.ts";
-import { registry } from "../shared/registry/index.ts";
+import { command_meta, registry } from "../shared/registry/index.ts";
 import { forget_all_tab_modes, forget_mode_on_navigation, forget_tab_mode, recall_tab_mode, remember_reported_mode, shortcut_allowed } from "./tab_modes.ts";
 import type { SlotTable } from "./slots.ts";
 import type { SnippetCall } from "./snippets.ts";
@@ -21,6 +21,10 @@ const bundle_loader = create_bundle_loader(bundle_loader_deps);
 const cmdline = create_cmdline_service({
   storage: browser.storage.local,
   sources: async () => ({ search_engines: await get_search_engine_names(), containers: await container_names() }),
+  page_config: async () => {
+    const config = await get_config();
+    return { commands: registry.list().map(command_meta), command_aliases: config.command_aliases, css: config.css };
+  },
 });
 
 // Listeners register in the first turn, so no event is missed while the config loads.

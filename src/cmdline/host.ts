@@ -14,7 +14,21 @@ const READY_TIMEOUT_MS = 3000;
 // Room for the line and an error above it. The page draws its background only on the part it uses.
 const BAR_HEIGHT = "5rem";
 
-type Open = { frame: HTMLIFrameElement; holder: HTMLElement; ready: boolean; typed: string[]; text: string; timer: ReturnType<typeof setTimeout> };
+type Open = {
+  frame: HTMLIFrameElement;
+  holder: HTMLElement;
+  secret: string;
+  // Set once the page is ready. Every message after `start` goes over it.
+  port?: MessagePort;
+  typed: string[];
+  text: string;
+  timer: ReturnType<typeof setTimeout>;
+};
+
+// `crypto.randomUUID` needs a secure context, and the page may be plain http.
+function random_secret(): string {
+  return Array.from(crypto.getRandomValues(new Uint8Array(16)), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
 
 // A second run would add a second sink and listener.
 if (!page.oasisfox_cmdline_ready) {
@@ -23,11 +37,10 @@ if (!page.oasisfox_cmdline_ready) {
   const origin = new URL(browser.runtime.getURL("cmdline.html")).origin;
   let open: Open | undefined;
 
-  const send = (frame: HTMLIFrameElement, message: HostToPage) => frame.contentWindow?.postMessage(wrap(message), origin);
-
   const unmount = () => {
     if (!open) return;
     clearTimeout(open.timer);
+    open.port?.close();
     open.holder.remove();
     open = undefined;
   };
@@ -42,11 +55,13 @@ if (!page.oasisfox_cmdline_ready) {
     const holder = document.createElement("div");
     holder.style.cssText = `all:initial;position:fixed;left:0;right:0;bottom:0;height:${BAR_HEIGHT};z-index:2147483647;`;
     const frame = document.createElement("iframe");
+    const secret = random_secret();
+    frame.name = secret;
     frame.src = browser.runtime.getURL("cmdline.html");
     frame.style.cssText = "all:initial;display:block;width:100%;height:100%;border:0;color-scheme:normal;";
     holder.attachShadow({ mode: "closed" }).append(frame);
     (document.body ?? document.documentElement).append(holder);
-    open = { frame, holder, ready: false, typed: [], text, timer: setTimeout(close, READY_TIMEOUT_MS) };
+    open = { frame, holder, secret, typed: [], text, timer: setTimeout(close, READY_TIMEOUT_MS) };
   }
 
   async function submit(message: Extract<PageToHost, { kind: "submit" }>) {
@@ -55,23 +70,32 @@ if (!page.oasisfox_cmdline_ready) {
     await browser.runtime.sendMessage({ type: "run", invocations: [message.invocation], mode: "normal" });
   }
 
+  const start = (current: Open) => {
+    clearTimeout(current.timer);
+    const channel = new MessageChannel();
+    channel.port1.onmessage = (event: MessageEvent) => {
+      const message = unwrap<PageToHost>(event.data);
+      if (open !== current || !message) return;
+      if (message.kind === "close") close();
+      else if (message.kind === "submit") void submit(message);
+    };
+    current.port = channel.port1;
+    current.frame.focus();
+    const message: HostToPage = { kind: "start", secret: current.secret, text: current.text, tokens: current.typed };
+    current.frame.contentWindow?.postMessage(wrap(message), origin, [channel.port2]);
+    current.typed = [];
+  };
+
+  // Only `ready` comes this way. A `close` or `submit` here is forged, since the page sends those over the port.
   window.addEventListener("message", (event) => {
     const message = unwrap<PageToHost>(event.data);
-    if (!open || !message || event.source !== open.frame.contentWindow) return;
-    if (message.kind === "ready") {
-      clearTimeout(open.timer);
-      open.ready = true;
-      open.frame.focus();
-      send(open.frame, { kind: "start", text: open.text, tokens: open.typed });
-      open.typed = [];
-    } else if (message.kind === "close") close();
-    else void submit(message);
+    if (open && !open.port && message?.kind === "ready" && event.source === open.frame.contentWindow) start(open);
   });
 
   host.register_sink("cmdline", {
     on_token: (token) => {
       if (!open) return "pass";
-      if (open.ready) send(open.frame, { kind: "token", token });
+      if (open.port) open.port.postMessage(wrap<HostToPage>({ kind: "token", token }));
       else open.typed.push(token);
       return "handled";
     },
