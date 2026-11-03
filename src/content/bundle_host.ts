@@ -1,6 +1,6 @@
 // Loads bundles on first use and holds what they register. A bundle is a script the background injects
-// into this frame. It registers through `register_sink` and `register_handler`, which main.ts puts on
-// `window.oasisfox_host`. The host counts every wait on a load, and key_flow holds keys until none is left.
+// into this frame. It registers through `register_sink` and `register_handler` and enters its mode with `set_mode`.
+// main.ts puts all three on `window.oasisfox_host`. The host counts every wait on a load, and key_flow holds keys until none is left.
 
 import { BUNDLE_FOR_MODE } from "../shared/bundles.ts";
 import type { BundleName } from "../shared/bundles.ts";
@@ -15,6 +15,8 @@ export type BundleHandler = (args: Record<string, unknown>) => void;
 export type BundleHostApi = {
   register_sink: (mode: Mode, sink: Sink) => void;
   register_handler: (command_id: string, handler: BundleHandler) => void;
+  // Any mode, the same path as a key that changes mode. A bundle uses it to enter its own mode.
+  set_mode: (mode: Mode) => void;
 };
 
 export type BundleHostDeps = {
@@ -23,6 +25,7 @@ export type BundleHostDeps = {
   // Runs after a load and everything that waited on it is done, so held keys can replay.
   on_idle: () => void;
   show_error: (message: string) => void;
+  set_mode: (mode: Mode) => void;
   // A mode with a sink ended its load without one, so nothing would take its keys.
   on_sink_missing: (mode: Mode) => void;
 };
@@ -86,6 +89,7 @@ export function create_bundle_host() {
     api: {
       register_sink: (mode, sink) => void sinks.set(mode, sink),
       register_handler: (command_id, handler) => void handlers.set(command_id, handler),
+      set_mode: (mode) => deps.set_mode(mode),
     } satisfies BundleHostApi,
   };
 }
