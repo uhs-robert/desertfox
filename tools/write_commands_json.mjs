@@ -21,6 +21,7 @@ const COMMAND_MODULES = [
   "src/commands/site.ts",
   "src/commands/phase_2.ts",
   "src/commands/help.ts",
+  "src/commands/engine.ts",
 ];
 
 export async function write_commands_json(out_dir) {

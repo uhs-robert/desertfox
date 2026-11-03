@@ -103,3 +103,21 @@ test("help.html loads the content script after help.js", () => {
   assert.ok(help >= 0 && content > help);
   assert.ok(html.indexOf('<script src="ui.js"></script>') > content, "the badge and toast bundle loads by tag, because executeScript is refused here");
 });
+
+test("the Engines section lists the tree parents first, with needs, fallback and origins", () => {
+  const { commands } = sample();
+  const engines = {
+    "github.repo.code": { url: "u{repo}{query}", label: "GitHub: this repo: code", slots: ["repo"], origins: { url: "f.toml [github]", scope: "f.toml [github.repo]" } },
+    github: { url: "u{query}", label: "GitHub" },
+    "github.repos": { url: "u{query}", label: "GitHub: repos" },
+    "github.repo": { url: "u{repo}{query}", label: "GitHub: this repo", slots: ["repo"], fallback: "github" },
+    duck: { url: "d{query}", label: "DuckDuckGo" },
+  };
+  const rows = build_help_model(commands, undefined, [], {}, engines).engines;
+  assert.deepEqual(rows.map((row) => row.name), ["duck", "github", "github.repo", "github.repo.code", "github.repos"]);
+  const code = rows.find((row) => row.name === "github.repo.code")!;
+  assert.equal(code.needs, "{repo}");
+  assert.deepEqual(code.origins, ["url: f.toml [github]", "scope: f.toml [github.repo]"]);
+  assert.equal(rows.find((row) => row.name === "github.repo")!.fallback, "github");
+  assert.equal(rows.find((row) => row.name === "duck")!.needs, "");
+});
