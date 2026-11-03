@@ -78,6 +78,29 @@ export async function run_cases({ rdp, extension_id, take_shot, run_case, send_k
     expect(whichkey_events(mark, "wk").every((event) => event.value === ""), "the panel came back after Escape");
   });
 
+  // The test keymap binds ,w to help.whichkey in normal, caret and visual mode. Each mode lists its own keys.
+  const rows_after = async (keys, mode) => {
+    const mark = events.length;
+    await send_keys(...keys);
+    const shown = await panel_value(mark, (value) => value !== "", `the manual panel in ${mode} mode`);
+    return Number(shown.value.split(":")[1]);
+  };
+
+  await run_case("help.whichkey lists the keys of the current mode", async () => {
+    await open_page("caret", "wk", { new_tab: true });
+    const normal_rows = await rows_after([",w"], "normal");
+    await send_keys("-k", "Escape");
+    await send_keys("V");
+    const caret_rows = await rows_after([",w"], "caret");
+    await send_keys("-k", "Escape");
+    await send_keys("v");
+    const visual_rows = await rows_after([",w"], "visual");
+    await send_keys("-k", "Escape");
+    await send_keys("-k", "Escape");
+    expect(caret_rows !== normal_rows, `caret mode listed ${caret_rows} rows, the same as normal mode`);
+    expect(visual_rows !== normal_rows, `visual mode listed ${visual_rows} rows, the same as normal mode`);
+  });
+
   // Set OASISFOX_SHOT_DIR to also save screenshots of the panel. A raised page zoom shrinks the viewport, which forces the columns.
   const shot_dir = process.env.OASISFOX_SHOT_DIR;
   if (shot_dir) {
@@ -96,5 +119,21 @@ export async function run_cases({ rdp, extension_id, take_shot, run_case, send_k
         await set_zoom(1);
       });
     }
+    await run_case("screenshots of the panel and the toast under a non-default theme", async () => {
+      await open_page("caret_themed", "wk_theme", { new_tab: true });
+      await send_keys("g");
+      await sleep(900);
+      await take_shot(`${shot_dir}/themed-panel.png`);
+      await send_keys("-k", "Escape");
+      await send_keys("V");
+      await send_keys("v");
+      await send_keys("e");
+      const mark = events.length;
+      await send_keys("y");
+      await wait_event(mark, (event) => event.type === "toast" && event.page_id === "wk_theme", "the copied toast");
+      await take_shot(`${shot_dir}/themed-toast.png`);
+      await send_keys("-k", "Escape");
+      await send_keys("-k", "Escape");
+    });
   }
 }

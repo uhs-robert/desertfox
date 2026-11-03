@@ -1,3 +1,9 @@
-# Test keymap: the defaults plus one chord that runs focus_page.
+# Test keymap: the defaults plus one chord that runs focus_page and ,w for help.whichkey in three modes.
 [browser]
 "<A-,>" = "browser.focus_page"
+[normal]
+",w" = "help.whichkey"
+[caret]
+",w" = "help.whichkey"
+[visual]
+",w" = "help.whichkey"
