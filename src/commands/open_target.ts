@@ -68,7 +68,8 @@ export async function current_tab_url(ctx: CommandContext): Promise<string> {
 
 // What the page slots read. Undefined when the tab cannot be read, so page slots then refuse with their own message.
 export async function current_page(ctx: CommandContext): Promise<PageInfo | undefined> {
-  const tab = await browser.tabs.get(require_tab_id(ctx)).catch(() => undefined);
+  if (ctx.tab_id === undefined) return undefined;
+  const tab = await browser.tabs.get(ctx.tab_id).catch(() => undefined);
   return tab?.url ? { url: tab.url, ...(tab.title ? { title: tab.title } : {}) } : undefined;
 }
 
