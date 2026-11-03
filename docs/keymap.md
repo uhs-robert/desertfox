@@ -11,7 +11,7 @@ Status values:
 The shipped defaults bind every `v1` row whose command exists, with three kinds of exception:
 
 - Rows that name a search engine or a container (`s`, `S`, `,`, `c`, `C` keys). The user's config generates them from `search_keys` and `container_keys`. The `s/` and `sg` site search rows are the exception and ship as defaults.
-- `;f`, because `hint.run` has no link text param yet.
+- `;f`, because it needs the command line prompt to ask for the link text. `hint.run text=...` already filters.
 - `ZZ`, because closing every window cannot be undone. Bind it in the config.
 
 Which-key shows a group as `+Name`, for example `g` as `+Go`. A `group_names` section in `keymap.toml` maps a key sequence to its name. A group without one shows its prefix key.
@@ -180,10 +180,12 @@ dropped: 8 | later: 15 | v1: 269
 | normal | `zb` | v1 | `scroll.align position=bottom` (changed in 0.1.1, was blur) |
 | normal | `;b` | v1 | `hint.run filter=clickable` |
 | normal | `;B` | v1 | `hint.run action=background` |
+| normal | `;r` | v1 | `hint.run action=background filter=links rapid=true` |
 | normal | `;c` | dropped | needs a shell |
 | normal | `;f` | v1 | `hint.run action=here` (prompts for link text filter) |
 | normal | `;i` | v1 | `hint.run filter=inputs` |
 | normal | `;l` | v1 | `hint.run filter=links` |
+| normal | `;y` | v1 | `hint.run action=copy filter=links` (copies the link address, `action=copy_text` copies its text) |
 | normal | `;x` | dropped | needs a shell |
 | normal | `;:` | dropped | needs a shell |
 | normal | `,,` | v1 | `open.search engine=search` (prompts) |

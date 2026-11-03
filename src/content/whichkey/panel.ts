@@ -2,7 +2,7 @@
 // Hovering a row shows what the command does.
 
 import type { WhichKeyPanel } from "../../shared/messages.ts";
-import { create_surface, SURFACE_DEFAULT_VARIABLES } from "../surface.ts";
+import { create_surface } from "../surface.ts";
 import { choose_columns } from "./layout.ts";
 
 const CHAMFER_PX = 8;
@@ -10,31 +10,33 @@ const chamfer = (cut: number) =>
   `polygon(${cut}px 0, calc(100% - ${cut}px) 0, 100% ${cut}px, 100% calc(100% - ${cut}px), calc(100% - ${cut}px) 100%, ${cut}px 100%, 0 calc(100% - ${cut}px), 0 ${cut}px)`;
 
 // The look follows the Oasis editor float: a thin tinted border, a filled title chip, yellow keys, blue groups.
-// The two colors default here and a page-wide `--oasisfox-*` setting overrides them.
-const STYLE = `
-.oasisfox-whichkey {${SURFACE_DEFAULT_VARIABLES}
+// --bg and --fg alias the page-wide `--oasisfox-*` settings, each with its default as a fallback.
+export const STYLE = `
+.oasisfox-whichkey {
+  --bg: var(--oasisfox-bg, #222);
+  --fg: var(--oasisfox-fg, #eee);
   --primary: var(--oasisfox-accent, #7fa3c9);
   --secondary: var(--oasisfox-secondary, #e6c87a);
-  --border: color-mix(in srgb, var(--primary) 60%, var(--oasisfox-bg));
-  --dim: color-mix(in srgb, var(--oasisfox-fg) 55%, var(--oasisfox-bg));
+  --border: color-mix(in srgb, var(--primary) 60%, var(--bg));
+  --dim: color-mix(in srgb, var(--fg) 55%, var(--bg));
   position: fixed; right: 16px; bottom: 44px; max-width: calc(100vw - 32px);
-  font: var(--oasisfox-font);
+  font: var(--oasisfox-font, 14px system-ui, sans-serif);
 }
 .frame { background: var(--border); padding: 1px; }
-.body { box-sizing: border-box; background: var(--oasisfox-bg); color: var(--oasisfox-fg); padding: 14px 14px 8px; overflow: auto; max-height: calc(100vh - 98px); }
-.round, .round .body { border-radius: var(--oasisfox-radius); }
+.body { box-sizing: border-box; background: var(--bg); color: var(--fg); padding: 14px 14px 8px; overflow: auto; max-height: calc(100vh - 98px); }
+.round, .round .body { border-radius: var(--oasisfox-radius, 6px); }
 .chamfer { clip-path: ${chamfer(CHAMFER_PX)}; }
 .chamfer .body { clip-path: ${chamfer(CHAMFER_PX - 1)}; }
 .title { position: absolute; left: 12px; top: -11px; padding: 0 4px; z-index: 1;
-  background: linear-gradient(to bottom, transparent 11px, var(--oasisfox-bg) 11px, var(--oasisfox-bg) 12px, transparent 12px); }
-.chip { background: var(--primary); color: var(--oasisfox-bg); font-weight: bold; padding: 2px 7px; border-radius: 3px; white-space: nowrap; }
+  background: linear-gradient(to bottom, transparent 11px, var(--bg) 11px, var(--bg) 12px, transparent 12px); }
+.chip { background: var(--primary); color: var(--bg); font-weight: bold; padding: 2px 7px; border-radius: 3px; white-space: nowrap; }
 .rows { display: grid; column-gap: 24px; }
 .row { display: flex; height: 22px; line-height: 22px; white-space: nowrap; overflow: hidden; }
 .key { color: var(--secondary); min-width: 3ch; }
 .arrow { color: var(--dim); padding-right: 8px; }
 .label { overflow: hidden; text-overflow: ellipsis; }
 .group .label { color: var(--primary); font-weight: bold; }
-.footer { margin-top: 6px; padding-top: 6px; border-top: 1px solid color-mix(in srgb, var(--oasisfox-fg) 15%, var(--oasisfox-bg)); text-align: center; color: var(--dim); font-style: italic; }
+.footer { margin-top: 6px; padding-top: 6px; border-top: 1px solid color-mix(in srgb, var(--fg) 15%, var(--bg)); text-align: center; color: var(--dim); font-style: italic; }
 .footer span { font-style: normal; color: var(--secondary); font-size: 0.8em; margin: 0 4px 0 14px; }`;
 
 const FOOTER: readonly [key: string, word: string][] = [["ESC", "close"], ["←", "back"]];
