@@ -44,11 +44,10 @@ test("name and alias uniqueness across commands", () => {
   const registry = design_registry();
   rejects("open.other", { ...base, name: "search" }, /name: "search" is already used by "open.search"/, registry);
   rejects("open.other", { ...base, aliases: ["x", "s"] }, /aliases\[1\]: "s" is already used/, registry);
-  rejects("open.other", { ...base, name: "tab.close" }, /name: .*already used by "tab.close"/, registry);
   rejects("open.other", { ...base, name: "x", aliases: ["x"] }, /aliases\[0\]: .*twice/, registry);
   const with_name = create_registry();
-  with_name.define("a.b", { ...base, name: "other.thing" });
-  rejects("other.thing", base, /id: already used as the name or alias of "a.b"/, with_name);
+  with_name.define("a.b", { ...base, name: "thing" });
+  rejects("thing.go", { ...base, name: "thing" }, /name: "thing" is already used by "a.b"/, with_name);
 });
 
 test("a rejected define leaves the registry unchanged", () => {
@@ -137,17 +136,50 @@ test("at most one param is main, and it is a string", () => {
   assert.doesNotThrow(() => create_registry().define("a.b", { ...base, params: [{ name: "a", type: "string", main: true }] }));
 });
 
-test("a bare word names one param: enum values and bool names do not repeat", () => {
+test("a long flag names one param: enum values and bool names do not repeat", () => {
   const shared_value: CommandInput = {
     ...base,
     params: [{ name: "a", type: "enum", values: ["x", "y"] }, { name: "b", type: "enum", values: ["y", "z"] }],
   };
-  rejects("a.b", shared_value, /params\.b: bare word "y" is also used by param "a"/);
+  rejects("a.b", shared_value, /params\.b: flag --y is also used by param "a"/);
   const bool_is_value: CommandInput = {
     ...base,
     params: [{ name: "a", type: "enum", values: ["rapid"] }, { name: "rapid", type: "bool" }],
   };
-  rejects("a.b", bool_is_value, /params\.rapid: bare word "rapid" is also used by param "a"/);
+  rejects("a.b", bool_is_value, /params\.rapid: flag --rapid is also used by param "a"/);
+});
+
+test("long flags: hyphen and underscore spell one flag, help is reserved, words are plain", () => {
+  const word_end: CommandInput = {
+    ...base,
+    params: [{ name: "a", type: "enum", values: ["word_end"] }, { name: "b", type: "bool", default: false }, { name: "c", type: "enum", values: ["x"] }],
+  };
+  assert.doesNotThrow(() => create_registry().define("a.b", word_end));
+  rejects("a.b", { ...base, params: [{ name: "help", type: "bool" }] }, /params\.help: .*--help/);
+  rejects("a.b", { ...base, params: [{ name: "a", type: "enum", values: ["help", "x"] }] }, /params\.a: .*--help/);
+  rejects("a.b", { ...base, params: [{ name: "a", type: "enum", values: ["Big"] }] }, /params\.a: "Big" must be lowercase/);
+});
+
+test("short flags: one letter, not h, unique per command, only where a flag can use them", () => {
+  const where = { name: "where", type: "enum" as const, values: ["here", "tab", "window"], default: "here", short: { tab: "t", window: "w" } };
+  const registry = create_registry();
+  assert.doesNotThrow(() => registry.define("a.ok", { ...base, params: [where, { name: "hard", type: "bool", default: false, short: "r" }, { name: "dir", type: "string", short: "D" }] }));
+  const short = (param: object) => ({ ...base, params: [where, { name: "p", type: "bool" as const, ...param }] });
+  rejects("a.b", short({ short: "t" }), /params\.p\.short: -t is also used by params\.where\.short\.tab/);
+  rejects("a.b", short({ short: "tt" }), /params\.p\.short: "tt" must be one letter/);
+  rejects("a.b", short({ short: "1" }), /params\.p\.short: "1" must be one letter/);
+  rejects("a.b", short({ short: "h" }), /params\.p\.short: "h" is reserved/);
+  rejects("a.b", { ...base, params: [{ name: "w", type: "enum", values: ["x"], short: { y: "y" } }] }, /params\.w\.short\.y: is not one of the values/);
+  rejects("a.b", { ...base, params: [{ name: "w", type: "enum", values: ["x"], short: "x" }] }, /params\.w\.short: an enum takes a map/);
+  rejects("a.b", { ...base, params: [{ name: "w", type: "bool", short: { x: "x" } }] }, /params\.w\.short: only an enum with a fixed value list/);
+  rejects("a.b", { ...base, params: [{ name: "e", type: "enum", values: { from: "search_engines" }, short: { x: "x" } }] }, /params\.e\.short: only an enum with a fixed value list/);
+  rejects("a.b", { ...base, params: [{ name: "q", type: "string", main: true, short: "q" }] }, /params\.q\.short: main and rest/);
+  rejects("a.b", { ...base, params: [{ name: "q", type: "string", rest: true, short: "q" }] }, /params\.q\.short: main and rest/);
+});
+
+test("command names hold no dot", () => {
+  rejects("a.b", { ...base, name: "tab.close" }, /name: .*must not hold a "\."/);
+  rejects("a.b", { ...base, aliases: ["x.y"] }, /aliases\[0\]: .*must not hold a "\."/);
 });
 
 test("value_labels: keys must be values, the default has no phrase, phrases are plain, dynamic lists take none", () => {

@@ -27,6 +27,8 @@ export type Registry = {
 export const COMMAND_ID_PATTERN = /^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$/;
 const PARAM_NAME_PATTERN = /^[a-z][a-z0-9_]*$/;
 const COMMAND_WORD_PATTERN = /^[^\s'"\\-][^\s'"\\]*$/;
+const FLAG_WORD_PATTERN = /^[a-z][a-z0-9_]*$/;
+const SHORT_FLAG_PATTERN = /^[A-Za-z]$/;
 const PARAM_TYPES = ["int", "float", "string", "bool", "enum"];
 
 export function create_registry(): Registry {
@@ -43,7 +45,7 @@ export function create_registry(): Registry {
     check_words(id, input, commands_by_word, fail);
     check_intent(input, fail);
     check_params(input, fail);
-    check_bare_words(input, fail);
+    check_flags(input, fail);
     check_count_and_modes(input, fail);
 
     const command: CommandDef = { ...input, id, count: input.count ?? "ignore", modes: input.modes ?? ["normal"] };
@@ -72,6 +74,7 @@ function check_words(id: string, input: CommandInput, taken: Map<string, Command
   (input.aliases ?? []).forEach((alias, index) => words.push([`aliases[${index}]`, alias]));
   for (const [field, word] of words) {
     if (!COMMAND_WORD_PATTERN.test(word)) fail(field, `"${word}" must be one word that does not start with "-"`);
+    if (word.includes(".")) fail(field, `"${word}" must not hold a ".", so a typed word is never read as an id`);
     const owner = taken.get(word);
     if (owner) fail(field, `"${word}" is already used by "${owner.id}"`);
     if (word === id || seen.has(word)) fail(field, `"${word}" is used twice in this command`);
@@ -85,16 +88,42 @@ function check_intent(input: CommandInput, fail: Fail): void {
   if (/[\r\n]/.test(input.intent)) fail("intent", "must be one line");
 }
 
-// Config and the command line let a bare word stand for an enum value or a bool, so the words of one command must not repeat.
-function check_bare_words(input: CommandInput, fail: Fail): void {
-  const owner_of_word = new Map<string, string>();
+// A bool or an enum value is typed as a long flag (`--word-end`), so those words must be unique per command and must not take over `--help`. A short flag is one letter, unique per command.
+function check_flags(input: CommandInput, fail: Fail): void {
+  const owner_of_long = new Map<string, string>();
+  const owner_of_short = new Map<string, string>();
   for (const param of input.params ?? []) {
-    const words = param.type === "bool" ? [param.name] : (static_values(param) ?? []).filter(() => param.type === "enum");
-    for (const word of words) {
-      const owner = owner_of_word.get(word);
-      if (owner !== undefined) fail(`params.${param.name}`, `bare word "${word}" is also used by param "${owner}"`);
-      owner_of_word.set(word, param.name);
+    const at = `params.${param.name}`;
+    const values = static_values(param);
+    const longs = param.type === "bool" ? [param.name] : param.type === "enum" ? (values ?? []) : [];
+    for (const value of longs) {
+      if (!FLAG_WORD_PATTERN.test(value)) fail(at, `"${value}" must be lowercase with underscores to work as a flag`);
+      const flag = value.replaceAll("_", "-");
+      if (flag === "help") fail(at, `"${value}" would read as --help, which is reserved`);
+      const owner = owner_of_long.get(flag);
+      if (owner !== undefined) fail(at, `flag --${flag} is also used by param "${owner}"`);
+      owner_of_long.set(flag, param.name);
     }
+    if (param.short === undefined) continue;
+    if (param.main || param.rest) fail(`${at}.short`, "main and rest params take no flag");
+    if (typeof param.short === "string") {
+      if (param.type === "enum") fail(`${at}.short`, "an enum takes a map from value to letter");
+      add_short(param.short, `${at}.short`);
+    } else {
+      if (param.type !== "enum" || !values) fail(`${at}.short`, "only an enum with a fixed value list takes a short map");
+      for (const [value, letter] of Object.entries(param.short)) {
+        if (!values?.includes(value)) fail(`${at}.short.${value}`, "is not one of the values");
+        add_short(letter, `${at}.short.${value}`);
+      }
+    }
+  }
+
+  function add_short(letter: string, field: string): void {
+    if (!SHORT_FLAG_PATTERN.test(letter)) fail(field, `"${letter}" must be one letter`);
+    if (letter === "h") fail(field, `"h" is reserved for -h`);
+    const owner = owner_of_short.get(letter);
+    if (owner !== undefined) fail(field, `-${letter} is also used by ${owner}`);
+    owner_of_short.set(letter, field);
   }
 }
 
