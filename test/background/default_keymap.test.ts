@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import "../../src/background/command_modules.ts";
 import { compile_config } from "../../src/background/compile.ts";
@@ -83,26 +82,6 @@ test("zz, zt and zb align the focused field", () => {
     assert.deepEqual(DEFAULT_KEYMAP.normal?.[key], { id: "scroll.align", args: { position } });
   }
   assert.deepEqual(DEFAULT_KEYMAP.normal?.["z="], { id: "zoom.set", args: { level: 1 }, label: "Reset zoom" });
-});
-
-// Rows that name an engine or a container need the user's own data. The config supplies them.
-function doc_rows() {
-  const lines = readFileSync(new URL("../../docs/keymap.md", import.meta.url), "utf8").split("\n");
-  return lines.flatMap((line) => {
-    const [, mode, key, status, invocation] = line.match(/^\| (\w+) \| `(.+)` \| (\w+) \| `([^`]+)`/) ?? [];
-    if (!mode || !key || !invocation) return [];
-    return status === "v1" ? [{ mode, key, id: invocation.split(" ")[0] ?? invocation, user_data: /^(open\.search|tab\.reopen_in_container) /.test(invocation) || / --container=/.test(invocation) }] : [];
-  });
-}
-
-test("every v1 row of docs/keymap.md whose command exists is bound, except rows that need user data", () => {
-  const unbound = doc_rows()
-    .filter((row) => registry.get(row.id) && !row.user_data)
-    .filter((row) => !(DEFAULT_KEYMAP[row.mode as keyof KeymapConfig] as Record<string, unknown> | undefined)?.[row.key])
-    .map((row) => `${row.mode} ${row.key}`);
-  // `;f` needs the command line prompt to ask for the link text.
-  // `ZZ` closes every window with no undo, so users bind it in their config.
-  assert.deepEqual(unbound.sort(), ["normal ;f", "normal ZZ"].sort());
 });
 
 test("the keys of the new modes compile and resolve to their commands", () => {

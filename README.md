@@ -12,7 +12,7 @@ Status: phase 1 is built. Release 0.1.1 adds the toolbar button, the status page
 - `zt`, `zz` and `zb` scroll the focused field to the top, center or bottom of the view. After `gi` and `Escape` they align the field you just left. Zoom reset moved from `zz` to `z=`.
 - `page.blur` moved from `zb` to `qb`. The `q` group holds OasisFox's own commands: `qr` reload config, `qh` help, `qi` ignore mode, `qb` blur.
 - The plain keys `r`, `t` and `x` are now prefixes: `rr` reload, `rh` hard reload, `ri` site check, `tt` open in a new tab, `tT tm td tn tp ta tf tl` for tabs, `xx` close tab, `xp` stop loading.
-- The defaults bind every `v1` row of the binding map whose command exists, except the search engine and container keys, which come from your config. See [docs/keymap.md](docs/keymap.md).
+- The default keymap binds the keys listed in [docs/keymap.md](docs/keymap.md). The search engine and container keys come from your config.
 
 ## Config
 
@@ -35,7 +35,7 @@ ww = { run = ":open -w @current_url", label = "New window, edit current URL" }  
 
 - [docs/design.md](docs/design.md): architecture, scope and roadmap.
 - [docs/spike.md](docs/spike.md): what Firefox allows, measured.
-- [docs/keymap.md](docs/keymap.md): every current browser binding and what replaces it.
+- [docs/keymap.md](docs/keymap.md): every default key, and the keys that are planned or dropped.
 - `spike/`: the throwaway test harness from phase 0.
 
 ## Known limits

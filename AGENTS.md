@@ -13,7 +13,7 @@ Read the design for an area before you change it.
 | Topic                                  | File                                     |
 | -------------------------------------- | ---------------------------------------- |
 | Architecture, config, scope, roadmap   | [`docs/design.md`](docs/design.md)       |
-| Which bindings are in scope, per phase | [`docs/keymap.md`](docs/keymap.md)       |
+| The default keys, generated           | [`docs/keymap.md`](docs/keymap.md)       |
 | Measured Firefox behavior              | [`docs/spike.md`](docs/spike.md)         |
 | The phase 0 test harness               | `spike/` (throwaway, do not build on it) |
 
@@ -48,7 +48,8 @@ This repository is public.
 
 ```bash
 just build       # bundle the extension
-just test        # unit tests: registry, parser, prefix tree, config merge
+just test        # docs check, then unit tests: registry, parser, prefix tree, config merge
+just docs-gen    # regenerate the tables in docs/keymap.md
 just key-test    # real key presses in a nested Hyprland, about a minute
 just sign        # sign as unlisted on addons.mozilla.org
 just install     # install through the Firefox policy file (needs sudo)
@@ -56,6 +57,8 @@ just release     # sign and install, reading the AMO key from rbw when unset
 just install-profile <dir>  # install into one Firefox profile directory
 just build-config [dir]     # compile the user config into the managed storage config
 ```
+
+`docs/keymap.md` is generated between its markers from `src/background/default_keymap.ts` and `docs/keymap_planned.toml` (keys that are `later` or `dropped`). Edit those two, then run `just docs-gen`. `just test` fails when the doc is stale.
 
 Run `just test` before every commit. Run `just key-test` after a change to keys, modes, the content script or config reload. It needs a nested Hyprland and runs on demand only. Key tests can run in parallel from different worktrees, with no lock: each run has its own shadow session and clears the ones that dead runs left. Do not run two from one worktree, because each `just key-test` rebuilds and clears that worktree's `dist/`.
 
