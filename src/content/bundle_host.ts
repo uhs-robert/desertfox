@@ -21,6 +21,7 @@ export type BundleHostApi = {
   register_handler: (command_id: string, handler: BundleHandler) => void;
   // Any mode, the same path as a key that changes mode. A bundle uses it to enter its own mode.
   set_mode: (mode: Mode) => void;
+  get_mode: () => Mode;
   show_toast: (message: string) => void;
 };
 
@@ -113,6 +114,7 @@ export function create_bundle_host() {
       register_sink: (mode, sink) => void sinks.set(mode, sink),
       register_handler: (command_id, handler) => void handlers.set(command_id, handler),
       set_mode: (mode) => deps.set_mode(mode),
+      get_mode: () => current_mode,
       show_toast: (message) => (deps.show_toast ?? deps.show_error)(message),
     } satisfies BundleHostApi,
   };

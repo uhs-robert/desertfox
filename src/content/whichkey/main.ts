@@ -26,5 +26,5 @@ if (!page.oasisfox_whichkey_ready) {
     if (!prefix) return session.hide();
     void session.show_prefix(prefix, is_current).catch(ignore_failure);
   });
-  page.oasisfox_host.register_handler("help.whichkey", () => void session.show_manual("normal").catch(ignore_failure));
+  page.oasisfox_host.register_handler("help.whichkey", () => void session.show_manual(page.oasisfox_host.get_mode()).catch(ignore_failure));
 }
