@@ -47,6 +47,7 @@ export function collect(root: ParentNode, selector: string, frames: Element[] = 
   return found;
 }
 
-// The visible link text holds the needle, ignoring case. The needle arrives already lower-cased.
+// The visible text holds the needle, ignoring case. The needle arrives already lower-cased.
+// An empty innerText means the text is hidden, so only a missing innerText falls back to textContent.
 export const has_text = (element: Element, lower_needle: string): boolean =>
-  ((element as HTMLElement).innerText || element.textContent || "").toLowerCase().includes(lower_needle);
+  ((element as HTMLElement).innerText ?? element.textContent ?? "").toLowerCase().includes(lower_needle);

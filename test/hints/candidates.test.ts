@@ -60,4 +60,6 @@ test("has_text matches a lower-cased needle in the visible text, ignoring case",
   assert.equal(has_text({ innerText: "Read More", textContent: "" } as never, "more"), true);
   assert.equal(has_text({ textContent: "Read More" } as never, "read"), true);
   assert.equal(has_text({ textContent: "Read" } as never, "more"), false);
+  // Hidden text gives an empty innerText, which must not fall back to textContent.
+  assert.equal(has_text({ innerText: "", textContent: "Hidden" } as never, "hidden"), false);
 });

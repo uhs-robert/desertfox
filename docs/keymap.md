@@ -20,7 +20,7 @@ The `caret`, `visual` and `cmdline` rows bind placeholder commands that refuse u
 
 A note "(prompts)" means the binding leaves a param out, so the command line asks for it.
 
-dropped: 8 | later: 15 | v1: 267
+dropped: 8 | later: 15 | v1: 269
 
 | mode | key | status | OasisFox |
 | --- | --- | --- | --- |

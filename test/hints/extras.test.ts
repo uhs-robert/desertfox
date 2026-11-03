@@ -308,3 +308,40 @@ test("hint.run needs no text: it defaults to empty, which filters nothing", () =
   assert.deepEqual(checked, { ok: true, args: { action: "here", filter: "clickable", text: "", rapid: false } });
   assert.equal(check_args(registry.get("hint.run")!, { action: "copy_text", text: "x", rapid: true }).ok, true);
 });
+
+test("text keeps links only: a sole matching button is not clicked", async () => {
+  const page = await page_with(["Alpha", "Beta"]);
+  let clicks = 0;
+  const button = page.links[1]!;
+  Object.assign(button, { localName: "button", href: undefined, on_click: () => void clicks++ });
+  page.run({ text: "beta", filter: "clickable" });
+  await settle();
+  assert.equal(clicks, 0);
+  assert.deepEqual(page.messages(), ["No link matches beta"]);
+  assert.equal(page.mode(), "normal");
+});
+
+test("text with no candidate at all shows the no-link notice", async () => {
+  const page = await page_with([]);
+  page.run({ text: "zzz" });
+  assert.deepEqual(page.messages(), ["No link matches zzz"]);
+  assert.deepEqual(page.modes, []);
+});
+
+test("keys typed while rapid mode builds again wait and replay, also when the first one picks", async () => {
+  const page = await page_with(["one", "two"]);
+  page.run({ action: "background", rapid: true });
+  // Both keys arrive before the first build ends: the first pick starts the next build, and the second key replays there.
+  assert.equal(page.type("a"), "handled");
+  assert.equal(page.type("s"), "handled");
+  await settle();
+  assert.equal(page.sent.length, 2);
+  assert.equal(page.mode(), "hint");
+  assert.equal(page.labels().length, 2);
+  // A key typed during a rebuild after a pick waits too.
+  page.type("a");
+  assert.equal(page.type("s"), "handled");
+  await settle();
+  assert.equal(page.sent.length, 4);
+  page.escape();
+});

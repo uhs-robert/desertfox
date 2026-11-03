@@ -103,7 +103,7 @@ function register(host: BundleHostApi): void {
   async function build(current: Session, candidates: Found[], first_build: boolean): Promise<void> {
     const [letters, visible] = await Promise.all([read_letters(), keep_visible_ones(candidates)]);
     if (current.cancelled) return;
-    const found = current.lower_text === undefined ? visible : visible.filter((item) => has_text(item.element, current.lower_text!));
+    const found = current.lower_text === undefined ? visible : visible.filter((item) => link_address(item.element as HTMLAnchorElement) !== undefined && has_text(item.element, current.lower_text!));
     const view = create_view();
     if (found.length === 0) {
       host.set_mode("normal");
@@ -178,8 +178,8 @@ function register(host: BundleHostApi): void {
       return create_view().show_message(`Invalid selector: ${custom_selector}`);
     }
     // With nothing to label the mode never changes, so keys held during the load run as normal keys.
-    if (candidates.length === 0) return create_view().show_message("No hints on this page");
     const text = (args.text as string | undefined) || undefined;
+    if (candidates.length === 0) return create_view().show_message(text === undefined ? "No hints on this page" : `No link matches ${text}`);
     const current: Session = { cancelled: false, action, waiting_tokens: [], rapid: args.rapid === true, filter, custom_selector, text, lower_text: text?.toLowerCase() };
     session = current;
     host.set_mode("hint");
