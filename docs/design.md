@@ -32,10 +32,11 @@ The registry lives in the background page. A command is plain data plus a handle
 ```ts
 define("tab.close", {
   label: "Close tab",
-  intent: "Close the current tab and focus the tab on the chosen side.",
+  intent: "Close the current tab and focus the next one, or close the tabs around it.",
   params: [
-    { name: "focus", type: "enum", values: ["right", "left"], default: "right",
-      value_labels: { left: "and focus left" } },
+    { name: "side", type: "enum", values: ["none", "all_before", "all_after", "focus_previous"],
+      default: "none", short: { all_before: "B", all_after: "A", focus_previous: "P" },
+      value_labels: { focus_previous: "and focus previous" } },
   ],
   runs_in: "background",
   count: "repeat",
@@ -46,12 +47,12 @@ define("open.search", {
   label: "Search",
   intent: "Search with a keyword engine from the search engine list.",
   name: "search",
-  aliases: ["s"],
   params: [
     { name: "engine", type: "enum", values: from_engines },
     { name: "query", type: "string", main: true, default: { from: "selection" } },
-    { name: "where", type: "enum", values: WHERE, default: "here" },
-    { name: "container", type: "string", values: from_containers,
+    { name: "where", type: "enum", values: WHERE, default: "here",
+      short: { tab: "t", background: "b", window: "w" } },
+    { name: "container", type: "string", values: from_containers, short: "c",
       when: { where: ["tab", "background", "window"] } },
   ],
   runs_in: "background",
@@ -62,13 +63,14 @@ define("open.search", {
 The fields follow the Oasis action library (`home/hypr/.config/hypr/lib/act/init.lua`) so the two lists have one shape:
 
 - `id`: `group.name`, lowercase with underscores. Same pattern as Oasis actions.
-- `name`: the command line name, set by hand, for example `search`. It is optional. The full id always works on the command line. Names are never derived from the id, because derived names collide (`tab.close` and `window.close`).
-- `aliases`: more command line names, for example `s`.
+- `name`: the command line name, set by hand. It is optional, and it holds no `.`. The full id always works on the command line, and it is the name of most commands: you type `tab.close`, `window.new`, `tab.pin`. Only two kinds of command get a name. The one-word commands are `open`, `search`, `paste`, `copy`, `hint` and `github`. The family words are `tab` (switch), `bookmark` (open), `zoom` (set), `scroll` (lines), `mode` (set) and `help` (open), one per group, for the main action. Names are never derived from the id, because derived names collide (`tab.close` and `window.close`).
+- `aliases`: more command line names. The defaults ship none.
 - `label`: a short title in sentence case ("Close tab"). Which-key, the palette and completion show it. A key shows this label plus a phrase for each arg its binding sets, see [Which-key](#which-key).
 - `intent`: one plain sentence on one line. Help, the status page, which-key hover and completion details show it. The registry rejects an empty or multi-line one.
 - `params`: typed and named. The types are `int`, `float`, `string`, `bool` and `enum`. A later phase adds `key` (one key press, for marks). A param with no `default` and no `when` is required. The order is for display only.
-- `value_labels`: on an `enum` param with a fixed value list, a short phrase for each value ("and focus left"). Which-key adds the phrase to the label when a binding sets that value, and completion shows it beside the value. Every key must be one of `values`, and the default value has no phrase. A value with no phrase reads as the raw value with spaces for underscores. The registry checks this at define time.
-- `main`: the one `string` param that config and the command line take as a bare word, for example the URL of `open` or the query of `search`. At most one per command.
+- `value_labels`: on an `enum` param with a fixed value list, a short phrase for each value ("and focus previous"). Which-key adds the phrase to the label when a binding sets that value, and completion shows it beside the value. Every key must be one of `values`, and the default value has no phrase. A value with no phrase reads as the raw value with spaces for underscores. The registry checks this at define time.
+- `main`: the one `string` param that config and the command line take as the subject, for example the URL of `open` or the query of `search`. At most one per command.
+- `short`: the one-letter flag of a param. A string for a bool or a valued param (`short: "r"` gives `-r`, `short: "c"` on a string gives `-c=Work`). A map from value to letter for an enum with a fixed value list (`{ tab: "t" }` gives `-t`). Never on `main`, `rest` or an enum with a runtime list. `-t -b -w` mean where (tab, background, window) and `-c` means container on every command that has those params. A default value gets no letter, because the printer leaves it out.
 - `rest`: marks a `string` param as text with spaces. The grammar already lets the `main` value run to the end of the line.
 - `when`: the param is valid only if one other param has one of the listed values. For example, `container` needs `where` to open a new tab or window, because Firefox cannot change the container of an open tab. This is the only kind of condition. A command that needs more is split into two commands.
 - `default`: a value, or a context source (`{ from: "current_url" }`, `"selection"`, `"clipboard"`). The router fills a context source where it is available, so a background command can ask for the page selection.
@@ -84,10 +86,11 @@ Define-time checks cover names and params too:
 
 - `name` and `aliases` are unique across all commands, snippets included.
 - At most one param is `main`, and it is a `string`.
-- A bare word names at most one param of a command: no two enum params share a value, and no bool name repeats a value.
+- A long flag names at most one param of a command: no two enum params share a value, and no bool name repeats a value. `_` reads as `-` in a flag, and no value or bool is called `help`. Names and values are lowercase with underscores.
+- A short letter is one ASCII letter, never `h`, and unique within the command.
 - A `when` names a param that exists, with valid values, and never the param itself.
 
-A set of options where at most one can apply, for example open, background tab or copy link for a hint, is one `enum` param with a value per option. Two words from the set both set that param, so the command line rejects them together. No list of exclusions exists. This turns the hint command into five params: `action`, `filter`, `selector` (with `when: { filter: "custom" }`), `text` and the `rapid` switch.
+A set of options where at most one can apply, for example open, background tab or copy link for a hint, is one `enum` param with a value per option. Two flags from the set both set that param, so the command line rejects them together. No list of exclusions exists. This turns the hint command into five params: `action`, `filter`, `selector` (with `when: { filter: "custom" }`), `text` and the `rapid` switch.
 
 A build step writes `commands.json` from the registry: id, name, aliases, label, intent, params, count and modes. Help, the palette, which-key and the native `list` verb read it. The content script does not load it.
 
@@ -106,31 +109,34 @@ type Invocation = { id: string; args?: Record<string, unknown>; count?: number }
 
 ### Command line syntax
 
-One grammar covers the command line and every binding in the config. The text is what the user types and what a `:` key shows. `search engine=arch background "rust lifetimes"` becomes:
+One grammar covers the command line and every binding in the config. The text is what the user types and what a `:` key shows. `search arch -b "rust lifetimes"` becomes:
 
 ```json
 { "id": "open.search", "args": { "engine": "arch", "where": "background", "query": "rust lifetimes" } }
 ```
 
-- The first word is a `name`, an alias or a full id. The config uses the short `name`, and the build tool maps it to the id.
-- A bare word that is one enum param's value sets that param, in any order: `hint rapid background links`. A bare word that is a bool param's name turns it on. A word that fits two params of one command is an error, and `name=value` settles it.
-- Any param can be written `name=value`, split at the first `=`: `scroll.to percent=100 axis=x`. This is the only way to set free text and to turn a switch off (`rapid=false`).
-- A command marks at most one param `main`. The first bare word that is no value, switch or number fills it, and the rest of the line joins into it: `search arch pacman mirrors` gives the query `pacman mirrors`. Enum words, switches and `name=value` still work before the main value starts. After it starts, they are part of the text. A quoted main value works too.
-- When a command has exactly one number param, a bare number sets it: `tab.goto 1`, `tab.move -1`, `zoom.set 1.5`. A negative number is a value, never a flag. A command with two number params needs `name=value` for them.
-- An enum whose values come from a runtime list works as bare words too. In `search`, the first bare word picks the engine when it matches an engine name: `search arch pacman`. Build time knows the names from `search_engines.toml` plus the built-in `duck`, and the command line from the loaded engines. A query that starts with an engine name needs `query="..."`. `tools/build-config` warns when a binding hits that case.
-- Quote a value that has spaces or `=` with shell rules: `open tab "https://a.example/?q=a b"`. A quoted word is always free text, so it is never a param name, a value word or a `@source`.
-- An unquoted `@current_url`, `@selection` or `@clipboard` is a context source. The router fills it in when the key is pressed. It works as the main word or after `name=`.
-- A leading `:` (config only) makes the binding type its command into the command line and wait. `gO = ":open tab @current_url"` shows `open tab https://this.page/...`. The stored file names one param to fill: the one that holds a `@source` (which becomes the prefill), else the `main` param, else the first param. A command with no params cannot take a `:`.
-- Unknown params, a param set twice and an unknown source are errors with a message.
+- The first word is a `name`, an alias or a full id. The config uses the same words, and the build tool maps them to the id.
+- Flags come first, then the subject. `--value` sets an enum (`hint --background --links`), `--name` turns a switch on (`hint --rapid`), and `--name=value` sets any param, split at the first `=`: `scroll.pixels --dx=-50`. This is the way to turn a switch off (`--rapid=false`). A declared short letter does the same as the long flag: `-b`, `-r`, and `-c=Work` for a valued param. A hyphen in a flag reads as `_` in the name (`--word-end`).
+- There are no `--no-` flags, no space-separated values (`-c Work`) and no clusters (`-tb`). An unknown dash word before the subject is an error, so a typo never becomes a query. `-h` and `--help` show a usage line.
+- The subject is the `main` param. The first word that is not a flag starts it, and the rest of the line joins into it: `search arch pacman mirrors` gives the query `pacman mirrors`. After the subject starts, everything is text, so `open https://a.example -b` opens that whole string. Write `--` to end the flags early when the subject starts with a dash: `open -- -b`, `search -- -std c++`.
+- Quoted words are never flags, engines, values or `@source`s: `open '-b'` opens the text `-b`. Quote a value that has spaces or `=` with shell rules: `open -t "https://a.example/?q=a b"`.
+- When a command has exactly one number param, a bare number is its subject: `tab.goto 1`, `tab.move -1`, `zoom.set 1.5`. A negative number is a value, never a flag. A command with two number params needs `--name=value` for them.
+- A command whose only argument is a required value takes it as the bare subject: `mode ignore`, `cmdline.history prev`, `visual.act yank`. `mode --ignore` works too.
+- An enum whose values come from a runtime list, the search engine, is the first bare word, and only when it names an engine: `search arch pacman`. `--engine=arch` also works, but the printer never writes it. `--` stops the engine check, so `search -- arch maps` searches the default engine for "arch maps". Build time knows the names from `search_engines.toml` plus the built-in `duck`, and the command line from the loaded engines. `tools/build-config` warns about an engine name that starts with `-`, because only `--engine=` can name it.
+- An unquoted `@current_url`, `@selection` or `@clipboard` is a context source. The router fills it in when the key is pressed. It works as the subject or after `=`.
+- A leading `:` (config only) makes the binding type its command into the command line and wait. `gO = ":open -t @current_url"` shows `open -t https://this.page/...`. The stored file names one param to fill: the one that holds a `@source` (which becomes the prefill), else the `main` param, else the first param. A command with no params cannot take a `:`.
+- Unknown flags, a param set twice and an unknown source are errors with a message.
 - A param whose `when` condition does not hold is an error with a message, for example "container needs where tab, background or window".
-- There are no `--flags`, no `-x` short flags and no flag presets. `-h` or `--help` on the command line shows a usage line.
+- The printer writes the shortest text that reads back as the same args, with short flags: the engine, then flags in param order, then the subject. It leaves out args equal to the default and adds `--` when the subject would read as a flag. `gO` prefills `open -t `. Docs and the help page use the long form.
+- Wording says before, after, previous and next, never left or right, because vertical tab layouts exist.
 - The `oasisfox run` script uses the same parser.
 
 Completion reads the same definition:
 
-- A word that has no `=` completes to the command's enum values and switches, with their labels. Values already set drop out.
-- A `name=` prefix completes that param's value from its source, for example the containers.
-- Otherwise the main param completes by its type, for example engine names, then the query.
+- A command word completes by fuzzy match on the dotted id.
+- A `-` lists that command's flags with their descriptions, from `short` and the long names. Flags already set drop out.
+- A `--name=` prefix completes that param's value from its source, for example the containers.
+- Any other word completes the subject by its type, for example engine names, tabs or bookmarks, then the query.
 
 ## Keys and modes
 
@@ -140,7 +146,7 @@ The keymap is data, not code. It maps a mode and a key sequence to an invocation
 {
   "normal": {
     "J": { "id": "tab.next" },
-    "D": { "id": "tab.close", "args": { "focus": "left" } },
+    "D": { "id": "tab.close", "args": { "side": "focus_previous" } },
     "sa": { "id": "open.search", "args": { "engine": "arch" } },
     "ca": { "id": "tab.reopen_in_container", "args": { "container": "Family" } }
   },
@@ -194,9 +200,9 @@ p = "Personal"
 [normal]
 J = "tab.next"
 b = "bookmark.open"
-gO = ":open tab @current_url"   # types the command into the command line and waits
+gO = ":open -t @current_url"    # types the command into the command line and waits
 y = ""                          # removes a default binding
-ww = { run = ":open window @current_url", label = "New window, edit current URL" }
+ww = { run = ":open -w @current_url", label = "New window, edit current URL" }
 ```
 
 - `sa` searches with the `arch` engine in this tab, and `Sa` in a new tab.
@@ -259,17 +265,18 @@ A snippet file has a header with the command fields, then the code:
 // name: ids
 // modes: normal, visual
 // param: query string main default=selection
-// param: all bool
+// param: all bool short=a
 window.wrappedJSObject.my_app.toggle_ids(args.query);
 ```
 
+- `short=` gives a bool or a valued param its flag letter (`short=a`). An enum maps values to letters: `short=tab:t,window:w`. The letter rules are the define-time checks above.
 - `modes` is optional. It lists the modes where a key can run the snippet, from `normal`, `caret` and `visual`. The default is `normal`. Any other name is a build-config error.
 - `tools/build-config` turns the header into a normal registry entry. Snippet commands get keys, which-key rows, help, completion and prompts for missing params the same as built-in commands.
 - The router checks args, then runs the code in the tab's content script with `tabs.executeScript`, with `args` defined. `window.wrappedJSObject` reaches the page's own functions.
 - `matches` limits where the command runs. On other pages the router refuses with a message.
 - Errors from the code are caught and shown as a message, with the snippet id.
 - Snippets have no storage of their own. The code runs in the content script world, so the body's scope hides `browser` and `chrome`. That guards against accidents and is not a sandbox: `globalThis.browser` still reaches the extension APIs, and the code is the user's own.
-- A snippet runs other commands with `oasisfox.run(command_text)`, which takes the same text as the command line, for example `await oasisfox.run("open tab https://example.com")`. It rejects when the command fails. Snippets can call snippets up to 5 levels deep.
+- A snippet runs other commands with `oasisfox.run(command_text)`, which takes the same text as the command line, for example `await oasisfox.run("open -t https://example.com")`. It rejects when the command fails. Snippets can call snippets up to 5 levels deep.
 - A relative URL in `fetch` resolves against the extension, not the page. Build the address from `location.origin`, for example `fetch(location.origin + "/api/items")`.
 - Snippet ids cannot use a group name that OasisFox uses.
 

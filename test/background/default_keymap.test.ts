@@ -91,7 +91,7 @@ function doc_rows() {
   return lines.flatMap((line) => {
     const [, mode, key, status, invocation] = line.match(/^\| (\w+) \| `(.+)` \| (\w+) \| `([^`]+)`/) ?? [];
     if (!mode || !key || !invocation) return [];
-    return status === "v1" ? [{ mode, key, id: invocation.split(" ")[0] ?? invocation, user_data: / (engine|container)=/.test(invocation) }] : [];
+    return status === "v1" ? [{ mode, key, id: invocation.split(" ")[0] ?? invocation, user_data: /^(open\.search|tab\.reopen_in_container) /.test(invocation) || / --container=/.test(invocation) }] : [];
   });
 }
 
