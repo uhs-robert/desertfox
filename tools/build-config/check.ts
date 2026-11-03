@@ -130,9 +130,14 @@ function is_labeled_binding(entry: unknown): entry is { run: string | string[]; 
   return typeof entry === "object" && entry !== null && !Array.isArray(entry) && "run" in entry;
 }
 
-export function check_config(merged: MergedData, registry: Registry, problems: string[]) {
+export function check_config(merged: MergedData, registry: Registry, problems: string[], warnings: string[]) {
   const engine_names = Object.keys(with_fallback_engines(merged.search_engines));
   const where = (section: string, key: string) => location_of(merged, section, key);
+
+  // A leading dash would read as a flag, so the engine could only be named with --engine=.
+  for (const name of Object.keys(merged.search_engines)) {
+    if (name.startsWith("-")) warnings.push(`${where("search_engines", name)}: engine "${name}" starts with "-", so a command line can name it only as --engine=${name}`);
+  }
 
   const default_engine = merged.settings.default_engine;
   if (default_engine !== undefined && !engine_names.includes(default_engine)) {

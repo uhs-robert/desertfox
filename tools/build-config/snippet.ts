@@ -2,8 +2,9 @@
 // run of `// key: value` lines. The whole file stays as the code text.
 //
 // Grammar chosen here, because the design shows one example only:
-//   param: <name> <type> [main] [rest] [default=<value>] [values=a,b,c]
+//   param: <name> <type> [main] [rest] [default=<value>] [values=a,b,c] [short=<letter>]
 // `main` marks the one free-text param a bare word fills, as in the command grammar.
+// `short=p` gives a bool or valued param the flag `-p`. An enum maps values to letters: `short=tab:t,window:w`.
 // A bare `default=` word that names a context source (current_url, selection,
 // clipboard) is that source. A double-quoted default is always a literal string.
 
@@ -25,6 +26,17 @@ function parse_value(raw: string, type: ParamType): ParamValue | undefined {
   return raw.length >= 2 && raw.startsWith('"') && raw.endsWith('"') ? raw.slice(1, -1) : raw;
 }
 
+function parse_short(raw: string, type: ParamType, name: string, where: string, problems: string[]): NonNullable<ParamDef["short"]> {
+  if (type !== "enum") return raw;
+  const map: Record<string, string> = {};
+  for (const pair of raw.split(",")) {
+    const [value, letter, ...extra] = pair.split(":");
+    if (!value || !letter || extra.length > 0) problems.push(`${where}: short "${pair}" on "${name}" must be value:letter`);
+    else map[value] = letter;
+  }
+  return map;
+}
+
 function parse_param_words(words: string[], name: string, where: string, problems: string[]): ParamDef | undefined {
   const [type_word, ...options] = words;
   if (!type_word || !PARAM_TYPES.includes(type_word)) {
@@ -40,6 +52,8 @@ function parse_param_words(words: string[], name: string, where: string, problem
       param.rest = true;
     } else if (option.startsWith("values=")) {
       param.values = option.slice("values=".length).split(",").filter(Boolean);
+    } else if (option.startsWith("short=")) {
+      param.short = parse_short(option.slice("short=".length), type, name, where, problems);
     } else if (option.startsWith("default=")) {
       const raw = option.slice("default=".length);
       if (type === "string" && CONTEXT_SOURCES.includes(raw)) {
