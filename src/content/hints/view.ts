@@ -1,5 +1,6 @@
 // Draws the labels in a closed shadow root and keeps them over their elements.
 
+import { LAYERS } from "../../shared/layers.ts";
 import { create_surface } from "../surface.ts";
 import type { Found } from "./candidates.ts";
 
@@ -39,7 +40,7 @@ export function top_page_position(found: Found): { left: number; top: number } {
 type DrawnLabel = { found: Found; text: string; node: HTMLElement; typed_part: HTMLElement; rest_part: HTMLElement };
 
 export function create_view() {
-  const surface = create_surface("oasisfox-hints", STYLE);
+  const surface = create_surface("oasisfox-hints", STYLE, LAYERS.hints);
   let drawn: DrawnLabel[] = [];
   let message_timer: ReturnType<typeof setTimeout> | undefined;
 

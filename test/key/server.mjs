@@ -26,7 +26,7 @@ const root = document.documentElement;
 let last_indicator = "";
 let last_css = "";
 // The toast host is the other floating surface: no mode attribute, and its text sits in a closed shadow root.
-const toast_host = () => [...root.children].find((child) => child.style.zIndex === "2147483647" && !child.hasAttribute("data-oasisfox-mode") && !child.hasAttribute("data-oasisfox-whichkey"));
+const toast_host = () => [...root.children].find((child) => child.style.position === "fixed" && !child.hasAttribute("data-oasisfox-mode") && !child.hasAttribute("data-oasisfox-whichkey"));
 let last_whichkey = "";
 let toast_shown = false;
 new MutationObserver(() => {
