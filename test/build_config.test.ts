@@ -346,6 +346,38 @@ test("snippet params get the define-time checks", () => {
   assert.match(text, /c\.js:\d+: unknown header "flag"/);
 });
 
+test("snippet short= gives a bool or valued param a letter and an enum a value-to-letter map", () => {
+  const problems: string[] = [];
+  const header = "// id: a.b\n// label: L\n// intent: I\n// matches: *://*/*\n";
+  const entry = parse_snippet("s.js", `${header}// param: all bool short=a\n// param: where enum values=here,tab,window default=here short=tab:t,window:w\n`, problems);
+  assert.deepEqual(problems, []);
+  assert.deepEqual(entry?.params, [
+    { name: "all", type: "bool", short: "a" },
+    { name: "where", type: "enum", values: ["here", "tab", "window"], default: "here", short: { tab: "t", window: "w" } },
+  ]);
+  parse_snippet("s.js", `${header}// param: where enum values=here,tab short=tab\n`, problems);
+  assert.match(problems.join("\n"), /short "tab" on "where" must be value:letter/);
+});
+
+test("a snippet short letter gets the define-time checks", () => {
+  const header = "// label: L\n// intent: I\n// matches: *://*/*\n";
+  const dir = config_dir_with({
+    "snippets/a.js": `// id: myapp.one\n${header}// param: a bool short=h\n`,
+    "snippets/b.js": `// id: myapp.two\n${header}// param: a bool short=x\n// param: b bool short=x\n`,
+  });
+  const text = problems_of(dir).join("\n");
+  assert.match(text, /a\.js: .*"h" is reserved/);
+  assert.match(text, /b\.js: .*-x is also used/);
+});
+
+test("an engine name that starts with a dash draws a warning", () => {
+  const dir = config_dir_with({ "search_engines.toml": '"-odd" = { url = "o%s", label = "Odd" }\nfine = { url = "f%s", label = "Fine" }' });
+  const warnings: string[] = [];
+  build_config(dir, commands, warnings);
+  assert.equal(warnings.length, 1);
+  assert.match(warnings[0]!, /engine "-odd" starts with "-".*--engine=-odd/);
+});
+
 test("contract: build_commands_file output feeds build-config", () => {
   const registry = create_registry();
   registry.define("tab.close", {
