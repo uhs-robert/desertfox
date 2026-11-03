@@ -22,7 +22,7 @@ const press = (key: string, mods: Partial<KeyEventLike> = {}): KeyEventLike => (
   ...mods,
 });
 
-test("parse real key sequences from docs/keymap.md", () => {
+test("parse real key sequences", () => {
   assert.deepEqual(tokens_of("gx0"), ["g", "x", "0"]);
   assert.deepEqual(tokens_of("gx$"), ["g", "x", "$"]);
   assert.deepEqual(tokens_of("<<"), ["<", "<"]);

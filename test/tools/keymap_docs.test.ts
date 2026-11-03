@@ -64,6 +64,10 @@ test("the count line matches the rendered rows of the default keymap", () => {
   assert.deepEqual({ bound, later, dropped }, { bound: rows("bound"), later: rows("later"), dropped: rows("dropped") });
 });
 
+test("render fails when the keymap has a mode it has no place for", () => {
+  assert.throws(() => render({ normal: {}, newmode: {} } as KeymapConfig, fake_registry, []), /lacks the mode newmode/);
+});
+
 test("planned rows fail with a named message", () => {
   const keymap: KeymapConfig = { normal: { J: { id: "tab.next" } } };
   const row = (fields: string) => `[[row]]\nmode = "normal"\nkey = "m"\nstatus = "later"\n${fields}`;

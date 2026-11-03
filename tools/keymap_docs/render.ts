@@ -1,6 +1,6 @@
 // Renders the generated block of docs/keymap.md: a count line and one table per mode.
 
-import type { CommandDef } from "../../src/shared/command.ts";
+import { MODES, type CommandDef } from "../../src/shared/command.ts";
 import type { BoundInvocation, KeyBinding } from "../../src/shared/invocation.ts";
 import type { KeymapConfig, KeymapMode } from "../../src/shared/keymap.ts";
 import { print_command } from "../../src/shared/registry/print_command.ts";
@@ -46,7 +46,11 @@ function groups_list(group_names: Record<string, string>): string {
   return Object.entries(group_names).map(([prefix, name]) => `- ${code(prefix)}: ${name}`).join("\n");
 }
 
+const NOT_MODES = ["group_names", "search_keys", "container_keys"];
+
 export function render(keymap: KeymapConfig, registry: Lookup, planned: readonly PlannedRow[]): string {
+  const missing = [...MODES, "browser", ...Object.keys(keymap).filter((name) => !NOT_MODES.includes(name))].filter((mode) => !MODE_ORDER.includes(mode as KeymapMode));
+  if (missing.length > 0) throw new Error(`MODE_ORDER in planned.ts lacks the mode ${[...new Set(missing)].join(", ")}`);
   const by_mode = MODE_ORDER.map((mode) => ({ mode, rows: rows_of(mode, keymap, registry, planned) })).filter((entry) => entry.rows.length > 0);
   const count_of = (status: Row["status"]) => by_mode.reduce((sum, { rows }) => sum + rows.filter((row) => row.status === status).length, 0);
   const per_mode = by_mode.map(({ mode, rows }) => `${mode} ${rows.filter((row) => row.status === "bound").length}`).join(", ");

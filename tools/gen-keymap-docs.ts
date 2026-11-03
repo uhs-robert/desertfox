@@ -2,6 +2,7 @@
 // Usage: node tools/gen-keymap-docs.ts --write | --check [--doc path]
 
 import { readFileSync, writeFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import "../src/background/command_modules.ts";
 import { DEFAULT_KEYMAP } from "../src/background/default_keymap.ts";
 import { registry } from "../src/shared/registry/index.ts";
@@ -12,7 +13,7 @@ import { splice } from "./keymap_docs/splice.ts";
 const root = new URL("../", import.meta.url);
 const args = process.argv.slice(2);
 const doc_flag = args.indexOf("--doc");
-const doc_path = doc_flag >= 0 ? args[doc_flag + 1]! : new URL("docs/keymap.md", root).pathname;
+const doc_path = doc_flag >= 0 ? args[doc_flag + 1]! : fileURLToPath(new URL("docs/keymap.md", root));
 const write = args.includes("--write");
 const check = args.includes("--check");
 if (write === check) {
