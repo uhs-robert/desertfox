@@ -61,7 +61,7 @@ just build-config [dir]     # compile the user config into the managed storage c
 
 `docs/keymap.md` is generated between its markers from `src/background/default_keymap.ts` and `docs/keymap_planned.toml` (keys that are `later` or `dropped`). Edit those two, then run `just docs-gen`. `just test` fails when the doc is stale.
 
-Run `just test` before every commit. Run `just key-test` after a change to keys, modes, the content script or config reload. It needs a nested Hyprland and runs on demand only. Key tests can run in parallel from different worktrees, with no lock: each run has its own shadow session and clears the ones that dead runs left. Do not run two from one worktree, because each `just key-test` rebuilds and clears that worktree's `dist/`.
+Run `just test` before every commit. Run `just key-test` after a change to keys, modes, the content script or config reload. It needs a nested Hyprland and runs on demand only. Key tests can run in parallel from different worktrees, with no lock: each run has its own shadow session and clears the ones that dead runs left. Do not run two from one worktree, because each `just key-test` rebuilds and clears that worktree's `dist/`. `KEY_TEST_ONLY=<regex>` runs only the cases whose name matches, plus the cases marked `{ setup: true }` in `test/key/`, which leave state that later cases read. The output tags those as `SETUP`.
 
 ## Planning
 
