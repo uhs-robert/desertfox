@@ -3,8 +3,36 @@
   <head>
     <meta charset="utf-8" />
     <title>OasisFox command line</title>
+    <style>
+      html, body { margin: 0; height: 100%; background: transparent; }
+      body { display: flex; flex-direction: column; justify-content: flex-end; }
+      /* The defaults sit on an inner element, like every OasisFox surface. */
+      .oasisfox-cmdline {
+        --oasisfox-bg: #1d2021;
+        --oasisfox-fg: #e6e1d6;
+        --oasisfox-accent: #e69a4c;
+        --oasisfox-error: #e0645c;
+        --oasisfox-font: 15px/1.4 ui-monospace, monospace;
+        box-sizing: border-box;
+        background: var(--oasisfox-bg);
+        color: var(--oasisfox-fg);
+        font: var(--oasisfox-font);
+        border-top: 2px solid var(--oasisfox-accent);
+      }
+      .oasisfox-cmdline-note { padding: 0 .75rem; color: var(--oasisfox-error); }
+      .oasisfox-cmdline-row { display: flex; align-items: center; padding: .35rem .75rem; }
+      .oasisfox-cmdline-prompt { color: var(--oasisfox-accent); margin-right: .5rem; }
+      .oasisfox-cmdline-input { flex: 1; background: transparent; color: inherit; border: 0; outline: 0; font: inherit; }
+    </style>
   </head>
   <body>
+    <div class="oasisfox-cmdline">
+      <div id="note" class="oasisfox-cmdline-note" hidden></div>
+      <div class="oasisfox-cmdline-row">
+        <span class="oasisfox-cmdline-prompt">:</span>
+        <input id="line" class="oasisfox-cmdline-input" type="text" autocomplete="off" spellcheck="false" />
+      </div>
+    </div>
     <script src="cmdline_page.js"></script>
   </body>
 </html>

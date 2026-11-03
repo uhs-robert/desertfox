@@ -23,3 +23,9 @@ export const TAB_MODE_STORAGE_PREFIX = "oasisfox_tab_mode_";
 
 // The last bundle injections with their times. The key test reads it.
 export const BUNDLE_LOADS_STORAGE_KEY = "oasisfox_bundle_loads";
+
+// The command line history, oldest first. Capped, and never filled from a private window.
+export const CMDLINE_HISTORY_STORAGE_KEY = "oasisfox_cmdline_history";
+
+// Prefix of one `storage.session` key per command line ticket, holding the tab it was issued for. Removed when used.
+export const CMDLINE_TICKET_STORAGE_PREFIX = "oasisfox_cmdline_ticket_";

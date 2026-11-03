@@ -5,7 +5,6 @@
 import type { CommandDef, ContextSourceName, ParamDef } from "../command.ts";
 import type { Invocation } from "../invocation.ts";
 import type { EnumSources } from "./check_args.ts";
-import type { Registry } from "./define.ts";
 import { CONTEXT_SOURCE_NAMES, is_dynamic_values, static_values } from "./params.ts";
 import { usage_line } from "./usage.ts";
 
@@ -77,7 +76,11 @@ export type ParseResult =
 
 // `sources` holds the runtime lists (search engines), the same ones `check_args`
 // takes. Without a list, a bare word cannot pick a value from it.
-export function parse_command_line(registry: Registry, text: string, sources: EnumSources = {}): ParseResult {
+// Only the lookup is needed, so a page without the registry can parse from `commands.json`.
+export type CommandLookup = { find: (word: string) => ParsedCommand | undefined };
+type ParsedCommand = Pick<CommandDef, "id" | "name" | "params">;
+
+export function parse_command_line(registry: CommandLookup, text: string, sources: EnumSources = {}): ParseResult {
   const tokens = tokenize(text);
   if (!Array.isArray(tokens)) return { kind: "error", error: tokens.error };
   const [first, ...words] = tokens;
@@ -87,7 +90,7 @@ export function parse_command_line(registry: Registry, text: string, sources: En
   return parse_words(command, words, sources);
 }
 
-function parse_words(command: CommandDef, words: Token[], sources: EnumSources): ParseResult {
+function parse_words(command: ParsedCommand, words: Token[], sources: EnumSources): ParseResult {
   const params = command.params ?? [];
   const command_word = command.name ?? command.id;
   const args: Record<string, unknown> = {};

@@ -2,7 +2,7 @@
 // and `tabs.sendMessage`. The `type` field selects the shape.
 
 import type { BundleName } from "./bundles.ts";
-import type { Mode } from "./command.ts";
+import type { CommandMeta, Mode } from "./command.ts";
 import type { WhichKeyBorder } from "./config.ts";
 import type { BoundInvocation, Invocation } from "./invocation.ts";
 
@@ -51,7 +51,37 @@ export type WhichKeyRow = {
   more: boolean;
 };
 
-export type ContentToBackground = RunRequest | ModeChanged | LoadBundle | ListKeys;
+// From the `cmdline` host script when it mounts the line. The answer is a one-time ticket, or undefined outside a tab.
+export type IssueCmdlineTicket = {
+  type: "issue_cmdline_ticket";
+};
+
+// From the command line page when it opens: asks for the history, the commands, and the lists the grammar needs to read bare words.
+// The answer is undefined unless `ticket` is one the host got for this tab and nobody used yet.
+// `cmdline.html` is web-accessible, so any site can embed its own copy, and that copy must get nothing.
+export type OpenCmdline = {
+  type: "open_cmdline";
+  ticket: string;
+};
+
+export type CmdlineOpened = {
+  // Oldest first.
+  history: string[];
+  sources: { search_engines: string[]; containers: string[] };
+  // The runtime registry, snippets included, which `commands.json` lacks.
+  commands: CommandMeta[];
+  command_aliases: Record<string, string>;
+  // User CSS, loaded after the built-in styles.
+  css: string;
+};
+
+// From the command line page when typed text parsed. The background keeps it in the history unless the tab is private.
+export type RecordCmdline = {
+  type: "record_cmdline";
+  text: string;
+};
+
+export type ContentToBackground = RunRequest | ModeChanged | LoadBundle | ListKeys | IssueCmdlineTicket | OpenCmdline | RecordCmdline;
 
 export type RunResponse = { ok: true } | { ok: false; refusal: Refusal };
 

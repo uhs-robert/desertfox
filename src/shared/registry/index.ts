@@ -9,6 +9,6 @@ export type { CommandInput, Registry } from "./define.ts";
 export { check_args } from "./check_args.ts";
 export type { CheckResult, EnumSources } from "./check_args.ts";
 export { parse_command_line, tokenize } from "./command_line.ts";
-export type { ParseResult, Token } from "./command_line.ts";
+export type { CommandLookup, ParseResult, Token } from "./command_line.ts";
 export { usage_line } from "./usage.ts";
 export { build_commands_file, command_meta } from "./commands_file.ts";

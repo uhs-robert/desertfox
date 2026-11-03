@@ -1,6 +1,8 @@
-# Test keymap: the defaults plus one chord that runs focus_page and ,w for help.whichkey in three modes.
+# Test keymap: the defaults plus two chords that run focus_page and cmdline.open, and ,w for help.whichkey in three modes.
 [browser]
 "<A-,>" = "browser.focus_page"
+# Runs the command line open command from a Firefox shortcut, for the page with no content script.
+"<A-.>" = "cmdline.open"
 [normal]
 ",w" = "help.whichkey"
 [caret]
