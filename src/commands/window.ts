@@ -40,10 +40,10 @@ const handlers = make_window_handlers(browser_window_deps);
 
 define("window.new", {
   label: "New window",
-  intent: "Open a new window, blank unless a url is given. With private on, the window is private.",
+  intent: "Open a new window. It is blank unless a url is given. With private on, the window is private.",
   params: [
     { name: "url", type: "string", main: true, default: "" },
-    { name: "private", type: "bool", default: false, short: "p" },
+    { name: "private", type: "bool", default: false, short: "p", description: "Open a private window." },
   ],
   runs_in: "background",
   run: async (_ctx, args) => {
@@ -61,7 +61,7 @@ define("window.close", {
 
 define("window.undo_close", {
   label: "Reopen closed window",
-  intent: "Restore the most recently closed window. A count prefix restores that many.",
+  intent: "Reopen the last closed window. A count prefix restores that many.",
   runs_in: "background",
   count: "repeat",
   run: () => handlers.undo_close(),

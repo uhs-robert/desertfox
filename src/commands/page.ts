@@ -24,7 +24,7 @@ define("page.forward", {
 define("page.reload", {
   label: "Reload",
   intent: "Reload the page. With hard on, skip the cache.",
-  params: [{ name: "hard", type: "bool", default: false }],
+  params: [{ name: "hard", type: "bool", default: false, description: "Skip the cache." }],
   runs_in: "background",
   run: async (ctx, args) => browser.tabs.reload(require_tab_id(ctx), { bypassCache: args.hard === true }),
 });

@@ -5,7 +5,7 @@ import { define } from "../shared/registry/index.ts";
 define("scroll.lines", {
   name: "scroll",
   label: "Scroll lines",
-  intent: "Scroll the page down by lines. A negative number scrolls up. A count prefix repeats the scroll.",
+  intent: "Scroll the page by lines. A positive number scrolls down and a negative one scrolls up. A count prefix repeats the scroll.",
   params: [{ name: "count", type: "int", default: 1 }],
   runs_in: "content",
   count: "repeat",
@@ -14,10 +14,10 @@ define("scroll.lines", {
 
 define("scroll.pixels", {
   label: "Scroll pixels",
-  intent: "Scroll the page by a number of pixels, right for dx and down for dy.",
+  intent: "Scroll the page by pixels. Use dx for right and dy for down.",
   params: [
-    { name: "dx", type: "int", default: 0 },
-    { name: "dy", type: "int", default: 0 },
+    { name: "dx", type: "int", default: 0, description: "Scroll right by this many pixels." },
+    { name: "dy", type: "int", default: 0, description: "Scroll down by this many pixels." },
   ],
   runs_in: "content",
   count: "repeat",
@@ -26,7 +26,7 @@ define("scroll.pixels", {
 
 define("scroll.pages", {
   label: "Scroll pages",
-  intent: "Scroll down by a fraction of the visible height. A negative fraction scrolls up.",
+  intent: "Scroll the page by a fraction of the view. The fraction is of the visible height. A negative fraction scrolls up.",
   params: [{ name: "fraction", type: "float", default: 1 }],
   runs_in: "content",
   count: "repeat",
@@ -35,10 +35,10 @@ define("scroll.pages", {
 
 define("scroll.to", {
   label: "Scroll to",
-  intent: "Jump to a percent of the page, from the top or left edge at 0 to the bottom or right edge at 100.",
+  intent: "Jump to a position on the page. The position is a percent, where 0 is the top or left edge and 100 is the bottom or right edge.",
   params: [
     { name: "percent", type: "float" },
-    { name: "axis", type: "enum", values: ["x", "y"], default: SCROLL_TO_DEFAULT_AXIS, short: { x: "x" }, value_labels: { x: "horizontally" } },
+    { name: "axis", type: "enum", values: ["x", "y"], default: SCROLL_TO_DEFAULT_AXIS, short: { x: "x" }, value_labels: { x: "horizontally" }, description: { x: "Jump along the horizontal axis." } },
   ],
   runs_in: "content",
   run: scroll_to.run,
@@ -46,8 +46,8 @@ define("scroll.to", {
 
 define("scroll.align", {
   label: "Align focus",
-  intent: "Scroll the focused element, or else the selection, to the top, center or bottom of the view.",
-  params: [{ name: "position", type: "enum", values: ["top", "center", "bottom"], default: "center", short: { top: "t", bottom: "b" }, value_labels: { top: "to top", bottom: "to bottom" } }],
+  intent: "Align the focused element in the view. It scrolls the focus to the top, center or bottom. The focus is the focused element, or else the selection.",
+  params: [{ name: "position", type: "enum", values: ["top", "center", "bottom"], default: "center", short: { top: "t", bottom: "b" }, value_labels: { top: "to top", bottom: "to bottom" }, description: { top: "Align the focus to the top.", bottom: "Align the focus to the bottom." } }],
   runs_in: "content",
   run: scroll_align.run,
 });

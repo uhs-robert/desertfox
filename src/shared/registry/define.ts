@@ -4,6 +4,7 @@
 import type { CommandDef, ParamDef, ParamValue } from "../command.ts";
 import { MODES } from "../command.ts";
 import { find_param, is_context_source, is_dynamic_values, static_values } from "./params.ts";
+import { description_problem } from "./summary.ts";
 
 export type CommandInput = Omit<CommandDef, "id">;
 
@@ -82,7 +83,7 @@ function check_words(id: string, input: CommandInput, taken: Map<string, Command
   }
 }
 
-// The description shows on the help page and the status page, so it is one plain sentence.
+// The intent is one line. Its first sentence is the summary that lists show and later sentences are detail for the help page. The summary rules (verb first, short, no other command named) are checked over the built-in commands in the registry audit test, because snippets from the user's config go through this check too.
 function check_intent(input: CommandInput, fail: Fail): void {
   if (input.intent.trim() === "") fail("intent", "must not be empty");
   if (/[\r\n]/.test(input.intent)) fail("intent", "must be one line");
@@ -166,6 +167,7 @@ function check_param_shape(param: ParamDef, at: string, fail: Fail): void {
     if (from !== "search_engines" && from !== "containers") fail(`${at}.values`, `unknown source "${String(from)}"`);
   }
   check_value_labels(param, at, fail);
+  check_description(param, at, fail);
   if (param.default !== undefined) {
     if (is_context_source(param.default)) {
       if (param.type !== "string") fail(`${at}.default`, "a context source fits only a string param");
@@ -184,6 +186,26 @@ function check_value_labels(param: ParamDef, at: string, fail: Fail): void {
     if (!list.includes(value)) fail(`${at}.value_labels.${value}`, "is not one of the values");
     else if (phrase === "" || phrase !== phrase.trim()) fail(`${at}.value_labels.${value}`, "must be a non-empty phrase without edge spaces");
     else if (value === param.default) fail(`${at}.value_labels.${value}`, "the default value has no phrase");
+  }
+}
+
+// A fixed enum describes each value, any other param describes itself. Whether a flag has one is checked in the registry audit test.
+function check_description(param: ParamDef, at: string, fail: Fail): void {
+  const description = param.description;
+  if (description === undefined) return;
+  const list = static_values(param);
+  if (typeof description === "string") {
+    if (param.type === "enum" && list) return fail(`${at}.description`, "a fixed enum takes a map from value to sentence");
+    const problem = description_problem(description);
+    if (problem) fail(`${at}.description`, problem);
+    return;
+  }
+  if (!list) return fail(`${at}.description`, "only an enum with a fixed value list takes a map");
+  for (const [value, text] of Object.entries(description)) {
+    if (!list.includes(value)) fail(`${at}.description.${value}`, "is not one of the values");
+    else if (value === param.default) fail(`${at}.description.${value}`, "the default value has no flag to describe");
+    const problem = description_problem(text);
+    if (problem) fail(`${at}.description.${value}`, problem);
   }
 }
 
