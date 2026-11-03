@@ -125,8 +125,8 @@ function is_private_host(host: string): boolean {
 
 // No whitespace anywhere, so prose like "TODO: fix thing" is not taken for a scheme.
 const SCHEME_URL = /^[a-z][a-z0-9+.-]*:\S+$/i;
-// A name with a port and no dot ("nas:8080") is a machine on the local network. Five digits at most, so "tel:5551234" stays a scheme.
-const LABEL_WITH_PORT = /^[a-z0-9-]+:\d{1,5}(?:[/?#]\S*)?$/i;
+// A name with a port and no dot ("nas:8080") is a machine on the local network, unless the name is a scheme that links carry digits after.
+const LABEL_WITH_PORT = /^(?!(?:tel|sms|mms|fax|callto|facetime|facetime-audio|skype|whatsapp|geo|magnet|urn|sip|sips|xmpp|irc|ircs|bitcoin):)[a-z0-9-]+:\d{1,5}(?:[/?#]\S*)?$/i;
 const HOST_WITH_PORT = /^[^\s:/?#]+\.[^\s:/?#]+:\d+(?:[/?#]\S*)?$/;
 
 // Any parsable scheme opens as given (mailto:, view-source:, about:), except the two above. Prose with a colon searches.
