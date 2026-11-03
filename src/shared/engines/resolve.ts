@@ -28,10 +28,12 @@ export function nodes_of_file(file: string, data: Record<string, unknown>, probl
   const nodes: EngineNode[] = [];
   const walk = (path: string, table: Record<string, unknown>) => {
     const fields: Record<string, unknown> = {};
+    let has_child = false;
     for (const [key, value] of Object.entries(table)) {
       if (key.includes(".") || key === "") {
         problems.push(`${file}: engine name "${path ? `${path}.` : ""}${key}" cannot be empty or hold a dot`);
       } else if (is_table(value) && key !== "params" && !is_narrowing(value)) {
+        has_child = true;
         walk(path === "" ? key : `${path}.${key}`, value);
       } else if (path === "") {
         problems.push(`${file}: "${key}" is not an engine table`);
@@ -39,7 +41,9 @@ export function nodes_of_file(file: string, data: Record<string, unknown>, probl
         fields[key] = value;
       }
     }
-    if (path !== "") nodes.push({ path, file, fields });
+    // A table that only holds children is implicit, as `[github.repo]` makes `github`. Without this, a later file that
+    // writes `[github.repo]` would replace the whole `github` node with an empty one.
+    if (path !== "" && !(has_child && Object.keys(fields).length === 0)) nodes.push({ path, file, fields });
   };
   walk("", data);
   return nodes;

@@ -5,7 +5,7 @@ import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { build_config, read_commands_file } from "./build_config.ts";
 import { ConfigErrors } from "./errors.ts";
-import { EXTENSION_ID, write_managed_storage, write_schemas } from "./output.ts";
+import { EXTENSION_ID, write_managed_storage, write_resolved_engines, write_schemas } from "./output.ts";
 import { build_schemas } from "./schemas.ts";
 
 const { values, positionals } = parseArgs({
@@ -26,6 +26,7 @@ try {
   const config = build_config(config_dir, commands, warnings);
   for (const warning of warnings) console.error(`warning: ${warning}`);
   write_managed_storage(values.out, config);
+  write_resolved_engines(values.out.replace(/\.json$/, "") + ".engines.jsonl", config.search_engines);
   console.log(`wrote ${values.out}${values.schemas ? ` and schemas in ${values.schemas}` : ""}`);
 } catch (error) {
   if (!(error instanceof ConfigErrors)) throw error;

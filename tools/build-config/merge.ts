@@ -6,6 +6,8 @@
 import { MODES } from "../../src/shared/command.ts";
 import { MODE_INDICATOR_VALUES, WHICH_KEY_BORDER_VALUES } from "../../src/shared/config.ts";
 import type { SearchEngine, Settings } from "../../src/shared/config.ts";
+import { nodes_of_file, resolve_engines } from "../../src/shared/engines/index.ts";
+import type { EngineNode } from "../../src/shared/engines/index.ts";
 import { is_palette_name, PALETTE_NAMES } from "../../src/shared/mode_colors.ts";
 import type { KeymapConfig, ModeBindings } from "../../src/shared/keymap.ts";
 import { is_plain_object } from "./errors.ts";
@@ -96,18 +98,26 @@ function is_command_text(entry: unknown): boolean {
   return Array.isArray(entry) && entry.length > 0 && entry.every((item) => typeof item === "string" && item.trim() !== "");
 }
 
-function merge_search_engines(layers: DataLayer[], origins: Origins, problems: string[]) {
-  return merge_map_layers(layers, "search_engines", origins, problems, (value, where) => {
-    const valid =
-      is_plain_object(value) &&
-      typeof value.url === "string" &&
-      value.url.includes("%s") &&
-      typeof value.label === "string" &&
-      value.label !== "" &&
-      Object.keys(value).every((key) => key === "url" || key === "label");
-    if (!valid) problems.push(`${where}: an engine is { url = "...%s...", label = "..." } and nothing else`);
-    return valid;
-  }) as Record<string, SearchEngine>;
+// Engines are a tree of tables. A later file replaces the table at the same dotted path and leaves the parent
+// and the other children alone, so origins stay per engine.
+function merge_search_engines(layers: DataLayer[], origins: Origins, problems: string[]): Record<string, SearchEngine> {
+  const by_path = new Map<string, EngineNode>();
+  for (const layer of layers) {
+    for (const node of nodes_of_file(layer.file, layer.data, problems)) by_path.set(node.path, node);
+  }
+  const resolved = resolve_engines([...by_path.values()]);
+  problems.push(...resolved.problems);
+  for (const name of Object.keys(resolved.engines)) {
+    // A generated child has no table of its own: it comes from the nearest table above it.
+    for (let path = name; path !== ""; path = path.includes(".") ? path.slice(0, path.lastIndexOf(".")) : "") {
+      const node = by_path.get(path);
+      if (node) {
+        origins.set(origin_key("search_engines", name), node.file);
+        break;
+      }
+    }
+  }
+  return resolved.engines;
 }
 
 function merge_command_aliases(layers: DataLayer[], origins: Origins, problems: string[]) {

@@ -76,20 +76,26 @@ function settings_schema(): Schema {
   };
 }
 
+// An engine table holds fields (strings, `params`, narrowing tables) and child engine tables. Taplo cannot tell a
+// child from a narrowing, so the nested levels stay loose and the build tool checks them.
+function search_engines_schema(): Schema {
+  const engine: Schema = {
+    type: "object",
+    properties: {
+      url: { type: "string", minLength: 1, description: "URL template. {query} is the typed or selected text, %s is the same. Page slots: {url}, {host}, {title}, {repo}, {subreddit}. {a|b} takes the first that has a value" },
+      label: { type: "string", minLength: 1 },
+      fallback: { type: "string", minLength: 1, description: "Engine to use when the page cannot fill the slots" },
+      params: { type: "object", description: "Params declared here, each { default, values, children }" },
+    },
+    additionalProperties: true,
+  };
+  return { $schema: DRAFT, title: "OasisFox search engines", type: "object", additionalProperties: engine };
+}
+
 export function build_schemas(commands: CommandMeta[]): Record<DataKind, Schema> {
   return {
     keymap: keymap_schema(commands),
-    search_engines: {
-      $schema: DRAFT,
-      title: "OasisFox search engines",
-      type: "object",
-      additionalProperties: {
-        type: "object",
-        properties: { url: { type: "string", minLength: 1 }, label: { type: "string", minLength: 1 } },
-        required: ["url", "label"],
-        additionalProperties: false,
-      },
-    },
+    search_engines: search_engines_schema(),
     command_aliases: {
       $schema: DRAFT,
       title: "OasisFox command aliases",

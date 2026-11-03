@@ -130,6 +130,26 @@ function is_labeled_binding(entry: unknown): entry is { run: string | string[]; 
   return typeof entry === "object" && entry !== null && !Array.isArray(entry) && "run" in entry;
 }
 
+// A fallback must name an engine, and following fallbacks must end.
+function check_engine_fallbacks(merged: MergedData, where: (section: string, key: string) => string, problems: string[]) {
+  const engines = with_fallback_engines(merged.search_engines);
+  for (const [name, engine] of Object.entries(engines)) {
+    if (engine.fallback === undefined) continue;
+    if (!Object.hasOwn(engines, engine.fallback)) {
+      problems.push(`${where("search_engines", name)}: engine "${name}" has fallback "${engine.fallback}", which is not an engine`);
+      continue;
+    }
+    const chain = [name];
+    for (let next: string | undefined = engine.fallback; next !== undefined; next = engines[next]?.fallback) {
+      if (chain.includes(next)) {
+        problems.push(`${where("search_engines", name)}: fallbacks loop: ${[...chain, next].join(" -> ")}`);
+        break;
+      }
+      chain.push(next);
+    }
+  }
+}
+
 export function check_config(merged: MergedData, registry: Registry, problems: string[], warnings: string[]) {
   const engine_names = Object.keys(with_fallback_engines(merged.search_engines));
   const where = (section: string, key: string) => location_of(merged, section, key);
@@ -144,6 +164,14 @@ export function check_config(merged: MergedData, registry: Registry, problems: s
     const file = merged.origins.get(origin_key("settings", "default_engine")) ?? "config";
     problems.push(`${file}: default_engine: unknown search engine "${default_engine}"`);
   }
+  // Typed text with no page behind it goes to this engine, so it cannot need a page slot.
+  const default_slots = default_engine === undefined ? undefined : with_fallback_engines(merged.search_engines)[default_engine]?.slots;
+  if (default_slots && default_slots.length > 0) {
+    const file = merged.origins.get(origin_key("settings", "default_engine")) ?? "config";
+    problems.push(`${file}: default_engine "${default_engine}" needs the page slot ${default_slots.map((slot) => `{${slot}}`).join(", ")}`);
+  }
+
+  check_engine_fallbacks(merged, where, problems);
 
   for (const [mode, entries] of Object.entries(merged.keymap)) {
     if (mode === "group_names") {
