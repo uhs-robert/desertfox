@@ -7,6 +7,7 @@ import type { Motion } from "./motion.ts";
 import { yank_text } from "./copy_text.ts";
 import { character_box, screen_line_target } from "./screen_line.ts";
 import { apply_selection_colors, clear_selection_colors } from "./selection_colors.ts";
+import { scroll_delta } from "./scroll_delta.ts";
 import { selected_text, selected_span, swap_ends, with_caret } from "./selection_state.ts";
 import type { Cursor } from "./selection_state.ts";
 import { build_text_model } from "./text_model.ts";
@@ -18,6 +19,8 @@ const page = window as unknown as CaretWindow;
 
 type Session = { model: TextModel; cursor: Cursor; mode: "caret" | "visual"; goal_x: number | undefined };
 let session: Session | undefined;
+// Counts visual starts, so a copy can tell its own visual run from a later one in the same session.
+let visual_runs = 0;
 
 function paint(open: Session): void {
   const { from, to } = selected_span(open.cursor);
@@ -33,14 +36,19 @@ function paint(open: Session): void {
   scroll_to_caret(open);
 }
 
-// Only the caret's own character counts: its paragraph can be taller than the screen.
+// Only the caret's own character counts: its paragraph can be taller than the screen. Each scrollable ancestor scrolls first, then the window.
 function scroll_to_caret(open: Session): void {
-  const box = character_box(open.model, open.cursor.caret);
-  if (!box) return;
-  const margin = box.height;
-  const by_y = box.top < 0 ? box.top - margin : box.bottom > innerHeight ? box.bottom - innerHeight + margin : 0;
-  const by_x = box.left < 0 ? box.left - margin : box.right > innerWidth ? box.right - innerWidth + margin : 0;
-  if (by_x || by_y) scrollBy(by_x, by_y);
+  for (let view = open.model.point_at(open.cursor.caret).node.parentElement; view; view = view.parentElement) {
+    const nested = view !== document.documentElement && view !== document.body;
+    if (nested && view.scrollHeight <= view.clientHeight && view.scrollWidth <= view.clientWidth) continue;
+    const box = character_box(open.model, open.cursor.caret);
+    if (!box) return;
+    const edges = nested ? view.getBoundingClientRect() : { left: 0, right: innerWidth, top: 0, bottom: innerHeight };
+    const by_x = scroll_delta({ low: box.left, high: box.right }, { low: edges.left, high: edges.right }, box.height);
+    const by_y = scroll_delta({ low: box.top, high: box.bottom }, { low: edges.top, high: edges.bottom }, box.height);
+    if (by_x || by_y) (nested ? view : window).scrollBy(by_x, by_y);
+    if (!nested) return;
+  }
 }
 
 // Where a new session starts: the caret's place in the page's own selection if it is on screen, else the first visible text.
@@ -68,7 +76,10 @@ function ensure_session(mode: "caret" | "visual"): Session | undefined {
   if (mode === "caret") session.cursor = { anchor: session.cursor.caret, caret: session.cursor.caret };
   session.mode = mode;
   paint(session);
-  if (mode_changed) void apply_selection_colors(mode);
+  if (mode_changed) {
+    if (mode === "visual") visual_runs++;
+    void apply_selection_colors(mode);
+  }
   return session;
 }
 
@@ -118,9 +129,10 @@ const handle_act = (args: Record<string, unknown>): void => {
     void browser.runtime.sendMessage({ type: "run", invocations: [{ id: "open.search", args: { query: text } }], mode: "visual" });
     return page.oasisfox_host.set_mode("caret");
   }
+  const run = visual_runs;
   // Visual mode stays until the copy is done, so a refused copy leaves the selection to retry.
   void yank_text(navigator.clipboard, text, {
-    is_same_session: () => session === open && open.mode === "visual",
+    is_same_session: () => visual_runs === run && session === open && open.mode === "visual",
     toast: page.oasisfox_host.show_toast,
     leave_visual: () => page.oasisfox_host.set_mode("caret"),
   });

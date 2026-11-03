@@ -103,6 +103,31 @@ export async function run_cases({ run_case, expect, open_page, send_keys, sleep,
     await send_keys("-k", "Escape");
   });
 
+  await run_case("j keeps the column while the next line is below the screen", async () => {
+    await open_page("caret_long_columns", "caret_long", { new_tab: true });
+    await send_keys("V");
+    await send_keys("j");
+    await send_keys("lllll");
+    await send_keys("120j");
+    await sleep(1500);
+    const last = events.filter((event) => event.type === "selection" && event.page_id === "caret_long").at(-1);
+    expect(last.scroll_y > 0, "the page did not scroll down");
+    expect(last.text === "f", `after 120 j the caret is on "${last.text}", expected "f" in column 5`);
+    await send_keys("-k", "Escape");
+  });
+
+  await run_case("the caret scrolls a nested scroller to stay in view", async () => {
+    await open_page("caret_nested", "caret_nested", { new_tab: true });
+    await send_keys("V");
+    await send_keys("j");
+    await send_keys("60j");
+    await sleep(1500);
+    const last = events.filter((event) => event.type === "selection" && event.page_id === "caret_nested").at(-1);
+    expect(last.pane_top > 300, `the pane scrolled to ${last.pane_top}, the caret is off its view`);
+    expect(last.top >= 0 && last.top < 400, `the caret is at y ${last.top}, outside the pane`);
+    await send_keys("-k", "Escape");
+  });
+
   await run_case("V on a page scrolled into the middle of a paragraph starts on a visible character", async () => {
     await open_page("caret_scrolled", "caret_scrolled", { new_tab: true });
     await sleep(500);

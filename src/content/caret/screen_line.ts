@@ -19,10 +19,24 @@ export function screen_line_target(model: TextModel, selection: Selection, from:
   const target = modify_target(model, selection, from, motion);
   if (motion.unit !== "line" || target === from) return { index: target, goal_x: undefined };
   const wanted_x = goal_x ?? character_box(model, from)?.left ?? 0;
-  const line_box = character_box(model, target);
-  const landed = line_box && document.caretPositionFromPoint(wanted_x, line_box.top + line_box.height / 2);
-  const index = landed && landed.offsetNode.nodeType === Node.TEXT_NODE ? model.index_of(landed.offsetNode, landed.offset) : undefined;
-  return { index: index ?? target, goal_x: wanted_x };
+  return { index: nearest_on_line(model, target, wanted_x), goal_x: wanted_x };
+}
+
+// The character on the target's screen line whose left edge is nearest to x. It measures boxes, because caretPositionFromPoint answers null for a line below the screen.
+function nearest_on_line(model: TextModel, target: number, x: number): number {
+  const row = character_box(model, target);
+  if (!row) return target;
+  let best = target;
+  let best_gap = Infinity;
+  for (const step of [-1, 1]) {
+    for (let at = target; at >= 0 && at < model.text.length && model.text[at] !== "\n"; at += step) {
+      const box = character_box(model, at);
+      if (!box || Math.abs(box.top - row.top) >= row.height / 2) break;
+      const gap = Math.abs(box.left - x);
+      if (gap < best_gap) [best, best_gap] = [at, gap];
+    }
+  }
+  return best;
 }
 
 function modify_target(model: TextModel, selection: Selection, from: number, motion: Motion): number {

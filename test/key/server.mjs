@@ -18,7 +18,7 @@ addEventListener("scroll", () => {
   }), 150);
 });
 addEventListener("keydown", (event) => send("keydown", { key: event.key }));
-document.addEventListener("selectionchange", () => send("selection", { text: String(getSelection()), scroll_y: scrollY, top: getSelection().rangeCount ? getSelection().getRangeAt(0).getBoundingClientRect().top : null }));
+document.addEventListener("selectionchange", () => send("selection", { text: String(getSelection()), scroll_y: scrollY, pane_top: document.getElementById("pane")?.scrollTop ?? null, top: getSelection().rangeCount ? getSelection().getRangeAt(0).getBoundingClientRect().top : null }));
 addEventListener("input", (event) => send("input", { value: event.target.value }));
 addEventListener("focus", () => send("window_focus"));
 const root = document.documentElement;
@@ -95,6 +95,14 @@ export function start_server() {
     if (url.pathname === "/caret_columns") {
       // The middle line is short: j over it must still come back to the column the caret left.
       return response.end(page(`caret_columns ${id}`, '<p style="font-family:monospace">abcdefghij<br>ab<br>abcdefghij</p>'));
+    }
+    if (url.pathname === "/caret_long_columns") {
+      // Far more lines than the screen holds, a long line then a short one, so j crosses the bottom edge many times.
+      return response.end(page(`caret_long_columns ${id}`, `<p style="font-family:monospace">${"abcdefghij<br>ab<br>".repeat(120)}</p>`));
+    }
+    if (url.pathname === "/caret_nested") {
+      const lines = Array.from({ length: 100 }, (_, index) => `<div>line ${index}</div>`).join("");
+      return response.end(page(`caret_nested ${id}`, `<div id="pane" style="height:200px;width:300px;overflow:auto;font-family:monospace">${lines}</div>`));
     }
     if (url.pathname === "/caret_scrolled") {
       const words = Array.from({ length: 1500 }, (_, index) => `w${String(index).padStart(4, "0")}`).join(" ");
