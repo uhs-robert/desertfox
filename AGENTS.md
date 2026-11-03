@@ -13,7 +13,7 @@ Read the design for an area before you change it.
 | Topic                                  | File                                     |
 | -------------------------------------- | ---------------------------------------- |
 | Architecture, config, scope, roadmap   | [`docs/design.md`](docs/design.md)       |
-| The default keys, generated           | [`docs/keymap.md`](docs/keymap.md)       |
+| The default keys, generated            | [`docs/keymap.md`](docs/keymap.md)       |
 | Measured Firefox behavior              | [`docs/spike.md`](docs/spike.md)         |
 | The phase 0 test harness               | `spike/` (throwaway, do not build on it) |
 
