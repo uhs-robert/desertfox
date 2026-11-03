@@ -64,9 +64,9 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, open_p
     await open_page("page", "p2_after_bare", { new_tab: false });
   });
 
-  await run_case("s/ with nothing selected opens the command line", async () => {
+  await run_case("sd, a config search key on the selection, opens the command line when nothing is selected", async () => {
     await open_page("page", "p2_search", { new_tab: false });
-    await send_keys("s/");
+    await send_keys("sd");
     await sleep(800);
     const mark = events.length;
     await send_keys("j");
