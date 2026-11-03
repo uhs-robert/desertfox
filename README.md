@@ -23,15 +23,15 @@ Write your keys in TOML in `~/.config/oasisfox/`, then run `just build-config`. 
 [normal]
 J = "tab.next"                  # a command name or id
 o = "open"                      # asks for the URL
-O = "open tab"                  # a bare word sets the param it names
-sa = "search arch"              # the first bare word picks the engine
+O = "open -t"                   # -t opens in a new tab, -b a background tab, -w a window
+sa = "search arch"              # the first bare word picks the engine (`search arch -t` for a new tab)
 gt = "tab.goto 1"               # a bare number sets a command's only number param
-gO = ":open tab @current_url"   # a leading ":" types it into the command line and waits
+gO = ":open -t @current_url"    # a leading ":" types it into the command line and waits
 y = ""                          # "" removes a default binding
-ww = { run = ":open window @current_url", label = "New window, edit current URL" }  # names the key in which-key
+ww = { run = ":open -w @current_url", label = "New window, edit current URL" }  # names the key in which-key
 ```
 
-`@current_url`, `@selection` and `@clipboard` are filled in when you press the key. The first free word starts the main value (the URL, the query) and the rest of the line joins into it, so `search arch pacman mirrors` searches for "pacman mirrors". A query that starts with an engine name needs `query="..."`. Quote other text that has spaces or `=`. Any param can be written `name=value`. Files `search_engines.toml`, `command_aliases.toml` and `settings.toml` sit beside the keymap, and each can have a `.d/` directory of later files. See [docs/design.md](docs/design.md#config) for the full format. Copy [`examples/engines.toml`](examples/engines.toml) to start your engines file, or see [a fuller real example](https://github.com/uhs-robert/oasis-dots/blob/main/home/oasisfox/.config/oasisfox/search_engines.toml).
+`@current_url`, `@selection` and `@clipboard` are filled in when you press the key. Flags come first. `--tab` or `-t` sets a value, `--rapid` or `-r` turns a switch on, and `--name=value` sets any param (`-c=Work` for the container). The first word that is not a flag starts the main value (the URL, the query) and the rest of the line joins into it, so `search arch pacman mirrors` searches for "pacman mirrors". Write `--` to end the flags early: `search -- arch maps` searches for "arch maps", and `open -- -b` opens the text `-b`. Quote other text that has spaces or `=`. Type the dotted id for most commands (`tab.pin`, `window.new`). `open`, `search`, `paste`, `copy`, `hint`, `github`, `tab`, `bookmark`, `zoom`, `scroll`, `mode` and `help` are the short words. Files `search_engines.toml`, `command_aliases.toml` and `settings.toml` sit beside the keymap, and each can have a `.d/` directory of later files. See [docs/design.md](docs/design.md#config) for the full format. Copy [`examples/engines.toml`](examples/engines.toml) to start your engines file, or see [a fuller real example](https://github.com/uhs-robert/oasis-dots/blob/main/home/oasisfox/.config/oasisfox/search_engines.toml).
 
 - [docs/design.md](docs/design.md): architecture, scope and roadmap.
 - [docs/spike.md](docs/spike.md): what Firefox allows, measured.
