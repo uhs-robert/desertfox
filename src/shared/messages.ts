@@ -32,7 +32,24 @@ export type LoadBundle = {
   name: BundleName;
 };
 
-export type ContentToBackground = RunRequest | ModeChanged | LoadBundle;
+// From the command line page when it opens: asks for the history and the lists the grammar needs to read bare words.
+export type OpenCmdline = {
+  type: "open_cmdline";
+};
+
+export type CmdlineOpened = {
+  // Oldest first.
+  history: string[];
+  sources: { search_engines: string[]; containers: string[] };
+};
+
+// From the command line page when typed text parsed. The background keeps it in the history unless the tab is private.
+export type RecordCmdline = {
+  type: "record_cmdline";
+  text: string;
+};
+
+export type ContentToBackground = RunRequest | ModeChanged | LoadBundle | OpenCmdline | RecordCmdline;
 
 export type RunResponse = { ok: true } | { ok: false; refusal: Refusal };
 

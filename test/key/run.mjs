@@ -8,6 +8,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { connect_rdp, evaluate_in_background, install_temporary_addon } from "./rdp.mjs";
+import { p1_cases } from "./p1.mjs";
 import { start_server } from "./server.mjs";
 
 const run_execfile = promisify(execFile);
@@ -327,6 +328,8 @@ async function main() {
         throw new Error(`j after the chord did not reach the page (scroll stayed at ${before})`);
       }
     });
+
+    await p1_cases({ run_case, expect, send_keys, sleep, open_page, events, wait_event, scroll_of, last_scroll_y, find_event, evaluate_in_background, rdp, EXTENSION_ID });
 
     await run_case("config.reload keeps keys working in open tabs", async () => {
       writeFileSync(join(config_dir, "keymap.toml"), [
