@@ -59,6 +59,7 @@ define("help.whichkey", {
   label: "Which Key",
   intent: "List the keys at the top of the keymap.",
   runs_in: "content",
+  modes: ["normal", "caret", "visual"],
   run: help_whichkey.run,
 });
 

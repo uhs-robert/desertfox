@@ -341,3 +341,12 @@ test("a bundle shows a toast through the host, and the error path takes it when 
   bare.api.show_toast("hello");
   assert.deepEqual(shown, ["hello"]);
 });
+
+test("get_mode follows the mode the host entered", () => {
+  const page = make_page();
+  assert.equal(page.host.api.get_mode(), "normal");
+  page.state.set_mode("caret");
+  assert.equal(page.host.api.get_mode(), "caret");
+  page.state.escape();
+  assert.equal(page.host.api.get_mode(), "normal");
+});

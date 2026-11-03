@@ -1,14 +1,14 @@
 // One short message on the page.
 
-import { create_surface, SURFACE_DEFAULT_VARIABLES } from "./surface.ts";
+import { create_surface } from "./surface.ts";
 
 const TOAST_MS = 3000;
 
-const STYLE = `
-.oasisfox-toast {${SURFACE_DEFAULT_VARIABLES}
+export const STYLE = `
+.oasisfox-toast {
   position: fixed; right: 16px; bottom: 48px; max-width: 40ch; padding: 8px 12px;
-  background: var(--oasisfox-bg); color: var(--oasisfox-fg);
-  font: var(--oasisfox-font); border-radius: var(--oasisfox-radius);
+  background: var(--oasisfox-bg, #222); color: var(--oasisfox-fg, #eee);
+  font: var(--oasisfox-font, 14px system-ui, sans-serif); border-radius: var(--oasisfox-radius, 6px);
 }`;
 
 let surface: ReturnType<typeof create_surface> | undefined;
