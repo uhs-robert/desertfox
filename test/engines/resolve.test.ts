@@ -122,3 +122,24 @@ test("a var that refers to itself is a problem", () => {
 test("a child with no parent is a problem", () => {
   assert.match(resolve('[x]\nurl = "https://x.com/{query}"', '[y.z]\nurl = "https://x.com/{query}"').problems.join("\n"), /no url|no parent engine/);
 });
+
+test("a hand child named like a generated one keeps its value", () => {
+  const { engines, problems } = resolve(`${GITHUB}
+[github.issues]
+label = "Issues!"
+`);
+  assert.deepEqual(problems, []);
+  assert.equal(engines["github.issues"]?.url, "https://github.com/search?q={query}&type=issues");
+  assert.equal(engines["github.issues"]?.label, "GitHub: Issues!");
+});
+
+test("a misspelled field that no url reads is a problem", () => {
+  assert.match(resolve(`[x]\nlable = "X"\nurl = "https://x.com/?q={query}"\n`).problems.join("\n"), /"lable" is not a field/);
+  assert.deepEqual(resolve(`[x]\nlabel = "X"\nurl = "https://x.com/?q={query}&k={k}"\nk = ""\n`).problems, []);
+});
+
+test("the label origin names the file and level that set it", () => {
+  const { engines } = resolve(GITHUB);
+  assert.equal(engines["github.repo"]?.origins?.label, "t0.toml [github.repo]");
+  assert.equal(engines["github.repo.issues"]?.origins?.label, "github.repo.issues (labels on the path)");
+});
