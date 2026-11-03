@@ -1,6 +1,6 @@
 # whichkey
 
-The which-key panel: a floating list of the keys that can follow what the user has typed. It ships as the `which-key` bundle, which the content script loads on first use.
+The which-key panel: a floating list of the keys that can follow what the user has typed. It ships as the `whichkey` bundle, which the content script loads on first use.
 
 - `main.ts`: the bundle entry. Registers the `whichkey` handler (with a prefix it shows the panel, without one it hides it) and the `help.whichkey` handler (lists the first keys of the mode). A second run does not register again.
 - `session.ts`: decides whether an answer from the background may still be drawn. It skips modes that have no keymap to list, and drops an answer when the next key arrived first or a hide came in between.
