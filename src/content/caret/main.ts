@@ -72,7 +72,9 @@ function page_span(model: TextModel): { first: number; last: number } | undefine
   if (selection.rangeCount === 0) return undefined;
   const range = selection.getRangeAt(0);
   const first = model.index_of(range.startContainer, range.startOffset);
-  const last = range.collapsed || range.endOffset === 0 ? first : model.index_of(range.endContainer, range.endOffset - 1);
+  // An end on an empty line is the <br> itself, painted without the +1 a text end has.
+  const end_in_text = range.endContainer.nodeType === Node.TEXT_NODE;
+  const last = range.collapsed || (end_in_text && range.endOffset === 0) ? first : model.index_of(range.endContainer, end_in_text ? range.endOffset - 1 : range.endOffset);
   return first === undefined || last === undefined ? undefined : { first, last };
 }
 
