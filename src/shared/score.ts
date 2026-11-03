@@ -122,3 +122,18 @@ export function rank<Item extends Candidate>(query: string, items: readonly Item
   hits.sort((left, right) => right.hit.score - left.hit.score || left.item.name.length - right.item.name.length || left.order - right.order);
   return hits.map(({ item, hit }) => ({ ...item, positions: hit.positions }));
 }
+
+export type BestMatch<Item> = { found: "none" } | { found: "one"; item: Item } | { found: "tie"; first: Item; second: Item };
+
+// For a handler that runs one item from typed text. Equal top scores give a `tie` so the caller can refuse instead of guessing.
+export function best_match<Item>(query: string, items: readonly Item[], candidate_of: (item: Item) => Candidate): BestMatch<Item> {
+  const hits: { item: Item; score: number }[] = [];
+  for (const item of items) {
+    const hit = score_candidate(query, candidate_of(item));
+    if (hit) hits.push({ item, score: hit.score });
+  }
+  hits.sort((left, right) => right.score - left.score);
+  const [best, next] = hits;
+  if (!best) return { found: "none" };
+  return next && next.score === best.score ? { found: "tie", first: best.item, second: next.item } : { found: "one", item: best.item };
+}

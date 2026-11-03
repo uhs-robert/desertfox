@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { rank, score_candidate } from "../../../src/cmdline/completion/score.ts";
+import { best_match, rank, score_candidate } from "../src/shared/score.ts";
 
 const names = (query: string, list: string[]) => rank(query, list.map((name) => ({ name }))).map((item) => item.name);
 
@@ -44,4 +44,12 @@ test("only name hits give positions", () => {
 
 test("an empty query keeps the order of the source", () => {
   assert.deepEqual(names("", ["b", "a"]), ["b", "a"]);
+});
+
+test("best_match names the one winner, a tie, or nothing", () => {
+  const items = [{ name: "Mail" }, { name: "News" }, { name: "News" }];
+  const by_name = (item: { name: string }) => item;
+  assert.deepEqual(best_match("mail", items, by_name), { found: "one", item: items[0] });
+  assert.deepEqual(best_match("news", items, by_name), { found: "tie", first: items[1], second: items[2] });
+  assert.deepEqual(best_match("zzz", items, by_name), { found: "none" });
 });

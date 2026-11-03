@@ -23,6 +23,8 @@ const OPENED = {
   css: ".oasisfox-cmdline { --oasisfox-bg: red; }",
 };
 
+const TAB_COMMAND = { id: "tab.switch", name: "tab", label: "Switch tab", intent: "Switch tab.", params: [{ name: "tab", type: "string", rest: true, main: true, values: { from: "tabs" } }] };
+
 // An element that keeps what the page puts in it.
 function fake_element() {
   const element = {
@@ -39,15 +41,17 @@ function fake_element() {
 }
 
 // Just enough DOM for the command line page. `head` records what is appended, `parent` what is posted to the web page.
-type PageSetup = { keymap?: unknown };
+type PageSetup = { keymap?: unknown; with_tab_command?: boolean };
 
-async function load_page(t: TestContext, tag: string, { keymap = KEYMAP }: PageSetup = {}) {
+async function load_page(t: TestContext, tag: string, { keymap = KEYMAP, with_tab_command = false }: PageSetup = {}) {
   const window_listeners: ((event: unknown) => void)[] = [];
   const input_listeners: Record<string, (event: unknown) => void> = {};
   const to_parent: unknown[] = [];
   const head: { textContent: string }[] = [];
   // Every message the page sends to the background, in order.
   const to_background: string[] = [];
+  // The `complete_items` asks that wait for the test to answer them.
+  const item_asks: ((items: unknown[]) => void)[] = [];
   // Setting the value puts the caret at the end, as Firefox does.
   let value = "";
   const input = {
@@ -93,6 +97,8 @@ async function load_page(t: TestContext, tag: string, { keymap = KEYMAP }: PageS
         // The background answers only the ticket it issued.
         sendMessage: async (message: { type: string; ticket?: string }) => {
           to_background.push(message.type);
+          if (message.type === "complete_items") return new Promise((resolve) => void item_asks.push((items) => resolve({ items })));
+          if (message.type === "open_cmdline" && message.ticket === TICKET && with_tab_command) return { ...OPENED, commands: [...OPENED.commands, TAB_COMMAND] };
           return message.type === "open_cmdline" && message.ticket === TICKET ? OPENED : undefined;
         },
       },
@@ -122,7 +128,7 @@ async function load_page(t: TestContext, tag: string, { keymap = KEYMAP }: PageS
   };
   const press_enter = () => input_listeners.keydown!({ isTrusted: true, isComposing: false, key: "Enter", code: "Enter", preventDefault: () => {} });
   const press = (key: string) => input_listeners.keydown!({ isTrusted: true, isComposing: false, key, code: key, preventDefault: () => {} });
-  return { input, list, panel, to_parent, to_background, head, post_start, press_enter, press };
+  return { input, list, panel, to_parent, to_background, item_asks, head, post_start, press_enter, press };
 }
 
 // Port messages arrive on a later turn, and later still on a busy machine.
@@ -288,4 +294,41 @@ test("Tab previews a command in the line and Enter submits what the line shows",
   press_enter();
   await until(() => host.submits().length === 1);
   assert.deepEqual(host.submits(), submit_of("my.jira"));
+});
+
+test("a page that never redeemed a ticket asks the background for no tabs, even with a tab line prefilled", async (t) => {
+  const { to_background, item_asks, post_start } = await load_page(t, "unredeemed_asks_nothing", { with_tab_command: true });
+  const forged = [post_start(undefined, "tab "), post_start("guess", "tab ")];
+  await settle();
+  assert.deepEqual(to_background, ["open_cmdline", "open_cmdline"]);
+  assert.deepEqual(item_asks, []);
+  assert.deepEqual(forged.map((site) => site.received), [[], []]);
+});
+
+test("a redeemed line asks for tabs once and shows them when they arrive", async (t) => {
+  const { list, to_background, item_asks, post_start, press } = await load_page(t, "tabs_arrive", { with_tab_command: true });
+  const host = post_start(TICKET, "tab ");
+  await host.opened();
+  host.port.postMessage({ oasisfox_cmdline: { kind: "focused" } });
+  await until(() => item_asks.length === 1);
+  press("a");
+  assert.equal(to_background.filter((type) => type === "complete_items").length, 1);
+  assert.equal(list.children.length, 0);
+  item_asks[0]!([{ number: 1, title: "Alpha", url: "https://alpha.test/" }]);
+  await until(() => list.children.length === 1);
+  assert.equal(list.children.length, 1);
+});
+
+test("a tab reply that lands after the line submitted draws nothing", async (t) => {
+  const { list, item_asks, post_start, press_enter } = await load_page(t, "tabs_after_close", { with_tab_command: true });
+  const host = post_start(TICKET, "tab a");
+  await host.opened();
+  host.port.postMessage({ oasisfox_cmdline: { kind: "focused" } });
+  await until(() => item_asks.length === 1);
+  press_enter();
+  await until(() => host.submits().length === 1);
+  const drawn = list.children.length;
+  item_asks[0]!([{ number: 1, title: "Alpha", url: "https://alpha.test/" }]);
+  await settle();
+  assert.equal(list.children.length, drawn);
 });

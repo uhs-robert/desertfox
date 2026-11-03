@@ -71,6 +71,7 @@ function settings_schema(): Schema {
         description: "Search engine that open.clipboard uses for text that is not a URL. Must name a defined engine",
       },
       new_tab_page: { type: "string", description: "Reserved" },
+      completion_all_windows: { type: "boolean", default: false, description: "Whether the tab completion lists the tabs of every window, not only the line's window" },
     },
     additionalProperties: false,
   };

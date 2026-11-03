@@ -2,7 +2,6 @@ import type { KeymapConfig } from "../shared/keymap.ts";
 
 // The source of docs/keymap.md: `just docs-gen` regenerates its tables from this file.
 // Search engine keys (`s`, `S`, `,`) and container keys (`c`) come from the user's config.
-// `tab.switch` and `bookmark.open` (`T b B`) are bound now and refuse until the picker exists.
 // Hint, cmdline, caret and visual commands load their bundle on first use and refuse if it registers no handler.
 // The caret and visual motions. `0` and `$` are line ends, `^` the first non-blank, `gg` and `G` the ends of the text.
 const MOTIONS: Record<string, { id: string; args: Record<string, unknown>; label?: string }> = {

@@ -5,8 +5,10 @@ import type { CommandMeta, Mode, ParamDef } from "../../shared/command.ts";
 import { first_sentence, flag_alternatives, usage_line } from "../../shared/registry/index.ts";
 import type { CommandLookup, EnumSources } from "../../shared/registry/index.ts";
 import { bare_word_param, flag_params, is_dynamic_values, static_values, subject_param } from "../../shared/registry/params.ts";
-import { rank } from "./score.ts";
-import type { Ranked } from "./score.ts";
+import { rank } from "../../shared/score.ts";
+import type { Ranked } from "../../shared/score.ts";
+import type { BookmarkItem, TabItem } from "../../shared/messages.ts";
+import type { LiveKind, LiveSource } from "./live.ts";
 import { cursor_context } from "./tokenize.ts";
 
 export type Row = {
@@ -33,6 +35,8 @@ export type Completion = {
   usage?: string;
   // Whether a source applies here. An empty list then reads "no match".
   listing: boolean;
+  // The rows wait for tabs or bookmarks that are still on their way.
+  loading?: boolean;
 };
 
 const NO_COMPLETION: Completion = { rows: [], start: 0, end: 0, listing: false };
@@ -131,8 +135,40 @@ function value_rows(command: Command, param: ParamDef, sources: EnumSources): Ro
   }));
 }
 
+// With no word typed, the bookmark list shows this many of the newest.
+const RECENT_BOOKMARKS = 20;
+
+// The number first, so a typed `3` finds the tab at place 3 of the tab bar. The pick puts the number and title in the
+// line and the handler reads the leading number. A title with a quote is quoted whole, or the line would not parse.
+function tab_rows(tabs: readonly TabItem[], usage: string): Row[] {
+  return tabs.map((tab) => ({
+    name: `${tab.number} ${tab.title}`,
+    insert: `${tab.number} ${/["'\\]/.test(tab.title) ? quote_word(tab.title) : tab.title} `,
+    description: tab.url,
+    args: "",
+    also_named: [],
+    keywords: [],
+    usage,
+  }));
+}
+
+function bookmark_rows(bookmarks: readonly BookmarkItem[], usage: string): Row[] {
+  return bookmarks.map((bookmark) => ({ name: bookmark.title, insert: `${quote_word(bookmark.url)} `, description: bookmark.url, args: "", also_named: [], keywords: [], usage }));
+}
+
+const live_kind_of = (param: ParamDef | undefined): LiveKind | undefined =>
+  param && is_dynamic_values(param.values) && (param.values.from === "tabs" || param.values.from === "bookmarks") ? param.values.from : undefined;
+
 // The completer reads the commands once, so each keystroke only ranks.
-export function create_completer(lookup: CommandLookup, commands: readonly CommandMeta[], command_aliases: Readonly<Record<string, string>>, sources: EnumSources, opened_from = "normal") {
+// `live` supplies the tabs and bookmarks. Without it those subjects list nothing.
+export function create_completer(
+  lookup: CommandLookup,
+  commands: readonly CommandMeta[],
+  command_aliases: Readonly<Record<string, string>>,
+  sources: EnumSources,
+  opened_from = "normal",
+  live?: Pick<LiveSource, "read">,
+) {
   const all_commands = command_rows(commands, command_aliases, opened_from);
   return (text: string, caret: number): Completion => {
     const context = cursor_context(text, caret, lookup.find);
@@ -142,6 +178,13 @@ export function create_completer(lookup: CommandLookup, commands: readonly Comma
     const usage = usage_line(context.command);
     if (context.kind === "flag") return { ...span, usage, rows: rank(context.word, flag_rows(context.command)), listing: true };
     const param = context.kind === "flag_value" ? context.param : context.position === 0 ? (subject_param(context.command) ?? bare_word_param(context.command)) : undefined;
+    const kind = live_kind_of(param);
+    if (kind && live) {
+      const read = live.read(kind);
+      if (read.loading) return { ...span, usage, rows: [], listing: true, loading: true };
+      const ranked = rank(context.word, kind === "tabs" ? tab_rows(read.items as TabItem[], usage) : bookmark_rows(read.items as BookmarkItem[], usage));
+      return { ...span, usage, rows: kind === "bookmarks" && context.word.trim() === "" ? ranked.slice(0, RECENT_BOOKMARKS) : ranked, listing: true };
+    }
     const rows = param ? value_rows(context.command, param, sources) : [];
     return { ...span, usage, rows: rank(context.word, rows), listing: rows.length > 0 };
   };
