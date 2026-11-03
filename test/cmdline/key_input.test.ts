@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { run_token, run_token_without_keymap, typed_edit } from "../../src/cmdline/key_input.ts";
+import { edit_forwarded, run_token, run_token_without_keymap } from "../../src/cmdline/key_input.ts";
 import { create_session } from "../../src/cmdline/session.ts";
 import { DEFAULT_KEYMAP } from "../../src/background/default_keymap.ts";
 import { create_matcher } from "../../src/shared/keys/index.ts";
@@ -37,11 +37,27 @@ test("Escape closes, Up recalls history, and plain letters are left to the text"
 });
 
 test("a forwarded token types a character, a space or a backspace, and drops other keys", () => {
-  assert.deepEqual(typed_edit("a"), { insert: "a" });
-  assert.deepEqual(typed_edit("<Space>"), { insert: " " });
-  assert.deepEqual(typed_edit("<Backspace>"), { backspace: true });
-  assert.equal(typed_edit("<C-w>"), undefined);
-  assert.equal(typed_edit("<F5>"), undefined);
+  const at_end = { text: "ab", start: 2, end: 2 };
+  assert.deepEqual(edit_forwarded(at_end, "c"), { text: "abc", caret: 3 });
+  assert.deepEqual(edit_forwarded(at_end, "<Space>"), { text: "ab ", caret: 3 });
+  assert.deepEqual(edit_forwarded(at_end, "<Backspace>"), { text: "a", caret: 1 });
+  assert.equal(edit_forwarded(at_end, "<C-w>"), undefined);
+  assert.equal(edit_forwarded(at_end, "<F5>"), undefined);
+});
+
+test("forwarded editing keys move the caret and delete, as in a text field", () => {
+  const field = (text: string, caret: number, end = caret) => ({ text, start: caret, end });
+  // Left then Backspace on a prefilled line removes the character before the caret, not the last one.
+  const left = edit_forwarded(field("open x", 6), "<ArrowLeft>")!;
+  assert.deepEqual(left, { text: "open x", caret: 5 });
+  assert.deepEqual(edit_forwarded(field(left.text, left.caret), "<Backspace>"), { text: "openx", caret: 4 });
+  assert.deepEqual(edit_forwarded(field("abc", 1), "<ArrowRight>"), { text: "abc", caret: 2 });
+  assert.deepEqual(edit_forwarded(field("abc", 2), "<Home>"), { text: "abc", caret: 0 });
+  assert.deepEqual(edit_forwarded(field("abc", 0), "<End>"), { text: "abc", caret: 3 });
+  assert.deepEqual(edit_forwarded(field("abc", 0), "<Delete>"), { text: "bc", caret: 0 });
+  assert.deepEqual(edit_forwarded(field("abc", 0, 2), "<Delete>"), { text: "c", caret: 0 });
+  assert.deepEqual(edit_forwarded(field("abc", 3), "<ArrowRight>"), { text: "abc", caret: 3 });
+  assert.deepEqual(edit_forwarded(field("abc", 0), "<Backspace>"), { text: "abc", caret: 0 });
 });
 
 test("a user sequence in cmdline mode waits for its second key", () => {
@@ -66,4 +82,12 @@ test("with no stored keymap Enter still submits and Escape still closes", () => 
   session.edit("scroll down");
   assert.equal((run_token_without_keymap(session, "<Enter>") as { effect: { kind: string } }).effect.kind, "submit");
   assert.deepEqual(run_token_without_keymap(session, "a"), { kind: "unbound" });
+});
+
+test("a cmdline binding with several commands runs them in order", () => {
+  const steps = (...ids: string[]) => ({ kind: "leaf" as const, steps: ids.map((id) => ({ invocation: { id }, runs_in: "content" as const, count_rule: "ignore" as const })) });
+  const { matcher, session } = setup({ "<C-k>": steps("cmdline.clear", "mode.escape") });
+  session.edit("open x");
+  assert.deepEqual(run_token(matcher, session, "<C-k>"), { kind: "effect", effect: { kind: "close" } });
+  assert.equal(session.get_text(), "");
 });

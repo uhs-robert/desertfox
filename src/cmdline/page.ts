@@ -7,7 +7,7 @@ import { COMPILED_KEYMAP_STORAGE_KEY } from "../shared/prefix_tree.ts";
 import type { CompiledKeymap } from "../shared/prefix_tree.ts";
 import { parse_command_line } from "../shared/registry/index.ts";
 import type { CmdlineOpened, ContentToBackground } from "../shared/messages.ts";
-import { run_token, run_token_without_keymap, typed_edit } from "./key_input.ts";
+import { edit_forwarded, run_token, run_token_without_keymap } from "./key_input.ts";
 import type { TokenMatcher } from "./key_input.ts";
 import type { HostToPage, PageToHost } from "./protocol.ts";
 import { unwrap, wrap } from "./protocol.ts";
@@ -16,7 +16,7 @@ import type { Effect, Session } from "./session.ts";
 import { create_word_lookup } from "./word_lookup.ts";
 
 // Read once and cleared, so a page that navigates this frame away cannot read it from `window.name`.
-const host_secret = window.name;
+const ticket = window.name;
 window.name = "";
 // The port from the host's `start`. Until it arrives there is nobody to tell.
 let host_port: MessagePort | undefined;
@@ -33,15 +33,17 @@ async function main(): Promise<void> {
 
   const [stored, opened] = await Promise.all([
     browser.storage.local.get(COMPILED_KEYMAP_STORAGE_KEY),
-    ask_background<CmdlineOpened>({ type: "open_cmdline" }),
+    ask_background<CmdlineOpened | undefined>({ type: "open_cmdline", ticket }),
   ]);
+  // A copy of this page that the host did not open: a site embedded it on its own. It stays silent.
+  if (!opened) return;
   const lookup = create_word_lookup(opened.commands, opened.command_aliases);
   // After the built-in styles, so user CSS wins.
   const user_style = document.createElement("style");
   user_style.textContent = opened.css;
   document.head.append(user_style);
   const keymap = stored[COMPILED_KEYMAP_STORAGE_KEY] as CompiledKeymap | undefined;
-  const matcher: TokenMatcher | undefined = keymap && create_matcher(keymap);
+  const matcher: TokenMatcher | undefined = keymap?.modes.cmdline ? create_matcher(keymap) : undefined;
   const session: Session = create_session({ history: opened.history, parse: (text) => parse_command_line(lookup, text, opened.sources) });
 
   const render = () => {
@@ -70,13 +72,11 @@ async function main(): Promise<void> {
   // A key that reached the host script, not this page, so the line types it here.
   const press_forwarded = (token: string) => {
     if (press(token)) return;
-    const edit = typed_edit(token);
-    if (!edit) return;
-    if ("insert" in edit) input.setRangeText(edit.insert, input.selectionStart ?? input.value.length, input.selectionEnd ?? input.value.length, "end");
-    else {
-      const end = input.selectionStart ?? input.value.length;
-      if (end > 0) input.setRangeText("", end - 1, end, "end");
-    }
+    const end_of_text = input.value.length;
+    const edited = edit_forwarded({ text: input.value, start: input.selectionStart ?? end_of_text, end: input.selectionEnd ?? end_of_text }, token);
+    if (!edited) return;
+    input.value = edited.text;
+    input.setSelectionRange(edited.caret, edited.caret);
     session.edit(input.value);
     render();
   };
@@ -95,11 +95,11 @@ async function main(): Promise<void> {
     if (message?.kind === "token") press_forwarded(message.token);
   };
 
-  // Page scripts can post here too. Only the host knows the secret, and only the first `start` counts.
+  // Page scripts can post here too. Only the host knows the ticket, and only the first `start` counts.
   window.addEventListener("message", (event) => {
     const message = unwrap<HostToPage>(event.data);
     const port = event.ports[0];
-    const is_first_host_start = !host_port && message?.kind === "start" && host_secret !== "" && message.secret === host_secret;
+    const is_first_host_start = !host_port && message?.kind === "start" && message.ticket === ticket;
     if (!is_first_host_start || !port) return;
     host_port = port;
     host_port.onmessage = take_token;

@@ -17,18 +17,14 @@ const BAR_HEIGHT = "5rem";
 type Open = {
   frame: HTMLIFrameElement;
   holder: HTMLElement;
-  secret: string;
+  // From the background. The frame's name carries it to the page, which redeems it for the history and commands.
+  ticket?: string;
   // Set once the page is ready. Every message after `start` goes over it.
   port?: MessagePort;
   typed: string[];
   text: string;
   timer: ReturnType<typeof setTimeout>;
 };
-
-// `crypto.randomUUID` needs a secure context, and the page may be plain http.
-function random_secret(): string {
-  return Array.from(crypto.getRandomValues(new Uint8Array(16)), (byte) => byte.toString(16).padStart(2, "0")).join("");
-}
 
 // A second run would add a second sink and listener.
 if (!page.oasisfox_cmdline_ready) {
@@ -55,13 +51,19 @@ if (!page.oasisfox_cmdline_ready) {
     const holder = document.createElement("div");
     holder.style.cssText = `all:initial;position:fixed;left:0;right:0;bottom:0;height:${BAR_HEIGHT};z-index:2147483647;`;
     const frame = document.createElement("iframe");
-    const secret = random_secret();
-    frame.name = secret;
-    frame.src = browser.runtime.getURL("cmdline.html");
     frame.style.cssText = "all:initial;display:block;width:100%;height:100%;border:0;color-scheme:normal;";
     holder.attachShadow({ mode: "closed" }).append(frame);
     (document.body ?? document.documentElement).append(holder);
-    open = { frame, holder, secret, typed: [], text, timer: setTimeout(close, READY_TIMEOUT_MS) };
+    const current: Open = { frame, holder, typed: [], text, timer: setTimeout(close, READY_TIMEOUT_MS) };
+    open = current;
+    void browser.runtime.sendMessage({ type: "issue_cmdline_ticket" }).then((ticket: unknown) => {
+      if (open !== current) return;
+      if (typeof ticket !== "string") return close();
+      current.ticket = ticket;
+      // The name before the address, so the page finds it when it loads.
+      frame.name = ticket;
+      frame.src = browser.runtime.getURL("cmdline.html");
+    });
   }
 
   async function submit(message: Extract<PageToHost, { kind: "submit" }>) {
@@ -81,7 +83,7 @@ if (!page.oasisfox_cmdline_ready) {
     };
     current.port = channel.port1;
     current.frame.focus();
-    const message: HostToPage = { kind: "start", secret: current.secret, text: current.text, tokens: current.typed };
+    const message: HostToPage = { kind: "start", ticket: current.ticket!, text: current.text, tokens: current.typed };
     current.frame.contentWindow?.postMessage(wrap(message), origin, [channel.port2]);
     current.typed = [];
   };
@@ -89,7 +91,10 @@ if (!page.oasisfox_cmdline_ready) {
   // Only `ready` comes this way. A `close` or `submit` here is forged, since the page sends those over the port.
   window.addEventListener("message", (event) => {
     const message = unwrap<PageToHost>(event.data);
-    if (open && !open.port && message?.kind === "ready" && event.source === open.frame.contentWindow) start(open);
+    if (!open || message?.kind !== "ready" || event.source !== open.frame.contentWindow) return;
+    // A second `ready` means the frame loaded again, maybe after a page script navigated it, so the line is no longer ours.
+    if (open.port) close();
+    else start(open);
   });
 
   host.register_sink("cmdline", {

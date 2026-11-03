@@ -8,9 +8,9 @@
 import type { Invocation } from "../shared/invocation.ts";
 
 export type HostToPage =
-  // Sent once the page said it is ready, with the port in its transfer list. `secret` is the iframe's name, which
-  // page scripts cannot read, so a forged `start` is ignored. `tokens` are the keys typed while the page loaded, in order.
-  | { kind: "start"; secret: string; text: string; tokens: string[] }
+  // Sent once the page said it is ready, with the port in its transfer list. `ticket` is the one the page found in its
+  // frame name, which page scripts cannot read, so a forged `start` is ignored. `tokens` are the keys typed while the page loaded, in order.
+  | { kind: "start"; ticket: string; text: string; tokens: string[] }
   // A key that reached the host script instead of the page, for example after a click on the page.
   | { kind: "token"; token: string };
 

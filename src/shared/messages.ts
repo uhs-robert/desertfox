@@ -51,10 +51,17 @@ export type WhichKeyRow = {
   more: boolean;
 };
 
+// From the `cmdline` host script before it mounts the line. The answer is a one-time ticket, or undefined outside a tab.
+export type IssueCmdlineTicket = {
+  type: "issue_cmdline_ticket";
+};
 
 // From the command line page when it opens: asks for the history, the commands, and the lists the grammar needs to read bare words.
+// The answer is undefined unless `ticket` is one the host got for this tab and nobody used yet.
+// `cmdline.html` is web-accessible, so any site can embed its own copy, and that copy must get nothing.
 export type OpenCmdline = {
   type: "open_cmdline";
+  ticket: string;
 };
 
 export type CmdlineOpened = {
@@ -74,7 +81,7 @@ export type RecordCmdline = {
   text: string;
 };
 
-export type ContentToBackground = RunRequest | ModeChanged | LoadBundle | ListKeys | OpenCmdline | RecordCmdline;
+export type ContentToBackground = RunRequest | ModeChanged | LoadBundle | ListKeys | IssueCmdlineTicket | OpenCmdline | RecordCmdline;
 
 export type RunResponse = { ok: true } | { ok: false; refusal: Refusal };
 

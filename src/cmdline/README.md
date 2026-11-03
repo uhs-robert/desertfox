@@ -7,6 +7,6 @@ The command line: press `:` and a bar opens at the bottom. Type a command, press
 - `session.ts`: the text, the inline message and the history walk, apart from the DOM. A parse error keeps the line open and shows the error. Pure.
 - `key_input.ts`: one key token to an effect, or to text when no key is bound. Pure.
 - `history_cursor.ts`: Up and Down over the history with the draft kept. Pure.
-- `protocol.ts`: the message shapes between the host and the page. Only `ready` and `start` use the page's window. The rest travels over a `MessageChannel` port handed over with `start`, so page scripts cannot read or forge it.
+- `protocol.ts`: the message shapes between the host and the page. Only `ready` and `start` use the page's window. The rest travels over a `MessageChannel` port handed over with `start`, so page scripts cannot read or forge it. The host gets a one-time ticket from the background and passes it in the frame's name. The page trades it for the history and commands, so a copy of `cmdline.html` that a site embeds on its own gets nothing.
 
 The history lives in `storage.local`, kept by `src/background/cmdline_service.ts`. Completion is not here yet: `cmdline.next_completion` and `cmdline.prev_completion` are bound and do nothing until the completion piece lands.

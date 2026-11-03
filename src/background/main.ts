@@ -21,6 +21,8 @@ const router = create_router(make_router_deps(get_search_engine_names));
 const bundle_loader = create_bundle_loader(bundle_loader_deps);
 const cmdline = create_cmdline_service({
   storage: browser.storage.local,
+  tickets: browser.storage.session,
+  new_ticket: () => crypto.randomUUID(),
   sources: async () => ({ search_engines: await get_search_engine_names(), containers: await container_names() }),
   page_config: async () => {
     const config = await get_config();
@@ -36,7 +38,8 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
     return modes_cleared.then(() => remember_reported_mode(browser.storage.local, tab_id, sender.frameId, request.mode));
   }
   if (request?.type === "load_bundle") return bundle_loader.answer(sender, request.name);
-  if (request?.type === "open_cmdline") return get_config().then(() => cmdline.open());
+  if (request?.type === "issue_cmdline_ticket") return cmdline.issue_ticket(sender.tab?.id);
+  if (request?.type === "open_cmdline") return get_config().then(() => cmdline.open(request.ticket, sender.tab?.id));
   if (request?.type === "record_cmdline") return cmdline.record(request.text, sender.tab?.incognito === true);
   if (request?.type === "list_keys") return get_config().then(() => list_keys(browser.storage.local, (id) => registry.get(id), request));
   if ((message as SnippetCall)?.type === "snippet_run") {

@@ -1,14 +1,17 @@
 // What the command line page asks of the background: the history to walk, the commands and the lists that bare words read from.
 
 import type { CmdlineOpened } from "../shared/messages.ts";
-import { CMDLINE_HISTORY_STORAGE_KEY } from "./storage_keys.ts";
+import { CMDLINE_HISTORY_STORAGE_KEY, CMDLINE_TICKET_STORAGE_PREFIX } from "./storage_keys.ts";
 
 export const HISTORY_LIMIT = 100;
 
 type HistoryStorage = Pick<typeof browser.storage.local, "get" | "set">;
+type TicketStorage = Pick<typeof browser.storage.session, "get" | "set" | "remove">;
 
 export type CmdlineServiceDeps = {
   storage: HistoryStorage;
+  tickets: TicketStorage;
+  new_ticket: () => string;
   sources: () => Promise<CmdlineOpened["sources"]>;
   // Read on every open, after the config has loaded.
   page_config: () => Promise<Pick<CmdlineOpened, "commands" | "command_aliases" | "css">>;
@@ -29,8 +32,21 @@ export function create_cmdline_service(deps: CmdlineServiceDeps) {
   let last_write: Promise<unknown> = Promise.resolve();
 
   return {
-    // After the pending writes, so a line reopened at once already has the last command.
-    open: async (): Promise<CmdlineOpened> => {
+    // The host asks before it mounts the line and hands the ticket to its own frame only.
+    issue_ticket: async (tab_id: number | undefined): Promise<string | undefined> => {
+      if (tab_id === undefined) return undefined;
+      const ticket = deps.new_ticket();
+      await deps.tickets.set({ [CMDLINE_TICKET_STORAGE_PREFIX + ticket]: tab_id });
+      return ticket;
+    },
+    // Used up on the first try, so a frame reloaded with an old ticket gets nothing either.
+    open: async (ticket: unknown, tab_id: number | undefined): Promise<CmdlineOpened | undefined> => {
+      if (typeof ticket !== "string" || tab_id === undefined) return undefined;
+      const key = CMDLINE_TICKET_STORAGE_PREFIX + ticket;
+      const issued_for: unknown = (await deps.tickets.get(key))[key];
+      await deps.tickets.remove(key);
+      if (issued_for !== tab_id) return undefined;
+      // After the pending writes, so a line reopened at once already has the last command.
       await last_write;
       return { history: await read(), sources: await deps.sources(), ...(await deps.page_config()) };
     },
