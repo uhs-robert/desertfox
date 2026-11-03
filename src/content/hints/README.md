@@ -7,7 +7,7 @@ The `hints` bundle (`hints.js`). The background injects it into a frame on the f
 - `visible.ts`: keeps what a person can click: inside every scrolling box, not hidden, and not under another element, tested in each parent document for a framed element. Reads the page only through `PageProbe`, so tests use a fake page.
 - `labels.ts`, `pick.ts`: the label generator (prefix-free, built from the letters) and the typing rules. Pure.
 - `actions.ts`: what a picked element gets: click or focus, open in a place, focus, delete. `select` and `copy` are declared on the command and refuse until their pieces exist. `rapid` is declared and ignored until the extras piece.
-- `view.ts`: labels in a closed shadow root.
+- `view.ts`: labels in a closed shadow root. They use the which-key colors: `--oasisfox-secondary` text and `--oasisfox-accent` border on the `--oasisfox-bg` background.
 - `follow.ts`: repositions the labels on the next animation frame after a scroll or resize in the top window or a frame window.
 
 The registry never imports this folder. The command and its params sit in `src/commands/phase_2.ts`.

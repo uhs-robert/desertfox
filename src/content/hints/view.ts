@@ -5,15 +5,19 @@ import type { Found } from "./candidates.ts";
 
 const MESSAGE_MS = 1500;
 
-const STYLE = `
+// Same mapping as the which-key panel: yellow secondary for the keys, blue accent for the frame.
+// The defaults repeat the which-key ones, so a page that sets no `--oasisfox-*` variable still gets the oasis look.
+export const STYLE = `
 .oasisfox-hints {${SURFACE_DEFAULT_VARIABLES}
+  --primary: var(--oasisfox-accent, #7fa3c9);
+  --secondary: var(--oasisfox-secondary, #e6c87a);
   font: bold 12px/1 ui-monospace, monospace;
 }
 .oasisfox-hint {
   position: fixed; padding: 2px 4px; border-radius: 3px; text-transform: uppercase;
-  background: var(--oasisfox-accent, #f5c542); color: #1a1a1a; box-shadow: 0 1px 3px #0008;
+  background: var(--oasisfox-bg); color: var(--secondary); border: 1px solid var(--primary); box-shadow: 0 1px 3px #0008;
 }
-.oasisfox-hint b { opacity: 0.4; font-weight: inherit; }
+.oasisfox-hint b { color: color-mix(in srgb, var(--oasisfox-fg) 55%, var(--oasisfox-bg)); font-weight: inherit; }
 .oasisfox-hint-message {
   position: fixed; left: 50%; bottom: 48px; transform: translateX(-50%); padding: 8px 12px;
   background: var(--oasisfox-bg); color: var(--oasisfox-fg); font: var(--oasisfox-font); border-radius: var(--oasisfox-radius);
