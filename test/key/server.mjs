@@ -84,6 +84,11 @@ export function start_server() {
       const frame = '<iframe id="inner" src="/page?id=inner" style="width:300px;height:200px"></iframe>';
       return response.end(page(`framed ${id}`, frame, "<script>addEventListener('load', () => document.getElementById('inner').contentWindow.focus())</script>"));
     }
+    if (url.pathname === "/hints") {
+      const covered = '<div style="position:relative;width:200px"><a href="/page?id=hint_covered">covered</a><div style="position:absolute;inset:0;background:#fff"></div></div>';
+      const links = `<a href="/page?id=hint_hidden" style="display:none">hidden</a>${covered}<p><a href="/page?id=hint_one">one</a></p><p><a href="/page?id=hint_two">two</a></p>`;
+      return response.end(page(`hints ${id}`, links + tall_filler));
+    }
     if (url.pathname === "/caret") {
       const text = "<p>foo bar.baz</p><p>second line here</p>";
       return response.end(page(`caret ${id}`, `${text}<input id="paste_target">`));
