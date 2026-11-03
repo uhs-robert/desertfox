@@ -45,7 +45,7 @@ test("opening mounts the line and enters cmdline mode, and a close from the page
   const host_url = new URL("../../src/cmdline/host.ts", import.meta.url).href;
   await import(`${host_url}?open`);
 
-  handlers.get("cmdline.open")!({});
+  handlers.get("cmdline.open")!({ text: "open " });
   assert.deepEqual(modes, ["cmdline"]);
   const [holder, frame] = elements as [ReturnType<typeof fake_element>, ReturnType<typeof fake_element>];
 
@@ -55,8 +55,8 @@ test("opening mounts the line and enters cmdline mode, and a close from the page
   assert.equal(sink.on_token("c"), "handled");
   const from_page = (message: unknown) => window_listeners.message!({ data: { oasisfox_cmdline: message }, source: frame.contentWindow });
   from_page({ kind: "ready" });
-  const start = (frame.posted[0] as { oasisfox_cmdline: { kind: string; tokens: string[] } }).oasisfox_cmdline;
-  assert.deepEqual([start.kind, start.tokens], ["start", ["s", "c"]]);
+  const start = (frame.posted[0] as { oasisfox_cmdline: unknown }).oasisfox_cmdline as { kind: string; tokens: string[]; text: string };
+  assert.deepEqual([start.kind, start.text, start.tokens], ["start", "open ", ["s", "c"]]);
 
   // A message that does not come from the iframe is ignored.
   window_listeners.message!({ data: { oasisfox_cmdline: { kind: "close" } }, source: {} });

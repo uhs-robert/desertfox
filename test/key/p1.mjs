@@ -53,6 +53,9 @@ export async function p1_cases(t) {
   });
 
   await run_case("Up brings back the last command", async () => {
+    // The page is at the top after the last command, so move away first or the recalled command would not scroll.
+    await send_keys("j");
+    await sleep(400);
     await send_keys(":", "-k", "Up");
     await sleep(300);
     const mark = events.length;
@@ -82,4 +85,11 @@ export async function p1_cases(t) {
     await send_keys(...CTRL("w"));
     await sleep(500);
   });
+
+  // Close the tab of these cases.
+  await send_keys(...CTRL("w"));
+  await sleep(700);
+  // Closing a tab can leave the keyboard focus in the browser chrome.
+  await send_keys(...ALT(","));
+  await sleep(500);
 }

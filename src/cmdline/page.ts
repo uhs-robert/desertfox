@@ -93,7 +93,7 @@ async function main(): Promise<void> {
     }
   });
 
-  input.focus();
+  // No autofocus anywhere: the frame would take the keys before the host has handed over the ones it kept, and the start message would wipe them.
   tell_host({ kind: "ready" });
 }
 
