@@ -6,7 +6,9 @@ import type { KeymapMode } from "../shared/keymap.ts";
 import type { Prompt } from "../shared/invocation.ts";
 import type { CompiledKeymap, TreeNode } from "../shared/prefix_tree.ts";
 import { is_context_source, is_dynamic_values } from "../shared/registry/params.ts";
-import { usage_line } from "../shared/registry/usage.ts";
+import { print_command } from "../shared/registry/print_command.ts";
+import { subject_param } from "../shared/registry/params.ts";
+import { flag_alternatives, usage_line } from "../shared/registry/usage.ts";
 
 export type KeyRow = { mode: KeymapMode; keys: string; args: string };
 
@@ -15,6 +17,8 @@ export type ParamRow = {
   type: string;
   default: string;
   values: string;
+  // How to type the param as a flag. Empty for the subject, which is typed bare.
+  flags: string;
 };
 
 export type CommandRow = {
@@ -36,7 +40,7 @@ function describe_value(value: ParamValue | { from: string }): string {
   return is_context_source(value) ? `from ${value.from}` : String(value);
 }
 
-function param_row(param: ParamDef): ParamRow {
+function param_row(param: ParamDef, subject: ParamDef | undefined): ParamRow {
   let values = "";
   if (is_dynamic_values(param.values)) values = `from ${param.values.from}`;
   else if (param.values) values = param.values.join(", ");
@@ -45,40 +49,46 @@ function param_row(param: ParamDef): ParamRow {
     type: param.type,
     default: param.default === undefined ? "" : describe_value(param.default),
     values,
+    flags: param === subject ? "" : flag_alternatives(param).join(" "),
   };
 }
 
-function describe_args(args: Record<string, unknown> | undefined, count: number | undefined, prompt: Prompt | undefined): string {
-  const parts = Object.entries(args ?? {}).map(([name, value]) => `${name}=${JSON.stringify(value)}`);
+// The args as the command line writes them in the long style, without the command word.
+function describe_args(command: CommandMeta | undefined, args: Record<string, unknown> | undefined, count: number | undefined, prompt: Prompt | undefined): string {
+  const parts: string[] = [];
+  if (command && args && Object.keys(args).length > 0) {
+    const text = print_command(command, args, { flags: "long" });
+    parts.push(text.slice((command.name ?? command.id).length).trim());
+  }
   if (count !== undefined) parts.push(`count=${count}`);
   if (prompt) parts.push(prompt.prefill ? `prompts for ${prompt.param}, prefilled from ${prompt.prefill.from}` : `prompts for ${prompt.param}`);
   return parts.join(" ");
 }
 
 // Every leaf lists under each command it runs, so a two-step binding shows on both.
-function collect_keys(node: TreeNode, path: string[], mode: KeymapMode, into: Map<string, KeyRow[]>): void {
+function collect_keys(node: TreeNode, path: string[], mode: KeymapMode, into: Map<string, KeyRow[]>, commands: Map<string, CommandMeta>): void {
   if (node.kind === "branch") {
-    for (const [token, child] of Object.entries(node.children)) collect_keys(child, [...path, token], mode, into);
+    for (const [token, child] of Object.entries(node.children)) collect_keys(child, [...path, token], mode, into, commands);
     return;
   }
   for (const step of node.steps) {
     const rows = into.get(step.invocation.id) ?? [];
-    rows.push({ mode, keys: path.join(""), args: describe_args(step.invocation.args, step.invocation.count, step.invocation.prompt) });
+    rows.push({ mode, keys: path.join(""), args: describe_args(commands.get(step.invocation.id), step.invocation.args, step.invocation.count, step.invocation.prompt) });
     into.set(step.invocation.id, rows);
   }
 }
 
-function keys_by_command(compiled: CompiledKeymap | undefined): Map<string, KeyRow[]> {
+function keys_by_command(compiled: CompiledKeymap | undefined, commands: Map<string, CommandMeta>): Map<string, KeyRow[]> {
   const into = new Map<string, KeyRow[]>();
   for (const mode of MODE_ORDER) {
     const root = compiled?.modes[mode];
-    if (root) collect_keys(root, [], mode, into);
+    if (root) collect_keys(root, [], mode, into, commands);
   }
   return into;
 }
 
 export function build_help_model(commands: CommandMeta[], compiled: CompiledKeymap | undefined, warnings: string[]): HelpModel {
-  const keys = keys_by_command(compiled);
+  const keys = keys_by_command(compiled, new Map(commands.map((command) => [command.id, command])));
   const groups = new Map<string, CommandRow[]>();
   for (const command of commands) {
     const group_name = command.id.split(".")[0] ?? command.id;
@@ -87,7 +97,7 @@ export function build_help_model(commands: CommandMeta[], compiled: CompiledKeym
       label: command.label,
       intent: command.intent,
       usage: usage_line(command),
-      params: (command.params ?? []).map(param_row),
+      params: (command.params ?? []).map((param) => param_row(param, subject_param(command))),
       keys: keys.get(command.id) ?? [],
     };
     groups.set(group_name, [...(groups.get(group_name) ?? []), row]);

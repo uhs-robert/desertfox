@@ -22,7 +22,7 @@ function sample() {
   });
   registry.define("help.open", { name: "help", label: "Help", intent: "Open help.", runs_in: "background", run: () => {} });
   const { compiled } = compile_keymap(
-    { normal: { j: { id: "scroll.lines", args: { count: 10 } }, gg: [{ id: "scroll.lines" }, { id: "help.open" }] }, browser: { "<A-j>": { id: "scroll.lines" } } },
+    { normal: { o: { id: "open.url", args: { where: "tab", url: "https://a.example" } }, j: { id: "scroll.lines", args: { count: 10 } }, gg: [{ id: "scroll.lines" }, { id: "help.open" }] }, browser: { "<A-j>": { id: "scroll.lines" } } },
     {},
     (id) => {
       const command = registry.get(id);
@@ -39,8 +39,8 @@ test("the model groups commands by id group and lists params", () => {
   const open = model.groups[1]!.commands[0]!;
   assert.equal(open.usage, "open --url=<url> [--tab]");
   assert.deepEqual(open.params, [
-    { name: "url", type: "string", default: "from clipboard", values: "" },
-    { name: "where", type: "enum", default: "here", values: "here, tab" },
+    { name: "url", type: "string", default: "from clipboard", values: "", flags: "--url=<url>" },
+    { name: "where", type: "enum", default: "here", values: "here, tab", flags: "--tab" },
   ]);
 });
 
@@ -48,10 +48,16 @@ test("keys come from the live compiled keymap, per mode, with args", () => {
   const { commands, compiled } = sample();
   const scroll = build_help_model(commands, compiled, []).groups[2]!.commands[0]!;
   assert.deepEqual(scroll.keys, [
-    { mode: "normal", keys: "j", args: "count=10" },
+    { mode: "normal", keys: "j", args: "10" },
     { mode: "normal", keys: "gg", args: "" },
     { mode: "browser", keys: "<A-j>", args: "" },
   ]);
+});
+
+test("a key row writes its args the way the command line does, in the long style", () => {
+  const { commands, compiled } = sample();
+  const open = build_help_model(commands, compiled, []).groups[1]!.commands[0]!;
+  assert.deepEqual(open.keys, [{ mode: "normal", keys: "o", args: "--url=https://a.example --tab" }]);
 });
 
 test("warnings pass through and a missing keymap gives no keys", () => {

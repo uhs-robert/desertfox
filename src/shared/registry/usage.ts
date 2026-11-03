@@ -24,6 +24,12 @@ function subject_usage(param: ParamDef): string {
 }
 
 function flag_usage(param: ParamDef): string {
+  const word = flag_alternatives(param).join("|");
+  return is_optional(param) ? `[${word}]` : word;
+}
+
+// Every way to type one param as a flag, short before long. The default enum value is the state without the flag, so it needs no mention.
+export function flag_alternatives(param: ParamDef): string[] {
   const dashed = (word: string) => word.replaceAll("_", "-");
   let alternatives: string[];
   if (param.type === "bool") {
@@ -38,6 +44,5 @@ function flag_usage(param: ParamDef): string {
   } else {
     alternatives = [...(typeof param.short === "string" ? [`-${param.short}=<${param.name}>`] : []), `--${param.name}=<${param.name}>`];
   }
-  const word = alternatives.join("|");
-  return is_optional(param) ? `[${word}]` : word;
+  return alternatives;
 }
