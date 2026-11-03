@@ -1,3 +1,5 @@
 # Test keymap: the defaults plus one chord that runs focus_page.
 [browser]
 "<A-,>" = "browser.focus_page"
+# Runs the command line open command from a Firefox shortcut, for the page with no content script.
+"<A-.>" = "cmdline.open"

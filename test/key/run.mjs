@@ -8,6 +8,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { connect_rdp, evaluate_in_background, install_temporary_addon } from "./rdp.mjs";
+import { p1_cases } from "./p1.mjs";
 import { start_server } from "./server.mjs";
 
 const run_execfile = promisify(execFile);
@@ -336,6 +337,7 @@ async function main() {
         'm = "scroll.to percent=50"',
         "[browser]",
         '"<A-,>" = "browser.focus_page"',
+        '"<A-.>" = "cmdline.open"',
         "",
       ].join("\n"));
       build_test_config(config_dir, managed_file);
@@ -627,6 +629,8 @@ async function main() {
     measurements.tree_read_ms = tree_read_ms;
     const sorted = [...tree_read_ms].sort((left, right) => left - right);
     measurements.tree_read_summary = { loads: sorted.length, min: sorted[0], median: (sorted[(sorted.length - 1) >> 1] + sorted[sorted.length >> 1]) / 2, max: sorted.at(-1) };
+
+    await p1_cases({ run_case, expect, send_keys, sleep, open_page, events, wait_event, scroll_of, last_scroll_y, find_event, evaluate_in_background, rdp, EXTENSION_ID });
   } finally {
     rdp?.close();
     await shadow("down", SHADOW_NAME).catch((error) => console.error(`shadow down failed: ${error.message}`));

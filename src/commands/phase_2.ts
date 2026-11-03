@@ -31,7 +31,8 @@ define("hint.run", {
 define("cmdline.open", {
   name: "cmdline",
   label: "Command Line",
-  intent: "Open the command line.",
+  intent: "Open the command line, with text already typed if given.",
+  params: [{ name: "text", type: "string", default: "" }],
   runs_in: "content",
   run: cmdline_open.run,
 });
