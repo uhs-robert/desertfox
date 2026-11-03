@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { list_keys, panel_after_prefix } from "../../src/background/list_keys.ts";
-import { choose_columns } from "../../src/content/whichkey/layout.ts";
+import { choose_columns, fit_title } from "../../src/content/whichkey/layout.ts";
 import type { CommandMeta } from "../../src/shared/command.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY, COMPILED_KEYMAP_VERSION } from "../../src/shared/prefix_tree.ts";
 import type { CompiledKeymap, TreeBranch, TreeNode } from "../../src/shared/prefix_tree.ts";
@@ -71,17 +71,36 @@ test("rows past what one column holds add columns, up to the cap", () => {
 
 test("the title names the chain of groups, each part by its name or else its key", () => {
   const named = branch({ g: { ...branch({ t: leaf("tab.next"), x: { ...branch({ x: leaf("tab.close") }), label: "Close tabs" } }), label: "Go" } });
-  assert.equal(panel_after_prefix(named, ["g"], find_command).title, "+Go");
-  assert.equal(panel_after_prefix(named, ["g", "x"], find_command).title, "+Go >> +Close tabs");
+  assert.deepEqual(panel_after_prefix(named, ["g"], find_command).title, ["+Go"]);
+  assert.deepEqual(panel_after_prefix(named, ["g", "x"], find_command).title, ["+Go", "+Close tabs"]);
   // `root` names neither level, so each part falls back to its key.
-  assert.equal(panel_after_prefix(root, ["g", "x"], find_command).title, "+g >> +x");
+  assert.deepEqual(panel_after_prefix(root, ["g", "x"], find_command).title, ["+g", "+x"]);
   const unnamed_middle = branch({ g: { ...branch({ x: branch({ y: { ...branch({ z: leaf("tab.next") }), label: "Deep" } }) }), label: "Go" } });
-  assert.equal(panel_after_prefix(unnamed_middle, ["g", "x", "y"], find_command).title, "+Go >> +x >> +Deep");
-  assert.equal(panel_after_prefix(root, [], find_command).title, "keys");
+  assert.deepEqual(panel_after_prefix(unnamed_middle, ["g", "x", "y"], find_command).title, ["+Go", "+x", "+Deep"]);
+  assert.deepEqual(panel_after_prefix(root, [], find_command).title, ["keys"]);
 });
 
 test("the panel carries the border style, square when the keymap has none", async () => {
   const stored = (which_key_border?: "round") => ({ get: async () => ({ [COMPILED_KEYMAP_STORAGE_KEY]: { format_version: COMPILED_KEYMAP_VERSION, modes: { normal: root }, ignore_sites: [], mode_indicator: "always", which_key_delay_ms: 300, ...(which_key_border ? { which_key_border } : {}) } }) }) as never;
   assert.equal((await list_keys(stored(), find_command, { mode: "normal", prefix: ["g"] })).border, "square");
   assert.equal((await list_keys(stored("round"), find_command, { mode: "normal", prefix: ["g"] })).border, "round");
+});
+
+test("the title joins group names with the which-key.nvim breadcrumb", () => {
+  assert.deepEqual(fit_title(["+Go", "+Close tabs"], () => false), { text: "+Go » +Close tabs", dropped: 0 });
+  assert.deepEqual(fit_title(["keys"], () => false), { text: "keys", dropped: 0 });
+});
+
+test("a chain past the cap drops groups from the start and keeps the deepest", () => {
+  const chain = ["+Git", "+Hunk", "+Stage", "+Deep"];
+  const fits_in = (limit: number) => (text: string) => text.length > limit;
+  assert.deepEqual(fit_title(chain, fits_in(100)), { text: "+Git » +Hunk » +Stage » +Deep", dropped: 0 });
+  assert.deepEqual(fit_title(chain, fits_in(26)), { text: "… » +Hunk » +Stage » +Deep", dropped: 1 });
+  assert.deepEqual(fit_title(chain, fits_in(18)), { text: "… » +Stage » +Deep", dropped: 2 });
+  assert.deepEqual(fit_title(chain, fits_in(8)), { text: "… » +Deep", dropped: 3 });
+});
+
+test("a single over-long group stays whole for CSS to cut at its end", () => {
+  assert.deepEqual(fit_title(["+Very long group name"], () => true), { text: "+Very long group name", dropped: 0 });
+  assert.deepEqual(fit_title(["+Git", "+Very long group name"], () => true), { text: "… » +Very long group name", dropped: 1 });
 });

@@ -10,3 +10,17 @@ export function choose_columns(row_count: number, viewport_height_px: number): n
   const rows_per_column = Math.max(1, Math.min(MAX_ROWS_PER_COLUMN, Math.floor((viewport_height_px - RESERVED_HEIGHT_PX) / ROW_HEIGHT_PX)));
   return Math.min(MAX_COLUMNS, Math.max(1, Math.ceil(row_count / rows_per_column)));
 }
+
+// The title is the group chain joined like which-key.nvim's breadcrumb. When it is too wide, whole groups drop from the start so the deepest group stays,
+// and "…" stands for them. `overflows` says whether a candidate text is wider than the panel allows.
+// The cut is not CSS `direction: rtl` with `text-overflow`, because bidi reordering moves the "+" and the "»" to the wrong side.
+export const TITLE_SEPARATOR = " » ";
+
+export function fit_title(chain: readonly string[], overflows: (text: string) => boolean): { text: string; dropped: number } {
+  const shown = (dropped: number) => ({ text: (dropped === 0 ? chain : ["…", ...chain.slice(dropped)]).join(TITLE_SEPARATOR), dropped });
+  for (let dropped = 0; dropped < chain.length - 1; dropped++) {
+    if (!overflows(shown(dropped).text)) return shown(dropped);
+  }
+  // One group is left. If it alone is too wide, CSS cuts its end.
+  return shown(Math.max(0, chain.length - 1));
+}

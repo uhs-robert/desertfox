@@ -1,6 +1,19 @@
 [normal]
 ",w" = "help.whichkey"
+"Qabc" = "help.whichkey"
+"Zabcde" = "help.whichkey"
 [caret]
 ",w" = "help.whichkey"
 [visual]
 ",w" = "help.whichkey"
+
+# A chain of long group names, for the which-key title widening and cutting at the start.
+[group_names]
+Q = "Quarterly planning review"
+Qa = "Annual budget forecast"
+Qab = "Regional sales summary"
+Z = "Operations handbook chapter of the annual corporate procedures manual, part one"
+Za = "Operations handbook chapter of the annual corporate procedures manual, part two"
+Zab = "Operations handbook chapter of the annual corporate procedures manual, part three"
+Zabc = "Operations handbook chapter of the annual corporate procedures manual, part four"
+Zabcd = "Operations handbook chapter of the annual corporate procedures manual, part five"

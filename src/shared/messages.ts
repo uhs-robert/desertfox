@@ -40,8 +40,8 @@ export type ListKeys = {
   prefix: string[];
 };
 
-// What the panel shows: a title and the keys that can follow.
-export type WhichKeyPanel = { title: string; rows: WhichKeyRow[]; border: WhichKeyBorder };
+// What the panel shows: the chain of group names that leads here (empty when there is no panel) and the keys that can follow.
+export type WhichKeyPanel = { title: string[]; rows: WhichKeyRow[]; border: WhichKeyBorder };
 
 // One key that can follow a prefix. A key that starts a longer sequence has `more` and no description.
 export type WhichKeyRow = {

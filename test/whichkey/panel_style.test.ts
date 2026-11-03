@@ -19,3 +19,8 @@ test("the panel reads its colors through aliases that carry the fallbacks", () =
   assert.match(PANEL_STYLE, /--fg: var\(--oasisfox-fg, #(eee|f5f5dc)\)/);
   assert.doesNotMatch(PANEL_STYLE.replace(/--(bg|fg): var\([^)]*\)/g, ""), /var\(--oasisfox-(bg|fg)\)/);
 });
+
+test("the title sits in the flow so it widens the panel, and the chip is capped below the panel cap", () => {
+  assert.doesNotMatch(PANEL_STYLE.match(/\.title \{[^}]*\}/)![0], /position: absolute/);
+  assert.match(PANEL_STYLE, /\.chip \{[^}]*max-width: calc\(100vw - 64px\)[^}]*text-overflow: ellipsis/);
+});

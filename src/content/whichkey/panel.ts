@@ -1,9 +1,10 @@
-// The panel: one closed shadow root on the page, a floating frame with its title set into the top border, a row per key and a footer.
+// The panel: one closed shadow root on the page, a floating frame with its title set into the top border (the title takes part in the width, up to the page cap), a row per key and a footer.
 // Hovering a row shows what the command does.
 
 import type { WhichKeyPanel } from "../../shared/messages.ts";
+import { LAYERS } from "../../shared/layers.ts";
 import { create_surface } from "../surface.ts";
-import { choose_columns } from "./layout.ts";
+import { choose_columns, fit_title } from "./layout.ts";
 
 const CHAMFER_PX = 8;
 const chamfer = (cut: number) =>
@@ -13,10 +14,10 @@ const chamfer = (cut: number) =>
 // --bg and --fg alias the page-wide `--oasisfox-*` settings, each with its default as a fallback.
 export const STYLE = `
 .oasisfox-whichkey {
-  --bg: var(--oasisfox-bg, #222);
-  --fg: var(--oasisfox-fg, #eee);
+  --bg: var(--oasisfox-bg, #0c0e13);
+  --fg: var(--oasisfox-fg, #f5f5dc);
   --primary: var(--oasisfox-accent, #7fa3c9);
-  --secondary: var(--oasisfox-secondary, #e6c87a);
+  --secondary: var(--oasisfox-secondary, #f0e68c);
   --border: color-mix(in srgb, var(--primary) 60%, var(--bg));
   --dim: color-mix(in srgb, var(--fg) 55%, var(--bg));
   position: fixed; right: 16px; bottom: 44px; max-width: calc(100vw - 32px);
@@ -27,9 +28,9 @@ export const STYLE = `
 .round, .round .body { border-radius: var(--oasisfox-radius, 6px); }
 .chamfer { clip-path: ${chamfer(CHAMFER_PX)}; }
 .chamfer .body { clip-path: ${chamfer(CHAMFER_PX - 1)}; }
-.title { position: absolute; left: 12px; top: -11px; padding: 0 4px; z-index: 1;
+.title { position: relative; width: fit-content; height: 12px; margin: 0 12px -1px; padding: 0 4px; z-index: 1;
   background: linear-gradient(to bottom, transparent 11px, var(--bg) 11px, var(--bg) 12px, transparent 12px); }
-.chip { background: var(--primary); color: var(--bg); font-weight: bold; padding: 2px 7px; border-radius: 3px; white-space: nowrap; }
+.chip { box-sizing: border-box; max-width: calc(100vw - 64px); overflow: hidden; text-overflow: ellipsis; background: var(--primary); color: var(--bg); font-weight: bold; padding: 2px 7px; border-radius: 3px; white-space: nowrap; }
 .rows { display: grid; column-gap: 24px; }
 .row { display: flex; height: 22px; line-height: 22px; white-space: nowrap; overflow: hidden; }
 .key { color: var(--secondary); min-width: 3ch; }
@@ -49,7 +50,7 @@ function element<Tag extends keyof HTMLElementTagNameMap>(tag: Tag, class_name: 
 
 // Rows fill left to right, then down.
 export function show_panel({ title, rows, border }: WhichKeyPanel): void {
-  surface ??= create_surface("oasisfox-whichkey", STYLE);
+  surface ??= create_surface("oasisfox-whichkey", STYLE, LAYERS.which_key);
   const columns = choose_columns(rows.length, window.innerHeight);
   surface.text.className = "oasisfox-whichkey";
   const list = element("div", "rows");
@@ -69,11 +70,18 @@ export function show_panel({ title, rows, border }: WhichKeyPanel): void {
   body.append(list, footer);
   frame.append(body);
   const title_bar = element("div", "title");
-  title_bar.append(element("div", "chip", title));
+  const chip = element("div", "chip");
+  title_bar.append(chip);
   surface.text.replaceChildren(title_bar, frame);
-  // The key test reads this attribute, because the shadow root is closed.
+  // The key test reads these attributes, because the shadow root is closed.
   surface.host.setAttribute("data-oasisfox-whichkey", `${columns}:${rows.length}`);
   document.documentElement.append(surface.host);
+  // Only a rendered chip can say whether it overflows.
+  const { text, dropped } = fit_title(title, (candidate) => ((chip.textContent = candidate), chip.scrollWidth > chip.clientWidth));
+  chip.textContent = text;
+  // Numbers only: the group names are the user's, and a page script can read this host.
+  surface.host.setAttribute("data-oasisfox-whichkey-dropped", String(dropped));
+  surface.host.setAttribute("data-oasisfox-whichkey-width", String(frame.getBoundingClientRect().width));
 }
 
 export const hide_panel = (): void => surface?.host.remove();

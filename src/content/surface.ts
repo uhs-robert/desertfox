@@ -1,10 +1,7 @@
 // A closed shadow root on the page for one small surface. A surface style must not declare --oasisfox-bg, -fg,
 // -font or -radius: a declaration shadows a value the page or host sets. Write each default as a var() fallback.
 
-import { LAYERS } from "../shared/layers.ts";
-
-// The layer defaults to the which-key panel, whose caller does not pass one yet.
-export function create_surface(class_name: string, style: string, layer: number = LAYERS.which_key): { host: HTMLElement; text: HTMLElement } {
+export function create_surface(class_name: string, style: string, layer: number): { host: HTMLElement; text: HTMLElement } {
   const host = document.createElement("div");
   host.style.cssText = `all: initial; position: fixed; z-index: ${layer};`;
   const root = host.attachShadow({ mode: "closed" });
