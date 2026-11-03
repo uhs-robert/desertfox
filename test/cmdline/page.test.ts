@@ -16,6 +16,7 @@ const OPENED = {
   // A snippet only the background knows, and an alias to it from `command_aliases.toml`.
   commands: [
     { id: "my.jira", name: "jira", label: "Jira", intent: "" },
+    { id: "my.move", name: "move", label: "Move", intent: "", params: [{ name: "offset", type: "int" }, { name: "wrap", type: "bool", default: false }] },
     { id: "my.fetch", name: "fetch", label: "Fetch", intent: "", params: [{ name: "url", type: "string", main: true }] },
   ],
   command_aliases: { j: "my.jira" },
@@ -233,4 +234,15 @@ test("after the missing value is typed, the same open line submits once", async 
   await settle();
   assert.equal(host.submits().length, 1);
   assert.deepEqual(to_background, ["open_cmdline", "record_cmdline"]);
+});
+
+test("an empty value on a required param without a default counts as missing", async (t) => {
+  const { to_background, post_start, press_enter } = await load_page(t, "precheck_empty");
+  const host = post_start(TICKET, "move offset=");
+  await host.opened();
+  host.port.postMessage({ oasisfox_cmdline: { kind: "focused" } });
+  press_enter();
+  await settle();
+  assert.deepEqual(host.submits(), []);
+  assert.deepEqual(to_background, ["open_cmdline"]);
 });

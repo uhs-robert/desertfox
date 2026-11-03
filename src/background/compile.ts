@@ -70,6 +70,12 @@ function keep_node(node: TreeNode, path: string[], mode: string, input: CompileI
       return false;
     }
     if (step.invocation.prompt) {
+      // The fixed args must be good. Only the prompted param may be left out.
+      const fixed = check_args(command, step.invocation.args, input.enum_sources);
+      if (!fixed.ok && fixed.missing_param === undefined) {
+        warnings.push(`${mode}: skipped "${path.join("")}": ${fixed.error}`);
+        return false;
+      }
       // Only the router can open the command line with the typed text, so the step goes to the background.
       step.runs_in = "background";
       continue;

@@ -173,6 +173,12 @@ test("s/ and sg search with the selection and prompt when it is empty", async ()
     open_cmdline: async (_tab, _frame, text) => void log.push(text),
     show_refusal: async () => undefined,
   });
-  for (const key of ["s/", "sg"]) await router.run({ invocations: [normal[key] as { id: string }], mode: "normal" });
+  for (const key of ["s/", "sg"]) await router.run({ invocations: [normal[key] as { id: string }], mode: "normal", may_prompt: true });
   assert.deepEqual(log, ["sitesearch ", "repo "]);
+});
+
+test("a prompt binding with a bad fixed arg is skipped with a warning", () => {
+  const { warnings } = compile({ normal: { "q1": { id: "open.url", args: { where: "bogus" }, prompt: { param: "url" } }, "q2": { id: "open.url", args: { where: "tab" }, prompt: { param: "url" } } } } as KeymapConfig);
+  assert.equal(warnings.length, 1);
+  assert.match(warnings[0]!, /skipped "q1".*where/);
 });

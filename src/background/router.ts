@@ -32,15 +32,20 @@ export type RouteRequest = {
   // The tab the caller says it came from. The active tab wins when there is one.
   sender_tab_id?: number;
   frame_id?: number;
+  // Set by keys and Firefox shortcuts: a missing value opens the command line. A snippet's `oasisfox.run` leaves it
+  // unset and gets the validation failure instead, because nobody is there to type.
+  may_prompt?: boolean;
 };
 
 export type Router = { run: (request: RouteRequest) => Promise<RunResponse> };
 
 type Now = { active: ActiveTab | undefined; context: CommandContext };
 
-type Outcome = { ok: true } | { ok: false; message: string };
+// `waiting` means the command line is open for the user, so the rest of a sequence must not run.
+type Outcome = { ok: true; waiting?: true } | { ok: false; message: string };
 
 const done: Outcome = { ok: true };
+const waiting: Outcome = { ok: true, waiting: true };
 const refuse = (message: string): Outcome => ({ ok: false, message });
 
 export function create_router(deps: RouterDeps): Router {
@@ -58,6 +63,7 @@ export function create_router(deps: RouterDeps): Router {
   async function run(request: RouteRequest): Promise<RunResponse> {
     for (const invocation of request.invocations) {
       const outcome = await run_one(invocation, request).catch((error: unknown) => refuse(error instanceof Error ? error.message : String(error)));
+      if (outcome.ok && outcome.waiting) return { ok: true };
       if (outcome.ok) continue;
       const refusal: Refusal = { id: invocation.id, message: outcome.message };
       const { context } = await read_now(request);
@@ -76,18 +82,24 @@ export function create_router(deps: RouterDeps): Router {
     if (missing_need) return refuse(`${command.label} needs ${missing_need}`);
 
     // A count before a key that opens the line is dropped.
-    if (invocation.prompt) return open_line(command, invocation.args ?? {}, invocation.prompt.param, context, active, invocation.prompt.prefill);
+    const sources = await deps.get_enum_sources();
+    if (invocation.prompt && request.may_prompt) {
+      // The fixed args must be good. Only the prompted param may be left out.
+      const fixed = check_args(command, invocation.args, sources);
+      if (!fixed.ok && fixed.missing_param === undefined) return refuse(fixed.error);
+      return open_line(command, invocation.args ?? {}, invocation.prompt.param, context, active, invocation.prompt.prefill);
+    }
 
     const counted = apply_count(command, invocation);
-    const checked = check_args(command, counted.args, await deps.get_enum_sources());
+    const checked = check_args(command, counted.args, sources);
     if (!checked.ok) {
-      if (checked.missing_param === undefined) return refuse(checked.error);
+      if (checked.missing_param === undefined || !request.may_prompt) return refuse(checked.error);
       return open_line(command, counted.args ?? {}, checked.missing_param, context, active);
     }
 
     const filled = await fill_context_sources(checked.args, context, active);
     if (!filled.ok) {
-      return filled.empty_selection_param === undefined ? filled : open_line(command, counted.args ?? {}, filled.empty_selection_param, context, active);
+      return filled.empty_selection_param === undefined || !request.may_prompt ? filled : open_line(command, counted.args ?? {}, filled.empty_selection_param, context, active);
     }
 
     if (command.runs_in === "content") return run_in_content(command, filled.args, counted.times, context);
@@ -140,7 +152,7 @@ export function create_router(deps: RouterDeps): Router {
     if (tab_id === undefined) return refuse(`${command.label} needs a tab`);
     try {
       await deps.open_cmdline(tab_id, frame_id ?? 0, print_command(command, typed, { open_param }));
-      return done;
+      return waiting;
     } catch {
       return refuse(`${command.label} needs a page OasisFox runs on`);
     }
