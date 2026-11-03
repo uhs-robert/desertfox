@@ -30,6 +30,8 @@ export type ParamDef = {
   values?: readonly string[] | DynamicValues;
   // Which-key phrase per enum value, added to the command label when a binding sets that value. The default value has none. A value missing here reads as the raw value with spaces for underscores.
   value_labels?: Readonly<Record<string, string>>;
+  // One-letter flag. A string for a bool or valued param (`-r`, `-c=Work`), a value-to-letter map for a static enum (`{ tab: "t" }` gives `-t`). Never on main, rest or a dynamic enum.
+  short?: string | Readonly<Record<string, string>>;
   // A `string` param that takes all remaining words.
   rest?: boolean;
   // The one free-text param that config and the command line take as a bare word. At most one per command, `string` only.
