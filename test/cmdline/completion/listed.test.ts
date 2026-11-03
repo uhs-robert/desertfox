@@ -27,6 +27,13 @@ test("every cmdline command is hidden, including cmdline.open", () => {
   assert.ok(!names_from("caret").some((name) => name.startsWith("cmdline.")));
 });
 
+test("the key-only focus and mode commands are hidden but still parse", () => {
+  for (const id of ["mode.escape", "mode.pass_next", "page.blur", "page.focus_input", "browser.focus_page"]) {
+    assert.equal(commands.find((command) => command.id === id)?.completion, "hidden", id);
+    assert.ok(!names_from("normal").includes(id), id);
+  }
+});
+
 test("caret and visual commands are hidden from the normal mode and shown from their own", () => {
   assert.ok(!names_from("normal").includes("caret.move"));
   assert.ok(!names_from("normal").includes("visual.act"));
