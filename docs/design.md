@@ -85,7 +85,7 @@ Define-time checks cover names and params too:
 - A bare word names at most one param of a command: no two enum params share a value, and no bool name repeats a value.
 - A `when` names a param that exists, with valid values, and never the param itself.
 
-A set of options where at most one can apply, for example open, background tab or copy link for a hint, is one `enum` param with a value per option. Two words from the set both set that param, so the command line rejects them together. No list of exclusions exists. This turns the hint command into four params: `action`, `filter`, `selector` (with `when: { filter: "custom" }`) and the `rapid` switch.
+A set of options where at most one can apply, for example open, background tab or copy link for a hint, is one `enum` param with a value per option. Two words from the set both set that param, so the command line rejects them together. No list of exclusions exists. This turns the hint command into five params: `action`, `filter`, `selector` (with `when: { filter: "custom" }`), `text` and the `rapid` switch.
 
 A build step writes `commands.json` from the registry: id, name, aliases, label, intent, params, count and modes. Help, the palette, which-key and the native `list` verb read it. The content script does not load it.
 

@@ -170,6 +170,8 @@ export const DEFAULT_KEYMAP: KeymapConfig = {
     v: { id: "hint.run", args: { action: "select" } },
     ";b": { id: "hint.run", args: { filter: "clickable" } },
     ";B": { id: "hint.run", args: { action: "background" } },
+    ";y": { id: "hint.run", args: { action: "copy", filter: "links" } },
+    ";r": { id: "hint.run", args: { action: "background", filter: "links", rapid: true } },
     ";i": { id: "hint.run", args: { filter: "inputs" } },
     ";l": { id: "hint.run", args: { filter: "links" } },
     ":": { id: "cmdline.open" },

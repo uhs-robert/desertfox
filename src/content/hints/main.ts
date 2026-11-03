@@ -5,7 +5,8 @@ import { CONFIG_STATUS_STORAGE_KEY } from "../../background/storage_keys.ts";
 import type { BundleHostApi } from "../bundle_host.ts";
 import { link_address, OPEN_PLACES, perform, UNBUILT_ACTIONS } from "./actions.ts";
 import type { HintAction, Place } from "./actions.ts";
-import { collect, selector_for } from "./candidates.ts";
+import { copy_text } from "../caret/copy_text.ts";
+import { collect, has_text, selector_for } from "./candidates.ts";
 import type { Found, HintFilter } from "./candidates.ts";
 import { clean_letters, make_labels } from "./labels.ts";
 import { create_picker } from "./pick.ts";
@@ -22,6 +23,13 @@ type Session = {
   action: HintAction;
   // Keys typed while the elements are still being found.
   waiting_tokens: string[];
+  // Rapid mode picks again after each pick.
+  rapid: boolean;
+  filter: HintFilter;
+  custom_selector: string | undefined;
+  // The `text` param as typed, and lower-cased for the match. Both are undefined without it.
+  text: string | undefined;
+  lower_text: string | undefined;
   ready?: { picker: ReturnType<typeof create_picker>; found: Found[]; view: ReturnType<typeof create_view>; stop_following: () => void };
 };
 
@@ -68,9 +76,18 @@ async function read_letters(): Promise<string[]> {
   return clean_letters(status?.settings?.hint_letters);
 }
 
+function copy_to_clipboard(text: string): void {
+  void copy_text(navigator.clipboard, text).then((copied) => {
+    // A view of its own, so the notice does not wipe the labels that rapid mode shows.
+    create_view().show_message(copied ? `Copied ${text.length > 40 ? text.slice(0, 40) + "..." : text}` : "Could not copy to the clipboard");
+  });
+}
+
 function open_link(url: string, place: Place): void {
   void browser.runtime.sendMessage({ type: "run", invocations: [{ id: "open.url", args: { url, where: place } }], mode: "normal" });
 }
+
+const deps = { open_link, copy: copy_to_clipboard };
 
 function register(host: BundleHostApi): void {
   let session: Session | undefined;
@@ -82,6 +99,38 @@ function register(host: BundleHostApi): void {
     session = undefined;
   }
 
+  // Finds, labels and shows the hints. Keys typed meanwhile wait and replay. Rapid mode calls it again after each pick.
+  async function build(current: Session, candidates: Found[], first_build: boolean): Promise<void> {
+    const [letters, visible] = await Promise.all([read_letters(), keep_visible_ones(candidates)]);
+    if (current.cancelled) return;
+    const found = current.lower_text === undefined ? visible : visible.filter((item) => link_address(item.element as HTMLAnchorElement) !== undefined && has_text(item.element, current.lower_text!));
+    const view = create_view();
+    if (found.length === 0) {
+      host.set_mode("normal");
+      view.show_message(current.text === undefined ? "No hints on this page" : `No link matches ${current.text}`);
+      return;
+    }
+    // One match needs no label. Only the first build does this, so rapid mode cannot repeat the same pick.
+    if (first_build && current.lower_text !== undefined && found.length === 1) {
+      host.set_mode("normal");
+      perform(current.action, found[0]!.element as HTMLElement, deps);
+      return;
+    }
+    const labels = make_labels(found.length, letters);
+    view.show(found.map((item, index) => ({ found: item, text: labels[index]! })));
+    current.ready = { picker: create_picker(labels), found, view, stop_following: follow_windows(windows_of(found), view.reposition) };
+    const queued = current.waiting_tokens.splice(0);
+    for (const [index, token] of queued.entries()) {
+      if (current.cancelled) break;
+      // A rapid pick starts the next build, which replays the keys that are left.
+      if (!current.ready) {
+        current.waiting_tokens.unshift(...queued.slice(index));
+        break;
+      }
+      handle_token(current, token);
+    }
+  }
+
   function handle_token(current: Session, token: string): "handled" | "pass" {
     const ready = current.ready!;
     const outcome = ready.picker.on_token(token);
@@ -89,9 +138,18 @@ function register(host: BundleHostApi): void {
     ready.view.show_progress(outcome.typed, new Set(outcome.still_possible));
     if (outcome.picked !== undefined) {
       const picked = ready.found[outcome.picked]!.element as HTMLElement;
-      // Leave hint mode first: a picked field then raises insert mode through its own focus event.
-      host.set_mode("normal");
-      perform(current.action, picked, { open_link });
+      if (!current.rapid) {
+        // Leave hint mode first: a picked field then raises insert mode through its own focus event.
+        host.set_mode("normal");
+        perform(current.action, picked, deps);
+        return "handled";
+      }
+      // Rapid: the pick may delete or move elements, so drop these labels and label the page again.
+      ready.stop_following();
+      ready.view.clear_labels();
+      delete current.ready;
+      perform(current.action, picked, deps);
+      if (!current.cancelled) void build(current, find_candidates(current.filter, current.custom_selector, current.action), false);
     }
     return "handled";
   }
@@ -111,29 +169,21 @@ function register(host: BundleHostApi): void {
     const action = args.action as HintAction;
     if (UNBUILT_ACTIONS.includes(action)) throw new Error(`hint ${action} is not built yet (phase 2)`);
     end_session();
-    const candidates = find_candidates(args.filter as HintFilter, args.selector as string | undefined, action);
+    const filter = args.filter as HintFilter;
+    const custom_selector = args.selector as string | undefined;
+    let candidates: Found[];
+    try {
+      candidates = find_candidates(filter, custom_selector, action);
+    } catch {
+      return create_view().show_message(`Invalid selector: ${custom_selector}`);
+    }
     // With nothing to label the mode never changes, so keys held during the load run as normal keys.
-    if (candidates.length === 0) return create_view().show_message("No hints on this page");
-    const current: Session = { cancelled: false, action, waiting_tokens: [] };
+    const text = (args.text as string | undefined) || undefined;
+    if (candidates.length === 0) return create_view().show_message(text === undefined ? "No hints on this page" : `No link matches ${text}`);
+    const current: Session = { cancelled: false, action, waiting_tokens: [], rapid: args.rapid === true, filter, custom_selector, text, lower_text: text?.toLowerCase() };
     session = current;
     host.set_mode("hint");
-    void (async () => {
-      const [letters, found] = await Promise.all([read_letters(), keep_visible_ones(candidates)]);
-      if (current.cancelled) return;
-      const view = create_view();
-      if (found.length === 0) {
-        host.set_mode("normal");
-        view.show_message("No hints on this page");
-        return;
-      }
-      const labels = make_labels(found.length, letters);
-      view.show(found.map((item, index) => ({ found: item, text: labels[index]! })));
-      current.ready = { picker: create_picker(labels), found, view, stop_following: follow_windows(windows_of(found), view.reposition) };
-      for (const token of current.waiting_tokens.splice(0)) {
-        if (current.cancelled) break;
-        handle_token(current, token);
-      }
-    })();
+    void build(current, candidates, true);
   });
 }
 
