@@ -89,30 +89,37 @@ test("tab.move clamps at both ends", async () => {
   assert.deepEqual(log, ["move 102 3", "move 101 0", "move 101 2"]);
 });
 
-test("focus after close follows the side and falls back at the edges", () => {
-  assert.equal(focus_index_after_close(2, 5, "right"), 3);
-  assert.equal(focus_index_after_close(2, 5, "left"), 1);
-  assert.equal(focus_index_after_close(0, 5, "left"), 1);
-  assert.equal(focus_index_after_close(4, 5, "right"), 3);
-  assert.equal(focus_index_after_close(0, 1, "left"), undefined);
+test("focus after close follows the direction and falls back at the edges", () => {
+  assert.equal(focus_index_after_close(2, 5, "next"), 3);
+  assert.equal(focus_index_after_close(2, 5, "previous"), 1);
+  assert.equal(focus_index_after_close(0, 5, "previous"), 1);
+  assert.equal(focus_index_after_close(4, 5, "next"), 3);
+  assert.equal(focus_index_after_close(0, 1, "previous"), undefined);
 });
 
-test("tab.close focus=left activates the left tab, then closes", async () => {
+test("tab.close side=focus_previous activates the previous tab, then closes", async () => {
   const { handlers, log } = make_fake(make_tabs(3));
-  await handlers.close(ctx_at(101), { focus: "left" });
+  await handlers.close(ctx_at(101), { side: "focus_previous" });
   assert.deepEqual(log, ["activate 100", "remove 101"]);
 });
 
 test("tab.close on the last tab closes without activating", async () => {
   const { handlers, log } = make_fake(make_tabs(1));
-  await handlers.close(ctx_at(100), { focus: "right" });
+  await handlers.close(ctx_at(100), { side: "none" });
   assert.deepEqual(log, ["remove 100"]);
+});
+
+test("tab.close with all_before or all_after keeps this tab and closes the unpinned ones on that side", async () => {
+  const { handlers, log } = make_fake(make_tabs(5, [{ pinned: true }]));
+  await handlers.close(ctx_at(102), { side: "all_before" });
+  await handlers.close(ctx_at(102), { side: "all_after" });
+  assert.deepEqual(log, ["remove 101", "remove 103,104"]);
 });
 
 test("side_tab_ids skips pinned tabs and the current tab", () => {
   const tabs = make_tabs(5, [{ pinned: true }]);
-  assert.deepEqual(side_tab_ids(tabs, 2, "left"), [101]);
-  assert.deepEqual(side_tab_ids(tabs, 2, "right"), [103, 104]);
+  assert.deepEqual(side_tab_ids(tabs, 2, "before"), [101]);
+  assert.deepEqual(side_tab_ids(tabs, 2, "after"), [103, 104]);
 });
 
 test("next_audible_index wraps, and is undefined when nothing plays", () => {
@@ -128,8 +135,8 @@ test("tab.detach refuses for the only tab", async () => {
 
 test("pin and mute toggle from the current state", async () => {
   const { handlers, log } = make_fake(make_tabs(2, [{ pinned: true }, { muted: false }]));
-  await handlers.pin_toggle(ctx_at(100));
-  await handlers.mute_toggle(ctx_at(101));
+  await handlers.pin(ctx_at(100));
+  await handlers.mute(ctx_at(101));
   assert.deepEqual(log, ["pin 100 false", "mute 101 true"]);
 });
 

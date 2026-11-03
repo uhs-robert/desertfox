@@ -29,6 +29,8 @@ export type TabDeps = {
   find_container_store_id: FindContainerStoreId;
 };
 
+type CloseSide = "none" | "all_before" | "all_after" | "focus_previous";
+
 type Position = { tabs: TabInfo[]; current: TabInfo };
 
 export function make_tab_handlers(deps: TabDeps) {
@@ -79,24 +81,24 @@ export function make_tab_handlers(deps: TabDeps) {
       if (target === undefined) throw new Error("no tab is playing sound");
       await activate_at(tabs, target);
     },
-    pin_toggle: async (ctx: CommandContext) => {
+    pin: async (ctx: CommandContext) => {
       const { current } = await position_of(ctx);
       await deps.set_pinned(current.id, !current.pinned);
     },
-    mute_toggle: async (ctx: CommandContext) => {
+    mute: async (ctx: CommandContext) => {
       const { current } = await position_of(ctx);
       await deps.set_muted(current.id, !current.muted);
     },
-    close: async (ctx: CommandContext, args: { focus: "left" | "right" }) => {
+    close: async (ctx: CommandContext, args: { side: CloseSide }) => {
       const { tabs, current } = await position_of(ctx);
-      const neighbor_index = focus_index_after_close(current.index, tabs.length, args.focus);
+      if (args.side === "all_before" || args.side === "all_after") {
+        await deps.remove(side_tab_ids(tabs, current.index, args.side === "all_before" ? "before" : "after"));
+        return;
+      }
+      const neighbor_index = focus_index_after_close(current.index, tabs.length, args.side === "focus_previous" ? "previous" : "next");
       // Focus moves first so Firefox does not pick the tab it would choose after the close.
       if (neighbor_index !== undefined) await activate_at(tabs, neighbor_index);
       await deps.remove([current.id]);
-    },
-    close_side: async (ctx: CommandContext, args: { side: "left" | "right" }) => {
-      const { tabs, current } = await position_of(ctx);
-      await deps.remove(side_tab_ids(tabs, current.index, args.side));
     },
     undo_close: async () => {
       if (!(await deps.restore_last_closed_tab())) throw new Error("no closed tab to restore");
@@ -127,16 +129,16 @@ export function goto_target_index(index: number, length: number): number {
   return clamp_index(index > 0 ? index - 1 : length + index, length);
 }
 
-export function focus_index_after_close(closing_index: number, length: number, focus: "left" | "right"): number | undefined {
+export function focus_index_after_close(closing_index: number, length: number, focus: "next" | "previous"): number | undefined {
   if (length === 1) return undefined;
-  const preferred = focus === "left" ? closing_index - 1 : closing_index + 1;
-  return preferred >= 0 && preferred < length ? preferred : focus === "left" ? closing_index + 1 : closing_index - 1;
+  const preferred = focus === "previous" ? closing_index - 1 : closing_index + 1;
+  return preferred >= 0 && preferred < length ? preferred : focus === "previous" ? closing_index + 1 : closing_index - 1;
 }
 
 // Pinned tabs stay, as in the Firefox "close tabs to the right/left" items.
-export function side_tab_ids(tabs: TabInfo[], current_index: number, side: "left" | "right"): number[] {
+export function side_tab_ids(tabs: TabInfo[], current_index: number, side: "before" | "after"): number[] {
   return tabs
-    .filter((tab) => !tab.pinned && (side === "left" ? tab.index < current_index : tab.index > current_index))
+    .filter((tab) => !tab.pinned && (side === "before" ? tab.index < current_index : tab.index > current_index))
     .map((tab) => tab.id);
 }
 
@@ -247,35 +249,36 @@ define("tab.goto_audible", {
   run: (ctx) => handlers.goto_audible(ctx),
 });
 
-define("tab.pin_toggle", {
+define("tab.pin", {
   label: "Toggle pin",
   intent: "Pin the tab, or unpin it when it is pinned.",
   runs_in: "background",
-  run: (ctx) => handlers.pin_toggle(ctx),
+  run: (ctx) => handlers.pin(ctx),
 });
 
-define("tab.mute_toggle", {
+define("tab.mute", {
   label: "Toggle mute",
   intent: "Mute the tab, or unmute it when it is muted.",
   runs_in: "background",
-  run: (ctx) => handlers.mute_toggle(ctx),
+  run: (ctx) => handlers.mute(ctx),
 });
 
 define("tab.close", {
   label: "Close tab",
-  intent: "Close the tab and focus the tab to its right, or to its left when focus is left. A count prefix repeats it.",
-  params: [{ name: "focus", type: "enum", values: ["right", "left"], default: "right", value_labels: { left: "and focus left" } }],
+  intent: "Close the tab and focus the next tab, or the previous one with focus_previous. With all_before or all_after, keep this tab and close every unpinned tab before or after it instead. A count prefix repeats it.",
+  params: [
+    {
+      name: "side",
+      type: "enum",
+      values: ["none", "all_before", "all_after", "focus_previous"],
+      default: "none",
+      short: { all_before: "B", all_after: "A", focus_previous: "P" },
+      value_labels: { all_before: "for all before it", all_after: "for all after it", focus_previous: "and focus previous" },
+    },
+  ],
   runs_in: "background",
   count: "repeat",
-  run: (ctx, args) => handlers.close(ctx, args as { focus: "left" | "right" }),
-});
-
-define("tab.close_side", {
-  label: "Close tabs to one side",
-  intent: "Close every unpinned tab to the left or right of this tab.",
-  params: [{ name: "side", type: "enum", values: ["left", "right"], value_labels: { left: "on the left", right: "on the right" } }],
-  runs_in: "background",
-  run: (ctx, args) => handlers.close_side(ctx, args as { side: "left" | "right" }),
+  run: (ctx, args) => handlers.close(ctx, args as { side: CloseSide }),
 });
 
 define("tab.reopen_in_container", {

@@ -11,7 +11,7 @@ const branch = (children: Record<string, TreeNode>): TreeBranch => ({ kind: "bra
 
 const root = branch({
   j: leaf("scroll.down", "Scroll Down"),
-  g: branch({ t: leaf("tab.next", "Next Tab"), T: leaf("tab.prev"), x: branch({ x: leaf("tab.close"), "0": leaf("tab.close_side") }) }),
+  g: branch({ t: leaf("tab.next", "Next Tab"), T: leaf("tab.prev"), x: branch({ x: leaf("tab.close"), "0": leaf("tab.close") }) }),
 });
 
 const commands: Record<string, CommandMeta> = {
