@@ -1,7 +1,7 @@
 // What the list offers at the caret: command rows, flag rows of the typed command and value rows. Each row carries
 // the text to put in the line, the three list columns and the usage the note row shows.
 
-import type { CommandMeta, ParamDef } from "../../shared/command.ts";
+import type { CommandMeta, Mode, ParamDef } from "../../shared/command.ts";
 import { first_sentence, flag_alternatives, usage_line } from "../../shared/registry/index.ts";
 import type { CommandLookup, EnumSources } from "../../shared/registry/index.ts";
 import { bare_word_param, flag_params, is_dynamic_values, static_values, subject_param } from "../../shared/registry/params.ts";
@@ -71,10 +71,15 @@ function args_of(command: Command): string {
   return [...engine, ...flag_params(command).flatMap(flags_of).map((flag) => flag.long), ...(subject ? [`<${subject.name}>`] : [])].join(" ");
 }
 
-export function command_rows(commands: readonly CommandMeta[], command_aliases: Readonly<Record<string, string>> = {}): Row[] {
+// Whether the list offers the command on a line opened from `opened_from`.
+export const is_listed = (command: Pick<CommandMeta, "completion">, opened_from: string): boolean =>
+  command.completion === undefined || (command.completion !== "hidden" && command.completion.some((mode: Mode) => mode === opened_from));
+
+export function command_rows(commands: readonly CommandMeta[], command_aliases: Readonly<Record<string, string>> = {}, opened_from = "normal"): Row[] {
   const configured = new Map<string, string[]>();
   for (const [alias, id] of Object.entries(command_aliases)) configured.set(id, [...(configured.get(id) ?? []), alias]);
   return commands
+    .filter((command) => is_listed(command, opened_from))
     .map((command): Row => {
       const name = command.name ?? command.id;
       return {
@@ -127,8 +132,8 @@ function value_rows(command: Command, param: ParamDef, sources: EnumSources): Ro
 }
 
 // The completer reads the commands once, so each keystroke only ranks.
-export function create_completer(lookup: CommandLookup, commands: readonly CommandMeta[], command_aliases: Readonly<Record<string, string>>, sources: EnumSources) {
-  const all_commands = command_rows(commands, command_aliases);
+export function create_completer(lookup: CommandLookup, commands: readonly CommandMeta[], command_aliases: Readonly<Record<string, string>>, sources: EnumSources, opened_from = "normal") {
+  const all_commands = command_rows(commands, command_aliases, opened_from);
   return (text: string, caret: number): Completion => {
     const context = cursor_context(text, caret, lookup.find);
     if (context.kind === "none") return NO_COMPLETION;

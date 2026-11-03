@@ -2,6 +2,7 @@ import { caret_move } from "../content/handlers/lazy_bundle.ts";
 import { define } from "../shared/registry/index.ts";
 
 define("caret.move", {
+  completion: ["caret", "visual"],
   label: "Move caret",
   intent: "Move the caret or extend the selection. In caret mode it moves the caret and in visual mode it extends the selection.",
   params: [

@@ -70,6 +70,7 @@ async function load_host(t: TestContext, tag: string, { ticket_fails = false } =
       innerHeight: 600,
       oasisfox_host: {
         set_mode: (mode: string) => void modes.push(mode),
+        get_mode: () => "normal",
         register_sink: (mode: string, sink: Sink) => void sinks.set(mode, sink),
         register_handler: (id: string, handler: (args: Record<string, unknown>) => void) => void handlers.set(id, handler),
       },

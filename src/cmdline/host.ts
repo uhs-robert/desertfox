@@ -35,6 +35,8 @@ type Open = {
   removal_watch: MutationObserver;
   typed: string[];
   text: string;
+  // The mode the key was pressed in, sent to the page in `start`.
+  from_mode: string;
   timer: ReturnType<typeof setTimeout>;
 };
 
@@ -61,7 +63,7 @@ if (!page.oasisfox_cmdline_ready) {
     unmount();
   };
 
-  function mount(text: string) {
+  function mount(text: string, from_mode: string) {
     const holder = document.createElement("div");
     holder.style.cssText = `all:initial;position:fixed;left:0;right:0;bottom:0;height:${BAR_HEIGHT};z-index:${LAYERS.command_line};`;
     const frame = document.createElement("iframe");
@@ -81,6 +83,7 @@ if (!page.oasisfox_cmdline_ready) {
       }),
       typed: [],
       text,
+      from_mode,
       timer: setTimeout(close, READY_TIMEOUT_MS),
     };
     // A page script can send the frame somewhere else, and then the port is dead. Firefox gives no event for that, so
@@ -122,7 +125,7 @@ if (!page.oasisfox_cmdline_ready) {
       else if (message.kind === "submit") void submit(message);
     };
     current.port = channel.port1;
-    const message: HostToPage = { kind: "start", ticket, text: current.text, tokens: current.typed };
+    const message: HostToPage = { kind: "start", ticket, text: current.text, tokens: current.typed, mode: current.from_mode };
     current.frame.contentWindow?.postMessage(wrap(message), origin, [channel.port2]);
     current.typed = [];
   };
@@ -155,7 +158,7 @@ if (!page.oasisfox_cmdline_ready) {
 
   host.register_handler("cmdline.open", (args) => {
     if (open) return;
-    mount(typeof args.text === "string" ? args.text : "");
+    mount(typeof args.text === "string" ? args.text : "", host.get_mode());
     host.set_mode("cmdline");
   });
 }
