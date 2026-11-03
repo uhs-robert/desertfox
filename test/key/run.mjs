@@ -1,7 +1,9 @@
 // The key test: real key presses in a nested session, results read from pages that report to a local server.
 // Needs SHADOW_SH, a script with `up|spawn|keys|down <name>` subcommands for a nested, invisible compositor.
+// `status` is optional. The sweep reads its stdout for lines that start `<name>: ` and skips the sweep if the verb fails.
+// The cleanup of killed runs works only for drivers that keep sessions in /tmp/shadow-<uid>-<name>.
 import { execFile, spawnSync } from "node:child_process";
-import { cpSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import net from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -16,13 +18,15 @@ const key_test_dir = dirname(fileURLToPath(import.meta.url));
 const repo_dir = resolve(key_test_dir, "../..");
 const dist_dir = join(repo_dir, "dist");
 const EXTENSION_ID = "oasisfox@uhs-robert";
-const SHADOW_NAME = "oasiskey";
+// shadow.sh caps names at 8 characters. "ok" plus a base-36 pid is at most 8 and unique among live runs.
+const SHADOW_NAME = `ok${process.pid.toString(36)}`;
+if (SHADOW_NAME.length > 8) throw new Error(`shadow name ${SHADOW_NAME} is longer than 8 characters`);
 const FRESH_LOAD_COUNT = 24;
 const PADDED_BUNDLE_BYTES = 20 * 1024;
 
 const shadow_sh = process.env.SHADOW_SH;
 if (!shadow_sh) {
-  console.error("key-test: set SHADOW_SH to a script that runs `<script> {up|spawn|keys|down} <name> ...` in a nested session.");
+  console.error("key-test: set SHADOW_SH to a script that runs `<script> {up|spawn|keys|down} <name> ...` in a nested session, and optionally `status` (lines `<name>: up|down ...`).");
   process.exit(2);
 }
 
@@ -38,6 +42,47 @@ async function send_keys(...wtype_args) {
 const ALT = (key) => ["-M", "alt", key, "-m", "alt"];
 const CTRL = (key) => ["-M", "ctrl", key, "-m", "ctrl"];
 const SHIFT_ESCAPE = ["-M", "shift", "-k", "Escape", "-m", "shift"];
+
+function process_is_alive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return error.code === "EPERM";
+  }
+}
+
+// shadow.sh keeps a session's runtime dir here (a literal /tmp, not TMPDIR), and `down` removes the dir with the marker in it.
+const OWNER_MARKER = "oasisfox-key-owner";
+const marker_path = (name) => join("/tmp", `shadow-${process.getuid()}-${name}`, OWNER_MARKER);
+
+function read_owner_pid(name) {
+  try {
+    const text = readFileSync(marker_path(name), "utf8").trim();
+    return /^\d+$/.test(text) && Number(text) > 0 ? Number(text) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+// A killed run leaves its session behind. Stop each session whose marker names a dead owner.
+// A live run is never touched. This run's own pid counts as dead, since a recycled pid can match an old leftover.
+// A session with no marker is skipped, whatever its name. That includes one killed between `up` and the marker write, which errs toward safety.
+async function sweep_dead_sessions() {
+  let stdout;
+  try {
+    ({ stdout } = await shadow("status"));
+  } catch (error) {
+    console.error(`sweep skipped: shadow status failed: ${error.message}`);
+    return;
+  }
+  for (const [, name] of stdout.matchAll(/^([a-z0-9][a-z0-9-]*): /gm)) {
+    const owner_pid = read_owner_pid(name);
+    if (!Number.isInteger(owner_pid) || (owner_pid !== process.pid && process_is_alive(owner_pid))) continue;
+    console.log(`sweep: stopping ${name}, left by dead run ${owner_pid}`);
+    await shadow("down", name).catch((error) => console.error(`sweep: down ${name} failed: ${error.message}`));
+  }
+}
 
 async function free_port() {
   const probe = net.createServer();
@@ -98,6 +143,20 @@ async function main() {
   const events = server.events;
   const debug_port = await free_port();
   let rdp;
+  // A signal can arrive during the normal teardown, so every path shares this one run of the cleanup.
+  let teardown_started;
+  const teardown = () => {
+    teardown_started ??= (async () => {
+      rdp?.close();
+      await shadow("down", SHADOW_NAME).catch((error) => console.error(`shadow down failed: ${error.message}`));
+      server.close();
+      rmSync(work_dir, { recursive: true, force: true });
+    })();
+    return teardown_started;
+  };
+  for (const [signal, code] of [["SIGINT", 130], ["SIGTERM", 143]]) {
+    process.on(signal, () => teardown().finally(() => process.exit(code)));
+  }
 
   const url_of = (kind, id) => `http://127.0.0.1:${server.port}/${kind}?id=${id}`;
   const since = (mark) => events.slice(mark);
@@ -157,7 +216,11 @@ async function main() {
   }
 
   try {
+    await sweep_dead_sessions();
     await shadow("up", SHADOW_NAME);
+    // A driver that keeps sessions elsewhere has no such dir. Its sessions are never swept, which is safe.
+    if (existsSync(dirname(marker_path(SHADOW_NAME)))) writeFileSync(marker_path(SHADOW_NAME), String(process.pid));
+    else console.error(`no runtime dir for ${SHADOW_NAME} under /tmp: skipping the owner marker, so a killed run's session will not be swept`);
     await shadow("spawn", SHADOW_NAME, join(key_test_dir, "launch_firefox.sh"), work_dir, profile_dir, String(debug_port), managed_file);
     for (let attempt = 0; ; attempt++) {
       try {
@@ -635,10 +698,7 @@ async function main() {
 
     await p1_cases({ run_case, expect, send_keys, sleep, open_page, events, wait_event, scroll_of, last_scroll_y, find_event, evaluate_in_background, rdp, EXTENSION_ID });
   } finally {
-    rdp?.close();
-    await shadow("down", SHADOW_NAME).catch((error) => console.error(`shadow down failed: ${error.message}`));
-    server.close();
-    rmSync(work_dir, { recursive: true, force: true });
+    await teardown();
     console.log(JSON.stringify(measurements));
   }
 
