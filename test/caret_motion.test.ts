@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { move_once } from "../src/content/caret/motion.ts";
 import type { Motion, MotionUnit } from "../src/content/caret/motion.ts";
-import { move_cursor, selected_text, swap_ends } from "../src/content/caret/selection_state.ts";
+import { selected_text, swap_ends, with_caret } from "../src/content/caret/selection_state.ts";
 
 // Indexes: "foo bar.baz" is 0-10, its "\n" is 11, the empty line is 12, "  qux quux" is 13-22, "\n" is 23, "last" is 24-27.
 const TEXT = "foo bar.baz\n\n  qux quux\nlast";
@@ -39,28 +39,9 @@ test("h and l stay on their line", () => {
   assert.equal(move_once(TEXT, 15, motion("char", { direction: "back" })), 14);
 });
 
-test("0, ^ and $ find the line ends, also on the empty line", () => {
-  assert.equal(move_once(TEXT, 19, motion("line_start")), 13);
-  assert.equal(move_once(TEXT, 19, motion("line_first")), 15);
-  assert.equal(move_once(TEXT, 15, motion("line_end")), 22);
-  assert.equal(move_once(TEXT, 12, motion("line_end")), 12);
-  assert.equal(move_once(TEXT, 12, motion("line_start")), 12);
-});
-
 test("gg and G go to the first non-blank of the first and last line", () => {
   assert.equal(move_once(TEXT, 19, motion("start")), 0);
   assert.equal(move_once(TEXT, 3, motion("end")), 24);
-});
-
-test("j and k keep the wanted column over a shorter line", () => {
-  const down = move_cursor(TEXT, { anchor: 4, caret: 4 }, motion("line"), false, undefined);
-  assert.equal(down.cursor.caret, 12);
-  const down_again = move_cursor(TEXT, down.cursor, motion("line"), false, down.wanted_column);
-  assert.equal(down_again.cursor.caret, 17);
-  const up = move_cursor(TEXT, down_again.cursor, motion("line", { direction: "back" }), false, down_again.wanted_column);
-  assert.equal(up.cursor.caret, 12);
-  assert.equal(move_once(TEXT, 25, motion("line")), 25);
-  assert.equal(move_once(TEXT, 4, motion("line", { direction: "back" })), 4);
 });
 
 test("a count repeats the motion", () => {
@@ -74,8 +55,7 @@ test("empty text keeps the caret at 0", () => {
 
 test("visual mode keeps the anchor and includes both ends", () => {
   let cursor = { anchor: 8, caret: 8 };
-  const moved = move_cursor(TEXT, cursor, motion("word_end"), true, undefined);
-  cursor = moved.cursor;
+  cursor = with_caret(cursor, move_once(TEXT, cursor.caret, motion("word_end")), true);
   assert.deepEqual(cursor, { anchor: 8, caret: 10 });
   assert.equal(selected_text(TEXT, cursor), "baz");
   const swapped = swap_ends(cursor);
@@ -86,8 +66,8 @@ test("visual mode keeps the anchor and includes both ends", () => {
 test("V, 3w, v, e yields the word the key test copies", () => {
   const text = "caret p7\nfoo bar.baz";
   let cursor = { anchor: 0, caret: 0 };
-  for (let count = 0; count < 3; count++) cursor = move_cursor(text, cursor, motion("word"), false, undefined).cursor;
+  for (let count = 0; count < 3; count++) cursor = with_caret(cursor, move_once(text, cursor.caret, motion("word")), false);
   cursor = { anchor: cursor.caret, caret: cursor.caret };
-  cursor = move_cursor(text, cursor, motion("word_end"), true, undefined).cursor;
+  cursor = with_caret(cursor, move_once(text, cursor.caret, motion("word_end")), true);
   assert.equal(selected_text(text, cursor), "bar");
 });

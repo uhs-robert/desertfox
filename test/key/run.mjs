@@ -90,9 +90,10 @@ async function main() {
   mkdirSync(profile_dir);
   cpSync(join(key_test_dir, "user.js"), join(profile_dir, "user.js"), { recursive: true });
   const managed_file = join(managed_dir, `${EXTENSION_ID}.json`);
-  build_test_config(config_dir, managed_file);
-
   const server = await start_server();
+  // The built-in duck engine is replaced by this server, so a search from the keys lands on a page the test can read.
+  writeFileSync(join(config_dir, "search_engines.toml"), `duck = { url = "http://127.0.0.1:${server.port}/page?id=search_result&q=%s", label = "Test server" }\n`);
+  build_test_config(config_dir, managed_file);
   const events = server.events;
   const debug_port = await free_port();
   let rdp;

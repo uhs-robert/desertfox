@@ -1,5 +1,6 @@
 // Vim motions over plain text. A position is the index of the character under the caret. Lines end at "\n".
 // The caret never rests on a "\n" except on an empty line, where that "\n" is the line itself.
+// Motions along the screen line (j k 0 ^ $) are not here: where text wraps is the browser's to say.
 
 export type MotionUnit = "char" | "word" | "word_end" | "line" | "line_start" | "line_first" | "line_end" | "start" | "end";
 export type Motion = { unit: MotionUnit; direction: "forward" | "back"; big: boolean };
@@ -69,27 +70,10 @@ function word_end_back(text: string, from: number, big: boolean): number {
   return index;
 }
 
-// Line moves keep a wanted column, so a short line in between does not lose it.
-function line_move(text: string, from: number, forward: boolean, wanted_column: number): number {
-  const start = line_start_of(text, from);
-  let target_start: number;
-  if (forward) {
-    const next = text.indexOf("\n", from);
-    if (next < 0 || next === text.length - 1) return from;
-    target_start = next + 1;
-  } else {
-    if (start === 0) return from;
-    target_start = line_start_of(text, start - 1);
-  }
-  return Math.min(target_start + wanted_column, line_end_of(text, target_start));
-}
+export const SCREEN_LINE_UNITS: readonly MotionUnit[] = ["line", "line_start", "line_first", "line_end"];
 
-export function column_of(text: string, index: number): number {
-  return index - line_start_of(text, index);
-}
-
-// One step of a motion. `wanted_column` only matters for "line".
-export function move_once(text: string, from: number, motion: Motion, wanted_column = column_of(text, from)): number {
+// One step of a motion over the text. The screen line units are Firefox's to answer, see screen_line.ts.
+export function move_once(text: string, from: number, motion: Motion): number {
   if (text.length === 0) return 0;
   const forward = motion.direction === "forward";
   switch (motion.unit) {
@@ -102,13 +86,10 @@ export function move_once(text: string, from: number, motion: Motion, wanted_col
     case "word_end":
       return forward ? word_end_forward(text, from, motion.big) : word_end_back(text, from, motion.big);
     case "line":
-      return line_move(text, from, forward, wanted_column);
     case "line_start":
-      return line_start_of(text, from);
     case "line_first":
-      return first_non_blank_of(text, from);
     case "line_end":
-      return line_end_of(text, from);
+      return from;
     case "start":
       return first_non_blank_of(text, 0);
     case "end":

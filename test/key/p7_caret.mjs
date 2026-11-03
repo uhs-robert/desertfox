@@ -1,16 +1,26 @@
 // Key cases of the caret and visual piece. run.mjs calls run_cases with its helpers.
+// The pages report each change of their selection, and the highlight style the bundle puts on the document.
 
 export async function run_cases({ run_case, expect, open_page, send_keys, sleep, events, wait_event }) {
   const paste_ctrl_v = ["-M", "ctrl", "v", "-m", "ctrl"];
+  // Moonlight, the default palette, dark: the caret takes the command color and visual mode the visual color.
+  const CARET_BACKGROUND = "#7fcf78";
+  const VISUAL_BACKGROUND = "#ffba75";
+
+  const selection_is = (page_id, text) => (event) => event.type === "selection" && event.page_id === page_id && event.text === text;
+  const style_is = (page_id, has) => (event) => event.type === "selection_style" && event.page_id === page_id && has(event.css);
+  const no_style = (css) => css === "";
 
   // The page text is "caret p7", "foo bar.baz", "second line here". From the first word, 3w lands on "bar".
-  await run_case("V, 3w, v, e, y copies the word the selection reached", async () => {
+  await run_case("V, 3w, v, e, y copies the word the selection reached and shows a toast", async () => {
     await open_page("caret", "caret_yank", { new_tab: true });
     await send_keys("V");
     await send_keys("3w");
     await send_keys("v");
     await send_keys("e");
+    const mark_yank = events.length;
     await send_keys("y");
+    await wait_event(mark_yank, (event) => event.type === "toast" && event.page_id === "caret_yank", "the copied toast");
     await sleep(300);
     await send_keys("-k", "Escape");
     await send_keys("-k", "Escape");
@@ -20,5 +30,69 @@ export async function run_cases({ run_case, expect, open_page, send_keys, sleep,
     await send_keys(...paste_ctrl_v);
     const pasted = await wait_event(mark, (event) => event.type === "input" && event.page_id === "caret_yank", `the pasted text (badges ${badges})`);
     expect(pasted.value === "bar", `y copied "${pasted.value}", expected "bar"`);
+  });
+
+  await run_case("V shows the caret at once in the caret color, and Escape clears it with the colors", async () => {
+    await open_page("caret", "caret_enter", { new_tab: true });
+    const mark = events.length;
+    await send_keys("V");
+    await wait_event(mark, selection_is("caret_enter", "c"), "the caret on the first character");
+    await wait_event(mark, style_is("caret_enter", (css) => css.includes(CARET_BACKGROUND)), "the caret color");
+    await send_keys("v");
+    await wait_event(mark, style_is("caret_enter", (css) => css.includes(VISUAL_BACKGROUND)), "the visual color");
+    const mark_escape = events.length;
+    await send_keys("-k", "Escape");
+    await send_keys("-k", "Escape");
+    await wait_event(mark_escape, selection_is("caret_enter", ""), "an empty selection after Escape");
+    await wait_event(mark_escape, style_is("caret_enter", no_style), "no highlight style after Escape");
+    const mark_again = events.length;
+    await send_keys("V");
+    await wait_event(mark_again, selection_is("caret_enter", "c"), "the caret again after leaving");
+    await send_keys("-k", "Escape");
+  });
+
+  await run_case("switching tabs away from caret mode clears the highlight, and V works after coming back", async () => {
+    await open_page("caret", "caret_tab", { new_tab: true });
+    const mark = events.length;
+    await send_keys("V");
+    await wait_event(mark, selection_is("caret_tab", "c"), "the caret");
+    const mark_switch = events.length;
+    // Caret mode binds no tab key, so the switch is Firefox's own Ctrl+Page Down.
+    await send_keys("-M", "ctrl", "-k", "Next", "-m", "ctrl");
+    await wait_event(mark_switch, selection_is("caret_tab", ""), "an empty selection after the tab switch");
+    await wait_event(mark_switch, style_is("caret_tab", no_style), "no highlight style after the tab switch");
+    await send_keys("-M", "ctrl", "-k", "Prior", "-m", "ctrl");
+    await sleep(500);
+    const again = events.length;
+    await send_keys("V");
+    await wait_event(again, selection_is("caret_tab", "c"), "the caret after coming back");
+    await send_keys("-k", "Escape");
+  });
+
+  await run_case("j k 0 $ move by screen line in a wrapped paragraph", async () => {
+    await open_page("caret_wrap", "caret_wrap", { new_tab: true });
+    const mark = events.length;
+    // The paragraph wraps to abc, def, ghi, jkl. The first visible text is the title above it.
+    await send_keys("V");
+    await send_keys("j");
+    await wait_event(mark, selection_is("caret_wrap", "a"), "the first screen line");
+    await send_keys("j");
+    await wait_event(mark, selection_is("caret_wrap", "d"), "j to the second screen line");
+    await send_keys("$");
+    await wait_event(mark, selection_is("caret_wrap", "f"), "$ to the end of the screen line");
+    await send_keys("0");
+    await wait_event(mark, selection_is("caret_wrap", "d"), "0 to the start of the screen line");
+    await send_keys("k");
+    await wait_event(mark, selection_is("caret_wrap", "a"), "k to the first screen line");
+    await send_keys("-k", "Escape");
+  });
+
+  // open.search needs an engine and the bundle sends the built-in one, which the test config points at the test server.
+  await run_case("V, 3w, v, e, s searches the selected word", async () => {
+    await open_page("caret", "caret_search", { new_tab: true });
+    const mark = events.length;
+    for (const keys of ["V", "3w", "v", "e", "s"]) await send_keys(keys);
+    const result = await wait_event(mark, (event) => event.type === "tree_read" && event.page_id === "search_result", "the search result page");
+    expect(new URLSearchParams(result.search).get("q") === "bar", `searched "${new URLSearchParams(result.search).get("q")}", expected "bar"`);
   });
 }
