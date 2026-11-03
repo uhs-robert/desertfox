@@ -1,8 +1,10 @@
 // The Firefox side of the router and the startup: each function wraps one browser call.
 
+import type { MergedConfig } from "../shared/config.ts";
 import type { BackgroundToContent, Refusal } from "../shared/messages.ts";
 import type { EnumSources } from "../shared/registry/check_args.ts";
 import { registry } from "../shared/registry/index.ts";
+import { runs_with_empty } from "./availability.ts";
 import type { BundleLoaderDeps } from "./bundle_loader.ts";
 import { create_load_log } from "./load_log.ts";
 import type { ReinjectDeps } from "./reload.ts";
@@ -36,12 +38,12 @@ export async function container_names(): Promise<string[]> {
   return Array.isArray(identities) ? identities.map((identity) => identity.name) : [];
 }
 
-export function make_router_deps(get_search_engine_names: () => Promise<string[]>): RouterDeps {
+export function make_router_deps(get_config: () => Promise<MergedConfig>): RouterDeps {
   const channels = { send_to_tab, notify };
   return {
     get_command: (command_id) => registry.get(command_id),
     get_enum_sources: async (): Promise<EnumSources> => ({
-      search_engines: await get_search_engine_names(),
+      search_engines: Object.keys((await get_config()).search_engines),
       containers: await container_names(),
     }),
     active_tab: async () => {
@@ -53,6 +55,7 @@ export function make_router_deps(get_search_engine_names: () => Promise<string[]
       const answer: unknown = await send_to_tab(tab_id, { type: "get_selection" }, frame_id).catch(() => undefined);
       return typeof answer === "string" ? answer : undefined;
     },
+    runs_with_empty: async (command_id, args, param) => runs_with_empty(await get_config(), command_id, args, param),
     read_clipboard: () => navigator.clipboard.readText(),
     has_permission: (permission) => browser.permissions.contains({ permissions: [permission as browser._manifest.OptionalPermission] }),
     send_to_tab,

@@ -14,6 +14,7 @@ export function make_fake(commands: Record<string, CommandInput>, overrides: Par
     active_tab: async () => ({ tab_id: 7, window_id: 1, url: "https://example.org/" }),
     has_content_script: async () => true,
     ask_selection: async () => "chosen text",
+    runs_with_empty: async () => false,
     read_clipboard: async () => "clip",
     has_permission: async () => true,
     send_to_tab: async (tab_id, message) => void log.push(`send ${tab_id} ${JSON.stringify(message)}`),

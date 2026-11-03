@@ -5,7 +5,15 @@ import { join } from "node:path";
 import { test } from "node:test";
 import "../../src/background/command_modules.ts";
 import { CONFIG_FORMAT_VERSION } from "../../src/shared/config.ts";
+import { runs_with_empty } from "../../src/background/availability.ts";
+import { compile_config } from "../../src/background/compile.ts";
+import { empty_config } from "../../src/background/config_load.ts";
+import { create_router } from "../../src/background/router.ts";
+import { get_config } from "../../src/background/startup.ts";
+import type { BoundInvocation } from "../../src/shared/invocation.ts";
+import type { TreeLeaf } from "../../src/shared/prefix_tree.ts";
 import { parse_command_line, registry } from "../../src/shared/registry/index.ts";
+import { parse_binding } from "../../src/shared/registry/parse_binding.ts";
 import { build_config, read_commands_file } from "../../tools/build-config/build_config.ts";
 
 const ENGINES = `
@@ -106,4 +114,68 @@ test("a percent-s engine from a flat entry still searches", async () => {
 test("an engine that needs the page refuses when the tab cannot be read", async () => {
   page = undefined;
   await assert.rejects(search({ engine: "github.repo", query: "x" }), /not in a GitHub repository/);
+});
+
+// A config key as the router gets it: parsed, then compiled, which stores the defaults in the key.
+function compiled_key(text: string): BoundInvocation {
+  const sources = { search_engines: Object.keys(stored_engines()), containers: [] };
+  const parsed = parse_binding(registry, text, sources);
+  assert.equal(parsed.kind, "binding", JSON.stringify(parsed));
+  if (parsed.kind !== "binding") throw new Error(text);
+  const config = { ...empty_config(), keymap: { normal: { k: parsed.binding } } };
+  const { compiled, warnings } = compile_config({ config, default_keymap: {}, get_command: (id) => registry.get(id), enum_sources: sources });
+  assert.deepEqual(warnings, []);
+  return (compiled.modes.normal!.children.k as TreeLeaf).steps[0]!.invocation;
+}
+
+async function press(text: string, selection: string): Promise<{ lines: string[]; refusals: string[] }> {
+  const lines: string[] = [];
+  const refusals: string[] = [];
+  const router = create_router({
+    get_command: (id) => registry.get(id),
+    get_enum_sources: async () => ({ search_engines: Object.keys(stored_engines()), containers: [] }),
+    active_tab: async () => ({ tab_id: 1, window_id: 1, url: page?.url }),
+    has_content_script: async () => true,
+    ask_selection: async () => selection,
+    runs_with_empty: async (id, args, param) => runs_with_empty(await get_config(), id, args, param),
+    read_clipboard: async () => "",
+    has_permission: async () => true,
+    send_to_tab: async () => undefined,
+    open_cmdline: async (_tab, _frame, line) => void lines.push(line),
+    show_refusal: async (_tab, refusal) => void refusals.push(refusal.message),
+  });
+  await router.run({ invocations: [compiled_key(text)], mode: "normal", may_prompt: true });
+  return { lines, refusals };
+}
+
+test("a key on a query-or-page engine searches the page with nothing selected, and the selection when there is one", async () => {
+  page = { url: "https://example.com/a" };
+  opened.length = 0;
+  assert.deepEqual(await press("search archive @selection", ""), { lines: [], refusals: [] });
+  assert.equal(last_url(), "https://web.archive.org/web/https://example.com/a");
+  assert.deepEqual(await press("search archive @selection", "https://other.example/"), { lines: [], refusals: [] });
+  assert.equal(last_url(), "https://web.archive.org/web/https://other.example/");
+});
+
+test("a key on an engine that needs the query opens the command line with nothing selected, and searches a selection", async () => {
+  page = { url: "https://example.com/a" };
+  opened.length = 0;
+  assert.deepEqual(await press("search duck @selection", ""), { lines: ["search duck "], refusals: [] });
+  assert.equal(opened.length, 0);
+  await press("search duck @selection", "a b");
+  assert.equal(last_url(), "https://duck.example/?q=a%20b");
+});
+
+test("a key that names no engine opens the command line with nothing selected, and searches the default engine", async () => {
+  page = { url: "https://example.com/a" };
+  opened.length = 0;
+  assert.deepEqual(await press("search @selection", ""), { lines: ["search "], refusals: [] });
+  assert.equal(opened.length, 0);
+  await press("search @selection", "a b");
+  assert.equal(last_url(), "https://duck.example/?q=a%20b");
+});
+
+test("a key on another command with an empty selection still opens the command line", async () => {
+  page = { url: "https://example.com/a" };
+  assert.deepEqual(await press("open @selection", ""), { lines: ["open "], refusals: [] });
 });
