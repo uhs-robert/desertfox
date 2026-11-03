@@ -14,6 +14,9 @@ export type Effect =
 export type SessionDeps = {
   history: readonly string[];
   parse: (text: string) => ParseResult;
+  // An error for a parsed command that cannot run yet, for example a required value left out. The line stays open.
+  // Undefined when the command is fine. The pre-check must not touch the ticket, the port or `run`.
+  precheck?: (invocation: Invocation) => string | undefined;
 };
 
 export function create_session(deps: SessionDeps) {
@@ -37,6 +40,11 @@ export function create_session(deps: SessionDeps) {
     }
     if (parsed.kind === "help") {
       message = parsed.usage;
+      return { kind: "render" };
+    }
+    const problem = deps.precheck?.(parsed.invocation);
+    if (problem !== undefined) {
+      message = problem;
       return { kind: "render" };
     }
     return { kind: "submit", invocation: parsed.invocation, text: line };

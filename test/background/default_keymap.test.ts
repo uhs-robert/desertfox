@@ -154,3 +154,31 @@ test("every default group name labels a real group, so a typo cannot go quiet", 
   }
   assert.ok(!compiled.modes.normal?.children.g || (compiled.modes.normal.children.g as TreeBranch).label === "Go");
 });
+
+test("s/ and sGc search with the selection and prompt when it is empty", async () => {
+  const { create_router } = await import("../../src/background/router.ts");
+  const normal = DEFAULT_KEYMAP.normal as Record<string, unknown>;
+  assert.deepEqual(normal["s/"], { id: "site.search", args: { query: { from: "selection" } } });
+  assert.deepEqual(normal.sGc, { id: "site.repo", args: { query: { from: "selection" } } });
+  const log: string[] = [];
+  const router = create_router({
+    get_command: (id) => registry.get(id),
+    get_enum_sources: async () => ({}),
+    active_tab: async () => ({ tab_id: 3, window_id: 1, url: "https://github.com/a/b" }),
+    has_content_script: async () => true,
+    ask_selection: async () => "",
+    read_clipboard: async () => "",
+    has_permission: async () => true,
+    send_to_tab: async () => undefined,
+    open_cmdline: async (_tab, _frame, text) => void log.push(text),
+    show_refusal: async () => undefined,
+  });
+  for (const key of ["s/", "sGc"]) await router.run({ invocations: [normal[key] as { id: string }], mode: "normal", may_prompt: true });
+  assert.deepEqual(log, ["sitesearch ", "repo "]);
+});
+
+test("a prompt binding with a bad fixed arg is skipped with a warning", () => {
+  const { warnings } = compile({ normal: { "q1": { id: "open.url", args: { where: "bogus" }, prompt: { param: "url" } }, "q2": { id: "open.url", args: { where: "tab" }, prompt: { param: "url" } } } } as KeymapConfig);
+  assert.equal(warnings.length, 1);
+  assert.match(warnings[0]!, /skipped "q1".*where/);
+});

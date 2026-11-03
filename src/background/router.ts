@@ -1,11 +1,12 @@
 // The one entry for run requests: content scripts, Firefox shortcuts and later callers.
 
-import type { CheckedArgs, CommandContext, CommandDef, ContextSourceName, Mode } from "../shared/command.ts";
+import type { CheckedArgs, CommandContext, CommandDef, ContextSource, ContextSourceName, Mode } from "../shared/command.ts";
 import type { BoundInvocation } from "../shared/invocation.ts";
 import type { BackgroundToContent, Refusal, RunResponse } from "../shared/messages.ts";
 import { check_args } from "../shared/registry/check_args.ts";
 import type { EnumSources } from "../shared/registry/check_args.ts";
 import { is_context_source } from "../shared/registry/params.ts";
+import { print_command } from "../shared/registry/print_command.ts";
 import { apply_count } from "./count.ts";
 
 export type ActiveTab = { tab_id: number; window_id: number; url: string | undefined };
@@ -20,6 +21,8 @@ export type RouterDeps = {
   read_clipboard: () => Promise<string>;
   has_permission: (permission: string) => Promise<boolean>;
   send_to_tab: (tab_id: number, message: BackgroundToContent, frame_id?: number) => Promise<unknown>;
+  // Opens the command line in the frame with the text typed in. Rejects when the tab has no content script.
+  open_cmdline: (tab_id: number, frame_id: number, text: string) => Promise<unknown>;
   show_refusal: (tab_id: number | undefined, refusal: Refusal, frame_id?: number) => Promise<unknown>;
 };
 
@@ -29,15 +32,20 @@ export type RouteRequest = {
   // The tab the caller says it came from. The active tab wins when there is one.
   sender_tab_id?: number;
   frame_id?: number;
+  // Set by keys and Firefox shortcuts: a missing value opens the command line. A snippet's `oasisfox.run` leaves it
+  // unset and gets the validation failure instead, because nobody is there to type.
+  may_prompt?: boolean;
 };
 
 export type Router = { run: (request: RouteRequest) => Promise<RunResponse> };
 
 type Now = { active: ActiveTab | undefined; context: CommandContext };
 
-type Outcome = { ok: true } | { ok: false; message: string };
+// `waiting` means the command line is open for the user, so the rest of a sequence must not run.
+type Outcome = { ok: true; waiting?: true } | { ok: false; message: string };
 
 const done: Outcome = { ok: true };
+const waiting: Outcome = { ok: true, waiting: true };
 const refuse = (message: string): Outcome => ({ ok: false, message });
 
 export function create_router(deps: RouterDeps): Router {
@@ -55,6 +63,7 @@ export function create_router(deps: RouterDeps): Router {
   async function run(request: RouteRequest): Promise<RunResponse> {
     for (const invocation of request.invocations) {
       const outcome = await run_one(invocation, request).catch((error: unknown) => refuse(error instanceof Error ? error.message : String(error)));
+      if (outcome.ok && outcome.waiting) return { ok: true };
       if (outcome.ok) continue;
       const refusal: Refusal = { id: invocation.id, message: outcome.message };
       const { context } = await read_now(request);
@@ -69,19 +78,29 @@ export function create_router(deps: RouterDeps): Router {
     const command = deps.get_command(invocation.id);
     if (!command) return refuse(`unknown command "${invocation.id}"`);
 
-    if (invocation.prompt) return refuse(`${command.label} needs the command line (phase 2)`);
-
     const missing_need = await first_unmet_need(command, context.tab_id);
     if (missing_need) return refuse(`${command.label} needs ${missing_need}`);
 
+    // A count before a key that opens the line is dropped.
+    const sources = await deps.get_enum_sources();
+    if (invocation.prompt && request.may_prompt) {
+      // The fixed args must be good. Only the prompted param may be left out.
+      const fixed = check_args(command, invocation.args, sources);
+      if (!fixed.ok && fixed.missing_param === undefined) return refuse(fixed.error);
+      return open_line(command, invocation.args ?? {}, invocation.prompt.param, context, active, invocation.prompt.prefill);
+    }
+
     const counted = apply_count(command, invocation);
-    const checked = check_args(command, counted.args, await deps.get_enum_sources());
+    const checked = check_args(command, counted.args, sources);
     if (!checked.ok) {
-      return refuse(checked.missing_param === undefined ? checked.error : `${command.label} needs the command line (phase 2)`);
+      if (checked.missing_param === undefined || !request.may_prompt) return refuse(checked.error);
+      return open_line(command, counted.args ?? {}, checked.missing_param, context, active);
     }
 
     const filled = await fill_context_sources(checked.args, context, active);
-    if (!filled.ok) return filled;
+    if (!filled.ok) {
+      return filled.empty_selection_param === undefined || !request.may_prompt ? filled : open_line(command, counted.args ?? {}, filled.empty_selection_param, context, active);
+    }
 
     if (command.runs_in === "content") return run_in_content(command, filled.args, counted.times, context);
     for (let time = 0; time < counted.times; time++) {
@@ -113,11 +132,37 @@ export function create_router(deps: RouterDeps): Router {
     }
   }
 
+  // Types the command into the command line and waits. A source that has nothing to give prefills empty, because the
+  // user can still type the value.
+  async function open_line(
+    command: CommandDef,
+    args: Record<string, unknown>,
+    open_param: string,
+    context: CommandContext,
+    active: ActiveTab | undefined,
+    prefill?: ContextSource,
+  ): Promise<Outcome> {
+    const typed: Record<string, unknown> = {};
+    for (const [name, value] of Object.entries(args)) {
+      typed[name] = is_context_source(value) ? await read_source(value.from, context, active).catch(() => undefined) : value;
+    }
+    // The line opens when the key is pressed, because focus moves into the iframe and the selection with it.
+    if (prefill) typed[open_param] = await read_source(prefill.from, context, active).catch(() => undefined);
+    const { tab_id, frame_id } = context;
+    if (tab_id === undefined) return refuse(`${command.label} needs a tab`);
+    try {
+      await deps.open_cmdline(tab_id, frame_id ?? 0, print_command(command, typed, { open_param }));
+      return waiting;
+    } catch {
+      return refuse(`${command.label} needs a page OasisFox runs on`);
+    }
+  }
+
   async function fill_context_sources(
     args: CheckedArgs,
     context: CommandContext,
     active: ActiveTab | undefined,
-  ): Promise<{ ok: true; args: CheckedArgs } | { ok: false; message: string }> {
+  ): Promise<{ ok: true; args: CheckedArgs } | { ok: false; message: string; empty_selection_param?: string }> {
     const filled: CheckedArgs = {};
     for (const [name, value] of Object.entries(args)) {
       if (!is_context_source(value)) {
@@ -125,7 +170,10 @@ export function create_router(deps: RouterDeps): Router {
         continue;
       }
       const text = await read_source(value.from, context, active);
-      if (text === undefined) return { ok: false, message: `${name}: ${value.from} is not available here` };
+      if (text === undefined) {
+        const message = `${name}: ${value.from} is not available here`;
+        return value.from === "selection" ? { ok: false, message, empty_selection_param: name } : { ok: false, message };
+      }
       filled[name] = text;
     }
     return { ok: true, args: filled };

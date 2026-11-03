@@ -5,7 +5,7 @@
 import { create_matcher, event_to_token } from "../shared/keys/index.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY } from "../shared/prefix_tree.ts";
 import type { CompiledKeymap } from "../shared/prefix_tree.ts";
-import { parse_command_line } from "../shared/registry/index.ts";
+import { check_args, parse_command_line } from "../shared/registry/index.ts";
 import type { CmdlineOpened, ContentToBackground } from "../shared/messages.ts";
 import { edit_forwarded, run_token, run_token_without_keymap } from "./key_input.ts";
 import type { TokenMatcher } from "./key_input.ts";
@@ -45,7 +45,16 @@ async function open_line(start: Start, port: MessagePort): Promise<void> {
   document.head.append(user_style);
   const keymap = stored[COMPILED_KEYMAP_STORAGE_KEY] as CompiledKeymap | undefined;
   const matcher: TokenMatcher | undefined = keymap?.modes.cmdline ? create_matcher(keymap) : undefined;
-  const session: Session = create_session({ history: opened.history, parse: (text) => parse_command_line(lookup, text, opened.sources) });
+  const session: Session = create_session({
+    history: opened.history,
+    parse: (text) => parse_command_line(lookup, text, opened.sources),
+    // Only a missing value is caught here. The router still checks everything else when it runs the command.
+    precheck: (invocation) => {
+      const command = lookup.find(invocation.id);
+      const checked = command && check_args(command, invocation.args, opened.sources);
+      return checked && !checked.ok && checked.missing_param !== undefined ? checked.error : undefined;
+    },
+  });
 
   const render = () => {
     if (input.value !== session.get_text()) input.value = session.get_text();

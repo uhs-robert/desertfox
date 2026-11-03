@@ -10,7 +10,7 @@ Status values:
 
 The shipped defaults bind every `v1` row whose command exists, with three kinds of exception:
 
-- Rows that name a search engine or a container (`s`, `S`, `,`, `c`, `C` keys). The user's config generates them from `search_keys` and `container_keys`.
+- Rows that name a search engine or a container (`s`, `S`, `,`, `c`, `C` keys). The user's config generates them from `search_keys` and `container_keys`. The `s/` and `sGc` site search rows are the exception and ship as defaults.
 - `;f`, because it needs the command line prompt to ask for the link text. `hint.run text=...` already filters.
 - `ZZ`, because closing every window cannot be undone. Bind it in the config.
 
@@ -62,6 +62,8 @@ dropped: 8 | later: 15 | v1: 269
 | normal | `rr` | v1 | `page.reload` |
 | normal | `rh` | v1 | `page.reload hard=true` |
 | normal | `ri` | v1 | `site.isdown` |
+| normal | `s/` | v1 | `site.search query=@selection` (prompts when nothing is selected) |
+| normal | `sGc` | v1 | `site.repo query=@selection` (prompts when nothing is selected) |
 | normal | `W` | v1 | `window.new` (prompts, url prefilled from current_url) |
 | normal | `wa` | dropped | assumed unused |
 | normal | `wc` | v1 | `window.close` |

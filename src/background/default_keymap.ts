@@ -1,7 +1,7 @@
 import type { KeymapConfig } from "../shared/keymap.ts";
 
 // Every `v1` row of docs/keymap.md whose command exists, except the rows that need the user's own data.
-// Search engine keys (`s`, `S`, `,`) and container keys (`c`) come from the user's config.
+// Search engine keys (`s`, `S`, `,`) and container keys (`c`) come from the user's config. The two site search keys `s/` and `sGc` are defaults and open the command line when nothing is selected.
 // Keys of the phase 2 stubs (`o O T b B f F ; : V`) are bound now and refuse until hints, the command line, the picker and caret mode exist.
 // The caret, visual and cmdline commands are placeholders too: they load their bundle and refuse until it registers them.
 // The caret and visual motions. `0` and `$` are line ends, `^` the first non-blank, `gg` and `G` the ends of the text.
@@ -64,6 +64,8 @@ export const DEFAULT_KEYMAP: KeymapConfig = {
     rh: { id: "page.reload", args: { hard: true } },
     R: { id: "page.reload", args: { hard: true } },
     ri: { id: "site.isdown" },
+    "s/": { id: "site.search", args: { query: { from: "selection" } } },
+    sGc: { id: "site.repo", args: { query: { from: "selection" } } },
     xp: { id: "page.stop" },
     gh: { id: "page.home" },
     gH: { id: "page.home", args: { where: "tab" } },

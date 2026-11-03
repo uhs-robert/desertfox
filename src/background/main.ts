@@ -50,6 +50,7 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
     router.run({
       invocations: request.invocations,
       mode: request.mode,
+      may_prompt: true,
       ...(sender.tab?.id === undefined ? {} : { sender_tab_id: sender.tab.id }),
       ...(sender.frameId === undefined ? {} : { frame_id: sender.frameId }),
     }),
@@ -63,7 +64,7 @@ browser.commands.onCommand.addListener(async (slot_name: string) => {
   if (!invocations) return;
   const [active] = await browser.tabs.query({ active: true, currentWindow: true });
   const mode = active?.id === undefined ? "normal" : await recall_tab_mode(browser.storage.local, active.id);
-  if (shortcut_allowed(mode, invocations, (id) => registry.get(id))) await router.run({ invocations, mode });
+  if (shortcut_allowed(mode, invocations, (id) => registry.get(id))) await router.run({ invocations, mode, may_prompt: true });
 });
 
 browser.tabs.onUpdated.addListener((tab_id, change) => forget_mode_on_navigation(browser.storage.local, tab_id, change));

@@ -398,6 +398,7 @@ async function main() {
       writeFileSync(join(config_dir, "keymap.toml"), [
         "[normal]",
         'm = "scroll.to percent=50"',
+        'go = "open"',
         "[browser]",
         '"<A-,>" = "browser.focus_page"',
         '"<A-.>" = "cmdline.open"',
@@ -652,10 +653,12 @@ async function main() {
       await wait_event(mark, (event) => event.type === "tree_read" && event.page_id === "d_reload", "d_reload to load again after rr");
     });
 
-    await run_case("tt refuses its prompt without opening a tab", async () => {
+    await run_case("tt opens the command line for its prompt without opening a tab", async () => {
       const mark = events.length;
       await send_keys("tt");
       await sleep(1000);
+      await send_keys("-k", "Escape");
+      await sleep(400);
       expect(visible_events(mark).length === 0, "tt switched tabs");
       expect(!find_event(mark, (event) => event.type === "tree_read"), "tt loaded a page");
     });
