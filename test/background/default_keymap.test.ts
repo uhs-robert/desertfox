@@ -155,11 +155,11 @@ test("every default group name labels a real group, so a typo cannot go quiet", 
   assert.ok(!compiled.modes.normal?.children.g || (compiled.modes.normal.children.g as TreeBranch).label === "Go");
 });
 
-test("s/ and sg search with the selection and prompt when it is empty", async () => {
+test("s/ and sGc search with the selection and prompt when it is empty", async () => {
   const { create_router } = await import("../../src/background/router.ts");
   const normal = DEFAULT_KEYMAP.normal as Record<string, unknown>;
   assert.deepEqual(normal["s/"], { id: "site.search", args: { query: { from: "selection" } } });
-  assert.deepEqual(normal.sg, { id: "site.repo", args: { query: { from: "selection" } } });
+  assert.deepEqual(normal.sGc, { id: "site.repo", args: { query: { from: "selection" } } });
   const log: string[] = [];
   const router = create_router({
     get_command: (id) => registry.get(id),
@@ -173,7 +173,7 @@ test("s/ and sg search with the selection and prompt when it is empty", async ()
     open_cmdline: async (_tab, _frame, text) => void log.push(text),
     show_refusal: async () => undefined,
   });
-  for (const key of ["s/", "sg"]) await router.run({ invocations: [normal[key] as { id: string }], mode: "normal", may_prompt: true });
+  for (const key of ["s/", "sGc"]) await router.run({ invocations: [normal[key] as { id: string }], mode: "normal", may_prompt: true });
   assert.deepEqual(log, ["sitesearch ", "repo "]);
 });
 
