@@ -118,6 +118,22 @@ export function start_server() {
       const words = Array.from({ length: 1500 }, (_, index) => `w${String(index).padStart(4, "0")}`).join(" ");
       return response.end(page(`caret_scrolled ${id}`, `<p style="width:30ch;font-family:monospace">${words}</p><script>addEventListener("load", () => scrollTo(0, 3000))</script>`));
     }
+    if (url.pathname === "/caret_bug_lines") {
+      const kind = (url.searchParams.get("id") ?? "").replace(/^lines_/, "");
+      const bodies = {
+        blocks: "<p>one two</p><p>three four</p><p>five six</p><p>seven</p>",
+        empty_line: '<p style="font-family:monospace">abc<br><br>def<br><br><br>ghi</p>',
+        links: '<p>some <a href="/x">link text</a> more</p><p>next <b>bold</b> line</p><p>last</p>',
+        pre: "<pre>abc\n\ndef\n  ghi\n\njkl</pre>",
+        lists: "<ul><li>alpha</li><li>beta <em>gamma</em></li><li>delta</li></ul><p>tail</p>",
+        wrapped_blocks: '<p style="width:8ch;font-family:monospace">aaa bbb ccc ddd</p><p style="width:8ch;font-family:monospace">eee fff ggg</p>',
+      };
+      return response.end(page(`caret_bug_lines ${id}`, bodies[kind] ?? ""));
+    }
+    if (url.pathname === "/caret_bug_find") {
+      const filler = Array.from({ length: 60 }, (_, index) => `<p>filler line ${index} with some text</p>`).join("");
+      return response.end(page(`caret_bug_find ${id}`, `<p>start of page</p>${filler}<p>the needle sits here</p>${filler}`));
+    }
     if (url.pathname === "/swallow") return response.end(page(`swallow ${id}`, tall_filler, CANCEL_KEYS_IN_CAPTURE));
     response.end(page(`page ${id}`, tall_filler));
   });

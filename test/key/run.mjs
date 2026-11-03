@@ -113,6 +113,8 @@ const results = [];
 const measurements = {};
 
 async function run_case(name, body) {
+  // KEY_TEST_ONLY=<regex> runs only the cases whose name matches, for a quick repro.
+  if (process.env.KEY_TEST_ONLY && !new RegExp(process.env.KEY_TEST_ONLY).test(name)) return;
   try {
     await body();
     results.push({ name, pass: true });

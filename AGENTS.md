@@ -8,13 +8,14 @@ OasisFox is a keyboard-first Firefox extension built around one command registry
 
 ## Where to look
 
-Read the design for an area before you change it.
+Read the design for an area before you change it. Read a folder's README before you change or research code in that folder.
 
 | Topic                                  | File                                     |
 | -------------------------------------- | ---------------------------------------- |
 | Architecture, config, scope, roadmap   | [`docs/design.md`](docs/design.md)       |
 | The default keys, generated            | [`docs/keymap.md`](docs/keymap.md)       |
 | Measured Firefox behavior              | [`docs/spike.md`](docs/spike.md)         |
+| Code map, one line per source folder   | [`src/README.md`](src/README.md)         |
 | The phase 0 test harness               | `spike/` (throwaway, do not build on it) |
 
 If code and the design disagree, stop and ask the maintainer. Do not change the design to match the code without the maintainer's approval.
