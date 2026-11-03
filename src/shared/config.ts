@@ -75,6 +75,8 @@ export const DEFAULT_SETTINGS: Settings = {
 export type SnippetEntry = Omit<CommandMeta, "count"> & {
   // Match patterns. On other pages the router refuses.
   matches: string[];
+  // Page slots the tab must fill before the snippet runs, for example "repo". Which-key hides the key elsewhere.
+  requires?: string[];
   // Source text, run in the tab's content script with `args` defined.
   code: string;
 };

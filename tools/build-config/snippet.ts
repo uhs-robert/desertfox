@@ -9,11 +9,12 @@
 // clipboard) is that source. A double-quoted default is always a literal string.
 
 import type { ContextSourceName, Mode, ParamDef, ParamType, ParamValue } from "../../src/shared/command.ts";
+import { SLOTS } from "../../src/shared/engines/index.ts";
 import type { SnippetEntry } from "../../src/shared/config.ts";
 
 const PARAM_TYPES: readonly string[] = ["int", "float", "string", "bool", "enum"];
 const CONTEXT_SOURCES: readonly string[] = ["current_url", "selection", "clipboard"];
-const SINGLE_KEYS = ["id", "label", "intent", "name", "modes"] as const;
+const SINGLE_KEYS = ["id", "label", "intent", "name", "modes", "requires"] as const;
 // Only the modes where a key press reaches a page command. Insert, ignore, hint and cmdline take typed text.
 const SNIPPET_MODES: readonly string[] = ["normal", "caret", "visual"];
 const REPEAT_KEYS = ["matches", "param"] as const;
@@ -90,6 +91,16 @@ function parse_modes(raw: string, where: string, problems: string[]): Mode[] {
   return [...new Set(names.filter((word) => SNIPPET_MODES.includes(word)))] as Mode[];
 }
 
+// The snippet check reads the tab address only, so a slot that needs the title cannot be required.
+const REQUIRABLE_SLOTS = Object.keys(SLOTS).filter((name) => SLOTS[name]?.kind === "page" && name !== "title");
+
+function parse_requires(raw: string, where: string, problems: string[]): string[] {
+  const names = raw.split(",").map((word) => word.trim()).filter(Boolean);
+  const unknown = names.filter((word) => !REQUIRABLE_SLOTS.includes(word));
+  if (unknown.length > 0) problems.push(`${where}: unknown slot "${unknown.join(", ")}" in requires, use ${REQUIRABLE_SLOTS.join(", ")}`);
+  return [...new Set(names.filter((word) => REQUIRABLE_SLOTS.includes(word)))];
+}
+
 export function parse_snippet(file: string, text: string, problems: string[]): SnippetEntry | undefined {
   const problems_before = problems.length;
   const single = new Map<string, string>();
@@ -129,6 +140,8 @@ export function parse_snippet(file: string, text: string, problems: string[]): S
   }
   const modes_line = single.get("modes");
   const modes = modes_line === undefined ? [] : parse_modes(modes_line, `${file}: header "modes"`, problems);
+  const requires_line = single.get("requires");
+  const requires = requires_line === undefined ? [] : parse_requires(requires_line, `${file}: header "requires"`, problems);
   if (problems.length > problems_before) return undefined;
 
   const entry: SnippetEntry = {
@@ -142,5 +155,6 @@ export function parse_snippet(file: string, text: string, problems: string[]): S
   if (name) entry.name = name;
   if (params.length > 0) entry.params = params;
   if (modes.length > 0) entry.modes = modes;
+  if (requires.length > 0) entry.requires = requires;
   return entry;
 }

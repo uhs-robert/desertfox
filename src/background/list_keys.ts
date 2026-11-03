@@ -1,10 +1,14 @@
 // Answers which-key: the keys that can follow a typed prefix, read from the compiled keymap the content script also uses.
 
 import type { CommandMeta } from "../shared/command.ts";
+import type { PageInfo } from "../shared/engines/index.ts";
+import type { BoundInvocation } from "../shared/invocation.ts";
 import type { WhichKeyBorder } from "../shared/config.ts";
 import type { ListKeys, WhichKeyPanel, WhichKeyRow } from "../shared/messages.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY } from "../shared/prefix_tree.ts";
 import type { CompiledKeymap, TreeBranch, TreeNode } from "../shared/prefix_tree.ts";
+
+import { is_available } from "./availability.ts";
 
 type KeymapStorage = Pick<typeof browser.storage.local, "get">;
 
@@ -50,8 +54,31 @@ export function panel_after_prefix(root: TreeBranch | undefined, prefix: string[
   return { title: chain.length === 0 ? "keys" : chain.join(" >> "), rows, border };
 }
 
-export async function list_keys(storage: KeymapStorage, find_command: (id: string) => CommandMeta | undefined, request: Pick<ListKeys, "mode" | "prefix">): Promise<WhichKeyPanel> {
+// What the active page can run. Keys whose command needs slots the page cannot fill are left out, and so are groups left empty.
+export type PageAvailability = { page: PageInfo | undefined; requirement_of: (invocation: BoundInvocation) => string[] };
+
+export function without_unavailable(node: TreeBranch, availability: PageAvailability): TreeBranch | undefined {
+  const children: Record<string, TreeNode> = {};
+  for (const [token, child] of Object.entries(node.children)) {
+    if (child.kind === "branch") {
+      const kept = without_unavailable(child, availability);
+      if (kept) children[token] = kept;
+    } else if (child.steps.every((step) => is_available(availability.requirement_of(step.invocation), availability.page))) {
+      children[token] = child;
+    }
+  }
+  return Object.keys(children).length === 0 ? undefined : { ...node, children };
+}
+
+export async function list_keys(
+  storage: KeymapStorage,
+  find_command: (id: string) => CommandMeta | undefined,
+  request: Pick<ListKeys, "mode" | "prefix">,
+  availability?: PageAvailability,
+): Promise<WhichKeyPanel> {
   const stored = await storage.get(COMPILED_KEYMAP_STORAGE_KEY);
   const keymap = stored[COMPILED_KEYMAP_STORAGE_KEY] as CompiledKeymap | undefined;
-  return panel_after_prefix(keymap?.modes[request.mode as keyof CompiledKeymap["modes"]], request.prefix, find_command, keymap?.which_key_border);
+  const root = keymap?.modes[request.mode as keyof CompiledKeymap["modes"]];
+  const shown = root && availability ? without_unavailable(root, availability) : root;
+  return panel_after_prefix(shown, request.prefix, find_command, keymap?.which_key_border);
 }
