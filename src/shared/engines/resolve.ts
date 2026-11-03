@@ -59,6 +59,8 @@ type Level = {
   allowed: Record<string, string[]>;
   assigned: Record<string, Origined>;
   labels: string[];
+  // Where this level's own `label` came from. Labels do not inherit, so each level starts without one.
+  label_origin?: string;
 };
 
 const copy_level = (level: Level): Level => ({
@@ -128,7 +130,10 @@ export function resolve_engines(nodes: EngineNode[]): Resolved {
         level.fallback = { value, origin };
       } else if (key === "label") {
         if (value === "") problems.push(`${where}: label cannot be empty`);
-        else level.labels[level.labels.length - 1] = value;
+        else {
+          level.labels[level.labels.length - 1] = value;
+          level.label_origin = origin;
+        }
       } else if (Object.hasOwn(level.params, key)) {
         if (level.allowed[key]?.includes(value)) level.assigned[key] = { value, origin };
         else problems.push(`${where}: ${key} = "${value}" is outside the declared list (${level.allowed[key]?.join(", ")})`);
@@ -184,7 +189,8 @@ export function resolve_engines(nodes: EngineNode[]): Resolved {
     const pairs = (mark === -1 ? [] : head.slice(mark + 1).split("&")).filter((pair) => {
       const name = QUERY_PAIR_WITH_ONE_NAME.exec(pair)?.[1];
       const names_text = name !== undefined && (Object.hasOwn(level.params, name) || Object.hasOwn(level.vars, name));
-      return !(names_text && expand(`{${name}}`, level, new Set(), where) === "");
+      // `used` is passed on: a pair left out still read its var, so the unused var check must not report it.
+      return !(names_text && expand(`{${name}}`, level, used, where) === "");
     });
     const query = pairs.length === 0 ? "" : `?${pairs.join("&")}`;
     return expand(`${base}${query}${fragment}`, level, used, where);
@@ -207,7 +213,7 @@ export function resolve_engines(nodes: EngineNode[]): Resolved {
       problems.push(`${where}: engine "${path}" has no {query} in its url`);
     }
     const slots = page_requirements(url);
-    const origins: Record<string, string> = { url: level.url.origin, label: `${path} (labels on the path)` };
+    const origins: Record<string, string> = { url: level.url.origin, label: level.label_origin ?? `${path} (labels on the path)` };
     if (level.fallback) origins.fallback = level.fallback.origin;
     for (const [name, found] of Object.entries(level.vars)) origins[name] = found.origin;
     for (const [name, found] of Object.entries(level.assigned)) origins[name] = found.origin;
@@ -224,6 +230,7 @@ export function resolve_engines(nodes: EngineNode[]): Resolved {
   const visit = (path: string, node: EngineNode | undefined, parent: Level, generated?: { param: string; value: string; origin: string }): Set<string> => {
     visited.add(path);
     const level = copy_level(parent);
+    delete level.label_origin;
     const name = path.slice(path.lastIndexOf(".") + 1);
     level.labels.push(generated ? generated.value : name);
     if (generated) level.assigned[generated.param] = { value: generated.value, origin: generated.origin };
@@ -231,6 +238,11 @@ export function resolve_engines(nodes: EngineNode[]): Resolved {
 
     const used = new Set<string>();
     emit(path, level, used);
+
+    const origin = node ? `${node.file} [${path}]` : `generated under ${path}`;
+    const generated_children = Object.entries(level.params)
+      .filter(([param, decl]) => decl.children && !Object.hasOwn(level.assigned, param))
+      .flatMap(([param]) => (level.allowed[param] ?? []).map((value) => ({ param, value, origin })));
 
     const hand = children_of.get(path) ?? [];
     for (const child of hand) {
@@ -240,22 +252,25 @@ export function resolve_engines(nodes: EngineNode[]): Resolved {
         visited.add(child.path);
         continue;
       }
-      for (const name of visit(child.path, child, level)) used.add(name);
+      // A hand child named like a generated one replaces it, so it keeps the value the generated child would assign.
+      const replaced = generated_children.find(({ value }) => value === child_name);
+      for (const name of visit(child.path, child, level, replaced)) used.add(name);
     }
-    const origin = node ? `${node.file} [${path}]` : `generated under ${path}`;
     const taken = new Set(hand.map((child) => child.path.slice(child.path.lastIndexOf(".") + 1)));
-    for (const [param, decl] of Object.entries(level.params)) {
-      if (!decl.children || Object.hasOwn(level.assigned, param)) continue;
-      for (const value of level.allowed[param] ?? []) {
-        if (taken.has(value)) continue;
-        taken.add(value);
-        for (const name of visit(`${path}.${value}`, undefined, level, { param, value, origin })) used.add(name);
-      }
+    for (const generated_child of generated_children) {
+      if (taken.has(generated_child.value)) continue;
+      taken.add(generated_child.value);
+      for (const name of visit(`${path}.${generated_child.value}`, undefined, level, generated_child)) used.add(name);
     }
 
     const declared_here = node && is_table(node.fields.params) ? Object.keys(node.fields.params) : [];
     for (const param of declared_here) {
       if (Object.hasOwn(level.params, param) && !used.has(param)) problems.push(`${node?.file}: [${path}] param "${param}" is not used by any url under it`);
+    }
+    // Any other string field is a var, so a misspelled field such as `lable` shows up here.
+    const vars_here = Object.entries(level.vars).filter(([, found]) => found.origin === origin).map(([name]) => name);
+    for (const name of vars_here) {
+      if (!used.has(name)) problems.push(`${node?.file}: [${path}] "${name}" is not a field and no url under it uses it as a var`);
     }
     return used;
   };
