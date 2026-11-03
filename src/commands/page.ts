@@ -35,7 +35,7 @@ define("page.reload", {
 // Firefox has no stop call for the tabs API, so the page itself stops.
 define("page.stop", {
   name: "stop",
-  label: "Stop Loading",
+  label: "Stop loading",
   intent: "Stop the page from loading.",
   runs_in: "content",
   run: stop_page.run,
@@ -43,7 +43,7 @@ define("page.stop", {
 
 define("page.home", {
   name: "home",
-  label: "Home Page",
+  label: "Home page",
   intent: "Open the home page from the settings.",
   params: [WHERE_PARAM],
   runs_in: "background",

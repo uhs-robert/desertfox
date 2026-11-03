@@ -681,8 +681,24 @@ async function main() {
       expect(await scroll_delta_after(shown.page_id, ["j"]) > 0, "the tab left after xx does not take keys");
     });
 
+    // Builds a config folder, hands it to the running Firefox as managed storage and reloads it with qr. The which-key shots use it to show a copy of the owner config.
+    const load_config_dir = async (dir) => {
+      build_test_config(dir, managed_file);
+      const session_home = readFileSync(join(work_dir, "session_home"), "utf8").trim();
+      cpSync(managed_file, join(session_home, ".mozilla", "managed-storage", `${EXTENSION_ID}.json`));
+      await evaluate_in_background(rdp, EXTENSION_ID, `browser.storage.local.remove("oasisfox_reinject_report")`);
+      await send_keys("qr");
+      let report;
+      for (let attempt = 0; attempt < 60 && !report; attempt++) {
+        await sleep(500);
+        report = await evaluate_in_background(rdp, EXTENSION_ID, `(await browser.storage.local.get("oasisfox_reinject_report")).oasisfox_reinject_report`).catch(() => undefined);
+      }
+      expect(report, "no oasisfox_reinject_report after 30 s");
+      await sleep(1000);
+    };
+
     // Pieces keep their cases in test/key/p<number>_*.mjs, each exporting run_cases(context).
-    const case_context = { take_shot: (path) => shadow("shot", SHADOW_NAME, "--out", path), run_case, expect, open_page, send_keys, sleep, events, wait_event, since, find_event, url_of, rdp, extension_id: EXTENSION_ID, scroll_delta_after, became_visible };
+    const case_context = { config_dir, load_config_dir, take_shot: (path) => shadow("shot", SHADOW_NAME, "--out", path), run_case, expect, open_page, send_keys, sleep, events, wait_event, since, find_event, url_of, rdp, extension_id: EXTENSION_ID, scroll_delta_after, became_visible };
     for (const file of readdirSync(key_test_dir).filter((name) => /^p\d+_.*\.mjs$/.test(name)).sort()) await (await import(`./${file}`)).run_cases(case_context);
 
     const tree_read_ms = [];

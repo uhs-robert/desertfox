@@ -135,6 +135,7 @@ function check_param_shape(param: ParamDef, at: string, fail: Fail): void {
     const from = (param.values as { from: unknown }).from;
     if (from !== "search_engines" && from !== "containers") fail(`${at}.values`, `unknown source "${String(from)}"`);
   }
+  check_value_labels(param, at, fail);
   if (param.default !== undefined) {
     if (is_context_source(param.default)) {
       if (param.type !== "string") fail(`${at}.default`, "a context source fits only a string param");
@@ -142,6 +143,17 @@ function check_param_shape(param: ParamDef, at: string, fail: Fail): void {
       const problem = value_problem(param, param.default);
       if (problem) fail(`${at}.default`, problem);
     }
+  }
+}
+
+function check_value_labels(param: ParamDef, at: string, fail: Fail): void {
+  if (param.value_labels === undefined) return;
+  const list = static_values(param);
+  if (param.type !== "enum" || !list) return fail(`${at}.value_labels`, "only an enum with a fixed value list takes value labels");
+  for (const [value, phrase] of Object.entries(param.value_labels)) {
+    if (!list.includes(value)) fail(`${at}.value_labels.${value}`, "is not one of the values");
+    else if (phrase === "" || phrase !== phrase.trim()) fail(`${at}.value_labels.${value}`, "must be a non-empty phrase without edge spaces");
+    else if (value === param.default) fail(`${at}.value_labels.${value}`, "the default value has no phrase");
   }
 }
 

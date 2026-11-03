@@ -6,7 +6,7 @@
 
 import type { CommandMeta, Mode } from "../../src/shared/command.ts";
 import { with_fallback_engines, type SnippetEntry } from "../../src/shared/config.ts";
-import { to_firefox_shortcut, parse_sequence } from "../../src/shared/keys/index.ts";
+import { label_problem, to_firefox_shortcut, parse_sequence } from "../../src/shared/keys/index.ts";
 import { find_param } from "../../src/shared/registry/params.ts";
 import { check_args, create_registry, DefineError, type Registry } from "../../src/shared/registry/index.ts";
 import { parse_binding } from "../../src/shared/registry/parse_binding.ts";
@@ -103,19 +103,34 @@ export function resolve_bindings(merged: MergedData, registry: Registry, problem
       return result.binding;
     }
   };
+  const resolve_run = (run: string | string[], where: string): BoundInvocation | BoundInvocation[] | undefined => {
+    if (typeof run === "string") return resolve_text(run, where);
+    const parsed = run.map((text) => resolve_text(text, where));
+    return parsed.every((binding) => binding !== undefined) ? parsed : undefined;
+  };
   for (const [mode, entries] of Object.entries(merged.keymap)) {
     if (mode === "search_keys" || mode === "container_keys" || mode === "group_names") continue;
     const bindings = entries as Record<string, unknown>;
     for (const [sequence, entry] of Object.entries(bindings)) {
-      if (typeof entry === "string") {
-        const binding = resolve_text(entry, location(mode, sequence));
+      const where = location(mode, sequence);
+      if (typeof entry === "string" || Array.isArray(entry)) {
+        const binding = resolve_run(entry, where);
         if (binding) bindings[sequence] = binding;
-      } else if (Array.isArray(entry)) {
-        const parsed = entry.map((text: string) => resolve_text(text, location(mode, sequence)));
-        if (parsed.every((binding) => binding !== undefined)) bindings[sequence] = parsed;
+      } else if (is_labeled_binding(entry)) {
+        const binding = resolve_run(entry.run, where);
+        if (!binding) continue;
+        const problem = entry.label === undefined ? null : label_problem(entry.label);
+        if (problem) problems.push(`${where}: ${problem}`);
+        // The label sits on the first invocation, as the compiler reads it there.
+        else if (entry.label !== undefined) [binding].flat()[0]!.label = entry.label;
+        bindings[sequence] = binding;
       }
     }
   }
+}
+
+function is_labeled_binding(entry: unknown): entry is { run: string | string[]; label?: string } {
+  return typeof entry === "object" && entry !== null && !Array.isArray(entry) && "run" in entry;
 }
 
 export function check_config(merged: MergedData, registry: Registry, problems: string[]) {
@@ -154,8 +169,8 @@ export function check_config(merged: MergedData, registry: Registry, problems: s
       if (binding === null) continue;
       const invocations = Array.isArray(binding) ? binding : [binding];
       for (const invocation of invocations) {
-        // A string here failed to parse, and resolve_bindings already reported it.
-        if (typeof invocation === "string") continue;
+        // A string or a labeled table here failed to parse, and resolve_bindings already reported it.
+        if (typeof invocation === "string" || is_labeled_binding(invocation)) continue;
         for (const message of check_invocation(invocation, registry, engine_names, mode)) problems.push(`${location}: ${message}`);
       }
     }

@@ -31,10 +31,11 @@ The registry lives in the background page. A command is plain data plus a handle
 
 ```ts
 define("tab.close", {
-  label: "Close Tab",
+  label: "Close tab",
   intent: "Close the current tab and focus the tab on the chosen side.",
   params: [
-    { name: "focus", type: "enum", values: ["right", "left"], default: "right" },
+    { name: "focus", type: "enum", values: ["right", "left"], default: "right",
+      value_labels: { left: "and focus left" } },
   ],
   runs_in: "background",
   count: "repeat",
@@ -63,9 +64,10 @@ The fields follow the Oasis action library (`home/hypr/.config/hypr/lib/act/init
 - `id`: `group.name`, lowercase with underscores. Same pattern as Oasis actions.
 - `name`: the command line name, set by hand, for example `search`. It is optional. The full id always works on the command line. Names are never derived from the id, because derived names collide (`tab.close` and `window.close`).
 - `aliases`: more command line names, for example `s`.
-- `label`: a short title. Which-key, the palette and completion show it.
+- `label`: a short title in sentence case ("Close tab"). Which-key, the palette and completion show it. A key shows this label plus a phrase for each arg its binding sets, see [Which-key](#which-key).
 - `intent`: one plain sentence on one line. Help, the status page, which-key hover and completion details show it. The registry rejects an empty or multi-line one.
 - `params`: typed and named. The types are `int`, `float`, `string`, `bool` and `enum`. A later phase adds `key` (one key press, for marks). A param with no `default` and no `when` is required. The order is for display only.
+- `value_labels`: on an `enum` param with a fixed value list, a short phrase for each value ("and focus left"). Which-key adds the phrase to the label when a binding sets that value, and completion shows it beside the value. Every key must be one of `values`, and the default value has no phrase. A value with no phrase reads as the raw value with spaces for underscores. The registry checks this at define time.
 - `main`: the one `string` param that config and the command line take as a bare word, for example the URL of `open` or the query of `search`. At most one per command.
 - `rest`: marks a `string` param as text with spaces. The grammar already lets the `main` value run to the end of the line.
 - `when`: the param is valid only if one other param has one of the listed values. For example, `container` needs `where` to open a new tab or window, because Firefox cannot change the container of an open tab. This is the only kind of condition. A command that needs more is split into two commands.
@@ -176,7 +178,7 @@ The tool reads `~/.config/oasisfox/` by default. Every data file is TOML. A left
 
 Each data file can also have a matching directory, for example `keymap.d/`. The tool merges the main file first, then the files in the directory in name order. A later entry wins for the same key. This is how private config joins without editing public files: a private repo links `keymap.d/50-private.toml` and `snippets/` files into place.
 
-Every key lives in `keymap.toml`. The other files hold only data. A binding is one line of command text, in the grammar of [Command line syntax](#command-line-syntax), or a list of them that run in order. TOML quotes any key that has symbols, so `"<C-[>"` and `"$"` are quoted and `gx` is not. Two shortcut sections remove most repetition:
+Every key lives in `keymap.toml`. The other files hold only data. A binding is one line of command text, in the grammar of [Command line syntax](#command-line-syntax), or a list of them that run in order, or a table `{ run = "...", label = "..." }` that names the key for which-key (`run` is a string or a list). TOML quotes any key that has symbols, so `"<C-[>"` and `"$"` are quoted and `gx` is not. Two shortcut sections remove most repetition:
 
 ```toml
 # keymap.toml
@@ -194,6 +196,7 @@ J = "tab.next"
 b = "bookmark.open"
 gO = ":open tab @current_url"   # types the command into the command line and waits
 y = ""                          # removes a default binding
+ww = { run = ":open window @current_url", label = "New window, edit current URL" }
 ```
 
 - `sa` searches with the `arch` engine in this tab, and `Sa` in a new tab.
@@ -308,6 +311,15 @@ Completion sources load only when the param being completed needs them: commands
 ### Which-key
 
 Which-key is a first-class surface. After a prefix key, it lists each possible next key with the label of its command. Hovering a row shows the command's intent. It reads both from the registry, so a new command appears without extra work.
+
+The label of a key comes from one rule, applied to the args the binding sets (never the defaults the validator fills in):
+
+- A binding `label` wins. It exists in the TOML table form and on the bindings of the default keymap. On a key that runs several commands, the label sits on the first command.
+- A key that sets a container reads as the container name, and the container named `default` reads "Default container".
+- Otherwise the label is the command label. A search engine with a label in `search_engines.toml` replaces it, and a binding with no engine uses the default engine. Then each `enum` arg the binding sets to a non-default value adds its `value_labels` phrase, in param order ("Open URL in new tab"). A `bool` set to true adds the param name ("Reload hard"). Numbers, free strings and prompted params add nothing, so the keys that set them carry a hand `label` ("Scroll left", "Zoom in a lot").
+- A snippet key shows the `// label:` header of its snippet.
+
+Two keys in one group may share a label only when they run the same binding (`zi` and `z+`). The unit tests check this for every group of the default keymap and of a copy of the owner config, and print each group's labels.
 
 - In the browser it draws in a closed shadow root, styled through the CSS variables in [Styles](#styles). It appears after a delay that is a setting.
 - With the native host, it can show in the Quickshell which-key HUD instead. The host writes the rows as `{ "items": [...] }` and calls the `hyprvim_whichkey` IPC target (`open <path>` and `close`). The HUD then uses the current Oasis style. Mouse hover works only in the browser version.

@@ -4,7 +4,7 @@ import { define } from "../shared/registry/index.ts";
 
 define("scroll.lines", {
   name: "scroll",
-  label: "Scroll Lines",
+  label: "Scroll lines",
   intent: "Scroll the page down by lines. A negative number scrolls up. A count prefix repeats the scroll.",
   params: [{ name: "count", type: "int", default: 1 }],
   runs_in: "content",
@@ -14,7 +14,7 @@ define("scroll.lines", {
 
 define("scroll.pixels", {
   name: "scrollpx",
-  label: "Scroll Pixels",
+  label: "Scroll pixels",
   intent: "Scroll the page by a number of pixels, right for dx and down for dy.",
   params: [
     { name: "dx", type: "int", default: 0 },
@@ -27,7 +27,7 @@ define("scroll.pixels", {
 
 define("scroll.pages", {
   name: "scrollpage",
-  label: "Scroll Pages",
+  label: "Scroll pages",
   intent: "Scroll down by a fraction of the visible height. A negative fraction scrolls up.",
   params: [{ name: "fraction", type: "float", default: 1 }],
   runs_in: "content",
@@ -37,11 +37,11 @@ define("scroll.pages", {
 
 define("scroll.to", {
   name: "scrollto",
-  label: "Scroll To",
+  label: "Scroll to",
   intent: "Jump to a percent of the page, from the top or left edge at 0 to the bottom or right edge at 100.",
   params: [
     { name: "percent", type: "float" },
-    { name: "axis", type: "enum", values: ["x", "y"], default: SCROLL_TO_DEFAULT_AXIS },
+    { name: "axis", type: "enum", values: ["x", "y"], default: SCROLL_TO_DEFAULT_AXIS, value_labels: { x: "horizontally" } },
   ],
   runs_in: "content",
   run: scroll_to.run,
@@ -49,9 +49,9 @@ define("scroll.to", {
 
 define("scroll.align", {
   name: "align",
-  label: "Align Focus",
+  label: "Align focus",
   intent: "Scroll the focused element, or else the selection, to the top, center or bottom of the view.",
-  params: [{ name: "position", type: "enum", values: ["top", "center", "bottom"], default: "center" }],
+  params: [{ name: "position", type: "enum", values: ["top", "center", "bottom"], default: "center", value_labels: { top: "to top", bottom: "to bottom" } }],
   runs_in: "content",
   run: scroll_align.run,
 });

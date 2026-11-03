@@ -19,7 +19,8 @@ export type Prompt = {
 };
 
 // An invocation as a key binding writes it.
-export type BoundInvocation = Invocation & { prompt?: Prompt };
+// `label` replaces the which-key label derived from the command. On a binding of several invocations only the first one's label counts.
+export type BoundInvocation = Invocation & { prompt?: Prompt; label?: string };
 
 // One invocation, or an array that runs in order.
 export type KeyBinding = BoundInvocation | BoundInvocation[];

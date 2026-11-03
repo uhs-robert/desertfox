@@ -82,7 +82,7 @@ test("zz, zt and zb align the focused field", () => {
   for (const [key, position] of Object.entries({ zz: "center", zt: "top", zb: "bottom" })) {
     assert.deepEqual(DEFAULT_KEYMAP.normal?.[key], { id: "scroll.align", args: { position } });
   }
-  assert.deepEqual(DEFAULT_KEYMAP.normal?.["z="], { id: "zoom.set", args: { level: 1 } });
+  assert.deepEqual(DEFAULT_KEYMAP.normal?.["z="], { id: "zoom.set", args: { level: 1 }, label: "Reset zoom" });
 });
 
 // Rows that name an engine or a container need the user's own data. The config supplies them.

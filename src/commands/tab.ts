@@ -186,7 +186,7 @@ const handlers = make_tab_handlers(browser_tab_deps);
 
 define("tab.next", {
   name: "tabnext",
-  label: "Next Tab",
+  label: "Next tab",
   intent: "Switch to the next tab, wrapping from the last to the first. A count prefix repeats it.",
   runs_in: "background",
   count: "repeat",
@@ -195,7 +195,7 @@ define("tab.next", {
 
 define("tab.prev", {
   name: "tabprev",
-  label: "Previous Tab",
+  label: "Previous tab",
   intent: "Switch to the previous tab, wrapping from the first to the last. A count prefix repeats it.",
   runs_in: "background",
   count: "repeat",
@@ -204,7 +204,7 @@ define("tab.prev", {
 
 define("tab.undo_close", {
   name: "undotab",
-  label: "Reopen Closed Tab",
+  label: "Reopen closed tab",
   intent: "Restore the most recently closed tab. A count prefix restores that many.",
   runs_in: "background",
   count: "repeat",
@@ -213,7 +213,7 @@ define("tab.undo_close", {
 
 define("tab.move", {
   name: "tabmove",
-  label: "Move Tab",
+  label: "Move tab",
   intent: "Move the tab right by a positive offset or left by a negative one. A count prefix repeats it.",
   params: [{ name: "offset", type: "int" }],
   runs_in: "background",
@@ -223,7 +223,7 @@ define("tab.move", {
 
 define("tab.duplicate", {
   name: "tabdup",
-  label: "Duplicate Tab",
+  label: "Duplicate tab",
   intent: "Open a copy of the tab next to it.",
   runs_in: "background",
   run: (ctx) => handlers.duplicate(ctx),
@@ -231,7 +231,7 @@ define("tab.duplicate", {
 
 define("tab.detach", {
   name: "detach",
-  label: "Detach Tab",
+  label: "Detach tab",
   intent: "Move the tab into a new window.",
   runs_in: "background",
   run: (ctx) => handlers.detach(ctx),
@@ -239,7 +239,7 @@ define("tab.detach", {
 
 define("tab.goto", {
   name: "tabgoto",
-  label: "Go To Tab",
+  label: "Go to tab",
   intent: "Switch to the tab at an index, where 1 is the first and -1 the last. Index 0 means the next tab.",
   params: [{ name: "index", type: "int", default: NEXT_TAB_INDEX }],
   runs_in: "background",
@@ -249,7 +249,7 @@ define("tab.goto", {
 
 define("tab.goto_audible", {
   name: "audible",
-  label: "Go To Audible Tab",
+  label: "Go to audible tab",
   intent: "Switch to the next tab in this window that is playing sound.",
   runs_in: "background",
   run: (ctx) => handlers.goto_audible(ctx),
@@ -257,7 +257,7 @@ define("tab.goto_audible", {
 
 define("tab.pin_toggle", {
   name: "pin",
-  label: "Toggle Pin",
+  label: "Toggle pin",
   intent: "Pin the tab, or unpin it when it is pinned.",
   runs_in: "background",
   run: (ctx) => handlers.pin_toggle(ctx),
@@ -265,7 +265,7 @@ define("tab.pin_toggle", {
 
 define("tab.mute_toggle", {
   name: "mute",
-  label: "Toggle Mute",
+  label: "Toggle mute",
   intent: "Mute the tab, or unmute it when it is muted.",
   runs_in: "background",
   run: (ctx) => handlers.mute_toggle(ctx),
@@ -273,9 +273,9 @@ define("tab.mute_toggle", {
 
 define("tab.close", {
   name: "tabclose",
-  label: "Close Tab",
+  label: "Close tab",
   intent: "Close the tab and focus the tab to its right, or to its left when focus is left. A count prefix repeats it.",
-  params: [{ name: "focus", type: "enum", values: ["right", "left"], default: "right" }],
+  params: [{ name: "focus", type: "enum", values: ["right", "left"], default: "right", value_labels: { left: "and focus left" } }],
   runs_in: "background",
   count: "repeat",
   run: (ctx, args) => handlers.close(ctx, args as { focus: "left" | "right" }),
@@ -283,16 +283,16 @@ define("tab.close", {
 
 define("tab.close_side", {
   name: "closeside",
-  label: "Close Tabs To One Side",
+  label: "Close tabs to one side",
   intent: "Close every unpinned tab to the left or right of this tab.",
-  params: [{ name: "side", type: "enum", values: ["left", "right"] }],
+  params: [{ name: "side", type: "enum", values: ["left", "right"], value_labels: { left: "on the left", right: "on the right" } }],
   runs_in: "background",
   run: (ctx, args) => handlers.close_side(ctx, args as { side: "left" | "right" }),
 });
 
 define("tab.reopen_in_container", {
   name: "reopen",
-  label: "Reopen In Container",
+  label: "Reopen in container",
   intent: "Reopen this page in a container in the same place and close the old tab. The container default means none.",
   params: [{ name: "container", type: "string", main: true, values: { from: "containers" } }],
   runs_in: "background",

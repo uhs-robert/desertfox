@@ -74,7 +74,7 @@ function merge_keymap(layers: DataLayer[], origins: Origins, problems: string[])
           continue;
         }
         if (!generator_sections.includes(section) && !is_command_text(entry)) {
-          problems.push(`${layer.file}: keymap.${section}["${key}"] must be a command string, "" to unbind, or a list of command strings`);
+          problems.push(`${layer.file}: keymap.${section}["${key}"] must be a command string, "" to unbind, a list of command strings, or { run = "...", label = "..." }`);
           continue;
         }
         // TOML has no null: "" is the unbind marker, stored as null.
@@ -88,6 +88,11 @@ function merge_keymap(layers: DataLayer[], origins: Origins, problems: string[])
 
 function is_command_text(entry: unknown): boolean {
   if (typeof entry === "string") return true;
+  if (is_plain_object(entry)) {
+    const only_known_fields = Object.keys(entry).every((key) => key === "run" || key === "label");
+    const has_run = is_command_text(entry.run) && entry.run !== "";
+    return only_known_fields && has_run && (entry.label === undefined || typeof entry.label === "string");
+  }
   return Array.isArray(entry) && entry.length > 0 && entry.every((item) => typeof item === "string" && item.trim() !== "");
 }
 
