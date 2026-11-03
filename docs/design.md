@@ -317,7 +317,7 @@ Completion sources load only when the param being completed needs them: commands
 
 ### Which-key
 
-Which-key is a first-class surface. After a prefix key, it lists each possible next key with the label of its command. Hovering a row shows the command's intent. It reads both from the registry, so a new command appears without extra work. The panel title shows the chain of groups typed so far, each part as the group's own row, for example `+Search in new tab >> +Dictionaries`. A group without a name shows its key.
+Which-key is a first-class surface. After a prefix key, it lists each possible next key with the label of its command. Hovering a row shows the command's intent. It reads both from the registry, so a new command appears without extra work.
 
 The label of a key comes from one rule, applied to the args the binding sets (never the defaults the validator fills in):
 
