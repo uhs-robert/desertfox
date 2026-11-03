@@ -30,6 +30,14 @@ export function create_cmdline_service(deps: CmdlineServiceDeps) {
   };
   // Two records in a row would both read the old list, so each waits for the one before.
   let last_write: Promise<unknown> = Promise.resolve();
+  // Two redemptions of one ticket at once would both read it before either removed it, so each waits for the one before.
+  let last_redeem: Promise<unknown> = Promise.resolve();
+  const redeem = async (ticket: string): Promise<unknown> => {
+    const key = CMDLINE_TICKET_STORAGE_PREFIX + ticket;
+    const issued_for: unknown = (await deps.tickets.get(key))[key];
+    await deps.tickets.remove(key);
+    return issued_for;
+  };
 
   return {
     // The host asks before it mounts the line and hands the ticket to its own frame only.
@@ -42,10 +50,9 @@ export function create_cmdline_service(deps: CmdlineServiceDeps) {
     // Used up on the first try, so a frame reloaded with an old ticket gets nothing either.
     open: async (ticket: unknown, tab_id: number | undefined): Promise<CmdlineOpened | undefined> => {
       if (typeof ticket !== "string" || tab_id === undefined) return undefined;
-      const key = CMDLINE_TICKET_STORAGE_PREFIX + ticket;
-      const issued_for: unknown = (await deps.tickets.get(key))[key];
-      await deps.tickets.remove(key);
-      if (issued_for !== tab_id) return undefined;
+      const redeemed = last_redeem.then(() => redeem(ticket));
+      last_redeem = redeemed.catch(() => undefined);
+      if ((await redeemed) !== tab_id) return undefined;
       // After the pending writes, so a line reopened at once already has the last command.
       await last_write;
       return { history: await read(), sources: await deps.sources(), ...(await deps.page_config()) };

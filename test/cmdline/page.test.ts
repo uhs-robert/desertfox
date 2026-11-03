@@ -3,7 +3,7 @@ import { test } from "node:test";
 import type { TestContext } from "node:test";
 import { COMPILED_KEYMAP_STORAGE_KEY, COMPILED_KEYMAP_VERSION } from "../../src/shared/prefix_tree.ts";
 
-// The ticket the host got from the background and put in the frame's name.
+// The ticket the host got from the background and sends in `start`.
 const TICKET = "issued-ticket";
 const leaf = (id: string) => ({ kind: "leaf", steps: [{ invocation: { id }, runs_in: "content", count_rule: "ignore" }] });
 const KEYMAP = {
@@ -20,9 +20,9 @@ const OPENED = {
 };
 
 // Just enough DOM for the command line page. `head` records what is appended, `parent` what is posted to the web page.
-type PageSetup = { frame_name?: string; keymap?: unknown };
+type PageSetup = { keymap?: unknown };
 
-async function load_page(t: TestContext, tag: string, { frame_name = TICKET, keymap = KEYMAP }: PageSetup = {}) {
+async function load_page(t: TestContext, tag: string, { keymap = KEYMAP }: PageSetup = {}) {
   const window_listeners: ((event: unknown) => void)[] = [];
   const input_listeners: Record<string, (event: unknown) => void> = {};
   const to_parent: unknown[] = [];
@@ -51,7 +51,6 @@ async function load_page(t: TestContext, tag: string, { frame_name = TICKET, key
     },
   };
   const page_window = {
-    name: frame_name,
     parent: { postMessage: (message: unknown) => void to_parent.push(message) },
     addEventListener: (type: string, listener: (event: unknown) => void) => void (type === "message" && window_listeners.push(listener)),
   };
@@ -59,6 +58,8 @@ async function load_page(t: TestContext, tag: string, { frame_name = TICKET, key
     window: page_window,
     document: {
       querySelector: (selector: string) => (selector === "#line" ? input : { textContent: "", hidden: true }),
+      // The page listens for keys on the document. The fake sends them through the input's table.
+      addEventListener: (type: string, listener: (event: unknown) => void) => void (input_listeners[type] = listener),
       body: { classList: { toggle: () => {} } },
       head: { append: (element: { textContent: string }) => void head.push(element) },
       createElement: () => ({ textContent: "" }),
@@ -66,10 +67,8 @@ async function load_page(t: TestContext, tag: string, { frame_name = TICKET, key
     browser: {
       runtime: {
         getURL: (path: string) => `https://extension.test/${path}`,
-        // The background answers only the ticket it issued. Before tickets it answered every frame, which is how the
-        // fake answers a request with none.
-        sendMessage: async (message: { type: string; ticket?: string }) =>
-          message.type === "open_cmdline" && (message.ticket === undefined || message.ticket === TICKET) ? OPENED : undefined,
+        // The background answers only the ticket it issued.
+        sendMessage: async (message: { type: string; ticket?: string }) => (message.type === "open_cmdline" && message.ticket === TICKET ? OPENED : undefined),
       },
       storage: { local: { get: async () => ({ [COMPILED_KEYMAP_STORAGE_KEY]: keymap }) } },
     },
@@ -78,21 +77,22 @@ async function load_page(t: TestContext, tag: string, { frame_name = TICKET, key
   });
   const page_url = new URL("../../src/cmdline/page.ts", import.meta.url).href;
   await import(`${page_url}?${tag}`);
-  // `main` has run once the page says ready. A page that never says so gets the wait in full.
   await until(() => to_parent.length === 1);
 
   const ports: MessagePort[] = [];
   t.after(() => ports.forEach((port) => port.close()));
   // Posts a start the way the host does, or the way a page script can, and returns the end the sender keeps.
-  // `secret` repeats the ticket under its old field name, so the test also reads true against the page before tickets.
   const post_start = (ticket: string | undefined, text: string, tokens: string[] = []) => {
     const channel = new MessageChannel();
     ports.push(channel.port1, channel.port2);
     const received: unknown[] = [];
     channel.port1.onmessage = (event) => void received.push(event.data);
-    const data = { oasisfox_cmdline: { kind: "start", ticket, secret: ticket, text, tokens } };
+    const data = { oasisfox_cmdline: { kind: "start", ticket, text, tokens } };
     for (const listener of window_listeners) listener({ data, source: page_window.parent, ports: [channel.port2] });
-    return { port: channel.port1, received };
+    // Resolves once the page took this start and said `opened`.
+    const opened = () => until(() => received.some((data) => (data as { oasisfox_cmdline: { kind: string } }).oasisfox_cmdline.kind === "opened"));
+    const submits = () => received.filter((data) => (data as { oasisfox_cmdline: { kind: string } }).oasisfox_cmdline.kind === "submit");
+    return { port: channel.port1, received, opened, submits };
   };
   const press_enter = () => input_listeners.keydown!({ isTrusted: true, isComposing: false, key: "Enter", code: "Enter", preventDefault: () => {} });
   const press = (key: string) => input_listeners.keydown!({ isTrusted: true, isComposing: false, key, code: key, preventDefault: () => {} });
@@ -104,59 +104,95 @@ async function until(condition: () => boolean): Promise<void> {
   for (let waited = 0; !condition() && waited < 2000; waited += 5) await new Promise((resolve) => setTimeout(resolve, 5));
 }
 
-test("a start without the host's ticket is ignored, and so is a second start", async (t) => {
+const settle = () => new Promise((resolve) => setTimeout(resolve, 50));
+const submit_of = (id: string) => [{ oasisfox_cmdline: { kind: "submit", invocation: { id } } }];
+
+test("a start with a ticket the background refuses gets nothing, and the host's start still opens the line", async (t) => {
   const { input, post_start } = await load_page(t, "forged_start");
-  post_start(undefined, "forged");
-  post_start("guess", "forged");
-  assert.equal(input.value, "");
-  post_start(TICKET, "real");
-  post_start(TICKET, "forged");
+  // A page script posts first, without a ticket and with a guess.
+  const forged = [post_start(undefined, "forged"), post_start("guess", "forged")];
+  const host = post_start(TICKET, "real");
+  await host.opened();
+  post_start(TICKET, "late");
+  await settle();
   assert.equal(input.value, "real");
+  assert.deepEqual(forged.map((site) => site.received), [[], []]);
 });
 
 test("a submit goes over the host's port and never to the web page", async (t) => {
   const { to_parent, post_start, press_enter } = await load_page(t, "no_leak");
   const host = post_start(TICKET, "jira");
+  await host.opened();
+  host.port.postMessage({ oasisfox_cmdline: { kind: "focused" } });
   press_enter();
-  await until(() => host.received.length === 1);
+  await until(() => host.submits().length === 1);
   assert.deepEqual(to_parent, [{ oasisfox_cmdline: { kind: "ready" } }]);
-  assert.deepEqual(host.received, [{ oasisfox_cmdline: { kind: "submit", invocation: { id: "my.jira" } } }]);
+  assert.deepEqual(host.submits(), submit_of("my.jira"));
 });
 
 test("a configured alias resolves, and the user CSS loads", async (t) => {
   const { head, post_start, press_enter } = await load_page(t, "alias_css");
   const host = post_start(TICKET, "j");
+  await host.opened();
+  host.port.postMessage({ oasisfox_cmdline: { kind: "focused" } });
   press_enter();
-  await until(() => host.received.length === 1);
-  assert.deepEqual(host.received, [{ oasisfox_cmdline: { kind: "submit", invocation: { id: "my.jira" } } }]);
+  await until(() => host.submits().length === 1);
+  assert.deepEqual(host.submits(), submit_of("my.jira"));
   assert.deepEqual(head.map((element) => element.textContent), [OPENED.css]);
 });
 
-test("the ticket is cleared from the frame's name once read", async (t) => {
-  await load_page(t, "name_cleared");
-  assert.equal((globalThis as unknown as { window: { name: string } }).window.name, "");
-});
-
-test("a copy that a site embedded itself, with a name it chose, sends no history over the site's port", async (t) => {
-  // The site learned the extension origin from an earlier `ready`, embedded cmdline.html, named it, and sends a matching start.
-  const { to_parent, post_start } = await load_page(t, "embedded_copy", { frame_name: "attacker" });
-  const site = post_start("attacker", "", ["<ArrowUp>", "<Enter>"]);
+test("a copy that a site embedded itself, with a ticket it made up, sends no history over the site's port", async (t) => {
+  // The site learned the extension origin from an earlier `ready`, embedded cmdline.html and sends its own start.
+  const { post_start } = await load_page(t, "embedded_copy");
+  const site = post_start("made-up", "", ["<ArrowUp>", "<Enter>"]);
   site.port.postMessage({ oasisfox_cmdline: { kind: "token", token: "<ArrowUp>" } });
   site.port.postMessage({ oasisfox_cmdline: { kind: "token", token: "<Enter>" } });
-  await new Promise((resolve) => setTimeout(resolve, 50));
-  assert.deepEqual([to_parent, site.received], [[], []]);
+  await settle();
+  assert.deepEqual(site.received, []);
+});
+
+test("keys the host forwarded before the page opened are typed once it has", async (t) => {
+  const { input, post_start } = await load_page(t, "queued_tokens");
+  const host = post_start(TICKET, "open");
+  host.port.postMessage({ oasisfox_cmdline: { kind: "token", token: "<Space>" } });
+  host.port.postMessage({ oasisfox_cmdline: { kind: "token", token: "x" } });
+  await until(() => input.value === "open x");
+  assert.equal(input.value, "open x");
 });
 
 test("Left then Backspace typed during the load edit before the caret", async (t) => {
   const { input, post_start } = await load_page(t, "edit_keys");
-  post_start(TICKET, "open x", ["<ArrowLeft>", "<Backspace>"]);
+  await post_start(TICKET, "open x", ["<ArrowLeft>", "<Backspace>"]).opened();
   assert.equal(input.value, "openx");
 });
 
 test("a stored keymap with no cmdline mode still lets Enter submit", async (t) => {
   const { post_start, press_enter } = await load_page(t, "no_cmdline_mode", { keymap: { ...KEYMAP, modes: {} } });
   const host = post_start(TICKET, "jira");
+  await host.opened();
+  host.port.postMessage({ oasisfox_cmdline: { kind: "focused" } });
   press_enter();
-  await until(() => host.received.length === 1);
-  assert.deepEqual(host.received, [{ oasisfox_cmdline: { kind: "submit", invocation: { id: "my.jira" } } }]);
+  await until(() => host.submits().length === 1);
+  assert.deepEqual(host.submits(), submit_of("my.jira"));
+});
+
+test("the page answers the host's check after a frame load", async (t) => {
+  const { post_start } = await load_page(t, "check");
+  const host = post_start(TICKET, "");
+  await host.opened();
+  host.port.postMessage({ oasisfox_cmdline: { kind: "check" } });
+  await until(() => host.received.length === 2);
+  assert.deepEqual(host.received.at(-1), { oasisfox_cmdline: { kind: "here" } });
+});
+
+test("an Enter typed in the frame waits for the keys the host forwarded before it", async (t) => {
+  const { post_start, press_enter } = await load_page(t, "key_order");
+  const host = post_start(TICKET, "jir");
+  await host.opened();
+  // The host forwarded "a", then moved focus, and the user's Enter reached the frame before "a" left the port.
+  host.port.postMessage({ oasisfox_cmdline: { kind: "token", token: "a" } });
+  press_enter();
+  host.port.postMessage({ oasisfox_cmdline: { kind: "focused" } });
+  await until(() => host.submits().length === 1);
+  assert.deepEqual(host.submits(), submit_of("my.jira"));
 });

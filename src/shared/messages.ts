@@ -51,7 +51,7 @@ export type WhichKeyRow = {
   more: boolean;
 };
 
-// From the `cmdline` host script before it mounts the line. The answer is a one-time ticket, or undefined outside a tab.
+// From the `cmdline` host script when it mounts the line. The answer is a one-time ticket, or undefined outside a tab.
 export type IssueCmdlineTicket = {
   type: "issue_cmdline_ticket";
 };

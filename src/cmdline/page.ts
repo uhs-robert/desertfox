@@ -15,9 +15,6 @@ import { create_session } from "./session.ts";
 import type { Effect, Session } from "./session.ts";
 import { create_word_lookup } from "./word_lookup.ts";
 
-// Read once and cleared, so a page that navigates this frame away cannot read it from `window.name`.
-const ticket = window.name;
-window.name = "";
 // The port from the host's `start`. Until it arrives there is nobody to tell.
 let host_port: MessagePort | undefined;
 
@@ -27,16 +24,20 @@ const say_ready = () => window.parent.postMessage(wrap<PageToHost>({ kind: "read
 
 const ask_background = <Answer>(message: ContentToBackground) => browser.runtime.sendMessage(message) as Promise<Answer>;
 
-async function main(): Promise<void> {
+type Start = Extract<HostToPage, { kind: "start" }>;
+
+// Page scripts can post a `start` too, to this frame or to a copy they embed. Only the background knows whether the
+// ticket is live, so every `start` is tried and the first one it accepts wins.
+async function open_line(start: Start, port: MessagePort): Promise<void> {
   const input = document.querySelector<HTMLInputElement>("#line")!;
   const note = document.querySelector<HTMLElement>("#note")!;
 
   const [stored, opened] = await Promise.all([
     browser.storage.local.get(COMPILED_KEYMAP_STORAGE_KEY),
-    ask_background<CmdlineOpened | undefined>({ type: "open_cmdline", ticket }),
+    ask_background<CmdlineOpened | undefined>({ type: "open_cmdline", ticket: start.ticket }),
   ]);
-  // A copy of this page that the host did not open: a site embedded it on its own. It stays silent.
-  if (!opened) return;
+  if (!opened || host_port) return;
+  host_port = port;
   const lookup = create_word_lookup(opened.commands, opened.command_aliases);
   // After the built-in styles, so user CSS wins.
   const user_style = document.createElement("style");
@@ -81,36 +82,46 @@ async function main(): Promise<void> {
     render();
   };
 
-  input.addEventListener("keydown", (event) => {
+  // Keys typed here before `focused` wait behind the ones the host forwarded, which may still be on the port.
+  // Without this, an Enter typed here can run before the last forwarded characters land.
+  let typed_before_focused: string[] | undefined = [];
+  // On the document, not the input: while focus moves into the frame, a key can land before the input has it.
+  document.addEventListener("keydown", (event) => {
     const token = event.isTrusted && !event.isComposing ? event_to_token(event) : null;
-    if (token !== null && press(token)) event.preventDefault();
+    if (typed_before_focused) {
+      if (token !== null) typed_before_focused.push(token);
+      event.preventDefault();
+    } else if (token !== null && press(token)) event.preventDefault();
   });
   input.addEventListener("input", () => {
     session.edit(input.value);
     render();
   });
 
-  const take_token = (event: MessageEvent) => {
+  host_port.onmessage = (event: MessageEvent) => {
     const message = unwrap<HostToPage>(event.data);
     if (message?.kind === "token") press_forwarded(message.token);
+    else if (message?.kind === "check") tell_host({ kind: "here" });
+    else if (message?.kind === "focused" && typed_before_focused) {
+      // Again now that the frame has focus. The first call ran while the host still held it.
+      input.focus();
+      const waiting = typed_before_focused;
+      typed_before_focused = undefined;
+      for (const token of waiting) press_forwarded(token);
+    }
   };
-
-  // Page scripts can post here too. Only the host knows the ticket, and only the first `start` counts.
-  window.addEventListener("message", (event) => {
-    const message = unwrap<HostToPage>(event.data);
-    const port = event.ports[0];
-    const is_first_host_start = !host_port && message?.kind === "start" && message.ticket === ticket;
-    if (!is_first_host_start || !port) return;
-    host_port = port;
-    host_port.onmessage = take_token;
-    session.edit(message.text);
-    render();
-    input.focus();
-    for (const token of message.tokens) press_forwarded(token);
-  });
-
-  // No autofocus anywhere: the frame would take the keys before the host has handed over the ones it kept, and the start message would wipe them.
-  say_ready();
+  session.edit(start.text);
+  render();
+  input.focus();
+  for (const token of start.tokens) press_forwarded(token);
+  tell_host({ kind: "opened" });
 }
 
-void main();
+window.addEventListener("message", (event) => {
+  const message = unwrap<HostToPage>(event.data);
+  const port = event.ports[0];
+  if (!host_port && message?.kind === "start" && port) void open_line(message, port);
+});
+
+// No autofocus anywhere: the frame would take the keys before the host has handed over the ones it kept, and the start message would wipe them.
+say_ready();

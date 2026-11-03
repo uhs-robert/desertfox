@@ -100,3 +100,10 @@ test("a ticket opens the line once, and only from the tab it was issued for", as
   assert.equal(await service.open(other, 7), undefined);
   assert.equal(await service.issue_ticket(undefined), undefined);
 });
+
+test("two redemptions of one ticket at once give the data only once", async () => {
+  const { service } = make();
+  const ticket = await service.issue_ticket(7);
+  const answers = await Promise.all([service.open(ticket, 7), service.open(ticket, 7)]);
+  assert.equal(answers.filter((answer) => answer !== undefined).length, 1);
+});

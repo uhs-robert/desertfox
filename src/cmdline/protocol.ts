@@ -8,13 +8,23 @@
 import type { Invocation } from "../shared/invocation.ts";
 
 export type HostToPage =
-  // Sent once the page said it is ready, with the port in its transfer list. `ticket` is the one the page found in its
-  // frame name, which page scripts cannot read, so a forged `start` is ignored. `tokens` are the keys typed while the page loaded, in order.
+  // Sent once the page said it is ready, with the port in its transfer list. The page trades `ticket` with the
+  // background for its data, so a forged `start` gets nothing. `tokens` are the keys typed while the page loaded, in order.
   | { kind: "start"; ticket: string; text: string; tokens: string[] }
   // A key that reached the host script instead of the page, for example after a click on the page.
-  | { kind: "token"; token: string };
+  | { kind: "token"; token: string }
+  // Sent once the host moved focus into the frame, after every key it forwarded. Later keys reach the page directly.
+  | { kind: "focused" }
+  // Sent after the frame loaded. A page that is still ours answers `here`.
+  | { kind: "check" };
 
-export type PageToHost = { kind: "ready" } | { kind: "close" } | { kind: "submit"; invocation: Invocation };
+export type PageToHost =
+  | { kind: "ready" }
+  // The ticket was good and the line is set up, so the host may move focus into the frame.
+  | { kind: "opened" }
+  | { kind: "here" }
+  | { kind: "close" }
+  | { kind: "submit"; invocation: Invocation };
 
 export const MESSAGE_MARK = "oasisfox_cmdline";
 
