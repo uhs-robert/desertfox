@@ -1,7 +1,20 @@
-# Sample search engines for OasisFox. "%s" stands for the query.
-# Copy this file to ~/.config/oasisfox/search_engines.toml and edit it.
+# Sample search engines for OasisFox. Copy this file to ~/.config/oasisfox/search_engines.toml and edit it.
 # OasisFox has one built-in engine, duck. An entry named duck here replaces it.
+#
+# An engine is a named URL template. Slots fill it in:
+#   {query}       the typed or selected text. "%s" means the same.
+#   {url} {host} {title}   the current page. {repo} {subreddit} {channel}   the GitHub repo, subreddit or YouTube channel of the page.
+#   {a|b}         the first of the slots that has a value, for example {query|url}: the typed address, else this page.
+#   {name:raw}    the value as it is, with no escaping, for a path such as /web/{url:raw}.
+# An engine that uses a page slot is available only on a page that can fill it. It hides from which-key and completion
+# elsewhere. With a fallback, it never hides and runs the fallback engine instead.
+#
+# A table inside an engine is a child, named with a dot: `search github.repo.issues foo`. A child inherits every field
+# and overrides by name. A param is declared on the parent with its values, and children = true makes one child per
+# value. A value names a slot with `{name}`, so a scope can say "repo:{repo} ".
+# A child cannot be named url, label, params or fallback, or like a field or param of its parent.
 
+# Flat engines: one line each, "%s" stands for the query.
 arch = { url = "https://wiki.archlinux.org/index.php?search=%s", label = "Arch Linux wiki" }
 amazon = { url = "https://www.amazon.com/s?k=%s", label = "Amazon" }
 brave = { url = "https://search.brave.com/search?q=%s", label = "Brave Search" }
@@ -10,13 +23,9 @@ commons = { url = "https://openverse.org/search/?q=%s", label = "Creative Common
 crates = { url = "https://crates.io/search?q=%s", label = "Rust crates" }
 duck = { url = "https://duckduckgo.com/?q=%s", label = "DuckDuckGo" }
 define = { url = "https://www.merriam-webster.com/dictionary/%s", label = "Merriam-Webster dictionary" }
-sitedown = { url = "https://www.isitdownrightnow.com/%s", label = "Is it down right now" }
 fedora = { url = "https://packages.fedoraproject.org/search?query=%s", label = "Fedora packages" }
 flathub = { url = "https://flathub.org/apps/search?q=%s", label = "Flathub apps" }
 google = { url = "https://www.google.com/search?q=%s", label = "Google" }
-# Code search needs a GitHub login.
-gh = { url = "https://github.com/search?q=%s&type=code", label = "GitHub code search" }
-github = { url = "https://github.com/search?q=%s", label = "GitHub" }
 greasyfork = { url = "https://greasyfork.org/en/scripts?q=%s", label = "Greasy Fork user scripts" }
 image = { url = "https://www.google.com/search?tbm=isch&q=%s", label = "Google Images" }
 lastyear = { url = "https://www.google.com/search?hl=en&tbo=1&tbs=qdr:y&q=%s", label = "Google, past year" }
@@ -33,16 +42,81 @@ imdb = { url = "https://www.imdb.com/find?s=all&q=%s", label = "IMDb" }
 mdn = { url = "https://developer.mozilla.org/en-US/search?q=%s", label = "MDN Web Docs" }
 npm = { url = "https://www.npmjs.com/search?q=%s", label = "npm packages" }
 proton = { url = "https://www.protondb.com/search?q=%s", label = "ProtonDB" }
-reddit = { url = "https://www.reddit.com/search/?q=%s", label = "Reddit" }
 redditgoogle = { url = "https://www.google.com/search?q=site:reddit.com+%s", label = "Reddit, through Google" }
 rubygems = { url = "https://rubygems.org/search?query=%s", label = "RubyGems" }
 stackoverflow = { url = "https://stackoverflow.com/search?q=%s", label = "Stack Overflow" }
 steam = { url = "https://store.steampowered.com/search?term=%s", label = "Steam store" }
 synonym = { url = "https://www.thesaurus.com/browse/%s", label = "Thesaurus" }
-# Fixed to translate into English (tl=en).
-translate = { url = "https://translate.google.com/?sl=auto&tl=en&text=%s", label = "Google Translate" }
 # Results can include adult content.
 urbandictionary = { url = "https://www.urbandictionary.com/define.php?term=%s", label = "Urban Dictionary" }
 wikipedia = { url = "https://en.wikipedia.org/w/index.php?search=%s", label = "Wikipedia" }
 wolframalpha = { url = "https://www.wolframalpha.com/input?i=%s", label = "Wolfram Alpha" }
-youtube = { url = "https://www.youtube.com/results?search_query=%s", label = "YouTube" }
+
+# Tables must come after the one-line engines: TOML puts a plain key under the table above it.
+
+# A tree: search GitHub by type, or only inside the repo of the current page.
+# Generates github, github.code, github.issues, github.prs, github.commits, github.discussions, github.repos,
+# github.users, then github.repo and the five repo-scoped children below it.
+[github]
+label = "GitHub"
+url = "https://github.com/search?q={scope}{query}&type={type}"
+scope = ""
+
+[github.params.type]
+default = "code"
+children = true
+values = { code = "code", issues = "issues", prs = "pullrequests", commits = "commits", discussions = "discussions", repos = "repositories", users = "users" }
+
+[github.repo]
+label = "this repo"
+scope = "repo:{repo} "
+type = { only = ["code", "issues", "prs", "commits", "discussions"] }
+
+# A tree with filters: one param whose values are YouTube's own filter codes. An empty value leaves "&sp=" out.
+[youtube]
+label = "YouTube"
+url = "https://www.youtube.com/results?search_query={query}&sp={filter}"
+
+[youtube.params.filter]
+default = "any"
+children = true
+values = { any = "", hour = "EgIIAQ%3D%3D", today = "EgIIAg%3D%3D", week = "EgIIAw%3D%3D", month = "EgIIBA%3D%3D", year = "EgIIBQ%3D%3D", short = "EgIYAQ%3D%3D", medium = "EgIYAw%3D%3D", long = "EgIYAg%3D%3D" }
+
+# Search inside the channel of the current page. Its url takes no filter, so it has no filter children.
+[youtube.channel]
+label = "this channel"
+url = "https://www.youtube.com/{channel:raw}/search?query={query}"
+filter = { only = [] }
+
+# Reddit: this subreddit when the page is in one, else all of Reddit.
+[reddit]
+label = "Reddit"
+url = "https://www.reddit.com/search/?q={query}"
+
+[reddit.sub]
+label = "this subreddit"
+url = "https://www.reddit.com/r/{subreddit}/search/?q={query}&restrict_sr=1"
+fallback = "reddit"
+
+# Search the site of the current page. Hidden on pages with no site.
+[site]
+label = "This site"
+url = "https://duckduckgo.com/?q=site:{host}+{query}"
+
+# These three take a typed address and default to the current page.
+[archive]
+label = "Web archive"
+url = "https://web.archive.org/web/{query|url:raw}"
+
+[isdown]
+label = "Is it down right now"
+url = "https://www.isitdownrightnow.com/{query|host}.html"
+
+# Translate typed text, or the current page as translate.page. Fixed to translate into English (tl=en).
+[translate]
+label = "Google Translate"
+url = "https://translate.google.com/?sl=auto&tl=en&text={query}"
+
+[translate.page]
+label = "this page"
+url = "https://translate.google.com/translate?sl=auto&tl=en&u={query|url}"

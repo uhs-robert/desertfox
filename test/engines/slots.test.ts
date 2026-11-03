@@ -21,6 +21,14 @@ test("subreddit reads the name under /r/", () => {
   assert.equal(read("subreddit", "https://example.com/r/rust"), undefined);
 });
 
+test("channel reads the handle or the older channel path on YouTube only", () => {
+  assert.equal(read("channel", "https://www.youtube.com/@cat/videos"), "@cat");
+  assert.equal(read("channel", "https://m.youtube.com/channel/UC123/about"), "channel/UC123");
+  assert.equal(read("channel", "https://www.youtube.com/watch?v=x"), undefined);
+  assert.equal(read("channel", "https://www.youtube.com/@"), undefined);
+  assert.equal(read("channel", "https://example.com/@cat"), undefined);
+});
+
 test("url and host need a web page", () => {
   assert.equal(read("url", "https://a.com/x"), "https://a.com/x");
   assert.equal(read("host", "http://a.com:8080/x"), "a.com");
