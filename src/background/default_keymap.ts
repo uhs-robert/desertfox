@@ -1,7 +1,7 @@
 import type { KeymapConfig } from "../shared/keymap.ts";
 
 // The source of docs/keymap.md: `just docs-gen` regenerates its tables from this file.
-// Search engine keys (`s`, `S`, `,`) and container keys (`c`) come from the user's config. The site search key `s/` and the `sG` GitHub group are defaults and open the command line when nothing is selected.
+// Search engine keys (`s`, `S`, `,`) and container keys (`c`) come from the user's config.
 // Keys of the phase 2 stubs (`o O T b B f F ; : V`) are bound now and refuse until hints, the command line, the picker and caret mode exist.
 // The caret, visual and cmdline commands are placeholders too: they load their bundle and refuse until it registers them.
 // The caret and visual motions. `0` and `$` are line ends, `^` the first non-blank, `gg` and `G` the ends of the text.
@@ -40,7 +40,6 @@ export const DEFAULT_KEYMAP: KeymapConfig = {
     q: "OasisFox",
     ";": "Hints",
     s: "Search here",
-    sG: "GitHub",
     S: "Search in new tab",
     c: "Reopen in container",
     C: "Open in container",
@@ -64,16 +63,6 @@ export const DEFAULT_KEYMAP: KeymapConfig = {
     rr: { id: "page.reload" },
     rh: { id: "page.reload", args: { hard: true }, label: "Hard reload" },
     R: { id: "page.reload", args: { hard: true }, label: "Hard reload" },
-    ri: { id: "site.isdown" },
-    "s/": { id: "site.search", args: { query: { from: "selection" } } },
-    sGc: { id: "site.github", args: { query: { from: "selection" }, type: "code" }, label: "Search GitHub code in this repo" },
-    sGi: { id: "site.github", args: { query: { from: "selection" }, type: "issues" }, label: "Search GitHub issues in this repo" },
-    sGp: { id: "site.github", args: { query: { from: "selection" }, type: "pullrequests" }, label: "Search GitHub pull requests in this repo" },
-    sGm: { id: "site.github", args: { query: { from: "selection" }, type: "commits" }, label: "Search GitHub commits in this repo" },
-    sGd: { id: "site.github", args: { query: { from: "selection" }, type: "discussions" }, label: "Search GitHub discussions in this repo" },
-    sGr: { id: "site.github", args: { query: { from: "selection" }, type: "repositories" } },
-    sGu: { id: "site.github", args: { query: { from: "selection" }, type: "users" } },
-    sGs: { id: "site.github", args: { query: { from: "selection" }, type: "any", scope: "all" }, label: "Search all of GitHub" },
     xp: { id: "page.stop" },
     gh: { id: "page.home" },
     gH: { id: "page.home", args: { where: "tab" } },

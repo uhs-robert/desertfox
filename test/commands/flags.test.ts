@@ -3,12 +3,6 @@ import { test } from "node:test";
 import "../../src/background/command_modules.ts";
 import { parse_command_line, print_command, registry } from "../../src/shared/registry/index.ts";
 
-const args_of = (text: string) => {
-  const result = parse_command_line(registry, text, { search_engines: ["google"], containers: [] });
-  assert.equal(result.kind, "invocation", `${text}: ${JSON.stringify(result)}`);
-  return result.kind === "invocation" ? result.invocation.args : undefined;
-};
-
 test("-t -b -w mean where and -c means container on every command that has the param", () => {
   for (const command of registry.list()) {
     for (const param of command.params ?? []) {
@@ -16,14 +10,6 @@ test("-t -b -w mean where and -c means container on every command that has the p
       if (param.name === "container" && !param.main) assert.equal(param.short, "c", command.id);
     }
   }
-});
-
-test("site.github has no container param, and its default type has no short", () => {
-  const github = registry.get("site.github")!;
-  assert.equal(github.params?.some((param) => param.name === "container"), false);
-  const type = github.params?.find((param) => param.name === "type");
-  assert.equal(typeof type?.short === "object" && "code" in type.short, false);
-  assert.deepEqual(args_of("github -r -t go"), { type: "repositories", where: "tab", query: "go" });
 });
 
 test("typed names are the dotted id except the family words and one-word commands", () => {
@@ -38,7 +24,6 @@ test("typed names are the dotted id except the family words and one-word command
     "open.search=search",
     "open.url=open",
     "scroll.lines=scroll",
-    "site.github=github",
     "tab.switch=tab",
     "zoom.set=zoom",
   ]);

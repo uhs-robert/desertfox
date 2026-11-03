@@ -12,7 +12,6 @@ import "../commands/page.ts";
 import "../commands/url.ts";
 import "../commands/open.ts";
 import "../commands/copy.ts";
-import "../commands/site.ts";
 import "../commands/phase_2.ts";
 import "../commands/help.ts";
 import "../commands/engine.ts";

@@ -1,17 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import {
-  archive_url,
-  engine_search_url,
-  isdown_url,
-  parent_url,
-  github_search_url,
-  root_url,
-  site_search_url,
-  subreddit_of,
-  subreddit_search_url,
-  translate_url,
-} from "../../src/commands/url_build.ts";
+import { engine_search_url, parent_url, root_url } from "../../src/commands/url_build.ts";
 
 test("parent drops the last segment, the query and the fragment", () => {
   assert.equal(parent_url("https://a.com/x/y/z?q=1#h"), "https://a.com/x/y/");
@@ -35,54 +24,6 @@ test("root keeps the port and drops the path", () => {
   assert.equal(root_url("file:///tmp/x"), undefined);
 });
 
-test("archive, isdown and translate build from the page", () => {
-  assert.equal(archive_url("https://a.com/x"), "https://web.archive.org/web/https://a.com/x");
-  assert.equal(isdown_url("https://sub.a.com:81/x"), "https://www.isitdownrightnow.com/sub.a.com.html");
-  assert.equal(isdown_url("about:blank"), undefined);
-  assert.equal(translate_url("https://a.com/x?y=1&z"), "https://translate.google.com/translate?sl=auto&tl=en&u=https%3A%2F%2Fa.com%2Fx%3Fy%3D1%26z");
-});
-
-test("site search puts the host in a site: filter", () => {
-  assert.equal(site_search_url("https://a.com/x", "rust & go"), "https://www.google.com/search?q=site%3Aa.com%20rust%20%26%20go");
-});
-
-test("GitHub search qualifies the query with the repo of the page for every type", () => {
-  const page = "https://github.com/o/r/blob/main/x.ts";
-  for (const type of ["code", "issues", "pullrequests", "commits", "discussions"]) {
-    assert.equal(github_search_url(page, type, "repo", "a b"), `https://github.com/search?q=repo%3Ao%2Fr%20a%20b&type=${type}`);
-  }
-});
-
-test("GitHub search across all of GitHub needs no repo and leaves type out for any", () => {
-  assert.equal(github_search_url("https://a.com", "any", "all", "x"), "https://github.com/search?q=x");
-  assert.equal(github_search_url("https://a.com", "issues", "all", "x"), "https://github.com/search?q=x&type=issues");
-});
-
-test("repositories and users search all of GitHub from any page", () => {
-  assert.equal(github_search_url("about:blank", "repositories", undefined, "a&b"), "https://github.com/search?q=a%26b&type=repositories");
-  assert.equal(github_search_url("https://a.com", "users", undefined, "x"), "https://github.com/search?q=x&type=users");
-});
-
-test("GitHub search refuses repo scope off a repo page", () => {
-  assert.equal(github_search_url("https://github.com/o", "code", "repo", "x"), undefined);
-  assert.equal(github_search_url("https://gitlab.com/o/r", "issues", "repo", "x"), undefined);
-});
-
-test("subreddit comes from /r/<name>, an explicit sub wins, and all is the fallback", () => {
-  assert.equal(subreddit_of("https://www.reddit.com/r/rust/comments/1"), "rust");
-  assert.equal(subreddit_of("https://www.reddit.com/user/x"), undefined);
-  const search = (page: string, sub: string) => subreddit_search_url(page, "q 1", sub);
-  assert.equal(search("https://www.reddit.com/r/rust/", "all"), "https://www.reddit.com/r/rust/search/?q=q%201&restrict_sr=1");
-  assert.equal(search("https://www.reddit.com/r/rust/", "go"), "https://www.reddit.com/r/go/search/?q=q%201&restrict_sr=1");
-  assert.equal(search("https://a.com/", "all"), "https://www.reddit.com/r/all/search/?q=q%201&restrict_sr=1");
-});
-
 test("engine template encodes the query at every placeholder", () => {
   assert.equal(engine_search_url("https://e.com/?q=%s&r=%s", "a&b/c d"), "https://e.com/?q=a%26b%2Fc%20d&r=a%26b%2Fc%20d");
-});
-
-test("archive and translate refuse non-http pages", () => {
-  assert.equal(archive_url("about:preferences"), undefined);
-  assert.equal(translate_url("about:preferences"), undefined);
-  assert.equal(archive_url("https://a.com/x"), "https://web.archive.org/web/https://a.com/x");
 });
