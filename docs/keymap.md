@@ -10,7 +10,7 @@ Status values:
 
 The shipped defaults bind every `v1` row whose command exists, with three kinds of exception:
 
-- Rows that name a search engine or a container (`s`, `S`, `,`, `c`, `C` keys). The user's config generates them from `search_keys` and `container_keys`. The `s/` and `sGc` site search rows are the exception and ship as defaults.
+- Rows that name a search engine or a container (`s`, `S`, `,`, `c`, `C` keys). The user's config generates them from `search_keys` and `container_keys`. The `s/` and `sG` site search rows are the exception and ship as defaults.
 - `;f`, because it needs the command line prompt to ask for the link text. `hint.run text=...` already filters.
 - `ZZ`, because closing every window cannot be undone. Bind it in the config.
 
@@ -65,7 +65,14 @@ dropped: 8 | later: 15 | v1: 269
 | normal | `rh` | v1 | `page.reload hard=true` |
 | normal | `ri` | v1 | `site.isdown` |
 | normal | `s/` | v1 | `site.search query=@selection` (prompts when nothing is selected) |
-| normal | `sGc` | v1 | `site.repo query=@selection` (prompts when nothing is selected) |
+| normal | `sGc` | v1 | `site.github query=@selection type=code` (prompts when nothing is selected) |
+| normal | `sGi` | v1 | `site.github query=@selection type=issues` |
+| normal | `sGp` | v1 | `site.github query=@selection type=pullrequests` |
+| normal | `sGm` | v1 | `site.github query=@selection type=commits` |
+| normal | `sGd` | v1 | `site.github query=@selection type=discussions` |
+| normal | `sGr` | v1 | `site.github query=@selection type=repositories` |
+| normal | `sGu` | v1 | `site.github query=@selection type=users` |
+| normal | `sGs` | v1 | `site.github query=@selection type=any scope=all` (GitHub picks the result type) |
 | normal | `W` | v1 | `window.new` (prompts, url prefilled from current_url) |
 | normal | `wa` | dropped | assumed unused |
 | normal | `wc` | v1 | `window.close` |
@@ -252,8 +259,6 @@ dropped: 8 | later: 15 | v1: 269
 | normal | `Sc` | v1 | `open.search engine=crates where=tab` (prompts) |
 | normal | `sf` | v1 | `open.search engine=flathub` (prompts) |
 | normal | `Sf` | v1 | `open.search engine=flathub where=tab` (prompts) |
-| normal | `sG` | v1 | `open.search engine=gh` (prompts) |
-| normal | `SG` | v1 | `open.search engine=gh where=tab` (prompts) |
 | normal | `sh` | v1 | `open.search engine=hackernews` (prompts) |
 | normal | `Sh` | v1 | `open.search engine=hackernews where=tab` (prompts) |
 | normal | `si` | v1 | `open.search engine=imdb` (prompts) |
