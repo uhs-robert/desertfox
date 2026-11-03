@@ -10,7 +10,8 @@ import type { Found, HintFilter } from "./candidates.ts";
 import { clean_letters, make_labels } from "./labels.ts";
 import { create_picker } from "./pick.ts";
 import { create_view } from "./view.ts";
-import { contains_composed, keep_visible } from "./visible.ts";
+import { follow_windows } from "./follow.ts";
+import { keep_visible, uncovered_through_frames } from "./visible.ts";
 import type { PageProbe } from "./visible.ts";
 
 type HintsWindow = { oasisfox_host: BundleHostApi; oasisfox_hints_ready?: true };
@@ -37,6 +38,12 @@ function observe_intersecting(elements: Element[]): Promise<Set<Element>> {
 
 const window_of = (element: Element): Window => element.ownerDocument.defaultView ?? window;
 
+// The top window plus every same-origin frame window that holds a candidate: a scroll inside a frame moves its labels too.
+function windows_of(found: Found[]): Window[] {
+  const frame_windows = found.flatMap((item) => item.frames.map((frame) => (frame as HTMLIFrameElement).contentWindow));
+  return [...new Set([window, ...frame_windows])].filter((win): win is Window => win !== null);
+}
+
 // Opening in another place needs an address, so only links qualify.
 function find_candidates(filter: HintFilter, custom_selector: string | undefined, action: HintAction): Found[] {
   const opens_elsewhere = OPEN_PLACES.includes(action);
@@ -50,10 +57,7 @@ async function keep_visible_ones(candidates: Found[]): Promise<Found[]> {
     rect_of: (found) => found.element.getBoundingClientRect(),
     viewport_of: (found) => ({ width: window_of(found.element).innerWidth, height: window_of(found.element).innerHeight }),
     is_hidden_by_style: (found) => window_of(found.element).getComputedStyle(found.element).visibility === "hidden",
-    is_reachable_at: (found, x, y) => {
-      const top = found.element.ownerDocument.elementFromPoint(x, y);
-      return top === null || contains_composed(found.element, top) || contains_composed(top, found.element);
-    },
+    is_reachable_at: (found, x, y) => uncovered_through_frames(found, x, y),
   };
   return keep_visible(candidates, probe);
 }
@@ -66,25 +70,6 @@ async function read_letters(): Promise<string[]> {
 
 function open_link(url: string, place: Place): void {
   void browser.runtime.sendMessage({ type: "run", invocations: [{ id: "open.url", args: { url, where: place } }], mode: "normal" });
-}
-
-// A frame that sees the rest of the page repositions the labels on the next animation frame after any scroll or resize.
-function follow_page(reposition: () => void): () => void {
-  let frame_requested = false;
-  const on_change = () => {
-    if (frame_requested) return;
-    frame_requested = true;
-    requestAnimationFrame(() => {
-      frame_requested = false;
-      reposition();
-    });
-  };
-  window.addEventListener("scroll", on_change, { capture: true, passive: true });
-  window.addEventListener("resize", on_change, { passive: true });
-  return () => {
-    window.removeEventListener("scroll", on_change, true);
-    window.removeEventListener("resize", on_change);
-  };
 }
 
 function register(host: BundleHostApi): void {
@@ -143,7 +128,7 @@ function register(host: BundleHostApi): void {
       }
       const labels = make_labels(found.length, letters);
       view.show(found.map((item, index) => ({ found: item, text: labels[index]! })));
-      current.ready = { picker: create_picker(labels), found, view, stop_following: follow_page(view.reposition) };
+      current.ready = { picker: create_picker(labels), found, view, stop_following: follow_windows(windows_of(found), view.reposition) };
       for (const token of current.waiting_tokens.splice(0)) {
         if (current.cancelled) break;
         handle_token(current, token);

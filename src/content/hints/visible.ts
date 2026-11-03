@@ -40,3 +40,23 @@ export function contains_composed(ancestor: unknown, node: unknown): boolean {
   }
   return false;
 }
+
+type Topmost = { ownerDocument: { elementFromPoint: (x: number, y: number) => unknown } };
+type FrameBox = Topmost & { getBoundingClientRect: () => Rect; clientLeft: number; clientTop: number };
+
+// The page test at the point, repeated in each parent document: the element, then its innermost frame, out to the outermost.
+// Each frame is tested as a whole, since the parent cannot see inside it.
+export function uncovered_through_frames(found: { element: Topmost; frames: readonly FrameBox[] }, x: number, y: number): boolean {
+  let target: Topmost = found.element;
+  let point = { x, y };
+  for (let depth = found.frames.length; depth >= 0; depth--) {
+    const top = target.ownerDocument.elementFromPoint(point.x, point.y);
+    if (top !== null && !contains_composed(target, top) && !contains_composed(top, target)) return false;
+    if (depth === 0) return true;
+    const frame = found.frames[depth - 1]!;
+    const box = frame.getBoundingClientRect();
+    point = { x: point.x + box.left + frame.clientLeft, y: point.y + box.top + frame.clientTop };
+    target = frame;
+  }
+  return true;
+}

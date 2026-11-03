@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { contains_composed, keep_visible, visible_point } from "../../src/content/hints/visible.ts";
+import { contains_composed, keep_visible, uncovered_through_frames, visible_point } from "../../src/content/hints/visible.ts";
 import type { PageProbe, Rect } from "../../src/content/hints/visible.ts";
 
 type Box = { name: string; rect: Rect; intersecting?: boolean; hidden?: boolean; covered_by?: string };
@@ -47,4 +47,16 @@ test("contains_composed climbs out of a shadow root through its host", () => {
   assert.equal(contains_composed(host, inner), true);
   assert.equal(contains_composed(inner, host), false);
   assert.equal(contains_composed(inner, inner), true);
+});
+
+test("a candidate in a frame is dropped when the parent document covers the frame", () => {
+  const link = { parentNode: null as unknown, ownerDocument: { elementFromPoint: () => null as unknown } };
+  const modal = { parentNode: null as unknown };
+  const frame = { parentNode: null as unknown, clientLeft: 1, clientTop: 2, getBoundingClientRect: () => at(100, 200), ownerDocument: { elementFromPoint: (_x: number, _y: number) => modal as unknown } };
+  const found = { element: link, frames: [frame] };
+  assert.equal(uncovered_through_frames(found, 5, 5), false);
+  const seen: [number, number][] = [];
+  frame.ownerDocument.elementFromPoint = (x, y) => (seen.push([x, y]), frame);
+  assert.equal(uncovered_through_frames(found, 5, 5), true);
+  assert.deepEqual(seen, [[106, 207]]);
 });
