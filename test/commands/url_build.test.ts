@@ -54,17 +54,18 @@ test("GitHub search qualifies the query with the repo of the page for every type
 });
 
 test("GitHub search across all of GitHub needs no repo and leaves type out for any", () => {
-  assert.equal(github_search_url("about:blank", "repositories", "all", "a&b"), "https://github.com/search?q=a%26b&type=repositories");
-  assert.equal(github_search_url("https://a.com", "users", "all", "x"), "https://github.com/search?q=x&type=users");
   assert.equal(github_search_url("https://a.com", "any", "all", "x"), "https://github.com/search?q=x");
   assert.equal(github_search_url("https://a.com", "issues", "all", "x"), "https://github.com/search?q=x&type=issues");
 });
 
-test("GitHub search refuses repo scope off a repo page and for repositories and users", () => {
+test("repositories and users search all of GitHub from any page", () => {
+  assert.equal(github_search_url("about:blank", "repositories", undefined, "a&b"), "https://github.com/search?q=a%26b&type=repositories");
+  assert.equal(github_search_url("https://a.com", "users", undefined, "x"), "https://github.com/search?q=x&type=users");
+});
+
+test("GitHub search refuses repo scope off a repo page", () => {
   assert.equal(github_search_url("https://github.com/o", "code", "repo", "x"), undefined);
   assert.equal(github_search_url("https://gitlab.com/o/r", "issues", "repo", "x"), undefined);
-  assert.equal(github_search_url("https://github.com/o/r", "repositories", "repo", "x"), undefined);
-  assert.equal(github_search_url("https://github.com/o/r", "users", "repo", "x"), undefined);
 });
 
 test("subreddit comes from /r/<name>, an explicit sub wins, and all is the fallback", () => {

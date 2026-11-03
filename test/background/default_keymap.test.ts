@@ -7,7 +7,7 @@ import { empty_config } from "../../src/background/config_load.ts";
 import { DEFAULT_KEYMAP } from "../../src/background/default_keymap.ts";
 import type { TreeBranch } from "../../src/shared/prefix_tree.ts";
 import type { KeymapConfig } from "../../src/shared/keymap.ts";
-import { registry } from "../../src/shared/registry/index.ts";
+import { check_args, registry } from "../../src/shared/registry/index.ts";
 
 const bindings_of = (keymap: KeymapConfig) => Object.entries(keymap).filter(([name]) => name !== "group_names");
 
@@ -166,8 +166,8 @@ test("s/ and the sG keys search with the selection and prompt when it is empty",
     sGp: { type: "pullrequests" },
     sGm: { type: "commits" },
     sGd: { type: "discussions" },
-    sGr: { type: "repositories", scope: "all" },
-    sGu: { type: "users", scope: "all" },
+    sGr: { type: "repositories" },
+    sGu: { type: "users" },
     sGs: { type: "any", scope: "all" },
   };
   for (const [key, args] of Object.entries(github_keys)) assert.deepEqual(normal[key], { id: "site.github", args: { query: selection, ...args } }, key);
@@ -185,11 +185,19 @@ test("s/ and the sG keys search with the selection and prompt when it is empty",
     show_refusal: async () => undefined,
   });
   for (const key of ["s/", "sGc", "sGr"]) await router.run({ invocations: [normal[key] as { id: string }], mode: "normal", may_prompt: true });
-  assert.deepEqual(log, ["sitesearch ", "github type=code ", "github type=repositories scope=all "]);
+  assert.deepEqual(log, ["sitesearch ", "github type=code ", "github type=repositories "]);
 });
 
 test("a prompt binding with a bad fixed arg is skipped with a warning", () => {
   const { warnings } = compile({ normal: { "q1": { id: "open.url", args: { where: "bogus" }, prompt: { param: "url" } }, "q2": { id: "open.url", args: { where: "tab" }, prompt: { param: "url" } } } } as KeymapConfig);
   assert.equal(warnings.length, 1);
   assert.match(warnings[0]!, /skipped "q1".*where/);
+});
+
+test("scope applies only to the repo-scoped GitHub types, so the validator rejects the rest", () => {
+  const github = registry.get("site.github")!;
+  assert.equal(check_args(github, { query: "x", type: "users", scope: "repo" }).ok, false);
+  assert.equal(check_args(github, { query: "x", type: "repositories", scope: "all" }).ok, false);
+  assert.deepEqual(check_args(github, { query: "x", type: "users" }), { ok: true, args: { query: "x", type: "users", where: "here" } });
+  assert.equal(check_args(github, { query: "x", type: "issues", scope: "all" }).ok, true);
 });

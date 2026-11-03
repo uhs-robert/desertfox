@@ -6,6 +6,7 @@ import {
   DEFAULT_SUBREDDIT,
   isdown_url,
   github_search_url,
+  GITHUB_REPO_SCOPED_TYPES,
   GITHUB_SEARCH_SCOPES,
   GITHUB_SEARCH_TYPES,
   site_search_url,
@@ -39,18 +40,14 @@ define("site.github", {
   params: [
     QUERY_PARAM,
     { name: "type", type: "enum", values: [...GITHUB_SEARCH_TYPES], default: "code" },
-    { name: "scope", type: "enum", values: [...GITHUB_SEARCH_SCOPES], default: "repo" },
+    // Repositories and users have no repo to search inside, so scope does not apply to them.
+    { name: "scope", type: "enum", values: [...GITHUB_SEARCH_SCOPES], default: "repo", when: { type: [...GITHUB_REPO_SCOPED_TYPES] } },
     WHERE_PARAM,
   ],
   runs_in: "background",
   run: (ctx, args) =>
-    open_built(
-      ctx,
-      args.where,
-      args.scope === "repo" && (args.type === "repositories" || args.type === "users")
-        ? "Repositories and users are searched across GitHub"
-        : "This page is not in a GitHub repository",
-      (page_url) => github_search_url(page_url, args.type as string, args.scope as string, args.query as string),
+    open_built(ctx, args.where, "This page is not in a GitHub repository", (page_url) =>
+      github_search_url(page_url, args.type as string, args.scope as string | undefined, args.query as string),
     ),
 });
 

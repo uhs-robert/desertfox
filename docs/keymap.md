@@ -68,8 +68,8 @@ dropped: 8 | later: 15 | v1: 269
 | normal | `sGp` | v1 | `site.github query=@selection type=pullrequests` |
 | normal | `sGm` | v1 | `site.github query=@selection type=commits` |
 | normal | `sGd` | v1 | `site.github query=@selection type=discussions` |
-| normal | `sGr` | v1 | `site.github query=@selection type=repositories scope=all` |
-| normal | `sGu` | v1 | `site.github query=@selection type=users scope=all` |
+| normal | `sGr` | v1 | `site.github query=@selection type=repositories` |
+| normal | `sGu` | v1 | `site.github query=@selection type=users` |
 | normal | `sGs` | v1 | `site.github query=@selection type=any scope=all` (GitHub picks the result type) |
 | normal | `W` | v1 | `window.new` (prompts, url prefilled from current_url) |
 | normal | `wa` | dropped | assumed unused |
