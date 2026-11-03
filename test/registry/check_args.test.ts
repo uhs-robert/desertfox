@@ -33,6 +33,17 @@ test("enum values are checked, static and runtime", () => {
   assert.match(error_of(check_args(open_search, { engine: "arch", where: "elsewhere" }, search_sources)), /where expects one of here/);
 });
 
+test("an enum given its own default passes, as a compiled key that names no engine gives it", () => {
+  const command = create_registry().define("a.search", {
+    label: "S",
+    intent: "I.",
+    runs_in: "background",
+    run: () => {},
+    params: [{ name: "engine", type: "enum", values: { from: "search_engines" }, default: "" }],
+  });
+  assert.deepEqual(check_args(command, { engine: "" }, search_sources), { ok: true, args: { engine: "" } });
+});
+
 test("a missing runtime list skips the membership check", () => {
   assert.equal(check_args(open_search, { engine: "anything" }).ok, true);
 });

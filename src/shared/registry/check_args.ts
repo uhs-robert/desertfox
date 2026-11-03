@@ -104,6 +104,8 @@ function coerce(param: ParamDef, given: unknown, sources: EnumSources): Coerced 
     }
     case "enum": {
       if (typeof given !== "string") return bad("text");
+      // The compile stores defaults in each key, so the router sees a default such as search's "" (no engine named) again.
+      if (given === param.default) return { ok: true, value: given };
       const allowed = enum_values(param, sources);
       if (allowed && !allowed.includes(given)) return bad(`one of ${allowed.join(", ")}`);
       return { ok: true, value: given };
