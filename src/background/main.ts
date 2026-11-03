@@ -2,6 +2,7 @@ import "./command_modules.ts";
 import type { ContentToBackground } from "../shared/messages.ts";
 import type { BoundInvocation } from "../shared/invocation.ts";
 import { bundle_loader_deps, make_router_deps, reinject_deps } from "./browser_deps.ts";
+import { list_keys } from "./list_keys.ts";
 import { create_bundle_loader } from "./bundle_loader.ts";
 import { repair_tabs_after_reload } from "./reload.ts";
 import { create_router } from "./router.ts";
@@ -26,6 +27,7 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
     return modes_cleared.then(() => remember_reported_mode(browser.storage.local, tab_id, sender.frameId, request.mode));
   }
   if (request?.type === "load_bundle") return bundle_loader.answer(sender, request.name);
+  if (request?.type === "list_keys") return get_config().then(() => list_keys(browser.storage.local, (id) => registry.get(id), request));
   if ((message as SnippetCall)?.type === "snippet_run") {
     return get_config().then(() => snippets.handle_call(message as SnippetCall, { tab_id: sender.tab?.id, frame_id: sender.frameId }));
   }

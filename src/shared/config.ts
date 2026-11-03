@@ -16,10 +16,15 @@ export type SearchEngine = {
 };
 
 export const MODE_INDICATOR_VALUES = ["always", "not_normal", "off"] as const;
+export const WHICH_KEY_BORDER_VALUES = ["square", "round", "chamfer"] as const;
+export type WhichKeyBorder = (typeof WHICH_KEY_BORDER_VALUES)[number];
+
 export type ModeIndicator = (typeof MODE_INDICATOR_VALUES)[number];
 
 export type Settings = {
   which_key_delay_ms: number;
+  // Corner style of the which-key panel border.
+  which_key_border: WhichKeyBorder;
   hint_letters: string;
   // Match patterns for pages where OasisFox starts in ignore mode.
   ignore_sites: string[];
@@ -50,6 +55,7 @@ export function with_fallback_engines(user_engines: Record<string, SearchEngine>
 
 export const DEFAULT_SETTINGS: Settings = {
   which_key_delay_ms: 300,
+  which_key_border: "square",
   hint_letters: "asdfghjkl",
   ignore_sites: [],
   mode_indicator: "always",

@@ -2,7 +2,7 @@ import type { KeymapConfig } from "../shared/keymap.ts";
 
 // Every `v1` row of docs/keymap.md whose command exists, except the rows that need the user's own data.
 // Search engine keys (`s`, `S`, `,`) and container keys (`c`) come from the user's config.
-// Keys of the phase 2 stubs (`o O T b B f F ; : g? V`) are bound now and refuse until hints, the command line, the picker and caret mode exist.
+// Keys of the phase 2 stubs (`o O T b B f F ; : V`) are bound now and refuse until hints, the command line, the picker and caret mode exist.
 // The caret, visual and cmdline commands are placeholders too: they load their bundle and refuse until it registers them.
 // The caret and visual motions. `0` and `$` are line ends, `^` the first non-blank, `gg` and `G` the ends of the text.
 const MOTIONS: Record<string, { id: string; args: Record<string, unknown> }> = {
@@ -24,6 +24,26 @@ const MOTIONS: Record<string, { id: string; args: Record<string, unknown> }> = {
 };
 
 export const DEFAULT_KEYMAP: KeymapConfig = {
+  // What which-key calls each group. `s S c C` name the groups that the search and container keys of a user config fill.
+  group_names: {
+    g: "Go",
+    gx: "Close tabs",
+    d: "Close",
+    x: "Stop or close",
+    r: "Reload",
+    ">": "Move tab",
+    t: "Tabs",
+    w: "Windows",
+    y: "Copy",
+    a: "Bookmark",
+    z: "Zoom and scroll",
+    q: "OasisFox",
+    ";": "Hints",
+    s: "Search here",
+    S: "Search in new tab",
+    c: "Reopen in container",
+    C: "Open in container",
+  },
   normal: {
     h: { id: "scroll.pixels", args: { dx: -50 } },
     l: { id: "scroll.pixels", args: { dx: 50 } },
@@ -153,7 +173,7 @@ export const DEFAULT_KEYMAP: KeymapConfig = {
     ";i": { id: "hint.run", args: { filter: "inputs" } },
     ";l": { id: "hint.run", args: { filter: "links" } },
     ":": { id: "cmdline.open" },
-    "g?": { id: "help.whichkey" },
+    "g?": { id: "help.open" },
     V: { id: "mode.set", args: { mode: "caret" } },
   },
   hint: {

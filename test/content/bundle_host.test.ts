@@ -41,6 +41,7 @@ function make_page() {
     in_editable_field: () => in_field,
     is_loading: host.is_loading,
     sink_of: host.sink_of,
+    on_prefix: () => {},
     leave_insert: () => state.escape(),
     run_leaf: (matched) => {
       const { id, args } = matched.steps[0]!.invocation;

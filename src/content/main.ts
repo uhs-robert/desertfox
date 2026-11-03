@@ -9,6 +9,7 @@ import { bundles } from "./bundles.ts";
 import { is_editable_element } from "./editable.ts";
 import { create_cancelled_keys } from "./cancelled_keys.ts";
 import { create_key_flow } from "./key_flow.ts";
+import { create_which_key_timer } from "./which_key_timer.ts";
 import { mode_label } from "./mode_label.ts";
 import type { BadgeColors } from "./mode_indicator.ts";
 import { show_mode_label, show_toast } from "./ui_proxy.ts";
@@ -73,7 +74,16 @@ async function run_leaf(leaf: TreeLeaf, count: number | undefined): Promise<void
   }
 }
 
+// Zero turns which-key off.
+let which_key_delay_ms: number | undefined;
+// Hiding asks only once the bundle has loaded, because before that there is no panel.
+const follow_prefix = create_which_key_timer(
+  () => which_key_delay_ms,
+  (prefix, is_current) => (prefix || bundles.has_handler("whichkey")) && bundles.run_command("whichkey", "whichkey", { prefix, is_current }, "", false),
+);
+
 const key_flow = create_key_flow({
+  on_prefix: follow_prefix,
   get_mode: page_mode.get_mode,
   take_pass_next: page_mode.take_pass_next,
   run_leaf: (leaf, count) => void run_leaf(leaf, count),
@@ -161,6 +171,7 @@ function install_matcher(keymap: CompiledKeymap | undefined, first_load: boolean
   // A tree stored before the setting existed has no value, which means the default.
   mode_indicator = usable?.mode_indicator ?? DEFAULT_SETTINGS.mode_indicator;
   mode_colors = usable?.mode_colors;
+  which_key_delay_ms = usable?.which_key_delay_ms;
   // The mode comes first, so keys held during the load replay in the right mode.
   if (first_load) {
     if (usable && is_ignored_site(usable.ignore_sites, location.href)) page_mode.set_mode("ignore");

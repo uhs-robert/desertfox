@@ -56,7 +56,7 @@ define("cmdline.prev_completion", {
 define("help.whichkey", {
   name: "whichkey",
   label: "Which Key",
-  intent: "List the keys that can follow the keys typed so far.",
+  intent: "List the keys at the top of the keymap.",
   runs_in: "content",
   run: help_whichkey.run,
 });
