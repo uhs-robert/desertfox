@@ -37,7 +37,7 @@ test("a selection on the field's wrapper gives way to the blurred field inside i
 
 test("scroll.align defaults to center and refuses an unknown position", () => {
   const align = registry.get("scroll.align")!;
-  assert.equal(align.name, "align");
+  assert.equal(align.name, undefined);
   assert.deepEqual(check_args(align, undefined), { ok: true, args: { position: "center" } });
   assert.deepEqual(check_args(align, { position: "top" }), { ok: true, args: { position: "top" } });
   assert.equal(check_args(align, { position: "middle" }).ok, false);

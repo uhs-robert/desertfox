@@ -8,11 +8,15 @@ import { url_target } from "./url_build.ts";
 export const WHERE = ["here", "tab", "background", "window"] as const;
 export type Where = (typeof WHERE)[number];
 
+// `-t -b -w` mean the same on every command that has a where param, and `-c` always means container.
+export const WHERE_SHORT = { tab: "t", background: "b", window: "w" } as const;
+
 export const WHERE_PARAM: ParamDef = {
   name: "where",
   type: "enum",
   values: WHERE,
   default: "here",
+  short: WHERE_SHORT,
   value_labels: { tab: "in new tab", background: "in background tab", window: "in new window" },
 };
 
@@ -22,6 +26,7 @@ export const CONTAINER_PARAM: ParamDef = {
   type: "string",
   values: { from: "containers" },
   when: { where: ["tab", "background", "window"] },
+  short: "c",
 };
 
 export const DEFAULT_CONTAINER_NAME = "default";

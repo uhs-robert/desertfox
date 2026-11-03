@@ -13,7 +13,6 @@ define("scroll.lines", {
 });
 
 define("scroll.pixels", {
-  name: "scrollpx",
   label: "Scroll pixels",
   intent: "Scroll the page by a number of pixels, right for dx and down for dy.",
   params: [
@@ -26,7 +25,6 @@ define("scroll.pixels", {
 });
 
 define("scroll.pages", {
-  name: "scrollpage",
   label: "Scroll pages",
   intent: "Scroll down by a fraction of the visible height. A negative fraction scrolls up.",
   params: [{ name: "fraction", type: "float", default: 1 }],
@@ -36,22 +34,20 @@ define("scroll.pages", {
 });
 
 define("scroll.to", {
-  name: "scrollto",
   label: "Scroll to",
   intent: "Jump to a percent of the page, from the top or left edge at 0 to the bottom or right edge at 100.",
   params: [
     { name: "percent", type: "float" },
-    { name: "axis", type: "enum", values: ["x", "y"], default: SCROLL_TO_DEFAULT_AXIS, value_labels: { x: "horizontally" } },
+    { name: "axis", type: "enum", values: ["x", "y"], default: SCROLL_TO_DEFAULT_AXIS, short: { x: "x", y: "y" }, value_labels: { x: "horizontally" } },
   ],
   runs_in: "content",
   run: scroll_to.run,
 });
 
 define("scroll.align", {
-  name: "align",
   label: "Align focus",
   intent: "Scroll the focused element, or else the selection, to the top, center or bottom of the view.",
-  params: [{ name: "position", type: "enum", values: ["top", "center", "bottom"], default: "center", value_labels: { top: "to top", bottom: "to bottom" } }],
+  params: [{ name: "position", type: "enum", values: ["top", "center", "bottom"], default: "center", short: { top: "t", center: "c", bottom: "b" }, value_labels: { top: "to top", bottom: "to bottom" } }],
   runs_in: "content",
   run: scroll_align.run,
 });

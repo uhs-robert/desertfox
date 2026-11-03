@@ -11,6 +11,7 @@ define("copy.url", {
       type: "enum",
       values: COPY_FORMATS,
       default: "plain",
+      short: { plain: "p", canonical: "C", short: "s", title: "T", markdown: "m", org: "o" },
       value_labels: { canonical: "in canonical form", short: "shortened", title: "as page title", markdown: "as Markdown link", org: "as Org link" },
     },
   ],

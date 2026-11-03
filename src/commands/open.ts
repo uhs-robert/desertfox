@@ -18,7 +18,6 @@ define("open.url", {
 
 define("open.search", {
   name: "search",
-  aliases: ["s"],
   label: "Search",
   intent: "Search with a keyword engine from the search engine list. The engine defaults to the default_engine setting and the query to the selection.",
   params: [

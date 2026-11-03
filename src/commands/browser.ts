@@ -42,7 +42,6 @@ export const browser_browser_deps: BrowserDeps = {
 const handlers = make_browser_handlers(browser_browser_deps);
 
 define("browser.focus_page", {
-  name: "focuspage",
   label: "Focus page",
   intent: "Move focus from the address bar to the page. Firefox has no direct call, so this is a best effort.",
   runs_in: "background",
@@ -50,7 +49,6 @@ define("browser.focus_page", {
 });
 
 define("browser.close_all", {
-  name: "quitall",
   label: "Close all windows",
   intent: "Close every browser window, which quits Firefox.",
   runs_in: "background",
