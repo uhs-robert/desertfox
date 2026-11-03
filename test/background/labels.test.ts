@@ -86,7 +86,7 @@ function labels_of(keymap: KeymapConfig, extra: Partial<MergedConfig> = {}, defa
     config,
     default_keymap,
     get_command: (id) => fake.get(id),
-    enum_sources: { search_engines: ["ddg", "arch", "nope", "bad", "blank"], containers: ["Work", "default"] },
+    enum_sources: { search_engines: ["ddg", "arch", "nope", "bad", "blank", ...Object.keys(config.search_engines)], containers: ["Work", "default"] },
   });
   const children = compiled.modes.normal!.children;
   const leaf_at = (...keys: string[]) => {
@@ -405,4 +405,17 @@ test("no which-key group of the user config has two different bindings with one 
   } finally {
     rmSync(copy, { recursive: true, force: true });
   }
+});
+
+test("a derived engine label under a named group keeps its whole path, even when the group name says part of it", () => {
+  const engines = {
+    "github.repo.issues": { url: "https://g/?q={repo}{query}", label: "GitHub: this repo: issues", slots: ["repo"] },
+  };
+  const { leaf_at, warnings } = labels_of(
+    { normal: { Gi: { id: "open.search", args: { engine: "github.repo.issues" } }, Hi: { id: "open.search", args: { engine: "github.repo.issues", where: "tab" } } }, group_names: { G: "GitHub", H: "this repo in new tab" } },
+    { search_engines: engines },
+  );
+  assert.deepEqual(warnings, []);
+  assert.equal(leaf_at("G", "i").label, "GitHub: this repo: issues");
+  assert.equal(leaf_at("H", "i").label, "GitHub: this repo: issues");
 });

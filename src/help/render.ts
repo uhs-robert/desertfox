@@ -1,6 +1,6 @@
 // Draws the help model with DOM calls only. Command text never goes through innerHTML.
 
-import type { CommandRow, HelpModel, KeyRow } from "./model.ts";
+import type { CommandRow, EngineRow, HelpModel, KeyRow } from "./model.ts";
 import { STYLE_CLASSES, STYLE_VARIABLES } from "./model.ts";
 
 type Child = Node | string;
@@ -47,6 +47,20 @@ function command_card(command: CommandRow): HTMLElement {
   );
 }
 
+export const engine_anchor = (name: string): string => `engine-${name}`;
+
+function engine_table(engines: EngineRow[]): HTMLElement | string {
+  if (engines.length === 0) return el("span", "oasisfox-help-muted", "No engines.");
+  const head = el("tr", undefined, ...["engine", "label", "url", "needs", "falls back to", "set by"].map((name) => el("th", undefined, name)));
+  const body = engines.map((engine) => {
+    const row = el("tr", undefined, ...[engine.name, engine.label, engine.url, engine.needs, engine.fallback].map((text) => el("td", undefined, text)));
+    row.id = engine_anchor(engine.name);
+    row.append(el("td", "oasisfox-help-muted", ...engine.origins.map((line) => el("div", undefined, line))));
+    return row;
+  });
+  return el("table", "oasisfox-help-engines", head, ...body);
+}
+
 function definition_table(rows: { name: string; meaning: string }[]): HTMLElement {
   return el("table", undefined, ...rows.map((row) => el("tr", undefined, el("td", undefined, el("code", undefined, row.name)), el("td", undefined, row.meaning))));
 }
@@ -57,6 +71,8 @@ export function render_help(root: HTMLElement, model: HelpModel): void {
   page.append(el("h2", undefined, "Warnings"));
   if (model.warnings.length === 0) page.append(el("p", "oasisfox-help-muted", "No warnings."));
   else page.append(el("ul", "oasisfox-help-warnings", ...model.warnings.map((warning) => el("li", undefined, warning))));
+
+  page.append(el("h2", undefined, "Engines"), engine_table(model.engines));
 
   page.append(el("h2", undefined, "Commands"));
   for (const group of model.groups) {

@@ -2,6 +2,7 @@
 
 import { MODES } from "../shared/command.ts";
 import type { CommandMeta, ParamDef, ParamValue } from "../shared/command.ts";
+import type { SearchEngine } from "../shared/config.ts";
 import type { KeymapMode } from "../shared/keymap.ts";
 import type { Prompt } from "../shared/invocation.ts";
 import type { CompiledKeymap, TreeNode } from "../shared/prefix_tree.ts";
@@ -33,7 +34,19 @@ export type CommandRow = {
 
 export type HelpGroup = { name: string; commands: CommandRow[] };
 
-export type HelpModel = { warnings: string[]; groups: HelpGroup[] };
+export type EngineRow = {
+  name: string;
+  label: string;
+  url: string;
+  // Page slots the engine needs, or "" when it runs anywhere.
+  needs: string;
+  // Where the engine falls back to, or "".
+  fallback: string;
+  // One "field: file [level]" line per field that has an origin.
+  origins: string[];
+};
+
+export type HelpModel = { warnings: string[]; groups: HelpGroup[]; engines: EngineRow[] };
 
 const MODE_ORDER: readonly KeymapMode[] = [...MODES, "browser"];
 
@@ -90,8 +103,35 @@ function keys_by_command(compiled: CompiledKeymap | undefined, printing: Printin
   return into;
 }
 
+// Parents before their children, siblings by name: github, github.code, github.repo, github.repo.code, github.repos.
+function compare_engine_names(left: string, right: string): number {
+  const left_path = left.split(".");
+  const right_path = right.split(".");
+  for (let depth = 0; depth < Math.min(left_path.length, right_path.length); depth++) {
+    const order = left_path[depth]!.localeCompare(right_path[depth]!);
+    if (order !== 0) return order;
+  }
+  return left_path.length - right_path.length;
+}
+
+function engine_rows(engines: Record<string, SearchEngine>): EngineRow[] {
+  return Object.keys(engines)
+    .sort(compare_engine_names)
+    .map((name) => {
+      const engine = engines[name]!;
+      return {
+        name,
+        label: engine.label,
+        url: engine.url,
+        needs: (engine.slots ?? []).map((slot) => `{${slot}}`).join(" "),
+        fallback: engine.fallback ?? "",
+        origins: Object.entries(engine.origins ?? {}).map(([field, origin]) => `${field}: ${origin}`),
+      };
+    });
+}
+
 // `sources` are the configured engine names, so a query that starts with one prints with its `--` guard.
-export function build_help_model(commands: CommandMeta[], compiled: CompiledKeymap | undefined, warnings: string[], sources: EnumSources = {}): HelpModel {
+export function build_help_model(commands: CommandMeta[], compiled: CompiledKeymap | undefined, warnings: string[], sources: EnumSources = {}, engines: Record<string, SearchEngine> = {}): HelpModel {
   const keys = keys_by_command(compiled, { commands: new Map(commands.map((command) => [command.id, command])), sources });
   const groups = new Map<string, CommandRow[]>();
   for (const command of commands) {
@@ -108,6 +148,7 @@ export function build_help_model(commands: CommandMeta[], compiled: CompiledKeym
   }
   return {
     warnings,
+    engines: engine_rows(engines),
     groups: [...groups].sort(([a], [b]) => a.localeCompare(b)).map(([name, rows]) => ({ name, commands: rows })),
   };
 }
