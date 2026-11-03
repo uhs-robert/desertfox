@@ -5,12 +5,15 @@
 export type MotionUnit = "char" | "word" | "word_end" | "line" | "line_start" | "line_first" | "line_end" | "start" | "end";
 export type Motion = { unit: MotionUnit; direction: "forward" | "back"; big: boolean };
 
+// Letters and digits of any script, and the underscore.
+const WORD_CHAR = /[\p{L}\p{N}_]/u;
+
 // Class of a character: -1 newline, 0 blank, 1 word, 2 punctuation. A big word has only classes -1, 0 and 1.
 const char_class = (text: string, index: number, big: boolean): number => {
   const char = text[index]!;
   if (char === "\n") return -1;
   if (/\s/.test(char)) return 0;
-  if (big || /\w/.test(char)) return 1;
+  if (big || WORD_CHAR.test(char)) return 1;
   return 2;
 };
 

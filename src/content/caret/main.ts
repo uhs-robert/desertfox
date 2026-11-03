@@ -1,11 +1,11 @@
 // The `caret` bundle: caret mode and visual mode. Loaded on the first `V`, it registers a sink for each mode and
 // the handlers of `caret.move` and `visual.act`.
 
-import { FALLBACK_ENGINE_NAME } from "../../shared/config.ts";
 import type { BundleHostApi, ExitDestination } from "../bundle_host.ts";
 import { move_once, SCREEN_LINE_UNITS } from "./motion.ts";
 import type { Motion } from "./motion.ts";
-import { screen_line_target } from "./screen_line.ts";
+import { yank_text } from "./copy_text.ts";
+import { character_box, screen_line_target } from "./screen_line.ts";
 import { apply_selection_colors, clear_selection_colors } from "./selection_colors.ts";
 import { selected_text, selected_span, swap_ends, with_caret } from "./selection_state.ts";
 import type { Cursor } from "./selection_state.ts";
@@ -16,7 +16,7 @@ import { first_visible_index } from "./start_point.ts";
 type CaretWindow = { oasisfox_host: BundleHostApi; oasisfox_caret_ready?: true };
 const page = window as unknown as CaretWindow;
 
-type Session = { model: TextModel; cursor: Cursor; mode: "caret" | "visual" };
+type Session = { model: TextModel; cursor: Cursor; mode: "caret" | "visual"; goal_x: number | undefined };
 let session: Session | undefined;
 
 function paint(open: Session): void {
@@ -30,8 +30,17 @@ function paint(open: Session): void {
   range.setEnd(end.node, open.model.text[to - 1] === "\n" ? end.offset : end.offset + 1);
   selection.removeAllRanges();
   selection.addRange(range);
-  const focus = open.model.point_at(open.cursor.caret).node.parentElement;
-  focus?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  scroll_to_caret(open);
+}
+
+// Only the caret's own character counts: its paragraph can be taller than the screen.
+function scroll_to_caret(open: Session): void {
+  const box = character_box(open.model, open.cursor.caret);
+  if (!box) return;
+  const margin = box.height;
+  const by_y = box.top < 0 ? box.top - margin : box.bottom > innerHeight ? box.bottom - innerHeight + margin : 0;
+  const by_x = box.left < 0 ? box.left - margin : box.right > innerWidth ? box.right - innerWidth + margin : 0;
+  if (by_x || by_y) scrollBy(by_x, by_y);
 }
 
 // Where a new session starts: the caret's place in the page's own selection if it is on screen, else the first visible text.
@@ -39,7 +48,7 @@ function start_session(mode: "caret" | "visual", element?: Element): Session | u
   const model = build_text_model(element ?? document.body);
   if (model.text === "") return undefined;
   const caret = first_visible_index(model, getSelection()!, element === undefined);
-  return { model, cursor: { anchor: caret, caret }, mode };
+  return { model, cursor: { anchor: caret, caret }, mode, goal_x: undefined };
 }
 
 function end_session(): void {
@@ -49,6 +58,7 @@ function end_session(): void {
 }
 
 function ensure_session(mode: "caret" | "visual"): Session | undefined {
+  const mode_changed = !session || session.mode !== mode;
   session ??= start_session(mode);
   if (!session) {
     page.oasisfox_host.set_mode("normal");
@@ -58,7 +68,7 @@ function ensure_session(mode: "caret" | "visual"): Session | undefined {
   if (mode === "caret") session.cursor = { anchor: session.cursor.caret, caret: session.cursor.caret };
   session.mode = mode;
   paint(session);
-  void apply_selection_colors(mode);
+  if (mode_changed) void apply_selection_colors(mode);
   return session;
 }
 
@@ -81,7 +91,15 @@ const handle_move = (args: Record<string, unknown>): void => {
   const open = ensure_session(session?.mode ?? "caret");
   if (!open) return;
   const motion: Motion = { unit: args.unit as Motion["unit"], direction: (args.direction as Motion["direction"] | undefined) ?? "forward", big: args.big === true };
-  const caret = SCREEN_LINE_UNITS.includes(motion.unit) ? screen_line_target(open.model, getSelection()!, open.cursor.caret, motion) : move_once(open.model.text, open.cursor.caret, motion);
+  let caret: number;
+  if (SCREEN_LINE_UNITS.includes(motion.unit)) {
+    const target = screen_line_target(open.model, getSelection()!, open.cursor.caret, motion, open.goal_x);
+    caret = target.index;
+    open.goal_x = target.goal_x;
+  } else {
+    caret = move_once(open.model.text, open.cursor.caret, motion);
+    open.goal_x = undefined;
+  }
   open.cursor = with_caret(open.cursor, caret, open.mode === "visual");
   paint(open);
 };
@@ -96,11 +114,16 @@ const handle_act = (args: Record<string, unknown>): void => {
     return;
   }
   const text = selected_text(open.model.text, open.cursor);
-  if (action === "yank") {
-    void navigator.clipboard.writeText(text);
-    page.oasisfox_host.show_toast(`Copied ${text.length > 40 ? text.slice(0, 40) + "..." : text}`);
-  } else void browser.runtime.sendMessage({ type: "run", invocations: [{ id: "open.search", args: { engine: FALLBACK_ENGINE_NAME, query: text } }], mode: "visual" });
-  page.oasisfox_host.set_mode("caret");
+  if (action === "search") {
+    void browser.runtime.sendMessage({ type: "run", invocations: [{ id: "open.search", args: { query: text } }], mode: "visual" });
+    return page.oasisfox_host.set_mode("caret");
+  }
+  // Visual mode stays until the copy is done, so a refused copy leaves the selection to retry.
+  void yank_text(navigator.clipboard, text, {
+    is_same_session: () => session === open && open.mode === "visual",
+    toast: page.oasisfox_host.show_toast,
+    leave_visual: () => page.oasisfox_host.set_mode("caret"),
+  });
 };
 
 // A bundle may run twice, and a second run would hold fresh state next to the first.

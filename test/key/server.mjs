@@ -18,7 +18,7 @@ addEventListener("scroll", () => {
   }), 150);
 });
 addEventListener("keydown", (event) => send("keydown", { key: event.key }));
-document.addEventListener("selectionchange", () => send("selection", { text: String(getSelection()) }));
+document.addEventListener("selectionchange", () => send("selection", { text: String(getSelection()), scroll_y: scrollY, top: getSelection().rangeCount ? getSelection().getRangeAt(0).getBoundingClientRect().top : null }));
 addEventListener("input", (event) => send("input", { value: event.target.value }));
 addEventListener("focus", () => send("window_focus"));
 const root = document.documentElement;
@@ -91,6 +91,14 @@ export function start_server() {
     if (url.pathname === "/caret_wrap") {
       // Each word fills a screen line: the column is 6 characters wide and the words are 3.
       return response.end(page(`caret_wrap ${id}`, '<p style="width:6ch;font-family:monospace">abc def ghi jkl</p>'));
+    }
+    if (url.pathname === "/caret_columns") {
+      // The middle line is short: j over it must still come back to the column the caret left.
+      return response.end(page(`caret_columns ${id}`, '<p style="font-family:monospace">abcdefghij<br>ab<br>abcdefghij</p>'));
+    }
+    if (url.pathname === "/caret_scrolled") {
+      const words = Array.from({ length: 1500 }, (_, index) => `w${String(index).padStart(4, "0")}`).join(" ");
+      return response.end(page(`caret_scrolled ${id}`, `<p style="width:30ch;font-family:monospace">${words}</p><script>addEventListener("load", () => scrollTo(0, 3000))</script>`));
     }
     if (url.pathname === "/swallow") return response.end(page(`swallow ${id}`, tall_filler, CANCEL_KEYS_IN_CAPTURE));
     response.end(page(`page ${id}`, tall_filler));

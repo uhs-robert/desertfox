@@ -71,3 +71,10 @@ test("V, 3w, v, e yields the word the key test copies", () => {
   cursor = with_caret(cursor, move_once(text, cursor.caret, motion("word_end")), true);
   assert.equal(selected_text(text, cursor), "bar");
 });
+
+test("word motions keep accented and non-Latin letters inside the word", () => {
+  const text = "café über 日本語 x";
+  assert.deepEqual([0, 5, 10].map((from) => move_once(text, from, motion("word"))), [5, 10, 14]);
+  assert.deepEqual([0, 5].map((from) => move_once(text, from, motion("word_end"))), [3, 8]);
+  assert.equal(move_once(text, 14, motion("word", { direction: "back" })), 10);
+});

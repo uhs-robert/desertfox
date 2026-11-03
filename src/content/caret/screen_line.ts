@@ -4,7 +4,28 @@
 import type { Motion } from "./motion.ts";
 import type { TextModel } from "./text_model.ts";
 
-export function screen_line_target(model: TextModel, selection: Selection, from: number, motion: Motion): number {
+// The box of one character, or undefined when it has none to measure, as on an empty line.
+export function character_box(model: TextModel, index: number): DOMRect | undefined {
+  const { node, offset } = model.point_at(index);
+  const range = document.createRange();
+  range.setStart(node, offset);
+  range.setEnd(node, Math.min(offset + 1, node.length));
+  const box = range.getBoundingClientRect();
+  return box.height > 0 ? box : undefined;
+}
+
+// `goal_x` is where j and k aim on each new line, so a short line in between does not move the column. A caller keeps what comes back for the next j or k and drops it after any other motion.
+export function screen_line_target(model: TextModel, selection: Selection, from: number, motion: Motion, goal_x?: number): { index: number; goal_x: number | undefined } {
+  const target = modify_target(model, selection, from, motion);
+  if (motion.unit !== "line" || target === from) return { index: target, goal_x: undefined };
+  const wanted_x = goal_x ?? character_box(model, from)?.left ?? 0;
+  const line_box = character_box(model, target);
+  const landed = line_box && document.caretPositionFromPoint(wanted_x, line_box.top + line_box.height / 2);
+  const index = landed && landed.offsetNode.nodeType === Node.TEXT_NODE ? model.index_of(landed.offsetNode, landed.offset) : undefined;
+  return { index: index ?? target, goal_x: wanted_x };
+}
+
+function modify_target(model: TextModel, selection: Selection, from: number, motion: Motion): number {
   const start = model.point_at(from);
   selection.collapse(start.node, start.offset);
   const by_line = motion.unit === "line";

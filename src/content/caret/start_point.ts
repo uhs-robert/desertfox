@@ -1,5 +1,6 @@
 // Where caret mode starts when no hint chose a place.
 
+import { character_box } from "./screen_line.ts";
 import type { TextModel } from "./text_model.ts";
 
 const on_screen = (node: Node): boolean => {
@@ -17,11 +18,11 @@ export function first_visible_index(model: TextModel, selection: Selection, foll
   }
   let low = 0;
   let high = model.text.length - 1;
-  // Text runs down the page, so the first index below the top edge is found by halving.
+  // Text runs down the page, so the first character below the top edge is found by halving. The box is the character's own, because a paragraph's box starts above the screen.
   while (low < high) {
     const middle = (low + high) >> 1;
-    const point = model.point_at(middle);
-    if (point.node.parentElement!.getBoundingClientRect().bottom < 0) low = middle + 1;
+    const box = character_box(model, middle);
+    if (box && box.bottom < 0) low = middle + 1;
     else high = middle;
   }
   return Math.max(low, 0);

@@ -87,7 +87,35 @@ export async function run_cases({ run_case, expect, open_page, send_keys, sleep,
     await send_keys("-k", "Escape");
   });
 
-  // open.search needs an engine and the bundle sends the built-in one, which the test config points at the test server.
+  await run_case("j and k keep the column over a shorter line", async () => {
+    await open_page("caret_columns", "caret_columns", { new_tab: true });
+    const mark = events.length;
+    await send_keys("V");
+    await send_keys("j");
+    await wait_event(mark, selection_is("caret_columns", "a"), "the first line");
+    await send_keys("lllll");
+    await wait_event(mark, selection_is("caret_columns", "f"), "column 5");
+    await send_keys("j");
+    await wait_event(mark, selection_is("caret_columns", "b"), "the short line");
+    const mark_back = events.length;
+    await send_keys("j");
+    await wait_event(mark_back, selection_is("caret_columns", "f"), "column 5 again on the long line");
+    await send_keys("-k", "Escape");
+  });
+
+  await run_case("V on a page scrolled into the middle of a paragraph starts on a visible character", async () => {
+    await open_page("caret_scrolled", "caret_scrolled", { new_tab: true });
+    await sleep(500);
+    const mark = events.length;
+    await send_keys("V");
+    const shown = await wait_event(mark, (event) => event.type === "selection" && event.page_id === "caret_scrolled" && event.text !== "", "a caret");
+    expect(shown.top !== null && shown.top > -30 && shown.top < 1000, `the caret starts at y ${shown.top}, off screen`);
+    // Starting at the paragraph's first character would scroll the page back up to it.
+    expect(shown.scroll_y > 2500, `the page scrolled from y 3000 to ${shown.scroll_y}`);
+    await send_keys("-k", "Escape");
+  });
+
+  // `s` names no engine, so the default_engine setting decides, and the test config points the built-in duck at the test server.
   await run_case("V, 3w, v, e, s searches the selected word", async () => {
     await open_page("caret", "caret_search", { new_tab: true });
     const mark = events.length;
