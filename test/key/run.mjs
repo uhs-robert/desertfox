@@ -1,7 +1,7 @@
 // The key test: real key presses in a nested session, results read from pages that report to a local server.
 // Needs SHADOW_SH, a script with `up|spawn|keys|down <name>` subcommands for a nested, invisible compositor.
 import { execFile, spawnSync } from "node:child_process";
-import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import net from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -90,9 +90,10 @@ async function main() {
   mkdirSync(profile_dir);
   cpSync(join(key_test_dir, "user.js"), join(profile_dir, "user.js"), { recursive: true });
   const managed_file = join(managed_dir, `${EXTENSION_ID}.json`);
-  build_test_config(config_dir, managed_file);
-
   const server = await start_server();
+  // The built-in duck engine is replaced by this server, so a search from the keys lands on a page the test can read.
+  writeFileSync(join(config_dir, "search_engines.toml"), `duck = { url = "http://127.0.0.1:${server.port}/page?id=search_result&q=%s", label = "Test server" }\n`);
+  build_test_config(config_dir, managed_file);
   const events = server.events;
   const debug_port = await free_port();
   let rdp;
@@ -169,7 +170,9 @@ async function main() {
     // The padded bundles stand in for a 20 KB hints or caret bundle. They go into a copy, so dist/ stays as built.
     const extension_dir = join(work_dir, "extension");
     cpSync(dist_dir, extension_dir, { recursive: true });
-    for (const name of ["caret.js", "whichkey.js"]) writeFileSync(join(extension_dir, name), padded_bundle_text());
+    // The caret bundle keeps its real code and gains the padding after it, so the caret cases run the real sinks.
+    writeFileSync(join(extension_dir, "caret.js"), readFileSync(join(dist_dir, "caret.js"), "utf8") + padded_bundle_text());
+    writeFileSync(join(extension_dir, "whichkey.js"), padded_bundle_text());
     await install_temporary_addon(rdp, extension_dir);
     await sleep(1500);
     const read_injections = async (file) => {
@@ -404,17 +407,18 @@ async function main() {
       expect(Math.abs(reported.y - 3 * single) <= 3, `f3j moved ${reported.y}px, j moves ${single}px`);
     });
 
-    await run_case("V loads the padded caret bundle, finds no sink and returns to normal mode", async () => {
+    await run_case("V loads the padded caret bundle and enters caret mode, Escape leaves it", async () => {
       await open_page("page", "bundle_c", { new_tab: true });
       const is_label = (label) => (event) => event.type === "indicator" && event.page_id === "bundle_c" && event.label === label;
       const mark = events.length;
       await send_keys("V");
-      const caret_badge = await wait_event(mark, is_label("CARET"), "the CARET badge");
-      await wait_event(mark, (event) => is_label("NORMAL")(event) && events.indexOf(event) > events.indexOf(caret_badge), "the NORMAL badge after CARET");
+      await wait_event(mark, is_label("CARET"), "the CARET badge");
       const caret_loads = await injections_of("caret.js", 1);
       expect(caret_loads.length >= 1 && caret_loads.at(-1).ok, "caret.js was not injected");
       measurements.padded_bundle_inject_ms = caret_loads.at(-1).ms;
-      expect(await scroll_delta_after("bundle_c", ["j"]) > 0, "the page stopped taking keys after V");
+      await send_keys("-k", "Escape");
+      await wait_event(mark, is_label("NORMAL"), "the NORMAL badge after Escape");
+      expect(await scroll_delta_after("bundle_c", ["j"]) > 0, "the page stopped taking keys after V and Escape");
     });
 
     await run_case("executeScript of a 20 KB file takes this long", async () => {
@@ -609,6 +613,10 @@ async function main() {
       expect(shown.page_id !== "d_close", "d_close is still the visible tab");
       expect(await scroll_delta_after(shown.page_id, ["j"]) > 0, "the tab left after xx does not take keys");
     });
+
+    // Pieces keep their cases in test/key/p<number>_*.mjs, each exporting run_cases(context).
+    const case_context = { run_case, expect, open_page, send_keys, sleep, events, wait_event, since, find_event, url_of };
+    for (const file of readdirSync(key_test_dir).filter((name) => /^p\d+_.*\.mjs$/.test(name)).sort()) await (await import(`./${file}`)).run_cases(case_context);
 
     const tree_read_ms = [];
     for (let index = 0; index < FRESH_LOAD_COUNT; index++) {
