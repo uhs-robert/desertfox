@@ -26,7 +26,7 @@ async function open_built(ctx: CommandContext, where: unknown, refusal: string, 
 
 define("site.search", {
   name: "sitesearch",
-  label: "Search This Site",
+  label: "Search this site",
   intent: "Search the current site with Google.",
   params: [QUERY_PARAM, WHERE_PARAM],
   runs_in: "background",
@@ -39,9 +39,15 @@ define("site.github", {
   intent: "Search GitHub for code, issues, pull requests, commits, discussions, repositories or users. By default it searches the repository the page belongs to.",
   params: [
     QUERY_PARAM,
-    { name: "type", type: "enum", values: [...GITHUB_SEARCH_TYPES], default: "code" },
+    {
+      name: "type",
+      type: "enum",
+      values: [...GITHUB_SEARCH_TYPES],
+      default: "code",
+      value_labels: { issues: "issues", pullrequests: "pull requests", commits: "commits", discussions: "discussions", repositories: "repositories", users: "users", any: "anything" },
+    },
     // Repositories and users have no repo to search inside, so scope does not apply to them.
-    { name: "scope", type: "enum", values: [...GITHUB_SEARCH_SCOPES], default: "repo", when: { type: [...GITHUB_REPO_SCOPED_TYPES] } },
+    { name: "scope", type: "enum", values: [...GITHUB_SEARCH_SCOPES], default: "repo", value_labels: { all: "everywhere" }, when: { type: [...GITHUB_REPO_SCOPED_TYPES] } },
     WHERE_PARAM,
   ],
   runs_in: "background",
@@ -53,7 +59,7 @@ define("site.github", {
 
 define("site.subreddit", {
   name: "subreddit",
-  label: "Search Subreddit",
+  label: "Search subreddit",
   intent: "Search a subreddit. Without a sub, search the one the page is in, or all of Reddit.",
   params: [QUERY_PARAM, { name: "sub", type: "string", default: DEFAULT_SUBREDDIT }, WHERE_PARAM],
   runs_in: "background",
@@ -62,7 +68,7 @@ define("site.subreddit", {
 
 define("site.archive", {
   name: "archive",
-  label: "Archive Page",
+  label: "Archive page",
   intent: "Open the page in the Internet Archive.",
   params: [WHERE_PARAM],
   runs_in: "background",
@@ -71,7 +77,7 @@ define("site.archive", {
 
 define("site.isdown", {
   name: "isdown",
-  label: "Is It Down",
+  label: "Is it down",
   intent: "Check whether the site is down for everyone.",
   params: [WHERE_PARAM],
   runs_in: "background",
@@ -80,7 +86,7 @@ define("site.isdown", {
 
 define("site.translate", {
   name: "translate",
-  label: "Translate Page",
+  label: "Translate page",
   intent: "Translate the page into English with Google Translate.",
   params: [WHERE_PARAM],
   runs_in: "background",
