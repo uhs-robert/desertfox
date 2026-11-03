@@ -1,4 +1,4 @@
-// Opens a URL where the command asks. Shared by open, page.home and site.
+// Opens a URL where the command asks. Shared by open, page.home and the other commands that open pages.
 
 import { get_config } from "../background/startup.ts";
 import { DEFAULT_SETTINGS } from "../shared/config.ts";

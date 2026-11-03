@@ -1,6 +1,4 @@
 [normal]
-# A search key on the selection, for the prompt case: with nothing selected it opens the command line.
-"sd" = "search @selection"
 # Engines that need a page slot (see search_engines.toml in run.mjs).
 "sh" = "search keysite @selection"
 "sr" = "search keyrepo needle"

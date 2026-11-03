@@ -155,9 +155,9 @@ test("a search binding on the selection opens the command line when nothing is s
     open_cmdline: async (_tab, _frame, text) => void log.push(text),
     show_refusal: async () => undefined,
   });
-  const binding = { id: "open.search", args: { engine: "github.repo", query: { from: "selection" } } };
+  const binding = { id: "open.search", args: { query: { from: "selection" } } };
   await router.run({ invocations: [binding], mode: "normal", may_prompt: true });
-  assert.deepEqual(log, ["search github.repo "]);
+  assert.deepEqual(log, ["search "]);
 });
 
 test("a prompt binding with a bad fixed arg is skipped with a warning", () => {
