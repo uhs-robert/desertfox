@@ -1,15 +1,11 @@
 import type { SearchEngine } from "../shared/config.ts";
 import { fill_template } from "../shared/engines/fill.ts";
 import type { FillInput } from "../shared/engines/fill.ts";
-import { github_repo_of, parse_http_url, path_segments, subreddit_of } from "../shared/engines/slots.ts";
+import { parse_http_url, path_segments } from "../shared/engines/slots.ts";
 
-export { github_repo_of, subreddit_of };
-
-// Pure URL math for the url, site and open commands. Each function returns
+// Pure URL math for the url and open commands. Each function returns
 // undefined when the page has no sensible answer, and the caller refuses.
 
-export const GOOGLE_SEARCH_URL = "https://www.google.com/search?q=";
-export const DEFAULT_SUBREDDIT = "all";
 
 // Drops the query and fragment with the last path segment. A root path with a query or fragment loses only those.
 function parent_once(page_url: string): string | undefined {
@@ -35,48 +31,6 @@ export function parent_url(page_url: string, levels = 1): string | undefined {
 export function root_url(page_url: string): string | undefined {
   const url = parse_http_url(page_url);
   return url ? `${url.origin}/` : undefined;
-}
-
-export function archive_url(page_url: string): string | undefined {
-  return parse_http_url(page_url) ? `https://web.archive.org/web/${page_url}` : undefined;
-}
-
-export function isdown_url(page_url: string): string | undefined {
-  const url = parse_http_url(page_url);
-  return url ? `https://www.isitdownrightnow.com/${url.hostname}.html` : undefined;
-}
-
-export function translate_url(page_url: string): string | undefined {
-  if (!parse_http_url(page_url)) return undefined;
-  return `https://translate.google.com/translate?sl=auto&tl=en&u=${encodeURIComponent(page_url)}`;
-}
-
-export function site_search_url(page_url: string, query: string): string | undefined {
-  const url = parse_http_url(page_url);
-  return url ? `${GOOGLE_SEARCH_URL}${encodeURIComponent(`site:${url.hostname} ${query}`)}` : undefined;
-}
-
-export const GITHUB_SEARCH_TYPES = ["code", "issues", "pullrequests", "commits", "discussions", "repositories", "users", "any"] as const;
-export const GITHUB_REPO_SCOPED_TYPES = ["code", "issues", "pullrequests", "commits", "discussions", "any"] as const;
-export const GITHUB_SEARCH_SCOPES = ["repo", "all"] as const;
-
-// "any" leaves out `type`, so GitHub picks its default result type.
-// Repositories and users always search all of GitHub, whatever the scope says.
-export function github_search_url(page_url: string, type: string, scope: string | undefined, query: string): string | undefined {
-  let qualified = query;
-  if (scope === "repo") {
-    const found = github_repo_of(page_url);
-    if (!found) return undefined;
-    qualified = `repo:${found.owner}/${found.repo} ${query}`;
-  }
-  const type_param = type === "any" ? "" : `&type=${type}`;
-  return `https://github.com/search?q=${encodeURIComponent(qualified)}${type_param}`;
-}
-
-// An explicit sub wins. The default "all" yields to the subreddit the page is on.
-export function subreddit_search_url(page_url: string, query: string, sub: string): string {
-  const chosen = sub === DEFAULT_SUBREDDIT ? (subreddit_of(page_url) ?? sub) : sub;
-  return `https://www.reddit.com/r/${encodeURIComponent(chosen)}/search/?q=${encodeURIComponent(query)}&restrict_sr=1`;
 }
 
 // For typed text, which has no page behind it: a template that needs the page is refused.

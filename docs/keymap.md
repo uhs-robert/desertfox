@@ -20,7 +20,7 @@ A note "(prompts)" means the binding leaves a param out, so the command line ask
 
 <!-- BEGIN generated -->
 
-bound: 184 (normal 128, hint 2, cmdline 11, caret 18, visual 20, insert 1, ignore 1, browser 3) | later: 15 | dropped: 7
+bound: 174 (normal 118, hint 2, cmdline 11, caret 18, visual 20, insert 1, ignore 1, browser 3) | later: 15 | dropped: 7
 
 ### normal
 
@@ -43,16 +43,6 @@ bound: 184 (normal 128, hint 2, cmdline 11, caret 18, visual 20, insert 1, ignor
 | `rr` | bound | `page.reload` | Reload |  |
 | `rh` | bound | `page.reload --hard` | Hard reload |  |
 | `R` | bound | `page.reload --hard` | Hard reload |  |
-| `ri` | bound | `site.isdown` | Is it down |  |
-| `s/` | bound | `site.search @selection` | Search this site |  |
-| `sGc` | bound | `github @selection` | Search GitHub code in this repo |  |
-| `sGi` | bound | `github --issues @selection` | Search GitHub issues in this repo |  |
-| `sGp` | bound | `github --pullrequests @selection` | Search GitHub pull requests in this repo |  |
-| `sGm` | bound | `github --commits @selection` | Search GitHub commits in this repo |  |
-| `sGd` | bound | `github --discussions @selection` | Search GitHub discussions in this repo |  |
-| `sGr` | bound | `github --repositories @selection` | Search GitHub |  |
-| `sGu` | bound | `github --users @selection` | Search GitHub |  |
-| `sGs` | bound | `github --any --all @selection` | Search all of GitHub |  |
 | `xp` | bound | `page.stop` | Stop loading |  |
 | `gh` | bound | `page.home` | Home page |  |
 | `gH` | bound | `page.home --tab` | Home page |  |
@@ -193,7 +183,6 @@ Which-key group names:
 - `q`: OasisFox
 - `;`: Hints
 - `s`: Search here
-- `sG`: GitHub
 - `S`: Search in new tab
 - `c`: Reopen in container
 - `C`: Open in container
