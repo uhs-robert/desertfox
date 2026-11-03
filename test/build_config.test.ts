@@ -577,3 +577,10 @@ test("a table binding whose run is not a string or a list of strings is a config
   assert.match(text, /keymap\.normal\["J"\] must be a command string/);
   assert.match(text, /keymap\.normal\["M"\] must be a command string/);
 });
+
+test("a snippet header requires names page slots, and an unknown name is an error", () => {
+  const ok = config_dir_with({ "snippets/a.js": `// id: myapp.one\n// requires: repo, subreddit\n${SNIPPET_HEADER}` });
+  assert.deepEqual(build_config(ok, commands).snippets[0]?.requires, ["repo", "subreddit"]);
+  const bad = config_dir_with({ "snippets/a.js": `// id: myapp.one\n// requires: repo, ghost, query, title\n${SNIPPET_HEADER}` });
+  assert.match(problems_of(bad).join("\n"), /unknown slot "ghost, query, title" in requires/);
+});

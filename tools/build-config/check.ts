@@ -37,7 +37,7 @@ export function build_registry(commands: CommandMeta[], snippets: SnippetEntry[]
       problems.push(`${file}: id "${snippet.id}" uses the group "${group}", which OasisFox commands use`);
       continue;
     }
-    const { matches: _matches, code: _code, ...meta } = snippet;
+    const { matches: _matches, requires: _requires, code: _code, ...meta } = snippet;
     define(file, { ...meta, runs_in: "content" });
   }
   return registry;

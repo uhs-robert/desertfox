@@ -3,6 +3,7 @@ import type { ContentToBackground } from "../shared/messages.ts";
 import type { BoundInvocation } from "../shared/invocation.ts";
 import { bundle_loader_deps, container_names, make_router_deps, reinject_deps } from "./browser_deps.ts";
 import { create_cmdline_service } from "./cmdline_service.ts";
+import { requirement_lookup } from "./availability.ts";
 import { list_keys } from "./list_keys.ts";
 import { create_bundle_loader } from "./bundle_loader.ts";
 import { repair_tabs_after_reload } from "./reload.ts";
@@ -41,7 +42,11 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
   if (request?.type === "issue_cmdline_ticket") return cmdline.issue_ticket(sender.tab?.id);
   if (request?.type === "open_cmdline") return get_config().then(() => cmdline.open(request.ticket, sender.tab?.id));
   if (request?.type === "record_cmdline") return cmdline.record(request.text, sender.tab?.incognito === true);
-  if (request?.type === "list_keys") return get_config().then(() => list_keys(browser.storage.local, (id) => registry.get(id), request));
+  if (request?.type === "list_keys") {
+    const tab = sender.tab;
+    const page = tab?.url ? { url: tab.url, ...(tab.title ? { title: tab.title } : {}) } : undefined;
+    return get_config().then((config) => list_keys(browser.storage.local, (id) => registry.get(id), request, { page, requirement_of: requirement_lookup(config) }));
+  }
   if ((message as SnippetCall)?.type === "snippet_run") {
     return get_config().then(() => snippets.handle_call(message as SnippetCall, { tab_id: sender.tab?.id, frame_id: sender.frameId }));
   }

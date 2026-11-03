@@ -4,8 +4,10 @@
 
 import type { CheckedArgs, CommandContext, CommandDef } from "../shared/command.ts";
 import type { SnippetEntry } from "../shared/config.ts";
+import { slot_of } from "../shared/engines/index.ts";
 import { matches_pattern } from "../shared/match_pattern.ts";
 import { parse_command_line, type Registry } from "../shared/registry/index.ts";
+import { is_available } from "./availability.ts";
 import { create_router, type RouterDeps } from "./router.ts";
 
 export const MAX_SNIPPET_DEPTH = 5;
@@ -64,6 +66,8 @@ export function create_snippets(registry: Registry, deps: SnippetDeps, router_de
     if (url === undefined || !entry.matches.some((pattern) => matches_pattern(pattern, url))) {
       throw new Error(`${entry.id}: does not run on this page`);
     }
+    const unmet = (entry.requires ?? []).find((name) => !is_available([name], { url }));
+    if (unmet !== undefined) throw new Error(`${entry.id}: ${slot_of(unmet)?.message ?? `the page needs ${unmet}`}`);
     let answer: unknown;
     try {
       answer = await deps.execute_in_top_frame(context.tab_id, wrap_snippet_code(entry.code, args, depth, url));

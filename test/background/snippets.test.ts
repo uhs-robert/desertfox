@@ -211,3 +211,16 @@ test("a snippet_run message from a frame other than the top one is refused", asy
   assert.equal((await snippets.handle_call(call, { tab_id: 7, frame_id: 0 })).ok, true);
   assert.ok(fake.log.includes("note hi"));
 });
+
+test("a snippet that requires a slot runs where the page fills it and refuses elsewhere", async () => {
+  const code = "log('ran')";
+  const repo = setup([snippet("app.repo", code, { matches: ["https://github.com/*"], requires: ["repo"] })], "https://github.com/octo/cat");
+  assert.deepEqual(await repo.press("app.repo"), { ok: true });
+  assert.deepEqual(repo.fake.log, ["ran"]);
+
+  const elsewhere = setup([snippet("app.repo", code, { matches: ["https://github.com/*"], requires: ["repo"] })], "https://github.com/octo");
+  const response = await elsewhere.press("app.repo");
+  assert.equal(response.ok, false);
+  assert.match(JSON.stringify(response), /not in a GitHub repository/);
+  assert.ok(!elsewhere.fake.log.includes("ran"));
+});
