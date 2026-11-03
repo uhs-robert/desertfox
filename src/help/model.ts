@@ -6,6 +6,7 @@ import type { KeymapMode } from "../shared/keymap.ts";
 import type { Prompt } from "../shared/invocation.ts";
 import type { CompiledKeymap, TreeNode } from "../shared/prefix_tree.ts";
 import { is_context_source, is_dynamic_values } from "../shared/registry/params.ts";
+import type { EnumSources } from "../shared/registry/check_args.ts";
 import { print_command } from "../shared/registry/print_command.ts";
 import { subject_param } from "../shared/registry/params.ts";
 import { flag_alternatives, usage_line } from "../shared/registry/usage.ts";
@@ -53,11 +54,13 @@ function param_row(param: ParamDef, subject: ParamDef | undefined): ParamRow {
   };
 }
 
+type Printing = { commands: Map<string, CommandMeta>; sources: EnumSources };
+
 // The args as the command line writes them in the long style, without the command word.
-function describe_args(command: CommandMeta | undefined, args: Record<string, unknown> | undefined, count: number | undefined, prompt: Prompt | undefined): string {
+function describe_args(sources: EnumSources, command: CommandMeta | undefined, args: Record<string, unknown> | undefined, count: number | undefined, prompt: Prompt | undefined): string {
   const parts: string[] = [];
   if (command && args && Object.keys(args).length > 0) {
-    const text = print_command(command, args, { flags: "long" });
+    const text = print_command(command, args, { flags: "long", sources });
     parts.push(text.slice((command.name ?? command.id).length).trim());
   }
   if (count !== undefined) parts.push(`count=${count}`);
@@ -66,29 +69,30 @@ function describe_args(command: CommandMeta | undefined, args: Record<string, un
 }
 
 // Every leaf lists under each command it runs, so a two-step binding shows on both.
-function collect_keys(node: TreeNode, path: string[], mode: KeymapMode, into: Map<string, KeyRow[]>, commands: Map<string, CommandMeta>): void {
+function collect_keys(node: TreeNode, path: string[], mode: KeymapMode, into: Map<string, KeyRow[]>, printing: Printing): void {
   if (node.kind === "branch") {
-    for (const [token, child] of Object.entries(node.children)) collect_keys(child, [...path, token], mode, into, commands);
+    for (const [token, child] of Object.entries(node.children)) collect_keys(child, [...path, token], mode, into, printing);
     return;
   }
   for (const step of node.steps) {
     const rows = into.get(step.invocation.id) ?? [];
-    rows.push({ mode, keys: path.join(""), args: describe_args(commands.get(step.invocation.id), step.invocation.args, step.invocation.count, step.invocation.prompt) });
+    rows.push({ mode, keys: path.join(""), args: describe_args(printing.sources, printing.commands.get(step.invocation.id), step.invocation.args, step.invocation.count, step.invocation.prompt) });
     into.set(step.invocation.id, rows);
   }
 }
 
-function keys_by_command(compiled: CompiledKeymap | undefined, commands: Map<string, CommandMeta>): Map<string, KeyRow[]> {
+function keys_by_command(compiled: CompiledKeymap | undefined, printing: Printing): Map<string, KeyRow[]> {
   const into = new Map<string, KeyRow[]>();
   for (const mode of MODE_ORDER) {
     const root = compiled?.modes[mode];
-    if (root) collect_keys(root, [], mode, into, commands);
+    if (root) collect_keys(root, [], mode, into, printing);
   }
   return into;
 }
 
-export function build_help_model(commands: CommandMeta[], compiled: CompiledKeymap | undefined, warnings: string[]): HelpModel {
-  const keys = keys_by_command(compiled, new Map(commands.map((command) => [command.id, command])));
+// `sources` are the configured engine names, so a query that starts with one prints with its `--` guard.
+export function build_help_model(commands: CommandMeta[], compiled: CompiledKeymap | undefined, warnings: string[], sources: EnumSources = {}): HelpModel {
+  const keys = keys_by_command(compiled, { commands: new Map(commands.map((command) => [command.id, command])), sources });
   const groups = new Map<string, CommandRow[]>();
   for (const command of commands) {
     const group_name = command.id.split(".")[0] ?? command.id;
