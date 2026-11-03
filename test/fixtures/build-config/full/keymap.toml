@@ -10,7 +10,7 @@ y = "Home"
 [normal]
 J = "tab.next"
 K = "tab.prev"
-D = "tab.close left"
+D = "tab.close --left"
 
 [browser]
 "<A-j>" = "tab.next"

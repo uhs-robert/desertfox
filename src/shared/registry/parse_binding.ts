@@ -9,7 +9,7 @@ import { parse_command_line } from "./command_line.ts";
 import type { Registry } from "./define.ts";
 import { is_context_source } from "./params.ts";
 
-export type BindingResult = { kind: "binding"; binding: BoundInvocation; warnings?: string[] } | { kind: "error"; error: string };
+export type BindingResult = { kind: "binding"; binding: BoundInvocation } | { kind: "error"; error: string };
 
 export function parse_binding(registry: Registry, text: string, sources: EnumSources = {}): BindingResult {
   const trimmed = text.trimStart();
@@ -17,8 +17,7 @@ export function parse_binding(registry: Registry, text: string, sources: EnumSou
   const parsed = parse_command_line(registry, types_into_command_line ? trimmed.slice(1) : trimmed, sources);
   if (parsed.kind === "error") return parsed;
   if (parsed.kind === "help") return { kind: "error", error: "-h and --help are for the command line, not a binding" };
-  const warnings = parsed.warnings?.length ? { warnings: parsed.warnings } : {};
-  if (!types_into_command_line) return { kind: "binding", binding: parsed.invocation, ...warnings };
+  if (!types_into_command_line) return { kind: "binding", binding: parsed.invocation };
 
   const prompt = prompt_for(registry, parsed.invocation.id, parsed.invocation.args ?? {});
   if (typeof prompt === "string") return { kind: "error", error: prompt };
@@ -26,7 +25,7 @@ export function parse_binding(registry: Registry, text: string, sources: EnumSou
   const binding: BoundInvocation = { id, prompt: prompt.prompt };
   const kept = Object.fromEntries(Object.entries(args).filter(([name]) => name !== prompt.moved_to_prefill));
   if (Object.keys(kept).length > 0) binding.args = kept;
-  return { kind: "binding", binding, ...warnings };
+  return { kind: "binding", binding };
 }
 
 // The stored form names one param to fill. Pick the one that holds an @source,

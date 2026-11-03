@@ -18,30 +18,30 @@ function error_of(text: string): string {
 
 test("a command string becomes the id and args the extension stores", () => {
   assert.deepEqual(binding_of("tab.next"), { id: "tab.next" });
-  assert.deepEqual(binding_of("open tab https://github.com"), { id: "open.url", args: { where: "tab", url: "https://github.com" } });
-  assert.deepEqual(binding_of("hint rapid background links"), { id: "hint.run", args: { rapid: true, action: "background", filter: "links" } });
-  assert.deepEqual(binding_of(`search engine=arch "rust lifetimes"`).args, { engine: "arch", query: "rust lifetimes" });
+  assert.deepEqual(binding_of("open -t https://github.com"), { id: "open.url", args: { where: "tab", url: "https://github.com" } });
+  assert.deepEqual(binding_of("hint -r -b --links"), { id: "hint.run", args: { rapid: true, action: "background", filter: "links" } });
+  assert.deepEqual(binding_of(`search --engine=arch "rust lifetimes"`).args, { engine: "arch", query: "rust lifetimes" });
 });
 
-test("a short name, an alias and a full id reach the same id", () => {
+test("a name, an alias and a full id reach the same id", () => {
   assert.equal(binding_of("open").id, "open.url");
   assert.equal(binding_of("o").id, "open.url");
   assert.equal(binding_of("open.url").id, "open.url");
 });
 
 test("a leading colon asks for the command line, and the main param is the one to type", () => {
-  assert.deepEqual(binding_of(":open tab"), { id: "open.url", args: { where: "tab" }, prompt: { param: "url" } });
+  assert.deepEqual(binding_of(":open -t"), { id: "open.url", args: { where: "tab" }, prompt: { param: "url" } });
   assert.deepEqual(binding_of("  :open"), { id: "open.url", prompt: { param: "url" } });
-  assert.deepEqual(binding_of(":hint rapid").prompt, { param: "action" });
+  assert.deepEqual(binding_of(":hint -r").prompt, { param: "action" });
 });
 
 test("a leading colon moves the @source into the prefill", () => {
-  assert.deepEqual(binding_of(":open tab @current_url"), {
+  assert.deepEqual(binding_of(":open -t @current_url"), {
     id: "open.url",
     args: { where: "tab" },
     prompt: { param: "url", prefill: { from: "current_url" } },
   });
-  assert.deepEqual(binding_of(":open.url url=@selection"), { id: "open.url", prompt: { param: "url", prefill: { from: "selection" } } });
+  assert.deepEqual(binding_of(":open.url --url=@selection"), { id: "open.url", prompt: { param: "url", prefill: { from: "selection" } } });
 });
 
 test("without a colon an @source stays in the args for the key press to fill", () => {
@@ -53,18 +53,17 @@ test("a colon needs a command with a param", () => {
 });
 
 test("grammar errors pass through, and help is not a binding", () => {
-  assert.equal(error_of("open nope=1"), 'unknown param "nope" for open');
+  assert.equal(error_of("open --nope=1"), 'unknown param "nope" for open');
   assert.equal(error_of(":nope"), 'unknown command "nope"');
-  assert.equal(error_of("open tab window"), "where is set twice");
+  assert.equal(error_of("open -t -w"), "where is set twice");
   assert.equal(error_of(""), "empty command line");
   assert.match(error_of("open --help"), /not a binding/);
 });
 
-test("runtime lists reach the grammar and warnings come back with the binding", () => {
+test("runtime lists reach the grammar", () => {
   const sources = { search_engines: ["arch", "ddg"] };
-  const result = parse_binding(registry, "search engine=ddg arch linux", sources);
-  assert.equal(result.kind, "binding");
-  assert.equal(result.kind === "binding" && result.warnings?.length, 1);
+  const result = parse_binding(registry, "search --engine=ddg arch linux", sources);
+  assert.deepEqual(result.kind === "binding" && result.binding.args, { engine: "ddg", query: "arch linux" });
   const picked = parse_binding(registry, ":search arch pacman", sources);
   assert.deepEqual(picked.kind === "binding" && picked.binding, {
     id: "open.search",

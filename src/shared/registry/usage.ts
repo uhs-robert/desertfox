@@ -1,24 +1,43 @@
 import type { CommandDef, ParamDef } from "../command.ts";
-import { is_context_source, static_values } from "./params.ts";
+import { bare_word_param, is_context_source, is_dynamic_values, static_values, subject_param } from "./params.ts";
 
-// `search engine query [here|tab|background|window] [container=<container>]`, in the words the grammar reads.
-export function usage_line(command: Pick<CommandDef, "id" | "name" | "params">): string {
-  return [command.name ?? command.id, ...(command.params ?? []).map(param_usage)].join(" ");
+type Usable = Pick<CommandDef, "id" | "name" | "params">;
+
+// `search [<engine>] [-t|--tab|-b|--background|-w|--window] [-c=<container>|--container=<container>] query...`, in the words the grammar reads.
+// The engine comes first, flags follow in param order and the subject comes last.
+export function usage_line(command: Usable): string {
+  const params = command.params ?? [];
+  const bare = bare_word_param(command);
+  const subject = subject_param(command);
+  const flags = params.filter((param) => param !== subject && !(param === bare && is_dynamic_values(param.values)));
+  const engine = bare && is_dynamic_values(bare.values) ? [`[<${bare.name}>]`] : [];
+  return [command.name ?? command.id, ...engine, ...flags.map(flag_usage), ...(subject ? [subject_usage(subject)] : [])].join(" ");
 }
 
-// A bare word names a switch, picks an enum value or fills the main param.
-// Any other param needs `name=`. A context-source default marks the main
-// input, so it stays unbracketed.
-function param_usage(param: ParamDef): string {
-  const word =
-    param.type === "enum"
-      ? (static_values(param)?.join("|") ?? param.name)
-      : param.type === "bool" || param.main
-        ? `${param.name}${param.rest ? "..." : ""}`
-        : `${param.name}=<${param.name}>`;
-  const optional =
-    param.type === "bool" ||
-    param.when !== undefined ||
-    (param.default !== undefined && !is_context_source(param.default));
-  return optional ? `[${word}]` : word;
+function is_optional(param: ParamDef): boolean {
+  return param.type === "bool" || param.when !== undefined || (param.default !== undefined && !is_context_source(param.default));
+}
+
+function subject_usage(param: ParamDef): string {
+  const word = param.type === "enum" ? (static_values(param)?.join("|") ?? param.name) : `${param.name}${param.rest ? "..." : ""}`;
+  return is_optional(param) ? `[${word}]` : word;
+}
+
+function flag_usage(param: ParamDef): string {
+  const dashed = (word: string) => word.replaceAll("_", "-");
+  let alternatives: string[];
+  if (param.type === "bool") {
+    alternatives = [...(typeof param.short === "string" ? [`-${param.short}`] : []), `--${dashed(param.name)}`];
+  } else if (param.type === "enum" && static_values(param)) {
+    // The default value is the state without the flag, so it needs no mention.
+    const values = (static_values(param) ?? []).filter((value) => value !== param.default);
+    alternatives = values.flatMap((value) => {
+      const letter = typeof param.short === "object" ? param.short[value] : undefined;
+      return [...(letter ? [`-${letter}`] : []), `--${dashed(value)}`];
+    });
+  } else {
+    alternatives = [...(typeof param.short === "string" ? [`-${param.short}=<${param.name}>`] : []), `--${param.name}=<${param.name}>`];
+  }
+  const word = alternatives.join("|");
+  return is_optional(param) ? `[${word}]` : word;
 }

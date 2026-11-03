@@ -19,6 +19,27 @@ export function static_values(param: ParamDef): readonly string[] | undefined {
   return Array.isArray(param.values) ? (param.values as readonly string[]) : undefined;
 }
 
+// The param that the first unmarked word may fill: the search engine (a runtime list), or the one required value of a command that takes nothing else (`mode ignore`).
+export function bare_word_param(command: Pick<CommandDef, "params">): ParamDef | undefined {
+  const params = command.params ?? [];
+  const from_list = params.find((param) => param.type === "enum" && is_dynamic_values(param.values));
+  if (from_list) return from_list;
+  const [only] = params;
+  const required = only !== undefined && only.default === undefined && only.when === undefined;
+  return params.length === 1 && required && only.type === "enum" && static_values(only) ? only : undefined;
+}
+
+// The param typed last and bare: the main text, else the one number, else the one required value.
+export function subject_param(command: Pick<CommandDef, "params">): ParamDef | undefined {
+  const params = command.params ?? [];
+  const main = params.find((param) => param.main);
+  if (main) return main;
+  const numbers = params.filter((param) => param.type === "int" || param.type === "float");
+  if (numbers.length === 1) return numbers[0];
+  const bare = bare_word_param(command);
+  return bare && !is_dynamic_values(bare.values) ? bare : undefined;
+}
+
 export function find_param(command: Pick<CommandDef, "params">, name: string): ParamDef | undefined {
   return (command.params ?? []).find((param) => param.name === name);
 }

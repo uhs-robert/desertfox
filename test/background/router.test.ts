@@ -54,7 +54,7 @@ test("an empty selection in an explicit @selection arg opens the line, a full on
   const empty = make_fake(commands, { ask_selection: async () => "" });
   const key = { id: "site.find", args: { query: { from: "selection" }, where: "tab" } };
   assert.deepEqual(await create_router(empty.deps).run({ invocations: [key], mode: "normal", may_prompt: true }), { ok: true });
-  assert.deepEqual(empty.log, ["cmdline 7 0 find where=tab "]);
+  assert.deepEqual(empty.log, ["cmdline 7 0 find --where=tab "]);
   const full = make_fake(commands);
   await create_router(full.deps).run({ invocations: [key], mode: "normal", may_prompt: true });
   assert.deepEqual(seen, [{ query: "chosen text", where: "tab" }]);
@@ -66,7 +66,7 @@ test("a missing required param opens the command line with the command typed in"
     "open.url": { label: "Open", intent: "x", name: "open", params: [{ name: "url", type: "string" }], runs_in: "background", run: () => assert.fail() },
   });
   assert.deepEqual(await create_router(deps).run({ invocations: [{ id: "open.url" }], mode: "normal", may_prompt: true }), { ok: true });
-  assert.deepEqual(log, ["cmdline 7 0 open url="]);
+  assert.deepEqual(log, ["cmdline 7 0 open --url="]);
 });
 
 test("a prompt opens the line with the prefill resolved now, and runs nothing", async () => {
@@ -77,7 +77,7 @@ test("a prompt opens the line with the prefill resolved now, and runs nothing", 
   await create_router(deps).run({ invocations: [binding], mode: "normal", may_prompt: true });
   const bare = { id: "open.url", prompt: { param: "url" } };
   await create_router(deps).run({ invocations: [bare], mode: "normal", may_prompt: true });
-  assert.deepEqual(log, ["cmdline 7 0 open url=https://example.org/ where=tab", "cmdline 7 0 open url="]);
+  assert.deepEqual(log, ["cmdline 7 0 open --url=https://example.org/ --where=tab", "cmdline 7 0 open --url="]);
 });
 
 test("a prompt with an empty selection prefills empty, and a count is dropped", async () => {
@@ -198,7 +198,7 @@ test("a prompt binding opens the line even when no param is missing", async () =
     may_prompt: true,
   });
   assert.deepEqual(response, { ok: true });
-  assert.deepEqual(log, ["cmdline 7 0 bookmark.add url=https://example.org/"]);
+  assert.deepEqual(log, ["cmdline 7 0 bookmark.add --url=https://example.org/"]);
 });
 
 test("get_selection goes to the sender frame", async () => {

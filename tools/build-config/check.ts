@@ -83,7 +83,7 @@ function location_of(merged: MergedData, section: string, key: string): string {
 
 // Turns the binding strings of every mode into invocations, in place. The
 // extension and the stored file only ever see invocations.
-export function resolve_bindings(merged: MergedData, registry: Registry, problems: string[], warnings: string[]) {
+export function resolve_bindings(merged: MergedData, registry: Registry, problems: string[]) {
   const sources = { search_engines: Object.keys(with_fallback_engines(merged.search_engines)) };
   const location = (mode: string, sequence: string) => location_of(merged, `keymap.${mode}`, sequence);
   // Aliases that check_config rejects (spaces, a taken word, an unknown target) stay out, so they are reported once, there.
@@ -98,10 +98,7 @@ export function resolve_bindings(merged: MergedData, registry: Registry, problem
   const resolve_text = (text: string, where: string): BoundInvocation | undefined => {
     const result = parse_binding(with_aliases, text, sources);
     if (result.kind === "error") problems.push(`${where}: ${result.error}`);
-    else {
-      for (const warning of result.warnings ?? []) warnings.push(`${where}: ${warning}`);
-      return result.binding;
-    }
+    else return result.binding;
   };
   const resolve_run = (run: string | string[], where: string): BoundInvocation | BoundInvocation[] | undefined => {
     if (typeof run === "string") return resolve_text(run, where);

@@ -37,7 +37,7 @@ test("the model groups commands by id group and lists params", () => {
   const model = build_help_model(commands, compiled, []);
   assert.deepEqual(model.groups.map((group) => group.name), ["help", "open", "scroll"]);
   const open = model.groups[1]!.commands[0]!;
-  assert.equal(open.usage, "open url=<url> [here|tab]");
+  assert.equal(open.usage, "open --url=<url> [--tab]");
   assert.deepEqual(open.params, [
     { name: "url", type: "string", default: "from clipboard", values: "" },
     { name: "where", type: "enum", default: "here", values: "here, tab" },
