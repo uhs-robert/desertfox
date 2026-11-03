@@ -101,3 +101,46 @@ test("a binding in a mode the command does not allow is warned about and skipped
   assert.ok(compiled.modes.browser!.children["<A-j>"]);
   assert.equal(warnings.filter((w) => w.includes("ignore") && w.includes("tab.close")).length, 1);
 });
+
+function compile_labels(keymap: object, extra: object = {}) {
+  const { registry } = make_fake({
+    ...commands,
+    "open.url": { label: "Open", intent: "x", params: [{ name: "where", type: "string" as const }, { name: "container", type: "string" as const }], runs_in: "background" as const, run: () => {} },
+    "tab.reopen_in_container": { label: "Reopen In Container", intent: "x", params: [{ name: "container", type: "string" as const }], runs_in: "background" as const, run: () => {} },
+  });
+  const config = {
+    ...empty_config(),
+    keymap,
+    search_engines: { ddg: { url: "https://d/?q=%s", label: "DuckDuckGo" }, arch: { url: "https://a/?q=%s", label: "Arch Wiki" } },
+    ...extra,
+  };
+  const { compiled, warnings } = compile_config({ config, default_keymap: {}, get_command: (id) => registry.get(id), enum_sources: { search_engines: ["ddg", "arch", "nope"], containers: ["Work"] } });
+  assert.deepEqual(warnings, []);
+  const children = compiled.modes.normal!.children;
+  const leaf_at = (group: string, key: string) => ((children[group] as { children: Record<string, TreeLeaf> }).children[key])!;
+  return { children, leaf_at };
+}
+
+test("generated search keys are labeled with the engine label", () => {
+  const { leaf_at } = compile_labels({ search_keys: { d: "ddg", a: "arch" } });
+  assert.equal(leaf_at("s", "d").label, "DuckDuckGo");
+  assert.equal(leaf_at("S", "d").label, "DuckDuckGo");
+  assert.equal(leaf_at("s", "a").label, "Arch Wiki");
+});
+
+test("a search binding without an engine takes the default engine label", () => {
+  const { children } = compile_labels({ normal: { ",,": { id: "open.search" } } }, { settings: { default_engine: "arch" } });
+  const leaf = (children[","] as { children: Record<string, TreeLeaf> }).children[","]!;
+  assert.equal(leaf.label, "Arch Wiki");
+});
+
+test("a search engine without a configured label keeps the command label", () => {
+  const { leaf_at } = compile_labels({ search_keys: { n: "nope" } });
+  assert.equal(leaf_at("s", "n").label, "Search");
+});
+
+test("container keys are labeled with the container name", () => {
+  const { leaf_at } = compile_labels({ container_keys: { w: "Work" } });
+  assert.equal(leaf_at("c", "w").label, "Work");
+  assert.equal(leaf_at("C", "w").label, "Work");
+});

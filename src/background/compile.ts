@@ -3,15 +3,17 @@
 // skipped with a warning and the content script never sees it.
 
 import type { CommandDef, Mode } from "../shared/command.ts";
+import { DEFAULT_SETTINGS } from "../shared/config.ts";
 import type { MergedConfig } from "../shared/config.ts";
 import type { KeymapConfig } from "../shared/keymap.ts";
-import type { CompiledKeymap, TreeBranch, TreeNode } from "../shared/prefix_tree.ts";
+import type { CompiledKeymap, TreeBranch, TreeLeaf, TreeNode } from "../shared/prefix_tree.ts";
 import type { Prompt } from "../shared/invocation.ts";
 import { find_param, is_context_source } from "../shared/registry/params.ts";
 import { check_args } from "../shared/registry/check_args.ts";
 import type { EnumSources } from "../shared/registry/check_args.ts";
 import { DEFAULT_PALETTE, is_palette_name, palette_or_default, resolve_mode_colors } from "../shared/mode_colors.ts";
 import { compile_keymap } from "../shared/keys/compiler.ts";
+import { search_engine_name } from "../commands/url_build.ts";
 import { merge_keymaps } from "./keymap_merge.ts";
 
 export type CompileInput = {
@@ -30,6 +32,8 @@ export function compile_config(input: CompileInput): CompileOutput {
     return command && { runs_in: command.runs_in, label: command.label, count: command.count ?? "ignore" };
   });
 
+  for (const root of Object.values(compiled.modes)) label_by_args(root, input.config);
+
   const requested_palette = input.config.settings.palette;
   if (requested_palette !== undefined && !is_palette_name(requested_palette)) {
     warnings.push(`settings: palette "${String(requested_palette)}" is not an oasis palette, using ${DEFAULT_PALETTE}`);
@@ -41,6 +45,27 @@ export function compile_config(input: CompileInput): CompileOutput {
     if (Object.keys(root.children).length === 0) delete compiled.modes[mode as keyof CompiledKeymap["modes"]];
   }
   return { compiled, warnings };
+}
+
+// The command label says "Search" for every engine and "Reopen In Container" for every container, so which-key rows
+// would read alike. A binding has no label of its own, so the argument is the only thing that tells the rows apart.
+function label_by_args(branch: TreeBranch, config: MergedConfig): void {
+  for (const node of Object.values(branch.children)) {
+    if (node.kind === "branch") label_by_args(node, config);
+    else label_leaf(node, config);
+  }
+}
+
+function label_leaf(leaf: TreeLeaf, config: MergedConfig): void {
+  if (leaf.steps.length !== 1) return;
+  const { id, args } = leaf.steps[0]!.invocation;
+  if (id === "open.search") {
+    const engine = search_engine_name(args?.engine, config.settings.default_engine ?? DEFAULT_SETTINGS.default_engine);
+    const engine_label = config.search_engines[engine]?.label;
+    if (engine_label !== undefined) leaf.label = engine_label;
+  } else if (typeof args?.container === "string" && args.container !== "") {
+    leaf.label = args.container;
+  }
 }
 
 // Checks and prunes in place.
