@@ -40,6 +40,13 @@ export function subject_param(command: Pick<CommandDef, "params">): ParamDef | u
   return bare && !is_dynamic_values(bare.values) ? bare : undefined;
 }
 
+// The params typed as flags: all but the subject and the engine that takes the first bare word.
+export function flag_params(command: Pick<CommandDef, "params">): ParamDef[] {
+  const subject = subject_param(command);
+  const bare = bare_word_param(command);
+  return (command.params ?? []).filter((param) => param !== subject && !(param === bare && is_dynamic_values(param.values)));
+}
+
 export function find_param(command: Pick<CommandDef, "params">, name: string): ParamDef | undefined {
   return (command.params ?? []).find((param) => param.name === name);
 }

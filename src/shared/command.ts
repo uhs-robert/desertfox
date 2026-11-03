@@ -32,6 +32,8 @@ export type ParamDef = {
   value_labels?: Readonly<Record<string, string>>;
   // One-letter flag. A string for a bool or valued param (`-r`, `-c=Work`), a value-to-letter map for a static enum (`{ tab: "t" }` gives `-t`). Never on main, rest or a dynamic enum.
   short?: string | Readonly<Record<string, string>>;
+  // What the flag does, one sentence with the verb first (`Close the tabs after this one.`). A string for a bool or valued param, a value-to-sentence map for a static enum. Every flag of a built-in command has one. The completion list shows it.
+  description?: string | Readonly<Record<string, string>>;
   // A `string` param that takes all remaining words.
   rest?: boolean;
   // The one free-text param that config and the command line take as a bare word. At most one per command, `string` only.

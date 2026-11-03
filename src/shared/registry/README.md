@@ -2,12 +2,13 @@
 
 The command registry and everything that reads a command definition. Pure TypeScript with no browser APIs, so the background page and Node tools share it. `tools/write_commands_json.mjs` loads it straight from source.
 
-- `define.ts`: `create_registry` and the define-time checks. Every rejection is a `DefineError` that names the command and the field. It checks the flag names (bool names and enum values, unique per command, none called `help`), the `short` letters and the `value_labels` of an enum param. Command names hold no dot. Snippet commands go through the same `define`, so they share the name check.
+- `define.ts`: `create_registry` and the define-time checks. Every rejection is a `DefineError` that names the command and the field. It checks the flag names (bool names and enum values, unique per command, none called `help`), the `short` letters, the `value_labels` and the `description` of a param. Command names hold no dot. Snippet commands go through the same `define`, so they share the name check.
 - `check_args.ts`: the one validator. Runtime enum lists (engines, containers) arrive as an `EnumSources` argument.
 - `command_line.ts`: the one grammar for command text, text to `Invocation`. It never checks `when` or types. Call `check_args` on the result. Flags come before the subject. Pass the same `EnumSources` so the first bare word can pick from a runtime list, for example an engine name.
 - `parse_binding.ts`: the same grammar for a config binding, plus the leading `:` that turns into a stored `prompt`.
 - `print_command.ts`: the inverse of `command_line.ts`, an invocation back to text. It writes the engine first, flags in param order and the subject last, and leaves out args equal to the default. It checks each line by parsing it again and falls back to a `--` guard, quotes and then `--name=value` when the text would be misread. An open param prints with no value. `flags: "long"` writes the docs form, and `print_flag` writes one param as a flag.
 - `usage.ts`: the usage line shown for `-h`, in the words the grammar reads, and `flag_alternatives`, the flags of one param that the help page lists.
+- `summary.ts`: the summary rule. `first_sentence` cuts the text that lists show out of an `intent`. `summary_problem` and `description_problem` check it, and `summary_problems` audits one command, including a flag that has no description. The define-time check runs `description_problem` on a description that is present. A test runs `summary_problems` over every built-in command, because snippets from the user's config go through `define` and need not meet the rule.
 - `commands_file.ts`: the `commands.json` content.
 - `params.ts`: small readers over params shared by the files above, including which param is the subject and which takes the first bare word.
 - `index.ts`: the shared `registry` and `define`, plus the exports.

@@ -4,7 +4,7 @@ import { define } from "../shared/registry/index.ts";
 define("cmdline.open", {
   label: "Command line",
   intent: "Open the command line, with text already typed if given.",
-  params: [{ name: "text", type: "string", default: "" }],
+  params: [{ name: "text", type: "string", default: "", description: "Put this text in the line." }],
   runs_in: "content",
   run: cmdline_open.run,
 });
@@ -35,7 +35,7 @@ define("cmdline.submit", {
 
 define("cmdline.history", {
   label: "History",
-  intent: "Put an earlier or later command from the command line history into the line.",
+  intent: "Recall a command from history. It puts an earlier or later command into the command line.",
   params: [{ name: "direction", type: "enum", values: ["prev", "next"], value_labels: { prev: "to older entry", next: "to newer entry" } }],
   runs_in: "content",
   modes: ["cmdline"],

@@ -1,15 +1,14 @@
 import type { CommandDef, ParamDef } from "../command.ts";
-import { bare_word_param, is_context_source, is_dynamic_values, static_values, subject_param } from "./params.ts";
+import { bare_word_param, flag_params, is_context_source, is_dynamic_values, static_values, subject_param } from "./params.ts";
 
 type Usable = Pick<CommandDef, "id" | "name" | "params">;
 
 // `search [<engine>] [-t|--tab|-b|--background|-w|--window] [-c=<container>|--container=<container>] query...`, in the words the grammar reads.
 // The engine comes first, flags follow in param order and the subject comes last.
 export function usage_line(command: Usable): string {
-  const params = command.params ?? [];
   const bare = bare_word_param(command);
   const subject = subject_param(command);
-  const flags = params.filter((param) => param !== subject && !(param === bare && is_dynamic_values(param.values)));
+  const flags = flag_params(command);
   const engine = bare && is_dynamic_values(bare.values) ? [`[<${bare.name}>]`] : [];
   return [command.name ?? command.id, ...engine, ...flags.map(flag_usage), ...(subject ? [subject_usage(subject)] : [])].join(" ");
 }

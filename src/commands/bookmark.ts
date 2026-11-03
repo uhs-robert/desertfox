@@ -31,7 +31,7 @@ const handlers = make_bookmark_handlers(browser_bookmark_deps);
 
 define("bookmark.add", {
   label: "Add bookmark",
-  intent: "Bookmark a url, the current page by default, titled with the page title.",
+  intent: "Bookmark a page. The url defaults to the current page, titled with the page title.",
   params: [{ name: "url", type: "string", main: true, default: { from: "current_url" } }],
   runs_in: "background",
   run: (ctx, args) => handlers.add(ctx, args as { url: string }),

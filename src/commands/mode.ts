@@ -21,7 +21,7 @@ define("mode.set", {
 
 define("mode.escape", {
   label: "Escape",
-  intent: "Leave insert, hint, command line, caret or visual mode, drop the focus from the field and return to normal mode.",
+  intent: "Return to normal mode. It works from insert, hint, command line, caret and visual mode, and drops the focus from the field.",
   runs_in: "content",
   modes: ["normal", "insert", "hint", "cmdline", "caret", "visual"],
   run: mode_escape.run,
@@ -37,7 +37,7 @@ define("mode.pass_next", {
 // Defined here with the mode commands because both change what has the focus.
 define("page.focus_input", {
   label: "Focus input",
-  intent: "Focus the first visible text field on the page, preferring one in view.",
+  intent: "Focus the first text field on the page. It takes the first visible field and prefers one in view.",
   runs_in: "content",
   run: page_focus_input.run,
 });
