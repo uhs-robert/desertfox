@@ -212,7 +212,7 @@ define("tab.undo_close", {
 
 define("tab.move", {
   label: "Move tab",
-  intent: "Move the tab right by a positive offset or left by a negative one. A count prefix repeats it.",
+  intent: "Move the tab later in the strip by a positive offset or earlier by a negative one. A count prefix repeats it.",
   params: [{ name: "offset", type: "int" }],
   runs_in: "background",
   count: "repeat",
