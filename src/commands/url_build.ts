@@ -126,3 +126,6 @@ export function clipboard_target(
   if (!engine) throw new Error(`The clipboard is not a URL and the default_engine setting names no search engine: "${default_engine}"`);
   return engine_search_url(engine.url, trimmed);
 }
+
+// An empty or missing engine means the user named none, so the default_engine setting decides.
+export const search_engine_name = (given: unknown, default_engine: string): string => (typeof given === "string" && given !== "" ? given : default_engine);
