@@ -7,7 +7,7 @@ const TOAST_MS = 3000;
 export const STYLE = `
 .oasisfox-toast {
   position: fixed; right: 16px; bottom: 48px; max-width: 40ch; padding: 8px 12px;
-  background: var(--oasisfox-bg, #222); color: var(--oasisfox-fg, #eee);
+  background: var(--oasisfox-bg, #0c0e13); color: var(--oasisfox-fg, #f5f5dc);
   font: var(--oasisfox-font, 14px system-ui, sans-serif); border-radius: var(--oasisfox-radius, 6px);
 }`;
 
