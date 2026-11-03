@@ -17,9 +17,8 @@ const key_test_dir = dirname(fileURLToPath(import.meta.url));
 const repo_dir = resolve(key_test_dir, "../..");
 const dist_dir = join(repo_dir, "dist");
 const EXTENSION_ID = "oasisfox@uhs-robert";
-// shadow.sh caps names at 8 characters. "ok" plus a base-36 pid is at most 8, and the sweep reads the owner pid back from the name.
-const SHADOW_PREFIX = "ok";
-const SHADOW_NAME = `${SHADOW_PREFIX}${process.pid.toString(36)}`;
+// shadow.sh caps names at 8 characters. "ok" plus a base-36 pid is at most 8 and unique among live runs.
+const SHADOW_NAME = `ok${process.pid.toString(36)}`;
 if (SHADOW_NAME.length > 8) throw new Error(`shadow name ${SHADOW_NAME} is longer than 8 characters`);
 const FRESH_LOAD_COUNT = 24;
 const PADDED_BUNDLE_BYTES = 20 * 1024;
@@ -52,22 +51,32 @@ function process_is_alive(pid) {
   }
 }
 
-// A killed run leaves its session behind under its own name. Stop each session whose owner is dead.
-// A live run is never touched. This run's own name counts as stale, since a recycled pid can match an old leftover.
+// shadow.sh keeps a session's runtime dir here, and `down` removes the dir with the marker in it.
+const OWNER_MARKER = "oasisfox-key-owner";
+const marker_path = (name) => join(tmpdir(), `shadow-${process.getuid()}-${name}`, OWNER_MARKER);
+
+function read_owner_pid(name) {
+  try {
+    return Number.parseInt(readFileSync(marker_path(name), "utf8"), 10);
+  } catch {
+    return undefined;
+  }
+}
+
+// A killed run leaves its session behind. Stop each session whose marker names a dead owner.
+// A live run is never touched. This run's own pid counts as dead, since a recycled pid can match an old leftover.
+// A session with no marker is skipped, whatever its name. That includes one killed between `up` and the marker write, which errs toward safety.
 async function sweep_dead_sessions() {
   let stdout;
   try {
     ({ stdout } = await shadow("status"));
   } catch (error) {
-    console.warn(`sweep skipped: shadow status failed: ${error.message}`);
+    console.error(`sweep skipped: shadow status failed: ${error.message}`);
     return;
   }
-  // Only names this runner makes: the suffix must be a pid in canonical base 36, so "okapi" is never touched.
-  const names = [...stdout.matchAll(new RegExp(`^(${SHADOW_PREFIX}[0-9a-z]{1,5}): `, "gm"))].map((match) => match[1])
-    .filter((name) => Number.parseInt(name.slice(SHADOW_PREFIX.length), 36).toString(36) === name.slice(SHADOW_PREFIX.length));
-  for (const name of names) {
-    const owner_pid = Number.parseInt(name.slice(SHADOW_PREFIX.length), 36);
-    if (name !== SHADOW_NAME && process_is_alive(owner_pid)) continue;
+  for (const [, name] of stdout.matchAll(/^([a-z0-9][a-z0-9-]*): /gm)) {
+    const owner_pid = read_owner_pid(name);
+    if (!Number.isInteger(owner_pid) || (owner_pid !== process.pid && process_is_alive(owner_pid))) continue;
     console.log(`sweep: stopping ${name}, left by dead run ${owner_pid}`);
     await shadow("down", name).catch((error) => console.error(`sweep: down ${name} failed: ${error.message}`));
   }
@@ -207,6 +216,7 @@ async function main() {
   try {
     await sweep_dead_sessions();
     await shadow("up", SHADOW_NAME);
+    writeFileSync(marker_path(SHADOW_NAME), String(process.pid));
     await shadow("spawn", SHADOW_NAME, join(key_test_dir, "launch_firefox.sh"), work_dir, profile_dir, String(debug_port), managed_file);
     for (let attempt = 0; ; attempt++) {
       try {
