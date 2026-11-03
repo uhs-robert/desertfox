@@ -254,11 +254,13 @@ A snippet file has a header with the command fields, then the code:
 // intent: Show or hide record IDs in My App.
 // matches: https://app.example.com/*
 // name: ids
+// modes: normal, visual
 // param: query string main default=selection
 // param: all bool
 window.wrappedJSObject.my_app.toggle_ids(args.query);
 ```
 
+- `modes` is optional. It lists the modes where a key can run the snippet, from `normal`, `caret` and `visual`. The default is `normal`. Any other name is a build-config error.
 - `tools/build-config` turns the header into a normal registry entry. Snippet commands get keys, which-key rows, help, completion and prompts for missing params the same as built-in commands.
 - The router checks args, then runs the code in the tab's content script with `tabs.executeScript`, with `args` defined. `window.wrappedJSObject` reaches the page's own functions.
 - `matches` limits where the command runs. On other pages the router refuses with a message.

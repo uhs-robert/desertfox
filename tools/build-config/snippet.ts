@@ -7,12 +7,14 @@
 // A bare `default=` word that names a context source (current_url, selection,
 // clipboard) is that source. A double-quoted default is always a literal string.
 
-import type { ContextSourceName, ParamDef, ParamType, ParamValue } from "../../src/shared/command.ts";
+import type { ContextSourceName, Mode, ParamDef, ParamType, ParamValue } from "../../src/shared/command.ts";
 import type { SnippetEntry } from "../../src/shared/config.ts";
 
 const PARAM_TYPES: readonly string[] = ["int", "float", "string", "bool", "enum"];
 const CONTEXT_SOURCES: readonly string[] = ["current_url", "selection", "clipboard"];
-const SINGLE_KEYS = ["id", "label", "intent", "name"] as const;
+const SINGLE_KEYS = ["id", "label", "intent", "name", "modes"] as const;
+// Only the modes where a key press reaches a page command. Insert, ignore, hint and cmdline take typed text.
+const SNIPPET_MODES: readonly string[] = ["normal", "caret", "visual"];
 const REPEAT_KEYS = ["matches", "param"] as const;
 const HEADER_LINE = /^\/\/\s*([a-z_]+)\s*:\s*(.*?)\s*$/;
 
@@ -65,6 +67,15 @@ function parse_param_line(line: string, where: string, problems: string[]): Para
   return parse_param_words(words, name, where, problems);
 }
 
+function parse_modes(raw: string, where: string, problems: string[]): Mode[] {
+  const names = raw.split(",").map((word) => word.trim());
+  const unknown = names.filter((word) => !SNIPPET_MODES.includes(word));
+  if (unknown.length > 0) {
+    problems.push(`${where}: unknown mode "${unknown.join(", ")}" in modes, use ${SNIPPET_MODES.join(", ")}`);
+  }
+  return [...new Set(names.filter((word) => SNIPPET_MODES.includes(word)))] as Mode[];
+}
+
 export function parse_snippet(file: string, text: string, problems: string[]): SnippetEntry | undefined {
   const problems_before = problems.length;
   const single = new Map<string, string>();
@@ -102,6 +113,8 @@ export function parse_snippet(file: string, text: string, problems: string[]): S
     if (seen_names.has(param.name)) problems.push(`${file}: param "${param.name}" is defined twice`);
     seen_names.add(param.name);
   }
+  const modes_line = single.get("modes");
+  const modes = modes_line === undefined ? [] : parse_modes(modes_line, `${file}: header "modes"`, problems);
   if (problems.length > problems_before) return undefined;
 
   const entry: SnippetEntry = {
@@ -114,5 +127,6 @@ export function parse_snippet(file: string, text: string, problems: string[]): S
   const name = single.get("name");
   if (name) entry.name = name;
   if (params.length > 0) entry.params = params;
+  if (modes.length > 0) entry.modes = modes;
   return entry;
 }
