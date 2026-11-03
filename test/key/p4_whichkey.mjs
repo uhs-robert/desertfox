@@ -78,7 +78,7 @@ export async function run_cases({ rdp, extension_id, take_shot, run_case, send_k
     expect(whichkey_events(mark, "wk").every((event) => event.value === ""), "the panel came back after Escape");
   });
 
-  // The test keymap binds ,w to help.whichkey in normal, caret and visual mode. Each mode lists its own keys.
+  // keymap.d binds ,w to help.whichkey in normal, caret and visual mode. It sits there so the keymap that config.reload writes keeps it. Each mode lists its own keys.
   const rows_after = async (keys, mode) => {
     const mark = events.length;
     await send_keys(...keys);
@@ -92,7 +92,9 @@ export async function run_cases({ rdp, extension_id, take_shot, run_case, send_k
     await send_keys("-k", "Escape");
     await send_keys("V");
     const caret_rows = await rows_after([",w"], "caret");
+    // Escape closes the panel and also leaves caret mode, so V starts caret mode again before v.
     await send_keys("-k", "Escape");
+    await send_keys("V");
     await send_keys("v");
     const visual_rows = await rows_after([",w"], "visual");
     await send_keys("-k", "Escape");
