@@ -1,0 +1,68 @@
+import assert from "node:assert/strict";
+import { test } from "node:test";
+import { link_address, perform, takes_typing } from "../../src/content/hints/actions.ts";
+import type { HintAction } from "../../src/content/hints/actions.ts";
+
+function fixture(local: string, extra: Record<string, unknown> = {}) {
+  const calls: string[] = [];
+  const element = { localName: local, click: () => calls.push("click"), focus: () => calls.push("focus"), remove: () => calls.push("remove"), ...extra };
+  const opened: [string, string][] = [];
+  const deps = { open_link: (url: string, place: string) => opened.push([url, place]) };
+  const run = (action: HintAction) => perform(action, element as never, deps as never);
+  return { calls, opened, run };
+}
+
+test("here clicks a link", () => {
+  const page = fixture("a", { href: "https://example.com/" });
+  page.run("here");
+  assert.deepEqual(page.calls, ["click"]);
+  assert.deepEqual(page.opened, []);
+});
+
+test("tab, background and window open the address in that place", () => {
+  for (const place of ["tab", "background", "window"] as const) {
+    const page = fixture("a", { href: "https://example.com/x" });
+    page.run(place);
+    assert.deepEqual(page.opened, [["https://example.com/x", place]]);
+    assert.deepEqual(page.calls, []);
+  }
+});
+
+test("an element with no usable address is clicked instead of opened", () => {
+  const page = fixture("button");
+  page.run("tab");
+  assert.deepEqual(page.calls, ["click"]);
+  const script = fixture("a", { href: "javascript:void(0)" });
+  script.run("background");
+  assert.deepEqual(script.opened, []);
+});
+
+test("here focuses a text field and clicks a checkbox", () => {
+  const text = fixture("input", { type: "text" });
+  text.run("here");
+  assert.deepEqual(text.calls, ["focus"]);
+  const box = fixture("input", { type: "checkbox" });
+  box.run("here");
+  assert.deepEqual(box.calls, ["click"]);
+});
+
+test("focus focuses and delete removes", () => {
+  const page = fixture("div");
+  page.run("focus");
+  page.run("delete");
+  assert.deepEqual(page.calls, ["focus", "remove"]);
+});
+
+test("takes_typing knows fields from buttons", () => {
+  assert.equal(takes_typing({ localName: "textarea" } as never), true);
+  assert.equal(takes_typing({ localName: "select" } as never), true);
+  assert.equal(takes_typing({ localName: "div", isContentEditable: true } as never), true);
+  assert.equal(takes_typing({ localName: "input", type: "submit" } as never), false);
+  assert.equal(takes_typing({ localName: "a" } as never), false);
+});
+
+test("link_address refuses script addresses", () => {
+  assert.equal(link_address({ href: "JavaScript:alert(1)" } as never), undefined);
+  assert.equal(link_address({ href: "" } as never), undefined);
+  assert.equal(link_address({ href: "https://a.test/" } as never), "https://a.test/");
+});

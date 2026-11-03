@@ -8,6 +8,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { connect_rdp, evaluate_in_background, install_temporary_addon } from "./rdp.mjs";
+import { run_hint_cases } from "./p5_hints.mjs";
 import { start_server } from "./server.mjs";
 
 const run_execfile = promisify(execFile);
@@ -609,6 +610,8 @@ async function main() {
       expect(shown.page_id !== "d_close", "d_close is still the visible tab");
       expect(await scroll_delta_after(shown.page_id, ["j"]) > 0, "the tab left after xx does not take keys");
     });
+
+    await run_hint_cases({ rdp, extension_id: EXTENSION_ID, run_case, send_keys, open_page, wait_event, find_event, events, expect, sleep, scroll_delta_after, became_visible });
 
     const tree_read_ms = [];
     for (let index = 0; index < FRESH_LOAD_COUNT; index++) {
