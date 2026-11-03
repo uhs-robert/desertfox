@@ -1,5 +1,6 @@
 // The key test: real key presses in a nested session, results read from pages that report to a local server.
 // Needs SHADOW_SH, a script with `up|spawn|keys|down <name>` subcommands for a nested, invisible compositor.
+// `status` is optional. The sweep reads its stdout for lines that start `<name>: ` and skips the sweep if the verb fails.
 import { execFile, spawnSync } from "node:child_process";
 import { cpSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import net from "node:net";
@@ -25,7 +26,7 @@ const PADDED_BUNDLE_BYTES = 20 * 1024;
 
 const shadow_sh = process.env.SHADOW_SH;
 if (!shadow_sh) {
-  console.error("key-test: set SHADOW_SH to a script that runs `<script> {up|spawn|keys|down} <name> ...` in a nested session.");
+  console.error("key-test: set SHADOW_SH to a script that runs `<script> {up|spawn|keys|down} <name> ...` in a nested session, and optionally `status` (lines `<name>: up|down ...`).");
   process.exit(2);
 }
 
@@ -54,8 +55,16 @@ function process_is_alive(pid) {
 // A killed run leaves its session behind under its own name. Stop each session whose owner is dead.
 // A live run is never touched. This run's own name counts as stale, since a recycled pid can match an old leftover.
 async function sweep_dead_sessions() {
-  const { stdout } = await shadow("status");
-  const names = [...stdout.matchAll(new RegExp(`^(${SHADOW_PREFIX}[0-9a-z]+): `, "gm"))].map((match) => match[1]);
+  let stdout;
+  try {
+    ({ stdout } = await shadow("status"));
+  } catch (error) {
+    console.warn(`sweep skipped: shadow status failed: ${error.message}`);
+    return;
+  }
+  // Only names this runner makes: the suffix must be a pid in canonical base 36, so "okapi" is never touched.
+  const names = [...stdout.matchAll(new RegExp(`^(${SHADOW_PREFIX}[0-9a-z]{1,5}): `, "gm"))].map((match) => match[1])
+    .filter((name) => Number.parseInt(name.slice(SHADOW_PREFIX.length), 36).toString(36) === name.slice(SHADOW_PREFIX.length));
   for (const name of names) {
     const owner_pid = Number.parseInt(name.slice(SHADOW_PREFIX.length), 36);
     if (name !== SHADOW_NAME && process_is_alive(owner_pid)) continue;
