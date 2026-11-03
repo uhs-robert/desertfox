@@ -4,17 +4,16 @@
     <meta charset="utf-8" />
     <title>OasisFox command line</title>
     <style>
-      html, body { margin: 0; height: 100%; background: transparent; }
+      html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; }
       body { display: flex; flex-direction: column; justify-content: flex-end; }
       /* The defaults sit on an inner element, like every OasisFox surface. */
       .oasisfox-cmdline {
-        --oasisfox-bg: #1d2021;
-        --oasisfox-fg: #e6e1d6;
-        --oasisfox-accent: #e69a4c;
-        --oasisfox-error: #e0645c;
-        /* Derived from the three above, so a theme that sets only those still gets a matching list. */
-        --oasisfox-muted: color-mix(in srgb, var(--oasisfox-fg) 60%, var(--oasisfox-bg));
-        --oasisfox-selection: color-mix(in srgb, var(--oasisfox-accent) 25%, var(--oasisfox-bg));
+        --oasisfox-bg: #0c0e13;
+        --oasisfox-fg: #f5f5dc;
+        --oasisfox-accent: #7fa3c9;
+        --oasisfox-error: #ffa0a0;
+        --oasisfox-muted: #4e6578;
+        --oasisfox-selection: #24364d;
         --oasisfox-font: 15px/1.4 ui-monospace, monospace;
         box-sizing: border-box;
         flex: none;

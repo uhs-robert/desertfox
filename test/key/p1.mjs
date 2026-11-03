@@ -32,6 +32,8 @@ export async function p1_cases(t) {
     await send_keys("j");
     await sleep(500);
     expect(!find_event(mark, scroll_of("cmd")), "j scrolled the page while the line was open");
+    // The list is open, so the first Escape closes it and the second closes the line.
+    await send_keys("-k", "Escape");
     await send_keys("-k", "Escape");
     await sleep(400);
     const after = events.length;
@@ -56,7 +58,11 @@ export async function p1_cases(t) {
     // The page is at the top after the last command, so move away first or the recalled command would not scroll.
     await send_keys("j");
     await sleep(400);
-    await send_keys(":", "-k", "Up");
+    // Up moves in the list while it is open, so Escape closes the list first and Up then walks the history.
+    await send_keys(":");
+    // After the page opened: the host closes the line on an Escape it still holds, as it must when the page is gone.
+    await sleep(600);
+    await send_keys("-k", "Escape", "-k", "Up");
     await sleep(300);
     const mark = events.length;
     await send_keys("-k", "Return");

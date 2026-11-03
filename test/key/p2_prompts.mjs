@@ -21,6 +21,8 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, open_p
     await sleep(500);
     expect(!find_event(mark, scrolled("p2_start")), "j scrolled the page while the line was open");
     await send_keys(...CTRL("u"));
+    // The cleared line lists every command, so the first Escape closes the list and the second closes the line.
+    await send_keys("-k", "Escape");
     await send_keys("-k", "Escape");
     await sleep(400);
   });
@@ -73,6 +75,8 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, open_p
     await sleep(500);
     expect(!find_event(mark, scrolled("p2_search")), "j scrolled the page while the line was open");
     await send_keys(...CTRL("u"));
+    // The cleared line lists every command, so the first Escape closes the list and the second closes the line.
+    await send_keys("-k", "Escape");
     await send_keys("-k", "Escape");
     await sleep(400);
   });
