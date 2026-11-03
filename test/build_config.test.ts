@@ -160,6 +160,13 @@ test("bad bindings name the file and the key", () => {
   assert.match(text, /keymap normal "e": container needs where tab, background or window/);
 });
 
+test("a dropped command name is a config error, not a warning", () => {
+  const dir = config_dir_with({ "keymap.toml": '[normal]\na = "tabclose"\nb = "search arch cats"' });
+  const warnings: string[] = [];
+  assert.throws(() => build_config(dir, commands, warnings), (error: unknown) => error instanceof ConfigErrors && /keymap normal "a": unknown command "tabclose"/.test(error.problems.join("\n")));
+  assert.deepEqual(warnings, []);
+});
+
 test("a search key naming a missing engine is an error", () => {
   const dir = config_dir_with({ "keymap.toml": '[search_keys]\nz = "ghost"' });
   assert.match(problems_of(dir).join("\n"), /search_keys "z": unknown search engine "ghost"/);

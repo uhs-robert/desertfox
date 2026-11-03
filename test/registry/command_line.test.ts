@@ -127,6 +127,11 @@ test("the engine is the first bare word and only when it names an engine", () =>
   assert.deepEqual(parsed(`search "arch" maps`).args, { query: "arch maps" });
 });
 
+test("an engine name may hold dots or any other characters", () => {
+  const sources = { search_engines: ["github.repo.issues"], containers: [] };
+  assert.deepEqual(parsed("search github.repo.issues bug", sources).args, { engine: "github.repo.issues", query: "bug" });
+});
+
 test("quoted and unquoted words mix in the main value", () => {
   assert.deepEqual(parsed(`search arch "pacman mirrors"`).args, { engine: "arch", query: "pacman mirrors" });
   assert.deepEqual(parsed(`search arch pacman "mirror list" now`).args, { engine: "arch", query: "pacman mirror list now" });

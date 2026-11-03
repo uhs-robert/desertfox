@@ -53,6 +53,7 @@ function is_default(param: ParamDef, value: unknown): boolean {
 type SubjectStyle = "raw" | "guard" | "quoted" | "named";
 type Plan = { engine: "bare" | "flag"; subject: SubjectStyle };
 
+// Tried in order. The engine falls back to `--engine=` when a bare word would not read back (for example a name that starts with a dash).
 const PLANS: readonly Plan[] = [
   { engine: "bare", subject: "raw" },
   { engine: "bare", subject: "guard" },
@@ -88,13 +89,13 @@ function assemble(command: Printable, args: Record<string, unknown>, options: Pr
     else if (empty) words.push("");
     else {
       if (plan.subject === "guard") words.push("--");
-      words.push(is_context_source(value) || plan.subject !== "quoted" ? value_text_raw(value) : quoted(String(value)));
+      words.push(plan.subject === "quoted" && !is_context_source(value) ? quoted(String(value)) : unquoted_text(value));
     }
   }
   return words.join(" ");
 }
 
-const value_text_raw = (value: unknown): string => (is_context_source(value) ? `@${value.from}` : String(value));
+const unquoted_text = (value: unknown): string => (is_context_source(value) ? `@${value.from}` : String(value));
 
 // Reads back as the same args. A value that would be misread (a source, a flag, an engine name) fails this.
 function reads_back(command: Printable, args: Record<string, unknown>, options: PrintOptions, text: string): boolean {

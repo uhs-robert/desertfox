@@ -397,7 +397,7 @@ async function main() {
     await run_case("config.reload keeps keys working in open tabs", async () => {
       writeFileSync(join(config_dir, "keymap.toml"), [
         "[normal]",
-        'm = "scroll.to percent=50"',
+        'm = "scroll.to 50"',
         'go = "open"',
         "[browser]",
         '"<A-,>" = "browser.focus_page"',
