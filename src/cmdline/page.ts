@@ -49,11 +49,8 @@ async function open_line(start: Start, port: MessagePort): Promise<void> {
     history: opened.history,
     parse: (text) => parse_command_line(lookup, text, opened.sources),
     // Only a missing value is caught here. The router still checks everything else when it runs the command.
-    // An empty value counts as missing for a param with no default, such as the `offset=` a prompt leaves.
     precheck: (invocation) => {
       const command = lookup.find(invocation.id);
-      const emptied = command?.params?.find((param) => param.default === undefined && !param.when && invocation.args?.[param.name] === "");
-      if (emptied) return `missing <${emptied.name}>`;
       const checked = command && check_args(command, invocation.args, opened.sources);
       return checked && !checked.ok && checked.missing_param !== undefined ? checked.error : undefined;
     },

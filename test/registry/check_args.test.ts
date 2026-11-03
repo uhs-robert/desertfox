@@ -42,6 +42,11 @@ test("a missing required param is reported by name", () => {
   assert.deepEqual(result, { ok: false, error: "missing <engine>", missing_param: "engine" });
 });
 
+test("an empty value for a required param is missing, not a value", () => {
+  const result = check_args(open_search, { engine: "" }, search_sources);
+  assert.deepEqual(result, { ok: false, error: "missing <engine>", missing_param: "engine" });
+});
+
 test("a bool param left out is off, not missing", () => {
   const registry = create_registry();
   const toggle = registry.define("myapp.toggle", {
@@ -121,7 +126,7 @@ test("types coerce from strings", () => {
   assert.deepEqual(check_args(command, { count_of: 3, ratio: 2, loud: true, text: "t" }).ok, true);
   assert.match(error_of(check_args(command, { count_of: "1.5", ratio: 1, loud: true, text: "t" })), /count_of expects a whole number/);
   assert.match(error_of(check_args(command, { count_of: 1, ratio: "abc", loud: true, text: "t" })), /ratio expects a number/);
-  assert.match(error_of(check_args(command, { count_of: 1, ratio: "", loud: true, text: "t" })), /ratio expects a number/);
+  assert.match(error_of(check_args(command, { count_of: 1, ratio: "", loud: true, text: "t" })), /missing <ratio>/);
   assert.match(error_of(check_args(command, { count_of: 1, ratio: 1, loud: "yes", text: "t" })), /loud expects true or false/);
   assert.match(error_of(check_args(command, { count_of: 1, ratio: 1, loud: true, text: 5 })), /text expects text/);
 });
