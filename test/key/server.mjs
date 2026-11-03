@@ -25,8 +25,10 @@ const root = document.documentElement;
 // The indicator host is in the page, its text is in a closed shadow root, so the label is an attribute.
 let last_indicator = "";
 let last_css = "";
-// The toast host is the other floating surface: no mode attribute, and its text sits in a closed shadow root.
-const toast_host = () => [...root.children].find((child) => child.style.zIndex === "2147483647" && !child.hasAttribute("data-oasisfox-mode") && !child.hasAttribute("data-oasisfox-whichkey"));
+// The toast host is found by its layer, because its text sits in a closed shadow root.
+// LAYERS.toast in src/shared/layers.ts. The page script cannot import it.
+const TOAST_Z_INDEX = "2147483645";
+const toast_host = () => [...root.children].find((child) => child.style.zIndex === TOAST_Z_INDEX);
 let last_whichkey = "";
 let toast_shown = false;
 new MutationObserver(() => {
