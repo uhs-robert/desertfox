@@ -12,6 +12,7 @@ test("a phase 2 content command loads its bundle and refuses with the reason whi
       return true;
     },
     on_idle: () => {},
+    set_mode: () => {},
     show_error: (message) => shown.push(message),
     on_sink_missing: () => {},
   });
