@@ -1,9 +1,9 @@
-// The panel: one closed shadow root on the page, a floating frame with its title set into the top border, a row per key and a footer.
+// The panel: one closed shadow root on the page, a floating frame with its title set into the top border (the title takes part in the width, up to the page cap), a row per key and a footer.
 // Hovering a row shows what the command does.
 
 import type { WhichKeyPanel } from "../../shared/messages.ts";
 import { create_surface } from "../surface.ts";
-import { choose_columns } from "./layout.ts";
+import { choose_columns, fit_title } from "./layout.ts";
 
 const CHAMFER_PX = 8;
 const chamfer = (cut: number) =>
@@ -27,9 +27,9 @@ export const STYLE = `
 .round, .round .body { border-radius: var(--oasisfox-radius, 6px); }
 .chamfer { clip-path: ${chamfer(CHAMFER_PX)}; }
 .chamfer .body { clip-path: ${chamfer(CHAMFER_PX - 1)}; }
-.title { position: absolute; left: 12px; top: -11px; padding: 0 4px; z-index: 1;
+.title { position: relative; width: fit-content; height: 12px; margin: 0 12px -1px; padding: 0 4px; z-index: 1;
   background: linear-gradient(to bottom, transparent 11px, var(--bg) 11px, var(--bg) 12px, transparent 12px); }
-.chip { background: var(--primary); color: var(--bg); font-weight: bold; padding: 2px 7px; border-radius: 3px; white-space: nowrap; }
+.chip { box-sizing: border-box; max-width: calc(100vw - 64px); overflow: hidden; text-overflow: ellipsis; background: var(--primary); color: var(--bg); font-weight: bold; padding: 2px 7px; border-radius: 3px; white-space: nowrap; }
 .rows { display: grid; column-gap: 24px; }
 .row { display: flex; height: 22px; line-height: 22px; white-space: nowrap; overflow: hidden; }
 .key { color: var(--secondary); min-width: 3ch; }
@@ -69,11 +69,17 @@ export function show_panel({ title, rows, border }: WhichKeyPanel): void {
   body.append(list, footer);
   frame.append(body);
   const title_bar = element("div", "title");
-  title_bar.append(element("div", "chip", title));
+  const chip = element("div", "chip");
+  title_bar.append(chip);
   surface.text.replaceChildren(title_bar, frame);
-  // The key test reads this attribute, because the shadow root is closed.
+  // The key test reads these attributes, because the shadow root is closed.
   surface.host.setAttribute("data-oasisfox-whichkey", `${columns}:${rows.length}`);
   document.documentElement.append(surface.host);
+  // Only a rendered chip can say whether it overflows.
+  const shown_title = fit_title(title, (text) => ((chip.textContent = text), chip.scrollWidth > chip.clientWidth));
+  chip.textContent = shown_title;
+  surface.host.setAttribute("data-oasisfox-whichkey-title", shown_title);
+  surface.host.setAttribute("data-oasisfox-whichkey-width", String(frame.getBoundingClientRect().width));
 }
 
 export const hide_panel = (): void => surface?.host.remove();

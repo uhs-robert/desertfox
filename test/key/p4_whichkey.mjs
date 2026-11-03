@@ -37,6 +37,28 @@ export async function run_cases({ rdp, extension_id, take_shot, run_case, send_k
     await sleep(500);
   });
 
+  const title_after = async (keys) => {
+    const mark = events.length;
+    await send_keys(...keys);
+    const shown = await wait_event(mark, (event) => event.type === "whichkey_title" && event.title !== "", "the panel title");
+    // Set OASISFOX_SHOT_DIR to also save a screenshot of the panel.
+    if (process.env.OASISFOX_SHOT_DIR) { await sleep(300); await take_shot(`${process.env.OASISFOX_SHOT_DIR}/${keys[0]}-title.png`); }
+    await send_keys("-k", "Escape");
+    return shown;
+  };
+
+  await run_case("a long group chain widens the panel to fit the title", async () => {
+    const shown = await title_after(["Qab"]);
+    expect(shown.title === "+Quarterly planning review » +Annual budget forecast » +Regional sales summary", `title was "${shown.title}"`);
+    expect(shown.width > 400 && shown.width <= shown.viewport - 32, `panel width ${shown.width} of ${shown.viewport}`);
+  });
+
+  await run_case("a chain past the panel cap starts with an ellipsis and ends with the deepest group", async () => {
+    const shown = await title_after(["Zabcd"]);
+    expect(shown.title.startsWith("… » +") && shown.title.endsWith("+Operations handbook chapter of the annual corporate procedures manual, part five"), `title was "${shown.title}"`);
+    expect(shown.width <= shown.viewport - 32, `panel width ${shown.width} past the cap of ${shown.viewport - 32}`);
+  });
+
   const panel_value = (mark, predicate, what) => wait_event(mark, (event) => event.type === "whichkey" && event.page_id === "wk" && predicate(event.value), what);
   const is_panel_of = (rows) => (value) => value.endsWith(`:${rows}`);
 

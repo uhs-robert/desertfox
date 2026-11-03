@@ -30,12 +30,16 @@ let last_css = "";
 const TOAST_Z_INDEX = "2147483645";
 const toast_host = () => [...root.children].find((child) => child.style.zIndex === TOAST_Z_INDEX);
 let last_whichkey = "";
+let last_whichkey_title = "";
 let toast_shown = false;
 new MutationObserver(() => {
   const label = root.querySelector("[data-oasisfox-mode]")?.getAttribute("data-oasisfox-mode") ?? "";
   if (label !== last_indicator) send("indicator", { label: (last_indicator = label) });
   const whichkey = root.querySelector("[data-oasisfox-whichkey]")?.getAttribute("data-oasisfox-whichkey") ?? "";
   if (whichkey !== last_whichkey) send("whichkey", { value: (last_whichkey = whichkey) });
+  const panel_host = root.querySelector("[data-oasisfox-whichkey]");
+  const panel_title = panel_host?.getAttribute("data-oasisfox-whichkey-title") ?? "";
+  if (panel_title !== last_whichkey_title) send("whichkey_title", { title: (last_whichkey_title = panel_title), width: Number(panel_host?.getAttribute("data-oasisfox-whichkey-width") ?? 0), viewport: window.innerWidth });
   const css = root.querySelector(":scope > style")?.textContent ?? "";
   if (css !== last_css) send("selection_style", { css: (last_css = css) });
   const toast_now = Boolean(toast_host());

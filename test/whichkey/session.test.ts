@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { create_which_key_session } from "../../src/content/whichkey/session.ts";
 import type { WhichKeyPanel } from "../../src/shared/messages.ts";
 
-const panel: WhichKeyPanel = { title: "keys", rows: [{ keys: "j", command: "Down", description: "", more: false }], border: "square" };
+const panel: WhichKeyPanel = { title: ["keys"], rows: [{ keys: "j", command: "Down", description: "", more: false }], border: "square" };
 
 // A fetch the test answers by hand, like the background answering late.
 function make_session() {
@@ -11,7 +11,7 @@ function make_session() {
   const waiting: ((answer: WhichKeyPanel) => void)[] = [];
   const session = create_which_key_session(
     () => new Promise<WhichKeyPanel>((resolve) => waiting.push(resolve)),
-    (shown) => void drawn.push(shown.title),
+    (shown) => void drawn.push(shown.title.join("")),
     () => void drawn.push("hidden"),
   );
   return { session, drawn, answer: (index: number) => waiting[index]!(panel) };
