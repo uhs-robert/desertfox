@@ -1,5 +1,6 @@
 import type { CommandContext } from "../shared/command.ts";
 import { define } from "../shared/registry/index.ts";
+import { typed_url_target } from "./open_target.ts";
 
 export type WindowDeps = {
   create: (open: { url: string | undefined; private_window: boolean }) => Promise<void>;
@@ -46,7 +47,10 @@ define("window.new", {
     { name: "private", type: "bool", default: false },
   ],
   runs_in: "background",
-  run: (_ctx, args) => handlers.create(args as { url: string; private: boolean }),
+  run: async (_ctx, args) => {
+    const { url, private: private_window } = args as { url: string; private: boolean };
+    await handlers.create({ url: url === "" ? "" : await typed_url_target(url), private: private_window });
+  },
 });
 
 define("window.close", {

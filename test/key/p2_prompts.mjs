@@ -50,6 +50,20 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, open_p
     expect(events.slice(mark).filter(loaded("p2_filled")).length === 1, "the completed line ran more than once");
   });
 
+  await run_case("a scheme-less address typed into the command line opens on https, not on the extension", async () => {
+    await open_page("page", "p2_bare", { new_tab: false });
+    await send_keys(":open www.example.com/oasisfox_bare", "-k", "Return");
+    const active_url = () => evaluate_in_background(rdp, extension_id, `(async () => (await browser.tabs.query({ active: true, currentWindow: true }))[0].url)()`);
+    let url = "";
+    for (let attempt = 0; attempt < 30 && !url.includes("oasisfox_bare"); attempt++) {
+      await sleep(300);
+      url = await active_url();
+    }
+    expect(url.startsWith("https://www.example.com/oasisfox_bare"), `the tab is at ${url}`);
+    // Leave the pending external load behind before the next cases.
+    await open_page("page", "p2_after_bare", { new_tab: false });
+  });
+
   await run_case("s/ with nothing selected opens the command line", async () => {
     await open_page("page", "p2_search", { new_tab: false });
     await send_keys("s/");

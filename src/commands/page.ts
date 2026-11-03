@@ -1,7 +1,7 @@
 import { get_config } from "../background/startup.ts";
 import { stop_page } from "../content/handlers/stop.ts";
 import { define } from "../shared/registry/index.ts";
-import { open_in, require_tab_id, WHERE_PARAM } from "./open_target.ts";
+import { open_in, require_tab_id, typed_url_target, WHERE_PARAM } from "./open_target.ts";
 import type { Where } from "./open_target.ts";
 import { home_page_url } from "./url_build.ts";
 
@@ -49,6 +49,6 @@ define("page.home", {
   runs_in: "background",
   run: async (ctx, args) => {
     const home_url = home_page_url((await get_config()).settings.home_page);
-    await open_in(ctx, home_url, args.where as Where);
+    await open_in(ctx, await typed_url_target(home_url), args.where as Where);
   },
 });

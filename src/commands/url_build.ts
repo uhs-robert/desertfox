@@ -112,29 +112,35 @@ export function home_page_url(home_page: string | undefined): string {
   return home_page;
 }
 
-const CLIPBOARD_URL_SCHEMES = ["http:", "https:", "ftp:", "file:"];
-const HOST_WITH_PORT = /^(localhost|[^\s:/?#]+\.[^\s:/?#]+):\d+(?:[/?#]\S*)?$/;
+const KEPT_SCHEMES = ["http:", "https:", "ftp:", "file:"];
+// Local hosts rarely have a certificate, so they get http. The optional port and path follow.
+const LOCAL_HOST = /^(?:localhost|\d{1,3}(?:\.\d{1,3}){3})(?::\d+)?(?:[/?#]\S*)?$/;
+const HOST_WITH_PORT = /^[^\s:/?#]+\.[^\s:/?#]+:\d+(?:[/?#]\S*)?$/;
+const ABOUT_URL = /^about:\S+$/;
 
 // Other schemes (javascript:, data:) and text with a colon ("TODO: fix") are not worth opening, so they search.
-function clipboard_url(text: string): string | undefined {
-  // Checked first: "example.com:8080" would otherwise parse as the scheme "example.com:".
-  const host_with_port = HOST_WITH_PORT.exec(text);
-  if (host_with_port) return `${host_with_port[1] === "localhost" ? "http" : "https"}://${text}`;
-  if (URL.canParse(text)) return CLIPBOARD_URL_SCHEMES.includes(new URL(text).protocol) ? text : undefined;
+function typed_url(text: string): string | undefined {
+  if (LOCAL_HOST.test(text)) return `http://${text}`;
+  // Checked before the scheme parse: "example.com:8080" would otherwise parse as the scheme "example.com:".
+  if (HOST_WITH_PORT.test(text)) return `https://${text}`;
+  if (ABOUT_URL.test(text)) return text;
+  if (URL.canParse(text)) return KEPT_SCHEMES.includes(new URL(text).protocol) ? text : undefined;
   const looks_like_domain = text.includes(".") && !/\s/.test(text);
   return looks_like_domain && URL.canParse(`https://${text}`) ? `https://${text}` : undefined;
 }
 
-export function clipboard_target(
+// The one way to turn text a person typed or copied into something a tab can open.
+// A bare address must get a scheme here: the tabs API resolves it against the extension's own origin.
+export function url_target(
   text: string,
   default_engine: string,
   engines: Record<string, { url: string }>,
 ): string {
   const trimmed = text.trim();
-  const url = clipboard_url(trimmed);
+  const url = typed_url(trimmed);
   if (url !== undefined) return url;
   const engine = engines[default_engine];
-  if (!engine) throw new Error(`The clipboard is not a URL and the default_engine setting names no search engine: "${default_engine}"`);
+  if (!engine) throw new Error(`The text is not a URL and the default_engine setting names no search engine: "${default_engine}"`);
   return engine_search_url(engine.url, trimmed);
 }
 
