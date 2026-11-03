@@ -31,9 +31,9 @@ test("a command row has the first sentence, the flags and the subject", () => {
 
 test("a dash lists the flags of the command with their descriptions and short forms", () => {
   const { rows, start, end } = complete("tab.close -", 11);
-  assert.deepEqual(rows.map((row) => [row.name, row.args, row.description, row.insert]), [
-    ["--left", "-l", "Close the tabs on the left.", "--left "],
-    ["--right", "-r", "Close the tabs on the right.", "--right "],
+  assert.deepEqual(rows.map((row) => [row.name, row.description, row.insert]), [
+    ["--left -l", "Close the tabs on the left.", "--left "],
+    ["--right -r", "Close the tabs on the right.", "--right "],
   ]);
   assert.deepEqual([start, end], [10, 11]);
 });
@@ -41,8 +41,7 @@ test("a dash lists the flags of the command with their descriptions and short fo
 test("a valued flag inserts its equals sign and no space, and an enum value gets its own flag", () => {
   const rows = complete("search -", 8).rows;
   assert.deepEqual(rows.map((row) => row.insert), ["--tab ", "--container="]);
-  assert.equal(rows[0]?.args, "-t");
-  assert.equal(rows[1]?.args, "-c");
+  assert.deepEqual(rows.map((row) => row.name), ["--tab -t", "--container= -c="]);
 });
 
 test("a flag value lists the containers, and a static value lists with its label", () => {
@@ -73,4 +72,18 @@ test("a quoted word offers nothing", () => {
 
 test("the note usage of a typed command is its usage line", () => {
   assert.match(complete("tab.close ", 10).usage ?? "", /^tab\.close /);
+});
+
+test("a value with a space or a quote goes in double quotes", () => {
+  const spaced = create_completer(lookup, COMMANDS, COMMAND_ALIASES, { ...SOURCES, containers: ["My Work", 'a"b', "Home"] });
+  assert.deepEqual(spaced("search -c=", 10).rows.map((row) => row.insert), ['"My Work" ', '"a\\"b" ', "Home "]);
+});
+
+test("a typed short flag finds its row first and is no mismatch", () => {
+  const found = complete("tab.close -l", 12);
+  assert.equal(found.rows[0]?.name, "--left -l");
+  assert.equal(found.listing && found.rows.length > 0, true);
+  assert.equal(complete("tab.close -r", 12).rows[0]?.name, "--right -r");
+  assert.equal(complete("search -t", 9).rows[0]?.name, "--tab -t");
+  assert.equal(complete("search -c", 9).rows[0]?.name, "--container= -c=");
 });

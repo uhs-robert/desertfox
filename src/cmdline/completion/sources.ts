@@ -92,23 +92,32 @@ export function command_rows(commands: readonly CommandMeta[], command_aliases: 
 
 function flag_rows(command: Command): Row[] {
   const usage = usage_line(command);
-  return flag_params(command).flatMap(flags_of).map((flag) => ({
-    name: flag.valued ? `${flag.long}=` : flag.long,
-    insert: flag.valued ? `${flag.long}=` : `${flag.long} `,
-    description: flag.description,
-    args: flag.short ?? "",
-    also_named: [],
-    keywords: flag.short ? [flag.short] : [],
-    usage,
-  }));
+  return flag_params(command).flatMap(flags_of).map((flag) => {
+    const equals = flag.valued ? "=" : "";
+    const long = `${flag.long}${equals}`;
+    const short = flag.short ? `${flag.short}${equals}` : undefined;
+    return {
+      // Both forms are the name, so a typed short flag finds its row and an exact one ranks first.
+      name: short ? `${long} ${short}` : long,
+      insert: flag.valued ? long : `${long} `,
+      description: flag.description,
+      args: "",
+      also_named: short ? [long, short] : [],
+      keywords: [],
+      usage,
+    };
+  });
 }
+
+// A value with a space or a quote would split into two words, so it goes in double quotes.
+const quote_word = (value: string) => (/[\s"'\\]/.test(value) ? `"${value.replace(/(["\\$`])/g, "\\$1")}"` : value);
 
 function value_rows(command: Command, param: ParamDef, sources: EnumSources): Row[] {
   const values = is_dynamic_values(param.values) ? (param.values.from === "containers" ? (sources.containers ?? []) : []) : (static_values(param) ?? []);
   const usage = usage_line(command);
   return values.map((value) => ({
     name: value,
-    insert: `${value} `,
+    insert: `${quote_word(value)} `,
     description: param.value_labels?.[value] ?? "",
     args: "",
     also_named: [],

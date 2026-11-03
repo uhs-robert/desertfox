@@ -180,3 +180,59 @@ test("the hint is the selected row's usage, else the command's", () => {
   tab(session);
   assert.match(session.get_hint() ?? "", /^tab\.close /);
 });
+
+test("a fresh line keeps Up and Down for the history: `:` Up Enter reruns the last command", () => {
+  const session = make(["tab.next", "window.new"]);
+  session.open("");
+  assert.equal(session.get_rows().length, 6);
+  up(session);
+  assert.equal(session.get_text(), "window.new");
+  up(session);
+  assert.equal(session.get_text(), "tab.next");
+  down(session);
+  assert.equal(session.get_text(), "window.new");
+  assert.deepEqual(session.run("cmdline.submit", undefined), { kind: "submit", invocation: { id: "window.new" }, text: "window.new" });
+});
+
+test("a prefilled line stays fresh, and typing or Tab ends it so Up and Down move in the list", () => {
+  const typed = make(["old"]);
+  typed.open("");
+  typed.edit("t");
+  up(typed);
+  assert.equal(typed.get_selected(), typed.get_rows().length - 1);
+  assert.notEqual(typed.get_text(), "old");
+
+  const tabbed = make(["old"]);
+  tabbed.open("");
+  tab(tabbed);
+  down(tabbed);
+  assert.equal(tabbed.get_selected(), 1);
+});
+
+test("Ctrl-u ends the fresh state too", () => {
+  const session = make(["old"]);
+  session.open("");
+  session.run("cmdline.clear", undefined);
+  down(session);
+  assert.equal(session.get_selected(), 0);
+});
+
+test("a caret move with no text change ranks the word at the new caret", () => {
+  const session = make();
+  session.edit("tab.close --ri");
+  assert.equal(session.get_rows()[0]?.name, "--right -r");
+  session.set_caret(3);
+  assert.ok(session.get_rows().some((row) => row.name === "tab.close"));
+  tab(session);
+  assert.match(session.get_text(), /^tab\S*\s+--ri$/);
+});
+
+test("a typed exact short flag shows its row and no no-match note", () => {
+  const session = make();
+  session.edit("tab.close -l");
+  assert.equal(session.get_rows()[0]?.name, "--left -l");
+  assert.notEqual(session.get_hint(), "no match");
+  assert.equal(session.get_message(), undefined);
+  tab(session);
+  assert.equal(session.get_text(), "tab.close --left ");
+});

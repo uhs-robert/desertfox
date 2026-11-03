@@ -58,11 +58,8 @@ export async function p1_cases(t) {
     // The page is at the top after the last command, so move away first or the recalled command would not scroll.
     await send_keys("j");
     await sleep(400);
-    // Up moves in the list while it is open, so Escape closes the list first and Up then walks the history.
-    await send_keys(":");
-    // After the page opened: the host closes the line on an Escape it still holds, as it must when the page is gone.
-    await sleep(600);
-    await send_keys("-k", "Escape", "-k", "Up");
+    // On a fresh line Up walks the history, though the list is open.
+    await send_keys(":", "-k", "Up");
     await sleep(300);
     const mark = events.length;
     await send_keys("-k", "Return");

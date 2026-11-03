@@ -45,7 +45,7 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, open_p
     expect(!(await tab_urls()).some((url) => url.includes("p9_target")), "p9_target is still open");
   });
 
-  await run_case("tab.close - then Tab previews the shortest flag, --all-after, and Enter closes the tabs on the right", async () => {
+  await run_case("tab.close -A then Tab previews its long form, --all-after, and Enter closes the tabs on the right", async () => {
     await open_page("page", "p9_left", { new_tab: true });
     await open_page("page", "p9_right_a", { new_tab: true });
     await open_page("page", "p9_right_b", { new_tab: true });
@@ -59,7 +59,7 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, open_p
     await sleep(500);
     await send_keys(":");
     await sleep(600);
-    await send_keys("tab.close -", "-k", "Tab", "-k", "Return");
+    await send_keys("tab.close -A", "-k", "Tab", "-k", "Return");
     let urls = await tab_urls();
     for (let attempt = 0; attempt < 20 && urls.some((url) => url.includes("p9_right_")); attempt++) {
       await sleep(250);
