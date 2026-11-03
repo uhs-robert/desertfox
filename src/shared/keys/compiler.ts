@@ -113,12 +113,17 @@ function to_steps(mode: KeymapMode, entry: Entry, resolve: ResolveCommand, setti
       return undefined;
     }
     if (label === undefined) {
-      label = invocation.label ?? derived_label(invocation, info, settings, sources);
-      // A derived label can carry a bad engine label or value phrase, so both kinds get the same check and the same skip.
-      const problem = label_problem(label);
-      if (problem) {
-        warnings.push(`${mode}: skipped "${entry.sequence}": ${problem}`);
+      const written_problem = invocation.label === undefined ? null : label_problem(invocation.label);
+      if (written_problem) {
+        warnings.push(`${mode}: skipped "${entry.sequence}": ${written_problem}`);
         return undefined;
+      }
+      label = invocation.label ?? derived_label(invocation, info, settings, sources);
+      // A derived label can carry a bad engine label or value phrase. The key still works, so it falls back to the command label.
+      const derived_problem = invocation.label === undefined ? label_problem(label) : null;
+      if (derived_problem) {
+        warnings.push(`${mode}: "${entry.sequence}" keeps the command label: ${derived_problem}`);
+        label = info.label;
       }
     }
     // The label is for the leaf. The steps stay the plain invocations the router runs.

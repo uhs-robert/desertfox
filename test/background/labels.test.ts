@@ -86,7 +86,7 @@ function labels_of(keymap: KeymapConfig, extra: Partial<MergedConfig> = {}, defa
     config,
     default_keymap,
     get_command: (id) => fake.get(id),
-    enum_sources: { search_engines: ["ddg", "arch", "nope"], containers: ["Work", "default"] },
+    enum_sources: { search_engines: ["ddg", "arch", "nope", "bad", "blank"], containers: ["Work", "default"] },
   });
   const children = compiled.modes.normal!.children;
   const leaf_at = (...keys: string[]) => {
@@ -171,14 +171,25 @@ test("a user binding without a label replaces the default label", () => {
   assert.equal(leaf_at("a").label, "Close tab");
 });
 
-test("a derived label with a control character warns and skips the key, as a bad binding label does", () => {
-  const { children, warnings } = labels_of(
-    { normal: { a: { id: "open.search", args: { engine: "bad" } }, b: { id: "tab.close", args: { focus: "left" } }, c: { id: "tab.close" } } },
+test("a derived label with a control character warns and keeps the command label, while a bad binding label skips the key", () => {
+  const { children, leaf_at, warnings } = labels_of(
+    { normal: { a: { id: "open.search", args: { engine: "bad" } }, b: { id: "tab.close", args: { focus: "left" } }, c: { id: "tab.close", label: "x\ny" } } },
     { search_engines: { bad: { url: "https://b/?q=%s", label: "Bad\nEngine" } } },
   );
-  assert.deepEqual(Object.keys(children), ["b", "c"]);
-  assert.equal(warnings.length, 1);
-  assert.match(warnings[0]!, /skipped "a": a label must not hold control characters/);
+  assert.deepEqual(Object.keys(children), ["a", "b"]);
+  assert.equal(leaf_at("a").label, "Search");
+  assert.equal(warnings.length, 2);
+  assert.match(warnings[0]!, /"a" keeps the command label: a label must not hold control characters/);
+  assert.match(warnings[1]!, /skipped "c": a label must not hold control characters/);
+});
+
+test("an empty engine label keeps the command label with a warning", () => {
+  const { leaf_at, warnings } = labels_of(
+    { normal: { a: { id: "open.search", args: { engine: "blank" } } } },
+    { search_engines: { blank: { url: "https://b/?q=%s", label: "  " } } },
+  );
+  assert.equal(leaf_at("a").label, "Search");
+  assert.match(warnings.join("\n"), /"a" keeps the command label: a label must not be empty/);
 });
 
 test("a search engine entry with no usable label is ignored for labels", () => {
