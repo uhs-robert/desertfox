@@ -27,6 +27,8 @@ type Open = {
   said_ready: boolean;
   // Set at `start`. Every message after `start` goes over it.
   port?: MessagePort;
+  // The page redeemed its ticket and took over the keys.
+  page_opened: boolean;
   // Runs from a frame load until the page answers the check.
   check_timer?: ReturnType<typeof setTimeout>;
   removal_watch: MutationObserver;
@@ -68,8 +70,10 @@ if (!page.oasisfox_cmdline_ready) {
     const current: Open = {
       frame,
       holder,
-      ticket: browser.runtime.sendMessage({ type: "issue_cmdline_ticket" }),
+      // A failed request reads as no ticket, so `ready` closes the line.
+      ticket: browser.runtime.sendMessage({ type: "issue_cmdline_ticket" }).catch(() => undefined),
       said_ready: false,
+      page_opened: false,
       // A page that removes the bar would leave the sink taking every key with nobody to show them.
       removal_watch: new MutationObserver(() => {
         if (open === current && !holder.isConnected) close();
@@ -80,9 +84,10 @@ if (!page.oasisfox_cmdline_ready) {
     };
     // A page script can send the frame somewhere else, and then the port is dead. Firefox gives no event for that, so
     // each load asks the page whether it is still there. Counting loads fails: the order of this event, `ready` and
-    // `opened` is not fixed. Before `start` there is no port to ask, and the ready timer covers that time.
+    // `opened` is not fixed. Before `opened` the page may still be redeeming its ticket and cannot answer, and the
+    // ready timer covers that time.
     frame.addEventListener("load", () => {
-      if (open !== current || !current.port) return;
+      if (open !== current || !current.port || !current.page_opened) return;
       clearTimeout(current.check_timer);
       current.check_timer = setTimeout(() => open === current && close(), CHECK_TIMEOUT_MS);
       current.port.postMessage(wrap<HostToPage>({ kind: "check" }));
@@ -107,6 +112,7 @@ if (!page.oasisfox_cmdline_ready) {
       // The page redeemed the ticket and can take keys itself. Until then the ready timer still runs.
       if (message.kind === "opened") {
         clearTimeout(current.timer);
+        current.page_opened = true;
         current.frame.focus();
         channel.port1.postMessage(wrap<HostToPage>({ kind: "focused" }));
       } else if (message.kind === "here") clearTimeout(current.check_timer);

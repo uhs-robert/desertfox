@@ -39,7 +39,7 @@ async function until(condition: () => boolean): Promise<void> {
 // For a message that must not arrive: long enough for one that would.
 const settle = () => new Promise((resolve) => setTimeout(resolve, 50));
 
-async function load_host(t: TestContext, tag: string) {
+async function load_host(t: TestContext, tag: string, { ticket_fails = false } = {}) {
   const modes: string[] = [];
   const handlers = new Map<string, (args: Record<string, unknown>) => void>();
   const sinks = new Map<string, Sink>();
@@ -58,7 +58,11 @@ async function load_host(t: TestContext, tag: string) {
     browser: {
       runtime: {
         getURL: (path: string) => `https://extension.test/${path}`,
-        sendMessage: async (message: { type: string }) => (message.type === "issue_cmdline_ticket" ? "issued-ticket" : void sent.push(message)),
+        sendMessage: async (message: { type: string }) => {
+          if (message.type !== "issue_cmdline_ticket") return void sent.push(message);
+          if (ticket_fails) throw new Error("the background is gone");
+          return "issued-ticket";
+        },
       },
     },
     document: { body: { append: (child: { isConnected: boolean }) => void (child.isConnected = true) }, createElement: () => { const element = fake_element(); elements.push(element); return element; } },
@@ -222,4 +226,25 @@ test("once the page opened, the host moves focus into the frame and says so afte
   page_port.postMessage({ oasisfox_cmdline: { kind: "opened" } });
   await until(() => received.length === 2);
   assert.deepEqual([received, frame.focused], [["a", "focused"], true]);
+});
+
+test("a frame load while the page still redeems its ticket does not close a healthy line", async (t) => {
+  const { modes, frame, ready } = await load_host(t, "slow_redeem");
+  await ready();
+  // Our own page's load can come after `start`, while the background has not answered the page yet.
+  frame.listeners.load!();
+  await new Promise((resolve) => setTimeout(resolve, 1100));
+  assert.deepEqual(modes, ["cmdline"]);
+});
+
+test("a failed ticket request closes the line at once", async (t) => {
+  const rejections: unknown[] = [];
+  const on_rejection = (reason: unknown) => void rejections.push(reason);
+  process.on("unhandledRejection", on_rejection);
+  t.after(() => void process.off("unhandledRejection", on_rejection));
+  const { modes, frame, on_window } = await load_host(t, "ticket_fails", { ticket_fails: true });
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  on_window({ kind: "ready" }, frame.contentWindow);
+  await until(() => modes.length === 2);
+  assert.deepEqual([modes, rejections], [["cmdline", "normal"], []]);
 });

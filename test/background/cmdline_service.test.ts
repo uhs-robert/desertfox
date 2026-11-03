@@ -5,7 +5,8 @@ import { add_to_history, create_cmdline_service, HISTORY_LIMIT } from "../../src
 const tick = () => new Promise((resolve) => setTimeout(resolve, 1));
 
 // `slow_set` makes every write take a timer turn, as a real storage write does.
-function make({ slow_set = false } = {}) {
+// `stuck_ticket` is a ticket whose lookup never finishes, as a flood of guesses can hold up storage.
+function make({ slow_set = false, stuck_ticket = "" } = {}) {
   const data: Record<string, unknown> = {};
   const storage = {
     get: async (key: string) => (key in data ? { [key]: data[key] } : {}),
@@ -16,7 +17,8 @@ function make({ slow_set = false } = {}) {
   } as unknown as Parameters<typeof create_cmdline_service>[0]["storage"];
   const session_data: Record<string, unknown> = {};
   const tickets = {
-    get: async (key: string) => (key in session_data ? { [key]: session_data[key] } : {}),
+    get: (key: string) =>
+      key.endsWith(stuck_ticket) && stuck_ticket !== "" ? new Promise(() => {}) : Promise.resolve(key in session_data ? { [key]: session_data[key] } : {}),
     set: async (items: Record<string, unknown>) => void Object.assign(session_data, items),
     remove: async (key: string) => void delete session_data[key],
   } as unknown as Parameters<typeof create_cmdline_service>[0]["tickets"];
@@ -106,4 +108,13 @@ test("two redemptions of one ticket at once give the data only once", async () =
   const ticket = await service.issue_ticket(7);
   const answers = await Promise.all([service.open(ticket, 7), service.open(ticket, 7)]);
   assert.equal(answers.filter((answer) => answer !== undefined).length, 1);
+});
+
+test("a guessed ticket that is slow to look up does not hold up the real one", async () => {
+  const { service } = make({ stuck_ticket: "guess" });
+  const ticket = await service.issue_ticket(7);
+  void service.open("guess", 7);
+  const answer = await Promise.race([service.open(ticket, 7), new Promise((resolve) => setTimeout(() => resolve("held up"), 200))]);
+  assert.notEqual(answer, "held up");
+  assert.ok(answer);
 });

@@ -30,8 +30,9 @@ export function create_cmdline_service(deps: CmdlineServiceDeps) {
   };
   // Two records in a row would both read the old list, so each waits for the one before.
   let last_write: Promise<unknown> = Promise.resolve();
-  // Two redemptions of one ticket at once would both read it before either removed it, so each waits for the one before.
-  let last_redeem: Promise<unknown> = Promise.resolve();
+  // Two redemptions of one ticket at once would both read it before either removed it, so each waits for the one
+  // before. Per ticket, so a site that floods guessed tickets does not hold up the real one.
+  const redemptions = new Map<string, Promise<unknown>>();
   const redeem = async (ticket: string): Promise<unknown> => {
     const key = CMDLINE_TICKET_STORAGE_PREFIX + ticket;
     const issued_for: unknown = (await deps.tickets.get(key))[key];
@@ -50,8 +51,10 @@ export function create_cmdline_service(deps: CmdlineServiceDeps) {
     // Used up on the first try, so a frame reloaded with an old ticket gets nothing either.
     open: async (ticket: unknown, tab_id: number | undefined): Promise<CmdlineOpened | undefined> => {
       if (typeof ticket !== "string" || tab_id === undefined) return undefined;
-      const redeemed = last_redeem.then(() => redeem(ticket));
-      last_redeem = redeemed.catch(() => undefined);
+      const redeemed = (redemptions.get(ticket) ?? Promise.resolve()).then(() => redeem(ticket));
+      const settled = redeemed.catch(() => undefined);
+      redemptions.set(ticket, settled);
+      void settled.then(() => redemptions.get(ticket) === settled && redemptions.delete(ticket));
       if ((await redeemed) !== tab_id) return undefined;
       // After the pending writes, so a line reopened at once already has the last command.
       await last_write;
