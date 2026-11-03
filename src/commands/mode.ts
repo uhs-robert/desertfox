@@ -20,7 +20,6 @@ define("mode.set", {
 });
 
 define("mode.escape", {
-  name: "escape",
   label: "Escape",
   intent: "Leave insert, hint, command line, caret or visual mode, drop the focus from the field and return to normal mode.",
   runs_in: "content",
@@ -29,7 +28,6 @@ define("mode.escape", {
 });
 
 define("mode.pass_next", {
-  name: "passnext",
   label: "Pass next key",
   intent: "Give the next key to the page instead of OasisFox.",
   runs_in: "content",
@@ -38,7 +36,6 @@ define("mode.pass_next", {
 
 // Defined here with the mode commands because both change what has the focus.
 define("page.focus_input", {
-  name: "focusinput",
   label: "Focus input",
   intent: "Focus the first visible text field on the page, preferring one in view.",
   runs_in: "content",
@@ -46,7 +43,6 @@ define("page.focus_input", {
 });
 
 define("page.blur", {
-  name: "blur",
   label: "Blur",
   intent: "Drop the focus from the focused element.",
   runs_in: "content",

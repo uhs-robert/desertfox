@@ -6,7 +6,6 @@ import type { Where } from "./open_target.ts";
 import { home_page_url } from "./url_build.ts";
 
 define("page.back", {
-  name: "back",
   label: "Back",
   intent: "Go back one page in the tab history. A count prefix goes back that many pages.",
   runs_in: "background",
@@ -15,7 +14,6 @@ define("page.back", {
 });
 
 define("page.forward", {
-  name: "forward",
   label: "Forward",
   intent: "Go forward one page in the tab history. A count prefix goes forward that many pages.",
   runs_in: "background",
@@ -24,7 +22,6 @@ define("page.forward", {
 });
 
 define("page.reload", {
-  name: "reload",
   label: "Reload",
   intent: "Reload the page. With hard on, skip the cache.",
   params: [{ name: "hard", type: "bool", default: false }],
@@ -34,7 +31,6 @@ define("page.reload", {
 
 // Firefox has no stop call for the tabs API, so the page itself stops.
 define("page.stop", {
-  name: "stop",
   label: "Stop loading",
   intent: "Stop the page from loading.",
   runs_in: "content",
@@ -42,7 +38,6 @@ define("page.stop", {
 });
 
 define("page.home", {
-  name: "home",
   label: "Home page",
   intent: "Open the home page from the settings.",
   params: [WHERE_PARAM],

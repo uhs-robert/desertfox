@@ -1,0 +1,55 @@
+import assert from "node:assert/strict";
+import { test } from "node:test";
+import "../../src/background/command_modules.ts";
+import { parse_command_line, print_command, registry } from "../../src/shared/registry/index.ts";
+
+const args_of = (text: string) => {
+  const result = parse_command_line(registry, text, { search_engines: ["google"], containers: [] });
+  assert.equal(result.kind, "invocation", `${text}: ${JSON.stringify(result)}`);
+  return result.kind === "invocation" ? result.invocation.args : undefined;
+};
+
+test("-t -b -w mean where and -c means container on every command that has the param", () => {
+  for (const command of registry.list()) {
+    for (const param of command.params ?? []) {
+      if (param.name === "where") assert.deepEqual(param.short, { tab: "t", background: "b", window: "w" }, command.id);
+      if (param.name === "container" && !param.main) assert.equal(param.short, "c", command.id);
+    }
+  }
+});
+
+test("site.github has no container param, and its default type has no short", () => {
+  const github = registry.get("site.github")!;
+  assert.equal(github.params?.some((param) => param.name === "container"), false);
+  const type = github.params?.find((param) => param.name === "type");
+  assert.equal(typeof type?.short === "object" && "code" in type.short, false);
+  assert.deepEqual(args_of("github -r -t go"), { type: "repositories", where: "tab", query: "go" });
+});
+
+test("typed names are the dotted id except the family words and one-word commands", () => {
+  const named = registry.list().filter((command) => command.name !== undefined).map((command) => `${command.id}=${command.name}`);
+  assert.deepEqual(named.sort(), [
+    "bookmark.open=bookmark",
+    "copy.url=copy",
+    "help.open=help",
+    "hint.run=hint",
+    "mode.set=mode",
+    "open.clipboard=paste",
+    "open.search=search",
+    "open.url=open",
+    "scroll.lines=scroll",
+    "site.github=github",
+    "tab.switch=tab",
+    "zoom.set=zoom",
+  ]);
+  assert.equal(registry.find("s"), undefined);
+});
+
+test("prefills use the short flags", () => {
+  const open = registry.get("open.url")!;
+  assert.equal(print_command(open, { where: "tab" }, { open_param: "url" }), "open -t ");
+  assert.equal(print_command(open, { where: "tab", container: "Family" }, { open_param: "url" }), "open -t -c=Family ");
+  assert.equal(print_command(registry.get("hint.run")!, { action: "copy", filter: "links", rapid: true }), "hint -y -l -r");
+  assert.equal(print_command(registry.get("copy.url")!, { format: "title" }), "copy -T");
+  assert.equal(print_command(registry.get("scroll.to")!, { percent: 50, axis: "x" }), "scroll.to -x 50");
+});

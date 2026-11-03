@@ -2,7 +2,7 @@
 
 import { caret_move, cmdline_clear, cmdline_history, cmdline_submit, visual_act, cmdline_next_completion, cmdline_open, cmdline_prev_completion, help_whichkey, hint_run, NEEDS_COMMAND_LINE } from "../content/handlers/phase_2.ts";
 import { define } from "../shared/registry/index.ts";
-import { WHERE, WHERE_PARAM } from "./open_target.ts";
+import { WHERE, WHERE_PARAM, WHERE_SHORT } from "./open_target.ts";
 
 const refuse_needing_command_line = () => {
   throw new Error(NEEDS_COMMAND_LINE);
@@ -18,6 +18,7 @@ define("hint.run", {
       type: "enum",
       values: [...WHERE, "select", "copy", "copy_text", "delete", "focus"],
       default: "here",
+      short: { ...WHERE_SHORT, select: "s", copy: "y", copy_text: "Y", delete: "d", focus: "f" },
       value_labels: {
         tab: "in new tab",
         background: "in background tab",
@@ -34,18 +35,18 @@ define("hint.run", {
       type: "enum",
       values: ["all", "clickable", "inputs", "links", "custom"],
       default: "clickable",
+      short: { all: "a", clickable: "k", inputs: "i", links: "l", custom: "u" },
       value_labels: { all: "for all elements", inputs: "for inputs", links: "for links", custom: "for a selector" },
     },
     { name: "selector", type: "string", when: { filter: ["custom"] } },
     { name: "text", type: "string", default: "" },
-    { name: "rapid", type: "bool", default: false },
+    { name: "rapid", type: "bool", default: false, short: "r" },
   ],
   runs_in: "content",
   run: hint_run.run,
 });
 
 define("cmdline.open", {
-  name: "cmdline",
   label: "Command line",
   intent: "Open the command line, with text already typed if given.",
   params: [{ name: "text", type: "string", default: "" }],
@@ -54,7 +55,6 @@ define("cmdline.open", {
 });
 
 define("cmdline.next_completion", {
-  name: "nextcomp",
   label: "Next completion",
   intent: "Select the next completion in the command line.",
   runs_in: "content",
@@ -63,7 +63,6 @@ define("cmdline.next_completion", {
 });
 
 define("cmdline.prev_completion", {
-  name: "prevcomp",
   label: "Previous completion",
   intent: "Select the previous completion in the command line.",
   runs_in: "content",
@@ -72,7 +71,6 @@ define("cmdline.prev_completion", {
 });
 
 define("help.whichkey", {
-  name: "whichkey",
   label: "Which key",
   intent: "List the keys at the top of the keymap.",
   runs_in: "content",
@@ -99,7 +97,6 @@ define("bookmark.open", {
 });
 
 define("cmdline.submit", {
-  name: "submit",
   label: "Submit",
   intent: "Run the text typed in the command line.",
   runs_in: "content",
@@ -108,7 +105,6 @@ define("cmdline.submit", {
 });
 
 define("cmdline.history", {
-  name: "history",
   label: "History",
   intent: "Put an earlier or later command from the command line history into the line.",
   params: [{ name: "direction", type: "enum", values: ["prev", "next"], value_labels: { prev: "to older entry", next: "to newer entry" } }],
@@ -118,7 +114,6 @@ define("cmdline.history", {
 });
 
 define("cmdline.clear", {
-  name: "clearline",
   label: "Clear line",
   intent: "Delete the text typed in the command line.",
   runs_in: "content",
@@ -127,7 +122,6 @@ define("cmdline.clear", {
 });
 
 define("caret.move", {
-  name: "move",
   label: "Move caret",
   intent: "Move the caret in caret mode, or extend the selection in visual mode.",
   params: [
@@ -157,7 +151,6 @@ define("caret.move", {
 });
 
 define("visual.act", {
-  name: "visualact",
   label: "Act on selection",
   intent: "Copy the selection, swap its ends or search for it.",
   params: [{ name: "action", type: "enum", values: ["yank", "swap", "search"], value_labels: { yank: "to copy", swap: "to swap ends", search: "to search" } }],

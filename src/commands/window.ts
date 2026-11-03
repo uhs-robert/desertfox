@@ -39,12 +39,11 @@ export const browser_window_deps: WindowDeps = {
 const handlers = make_window_handlers(browser_window_deps);
 
 define("window.new", {
-  name: "winnew",
   label: "New window",
   intent: "Open a new window, blank unless a url is given. With private on, the window is private.",
   params: [
     { name: "url", type: "string", main: true, default: "" },
-    { name: "private", type: "bool", default: false },
+    { name: "private", type: "bool", default: false, short: "p" },
   ],
   runs_in: "background",
   run: async (_ctx, args) => {
@@ -54,7 +53,6 @@ define("window.new", {
 });
 
 define("window.close", {
-  name: "winclose",
   label: "Close window",
   intent: "Close the current window with all its tabs.",
   runs_in: "background",
@@ -62,7 +60,6 @@ define("window.close", {
 });
 
 define("window.undo_close", {
-  name: "undowin",
   label: "Reopen closed window",
   intent: "Restore the most recently closed window. A count prefix restores that many.",
   runs_in: "background",

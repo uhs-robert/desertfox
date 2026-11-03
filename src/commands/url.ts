@@ -4,7 +4,6 @@ import { parent_url, root_url } from "./url_build.ts";
 
 // A count fills `levels` instead of repeating: a repeat would read the tab URL again before the last navigation lands.
 define("url.parent", {
-  name: "parent",
   label: "Parent URL",
   intent: "Go up one level in the URL path. A count prefix goes up that many levels.",
   params: [{ name: "levels", type: "int", default: 1 }],
@@ -18,7 +17,6 @@ define("url.parent", {
 });
 
 define("url.root", {
-  name: "root",
   label: "Root URL",
   intent: "Go to the top of the site.",
   runs_in: "background",

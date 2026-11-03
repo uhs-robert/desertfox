@@ -25,7 +25,6 @@ async function open_built(ctx: CommandContext, where: unknown, refusal: string, 
 }
 
 define("site.search", {
-  name: "sitesearch",
   label: "Search this site",
   intent: "Search the current site with Google.",
   params: [QUERY_PARAM, WHERE_PARAM],
@@ -44,6 +43,7 @@ define("site.github", {
       type: "enum",
       values: [...GITHUB_SEARCH_TYPES],
       default: "code",
+      short: { issues: "i", pullrequests: "p", commits: "m", discussions: "d", repositories: "r", users: "u", any: "a" },
       value_labels: { issues: "issues", pullrequests: "pull requests", commits: "commits", discussions: "discussions", repositories: "repositories", users: "users", any: "anything" },
     },
     // Repositories and users have no repo to search inside, so scope does not apply to them.
@@ -58,16 +58,14 @@ define("site.github", {
 });
 
 define("site.subreddit", {
-  name: "subreddit",
   label: "Search subreddit",
   intent: "Search a subreddit. Without a sub, search the one the page is in, or all of Reddit.",
-  params: [QUERY_PARAM, { name: "sub", type: "string", default: DEFAULT_SUBREDDIT }, WHERE_PARAM],
+  params: [QUERY_PARAM, { name: "sub", type: "string", default: DEFAULT_SUBREDDIT, short: "s" }, WHERE_PARAM],
   runs_in: "background",
   run: (ctx, args) => open_built(ctx, args.where, "This address has no subreddit search", (page_url) => subreddit_search_url(page_url, args.query as string, args.sub as string)),
 });
 
 define("site.archive", {
-  name: "archive",
   label: "Archive page",
   intent: "Open the page in the Internet Archive.",
   params: [WHERE_PARAM],
@@ -76,7 +74,6 @@ define("site.archive", {
 });
 
 define("site.isdown", {
-  name: "isdown",
   label: "Is it down",
   intent: "Check whether the site is down for everyone.",
   params: [WHERE_PARAM],
@@ -85,7 +82,6 @@ define("site.isdown", {
 });
 
 define("site.translate", {
-  name: "translate",
   label: "Translate page",
   intent: "Translate the page into English with Google Translate.",
   params: [WHERE_PARAM],

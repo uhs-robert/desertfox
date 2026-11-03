@@ -33,7 +33,6 @@ export const browser_zoom_deps: ZoomDeps = {
 const handlers = make_zoom_handlers(browser_zoom_deps);
 
 define("zoom.by", {
-  name: "zoomby",
   label: "Zoom by",
   intent: "Change the zoom by an amount, where 0.1 is ten percent. A count prefix repeats it.",
   params: [{ name: "delta", type: "float" }],
