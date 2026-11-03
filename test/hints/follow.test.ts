@@ -4,12 +4,16 @@ import { follow_windows } from "../../src/content/hints/follow.ts";
 
 function fake_window() {
   const listeners = new Set<string>();
+  const removed: { type: string; handler: unknown; capture: unknown }[] = [];
   const handlers: Record<string, () => void> = {};
+  const adds: Record<string, unknown> = {};
   return {
     listeners,
+    removed,
+    adds,
     handlers,
-    addEventListener: (type: string, handler: () => void) => (listeners.add(type), (handlers[type] = handler)),
-    removeEventListener: (type: string) => listeners.delete(type),
+    addEventListener: (type: string, handler: () => void, options: unknown) => (listeners.add(type), (handlers[type] = handler), (adds[type] = options)),
+    removeEventListener: (type: string, handler: unknown, capture?: unknown) => (listeners.delete(type), removed.push({ type, handler, capture })),
   };
 }
 
@@ -25,5 +29,11 @@ test("a scroll in any window repositions the labels, and stopping removes every 
   frames.splice(0).forEach((callback) => callback());
   assert.equal(repositions, 1);
   stop();
-  assert.equal(top.listeners.size + inner.listeners.size, 0);
+  for (const win of [top, inner]) {
+    assert.deepEqual(win.removed, [
+      { type: "scroll", handler: win.handlers.scroll, capture: true },
+      { type: "resize", handler: win.handlers.resize, capture: undefined },
+    ]);
+    assert.equal(win.handlers.scroll, win.handlers.resize);
+  }
 });

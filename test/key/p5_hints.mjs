@@ -1,8 +1,8 @@
-// Key test cases of piece P5 (hints). run.mjs calls this with its helpers.
+// Key test cases of piece P5 (hints). run.mjs calls run_cases with its helpers.
 // The fixture page /hints holds a hidden link and a covered link before two plain ones, so the labels "a" and "s" belong to the plain links only when the visibility rules work.
 import { evaluate_in_background } from "./rdp.mjs";
 
-export async function run_hint_cases({ rdp, extension_id, run_case, send_keys, open_page, wait_event, find_event, events, expect, sleep, scroll_delta_after, became_visible }) {
+export async function run_cases({ rdp, extension_id, run_case, send_keys, open_page, wait_event, find_event, events, expect, sleep, scroll_delta_after, became_visible }) {
   const tab_count = () => evaluate_in_background(rdp, extension_id, `(async () => (await browser.tabs.query({})).length)()`);
   const close_tabs_with = (text) => evaluate_in_background(rdp, extension_id, `(async () => { for (const tab of await browser.tabs.query({})) if (tab.url.includes(${JSON.stringify(text)})) await browser.tabs.remove(tab.id); })()`);
   const loaded = (page_id) => (event) => event.type === "tree_read" && event.page_id === page_id;

@@ -18,17 +18,21 @@ addEventListener("scroll", () => {
   }), 150);
 });
 addEventListener("keydown", (event) => send("keydown", { key: event.key }));
+document.addEventListener("selectionchange", () => send("selection", { text: String(getSelection()), scroll_y: scrollY, pane_top: document.getElementById("pane")?.scrollTop ?? null, top: getSelection().rangeCount ? getSelection().getRangeAt(0).getBoundingClientRect().top : null }));
 addEventListener("input", (event) => send("input", { value: event.target.value }));
 addEventListener("focus", () => send("window_focus"));
 const root = document.documentElement;
 // The indicator host is in the page, its text is in a closed shadow root, so the label is an attribute.
 let last_indicator = "";
+let last_css = "";
 // The toast host is the other floating surface: no mode attribute, and its text sits in a closed shadow root.
 const toast_host = () => [...root.children].find((child) => child.style.zIndex === "2147483647" && !child.hasAttribute("data-oasisfox-mode"));
 let toast_shown = false;
 new MutationObserver(() => {
   const label = root.querySelector("[data-oasisfox-mode]")?.getAttribute("data-oasisfox-mode") ?? "";
   if (label !== last_indicator) send("indicator", { label: (last_indicator = label) });
+  const css = root.querySelector(":scope > style")?.textContent ?? "";
+  if (css !== last_css) send("selection_style", { css: (last_css = css) });
   const toast_now = Boolean(toast_host());
   if (toast_now !== toast_shown) send(toast_now ? "toast" : "toast_gone");
   toast_shown = toast_now;
@@ -36,7 +40,7 @@ new MutationObserver(() => {
 const report_tree_read = () => {
   const ms = root.getAttribute("data-oasisfox-tree-read-ms");
   if (ms === null) return false;
-  send("tree_read", { ms: Number(ms) });
+  send("tree_read", { ms: Number(ms), search: location.search });
   return true;
 };
 if (!report_tree_read()) {
@@ -84,6 +88,30 @@ export function start_server() {
       const covered = '<div style="position:relative;width:200px"><a href="/page?id=hint_covered">covered</a><div style="position:absolute;inset:0;background:#fff"></div></div>';
       const links = `<a href="/page?id=hint_hidden" style="display:none">hidden</a>${covered}<p><a href="/page?id=hint_one">one</a></p><p><a href="/page?id=hint_two">two</a></p>`;
       return response.end(page(`hints ${id}`, links + tall_filler));
+    }
+    if (url.pathname === "/caret") {
+      const text = "<p>foo bar.baz</p><p>second line here</p>";
+      return response.end(page(`caret ${id}`, `${text}<input id="paste_target">`));
+    }
+    if (url.pathname === "/caret_wrap") {
+      // Each word fills a screen line: the column is 6 characters wide and the words are 3.
+      return response.end(page(`caret_wrap ${id}`, '<p style="width:6ch;font-family:monospace">abc def ghi jkl</p>'));
+    }
+    if (url.pathname === "/caret_columns") {
+      // The middle line is short: j over it must still come back to the column the caret left.
+      return response.end(page(`caret_columns ${id}`, '<p style="font-family:monospace">abcdefghij<br>ab<br>abcdefghij</p>'));
+    }
+    if (url.pathname === "/caret_long_columns") {
+      // Far more lines than the screen holds, a long line then a short one, so j crosses the bottom edge many times.
+      return response.end(page(`caret_long_columns ${id}`, `<p style="font-family:monospace">${"abcdefghij<br>ab<br>".repeat(120)}</p>`));
+    }
+    if (url.pathname === "/caret_nested") {
+      const lines = Array.from({ length: 100 }, (_, index) => `<div>line ${index}</div>`).join("");
+      return response.end(page(`caret_nested ${id}`, `<div id="pane" style="height:200px;width:300px;overflow:auto;font-family:monospace">${lines}</div>`));
+    }
+    if (url.pathname === "/caret_scrolled") {
+      const words = Array.from({ length: 1500 }, (_, index) => `w${String(index).padStart(4, "0")}`).join(" ");
+      return response.end(page(`caret_scrolled ${id}`, `<p style="width:30ch;font-family:monospace">${words}</p><script>addEventListener("load", () => scrollTo(0, 3000))</script>`));
     }
     if (url.pathname === "/swallow") return response.end(page(`swallow ${id}`, tall_filler, CANCEL_KEYS_IN_CAPTURE));
     response.end(page(`page ${id}`, tall_filler));
