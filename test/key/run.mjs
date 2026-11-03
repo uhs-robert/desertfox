@@ -681,7 +681,7 @@ async function main() {
       expect(await scroll_delta_after(shown.page_id, ["j"]) > 0, "the tab left after xx does not take keys");
     });
 
-    // Builds a config folder, hands it to the running Firefox as managed storage and reloads it with qr. The which-key shots use it to show a copy of the owner config.
+    // Builds a config folder, hands it to the running Firefox as managed storage and reloads it with qr. The which-key shots use it to show a copy of the user config.
     const load_config_dir = async (dir) => {
       build_test_config(dir, managed_file);
       const session_home = readFileSync(join(work_dir, "session_home"), "utf8").trim();

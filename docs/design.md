@@ -319,7 +319,7 @@ The label of a key comes from one rule, applied to the args the binding sets (ne
 - Otherwise the label is the command label. A search engine with a label in `search_engines.toml` replaces it, and a binding with no engine uses the default engine. Then each `enum` arg the binding sets to a non-default value adds its `value_labels` phrase, in param order ("Open URL in new tab"). A `bool` set to true adds the param name ("Reload hard"). Numbers, free strings and prompted params add nothing, so the keys that set them carry a hand `label` ("Scroll left", "Zoom in a lot").
 - A snippet key shows the `// label:` header of its snippet.
 
-Two keys in one group may share a label only when they run the same binding (`zi` and `z+`). The unit tests check this for every group of the default keymap and of a copy of the owner config, and print each group's labels.
+Two keys in one group may share a label only when they run the same binding (`zi` and `z+`). The unit tests check this for every group of the default keymap and of a copy of the user config, and print each group's labels.
 
 - In the browser it draws in a closed shadow root, styled through the CSS variables in [Styles](#styles). It appears after a delay that is a setting.
 - With the native host, it can show in the Quickshell which-key HUD instead. The host writes the rows as `{ "items": [...] }` and calls the `hyprvim_whichkey` IPC target (`open <path>` and `close`). The HUD then uses the current Oasis style. Mouse hover works only in the browser version.

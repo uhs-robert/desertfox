@@ -439,3 +439,10 @@ test("the keymap schema accepts the table form", () => {
   const schema = build_schemas(commands)["keymap"] as { properties: { normal: { additionalProperties: { anyOf: { type: string }[] } } } };
   assert.ok(schema.properties.normal.additionalProperties.anyOf.some((form) => form.type === "object"));
 });
+
+test("a table binding whose run is not a string or a list of strings is a config error, not a crash", () => {
+  const dir = config_dir_with({ "keymap.d/20-bad.toml": '[normal]\nJ = { run = { run = "tab.next" } }\nM = { run = 3 }' }, join(FIXTURES, "full"));
+  const text = problems_of(dir).join("\n");
+  assert.match(text, /keymap\.normal\["J"\] must be a command string/);
+  assert.match(text, /keymap\.normal\["M"\] must be a command string/);
+});

@@ -90,7 +90,8 @@ function is_command_text(entry: unknown): boolean {
   if (typeof entry === "string") return true;
   if (is_plain_object(entry)) {
     const only_known_fields = Object.keys(entry).every((key) => key === "run" || key === "label");
-    const has_run = is_command_text(entry.run) && entry.run !== "";
+    const run_is_text = typeof entry.run === "string" ? entry.run !== "" : Array.isArray(entry.run) && is_command_text(entry.run);
+    const has_run = run_is_text;
     return only_known_fields && has_run && (entry.label === undefined || typeof entry.label === "string");
   }
   return Array.isArray(entry) && entry.length > 0 && entry.every((item) => typeof item === "string" && item.trim() !== "");

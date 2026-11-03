@@ -171,6 +171,26 @@ test("a user binding without a label replaces the default label", () => {
   assert.equal(leaf_at("a").label, "Close tab");
 });
 
+test("a derived label with a control character warns and skips the key, as a bad binding label does", () => {
+  const { children, warnings } = labels_of(
+    { normal: { a: { id: "open.search", args: { engine: "bad" } }, b: { id: "tab.close", args: { focus: "left" } }, c: { id: "tab.close" } } },
+    { search_engines: { bad: { url: "https://b/?q=%s", label: "Bad\nEngine" } } },
+  );
+  assert.deepEqual(Object.keys(children), ["b", "c"]);
+  assert.equal(warnings.length, 1);
+  assert.match(warnings[0]!, /skipped "a": a label must not hold control characters/);
+});
+
+test("a search engine entry with no usable label is ignored for labels", () => {
+  const { leaf_at, warnings } = labels_of(
+    { normal: { a: { id: "open.search", args: { engine: "ddg" } }, b: { id: "open.search", args: { engine: "arch" } } } },
+    { search_engines: { ddg: null, arch: { url: "https://a/?q=%s" } } as unknown as MergedConfig["search_engines"] },
+  );
+  assert.deepEqual(warnings, []);
+  assert.equal(leaf_at("a").label, "Search");
+  assert.equal(leaf_at("b").label, "Search");
+});
+
 // Engine and container keys.
 test("generated search keys are labeled with the engine label", () => {
   const { leaf_at } = labels_of({ search_keys: { d: "ddg", a: "arch" } });
@@ -237,8 +257,8 @@ test("the default keymap reads as the wording draft says", () => {
     ["normal", ["P"], "Open clipboard in new tab"],
     ["normal", ["V"], "Set mode to caret"],
     ["normal", ["f"], "Click element"],
-    ["normal", [";", "y"], "Hint to copy for links"],
-    ["normal", [";", "r"], "Click links in background tabs, rapid"],
+    ["normal", [";", "y"], "Copy link address"],
+    ["normal", [";", "r"], "Open links rapidly in background tabs"],
     ["caret", ["w"], "Move caret by word"],
     ["caret", ["e"], "Move caret to word end"],
     ["caret", ["k"], "Move caret by line backward"],
@@ -298,14 +318,14 @@ test("keys that run the same binding may share a label, keys that run different 
   assert.match(found[0]!, /"Same" is shared by a c and b/);
 });
 
-// The owner config is read from a copy with the symlinks resolved. The live config and the dotfiles behind it are never touched.
-// OASISFOX_OWNER_CONFIG points the test at another folder, for trying a config before it goes into the dotfiles.
-const OWNER_CONFIG = process.env.OASISFOX_OWNER_CONFIG ?? join(homedir(), ".config", "oasisfox");
+// The user config is read from a copy with the symlinks resolved. The live config and the dotfiles behind it are never touched.
+// OASISFOX_USER_CONFIG points the test at another folder, for trying a config before it goes into the dotfiles.
+const USER_CONFIG = process.env.OASISFOX_USER_CONFIG ?? join(homedir(), ".config", "oasisfox");
 
-test("no which-key group of the owner config has two different bindings with one label", { skip: !existsSync(OWNER_CONFIG) && "no owner config folder on this machine" }, (t: TestContext) => {
-  const copy = mkdtempSync(join(tmpdir(), "oasisfox-owner-config-"));
+test("no which-key group of the user config has two different bindings with one label", { skip: !existsSync(USER_CONFIG) && "no user config folder on this machine" }, (t: TestContext) => {
+  const copy = mkdtempSync(join(tmpdir(), "oasisfox-user-config-"));
   try {
-    cpSync(OWNER_CONFIG, copy, { recursive: true, dereference: true });
+    cpSync(USER_CONFIG, copy, { recursive: true, dereference: true });
     const config = build_config(copy, real_commands);
     // Snippets define their own commands, so the check runs on a registry that holds them too.
     const containers = Object.values(config.keymap.container_keys ?? {});
