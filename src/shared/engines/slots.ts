@@ -9,6 +9,8 @@ export type SlotDef = InputSlot | PageSlot;
 
 const GITHUB_HOSTS = ["github.com", "www.github.com"];
 const REDDIT_HOSTS = ["reddit.com", "www.reddit.com", "old.reddit.com"];
+const YOUTUBE_HOSTS = ["youtube.com", "www.youtube.com", "m.youtube.com"];
+const YOUTUBE_CHANNEL_PREFIXES = ["channel", "c", "user"];
 
 export function parse_http_url(page_url: string): URL | undefined {
   try {
@@ -37,6 +39,15 @@ export function subreddit_of(page_url: string): string | undefined {
   return prefix === "r" ? name : undefined;
 }
 
+// The path that names a channel: "@handle", or "channel/ID" for the older forms. A template writes it as {channel:raw}.
+export function youtube_channel_of(page_url: string): string | undefined {
+  const url = parse_http_url(page_url);
+  if (!url || !YOUTUBE_HOSTS.includes(url.hostname)) return undefined;
+  const [first, second] = path_segments(url);
+  if (first?.startsWith("@") && first.length > 1) return first;
+  return first && second && YOUTUBE_CHANNEL_PREFIXES.includes(first) ? `${first}/${second}` : undefined;
+}
+
 export const SLOTS: Record<string, SlotDef> = {
   query: { kind: "input", message: "This engine needs a query" },
   url: { kind: "page", message: "This address is not a web page", read: (page) => (parse_http_url(page.url) ? page.url : undefined) },
@@ -51,6 +62,7 @@ export const SLOTS: Record<string, SlotDef> = {
     },
   },
   subreddit: { kind: "page", message: "This page is not in a subreddit", read: (page) => subreddit_of(page.url) },
+  channel: { kind: "page", message: "This page is not on a YouTube channel", read: (page) => youtube_channel_of(page.url) },
 };
 
 export const SLOT_NAMES = Object.keys(SLOTS);
