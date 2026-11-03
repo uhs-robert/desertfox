@@ -10,9 +10,15 @@ import type { PaletteName } from "./mode_colors.ts";
 export const CONFIG_FORMAT_VERSION = 2;
 
 export type SearchEngine = {
-  // URL template with the query placeholder.
+  // URL template. It holds the query slot and page slots; `%s` is the older spelling of the query slot.
   url: string;
   label: string;
+  // What the page must provide before the engine can run there, one slot expression per entry, for example "repo". Absent when nothing.
+  slots?: string[];
+  // Name of the engine to use when the page cannot fill the slots.
+  fallback?: string;
+  // Where each field came from, for `engine.show`: field name to "file [level]".
+  origins?: Record<string, string>;
 };
 
 export const MODE_INDICATOR_VALUES = ["always", "not_normal", "off"] as const;
