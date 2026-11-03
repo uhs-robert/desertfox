@@ -50,11 +50,11 @@ test("an empty selection in a default opens the command line with the param left
 
 test("an empty selection in an explicit @selection arg opens the line, a full one runs", async () => {
   const seen: unknown[] = [];
-  const commands = { "site.find": { label: "Find", intent: "x", name: "find", params: [{ name: "query", type: "string", rest: true, main: true }, { name: "where", type: "string", default: "here" }], runs_in: "background", run: (_ctx: unknown, args: unknown) => void seen.push(args) } } as const;
+  const commands = { "site.find": { label: "Find", intent: "x", name: "find", params: [{ name: "query", type: "string", rest: true, main: true }, { name: "where", type: "enum", values: ["here", "tab"], default: "here" }], runs_in: "background", run: (_ctx: unknown, args: unknown) => void seen.push(args) } } as const;
   const empty = make_fake(commands, { ask_selection: async () => "" });
   const key = { id: "site.find", args: { query: { from: "selection" }, where: "tab" } };
   assert.deepEqual(await create_router(empty.deps).run({ invocations: [key], mode: "normal", may_prompt: true }), { ok: true });
-  assert.deepEqual(empty.log, ["cmdline 7 0 find where=tab "]);
+  assert.deepEqual(empty.log, ["cmdline 7 0 find tab "]);
   const full = make_fake(commands);
   await create_router(full.deps).run({ invocations: [key], mode: "normal", may_prompt: true });
   assert.deepEqual(seen, [{ query: "chosen text", where: "tab" }]);
@@ -71,13 +71,13 @@ test("a missing required param opens the command line with the command typed in"
 
 test("a prompt opens the line with the prefill resolved now, and runs nothing", async () => {
   const { deps, log } = make_fake({
-    "open.url": { label: "Open", intent: "x", name: "open", params: [{ name: "url", type: "string" }, { name: "where", type: "string", default: "here" }], runs_in: "background", run: () => assert.fail() },
+    "open.url": { label: "Open", intent: "x", name: "open", params: [{ name: "url", type: "string" }, { name: "where", type: "enum", values: ["here", "tab"], default: "here" }], runs_in: "background", run: () => assert.fail() },
   });
   const binding = { id: "open.url", args: { where: "tab" }, prompt: { param: "url", prefill: { from: "current_url" } as const } };
   await create_router(deps).run({ invocations: [binding], mode: "normal", may_prompt: true });
   const bare = { id: "open.url", prompt: { param: "url" } };
   await create_router(deps).run({ invocations: [bare], mode: "normal", may_prompt: true });
-  assert.deepEqual(log, ["cmdline 7 0 open url=https://example.org/ where=tab", "cmdline 7 0 open url="]);
+  assert.deepEqual(log, ["cmdline 7 0 open url=https://example.org/ tab", "cmdline 7 0 open url="]);
 });
 
 test("a prompt with an empty selection prefills empty, and a count is dropped", async () => {

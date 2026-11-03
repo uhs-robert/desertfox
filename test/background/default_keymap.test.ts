@@ -5,9 +5,10 @@ import "../../src/background/command_modules.ts";
 import { compile_config } from "../../src/background/compile.ts";
 import { empty_config } from "../../src/background/config_load.ts";
 import { DEFAULT_KEYMAP } from "../../src/background/default_keymap.ts";
+import { is_context_source } from "../../src/shared/registry/params.ts";
 import type { TreeBranch } from "../../src/shared/prefix_tree.ts";
 import type { KeymapConfig } from "../../src/shared/keymap.ts";
-import { check_args, registry } from "../../src/shared/registry/index.ts";
+import { check_args, parse_command_line, print_command, registry } from "../../src/shared/registry/index.ts";
 
 const bindings_of = (keymap: KeymapConfig) => Object.entries(keymap).filter(([name]) => name !== "group_names");
 
@@ -51,6 +52,32 @@ test("every prompting default names a real param", () => {
       }
     }
   }
+});
+
+test("every prompting default prints a line that parses back to the same invocation", () => {
+  const sources = { search_engines: ["arch", "ddg"], containers: ["Work", "Home"] };
+  const text = "https://example.org/a b";
+  let checked = 0;
+  for (const [, section] of bindings_of(DEFAULT_KEYMAP)) {
+    for (const binding of Object.values(section as Record<string, unknown>)) {
+      for (const step of [binding].flat() as { id: string; args?: Record<string, unknown>; prompt?: { param: string; prefill?: unknown } }[]) {
+        const command = registry.get(step.id);
+        if (!step.prompt || !command) continue;
+        const typed: Record<string, unknown> = Object.fromEntries(Object.entries(step.args ?? {}).map(([name, value]) => [name, is_context_source(value) ? text : value]));
+        if (step.prompt.prefill) typed[step.prompt.param] = text;
+        const line = print_command(command, typed, { open_param: step.prompt.param });
+        const parsed = parse_command_line(registry, line, sources);
+        assert.equal(parsed.kind, "invocation", line);
+        if (parsed.kind !== "invocation") continue;
+        assert.equal(parsed.invocation.id, step.id, line);
+        const expected = { ...typed };
+        if (!step.prompt.prefill) delete expected[step.prompt.param];
+        assert.deepEqual(check_args(command, parsed.invocation.args, sources), check_args(command, expected, sources), line);
+        checked += 1;
+      }
+    }
+  }
+  assert.ok(checked > 0);
 });
 
 test("the approved keys are all bound", () => {
@@ -188,7 +215,7 @@ test("s/ and the sG keys search with the selection and prompt when it is empty",
     show_refusal: async () => undefined,
   });
   for (const key of ["s/", "sGc", "sGr"]) await router.run({ invocations: [normal[key] as { id: string }], mode: "normal", may_prompt: true });
-  assert.deepEqual(log, ["sitesearch ", "github type=code ", "github type=repositories "]);
+  assert.deepEqual(log, ["sitesearch ", "github ", "github repositories "]);
 });
 
 test("a prompt binding with a bad fixed arg is skipped with a warning", () => {
