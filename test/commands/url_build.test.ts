@@ -5,7 +5,7 @@ import {
   engine_search_url,
   isdown_url,
   parent_url,
-  repo_search_url,
+  github_search_url,
   root_url,
   site_search_url,
   subreddit_of,
@@ -46,13 +46,26 @@ test("site search puts the host in a site: filter", () => {
   assert.equal(site_search_url("https://a.com/x", "rust & go"), "https://www.google.com/search?q=site%3Aa.com%20rust%20%26%20go");
 });
 
-test("repo search reads owner and repo from the GitHub path", () => {
-  assert.equal(
-    repo_search_url("https://github.com/o/r/blob/main/x.ts", "a b"),
-    "https://github.com/o/r/search?q=a%20b&type=code",
-  );
-  assert.equal(repo_search_url("https://github.com/o", "x"), undefined);
-  assert.equal(repo_search_url("https://gitlab.com/o/r", "x"), undefined);
+test("GitHub search qualifies the query with the repo of the page for every type", () => {
+  const page = "https://github.com/o/r/blob/main/x.ts";
+  for (const type of ["code", "issues", "pullrequests", "commits", "discussions"]) {
+    assert.equal(github_search_url(page, type, "repo", "a b"), `https://github.com/search?q=repo%3Ao%2Fr%20a%20b&type=${type}`);
+  }
+});
+
+test("GitHub search across all of GitHub needs no repo and leaves type out for any", () => {
+  assert.equal(github_search_url("https://a.com", "any", "all", "x"), "https://github.com/search?q=x");
+  assert.equal(github_search_url("https://a.com", "issues", "all", "x"), "https://github.com/search?q=x&type=issues");
+});
+
+test("repositories and users search all of GitHub from any page", () => {
+  assert.equal(github_search_url("about:blank", "repositories", undefined, "a&b"), "https://github.com/search?q=a%26b&type=repositories");
+  assert.equal(github_search_url("https://a.com", "users", undefined, "x"), "https://github.com/search?q=x&type=users");
+});
+
+test("GitHub search refuses repo scope off a repo page", () => {
+  assert.equal(github_search_url("https://github.com/o", "code", "repo", "x"), undefined);
+  assert.equal(github_search_url("https://gitlab.com/o/r", "issues", "repo", "x"), undefined);
 });
 
 test("subreddit comes from /r/<name>, an explicit sub wins, and all is the fallback", () => {
