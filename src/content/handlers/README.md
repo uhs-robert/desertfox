@@ -3,8 +3,10 @@
 The content-side code of each command that runs in the page. One file per command group, and each command is one `ContentHandler` object: a `run(args)` function and an optional `fill_from_page` map.
 
 - `types.ts`: the `ContentHandler` type. `fill_from_page` names the params that the handler reads from the page when the invocation leaves them out.
-- `scroll.ts`, `align.ts`: the `scroll.*` commands. `page.ts` holds `blur_focused_element` and remembers the last blurred field for `scroll.align`.
-- `mode.ts`, `page.ts`, `stop.ts`, `focus.ts`, `copy.ts`: the mode, page and copy commands. `focus.ts` is a helper that has no handler object.
+- `scroll.ts`, `align.ts`: the `scroll.*` commands.
+- `page.ts`: the page focus commands. It also holds `blur_focused_element` and remembers the last blurred field for `scroll.align`.
+- `mode.ts`, `stop.ts`, `copy.ts`: the mode, stop and copy commands.
+- `focus.ts`: a helper that has no handler object.
 - `phase_2.ts`: handlers for commands whose code sits in a bundle (`hints`, `cmdline`, `caret`, `whichkey`). Each one asks `bundles` to load the bundle and run the command. If the bundle has no handler for the command yet, the handler refuses with a `NEEDS_*` message.
 
 How a handler is found and called:

@@ -4,7 +4,7 @@ The `ui` bundle (`ui.js`), which the content script loads on first use. It draws
 
 - `main.ts`: the bundle entry. It registers two handlers with the host: `ui.toast` (shows `args.message`) and `ui.badge` (sets `args.label` and `args.colors`, and removes the badge when the label is undefined). A second run does not register again.
 
-The drawing code is in `../toast.ts` and `../mode_indicator.ts`. Both draw in a closed shadow root made by `../surface.ts`. Only this bundle imports them.
+The drawing code is in `../toast.ts` and `../mode_indicator.ts`. Both draw in a closed shadow root made by `../surface.ts`. Only this bundle runs them. Other files import only the `BadgeColors` type.
 
 Other code does not import the bundle. It calls `../ui_proxy.ts`:
 
