@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
 import { make_browser_handlers } from "../src/commands/browser.ts";
-import { clipboard_target, home_page_url } from "../src/commands/url_build.ts";
+import { url_target, home_page_url } from "../src/commands/url_build.ts";
 import { focus_page_content } from "../src/content/handlers/focus.ts";
 import { build_config, read_commands_file } from "../tools/build-config/build_config.ts";
 import { ConfigErrors } from "../tools/build-config/errors.ts";
@@ -60,13 +60,13 @@ test("page.home opens the home_page setting or refuses", () => {
 const engines = { search: { url: "https://s.example/?q=%s" }, other: { url: "https://o.example/?q=%s" } };
 
 test("open.clipboard opens a URL as is and searches other text", () => {
-  assert.equal(clipboard_target(" https://a.example/x \n", "search", engines), "https://a.example/x");
-  assert.equal(clipboard_target("rust lifetimes", "search", engines), "https://s.example/?q=rust%20lifetimes");
-  assert.equal(clipboard_target("rust", "other", engines), "https://o.example/?q=rust");
+  assert.equal(url_target(" https://a.example/x \n", "search", engines), "https://a.example/x");
+  assert.equal(url_target("rust lifetimes", "search", engines), "https://s.example/?q=rust%20lifetimes");
+  assert.equal(url_target("rust", "other", engines), "https://o.example/?q=rust");
 });
 
 test("open.clipboard refuses with the setting name when the engine is missing", () => {
-  assert.throws(() => clipboard_target("rust", "ghost", engines), /default_engine setting/);
+  assert.throws(() => url_target("rust", "ghost", engines), /default_engine setting/);
 });
 
 test("build-config: home_page and default_engine are checked", () => {
@@ -83,19 +83,76 @@ test("the settings schema lists both settings", () => {
 
 test("open.clipboard searches text that only parses as a URL", () => {
   for (const text of ["javascript:alert(1)", "TODO: fix thing", "data:text/html,hi", "rust"]) {
-    assert.equal(clipboard_target(text, "search", engines), `https://s.example/?q=${encodeURIComponent(text)}`, text);
+    assert.equal(url_target(text, "search", engines), `https://s.example/?q=${encodeURIComponent(text)}`, text);
   }
 });
 
 test("open.clipboard opens web schemes, bare domains and localhost with a port", () => {
-  assert.equal(clipboard_target("ftp://f.example/x", "search", engines), "ftp://f.example/x");
-  assert.equal(clipboard_target("file:///tmp/a.html", "search", engines), "file:///tmp/a.html");
-  assert.equal(clipboard_target("example.com/path", "search", engines), "https://example.com/path");
-  assert.equal(clipboard_target("localhost:3000", "search", engines), "http://localhost:3000");
-  assert.equal(clipboard_target("two words.com", "search", engines), "https://s.example/?q=two%20words.com");
+  assert.equal(url_target("ftp://f.example/x", "search", engines), "ftp://f.example/x");
+  assert.equal(url_target("file:///tmp/a.html", "search", engines), "file:///tmp/a.html");
+  assert.equal(url_target("example.com/path", "search", engines), "https://example.com/path");
+  assert.equal(url_target("localhost:3000", "search", engines), "http://localhost:3000");
+  assert.equal(url_target("two words.com", "search", engines), "https://s.example/?q=two%20words.com");
 });
 
 test("open.clipboard opens host:port, which parses as a scheme", () => {
-  assert.equal(clipboard_target("example.com:8080", "search", engines), "https://example.com:8080");
-  assert.equal(clipboard_target("localhost:3000/a?b=1", "search", engines), "http://localhost:3000/a?b=1");
+  assert.equal(url_target("example.com:8080", "search", engines), "https://example.com:8080");
+  assert.equal(url_target("localhost:3000/a?b=1", "search", engines), "http://localhost:3000/a?b=1");
+});
+
+test("url_target gives host-like text https, local hosts http and keeps full URLs", () => {
+  const cases: Record<string, string> = {
+    "www.google.com": "https://www.google.com",
+    "google.com": "https://google.com",
+    "example.com": "https://example.com",
+    "github.com/x/y": "https://github.com/x/y",
+    "  padded.com  ": "https://padded.com",
+    "example.com:8080/a?b=1": "https://example.com:8080/a?b=1",
+    localhost: "http://localhost",
+    "localhost:3000": "http://localhost:3000",
+    "127.0.0.1": "http://127.0.0.1",
+    "192.168.1.1:8080/admin": "http://192.168.1.1:8080/admin",
+    "https://a.example/x": "https://a.example/x",
+    "http://a.example/x": "http://a.example/x",
+    "file:///tmp/a.html": "file:///tmp/a.html",
+    "about:config": "about:config",
+    "about:preferences#privacy": "about:preferences#privacy",
+    "ABOUT:config": "ABOUT:config",
+    "LOCALHOST:3000": "http://LOCALHOST:3000",
+    "[::1]": "http://[::1]",
+    "[fd00::1]/admin": "http://[fd00::1]/admin",
+    "[fe80::1]": "http://[fe80::1]",
+    "[2001:db8::1]": "https://[2001:db8::1]",
+    "10.0.0.5": "http://10.0.0.5",
+    "172.16.0.1": "http://172.16.0.1",
+    "172.32.0.1": "https://172.32.0.1",
+    "192.168.1.1": "http://192.168.1.1",
+    "8.8.8.8": "https://8.8.8.8",
+    "8.8.8.8:8080": "https://8.8.8.8:8080",
+    "nas:8080": "http://nas:8080",
+    "nas:8080/path": "http://nas:8080/path",
+    "mailto:x": "mailto:x",
+    "tel:5551234": "tel:5551234",
+    "tel:911": "tel:911",
+    "tel:12345": "tel:12345",
+    "sms:12345": "sms:12345",
+    "[::12]": "https://[::12]",
+    "[::1:2]": "https://[::1:2]",
+    "blob:https://a.example/uuid": "blob:https://a.example/uuid",
+    "[::1]:3000/a": "http://[::1]:3000/a",
+    "mailto:a@b.example": "mailto:a@b.example",
+    "tel:+15551234": "tel:+15551234",
+    "view-source:https://a.example/": "view-source:https://a.example/",
+  };
+  for (const [text, expected] of Object.entries(cases)) assert.equal(url_target(text, "search", engines), expected, text);
+});
+
+test("url_target searches plain words and unknown schemes", () => {
+  for (const text of ["rust", "foo bar", "[abc]", "javascript:alert(1)", "JavaScript:alert(1)", "data:text/html,hi", "about: config"]) {
+    assert.equal(url_target(text, "search", engines), `https://s.example/?q=${encodeURIComponent(text)}`, text);
+  }
+});
+
+test("url_target refuses empty text", () => {
+  assert.throws(() => url_target("  ", "search", engines), /No URL/);
 });

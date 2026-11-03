@@ -1,6 +1,9 @@
 // Opens a URL where the command asks. Shared by open, page.home and site.
 
+import { get_config } from "../background/startup.ts";
+import { DEFAULT_SETTINGS } from "../shared/config.ts";
 import type { CommandContext, ParamDef } from "../shared/index.ts";
+import { url_target } from "./url_build.ts";
 
 export const WHERE = ["here", "tab", "background", "window"] as const;
 export type Where = (typeof WHERE)[number];
@@ -57,7 +60,26 @@ export async function current_tab_url(ctx: CommandContext): Promise<string> {
   return tab.url;
 }
 
+// For text a person typed or configured. URLs that code built need no such pass.
+export async function typed_url_target(text: string): Promise<string> {
+  const { search_engines, settings } = await get_config();
+  return url_target(text, settings.default_engine ?? DEFAULT_SETTINGS.default_engine, search_engines);
+}
+
+// Firefox refuses privileged pages such as about:config from extensions. The refusal is shown as a notice, so the text is never searched instead.
+const ABOUT_URL = /^about:/i;
+const PRIVILEGED_URL_REFUSAL = /illegal url|privileged/i;
+
 export async function open_in(ctx: CommandContext, url: string, where: Where, container?: string): Promise<void> {
+  try {
+    await open_in_unchecked(ctx, url, where, container);
+  } catch (error) {
+    if (!ABOUT_URL.test(url) || !PRIVILEGED_URL_REFUSAL.test(String(error))) throw error;
+    throw new Error(`Firefox does not let extensions open ${url}`);
+  }
+}
+
+async function open_in_unchecked(ctx: CommandContext, url: string, where: Where, container?: string): Promise<void> {
   if (where === "here") {
     await browser.tabs.update(require_tab_id(ctx), { url });
     return;

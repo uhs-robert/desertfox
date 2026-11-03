@@ -112,29 +112,48 @@ export function home_page_url(home_page: string | undefined): string {
   return home_page;
 }
 
-const CLIPBOARD_URL_SCHEMES = ["http:", "https:", "ftp:", "file:"];
-const HOST_WITH_PORT = /^(localhost|[^\s:/?#]+\.[^\s:/?#]+):\d+(?:[/?#]\S*)?$/;
+// Schemes that run code or carry inline data in the page are never opened from text.
+const SEARCHED_SCHEMES = ["javascript:", "data:"];
+// Hosts on this machine or the local network rarely have a certificate, so they get http. Public IPs get https like domains.
+const IP_OR_LOCAL_HOST = /^(localhost|\d{1,3}(?:\.\d{1,3}){3}|\[[0-9a-f:.]*:[0-9a-f:.]*\])(?::\d+)?(?:[/?#]\S*)?$/i;
+const PRIVATE_IPV4 = /^(?:127\.|10\.|192\.168\.|172\.(?:1[6-9]|2\d|3[01])\.|169\.254\.)/;
+const PRIVATE_IPV6 = /^\[(?:::1\]|f[cd][0-9a-f]{2}:|fe[89ab][0-9a-f]:)/i;
 
-// Other schemes (javascript:, data:) and text with a colon ("TODO: fix") are not worth opening, so they search.
-function clipboard_url(text: string): string | undefined {
-  // Checked first: "example.com:8080" would otherwise parse as the scheme "example.com:".
-  const host_with_port = HOST_WITH_PORT.exec(text);
-  if (host_with_port) return `${host_with_port[1] === "localhost" ? "http" : "https"}://${text}`;
-  if (URL.canParse(text)) return CLIPBOARD_URL_SCHEMES.includes(new URL(text).protocol) ? text : undefined;
+function is_private_host(host: string): boolean {
+  return host.toLowerCase() === "localhost" || PRIVATE_IPV4.test(host) || PRIVATE_IPV6.test(host);
+}
+
+// No whitespace anywhere, so prose like "TODO: fix thing" is not taken for a scheme.
+const SCHEME_URL = /^[a-z][a-z0-9+.-]*:\S+$/i;
+// A name with a port and no dot ("nas:8080") is a machine on the local network, unless the name is a scheme that links carry digits after.
+const LABEL_WITH_PORT = /^(?!(?:tel|sms|mms|fax|callto|facetime|facetime-audio|skype|whatsapp|geo|magnet|urn|sip|sips|xmpp|irc|ircs|bitcoin):)[a-z0-9-]+:\d{1,5}(?:[/?#]\S*)?$/i;
+const HOST_WITH_PORT = /^[^\s:/?#]+\.[^\s:/?#]+:\d+(?:[/?#]\S*)?$/;
+
+// Any parsable scheme opens as given (mailto:, view-source:, about:), except the two above. Prose with a colon searches.
+function typed_url(text: string): string | undefined {
+  const ip_or_local = IP_OR_LOCAL_HOST.exec(text);
+  if (ip_or_local) return `${is_private_host(ip_or_local[1]!) ? "http" : "https"}://${text}`;
+  if (LABEL_WITH_PORT.test(text)) return `http://${text}`;
+  // Checked before the scheme parse: "example.com:8080" would otherwise parse as the scheme "example.com:".
+  if (HOST_WITH_PORT.test(text)) return `https://${text}`;
+  if (SCHEME_URL.test(text) && URL.canParse(text)) return SEARCHED_SCHEMES.includes(new URL(text).protocol) ? undefined : text;
   const looks_like_domain = text.includes(".") && !/\s/.test(text);
   return looks_like_domain && URL.canParse(`https://${text}`) ? `https://${text}` : undefined;
 }
 
-export function clipboard_target(
+// The one way to turn text a person typed or copied into something a tab can open.
+// A bare address must get a scheme here: the tabs API resolves it against the extension's own origin.
+export function url_target(
   text: string,
   default_engine: string,
   engines: Record<string, { url: string }>,
 ): string {
   const trimmed = text.trim();
-  const url = clipboard_url(trimmed);
+  if (trimmed === "") throw new Error("No URL");
+  const url = typed_url(trimmed);
   if (url !== undefined) return url;
   const engine = engines[default_engine];
-  if (!engine) throw new Error(`The clipboard is not a URL and the default_engine setting names no search engine: "${default_engine}"`);
+  if (!engine) throw new Error(`The text is not a URL and the default_engine setting names no search engine: "${default_engine}"`);
   return engine_search_url(engine.url, trimmed);
 }
 

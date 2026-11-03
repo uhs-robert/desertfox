@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { empty_config, pick_config } from "../src/background/config_load.ts";
-import { clipboard_target } from "../src/commands/url_build.ts";
+import { url_target } from "../src/commands/url_build.ts";
 import { CONFIG_FORMAT_VERSION, DEFAULT_SETTINGS, FALLBACK_ENGINE, FALLBACK_ENGINE_NAME, with_fallback_engines } from "../src/shared/config.ts";
 import { build_config, read_commands_file } from "../tools/build-config/build_config.ts";
 import { ConfigErrors } from "../tools/build-config/errors.ts";
@@ -43,7 +43,7 @@ test("a user duck replaces the fallback whole", () => {
 });
 
 test("clipboard text searches DuckDuckGo with the default setting and the fallback map", () => {
-  const url = clipboard_target("rust lifetimes", DEFAULT_SETTINGS.default_engine, with_fallback_engines({}));
+  const url = url_target("rust lifetimes", DEFAULT_SETTINGS.default_engine, with_fallback_engines({}));
   assert.equal(url, "https://duckduckgo.com/?q=rust%20lifetimes");
 });
 

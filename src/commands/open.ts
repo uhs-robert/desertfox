@@ -1,9 +1,9 @@
 import { get_config } from "../background/startup.ts";
 import { define } from "../shared/registry/index.ts";
-import { CONTAINER_PARAM, open_in, WHERE_PARAM } from "./open_target.ts";
+import { CONTAINER_PARAM, open_in, typed_url_target, WHERE_PARAM } from "./open_target.ts";
 import type { Where } from "./open_target.ts";
 import { DEFAULT_SETTINGS } from "../shared/config.ts";
-import { clipboard_target, engine_search_url, search_engine_name } from "./url_build.ts";
+import { engine_search_url, search_engine_name } from "./url_build.ts";
 
 const container_of = (args: Record<string, unknown>) => (typeof args.container === "string" ? args.container : undefined);
 
@@ -13,7 +13,7 @@ define("open.url", {
   intent: "Open a URL here, in a new tab, in a background tab or in a new window.",
   params: [{ name: "url", type: "string", main: true }, WHERE_PARAM, CONTAINER_PARAM],
   runs_in: "background",
-  run: (ctx, args) => open_in(ctx, args.url as string, args.where as Where, container_of(args)),
+  run: async (ctx, args) => open_in(ctx, await typed_url_target(args.url as string), args.where as Where, container_of(args)),
 });
 
 define("open.search", {
@@ -45,12 +45,7 @@ define("open.clipboard", {
   params: [WHERE_PARAM, CONTAINER_PARAM],
   runs_in: "background",
   run: async (ctx, args) => {
-    const { search_engines, settings } = await get_config();
-    const target = clipboard_target(
-      await navigator.clipboard.readText(),
-      settings.default_engine ?? DEFAULT_SETTINGS.default_engine,
-      search_engines,
-    );
+    const target = await typed_url_target(await navigator.clipboard.readText());
     await open_in(ctx, target, args.where as Where, container_of(args));
   },
 });
