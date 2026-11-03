@@ -8,7 +8,7 @@ type Posted = { message: { oasisfox_cmdline: Record<string, unknown> }; origin: 
 // Just enough DOM for the host script: elements that record what is done to them.
 function fake_element() {
   const element = {
-    style: { cssText: "" },
+    style: { cssText: "", height: undefined as string | undefined },
     src: "",
     name: "",
     removed: false,
@@ -67,6 +67,7 @@ async function load_host(t: TestContext, tag: string, { ticket_fails = false } =
     },
     document: { body: { append: (child: { isConnected: boolean }) => void (child.isConnected = true) }, createElement: () => { const element = fake_element(); elements.push(element); return element; } },
     window: {
+      innerHeight: 600,
       oasisfox_host: {
         set_mode: (mode: string) => void modes.push(mode),
         register_sink: (mode: string, sink: Sink) => void sinks.set(mode, sink),
@@ -247,4 +248,25 @@ test("a failed ticket request closes the line at once", async (t) => {
   on_window({ kind: "ready" }, frame.contentWindow);
   await until(() => modes.length === 2);
   assert.deepEqual([modes, rejections], [["cmdline", "normal"], []]);
+});
+
+test("a resize over the port sets the frame holder's height, capped at the window, and a forged one on the window does nothing", async (t) => {
+  const { holder, frame, on_window, ready } = await load_host(t, "resize");
+  await ready();
+  const start_height = holder.style.cssText;
+  on_window({ kind: "resize", height: 400 }, frame.contentWindow);
+  await settle();
+  assert.equal(holder.style.height, undefined);
+  assert.equal(holder.style.cssText, start_height);
+
+  const page_port = frame.posted[0]!.transfer[0]!;
+  page_port.postMessage({ oasisfox_cmdline: { kind: "resize", height: 320 } });
+  await until(() => holder.style.height === "320px");
+  assert.equal(holder.style.height, "320px");
+  page_port.postMessage({ oasisfox_cmdline: { kind: "resize", height: 5000 } });
+  await until(() => holder.style.height === "600px");
+  assert.equal(holder.style.height, "600px");
+  page_port.postMessage({ oasisfox_cmdline: { kind: "resize", height: "tall" } });
+  await settle();
+  assert.equal(holder.style.height, "600px");
 });

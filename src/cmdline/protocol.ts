@@ -24,6 +24,8 @@ export type PageToHost =
   | { kind: "opened" }
   | { kind: "here" }
   | { kind: "close" }
+  // The height in pixels the frame needs for the list, the note and the line.
+  | { kind: "resize"; height: number }
   | { kind: "submit"; invocation: Invocation };
 
 export const MESSAGE_MARK = "oasisfox_cmdline";

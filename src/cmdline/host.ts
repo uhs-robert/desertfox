@@ -12,7 +12,7 @@ const page = window as unknown as CmdlineWindow;
 
 // The page must open within this time, or a page that blocks the iframe would hold every key.
 const READY_TIMEOUT_MS = 3000;
-// Room for the line and an error above it. The page draws its background only on the part it uses.
+// Room for the line and an error above it, until the page reports what it needs with `resize`. The page draws its background only on the part it uses.
 const BAR_HEIGHT = "5rem";
 // After each load of the frame, the page must answer a check within this time, or the frame went somewhere else.
 const CHECK_TIMEOUT_MS = 1000;
@@ -118,6 +118,7 @@ if (!page.oasisfox_cmdline_ready) {
         channel.port1.postMessage(wrap<HostToPage>({ kind: "focused" }));
       } else if (message.kind === "here") clearTimeout(current.check_timer);
       else if (message.kind === "close") close();
+      else if (message.kind === "resize" && Number.isFinite(message.height)) current.holder.style.height = `${Math.min(message.height, window.innerHeight)}px`;
       else if (message.kind === "submit") void submit(message);
     };
     current.port = channel.port1;

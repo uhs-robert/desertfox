@@ -7,10 +7,12 @@ import { COMPILED_KEYMAP_STORAGE_KEY } from "../shared/prefix_tree.ts";
 import type { CompiledKeymap } from "../shared/prefix_tree.ts";
 import { check_args, parse_command_line } from "../shared/registry/index.ts";
 import type { CmdlineOpened, ContentToBackground } from "../shared/messages.ts";
+import { create_completer } from "./completion/sources.ts";
 import { edit_forwarded, run_token, run_token_without_keymap } from "./key_input.ts";
 import type { TokenMatcher } from "./key_input.ts";
 import type { HostToPage, PageToHost } from "./protocol.ts";
 import { unwrap, wrap } from "./protocol.ts";
+import { create_list } from "./list.ts";
 import { create_session } from "./session.ts";
 import type { Effect, Session } from "./session.ts";
 import { create_word_lookup } from "./word_lookup.ts";
@@ -31,6 +33,8 @@ type Start = Extract<HostToPage, { kind: "start" }>;
 async function open_line(start: Start, port: MessagePort): Promise<void> {
   const input = document.querySelector<HTMLInputElement>("#line")!;
   const note = document.querySelector<HTMLElement>("#note")!;
+  const list = create_list(document.querySelector<HTMLElement>("#list")!);
+  const panel = document.querySelector<HTMLElement>(".oasisfox-cmdline")!;
 
   const [stored, opened] = await Promise.all([
     browser.storage.local.get(COMPILED_KEYMAP_STORAGE_KEY),
@@ -48,6 +52,7 @@ async function open_line(start: Start, port: MessagePort): Promise<void> {
   const session: Session = create_session({
     history: opened.history,
     parse: (text) => parse_command_line(lookup, text, opened.sources),
+    complete: create_completer(lookup, opened.commands, opened.command_aliases, opened.sources),
     // Only a missing value is caught here. The router still checks everything else when it runs the command.
     precheck: (invocation) => {
       const command = lookup.find(invocation.id);
@@ -56,12 +61,21 @@ async function open_line(start: Start, port: MessagePort): Promise<void> {
     },
   });
 
+  let told_height = 0;
   const render = () => {
-    if (input.value !== session.get_text()) input.value = session.get_text();
+    if (input.value !== session.get_text()) {
+      input.value = session.get_text();
+      input.setSelectionRange(session.get_caret(), session.get_caret());
+    }
     const message = session.get_message();
-    note.textContent = message ?? "";
-    note.hidden = message === undefined;
+    // The error colour is for errors only. Without one the note shows the usage or "no match".
+    const shown = message ?? session.get_hint() ?? "";
+    note.textContent = shown;
+    note.hidden = shown === "";
     document.body.classList.toggle("oasisfox-cmdline-error", message !== undefined);
+    list.render(session.get_rows(), session.get_selected());
+    // The host holds the frame at the height the panel needs, so the list grows upward and the line stays put.
+    if (panel.offsetHeight !== told_height) tell_host({ kind: "resize", height: (told_height = panel.offsetHeight) });
   };
 
   const carry_out = (effect: Effect) => {
@@ -87,7 +101,7 @@ async function open_line(start: Start, port: MessagePort): Promise<void> {
     if (!edited) return;
     input.value = edited.text;
     input.setSelectionRange(edited.caret, edited.caret);
-    session.edit(input.value);
+    session.edit(input.value, edited.caret);
     render();
   };
 
@@ -103,7 +117,7 @@ async function open_line(start: Start, port: MessagePort): Promise<void> {
     } else if (token !== null && press(token)) event.preventDefault();
   });
   input.addEventListener("input", () => {
-    session.edit(input.value);
+    session.edit(input.value, input.selectionStart ?? input.value.length);
     render();
   });
 

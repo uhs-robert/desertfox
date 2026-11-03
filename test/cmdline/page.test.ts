@@ -8,7 +8,7 @@ const TICKET = "issued-ticket";
 const leaf = (id: string) => ({ kind: "leaf", steps: [{ invocation: { id }, runs_in: "content", count_rule: "ignore" }] });
 const KEYMAP = {
   format_version: COMPILED_KEYMAP_VERSION,
-  modes: { cmdline: { kind: "branch", children: { "<Enter>": leaf("cmdline.submit"), "<Escape>": leaf("mode.escape") } } },
+  modes: { cmdline: { kind: "branch", children: { "<Enter>": leaf("cmdline.submit"), "<Escape>": leaf("mode.escape"), "<Tab>": leaf("cmdline.next_completion") } } },
 };
 const OPENED = {
   history: ["open https://private.example"],
@@ -22,6 +22,21 @@ const OPENED = {
   command_aliases: { j: "my.jira" },
   css: ".oasisfox-cmdline { --oasisfox-bg: red; }",
 };
+
+// An element that keeps what the page puts in it.
+function fake_element() {
+  const element = {
+    className: "",
+    textContent: "",
+    hidden: false,
+    offsetHeight: 0,
+    children: [] as unknown[],
+    style: { setProperty: () => {} },
+    append: (...nodes: unknown[]) => void element.children.push(...nodes),
+    replaceChildren: (...nodes: unknown[]) => void (element.children = nodes),
+  };
+  return element;
+}
 
 // Just enough DOM for the command line page. `head` records what is appended, `parent` what is posted to the web page.
 type PageSetup = { keymap?: unknown };
@@ -56,6 +71,8 @@ async function load_page(t: TestContext, tag: string, { keymap = KEYMAP }: PageS
       input.selectionStart = input.selectionEnd = start + text.length;
     },
   };
+  const list = fake_element();
+  const panel = fake_element();
   const page_window = {
     parent: { postMessage: (message: unknown) => void to_parent.push(message) },
     addEventListener: (type: string, listener: (event: unknown) => void) => void (type === "message" && window_listeners.push(listener)),
@@ -63,12 +80,12 @@ async function load_page(t: TestContext, tag: string, { keymap = KEYMAP }: PageS
   Object.assign(globalThis, {
     window: page_window,
     document: {
-      querySelector: (selector: string) => (selector === "#line" ? input : { textContent: "", hidden: true }),
+      querySelector: (selector: string) => (selector === "#line" ? input : selector === "#list" ? list : selector === ".oasisfox-cmdline" ? panel : { textContent: "", hidden: true }),
       // The page listens for keys on the document. The fake sends them through the input's table.
       addEventListener: (type: string, listener: (event: unknown) => void) => void (input_listeners[type] = listener),
       body: { classList: { toggle: () => {} } },
       head: { append: (element: { textContent: string }) => void head.push(element) },
-      createElement: () => ({ textContent: "" }),
+      createElement: fake_element,
     },
     browser: {
       runtime: {
@@ -105,7 +122,7 @@ async function load_page(t: TestContext, tag: string, { keymap = KEYMAP }: PageS
   };
   const press_enter = () => input_listeners.keydown!({ isTrusted: true, isComposing: false, key: "Enter", code: "Enter", preventDefault: () => {} });
   const press = (key: string) => input_listeners.keydown!({ isTrusted: true, isComposing: false, key, code: key, preventDefault: () => {} });
-  return { input, to_parent, to_background, head, post_start, press_enter, press };
+  return { input, list, panel, to_parent, to_background, head, post_start, press_enter, press };
 }
 
 // Port messages arrive on a later turn, and later still on a busy machine.
@@ -245,4 +262,30 @@ test("an empty value on a required param without a default counts as missing", a
   await settle();
   assert.deepEqual(host.submits(), []);
   assert.deepEqual(to_background, ["open_cmdline"]);
+});
+
+test("the list shows every command when the line opens, and the host hears the height the panel needs", async (t) => {
+  const { list, panel, post_start } = await load_page(t, "list_on_open");
+  panel.offsetHeight = 140;
+  const host = post_start(TICKET, "");
+  await host.opened();
+  assert.equal(list.children.length, OPENED.commands.length);
+  assert.equal(list.hidden, false);
+  const resizes = host.received.filter((data) => (data as { oasisfox_cmdline: { kind: string } }).oasisfox_cmdline.kind === "resize");
+  assert.deepEqual(resizes, [{ oasisfox_cmdline: { kind: "resize", height: 140 } }]);
+});
+
+test("Tab previews a command in the line and Enter submits what the line shows", async (t) => {
+  const { input, post_start, press, press_enter } = await load_page(t, "tab_then_enter");
+  const host = post_start(TICKET, "");
+  await host.opened();
+  host.port.postMessage({ oasisfox_cmdline: { kind: "focused" } });
+  await settle();
+  press("Tab");
+  assert.equal(input.value, "fetch ");
+  press("Tab");
+  assert.equal(input.value, "jira");
+  press_enter();
+  await until(() => host.submits().length === 1);
+  assert.deepEqual(host.submits(), submit_of("my.jira"));
 });
