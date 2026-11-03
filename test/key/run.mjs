@@ -614,7 +614,7 @@ async function main() {
     });
 
     // Pieces keep their cases in test/key/p<number>_*.mjs, each exporting run_cases(context).
-    const case_context = { rdp, extension_id: EXTENSION_ID, take_shot: (path) => shadow("shot", SHADOW_NAME, "--out", path), run_case, expect, open_page, send_keys, sleep, events, wait_event, since, find_event, url_of };
+    const case_context = { take_shot: (path) => shadow("shot", SHADOW_NAME, "--out", path), run_case, expect, open_page, send_keys, sleep, events, wait_event, since, find_event, url_of, rdp, extension_id: EXTENSION_ID, scroll_delta_after, became_visible };
     for (const file of readdirSync(key_test_dir).filter((name) => /^p\d+_.*\.mjs$/.test(name)).sort()) await (await import(`./${file}`)).run_cases(case_context);
 
     const tree_read_ms = [];

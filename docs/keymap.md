@@ -36,7 +36,7 @@ dropped: 8 | later: 15 | v1: 267
 | normal | `^` | v1 | `scroll.to percent=0 axis=x` |
 | normal | `b` | v1 | `bookmark.open` (prompts) |
 | normal | `B` | v1 | `bookmark.open where=tab` (prompts) |
-| normal | `f` | v1 | `hint.run action=open` |
+| normal | `f` | v1 | `hint.run action=here` |
 | normal | `F` | v1 | `hint.run action=background` |
 | normal | `m` | later | `mark.add` (key param) |
 | normal | `M` | later | `quickmark.add` (key param) |
@@ -179,7 +179,7 @@ dropped: 8 | later: 15 | v1: 267
 | normal | `;b` | v1 | `hint.run filter=clickable` |
 | normal | `;B` | v1 | `hint.run action=background` |
 | normal | `;c` | dropped | needs a shell |
-| normal | `;f` | v1 | `hint.run action=open` (prompts for link text filter) |
+| normal | `;f` | v1 | `hint.run action=here` (prompts for link text filter) |
 | normal | `;i` | v1 | `hint.run filter=inputs` |
 | normal | `;l` | v1 | `hint.run filter=links` |
 | normal | `;x` | dropped | needs a shell |

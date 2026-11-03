@@ -165,7 +165,7 @@ export const DEFAULT_KEYMAP: KeymapConfig = {
     O: { id: "open.url", args: { where: "tab" }, prompt: { param: "url" } },
     go: { id: "open.url", args: { where: "here" }, prompt: { param: "url", prefill: { from: "current_url" } } },
     gO: { id: "open.url", args: { where: "tab" }, prompt: { param: "url", prefill: { from: "current_url" } } },
-    f: { id: "hint.run", args: { action: "open" } },
+    f: { id: "hint.run", args: { action: "here" } },
     F: { id: "hint.run", args: { action: "background" } },
     v: { id: "hint.run", args: { action: "select" } },
     ";b": { id: "hint.run", args: { filter: "clickable" } },
