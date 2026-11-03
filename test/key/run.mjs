@@ -1,8 +1,9 @@
 // The key test: real key presses in a nested session, results read from pages that report to a local server.
 // Needs SHADOW_SH, a script with `up|spawn|keys|down <name>` subcommands for a nested, invisible compositor.
 // `status` is optional. The sweep reads its stdout for lines that start `<name>: ` and skips the sweep if the verb fails.
+// The cleanup of killed runs works only for drivers that keep sessions in /tmp/shadow-<uid>-<name>.
 import { execFile, spawnSync } from "node:child_process";
-import { cpSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import net from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -51,13 +52,14 @@ function process_is_alive(pid) {
   }
 }
 
-// shadow.sh keeps a session's runtime dir here, and `down` removes the dir with the marker in it.
+// shadow.sh keeps a session's runtime dir here (a literal /tmp, not TMPDIR), and `down` removes the dir with the marker in it.
 const OWNER_MARKER = "oasisfox-key-owner";
-const marker_path = (name) => join(tmpdir(), `shadow-${process.getuid()}-${name}`, OWNER_MARKER);
+const marker_path = (name) => join("/tmp", `shadow-${process.getuid()}-${name}`, OWNER_MARKER);
 
 function read_owner_pid(name) {
   try {
-    return Number.parseInt(readFileSync(marker_path(name), "utf8"), 10);
+    const text = readFileSync(marker_path(name), "utf8").trim();
+    return /^\d+$/.test(text) && Number(text) > 0 ? Number(text) : undefined;
   } catch {
     return undefined;
   }
@@ -216,7 +218,9 @@ async function main() {
   try {
     await sweep_dead_sessions();
     await shadow("up", SHADOW_NAME);
-    writeFileSync(marker_path(SHADOW_NAME), String(process.pid));
+    // A driver that keeps sessions elsewhere has no such dir. Its sessions are never swept, which is safe.
+    if (existsSync(dirname(marker_path(SHADOW_NAME)))) writeFileSync(marker_path(SHADOW_NAME), String(process.pid));
+    else console.error(`no runtime dir for ${SHADOW_NAME} under /tmp: skipping the owner marker, so a killed run's session will not be swept`);
     await shadow("spawn", SHADOW_NAME, join(key_test_dir, "launch_firefox.sh"), work_dir, profile_dir, String(debug_port), managed_file);
     for (let attempt = 0; ; attempt++) {
       try {

@@ -23,7 +23,7 @@ key-test: build
     #!/usr/bin/env bash
     set -euo pipefail
     if [ -z "${SHADOW_SH:-}" ]; then
-        echo "key-test needs SHADOW_SH: a script that runs 'up|spawn|keys|down <name>' in a nested, invisible compositor (optional: 'status', one '<name>: up|down ...' line per session)." >&2
+        echo "key-test needs SHADOW_SH: a script that runs 'up|spawn|keys|down <name>' in a nested, invisible compositor (optional: 'status', one '<name>: up|down ...' line per session). Cleanup of killed runs works only for drivers that keep sessions in /tmp/shadow-<uid>-<name>." >&2
         exit 2
     fi
     node test/key/run.mjs
