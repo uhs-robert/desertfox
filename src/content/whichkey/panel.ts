@@ -76,9 +76,10 @@ export function show_panel({ title, rows, border }: WhichKeyPanel): void {
   surface.host.setAttribute("data-oasisfox-whichkey", `${columns}:${rows.length}`);
   document.documentElement.append(surface.host);
   // Only a rendered chip can say whether it overflows.
-  const shown_title = fit_title(title, (text) => ((chip.textContent = text), chip.scrollWidth > chip.clientWidth));
-  chip.textContent = shown_title;
-  surface.host.setAttribute("data-oasisfox-whichkey-title", shown_title);
+  const { text, dropped } = fit_title(title, (candidate) => ((chip.textContent = candidate), chip.scrollWidth > chip.clientWidth));
+  chip.textContent = text;
+  // Numbers only: the group names are the user's, and a page script can read this host.
+  surface.host.setAttribute("data-oasisfox-whichkey-dropped", String(dropped));
   surface.host.setAttribute("data-oasisfox-whichkey-width", String(frame.getBoundingClientRect().width));
 }
 

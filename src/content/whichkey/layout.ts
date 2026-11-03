@@ -16,11 +16,11 @@ export function choose_columns(row_count: number, viewport_height_px: number): n
 // The cut is not CSS `direction: rtl` with `text-overflow`, because bidi reordering moves the "+" and the "»" to the wrong side.
 export const TITLE_SEPARATOR = " » ";
 
-export function fit_title(chain: readonly string[], overflows: (text: string) => boolean): string {
+export function fit_title(chain: readonly string[], overflows: (text: string) => boolean): { text: string; dropped: number } {
+  const shown = (dropped: number) => ({ text: (dropped === 0 ? chain : ["…", ...chain.slice(dropped)]).join(TITLE_SEPARATOR), dropped });
   for (let dropped = 0; dropped < chain.length - 1; dropped++) {
-    const text = (dropped === 0 ? chain : ["…", ...chain.slice(dropped)]).join(TITLE_SEPARATOR);
-    if (!overflows(text)) return text;
+    if (!overflows(shown(dropped).text)) return shown(dropped);
   }
   // One group is left. If it alone is too wide, CSS cuts its end.
-  return (chain.length > 1 ? ["…", chain.at(-1)!] : chain).join(TITLE_SEPARATOR);
+  return shown(Math.max(0, chain.length - 1));
 }
