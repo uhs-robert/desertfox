@@ -319,6 +319,12 @@ The content script must have the keymap before the first key. It reads the compi
 
 The command line is an extension page in an iframe, so page scripts and CSS cannot reach it, and it calls `browser.*` directly. Keys typed while it opens are buffered and replayed.
 
+The list opens with the line and shows every command, so the line is never an empty list. Each row has a name, the first sentence of the intent, the args (flag names and the subject) and, in a later piece, the keys. In a narrow window the description shrinks first, then the args collapse to "…". The name never drops. The list shows up to 10 rows of 26px, with no scroll bar, and the host grows the frame upward to fit.
+
+The cursor word decides what the list offers. A first word completes command names, fuzzy over the whole dotted name: `tab.` lists the tab family and `tc` finds `tab.close`. A word that starts with `-` lists the flags of that command with their descriptions, and the value after `=` lists the values of that param. Any other word lists the subject candidates. A quoted word never completes, and after `--` only the subject candidates show. One fuzzy scorer ranks every source: a name hit beats a description hit, a dot is a word break, an exact name ranks first and a tie goes to the shorter name.
+
+Tab previews the selected row in the line and cycles. The list keeps ranking the text the user typed, and typing starts over. A single match goes in at once. Up and Down move and preview like Tab while the list is open, and stop at its ends. With the list closed they walk the history. Escape closes the list first and the line second. Enter runs the line as shown. The note row shows the usage of the selected row, or "no match".
+
 Completion sources load only when the param being completed needs them: commands, open tabs, bookmarks, search engines, containers and enum values. History completion with ranking comes in phase 3.
 
 ### Hints
