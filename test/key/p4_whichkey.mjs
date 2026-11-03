@@ -1,7 +1,7 @@
-// Key test cases of piece P4 (which-key). run.mjs calls this with its helpers.
+// Key test cases of piece P4 (which-key). run.mjs finds this file by its name and calls run_cases with its helpers.
 import { evaluate_in_background } from "./rdp.mjs";
 
-export async function run_whichkey_cases({ rdp, extension_id, take_shot, run_case, send_keys, open_page, wait_event, events, expect, sleep }) {
+export async function run_cases({ rdp, extension_id, take_shot, run_case, send_keys, open_page, wait_event, events, expect, sleep }) {
   const whichkey_events = (mark, page_id) => events.slice(mark).filter((event) => event.type === "whichkey" && event.page_id === page_id);
 
   await open_page("page", "wk", { new_tab: true });

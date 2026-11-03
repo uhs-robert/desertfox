@@ -31,6 +31,7 @@ function make_page() {
   const events: string[] = [];
   const loads: Load[] = [];
   const errors: string[] = [];
+  const toasts: string[] = [];
   const decisions: string[] = [];
   let in_field = false;
 
@@ -59,6 +60,7 @@ function make_page() {
     on_idle: flow.release,
     set_mode: state.set_mode,
     show_error: (message) => errors.push(message),
+    show_toast: (message) => toasts.push(message),
     on_sink_missing: (mode) => {
       events.push(`sink missing for ${mode}`);
       state.set_mode("normal");
@@ -75,9 +77,10 @@ function make_page() {
       events.push(`${mode} sink ${token}`);
       return handled.includes(token) ? "handled" : "pass";
     },
-    exit: () => events.push(`${mode} sink exit`),
+    enter: () => events.push(`${mode} sink enter`),
+    exit: (destination) => events.push(`${mode} sink exit to ${destination}`),
   });
-  return { state, host, flow, events, loads, errors, decisions, press, settle, recording_sink, set_in_field: (value: boolean) => (in_field = value) };
+  return { state, host, flow, events, loads, errors, toasts, decisions, press, settle, recording_sink, set_in_field: (value: boolean) => (in_field = value) };
 }
 
 test("keys typed while a bundle loads are held and replay in order once its sink is in", async () => {
@@ -95,7 +98,7 @@ test("keys typed while a bundle loads are held and replay in order once its sink
   });
   await page.settle();
   // The handler put the page in hint mode before the held keys replayed, so the sink saw a, s and d. The sink passed j to the keymap, which has no j in hint mode.
-  assert.deepEqual(page.events, ["hint sink a", "hint sink s", "hint sink d", "hint sink j"]);
+  assert.deepEqual(page.events, ["hint sink enter", "hint sink a", "hint sink s", "hint sink d", "hint sink j"]);
   assert.equal(page.state.get_mode(), "hint");
   assert.equal(page.host.is_loading(), false);
 });
@@ -161,7 +164,7 @@ test("entering a sink mode with the sink in place loads nothing, and leaving it 
   assert.equal(page.state.get_mode(), "caret");
   page.press("<Escape>");
   assert.equal(page.state.get_mode(), "normal");
-  assert.deepEqual(page.events, ["caret sink <Escape>", "caret sink exit"]);
+  assert.deepEqual(page.events, ["caret sink enter", "caret sink <Escape>", "caret sink exit to normal"]);
 });
 
 test("mode caret and visual share one bundle load", async () => {
@@ -175,7 +178,8 @@ test("mode caret and visual share one bundle load", async () => {
   });
   await page.settle();
   assert.equal(page.state.get_mode(), "visual");
-  assert.deepEqual(page.events, []);
+  // Caret mode was left before its sink existed, so only visual mode is entered.
+  assert.deepEqual(page.events, ["visual sink enter"]);
 });
 
 test("a leaving page mid-load strands nothing: the held keys are gone with the page and a new page starts clean", async () => {
@@ -221,7 +225,7 @@ test("a replayed key that starts another load keeps the keys behind it waiting f
   assert.equal(page.host.is_loading(), true);
   page.loads[1]!.finish(true, () => page.host.api.register_sink("caret", page.recording_sink("caret", ["j"])));
   await page.settle();
-  assert.deepEqual(page.events, ["hint.run", "run log_x", "caret sink j"]);
+  assert.deepEqual(page.events, ["hint.run", "run log_x", "caret sink enter", "caret sink j"]);
   assert.equal(page.state.get_mode(), "caret");
 });
 
@@ -271,8 +275,69 @@ test("a bundle enters hint mode with set_mode, its sink gets the keys, and set_m
   page.host.api.set_mode("hint");
   assert.equal(page.state.get_mode(), "hint");
   page.press("a");
-  assert.deepEqual(page.events, ["hint sink a"]);
+  assert.deepEqual(page.events, ["hint sink enter", "hint sink a"]);
   page.host.api.set_mode("normal");
   assert.equal(page.state.get_mode(), "normal");
-  assert.deepEqual(page.events, ["hint sink a", "hint sink exit"]);
+  assert.deepEqual(page.events, ["hint sink enter", "hint sink a", "hint sink exit to normal"]);
+});
+
+test("a sink is entered once when its bundle finishes loading, and keys held for the load see the entered mode", async () => {
+  const page = make_page();
+  page.press("V");
+  page.loads[0]!.finish(true, () => page.host.api.register_sink("caret", page.recording_sink("caret", [])));
+  await page.settle();
+  assert.deepEqual(page.events, ["caret sink enter"]);
+});
+
+test("a sink entered again after it exited gets one more enter and one more exit", () => {
+  const page = make_page();
+  page.host.api.register_sink("caret", page.recording_sink("caret", []));
+  page.press("V", "<Escape>", "V", "<Escape>");
+  assert.deepEqual(page.events.filter((event) => event.includes("enter") || event.includes("exit")), [
+    "caret sink enter", "caret sink exit to normal", "caret sink enter", "caret sink exit to normal",
+  ]);
+});
+
+test("exit names the mode the page went to, whichever way it left", () => {
+  const page = make_page();
+  page.host.api.register_sink("caret", page.recording_sink("caret", []));
+  page.host.api.register_sink("visual", page.recording_sink("visual", []));
+  page.press("V");
+  page.state.set_mode("visual");
+  page.state.set_mode("caret");
+  // A command such as `:` takes the page to the command line mode.
+  page.state.set_mode("cmdline");
+  assert.deepEqual(page.events, [
+    "caret sink enter", "caret sink exit to visual", "visual sink enter", "visual sink exit to caret", "caret sink enter", "caret sink exit to cmdline",
+  ]);
+});
+
+test("a page that hides leaves the mode with exit page_hidden, once, and returns to normal", () => {
+  const page = make_page();
+  page.host.api.register_sink("caret", page.recording_sink("caret", []));
+  page.press("V");
+  page.host.page_hidden();
+  page.host.page_hidden();
+  assert.equal(page.state.get_mode(), "normal");
+  assert.deepEqual(page.events, ["caret sink enter", "caret sink exit to page_hidden"]);
+  page.press("V");
+  assert.deepEqual(page.events.slice(2), ["caret sink enter"]);
+});
+
+test("a page that hides in a mode without a sink is left alone", () => {
+  const page = make_page();
+  page.state.set_mode("insert");
+  page.host.page_hidden();
+  assert.equal(page.state.get_mode(), "insert");
+});
+
+test("a bundle shows a toast through the host, and the error path takes it when the page gave no toast", () => {
+  const page = make_page();
+  page.host.api.show_toast("Copied x");
+  assert.deepEqual(page.toasts, ["Copied x"]);
+  const bare = create_bundle_host();
+  const shown: string[] = [];
+  bare.connect({ request_bundle: async () => true, on_idle: () => {}, show_error: (message) => shown.push(message), set_mode: () => {}, on_sink_missing: () => {} });
+  bare.api.show_toast("hello");
+  assert.deepEqual(shown, ["hello"]);
 });

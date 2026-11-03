@@ -6,8 +6,12 @@ import { BUNDLE_FOR_MODE } from "../shared/bundles.ts";
 import type { BundleName } from "../shared/bundles.ts";
 import type { Mode } from "../shared/command.ts";
 
+// Where a sink's mode went. A mode, or "page_hidden" when the tab or page went away while the mode was active.
+export type ExitDestination = Mode | "page_hidden";
+
 // Gets each key token while its mode is active. "pass" hands the token on to the keymap.
-export type Sink = { on_token: (token: string) => "handled" | "pass"; exit: () => void };
+// `enter` runs once per entry, after the sink is registered. `exit` runs once per exit, whichever path led out.
+export type Sink = { on_token: (token: string) => "handled" | "pass"; enter?: () => void; exit: (destination: ExitDestination) => void };
 
 export type BundleHandler = (args: Record<string, unknown>) => void;
 
@@ -17,6 +21,7 @@ export type BundleHostApi = {
   register_handler: (command_id: string, handler: BundleHandler) => void;
   // Any mode, the same path as a key that changes mode. A bundle uses it to enter its own mode.
   set_mode: (mode: Mode) => void;
+  show_toast: (message: string) => void;
 };
 
 export type BundleHostDeps = {
@@ -25,6 +30,8 @@ export type BundleHostDeps = {
   // Runs after a load and everything that waited on it is done, so held keys can replay.
   on_idle: () => void;
   show_error: (message: string) => void;
+  // Without it a bundle's toast goes to show_error.
+  show_toast?: (message: string) => void;
   set_mode: (mode: Mode) => void;
   // A mode with a sink ended its load without one, so nothing would take its keys.
   on_sink_missing: (mode: Mode) => void;
@@ -77,19 +84,36 @@ export function create_bundle_host() {
         registered(args);
       }, hold);
     },
-    // Called on every mode change: the mode left drops its sink, and a mode with a sink loads its bundle.
+    // Called on every mode change: the mode left exits its sink, and a mode with a sink loads its bundle and enters it.
     enter_mode: (next: Mode): void => {
       const left = current_mode;
       current_mode = next;
-      sinks.get(left)?.exit();
+      sinks.get(left)?.exit(next);
       const name = BUNDLE_FOR_MODE[next];
-      if (name && !sinks.has(next)) after_load(name, () => current_mode === next && !sinks.has(next) && deps.on_sink_missing(next));
+      if (!name) return;
+      const enter = () => {
+        if (current_mode !== next) return;
+        const sink = sinks.get(next);
+        if (sink) sink.enter?.();
+        else deps.on_sink_missing(next);
+      };
+      if (sinks.has(next)) enter();
+      else after_load(name, enter);
+    },
+    // The tab or page went away. A mode with a sink ends and the page returns to normal mode.
+    page_hidden: (): void => {
+      const sink = sinks.get(current_mode);
+      if (!sink) return;
+      current_mode = "normal";
+      sink.exit("page_hidden");
+      deps.set_mode("normal");
     },
     // What a bundle sees.
     api: {
       register_sink: (mode, sink) => void sinks.set(mode, sink),
       register_handler: (command_id, handler) => void handlers.set(command_id, handler),
       set_mode: (mode) => deps.set_mode(mode),
+      show_toast: (message) => (deps.show_toast ?? deps.show_error)(message),
     } satisfies BundleHostApi,
   };
 }

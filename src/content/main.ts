@@ -100,6 +100,7 @@ bundles.connect({
   request_bundle: async (name) => (await send_to_background({ type: "load_bundle", name })).ok,
   on_idle: key_flow.release,
   set_mode: page_mode.set_mode,
+  show_toast,
   // The toast needs the ui bundle, so without it an error has nowhere to show.
   show_error: (message) => (bundles.has_handler("ui.toast") ? show_toast(message) : console.error(message)),
   on_sink_missing: (mode) => {
@@ -151,6 +152,12 @@ function stop_listening(): void {
   window.removeEventListener("keyup", on_keyup, true);
   window.removeEventListener("focusin", on_focusin, true);
   window.removeEventListener("focusout", on_focusout, true);
+  removeEventListener("pagehide", bundles.page_hidden);
+  document.removeEventListener("visibilitychange", on_visibility_change);
+}
+
+function on_visibility_change(): void {
+  if (document.hidden) bundles.page_hidden();
 }
 
 function follow_focus(entered: boolean, event: Event): void {
@@ -193,6 +200,8 @@ function start(): void {
   window.addEventListener("keyup", on_keyup, true);
   window.addEventListener("focusin", on_focusin, true);
   window.addEventListener("focusout", on_focusout, true);
+  addEventListener("pagehide", bundles.page_hidden);
+  document.addEventListener("visibilitychange", on_visibility_change);
 
   wire_mode_reports(page_mode, (mode) => {
     if (!extension_context_alive()) return stop_listening();

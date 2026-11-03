@@ -315,8 +315,8 @@ Which-key is a first-class surface. After a prefix key, it lists each possible n
 Caret mode puts a text cursor in the page, so the user can move through text with vim motions. Visual mode extends a selection with the same motions.
 
 - Caret mode starts at the first visible text, or at a hinted element with `hint.run action=select`. `v` starts a character selection and `V` a line selection.
-- The motions are `h`, `j`, `k`, `l`, `w`, `b`, `e`, `0`, `$`, `gg` and `G`, with count prefixes. They use Firefox's `Selection.modify`: `move` in caret mode and `extend` in visual mode, by character, word, line and line boundary.
-- In visual mode, `o` swaps the ends of the selection, `y` copies it, and `s` searches it with `open.search`. Any command whose param defaults to `{ from: "selection" }` uses it. Escape returns to caret mode, then to normal mode.
+- The motions are `h`, `j`, `k`, `l`, `w`, `b`, `e`, `0`, `$`, `gg` and `G`, with count prefixes. The line motions (`j`, `k`, `0`, `^`, `$`) use Firefox's `Selection.modify`, so a wrapped paragraph moves per screen line, and `j` and `k` keep their column. The other motions run on a text model of the visible page, and word motions count letters and digits of any script.
+- In visual mode, `o` swaps the ends of the selection, `y` copies it, and `s` searches it with `open.search` and the `default_engine` setting. Any command whose param defaults to `{ from: "selection" }` uses it. Escape returns to caret mode, then to normal mode.
 - The motions are registry commands in the `caret` and `visual` modes, so keys, which-key and help cover them like any other command.
 - Page text inside inputs and text areas belongs to insert mode, not caret mode.
 
