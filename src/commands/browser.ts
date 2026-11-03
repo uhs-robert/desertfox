@@ -42,6 +42,7 @@ export const browser_browser_deps: BrowserDeps = {
 const handlers = make_browser_handlers(browser_browser_deps);
 
 define("browser.focus_page", {
+  completion: "hidden",
   label: "Focus page",
   intent: "Move focus from the address bar to the page. Firefox has no direct call, so this is a best effort.",
   runs_in: "background",
