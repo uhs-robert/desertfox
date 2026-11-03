@@ -3,7 +3,7 @@
   "version": "0.1.1",
   "private": true,
   "description": "Keyboard-first Firefox extension built around one command registry.",
-  "license": "MIT",
+  "license": "MPL-2.0",
   "type": "module",
   "scripts": {
     "typecheck": "tsc --noEmit",

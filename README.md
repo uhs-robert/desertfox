@@ -41,4 +41,4 @@ y = ""                          # "" removes a default binding
 
 Plain keys such as `J` and `K` do nothing until the tab's page starts loading, so a press on an unloaded tab is lost. `Alt+j` and `Alt+k` use Firefox shortcuts and switch tabs at once. Plain keys never work on pages where Firefox blocks extensions: `about:` pages, the PDF viewer, reader view and addons.mozilla.org.
 
-License: [MIT](LICENSE).
+License: [MPL 2.0](LICENSE).
