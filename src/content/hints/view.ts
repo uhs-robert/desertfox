@@ -1,26 +1,26 @@
 // Draws the labels in a closed shadow root and keeps them over their elements.
 
-import { create_surface, SURFACE_DEFAULT_VARIABLES } from "../surface.ts";
+import { create_surface } from "../surface.ts";
 import type { Found } from "./candidates.ts";
 
 const MESSAGE_MS = 1500;
 
 // Same mapping as the which-key panel: yellow secondary for the keys, blue accent for the frame.
-// The defaults repeat the which-key ones, so a page that sets no `--oasisfox-*` variable still gets the oasis look.
+// Defaults are var() fallbacks, never declarations: a declaration here would shadow a value the page or host sets.
 export const STYLE = `
-.oasisfox-hints {${SURFACE_DEFAULT_VARIABLES}
+.oasisfox-hints {
   --primary: var(--oasisfox-accent, #7fa3c9);
   --secondary: var(--oasisfox-secondary, #e6c87a);
   font: bold 12px/1 ui-monospace, monospace;
 }
 .oasisfox-hint {
   position: fixed; padding: 2px 4px; border-radius: 3px; text-transform: uppercase;
-  background: var(--oasisfox-bg); color: var(--secondary); border: 1px solid var(--primary); box-shadow: 0 1px 3px #0008;
+  background: var(--oasisfox-bg, #222); color: var(--secondary); border: 1px solid var(--primary); box-shadow: 0 1px 3px #0008;
 }
-.oasisfox-hint b { color: color-mix(in srgb, var(--oasisfox-fg) 55%, var(--oasisfox-bg)); font-weight: inherit; }
+.oasisfox-hint b { color: color-mix(in srgb, var(--oasisfox-fg, #eee) 55%, var(--oasisfox-bg, #222)); font-weight: inherit; }
 .oasisfox-hint-message {
   position: fixed; left: 50%; bottom: 48px; transform: translateX(-50%); padding: 8px 12px;
-  background: var(--oasisfox-bg); color: var(--oasisfox-fg); font: var(--oasisfox-font); border-radius: var(--oasisfox-radius);
+  background: var(--oasisfox-bg, #222); color: var(--oasisfox-fg, #eee); font: var(--oasisfox-font, 14px system-ui, sans-serif); border-radius: var(--oasisfox-radius, 6px);
 }`;
 
 // Where the element sits on the top page: its own box plus the box of every frame around it.
