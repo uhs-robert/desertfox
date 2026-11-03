@@ -30,7 +30,7 @@ gO = ":open tab @current_url"   # a leading ":" types it into the command line a
 y = ""                          # "" removes a default binding
 ```
 
-`@current_url`, `@selection` and `@clipboard` are filled in when you press the key. The first free word starts the main value (the URL, the query) and the rest of the line joins into it, so `search arch pacman mirrors` searches for "pacman mirrors". A query that starts with an engine name needs `query="..."`. Quote other text that has spaces or `=`. Any param can be written `name=value`. Files `search_engines.toml`, `command_aliases.toml` and `settings.toml` sit beside the keymap, and each can have a `.d/` directory of later files. See [docs/design.md](docs/design.md#config) for the full format.
+`@current_url`, `@selection` and `@clipboard` are filled in when you press the key. The first free word starts the main value (the URL, the query) and the rest of the line joins into it, so `search arch pacman mirrors` searches for "pacman mirrors". A query that starts with an engine name needs `query="..."`. Quote other text that has spaces or `=`. Any param can be written `name=value`. Files `search_engines.toml`, `command_aliases.toml` and `settings.toml` sit beside the keymap, and each can have a `.d/` directory of later files. See [docs/design.md](docs/design.md#config) for the full format. Copy [`examples/engines.toml`](examples/engines.toml) to start your engines file, or see [a fuller real example](https://github.com/uhs-robert/oasis-dots/blob/main/home/oasisfox/.config/oasisfox/search_engines.toml).
 
 - [docs/design.md](docs/design.md): architecture, scope and roadmap.
 - [docs/spike.md](docs/spike.md): what Firefox allows, measured.
