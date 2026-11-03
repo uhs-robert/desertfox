@@ -87,20 +87,20 @@ test("the panel carries the border style, square when the keymap has none", asyn
 });
 
 test("the title joins group names with the which-key.nvim breadcrumb", () => {
-  assert.equal(fit_title(["+Go", "+Close tabs"], () => false), "+Go » +Close tabs");
-  assert.equal(fit_title(["keys"], () => false), "keys");
+  assert.deepEqual(fit_title(["+Go", "+Close tabs"], () => false), { text: "+Go » +Close tabs", dropped: 0 });
+  assert.deepEqual(fit_title(["keys"], () => false), { text: "keys", dropped: 0 });
 });
 
 test("a chain past the cap drops groups from the start and keeps the deepest", () => {
   const chain = ["+Git", "+Hunk", "+Stage", "+Deep"];
   const fits_in = (limit: number) => (text: string) => text.length > limit;
-  assert.equal(fit_title(chain, fits_in(100)), "+Git » +Hunk » +Stage » +Deep");
-  assert.equal(fit_title(chain, fits_in(26)), "… » +Hunk » +Stage » +Deep");
-  assert.equal(fit_title(chain, fits_in(18)), "… » +Stage » +Deep");
-  assert.equal(fit_title(chain, fits_in(8)), "… » +Deep");
+  assert.deepEqual(fit_title(chain, fits_in(100)), { text: "+Git » +Hunk » +Stage » +Deep", dropped: 0 });
+  assert.deepEqual(fit_title(chain, fits_in(26)), { text: "… » +Hunk » +Stage » +Deep", dropped: 1 });
+  assert.deepEqual(fit_title(chain, fits_in(18)), { text: "… » +Stage » +Deep", dropped: 2 });
+  assert.deepEqual(fit_title(chain, fits_in(8)), { text: "… » +Deep", dropped: 3 });
 });
 
 test("a single over-long group stays whole for CSS to cut at its end", () => {
-  assert.equal(fit_title(["+Very long group name"], () => true), "+Very long group name");
-  assert.equal(fit_title(["+Git", "+Very long group name"], () => true), "… » +Very long group name");
+  assert.deepEqual(fit_title(["+Very long group name"], () => true), { text: "+Very long group name", dropped: 0 });
+  assert.deepEqual(fit_title(["+Git", "+Very long group name"], () => true), { text: "… » +Very long group name", dropped: 1 });
 });

@@ -28,7 +28,7 @@ let last_css = "";
 // The toast host is the other floating surface: no mode attribute, and its text sits in a closed shadow root.
 const toast_host = () => [...root.children].find((child) => child.style.zIndex === "2147483647" && !child.hasAttribute("data-oasisfox-mode") && !child.hasAttribute("data-oasisfox-whichkey"));
 let last_whichkey = "";
-let last_whichkey_title = "";
+let last_whichkey_shape = "";
 let toast_shown = false;
 new MutationObserver(() => {
   const label = root.querySelector("[data-oasisfox-mode]")?.getAttribute("data-oasisfox-mode") ?? "";
@@ -36,8 +36,11 @@ new MutationObserver(() => {
   const whichkey = root.querySelector("[data-oasisfox-whichkey]")?.getAttribute("data-oasisfox-whichkey") ?? "";
   if (whichkey !== last_whichkey) send("whichkey", { value: (last_whichkey = whichkey) });
   const panel_host = root.querySelector("[data-oasisfox-whichkey]");
-  const panel_title = panel_host?.getAttribute("data-oasisfox-whichkey-title") ?? "";
-  if (panel_title !== last_whichkey_title) send("whichkey_title", { title: (last_whichkey_title = panel_title), width: Number(panel_host?.getAttribute("data-oasisfox-whichkey-width") ?? 0), viewport: window.innerWidth });
+  const panel_shape = panel_host ? panel_host.getAttribute("data-oasisfox-whichkey-dropped") + ":" + panel_host.getAttribute("data-oasisfox-whichkey-width") : "";
+  if (panel_shape !== last_whichkey_shape) {
+    last_whichkey_shape = panel_shape;
+    send("whichkey_shape", { dropped: Number(panel_host?.getAttribute("data-oasisfox-whichkey-dropped")), width: Number(panel_host?.getAttribute("data-oasisfox-whichkey-width") ?? 0), viewport: window.innerWidth });
+  }
   const css = root.querySelector(":scope > style")?.textContent ?? "";
   if (css !== last_css) send("selection_style", { css: (last_css = css) });
   const toast_now = Boolean(toast_host());

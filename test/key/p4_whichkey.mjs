@@ -37,10 +37,11 @@ export async function run_cases({ rdp, extension_id, take_shot, run_case, send_k
     await sleep(500);
   });
 
-  const title_after = async (keys) => {
+  // The page can read the panel host, so the test sees only numbers: how many groups were dropped from the title, and the panel width.
+  const shape_after = async (keys) => {
     const mark = events.length;
     await send_keys(...keys);
-    const shown = await wait_event(mark, (event) => event.type === "whichkey_title" && event.title !== "", "the panel title");
+    const shown = await wait_event(mark, (event) => event.type === "whichkey_shape" && event.width > 0, "the panel shape");
     // Set OASISFOX_SHOT_DIR to also save a screenshot of the panel.
     if (process.env.OASISFOX_SHOT_DIR) { await sleep(300); await take_shot(`${process.env.OASISFOX_SHOT_DIR}/${keys[0]}-title.png`); }
     await send_keys("-k", "Escape");
@@ -48,14 +49,15 @@ export async function run_cases({ rdp, extension_id, take_shot, run_case, send_k
   };
 
   await run_case("a long group chain widens the panel to fit the title", async () => {
-    const shown = await title_after(["Qab"]);
-    expect(shown.title === "+Quarterly planning review » +Annual budget forecast » +Regional sales summary", `title was "${shown.title}"`);
+    const shown = await shape_after(["Qab"]);
+    expect(shown.dropped === 0, `${shown.dropped} groups dropped from a chain that fits`);
     expect(shown.width > 400 && shown.width <= shown.viewport - 32, `panel width ${shown.width} of ${shown.viewport}`);
   });
 
-  await run_case("a chain past the panel cap starts with an ellipsis and ends with the deepest group", async () => {
-    const shown = await title_after(["Zabcd"]);
-    expect(shown.title.startsWith("… » +") && shown.title.endsWith("+Operations handbook chapter of the annual corporate procedures manual, part five"), `title was "${shown.title}"`);
+  await run_case("a chain past the panel cap drops groups from the start, keeps the deepest and stays in the cap", async () => {
+    const shown = await shape_after(["Zabcd"]);
+    // Five groups: at least one dropped, and never the deepest, so at most four.
+    expect(shown.dropped >= 1 && shown.dropped <= 4, `${shown.dropped} groups dropped from a chain of 5`);
     expect(shown.width <= shown.viewport - 32, `panel width ${shown.width} past the cap of ${shown.viewport - 32}`);
   });
 
