@@ -38,7 +38,7 @@ define("scroll.to", {
   intent: "Jump to a percent of the page, from the top or left edge at 0 to the bottom or right edge at 100.",
   params: [
     { name: "percent", type: "float" },
-    { name: "axis", type: "enum", values: ["x", "y"], default: SCROLL_TO_DEFAULT_AXIS, short: { x: "x", y: "y" }, value_labels: { x: "horizontally" } },
+    { name: "axis", type: "enum", values: ["x", "y"], default: SCROLL_TO_DEFAULT_AXIS, short: { x: "x" }, value_labels: { x: "horizontally" } },
   ],
   runs_in: "content",
   run: scroll_to.run,
@@ -47,7 +47,7 @@ define("scroll.to", {
 define("scroll.align", {
   label: "Align focus",
   intent: "Scroll the focused element, or else the selection, to the top, center or bottom of the view.",
-  params: [{ name: "position", type: "enum", values: ["top", "center", "bottom"], default: "center", short: { top: "t", center: "c", bottom: "b" }, value_labels: { top: "to top", bottom: "to bottom" } }],
+  params: [{ name: "position", type: "enum", values: ["top", "center", "bottom"], default: "center", short: { top: "t", bottom: "b" }, value_labels: { top: "to top", bottom: "to bottom" } }],
   runs_in: "content",
   run: scroll_align.run,
 });

@@ -113,6 +113,7 @@ function check_flags(input: CommandInput, fail: Fail): void {
       if (param.type !== "enum" || !values) fail(`${at}.short`, "only an enum with a fixed value list takes a short map");
       for (const [value, letter] of Object.entries(param.short)) {
         if (!values?.includes(value)) fail(`${at}.short.${value}`, "is not one of the values");
+        if (value === param.default) fail(`${at}.short.${value}`, "the default value has no short, because the printer leaves it out");
         add_short(letter, `${at}.short.${value}`);
       }
     }
