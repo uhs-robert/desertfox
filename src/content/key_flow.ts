@@ -7,6 +7,9 @@ import type { Sink } from "./bundle_host.ts";
 
 export type KeyDecision = "cancel" | "pass";
 
+// The keys typed so far in a half-typed sequence. Which-key reads it.
+export type PendingPrefix = { mode: Mode; typed: string[] };
+
 export type Matcher = { feed: (mode: string, token: string) => MatchResult; reset: () => void };
 
 export type KeyFlowDeps = {
@@ -18,6 +21,8 @@ export type KeyFlowDeps = {
   // A bundle is loading, and the mode its keys replay in is not known yet.
   is_loading: () => boolean;
   sink_of: (mode: Mode) => Sink | undefined;
+  // Called with the prefix after each key that leaves a sequence half-typed, and with nothing when the sequence ends or resets. `at_once` skips the pause before the panel.
+  on_prefix: (prefix: PendingPrefix | undefined, at_once?: boolean) => void;
 };
 
 const MAX_HELD_KEYS = 32;
@@ -30,10 +35,13 @@ export function create_key_flow(deps: KeyFlowDeps) {
   let browser_chords: TreeBranch | undefined;
   const held_tokens: string[] = [];
   let sequence_in_progress = false;
+  let typed: string[] = [];
+  let count: number | undefined;
 
   const reset_sequence = () => {
     matcher?.reset();
     sequence_in_progress = false;
+    deps.on_prefix(undefined);
   };
 
   // The `browser` chords also have a Firefox shortcut. Cancelling the key stops the shortcut from firing too.
@@ -56,10 +64,22 @@ export function create_key_flow(deps: KeyFlowDeps) {
   const step = (active: Matcher, token: string): KeyDecision => {
     const mode = deps.get_mode();
     const was_in_progress = sequence_in_progress;
+    // Backspace drops the last key of a half-typed sequence. The matcher cannot step back, so the shorter prefix is typed again.
+    if (was_in_progress && token === "<Backspace>") {
+      const kept = typed.slice(0, -1);
+      reset_sequence();
+      // The count goes back in as its digits, ahead of the kept keys.
+      for (const key of [...`${count ?? ""}`, ...kept]) step(active, key);
+      deps.on_prefix(kept.length > 0 ? { mode, typed: kept } : undefined, true);
+      return "cancel";
+    }
     let result = active.feed(mode, token);
     // A key that breaks a half-typed sequence gets one more try as a first key.
     if (result.kind === "no_match" && was_in_progress) result = active.feed(mode, token);
     sequence_in_progress = result.kind === "pending";
+    if (result.kind === "pending") ({ typed, count } = result);
+    // A bare count (`3`) has typed nothing yet, so no keys can be listed.
+    deps.on_prefix(result.kind === "pending" && result.typed.length > 0 ? { mode, typed: result.typed } : undefined);
     if (result.kind === "match") {
       deps.run_leaf(result.leaf, result.count);
       return "cancel";
@@ -98,7 +118,8 @@ export function create_key_flow(deps: KeyFlowDeps) {
     set_matcher: (next: Matcher, next_browser_chords?: TreeBranch) => {
       matcher = next;
       browser_chords = next_browser_chords;
-      sequence_in_progress = false;
+      // A half-typed sequence of the old keymap means nothing in the new one, and neither does its panel.
+      reset_sequence();
       replay();
     },
     release: replay,

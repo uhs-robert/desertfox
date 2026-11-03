@@ -3,6 +3,7 @@
 
 import type { BundleName } from "./bundles.ts";
 import type { CommandMeta, Mode } from "./command.ts";
+import type { WhichKeyBorder } from "./config.ts";
 import type { BoundInvocation, Invocation } from "./invocation.ts";
 
 // Why a command did not run. The content script shows `message` as a toast,
@@ -32,6 +33,25 @@ export type LoadBundle = {
   name: BundleName;
 };
 
+// Asks for the keys that can follow `prefix` in `mode`. The answer is a WhichKeyPanel.
+export type ListKeys = {
+  type: "list_keys";
+  mode: Mode;
+  prefix: string[];
+};
+
+// What the panel shows: a title and the keys that can follow.
+export type WhichKeyPanel = { title: string; rows: WhichKeyRow[]; border: WhichKeyBorder };
+
+// One key that can follow a prefix. A key that starts a longer sequence has `more` and no description.
+export type WhichKeyRow = {
+  keys: string;
+  command: string;
+  description: string;
+  more: boolean;
+};
+
+
 // From the command line page when it opens: asks for the history, the commands, and the lists the grammar needs to read bare words.
 export type OpenCmdline = {
   type: "open_cmdline";
@@ -54,7 +74,7 @@ export type RecordCmdline = {
   text: string;
 };
 
-export type ContentToBackground = RunRequest | ModeChanged | LoadBundle | OpenCmdline | RecordCmdline;
+export type ContentToBackground = RunRequest | ModeChanged | LoadBundle | ListKeys | OpenCmdline | RecordCmdline;
 
 export type RunResponse = { ok: true } | { ok: false; refusal: Refusal };
 

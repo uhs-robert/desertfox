@@ -1,0 +1,27 @@
+import assert from "node:assert/strict";
+import { test } from "node:test";
+
+test("the hints bundle registers a hint sink and hint.run, refuses unbuilt actions before entering hint mode, and registers once", async () => {
+  const registered: string[] = [];
+  const handlers = new Map<string, (args: Record<string, unknown>) => void>();
+  const sinks = new Map<string, { on_token: (token: string) => string; exit: () => void }>();
+  const modes: string[] = [];
+  const host = {
+    register_sink: (mode: string, sink: never) => void sinks.set(mode, sink),
+    register_handler: (id: string, handler: never) => {
+      registered.push(id);
+      handlers.set(id, handler);
+    },
+    set_mode: (mode: string) => void modes.push(mode),
+  };
+  (globalThis as Record<string, unknown>).window = { oasisfox_host: host };
+  const bundle_url = new URL("../../src/content/hints/main.ts", import.meta.url).href;
+  await import(`${bundle_url}?first`);
+  await import(`${bundle_url}?second`);
+  assert.deepEqual(registered, ["hint.run"]);
+  assert.deepEqual([...sinks.keys()], ["hint"]);
+  for (const action of ["select", "copy"]) assert.throws(() => handlers.get("hint.run")!({ action }), /not built yet/);
+  assert.deepEqual(modes, []);
+  assert.equal(sinks.get("hint")!.on_token("a"), "pass");
+  sinks.get("hint")!.exit();
+});

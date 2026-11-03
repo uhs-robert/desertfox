@@ -26,11 +26,14 @@ const root = document.documentElement;
 let last_indicator = "";
 let last_css = "";
 // The toast host is the other floating surface: no mode attribute, and its text sits in a closed shadow root.
-const toast_host = () => [...root.children].find((child) => child.style.zIndex === "2147483647" && !child.hasAttribute("data-oasisfox-mode"));
+const toast_host = () => [...root.children].find((child) => child.style.zIndex === "2147483647" && !child.hasAttribute("data-oasisfox-mode") && !child.hasAttribute("data-oasisfox-whichkey"));
+let last_whichkey = "";
 let toast_shown = false;
 new MutationObserver(() => {
   const label = root.querySelector("[data-oasisfox-mode]")?.getAttribute("data-oasisfox-mode") ?? "";
   if (label !== last_indicator) send("indicator", { label: (last_indicator = label) });
+  const whichkey = root.querySelector("[data-oasisfox-whichkey]")?.getAttribute("data-oasisfox-whichkey") ?? "";
+  if (whichkey !== last_whichkey) send("whichkey", { value: (last_whichkey = whichkey) });
   const css = root.querySelector(":scope > style")?.textContent ?? "";
   if (css !== last_css) send("selection_style", { css: (last_css = css) });
   const toast_now = Boolean(toast_host());
@@ -83,6 +86,11 @@ export function start_server() {
     if (url.pathname === "/framed") {
       const frame = '<iframe id="inner" src="/page?id=inner" style="width:300px;height:200px"></iframe>';
       return response.end(page(`framed ${id}`, frame, "<script>addEventListener('load', () => document.getElementById('inner').contentWindow.focus())</script>"));
+    }
+    if (url.pathname === "/hints") {
+      const covered = '<div style="position:relative;width:200px"><a href="/page?id=hint_covered">covered</a><div style="position:absolute;inset:0;background:#fff"></div></div>';
+      const links = `<a href="/page?id=hint_hidden" style="display:none">hidden</a>${covered}<p><a href="/page?id=hint_one">one</a></p><p><a href="/page?id=hint_two">two</a></p>`;
+      return response.end(page(`hints ${id}`, links + tall_filler));
     }
     if (url.pathname === "/caret") {
       const text = "<p>foo bar.baz</p><p>second line here</p>";

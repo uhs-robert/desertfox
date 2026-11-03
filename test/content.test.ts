@@ -42,6 +42,7 @@ function make_flow(in_field = false) {
     leave_insert: () => state.escape(),
     is_loading: () => false,
     sink_of: () => undefined,
+    on_prefix: () => {},
   });
   // The same wiring main.ts does.
   state.listen(() => flow.reset_sequence());

@@ -2,7 +2,7 @@
 
 import { caret_move, cmdline_clear, cmdline_history, cmdline_submit, visual_act, cmdline_next_completion, cmdline_open, cmdline_prev_completion, help_whichkey, hint_run, NEEDS_COMMAND_LINE } from "../content/handlers/phase_2.ts";
 import { define } from "../shared/registry/index.ts";
-import { WHERE_PARAM } from "./open_target.ts";
+import { WHERE, WHERE_PARAM } from "./open_target.ts";
 
 const refuse_needing_command_line = () => {
   throw new Error(NEEDS_COMMAND_LINE);
@@ -11,13 +11,13 @@ const refuse_needing_command_line = () => {
 define("hint.run", {
   name: "hint",
   label: "Hint",
-  intent: "Label the elements on the page with keys, then act on the one you pick.",
+  intent: "Label the elements on the page with keys, then act on the one you pick: open it here, in a tab, in a background tab or in a window, delete it or focus it.",
   params: [
     {
       name: "action",
       type: "enum",
-      values: ["open", "background", "window", "select", "copy_link", "copy_text", "delete", "focus"],
-      default: "open",
+      values: [...WHERE, "select", "copy", "delete", "focus"],
+      default: "here",
     },
     { name: "filter", type: "enum", values: ["all", "clickable", "inputs", "links", "custom"], default: "clickable" },
     { name: "selector", type: "string", when: { filter: ["custom"] } },
@@ -57,7 +57,7 @@ define("cmdline.prev_completion", {
 define("help.whichkey", {
   name: "whichkey",
   label: "Which Key",
-  intent: "List the keys that can follow the keys typed so far.",
+  intent: "List the keys at the top of the keymap.",
   runs_in: "content",
   run: help_whichkey.run,
 });

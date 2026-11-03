@@ -3,7 +3,7 @@
 import { MODES as RUNTIME_MODES } from "../command.ts";
 import type { CountBehavior, RunsIn } from "../command.ts";
 import { COMPILED_KEYMAP_VERSION } from "../prefix_tree.ts";
-import type { CompiledKeymap, LeafStep, TreeBranch } from "../prefix_tree.ts";
+import type { CompiledKeymap, LeafStep, TreeBranch, TreeNode } from "../prefix_tree.ts";
 import { DEFAULT_SETTINGS } from "../config.ts";
 import type { Settings } from "../config.ts";
 import type { KeyBinding } from "../invocation.ts";
@@ -108,15 +108,36 @@ function insert_entry(root: TreeBranch, mode: KeymapMode, entry: Entry, resolve:
   }
 }
 
+type GroupName = { tokens: string[]; name: string };
+
+function parse_group_names(group_names: Record<string, string>, warnings: string[]): GroupName[] {
+  return Object.entries(group_names).flatMap(([sequence, name]) => {
+    const parsed = parse_sequence(sequence);
+    if (parsed.error === undefined) return [{ tokens: parsed.tokens, name }];
+    warnings.push(`group_names: skipped "${sequence}": ${parsed.error}`);
+    return [];
+  });
+}
+
+function name_groups(root: TreeBranch, group_names: GroupName[]) {
+  for (const { tokens, name } of group_names) {
+    let node: TreeNode | undefined = root;
+    for (const token of tokens) node = node?.kind === "branch" ? node.children[token] : undefined;
+    if (node?.kind === "branch") node.label = name;
+  }
+}
+
 export function compile_keymap(keymap: KeymapConfig, settings: Partial<Settings>, resolve: ResolveCommand): CompileResult {
   const warnings: string[] = [];
   const modes: CompiledKeymap["modes"] = {};
   const keymap_modes: readonly KeymapMode[] = [...RUNTIME_MODES, "browser"];
+  const group_names = parse_group_names(keymap.group_names ?? {}, warnings);
   for (const mode of keymap_modes) {
     const root: TreeBranch = { kind: "branch", children: {} };
     for (const entry of entries_for_mode(mode, keymap, settings, warnings)) {
       insert_entry(root, mode, entry, resolve, warnings);
     }
+    name_groups(root, group_names);
     if (Object.keys(root.children).length > 0) modes[mode] = root;
   }
   const compiled: CompiledKeymap = {
@@ -124,6 +145,7 @@ export function compile_keymap(keymap: KeymapConfig, settings: Partial<Settings>
     modes,
     ignore_sites: settings.ignore_sites ?? DEFAULT_SETTINGS.ignore_sites,
     mode_indicator: settings.mode_indicator ?? DEFAULT_SETTINGS.mode_indicator,
+    which_key_border: settings.which_key_border ?? DEFAULT_SETTINGS.which_key_border,
     which_key_delay_ms: settings.which_key_delay_ms ?? DEFAULT_SETTINGS.which_key_delay_ms,
   };
   return { compiled, warnings };

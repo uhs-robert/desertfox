@@ -1,0 +1,45 @@
+import assert from "node:assert/strict";
+import { test } from "node:test";
+import { create_which_key_session } from "../../src/content/whichkey/session.ts";
+import type { WhichKeyPanel } from "../../src/shared/messages.ts";
+
+const panel: WhichKeyPanel = { title: "keys", rows: [{ keys: "j", command: "Down", description: "", more: false }], border: "square" };
+
+// A fetch the test answers by hand, like the background answering late.
+function make_session() {
+  const drawn: string[] = [];
+  const waiting: ((answer: WhichKeyPanel) => void)[] = [];
+  const session = create_which_key_session(
+    () => new Promise<WhichKeyPanel>((resolve) => waiting.push(resolve)),
+    (shown) => void drawn.push(shown.title),
+    () => void drawn.push("hidden"),
+  );
+  return { session, drawn, answer: (index: number) => waiting[index]!(panel) };
+}
+
+test("a manual show that a later key hid is not drawn when its answer arrives", async () => {
+  const { session, drawn, answer } = make_session();
+  const shown = session.show_manual("normal");
+  session.hide();
+  answer(0);
+  await shown;
+  assert.deepEqual(drawn, ["hidden"]);
+});
+
+test("a manual show with no key in between is drawn", async () => {
+  const { session, drawn, answer } = make_session();
+  const shown = session.show_manual("normal");
+  answer(0);
+  await shown;
+  assert.deepEqual(drawn, ["keys"]);
+});
+
+test("a prefix show stays tied to the timer's own is_current check", async () => {
+  const { session, drawn, answer } = make_session();
+  let current = true;
+  const shown = session.show_prefix({ mode: "normal", typed: ["g"] }, () => current);
+  current = false;
+  answer(0);
+  await shown;
+  assert.deepEqual(drawn, []);
+});

@@ -171,9 +171,8 @@ async function main() {
     // The padded bundles stand in for a 20 KB hints or caret bundle. They go into a copy, so dist/ stays as built.
     const extension_dir = join(work_dir, "extension");
     cpSync(dist_dir, extension_dir, { recursive: true });
-    // The caret bundle keeps its real code and gains the padding after it, so the caret cases run the real sinks.
+    // The caret bundle keeps its real code and gains the padding after it, so the caret cases run the real sinks. The which-key bundle stays real.
     writeFileSync(join(extension_dir, "caret.js"), readFileSync(join(dist_dir, "caret.js"), "utf8") + padded_bundle_text());
-    writeFileSync(join(extension_dir, "whichkey.js"), padded_bundle_text());
     await install_temporary_addon(rdp, extension_dir);
     await sleep(1500);
     const read_injections = async (file) => {
@@ -429,7 +428,7 @@ async function main() {
         const ms = [];
         for (let run = 0; run < 15; run++) {
           const started = performance.now();
-          await browser.tabs.executeScript(tab.id, { file: "whichkey.js", runAt: "document_start" });
+          await browser.tabs.executeScript(tab.id, { file: "caret.js", runAt: "document_start" });
           ms.push(performance.now() - started);
         }
         return ms;
@@ -617,7 +616,7 @@ async function main() {
     });
 
     // Pieces keep their cases in test/key/p<number>_*.mjs, each exporting run_cases(context).
-    const case_context = { run_case, expect, open_page, send_keys, sleep, events, wait_event, since, find_event, url_of };
+    const case_context = { take_shot: (path) => shadow("shot", SHADOW_NAME, "--out", path), run_case, expect, open_page, send_keys, sleep, events, wait_event, since, find_event, url_of, rdp, extension_id: EXTENSION_ID, scroll_delta_after, became_visible };
     for (const file of readdirSync(key_test_dir).filter((name) => /^p\d+_.*\.mjs$/.test(name)).sort()) await (await import(`./${file}`)).run_cases(case_context);
 
     const tree_read_ms = [];
