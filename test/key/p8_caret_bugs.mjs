@@ -1,5 +1,7 @@
+import { evaluate_in_background } from "./rdp.mjs";
+
 // Repro cases for two caret mode bugs: j/k getting stuck, and the caret not starting at a find match.
-export async function run_cases({ run_case, expect, open_page, send_keys, sleep, events, wait_event }) {
+export async function run_cases({ run_case, expect, open_page, send_keys, sleep, events, wait_event, rdp, extension_id }) {
   const selections_of = (page_id) => events.filter((event) => event.type === "selection" && event.page_id === page_id && event.text !== "");
 
   // V starts on the title. Press a key n times and read the character under the caret ("" on an empty line, where no caret is drawn).
@@ -53,13 +55,11 @@ export async function run_cases({ run_case, expect, open_page, send_keys, sleep,
     await send_keys("-k", "Escape");
   });
 
-  await run_case("V after a find with / and no Escape on the find bar starts at the match", async () => {
+  await run_case("V right after a find with / ended by Return starts at the match", async () => {
     await open_page("caret_bug_find", "find_b", { new_tab: true });
     await send_keys("/");
     await send_keys("-d", "30", "needle");
     await send_keys("-k", "Return");
-    await send_keys("-k", "Escape");
-    await send_keys("-k", "Escape");
     await sleep(500);
     const mark = events.length;
     await send_keys("V");
@@ -98,5 +98,44 @@ export async function run_cases({ run_case, expect, open_page, send_keys, sleep,
     await send_keys("-k", "Escape");
     await send_keys("-k", "Escape");
     expect(text.trimEnd().endsWith("g"), `after v and 6 j the selection ends ${JSON.stringify(text.slice(-8))}, expected it to end on "g"`);
+  });
+
+  // Decision 3: visual mode keeps the anchor and moves the caret to the end of the match.
+  await run_case("a find with / in visual mode keeps the anchor and ends at the match", async () => {
+    await open_page("caret_bug_find", "find_d", { new_tab: true });
+    await send_keys("V");
+    await send_keys("v");
+    await sleep(300);
+    await send_keys("/");
+    await send_keys("-d", "30", "needle");
+    await send_keys("-k", "Return");
+    await sleep(500);
+    // o swaps the ends, which makes the session adopt the find first. The selected text is the same either way.
+    await send_keys("o");
+    await sleep(600);
+    const text = events.filter((event) => event.type === "selection" && event.page_id === "find_d").at(-1)?.text ?? "";
+    await send_keys("-k", "Escape");
+    await send_keys("-k", "Escape");
+    expect(text.startsWith("caret_bug_find") && text.trimEnd().endsWith("needle"), `the selection is ${JSON.stringify(text.slice(0, 20))}...${JSON.stringify(text.slice(-12))}, expected from the title to "needle"`);
+  });
+
+  // A drag in the page can end at offset 0 of a later text node. The span then ends at the character before it, not at its start.
+  await run_case("a page selection ending at offset 0 of the next block keeps the whole span", async () => {
+    await open_page("caret_bug_lines", "lines_blocks", { new_tab: true });
+    await send_keys("V");
+    await send_keys("v");
+    await sleep(300);
+    await evaluate_in_background(rdp, extension_id, `(async () => {
+      const [tab] = await browser.tabs.query({ active: true, lastFocusedWindow: true });
+      await browser.tabs.executeScript(tab.id, { code: "(() => { const paragraphs = document.querySelectorAll('p'); const range = document.createRange(); range.setStart(paragraphs[0].firstChild, 2); range.setEnd(paragraphs[1].firstChild, 0); getSelection().removeAllRanges(); getSelection().addRange(range); })()" });
+    })()`);
+    await sleep(300);
+    await send_keys("o");
+    await sleep(600);
+    const text = events.filter((event) => event.type === "selection" && event.page_id === "lines_blocks").at(-1)?.text ?? "";
+    await send_keys("-k", "Escape");
+    await send_keys("-k", "Escape");
+    // The caret rests on the line end after "two", which paints no character, so the text stops before "o". The unfixed code stopped at "one".
+    expect(text.endsWith("one tw"), `the selection ends ${JSON.stringify(text.slice(-10))}, expected it to end with "one tw"`);
   });
 }
