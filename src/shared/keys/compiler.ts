@@ -167,13 +167,15 @@ function insert_entry(root: TreeBranch, mode: KeymapMode, entry: Entry, resolve:
 
 type GroupName = { tokens: string[]; name: string };
 
+// Two spellings of one key sequence name one group. The later one wins, so each group has one name for both the labels and the panel.
 function parse_group_names(group_names: Record<string, string>, warnings: string[]): GroupName[] {
-  return Object.entries(group_names).flatMap(([sequence, name]) => {
+  const by_normalized_sequence = new Map<string, GroupName>();
+  for (const [sequence, name] of Object.entries(group_names)) {
     const parsed = parse_sequence(sequence);
-    if (parsed.error === undefined) return [{ tokens: parsed.tokens, name }];
-    warnings.push(`group_names: skipped "${sequence}": ${parsed.error}`);
-    return [];
-  });
+    if (parsed.error === undefined) by_normalized_sequence.set(parsed.tokens.join(""), { tokens: parsed.tokens, name });
+    else warnings.push(`group_names: skipped "${sequence}": ${parsed.error}`);
+  }
+  return [...by_normalized_sequence.values()];
 }
 
 // The names of every group above the key, nearest or not.

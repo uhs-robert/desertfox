@@ -233,14 +233,24 @@ test("a hand label is kept, and a deeper group name counts for its own keys only
   const { leaf_at } = labels_of({
     normal: {
       Xa: { id: "page.reload", args: { hard: true } },
-      Xb: { id: "tab.close", args: { focus: "left" }, label: "Close and focus left" },
+      Xb: { id: "tab.close", args: { focus: "left" } },
+      Xd: { id: "tab.close", args: { focus: "left" }, label: "Close and focus left" },
       Xca: { id: "tab.close", args: { focus: "left" } },
     },
-    group_names: { X: "Hard", Xc: "Closing" },
+    group_names: { X: "Elsewhere", Xc: "Hard and focus left" },
   });
-  assert.equal(leaf_at("X", "a").label, "Reload");
-  assert.equal(leaf_at("X", "b").label, "Close and focus left");
-  assert.equal(leaf_at("X", "c", "a").label, "Close tab and focus left");
+  assert.equal(leaf_at("X", "a").label, "Reload hard");
+  assert.equal(leaf_at("X", "b").label, "Close tab and focus left");
+  assert.equal(leaf_at("X", "d").label, "Close and focus left");
+  assert.equal(leaf_at("X", "c", "a").label, "Close tab");
+});
+
+test("a group name that another spelling of the same keys replaces drops nothing", () => {
+  const { leaf_at } = labels_of({
+    normal: { Sa: { id: "tab.close", args: { focus: "left" } } },
+    group_names: { S: "Close and focus left", "<S-s>": "Search" },
+  });
+  assert.equal(leaf_at("S", "a").label, "Close tab and focus left");
 });
 
 test("a search binding without an engine takes the default engine label", () => {
