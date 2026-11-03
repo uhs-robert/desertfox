@@ -35,7 +35,7 @@ define("hint.run", {
       type: "enum",
       values: ["all", "clickable", "inputs", "links", "custom"],
       default: "clickable",
-      short: { all: "a", clickable: "k", inputs: "i", links: "l", custom: "u" },
+      short: { all: "a", inputs: "i", links: "l", custom: "u" },
       value_labels: { all: "for all elements", inputs: "for inputs", links: "for links", custom: "for a selector" },
     },
     { name: "selector", type: "string", when: { filter: ["custom"] } },

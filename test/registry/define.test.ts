@@ -177,6 +177,13 @@ test("short flags: one letter, not h, unique per command, only where a flag can 
   rejects("a.b", { ...base, params: [{ name: "q", type: "string", rest: true, short: "q" }] }, /params\.q\.short: main and rest/);
 });
 
+test("the default value of an enum gets no short, because the printer leaves it out", () => {
+  const param = (short: Record<string, string>) => ({ ...base, params: [{ name: "where", type: "enum" as const, values: ["here", "tab"], default: "here", short }] });
+  rejects("a.b", param({ here: "h2" }), /params\.where\.short\.here: the default value has no short/);
+  rejects("a.b", param({ here: "x", tab: "t" }), /params\.where\.short\.here: the default value has no short/);
+  assert.doesNotThrow(() => create_registry().define("a.ok", param({ tab: "t" })));
+});
+
 test("command names hold no dot", () => {
   rejects("a.b", { ...base, name: "tab.close" }, /name: .*must not hold a "\."/);
   rejects("a.b", { ...base, aliases: ["x.y"] }, /aliases\[0\]: .*must not hold a "\."/);
