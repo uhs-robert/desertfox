@@ -10,7 +10,7 @@ const container_of = (args: Record<string, unknown>) => (typeof args.container =
 define("open.url", {
   name: "open",
   label: "Open URL",
-  intent: "Open a URL here, in a new tab, in a background tab or in a new window.",
+  intent: "Open a URL. It opens here, in a new tab, in a background tab or in a new window.",
   params: [{ name: "url", type: "string", main: true }, WHERE_PARAM, CONTAINER_PARAM],
   runs_in: "background",
   run: async (ctx, args) => open_in(ctx, await typed_url_target(args.url as string), args.where as Where, container_of(args)),
@@ -19,7 +19,7 @@ define("open.url", {
 define("open.search", {
   name: "search",
   label: "Search",
-  intent: "Search with a keyword engine from the search engine list. The engine defaults to the default_engine setting and the query to the selection.",
+  intent: "Search with a keyword engine. The engine comes from the search engine list. It defaults to the default_engine setting and the query to the selection.",
   params: [
     // The empty default stands for "none named", which the validator needs to treat the param as optional.
     { name: "engine", type: "enum", values: { from: "search_engines" }, default: "" },

@@ -1,6 +1,7 @@
 // A badge in the bottom-right corner that names the mode.
 // Top frame only, so frames do not each draw one.
 
+import { LAYERS } from "../shared/layers.ts";
 import type { ColorPair } from "../shared/mode_colors.ts";
 import { create_surface } from "./surface.ts";
 
@@ -22,7 +23,7 @@ let surface: ReturnType<typeof create_surface> | undefined;
 export function show_mode_label(label: string | undefined, colors?: BadgeColors): void {
   if (window !== window.top) return;
   if (label === undefined) return surface?.host.remove();
-  surface ??= create_surface("oasisfox-mode", STYLE);
+  surface ??= create_surface("oasisfox-mode", STYLE, LAYERS.mode_badge);
   surface.text.textContent = label;
   const { style } = surface.text;
   const set = (name: string, value: string | undefined) => (value === undefined ? style.removeProperty(name) : style.setProperty(name, value));

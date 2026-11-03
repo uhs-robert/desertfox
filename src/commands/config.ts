@@ -3,7 +3,7 @@ import { mark_reload_pending } from "../background/reload.ts";
 
 define("config.reload", {
   label: "Reload config",
-  intent: "Reload the extension so it reads the managed config file again.",
+  intent: "Reload the extension and its config. It reads the managed config file again.",
   runs_in: "background",
   run: async () => {
     await mark_reload_pending();

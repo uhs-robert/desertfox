@@ -19,6 +19,7 @@ export const WHERE_PARAM: ParamDef = {
   default: "here",
   short: WHERE_SHORT,
   value_labels: { tab: "in new tab", background: "in background tab", window: "in new window" },
+  description: { tab: "Open in a new tab.", background: "Open in a background tab.", window: "Open in a new window." },
 };
 
 // Firefox cannot change the container of an open tab, so the param needs a new tab or window.
@@ -28,6 +29,7 @@ export const CONTAINER_PARAM: ParamDef = {
   values: { from: "containers" },
   when: { where: ["tab", "background", "window"] },
   short: "c",
+  description: "Open in a container.",
 };
 
 export const DEFAULT_CONTAINER_NAME = "default";

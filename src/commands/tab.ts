@@ -189,7 +189,7 @@ const handlers = make_tab_handlers(browser_tab_deps);
 
 define("tab.next", {
   label: "Next tab",
-  intent: "Switch to the next tab, wrapping from the last to the first. A count prefix repeats it.",
+  intent: "Switch to the next tab. It wraps from the last tab to the first. A count prefix repeats it.",
   runs_in: "background",
   count: "repeat",
   run: (ctx) => handlers.next(ctx),
@@ -197,7 +197,7 @@ define("tab.next", {
 
 define("tab.prev", {
   label: "Previous tab",
-  intent: "Switch to the previous tab, wrapping from the first to the last. A count prefix repeats it.",
+  intent: "Switch to the previous tab. It wraps from the first tab to the last. A count prefix repeats it.",
   runs_in: "background",
   count: "repeat",
   run: (ctx) => handlers.prev(ctx),
@@ -205,7 +205,7 @@ define("tab.prev", {
 
 define("tab.undo_close", {
   label: "Reopen closed tab",
-  intent: "Restore the most recently closed tab. A count prefix restores that many.",
+  intent: "Reopen the last closed tab. A count prefix restores that many.",
   runs_in: "background",
   count: "repeat",
   run: () => handlers.undo_close(),
@@ -213,7 +213,7 @@ define("tab.undo_close", {
 
 define("tab.move", {
   label: "Move tab",
-  intent: "Move the tab later in the strip by a positive offset or earlier by a negative one. A count prefix repeats it.",
+  intent: "Move the tab along the strip. A positive offset moves it later and a negative one earlier. A count prefix repeats it.",
   params: [{ name: "offset", type: "int" }],
   runs_in: "background",
   count: "repeat",
@@ -236,7 +236,7 @@ define("tab.detach", {
 
 define("tab.goto", {
   label: "Go to tab",
-  intent: "Switch to the tab at an index, where 1 is the first and -1 the last. Index 0 means the next tab.",
+  intent: "Switch to a tab by its position. Index 1 is the first tab and -1 the last. Index 0 means the next tab.",
   params: [{ name: "index", type: "int", default: NEXT_TAB_INDEX }],
   runs_in: "background",
   count: { param: "index" },
@@ -266,7 +266,7 @@ define("tab.mute", {
 
 define("tab.close", {
   label: "Close tab",
-  intent: "Close the tab and focus the next tab, or the previous one with focus_previous. With all_before or all_after, keep this tab and close every unpinned tab before or after it instead. A count prefix repeats it.",
+  intent: "Close the tab, or the tabs around it. Without all_before or all_after, it focuses the next tab, or the previous tab with focus_previous. With all_before or all_after, it keeps this tab and closes every unpinned tab before or after it. A count prefix repeats it.",
   params: [
     {
       name: "side",
@@ -275,6 +275,11 @@ define("tab.close", {
       default: "none",
       short: { all_before: "B", all_after: "A", focus_previous: "P" },
       value_labels: { all_before: "for all before it", all_after: "for all after it", focus_previous: "and focus previous" },
+      description: {
+        all_before: "Close every unpinned tab before this one.",
+        all_after: "Close every unpinned tab after this one.",
+        focus_previous: "Focus the previous tab instead of the next.",
+      },
     },
   ],
   runs_in: "background",
@@ -284,7 +289,7 @@ define("tab.close", {
 
 define("tab.reopen_in_container", {
   label: "Reopen in container",
-  intent: "Reopen this page in a container in the same place and close the old tab. The container default means none.",
+  intent: "Reopen the page in a container. It opens in the same place and closes the old tab. The container default means none.",
   params: [{ name: "container", type: "string", main: true, values: { from: "containers" } }],
   runs_in: "background",
   run: (ctx, args) => handlers.reopen_in_container(ctx, args as { container: string }),
