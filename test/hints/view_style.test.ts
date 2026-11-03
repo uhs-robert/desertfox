@@ -6,12 +6,12 @@ const rule_of = (selector: string) => STYLE.match(new RegExp(`^${selector.replac
 
 test("hint labels take every color from the theme variables, as the which-key panel does", () => {
   const label = rule_of(".oasisfox-hint");
-  assert.match(label, /background: var\(--oasisfox-bg, #222\)/);
+  assert.match(label, /background: var\(--oasisfox-bg, #0c0e13\)/);
   assert.match(label, /color: var\(--secondary\)/);
   assert.match(label, /border: 1px solid var\(--primary\)/);
-  assert.match(rule_of(".oasisfox-hint b"), /var\(--oasisfox-fg, #eee\)/);
+  assert.match(rule_of(".oasisfox-hint b"), /var\(--oasisfox-fg, #f5f5dc\)/);
   assert.match(STYLE, /--primary: var\(--oasisfox-accent, #7fa3c9\)/);
-  assert.match(STYLE, /--secondary: var\(--oasisfox-secondary, #e6c87a\)/);
+  assert.match(STYLE, /--secondary: var\(--oasisfox-secondary, #f0e68c\)/);
 });
 
 test("a hint label rule holds no hard-coded color", () => {
