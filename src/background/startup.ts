@@ -12,7 +12,7 @@ import { CONFIG_STATUS_STORAGE_KEY, SLOT_TABLE_STORAGE_KEY, WARNINGS_STORAGE_KEY
 import { apply_slot_plan, plan_slots, slot_table } from "./slots.ts";
 import { create_snippets } from "./snippets.ts";
 
-export const snippets = create_snippets(registry, snippet_deps, make_router_deps(get_search_engine_names));
+export const snippets = create_snippets(registry, snippet_deps, make_router_deps(get_config));
 
 // Derived from storage on every start, so a restart loses nothing.
 let loaded_config: Promise<MergedConfig> | undefined;

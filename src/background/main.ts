@@ -18,7 +18,7 @@ import type { SnippetCall } from "./snippets.ts";
 // Mode reports wait for this, so the clear never removes a fresh report.
 const modes_cleared = forget_all_tab_modes(browser.storage.local);
 
-const router = create_router(make_router_deps(get_search_engine_names));
+const router = create_router(make_router_deps(get_config));
 const bundle_loader = create_bundle_loader(bundle_loader_deps);
 const cmdline = create_cmdline_service({
   storage: browser.storage.local,

@@ -5,3 +5,5 @@
 "sh" = "search keysite @selection"
 "sr" = "search keyrepo needle"
 "sf" = "search keysub @selection"
+# An engine on {query|url}: with nothing selected it searches the page address.
+"sp" = "search keypage @selection"

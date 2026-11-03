@@ -3,8 +3,9 @@
 
 import { DEFAULT_SETTINGS } from "../shared/config.ts";
 import type { MergedConfig, SearchEngine } from "../shared/config.ts";
-import { slot_of } from "../shared/engines/index.ts";
+import { fills_without_query, slot_of } from "../shared/engines/index.ts";
 import type { PageInfo } from "../shared/engines/index.ts";
+import type { CheckedArgs } from "../shared/command.ts";
 import type { BoundInvocation } from "../shared/invocation.ts";
 
 export function is_available(requirement: readonly string[], page: PageInfo | undefined): boolean {
@@ -24,16 +25,27 @@ export function available_engine_names(engines: Record<string, SearchEngine>, pa
   return Object.keys(engines).filter((name) => is_available(engine_requirement(engines[name]!), page));
 }
 
+// The engine a search runs: the one it names, else the default_engine setting.
+function search_engine_of(config: Pick<MergedConfig, "search_engines" | "settings">, named: unknown): SearchEngine | undefined {
+  const name = typeof named === "string" && named !== "" ? named : (config.settings.default_engine ?? DEFAULT_SETTINGS.default_engine);
+  return config.search_engines[name];
+}
+
 // What one invocation asks of the page: the slots of the engine a search names, the `requires` of a snippet.
 export function requirement_lookup(config: Pick<MergedConfig, "search_engines" | "snippets" | "settings">): (invocation: BoundInvocation) => string[] {
   const snippets = new Map(config.snippets.map((snippet) => [snippet.id, snippet]));
   return (invocation) => {
     if (invocation.id === "open.search") {
-      const named = invocation.args?.engine;
-      const name = typeof named === "string" && named !== "" ? named : (config.settings.default_engine ?? DEFAULT_SETTINGS.default_engine);
-      const engine = config.search_engines[name];
+      const engine = search_engine_of(config, invocation.args?.engine);
       return engine ? engine_requirement(engine) : [];
     }
     return snippets.get(invocation.id)?.requires ?? [];
   };
+}
+
+// For the router: only a search runs with an empty query, and only when its engine fills the URL without one.
+export function runs_with_empty(config: Pick<MergedConfig, "search_engines" | "settings">, command_id: string, args: CheckedArgs, param: string): boolean {
+  if (command_id !== "open.search" || param !== "query") return false;
+  const engine = search_engine_of(config, args.engine);
+  return engine !== undefined && fills_without_query(engine.url);
 }

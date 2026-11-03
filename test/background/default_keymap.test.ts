@@ -149,6 +149,7 @@ test("a search binding on the selection opens the command line when nothing is s
     active_tab: async () => ({ tab_id: 3, window_id: 1, url: "https://github.com/a/b" }),
     has_content_script: async () => true,
     ask_selection: async () => "",
+    runs_with_empty: async () => false,
     read_clipboard: async () => "",
     has_permission: async () => true,
     send_to_tab: async () => undefined,

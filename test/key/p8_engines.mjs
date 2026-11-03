@@ -1,6 +1,6 @@
 // Key test cases of the engines piece. run.mjs calls run_cases with its helpers.
 // The test page has a host but is not a GitHub repo or a subreddit, so `{host}` engines are available there and `{repo}` ones are not.
-// The engines and the sh, sr, sf keys come from run.mjs and config/keymap.d/70-engines.toml.
+// The engines and the sd, sh, sr, sf, sp keys come from run.mjs and config/keymap.d/70-engines.toml.
 
 export async function run_cases({ run_case, send_keys, open_page, wait_event, find_event, events, expect, sleep }) {
   const panel_event = () => (event) => event.type === "whichkey" && event.page_id === "eng" && event.value !== "";
@@ -12,8 +12,8 @@ export async function run_cases({ run_case, send_keys, open_page, wait_event, fi
     const mark = events.length;
     await send_keys("s");
     const shown = await wait_event(mark, panel_event(), "the s panel");
-    // sq, sh and sf. Without the filter the panel would also list sr.
-    expect(/:3$/.test(shown.value), `the panel reported "${shown.value}", expected 3 rows`);
+    // sd, sh, sf and sp. Without the filter the panel would also list sr.
+    expect(/:4$/.test(shown.value), `the panel reported "${shown.value}", expected 4 rows`);
     await send_keys("-k", "Escape");
     await sleep(400);
   });
@@ -23,6 +23,14 @@ export async function run_cases({ run_case, send_keys, open_page, wait_event, fi
     await send_keys("s/");
     await sleep(900);
     expect(!find_event(mark, (event) => event.type === "toast" || event.type === "whichkey" && event.value !== ""), "s/ did something");
+  });
+
+  await run_case("a key on a query-or-page engine searches the page address when nothing is selected", async () => {
+    await open_page("page", "eng_page_start", { new_tab: false });
+    const mark = events.length;
+    await send_keys("sp");
+    const result = await wait_event(mark, loaded("engine_page"), "the query-or-page engine page");
+    expect(decodeURIComponent(result.search).includes("eng_page_start"), `the page opened with ${result.search}`);
   });
 
   await run_case("a key whose engine needs a repo shows the slot message and opens nothing", async () => {

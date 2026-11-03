@@ -140,7 +140,7 @@ async function main() {
   const managed_file = join(managed_dir, `${EXTENSION_ID}.json`);
   const server = await start_server();
   // The built-in duck engine is replaced by this server, so a search from the keys lands on a page the test can read.
-  // The keysite, keyrepo and keysub engines are for p8_engines.mjs: the test page has a host but is no GitHub repo or subreddit.
+  // The keysite, keyrepo, keysub and keypage engines are for p8_engines.mjs: the test page has a host but is no GitHub repo or subreddit.
   const engine_url = (id, slot) => `http://127.0.0.1:${server.port}/page?id=${id}&q=${slot}+{query}`;
   writeFileSync(
     join(config_dir, "search_engines.toml"),
@@ -149,6 +149,7 @@ async function main() {
       `[keysite]\nlabel = "Key site"\nurl = "${engine_url("engine_site", "{host}")}"`,
       `[keyrepo]\nlabel = "Key repo"\nurl = "${engine_url("engine_repo", "{repo}")}"`,
       `[keysub]\nlabel = "Key sub"\nurl = "${engine_url("engine_sub", "{subreddit}")}"\nfallback = "duck"`,
+      `[keypage]\nlabel = "Key page"\nurl = "http://127.0.0.1:${server.port}/page?id=engine_page&q={query|url}"`,
       "",
     ].join("\n"),
   );
