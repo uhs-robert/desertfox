@@ -50,7 +50,7 @@ test("every prompting default names a real param", () => {
   }
 });
 
-test("the keys the owner approved are all bound", () => {
+test("the approved keys are all bound", () => {
   const normal = Object.keys(DEFAULT_KEYMAP.normal ?? {});
   for (const key of ["h", "j", "k", "l", "gg", "G", "<C-d>", "<C-u>", "<C-f>", "<C-b>", "H", "L", "J", "K", "gt", "gT", "rr", "rh", "R", "xx", "dd", "u", "yy", "gu", "gU", "gi", "zi", "zo", "zz", "zt", "zb", "<S-Escape>", "<Escape>", "<C-v>", "<F1>", "o", "O", "tt", "f", "F", ":", "g?"]) {
     assert.ok(normal.includes(key), key);

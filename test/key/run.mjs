@@ -172,10 +172,24 @@ async function main() {
     for (const name of ["caret.js", "whichkey.js"]) writeFileSync(join(extension_dir, name), padded_bundle_text());
     await install_temporary_addon(rdp, extension_dir);
     await sleep(1500);
-    const injections_of = async (file) => {
+    const read_injections = async (file) => {
       const all = await evaluate_in_background(rdp, EXTENSION_ID, `(async () => (await browser.storage.local.get("oasisfox_bundle_loads")).oasisfox_bundle_loads ?? [])()`);
       if (!Array.isArray(all)) throw new Error(`injection log unreadable: ${JSON.stringify(all)}`);
       return all.filter((entry) => entry.file === file);
+    };
+    // The log is written after the injection answers, so a read can come first. Wait up to 1 s for the expected count.
+    const injections_of = async (file, at_least = 0) => {
+      let entries = await read_injections(file);
+      for (let waited = 0; entries.length < at_least && waited < 1000; waited += 100) {
+        await sleep(100);
+        entries = await read_injections(file);
+      }
+      return entries;
+    };
+    // A write from the previous case may still be on its way, so the baseline is taken after the log holds still.
+    const settled_injection_count = async (file) => {
+      await sleep(300);
+      return (await read_injections(file)).length;
     };
 
     await open_page("page", "a", { new_tab: false });
@@ -361,13 +375,13 @@ async function main() {
     // P0: bundles load on first use
     await run_case("a bundle loads on the first key, once, and no key typed during the load is lost", async () => {
       await open_page("page", "bundle_a", { new_tab: true });
-      const loads_before = (await injections_of("hints.js")).length;
+      const loads_before = await settled_injection_count("hints.js");
       // f starts the load. The three keys behind it arrive within a few milliseconds, before the injection can finish.
       // Held in order they scroll to the bottom. Reversed or dropped they would end at the top.
       const mark = events.length;
       await send_keys("fggG");
       await wait_event(mark, (event) => event.type === "scroll" && event.page_id === "bundle_a" && event.y > 0 && event.y >= event.max_y - 2, "the page to end at the bottom after fggG");
-      const hint_loads = await injections_of("hints.js");
+      const hint_loads = await injections_of("hints.js", loads_before + 1);
       expect(hint_loads.length === loads_before + 1, `expected one hints.js injection, saw ${hint_loads.length - loads_before}`);
       measurements.stub_bundle_inject_ms = hint_loads.at(-1).ms;
       await sleep(500);
@@ -397,7 +411,7 @@ async function main() {
       await send_keys("V");
       const caret_badge = await wait_event(mark, is_label("CARET"), "the CARET badge");
       await wait_event(mark, (event) => is_label("NORMAL")(event) && events.indexOf(event) > events.indexOf(caret_badge), "the NORMAL badge after CARET");
-      const caret_loads = await injections_of("caret.js");
+      const caret_loads = await injections_of("caret.js", 1);
       expect(caret_loads.length >= 1 && caret_loads.at(-1).ok, "caret.js was not injected");
       measurements.padded_bundle_inject_ms = caret_loads.at(-1).ms;
       expect(await scroll_delta_after("bundle_c", ["j"]) > 0, "the page stopped taking keys after V");
@@ -499,7 +513,7 @@ async function main() {
     // The help page runs content.js from a script tag. The question is whether executeScript reaches it.
     await run_case("V on the help page does not leave it stuck in caret mode", async () => {
       const badge = () => evaluate_in_background(rdp, EXTENSION_ID, `${extension_view("help.html")}?.document.querySelector("[data-oasisfox-mode]")?.getAttribute("data-oasisfox-mode") ?? null`);
-      const loads_before = (await injections_of("caret.js")).length;
+      const loads_before = await settled_injection_count("caret.js");
       await send_keys("V");
       await sleep(1500);
       const loads = (await injections_of("caret.js")).slice(loads_before);
