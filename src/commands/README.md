@@ -5,7 +5,7 @@ The command definitions. Each file is a command module: it calls `define` from `
 - A definition gives an id (`tab.pin`, group then verb), a label, an intent, params and `runs_in`. A `background` command runs here, with browser APIs. A `content` command's `run` is a handler from `src/content/handlers/`, which the content script runs in the page (`scroll.ts`, `copy.ts`, `mode.ts`).
 - Set the typed `name` by hand, and only for one-word commands and family words (`open`, `search`, `tab`). Every other command is typed by its dotted id. The registry rejects a duplicate name.
 - Modules by group: `tab`, `window`, `bookmark`, `browser`, `zoom`, `page`, `url`, `scroll`, `mode`, `copy`, `config` and `help`. `open.ts` holds `open.url`, `open.search` and `open.clipboard`. `engine.ts` holds `engine.show`.
-- `phase_2.ts` holds commands registered early so keys and help know them (hints, the command line, caret and visual motions). Running one loads its bundle or refuses until the bundle registers it.
+- `hint.ts`, `cmdline.ts`, `caret.ts` and `visual.ts` hold commands whose code sits in a bundle. Running one loads the bundle, or refuses with a `NEEDS_*` message until the bundle registers a handler (`src/content/handlers/lazy_bundle.ts`).
 
 Helpers:
 

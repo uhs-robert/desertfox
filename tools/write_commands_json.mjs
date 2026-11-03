@@ -18,7 +18,10 @@ const COMMAND_MODULES = [
   "src/commands/url.ts",
   "src/commands/open.ts",
   "src/commands/copy.ts",
-  "src/commands/phase_2.ts",
+  "src/commands/hint.ts",
+  "src/commands/cmdline.ts",
+  "src/commands/caret.ts",
+  "src/commands/visual.ts",
   "src/commands/help.ts",
   "src/commands/engine.ts",
 ];

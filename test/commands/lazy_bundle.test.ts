@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { NEEDS_COMMAND_LINE, NEEDS_HINTS, hint_run } from "../../src/content/handlers/phase_2.ts";
+import { NEEDS_COMMAND_LINE, NEEDS_HINTS, hint_run } from "../../src/content/handlers/lazy_bundle.ts";
 import { bundles } from "../../src/content/bundles.ts";
 
-test("a phase 2 content command loads its bundle and refuses with the reason while the bundle registers nothing", async () => {
+test("a lazy bundle content command loads its bundle and refuses with the reason while the bundle registers nothing", async () => {
   const shown: string[] = [];
   const asked: string[] = [];
   bundles.connect({

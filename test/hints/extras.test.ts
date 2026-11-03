@@ -1,7 +1,7 @@
 // The hint lifecycle for rapid mode, text, copy and a custom selector, run on a fake page.
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import "../../src/commands/phase_2.ts";
+import "../../src/commands/hint.ts";
 import { check_args } from "../../src/shared/registry/check_args.ts";
 import { registry } from "../../src/shared/registry/index.ts";
 

@@ -105,7 +105,7 @@ bundles.connect({
   show_error: (message) => (bundles.has_handler("ui.toast") ? show_toast(message) : console.error(message)),
   on_sink_missing: (mode) => {
     page_mode.set_mode("normal");
-    show_toast(`${mode} mode is not available yet (phase 2)`);
+    show_toast(`${mode} mode is not available yet`);
   },
 });
 

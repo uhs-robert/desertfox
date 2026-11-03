@@ -7,7 +7,7 @@ The content-side code of each command that runs in the page. One file per comman
 - `page.ts`: the page focus commands. It also holds `blur_focused_element` and remembers the last blurred field for `scroll.align`.
 - `mode.ts`, `stop.ts`, `copy.ts`: the mode, stop and copy commands.
 - `focus.ts`: a helper that has no handler object.
-- `phase_2.ts`: handlers for commands whose code sits in a bundle (`hints`, `cmdline`, `caret`, `whichkey`). Each one asks `bundles` to load the bundle and run the command. If the bundle has no handler for the command yet, the handler refuses with a `NEEDS_*` message.
+- `lazy_bundle.ts`: handlers for commands whose code sits in a bundle (`hints`, `cmdline`, `caret`, `whichkey`). Each one asks `bundles` to load the bundle and run the command. If the bundle has no handler for the command yet, the handler refuses with a `NEEDS_*` message.
 
 How a handler is found and called:
 
