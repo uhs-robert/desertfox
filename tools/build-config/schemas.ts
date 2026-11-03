@@ -82,7 +82,7 @@ function search_engines_schema(): Schema {
   const engine: Schema = {
     type: "object",
     properties: {
-      url: { type: "string", minLength: 1, description: "URL template. {query} is the typed or selected text, %s is the same. Page slots: {url}, {host}, {title}, {repo}, {subreddit}. {a|b} takes the first that has a value" },
+      url: { type: "string", minLength: 1, description: "URL template. {query} is the typed or selected text, %s is the same. Page slots: {url}, {host}, {title}, {repo}, {subreddit}, {channel}. {a|b} takes the first that has a value, {name:raw} skips escaping" },
       label: { type: "string", minLength: 1 },
       fallback: { type: "string", minLength: 1, description: "Engine to use when the page cannot fill the slots" },
       params: { type: "object", description: "Params declared here, each { default, values, children }" },
