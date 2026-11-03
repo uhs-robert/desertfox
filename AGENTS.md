@@ -57,7 +57,7 @@ just install-profile <dir>  # install into one Firefox profile directory
 just build-config [dir]     # compile the user config into the managed storage config
 ```
 
-Run `just test` before every commit. Run `just key-test` after a change to keys, modes, the content script or config reload. It needs a nested Hyprland and runs on demand only.
+Run `just test` before every commit. Run `just key-test` after a change to keys, modes, the content script or config reload. It needs a nested Hyprland and runs on demand only. Key tests can run in parallel, with no lock: each run has its own shadow session and clears the ones that dead runs left.
 
 ## Planning
 

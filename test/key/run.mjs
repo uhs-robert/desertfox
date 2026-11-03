@@ -16,7 +16,10 @@ const key_test_dir = dirname(fileURLToPath(import.meta.url));
 const repo_dir = resolve(key_test_dir, "../..");
 const dist_dir = join(repo_dir, "dist");
 const EXTENSION_ID = "oasisfox@uhs-robert";
-const SHADOW_NAME = "oasiskey";
+// shadow.sh caps names at 8 characters. "ok" plus a base-36 pid is at most 8, and the sweep reads the owner pid back from the name.
+const SHADOW_PREFIX = "ok";
+const SHADOW_NAME = `${SHADOW_PREFIX}${process.pid.toString(36)}`;
+if (SHADOW_NAME.length > 8) throw new Error(`shadow name ${SHADOW_NAME} is longer than 8 characters`);
 const FRESH_LOAD_COUNT = 24;
 const PADDED_BUNDLE_BYTES = 20 * 1024;
 
@@ -38,6 +41,28 @@ async function send_keys(...wtype_args) {
 const ALT = (key) => ["-M", "alt", key, "-m", "alt"];
 const CTRL = (key) => ["-M", "ctrl", key, "-m", "ctrl"];
 const SHIFT_ESCAPE = ["-M", "shift", "-k", "Escape", "-m", "shift"];
+
+function process_is_alive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return error.code === "EPERM";
+  }
+}
+
+// A killed run leaves its session behind under its own name. Stop each session whose owner is dead.
+// A live run is never touched. This run's own name counts as stale, since a recycled pid can match an old leftover.
+async function sweep_dead_sessions() {
+  const { stdout } = await shadow("status");
+  const names = [...stdout.matchAll(new RegExp(`^(${SHADOW_PREFIX}[0-9a-z]+): `, "gm"))].map((match) => match[1]);
+  for (const name of names) {
+    const owner_pid = Number.parseInt(name.slice(SHADOW_PREFIX.length), 36);
+    if (name !== SHADOW_NAME && process_is_alive(owner_pid)) continue;
+    console.log(`sweep: stopping ${name}, left by dead run ${owner_pid}`);
+    await shadow("down", name).catch((error) => console.error(`sweep: down ${name} failed: ${error.message}`));
+  }
+}
 
 async function free_port() {
   const probe = net.createServer();
@@ -98,6 +123,20 @@ async function main() {
   const events = server.events;
   const debug_port = await free_port();
   let rdp;
+  // A signal can arrive during the normal teardown, so every path shares this one run of the cleanup.
+  let teardown_started;
+  const teardown = () => {
+    teardown_started ??= (async () => {
+      rdp?.close();
+      await shadow("down", SHADOW_NAME).catch((error) => console.error(`shadow down failed: ${error.message}`));
+      server.close();
+      rmSync(work_dir, { recursive: true, force: true });
+    })();
+    return teardown_started;
+  };
+  for (const [signal, code] of [["SIGINT", 130], ["SIGTERM", 143]]) {
+    process.on(signal, () => teardown().finally(() => process.exit(code)));
+  }
 
   const url_of = (kind, id) => `http://127.0.0.1:${server.port}/${kind}?id=${id}`;
   const since = (mark) => events.slice(mark);
@@ -157,6 +196,7 @@ async function main() {
   }
 
   try {
+    await sweep_dead_sessions();
     await shadow("up", SHADOW_NAME);
     await shadow("spawn", SHADOW_NAME, join(key_test_dir, "launch_firefox.sh"), work_dir, profile_dir, String(debug_port), managed_file);
     for (let attempt = 0; ; attempt++) {
@@ -632,10 +672,7 @@ async function main() {
 
     await p1_cases({ run_case, expect, send_keys, sleep, open_page, events, wait_event, scroll_of, last_scroll_y, find_event, evaluate_in_background, rdp, EXTENSION_ID });
   } finally {
-    rdp?.close();
-    await shadow("down", SHADOW_NAME).catch((error) => console.error(`shadow down failed: ${error.message}`));
-    server.close();
-    rmSync(work_dir, { recursive: true, force: true });
+    await teardown();
     console.log(JSON.stringify(measurements));
   }
 
