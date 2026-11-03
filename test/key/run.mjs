@@ -17,6 +17,7 @@ const dist_dir = join(repo_dir, "dist");
 const EXTENSION_ID = "oasisfox@uhs-robert";
 const SHADOW_NAME = "oasiskey";
 const FRESH_LOAD_COUNT = 24;
+const PADDED_BUNDLE_BYTES = 20 * 1024;
 
 const shadow_sh = process.env.SHADOW_SH;
 if (!shadow_sh) {
@@ -48,6 +49,18 @@ async function free_port() {
 function build_test_config(config_dir, out_file) {
   const result = spawnSync("node", ["tools/build-config/cli.ts", config_dir, "--out", out_file], { cwd: repo_dir, encoding: "utf8" });
   if (result.status !== 0) throw new Error(`build-config failed: ${result.stderr}${result.stdout}`);
+}
+
+// Valid script text of about PADDED_BUNDLE_BYTES, so the bundle timings include a real parse and run.
+function padded_bundle_text() {
+  const lines = [];
+  let size = 0;
+  for (let index = 0; size < PADDED_BUNDLE_BYTES; index++) {
+    const line = `function pad_${index}(left, right) { return left * ${index} + right; }`;
+    lines.push(line);
+    size += line.length + 1;
+  }
+  return `(() => {\n${lines.join("\n")}\n})();\n`;
 }
 
 const results = [];
@@ -153,8 +166,31 @@ async function main() {
         await sleep(500);
       }
     }
-    await install_temporary_addon(rdp, dist_dir);
+    // The padded bundles stand in for a 20 KB hints or caret bundle. They go into a copy, so dist/ stays as built.
+    const extension_dir = join(work_dir, "extension");
+    cpSync(dist_dir, extension_dir, { recursive: true });
+    for (const name of ["caret.js", "whichkey.js"]) writeFileSync(join(extension_dir, name), padded_bundle_text());
+    await install_temporary_addon(rdp, extension_dir);
     await sleep(1500);
+    const read_injections = async (file) => {
+      const all = await evaluate_in_background(rdp, EXTENSION_ID, `(async () => (await browser.storage.local.get("oasisfox_bundle_loads")).oasisfox_bundle_loads ?? [])()`);
+      if (!Array.isArray(all)) throw new Error(`injection log unreadable: ${JSON.stringify(all)}`);
+      return all.filter((entry) => entry.file === file);
+    };
+    // The log is written after the injection answers, so a read can come first. Wait up to 1 s for the expected count.
+    const injections_of = async (file, at_least = 0) => {
+      let entries = await read_injections(file);
+      for (let waited = 0; entries.length < at_least && waited < 1000; waited += 100) {
+        await sleep(100);
+        entries = await read_injections(file);
+      }
+      return entries;
+    };
+    // A write from the previous case may still be on its way, so the baseline is taken after the log holds still.
+    const settled_injection_count = async (file) => {
+      await sleep(300);
+      return (await read_injections(file)).length;
+    };
 
     await open_page("page", "a", { new_tab: false });
     await open_page("page", "b", { new_tab: true });
@@ -336,6 +372,66 @@ async function main() {
       expect((await scroll_delta_after("after_reload", ["j"])) === single_j_pixels, "j moved a different distance");
     });
 
+    // P0: bundles load on first use
+    await run_case("a bundle loads on the first key, once, and no key typed during the load is lost", async () => {
+      await open_page("page", "bundle_a", { new_tab: true });
+      const loads_before = await settled_injection_count("hints.js");
+      // f starts the load. The three keys behind it arrive within a few milliseconds, before the injection can finish.
+      // Held in order they scroll to the bottom. Reversed or dropped they would end at the top.
+      const mark = events.length;
+      await send_keys("fggG");
+      await wait_event(mark, (event) => event.type === "scroll" && event.page_id === "bundle_a" && event.y > 0 && event.y >= event.max_y - 2, "the page to end at the bottom after fggG");
+      const hint_loads = await injections_of("hints.js", loads_before + 1);
+      expect(hint_loads.length === loads_before + 1, `expected one hints.js injection, saw ${hint_loads.length - loads_before}`);
+      measurements.stub_bundle_inject_ms = hint_loads.at(-1).ms;
+      await sleep(500);
+      const again = events.length;
+      await send_keys("gg");
+      await wait_event(again, scroll_of("bundle_a"), "gg to scroll after the load");
+      expect(last_scroll_y("bundle_a") === 0, "keys did not work after the load");
+      await send_keys("f");
+      await sleep(800);
+      expect((await injections_of("hints.js")).length === loads_before + 1, "a second f injected the bundle again");
+    });
+
+    await run_case("a count typed during the load keeps its meaning", async () => {
+      await open_page("page", "bundle_b", { new_tab: true });
+      const single = await scroll_delta_after("bundle_b", ["j"]);
+      await scroll_delta_after("bundle_b", ["gg"]);
+      const mark = events.length;
+      await send_keys("f3j");
+      const reported = await wait_event(mark, scroll_of("bundle_b"), "scroll after f3j");
+      expect(Math.abs(reported.y - 3 * single) <= 3, `f3j moved ${reported.y}px, j moves ${single}px`);
+    });
+
+    await run_case("V loads the padded caret bundle, finds no sink and returns to normal mode", async () => {
+      await open_page("page", "bundle_c", { new_tab: true });
+      const is_label = (label) => (event) => event.type === "indicator" && event.page_id === "bundle_c" && event.label === label;
+      const mark = events.length;
+      await send_keys("V");
+      const caret_badge = await wait_event(mark, is_label("CARET"), "the CARET badge");
+      await wait_event(mark, (event) => is_label("NORMAL")(event) && events.indexOf(event) > events.indexOf(caret_badge), "the NORMAL badge after CARET");
+      const caret_loads = await injections_of("caret.js", 1);
+      expect(caret_loads.length >= 1 && caret_loads.at(-1).ok, "caret.js was not injected");
+      measurements.padded_bundle_inject_ms = caret_loads.at(-1).ms;
+      expect(await scroll_delta_after("bundle_c", ["j"]) > 0, "the page stopped taking keys after V");
+    });
+
+    await run_case("executeScript of a 20 KB file takes this long", async () => {
+      const timings = await evaluate_in_background(rdp, EXTENSION_ID, `(async () => {
+        const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
+        const ms = [];
+        for (let run = 0; run < 15; run++) {
+          const started = performance.now();
+          await browser.tabs.executeScript(tab.id, { file: "whichkey.js", runAt: "document_start" });
+          ms.push(performance.now() - started);
+        }
+        return ms;
+      })()`);
+      const sorted_ms = [...timings].sort((left, right) => left - right);
+      measurements.execute_script_20kb_ms = { runs: sorted_ms.length, min: sorted_ms[0], median: sorted_ms[sorted_ms.length >> 1], max: sorted_ms.at(-1) };
+    });
+
     // P9: snippets, from test/key/config/snippets
     const snippet_events = (mark, type) => since(mark).filter((event) => event.type === type);
     await open_page("page", "snip", { new_tab: true });
@@ -412,6 +508,17 @@ async function main() {
       expect(ignored.badge === "IGNORE", `badge after <S-Escape> was ${ignored.badge}`);
       await send_keys(...SHIFT_ESCAPE);
       await sleep(300);
+    });
+
+    // The help page runs content.js from a script tag. The question is whether executeScript reaches it.
+    await run_case("V on the help page does not leave it stuck in caret mode", async () => {
+      const badge = () => evaluate_in_background(rdp, EXTENSION_ID, `${extension_view("help.html")}?.document.querySelector("[data-oasisfox-mode]")?.getAttribute("data-oasisfox-mode") ?? null`);
+      const loads_before = await settled_injection_count("caret.js");
+      await send_keys("V");
+      await sleep(1500);
+      const loads = (await injections_of("caret.js")).slice(loads_before);
+      measurements.help_page_caret_load = loads.length === 0 ? "not requested" : loads.at(-1).ok ? "executeScript ok" : "executeScript refused";
+      expect(await badge() === "NORMAL", `the help page badge after V was ${await badge()}`);
     });
 
     await run_case("the options page opens and shows the config source", async () => {

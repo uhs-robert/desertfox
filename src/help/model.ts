@@ -1,5 +1,6 @@
 // Turns the three inputs of the help page into plain rows. No DOM here, so tests can read the rows.
 
+import { MODES } from "../shared/command.ts";
 import type { CommandMeta, ParamDef, ParamValue } from "../shared/command.ts";
 import type { KeymapMode } from "../shared/keymap.ts";
 import type { Prompt } from "../shared/invocation.ts";
@@ -29,7 +30,7 @@ export type HelpGroup = { name: string; commands: CommandRow[] };
 
 export type HelpModel = { warnings: string[]; groups: HelpGroup[] };
 
-const MODE_ORDER: KeymapMode[] = ["normal", "insert", "ignore", "hint", "cmdline", "browser"];
+const MODE_ORDER: readonly KeymapMode[] = [...MODES, "browser"];
 
 function describe_value(value: ParamValue | { from: string }): string {
   return is_context_source(value) ? `from ${value.from}` : String(value);

@@ -118,6 +118,7 @@ test("count must name an existing param, modes must be known", () => {
   );
   rejects("a.b", { ...base, modes: ["browser" as never] }, /modes: unknown mode "browser"/);
   rejects("a.b", { ...base, modes: [] }, /modes: .*empty/);
+  assert.doesNotThrow(() => create_registry().define("a.b", { ...base, modes: ["hint", "cmdline", "caret", "visual"] }));
   rejects("a.b", { ...base, runs_in: "both" as never }, /runs_in/);
 });
 

@@ -2,7 +2,7 @@
 // DefineError that names the command and the field.
 
 import type { CommandDef, ParamDef, ParamValue } from "../command.ts";
-import type { Mode } from "../command.ts";
+import { MODES } from "../command.ts";
 import { find_param, is_context_source, is_dynamic_values, static_values } from "./params.ts";
 
 export type CommandInput = Omit<CommandDef, "id">;
@@ -28,7 +28,6 @@ export const COMMAND_ID_PATTERN = /^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$/;
 const PARAM_NAME_PATTERN = /^[a-z][a-z0-9_]*$/;
 const COMMAND_WORD_PATTERN = /^[^\s'"\\-][^\s'"\\]*$/;
 const PARAM_TYPES = ["int", "float", "string", "bool", "enum"];
-const MODES: readonly Mode[] = ["normal", "insert", "ignore", "hint", "cmdline"];
 
 export function create_registry(): Registry {
   const commands_by_id = new Map<string, CommandDef>();

@@ -7,6 +7,7 @@ Types and constants that fix the hand-off formats between the background page, t
 - `keymap.ts`: keymap data as written by the user.
 - `prefix_tree.ts`: the compiled keymap stored in `storage.local` for the content script.
 - `messages.ts`: messages between content script and background.
+- `bundles.ts`: the names of the scripts loaded on first use, and which mode loads which.
 - `registry/`: the command registry, the one validator and the command line parser. See its README.
 - `keys/`: key notation, the prefix tree compiler and the matcher. See its README.
 - `mode_colors.ts`: the 16 oasis palettes and the lookup that cuts one down to the badge colors per mode. Only the background imports the lookup, so the content script gets the few colors it needs through the compiled keymap.

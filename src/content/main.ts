@@ -4,19 +4,20 @@
 import type { BackgroundToContent, CompiledKeymap, ContentToBackground, CountBehavior, Invocation, Mode, ModeIndicator, RunResponse, TreeLeaf } from "../shared/index.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY, COMPILED_KEYMAP_VERSION, DEFAULT_SETTINGS } from "../shared/index.ts";
 import { create_matcher, event_to_token } from "../shared/keys/index.ts";
+import type { BundleHostApi } from "./bundle_host.ts";
+import { bundles } from "./bundles.ts";
 import { is_editable_element } from "./editable.ts";
 import { create_cancelled_keys } from "./cancelled_keys.ts";
 import { create_key_flow } from "./key_flow.ts";
 import { mode_label } from "./mode_label.ts";
-import { show_mode_label } from "./mode_indicator.ts";
 import type { BadgeColors } from "./mode_indicator.ts";
-import { is_ignored_site } from "./match_pattern.ts";
+import { show_mode_label, show_toast } from "./ui_proxy.ts";
+import { is_ignored_site } from "../shared/match_pattern.ts";
 import { wire_mode_reports } from "./mode_report.ts";
 import { page_mode } from "./page_mode.ts";
 import { plan_steps } from "./plan_steps.ts";
 import { run_content_invocation } from "./run_content.ts";
 import { read_context_source } from "./context.ts";
-import { show_toast } from "./toast.ts";
 import { focus_page_content } from "./handlers/focus.ts";
 import { blur_focused_element } from "./handlers/page.ts";
 
@@ -81,6 +82,19 @@ const key_flow = create_key_flow({
     blur_focused_element();
   },
   in_editable_field: () => is_editable_element(document.activeElement),
+  is_loading: bundles.is_loading,
+  sink_of: bundles.sink_of,
+});
+
+bundles.connect({
+  request_bundle: async (name) => (await send_to_background({ type: "load_bundle", name })).ok,
+  on_idle: key_flow.release,
+  // The toast needs the ui bundle, so without it an error has nowhere to show.
+  show_error: (message) => (bundles.has_handler("ui.toast") ? show_toast(message) : console.error(message)),
+  on_sink_missing: (mode) => {
+    page_mode.set_mode("normal");
+    show_toast(`${mode} mode is not available yet (phase 2)`);
+  },
 });
 
 const cancelled_keys = create_cancelled_keys();
@@ -161,6 +175,7 @@ function publish_timing(): void {
 }
 
 function start(): void {
+  (window as unknown as { oasisfox_host: BundleHostApi }).oasisfox_host = bundles.api;
   window.addEventListener("keydown", on_keydown, true);
   window.addEventListener("keypress", on_keypress, true);
   window.addEventListener("keyup", on_keyup, true);
@@ -170,6 +185,7 @@ function start(): void {
   wire_mode_reports(page_mode, (mode) => {
     if (!extension_context_alive()) return stop_listening();
     key_flow.reset_sequence();
+    bundles.enter_mode(mode);
     void send_to_background({ type: "mode_changed", mode });
   });
 

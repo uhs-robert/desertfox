@@ -1,5 +1,6 @@
 // Compiles the merged keymap into the prefix tree the content script walks.
 
+import { MODES as RUNTIME_MODES } from "../command.ts";
 import type { CountBehavior, RunsIn } from "../command.ts";
 import { COMPILED_KEYMAP_VERSION } from "../prefix_tree.ts";
 import type { CompiledKeymap, LeafStep, TreeBranch } from "../prefix_tree.ts";
@@ -17,8 +18,6 @@ export type ResolveCommand = (command_id: string) => CommandInfo | undefined;
 export type CompileResult = { compiled: CompiledKeymap; warnings: string[] };
 
 type Entry = { sequence: string; tokens: string[]; binding: KeyBinding; source_index: number };
-
-const MODES: KeymapMode[] = ["normal", "insert", "ignore", "hint", "cmdline", "browser"];
 
 // Explicit bindings win over generated ones, so generated entries go in first.
 function generated_bindings(keymap: KeymapConfig, settings: Partial<Settings>): Record<string, KeyBinding> {
@@ -112,7 +111,8 @@ function insert_entry(root: TreeBranch, mode: KeymapMode, entry: Entry, resolve:
 export function compile_keymap(keymap: KeymapConfig, settings: Partial<Settings>, resolve: ResolveCommand): CompileResult {
   const warnings: string[] = [];
   const modes: CompiledKeymap["modes"] = {};
-  for (const mode of MODES) {
+  const keymap_modes: readonly KeymapMode[] = [...RUNTIME_MODES, "browser"];
+  for (const mode of keymap_modes) {
     const root: TreeBranch = { kind: "branch", children: {} };
     for (const entry of entries_for_mode(mode, keymap, settings, warnings)) {
       insert_entry(root, mode, entry, resolve, warnings);

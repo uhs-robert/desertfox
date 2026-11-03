@@ -1,5 +1,6 @@
 // Turns the stored config status and warnings into plain rows for the status page. No DOM here, so tests read the rows.
 
+import { MODES } from "../shared/command.ts";
 import type { CommandMeta } from "../shared/command.ts";
 import type { Settings } from "../shared/config.ts";
 import { DEFAULT_SETTINGS } from "../shared/config.ts";
@@ -31,7 +32,7 @@ const SOURCE_TEXT: Record<ConfigSource, string> = {
 const FALLBACK_MANAGED_FILE = "~/.mozilla/managed-storage/oasisfox@uhs-robert.json";
 
 // Keymap warnings start with the mode name, config warnings with "config".
-const KEYMAP_WARNING = /^(normal|insert|ignore|hint|cmdline|browser): /;
+const KEYMAP_WARNING = new RegExp(`^(${[...MODES, "browser"].join("|")}): `);
 
 function show_value(value: unknown): string {
   return typeof value === "string" ? JSON.stringify(value) : (JSON.stringify(value) ?? "unset");

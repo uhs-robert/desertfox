@@ -1,10 +1,11 @@
 // Command definition: the one shape the registry stores, the validator checks
-// and `commands.json` is cut from. Types only.
+// and `commands.json` is cut from. Types, plus the list of runtime modes.
 
 export type ParamType = "int" | "float" | "string" | "bool" | "enum";
 
 // Runtime modes. `browser` is not here: it is a keymap section, see KeymapMode.
-export type Mode = "normal" | "insert" | "ignore" | "hint" | "cmdline";
+export const MODES = ["normal", "insert", "ignore", "hint", "cmdline", "caret", "visual"] as const;
+export type Mode = (typeof MODES)[number];
 
 export type RunsIn = "background" | "content";
 

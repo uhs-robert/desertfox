@@ -8,16 +8,17 @@ Status values:
 - `later`: phase 3.
 - `dropped`: not built. The last column gives the reason.
 
-The shipped defaults bind every `v1` row whose command exists, with four kinds of exception:
+The shipped defaults bind every `v1` row whose command exists, with three kinds of exception:
 
 - Rows that name a search engine or a container (`s`, `S`, `,`, `c`, `C` keys). The user's config generates them from `search_keys` and `container_keys`.
-- `V`, because caret mode does not exist yet.
 - `;f`, because `hint.run` has no link text param yet.
 - `ZZ`, because closing every window cannot be undone. Bind it in the config.
 
+The `caret`, `visual` and `cmdline` rows bind placeholder commands that refuse until their piece builds them.
+
 A note "(prompts)" means the binding leaves a param out, so the command line asks for it.
 
-dropped: 8 | later: 15 | v1: 218
+dropped: 8 | later: 15 | v1: 267
 
 | mode | key | status | OasisFox |
 | --- | --- | --- | --- |
@@ -46,7 +47,7 @@ dropped: 8 | later: 15 | v1: 218
 | normal | `u` | v1 | `tab.undo_close` |
 | normal | `U` | v1 | `window.undo_close` |
 | normal | `v` | v1 | `hint.run action=select` (enters visual) |
-| normal | `V` | v1 | `mode.set mode=caret` (then `v` selects) |
+| normal | `V` | v1 | `mode.set mode=caret` (then `v` selects, new in phase 2) |
 | normal | `.` | later | `command.repeat` |
 | normal | `:` | v1 | `cmdline.open` |
 | normal | `<<` | v1 | `tab.move offset=-1` |
@@ -184,8 +185,57 @@ dropped: 8 | later: 15 | v1: 218
 | normal | `,,` | v1 | `open.search engine=search` (prompts) |
 | normal | `,<` | v1 | `open.search engine=search where=tab` (prompts) |
 | normal | `,r` | dropped | no config file to reload |
-| ex | `<A-ArrowDown>` | v1 | `cmdline.next_completion` (cmdline mode) |
-| ex | `<A-ArrowUp>` | v1 | `cmdline.prev_completion` (cmdline mode) |
+| cmdline | `<A-ArrowDown>` | v1 | `cmdline.next_completion` |
+| cmdline | `<A-ArrowUp>` | v1 | `cmdline.prev_completion` |
+| cmdline | `<Tab>` | v1 | `cmdline.next_completion` (new in phase 2) |
+| cmdline | `<C-n>` | v1 | `cmdline.next_completion` (new in phase 2) |
+| cmdline | `<S-Tab>` | v1 | `cmdline.prev_completion` (new in phase 2) |
+| cmdline | `<C-p>` | v1 | `cmdline.prev_completion` (new in phase 2) |
+| cmdline | `<Escape>` | v1 | `mode.escape` (new in phase 2) |
+| caret | `h` | v1 | `caret.move char back` (new in phase 2) |
+| caret | `l` | v1 | `caret.move char` (new in phase 2) |
+| caret | `j` | v1 | `caret.move line` (new in phase 2) |
+| caret | `k` | v1 | `caret.move line back` (new in phase 2) |
+| caret | `w` | v1 | `caret.move word` (new in phase 2) |
+| caret | `b` | v1 | `caret.move word back` (new in phase 2) |
+| caret | `e` | v1 | `caret.move word_end` (new in phase 2) |
+| caret | `W` | v1 | `caret.move word big` (new in phase 2) |
+| caret | `B` | v1 | `caret.move word back big` (new in phase 2) |
+| caret | `E` | v1 | `caret.move word_end big` (new in phase 2) |
+| caret | `0` | v1 | `caret.move line_start` (new in phase 2) |
+| caret | `^` | v1 | `caret.move line_first` (new in phase 2) |
+| caret | `$` | v1 | `caret.move line_end` (new in phase 2) |
+| caret | `gg` | v1 | `caret.move start` (new in phase 2) |
+| caret | `G` | v1 | `caret.move end` (new in phase 2) |
+| visual | `h` | v1 | `caret.move char back` (new in phase 2) |
+| visual | `l` | v1 | `caret.move char` (new in phase 2) |
+| visual | `j` | v1 | `caret.move line` (new in phase 2) |
+| visual | `k` | v1 | `caret.move line back` (new in phase 2) |
+| visual | `w` | v1 | `caret.move word` (new in phase 2) |
+| visual | `b` | v1 | `caret.move word back` (new in phase 2) |
+| visual | `e` | v1 | `caret.move word_end` (new in phase 2) |
+| visual | `W` | v1 | `caret.move word big` (new in phase 2) |
+| visual | `B` | v1 | `caret.move word back big` (new in phase 2) |
+| visual | `E` | v1 | `caret.move word_end big` (new in phase 2) |
+| visual | `0` | v1 | `caret.move line_start` (new in phase 2) |
+| visual | `^` | v1 | `caret.move line_first` (new in phase 2) |
+| visual | `$` | v1 | `caret.move line_end` (new in phase 2) |
+| visual | `gg` | v1 | `caret.move start` (new in phase 2) |
+| visual | `G` | v1 | `caret.move end` (new in phase 2) |
+| visual | `y` | v1 | `visual.act yank` (new in phase 2) |
+| visual | `o` | v1 | `visual.act swap` (new in phase 2) |
+| visual | `s` | v1 | `visual.act search` (new in phase 2) |
+| cmdline | `<Enter>` | v1 | `cmdline.submit` (new in phase 2) |
+| cmdline | `<ArrowUp>` | v1 | `cmdline.history prev` (new in phase 2) |
+| cmdline | `<ArrowDown>` | v1 | `cmdline.history next` (new in phase 2) |
+| cmdline | `<C-u>` | v1 | `cmdline.clear` (new in phase 2) |
+| hint | `<Escape>` | v1 | `mode.escape` (new in phase 2) |
+| hint | `<C-[>` | v1 | `mode.escape` (new in phase 2) |
+| caret | `v` | v1 | `mode.set mode=visual` (new in phase 2) |
+| caret | `<Escape>` | v1 | `mode.escape` (new in phase 2) |
+| caret | `<C-[>` | v1 | `mode.escape` (new in phase 2) |
+| visual | `<Escape>` | v1 | `mode.escape` (new in phase 2) |
+| visual | `<C-[>` | v1 | `mode.escape` (new in phase 2) |
 | normal | `sa` | v1 | `open.search engine=arch` (prompts) |
 | normal | `Sa` | v1 | `open.search engine=arch where=tab` (prompts) |
 | normal | `sb` | v1 | `open.search engine=brave` (prompts) |

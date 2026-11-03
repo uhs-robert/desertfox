@@ -3,6 +3,7 @@
 // A later layer wins per key. Nothing here knows the command list, so binding
 // strings stay strings until `resolve_bindings` in check.ts parses them.
 
+import { MODES } from "../../src/shared/command.ts";
 import { MODE_INDICATOR_VALUES } from "../../src/shared/config.ts";
 import type { SearchEngine, Settings } from "../../src/shared/config.ts";
 import { is_palette_name, PALETTE_NAMES } from "../../src/shared/mode_colors.ts";
@@ -10,7 +11,7 @@ import type { KeymapConfig, ModeBindings } from "../../src/shared/keymap.ts";
 import { is_plain_object } from "./errors.ts";
 import type { DataLayer } from "./source_files.ts";
 
-export const KEYMAP_MODES = ["normal", "insert", "ignore", "hint", "cmdline", "browser"] as const;
+export const KEYMAP_MODES = [...MODES, "browser"] as const;
 
 // Where each merged entry came from, so a later check can name the file and key.
 export type Origins = Map<string, string>;

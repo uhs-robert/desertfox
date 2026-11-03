@@ -33,6 +33,9 @@
       "match_about_blank": true
     }
   ],
+  "web_accessible_resources": [
+    "cmdline.html"
+  ],
   "permissions": [
     "tabs",
     "storage",

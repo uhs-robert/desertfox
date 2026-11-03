@@ -97,9 +97,26 @@ test("every v1 row of docs/keymap.md whose command exists is bound, except rows 
     .filter((row) => registry.get(row.id) && !row.user_data)
     .filter((row) => !(DEFAULT_KEYMAP[row.mode as keyof KeymapConfig] as Record<string, unknown> | undefined)?.[row.key])
     .map((row) => `${row.mode} ${row.key}`);
-  // `;f` needs a link text param that hint.run lacks. `V` needs caret mode. `ex` rows belong to the command line.
+  // `;f` needs a link text param that hint.run lacks.
   // `ZZ` closes every window with no undo, so users bind it in their config.
-  assert.deepEqual(unbound.sort(), ["normal V", "normal ;f", "normal ZZ", "ex <A-ArrowDown>", "ex <A-ArrowUp>"].sort());
+  assert.deepEqual(unbound.sort(), ["normal ;f", "normal ZZ"].sort());
+});
+
+test("the keys of the new modes compile and resolve to their commands", () => {
+  const { warnings, compiled } = compile(DEFAULT_KEYMAP);
+  assert.deepEqual(warnings, []);
+  const leaf_id = (mode: "normal" | "hint" | "cmdline" | "caret" | "visual", ...tokens: string[]) => {
+    let node: { kind: string; children?: Record<string, unknown>; steps?: { invocation: { id: string; args?: Record<string, unknown> } }[] } | undefined = compiled.modes[mode];
+    for (const token of tokens) node = node?.children?.[token] as typeof node;
+    return node?.steps?.map((step) => `${step.invocation.id} ${JSON.stringify(step.invocation.args ?? {})}`).join(",");
+  };
+  assert.equal(leaf_id("normal", "V"), 'mode.set {"mode":"caret"}');
+  assert.equal(leaf_id("caret", "v"), 'mode.set {"mode":"visual"}');
+  for (const mode of ["hint", "cmdline", "caret", "visual"] as const) {
+    assert.equal(leaf_id(mode, "<Escape>"), "mode.escape {}", mode);
+  }
+  for (const key of ["<Tab>", "<C-n>", "<A-ArrowDown>"]) assert.equal(leaf_id("cmdline", key), "cmdline.next_completion {}", key);
+  for (const key of ["<S-Tab>", "<C-p>", "<A-ArrowUp>"]) assert.equal(leaf_id("cmdline", key), "cmdline.prev_completion {}", key);
 });
 
 test("no default binds a command that does not exist", () => {

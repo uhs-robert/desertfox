@@ -1,8 +1,25 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { needs_command_line, needs_hints } from "../../src/content/handlers/phase_2.ts";
+import { NEEDS_COMMAND_LINE, NEEDS_HINTS, hint_run } from "../../src/content/handlers/phase_2.ts";
+import { bundles } from "../../src/content/bundles.ts";
 
-test("phase 2 content commands refuse with the reason", () => {
-  assert.throws(() => needs_hints.run({}), /needs hints \(phase 2\)/);
-  assert.throws(() => needs_command_line.run({}), /needs the command line \(phase 2\)/);
+test("a phase 2 content command loads its bundle and refuses with the reason while the bundle registers nothing", async () => {
+  const shown: string[] = [];
+  const asked: string[] = [];
+  bundles.connect({
+    request_bundle: async (name) => {
+      asked.push(name);
+      return true;
+    },
+    on_idle: () => {},
+    show_error: (message) => shown.push(message),
+    on_sink_missing: () => {},
+  });
+  hint_run.run({});
+  assert.equal(bundles.is_loading(), true);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(asked, ["hints"]);
+  assert.deepEqual(shown, [NEEDS_HINTS]);
+  assert.equal(bundles.is_loading(), false);
+  assert.match(NEEDS_COMMAND_LINE, /command line/);
 });
