@@ -49,6 +49,7 @@ async function page_with(texts: string[]) {
   const links: Link[] = [];
   const active_listeners = new Set<string>();
   const sent: unknown[] = [];
+  const repeat_records: unknown[] = [];
   const copied: string[] = [];
   const modes: string[] = [];
   const handlers = new Map<string, (args: Record<string, unknown>) => void>();
@@ -118,7 +119,7 @@ async function page_with(texts: string[]) {
     };
     disconnect = () => {};
   };
-  globals.browser = { storage: { local: { get: async () => ({}) } }, runtime: { sendMessage: (message: unknown) => void sent.push(message) } };
+  globals.browser = { storage: { local: { get: async () => ({}) } }, runtime: { sendMessage: async (message: unknown) => void ((message as { type?: string }).type === "record_repeat" ? repeat_records : sent).push(message) } };
   Object.defineProperty(globalThis, "navigator", { value: { clipboard: { writeText: async (text: string) => void copied.push(text) } }, configurable: true });
   await import(`${new URL("../../src/content/hints/main.ts", import.meta.url).href}?extras${import_count++}`);
 
@@ -135,6 +136,7 @@ async function page_with(texts: string[]) {
   return {
     links,
     sent,
+    repeat_records,
     copied,
     modes,
     mode: () => mode,
@@ -366,4 +368,16 @@ test("caret with one text match starts at once at that link", async () => {
   await settle();
   assert.equal(page.caret_target().oasisfox_caret_target, page.links[1]);
   assert.equal(page.mode(), "caret");
+});
+
+test("a hint start tells the background what `.` shows again, and says so again after a pick opened a link", async () => {
+  const page = await page_with(["one", "two"]);
+  const args = { action: "tab", filter: "links", text: "", rapid: true };
+  page.run(args);
+  await settle();
+  page.type(page.labels()[0]!.toLowerCase());
+  await settle();
+  const record = { type: "record_repeat", invocation: { id: "hint.run", args } };
+  // Once at the start and once after the pick opened its link, because the router stores that `open.url` first.
+  assert.deepEqual(page.repeat_records, [record, record]);
 });

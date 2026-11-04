@@ -8,6 +8,7 @@ import { slot_of } from "../shared/engines/index.ts";
 import { matches_pattern } from "../shared/match_pattern.ts";
 import { parse_command_line, type Registry } from "../shared/registry/index.ts";
 import { is_available } from "./availability.ts";
+import { no_repeat_memory } from "./repeat_memory.ts";
 import { create_router, type RouterDeps } from "./router.ts";
 
 export const MAX_SNIPPET_DEPTH = 5;
@@ -130,6 +131,7 @@ export function create_snippets(registry: Registry, deps: SnippetDeps, router_de
       ...router_deps,
       get_command: (id) => command_at_depth(id, call.depth + 1),
       show_refusal: async () => undefined,
+      repeat_memory: no_repeat_memory,
     });
     const response = await nested_router.run({
       invocations: [parsed.invocation],

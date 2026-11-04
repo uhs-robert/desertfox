@@ -10,6 +10,8 @@ import { create_bundle_loader } from "./bundle_loader.ts";
 import { track_window_focus } from "./window_focus.ts";
 import { repair_tabs_after_reload } from "./reload.ts";
 import { create_router } from "./router.ts";
+import { create_repeat_memory, page_record } from "./repeat_memory.ts";
+import { wire_repeat } from "../commands/command.ts";
 import { SLOT_TABLE_STORAGE_KEY } from "./storage_keys.ts";
 import { get_config, get_search_engine_names, snippets } from "./startup.ts";
 import { command_meta, registry } from "../shared/registry/index.ts";
@@ -20,7 +22,15 @@ import type { SnippetCall } from "./snippets.ts";
 // Mode reports wait for this, so the clear never removes a fresh report.
 const modes_cleared = forget_all_tab_modes(browser.storage.local);
 
-const router = create_router(make_router_deps(get_config));
+const repeat_memory = create_repeat_memory(browser.storage.session);
+const router = create_router(make_router_deps(get_config, repeat_memory));
+const is_private_tab = async (tab_id: number | undefined) => tab_id !== undefined && (await browser.tabs.get(tab_id).catch(() => undefined))?.incognito === true;
+// A replay is a request like any other: it stores itself again, so `3.` keeps its count for the next `.`.
+wire_repeat({
+  load: async (ctx) => repeat_memory.load(await is_private_tab(ctx.tab_id)),
+  run_batch: (invocations, ctx) =>
+    router.run({ invocations, mode: ctx.mode, frame_id: ctx.frame_id, ...(ctx.tab_id === undefined ? {} : { sender_tab_id: ctx.tab_id }) }),
+});
 const bundle_loader = create_bundle_loader(bundle_loader_deps);
 const cmdline = create_cmdline_service({
   storage: browser.storage.local,
@@ -62,6 +72,12 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
     return complete_items.answer(request.kind, id === undefined || windowId === undefined ? undefined : { tab_id: id, window_id: windowId, incognito: incognito === true });
   }
   if (request?.type === "record_cmdline") return cmdline.record(request.text, sender.tab?.incognito === true);
+  if (request?.type === "record_repeat") {
+    return get_config().then(async () => {
+      const invocation = page_record(request, (id) => registry.get(id), { search_engines: await get_search_engine_names(), containers: await container_names() });
+      if (invocation) await repeat_memory.save([invocation], sender.tab?.incognito === true);
+    });
+  }
   if (request?.type === "list_keys") {
     const tab = sender.tab;
     const page = tab?.url ? { url: tab.url, ...(tab.title ? { title: tab.title } : {}) } : undefined;

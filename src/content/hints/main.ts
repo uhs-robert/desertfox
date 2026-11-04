@@ -83,8 +83,16 @@ function copy_to_clipboard(text: string): void {
   });
 }
 
+// The last hint start, as the background should remember it for `.`.
+let repeat_record: object | undefined;
+
+// The router stores every finished `open.url`, which would make `.` open this address instead of picking again. So the
+// hint start is sent once more after the open has run.
 function open_link(url: string, place: Place): void {
-  void browser.runtime.sendMessage({ type: "run", invocations: [{ id: "open.url", args: { url, where: place } }], mode: "normal" });
+  void browser.runtime
+    .sendMessage({ type: "run", invocations: [{ id: "open.url", args: { url, where: place } }], mode: "normal" })
+    .catch(() => undefined)
+    .then(() => repeat_record && browser.runtime.sendMessage(repeat_record));
 }
 
 // The caret bundle reads the element in `start_session` when the mode starts, and loads on that first entry.
@@ -184,6 +192,8 @@ function register(host: BundleHostApi): void {
     }
     // With nothing to label the mode never changes, so keys held during the load run as normal keys.
     const text = (args.text as string | undefined) || undefined;
+    repeat_record = { type: "record_repeat", invocation: { id: "hint.run", args } };
+    void browser.runtime.sendMessage(repeat_record);
     if (candidates.length === 0) return create_view().show_message(text === undefined ? "No hints on this page" : `No link matches ${text}`);
     // A caret start ends hint mode on the first pick, so rapid has nothing to repeat.
     const current: Session = { cancelled: false, action, waiting_tokens: [], rapid: args.rapid === true && !starts_caret(action), filter, custom_selector, text, lower_text: text?.toLowerCase() };

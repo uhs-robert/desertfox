@@ -83,6 +83,8 @@ export type CommandDef = {
   // Where the command line list offers the command. Absent means always. "hidden" means never, for a command that
   // makes no sense typed. A list of modes means only when the line was opened from one of them. Typing the name still runs it.
   completion?: "hidden" | readonly Mode[];
+  // Absent means true. `.` replays only a repeatable background command, so false keeps a command out of the memory.
+  repeatable?: boolean;
   run: CommandRun;
 };
 
