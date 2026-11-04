@@ -129,6 +129,8 @@ export const DEFAULT_KEYMAP: KeymapConfig = {
     P: { id: "open.clipboard", args: { where: "tab" } },
     aa: { id: "bookmark.add" },
     ab: { id: "bookmark.add", prompt: { param: "url", prefill: { from: "current_url" } }, label: "Add bookmark, edit URL" },
+    ad: { id: "bookmark.remove" },
+    aD: { id: "bookmark.remove", prompt: { param: "bookmark" }, label: "Remove bookmark, pick from list" },
     b: { id: "bookmark.open", args: { where: "here" }, prompt: { param: "bookmark" } },
     B: { id: "bookmark.open", args: { where: "tab" }, prompt: { param: "bookmark" } },
 

@@ -40,6 +40,8 @@ function show_prompt(prompt: HTMLElement, setting: string): void {
   }
 }
 
+const WHEEL_ROWS_PER_NOTCH = 3;
+
 // Page scripts can post a `start` too, to this frame or to a copy they embed. Only the background knows whether the
 // ticket is live, so every `start` is tried and the first one it accepts wins.
 async function open_line(start: Start, port: MessagePort): Promise<void> {
@@ -151,6 +153,15 @@ async function open_line(start: Start, port: MessagePort): Promise<void> {
       event.preventDefault();
     } else if (token !== null && press(token)) event.preventDefault();
   });
+  // Non-passive, so the page behind the list does not scroll with it.
+  document.querySelector<HTMLElement>("#list")!.addEventListener(
+    "wheel",
+    (event) => {
+      event.preventDefault();
+      list.scroll(Math.sign(event.deltaY) * WHEEL_ROWS_PER_NOTCH);
+    },
+    { passive: false },
+  );
   input.addEventListener("input", () => {
     session.edit(input.value, input.selectionStart ?? input.value.length);
     render();
