@@ -63,9 +63,11 @@ export type Settings = {
   open_completion?: ("bookmarks" | "history")[];
   // History rows `open` shows for an empty word. Absent is 10.
   history_completion_max?: number;
-  // The new tab page widgets. Each is on unless false.
-  newtab_clock?: boolean;
+  // The new tab page widgets. Each is on unless false. `true` on the clock means analog, as it did before the digital face.
+  newtab_clock?: boolean | "analog" | "digital";
   newtab_date?: boolean;
+  // The hours of the digital clock. Absent is 12. The analog face has no 12 or 24 form.
+  newtab_clock_format?: 12 | 24;
   // Whether the first install opens the Quick Start page. On unless false. A first install has no config, so only a managed config can turn it off in time.
   open_quick_start_on_install?: boolean;
 };
