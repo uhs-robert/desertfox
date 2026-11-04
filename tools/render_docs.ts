@@ -104,7 +104,7 @@ export function parse_markdown(source: string, text: string): Block[] {
       }
       if (index >= lines.length) fail_at(start, "the code block is never closed");
       index += 1;
-      blocks.push({ kind: "code_block", text: body.join("\n") });
+      blocks.push({ kind: "code_block", text: body.join("\n"), ...(fence[1] ? { language: fence[1] } : {}) });
       continue;
     }
     const unsupported = unsupported_block_start(line);
