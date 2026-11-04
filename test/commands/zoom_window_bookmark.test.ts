@@ -68,6 +68,13 @@ test("browser.focus_page focuses window, tab, then page content", async () => {
   assert.deepEqual(log, ["window 2", "tab 7", "content 7"]);
 });
 
+const UNUSED_REMOVE = {
+  nodes_for_url: async () => [],
+  tab_url: async () => undefined,
+  remove: async () => {},
+  toast: async () => {},
+};
+
 test("bookmark.add uses the tab title only when the tab shows that url", async () => {
   const created: unknown[] = [];
   const handlers = make_bookmark_handlers({
@@ -75,6 +82,7 @@ test("bookmark.add uses the tab title only when the tab shows that url", async (
     create: async (bookmark) => void created.push(bookmark),
     bookmarks: async () => [],
     open: async () => {},
+    ...UNUSED_REMOVE,
   });
   await handlers.add(ctx, { url: "https://a.test/" });
   await handlers.add(ctx, { url: "https://b.test/" });
@@ -109,10 +117,62 @@ test("bookmark.open opens the picked address where the flag says, and opens noth
     create: async () => {},
     bookmarks: async () => BOOKMARKS,
     open: async (_ctx, url, where) => void opened.push(`${where} ${url}`),
+    ...UNUSED_REMOVE,
   });
   await handlers.open(ctx, { bookmark: "arch", where: "tab" });
   await assert.rejects(handlers.open(ctx, { bookmark: "zzzz", where: "tab" }));
   assert.deepEqual(opened, ["tab https://wiki.archlinux.org/"]);
+});
+
+function remove_fixture(nodes: { id: string; type?: string }[], tab_url: string | null = "https://a.test/") {
+  const log: string[] = [];
+  const asked: string[] = [];
+  const handlers = make_bookmark_handlers({
+    tab_title_for_url: async () => undefined,
+    create: async () => {},
+    open: async () => {},
+    bookmarks: async () => BOOKMARKS,
+    tab_url: async () => tab_url ?? undefined,
+    nodes_for_url: async (url) => (asked.push(url), nodes),
+    remove: async (id) => void log.push(`remove ${id}`),
+    toast: async (_ctx, kind, message) => void log.push(`${kind} ${message}`),
+  });
+  return { handlers, log, asked };
+}
+
+test("bookmark.remove with no argument removes every bookmark for the current page", async () => {
+  const one = remove_fixture([{ id: "a", type: "bookmark" }]);
+  await one.handlers.remove(ctx, { bookmark: "" });
+  assert.deepEqual([one.asked, one.log], [["https://a.test/"], ["remove a", "success Removed 1 bookmark"]]);
+  const two = remove_fixture([{ id: "a", type: "bookmark" }, { id: "b", type: "bookmark" }]);
+  await two.handlers.remove(ctx, { bookmark: "" });
+  assert.deepEqual(two.log, ["remove a", "remove b", "success Removed 2 bookmarks"]);
+});
+
+test("bookmark.remove refuses when the page has no bookmark, and when the tab has no address", async () => {
+  const none = remove_fixture([]);
+  await assert.rejects(none.handlers.remove(ctx, { bookmark: "" }), /No bookmark for this page/);
+  const no_url = remove_fixture([{ id: "a", type: "bookmark" }], null);
+  await assert.rejects(no_url.handlers.remove(ctx, { bookmark: "" }), /No bookmark for this page/);
+  assert.deepEqual([none.log, no_url.log], [[], []]);
+});
+
+test("bookmark.remove with an argument removes the bookmarks at the picked address, and refuses no match", async () => {
+  const picked = remove_fixture([{ id: "x", type: "bookmark" }, { id: "y", type: "bookmark" }]);
+  await picked.handlers.remove(ctx, { bookmark: "arch" });
+  assert.deepEqual([picked.asked, picked.log], [["https://wiki.archlinux.org/"], ["remove x", "remove y", "success Removed 2 bookmarks"]]);
+  const missed = remove_fixture([{ id: "x", type: "bookmark" }]);
+  await assert.rejects(missed.handlers.remove(ctx, { bookmark: "zzzz" }), /no bookmark matches/);
+  assert.deepEqual(missed.log, []);
+});
+
+test("bookmark.remove never removes a folder", async () => {
+  const mixed = remove_fixture([{ id: "dir", type: "folder" }, { id: "a", type: "bookmark" }]);
+  await mixed.handlers.remove(ctx, { bookmark: "" });
+  assert.deepEqual(mixed.log, ["remove a", "success Removed 1 bookmark"]);
+  const only_folder = remove_fixture([{ id: "dir", type: "folder" }]);
+  await assert.rejects(only_folder.handlers.remove(ctx, { bookmark: "" }), /No bookmark/);
+  assert.deepEqual(only_folder.log, []);
 });
 
 // Windows in getAll order: 1 normal (the current one), 2 private, 3 normal used long ago, 4 normal used just now.
