@@ -75,6 +75,8 @@ export type CmdlineOpened = {
   command_aliases: Record<string, string>;
   // User CSS, loaded after the built-in styles.
   css: string;
+  // The `cmdline_prompt` setting. Absent keeps the page's own default.
+  prompt?: string;
 };
 
 // From the command line page when typed text parsed. The background keeps it in the history unless the tab is private.

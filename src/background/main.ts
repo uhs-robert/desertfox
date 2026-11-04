@@ -40,7 +40,7 @@ const cmdline = create_cmdline_service({
   sources: async () => ({ search_engines: await get_search_engine_names(), containers: await container_names() }),
   page_config: async () => {
     const config = await get_config();
-    return { commands: registry.list().map(command_meta), command_aliases: config.command_aliases, css: config.css };
+    return { commands: registry.list().map(command_meta), command_aliases: config.command_aliases, css: config.css, ...(config.settings.cmdline_prompt !== undefined && { prompt: config.settings.cmdline_prompt }) };
   },
 });
 
