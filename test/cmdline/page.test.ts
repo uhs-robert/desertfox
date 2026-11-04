@@ -42,12 +42,13 @@ function fake_element() {
 }
 
 // Just enough DOM for the command line page. `head` records what is appended, `parent` what is posted to the web page.
-type PageSetup = { keymap?: unknown; with_tab_command?: boolean };
+type PageSetup = { keymap?: unknown; with_tab_command?: boolean; without_prompt?: boolean };
 
-async function load_page(t: TestContext, tag: string, { keymap = KEYMAP, with_tab_command = false }: PageSetup = {}) {
+async function load_page(t: TestContext, tag: string, { keymap = KEYMAP, with_tab_command = false, without_prompt = false }: PageSetup = {}) {
   const window_listeners: ((event: unknown) => void)[] = [];
   const input_listeners: Record<string, (event: unknown) => void> = {};
   const to_parent: unknown[] = [];
+  const opened_answer = without_prompt ? { ...OPENED, prompt: undefined } : OPENED;
   const head: { textContent: string }[] = [];
   // Every message the page sends to the background, in order.
   const to_background: string[] = [];
@@ -78,7 +79,8 @@ async function load_page(t: TestContext, tag: string, { keymap = KEYMAP, with_ta
   };
   const list = fake_element();
   const panel = fake_element();
-  const prompt = fake_element();
+  // Starts with the default that cmdline.html holds.
+  const prompt = Object.assign(fake_element(), { textContent: "> " });
   const page_window = {
     parent: { postMessage: (message: unknown) => void to_parent.push(message) },
     addEventListener: (type: string, listener: (event: unknown) => void) => void (type === "message" && window_listeners.push(listener)),
@@ -100,8 +102,8 @@ async function load_page(t: TestContext, tag: string, { keymap = KEYMAP, with_ta
         sendMessage: async (message: { type: string; ticket?: string }) => {
           to_background.push(message.type);
           if (message.type === "complete_items") return new Promise((resolve) => void item_asks.push((items) => resolve({ items })));
-          if (message.type === "open_cmdline" && message.ticket === TICKET && with_tab_command) return { ...OPENED, commands: [...OPENED.commands, TAB_COMMAND] };
-          return message.type === "open_cmdline" && message.ticket === TICKET ? OPENED : undefined;
+          if (message.type === "open_cmdline" && message.ticket === TICKET && with_tab_command) return { ...opened_answer, commands: [...OPENED.commands, TAB_COMMAND] };
+          return message.type === "open_cmdline" && message.ticket === TICKET ? opened_answer : undefined;
         },
       },
       storage: { local: { get: async () => ({ [COMPILED_KEYMAP_STORAGE_KEY]: keymap }) } },
@@ -168,6 +170,12 @@ test("the prompt shows the configured text", async (t) => {
   const { prompt, post_start } = await load_page(t, "prompt_text");
   await post_start(TICKET, "j").opened();
   assert.equal(prompt.textContent, OPENED.prompt);
+});
+
+test("the prompt keeps the page default when no prompt is configured", async (t) => {
+  const { prompt, post_start } = await load_page(t, "prompt_default", { without_prompt: true });
+  await post_start(TICKET, "j").opened();
+  assert.equal(prompt.textContent, "> ");
 });
 
 test("a configured alias resolves, and the user CSS loads", async (t) => {

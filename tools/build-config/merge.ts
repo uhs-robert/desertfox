@@ -140,7 +140,7 @@ const SETTING_CHECKS: Record<keyof Settings, (value: unknown) => boolean> = {
   default_engine: (value) => typeof value === "string" && value !== "",
   new_tab_page: (value) => typeof value === "string" && (value === BUILT_IN_PAGE || is_web_url(value)),
   completion_all_windows: (value) => typeof value === "boolean",
-  cmdline_prompt: (value) => typeof value === "string" && value.length >= 1 && value.length <= 8 && !/[\r\n]/.test(value),
+  cmdline_prompt: (value) => typeof value === "string" && [...value].length >= 1 && [...value].length <= 8 && !/[\r\n]/.test(value),
   open_completion: (value) => Array.isArray(value) && new Set(value).size === value.length && value.every((source) => source === "bookmarks" || source === "history"),
   history_completion_max: (value) => typeof value === "number" && Number.isInteger(value) && value >= 0,
 };
