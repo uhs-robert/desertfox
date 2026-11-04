@@ -328,6 +328,11 @@ test("the alternate tab is the previous tab of the line's window, and the curren
   assert.deepEqual(listed.map((item) => [item.id, item.active, item.alternate]), [[1, true, undefined], [2, undefined, undefined], [3, undefined, true], [4, undefined, undefined]]);
 });
 
+test("a previous tab moved to another window takes no alternate mark in that window's rows", () => {
+  const tabs = [in_window(1, { active: true }), tab(3, 0, 11, false)];
+  assert.deepEqual(listed_tabs(tabs, { window_id: 10, incognito: false }, new Map(), 3).map((item) => item.alternate), [undefined, undefined]);
+});
+
 test("a background tab never takes the alternate mark, and a closed or current previous tab marks nothing", () => {
   const scope = { window_id: 10, incognito: false };
   const opened_later = [in_window(1, { active: true }), in_window(2, {}), in_window(3, {})];

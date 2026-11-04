@@ -40,3 +40,18 @@ test("closing the previous tab or its window clears it, and closing another tab 
   await tabs.removed(12, 1, true);
   assert.equal(await tabs.previous_of(1), undefined);
 });
+
+test("a read right after an activation waits for the write", async () => {
+  const data = new Map<string, unknown>();
+  const storage = {
+    get: async (key: string) => (data.has(key) ? { [key]: data.get(key) } : {}),
+    set: async (items: Record<string, unknown>) => {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      Object.entries(items).forEach(([key, value]) => data.set(key, value));
+    },
+    remove: async (key: string) => void data.delete(key),
+  };
+  const tabs = create_previous_tabs(storage as never);
+  void tabs.activated(1, 10);
+  assert.equal(await tabs.previous_of(1), 10);
+});

@@ -7,7 +7,7 @@ type PreviousTabStorage = Pick<typeof browser.storage.session, "get" | "set" | "
 
 export function create_previous_tabs(storage: PreviousTabStorage) {
   const key_of = (window_id: number) => PREVIOUS_TAB_STORAGE_PREFIX + window_id;
-  const previous_of = async (window_id: number): Promise<number | undefined> => {
+  const stored_previous_of = async (window_id: number): Promise<number | undefined> => {
     const stored = (await storage.get(key_of(window_id)))[key_of(window_id)];
     return typeof stored === "number" ? stored : undefined;
   };
@@ -18,13 +18,17 @@ export function create_previous_tabs(storage: PreviousTabStorage) {
     return queue;
   };
   return {
-    previous_of,
+    // Waits for queued writes, so a read right after an activation sees it. `removed` reads inside the queue and must not wait on it.
+    previous_of: async (window_id: number): Promise<number | undefined> => {
+      await queue;
+      return stored_previous_of(window_id);
+    },
     // A window's first activation has no previous tab.
     activated: (window_id: number, previous_tab_id: number | undefined): Promise<void> =>
       enqueue(() => (previous_tab_id === undefined ? storage.remove(key_of(window_id)) : storage.set({ [key_of(window_id)]: previous_tab_id }))),
     removed: (tab_id: number, window_id: number, window_closing: boolean): Promise<void> =>
       enqueue(async () => {
-        if (window_closing || (await previous_of(window_id)) === tab_id) await storage.remove(key_of(window_id));
+        if (window_closing || (await stored_previous_of(window_id)) === tab_id) await storage.remove(key_of(window_id));
       }),
   };
 }

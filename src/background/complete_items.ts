@@ -74,8 +74,8 @@ export function listed_tabs(tabs: readonly TabLike[], scope: LineScope, containe
         ...(container ? { container } : {}),
         // Another window's active tab is not the current one, so only the line's window marks `%` and `#`.
         ...(tab.active && tab.windowId === scope.window_id ? { active: true as const } : {}),
-        // `previous_tab_id` is the line's window's, so no other window's tab can match it. A closed tab is not in `shown`, so it marks nothing.
-        ...(tab.id === previous_tab_id && !tab.active ? { alternate: true as const } : {}),
+        // `previous_tab_id` is the line's window's, but a tab moved to another window keeps its id, so only the line's window marks `#`. A closed tab is not in `shown`, so it marks nothing.
+        ...(tab.id === previous_tab_id && !tab.active && tab.windowId === scope.window_id ? { alternate: true as const } : {}),
         ...(tab.pinned ? { pinned: true as const } : {}),
         // A muted tab that plays sound is audible too, and the speaker would contradict the crossed one.
         ...(tab.audible && !tab.mutedInfo?.muted ? { audible: true as const } : {}),
