@@ -14,7 +14,7 @@
         --oasisfox-error: #ffa0a0;
         --oasisfox-muted: #4e6578;
         --oasisfox-selection: #24364d;
-        --oasisfox-font: 15px/1.4 ui-monospace, monospace;
+        --oasisfox-font: 12px/1.4 ui-monospace, monospace;
         box-sizing: border-box;
         flex: none;
         background: var(--oasisfox-bg);
@@ -25,16 +25,16 @@
       }
       .oasisfox-cmdline-note { padding: 0 .75rem; color: var(--oasisfox-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
       .oasisfox-cmdline-error .oasisfox-cmdline-note { color: var(--oasisfox-error); }
-      .oasisfox-cmdline-row { display: flex; align-items: center; padding: .35rem .75rem; }
+      .oasisfox-cmdline-row { display: flex; align-items: center; padding: .25rem .75rem; background: var(--oasisfox-mantle, #141c24); }
       .oasisfox-cmdline-prompt { color: var(--oasisfox-accent); margin-right: .5rem; }
       .oasisfox-cmdline-input { flex: 1; background: transparent; color: inherit; border: 0; outline: 0; font: inherit; }
-      /* Each row is 26px. The keys column is last and never shrinks: --oasisfox-keys-width is its widest text. */
+      /* Each row is 20px. The keys column is last and never shrinks: --oasisfox-keys-width is its widest text. */
       .oasisfox-cmdline-list { overflow: hidden; }
-      .oasisfox-cmdline-item { display: flex; align-items: center; gap: .75rem; height: 26px; padding: 0 .75rem; white-space: nowrap; }
-      .oasisfox-cmdline-selected { background: var(--oasisfox-selection); }
+      .oasisfox-cmdline-item { display: flex; align-items: center; gap: .75rem; height: 20px; padding: 0 .75rem; white-space: nowrap; }
+      .oasisfox-cmdline-selected { background: var(--oasisfox-selection); color: var(--oasisfox-secondary, #f0e68c); }
       .oasisfox-cmdline-unavailable { opacity: .5; }
       .oasisfox-cmdline-name { flex: 0 0 var(--oasisfox-name-width); overflow: hidden; text-overflow: ellipsis; }
-      .oasisfox-cmdline-name b { color: var(--oasisfox-accent); }
+      .oasisfox-cmdline-name b { color: var(--oasisfox-secondary, #f0e68c); }
       /* The description takes the space that is left, so it is the first to shrink. */
       .oasisfox-cmdline-description { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--oasisfox-muted); }
       .oasisfox-cmdline-args { flex: 0 1 auto; max-width: 45%; overflow: hidden; text-overflow: ellipsis; color: var(--oasisfox-muted); opacity: .8; }
