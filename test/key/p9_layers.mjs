@@ -14,7 +14,7 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, open_p
 
   await run_case("the toast is above the mode badge while both are shown", async () => {
     await open_page("caret", "p9_layers", { new_tab: true });
-    await send_keys("V");
+    await send_keys("gV");
     await send_keys("3w");
     await send_keys("v");
     await send_keys("e");

@@ -92,7 +92,9 @@ test("the keys of the new modes compile and resolve to their commands", () => {
     for (const token of tokens) node = node?.children?.[token] as typeof node;
     return node?.steps?.map((step) => `${step.invocation.id} ${JSON.stringify(step.invocation.args ?? {})}`).join(",");
   };
-  assert.equal(leaf_id("normal", "V"), 'mode.set {"mode":"caret"}');
+  assert.equal(leaf_id("normal", "g", "V"), 'mode.set {"mode":"caret"}');
+  assert.equal(leaf_id("normal", "v"), 'hint.run {"action":"caret","filter":"all","text":"","rapid":false}');
+  assert.equal(leaf_id("normal", "V"), 'hint.run {"action":"visual","filter":"all","text":"","rapid":false}');
   assert.equal(leaf_id("caret", "v"), 'mode.set {"mode":"visual"}');
   for (const mode of ["hint", "cmdline", "caret", "visual"] as const) {
     assert.equal(leaf_id(mode, "<Escape>"), "mode.escape {}", mode);
