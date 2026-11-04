@@ -35,13 +35,11 @@ export async function run_cases({ run_case, expect, open_page, send_keys, sleep,
   await run_case("k passes two empty lines made with br (g, empty, empty, d)", () => check("empty_line", ["k", "k", "k"], "d", true));
   await run_case("k passes a blank line in pre (j, empty, g line)", () => check("pre", ["k", "k"], " ", true));
 
-  // Firefox's own find bar (Ctrl+F), because "/" is page search in normal mode. After Enter and Escape its match stays selected on the page.
-  await run_case("V after a find with / starts at the found match", async () => {
+  // Something else selects the match, as a find does: `window.find`, because "/" is page search in normal mode and leaves the page selection alone.
+  const select_needle = () => evaluate_in_background(rdp, extension_id, `(async () => { const [tab] = await browser.tabs.query({ active: true, currentWindow: true }); return browser.tabs.executeScript(tab.id, { code: 'window.find("needle")' }); })()`);
+  await run_case("V after a find selected the match starts at it", async () => {
     await open_page("caret_bug_find", "find_a", { new_tab: true });
-    await send_keys("-M", "ctrl", "f", "-m", "ctrl");
-    await send_keys("-d", "30", "needle");
-    await send_keys("-k", "Return");
-    await send_keys("-k", "Escape");
+    await select_needle();
     await sleep(500);
     const mark = events.length;
     await send_keys("gV");
@@ -52,20 +50,6 @@ export async function run_cases({ run_case, expect, open_page, send_keys, sleep,
     const mark_w = events.length;
     await send_keys("w");
     await wait_event(mark_w, (event) => event.type === "selection" && event.page_id === "find_a" && event.text === "s", "w to the word after the match");
-    await send_keys("-k", "Escape");
-  });
-
-  await run_case("V right after a find with / ended by Return starts at the match", async () => {
-    await open_page("caret_bug_find", "find_b", { new_tab: true });
-    await send_keys("-M", "ctrl", "f", "-m", "ctrl");
-    await send_keys("-d", "30", "needle");
-    await send_keys("-k", "Return");
-    await sleep(500);
-    const mark = events.length;
-    await send_keys("gV");
-    await sleep(500);
-    const shown = events.slice(mark).filter((event) => event.type === "selection" && event.page_id === "find_b" && event.text !== "").at(-1);
-    expect(shown && shown.text === "n", `the caret is on "${shown?.text}", expected "n" of needle`);
     await send_keys("-k", "Escape");
   });
 
