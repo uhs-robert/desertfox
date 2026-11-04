@@ -113,3 +113,39 @@ test("a command row shows its keys in the last cell and a row with no id shows n
   assert.deepEqual(texts, ["d dH +1", "", ""]);
   assert.equal(element.style.vars["--oasisfox-keys-width"], "7ch");
 });
+
+test("a tab row leads with the status, container and favicon cells, and a row without tab marks has none", () => {
+  const { element, list } = setup();
+  const [plain] = rows(1);
+  const tab = { ...plain!, tab: { status: "%", flags: ["pinned", "muted"] as ("pinned" | "muted")[], favicon: "https://a.test/i.png", container: { color: "#37adff", icon: "resource://usercontext-content/fingerprint.svg" } } };
+  list.render([plain!, tab], -1);
+  const [first, second] = element.children as [Node, Node];
+  assert.equal(first.children[0]!.className, "oasisfox-cmdline-name");
+  assert.deepEqual(second.children.map((cell) => cell.className), ["oasisfox-cmdline-tab-status", "oasisfox-cmdline-container", "oasisfox-cmdline-favicon", "oasisfox-cmdline-name", "oasisfox-cmdline-description", "oasisfox-cmdline-args", "oasisfox-cmdline-keys"]);
+  const [status, container, favicon] = second.children as [Node, Node, Node];
+  assert.deepEqual(status.children.map((cell) => [cell.className, cell.textContent]), [["oasisfox-cmdline-tab-mark", "%"], ["oasisfox-cmdline-flag oasisfox-cmdline-flag-pinned", ""], ["oasisfox-cmdline-flag oasisfox-cmdline-flag-muted", ""]]);
+  assert.equal(container.style.vars["--oasisfox-container-color"], "#37adff");
+  assert.equal((favicon.children[0] as unknown as { src: string }).src, "https://a.test/i.png");
+  assert.equal(element.style.vars["--oasisfox-flags-width"], "28px");
+});
+
+test("a tab with no container or favicon draws empty cells, and no flags take no width", () => {
+  const { element, list } = setup();
+  list.render([{ ...rows(1)[0]!, tab: { status: "", flags: [] } }], -1);
+  const [container, favicon] = (element.children[0] as Node).children.slice(1, 3) as [Node, Node];
+  assert.deepEqual([container.children.length, favicon.children.length], [0, 0]);
+  assert.equal(element.style.vars["--oasisfox-flags-width"], "0px");
+});
+
+test("an image that fails to load is hidden, and a container icon that fails becomes a dot", () => {
+  const { element, list } = setup();
+  list.render([{ ...rows(1)[0]!, tab: { status: "#", flags: [], favicon: "https://a.test/i.png", container: { color: "red", icon: "resource://x/y.svg" } } }], -1);
+  const [container, favicon] = (element.children[0] as Node).children.slice(1, 3) as [Node, Node];
+  for (const holder of [container, favicon]) {
+    const image = holder.children[0] as unknown as { hidden: boolean; onerror: () => void };
+    image.onerror();
+    assert.equal(image.hidden, true);
+  }
+  assert.ok(container.className.includes("oasisfox-cmdline-container-dot"));
+  assert.equal(favicon.className, "oasisfox-cmdline-favicon");
+});

@@ -88,8 +88,24 @@ export type CompleteItems = {
   kind: "tabs" | "bookmarks" | "engines" | "open";
 };
 
-// `number` is the tab's place in its window's tab bar, counted from 1.
-export type TabItem = { number: number; title: string; url: string };
+// A tab's container, drawn as a mark in the container's color. Absent for the default container and for private tabs.
+export type TabContainer = { color: string; icon: string };
+
+// `number` is the tab's place in its window's tab bar, counted from 1. `favicon` is an http, https or short data: URL and is absent otherwise.
+// The flags are present only when true, which keeps the answer small.
+export type TabItem = {
+  number: number;
+  title: string;
+  url: string;
+  favicon?: string;
+  container?: TabContainer;
+  active?: true;
+  alternate?: true;
+  pinned?: true;
+  audible?: true;
+  muted?: true;
+  discarded?: true;
+};
 
 // Newest first.
 export type BookmarkItem = { title: string; url: string };

@@ -7,9 +7,14 @@ import type { CommandLookup, EnumSources } from "../../shared/registry/index.ts"
 import { bare_word_param, flag_params, is_dynamic_values, static_values, subject_param } from "../../shared/registry/params.ts";
 import { rank } from "../../shared/score.ts";
 import type { Ranked } from "../../shared/score.ts";
-import type { BookmarkItem, EngineItem, OpenItems, OpenRow, TabItem } from "../../shared/messages.ts";
+import type { BookmarkItem, EngineItem, OpenItems, OpenRow, TabContainer, TabItem } from "../../shared/messages.ts";
 import type { LiveKind, LiveSource } from "./live.ts";
 import { cursor_context } from "./tokenize.ts";
+
+export type TabFlag = "pinned" | "audible" | "muted" | "discarded";
+
+// What a tab row draws before its name. `status` is `%` for the current tab, `#` for the alternate one and empty otherwise.
+export type TabMarks = { status: string; flags: TabFlag[]; favicon?: string; container?: TabContainer };
 
 export type Row = {
   // The command id of a command row, which the keys column looks up. Flag, value and subject rows have none.
@@ -30,6 +35,8 @@ export type Row = {
   unavailable?: boolean;
   // Where an `open` row came from, drawn as a dim cell: `bm` or `hist`.
   tag?: string;
+  // Set on a tab row only. The list draws the cells before the name from it.
+  tab?: TabMarks;
 };
 
 export type Completion = {
@@ -159,11 +166,21 @@ function open_ranked(word: string, rows: Row[], items: OpenItems): Ranked<Row>[]
   return rank(word, rows).filter((row) => (shown[row.tag as string] = (shown[row.tag as string] ?? 0) + 1) <= (caps[row.tag as string] ?? Infinity));
 }
 
+const FLAGS: TabFlag[] = ["pinned", "audible", "muted", "discarded"];
+
+const marks_of = (tab: TabItem): TabMarks => ({
+  status: tab.active ? "%" : tab.alternate ? "#" : "",
+  flags: FLAGS.filter((flag) => tab[flag]),
+  ...(tab.favicon ? { favicon: tab.favicon } : {}),
+  ...(tab.container ? { container: tab.container } : {}),
+});
+
 // The number first, so a typed `3` finds the tab at place 3 of the tab bar. The pick puts the number and title in the
 // line and the handler reads the leading number. A title with a quote is quoted whole, or the line would not parse.
 function tab_rows(tabs: readonly TabItem[], usage: string): Row[] {
   return tabs.map((tab) => ({
-    name: `${tab.number} ${tab.title}`,
+    name: `${tab.number}: ${tab.title}`,
+    tab: marks_of(tab),
     insert: `${tab.number} ${/["'\\]/.test(tab.title) ? quote_word(tab.title) : tab.title} `,
     description: tab.url,
     args: "",

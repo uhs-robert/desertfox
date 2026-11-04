@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { bookmark_items, create_complete_items, engine_items, flatten_bookmarks, history_items, listed_tabs } from "../../src/background/complete_items.ts";
+import { bookmark_items, create_complete_items, engine_items, flatten_bookmarks, history_items, listed_favicon, listed_tabs, read_containers } from "../../src/background/complete_items.ts";
 import type { BookmarkNode, HistoryNode, LineScope, OpenSettings, TabLike } from "../../src/background/complete_items.ts";
 
 const tab = (id: number, index: number, window_id: number, incognito: boolean, title = `Tab ${id}`): TabLike => ({ id, index, windowId: window_id, title, url: `https://site${id}.test/`, incognito });
@@ -33,6 +33,7 @@ function make({ openers = [1, 2], all_windows = false, tabs = ALL_TABS, bookmark
     },
     is_opener: async (tab_id) => opened.has(tab_id),
     all_windows: async () => all_windows,
+    containers: async () => new Map(),
     search_engines: async () => ENGINES,
     page_of: async () => page,
     search_history: async () => {
@@ -131,6 +132,7 @@ test("a tab that navigates or closes while the lookup runs gets nothing", async 
     },
     is_opener: async (tab_id) => opened.has(tab_id),
     all_windows: async () => false,
+    containers: async () => new Map(),
     search_engines: async () => ENGINES,
     page_of: async () => undefined,
     search_history: async () => [],
@@ -244,6 +246,7 @@ test("the opener is checked before and after the history fetch", async () => {
     all_bookmarks: async () => [],
     is_opener: async (tab_id) => opened.has(tab_id),
     all_windows: async () => false,
+    containers: async () => new Map(),
     search_engines: async () => ENGINES,
     page_of: async () => undefined,
     search_history: async () => {
@@ -265,6 +268,7 @@ test("a failed history read leaves the bookmarks, and a failed bookmark read lea
       },
       is_opener: async () => true,
       all_windows: async () => false,
+      containers: async () => new Map(),
       search_engines: async () => ENGINES,
       page_of: async () => undefined,
       search_history: async () => {
@@ -276,4 +280,97 @@ test("a failed history read leaves the bookmarks, and a failed bookmark read lea
   const tags = async (failing: "history" | "bookmarks") => ((await service(failing).answer("open", NORMAL_LINE))?.items as { rows: { tag: string }[] }).rows.map((row) => row.tag);
   assert.deepEqual(await tags("history"), ["bm", "bm"]);
   assert.deepEqual(await tags("bookmarks"), ["hist", "hist", "hist"]);
+});
+
+const FOX = { color: "#37adff", icon: "resource://usercontext-content/fingerprint.svg" };
+const in_window = (id: number, extra: Partial<TabLike>): TabLike => ({ ...tab(id, id - 1, 10, false), ...extra });
+
+test("the alternate tab is the other tab of the line's window used last, and the current tab is marked", () => {
+  const tabs = [in_window(1, { active: true, lastAccessed: 900 }), in_window(2, { lastAccessed: 100 }), in_window(3, { lastAccessed: 500 }), { ...tab(4, 0, 11, false), lastAccessed: 800 }];
+  const listed = listed_tabs(tabs, { window_id: 10, incognito: false });
+  assert.deepEqual(listed.map((item) => [item.id, item.active, item.alternate]), [[1, true, undefined], [2, undefined, undefined], [3, undefined, true], [4, undefined, undefined]]);
+});
+
+test("with no other tab, or no access time, or a tie, the alternate pick stays sane", () => {
+  const scope = { window_id: 10, incognito: false };
+  assert.deepEqual(listed_tabs([in_window(1, { active: true, lastAccessed: 5 })], scope).map((item) => item.alternate), [undefined]);
+  assert.deepEqual(listed_tabs([in_window(1, { active: true }), in_window(2, {})], scope).map((item) => item.alternate), [undefined, undefined]);
+  const tied = listed_tabs([in_window(1, { active: true, lastAccessed: 9 }), in_window(2, { lastAccessed: 7 }), in_window(3, { lastAccessed: 7 })], scope);
+  assert.deepEqual(tied.map((item) => item.alternate), [undefined, true, undefined]);
+  // Another window's active tab is not the current tab of this line.
+  assert.deepEqual(listed_tabs([{ ...tab(4, 0, 11, false), active: true, lastAccessed: 1 }], scope).map((item) => item.active), [undefined]);
+});
+
+test("the flags appear only when true", () => {
+  const [plain, flagged] = listed_tabs([in_window(1, {}), in_window(2, { pinned: true, audible: true, mutedInfo: { muted: true }, discarded: true })], { window_id: 10, incognito: false });
+  assert.deepEqual(Object.keys(plain!).sort(), ["id", "number", "title", "url", "window_id"]);
+  assert.deepEqual([flagged!.pinned, flagged!.audible, flagged!.muted, flagged!.discarded], [true, true, true, true]);
+  assert.equal(listed_tabs([in_window(1, { mutedInfo: { muted: false } })], { window_id: 10, incognito: false })[0]!.muted, undefined);
+});
+
+test("only http, https and short data: favicons go on the wire", () => {
+  assert.equal(listed_favicon("https://a.test/icon.png"), "https://a.test/icon.png");
+  assert.equal(listed_favicon("http://a.test/icon.png"), "http://a.test/icon.png");
+  assert.equal(listed_favicon("data:image/png;base64,AAAA"), "data:image/png;base64,AAAA");
+  assert.equal(listed_favicon(`data:image/png;base64,${"A".repeat(5000)}`), undefined);
+  for (const dropped of ["chrome://mozapps/skin/places/defaultFavicon.svg", "moz-extension://x/icon.png", "file:///a.png", "javascript:alert(1)", "", undefined]) assert.equal(listed_favicon(dropped), undefined);
+  const [item] = listed_tabs([in_window(1, { favIconUrl: "chrome://branding/content/icon32.png" })], { window_id: 10, incognito: false });
+  assert.equal("favicon" in item!, false);
+});
+
+test("a container tab carries the container, and the default container, a private tab and an unknown store carry none", () => {
+  const containers = new Map([["firefox-container-1", FOX]]);
+  const tabs = [in_window(1, { cookieStoreId: "firefox-container-1" }), in_window(2, { cookieStoreId: "firefox-default" }), in_window(3, { cookieStoreId: "firefox-container-9" }), in_window(4, {})];
+  assert.deepEqual(listed_tabs(tabs, { window_id: 10, incognito: false }, containers).map((item) => item.container), [FOX, undefined, undefined, undefined]);
+  const private_tab = { ...tab(5, 0, 20, true), cookieStoreId: "firefox-private" };
+  assert.equal(listed_tabs([private_tab], { window_id: 20, incognito: true }, containers)[0]!.container, undefined);
+});
+
+test("the container lookup maps identities, and gives none when containers are off", async () => {
+  const identity = { cookieStoreId: "firefox-container-1", colorCode: FOX.color, iconUrl: FOX.icon };
+  assert.deepEqual([...(await read_containers(async () => [identity]))], [["firefox-container-1", FOX]]);
+  assert.equal((await read_containers(async () => { throw new Error("containers are off"); })).size, 0);
+  assert.equal((await read_containers(() => { throw new Error("no api"); })).size, 0);
+  assert.equal((await read_containers(async () => false)).size, 0);
+});
+
+test("the answer drops the ids, keeps the new fields, and sends a long data: favicon nowhere", async () => {
+  const long = `data:image/png;base64,${"A".repeat(5000)}`;
+  const tabs = [
+    in_window(1, { active: true, lastAccessed: 3, favIconUrl: long, pinned: true }),
+    in_window(2, { lastAccessed: 2, favIconUrl: "https://a.test/i.png", cookieStoreId: "firefox-container-1" }),
+  ];
+  const service = create_complete_items({
+    query_tabs: async () => tabs,
+    all_bookmarks: async () => [],
+    is_opener: async () => true,
+    all_windows: async () => false,
+    containers: async () => new Map([["firefox-container-1", FOX]]),
+    search_engines: async () => ENGINES,
+    page_of: async () => undefined,
+    search_history: async () => [],
+    open_settings: async () => ({ sources: [], history_max: 0 }),
+  });
+  const answer = await service.answer("tabs", NORMAL_LINE);
+  assert.deepEqual(answer?.items, [
+    { number: 1, title: "Tab 1", url: "https://site1.test/", active: true, pinned: true },
+    { number: 2, title: "Tab 2", url: "https://site2.test/", favicon: "https://a.test/i.png", container: FOX, alternate: true },
+  ]);
+  assert.ok(JSON.stringify(answer).length < 600);
+});
+
+test("a private line lists private tabs with their favicon and flags and no container", async () => {
+  const private_tabs = [{ ...tab(4, 0, 20, true), active: true, favIconUrl: "https://p.test/i.png", cookieStoreId: "firefox-private" }];
+  const service = create_complete_items({
+    query_tabs: async () => private_tabs,
+    all_bookmarks: async () => [],
+    is_opener: async () => true,
+    all_windows: async () => false,
+    containers: async () => new Map([["firefox-container-1", FOX]]),
+    search_engines: async () => ENGINES,
+    page_of: async () => undefined,
+    search_history: async () => [],
+    open_settings: async () => ({ sources: [], history_max: 0 }),
+  });
+  assert.deepEqual((await service.answer("tabs", PRIVATE_LINE))?.items, [{ number: 1, title: "Tab 4", url: "https://site4.test/", favicon: "https://p.test/i.png", active: true }]);
 });

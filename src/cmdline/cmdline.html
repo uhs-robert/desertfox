@@ -33,6 +33,22 @@
       .oasisfox-cmdline-item { display: flex; align-items: center; gap: .75rem; height: 20px; padding: 0 .75rem; white-space: nowrap; }
       .oasisfox-cmdline-selected { background: var(--oasisfox-selection); color: var(--oasisfox-secondary, #f0e68c); }
       .oasisfox-cmdline-unavailable { opacity: .5; }
+      /* Tab rows lead with fixed-width cells, so the names line up. The flag icons are masks, so they take the text color. */
+      .oasisfox-cmdline-tab-status { flex: 0 0 calc(1ch + var(--oasisfox-flags-width, 0px)); display: flex; align-items: center; color: var(--oasisfox-accent); }
+      .oasisfox-cmdline-tab-mark { flex: 0 0 1ch; text-align: center; }
+      .oasisfox-cmdline-flag { flex: 0 0 12px; height: 12px; margin-left: 2px; background: currentColor; mask: var(--oasisfox-flag-mask) center / contain no-repeat; -webkit-mask: var(--oasisfox-flag-mask) center / contain no-repeat; }
+      .oasisfox-cmdline-flag-pinned { --oasisfox-flag-mask: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><path d='M5 1h6v1.5l-1 1V7l2.5 2.5V11H8.8v4L8 16l-.8-1v-4H3.5V9.5L6 7V3.5l-1-1z'/></svg>"); }
+      .oasisfox-cmdline-flag-audible { --oasisfox-flag-mask: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><path d='M1 6h3l4-3.5v11L4 10H1z'/><path d='M10.5 5.5a3.5 3.5 0 0 1 0 5M12.5 3.5a6.5 6.5 0 0 1 0 9' fill='none' stroke='black' stroke-width='1.4'/></svg>"); }
+      .oasisfox-cmdline-flag-muted { --oasisfox-flag-mask: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><path d='M1 6h3l4-3.5v11L4 10H1z'/><path d='M10.5 6l4 4M14.5 6l-4 4' fill='none' stroke='black' stroke-width='1.4'/></svg>"); }
+      .oasisfox-cmdline-flag-discarded { --oasisfox-flag-mask: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><circle cx='8' cy='8' r='6.3' fill='none' stroke='black' stroke-width='1.5'/><path d='M4.8 8h6.4' stroke='black' stroke-width='1.5'/></svg>"); }
+      .oasisfox-cmdline-container, .oasisfox-cmdline-favicon { position: relative; flex: 0 0 14px; height: 14px; }
+      .oasisfox-cmdline-container img, .oasisfox-cmdline-favicon img { position: absolute; inset: 0; width: 14px; height: 14px; }
+      .oasisfox-cmdline-container:has(img) { background: var(--oasisfox-container-color); mask: var(--oasisfox-container-icon) center / contain no-repeat; -webkit-mask: var(--oasisfox-container-icon) center / contain no-repeat; }
+      .oasisfox-cmdline-container img { opacity: 0; }
+      .oasisfox-cmdline-container.oasisfox-cmdline-container-dot { mask: none; -webkit-mask: none; background: none; }
+      .oasisfox-cmdline-container-dot::before { content: ""; position: absolute; inset: 3px; border-radius: 50%; background: var(--oasisfox-container-color); }
+      .oasisfox-cmdline-favicon::before { content: ""; position: absolute; inset: 2px; border: 1px solid var(--oasisfox-muted); border-radius: 3px; box-sizing: border-box; }
+      .oasisfox-cmdline-favicon img { background: var(--oasisfox-bg); }
       .oasisfox-cmdline-name { flex: 0 0 var(--oasisfox-name-width); overflow: hidden; text-overflow: ellipsis; }
       .oasisfox-cmdline-name b { color: var(--oasisfox-secondary, #f0e68c); }
       /* The description takes the space that is left, so it is the first to shrink. */

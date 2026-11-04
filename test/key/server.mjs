@@ -84,6 +84,10 @@ export function start_server() {
       });
       return;
     }
+    if (url.pathname === "/icon.svg") {
+      response.writeHead(200, { "content-type": "image/svg+xml" });
+      return response.end('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><circle cx="8" cy="8" r="7" fill="#e8a33d"/><path d="M5 8l2 2 4-4" fill="none" stroke="#fff" stroke-width="2"/></svg>');
+    }
     response.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" });
     const id = url.searchParams.get("id") ?? "none";
     if (url.pathname === "/field") {
@@ -148,6 +152,7 @@ export function start_server() {
       const filler = Array.from({ length: 60 }, (_, index) => `<p>filler line ${index} with some text</p>`).join("");
       return response.end(page(`caret_bug_find ${id}`, `<p>start of page</p>${filler}<p>the needle sits here</p>${filler}`));
     }
+    if (url.pathname === "/iconed") return response.end(page(`iconed ${id}`, "", '<link rel="icon" href="/icon.svg">'));
     if (url.pathname === "/swallow") return response.end(page(`swallow ${id}`, tall_filler, CANCEL_KEYS_IN_CAPTURE));
     response.end(page(`page ${id}`, tall_filler));
   });
