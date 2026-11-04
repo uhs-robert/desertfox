@@ -82,6 +82,27 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, open_p
     });
   }
 
+  // Called straight on the browser, with the index tab.attach uses for a pinned tab: the end of the pinned tabs. Firefox ignores a move of a
+  // pinned tab to index -1 and answers with no tab, so the pin must be kept by choosing an index inside the pinned area.
+  await run_case("Firefox moves a pinned tab to the end of the pinned tabs of another window and keeps it pinned", async () => {
+    await open_page("page", "p9e_attach", { new_tab: true });
+    const moved = await background(`(async () => {
+      const home = (await browser.windows.getLastFocused()).id;
+      const [tab] = await browser.tabs.query({ active: true, windowId: home });
+      await browser.tabs.update(tab.id, { pinned: true });
+      const other = (await browser.windows.create({ url: "about:blank" })).id;
+      const pinned_there = (await browser.tabs.query({ windowId: other, pinned: true })).length;
+      await browser.tabs.move(tab.id, { windowId: other, index: pinned_there });
+      const after = await browser.tabs.get(tab.id);
+      await browser.windows.remove(other);
+      await browser.windows.update(home, { focused: true });
+      return { in_other_window: after.windowId === other, pinned: after.pinned };
+    })()`);
+    await sleep(500);
+    expect(moved.in_other_window, "the tab did not reach the other window");
+    expect(moved.pinned, "the moved tab lost its pin");
+  });
+
   for (let closed = 0; closed < 3; closed++) {
     await send_keys(...CTRL("w"));
     await sleep(700);

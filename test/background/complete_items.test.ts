@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { bookmark_items, create_complete_items, engine_items, flatten_bookmarks, history_items, listed_favicon, listed_tabs, read_containers } from "../../src/background/complete_items.ts";
-import type { BookmarkNode, HistoryNode, LineScope, OpenSettings, TabLike } from "../../src/background/complete_items.ts";
+import { bookmark_items, create_complete_items, engine_items, flatten_bookmarks, history_items, listed_favicon, listed_tabs, listed_windows, read_containers } from "../../src/background/complete_items.ts";
+import type { BookmarkNode, HistoryNode, LineScope, OpenSettings, TabLike, WindowLike } from "../../src/background/complete_items.ts";
 
 const tab = (id: number, index: number, window_id: number, incognito: boolean, title = `Tab ${id}`): TabLike => ({ id, index, windowId: window_id, title, url: `https://site${id}.test/`, incognito });
 const NORMAL_LINE: LineScope & { tab_id: number } = { tab_id: 1, window_id: 10, incognito: false };
@@ -17,6 +17,15 @@ const ENGINES = {
   "github.repo.fb": { url: "https://github.com/{repo}", label: "GitHub fallback", slots: ["repo"], fallback: "https://github.com/" },
 };
 
+const window_of = (id: number, incognito: boolean, title: string, type = "normal"): WindowLike => ({
+  id,
+  type,
+  incognito,
+  tabs: [{ active: false, title: "background tab" }, { active: true, title, url: `https://w${id}.test/`, lastAccessed: id }],
+});
+// Two normal windows and one private window, in `windows.getAll` order.
+const WINDOWS = [window_of(10, false, "Mail"), window_of(20, true, "Secret"), window_of(11, false, "Docs\n tab")];
+
 function make({ openers = [1, 2], all_windows = false, tabs = ALL_TABS, bookmarks = [] as BookmarkNode[], fail = false, page = undefined as { url: string } | undefined, history = [] as HistoryNode[], open = { sources: ["bookmarks", "history"], history_max: 10 } as OpenSettings } = {}) {
   const history_reads: number[] = [];
   const asked: (number | undefined)[] = [];
@@ -26,6 +35,10 @@ function make({ openers = [1, 2], all_windows = false, tabs = ALL_TABS, bookmark
       asked.push(window_id);
       if (fail) throw new Error("no tabs");
       return tabs.filter((candidate) => window_id === undefined || candidate.windowId === window_id);
+    },
+    query_windows: async () => {
+      if (fail) throw new Error("no windows");
+      return WINDOWS;
     },
     all_bookmarks: async () => {
       if (fail) throw new Error("no bookmarks");
@@ -127,6 +140,7 @@ test("a tab that navigates or closes while the lookup runs gets nothing", async 
       opened.delete(1);
       return ALL_TABS;
     },
+    query_windows: async () => WINDOWS,
     all_bookmarks: async () => {
       opened.delete(1);
       return [];
@@ -176,6 +190,23 @@ test("a page that cannot fill a slot marks the engine, a fallback engine stays a
 
 test("a line with no page offers only the engines that need no slot or have a fallback", () => {
   assert.deepEqual(engine_items(ENGINES, undefined).filter((item) => item.available).map((item) => item.name), ["duck", "github.repo.fb"]);
+});
+
+test("a normal line lists the other normal windows by their getAll place and active tab title", async () => {
+  assert.deepEqual(listed_windows(WINDOWS, NORMAL_LINE).map(({ number, title }) => ({ number, title })), [{ number: 3, title: "Docs tab" }]);
+  assert.deepEqual(listed_windows(WINDOWS, { window_id: 11, incognito: false }).map((window) => window.number), [1]);
+});
+
+test("a private line lists only private windows, and its own window drops out", async () => {
+  assert.deepEqual(listed_windows(WINDOWS, { window_id: 99, incognito: true }).map((window) => window.title), ["Secret"]);
+  assert.deepEqual(listed_windows(WINDOWS, { window_id: 20, incognito: true }), []);
+});
+
+test("the windows answer holds the number and title only, and a failed call gives an empty list", async () => {
+  const { service } = make();
+  assert.deepEqual(await service.answer("windows", NORMAL_LINE), { items: [{ number: 3, title: "Docs tab" }] });
+  assert.equal(await make({ openers: [] }).service.answer("windows", NORMAL_LINE), undefined);
+  assert.deepEqual(await make({ fail: true }).service.answer("windows", NORMAL_LINE), { items: [] });
 });
 
 const VISITS: HistoryNode[] = [
@@ -245,6 +276,7 @@ test("the opener is checked before and after the history fetch", async () => {
   const opened = new Set([1]);
   const service = create_complete_items({
     query_tabs: async () => [],
+    query_windows: async () => [],
     all_bookmarks: async () => [],
     is_opener: async (tab_id) => opened.has(tab_id),
     all_windows: async () => false,
@@ -265,6 +297,7 @@ test("a failed history read leaves the bookmarks, and a failed bookmark read lea
   const service = (failing: "history" | "bookmarks") =>
     create_complete_items({
       query_tabs: async () => [],
+      query_windows: async () => [],
       all_bookmarks: async () => {
         if (failing === "bookmarks") throw new Error("no bookmarks");
         return MARKS;
@@ -272,7 +305,7 @@ test("a failed history read leaves the bookmarks, and a failed bookmark read lea
       is_opener: async () => true,
       all_windows: async () => false,
       containers: async () => new Map(),
-    previous_tab: async () => undefined,
+      previous_tab: async () => undefined,
       search_engines: async () => ENGINES,
       page_of: async () => undefined,
       search_history: async () => {
@@ -356,6 +389,7 @@ test("the answer drops the ids, keeps the new fields, and sends a long data: fav
     all_windows: async () => false,
     containers: async () => new Map([["firefox-container-1", FOX]]),
     previous_tab: async () => 2,
+    query_windows: async () => [],
     search_engines: async () => ENGINES,
     page_of: async () => undefined,
     search_history: async () => [],
@@ -378,10 +412,16 @@ test("a private line lists private tabs with their favicon and flags and no cont
     all_windows: async () => false,
     containers: async () => new Map([["firefox-container-1", FOX]]),
     previous_tab: async () => undefined,
+    query_windows: async () => [],
     search_engines: async () => ENGINES,
     page_of: async () => undefined,
     search_history: async () => [],
     open_settings: async () => ({ sources: [], history_max: 0 }),
   });
   assert.deepEqual((await service.answer("tabs", PRIVATE_LINE))?.items, [{ number: 1, title: "Tab 4", url: "https://site4.test/", favicon: "https://p.test/i.png", active: true }]);
+});
+
+test("a popup window is not listed, and it still counts a place so the numbers stay put", () => {
+  const with_popup = [window_of(10, false, "Mail"), window_of(30, false, "Popup", "popup"), window_of(11, false, "Docs")];
+  assert.deepEqual(listed_windows(with_popup, NORMAL_LINE).map(({ number, title }) => ({ number, title })), [{ number: 3, title: "Docs" }]);
 });

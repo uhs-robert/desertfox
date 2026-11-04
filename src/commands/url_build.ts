@@ -1,3 +1,4 @@
+import { BUILT_IN_PAGE, BUILT_IN_QUERY } from "../shared/config.ts";
 import type { SearchEngine } from "../shared/config.ts";
 import { fill_template } from "../shared/engines/fill.ts";
 import type { FillInput } from "../shared/engines/fill.ts";
@@ -56,9 +57,10 @@ export function engine_url(engines: Record<string, SearchEngine>, name: string, 
 }
 
 // Refusals are thrown: the router shows the message to the user.
-export function home_page_url(home_page: string | undefined): string {
+// `oasisfox` names the built-in new tab page, whose address only the browser knows. It is asked for only then.
+export function home_page_url(home_page: string | undefined, built_in_url: () => string): string {
   if (!home_page) throw new Error("set home_page in settings.toml");
-  return home_page;
+  return home_page === BUILT_IN_PAGE ? `${built_in_url()}?${BUILT_IN_QUERY}` : home_page;
 }
 
 // Schemes that run code or carry inline data in the page are never opened from text.

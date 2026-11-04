@@ -77,6 +77,13 @@ export async function evaluate_in_background(rdp, addon_id, async_code) {
   }
 }
 
+// Runs async code in Firefox's parent process, with chrome privileges.
+export async function evaluate_in_chrome(rdp, async_code) {
+  const { processDescriptor } = await rdp.request("root", { type: "getProcess", id: 0 });
+  const { process } = await rdp.request(processDescriptor.actor, { type: "getTarget" });
+  return run_in_console(rdp, process.consoleActor, async_code);
+}
+
 async function run_in_console(rdp, console_actor, async_code) {
   const slot = `__key_test_${Math.random().toString(36).slice(2)}`;
   const start = `globalThis.${slot} = undefined; (async () => ${async_code})().then((value) => { globalThis.${slot} = JSON.stringify(value ?? null); }, (error) => { globalThis.${slot} = JSON.stringify({ error: String(error) }); }); "started"`;

@@ -8,6 +8,7 @@ import { browser_complete_items_deps, create_complete_items } from "./complete_i
 import { requirement_lookup } from "./availability.ts";
 import { list_keys } from "./list_keys.ts";
 import { create_bundle_loader } from "./bundle_loader.ts";
+import { track_window_focus } from "./window_focus.ts";
 import { repair_tabs_after_reload } from "./reload.ts";
 import { create_router } from "./router.ts";
 import { SLOT_TABLE_STORAGE_KEY } from "./storage_keys.ts";
@@ -47,6 +48,8 @@ const complete_items = create_complete_items({
     return { sources: open_completion ?? ["bookmarks", "history"], history_max: history_completion_max ?? 10 };
   },
 });
+
+track_window_focus(browser.storage.session, browser.windows);
 
 // Listeners register in the first turn, so no event is missed while the config loads.
 browser.runtime.onMessage.addListener((message: unknown, sender) => {

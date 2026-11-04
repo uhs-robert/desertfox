@@ -4,7 +4,7 @@
 // strings stay strings until `resolve_bindings` in check.ts parses them.
 
 import { MODES } from "../../src/shared/command.ts";
-import { MODE_INDICATOR_VALUES, WHICH_KEY_BORDER_VALUES } from "../../src/shared/config.ts";
+import { BUILT_IN_PAGE, is_web_url, MODE_INDICATOR_VALUES, WHICH_KEY_BORDER_VALUES } from "../../src/shared/config.ts";
 import type { SearchEngine, Settings } from "../../src/shared/config.ts";
 import { nodes_of_file, resolve_engines } from "../../src/shared/engines/index.ts";
 import type { EngineNode } from "../../src/shared/engines/index.ts";
@@ -139,7 +139,7 @@ const SETTING_CHECKS: Record<keyof Settings, (value: unknown) => boolean> = {
   container_prefixes: (value) => is_prefix_pair(value, "reopen"),
   home_page: (value) => typeof value === "string" && value !== "",
   default_engine: (value) => typeof value === "string" && value !== "",
-  new_tab_page: (value) => typeof value === "string",
+  new_tab_page: (value) => typeof value === "string" && (value === BUILT_IN_PAGE || is_web_url(value)),
   completion_all_windows: (value) => typeof value === "boolean",
   open_completion: (value) => Array.isArray(value) && new Set(value).size === value.length && value.every((source) => source === "bookmarks" || source === "history"),
   history_completion_max: (value) => typeof value === "number" && Number.isInteger(value) && value >= 0,
@@ -156,7 +156,7 @@ const SETTING_EXPECTATIONS: Record<keyof Settings, string> = {
   container_prefixes: '{"reopen": "...", "tab": "..."} with non-empty strings',
   home_page: "a non-empty URL string",
   default_engine: "the name of a search engine",
-  new_tab_page: "a string",
+  new_tab_page: `"${BUILT_IN_PAGE}" or an http or https URL`,
   completion_all_windows: "true or false",
   open_completion: 'a list of "bookmarks" and "history" with no repeat',
   history_completion_max: "a whole number, 0 or more",
