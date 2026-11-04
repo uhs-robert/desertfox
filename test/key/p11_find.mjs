@@ -183,6 +183,18 @@ export async function run_cases({ rdp, extension_id, run_case, expect, open_page
     }
   });
 
+  await run_case("a match already visible in a short scrollable frame does not scroll the frame while the line is open or after Enter", async () => {
+    await open_page("find_frame_visible", "find_frame_visible", { new_tab: true });
+    await send_keys("/marker");
+    await wait_highlights((read) => total_painted(read) === 1, "the match in the frame");
+    await sleep(600);
+    const frame_scroll = () => in_active_tab(`document.getElementById("frame").contentWindow.scrollY`);
+    expect((await frame_scroll()) === 0, `the frame scrolled to ${await frame_scroll()} while typing`);
+    await send_keys(...ENTER);
+    await sleep(500);
+    expect((await frame_scroll()) === 0, `the frame scrolled to ${await frame_scroll()} after Enter`);
+  });
+
   const selection_is = (page_id, text) => (event) => event.type === "selection" && event.page_id === page_id && event.text === text;
   const select_in_page = (text) => in_active_tab(`window.find(${JSON.stringify(text)})`);
 

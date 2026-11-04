@@ -182,6 +182,11 @@ export function start_server() {
       const smooth = id.includes("smooth") ? "<style>html, #wide { scroll-behavior: smooth }</style>" : "";
       return response.end(page(`find_scroll ${id}`, body, smooth));
     }
+    if (url.pathname === "/find_frame_visible") {
+      // A short frame that scrolls, with its one match in the last 56 pixels of the frame: visible, but under where the command line would sit if the frame were the top window.
+      const inner = "<body style='margin:0'><div style='height:150px'></div><p style='margin:0'>marker low</p><div style='height:1500px'></div></body>";
+      return response.end(page(`find_frame_visible ${id}`, `<iframe id="frame" srcdoc="${inner}" style="width:400px;height:200px;display:block"></iframe>`));
+    }
     if (url.pathname === "/find_big") {
       // Three hundred thousand matches of "e" in one text node, and one "ex" at the end: a scan for "e" takes many slices.
       return response.end(page(`find_big ${id}`, `<p id="big" style="word-break:break-all">${"e ".repeat(Number(/_(\d+)$/.exec(id)?.[1] ?? 300000))}ex</p>`));
