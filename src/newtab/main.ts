@@ -13,7 +13,8 @@ async function main(): Promise<void> {
       // A URL that passed the checks and still fails to load leaves the built-in page, not a blank tab.
     }
   }
-  render_new_tab(document.body);
+  const fetch_json = async (url: string) => (await fetch(url, { signal: AbortSignal.timeout(5000) })).json();
+  render_new_tab(document.body, config.settings, { fetch_json, area: browser.storage.local, now: Date.now() });
 }
 
 void main();
