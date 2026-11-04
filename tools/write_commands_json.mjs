@@ -1,36 +1,12 @@
 // Writes dist/commands.json from the command registry. Node loads the
-// TypeScript sources directly, so the command modules need no bundling here.
+// TypeScript sources directly, so the runtime list of command modules loads here without bundling.
 import { mkdir, writeFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 import path from "node:path";
 
-// Modules that call `define` on import. Later waves add the command groups here.
-const COMMAND_MODULES = [
-  "src/commands/config.ts",
-  "src/commands/scroll.ts",
-  "src/commands/mode.ts",
-  "src/commands/tab.ts",
-  "src/commands/window.ts",
-  "src/commands/browser.ts",
-  "src/commands/zoom.ts",
-  "src/commands/bookmark.ts",
-  "src/commands/page.ts",
-  "src/commands/url.ts",
-  "src/commands/open.ts",
-  "src/commands/copy.ts",
-  "src/commands/hint.ts",
-  "src/commands/cmdline.ts",
-  "src/commands/caret.ts",
-  "src/commands/visual.ts",
-  "src/commands/find.ts",
-  "src/commands/help.ts",
-  "src/commands/engine.ts",
-  "src/commands/command.ts",
-];
-
 export async function write_commands_json(out_dir) {
   const root = path.resolve(import.meta.dirname, "..");
-  for (const module_path of COMMAND_MODULES) await import(pathToFileURL(path.join(root, module_path)).href);
+  await import(pathToFileURL(path.join(root, "src/background/command_modules.ts")).href);
   const { registry, build_commands_file } = await import(
     pathToFileURL(path.join(root, "src/shared/registry/index.ts")).href
   );
