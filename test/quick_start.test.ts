@@ -36,7 +36,8 @@ test("quick start: a rebind changes the page and an unbound key falls back to th
   const { f: _hint, v: _caret, gV: _caret_too, ...rest } = DEFAULT_KEYMAP.normal!;
   const rebound = { ...DEFAULT_KEYMAP, normal: { ...rest, "<A-f>": { id: "hint.run", args: { action: "here" } } } };
   const codes = codes_of(quick_start_blocks(compile(rebound), all_commands));
-  assert.ok(codes.includes("<A-f>"));
+  // `;b` runs the same hint action as `f`, so it is the shortest key left.
+  assert.ok(codes.includes(";b"));
   assert.ok(!codes.includes("f"));
   assert.ok(codes.includes(":mode caret"));
   assert.ok(codes_of(quick_start_blocks(undefined, all_commands)).includes(":hint"));
