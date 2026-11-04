@@ -53,6 +53,27 @@ function parse_inlines(text: string, fail: (reason: string) => never): Inline[] 
   return inlines;
 }
 
+// The reason a line cannot start or sit inside a paragraph, or undefined when it can.
+function unsupported_block_start(line: string): string | undefined {
+  if (line.startsWith("```") || line.startsWith("~~~") || line.startsWith("    ")) {
+    return "use a plain ``` fence with at most a language word. Indented code is not supported";
+  }
+  if (line.startsWith(">") || line.startsWith("|") || /^(-{3,}|={3,}|\*{3,})$/.test(line.trim())) {
+    return "quotes, tables, rules and setext headings are not supported";
+  }
+  return undefined;
+}
+
+function merge_text(inlines: Inline[]): Inline[] {
+  const merged: Inline[] = [];
+  for (const inline of inlines) {
+    const last = merged[merged.length - 1];
+    if (last?.kind === "text" && inline.kind === "text") last.text += inline.text;
+    else merged.push(inline);
+  }
+  return merged;
+}
+
 export function parse_markdown(source: string, text: string): Block[] {
   const lines = text.split("\n");
   const blocks: Block[] = [];
@@ -86,15 +107,15 @@ export function parse_markdown(source: string, text: string): Block[] {
       blocks.push({ kind: "code_block", text: body.join("\n") });
       continue;
     }
-    if (line.startsWith("```") || line.startsWith("~~~") || line.startsWith("    ")) {
-      fail_at(index, "use a plain ``` fence with at most a language word. Indented code is not supported");
-    }
+    const unsupported = unsupported_block_start(line);
+    if (unsupported) fail_at(index, unsupported);
     const heading = HEADING.exec(line);
     if (heading) {
       const level = heading[1]!.length;
       if (level !== 2 && level !== 3) fail_at(index, "only ## and ### headings are supported");
       const title = heading[2] ?? "";
       if (title.trim() === "") fail_at(index, "the heading is empty");
+      if (inlines_at(index, title).some((inline) => inline.kind !== "text")) fail_at(index, "a heading takes plain text only");
       blocks.push({ kind: "heading", level: level as 2 | 3, text: title });
       index += 1;
       continue;
@@ -117,19 +138,17 @@ export function parse_markdown(source: string, text: string): Block[] {
       blocks.push({ kind: "list", items });
       continue;
     }
-    if (line.startsWith(">") || line.startsWith("|") || /^(-{3,}|={3,}|\*{3,})$/.test(line.trim())) {
-      fail_at(index, "quotes, tables, rules and setext headings are not supported");
-    }
-    const start = index;
-    const parts: string[] = [];
+    const paragraph: Inline[] = [];
     while (index < lines.length && lines[index]!.trim() !== "") {
       const row = lines[index]!;
       if (FENCE.test(row) || HEADING.test(row) || LIST_MARKER.test(row)) fail_at(index, "leave a blank line before a heading, list or code block");
-      if (/^(-{3,}|={3,})$/.test(row.trim())) fail_at(index, "quotes, tables, rules and setext headings are not supported");
-      parts.push(row.trim());
+      const unsupported_row = unsupported_block_start(row);
+      if (unsupported_row) fail_at(index, unsupported_row);
+      // Parsed per row so an error names its own line.
+      paragraph.push(...inlines_at(index, `${paragraph.length ? " " : ""}${row.trim()}`));
       index += 1;
     }
-    blocks.push({ kind: "paragraph", inlines: inlines_at(start, parts.join(" ")) });
+    blocks.push({ kind: "paragraph", inlines: merge_text(paragraph) });
   }
   return blocks;
 }

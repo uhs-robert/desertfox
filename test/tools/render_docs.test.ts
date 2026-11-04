@@ -55,6 +55,12 @@ const UNSUPPORTED: [string, string][] = [
   ["windows line endings", "## A\r\n\r\ntext"],
   ["a carriage return alone on a blank line", "text\n\r\nmore"],
   ["a carriage return in a code block", "```\na\r\n```"],
+  ["emphasis in a heading", "## *bold*"],
+  ["an image in a heading", "## ![x](https://e.com/a.png)"],
+  ["code in a heading", "## The `code`"],
+  ["a quote on a later paragraph line", "text\n> quoted"],
+  ["a table row on a later paragraph line", "text\n| a | b |"],
+  ["a tilde fence on a later paragraph line", "text\n~~~"],
   ["a list glued to a paragraph", "text\n- item"],
 ];
 
@@ -63,6 +69,14 @@ for (const [name, text] of UNSUPPORTED) {
     assert.throws(() => parse(text), (error: unknown) => error instanceof UnsupportedMarkdown && /^doc\.md:\d+: /.test(error.message));
   });
 }
+
+test("an inline error on a later paragraph line names that line", () => {
+  assert.throws(() => parse("fine\nstill fine\nbad **bold**"), /doc\.md:3:/);
+});
+
+test("a block marker on a later paragraph line names that line", () => {
+  assert.throws(() => parse("fine\n> quoted"), /doc\.md:2:/);
+});
 
 test("the error names the line", () => {
   assert.throws(() => parse("fine\n\n**bold**"), /doc\.md:3:/);
