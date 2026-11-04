@@ -94,6 +94,8 @@ test("palette must name a theme, and the error lists the known names", () => {
 
 test("cmdline_prompt takes 1 to 8 characters on one line", () => {
   assert.equal(build_config(config_dir_with({ "settings.toml": 'cmdline_prompt = ">> "' }), commands).settings.cmdline_prompt, ">> ");
+  const five_emoji = "\u{1F600}".repeat(5);
+  assert.equal(build_config(config_dir_with({ "settings.toml": `cmdline_prompt = "${five_emoji}"` }), commands).settings.cmdline_prompt, five_emoji);
   for (const bad of ['""', '"123456789"', '"a\\nb"', "5"]) {
     assert.match(problems_of(config_dir_with({ "settings.toml": `cmdline_prompt = ${bad}` })).join("\n"), /settings\.toml: cmdline_prompt: /);
   }
