@@ -2,6 +2,7 @@
 
 import { MODES as RUNTIME_MODES } from "../command.ts";
 import type { CountBehavior, ParamDef, RunsIn } from "../command.ts";
+import { ignore_regex_source } from "../match_pattern.ts";
 import { COMPILED_KEYMAP_VERSION } from "../prefix_tree.ts";
 import type { CompiledKeymap, LeafStep, TreeBranch, TreeNode } from "../prefix_tree.ts";
 import { DEFAULT_SETTINGS } from "../config.ts";
@@ -205,10 +206,11 @@ export function compile_keymap(keymap: KeymapConfig, settings: Partial<Settings>
     name_groups(root, group_names);
     if (Object.keys(root.children).length > 0) modes[mode] = root;
   }
+  const ignore_regex = ignore_regex_source(settings.ignore_sites ?? DEFAULT_SETTINGS.ignore_sites);
   const compiled: CompiledKeymap = {
     format_version: COMPILED_KEYMAP_VERSION,
     modes,
-    ignore_sites: settings.ignore_sites ?? DEFAULT_SETTINGS.ignore_sites,
+    ...(ignore_regex ? { ignore_regex } : {}),
     mode_indicator: settings.mode_indicator ?? DEFAULT_SETTINGS.mode_indicator,
     which_key_border: settings.which_key_border ?? DEFAULT_SETTINGS.which_key_border,
     which_key_delay_ms: settings.which_key_delay_ms ?? DEFAULT_SETTINGS.which_key_delay_ms,

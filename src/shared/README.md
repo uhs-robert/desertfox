@@ -5,15 +5,15 @@ Types and constants that fix the hand-off formats between the background page, t
 - `command.ts`: a command definition, and the `commands.json` entry cut from it.
 - `invocation.ts`: the `Invocation` every caller produces, and a key binding.
 - `keymap.ts`: keymap data as written by the user.
-- `prefix_tree.ts`: the compiled keymap stored in `storage.local` for the content script.
+- `prefix_tree.ts`: the compiled keymap stored in `storage.local` for the content script. Its `format_version` is bumped when the shape changes, and `current_keymap` hides an older one until the background recompiles at its next start.
 - `messages.ts`: messages between content script and background.
 - `bundles.ts`: the names of the scripts loaded on first use, and which mode loads which.
 - `registry/`: the command registry, the one validator and the command line parser. See its README.
 - `engines/`: search engines as URL templates with slots, and the tree resolver. Outside the barrel. See its README.
 - `keys/`: key notation, the prefix tree compiler and the matcher. See its README.
 - `mode_colors.ts`: the 16 oasis palettes and the lookup that cuts one down to the badge colors per mode. Only the background imports the lookup, so the content script gets the few colors it needs through the compiled keymap.
-- `match_pattern.ts`: WebExtension match patterns. `ignore_sites` (content script) and snippet `matches` (background) both use it.
+- `match_pattern.ts`: WebExtension match patterns. Only the background imports it. Snippet `matches` use `matches_pattern`, and `ignore_sites` compile to one regex source (`ignore_regex` in the compiled keymap) that the content script tests against the page URL.
 - `layers.ts`: the `z-index` of each surface the content script draws, bottom to top: hints, mode badge, toast, which-key panel, command line.
 - `config.ts`: the merged config file and the settings with their defaults.
 
-The content script imports only types, `prefix_tree.ts` constants and `match_pattern.ts` from here, so the 15 KB bundle stays small.
+The content script imports only types and `prefix_tree.ts` from here, so the 15 KB bundle stays small.

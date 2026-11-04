@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { CommandDef, CompiledKeymap, TreeLeaf } from "../src/shared/index.ts";
-import { CONFIG_FORMAT_VERSION, DEFAULT_SETTINGS } from "../src/shared/index.ts";
+import { COMPILED_KEYMAP_VERSION, CONFIG_FORMAT_VERSION, DEFAULT_SETTINGS } from "../src/shared/index.ts";
 
 const WHERE = ["here", "tab", "background", "window"] as const;
 
@@ -47,9 +47,8 @@ const leaf: TreeLeaf = {
 };
 
 const keymap: CompiledKeymap = {
-  format_version: 1,
+  format_version: COMPILED_KEYMAP_VERSION,
   modes: { normal: { kind: "branch", children: { D: leaf } } },
-  ignore_sites: [],
   mode_indicator: "always",
   which_key_delay_ms: DEFAULT_SETTINGS.which_key_delay_ms,
 };

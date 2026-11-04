@@ -12,7 +12,6 @@ const leaf = (id: string, args: Record<string, unknown> = {}): TreeNode => ({ ki
 
 const keymap: CompiledKeymap = {
   format_version: COMPILED_KEYMAP_VERSION,
-  ignore_sites: [],
   mode_indicator: "always",
   which_key_delay_ms: 0,
   modes: {
