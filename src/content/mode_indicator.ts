@@ -8,11 +8,11 @@ import { create_surface } from "./surface.ts";
 export const STYLE = `
 .oasisfox-mode {
   position: fixed; right: 16px; bottom: 8px; padding: 4px 8px; pointer-events: none;
-  background: var(--mode-bg, var(--oasisfox-bg, #0c0e13)); color: var(--mode-fg, var(--oasisfox-fg, #f5f5dc));
+  background: var(--mode-bg, var(--oasisfox-bg-core, #0c0e13)); color: var(--mode-fg, var(--oasisfox-fg-core, #f5f5dc));
   font: var(--oasisfox-font, 14px system-ui, sans-serif); border-radius: var(--oasisfox-radius, 6px);
 }
 @media (prefers-color-scheme: light) {
-  .oasisfox-mode { background: var(--mode-light-bg, var(--oasisfox-bg, #0c0e13)); color: var(--mode-light-fg, var(--oasisfox-fg, #f5f5dc)); }
+  .oasisfox-mode { background: var(--mode-light-bg, var(--oasisfox-bg-core, #0c0e13)); color: var(--mode-light-fg, var(--oasisfox-fg-core, #f5f5dc)); }
 }`;
 
 // The variant follows the system theme in CSS, so the badge needs no listener.
