@@ -385,6 +385,9 @@ async function main() {
     });
 
     await send_keys(...CTRL("t"));
+    // The first new tab of the extension's page shows Firefox's "extension controls your new tab" notice. It takes the next keys, so Escape dismisses it.
+    await sleep(1500);
+    await send_keys("-k", "Escape");
     await send_keys(...CTRL("l"), "about:support", "-k", "Return");
     await sleep(1500);
 
@@ -608,6 +611,38 @@ async function main() {
       const loads = (await injections_of("caret.js")).slice(loads_before);
       measurements.help_page_caret_load = loads.length === 0 ? "not requested" : loads.at(-1).ok ? "executeScript ok" : "executeScript refused";
       expect(await badge() === "NORMAL", `the help page badge after V was ${await badge()}`);
+    });
+
+    // The new tab page loads every key script by tag, since executeScript cannot reach an extension page.
+    await run_case("the new tab page takes : and f without asking executeScript", async () => {
+      const hints_before = await settled_injection_count("hints.js");
+      const cmdline_before = await settled_injection_count("cmdline.js");
+      await evaluate_in_background(rdp, EXTENSION_ID, `browser.tabs.create({ url: browser.runtime.getURL("newtab.html") })`);
+      let ready = false;
+      for (let attempt = 0; attempt < 40 && !ready; attempt++) {
+        await sleep(250);
+        ready = await evaluate_in_background(rdp, EXTENSION_ID, `!!${extension_view("newtab.html")}?.document.querySelector(".oasisfox-newtab")`).catch(() => false);
+      }
+      expect(ready, "the new tab page never rendered");
+      await sleep(800);
+      const mode = () => evaluate_in_background(rdp, EXTENSION_ID, `${extension_view("newtab.html")}?.oasisfox_host?.get_mode() ?? null`);
+      await send_keys(":");
+      await sleep(800);
+      expect(await mode() === "cmdline", `the mode after : was ${await mode()}`);
+      // The first Escape closes the completion list, the second closes the line.
+      await send_keys("-k", "Escape");
+      await send_keys("-k", "Escape");
+      await sleep(500);
+      expect(await mode() === "normal", `the mode after Escape was ${await mode()}`);
+      await evaluate_in_background(rdp, EXTENSION_ID, `(() => { const view = ${extension_view("newtab.html")}; const link = view.document.createElement("a"); link.href = "https://example.com/"; link.textContent = "link"; link.style.cssText = "position:fixed;top:20px;left:20px;color:white;"; view.document.body.append(link); })()`);
+      await send_keys("f");
+      await sleep(1500);
+      expect(await mode() === "hint", `the mode after f was ${await mode()}`);
+      await send_keys("-k", "Escape");
+      await sleep(500);
+      expect((await injections_of("hints.js")).length === hints_before, "hints.js went through executeScript");
+      expect((await injections_of("cmdline.js")).length === cmdline_before, "cmdline.js went through executeScript");
+      await evaluate_in_background(rdp, EXTENSION_ID, `(async () => { for (const tab of await browser.tabs.query({})) if (tab.url.endsWith("/newtab.html")) await browser.tabs.remove(tab.id); })()`);
     });
 
     await run_case("the options page opens and shows the config source", async () => {

@@ -2,7 +2,7 @@
 // (Taplo reads them for TOML) completes command names and setting names.
 
 import type { CommandMeta } from "../../src/shared/command.ts";
-import { DEFAULT_SETTINGS, MODE_INDICATOR_VALUES, WHICH_KEY_BORDER_VALUES } from "../../src/shared/config.ts";
+import { BUILT_IN_PAGE, DEFAULT_SETTINGS, MODE_INDICATOR_VALUES, WHICH_KEY_BORDER_VALUES } from "../../src/shared/config.ts";
 import { PALETTE_NAMES } from "../../src/shared/mode_colors.ts";
 import { KEYMAP_MODES } from "./merge.ts";
 import type { DataKind } from "./source_files.ts";
@@ -63,14 +63,14 @@ function settings_schema(): Schema {
       palette: { enum: [...PALETTE_NAMES], default: DEFAULT_SETTINGS.palette, description: "oasis.nvim palette for the mode badges. Light or dark follows the system theme" },
       search_prefixes: { ...prefix_pair_schema("here"), default: DEFAULT_SETTINGS.search_prefixes },
       container_prefixes: { ...prefix_pair_schema("reopen"), default: DEFAULT_SETTINGS.container_prefixes },
-      home_page: { type: "string", minLength: 1, description: "URL that page.home opens" },
+      home_page: { type: "string", minLength: 1, description: `URL that page.home opens, or "${BUILT_IN_PAGE}" for the built-in new tab page` },
       default_engine: {
         type: "string",
         minLength: 1,
         default: DEFAULT_SETTINGS.default_engine,
         description: "Search engine that open.clipboard uses for text that is not a URL. Must name a defined engine",
       },
-      new_tab_page: { type: "string", description: "Reserved" },
+      new_tab_page: { type: "string", pattern: `^(${BUILT_IN_PAGE}|https?://\\S+)$`, description: `What a new tab shows: an http or https URL that the new tab redirects to, or "${BUILT_IN_PAGE}" for the built-in page. Unset means the built-in page` },
       completion_all_windows: { type: "boolean", default: false, description: "Whether the tab completion lists the tabs of every window, not only the line's window" },
       open_completion: { type: "array", items: { enum: ["bookmarks", "history"] }, uniqueItems: true, description: "Groups that open completes from, in list order. A source left out is not read. Default is both" },
       history_completion_max: { type: "integer", minimum: 0, default: 10, description: "History rows that open completion shows for an empty word" },

@@ -42,11 +42,11 @@ export type Settings = {
   search_prefixes: { here: string; tab: string };
   // Prefixes of keys generated from `container_keys`: reopen, prompt in new tab.
   container_prefixes: { reopen: string; tab: string };
-  // Page that `page.home` opens. Without it the command refuses.
+  // Page that `page.home` opens: a URL, or `oasisfox` for the built-in new tab page. Without it the command refuses.
   home_page?: string;
   // Search engine name that `open.clipboard` uses when the clipboard text is not a URL. The default names the built-in fallback engine.
   default_engine: string;
-  // Reserved. Decided in phase 3.
+  // What a new tab shows: an http or https URL, or `oasisfox` for the built-in page. Absent means the built-in page.
   new_tab_page?: string;
   // The `tab` completion list: absent or false lists the tabs of the line's window, true lists the tabs of every window.
   // Kept out of DEFAULT_SETTINGS because the content script bundles that object and has no use for this one.
@@ -56,6 +56,20 @@ export type Settings = {
   // History rows `open` shows for an empty word. Absent is 10.
   history_completion_max?: number;
 };
+
+// The reserved value of `new_tab_page` and `home_page` that names the built-in new tab page.
+export const BUILT_IN_PAGE = "oasisfox";
+export const NEW_TAB_PAGE_FILE = "newtab.html";
+
+// A URL value is opened by redirect, so only web schemes are accepted: `javascript:` or `data:` would run in the extension page.
+export const is_web_url = (text: string): boolean => /^https?:\/\/\S+$/i.test(text);
+
+export type NewTabTarget = { kind: "built_in" } | { kind: "redirect"; url: string };
+
+// A value that is neither a web URL nor the reserved word falls back to the built-in page: the stored config can come from elsewhere than the build check.
+export function resolve_new_tab_page(new_tab_page: string | undefined): NewTabTarget {
+  return new_tab_page !== undefined && is_web_url(new_tab_page) ? { kind: "redirect", url: new_tab_page } : { kind: "built_in" };
+}
 
 export const FALLBACK_ENGINE_NAME = "duck";
 
