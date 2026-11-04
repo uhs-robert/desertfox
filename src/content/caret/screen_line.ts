@@ -33,14 +33,24 @@ export function character_box(model: TextModel, index: number): DOMRect | undefi
   return new DOMRect(box.x + shift.x, box.y + shift.y, box.width, box.height);
 }
 
+// The box around the characters from `from` to `to`, so a match is brought in whole and not by its first letter.
+function span_box(model: TextModel, from: number, to = from): DOMRect | undefined {
+  const first = character_box(model, from);
+  const last = to === from ? first : character_box(model, to);
+  if (!first || !last) return first;
+  const left = Math.min(first.left, last.left);
+  const top = Math.min(first.top, last.top);
+  return new DOMRect(left, top, Math.max(first.right, last.right) - left, Math.max(first.bottom, last.bottom) - top);
+}
+
 // The next box out that can scroll: the parent, the host of a shadow root, or the frame around a document.
 const outer_view = (node: Node): Element | null =>
   node.parentElement ?? (node.parentNode as ShadowRoot | null)?.host ?? (node.nodeType === Node.DOCUMENT_NODE ? ((node as Document).defaultView?.frameElement ?? null) : null);
 
-// Only the one character counts: its paragraph can be taller than the screen. Each scrollable ancestor scrolls first, then the window, then the same again out through each frame.
+// Only the character, or the span up to `last_index`, counts: its paragraph can be taller than the screen. Each scrollable ancestor scrolls first, then the window, then the same again out through each frame.
 // The boxes are all in this script's window, so a view's edges shift by the frames around it.
 // `bottom_inset` keeps the match above something drawn over the bottom of this script's window, such as the command line. A frame's own viewport is not covered by it. 
-export function scroll_to_index(model: TextModel, index: number, options: { bottom_inset?: number } = {}): void {
+export function scroll_to_index(model: TextModel, index: number, options: { bottom_inset?: number; last_index?: number } = {}): void {
   const caret_node = model.point_at(index).node;
   for (let view = caret_node.nodeType === Node.ELEMENT_NODE ? (caret_node as Element) : outer_view(caret_node); view; ) {
     const owner = view.ownerDocument;
@@ -49,7 +59,7 @@ export function scroll_to_index(model: TextModel, index: number, options: { bott
       view = outer_view(view);
       continue;
     }
-    const box = character_box(model, index);
+    const box = span_box(model, index, options.last_index);
     const window_of_view = owner.defaultView;
     if (!box || !window_of_view) return;
     const shift = frame_offset(owner);

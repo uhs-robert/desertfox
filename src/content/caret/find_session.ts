@@ -39,7 +39,7 @@ export type FindDeps = {
   build_model: () => TextModel;
   start_index: (model: TextModel) => number;
   painter: Painter;
-  scroll_to: (model: TextModel, index: number, bottom_inset: number) => void;
+  scroll_to: (model: TextModel, first_index: number, last_index: number, bottom_inset: number) => void;
   read_colors: () => Promise<FindColors>;
   get_register: (name: string) => Promise<string | undefined>;
   set_register: (name: string, text: string) => Promise<void>;
@@ -63,7 +63,7 @@ const browser_deps = (): FindDeps => ({
   build_model: () => build_text_model(document.body),
   start_index: (model) => (model.text === "" ? 0 : first_visible_index(model)),
   painter: create_painter(),
-  scroll_to: (model, index, bottom_inset) => scroll_to_index(model, index, { bottom_inset }),
+  scroll_to: (model, first_index, last_index, bottom_inset) => scroll_to_index(model, first_index, { bottom_inset, last_index }),
   read_colors: async () => {
     const [all, current] = await Promise.all([stored_mode_colors("visual"), stored_mode_colors("caret")]);
     return all && current ? { all, current } : FALLBACK_COLORS;
@@ -107,7 +107,7 @@ export function create_find(host: Host, deps: FindDeps = browser_deps()) {
 
   const scroll_to = (found: Found, inset: number) => {
     try {
-      deps.scroll_to(found.model, found.matches.from[found.current]!, inset);
+      deps.scroll_to(found.model, found.matches.from[found.current]!, found.matches.to[found.current]! - 1, inset);
     } catch {}
   };
 
