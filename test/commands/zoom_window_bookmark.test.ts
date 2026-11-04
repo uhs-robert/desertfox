@@ -4,6 +4,7 @@ import { make_bookmark_handlers, pick_bookmark } from "../../src/commands/bookma
 import { make_browser_handlers } from "../../src/commands/browser.ts";
 import { clamp_zoom, make_zoom_handlers } from "../../src/commands/zoom.ts";
 import { make_window_handlers } from "../../src/commands/window.ts";
+import type { WindowLike } from "../../src/background/complete_items.ts";
 import type { CommandContext } from "../../src/shared/command.ts";
 
 const ctx: CommandContext = { tab_id: 7, window_id: 2, frame_id: 0, mode: "normal" };
@@ -28,6 +29,8 @@ test("window.new turns an empty url into a blank window", async () => {
     create: async (open) => void opened.push(open),
     close: async () => {},
     restore_last_closed_window: async () => false,
+    windows: async () => [],
+    move_tab_to_window: async () => {},
   });
   await handlers.create({ url: "", private: true });
   await handlers.create({ url: "https://a.test/", private: false });
@@ -109,4 +112,62 @@ test("bookmark.open opens the picked address where the flag says, and opens noth
   await handlers.open(ctx, { bookmark: "arch", where: "tab" });
   await assert.rejects(handlers.open(ctx, { bookmark: "zzzz", where: "tab" }));
   assert.deepEqual(opened, ["tab https://wiki.archlinux.org/"]);
+});
+
+// Windows in getAll order: 1 normal (the current one), 2 private, 3 normal used long ago, 4 normal used just now.
+const attach_windows = (): WindowLike[] => [
+  { id: 2, incognito: false, tabs: [{ active: true, title: "Here", lastAccessed: 500 }] },
+  { id: 5, incognito: true, tabs: [{ active: true, title: "Secret", lastAccessed: 900 }] },
+  { id: 6, incognito: false, tabs: [{ active: true, title: "Old", lastAccessed: 100 }] },
+  { id: 7, incognito: false, tabs: [{ active: true, title: "Recent", lastAccessed: 800 }] },
+];
+
+function attach_fake(windows: WindowLike[] = attach_windows()) {
+  const log: string[] = [];
+  const handlers = make_window_handlers({
+    create: async () => {},
+    close: async () => {},
+    restore_last_closed_window: async () => false,
+    windows: async () => windows,
+    // A move never unpins: the only calls are the move and the focus.
+    move_tab_to_window: async (tab_id, window_id) => void log.push(`move ${tab_id} to ${window_id}`),
+  });
+  return { handlers, log };
+}
+
+test("tab.attach moves the tab to the numbered window", async () => {
+  const { handlers, log } = attach_fake();
+  await handlers.attach(ctx, { window: "3 Old" });
+  assert.deepEqual(log, ["move 7 to 6"]);
+});
+
+test("tab.attach reads the number and ignores a stale title", async () => {
+  const { handlers, log } = attach_fake();
+  await handlers.attach(ctx, { window: "4 Renamed since" });
+  assert.deepEqual(log, ["move 7 to 7"]);
+});
+
+test("a bare tab.attach goes to the other window of the same privacy that was used last", async () => {
+  const { handlers, log } = attach_fake();
+  await handlers.attach(ctx, { window: "" });
+  assert.deepEqual(log, ["move 7 to 7"]);
+});
+
+test("tab.attach refuses a private window from a normal one, and the reverse", async () => {
+  const { handlers, log } = attach_fake();
+  await assert.rejects(handlers.attach(ctx, { window: "2" }), /Cannot move a tab between private and normal windows/);
+  await assert.rejects(handlers.attach({ ...ctx, window_id: 5 }, { window: "1" }), /Cannot move a tab between private and normal windows/);
+  assert.deepEqual(log, []);
+});
+
+test("tab.attach refuses with one window, its own window, an unknown number and text with no number", async () => {
+  const only = attach_fake([{ id: 2, incognito: false, tabs: [] }]);
+  await assert.rejects(only.handlers.attach(ctx, { window: "" }), /No other window to move to/);
+  const no_match = attach_fake([{ id: 2, incognito: false, tabs: [] }, { id: 5, incognito: true, tabs: [] }]);
+  await assert.rejects(no_match.handlers.attach(ctx, { window: "" }), /No other window to move to/);
+  const { handlers, log } = attach_fake();
+  await assert.rejects(handlers.attach(ctx, { window: "1" }), /already in that window/);
+  await assert.rejects(handlers.attach(ctx, { window: "9" }), /No window 9/);
+  await assert.rejects(handlers.attach(ctx, { window: "Old" }), /Give a window number/);
+  assert.deepEqual(log, []);
 });

@@ -20,7 +20,7 @@ A note "(prompts)" means the binding leaves a param out, so the command line ask
 
 <!-- BEGIN generated -->
 
-bound: 175 (normal 119, hint 2, cmdline 11, caret 18, visual 20, insert 1, ignore 1, browser 3) | later: 15 | dropped: 7
+bound: 176 (normal 120, hint 2, cmdline 11, caret 18, visual 20, insert 1, ignore 1, browser 3) | later: 15 | dropped: 6
 
 ### normal
 
@@ -82,6 +82,7 @@ bound: 175 (normal 119, hint 2, cmdline 11, caret 18, visual 20, insert 1, ignor
 | `wn` | bound | `window.new` | New window |  |
 | `wp` | bound | `window.new --private` | New private window |  |
 | `wc` | bound | `window.close` | Close window |  |
+| `wa` | bound | `tab.attach` (prompts) | Attach tab to window |  |
 | `wd` | bound | `tab.duplicate` | Duplicate tab |  |
 | `wD` | bound | `tab.detach` | Detach tab |  |
 | `wh` | bound | `hint --window` | Click element in new window |  |
@@ -153,7 +154,6 @@ bound: 175 (normal 119, hint 2, cmdline 11, caret 18, visual 20, insert 1, ignor
 | `]]` | later | `page.follow --direction=next` |  | phase 3 |
 | `]c` | later | `url.increment --step=1` |  | phase 3 |
 | `` ` `` | later | `mark.jump` |  | phase 3, key param |
-| `wa` | dropped |  |  | assumed unused |
 | `wi` | dropped |  |  | needs a shell |
 | `<C-o>` | later | `page.jump --step=-1` |  | phase 3 |
 | `<C-i>` | later | `page.jump --step=1` |  | phase 3 |

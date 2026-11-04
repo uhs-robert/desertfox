@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { bookmark_items, create_complete_items, engine_items, flatten_bookmarks, listed_tabs } from "../../src/background/complete_items.ts";
-import type { BookmarkNode, LineScope, TabLike } from "../../src/background/complete_items.ts";
+import { bookmark_items, create_complete_items, engine_items, flatten_bookmarks, listed_tabs, listed_windows } from "../../src/background/complete_items.ts";
+import type { BookmarkNode, LineScope, TabLike, WindowLike } from "../../src/background/complete_items.ts";
 
 const tab = (id: number, index: number, window_id: number, incognito: boolean, title = `Tab ${id}`): TabLike => ({ id, index, windowId: window_id, title, url: `https://site${id}.test/`, incognito });
 const NORMAL_LINE: LineScope & { tab_id: number } = { tab_id: 1, window_id: 10, incognito: false };
@@ -17,6 +17,14 @@ const ENGINES = {
   "github.repo.fb": { url: "https://github.com/{repo}", label: "GitHub fallback", slots: ["repo"], fallback: "https://github.com/" },
 };
 
+const window_of = (id: number, incognito: boolean, title: string): WindowLike => ({
+  id,
+  incognito,
+  tabs: [{ active: false, title: "background tab" }, { active: true, title, url: `https://w${id}.test/`, lastAccessed: id }],
+});
+// Two normal windows and one private window, in `windows.getAll` order.
+const WINDOWS = [window_of(10, false, "Mail"), window_of(20, true, "Secret"), window_of(11, false, "Docs\n tab")];
+
 function make({ openers = [1, 2], all_windows = false, tabs = ALL_TABS, bookmarks = [] as BookmarkNode[], fail = false, page = undefined as { url: string } | undefined } = {}) {
   const asked: (number | undefined)[] = [];
   const opened = new Set(openers);
@@ -25,6 +33,10 @@ function make({ openers = [1, 2], all_windows = false, tabs = ALL_TABS, bookmark
       asked.push(window_id);
       if (fail) throw new Error("no tabs");
       return tabs.filter((candidate) => window_id === undefined || candidate.windowId === window_id);
+    },
+    query_windows: async () => {
+      if (fail) throw new Error("no windows");
+      return WINDOWS;
     },
     all_bookmarks: async () => {
       if (fail) throw new Error("no bookmarks");
@@ -118,6 +130,7 @@ test("a tab that navigates or closes while the lookup runs gets nothing", async 
       opened.delete(1);
       return ALL_TABS;
     },
+    query_windows: async () => WINDOWS,
     all_bookmarks: async () => {
       opened.delete(1);
       return [];
@@ -163,4 +176,21 @@ test("a page that cannot fill a slot marks the engine, a fallback engine stays a
 
 test("a line with no page offers only the engines that need no slot or have a fallback", () => {
   assert.deepEqual(engine_items(ENGINES, undefined).filter((item) => item.available).map((item) => item.name), ["duck", "github.repo.fb"]);
+});
+
+test("a normal line lists the other normal windows by their getAll place and active tab title", async () => {
+  assert.deepEqual(listed_windows(WINDOWS, NORMAL_LINE).map(({ number, title }) => ({ number, title })), [{ number: 3, title: "Docs tab" }]);
+  assert.deepEqual(listed_windows(WINDOWS, { window_id: 11, incognito: false }).map((window) => window.number), [1]);
+});
+
+test("a private line lists only private windows, and its own window drops out", async () => {
+  assert.deepEqual(listed_windows(WINDOWS, { window_id: 99, incognito: true }).map((window) => window.title), ["Secret"]);
+  assert.deepEqual(listed_windows(WINDOWS, { window_id: 20, incognito: true }), []);
+});
+
+test("the windows answer holds the number and title only, and a failed call gives an empty list", async () => {
+  const { service } = make();
+  assert.deepEqual(await service.answer("windows", NORMAL_LINE), { items: [{ number: 3, title: "Docs tab" }] });
+  assert.equal(await make({ openers: [] }).service.answer("windows", NORMAL_LINE), undefined);
+  assert.deepEqual(await make({ fail: true }).service.answer("windows", NORMAL_LINE), { items: [] });
 });

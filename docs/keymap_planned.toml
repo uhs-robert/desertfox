@@ -60,12 +60,6 @@ note = "phase 3, key param"
 
 [[row]]
 mode = "normal"
-key = "wa"
-status = "dropped"
-note = "assumed unused"
-
-[[row]]
-mode = "normal"
 key = "wi"
 status = "dropped"
 note = "needs a shell"

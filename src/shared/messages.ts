@@ -81,11 +81,11 @@ export type RecordCmdline = {
   text: string;
 };
 
-// From the command line page when the subject of `tab` or `bookmark`, or the engine word of `search`, needs its list. The answer is undefined unless the
-// sender is a tab whose line redeemed a ticket, and it holds only tabs of the sender's own privacy (private or not).
+// From the command line page when the subject of `tab`, `bookmark` or `tab.attach`, or the engine word of `search`, needs its list. The answer is undefined unless the
+// sender is a tab whose line redeemed a ticket, and it holds only tabs and windows of the sender's own privacy (private or not).
 export type CompleteItems = {
   type: "complete_items";
-  kind: "tabs" | "bookmarks" | "engines";
+  kind: "tabs" | "bookmarks" | "engines" | "windows";
 };
 
 // `number` is the tab's place in its window's tab bar, counted from 1.
@@ -97,7 +97,10 @@ export type BookmarkItem = { title: string; url: string };
 // `label` is the config's resolved chain. `available` is whether the line's page can fill the engine's slots. The page URL itself never leaves the background.
 export type EngineItem = { name: string; label: string; available: boolean };
 
-export type CompleteItemsAnswer = { items: TabItem[] | BookmarkItem[] | EngineItem[] };
+// `number` is the window's place in `windows.getAll`, counted from 1, so it stays when other windows drop out of the list. `title` is its active tab's.
+export type WindowItem = { number: number; title: string };
+
+export type CompleteItemsAnswer = { items: TabItem[] | BookmarkItem[] | EngineItem[] | WindowItem[] };
 
 export type ContentToBackground = RunRequest | ModeChanged | LoadBundle | ListKeys | IssueCmdlineTicket | OpenCmdline | RecordCmdline | CompleteItems;
 

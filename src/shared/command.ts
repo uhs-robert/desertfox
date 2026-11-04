@@ -17,9 +17,9 @@ export type ParamValue = string | number | boolean;
 
 export type ParamDefault = ParamValue | ContextSource;
 
-// Value lists filled at run time from the user's config or from Firefox. `tabs` and `bookmarks` go on a string param and
+// Value lists filled at run time from the user's config or from Firefox. `tabs`, `bookmarks` and `windows` go on a string param and
 // only feed the completion list. The page asks the background for them (`complete_items`), nobody checks a typed value against them.
-export type DynamicValues = { from: "search_engines" | "containers" | "tabs" | "bookmarks" };
+export type DynamicValues = { from: "search_engines" | "containers" | "tabs" | "bookmarks" | "windows" };
 
 // The param is valid only if the named sibling param has one of these values.
 export type ParamWhen = Record<string, readonly ParamValue[]>;

@@ -1,9 +1,9 @@
-// The tabs, bookmarks and engines the command line page lists for `tab`, `bookmark` and `search`. The page cannot read them itself: only the
+// The tabs, bookmarks, engines and windows the command line page lists for `tab`, `bookmark`, `search` and `tab.attach`. The page cannot read them itself: only the
 // background knows which tab asked, so only it can keep private tabs out of a normal line and refuse a page that never opened a line.
 
 import type { SearchEngine } from "../shared/config.ts";
 import type { PageInfo } from "../shared/engines/index.ts";
-import type { BookmarkItem, CompleteItemsAnswer, EngineItem, TabItem } from "../shared/messages.ts";
+import type { BookmarkItem, CompleteItemsAnswer, EngineItem, TabItem, WindowItem } from "../shared/messages.ts";
 import { available_engine_names } from "./availability.ts";
 
 export type TabLike = { id?: number | undefined; index: number; windowId?: number | undefined; title?: string | undefined; url?: string | undefined; incognito: boolean };
@@ -13,6 +13,15 @@ export type ListedTab = TabItem & { id: number; window_id: number };
 
 // The window and privacy of the tab that holds the line.
 export type LineScope = { window_id: number; incognito: boolean };
+
+export type WindowLike = {
+  id?: number | undefined;
+  incognito: boolean;
+  tabs?: { active?: boolean | undefined; title?: string | undefined; url?: string | undefined; lastAccessed?: number | undefined }[] | undefined;
+};
+
+// A window the line can offer. The page gets `WindowItem` only.
+export type NumberedWindow = WindowItem & { id: number; incognito: boolean; last_used: number };
 
 export type BookmarkNode = { type?: string | undefined; title?: string | undefined; url?: string | undefined; dateAdded?: number | undefined; children?: BookmarkNode[] | undefined };
 
@@ -26,6 +35,19 @@ export function listed_tabs(tabs: readonly TabLike[], scope: LineScope): ListedT
     .map((tab): ListedTab => ({ id: tab.id as number, window_id: tab.windowId as number, number: tab.index + 1, title: one_line(tab.title || tab.url || ""), url: tab.url ?? "" }))
     .sort((a, b) => Number(b.window_id === scope.window_id) - Number(a.window_id === scope.window_id) || a.window_id - b.window_id || a.number - b.number);
 }
+
+// Every window with its place in `windows.getAll`, whatever its privacy: a typed number for a window the list hides still has to be found, to be refused by name.
+export function numbered_windows(windows: readonly WindowLike[]): NumberedWindow[] {
+  return windows.flatMap((window, place) => {
+    if (window.id === undefined) return [];
+    const active = window.tabs?.find((tab) => tab.active);
+    return [{ id: window.id, incognito: window.incognito, number: place + 1, title: one_line(active?.title || active?.url || ""), last_used: active?.lastAccessed ?? 0 }];
+  });
+}
+
+// The windows of the line's own privacy, without the line's own window.
+export const listed_windows = (windows: readonly WindowLike[], scope: LineScope): NumberedWindow[] =>
+  numbered_windows(windows).filter((window) => window.incognito === scope.incognito && window.id !== scope.window_id);
 
 // Every node of the bookmark tree, folders included, newest added first. `getTree` has no cap, unlike `getRecent`, so an old bookmark still opens.
 export function flatten_bookmarks(roots: readonly BookmarkNode[]): BookmarkNode[] {
@@ -65,6 +87,7 @@ export const read_tabs = async (query: TabQuery, scope: LineScope, all_windows: 
 
 export const browser_complete_items_deps = {
   query_tabs: ((window_id) => browser.tabs.query(window_id === undefined ? {} : { windowId: window_id })) as TabQuery,
+  query_windows: (async () => browser.windows.getAll({ populate: true })) as () => Promise<WindowLike[]>,
   all_bookmarks: async (): Promise<BookmarkNode[]> => flatten_bookmarks(await browser.bookmarks.getTree()),
 };
 
@@ -80,9 +103,10 @@ export type CompleteItemsDeps = typeof browser_complete_items_deps & {
 export type Asker = LineScope & { tab_id: number };
 
 export function create_complete_items(deps: CompleteItemsDeps) {
-  const fetch_items = async (kind: "tabs" | "bookmarks" | "engines", asker: Asker): Promise<CompleteItemsAnswer["items"]> => {
+  const fetch_items = async (kind: "tabs" | "bookmarks" | "engines" | "windows", asker: Asker): Promise<CompleteItemsAnswer["items"]> => {
     // The set is read once per line. The line is modal over one tab, so the page cannot change under it.
     if (kind === "engines") return engine_items(await deps.search_engines(), await deps.page_of(asker.tab_id));
+    if (kind === "windows") return listed_windows(await deps.query_windows(), asker).map(({ number, title }) => ({ number, title }));
     if (kind === "bookmarks") return bookmark_items(await deps.all_bookmarks());
     return (await read_tabs(deps.query_tabs, asker, await deps.all_windows())).map(({ number, title, url }) => ({ number, title, url }));
   };
@@ -91,7 +115,7 @@ export function create_complete_items(deps: CompleteItemsDeps) {
     // Undefined for a sender that is not a tab, for a tab that opened no line and for a tab that closed or navigated
     // while the lookup ran. A failed browser call gives an empty list.
     answer: async (kind: unknown, asker: Asker | undefined): Promise<CompleteItemsAnswer | undefined> => {
-      if ((kind !== "tabs" && kind !== "bookmarks" && kind !== "engines") || !asker || !(await deps.is_opener(asker.tab_id))) return undefined;
+      if ((kind !== "tabs" && kind !== "bookmarks" && kind !== "engines" && kind !== "windows") || !asker || !(await deps.is_opener(asker.tab_id))) return undefined;
       const items = await fetch_items(kind, asker).catch(() => []);
       return (await deps.is_opener(asker.tab_id)) ? { items } : undefined;
     },

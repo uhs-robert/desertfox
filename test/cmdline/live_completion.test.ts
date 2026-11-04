@@ -4,11 +4,12 @@ import { create_live_source } from "../../src/cmdline/completion/live.ts";
 import { create_completer } from "../../src/cmdline/completion/sources.ts";
 import { create_session } from "../../src/cmdline/session.ts";
 import type { CommandMeta } from "../../src/shared/command.ts";
-import type { BookmarkItem, EngineItem, TabItem } from "../../src/shared/messages.ts";
+import type { BookmarkItem, EngineItem, TabItem, WindowItem } from "../../src/shared/messages.ts";
 import { parse_command_line } from "../../src/shared/registry/index.ts";
 import { create_word_lookup } from "../../src/cmdline/word_lookup.ts";
 
 const COMMANDS: CommandMeta[] = [
+  { id: "tab.attach", label: "Attach tab", intent: "Attach tab.", params: [{ name: "window", type: "string", rest: true, main: true, default: "", values: { from: "windows" } }] },
   { id: "tab.switch", name: "tab", label: "Switch tab", intent: "Switch tab.", params: [{ name: "tab", type: "string", rest: true, main: true, values: { from: "tabs" } }] },
   {
     id: "bookmark.open",
@@ -53,7 +54,7 @@ const BOOKMARKS: BookmarkItem[] = Array.from({ length: 30 }, (_, index) => ({ ti
 
 // The background answers when the test says so.
 function make() {
-  const asks: { kind: string; answer: (items: TabItem[] | BookmarkItem[] | EngineItem[]) => void }[] = [];
+  const asks: { kind: string; answer: (items: TabItem[] | BookmarkItem[] | EngineItem[] | WindowItem[]) => void }[] = [];
   const live = create_live_source({
     ask: (kind) => new Promise((resolve) => void asks.push({ kind, answer: (items) => resolve({ items }) })),
     on_ready: () => session.source_ready(),
@@ -246,4 +247,18 @@ test("after `--` or an `--engine=` flag the first word is the query, so no engin
     assert.equal(asks.length, 0, text);
     assert.deepEqual(names(session), [], text);
   }
+});
+
+test("a window pick puts its number and title in the line, and the list is fetched once as the windows kind", async () => {
+  const { session, asks, settle } = make();
+  session.edit("tab.attach ");
+  assert.equal(session.get_hint(), "loading");
+  assert.deepEqual(asks.map((ask) => ask.kind), ["windows"]);
+  asks[0]!.answer([{ number: 2, title: "Mail" }, { number: 3, title: "Docs" }]);
+  await settle();
+  assert.deepEqual(names(session), ["2 Mail", "3 Docs"]);
+  session.edit("tab.attach doc");
+  tab_key(session);
+  assert.equal(session.get_text(), "tab.attach 3 Docs ");
+  assert.equal(asks.length, 1);
 });
