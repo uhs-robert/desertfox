@@ -106,6 +106,7 @@ export const DEFAULT_KEYMAP: KeymapConfig = {
     wn: { id: "window.new" },
     wp: { id: "window.new", args: { private: true }, label: "New private window" },
     wc: { id: "window.close" },
+    wa: { id: "tab.attach", prompt: { param: "window" } },
     wd: { id: "tab.duplicate" },
     wD: { id: "tab.detach" },
     wh: { id: "hint.run", args: { action: "window" }, label: "Click element in new window" },

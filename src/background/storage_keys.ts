@@ -32,3 +32,6 @@ export const CMDLINE_TICKET_STORAGE_PREFIX = "oasisfox_cmdline_ticket_";
 
 // Prefix of one `storage.session` key per tab whose command line redeemed a ticket. `complete_items` answers only these tabs. Removed when the tab closes or navigates.
 export const CMDLINE_OPENER_STORAGE_PREFIX = "oasisfox_cmdline_opener_";
+
+// The ids of the windows in the order they were last focused, newest first, in `storage.session`. `tab.attach` with no window reads it.
+export const WINDOW_FOCUS_STORAGE_KEY = "oasisfox_window_focus";

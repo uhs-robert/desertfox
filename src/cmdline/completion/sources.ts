@@ -7,7 +7,7 @@ import type { CommandLookup, EnumSources } from "../../shared/registry/index.ts"
 import { bare_word_param, flag_params, is_dynamic_values, static_values, subject_param } from "../../shared/registry/params.ts";
 import { rank } from "../../shared/score.ts";
 import type { Ranked } from "../../shared/score.ts";
-import type { BookmarkItem, EngineItem, OpenItems, OpenRow, TabItem } from "../../shared/messages.ts";
+import type { BookmarkItem, EngineItem, OpenItems, OpenRow, TabItem, WindowItem } from "../../shared/messages.ts";
 import type { LiveKind, LiveSource } from "./live.ts";
 import { cursor_context } from "./tokenize.ts";
 
@@ -173,6 +173,19 @@ function tab_rows(tabs: readonly TabItem[], usage: string): Row[] {
   }));
 }
 
+// The number first, as in a tab row, so the handler reads the leading number and a typed `2` finds window 2.
+function window_rows(windows: readonly WindowItem[], usage: string): Row[] {
+  return windows.map((window) => ({
+    name: `${window.number} ${window.title}`,
+    insert: `${window.number} ${/["'\\]/.test(window.title) ? quote_word(window.title) : window.title} `,
+    description: "",
+    args: "",
+    also_named: [],
+    keywords: [],
+    usage,
+  }));
+}
+
 function bookmark_rows(bookmarks: readonly BookmarkItem[], usage: string): Row[] {
   return bookmarks.map((bookmark) => ({ name: bookmark.title, insert: `${quote_word(bookmark.url)} `, description: bookmark.url, args: "", also_named: [], keywords: [], usage }));
 }
@@ -199,7 +212,7 @@ function engine_rows(engines: readonly EngineItem[], usage: string, marks_unavai
 const live_kind_of = (param: ParamDef | undefined): LiveKind | undefined => {
   if (!param || !is_dynamic_values(param.values)) return undefined;
   const from = param.values.from;
-  return from === "tabs" || from === "bookmarks" || from === "open" ? from : from === "search_engines" ? "engines" : undefined;
+  return from === "tabs" || from === "bookmarks" || from === "open" || from === "windows" ? from : from === "search_engines" ? "engines" : undefined;
 };
 
 // The engine takes the first word of `search`, ahead of the query that follows it.
@@ -240,7 +253,9 @@ export function create_completer(
           ? tab_rows(read.items as TabItem[], usage)
           : kind === "engines"
             ? engine_rows(read.items as EngineItem[], usage, context.command.id !== "engine.show", context.word)
-            : bookmark_rows(read.items as BookmarkItem[], usage);
+            : kind === "windows"
+              ? window_rows(read.items as WindowItem[], usage)
+              : bookmark_rows(read.items as BookmarkItem[], usage);
       const ranked = rank(context.word, rows);
       return { ...span, usage, rows: kind === "bookmarks" && context.word.trim() === "" ? ranked.slice(0, RECENT_BOOKMARKS) : ranked, listing: true };
     }

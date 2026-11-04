@@ -164,7 +164,7 @@ function check_param_shape(param: ParamDef, at: string, fail: Fail): void {
     if (new Set(list).size !== list.length) fail(`${at}.values`, "has a repeated value");
   } else if (is_dynamic_values(param.values)) {
     const from = (param.values as { from: unknown }).from;
-    if (from !== "search_engines" && from !== "containers" && from !== "tabs" && from !== "bookmarks" && from !== "open") fail(`${at}.values`, `unknown source "${String(from)}"`);
+    if (from !== "search_engines" && from !== "containers" && from !== "tabs" && from !== "bookmarks" && from !== "open" && from !== "windows") fail(`${at}.values`, `unknown source "${String(from)}"`);
   }
   check_value_labels(param, at, fail);
   check_description(param, at, fail);
