@@ -102,9 +102,9 @@ export async function run_cases({ rdp, extension_id, run_case, expect, open_page
     expect(Object.values(state.sheets).every((count) => count === 0), `a sheet was left behind: ${JSON.stringify(state.sheets)}`);
     await sleep(500);
     expect(last_scroll_y(page_id) === scrolled_to, `the page scrolled back to ${last_scroll_y(page_id)}`);
-    // The match is kept as the place: n goes on from "five" and wraps to "one".
+    // The query is kept as the last search, so n paints its one match again.
     await send_keys("n");
-    await wait_highlights((read) => current_of(read) === "needle one", "n from the kept match wrapping to needle one");
+    await wait_highlights((read) => current_of(read) === "needle five" && total_painted(read) === 1, "n painting the kept search again");
   });
 
   await run_case("Escape in normal mode after Enter clears the highlights, and n brings them back from the same match", async () => {
@@ -129,6 +129,38 @@ export async function run_cases({ rdp, extension_id, run_case, expect, open_page
     await wait_highlights((read) => total_painted(read) === 1 && current_of(read) === "needle four", "the second search painting needle four");
     await send_keys(...ESCAPE);
     await wait_highlights((read) => total_painted(read) === 0, "every highlight cleared");
+  });
+
+  const selection_is = (page_id, text) => (event) => event.type === "selection" && event.page_id === page_id && event.text === text;
+  const select_in_page = (text) => in_active_tab(`window.find(${JSON.stringify(text)})`);
+
+  await run_case("v and V start at the search match, and a later selection takes the place", async () => {
+    const page_id = "find_start";
+    await open_page("find_page", page_id, { new_tab: true });
+    await send_keys("/four");
+    await wait_highlights((read) => current_of(read) === "needle four", "the match in the closed root");
+    await send_keys(...ENTER);
+    await sleep(300);
+    await send_keys(...ESCAPE);
+    await sleep(300);
+    const mark = events.length;
+    await send_keys("v");
+    await wait_event(mark, badge_is(page_id, "CARET"), "the CARET badge");
+    await wait_event(mark, selection_is(page_id, "f"), "the caret on the match four");
+    await send_keys("-k", "Escape");
+    const mark_visual = events.length;
+    await send_keys("V");
+    await wait_event(mark_visual, badge_is(page_id, "VISUAL"), "the VISUAL badge");
+    await wait_event(mark_visual, selection_is(page_id, "f"), "the selection on the match four");
+    await send_keys("-k", "Escape");
+    await send_keys("-k", "Escape");
+    // Something selected after the match wins: the word "one" on the first screen.
+    await select_in_page("one");
+    await sleep(300);
+    const mark_later = events.length;
+    await send_keys("v");
+    await wait_event(mark_later, selection_is(page_id, "o"), "the caret on the later selection, not on the match");
+    await send_keys("-k", "Escape");
   });
 
   await run_case("a frame and a root that leave the page mid-search do not break it, while typing or on n", async () => {

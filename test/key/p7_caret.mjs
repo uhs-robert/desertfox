@@ -190,20 +190,45 @@ export async function run_cases({ run_case, expect, open_page, send_keys, sleep,
     await send_keys("-k", "Escape");
   });
 
-  await run_case("v and V pick a hint for caret and visual mode", async () => {
+  await run_case(";v and ;V pick a hint for caret and visual mode", async () => {
     await open_page("caret_hint", "hint_keys", { new_tab: true });
     const mark = events.length;
-    await send_keys("v");
+    await send_keys(";v");
     await sleep(300);
     await send_keys("a");
-    await wait_event(mark, badge_is("hint_keys", "CARET"), "the CARET badge after v");
+    await wait_event(mark, badge_is("hint_keys", "CARET"), "the CARET badge after ;v");
+    await send_keys("-k", "Escape");
+    const mark_visual = events.length;
+    await send_keys(";V");
+    await sleep(300);
+    await send_keys("a");
+    await wait_event(mark_visual, badge_is("hint_keys", "VISUAL"), "the VISUAL badge after ;V");
+    await send_keys("-k", "Escape");
+    await send_keys("-k", "Escape");
+  });
+
+  await run_case("v starts caret mode and V visual mode, with no hint", async () => {
+    await open_page("caret", "caret_plain_keys", { new_tab: true });
+    const mark = events.length;
+    await send_keys("v");
+    await wait_event(mark, badge_is("caret_plain_keys", "CARET"), "the CARET badge after v");
     await send_keys("-k", "Escape");
     const mark_visual = events.length;
     await send_keys("V");
+    await wait_event(mark_visual, badge_is("caret_plain_keys", "VISUAL"), "the VISUAL badge after V");
+    await send_keys("-k", "Escape");
+    await send_keys("-k", "Escape");
+  });
+
+  await run_case(";; opens the command line with hint typed, so flags can follow", async () => {
+    await open_page("caret_hint", "hint_line", { new_tab: true });
+    const mark = events.length;
+    await send_keys(";;");
+    await sleep(500);
+    await send_keys("--caret --custom --selector=#pick", "-k", "Return");
     await sleep(300);
     await send_keys("a");
-    await wait_event(mark_visual, badge_is("hint_keys", "VISUAL"), "the VISUAL badge after V");
-    await send_keys("-k", "Escape");
+    await wait_event(mark, badge_is("hint_line", "CARET"), "the CARET badge from the hint typed into the line");
     await send_keys("-k", "Escape");
   });
 
