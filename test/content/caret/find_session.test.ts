@@ -104,3 +104,31 @@ test("n with no search made says so", async () => {
   await find.step(false);
   assert.deepEqual(page.toasts, ["No previous search"]);
 });
+
+test("two quick n presses move two matches, even when the register still has to be read", async () => {
+  const page = fake_page();
+  page.registers.set("/", "ab");
+  page.registers.set("/:direction", "forward");
+  const find = create_find(page.host, page.deps);
+  const first = find.step(false);
+  const second = find.step(false);
+  await page.settle();
+  await Promise.all([first, second]);
+  assert.deepEqual(page.toasts, ["1 of 3", "2 of 3"]);
+});
+
+test("a search that finds nothing, or ends with Escape, does not keep the old match as the position", async () => {
+  const page = fake_page();
+  const find = create_find(page.host, page.deps);
+  find.begin("forward");
+  find.update("ab", () => {});
+  await page.settle();
+  await find.end(true);
+  const model = page.deps.build_model();
+  assert.equal(find.position(model), 0);
+  find.begin("forward");
+  find.update("zz", () => {});
+  await page.settle();
+  await find.end(false);
+  assert.equal(find.position(model), undefined);
+});

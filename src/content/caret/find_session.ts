@@ -94,6 +94,8 @@ export function create_find(host: Host, deps: FindDeps = browser_deps()) {
   let last: { query: string; direction: Direction } | undefined;
   // Bumped by each `step` that has to scan again, so an older scan does not paint over a newer one.
   let step_generation = 0;
+  // Presses of `n` and `N` run one after the other, so each moves one match. A press that ran beside another would cancel it through `step_generation`.
+  let steps: Promise<void> = Promise.resolve();
 
   const paint = (found: Found, colors: FindColors) => {
     painter.paint(found.model, found.matches, found.current, colors);
@@ -161,10 +163,49 @@ export function create_find(host: Host, deps: FindDeps = browser_deps()) {
     report(describe_match(text, matches.from.length, first.index, query.invalid, first.wrapped));
   }
 
+  async function step_once(reverse: boolean): Promise<void> {
+    // Enter closes the line before its search has finished, so a key typed right after it waits for that.
+    await live?.finished;
+    if (live) return;
+    const run = ++step_generation;
+    const previous = await recall();
+    if (run !== step_generation) return;
+    if (!previous) return host.show_toast("No previous search");
+    const direction = reverse ? opposite(previous.direction) : previous.direction;
+    const colors = await deps.read_colors();
+    const kept = shown?.query === previous.query ? shown : undefined;
+    let found = kept && trees_alive(kept.model) ? kept : undefined;
+    let wrapped = false;
+    if (found) {
+      const stepped = step_match(found.current, found.matches.from.length, direction);
+      found = { ...found, current: stepped.index };
+      wrapped = stepped.wrapped;
+    } else {
+      const query = compile_query(previous.query);
+      if (!query) return;
+      const model = kept ? fresh_model(kept.model) : deps.build_model();
+      const matches = await collect_matches(model.text, query.regex, deps.slicing(() => run !== step_generation));
+      if (!matches || run !== step_generation) return;
+      // After a rebuild the step goes on from the match the user was on, when its text is still on the page.
+      const carried = kept && carry_index(kept, model);
+      const start = carried === undefined ? deps.start_index(model) : direction === "forward" ? carried + 1 : carried;
+      const first = nearest_match(matches.from, start, direction);
+      if (!first) return host.show_toast(describe_match(previous.query, 0, 0, query.invalid));
+      found = { model, query: previous.query, invalid: query.invalid, direction: previous.direction, matches, current: first.index };
+      wrapped = first.wrapped;
+    }
+    stand_on(found);
+    paint(found, colors);
+    scroll_to(found, 0);
+    host.show_toast(describe_match(found.query, found.matches.from.length, found.current, found.invalid, wrapped));
+  }
+
   return {
     // `/` or `?` was pressed. The model is read again each time, because the page may have changed since the last search.
     begin(direction: Direction): void {
       drop_highlights();
+      // The old match belongs to the old search, so a search that finds nothing must not leave it as the position.
+      shown = undefined;
       step_generation++;
       const model = deps.build_model();
       live = { model, direction, start: deps.start_index(model), generation: 0, text: "", found: undefined, pending: Promise.resolve(), colors: deps.read_colors(), finished: undefined };
@@ -192,7 +233,7 @@ export function create_find(host: Host, deps: FindDeps = browser_deps()) {
         if (live !== open) return;
         live = undefined;
         if (!keep) drop_highlights();
-        if (open.found) stand_on(open.found);
+        if (open.found?.query === open.text) stand_on(open.found);
         else if (keep) drop_highlights();
         if (open.text !== "") await remember(open.text, open.direction);
       })();
@@ -200,41 +241,10 @@ export function create_find(host: Host, deps: FindDeps = browser_deps()) {
     },
 
     // The key `n` or `N`: repeat the last search in its direction, or the other way.
-    async step(reverse: boolean): Promise<void> {
-      // Enter closes the line before its search has finished, so a key typed right after it waits for that.
-      await live?.finished;
-      if (live) return;
-      const run = ++step_generation;
-      const previous = await recall();
-      if (run !== step_generation) return;
-      if (!previous) return host.show_toast("No previous search");
-      const direction = reverse ? opposite(previous.direction) : previous.direction;
-      const colors = await deps.read_colors();
-      const kept = shown?.query === previous.query ? shown : undefined;
-      let found = kept && trees_alive(kept.model) ? kept : undefined;
-      let wrapped = false;
-      if (found) {
-        const stepped = step_match(found.current, found.matches.from.length, direction);
-        found = { ...found, current: stepped.index };
-        wrapped = stepped.wrapped;
-      } else {
-        const query = compile_query(previous.query);
-        if (!query) return;
-        const model = kept ? fresh_model(kept.model) : deps.build_model();
-        const matches = await collect_matches(model.text, query.regex, deps.slicing(() => run !== step_generation));
-        if (!matches || run !== step_generation) return;
-        // After a rebuild the step goes on from the match the user was on, when its text is still on the page.
-        const carried = kept && carry_index(kept, model);
-        const start = carried === undefined ? deps.start_index(model) : direction === "forward" ? carried + 1 : carried;
-        const first = nearest_match(matches.from, start, direction);
-        if (!first) return host.show_toast(describe_match(previous.query, 0, 0, query.invalid));
-        found = { model, query: previous.query, invalid: query.invalid, direction: previous.direction, matches, current: first.index };
-        wrapped = first.wrapped;
-      }
-      stand_on(found);
-      paint(found, colors);
-      scroll_to(found, 0);
-      host.show_toast(describe_match(found.query, found.matches.from.length, found.current, found.invalid, wrapped));
+    step(reverse: boolean): Promise<void> {
+      const done = steps.then(() => step_once(reverse));
+      steps = done.catch(() => {});
+      return done;
     },
 
     // Escape in normal mode: the highlights go, and the search keeps its place.
