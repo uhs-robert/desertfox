@@ -59,6 +59,9 @@ export function parse_markdown(source: string, text: string): Block[] {
   const fail_at = (index: number, reason: string): never => {
     throw new UnsupportedMarkdown(source, index + 1, reason);
   };
+  // Checked first, so a blank line or a code block body cannot hide one.
+  const carriage_return_line = lines.findIndex((line) => line.includes("\r"));
+  if (carriage_return_line >= 0) fail_at(carriage_return_line, "carriage returns are not supported. Use Unix line endings");
   const inlines_at = (index: number, line: string) => parse_inlines(line, (reason) => fail_at(index, reason));
 
   let index = 0;
@@ -69,7 +72,6 @@ export function parse_markdown(source: string, text: string): Block[] {
       continue;
     }
     if (line.includes("\t")) fail_at(index, "tabs are not supported");
-    if (line.includes("\r")) fail_at(index, "carriage returns are not supported. Use Unix line endings");
     const fence = FENCE.exec(line);
     if (fence) {
       const start = index;

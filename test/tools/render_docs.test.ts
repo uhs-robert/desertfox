@@ -53,6 +53,8 @@ const UNSUPPORTED: [string, string][] = [
   ["an unclosed backtick", "a `b"],
   ["indented code", "    code"],
   ["windows line endings", "## A\r\n\r\ntext"],
+  ["a carriage return alone on a blank line", "text\n\r\nmore"],
+  ["a carriage return in a code block", "```\na\r\n```"],
   ["a list glued to a paragraph", "text\n- item"],
 ];
 
