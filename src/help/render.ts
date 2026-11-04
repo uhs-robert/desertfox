@@ -52,16 +52,35 @@ function command_card(command: CommandRow): HTMLElement {
 
 export const engine_anchor = (name: string): string => `engine-${name}`;
 
+const file_name = (path: string): string => path.split("/").pop() ?? path;
+
+function engine_row(engine: EngineRow, show_files: boolean): HTMLElement {
+  const name = el("td", undefined, engine.name);
+  if (engine.needs) name.append(" ", el("span", "oasisfox-help-badge", `needs ${engine.needs}`));
+  if (engine.fallback) name.append(" ", el("span", "oasisfox-help-badge", `falls back to ${engine.fallback}`));
+  if (show_files) {
+    for (const file of engine.files) {
+      const badge = el("span", "oasisfox-help-badge", file_name(file));
+      badge.title = file;
+      name.append(" ", badge);
+    }
+  }
+  const keys = el("td", undefined, ...engine.keys.flatMap((sequence) => [el("kbd", undefined, sequence), " "]));
+  const host = el("summary", undefined, engine.host);
+  host.title = engine.url;
+  const full = el("div", "oasisfox-help-muted", engine.url, ...engine.origins.map((line) => el("div", undefined, line)));
+  const row = el("tr", undefined, name, el("td", undefined, engine.label), keys, el("td", undefined, el("details", undefined, host, full)));
+  row.id = engine_anchor(engine.name);
+  return row;
+}
+
 function engine_table(engines: EngineRow[]): HTMLElement {
   if (engines.length === 0) return el("span", "oasisfox-help-muted", "No engines.");
-  const head = el("tr", undefined, ...["engine", "label", "url", "needs", "falls back to", "set by"].map((name) => el("th", undefined, name)));
-  const body = engines.map((engine) => {
-    const row = el("tr", undefined, ...[engine.name, engine.label, engine.url, engine.needs, engine.fallback].map((text) => el("td", undefined, text)));
-    row.id = engine_anchor(engine.name);
-    row.append(el("td", "oasisfox-help-muted", ...engine.origins.map((line) => el("div", undefined, line))));
-    return row;
-  });
-  return el("table", "oasisfox-help-engines", head, ...body);
+  const files = new Set(engines.flatMap((engine) => engine.files));
+  const head = el("tr", undefined, ...["engine", "label", "keys", "url"].map((name) => el("th", undefined, name)));
+  const table = el("table", "oasisfox-help-engines", head, ...engines.map((engine) => engine_row(engine, files.size > 1)));
+  if (files.size !== 1) return table;
+  return el("div", undefined, el("p", "oasisfox-help-muted", `Set by ${[...files][0]}`), table);
 }
 
 function inline_node(inline: Inline): Child {

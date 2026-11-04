@@ -43,12 +43,18 @@ export type EngineRow = {
   name: string;
   label: string;
   url: string;
+  // The host alone, for a narrow table. The full url stays in `url`.
+  host: string;
+  // Every normal-mode key sequence that opens this engine, prefix included.
+  keys: string[];
   // Page slots the engine needs, or "" when it runs anywhere.
   needs: string;
   // Where the engine falls back to, or "".
   fallback: string;
   // One "field: file [level]" line per field that has an origin.
   origins: string[];
+  // The config files the origins name, without their level, in first-seen order.
+  files: string[];
 };
 
 export type HelpModel = {
@@ -126,7 +132,29 @@ function compare_engine_names(left: string, right: string): number {
   return left_path.length - right_path.length;
 }
 
-function engine_rows(engines: Record<string, SearchEngine>): EngineRow[] {
+// A url with slots such as {query} is not parseable, so the slots become a stand-in first.
+function url_host(url: string): string {
+  try {
+    return new URL(url.replace(/\{[^}]*\}/g, "x")).host || url;
+  } catch {
+    return url;
+  }
+}
+
+function collect_engine_keys(node: TreeNode, path: string[], into: Map<string, string[]>): void {
+  if (node.kind === "branch") {
+    for (const [token, child] of Object.entries(node.children)) collect_engine_keys(child, [...path, token], into);
+    return;
+  }
+  for (const step of node.steps) {
+    const engine = step.invocation.id === "open.search" ? step.invocation.args?.engine : undefined;
+    if (typeof engine === "string") into.set(engine, [...(into.get(engine) ?? []), path.join("")]);
+  }
+}
+
+function engine_rows(engines: Record<string, SearchEngine>, compiled: CompiledKeymap | undefined): EngineRow[] {
+  const keys = new Map<string, string[]>();
+  if (compiled?.modes.normal) collect_engine_keys(compiled.modes.normal, [], keys);
   return Object.keys(engines)
     .sort(compare_engine_names)
     .map((name) => {
@@ -135,9 +163,12 @@ function engine_rows(engines: Record<string, SearchEngine>): EngineRow[] {
         name,
         label: engine.label,
         url: engine.url,
+        host: url_host(engine.url),
+        keys: keys.get(name) ?? [],
         needs: (engine.slots ?? []).map((slot) => `{${slot}}`).join(" "),
         fallback: engine.fallback ?? "",
         origins: Object.entries(engine.origins ?? {}).map(([field, origin]) => `${field}: ${origin}`),
+        files: [...new Set(Object.values(engine.origins ?? {}).map((origin) => origin.replace(/ \[[^\]]*\]$/, "")))],
       };
     });
 }
@@ -163,7 +194,7 @@ export function build_help_model(commands: CommandMeta[], compiled: CompiledKeym
     warnings,
     config_source: options.source_text,
     settings: options.settings,
-    engines: engine_rows(engines),
+    engines: engine_rows(engines, compiled),
     groups: [...groups].sort(([a], [b]) => a.localeCompare(b)).map(([name, rows]) => ({ name, commands: rows })),
   };
 }
