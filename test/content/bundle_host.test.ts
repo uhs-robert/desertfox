@@ -44,7 +44,8 @@ function make_page() {
     leave_insert: () => state.escape(),
     run_leaf: (matched) => {
       const { id, args } = matched.steps[0]!.invocation;
-      if (id === "hint.run") host.run_command("hint.run", "hints", {}, "needs hints");
+      // As main.ts does: a failed outcome is shown once, by the caller.
+      if (id === "hint.run") void host.run_command("hint.run", "hints", {}, "needs hints").then((outcome) => outcome.ok || errors.push(outcome.message));
       else if (id === "mode.set") state.set_mode(args?.mode as Mode);
       else if (id === "mode.escape") state.escape();
       else events.push(`run ${id}`);
@@ -105,7 +106,7 @@ test("keys typed while a bundle loads are held and replay in order once its sink
 test("a second press after the load runs the handler at once and asks for nothing", async () => {
   const page = make_page();
   page.press("f");
-  page.loads[0]!.finish(true, () => page.host.api.register_handler("hint.run", () => page.events.push("hint.run")));
+  page.loads[0]!.finish(true, () => page.host.api.register_handler("hint.run", () => void page.events.push("hint.run")));
   await page.settle();
   page.press("f", "f");
   assert.equal(page.loads.length, 1);
@@ -216,7 +217,7 @@ test("a replayed key that starts another load keeps the keys behind it waiting f
   const page = make_page();
   // Mode caret needs the caret bundle. The hints bundle's own handler enters it, so the replayed keys wait twice.
   page.press("f", "x", "V", "j");
-  page.loads[0]!.finish(true, () => page.host.api.register_handler("hint.run", () => page.events.push("hint.run")));
+  page.loads[0]!.finish(true, () => page.host.api.register_handler("hint.run", () => void page.events.push("hint.run")));
   await page.settle();
   // x replayed in normal mode, V entered caret mode and started the caret load, j waits for it.
   assert.deepEqual(page.events, ["hint.run", "run log_x"]);
@@ -248,8 +249,8 @@ test("toasts and badge updates requested before the ui bundle loads are kept and
   page.press("x");
   assert.deepEqual(page.events, ["run log_x"]);
   page.loads[0]!.finish(true, () => {
-    page.host.api.register_handler("ui.badge", (args) => drawn.push(`badge ${args.label}`));
-    page.host.api.register_handler("ui.toast", (args) => drawn.push(`toast ${args.message}`));
+    page.host.api.register_handler("ui.badge", (args) => void drawn.push(`badge ${args.label}`));
+    page.host.api.register_handler("ui.toast", (args) => void drawn.push(`toast ${args.message}`));
   });
   await page.settle();
   assert.deepEqual(drawn, ["badge NORMAL", "toast first", "toast second"]);
@@ -348,4 +349,72 @@ test("get_mode follows the mode the host entered", () => {
   assert.equal(page.host.api.get_mode(), "caret");
   page.state.escape();
   assert.equal(page.host.api.get_mode(), "normal");
+});
+
+test("run_command answers the handler's real outcome after the load", async () => {
+  const page = make_page();
+  const answer = page.host.api.run_command("hint.run", "hints", {});
+  page.loads[0]!.finish(true, () => page.host.api.register_handler("hint.run", () => ({ ok: false, message: "No hints on this page" })));
+  assert.deepEqual(await answer, { ok: false, message: "No hints on this page" });
+  assert.equal(page.errors.length, 0);
+});
+
+test("run_command answers failed for a failed load and for a bundle with no handler, and a throw is failed", async () => {
+  const page = make_page();
+  const lost = page.host.api.run_command("hint.run", "hints", {});
+  page.loads[0]!.finish(false);
+  assert.deepEqual(await lost, { ok: false, message: "OasisFox could not load hints" });
+  assert.equal(page.host.is_loading(), false);
+  const empty = page.host.api.run_command("hint.run", "hints", {});
+  page.loads[1]!.finish(true);
+  assert.deepEqual(await empty, { ok: false, message: "hints has no hint.run" });
+  page.host.api.register_handler("hint.run", () => {
+    throw new Error("broken");
+  });
+  assert.deepEqual(await page.host.api.run_command("hint.run", "hints", {}), { ok: false, message: "broken" });
+});
+
+test("a registered handler runs in the caller's turn, and a pending handler does not hold keys", async () => {
+  const page = make_page();
+  let release!: () => void;
+  const ran: string[] = [];
+  page.host.api.register_handler("hint.run", () => (ran.push("run"), new Promise<void>((resolve) => (release = resolve))));
+  const waiting = page.host.api.run_command("hint.run", "hints", {});
+  assert.deepEqual(ran, ["run"]);
+  assert.equal(page.host.is_loading(), false);
+  page.press("x");
+  assert.deepEqual(page.events, ["run log_x"]);
+  release();
+  assert.deepEqual(await waiting, { ok: true });
+});
+
+test("keys are held for the load only, not while the loaded handler still waits", async () => {
+  const page = make_page();
+  let release!: () => void;
+  const waiting = page.host.api.run_command("hint.run", "hints", {});
+  assert.equal(page.host.is_loading(), true);
+  page.loads[0]!.finish(true, () => page.host.api.register_handler("hint.run", () => new Promise<void>((resolve) => (release = resolve))));
+  await page.settle();
+  assert.equal(page.host.is_loading(), false);
+  release();
+  assert.deepEqual(await waiting, { ok: true });
+});
+
+test("a waiting handler is cancelled by Escape, which the sink passes to the keymap, and by the page hiding", async () => {
+  for (const leave of ["<Escape>", "page_hidden"]) {
+    const page = make_page();
+    let finish!: (outcome: { ok: true; cancelled?: true }) => void;
+    // The sink as a bundle writes it: the first exit settles the wait, a later one changes nothing.
+    page.host.api.register_sink("hint", { on_token: (token) => (token === "<Escape>" ? "pass" : "handled"), exit: () => finish({ ok: true, cancelled: true }) });
+    page.host.api.register_handler("hint.run", () => {
+      page.state.set_mode("hint");
+      return new Promise((resolve) => (finish = resolve));
+    });
+    const waiting = page.host.api.run_command("hint.run", "hints", {});
+    assert.equal(page.state.get_mode(), "hint");
+    if (leave === "page_hidden") page.host.page_hidden();
+    else page.press(leave);
+    assert.deepEqual(await waiting, { ok: true, cancelled: true }, leave);
+    assert.equal(page.state.get_mode(), "normal");
+  }
 });

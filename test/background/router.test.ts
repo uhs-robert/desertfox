@@ -241,20 +241,94 @@ test("a sender frame is not used in a different tab", async () => {
   assert.deepEqual(frames, [0]);
 });
 
-test("a prompt that opens the line stops the rest of the sequence", async () => {
+const open_url = { label: "Open", intent: "x", name: "open", params: [{ name: "url", type: "string" as const, main: true }], runs_in: "background" as const, run: () => assert.fail() };
+
+// A line the test finishes by hand: the reply of `open_cmdline` stays pending until `reply` is called.
+function pending_line() {
+  const replies: ((reply: unknown) => void)[] = [];
+  return { open_cmdline: () => new Promise<unknown>((resolve) => replies.push(resolve)), reply: (value: unknown) => replies[0]!(value) };
+}
+const turn = () => new Promise((resolve) => setImmediate(resolve));
+
+test("a prompt waits for the line, and the next step runs after the user submits", async () => {
   const closed: string[] = [];
-  const { deps, log } = make_fake({
-    "open.url": { label: "Open", intent: "x", name: "open", params: [{ name: "url", type: "string", main: true }], runs_in: "background", run: () => assert.fail() },
-    "tab.close": { label: "Close", intent: "x", runs_in: "background", run: () => void closed.push("closed") },
-  });
-  const response = await create_router(deps).run({
-    invocations: [{ id: "open.url", prompt: { param: "url" } }, { id: "tab.close" }],
-    mode: "normal",
-    may_prompt: true,
-  });
-  assert.deepEqual(response, { ok: true });
-  assert.deepEqual(log, ["cmdline 7 0 open "]);
+  const line = pending_line();
+  const { deps, log } = make_fake({ "open.url": open_url, "tab.close": { label: "Close", intent: "x", runs_in: "background", run: () => void closed.push("closed") } }, { open_cmdline: line.open_cmdline });
+  const running = create_router(deps).run({ invocations: [{ id: "open.url", prompt: { param: "url" } }, { id: "tab.close" }], mode: "normal", may_prompt: true });
+  await turn();
   assert.deepEqual(closed, []);
+  line.reply({ ok: true });
+  assert.deepEqual(await running, { ok: true });
+  assert.deepEqual(closed, ["closed"]);
+  assert.deepEqual(log, []);
+});
+
+test("a cancelled line stops the sequence with no toast and stores nothing", async () => {
+  const closed: string[] = [];
+  const line = pending_line();
+  const { deps, log, slots } = make_fake({ "open.url": open_url, "tab.close": { label: "Close", intent: "x", runs_in: "background", run: () => void closed.push("closed") } }, { open_cmdline: line.open_cmdline });
+  const running = create_router(deps).run({ invocations: [{ id: "tab.close" }, { id: "open.url", prompt: { param: "url" } }, { id: "tab.close" }], mode: "normal", may_prompt: true });
+  await turn();
+  line.reply({ ok: true, cancelled: true });
+  assert.deepEqual(await running, { ok: true, cancelled: true });
+  assert.deepEqual(closed, ["closed"]);
+  assert.deepEqual(log, []);
+  assert.equal(slots.normal, undefined);
+});
+
+test("a line that fails to open stops the sequence with one toast", async () => {
+  const closed: string[] = [];
+  const { deps, log } = make_fake(
+    { "open.url": open_url, "tab.close": { label: "Close", intent: "x", runs_in: "background", run: () => void closed.push("closed") } },
+    { open_cmdline: async () => ({ ok: false, message: "The command line is already open" }) },
+  );
+  const response = await create_router(deps).run({ invocations: [{ id: "open.url", prompt: { param: "url" } }, { id: "tab.close" }], mode: "normal", may_prompt: true });
+  assert.equal(response.ok, false);
+  assert.deepEqual(closed, []);
+  assert.deepEqual(log, ["refuse 7 The command line is already open"]);
+});
+
+test("a content step waits for its answer: done goes on, failed stops with one toast, cancelled stops quietly, no answer is done", async () => {
+  const commands = {
+    "page.look": { label: "Look", intent: "x", runs_in: "content" as const, run: () => {} },
+    "tab.close": { label: "Close", intent: "x", runs_in: "background" as const, run: () => void ran.push("closed") },
+  };
+  const ran: string[] = [];
+  const cases: [unknown, boolean, string[]][] = [
+    [{ ok: true }, true, ["closed"]],
+    [undefined, true, ["closed"]],
+    [{ ok: true, cancelled: true }, true, []],
+    [{ ok: false, message: "No hints on this page" }, false, []],
+  ];
+  for (const [answer, ok, expected] of cases) {
+    ran.length = 0;
+    const { deps, log } = make_fake(commands, { send_to_tab: async () => answer });
+    const response = await create_router(deps).run({ invocations: [{ id: "page.look" }, { id: "tab.close" }], mode: "normal" });
+    assert.equal(response.ok, ok);
+    assert.deepEqual(ran, expected);
+    assert.deepEqual(log, ok ? [] : ["refuse 7 No hints on this page"]);
+  }
+});
+
+test("a content step whose reply is lost refuses with the page message and stops", async () => {
+  const ran: string[] = [];
+  const { deps, log } = make_fake(
+    {
+      "page.look": { label: "Look", intent: "x", runs_in: "content", run: () => {} },
+      "tab.close": { label: "Close", intent: "x", runs_in: "background", run: () => void ran.push("closed") },
+    },
+    { send_to_tab: async () => { throw new Error("The message channel closed"); } },
+  );
+  const response = await create_router(deps).run({ invocations: [{ id: "page.look" }, { id: "tab.close" }], mode: "normal" });
+  assert.equal(response.ok, false);
+  assert.deepEqual(ran, []);
+  assert.deepEqual(log, ["refuse 7 Look needs a page OasisFox runs on"]);
+});
+
+test("a prompt that was filled in stores nothing, because the line stores the command it runs", async () => {
+  const { deps, slots } = make_fake({ "open.url": open_url, "tab.echo": { label: "Echo", intent: "x", runs_in: "background", run: () => {} } });
+  await create_router(deps).run({ invocations: [{ id: "tab.echo" }, { id: "open.url", prompt: { param: "url" } }], mode: "normal", may_prompt: true });
+  assert.equal(slots.normal, undefined);
 });
 
 test("without may_prompt a missing arg or a prompt gets the validation failure", async () => {

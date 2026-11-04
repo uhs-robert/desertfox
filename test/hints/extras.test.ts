@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import "../../src/commands/hint.ts";
 import { check_args } from "../../src/shared/registry/check_args.ts";
+import type { Outcome } from "../../src/shared/messages.ts";
 import { registry } from "../../src/shared/registry/index.ts";
 
 class FakeNode {
@@ -37,6 +38,11 @@ class FakeNode {
 
 type Link = FakeNode & { localName: string; href: string; rect_top: number; on_click: () => void; click: () => void; matches: (selector: string) => boolean };
 
+// Reads a promise without waiting for it: undefined while it is still pending.
+async function peek(answer: Outcome | Promise<Outcome>): Promise<Outcome | undefined> {
+  return Promise.race([answer, new Promise<undefined>((resolve) => setTimeout(resolve, 20))]);
+}
+
 const settle = async () => {
   for (let turn = 0; turn < 6; turn++) await new Promise((resolve) => setTimeout(resolve, 0));
 };
@@ -52,7 +58,7 @@ async function page_with(texts: string[]) {
   const repeat_records: unknown[] = [];
   const copied: string[] = [];
   const modes: string[] = [];
-  const handlers = new Map<string, (args: Record<string, unknown>) => void>();
+  const handlers = new Map<string, (args: Record<string, unknown>) => unknown>();
   let sink: { on_token: (token: string) => string; exit: () => void } | undefined;
   let mode = "normal";
 
@@ -64,7 +70,7 @@ async function page_with(texts: string[]) {
     removeEventListener: (type: string) => void active_listeners.delete(type),
     oasisfox_host: {
       register_sink: (_mode: string, registered: typeof sink) => void (sink = registered),
-      register_handler: (id: string, handler: (args: Record<string, unknown>) => void) => void handlers.set(id, handler),
+      register_handler: (id: string, handler: (args: Record<string, unknown>) => unknown) => void handlers.set(id, handler),
       // The real host calls the sink's exit when the mode leaves hint.
       set_mode: (next: string) => {
         modes.push(next);
@@ -141,7 +147,8 @@ async function page_with(texts: string[]) {
     modes,
     mode: () => mode,
     active_listeners,
-    run: (args: Record<string, unknown>) => handlers.get("hint.run")!({ action: "here", filter: "links", rapid: false, ...args }),
+    // What the handler answers: an Outcome now, or a promise that stays pending while hints wait for the user.
+    run: (args: Record<string, unknown>) => handlers.get("hint.run")!({ action: "here", filter: "links", rapid: false, ...args }) as Outcome | Promise<Outcome>,
     type: (token: string) => sink!.on_token(token),
     escape: () => win.oasisfox_host.set_mode("normal"),
     // The label text of each label that is not hidden by typing.
@@ -249,9 +256,10 @@ test("text keeps links whose text holds it, ignoring case", async () => {
 
 test("text with no match shows a notice and stays in normal mode", async () => {
   const page = await page_with(["Alpha", "Beta"]);
-  page.run({ text: "zzz" });
+  const outcome = page.run({ text: "zzz" });
   await settle();
-  assert.deepEqual(page.messages(), ["No link matches zzz"]);
+  assert.deepEqual(await outcome, { ok: false, message: "No link matches zzz" });
+  assert.deepEqual(page.messages(), []);
   assert.equal(page.mode(), "normal");
   assert.equal(page.active_listeners.size, 0);
 });
@@ -301,8 +309,10 @@ test("copy writes the address and copy_text writes the text, rapid keeps the lab
 
 test("an invalid custom selector shows a notice instead of throwing", async () => {
   const page = await page_with(["one"]);
-  assert.doesNotThrow(() => page.run({ filter: "custom", selector: "a[" }));
-  assert.deepEqual(page.messages(), ["Invalid selector: a["]);
+  let outcome: Outcome | Promise<Outcome> | undefined;
+  assert.doesNotThrow(() => (outcome = page.run({ filter: "custom", selector: "a[" })));
+  assert.deepEqual(outcome, { ok: false, message: "Invalid selector: a[" });
+  assert.deepEqual(page.messages(), []);
   assert.deepEqual(page.modes, []);
 });
 
@@ -317,17 +327,16 @@ test("text keeps links only: a sole matching button is not clicked", async () =>
   let clicks = 0;
   const button = page.links[1]!;
   Object.assign(button, { localName: "button", href: undefined, on_click: () => void clicks++ });
-  page.run({ text: "beta", filter: "clickable" });
+  const outcome = page.run({ text: "beta", filter: "clickable" });
   await settle();
   assert.equal(clicks, 0);
-  assert.deepEqual(page.messages(), ["No link matches beta"]);
+  assert.deepEqual(await outcome, { ok: false, message: "No link matches beta" });
   assert.equal(page.mode(), "normal");
 });
 
 test("text with no candidate at all shows the no-link notice", async () => {
   const page = await page_with([]);
-  page.run({ text: "zzz" });
-  assert.deepEqual(page.messages(), ["No link matches zzz"]);
+  assert.deepEqual(page.run({ text: "zzz" }), { ok: false, message: "No link matches zzz" });
   assert.deepEqual(page.modes, []);
 });
 
@@ -380,4 +389,61 @@ test("a hint start tells the background what `.` shows again, and a pick that op
   const record = { type: "record_repeat", invocation: { id: "hint.run", args } };
   assert.deepEqual(page.repeat_records, [record]);
   assert.equal((page.sent.at(-1) as { from_hints?: boolean }).from_hints, true);
+});
+
+test("hint.run waits until a label is picked, then answers done and the mode change that follows does not cancel it", async () => {
+  const page = await page_with(["one", "two"]);
+  const answer = page.run({ action: "background" });
+  await settle();
+  assert.equal(await peek(answer), undefined);
+  page.type(page.labels()[0]!.toLowerCase());
+  assert.deepEqual(await answer, { ok: true });
+  assert.equal(page.mode(), "normal");
+});
+
+test("hint.run answers cancelled when the mode ends with no pick, and a later exit changes nothing", async () => {
+  const page = await page_with(["one", "two"]);
+  const answer = page.run({ action: "background" });
+  await settle();
+  page.escape();
+  assert.deepEqual(await answer, { ok: true, cancelled: true });
+  assert.equal(page.sent.length, 0);
+  page.escape();
+  assert.deepEqual(await answer, { ok: true, cancelled: true });
+});
+
+test("hint.run answers cancelled while the labels are still being found", async () => {
+  const page = await page_with(["one", "two"]);
+  const answer = page.run({ action: "background" });
+  page.escape();
+  assert.deepEqual(await answer, { ok: true, cancelled: true });
+});
+
+test("a new hint.run cancels the one before it", async () => {
+  const page = await page_with(["one", "two"]);
+  const first = page.run({ action: "background" });
+  await settle();
+  const second = page.run({ action: "background" });
+  assert.deepEqual(await first, { ok: true, cancelled: true });
+  await settle();
+  assert.equal(await peek(second), undefined);
+  page.escape();
+});
+
+test("a one-match text run answers done without labels", async () => {
+  const page = await page_with(["Alpha", "Beta"]);
+  const answer = page.run({ text: "bet", action: "background" });
+  await settle();
+  assert.deepEqual(await answer, { ok: true });
+});
+
+test("rapid mode answers done at the first pick and Escape later changes nothing", async () => {
+  const page = await page_with(["one", "two"]);
+  const answer = page.run({ action: "background", rapid: true });
+  await settle();
+  page.type(page.labels()[0]!.toLowerCase());
+  await settle();
+  assert.deepEqual(await answer, { ok: true });
+  page.escape();
+  assert.deepEqual(await answer, { ok: true });
 });

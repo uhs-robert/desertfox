@@ -1,6 +1,7 @@
 // The `hints` bundle: registers the hint sink and the `hint.run` handler with the host.
 // `hint.run` enters hint mode at once, finds and labels the visible elements, then waits for a label to be typed.
 
+import type { Outcome } from "../../shared/messages.ts";
 import { CONFIG_STATUS_STORAGE_KEY } from "../../background/storage_keys.ts";
 import type { BundleHostApi } from "../bundle_host.ts";
 import { link_address, OPEN_PLACES, perform, starts_caret } from "./actions.ts";
@@ -18,8 +19,13 @@ import type { PageProbe } from "./visible.ts";
 type HintsWindow = { oasisfox_host: BundleHostApi; oasisfox_hints_ready?: true; oasisfox_caret_target?: Element };
 const page = window as unknown as HintsWindow;
 
+const done: Outcome = { ok: true };
+const cancelled_outcome: Outcome = { ok: true, cancelled: true };
+
 type Session = {
   cancelled: boolean;
+  // Settles the promise `hint.run` returned. The first call wins, so each path that leaves hint mode must call it before `set_mode`, because the mode change ends the session as cancelled.
+  finish: (outcome: Outcome) => void;
   action: HintAction;
   // Keys typed while the elements are still being found.
   waiting_tokens: string[];
@@ -103,6 +109,7 @@ function register(host: BundleHostApi): void {
     session?.ready?.stop_following();
     session?.ready?.view.clear_labels();
     if (session) session.cancelled = true;
+    session?.finish(cancelled_outcome);
     session = undefined;
   }
 
@@ -113,12 +120,16 @@ function register(host: BundleHostApi): void {
     const found = current.lower_text === undefined ? visible : visible.filter((item) => link_address(item.element as HTMLAnchorElement) !== undefined && has_text(item.element, current.lower_text!));
     const view = create_view();
     if (found.length === 0) {
+      const message = current.text === undefined ? "No hints on this page" : `No link matches ${current.text}`;
+      current.finish({ ok: false, message });
       host.set_mode("normal");
-      view.show_message(current.text === undefined ? "No hints on this page" : `No link matches ${current.text}`);
+      // Only a rapid rebuild gets here with its promise already settled, so nobody else shows the message.
+      if (!first_build) view.show_message(message);
       return;
     }
     // One match needs no label. Only the first build does this, so rapid mode cannot repeat the same pick.
     if (first_build && current.lower_text !== undefined && found.length === 1) {
+      current.finish(done);
       host.set_mode("normal");
       perform(current.action, found[0]!.element as HTMLElement, deps);
       return;
@@ -145,6 +156,7 @@ function register(host: BundleHostApi): void {
     ready.view.show_progress(outcome.typed, new Set(outcome.still_possible));
     if (outcome.picked !== undefined) {
       const picked = ready.found[outcome.picked]!.element as HTMLElement;
+      current.finish(done);
       if (!current.rapid) {
         // Leave hint mode first: a picked field then raises insert mode through its own focus event.
         host.set_mode("normal");
@@ -172,7 +184,7 @@ function register(host: BundleHostApi): void {
     exit: end_session,
   });
 
-  host.register_handler("hint.run", (args) => {
+  host.register_handler("hint.run", (args): Outcome | Promise<Outcome> => {
     const action = args.action as HintAction;
     end_session();
     const filter = args.filter as HintFilter;
@@ -181,17 +193,20 @@ function register(host: BundleHostApi): void {
     try {
       candidates = find_candidates(filter, custom_selector, action);
     } catch {
-      return create_view().show_message(`Invalid selector: ${custom_selector}`);
+      return { ok: false, message: `Invalid selector: ${custom_selector}` };
     }
     // With nothing to label the mode never changes, so keys held during the load run as normal keys.
     const text = (args.text as string | undefined) || undefined;
     void browser.runtime.sendMessage({ type: "record_repeat", invocation: { id: "hint.run", args } });
-    if (candidates.length === 0) return create_view().show_message(text === undefined ? "No hints on this page" : `No link matches ${text}`);
-    // A caret start ends hint mode on the first pick, so rapid has nothing to repeat.
-    const current: Session = { cancelled: false, action, waiting_tokens: [], rapid: args.rapid === true && !starts_caret(action), filter, custom_selector, text, lower_text: text?.toLowerCase() };
-    session = current;
-    host.set_mode("hint");
-    void build(current, candidates, true);
+    if (candidates.length === 0) return { ok: false, message: text === undefined ? "No hints on this page" : `No link matches ${text}` };
+    // Pending until the user picks a label or leaves hint mode.
+    return new Promise<Outcome>((finish) => {
+      // A caret start ends hint mode on the first pick, so rapid has nothing to repeat.
+      const current: Session = { cancelled: false, finish, action, waiting_tokens: [], rapid: args.rapid === true && !starts_caret(action), filter, custom_selector, text, lower_text: text?.toLowerCase() };
+      session = current;
+      host.set_mode("hint");
+      void build(current, candidates, true);
+    });
   });
 }
 

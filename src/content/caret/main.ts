@@ -1,6 +1,7 @@
 // The `caret` bundle: caret mode and visual mode, and page search. Loaded on the first entry into caret or visual mode or the first search, it registers a sink for each mode and
 // the handlers of `caret.move`, `visual.act` and the `find.*` commands.
 
+import type { Outcome, RunResponse } from "../../shared/messages.ts";
 import type { BundleHostApi, ExitDestination } from "../bundle_host.ts";
 import { move_once, SCREEN_LINE_UNITS } from "./motion.ts";
 import type { Motion } from "./motion.ts";
@@ -60,21 +61,18 @@ function paint(open: Session): void {
 }
 
 // Where a new session starts: the text of the picked element or the next text after it, else the match a search stands on while no later selection took the place, else the caret's place in the page's own selection if it is on screen, else the first visible text.
-function start_session(mode: "caret" | "visual"): Session | undefined {
+// A string is the reason no session could start.
+function start_session(mode: "caret" | "visual"): Session | string {
   const target = page.oasisfox_caret_target;
   delete page.oasisfox_caret_target;
   const is_other_site_frame = target !== undefined && (target.localName === "iframe" || target.localName === "frame") && !frame_document(target);
   if (is_other_site_frame) {
-    page.oasisfox_host.show_toast("Caret cannot reach a frame from another site");
-    return undefined;
+    return "Caret cannot reach a frame from another site";
   }
   // The model covers the whole page, so motion is not trapped in the element.
   const model = build_text_model(document.body, target);
   const caret = target === undefined ? (find.position(model) ?? first_visible_index(model)) : model.start_index;
-  if (caret === undefined || model.text === "") {
-    if (target !== undefined) page.oasisfox_host.show_toast("No text here");
-    return undefined;
-  }
+  if (caret === undefined || model.text === "") return "No text here";
   return { model, cursor: { anchor: caret, caret }, mode, goal_x: undefined, painted: [] };
 }
 
@@ -136,15 +134,19 @@ function adopt_page_selection(open: Session): void {
   }
 }
 
-function ensure_session(mode: "caret" | "visual"): Session | undefined {
+// A string is the failure message. The mode went back to normal then.
+function ensure_session(mode: "caret" | "visual"): Session | string {
   const mode_changed = !session || session.mode !== mode;
   const model_before = session?.model;
   if (session) session = rebuild_if_stale(session);
   if (session) adopt_page_selection(session);
-  session ??= start_session(mode);
   if (!session) {
-    page.oasisfox_host.set_mode("normal");
-    return undefined;
+    const started = start_session(mode);
+    if (typeof started === "string") {
+      page.oasisfox_host.set_mode("normal");
+      return started;
+    }
+    session = started;
   }
   // Caret mode shows one character, so leaving visual mode drops the anchor.
   if (mode === "caret") session.cursor = { anchor: session.cursor.caret, caret: session.cursor.caret };
@@ -158,7 +160,10 @@ function ensure_session(mode: "caret" | "visual"): Session | undefined {
 
 const sink_for = (mode: "caret" | "visual") => ({
   // Showing the caret on entry is what makes entering the mode draw it at once.
-  enter: () => void ensure_session(mode),
+  enter: () => {
+    const started = ensure_session(mode);
+    if (typeof started === "string") page.oasisfox_host.show_toast(started);
+  },
   on_token: (token: string): "handled" | "pass" => {
     if (mode === "caret" || (token !== "<Escape>" && token !== "<C-[>")) return "pass";
     // Escape in visual mode goes back to caret mode, and the keymap never sees it.
@@ -171,9 +176,9 @@ const sink_for = (mode: "caret" | "visual") => ({
   },
 });
 
-const handle_move = (args: Record<string, unknown>): void => {
+const handle_move = (args: Record<string, unknown>): Outcome | undefined => {
   const open = ensure_session(session?.mode ?? "caret");
-  if (!open) return;
+  if (typeof open === "string") return { ok: false, message: open };
   const motion: Motion = { unit: args.unit as Motion["unit"], direction: (args.direction as Motion["direction"] | undefined) ?? "forward", big: args.big === true };
   let caret: number;
   if (SCREEN_LINE_UNITS.includes(motion.unit)) {
@@ -188,9 +193,9 @@ const handle_move = (args: Record<string, unknown>): void => {
   paint(open);
 };
 
-const handle_act = (args: Record<string, unknown>): void => {
+const handle_act = (args: Record<string, unknown>): Outcome | Promise<Outcome> | undefined => {
   const open = ensure_session("visual");
-  if (!open) return;
+  if (typeof open === "string") return { ok: false, message: open };
   const action = args.action as "yank" | "swap" | "search";
   if (action === "swap") {
     open.cursor = swap_ends(open.cursor);
@@ -199,12 +204,14 @@ const handle_act = (args: Record<string, unknown>): void => {
   }
   const text = selected_text(open.model.text, open.cursor);
   if (action === "search") {
-    void browser.runtime.sendMessage({ type: "run", invocations: [{ id: "open.search", args: { query: text } }], mode: "visual" });
-    return page.oasisfox_host.set_mode("caret");
+    // The router shows a refusal of its own, so the answer only decides whether a sequence goes on.
+    const searched = browser.runtime.sendMessage({ type: "run", invocations: [{ id: "open.search", args: { query: text } }], mode: "visual" }) as Promise<RunResponse>;
+    page.oasisfox_host.set_mode("caret");
+    return searched.then((answer): Outcome => (answer.ok ? answer : { ok: true, cancelled: true }), (): Outcome => ({ ok: false, message: "OasisFox background did not answer" }));
   }
   const run = visual_runs;
   // Visual mode stays until the copy is done, so a refused copy leaves the selection to retry.
-  void yank_text(navigator.clipboard, text, {
+  return yank_text(navigator.clipboard, text, {
     is_same_session: () => visual_runs === run && session === open && open.mode === "visual",
     toast: page.oasisfox_host.show_toast,
     leave_visual: () => page.oasisfox_host.set_mode("caret"),
@@ -221,10 +228,10 @@ if (!page.oasisfox_caret_ready) {
   page.oasisfox_host.register_handler("find.open", (args) => {
     const direction = args.direction === "backward" ? "backward" : "forward";
     find.begin(direction);
-    page.oasisfox_host.run_command("cmdline.open", "cmdline", { search: direction });
+    return page.oasisfox_host.run_command("cmdline.open", "cmdline", { search: direction });
   });
-  page.oasisfox_host.register_handler("find.next", () => void find.step(false));
-  page.oasisfox_host.register_handler("find.prev", () => void find.step(true));
+  page.oasisfox_host.register_handler("find.next", () => find.step(false));
+  page.oasisfox_host.register_handler("find.prev", () => find.step(true));
   // Called by the command line while it is open, and not by any key.
   page.oasisfox_host.register_handler("find.live", (args) => find.update(args.text as string, args.report as (status: string) => void));
   page.oasisfox_host.register_handler("find.end", (args) => void find.end(args.keep === true));

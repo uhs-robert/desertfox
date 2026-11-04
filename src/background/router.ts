@@ -2,7 +2,7 @@
 
 import type { CheckedArgs, CommandContext, CommandDef, ContextSource, ContextSourceName, Mode } from "../shared/command.ts";
 import type { BoundInvocation } from "../shared/invocation.ts";
-import type { BackgroundToContent, Refusal, RunResponse } from "../shared/messages.ts";
+import type { BackgroundToContent, Outcome, Refusal, RunResponse } from "../shared/messages.ts";
 import { check_args } from "../shared/registry/check_args.ts";
 import type { EnumSources } from "../shared/registry/check_args.ts";
 import { is_context_source } from "../shared/registry/params.ts";
@@ -48,12 +48,14 @@ export type Router = { run: (request: RouteRequest) => Promise<RunResponse> };
 
 type Now = { active: ActiveTab | undefined; context: CommandContext };
 
-// `waiting` means the command line is open for the user, so the rest of a sequence must not run.
-type Outcome = { ok: true; waiting?: true } | { ok: false; message: string };
-
 const done: Outcome = { ok: true };
-const waiting: Outcome = { ok: true, waiting: true };
 const refuse = (message: string): Outcome => ({ ok: false, message });
+
+// What a content script answers to a request that waits on the user. No answer is done: an older script answers nothing.
+function outcome_of_reply(reply: unknown): Outcome {
+  const outcome = reply as Outcome | undefined;
+  return outcome && typeof outcome === "object" && (outcome.ok === false ? typeof outcome.message === "string" : true) ? outcome : done;
+}
 
 export function create_router(deps: RouterDeps): Router {
   // Read at run time: an earlier step or repeat can change which tab is active.
@@ -70,16 +72,19 @@ export function create_router(deps: RouterDeps): Router {
   async function run(request: RouteRequest): Promise<RunResponse> {
     // Read before any step: window.new, window.close and tab.attach change which tab is active.
     const is_private = (await read_now(request)).active?.incognito === true;
+    const prompted = new Set<BoundInvocation>();
     for (const invocation of request.invocations) {
-      const outcome = await run_one(invocation, request).catch((error: unknown) => refuse(error instanceof Error ? error.message : String(error)));
-      if (outcome.ok && outcome.waiting) return { ok: true };
+      const outcome = await run_one(invocation, request, prompted).catch((error: unknown) => refuse(error instanceof Error ? error.message : String(error)));
+      // The user left a waiting step: the rest of the sequence does not run, and nothing is repeated.
+      if (outcome.ok && outcome.cancelled) return { ok: true, cancelled: true };
       if (outcome.ok) continue;
       const refusal: Refusal = { id: invocation.id, message: outcome.message };
       const { context } = await read_now(request);
       await deps.show_refusal(context.tab_id, refusal, context.frame_id);
       return { ok: false, refusal };
     }
-    await remember(request, is_private);
+    // A line the user filled in stores itself when it runs, and this request still holds the missing param.
+    if (prompted.size === 0) await remember(request, is_private);
     return { ok: true };
   }
 
@@ -94,7 +99,7 @@ export function create_router(deps: RouterDeps): Router {
     await deps.repeat_memory.save(repeatable.map(as_stored), is_private).catch(() => undefined);
   }
 
-  async function run_one(invocation: BoundInvocation, request: RouteRequest): Promise<Outcome> {
+  async function run_one(invocation: BoundInvocation, request: RouteRequest, prompted: Set<BoundInvocation>): Promise<Outcome> {
     const { active, context } = await read_now(request);
     const command = deps.get_command(invocation.id);
     if (!command) return refuse(`unknown command "${invocation.id}"`);
@@ -102,25 +107,29 @@ export function create_router(deps: RouterDeps): Router {
     const missing_need = await first_unmet_need(command, context.tab_id);
     if (missing_need) return refuse(`${command.label} needs ${missing_need}`);
 
+    const open = (args: Record<string, unknown>, param: string, prefill?: ContextSource) => {
+      prompted.add(invocation);
+      return open_line(command, args, param, context, active, prefill);
+    };
     // A count before a key that opens the line is dropped.
     const sources = await deps.get_enum_sources();
     if (invocation.prompt && request.may_prompt) {
       // The fixed args must be good. Only the prompted param may be left out.
       const fixed = check_args(command, invocation.args, sources);
       if (!fixed.ok && fixed.missing_param === undefined) return refuse(fixed.error);
-      return open_line(command, invocation.args ?? {}, invocation.prompt.param, context, active, invocation.prompt.prefill);
+      return open(invocation.args ?? {}, invocation.prompt.param, invocation.prompt.prefill);
     }
 
     const counted = apply_count(command, invocation);
     const checked = check_args(command, counted.args, sources);
     if (!checked.ok) {
       if (checked.missing_param === undefined || !request.may_prompt) return refuse(checked.error);
-      return open_line(command, counted.args ?? {}, checked.missing_param, context, active);
+      return open(counted.args ?? {}, checked.missing_param);
     }
 
     const filled = await fill_context_sources(command.id, checked.args, context, active);
     if (!filled.ok) {
-      return filled.empty_selection_param === undefined || !request.may_prompt ? filled : open_line(command, counted.args ?? {}, filled.empty_selection_param, context, active);
+      return filled.empty_selection_param === undefined || !request.may_prompt ? filled : open(counted.args ?? {}, filled.empty_selection_param);
     }
 
     if (command.runs_in === "content") return run_in_content(command, filled.args, counted.times, context);
@@ -146,14 +155,13 @@ export function create_router(deps: RouterDeps): Router {
     if (tab_id === undefined) return refuse(`${command.label} needs a tab`);
     const invocations = Array.from({ length: times }, () => ({ id: command.id, args }));
     try {
-      await deps.send_to_tab(tab_id, { type: "run_in_content", invocations }, frame_id);
-      return done;
+      return outcome_of_reply(await deps.send_to_tab(tab_id, { type: "run_in_content", invocations }, frame_id));
     } catch {
       return refuse(`${command.label} needs a page OasisFox runs on`);
     }
   }
 
-  // Types the command into the command line and waits. A source that has nothing to give prefills empty, because the
+  // Types the command into the command line and waits until the user submits or leaves it. A source that has nothing to give prefills empty, because the
   // user can still type the value.
   async function open_line(
     command: CommandDef,
@@ -172,8 +180,7 @@ export function create_router(deps: RouterDeps): Router {
     const { tab_id, frame_id } = context;
     if (tab_id === undefined) return refuse(`${command.label} needs a tab`);
     try {
-      await deps.open_cmdline(tab_id, frame_id ?? 0, print_command(command, typed, { open_param, sources: await deps.get_enum_sources() }));
-      return waiting;
+      return outcome_of_reply(await deps.open_cmdline(tab_id, frame_id ?? 0, print_command(command, typed, { open_param, sources: await deps.get_enum_sources() })));
     } catch {
       return refuse(`${command.label} needs a page OasisFox runs on`);
     }

@@ -5,6 +5,7 @@
 import { BUNDLE_FOR_MODE } from "../shared/bundles.ts";
 import type { BundleName } from "../shared/bundles.ts";
 import type { Mode } from "../shared/command.ts";
+import type { Outcome } from "../shared/messages.ts";
 
 // Where a sink's mode went. A mode, or "page_hidden" when the tab or page went away while the mode was active.
 export type ExitDestination = Mode | "page_hidden";
@@ -13,7 +14,9 @@ export type ExitDestination = Mode | "page_hidden";
 // `enter` runs once per entry, after the sink is registered. `exit` runs once per exit, whichever path led out.
 export type Sink = { on_token: (token: string) => "handled" | "pass"; enter?: () => void; exit: (destination: ExitDestination) => void };
 
-export type BundleHandler = (args: Record<string, unknown>) => void;
+// What a handler returns: nothing for done, or an Outcome. A promise stays pending while the handler waits on the user. A throw is failed.
+export type HandlerResult = void | Outcome | Promise<void | Outcome>;
+export type BundleHandler = (args: Record<string, unknown>) => HandlerResult;
 
 // What a bundle sees of the host.
 export type BundleHostApi = {
@@ -23,7 +26,8 @@ export type BundleHostApi = {
   set_mode: (mode: Mode) => void;
   get_mode: () => Mode;
   // Runs a handler of another bundle, loading that bundle first if needed. The id need not be a registry command: a bundle may offer handlers only its sibling calls. The args are bundle-internal and unchecked by the validator, and may hold functions.
-  run_command: (command_id: string, name: BundleName, args: Record<string, unknown>) => void;
+  // The answer is the handler's real outcome, and stays pending while the handler waits on the user. A missing handler or a failed load answers failed.
+  run_command: (command_id: string, name: BundleName, args: Record<string, unknown>) => Promise<Outcome>;
   show_toast: (message: string) => void;
 };
 
@@ -39,6 +43,14 @@ export type BundleHostDeps = {
   // A mode with a sink ended its load without one, so nothing would take its keys.
   on_sink_missing: (mode: Mode) => void;
 };
+
+// Answers the outcome of a call: nothing is done, a throw is failed. Calls the handler on the spot, so a sync handler still runs in the caller's turn.
+export function settle(call: () => HandlerResult): Promise<Outcome> {
+  return new Promise<HandlerResult>((resolve) => resolve(call())).then(
+    (result) => (result as Outcome | undefined) ?? { ok: true },
+    (error: unknown): Outcome => ({ ok: false, message: (error as Error).message }),
+  );
+}
 
 export function create_bundle_host() {
   const sinks = new Map<Mode, Sink>();
@@ -70,16 +82,30 @@ export function create_bundle_host() {
     });
   }
 
-  // Runs a command whose code sits in a bundle, loading the bundle first if needed. `missing` is the refusal for a bundle that registers nothing.
+  // Runs a command whose code sits in a bundle, loading the bundle first if needed. `missing` is the failure for a bundle that registers nothing.
+  // Keys are held for the load only, never while the handler's promise is pending.
   // `args` reaches the handler as given. Nothing validates it, so it holds whatever the caller and the handler agree on, functions included. Take it only from bundle code, never from keymap or command-line input, which the registry validates first.
-  function run_command(command_id: string, name: BundleName, args: Record<string, unknown>, missing: string, hold = true): void {
+  // `hold` false is for drawing, which nobody awaits, so a failure there goes to `show_error`.
+  function run_command(command_id: string, name: BundleName, args: Record<string, unknown>, missing: string, hold = true): Promise<Outcome> {
     const run = handlers.get(command_id);
-    if (run) return run(args);
-    after_load(name, (loaded) => {
-      const registered = handlers.get(command_id);
-      if (!registered) throw new Error(loaded ? missing : `OasisFox could not load ${name}`);
-      registered(args);
-    }, hold);
+    const answer = run
+      ? settle(() => run(args))
+      : new Promise<Outcome>((resolve) =>
+          after_load(
+            name,
+            (loaded) =>
+              resolve(
+                settle(() => {
+                  const registered = handlers.get(command_id);
+                  if (!registered) throw new Error(loaded ? missing : `OasisFox could not load ${name}`);
+                  return registered(args);
+                }),
+              ),
+            hold,
+          ),
+        );
+    if (!hold) void answer.then((outcome) => outcome.ok || deps.show_error(outcome.message));
+    return answer;
   }
 
   return {

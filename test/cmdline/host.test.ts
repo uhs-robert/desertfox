@@ -39,9 +39,9 @@ async function until(condition: () => boolean): Promise<void> {
 // For a message that must not arrive: long enough for one that would.
 const settle = () => new Promise((resolve) => setTimeout(resolve, 50));
 
-async function load_host(t: TestContext, tag: string, { ticket_fails = false } = {}) {
+async function load_host(t: TestContext, tag: string, { ticket_fails = false, run_answer = undefined as (() => Promise<unknown>) | undefined } = {}) {
   const modes: string[] = [];
-  const handlers = new Map<string, (args: Record<string, unknown>) => void>();
+  const handlers = new Map<string, (args: Record<string, unknown>) => unknown>();
   const sinks = new Map<string, Sink>();
   const elements: ReturnType<typeof fake_element>[] = [];
   const window_listeners: Record<string, (event: unknown) => void> = {};
@@ -59,7 +59,11 @@ async function load_host(t: TestContext, tag: string, { ticket_fails = false } =
       runtime: {
         getURL: (path: string) => `https://extension.test/${path}`,
         sendMessage: async (message: { type: string }) => {
-          if (message.type !== "issue_cmdline_ticket") return void sent.push(message);
+          if (message.type !== "issue_cmdline_ticket") {
+            sent.push(message);
+            // An inner `run` that the test finishes by hand.
+            return run_answer?.();
+          }
           if (ticket_fails) throw new Error("the background is gone");
           return "issued-ticket";
         },
@@ -72,7 +76,7 @@ async function load_host(t: TestContext, tag: string, { ticket_fails = false } =
         set_mode: (mode: string) => void modes.push(mode),
         get_mode: () => "normal",
         register_sink: (mode: string, sink: Sink) => void sinks.set(mode, sink),
-        register_handler: (id: string, handler: (args: Record<string, unknown>) => void) => void handlers.set(id, handler),
+        register_handler: (id: string, handler: (args: Record<string, unknown>) => unknown) => void handlers.set(id, handler),
       },
       addEventListener: (type: string, listener: (event: unknown) => void) => void (window_listeners[type] = listener),
     },
@@ -81,7 +85,8 @@ async function load_host(t: TestContext, tag: string, { ticket_fails = false } =
   const host_url = new URL("../../src/cmdline/host.ts", import.meta.url).href;
   await import(`${host_url}?${tag}`);
 
-  handlers.get("cmdline.open")!({ text: "open " });
+  const answer = handlers.get("cmdline.open")!({ text: "open " }) as Promise<{ ok: boolean; cancelled?: true; message?: string }> | { ok: false; message: string };
+  const opened_again = () => handlers.get("cmdline.open")!({ text: "again" }) as { ok: false; message: string };
   const [holder, frame] = elements as [ReturnType<typeof fake_element>, ReturnType<typeof fake_element>];
   // An open port keeps Node running, so a failed test would hang.
   t.after(() => frame.posted.forEach((posted) => posted.transfer.forEach((port) => port.close())));
@@ -96,7 +101,7 @@ async function load_host(t: TestContext, tag: string, { ticket_fails = false } =
     await until(() => frame.focused);
   };
   const page_mutated = () => observers.forEach((callback) => callback());
-  return { modes, sent, holder, frame, sink: sinks.get("cmdline")!, on_window, ready, page_opened, page_mutated };
+  return { modes, sent, holder, frame, sink: sinks.get("cmdline")!, on_window, ready, page_opened, page_mutated, answer, opened_again };
 }
 
 test("opening mounts the line, hands over the kept keys with a port, and a close over the port leaves it", async (t) => {
@@ -270,4 +275,79 @@ test("a resize over the port sets the frame holder's height, capped at the windo
   page_port.postMessage({ oasisfox_cmdline: { kind: "resize", height: "tall" } });
   await settle();
   assert.equal(holder.style.height, "600px");
+});
+
+// What the sequence that opened the line sees: a promise that stays pending while the line is open.
+const pending = (answer: unknown) => Promise.race([answer, new Promise((resolve) => setTimeout(() => resolve("pending"), 30))]);
+
+test("cmdline.open stays pending while the line is open and answers done once the submitted command has run", async (t) => {
+  let finish_run!: (value: unknown) => void;
+  const { modes, frame, ready, answer } = await load_host(t, "answer_submit", { run_answer: () => new Promise((resolve) => (finish_run = resolve)) });
+  await ready();
+  assert.equal(await pending(answer), "pending");
+  frame.posted[0]!.transfer[0]!.postMessage({ oasisfox_cmdline: { kind: "submit", invocation: { id: "scroll.down" } } });
+  await until(() => modes.length === 2);
+  // The line is closed, but the submitted command has not answered yet, so the sequence does not go on.
+  assert.equal(await pending(answer), "pending");
+  finish_run({ ok: true });
+  assert.deepEqual(await answer, { ok: true });
+});
+
+test("a submitted command that fails does not fail the sequence that opened the line", async (t) => {
+  const refusal = { ok: false, refusal: { id: "open.url", message: "No such tab" } };
+  const { modes, frame, ready, answer } = await load_host(t, "answer_failed_run", { run_answer: async () => refusal });
+  await ready();
+  frame.posted[0]!.transfer[0]!.postMessage({ oasisfox_cmdline: { kind: "submit", invocation: { id: "open.url" } } });
+  await until(() => modes.length === 2);
+  assert.deepEqual(await answer, { ok: true });
+});
+
+test("a submitted command whose request is lost still ends the wait as done", async (t) => {
+  const { modes, frame, ready, answer } = await load_host(t, "answer_lost_run", { run_answer: () => Promise.reject(new Error("The background is gone")) });
+  await ready();
+  frame.posted[0]!.transfer[0]!.postMessage({ oasisfox_cmdline: { kind: "submit", invocation: { id: "open.url" } } });
+  await until(() => modes.length === 2);
+  assert.deepEqual(await answer, { ok: true });
+});
+
+test("Escape, a close from the page and an empty-line close answer cancelled", async (t) => {
+  const escaped = await load_host(t, "answer_escape");
+  escaped.sink.on_token("<Escape>");
+  assert.deepEqual(await escaped.answer, { ok: true, cancelled: true });
+
+  const closed = await load_host(t, "answer_close");
+  await closed.ready();
+  closed.frame.posted[0]!.transfer[0]!.postMessage({ oasisfox_cmdline: { kind: "close" } });
+  assert.deepEqual(await closed.answer, { ok: true, cancelled: true });
+});
+
+test("the page leaving the mode (a navigation, or an unrelated key that changes the mode) answers cancelled", async (t) => {
+  const { sink, answer, ready } = await load_host(t, "answer_exit");
+  await ready();
+  sink.exit();
+  assert.deepEqual(await answer, { ok: true, cancelled: true });
+});
+
+test("committing a search answers done, and the close that follows does not turn it into cancelled", async (t) => {
+  const { modes, frame, ready, answer, sink } = await load_host(t, "answer_commit");
+  await ready();
+  frame.posted[0]!.transfer[0]!.postMessage({ oasisfox_cmdline: { kind: "find_commit" } });
+  await until(() => modes.length === 2);
+  sink.exit();
+  assert.deepEqual(await answer, { ok: true });
+});
+
+test("the first answer wins when Escape and a close both arrive", async (t) => {
+  const { sink, answer } = await load_host(t, "answer_first_wins");
+  sink.on_token("<Escape>");
+  sink.exit();
+  assert.deepEqual(await answer, { ok: true, cancelled: true });
+});
+
+test("opening while a line is open answers failed and leaves the first line alone", async (t) => {
+  const { modes, holder, answer, opened_again } = await load_host(t, "answer_second_open");
+  assert.deepEqual(opened_again(), { ok: false, message: "The command line is already open" });
+  assert.deepEqual(modes, ["cmdline"]);
+  assert.equal(holder.removed, false);
+  assert.equal(await pending(answer), "pending");
 });

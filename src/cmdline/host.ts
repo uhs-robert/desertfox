@@ -3,6 +3,7 @@
 // It stays small because it runs inside the page's own script world.
 
 import type { BundleHostApi } from "../content/bundle_host.ts";
+import type { Outcome } from "../shared/messages.ts";
 import { LAYERS } from "../shared/layers.ts";
 import type { HostToPage, PageToHost } from "./protocol.ts";
 import { unwrap, wrap } from "./protocol.ts";
@@ -40,6 +41,8 @@ type Open = {
   // Set when the line is a page search, and the way it searches. Enter sets `committed`, and the end of the line tells the search whether to keep its match.
   search?: "forward" | "backward" | undefined;
   committed: boolean;
+  // Settles the promise `cmdline.open` returned. The first call wins, so Enter settles it before `close` ends the line as cancelled.
+  finish: (outcome: Outcome | Promise<Outcome>) => void;
   timer: ReturnType<typeof setTimeout>;
 };
 
@@ -52,6 +55,7 @@ if (!page.oasisfox_cmdline_ready) {
 
   const unmount = () => {
     if (!open) return;
+    open.finish({ ok: true, cancelled: true });
     clearTimeout(open.timer);
     clearTimeout(open.check_timer);
     open.removal_watch.disconnect();
@@ -67,7 +71,7 @@ if (!page.oasisfox_cmdline_ready) {
     unmount();
   };
 
-  function mount(text: string, from_mode: string, search?: "forward" | "backward") {
+  function mount(text: string, from_mode: string, finish: (outcome: Outcome | Promise<Outcome>) => void, search?: "forward" | "backward") {
     const holder = document.createElement("div");
     holder.style.cssText = `all:initial;position:fixed;left:0;right:0;bottom:0;height:${BAR_HEIGHT};z-index:${LAYERS.command_line};`;
     const frame = document.createElement("iframe");
@@ -90,6 +94,7 @@ if (!page.oasisfox_cmdline_ready) {
       from_mode,
       search,
       committed: false,
+      finish,
       timer: setTimeout(close, READY_TIMEOUT_MS),
     };
     // A page script can send the frame somewhere else, and then the port is dead. Firefox gives no event for that, so
@@ -108,10 +113,14 @@ if (!page.oasisfox_cmdline_ready) {
     open = current;
   }
 
-  async function submit(message: Extract<PageToHost, { kind: "submit" }>) {
+  async function submit(current: Open, message: Extract<PageToHost, { kind: "submit" }>) {
+    // The line is done once the submitted command has run, so a sequence resumes after it. Its failure is not the sequence's:
+    // the router refuses with its own toast, so a refusal in the answer is not shown again.
+    let answered!: () => void;
+    current.finish(new Promise<Outcome>((resolve) => (answered = () => resolve({ ok: true }))));
     close();
-    // The router refuses with its own toast, so a refusal in the answer is not shown again.
-    await browser.runtime.sendMessage({ type: "run", invocations: [message.invocation], mode: "normal" });
+    await browser.runtime.sendMessage({ type: "run", invocations: [message.invocation], mode: "normal" }).catch(() => undefined);
+    answered();
   }
 
   const start = (current: Open, ticket: string) => {
@@ -128,12 +137,13 @@ if (!page.oasisfox_cmdline_ready) {
       } else if (message.kind === "here") clearTimeout(current.check_timer);
       else if (message.kind === "close") close();
       else if (message.kind === "resize" && Number.isFinite(message.height)) current.holder.style.height = `${Math.min(message.height, window.innerHeight)}px`;
-      else if (message.kind === "submit") void submit(message);
+      else if (message.kind === "submit") void submit(current, message);
       else if (message.kind === "find_text") {
         const report = (status: string) => open === current && current.port?.postMessage(wrap<HostToPage>({ kind: "find_status", text: status }));
         host.run_command("find.live", "caret", { text: message.text, report });
       } else if (message.kind === "find_commit") {
         current.committed = true;
+        current.finish({ ok: true });
         close();
       }
     };
@@ -169,9 +179,13 @@ if (!page.oasisfox_cmdline_ready) {
     exit: unmount,
   });
 
-  host.register_handler("cmdline.open", (args) => {
-    if (open) return;
-    mount(typeof args.text === "string" ? args.text : "", host.get_mode(), args.search === "forward" || args.search === "backward" ? args.search : undefined);
-    host.set_mode("cmdline");
+  // Pending until the user submits, commits a search or leaves the line.
+  host.register_handler("cmdline.open", (args): Outcome | Promise<Outcome> => {
+    // Joining the open line would let two sequences resume from one Enter.
+    if (open) return { ok: false, message: "The command line is already open" };
+    return new Promise<Outcome>((finish) => {
+      mount(typeof args.text === "string" ? args.text : "", host.get_mode(), finish, args.search === "forward" || args.search === "backward" ? args.search : undefined);
+      host.set_mode("cmdline");
+    });
   });
 }
