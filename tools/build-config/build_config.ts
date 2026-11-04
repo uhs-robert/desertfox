@@ -4,10 +4,10 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { CommandMeta, CommandsFile } from "../../src/shared/command.ts";
 import { CONFIG_FORMAT_VERSION, type MergedConfig, type SnippetEntry } from "../../src/shared/config.ts";
-import { DEFAULT_PALETTE, PALETTE_NAMES } from "../../src/shared/mode_colors.ts";
+import { DEFAULT_PALETTE } from "../../src/shared/config.ts";
+import { built_in_theme_names } from "../../src/shared/mode_colors.ts";
 import type { LocalTheme } from "../../src/shared/mode_colors.ts";
 import type { Theme } from "../../src/shared/theme/roles.ts";
-import { REPO_THEMES } from "../../src/shared/themes.ts";
 import { build_registry, check_config, resolve_bindings } from "./check.ts";
 import { ConfigErrors, is_plain_object } from "./errors.ts";
 import { merge_layers, origin_key } from "./merge.ts";
@@ -30,23 +30,23 @@ export function read_commands_file(path: string): CommandMeta[] {
 }
 
 // Also rejects a palette that names no theme at all.
-function pick_local_theme(merged: MergedData, local_themes: Record<string, Theme>, repo_themes: Record<string, Theme>, problems: string[]): LocalTheme | undefined {
+function pick_local_theme(merged: MergedData, local_themes: Record<string, Theme>, built_in_names: readonly string[], problems: string[]): LocalTheme | undefined {
   const name = merged.settings.palette ?? DEFAULT_PALETTE;
   if (Object.hasOwn(local_themes, name)) return { name, colors: local_themes[name]! };
-  if (Object.hasOwn(repo_themes, name) || (PALETTE_NAMES as readonly string[]).includes(name)) return undefined;
+  if (built_in_names.includes(name)) return undefined;
   const file = merged.origins.get(origin_key("settings", "palette")) ?? "config";
-  const known = new Set([...Object.keys(local_themes), ...Object.keys(repo_themes), ...PALETTE_NAMES]);
+  const known = new Set([...Object.keys(local_themes), ...built_in_names]);
   problems.push(`${file}: palette: no theme named "${name}" (known: ${[...known].join(", ")})`);
   return undefined;
 }
 
 // Warnings are for config that builds but may not mean what it says.
-export function build_config(config_dir: string, commands: CommandMeta[], warnings: string[] = [], repo_themes: Record<string, Theme> = REPO_THEMES): MergedConfig {
+export function build_config(config_dir: string, commands: CommandMeta[], warnings: string[] = [], built_in_names: readonly string[] = built_in_theme_names()): MergedConfig {
   const problems: string[] = [];
   const sources = read_source_files(config_dir, problems);
   const merged = merge_layers(sources.layers, problems);
   // Every local theme file is checked, not only the one `palette` names, so a broken file fails before it is picked.
-  const local_theme = pick_local_theme(merged, read_theme_dir(join(config_dir, "themes"), problems), repo_themes, problems);
+  const local_theme = pick_local_theme(merged, read_theme_dir(join(config_dir, "themes"), problems), built_in_names, problems);
 
   const snippets: SnippetEntry[] = [];
   const snippet_paths: string[] = [];

@@ -14,8 +14,8 @@ const chamfer = (cut: number) =>
 // --bg and --fg alias the page-wide `--oasisfox-*` settings, each with its default as a fallback.
 export const STYLE = `
 .oasisfox-whichkey {
-  --bg: var(--oasisfox-bg, #0c0e13);
-  --fg: var(--oasisfox-fg, #f5f5dc);
+  --bg: var(--oasisfox-bg-core, #0c0e13);
+  --fg: var(--oasisfox-fg-core, #f5f5dc);
   --primary: var(--oasisfox-accent, #7fa3c9);
   --secondary: var(--oasisfox-secondary, #f0e68c);
   --border: color-mix(in srgb, var(--primary) 60%, var(--bg));
