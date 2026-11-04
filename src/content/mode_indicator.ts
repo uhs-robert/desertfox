@@ -34,5 +34,7 @@ export function show_mode_label(label: string | undefined, colors?: BadgeColors)
   // The key test reads this attribute, because the shadow root is closed.
   surface.host.setAttribute("data-oasisfox-mode", label);
   surface.host.style.pointerEvents = "none";
+  // An instance orphaned by an extension reload leaves its badge in the page, out of this instance's reach.
+  document.documentElement.querySelectorAll("[data-oasisfox-mode]").forEach((stale) => stale !== surface?.host && stale.remove());
   document.documentElement.append(surface.host);
 }
