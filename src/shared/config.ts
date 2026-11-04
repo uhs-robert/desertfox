@@ -48,6 +48,9 @@ export type Settings = {
   default_engine: string;
   // Reserved. Decided in phase 3.
   new_tab_page?: string;
+  // The `tab` completion list: absent or false lists the tabs of the line's window, true lists the tabs of every window.
+  // Kept out of DEFAULT_SETTINGS because the content script bundles that object and has no use for this one.
+  completion_all_windows?: boolean;
 };
 
 export const FALLBACK_ENGINE_NAME = "duck";

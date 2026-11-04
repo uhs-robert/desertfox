@@ -1,7 +1,7 @@
 // What the command line page asks of the background: the history to walk, the commands and the lists that bare words read from.
 
 import type { CmdlineOpened } from "../shared/messages.ts";
-import { CMDLINE_HISTORY_STORAGE_KEY, CMDLINE_TICKET_STORAGE_PREFIX } from "./storage_keys.ts";
+import { CMDLINE_HISTORY_STORAGE_KEY, CMDLINE_OPENER_STORAGE_PREFIX, CMDLINE_TICKET_STORAGE_PREFIX } from "./storage_keys.ts";
 
 export const HISTORY_LIMIT = 100;
 
@@ -56,9 +56,21 @@ export function create_cmdline_service(deps: CmdlineServiceDeps) {
       redemptions.set(ticket, settled);
       void settled.then(() => redemptions.get(ticket) === settled && redemptions.delete(ticket));
       if ((await redeemed) !== tab_id) return undefined;
+      await deps.tickets.set({ [CMDLINE_OPENER_STORAGE_PREFIX + tab_id]: true });
       // After the pending writes, so a line reopened at once already has the last command.
       await last_write;
       return { history: await read(), sources: await deps.sources(), ...(await deps.page_config()) };
+    },
+    // Whether the tab redeemed a ticket and has not closed or navigated since.
+    is_opener: async (tab_id: number | undefined): Promise<boolean> => {
+      if (tab_id === undefined) return false;
+      const key = CMDLINE_OPENER_STORAGE_PREFIX + tab_id;
+      return (await deps.tickets.get(key))[key] === true;
+    },
+    forget_opener: (tab_id: number): Promise<void> => deps.tickets.remove(CMDLINE_OPENER_STORAGE_PREFIX + tab_id),
+    // A new page in the tab is not the page that opened the line, and its own embedded copy of the line page must get nothing.
+    forget_opener_on_navigation: async (tab_id: number, change: { status?: string | undefined }): Promise<void> => {
+      if (change.status === "loading") await deps.tickets.remove(CMDLINE_OPENER_STORAGE_PREFIX + tab_id);
     },
     record: (text: string, from_private_window: boolean): Promise<void> => {
       if (from_private_window || text.trim() === "") return Promise.resolve();

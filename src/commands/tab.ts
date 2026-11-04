@@ -1,5 +1,8 @@
 import type { CommandContext } from "../shared/command.ts";
-import { refuse_needing_command_line } from "../content/handlers/lazy_bundle.ts";
+import type { ListedTab } from "../background/complete_items.ts";
+import { browser_complete_items_deps, read_tabs } from "../background/complete_items.ts";
+import { get_config } from "../background/startup.ts";
+import { best_match } from "../shared/score.ts";
 import { define } from "../shared/registry/index.ts";
 import type { FindContainerStoreId } from "./open_target.ts";
 import { find_container_store_id, require_tab_id, resolve_container_store_id } from "./open_target.ts";
@@ -28,6 +31,9 @@ export type TabDeps = {
   restore_last_closed_tab: () => Promise<boolean>;
   // Undefined when no container has the name.
   find_container_store_id: FindContainerStoreId;
+  // The tabs the line lists, the same list the completion shows: the line's window, or every window, and only tabs of the line's privacy.
+  listed_tabs: (ctx: CommandContext) => Promise<ListedTab[]>;
+  focus_window: (window_id: number) => Promise<void>;
 };
 
 type CloseSide = "none" | "all_before" | "all_after" | "focus_previous";
@@ -104,6 +110,11 @@ export function make_tab_handlers(deps: TabDeps) {
     undo_close: async () => {
       if (!(await deps.restore_last_closed_tab())) throw new Error("no closed tab to restore");
     },
+    switch: async (ctx: CommandContext, args: { tab: string }) => {
+      const picked = pick_tab(await deps.listed_tabs(ctx), args.tab, ctx.window_id);
+      await deps.activate(picked.id);
+      if (picked.window_id !== ctx.window_id) await deps.focus_window(picked.window_id);
+    },
     reopen_in_container: async (ctx: CommandContext, args: { container: string }) => {
       const { current } = await position_of(ctx);
       if (current.url === undefined || ctx.window_id === undefined) throw new Error("this tab has no address to reopen");
@@ -112,6 +123,32 @@ export function make_tab_handlers(deps: TabDeps) {
       await deps.remove([current.id]);
     },
   };
+}
+
+const NUMBER_PICK = /^(\d+)(?:\s+(.*))?$/s;
+
+// `3 GitHub` is what a completion pick puts in the line: the tab at place 3 of the tab bar, then its title. The number
+// wins over the title, because the title may have changed since the pick. Other text is a fuzzy match on title and
+// address, and an equal tie is refused. With several windows listed the same number exists once per window, so the
+// title then picks one, else the line's own window.
+export function pick_tab(tabs: readonly ListedTab[], text: string, current_window_id: number | undefined): ListedTab {
+  const typed = text.trim();
+  const numbered = NUMBER_PICK.exec(typed);
+  const at_place = numbered ? tabs.filter((tab) => tab.number === Number(numbered[1])) : [];
+  if (at_place.length === 1) return at_place[0] as ListedTab;
+  if (at_place.length > 1) {
+    const title = numbered?.[2]?.trim();
+    const by_title = at_place.filter((tab) => tab.title === title);
+    const own = at_place.filter((tab) => tab.window_id === current_window_id);
+    const chosen = by_title.length === 1 ? by_title : own;
+    if (chosen.length === 1) return chosen[0] as ListedTab;
+    throw new Error(`tab ${numbered?.[1]} exists in several windows: ${at_place.map((tab) => `"${tab.title}"`).join(" and ")}`);
+  }
+  if (numbered && numbered[2] === undefined) throw new Error(`no tab at place ${numbered[1]}`);
+  const match = best_match(typed, tabs, (tab) => ({ name: tab.title, description: tab.url }));
+  if (match.found === "none") throw new Error(`no tab matches "${typed}"`);
+  if (match.found === "tie") throw new Error(`"${typed}" matches "${match.first.number} ${match.first.title}" and "${match.second.number} ${match.second.title}" equally, use a number`);
+  return match.item;
 }
 
 // `tab.goto` fills `index` with this when the user gives neither an index nor a count.
@@ -183,6 +220,13 @@ export const browser_tab_deps: TabDeps = {
     return true;
   },
   find_container_store_id,
+  listed_tabs: async (ctx) => {
+    const tab = await browser.tabs.get(require_tab_id(ctx));
+    if (tab.windowId === undefined) throw new Error("No window");
+    const settings = (await get_config()).settings;
+    return read_tabs(browser_complete_items_deps.query_tabs, { window_id: tab.windowId, incognito: tab.incognito }, settings.completion_all_windows === true);
+  },
+  focus_window: async (window_id) => void (await browser.windows.update(window_id, { focused: true })),
 };
 
 const handlers = make_tab_handlers(browser_tab_deps);
@@ -298,8 +342,8 @@ define("tab.reopen_in_container", {
 define("tab.switch", {
   name: "tab",
   label: "Switch tab",
-  intent: "Switch to an open tab chosen by title or address.",
-  params: [{ name: "tab", type: "string", rest: true, main: true }],
+  intent: "Switch to an open tab by number, title or address. The number is its place in the tab bar.",
+  params: [{ name: "tab", type: "string", rest: true, main: true, values: { from: "tabs" } }],
   runs_in: "background",
-  run: refuse_needing_command_line,
+  run: (ctx, args) => handlers.switch(ctx, args as { tab: string }),
 });

@@ -318,7 +318,7 @@ The content script must have the keymap before the first key. It reads the compi
 
 ### Command line and completion
 
-The command line is an extension page in an iframe, so page scripts and CSS cannot reach it, and it calls `browser.*` directly. Keys typed while it opens are buffered and replayed.
+The command line is an extension page in an iframe, so page scripts and CSS cannot reach it. It reads the stored keymap itself and asks the background for everything else. Keys typed while it opens are buffered and replayed.
 
 The list opens with the line and shows every command, so the line is never an empty list. Each row has a name, the first sentence of the intent, the args (flag names and the subject) and, in a later piece, the keys. In a narrow window the description shrinks first, then the args collapse to "…". The name never drops. The list shows up to 10 rows of 26px, with no scroll bar, and the host grows the frame upward to fit.
 
@@ -327,6 +327,11 @@ The cursor word decides what the list offers. A first word completes command nam
 Tab previews the selected row in the line and cycles. The list keeps ranking the text the user typed, and typing starts over. A single match goes in at once. Up and Down move and preview like Tab while the list is open, and stop at its ends. On a fresh line, before any typing or Tab, and with the list closed, they walk the history, so `:` Up Enter reruns the last command. Escape closes the list first and the line second. Enter runs the line as shown. The note row shows the usage of the selected row, or "no match".
 
 Completion sources load only when the param being completed needs them: commands, open tabs, bookmarks, search engines, containers and enum values. History completion with ranking comes in phase 3.
+
+Tabs and bookmarks come from the background, because it knows the window and privacy of the line's tab. A string param asks for them with `values: { from: "tabs" }` or `{ from: "bookmarks" }`. The page asks once per kind, keeps the answer for the line and ranks it with the shared scorer on every key. The row list shows "loading" in the note row until the answer lands. A reply is dropped when a newer fetch has started or the line has closed. The background answers only a tab whose line redeemed a ticket, until that tab closes or navigates. A normal line lists only normal tabs and a private line only private tabs. Bookmarks list in both.
+
+- A tab row reads `3 GitHub`: the number is the tab's place in its window's tab bar, counted from 1, so it stays while the user types. Picking it puts the number and title in the line. `tab` reads a leading number as that place, and the number wins over the title. Other text is a fuzzy match on title and address, and an equal tie is refused with both tabs named. The `completion_all_windows` setting (default false) lists the tabs of every window. The same number then exists once per window, so the title picks one, else the line's own window.
+- A bookmark row shows the title and the address. With no word typed, the list shows the 20 newest. Picking one puts the address in the line. `bookmark` takes an exact address first, then the best fuzzy match, and refuses an equal tie.
 
 ### Hints
 

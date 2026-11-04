@@ -128,6 +128,7 @@ export function create_session(deps: SessionDeps) {
     get_hint: (): string | undefined => {
       const row = completion?.rows[selected];
       if (row) return row.usage;
+      if (completion?.loading) return "loading";
       return completion?.listing && completion.rows.length === 0 ? "no match" : completion?.usage;
     },
     // The user typed or the page inserted a key: the history walk and any preview start over.
@@ -143,6 +144,11 @@ export function create_session(deps: SessionDeps) {
       replace_text(initial);
       caret = initial.length;
       refresh();
+    },
+    // Tabs or bookmarks arrived. The list ranks the typed text again. A closed list stays closed, and a previewed row stays.
+    source_ready: () => {
+      if (selected >= 0 || !completion) return;
+      completion = deps.complete?.(text, caret);
     },
     // The caret moved without a change to the text, for example by an arrow key or a click.
     set_caret: (next_caret: number) => {

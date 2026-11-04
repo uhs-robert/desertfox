@@ -4,12 +4,14 @@ import {
   focus_index_after_close,
   goto_target_index,
   make_tab_handlers,
+  pick_tab,
   next_audible_index,
   side_tab_ids,
   wrap_index,
   type TabDeps,
   type TabInfo,
 } from "../../src/commands/tab.ts";
+import type { ListedTab } from "../../src/background/complete_items.ts";
 import type { CommandContext } from "../../src/shared/command.ts";
 
 function make_tabs(count: number, overrides: Partial<TabInfo>[] = []): TabInfo[] {
@@ -42,8 +44,10 @@ function make_fake(tabs: TabInfo[], containers: Record<string, string> = {}) {
       return true;
     },
     find_container_store_id: async (name) => containers[name],
+    listed_tabs: async () => [],
+    focus_window: async (id) => void log.push(`focus ${id}`),
   };
-  return { handlers: make_tab_handlers(deps), log };
+  return { handlers: make_tab_handlers(deps), log, deps };
 }
 
 const ctx_at = (tab_id: number): CommandContext => ({ tab_id, window_id: 1, frame_id: 0, mode: "normal" });
@@ -162,3 +166,70 @@ test("a missing active tab refuses", async () => {
   const { handlers } = make_fake(make_tabs(2));
   await assert.rejects(handlers.next({ tab_id: undefined, window_id: 1, frame_id: 0, mode: "normal" }), /No tab/);
 });
+
+const listed = (id: number, number: number, title: string, window_id = 1, url = `https://t${id}.test/`): ListedTab => ({ id, number, title, url, window_id });
+const LISTED = [listed(11, 1, "Mail"), listed(12, 2, "GitHub"), listed(13, 3, "GitHub Gist"), listed(14, 4, "Docs")];
+
+test("pick_tab takes the tab at the number in the tab bar", () => {
+  assert.equal(pick_tab(LISTED, "3 GitHub Gist", 1).id, 13);
+  assert.equal(pick_tab(LISTED, "3", 1).id, 13);
+});
+
+test("the number wins when the title changed since the pick", () => {
+  assert.equal(pick_tab(LISTED, "4 GitHub", 1).id, 14);
+});
+
+test("a number with no tab there falls back to the text", () => {
+  assert.equal(pick_tab([listed(1, 1, "2024 plans")], "2024 plans", 1).id, 1);
+});
+
+test("a bare number with no tab at that place is refused, not matched against titles and addresses", () => {
+  const five = [1, 2, 3, 4, 5].map((number) => listed(number, number, `Page 9 of ${number}`, 1, `https://site9.test/${number}`));
+  assert.throws(() => pick_tab(five, "9", 1), /no tab at place 9/);
+});
+
+test("pick_tab takes the best match on title and address", () => {
+  assert.equal(pick_tab(LISTED, "mail", 1).id, 11);
+  assert.equal(pick_tab(LISTED, "t14", 1).id, 14);
+});
+
+test("an equal tie is refused with both tabs named, and a number settles it", () => {
+  const twins = [listed(1, 1, "News"), listed(2, 5, "News")];
+  assert.throws(() => pick_tab(twins, "news", 1), /"1 News" and "5 News" equally, use a number/);
+  assert.equal(pick_tab(twins, "5 News", 1).id, 2);
+});
+
+test("no match is an error", () => {
+  assert.throws(() => pick_tab(LISTED, "zzzz", 1), /no tab matches "zzzz"/);
+});
+
+test("with several windows listed the title picks among tabs at one number, else the line's window", () => {
+  const windows = [listed(1, 2, "Home", 1), listed(2, 2, "Work", 2), listed(3, 2, "Plans", 3)];
+  assert.equal(pick_tab(windows, "2 Work", 1).id, 2);
+  assert.equal(pick_tab(windows, "2 gone", 1).id, 1);
+  assert.throws(() => pick_tab(windows, "2 gone", 9), /tab 2 exists in several windows: "Home" and "Work" and "Plans"/);
+});
+
+test("tab.switch activates the picked tab, and focuses its window only when it is another one", async () => {
+  const { handlers, log, set_listed } = make_switch_fake();
+  await handlers.switch(ctx_at(11), { tab: "2 GitHub" });
+  assert.deepEqual(log, ["activate 12"]);
+  log.length = 0;
+  set_listed([listed(21, 1, "Elsewhere", 2)]);
+  await handlers.switch(ctx_at(11), { tab: "elsewhere" });
+  assert.deepEqual(log, ["activate 21", "focus 2"]);
+});
+
+test("tab.switch with a tie changes nothing", async () => {
+  const { handlers, log, set_listed } = make_switch_fake();
+  set_listed([listed(1, 1, "News"), listed(2, 2, "News")]);
+  await assert.rejects(handlers.switch(ctx_at(1), { tab: "news" }), /equally/);
+  assert.deepEqual(log, []);
+});
+
+function make_switch_fake() {
+  let tabs = LISTED;
+  const fake = make_fake([]);
+  const deps: TabDeps = { ...fake.deps, listed_tabs: async () => tabs };
+  return { handlers: make_tab_handlers(deps), log: fake.log, set_listed: (next: ListedTab[]) => void (tabs = next) };
+}
