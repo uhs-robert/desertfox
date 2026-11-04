@@ -610,15 +610,21 @@ async function main() {
       await sleep(300);
     }, { setup: true });
 
-    // The help page runs content.js from a script tag. The question is whether executeScript reaches it.
-    await run_case("V on the help page does not leave it stuck in caret mode", async () => {
+    // caret.js loads on the help page by script tag, so the caret keys work there. Escape must still leave the page in normal mode.
+    await run_case("V on the help page enters caret mode and Escape returns to normal", async () => {
       const badge = () => evaluate_in_background(rdp, EXTENSION_ID, `${extension_view("help.html")}?.document.querySelector("[data-oasisfox-mode]")?.getAttribute("data-oasisfox-mode") ?? null`);
       const loads_before = await settled_injection_count("caret.js");
       await send_keys("gV");
       await sleep(1500);
       const loads = (await injections_of("caret.js")).slice(loads_before);
       measurements.help_page_caret_load = loads.length === 0 ? "not requested" : loads.at(-1).ok ? "executeScript ok" : "executeScript refused";
-      expect(await badge() === "NORMAL", `the help page badge after V was ${await badge()}`);
+      const entered = await badge();
+      expect(entered === "CARET" || entered === "VISUAL", `the help page badge after V was ${entered}`);
+      for (let step = 0; step < 2; step++) {
+        await send_keys("-k", "Escape");
+        await sleep(400);
+      }
+      expect(await badge() === "NORMAL", `the help page badge after Escape was ${await badge()}`);
     });
 
     // The new tab page loads every key script by tag, since executeScript cannot reach an extension page.

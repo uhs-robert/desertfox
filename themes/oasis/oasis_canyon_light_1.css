@@ -1,0 +1,123 @@
+/* extras/css/themes/light/1/oasis_canyon_light_1.css
+ * name: Oasis Canyon Light 1
+ * author: uhs-robert
+ * mode: light
+ * light intensity: 1
+ */
+
+:root,
+[data-oasis-theme="canyon_light_1"],
+.oasis-canyon_light_1 {
+	--oasis-name: "Oasis Canyon Light 1";
+	--oasis-mode: "light";
+	--oasis-light-intensity: 1;
+	--oasis-bg-core: #f4e3d5;
+	--oasis-bg-crust: #f2dfcf;
+	--oasis-bg-mantle: #efd7c3;
+	--oasis-bg-shadow: #f1dbc9;
+	--oasis-bg-surface: #e7c3a5;
+	--oasis-diff-add: #335f4a;
+	--oasis-diff-change: #724f3f;
+	--oasis-diff-delete: #7f4747;
+	--oasis-diff-text: #7a4c31;
+	--oasis-fg-comment: #826b5f;
+	--oasis-fg-core: #181811;
+	--oasis-fg-dim: #88837f;
+	--oasis-fg-inlay: #6e7b7f;
+	--oasis-fg-muted: #786359;
+	--oasis-fg-strong: #3c3c1f;
+	--oasis-git-add: #24641c;
+	--oasis-git-change: #804913;
+	--oasis-git-delete: #b20000;
+	--oasis-syntax-bracket: #444851;
+	--oasis-syntax-builtin-const: #5a54c4;
+	--oasis-syntax-builtin-func: #5d5831;
+	--oasis-syntax-builtin-var: #791dd0;
+	--oasis-syntax-comment: #826050;
+	--oasis-syntax-conditional: #8b412a;
+	--oasis-syntax-constant: #9a4f11;
+	--oasis-syntax-delimiter: #925848;
+	--oasis-syntax-exception: #ad1319;
+	--oasis-syntax-func: #524b1c;
+	--oasis-syntax-identifier: #26637c;
+	--oasis-syntax-macro: #444f25;
+	--oasis-syntax-operator: #99361a;
+	--oasis-syntax-parameter: #356832;
+	--oasis-syntax-preproc: #4f5c2b;
+	--oasis-syntax-punctuation: #713d2d;
+	--oasis-syntax-regex: #ca161d;
+	--oasis-syntax-special: #85470f;
+	--oasis-syntax-statement: #ae3d1d;
+	--oasis-syntax-string: #971016;
+	--oasis-syntax-type: #326657;
+	--oasis-syntax-typedef: #2c5248;
+	--oasis-terminal-black: #414141;
+	--oasis-terminal-blue: #13589d;
+	--oasis-terminal-bright-black: #493f38;
+	--oasis-terminal-bright-blue: #225d76;
+	--oasis-terminal-bright-cyan: #335f53;
+	--oasis-terminal-bright-green: #33612d;
+	--oasis-terminal-bright-magenta: #7222d4;
+	--oasis-terminal-bright-red: #ae1111;
+	--oasis-terminal-bright-white: #43430e;
+	--oasis-terminal-bright-yellow: #804913;
+	--oasis-terminal-color0: #414141;
+	--oasis-terminal-color1: #ae1111;
+	--oasis-terminal-color10: #33612d;
+	--oasis-terminal-color11: #804913;
+	--oasis-terminal-color12: #225d76;
+	--oasis-terminal-color13: #7222d4;
+	--oasis-terminal-color14: #335f53;
+	--oasis-terminal-color15: #43430e;
+	--oasis-terminal-color2: #376033;
+	--oasis-terminal-color3: #5e581f;
+	--oasis-terminal-color4: #13589d;
+	--oasis-terminal-color5: #7322d3;
+	--oasis-terminal-color6: #355e53;
+	--oasis-terminal-color7: #43431f;
+	--oasis-terminal-color8: #493f38;
+	--oasis-terminal-color9: #ae1111;
+	--oasis-terminal-cyan: #355e53;
+	--oasis-terminal-green: #376033;
+	--oasis-terminal-magenta: #7322d3;
+	--oasis-terminal-red: #ae1111;
+	--oasis-terminal-white: #43431f;
+	--oasis-terminal-yellow: #5e581f;
+	--oasis-theme-accent: #ab0707;
+	--oasis-theme-cursor: #908419;
+	--oasis-theme-label: #b00707;
+	--oasis-theme-primary: #81460c;
+	--oasis-theme-primary-light: #784e0a;
+	--oasis-theme-primary-strong: #aa6524;
+	--oasis-theme-secondary: #074e85;
+	--oasis-ui-border: #7c4f3e;
+	--oasis-ui-cursor-line: #efd7c3;
+	--oasis-ui-diag-error-bg: #d59090;
+	--oasis-ui-diag-error-fg: #701818;
+	--oasis-ui-diag-hint-bg: #97cebe;
+	--oasis-ui-diag-hint-fg: #135c47;
+	--oasis-ui-diag-info-bg: #92b2d3;
+	--oasis-ui-diag-info-fg: #184571;
+	--oasis-ui-diag-ok-bg: #9ece97;
+	--oasis-ui-diag-ok-fg: #1d5c14;
+	--oasis-ui-diag-warn-bg: #cec897;
+	--oasis-ui-diag-warn-fg: #5c5413;
+	--oasis-ui-dir: #295567;
+	--oasis-ui-float-bg: #efd7c3;
+	--oasis-ui-float-border-bg: #efd7c3;
+	--oasis-ui-float-border-fg: #844c37;
+	--oasis-ui-float-fg: #1c4565;
+	--oasis-ui-float-title: #1c4565;
+	--oasis-ui-inlay: #434d4f;
+	--oasis-ui-line-number: #7d642b;
+	--oasis-ui-match-bg: #72aeda;
+	--oasis-ui-match-fg: #092234;
+	--oasis-ui-match-parent-bg: #e7c3a5;
+	--oasis-ui-match-parent-fg: #2b6c9c;
+	--oasis-ui-nontext: #807772;
+	--oasis-ui-search-bg: #e1b69d;
+	--oasis-ui-search-fg: #4e260e;
+	--oasis-ui-title: #90442b;
+	--oasis-ui-visual-bg: #e7c3a5;
+	--oasis-ui-visual-fg: none;
+}

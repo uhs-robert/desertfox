@@ -1,6 +1,9 @@
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { advance_hands, clock_angles, time_label, unwrap_angle } from "../src/newtab/clock.ts";
+import { digital_parts } from "../src/newtab/digital_clock.ts";
 import { date_text, enabled_widgets } from "../src/newtab/render.ts";
 
 test("clock angles: the hour hand turns once per 12 hours", () => {
@@ -36,8 +39,30 @@ test("the date text changes across midnight", () => {
 });
 
 test("each widget shows unless its setting is false", () => {
-  assert.deepEqual(enabled_widgets({}), { clock: true, date: true });
-  assert.deepEqual(enabled_widgets({ newtab_clock: false, newtab_date: false }), { clock: false, date: false });
+  assert.deepEqual(enabled_widgets({}), { clock: true, clock_style: "analog", date: true });
+  assert.deepEqual(enabled_widgets({ newtab_clock: false, newtab_date: false }), { clock: false, clock_style: "analog", date: false });
+});
+
+test("the clock is analog for true and analog, and digital only for digital", () => {
+  assert.equal(enabled_widgets({ newtab_clock: true }).clock_style, "analog");
+  assert.equal(enabled_widgets({ newtab_clock: "analog" }).clock_style, "analog");
+  assert.deepEqual(enabled_widgets({ newtab_clock: "digital" }), { clock: true, clock_style: "digital", date: true });
+});
+
+test("digital clock, 12 hour: zero-padded hours, midnight and noon read 12, AM and PM follow", () => {
+  const at = (hours: number, minutes: number) => digital_parts(new Date(2026, 0, 1, hours, minutes), 12);
+  assert.deepEqual(at(0, 5), { digits: "12:05", meridiem: "AM" });
+  assert.deepEqual(at(9, 30), { digits: "09:30", meridiem: "AM" });
+  assert.deepEqual(at(12, 0), { digits: "12:00", meridiem: "PM" });
+  assert.deepEqual(at(15, 7), { digits: "03:07", meridiem: "PM" });
+  assert.deepEqual(at(23, 59), { digits: "11:59", meridiem: "PM" });
+});
+
+test("digital clock, 24 hour: padded hours from 00 to 23 and no suffix", () => {
+  const at = (hours: number, minutes: number) => digital_parts(new Date(2026, 0, 1, hours, minutes), 24);
+  assert.deepEqual(at(0, 5), { digits: "00:05", meridiem: "" });
+  assert.deepEqual(at(15, 7), { digits: "15:07", meridiem: "" });
+  assert.deepEqual(at(23, 59), { digits: "23:59", meridiem: "" });
 });
 
 test("advance_hands: a gap or a backward step jumps to the new angles instead of animating", () => {
@@ -104,4 +129,10 @@ test("advance_hands: the minute wrap and the hour wrap animate", () => {
   const hour_wrap = advance_hands(advance_hands(null, new Date(2026, 0, 1, 11, 59, 59)), new Date(2026, 0, 1, 12, 0, 0));
   assert.equal(hour_wrap.jumped, false);
   assert.equal(hour_wrap.angles.hour, 360);
+});
+
+test("only the new tab page declares the digital clock font", () => {
+  const sources = readdirSync("src", { recursive: true, withFileTypes: true }).filter((entry) => entry.isFile() && /\.(ts|html|css|json)$/.test(entry.name));
+  const naming = sources.filter((entry) => readFileSync(join(entry.parentPath, entry.name), "utf8").includes("DSEG7"));
+  assert.deepEqual(naming.map((entry) => entry.name), ["newtab.html"]);
 });

@@ -58,7 +58,24 @@ test("build-config: the widget settings take booleans and reject the rest", () =
   for (const line of ['newtab_clock = "yes"', "newtab_date = 1"]) assert.match(problems_with_settings(line), /expected/, line);
 });
 
+test("build-config: newtab_clock takes false, true, analog and digital", () => {
+  for (const value of ["false", "true", '"analog"', '"digital"']) assert.equal(problems_with_settings(`newtab_clock = ${value}`), "", value);
+  for (const value of ['"yes"', '"Digital"', "1"]) assert.match(problems_with_settings(`newtab_clock = ${value}`), /newtab_clock: expected/, value);
+});
+
+test("build-config: newtab_clock_format takes 12 or 24 only", () => {
+  for (const value of ["12", "24"]) assert.equal(problems_with_settings(`newtab_clock_format = ${value}`), "", value);
+  for (const value of ["0", "13", "12.5", '"24"', "true"]) assert.match(problems_with_settings(`newtab_clock_format = ${value}`), /newtab_clock_format: expected 12 or 24/, value);
+});
+
 test("the settings schema lists the widget settings", () => {
   const properties = (build_schemas(commands).settings as { properties: Record<string, unknown> }).properties;
-  for (const name of ["newtab_clock", "newtab_date"]) assert.ok(name in properties, name);
+  for (const name of ["newtab_clock", "newtab_date", "newtab_clock_format"]) assert.ok(name in properties, name);
+});
+
+test("the settings schema pins the clock values and the format", () => {
+  const properties = (build_schemas(commands).settings as { properties: Record<string, { oneOf?: unknown[]; enum?: unknown[]; default?: unknown }> }).properties;
+  assert.deepEqual(properties.newtab_clock?.oneOf, [{ type: "boolean" }, { enum: ["analog", "digital"] }]);
+  assert.deepEqual(properties.newtab_clock_format?.enum, [12, 24]);
+  assert.equal(properties.newtab_clock_format?.default, 12);
 });

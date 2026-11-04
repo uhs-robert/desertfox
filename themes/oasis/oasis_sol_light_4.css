@@ -1,0 +1,123 @@
+/* extras/css/themes/light/4/oasis_sol_light_4.css
+ * name: Oasis Sol Light 4
+ * author: uhs-robert
+ * mode: light
+ * light intensity: 4
+ */
+
+:root,
+[data-oasis-theme="sol_light_4"],
+.oasis-sol_light_4 {
+	--oasis-name: "Oasis Sol Light 4";
+	--oasis-mode: "light";
+	--oasis-light-intensity: 4;
+	--oasis-bg-core: #efb7b7;
+	--oasis-bg-crust: #eeb1b1;
+	--oasis-bg-mantle: #eba4a4;
+	--oasis-bg-shadow: #ecaaaa;
+	--oasis-bg-surface: #e48585;
+	--oasis-diff-add: #274939;
+	--oasis-diff-change: #5e3831;
+	--oasis-diff-delete: #613636;
+	--oasis-diff-text: #5d3a25;
+	--oasis-fg-comment: #655654;
+	--oasis-fg-core: #181811;
+	--oasis-fg-dim: #6d6d6d;
+	--oasis-fg-inlay: #586566;
+	--oasis-fg-muted: #5d4f4d;
+	--oasis-fg-strong: #252512;
+	--oasis-git-add: #1c4c15;
+	--oasis-git-change: #62380f;
+	--oasis-git-delete: #8b0000;
+	--oasis-syntax-bracket: #303339;
+	--oasis-syntax-builtin-const: #423db1;
+	--oasis-syntax-builtin-func: #5b3a29;
+	--oasis-syntax-builtin-var: #5d179f;
+	--oasis-syntax-comment: #604e4b;
+	--oasis-syntax-conditional: #860f13;
+	--oasis-syntax-constant: #7a3e0d;
+	--oasis-syntax-delimiter: #9d2225;
+	--oasis-syntax-exception: #563e09;
+	--oasis-syntax-func: #4a3020;
+	--oasis-syntax-identifier: #1d4d61;
+	--oasis-syntax-macro: #31391b;
+	--oasis-syntax-operator: #811a1d;
+	--oasis-syntax-parameter: #295127;
+	--oasis-syntax-preproc: #3c4621;
+	--oasis-syntax-punctuation: #621e21;
+	--oasis-syntax-regex: #5b5115;
+	--oasis-syntax-special: #66350b;
+	--oasis-syntax-statement: #962024;
+	--oasis-syntax-string: #3b3617;
+	--oasis-syntax-type: #274f43;
+	--oasis-syntax-typedef: #1f3b34;
+	--oasis-terminal-black: #2b2b2b;
+	--oasis-terminal-blue: #0f4377;
+	--oasis-terminal-bright-black: #302a25;
+	--oasis-terminal-bright-blue: #19475a;
+	--oasis-terminal-bright-cyan: #27483f;
+	--oasis-terminal-bright-green: #274a22;
+	--oasis-terminal-bright-magenta: #581aa3;
+	--oasis-terminal-bright-red: #870d0d;
+	--oasis-terminal-bright-white: #2c2c09;
+	--oasis-terminal-bright-yellow: #62380f;
+	--oasis-terminal-color0: #2b2b2b;
+	--oasis-terminal-color1: #870e0e;
+	--oasis-terminal-color10: #274a22;
+	--oasis-terminal-color11: #62380f;
+	--oasis-terminal-color12: #19475a;
+	--oasis-terminal-color13: #581aa3;
+	--oasis-terminal-color14: #27483f;
+	--oasis-terminal-color15: #2c2c09;
+	--oasis-terminal-color2: #2a4a27;
+	--oasis-terminal-color3: #484318;
+	--oasis-terminal-color4: #0f4377;
+	--oasis-terminal-color5: #591ba1;
+	--oasis-terminal-color6: #29483f;
+	--oasis-terminal-color7: #2c2c15;
+	--oasis-terminal-color8: #302a25;
+	--oasis-terminal-color9: #870d0d;
+	--oasis-terminal-cyan: #29483f;
+	--oasis-terminal-green: #2a4a27;
+	--oasis-terminal-magenta: #591ba1;
+	--oasis-terminal-red: #870e0e;
+	--oasis-terminal-white: #2c2c15;
+	--oasis-terminal-yellow: #484318;
+	--oasis-theme-accent: #2d6c27;
+	--oasis-theme-cursor: #796e11;
+	--oasis-theme-label: #924207;
+	--oasis-theme-primary: #6d0101;
+	--oasis-theme-primary-light: #620101;
+	--oasis-theme-primary-strong: #862a2a;
+	--oasis-theme-secondary: #683606;
+	--oasis-ui-border: #603e1b;
+	--oasis-ui-cursor-line: #eba4a4;
+	--oasis-ui-diag-error-bg: #d59090;
+	--oasis-ui-diag-error-fg: #701818;
+	--oasis-ui-diag-hint-bg: #97cebe;
+	--oasis-ui-diag-hint-fg: #135c47;
+	--oasis-ui-diag-info-bg: #92b2d3;
+	--oasis-ui-diag-info-fg: #184571;
+	--oasis-ui-diag-ok-bg: #9ece97;
+	--oasis-ui-diag-ok-fg: #1d5c14;
+	--oasis-ui-diag-warn-bg: #cec897;
+	--oasis-ui-diag-warn-fg: #5c5413;
+	--oasis-ui-dir: #1f3f4c;
+	--oasis-ui-float-bg: #eba4a4;
+	--oasis-ui-float-border-bg: #eba4a4;
+	--oasis-ui-float-border-fg: #733030;
+	--oasis-ui-float-fg: #561515;
+	--oasis-ui-float-title: #561515;
+	--oasis-ui-inlay: #303739;
+	--oasis-ui-line-number: #76471d;
+	--oasis-ui-match-bg: #7ad1a7;
+	--oasis-ui-match-fg: #0d311f;
+	--oasis-ui-match-parent-bg: #e48585;
+	--oasis-ui-match-parent-fg: #315a45;
+	--oasis-ui-nontext: #626262;
+	--oasis-ui-search-bg: #e19d9d;
+	--oasis-ui-search-fg: #4e0e0e;
+	--oasis-ui-title: #842020;
+	--oasis-ui-visual-bg: #e48585;
+	--oasis-ui-visual-fg: none;
+}

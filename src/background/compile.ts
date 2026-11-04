@@ -10,7 +10,9 @@ import type { Prompt } from "../shared/invocation.ts";
 import { find_param, is_context_source } from "../shared/registry/params.ts";
 import { check_args } from "../shared/registry/check_args.ts";
 import type { EnumSources } from "../shared/registry/check_args.ts";
-import { DEFAULT_PALETTE, palette_mode_colors, resolve_mode_colors } from "../shared/mode_colors.ts";
+import { DEFAULT_LIGHT_INTENSITY, DEFAULT_PALETTE } from "../shared/config.ts";
+import { LIGHT_INTENSITIES } from "../shared/theme/roles.ts";
+import { palette_mode_colors } from "../shared/mode_colors.ts";
 import { compile_keymap } from "../shared/keys/compiler.ts";
 import { merge_keymaps } from "./keymap_merge.ts";
 
@@ -31,9 +33,14 @@ export function compile_config(input: CompileInput): CompileOutput {
   }, { engine_labels: Object.fromEntries(Object.entries(input.config.search_engines).flatMap(([name, engine]) => (typeof engine?.label === "string" ? [[name, engine.label]] : []))) });
 
   const requested_palette = input.config.settings.palette ?? DEFAULT_PALETTE;
-  const badge_colors = palette_mode_colors(String(requested_palette), input.config.local_theme);
+  let light_intensity = input.config.settings.light_intensity ?? DEFAULT_LIGHT_INTENSITY;
+  if (!(LIGHT_INTENSITIES as readonly unknown[]).includes(light_intensity)) {
+    warnings.push(`settings: light_intensity ${JSON.stringify(light_intensity)} is not 1 to 5, using ${DEFAULT_LIGHT_INTENSITY}`);
+    light_intensity = DEFAULT_LIGHT_INTENSITY;
+  }
+  const badge_colors = palette_mode_colors(String(requested_palette), light_intensity, input.config.local_theme);
   if (!badge_colors) warnings.push(`settings: palette "${String(requested_palette)}" names no theme, using ${DEFAULT_PALETTE}`);
-  compiled.mode_colors = badge_colors ?? resolve_mode_colors(DEFAULT_PALETTE);
+  compiled.mode_colors = badge_colors ?? palette_mode_colors(DEFAULT_PALETTE, light_intensity)!;
 
   for (const [mode, root] of Object.entries(compiled.modes) as [string, TreeBranch][]) {
     check_branch(root, [], mode, input, warnings);

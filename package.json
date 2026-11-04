@@ -10,6 +10,7 @@
     "build": "node tools/build.mjs",
     "docs:gen": "node --no-warnings tools/gen-keymap-docs.ts --write",
     "docs:check": "node --no-warnings tools/gen-keymap-docs.ts --check",
+    "themes:copy": "node --no-warnings tools/copy_oasis_css.ts",
     "themes:write": "node --no-warnings tools/build_themes.ts --write",
     "themes:check": "node --no-warnings tools/build_themes.ts --check",
     "test": "npm run --silent docs:check && npm run --silent themes:check && node --test --test-timeout=30000 --no-warnings \"test/**/*.test.ts\""

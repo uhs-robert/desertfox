@@ -1,8 +1,6 @@
 import { help_whichkey } from "../content/handlers/lazy_bundle.ts";
+import { HELP_PAGE_FILE } from "../help/route.ts";
 import { define } from "../shared/registry/index.ts";
-
-// The page is a file of the extension, so `help.html` needs no web-accessible entry for the background to open it.
-const HELP_PAGE = "help.html";
 
 define("help.open", {
   name: "help",
@@ -11,7 +9,7 @@ define("help.open", {
   runs_in: "background",
   repeatable: false,
   run: async () => {
-    await browser.tabs.create({ url: browser.runtime.getURL(HELP_PAGE) });
+    await browser.tabs.create({ url: browser.runtime.getURL(HELP_PAGE_FILE) });
   },
 });
 
