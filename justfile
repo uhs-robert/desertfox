@@ -5,12 +5,16 @@ default:
 docs-gen: install_deps
     npm run --silent docs:gen
 
+# Regenerate src/shared/themes.ts from the theme files in themes/.
+themes: install_deps
+    npm run --silent themes:write
+
 # Typecheck, then bundle the extension into dist/.
 build: install_deps
     npm run --silent typecheck
     npm run --silent build
 
-# Check docs/keymap.md is current, then run the unit tests from TypeScript source by Node's type stripping.
+# Check docs/keymap.md and src/shared/themes.ts are current, then run the unit tests from TypeScript source by Node's type stripping.
 test: install_deps
     npm run --silent test
 

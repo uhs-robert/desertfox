@@ -3,6 +3,7 @@ import type { ContentToBackground } from "../shared/messages.ts";
 import type { BoundInvocation } from "../shared/invocation.ts";
 import { bundle_loader_deps, container_names, make_router_deps, page_of, reinject_deps } from "./browser_deps.ts";
 import { create_cmdline_service } from "./cmdline_service.ts";
+import { create_previous_tabs } from "./previous_tab.ts";
 import { browser_complete_items_deps, create_complete_items } from "./complete_items.ts";
 import { requirement_lookup } from "./availability.ts";
 import { list_keys } from "./list_keys.ts";
@@ -10,6 +11,8 @@ import { create_bundle_loader } from "./bundle_loader.ts";
 import { track_window_focus } from "./window_focus.ts";
 import { repair_tabs_after_reload } from "./reload.ts";
 import { create_router } from "./router.ts";
+import { create_repeat_memory, page_record } from "./repeat_memory.ts";
+import { wire_repeat } from "../commands/command.ts";
 import { SLOT_TABLE_STORAGE_KEY } from "./storage_keys.ts";
 import { get_config, get_search_engine_names, snippets } from "./startup.ts";
 import { command_meta, registry } from "../shared/registry/index.ts";
@@ -20,7 +23,15 @@ import type { SnippetCall } from "./snippets.ts";
 // Mode reports wait for this, so the clear never removes a fresh report.
 const modes_cleared = forget_all_tab_modes(browser.storage.local);
 
-const router = create_router(make_router_deps(get_config));
+const repeat_memory = create_repeat_memory(browser.storage.session);
+const router = create_router(make_router_deps(get_config, repeat_memory));
+const is_private_tab = async (tab_id: number | undefined) => tab_id !== undefined && (await browser.tabs.get(tab_id).catch(() => undefined))?.incognito === true;
+// A replay is a request like any other: it stores itself again, so `3.` keeps its count for the next `.`.
+wire_repeat({
+  load: async (ctx) => repeat_memory.load(await is_private_tab(ctx.tab_id)),
+  run_batch: (invocations, ctx) =>
+    router.run({ invocations, mode: ctx.mode, frame_id: ctx.frame_id, ...(ctx.tab_id === undefined ? {} : { sender_tab_id: ctx.tab_id }) }),
+});
 const bundle_loader = create_bundle_loader(bundle_loader_deps);
 const cmdline = create_cmdline_service({
   storage: browser.storage.local,
@@ -33,8 +44,11 @@ const cmdline = create_cmdline_service({
   },
 });
 
+const previous_tabs = create_previous_tabs(browser.storage.session);
+
 const complete_items = create_complete_items({
   ...browser_complete_items_deps,
+  previous_tab: previous_tabs.previous_of,
   is_opener: cmdline.is_opener,
   all_windows: async () => (await get_config()).settings.completion_all_windows === true,
   search_engines: async () => (await get_config()).search_engines,
@@ -62,6 +76,12 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
     return complete_items.answer(request.kind, id === undefined || windowId === undefined ? undefined : { tab_id: id, window_id: windowId, incognito: incognito === true });
   }
   if (request?.type === "record_cmdline") return cmdline.record(request.text, sender.tab?.incognito === true);
+  if (request?.type === "record_repeat") {
+    return get_config().then(async () => {
+      const invocation = page_record(request, (id) => registry.get(id), { search_engines: await get_search_engine_names(), containers: await container_names() });
+      if (invocation) await repeat_memory.save([invocation], sender.tab?.incognito === true);
+    });
+  }
   if (request?.type === "list_keys") {
     const tab = sender.tab;
     const page = tab?.url ? { url: tab.url, ...(tab.title ? { title: tab.title } : {}) } : undefined;
@@ -76,6 +96,7 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
       invocations: request.invocations,
       mode: request.mode,
       may_prompt: true,
+      ...(request.from_hints === true && request.invocations.length === 1 && request.invocations[0]?.id === "open.url" ? { skip_repeat: true } : {}),
       ...(sender.tab?.id === undefined ? {} : { sender_tab_id: sender.tab.id }),
       ...(sender.frameId === undefined ? {} : { frame_id: sender.frameId }),
     }),
@@ -97,7 +118,10 @@ browser.tabs.onUpdated.addListener((tab_id, change) => {
   return forget_mode_on_navigation(browser.storage.local, tab_id, change);
 });
 
-browser.tabs.onRemoved.addListener((tab_id) => {
+browser.tabs.onActivated.addListener(({ windowId, previousTabId }) => previous_tabs.activated(windowId, previousTabId));
+
+browser.tabs.onRemoved.addListener((tab_id, { windowId, isWindowClosing }) => {
+  void previous_tabs.removed(tab_id, windowId, isWindowClosing);
   void cmdline.forget_opener(tab_id);
   return forget_tab_mode(browser.storage.local, tab_id);
 });

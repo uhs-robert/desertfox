@@ -78,6 +78,7 @@ The fields follow the Oasis action library (`home/hypr/.config/hypr/lib/act/init
 - `runs_in`: `background` or `content`. The router sends the invocation to that side. A command never runs in both.
 - `needs`: what must be true to run it. `content` means a content script in the tab. A permission name means an optional permission. The router refuses with a message instead of failing silently.
 - `count`: what a numeric prefix does. `repeat` runs the command that many times. A param name fills that param, for example `tab.goto` takes the count as its `index`. `ignore` drops it.
+- `repeatable`: whether `.` can replay the command. The default is true. Six commands opt out: `command.repeat`, `browser.close_all`, `browser.focus_page`, `config.reload`, `help.open` and `engine.show`.
 - `modes`: the modes where a key can run the command. The default is normal.
 - `completion`: where the command line list offers the command. Absent means always. `hidden` means never, and a list of modes means only when the line was opened from one of them. Typing the name still runs the command.
 - `run`: the handler. It gets the context (tab, frame, mode) and the checked args.
@@ -163,7 +164,7 @@ The keymap is data, not code. It maps a mode and a key sequence to an invocation
 - The background checks each entry against the registry when it loads. A bad entry logs a warning and is skipped, so one typo does not break the rest. The help page lists the warnings.
 - Key notation is vim style: `<C-x>`, `<A-j>`, `<S-Escape>`. Sequences match through a prefix tree. A complete match runs at once, with no timeout.
 - The modes are normal, insert, ignore, hint and cmdline. Caret and visual modes arrive in phase 2, see [Caret and visual](#caret-and-visual). Insert mode follows `focusin` and `focusout` on editable elements instead of checking the focused element on every key.
-- A mode badge sits in the bottom right corner, 8 px above the bottom edge. The `mode_indicator` setting controls it: `always` (the default), `not_normal` or `off`. The `palette` setting picks its colors from the 16 oasis.nvim palettes (default `moonlight`). Light or dark follows the system theme.
+- A mode badge sits in the bottom right corner, 8 px above the bottom edge. The `mode_indicator` setting controls it: `always` (the default), `not_normal` or `off`. The `palette` setting names a theme (default `moonlight`), see [Themes](#themes). Light or dark follows the system theme.
 - The which-key panel is a floating frame with a 1 px tinted border and its title set into the top border. The `which_key_border` setting picks the corners: `square` (the default), `round` or `chamfer`. A footer names the exit keys.
 - `browser` mode holds the chords for the Firefox shortcuts. The manifest reserves a fixed number of shortcut slots, and the background assigns the chords to them with `commands.update`. The content script also catches these chords. If it cancels a chord, Firefox does not fire the shortcut as well, which the spike's key-blocking page showed.
 
@@ -182,6 +183,7 @@ The tool reads `~/.config/oasisfox/` by default. Every data file is TOML. A left
 | `command_aliases.toml` | Extra command line names, for example `g = "open.search"`. |
 | `settings.toml` | Settings such as the which-key delay and the new tab page. |
 | `snippets/*.js` | One custom command per file. See [Snippets](#snippets). |
+| `themes/<name>.toml` | A local theme that `palette = "<name>"` picks. See [Themes](#themes). |
 | `style.css` | Custom CSS for the OasisFox surfaces. See [Styles](#styles). |
 
 Each data file can also have a matching directory, for example `keymap.d/`. The tool merges the main file first, then the files in the directory in name order. A later entry wins for the same key. This is how private config joins without editing public files: a private repo links `keymap.d/50-private.toml` and `snippets/` files into place.
@@ -265,6 +267,16 @@ Every surface (which-key, the command line, hints and the mode indicator) draws 
 - In Oasis Dots, the theme switcher writes `style.d/00-oasis-theme.css` with the variables for the current Oasis theme, then runs the reload. Without Oasis, the built-in defaults apply.
 - CSS cannot run code. A `url()` in user CSS makes the page load that address, so the CSS stays in the user's own files like the snippets.
 
+### Themes
+
+A theme file maps colors onto a fixed public list of roles. The theme's own color names never reach OasisFox. A file is TOML with a `[dark]` table, a `[light]` table or both, and a file with one table serves both system settings. Each table maps a role to a `#rgb` or `#rrggbb` color.
+
+The roles: `bg`, `bg_mantle`, `bg_crust`, `selection`, `fg`, `muted`, `primary`, `secondary`, `accent`, `border`, `error`, `warn`, `ok`, `mode_normal`, `mode_insert`, `mode_ignore`, `mode_caret` and `mode_visual`. `bg`, `fg`, `primary` and `accent` are required. Every other role derives from them when missing, by the one table in `src/shared/theme/derive.ts`. A role's CSS variable is `--oasisfox-` plus the role with hyphens, for example `--oasisfox-bg-mantle`. The list is a contract: a later rename breaks contributed themes, an addition does not.
+
+`palette = "<name>"` looks in `<config dir>/themes/<name>.toml` first, then in the repo's `themes/`, then in the 16 oasis.nvim palettes. A local file wins over a repo theme of the same name. `tools/build-config` checks every local theme file and rejects an unknown role (the error lists the valid ones), a missing required role and a bad color, each with the file, table and key. `just themes` compiles the repo `themes/` into `src/shared/themes.ts`, and `just test` fails when that module is stale. Today a theme sets only the mode badge colors: the badge is the `mode_*` role with `bg` as the text.
+
+`primary` is the brand color (links, the normal mode badge) and `accent` is the hint background and focus marks. Today the surfaces use `--oasisfox-accent` for the brand color. From theme PR 2 on, `--oasisfox-accent` holds the `accent` role instead. A `style.css` that sets or reads `--oasisfox-accent` for the brand color moves to `--oasisfox-primary`.
+
 ## Snippets
 
 A snippet is a user command written as page code. It is how users add behavior that OasisFox does not ship, for example helpers for one private web app. OasisFox has no plugin system: snippets are the only extension point.
@@ -305,6 +317,8 @@ The config file is code, so whoever can write it can run code on pages. The file
 
 A Firefox shortcut enters at step 4 through `commands.onCommand`.
 
+`.` (`command.repeat`) replays the last request that ran to the end. The router stores it in `storage.session` after every step succeeded, with the count it had. A private window has a slot of its own. Only `background` commands are stored, so `j` then `.` does nothing, and a request that opens the command line stores nothing until the typed command runs. A hint start records itself from the `hints` bundle, so `.` after a hint pick shows hints again with the same action and filter. `3.` replaces the stored count and `.` keeps it. With nothing stored, `.` shows "Nothing to repeat". A pick that opens a link runs as `open.url` marked `from_hints`, which the router does not store, so `.` shows hints and does not reopen the address. A replay re-reads context sources such as the selection and the clipboard, so it uses their values at that time.
+
 The content script must have the keymap before the first key. It reads the compiled prefix tree from `storage.local` at start, buffers keys until the read returns, then replays them. Phase 1 measured that read at 6-10 ms (median 8), so buffering is enough and inline registration is not needed (see [spike.md](spike.md), "Phase 1 measurements").
 
 ## Bundles and loading
@@ -330,8 +344,9 @@ Completion sources load only when the param being completed needs them: commands
 
 Tabs and bookmarks come from the background, because it knows the window and privacy of the line's tab. A string param asks for them with `values: { from: "tabs" }` or `{ from: "bookmarks" }`. The page asks once per kind, keeps the answer for the line and ranks it with the shared scorer on every key. The row list shows "loading" in the note row until the answer lands. Each kind has its own fetch in flight, so kinds do not drop each other. A reply is dropped when the line has closed. The background answers only a tab whose line redeemed a ticket, until that tab closes or navigates. A normal line lists only normal tabs and a private line only private tabs. Bookmarks list in both.
 
-- A tab row reads `3 GitHub`: the number is the tab's place in its window's tab bar, counted from 1, so it stays while the user types. Picking it puts the number and title in the line. `tab` reads a leading number as that place, and the number wins over the title. Other text is a fuzzy match on title and address, and an equal tie is refused with both tabs named. The `completion_all_windows` setting (default false) lists the tabs of every window. The same number then exists once per window, so the title picks one, else the line's own window.
+- A tab row reads `3: GitHub`: the number is the tab's place in its window's tab bar, counted from 1, so it stays while the user types. Picking it puts the number and title in the line. `tab` reads a leading number as that place, and the number wins over the title. Other text is a fuzzy match on title and address, and an equal tie is refused with both tabs named. The `completion_all_windows` setting (default false) lists the tabs of every window. The same number then exists once per window, so the title picks one, else the line's own window.
 - A bookmark row shows the title and the address. With no word typed, the list shows the 20 newest. Picking one puts the address in the line. `bookmark` takes an exact address first, then the best fuzzy match, and refuses an equal tie.
+- A tab row leads with fixed-width cells, in this order: a status cell (`%` the current tab, `#` the alternate tab, which is the tab the user was on before, then small icons for pinned, audible, muted and discarded), a container mark, a favicon, then the name, the address and the keys. The icons are CSS masks, so they take the text color. The container mark is Firefox's own container icon in the container color, and a colored dot when the icon cannot load. The default container and private tabs have no mark. The favicon is sent only for http, https and data: URLs up to 2048 characters, and a failed load shows a plain glyph. The favicons load from the network when the list opens, for each listed tab, in the command line's tab context (its container and private state), not the listed tab's. `#` is the tab the window was on before its current one, which the background tracks from `tabs.onActivated` in `storage.session`. The `contextualIdentities` lookup fails quietly when containers are off, and then no row has a mark.
 - `open` and its tab variants complete from bookmarks and history (`values: { from: "open" }`, `kind: "open"`). The background answers every row, tagged `bm` or `hist`, in the group order of the `open_completion` setting (default `["bookmarks", "history"]`, a source left out is not read), and drops a history row whose address is a bookmark. History comes from `history.search` with all time and up to 1000 entries, minus `about:`, `moz-extension:` and `data:` addresses. A private line lists no history. With no word typed the page shows the 20 newest bookmarks and `history_completion_max` history rows (default 10), a cap that rides in the answer. A typed word ranks every row and keeps the groups in order. A dim `bm` or `hist` cell tells the rows apart. Enter on text that matches no row still opens the address or searches with the default engine. The `history` permission adds an install prompt on update.
 - Engines ride the same fetch (`kind: "engines"`) for the first word of `search`, `--engine=` and `engine.show`. A row shows the engine name and its label. The background marks each engine with a yes or no for whether the line's tab page can fill its slots, and sends no page data. A row the page cannot fill is dimmed and reads "unavailable" in the args column; `engine.show` marks none. A word that ends in a dot (`github.`) lists every engine under that prefix, deeper ones included. The parser still reads a hidden engine, so a picked or typed one runs and the router refuses it.
 
@@ -392,7 +407,7 @@ Firefox keeps the background awake while the port is open, which also helps a la
 | Phase | Contents |
 | --- | --- |
 | v1 | Snippets and `config.reload`, with the managed storage config and `tools/build-config`. Normal, insert and ignore modes. Scrolling, back and forward, reload, stop, home, parent and root URL. Tab and window commands, including containers and closed-tab undo. Search engines and the prompt for missing args. Bookmarks. Hints with every action above, rapid mode included. Copying the URL in 6 formats. Zoom. Search engines with slots and children replace the former site commands (site search, GitHub, subreddit, archive, isdown, translate), which now ship as examples. |
-| Later | History completion. Marks and quickmarks. Changing the number in a URL, following next and previous page links, repeating the last command, the jump list, a QR code of the URL and view source. |
+| Later | History completion. Marks and quickmarks. Changing the number in a URL, following next and previous page links, the jump list, a QR code of the URL and view source. |
 | Dropped | Shell access, string eval, command strings with chaining and pipes, a config language, userChrome editing, rewriting Firefox prefs, an external editor, page-event hooks, per-site config, a key-grab mode, macros, a theme engine, an update nag, a tutorial and joke commands. |
 
 ## Trade-offs

@@ -21,13 +21,14 @@ const KNOWN_TOP_LEVEL = new Set<string>([
   "snippets",
   "style.css",
   "style.d",
+  "themes",
 ]);
 
 function sorted_entries(dir: string): string[] {
   return readdirSync(dir).filter((name) => !name.startsWith(".")).sort();
 }
 
-function parse_toml_file(path: string, problems: string[]): Record<string, unknown> | undefined {
+export function parse_toml_file(path: string, problems: string[]): Record<string, unknown> | undefined {
   try {
     // smol-toml builds tables without a prototype. Clone to plain objects, as JSON.parse would give.
     return structuredClone(parse(readFileSync(path, "utf8")));

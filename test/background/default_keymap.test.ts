@@ -144,6 +144,7 @@ test("no default key searches: search keys come from the user's engines", () => 
 
 test("a search binding on the selection opens the command line when nothing is selected", async () => {
   const { create_router } = await import("../../src/background/router.ts");
+  const { no_repeat_memory } = await import("../../src/background/repeat_memory.ts");
   const log: string[] = [];
   const router = create_router({
     get_command: (id) => registry.get(id),
@@ -157,6 +158,7 @@ test("a search binding on the selection opens the command line when nothing is s
     send_to_tab: async () => undefined,
     open_cmdline: async (_tab, _frame, text) => void log.push(text),
     show_refusal: async () => undefined,
+    repeat_memory: no_repeat_memory,
   });
   const binding = { id: "open.search", args: { query: { from: "selection" } } };
   await router.run({ invocations: [binding], mode: "normal", may_prompt: true });
@@ -169,3 +171,7 @@ test("a prompt binding with a bad fixed arg is skipped with a warning", () => {
   assert.match(warnings[0]!, /skipped "q1".*where/);
 });
 
+
+test("`.` repeats the last command", () => {
+  assert.deepEqual((DEFAULT_KEYMAP.normal as Record<string, unknown>)["."], { id: "command.repeat" });
+});
