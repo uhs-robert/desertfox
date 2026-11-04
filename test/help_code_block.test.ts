@@ -65,3 +65,15 @@ test("a refused copy leaves the button label alone", async () => {
   await copy_code_and_confirm({ writeText: () => Promise.reject(new Error("denied")) }, "x", button, () => assert.fail("no timer"));
   assert.equal(button.textContent, "Copy");
 });
+
+test("a second click cancels the first restore timer so Copied lasts a full period", async () => {
+  const button = { textContent: "Copy" as string | null };
+  const cancelled: unknown[] = [];
+  let next_handle = 0;
+  const clipboard = { writeText: async () => {} };
+  const later = () => ++next_handle;
+  await copy_code_and_confirm(clipboard, "x", button, later, (handle) => void cancelled.push(handle));
+  assert.deepEqual(cancelled, []);
+  await copy_code_and_confirm(clipboard, "x", button, later, (handle) => void cancelled.push(handle));
+  assert.deepEqual(cancelled, [1]);
+});
