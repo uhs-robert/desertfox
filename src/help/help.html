@@ -50,7 +50,12 @@
   .oasisfox-help-warnings { color: var(--oasisfox-accent); }
   .oasisfox-help table { border-collapse: collapse; margin: .5rem 0; }
   .oasisfox-help-params { width: 100%; }
-  .oasisfox-help-engines { display: block; max-width: 100%; overflow-x: auto; }
+  .oasisfox-help-engines { width: 100%; table-layout: fixed; overflow-wrap: anywhere; }
+  .oasisfox-help-engines th:nth-child(1) { width: 24%; }
+  .oasisfox-help-engines th:nth-child(2) { width: 28%; }
+  .oasisfox-help-engines th:nth-child(3) { width: 20%; }
+  .oasisfox-help-engines summary { cursor: pointer; }
+  .oasisfox-help-badge { display: inline-block; padding: 0 .4rem; border-radius: var(--oasisfox-radius); font-size: .8em; background: color-mix(in srgb, var(--oasisfox-fg) 15%, transparent); }
   .oasisfox-help th, .oasisfox-help td { padding: .1rem 1rem .1rem 0; text-align: left; vertical-align: top; }
   .oasisfox-help-params td:nth-child(n+4) { overflow-wrap: anywhere; }
   /* Narrow screens: five columns leave each one a few letters wide, so each param stacks as labelled lines. */
