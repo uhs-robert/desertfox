@@ -1,6 +1,6 @@
 // Loads the config, compiles the keymap and publishes the result.
 
-import { DEFAULT_SETTINGS } from "../shared/config.ts";
+import { effective_settings } from "../shared/config.ts";
 import type { MergedConfig } from "../shared/config.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY } from "../shared/prefix_tree.ts";
 import { registry } from "../shared/registry/index.ts";
@@ -47,7 +47,7 @@ async function initialize(): Promise<MergedConfig> {
     [WARNINGS_STORAGE_KEY]: all_warnings,
     [CONFIG_STATUS_STORAGE_KEY]: {
       source: loaded.source,
-      settings: { ...DEFAULT_SETTINGS, ...loaded.config.settings },
+      settings: effective_settings(loaded.config.settings),
       managed_file_hint: `~/.mozilla/managed-storage/${browser.runtime.id}.json`,
     },
     [SLOT_TABLE_STORAGE_KEY]: slot_table({ ...plan, assignments: applied_slots.applied }),

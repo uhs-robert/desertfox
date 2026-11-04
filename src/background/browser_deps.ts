@@ -2,7 +2,7 @@
 
 import type { MergedConfig } from "../shared/config.ts";
 import type { PageInfo } from "../shared/engines/index.ts";
-import type { BackgroundToContent, Refusal } from "../shared/messages.ts";
+import type { BackgroundToContent, Refusal, ToastKind } from "../shared/messages.ts";
 import type { EnumSources } from "../shared/registry/check_args.ts";
 import { registry } from "../shared/registry/index.ts";
 import { runs_with_empty } from "./availability.ts";
@@ -11,13 +11,18 @@ import { create_load_log } from "./load_log.ts";
 import type { RepeatMemory } from "./repeat_memory.ts";
 import type { ReinjectDeps } from "./reload.ts";
 import { BUNDLE_LOADS_STORAGE_KEY } from "./storage_keys.ts";
-import { deliver_refusal } from "./refusal.ts";
+import { deliver_refusal, deliver_toast } from "./refusal.ts";
 import type { RouterDeps } from "./router.ts";
 import type { SnippetDeps } from "./snippets.ts";
 
 // Without a frame id the message reaches every frame, which shows a toast in each.
 export function send_to_tab(tab_id: number, message: BackgroundToContent, frame_id?: number): Promise<unknown> {
   return browser.tabs.sendMessage(tab_id, message, frame_id === undefined ? {} : { frameId: frame_id });
+}
+
+// A warning, info or success toast on the command's tab, with the notification fallback a refusal has.
+export async function show_toast_on_tab(ctx: { tab_id?: number | undefined; frame_id?: number | undefined }, id: string, message: string, kind: ToastKind): Promise<void> {
+  await deliver_toast({ send_to_tab, notify }, ctx.tab_id, { id, message }, kind, ctx.frame_id);
 }
 
 // A tab with no content script rejects the send, so a ping settles the question without content's help.

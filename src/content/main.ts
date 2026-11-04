@@ -243,7 +243,7 @@ function start(): void {
       // The router already applied the count, so each invocation runs once.
       for (const invocation of message.invocations) run_content_step(invocation, "ignore");
     }
-    else if (message.type === "refusal") show_toast(message.refusal.message);
+    else if (message.type === "refusal") show_toast(message.refusal.message, message.kind);
     else if (message.type === "set_mode") page_mode.set_mode(message.mode);
     else if (message.type === "tree_updated") void read_keymap().then((keymap) => install_matcher(keymap));
   });

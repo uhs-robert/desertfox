@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
-import { build_help_model } from "../src/help/model.ts";
+import { build_help_model, STYLE_VARIABLES } from "../src/help/model.ts";
+import { parse_route } from "../src/help/route.ts";
+import { DEFAULT_SETTINGS, effective_settings } from "../src/shared/config.ts";
+import { ROLES } from "../src/shared/theme/roles.ts";
+import { token_name } from "../src/shared/theme/tokens.ts";
 import { compile_keymap } from "../src/shared/keys/compiler.ts";
 import { build_commands_file, create_registry } from "../src/shared/registry/index.ts";
 
@@ -120,4 +124,39 @@ test("the Engines section lists the tree parents first, with needs, fallback and
   assert.deepEqual(code.origins, ["url: f.toml [github]", "scope: f.toml [github.repo]"]);
   assert.equal(rows.find((row) => row.name === "github.repo")!.fallback, "github");
   assert.equal(rows.find((row) => row.name === "duck")!.needs, "");
+});
+
+test("the route parser maps hashes to pages and keeps engine links", () => {
+  assert.deepEqual(parse_route(""), { page: "home" });
+  assert.deepEqual(parse_route("#/commands"), { page: "commands" });
+  assert.deepEqual(parse_route("#/styling"), { page: "styling" });
+  assert.deepEqual(parse_route("#/search-engines"), { page: "search-engines" });
+  assert.deepEqual(parse_route("#engine=github.code"), { page: "search-engines", engine: "github.code" });
+  assert.deepEqual(parse_route("#engine=a%20b"), { page: "search-engines", engine: "a b" });
+  assert.deepEqual(parse_route("#/nope"), { page: "home" });
+  assert.deepEqual(parse_route("#%E0%A4%A"), { page: "home" });
+});
+
+test("the styling page lists every theme role as a variable", () => {
+  const names = STYLE_VARIABLES.map((variable) => variable.name);
+  for (const role of ROLES) assert.ok(names.includes(token_name(role)), role);
+  assert.ok(names.includes("--oasisfox-secondary"));
+  assert.ok(names.includes("--oasisfox-font") && names.includes("--oasisfox-radius"));
+});
+
+test("the model carries the settings and config source for the home page", () => {
+  const { commands, compiled } = sample();
+  const status = { source: "managed" as const, settings: { ...DEFAULT_SETTINGS, palette: "x" }, managed_file_hint: "" };
+  const model = build_help_model(commands, compiled, [], {}, {}, status);
+  assert.equal(model.config_source, "Managed storage file");
+  assert.deepEqual(model.settings.find((row) => row.name === "palette"), { name: "palette", value: '"x"' });
+  assert.equal(build_help_model(commands, compiled, []).config_source, "Unknown, the background has not written a status yet");
+});
+
+test("effective settings keep the default prefix a config leaves out", () => {
+  const settings = effective_settings({ search_prefixes: { tab: "T" } as { here: string; tab: string }, palette: "x" });
+  assert.deepEqual(settings.search_prefixes, { here: DEFAULT_SETTINGS.search_prefixes.here, tab: "T" });
+  assert.deepEqual(settings.container_prefixes, DEFAULT_SETTINGS.container_prefixes);
+  assert.equal(settings.palette, "x");
+  assert.equal(settings.hint_letters, DEFAULT_SETTINGS.hint_letters);
 });

@@ -126,3 +126,13 @@ export type MergedConfig = {
   // Present only when `palette` names a theme in the config directory.
   local_theme?: LocalTheme;
 };
+
+// The settings in force: the defaults under the config's own values. The two prefix maps merge one level deeper, so a config that sets only `search_prefixes.tab` keeps the default `here`. The key compiler merges them the same way.
+export function effective_settings(settings: Partial<Settings>): Settings {
+  return {
+    ...DEFAULT_SETTINGS,
+    ...settings,
+    search_prefixes: { ...DEFAULT_SETTINGS.search_prefixes, ...settings.search_prefixes },
+    container_prefixes: { ...DEFAULT_SETTINGS.container_prefixes, ...settings.container_prefixes },
+  };
+}

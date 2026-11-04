@@ -2,6 +2,8 @@
 
 import type { CommandRow, EngineRow, HelpModel, KeyRow } from "./model.ts";
 import { STYLE_CLASSES, STYLE_VARIABLES } from "./model.ts";
+import { PAGES } from "./route.ts";
+import type { PageId, Route } from "./route.ts";
 
 type Child = Node | string;
 
@@ -49,7 +51,7 @@ function command_card(command: CommandRow): HTMLElement {
 
 export const engine_anchor = (name: string): string => `engine-${name}`;
 
-function engine_table(engines: EngineRow[]): HTMLElement | string {
+function engine_table(engines: EngineRow[]): HTMLElement {
   if (engines.length === 0) return el("span", "oasisfox-help-muted", "No engines.");
   const head = el("tr", undefined, ...["engine", "label", "url", "needs", "falls back to", "set by"].map((name) => el("th", undefined, name)));
   const body = engines.map((engine) => {
@@ -65,25 +67,57 @@ function definition_table(rows: { name: string; meaning: string }[]): HTMLElemen
   return el("table", undefined, ...rows.map((row) => el("tr", undefined, el("td", undefined, el("code", undefined, row.name)), el("td", undefined, row.meaning))));
 }
 
-export function render_help(root: HTMLElement, model: HelpModel): void {
-  const page = el("main", "oasisfox-help-page", el("h1", undefined, "OasisFox help"));
+function home_page(model: HelpModel): HTMLElement[] {
+  const warnings = model.warnings.length === 0
+    ? el("p", "oasisfox-help-muted", "No warnings.")
+    : el("ul", "oasisfox-help-warnings", ...model.warnings.map((warning) => el("li", undefined, warning)));
+  const settings = el("table", undefined, ...model.settings.map((row) => el("tr", undefined, el("td", undefined, el("code", undefined, row.name)), el("td", undefined, el("code", undefined, row.value)))));
+  return [
+    el("h2", undefined, "Warnings"),
+    warnings,
+    el("h2", undefined, "Settings"),
+    el("p", undefined, `Config source: ${model.config_source}. This list is read-only.`),
+    settings,
+  ];
+}
 
-  page.append(el("h2", undefined, "Warnings"));
-  if (model.warnings.length === 0) page.append(el("p", "oasisfox-help-muted", "No warnings."));
-  else page.append(el("ul", "oasisfox-help-warnings", ...model.warnings.map((warning) => el("li", undefined, warning))));
+function commands_page(model: HelpModel): HTMLElement[] {
+  return model.groups.flatMap((group) => [el("h2", undefined, group.name), ...group.commands.map(command_card)]);
+}
 
-  page.append(el("h2", undefined, "Engines"), engine_table(model.engines));
-
-  page.append(el("h2", undefined, "Commands"));
-  for (const group of model.groups) {
-    page.append(el("h2", undefined, group.name), ...group.commands.map(command_card));
-  }
-
-  page.append(
-    el("h2", undefined, "Styling"),
-    el("p", undefined, "Set these CSS variables in style.css to restyle OasisFox. The class names below are stable."),
+function styling_page(): HTMLElement[] {
+  return [
+    el("p", undefined, "Set these CSS variables in style.css to restyle OasisFox. A surface reads the roles it needs, so a role no surface reads yet has no visible effect. The class names below are stable."),
+    el("h2", undefined, "Variables"),
     definition_table(STYLE_VARIABLES),
+    el("h2", undefined, "Classes"),
     definition_table(STYLE_CLASSES.map((entry) => ({ ...entry, name: `.${entry.name}` }))),
-  );
-  root.replaceChildren(el("div", "oasisfox-help", page));
+  ];
+}
+
+function page_body(page: PageId, model: HelpModel): HTMLElement[] {
+  switch (page) {
+    case "home": return home_page(model);
+    case "search-engines": return [engine_table(model.engines)];
+    case "commands": return commands_page(model);
+    case "styling": return styling_page();
+  }
+}
+
+function sidebar(current: PageId): HTMLElement {
+  const links = PAGES.map((page) => {
+    const link = el("a", undefined, page.title);
+    link.setAttribute("href", page.hash);
+    if (page.id === current) link.setAttribute("aria-current", "page");
+    return link;
+  });
+  return el("nav", "oasisfox-help-sidebar", el("div", "oasisfox-help-brand", "OasisFox"), ...links);
+}
+
+export function render_help(root: HTMLElement, model: HelpModel, route: Route): void {
+  const title = PAGES.find((page) => page.id === route.page)?.title ?? "Home";
+  const heading = el("h1", undefined, title);
+  heading.tabIndex = -1;
+  const page = el("main", "oasisfox-help-page", heading, ...page_body(route.page, model));
+  root.replaceChildren(el("div", "oasisfox-help", sidebar(route.page), page));
 }
