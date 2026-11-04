@@ -1,6 +1,5 @@
-// The new tab page widgets: the clock and date by default, then the IP and weather lines under a config that turns them on.
-// The network is stubbed by seeding the 5 minute cache in storage.local, so no request leaves the test. Shots go to OASISFOX_SHOT_DIR when it is set.
-// It swaps the config and reloads, so it runs first, while few tabs are open: a reload with many tabs open has left load_config_dir waiting. It loads the test config again at the end.
+// The new tab page widgets: the analog clock and the date.
+// It swaps the config and reloads, so it runs first, while few tabs are open. Shots go to OASISFOX_SHOT_DIR when it is set.
 import { cpSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -24,41 +23,35 @@ export async function run_cases({ config_dir, load_config_dir, take_shot, run_ca
     return found;
   };
   const close_new_tabs = () => in_background(`(async () => { for (const tab of await browser.tabs.query({})) if (tab.url.endsWith("/newtab.html")) await browser.tabs.remove(tab.id); })()`);
-  const lines_of_page = () => in_background(`(() => { const page = ${NEWTAB_VIEW}.document; return { clock: !!page.querySelector("svg.clock"), second_hand: page.querySelector("svg.clock .second")?.getAttribute("transform") ?? "", date: page.querySelector(".date")?.textContent ?? "", ip: page.querySelector(".ip")?.textContent ?? "", weather: page.querySelector(".weather")?.textContent ?? "" }; })()`);
+  const parts_of_page = () => in_background(`(() => { const page = ${NEWTAB_VIEW}.document; return { clock: !!page.querySelector("svg.clock"), ticks: page.querySelectorAll("svg.clock line").length, second_hand: page.querySelector("svg.clock .second")?.style.transform ?? "", date: page.querySelector(".date")?.textContent ?? "" }; })()`);
 
-  await run_case("the new tab page shows the clock and the date, and no IP or weather by default", async () => {
-    expect(await open_new_tab("svg.clock"), "the clock never rendered");
-    await sleep(500);
-    const lines = await lines_of_page();
-    expect(lines.second_hand.startsWith("rotate("), `the seconds hand had no angle: ${lines.second_hand}`);
-    expect(lines.date !== "", "the date line is empty");
-    expect(lines.ip === "" && lines.weather === "", `IP or weather showed without the settings: ${lines.ip} ${lines.weather}`);
-    if (shot_dir) await take_shot(`${shot_dir}/newtab-clock.png`);
+  try {
+    await run_case("the new tab page shows the 12 hour clock without ticks, and the date", async () => {
+      expect(await open_new_tab("svg.clock"), "the clock never rendered");
+      await sleep(500);
+      const parts = await parts_of_page();
+      expect(parts.ticks === 3, `expected only the three hands as lines, found ${parts.ticks}`);
+      expect(parts.second_hand.startsWith("rotate("), `the seconds hand had no angle: ${parts.second_hand}`);
+      expect(parts.date !== "" && !/\d{4}/.test(parts.date), `the date line was ${parts.date}`);
+      if (shot_dir) await take_shot(`${shot_dir}/newtab-clock.png`);
+    });
+
+    const hidden_config = mkdtempSync(join(tmpdir(), "oasisfox-widgets-"));
+    cpSync(test_config_dir, hidden_config, { recursive: true });
+    writeFileSync(join(hidden_config, "settings.toml"), "newtab_clock = false\n");
     await close_new_tabs();
-  });
+    // load_config_dir types qr, so a normal page must hold the keys.
+    await open_page("page", "widgets_config", { new_tab: true });
+    await load_config_dir(hidden_config);
 
-  const widgets_config = mkdtempSync(join(tmpdir(), "oasisfox-widgets-"));
-  cpSync(test_config_dir, widgets_config, { recursive: true });
-  writeFileSync(join(widgets_config, "settings.toml"), 'newtab_ip = true\nnewtab_weather = true\nweather_units = "us"\n');
-  // load_config_dir types qr, so a normal page must hold the keys.
-  await open_page("page", "widgets_config", { new_tab: true });
-  await load_config_dir(widgets_config);
-  const seeded_at = Date.now();
-  await in_background(`browser.storage.local.set({
-    oasisfox_newtab_ip: { at: ${seeded_at}, params: "", value: { ip: "203.0.113.7", city: "Oslo", latitude: 59.9, longitude: 10.7 } },
-    oasisfox_newtab_weather: { at: ${seeded_at}, params: "59.9,10.7,us", value: { temperature: 38, unit: "°F", description: "Partly cloudy" } },
-  })`);
-
-  await run_case("the new tab page shows the IP and weather lines from the cache when their settings are on", async () => {
-    expect(await open_new_tab(".weather"), "the weather line never rendered");
-    const lines = await lines_of_page();
-    expect(lines.ip === "203.0.113.7 · Oslo", `the IP line was ${lines.ip}`);
-    expect(lines.weather === "38°F · Partly cloudy · Oslo", `the weather line was ${lines.weather}`);
-    if (shot_dir) await take_shot(`${shot_dir}/newtab-clock-ip-weather.png`);
-    await close_new_tabs();
-  });
-
-  await in_background(`browser.storage.local.remove(["oasisfox_newtab_ip", "oasisfox_newtab_weather"])`);
-  await open_page("page", "widgets_restore", { new_tab: true });
-  await load_config_dir(config_dir);
+    await run_case("newtab_clock = false hides the clock and keeps the date", async () => {
+      expect(await open_new_tab(".date"), "the date never rendered");
+      const parts = await parts_of_page();
+      expect(!parts.clock, "the clock showed with newtab_clock = false");
+    });
+  } finally {
+    await close_new_tabs().catch(() => undefined);
+    await open_page("page", "widgets_restore", { new_tab: true });
+    await load_config_dir(config_dir);
+  }
 }

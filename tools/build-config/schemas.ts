@@ -2,7 +2,7 @@
 // (Taplo reads them for TOML) completes command names and setting names.
 
 import type { CommandMeta } from "../../src/shared/command.ts";
-import { BUILT_IN_PAGE, DEFAULT_SETTINGS, MODE_INDICATOR_VALUES, WEATHER_UNIT_VALUES, WHICH_KEY_BORDER_VALUES } from "../../src/shared/config.ts";
+import { BUILT_IN_PAGE, DEFAULT_SETTINGS, MODE_INDICATOR_VALUES, WHICH_KEY_BORDER_VALUES } from "../../src/shared/config.ts";
 import { PALETTE_NAMES } from "../../src/shared/mode_colors.ts";
 import { KEYMAP_MODES } from "./merge.ts";
 import type { DataKind } from "./source_files.ts";
@@ -76,11 +76,6 @@ function settings_schema(): Schema {
       history_completion_max: { type: "integer", minimum: 0, default: 10, description: "History rows that open completion shows for an empty word" },
       newtab_clock: { type: "boolean", default: true, description: "Whether the new tab page shows the analog clock" },
       newtab_date: { type: "boolean", default: true, description: "Whether the new tab page shows the date under the clock" },
-      newtab_ip: { type: "boolean", default: false, description: "Whether the new tab page shows the public IP address and city. Sends one request to ipwho.is" },
-      newtab_weather: { type: "boolean", default: false, description: "Whether the new tab page shows the weather. Sends the coordinates to api.open-meteo.com" },
-      weather_units: { enum: [...WEATHER_UNIT_VALUES], default: "metric", description: "metric shows Celsius, us shows Fahrenheit" },
-      weather_lat: { type: "number", minimum: -90, maximum: 90, description: "Latitude for the weather. Set with weather_lon to skip the IP lookup for the weather" },
-      weather_lon: { type: "number", minimum: -180, maximum: 180, description: "Longitude for the weather. Set with weather_lat" },
     },
     additionalProperties: false,
   };

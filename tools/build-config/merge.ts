@@ -4,7 +4,7 @@
 // strings stay strings until `resolve_bindings` in check.ts parses them.
 
 import { MODES } from "../../src/shared/command.ts";
-import { BUILT_IN_PAGE, is_web_url, MODE_INDICATOR_VALUES, WEATHER_UNIT_VALUES, WHICH_KEY_BORDER_VALUES } from "../../src/shared/config.ts";
+import { BUILT_IN_PAGE, is_web_url, MODE_INDICATOR_VALUES, WHICH_KEY_BORDER_VALUES } from "../../src/shared/config.ts";
 import type { SearchEngine, Settings } from "../../src/shared/config.ts";
 import { nodes_of_file, resolve_engines } from "../../src/shared/engines/index.ts";
 import type { EngineNode } from "../../src/shared/engines/index.ts";
@@ -145,11 +145,6 @@ const SETTING_CHECKS: Record<keyof Settings, (value: unknown) => boolean> = {
   history_completion_max: (value) => typeof value === "number" && Number.isInteger(value) && value >= 0,
   newtab_clock: (value) => typeof value === "boolean",
   newtab_date: (value) => typeof value === "boolean",
-  newtab_ip: (value) => typeof value === "boolean",
-  newtab_weather: (value) => typeof value === "boolean",
-  weather_units: (value) => (WEATHER_UNIT_VALUES as readonly unknown[]).includes(value),
-  weather_lat: (value) => typeof value === "number" && value >= -90 && value <= 90,
-  weather_lon: (value) => typeof value === "number" && value >= -180 && value <= 180,
 };
 
 const SETTING_EXPECTATIONS: Record<keyof Settings, string> = {
@@ -169,11 +164,6 @@ const SETTING_EXPECTATIONS: Record<keyof Settings, string> = {
   history_completion_max: "a whole number, 0 or more",
   newtab_clock: "true or false",
   newtab_date: "true or false",
-  newtab_ip: "true or false",
-  newtab_weather: "true or false",
-  weather_units: '"metric" or "us"',
-  weather_lat: "a latitude from -90 to 90",
-  weather_lon: "a longitude from -180 to 180",
 };
 
 function is_prefix_pair(value: unknown, first_key: string): boolean {

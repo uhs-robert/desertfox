@@ -55,19 +55,10 @@ export type Settings = {
   open_completion?: ("bookmarks" | "history")[];
   // History rows `open` shows for an empty word. Absent is 10.
   history_completion_max?: number;
-  // The new tab page widgets. Clock and date are on unless false. IP and weather are on only when true: they ask a web service.
+  // The new tab page widgets. Each is on unless false.
   newtab_clock?: boolean;
   newtab_date?: boolean;
-  newtab_ip?: boolean;
-  newtab_weather?: boolean;
-  // `us` shows Fahrenheit, `metric` (the default) Celsius.
-  weather_units?: "metric" | "us";
-  // Where the weather is read. Both set means the IP lookup is not needed for the weather. Absent uses the place the IP lookup returns.
-  weather_lat?: number;
-  weather_lon?: number;
 };
-
-export const WEATHER_UNIT_VALUES = ["metric", "us"] as const;
 
 // The reserved value of `new_tab_page` and `home_page` that names the built-in new tab page.
 export const BUILT_IN_PAGE = "oasisfox";

@@ -53,14 +53,13 @@ test("the built-in query keeps the page from redirecting, so home shows the buil
   assert.deepEqual(resolve_new_tab_page("https://start.example/", ""), { kind: "redirect", url: "https://start.example/" });
 });
 
-test("build-config: the widget settings take their types and reject the rest", () => {
-  assert.equal(problems_with_settings('newtab_ip = true\nnewtab_weather = true\nweather_units = "us"\nweather_lat = 48.1\nweather_lon = -11.6'), "");
-  for (const line of ['newtab_ip = "yes"', 'weather_units = "kelvin"', "weather_lat = 91", "weather_lon = -181", 'weather_lat = "48"']) {
-    assert.match(problems_with_settings(line), /expected/, line);
-  }
+test("build-config: the widget settings take booleans and reject the rest", () => {
+  assert.equal(problems_with_settings("newtab_clock = false\nnewtab_date = true"), "");
+  for (const line of ['newtab_clock = "yes"', "newtab_date = 1"]) assert.match(problems_with_settings(line), /expected/, line);
 });
 
-test("the settings schema lists the widget settings", () => {
+test("the settings schema lists the widget settings and no removed one", () => {
   const properties = (build_schemas(commands).settings as { properties: Record<string, unknown> }).properties;
-  for (const name of ["newtab_clock", "newtab_date", "newtab_ip", "newtab_weather", "weather_units", "weather_lat", "weather_lon"]) assert.ok(name in properties, name);
+  for (const name of ["newtab_clock", "newtab_date"]) assert.ok(name in properties, name);
+  for (const name of ["newtab_ip", "newtab_weather", "weather_units", "weather_lat", "weather_lon"]) assert.ok(!(name in properties), name);
 });
