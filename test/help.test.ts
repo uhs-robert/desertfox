@@ -117,7 +117,27 @@ test("the Engines section lists the tree parents first, with needs, fallback and
     "github.repo": { url: "u{repo}{query}", label: "GitHub: this repo", slots: ["repo"], fallback: "github" },
     duck: { url: "d{query}", label: "DuckDuckGo" },
   };
-  const rows = build_help_model(commands, undefined, [], {}, engines).engines;
+  const search = create_registry();
+  search.define("open.search", { name: "search", label: "Search", intent: "Search.", runs_in: "background", params: [{ name: "engine", type: "string", default: "" }], run: () => {} });
+  const { compiled } = compile_keymap({ normal: { sd: { id: "open.search", args: { engine: "duck" } }, ",,": { id: "open.search", args: { engine: "duck" } }, sg: { id: "open.search", args: { engine: "github" } } } }, {}, (id) => {
+    const command = search.get(id);
+    return command && { runs_in: command.runs_in, label: command.label, count: "ignore" };
+  });
+  const rows = build_help_model(commands, compiled, [], {}, engines).engines;
+  assert.deepEqual(rows.find((row) => row.name === "duck")!.keys, ["sd", ",,"]);
+  assert.deepEqual(rows.find((row) => row.name === "github")!.keys, ["sg"]);
+  assert.deepEqual(rows.find((row) => row.name === "github.repo")!.keys, []);
+  assert.equal(rows.find((row) => row.name === "github.repo.code")!.host, "u{repo}{query}");
+  assert.equal(build_help_model(commands, undefined, [], {}, { a: { url: "https://www.example.com/s?q={query}", label: "A" } }).engines[0]!.host, "www.example.com");
+  assert.deepEqual(rows.find((row) => row.name === "github.repo.code")!.files, ["f.toml"]);
+  const synthetic = { a: { url: "u", label: "A", origins: { url: "/c/e.toml [a]", label: "a (labels on the path)", scope: "generated under a" } } };
+  assert.deepEqual(build_help_model(commands, undefined, [], {}, synthetic).engines[0]!.files, ["/c/e.toml"]);
+  assert.deepEqual(build_help_model(commands, undefined, [], {}, { b: { url: "u", label: "B" } }).engines[0]!.files, []);
+  const bare = compile_keymap({ normal: { ",,": { id: "open.search" }, ",x": { id: "open.search", args: { engine: "" } } } }, {}, (id) => {
+    const command = search.get(id);
+    return command && { runs_in: command.runs_in, label: command.label, count: "ignore" };
+  }).compiled;
+  assert.deepEqual(build_help_model(commands, bare, [], {}, engines).engines.find((row) => row.name === "duck")!.keys, [",,", ",x"]);
   assert.deepEqual(rows.map((row) => row.name), ["duck", "github", "github.repo", "github.repo.code", "github.repos"]);
   const code = rows.find((row) => row.name === "github.repo.code")!;
   assert.equal(code.needs, "{repo}");

@@ -1,6 +1,7 @@
 // The `hints` bundle: registers the hint sink and the `hint.run` handler with the host.
 // `hint.run` enters hint mode at once, finds and labels the visible elements, then waits for a label to be typed.
 
+import type { Outcome } from "../../shared/messages.ts";
 import { CONFIG_STATUS_STORAGE_KEY } from "../../background/storage_keys.ts";
 import type { BundleHostApi } from "../bundle_host.ts";
 import { link_address, OPEN_PLACES, perform, starts_caret } from "./actions.ts";
@@ -18,8 +19,17 @@ import type { PageProbe } from "./visible.ts";
 type HintsWindow = { oasisfox_host: BundleHostApi; oasisfox_hints_ready?: true; oasisfox_caret_target?: Element };
 const page = window as unknown as HintsWindow;
 
+const done: Outcome = { ok: true };
+const cancelled_outcome: Outcome = { ok: true, cancelled: true };
+
 type Session = {
   cancelled: boolean;
+  // Set at the first pick. Only that pick answers `hint.run`, so a later rapid pick that fails shows its own message.
+  picked?: true;
+  // The hint.run args, which `.` repeats after a pick.
+  args: Record<string, unknown>;
+  // Settles the promise `hint.run` returned. The first call wins, so each path that leaves hint mode must call it before `set_mode`, because the mode change ends the session as cancelled.
+  finish: (outcome: Outcome | Promise<Outcome>) => void;
   action: HintAction;
   // Keys typed while the elements are still being found.
   waiting_tokens: string[];
@@ -76,16 +86,18 @@ async function read_letters(): Promise<string[]> {
   return clean_letters(status?.settings?.hint_letters);
 }
 
-function copy_to_clipboard(text: string): void {
-  void copy_text(navigator.clipboard, text).then((copied) => {
+// A refused copy answers failed and shows nothing here: the pick's answer carries it to the caller, which shows it once.
+function copy_to_clipboard(text: string): Promise<Outcome | undefined> {
+  return copy_text(navigator.clipboard, text).then((copied) => {
+    if (!copied) return { ok: false, message: "Could not copy to the clipboard" };
     // A view of its own, so the notice does not wipe the labels that rapid mode shows.
-    create_view().show_message(copied ? `Copied ${text.length > 40 ? text.slice(0, 40) + "..." : text}` : "Could not copy to the clipboard");
+    create_view().show_message(`Copied ${text.length > 40 ? text.slice(0, 40) + "..." : text}`);
   });
 }
 
 // `from_hints` keeps the router from storing this `open.url`, so `.` shows hints again instead of reopening the address.
-function open_link(url: string, place: Place): void {
-  void browser.runtime.sendMessage({ type: "run", invocations: [{ id: "open.url", args: { url, where: place } }], mode: "normal", from_hints: true }).catch(() => undefined);
+function open_link(url: string, place: Place): Promise<unknown> {
+  return browser.runtime.sendMessage({ type: "run", invocations: [{ id: "open.url", args: { url, where: place } }], mode: "normal", from_hints: true });
 }
 
 // The caret bundle reads the element in `start_session` when the mode starts, and loads on that first entry.
@@ -103,7 +115,35 @@ function register(host: BundleHostApi): void {
     session?.ready?.stop_following();
     session?.ready?.view.clear_labels();
     if (session) session.cancelled = true;
+    session?.finish(cancelled_outcome);
     session = undefined;
+  }
+
+  // A pick records what `.` repeats, so Escape or a failed filter stores nothing. The wait ends when the returned function gets the
+  // action's result, so a later step sees the opened tab or the copied text. Call it before `set_mode`, which ends the session as cancelled.
+  function begin_pick(current: Session): (run: () => unknown) => void {
+    let answer!: (outcome: Outcome) => void;
+    const first = !current.picked;
+    current.picked = true;
+    current.finish(new Promise<Outcome>((resolve) => (answer = resolve)));
+    void browser.runtime.sendMessage({ type: "record_repeat", invocation: { id: "hint.run", args: current.args } });
+    const ended = (result: unknown) => {
+      let outcome = (result as Outcome | undefined) ?? done;
+      // A refused open comes back as a RunResponse with no message. The background already showed it, so it only stops the sequence.
+      if (!outcome.ok && typeof outcome.message !== "string") outcome = { ok: true, cancelled: true };
+      if (first) answer(outcome);
+      else if (!outcome.ok) create_view().show_message(outcome.message);
+    };
+    // A throw from the action is a failed pick, and a rejected open means the page went away, which cancels.
+    return (run) => {
+      let result: unknown;
+      try {
+        result = run();
+      } catch (error) {
+        result = { ok: false, message: String((error as Error)?.message ?? error) };
+      }
+      void Promise.resolve(result).then(ended, () => ended({ ok: true, cancelled: true }));
+    };
   }
 
   // Finds, labels and shows the hints. Keys typed meanwhile wait and replay. Rapid mode calls it again after each pick.
@@ -113,14 +153,18 @@ function register(host: BundleHostApi): void {
     const found = current.lower_text === undefined ? visible : visible.filter((item) => link_address(item.element as HTMLAnchorElement) !== undefined && has_text(item.element, current.lower_text!));
     const view = create_view();
     if (found.length === 0) {
+      const message = current.text === undefined ? "No hints on this page" : `No link matches ${current.text}`;
+      current.finish({ ok: false, message });
       host.set_mode("normal");
-      view.show_message(current.text === undefined ? "No hints on this page" : `No link matches ${current.text}`);
+      // Only a rapid rebuild gets here with its promise already settled, so nobody else shows the message.
+      if (!first_build) view.show_message(message);
       return;
     }
     // One match needs no label. Only the first build does this, so rapid mode cannot repeat the same pick.
     if (first_build && current.lower_text !== undefined && found.length === 1) {
+      const performed = begin_pick(current);
       host.set_mode("normal");
-      perform(current.action, found[0]!.element as HTMLElement, deps);
+      performed(() => perform(current.action, found[0]!.element as HTMLElement, deps));
       return;
     }
     const labels = make_labels(found.length, letters);
@@ -145,17 +189,18 @@ function register(host: BundleHostApi): void {
     ready.view.show_progress(outcome.typed, new Set(outcome.still_possible));
     if (outcome.picked !== undefined) {
       const picked = ready.found[outcome.picked]!.element as HTMLElement;
+      const performed = begin_pick(current);
       if (!current.rapid) {
         // Leave hint mode first: a picked field then raises insert mode through its own focus event.
         host.set_mode("normal");
-        perform(current.action, picked, deps);
+        performed(() => perform(current.action, picked, deps));
         return "handled";
       }
       // Rapid: the pick may delete or move elements, so drop these labels and label the page again.
       ready.stop_following();
       ready.view.clear_labels();
       delete current.ready;
-      perform(current.action, picked, deps);
+      performed(() => perform(current.action, picked, deps));
       if (!current.cancelled) void build(current, find_candidates(current.filter, current.custom_selector, current.action), false);
     }
     return "handled";
@@ -172,7 +217,7 @@ function register(host: BundleHostApi): void {
     exit: end_session,
   });
 
-  host.register_handler("hint.run", (args) => {
+  host.register_handler("hint.run", (args): Outcome | Promise<Outcome> => {
     const action = args.action as HintAction;
     end_session();
     const filter = args.filter as HintFilter;
@@ -181,17 +226,19 @@ function register(host: BundleHostApi): void {
     try {
       candidates = find_candidates(filter, custom_selector, action);
     } catch {
-      return create_view().show_message(`Invalid selector: ${custom_selector}`);
+      return { ok: false, message: `Invalid selector: ${custom_selector}` };
     }
     // With nothing to label the mode never changes, so keys held during the load run as normal keys.
     const text = (args.text as string | undefined) || undefined;
-    void browser.runtime.sendMessage({ type: "record_repeat", invocation: { id: "hint.run", args } });
-    if (candidates.length === 0) return create_view().show_message(text === undefined ? "No hints on this page" : `No link matches ${text}`);
-    // A caret start ends hint mode on the first pick, so rapid has nothing to repeat.
-    const current: Session = { cancelled: false, action, waiting_tokens: [], rapid: args.rapid === true && !starts_caret(action), filter, custom_selector, text, lower_text: text?.toLowerCase() };
-    session = current;
-    host.set_mode("hint");
-    void build(current, candidates, true);
+    if (candidates.length === 0) return { ok: false, message: text === undefined ? "No hints on this page" : `No link matches ${text}` };
+    // Pending until the user picks a label or leaves hint mode.
+    return new Promise<Outcome>((finish) => {
+      // A caret start ends hint mode on the first pick, so rapid has nothing to repeat.
+      const current: Session = { cancelled: false, args, finish, action, waiting_tokens: [], rapid: args.rapid === true && !starts_caret(action), filter, custom_selector, text, lower_text: text?.toLowerCase() };
+      session = current;
+      host.set_mode("hint");
+      void build(current, candidates, true);
+    });
   });
 }
 
