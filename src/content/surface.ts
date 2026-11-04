@@ -23,7 +23,7 @@ export function create_surface(class_name: string, style: string, layer: number)
 export function mount_surface(host: HTMLElement): void {
   document.documentElement.append(host);
   const layer_of = (element: Element) => Number(element.getAttribute(LAYER_ATTRIBUTE));
-  const restack = [...document.documentElement.querySelectorAll<HTMLElement>(`:scope > [${LAYER_ATTRIBUTE}]`)]
+  const restack = Array.from(document.documentElement.querySelectorAll<HTMLElement>(`:scope > [${LAYER_ATTRIBUTE}]`))
     .filter((other) => other === host || (layer_of(other) > layer_of(host) && other.matches(":popover-open")))
     .sort((low, high) => layer_of(low) - layer_of(high));
   for (const surface_host of restack) {
