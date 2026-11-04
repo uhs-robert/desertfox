@@ -78,6 +78,7 @@ function settings_schema(): Schema {
       newtab_clock: { oneOf: [{ type: "boolean" }, { enum: ["analog", "digital"] }], default: true, description: "The new tab page clock: false hides it, true or \"analog\" shows the analog face, \"digital\" shows the seven-segment digits" },
       newtab_date: { type: "boolean", default: true, description: "Whether the new tab page shows the date under the clock" },
       newtab_clock_format: { enum: [12, 24], default: 12, description: "Hours on the digital clock: 12 with an AM or PM suffix, or 24. The analog clock ignores it" },
+      open_quick_start_on_install: { type: "boolean", default: true, description: "Whether the first install opens the Quick Start page. A first install has no config yet, so this helps managed setups, which carry the config from the start" },
     },
     additionalProperties: false,
   };

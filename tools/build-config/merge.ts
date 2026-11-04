@@ -146,6 +146,7 @@ const SETTING_CHECKS: Record<keyof Settings, (value: unknown) => boolean> = {
   newtab_clock: (value) => typeof value === "boolean" || value === "analog" || value === "digital",
   newtab_date: (value) => typeof value === "boolean",
   newtab_clock_format: (value) => value === 12 || value === 24,
+  open_quick_start_on_install: (value) => typeof value === "boolean",
 };
 
 const SETTING_EXPECTATIONS: Record<keyof Settings, string> = {
@@ -167,6 +168,7 @@ const SETTING_EXPECTATIONS: Record<keyof Settings, string> = {
   newtab_clock: 'true, false, "analog" or "digital"',
   newtab_date: "true or false",
   newtab_clock_format: "12 or 24",
+  open_quick_start_on_install: "true or false",
 };
 
 function is_prefix_pair(value: unknown, first_key: string): boolean {

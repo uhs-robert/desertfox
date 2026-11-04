@@ -62,6 +62,8 @@ export type Settings = {
   newtab_date?: boolean;
   // The hours of the digital clock. Absent is 12. The analog face has no 12 or 24 form.
   newtab_clock_format?: 12 | 24;
+  // Whether the first install opens the Quick Start page. On unless false. A first install has no config, so only a managed config can turn it off in time.
+  open_quick_start_on_install?: boolean;
 };
 
 // The reserved value of `new_tab_page` and `home_page` that names the built-in new tab page.
