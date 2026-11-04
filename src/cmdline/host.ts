@@ -41,6 +41,8 @@ type Open = {
   // Set when the line is a page search, and the way it searches. Enter sets `committed`, and the end of the line tells the search whether to keep its match.
   search?: "forward" | "backward" | undefined;
   committed: boolean;
+  // The end of the page search, once the line has closed. Enter waits for it, so the next step sees the committed match.
+  search_ended?: Promise<Outcome>;
   // Settles the promise `cmdline.open` returned. The first call wins, so Enter settles it before `close` ends the line as cancelled.
   finish: (outcome: Outcome | Promise<Outcome>) => void;
   timer: ReturnType<typeof setTimeout>;
@@ -59,7 +61,7 @@ if (!page.oasisfox_cmdline_ready) {
     clearTimeout(open.timer);
     clearTimeout(open.check_timer);
     open.removal_watch.disconnect();
-    if (open.search) host.run_command("find.end", "caret", { keep: open.committed });
+    if (open.search) open.search_ended = host.run_command("find.end", "caret", { keep: open.committed });
     open.port?.close();
     open.holder.remove();
     open = undefined;
@@ -143,8 +145,10 @@ if (!page.oasisfox_cmdline_ready) {
         host.run_command("find.live", "caret", { text: message.text, report });
       } else if (message.kind === "find_commit") {
         current.committed = true;
-        current.finish({ ok: true });
+        let ended!: (outcome: Outcome) => void;
+        current.finish(new Promise<Outcome>((resolve) => (ended = resolve)));
         close();
+        void (current.search_ended ?? Promise.resolve<Outcome>({ ok: true })).then(ended);
       }
     };
     current.port = channel.port1;

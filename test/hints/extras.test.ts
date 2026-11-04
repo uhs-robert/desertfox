@@ -61,6 +61,7 @@ async function page_with(texts: string[]) {
   const handlers = new Map<string, (args: Record<string, unknown>) => unknown>();
   let sink: { on_token: (token: string) => string; exit: () => void } | undefined;
   let mode = "normal";
+  let sends_held: Promise<unknown> | undefined;
 
   const win = {
     innerWidth: 800,
@@ -125,7 +126,11 @@ async function page_with(texts: string[]) {
     };
     disconnect = () => {};
   };
-  globals.browser = { storage: { local: { get: async () => ({}) } }, runtime: { sendMessage: async (message: unknown) => void ((message as { type?: string }).type === "record_repeat" ? repeat_records : sent).push(message) } };
+  globals.browser = { storage: { local: { get: async () => ({}) } }, runtime: { sendMessage: async (message: unknown) => {
+    const is_record = (message as { type?: string }).type === "record_repeat";
+    (is_record ? repeat_records : sent).push(message);
+    return is_record ? undefined : sends_held;
+  } } };
   Object.defineProperty(globalThis, "navigator", { value: { clipboard: { writeText: async (text: string) => void copied.push(text) } }, configurable: true });
   await import(`${new URL("../../src/content/hints/main.ts", import.meta.url).href}?extras${import_count++}`);
 
@@ -145,6 +150,8 @@ async function page_with(texts: string[]) {
     repeat_records,
     copied,
     modes,
+    // The next opened link answers when this promise settles.
+    hold_sends: (held: Promise<unknown>) => void (sends_held = held),
     mode: () => mode,
     active_listeners,
     // What the handler answers: an Outcome now, or a promise that stays pending while hints wait for the user.
@@ -445,5 +452,35 @@ test("rapid mode answers done at the first pick and Escape later changes nothing
   await settle();
   assert.deepEqual(await answer, { ok: true });
   page.escape();
+  assert.deepEqual(await answer, { ok: true });
+});
+
+test("Escape or a failed filter stores nothing for `.`, and a pick stores it", async () => {
+  const page = await page_with(["one", "two"]);
+  const answer = page.run({ action: "background" });
+  await settle();
+  page.escape();
+  await answer;
+  assert.deepEqual(page.repeat_records, []);
+  const none = await page_with([]);
+  none.run({ action: "background" });
+  assert.deepEqual(none.repeat_records, []);
+  const picked = await page_with(["one", "two"]);
+  picked.run({ action: "background" });
+  await settle();
+  picked.type(picked.labels()[0]!.toLowerCase());
+  await settle();
+  assert.equal(picked.repeat_records.length, 1);
+});
+
+test("hint.run answers done only after the picked link has been opened", async () => {
+  const page = await page_with(["one", "two"]);
+  let opened!: (value: unknown) => void;
+  page.hold_sends(new Promise((resolve) => (opened = resolve)));
+  const answer = page.run({ action: "background" });
+  await settle();
+  page.type(page.labels()[0]!.toLowerCase());
+  assert.equal(await peek(answer), undefined);
+  opened({ ok: true });
   assert.deepEqual(await answer, { ok: true });
 });

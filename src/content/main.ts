@@ -4,6 +4,7 @@
 import type { BackgroundToContent, CompiledKeymap, ContentToBackground, Mode, ModeIndicator, RunResponse, TreeLeaf } from "../shared/index.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY, COMPILED_KEYMAP_VERSION, DEFAULT_SETTINGS, current_keymap } from "../shared/index.ts";
 import { create_matcher, event_to_token } from "../shared/keys/index.ts";
+import { message_of } from "./bundle_host.ts";
 import type { BundleHostApi } from "./bundle_host.ts";
 import { bundles } from "./bundles.ts";
 import { is_editable_element } from "./editable.ts";
@@ -43,7 +44,6 @@ function can_reach_top_document(): boolean {
   }
 }
 
-const message_of = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
 async function send_to_background(message: ContentToBackground): Promise<RunResponse> {
   try {

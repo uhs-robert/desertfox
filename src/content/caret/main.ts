@@ -234,6 +234,6 @@ if (!page.oasisfox_caret_ready) {
   page.oasisfox_host.register_handler("find.prev", () => find.step(true));
   // Called by the command line while it is open, and not by any key.
   page.oasisfox_host.register_handler("find.live", (args) => find.update(args.text as string, args.report as (status: string) => void));
-  page.oasisfox_host.register_handler("find.end", (args) => void find.end(args.keep === true));
+  page.oasisfox_host.register_handler("find.end", (args) => find.end(args.keep === true));
   page.oasisfox_host.register_handler("find.clear", () => find.clear());
 }

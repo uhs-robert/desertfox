@@ -418,3 +418,11 @@ test("a waiting handler is cancelled by Escape, which the sink passes to the key
     assert.equal(page.state.get_mode(), "normal");
   }
 });
+
+test("a handler that throws something that is not an Error still answers a failed message", async () => {
+  const page = make_page();
+  page.host.api.register_handler("hint.run", () => {
+    throw "plain string";
+  });
+  assert.deepEqual(await page.host.api.run_command("hint.run", "hints", {}), { ok: false, message: "plain string" });
+});

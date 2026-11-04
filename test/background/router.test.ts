@@ -112,7 +112,7 @@ test("a prompt with an empty selection prefills empty, and a count is dropped", 
 test("opening the line on a tab with no content script refuses", async () => {
   const { deps, log } = make_fake(
     { "open.url": { label: "Open", intent: "x", name: "open", params: [{ name: "url", type: "string" }], runs_in: "background", run: () => assert.fail() } },
-    { open_cmdline: async () => { throw new Error("no receiver"); } },
+    { has_content_script: async () => false, open_cmdline: async () => { throw new Error("no receiver"); } },
   );
   const response = await create_router(deps).run({ invocations: [{ id: "open.url" }], mode: "normal", may_prompt: true });
   assert.equal(response.ok, false);
@@ -361,4 +361,28 @@ test("a prompt binding with a bad fixed arg refuses instead of opening the line"
   });
   assert.equal(response.ok, false);
   assert.match(log[0]!, /^refuse 7 where expects/);
+});
+
+test("a reply lost after the line opened on a live page is done, as when Enter navigates this tab", async () => {
+  const ran: string[] = [];
+  const { deps, log } = make_fake(
+    { "open.url": open_url, "tab.close": { label: "Close", intent: "x", runs_in: "background", run: () => void ran.push("closed") } },
+    { open_cmdline: async () => { throw new Error("The message channel closed"); } },
+  );
+  const response = await create_router(deps).run({ invocations: [{ id: "open.url", prompt: { param: "url" } }, { id: "tab.close" }], mode: "normal", may_prompt: true });
+  assert.deepEqual(response, { ok: true });
+  assert.deepEqual(ran, ["closed"]);
+  assert.deepEqual(log, []);
+});
+
+test("a background command that returns a failed outcome stops the sequence with one toast", async () => {
+  const ran: string[] = [];
+  const { deps, log } = make_fake({
+    "tab.fail": { label: "Fail", intent: "x", runs_in: "background", run: () => ({ ok: false, message: "nothing to do" }) },
+    "tab.close": { label: "Close", intent: "x", runs_in: "background", run: () => void ran.push("closed") },
+  });
+  const response = await create_router(deps).run({ invocations: [{ id: "tab.fail" }, { id: "tab.close" }], mode: "normal" });
+  assert.equal(response.ok, false);
+  assert.deepEqual(ran, []);
+  assert.deepEqual(log, ["refuse 7 nothing to do"]);
 });

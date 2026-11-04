@@ -39,7 +39,7 @@ async function until(condition: () => boolean): Promise<void> {
 // For a message that must not arrive: long enough for one that would.
 const settle = () => new Promise((resolve) => setTimeout(resolve, 50));
 
-async function load_host(t: TestContext, tag: string, { ticket_fails = false, run_answer = undefined as (() => Promise<unknown>) | undefined } = {}) {
+async function load_host(t: TestContext, tag: string, { ticket_fails = false, run_answer = undefined as (() => Promise<unknown>) | undefined, search = undefined as ((finish: (outcome: unknown) => void) => void) | undefined } = {}) {
   const modes: string[] = [];
   const handlers = new Map<string, (args: Record<string, unknown>) => unknown>();
   const sinks = new Map<string, Sink>();
@@ -75,6 +75,8 @@ async function load_host(t: TestContext, tag: string, { ticket_fails = false, ru
       oasisfox_host: {
         set_mode: (mode: string) => void modes.push(mode),
         get_mode: () => "normal",
+        // Only find.end is called here. Its answer is the test's to give.
+        run_command: () => new Promise((resolve) => search?.(resolve)),
         register_sink: (mode: string, sink: Sink) => void sinks.set(mode, sink),
         register_handler: (id: string, handler: (args: Record<string, unknown>) => unknown) => void handlers.set(id, handler),
       },
@@ -85,7 +87,7 @@ async function load_host(t: TestContext, tag: string, { ticket_fails = false, ru
   const host_url = new URL("../../src/cmdline/host.ts", import.meta.url).href;
   await import(`${host_url}?${tag}`);
 
-  const answer = handlers.get("cmdline.open")!({ text: "open " }) as Promise<{ ok: boolean; cancelled?: true; message?: string }> | { ok: false; message: string };
+  const answer = handlers.get("cmdline.open")!({ text: "open ", search: search ? "forward" : undefined }) as Promise<{ ok: boolean; cancelled?: true; message?: string }> | { ok: false; message: string };
   const opened_again = () => handlers.get("cmdline.open")!({ text: "again" }) as { ok: false; message: string };
   const [holder, frame] = elements as [ReturnType<typeof fake_element>, ReturnType<typeof fake_element>];
   // An open port keeps Node running, so a failed test would hang.
@@ -278,6 +280,13 @@ test("a resize over the port sets the frame holder's height, capped at the windo
 });
 
 // What the sequence that opened the line sees: a promise that stays pending while the line is open.
+// A search line whose find.end the test finishes by hand.
+async function load_search(t: TestContext, tag: string) {
+  const ended: ((outcome: unknown) => void)[] = [];
+  const page = await load_host(t, tag, { search: (finish) => ended.push(finish) });
+  return { ...page, finish_search: (outcome: unknown) => ended[0]!(outcome) };
+}
+
 const pending = (answer: unknown) => Promise.race([answer, new Promise((resolve) => setTimeout(() => resolve("pending"), 30))]);
 
 test("cmdline.open stays pending while the line is open and answers done once the submitted command has run", async (t) => {
@@ -350,4 +359,16 @@ test("opening while a line is open answers failed and leaves the first line alon
   assert.deepEqual(modes, ["cmdline"]);
   assert.equal(holder.removed, false);
   assert.equal(await pending(answer), "pending");
+});
+
+test("committing a search answers done only after find.end has finished, and a find.end failure fails it", async (t) => {
+  for (const [end, expected] of [[{ ok: true }, { ok: true }], [{ ok: false, message: "scan failed" }, { ok: false, message: "scan failed" }]] as const) {
+    const page = await load_search(t, `search_end_${expected.ok}`);
+    await page.ready();
+    page.frame.posted[0]!.transfer[0]!.postMessage({ oasisfox_cmdline: { kind: "find_commit" } });
+    await until(() => page.modes.length === 2);
+    assert.equal(await pending(page.answer), "pending");
+    page.finish_search(end);
+    assert.deepEqual(await page.answer, expected);
+  }
 });

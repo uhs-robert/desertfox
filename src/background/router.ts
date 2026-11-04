@@ -54,7 +54,8 @@ const refuse = (message: string): Outcome => ({ ok: false, message });
 // What a content script answers to a request that waits on the user. No answer is done: an older script answers nothing.
 function outcome_of_reply(reply: unknown): Outcome {
   const outcome = reply as Outcome | undefined;
-  return outcome && typeof outcome === "object" && (outcome.ok === false ? typeof outcome.message === "string" : true) ? outcome : done;
+  const is_outcome = typeof outcome === "object" && (outcome?.ok === true || (outcome?.ok === false && typeof outcome.message === "string"));
+  return is_outcome ? outcome : done;
 }
 
 export function create_router(deps: RouterDeps): Router {
@@ -134,7 +135,8 @@ export function create_router(deps: RouterDeps): Router {
 
     if (command.runs_in === "content") return run_in_content(command, filled.args, counted.times, context);
     for (let time = 0; time < counted.times; time++) {
-      await command.run(time === 0 ? context : (await read_now(request)).context, filled.args);
+      const failed = outcome_of_reply(await command.run(time === 0 ? context : (await read_now(request)).context, filled.args));
+      if (!failed.ok) return failed;
     }
     return done;
   }
@@ -179,10 +181,12 @@ export function create_router(deps: RouterDeps): Router {
     if (prefill) typed[open_param] = await read_source(prefill.from, context, active).catch(() => undefined);
     const { tab_id, frame_id } = context;
     if (tab_id === undefined) return refuse(`${command.label} needs a tab`);
+    // A reply lost after the line opened means the page went away, as when Enter opens a link in this tab. That is done, not a refusal.
+    const had_page = await deps.has_content_script(tab_id);
     try {
       return outcome_of_reply(await deps.open_cmdline(tab_id, frame_id ?? 0, print_command(command, typed, { open_param, sources: await deps.get_enum_sources() })));
     } catch {
-      return refuse(`${command.label} needs a page OasisFox runs on`);
+      return had_page ? done : refuse(`${command.label} needs a page OasisFox runs on`);
     }
   }
 
