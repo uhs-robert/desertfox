@@ -94,8 +94,10 @@ export function build_text_model(root: Element = document.body, start_node?: Nod
     const offsets: number[] = [];
     let piece = "";
     let blank_before: boolean = after_space;
-    for (let offset = 0; offset < node.data.length; offset++) {
-      const char = node.data[offset]!;
+    // `node.data` is a copy of the whole text on each read when the node is the page's, so a long text read per character fills the memory.
+    const data = node.data;
+    for (let offset = 0; offset < data.length; offset++) {
+      const char = data[offset]!;
       const is_blank: boolean = /\s/.test(char) && !(preformatted && char === "\n");
       if (is_blank && !preformatted) {
         if (blank_before) continue;
