@@ -129,6 +129,22 @@ export async function run_cases({ rdp, extension_id, run_case, expect, open_page
     expect((await in_active_tab(selection_styles))[0] === 0, "selection colors are still on the page after Escape");
   });
 
+  await run_case("caret in a tall frame that is already on screen does not scroll the page", async () => {
+    const page_id = "frames_tall";
+    await open_page("caret_tall_frame", page_id, { new_tab: true });
+    await sleep(500);
+    const frame_selection = `document.getElementById("tall").contentWindow.getSelection().toString()`;
+    const scroll_y = async () => (await in_active_tab("scrollY"))[0];
+    const before = await scroll_y();
+    expect(before > 1000, `the page did not scroll to the frame text: ${before}`);
+    await send_keys("gV");
+    for (let wait = 0; (await in_active_tab(frame_selection))[0] === "" && wait < 20; wait++) await sleep(150);
+    expect((await in_active_tab(frame_selection))[0] !== "", "the caret did not start in the frame");
+    await sleep(300);
+    expect((await scroll_y()) === before, `the page scrolled from ${before} to ${await scroll_y()} with the caret already on screen`);
+    await send_keys("-k", "Escape");
+  });
+
   await run_case("hint --caret on a frame from another origin shows a notice and stays in normal mode", async () => {
     const page_id = "frames_cross";
     const mark = await hint_into("caret_frames", page_id, "--caret", "#xframe");

@@ -80,7 +80,8 @@ function scroll_to_caret(open: Session): void {
     const by_x = scroll_delta({ low: box.left, high: box.right }, { low: edges.left + shift.x, high: edges.right + shift.x }, box.height);
     const by_y = scroll_delta({ low: box.top, high: box.bottom }, { low: edges.top + shift.y, high: edges.bottom + shift.y }, box.height);
     if (by_x || by_y) (nested ? view : window_of_view).scrollBy(by_x, by_y);
-    view = nested ? outer_view(view) : outer_view(owner);
+    // The walk stops at this script's own document: past it, the box is in a different space than the outer views.
+    view = nested ? outer_view(view) : owner === document ? null : outer_view(owner);
   }
 }
 
