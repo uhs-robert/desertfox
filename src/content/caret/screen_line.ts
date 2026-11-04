@@ -2,7 +2,9 @@
 // The text model lets us ask from any character and read the answer back as a character.
 
 import type { Motion } from "./motion.ts";
-import type { TextModel } from "./text_model.ts";
+import type { TextModel, TreeRun } from "./text_model.ts";
+
+const DOCUMENT_NODE = 9;
 
 // Where a frame's document sits in this script's window: the content box of each frame element around it, added up.
 export function frame_offset(of_document: Document): { x: number; y: number } {
@@ -54,11 +56,22 @@ function adjacent_line_start(text: string, from: number, direction: Motion["dire
   return line_start > 0 ? text.lastIndexOf("\n", line_start - 2) + 1 : from;
 }
 
-// Selection.modify stays in one document. On a frame's last line it only goes to the line's end, and on the page it steps over a frame. Then the next or previous line of the model stands in.
-function line_target(model: TextModel, from: number, modified: number, direction: Motion["direction"]): number {
-  const crossed_tree = model.tree_runs(Math.min(from, modified), Math.max(from, modified) + 1).length > 1;
+// Selection.modify walks into a shadow root of its own document, so an inline host in a wrapped paragraph is on the screen line it shows. It stalls on a block host and stays inside one frame, so those two need the model's line.
+export function crosses_frame_or_block_host(runs: TreeRun[]): boolean {
+  const owner_of = (tree: TreeRun["tree"]) => (tree.nodeType === DOCUMENT_NODE ? (tree as Document) : (tree as ShadowRoot).ownerDocument);
+  const is_block_host = ({ tree }: TreeRun) => {
+    if (tree.nodeType === DOCUMENT_NODE) return false;
+    const host = (tree as ShadowRoot).host;
+    return !host.ownerDocument.defaultView!.getComputedStyle(host).display.startsWith("inline");
+  };
+  return runs.length > 1 && runs.some((run) => owner_of(run.tree) !== owner_of(runs[0]!.tree) || is_block_host(run));
+}
+
+// Where Selection.modify stalls or leaves its document, the next or previous line of the model stands in.
+export function line_target(model: TextModel, from: number, modified: number, direction: Motion["direction"]): number {
+  const crossed = crosses_frame_or_block_host(model.tree_runs(Math.min(from, modified), Math.max(from, modified) + 1));
   const stalled = modified === from || same_row(model, from, modified);
-  return crossed_tree || stalled ? adjacent_line_start(model.text, from, direction) : modified;
+  return crossed || stalled ? adjacent_line_start(model.text, from, direction) : modified;
 }
 
 // The character on the target's screen line whose left edge is nearest to x. It measures boxes, because caretPositionFromPoint answers null for a line below the screen.

@@ -160,6 +160,11 @@ export function start_server() {
       // Each word fills a screen line: the column is 6 characters wide and the words are 3.
       return response.end(page(`caret_wrap ${id}`, '<p style="width:6ch;font-family:monospace">abc def ghi jkl</p>'));
     }
+    if (url.pathname === "/caret_inline_host") {
+      // An inline host in the middle of a wrapped paragraph: "aaa mid bbb " fills the first screen line and "ccc ddd eee" the second.
+      const root = '<script>document.getElementById("host").attachShadow({ mode: "closed" }).innerHTML = "mid";</script>';
+      return response.end(page(`caret_inline_host ${id}`, `<p id="first" style="width:12ch;font-family:monospace">aaa <span id="host"></span> bbb ccc ddd eee</p>${root}`));
+    }
     if (url.pathname === "/caret_columns") {
       // The middle line is short: j over it must still come back to the column the caret left.
       return response.end(page(`caret_columns ${id}`, '<p style="font-family:monospace">abcdefghij<br>ab<br>abcdefghij</p>'));
