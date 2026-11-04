@@ -79,6 +79,7 @@ function settings_schema(): Schema {
       history_completion_max: { type: "integer", minimum: 0, default: 10, description: "History rows that open completion shows for an empty word" },
       newtab_clock: { type: "boolean", default: true, description: "Whether the new tab page shows the analog clock" },
       newtab_date: { type: "boolean", default: true, description: "Whether the new tab page shows the date under the clock" },
+      open_quick_start_on_install: { type: "boolean", default: true, description: "Whether the first install opens the Quick Start page. A first install has no config yet, so this helps managed setups, which carry the config from the start" },
     },
     additionalProperties: false,
   };

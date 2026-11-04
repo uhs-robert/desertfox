@@ -2,6 +2,7 @@ import "./command_modules.ts";
 import type { ContentToBackground } from "../shared/messages.ts";
 import type { BoundInvocation } from "../shared/invocation.ts";
 import { bundle_loader_deps, container_names, make_router_deps, page_of, reinject_deps } from "./browser_deps.ts";
+import { open_quick_start_on_install } from "./first_install.ts";
 import { create_cmdline_service } from "./cmdline_service.ts";
 import { create_previous_tabs } from "./previous_tab.ts";
 import { browser_complete_items_deps, create_complete_items } from "./complete_items.ts";
@@ -100,6 +101,18 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
       ...(sender.tab?.id === undefined ? {} : { sender_tab_id: sender.tab.id }),
       ...(sender.frameId === undefined ? {} : { frame_id: sender.frameId }),
     }),
+  );
+});
+
+// The config may fail to load, and a failed load must not stop the page: the default is to open it.
+browser.runtime.onInstalled.addListener(({ reason }) => {
+  void open_quick_start_on_install(
+    {
+      reason,
+      open_on_install: () => get_config().then((config) => config.settings.open_quick_start_on_install !== false, () => true),
+      open_tab: (url) => browser.tabs.create({ url }),
+    },
+    (file) => browser.runtime.getURL(file),
   );
 });
 
