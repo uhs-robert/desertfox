@@ -15,6 +15,8 @@ import type { HostToPage, PageToHost } from "./protocol.ts";
 import { unwrap, wrap } from "./protocol.ts";
 import { key_labels } from "./completion/keys.ts";
 import { create_list } from "./list.ts";
+import { wheel_rows } from "./wheel.ts";
+import type { Wheel_state } from "./wheel.ts";
 import { create_session } from "./session.ts";
 import type { Effect, Session } from "./session.ts";
 import { create_word_lookup } from "./word_lookup.ts";
@@ -40,7 +42,7 @@ function show_prompt(prompt: HTMLElement, setting: string): void {
   }
 }
 
-const WHEEL_ROWS_PER_NOTCH = 3;
+const FALLBACK_ROW_HEIGHT_PX = 24;
 
 // Page scripts can post a `start` too, to this frame or to a copy they embed. Only the background knows whether the
 // ticket is live, so every `start` is tried and the first one it accepts wins.
@@ -88,6 +90,7 @@ async function open_line(start: Start, port: MessagePort): Promise<void> {
     },
   });
 
+  let wheel_rows_drawn: unknown;
   let told_height = 0;
   let told_text = "";
   const render = () => {
@@ -103,6 +106,9 @@ async function open_line(start: Start, port: MessagePort): Promise<void> {
     note.textContent = shown;
     note.hidden = shown === "";
     document.body.classList.toggle("oasisfox-cmdline-error", message !== undefined);
+    // A new ranking starts at the top, so leftover wheel pixels belong to the old one.
+    if (session.get_rows() !== wheel_rows_drawn) wheel.remainder_px = 0;
+    wheel_rows_drawn = session.get_rows();
     list.render(session.get_rows(), session.get_selected(), session.get_hint() === "loading");
     // The host holds the frame at the height the panel needs, so the list grows upward and the line stays put.
     if (panel.offsetHeight !== told_height) tell_host({ kind: "resize", height: (told_height = panel.offsetHeight) });
@@ -153,12 +159,16 @@ async function open_line(start: Start, port: MessagePort): Promise<void> {
       event.preventDefault();
     } else if (token !== null && press(token)) event.preventDefault();
   });
-  // Non-passive, so the page behind the list does not scroll with it.
-  document.querySelector<HTMLElement>("#list")!.addEventListener(
+  // Non-passive, so the page behind the list never scrolls while the pointer is over it.
+  const list_element = document.querySelector<HTMLElement>("#list")!;
+  const wheel: Wheel_state = { remainder_px: 0 };
+  list_element.addEventListener(
     "wheel",
     (event) => {
       event.preventDefault();
-      list.scroll(Math.sign(event.deltaY) * WHEEL_ROWS_PER_NOTCH);
+      const row_height_px = (list_element.firstElementChild as HTMLElement | null)?.offsetHeight || FALLBACK_ROW_HEIGHT_PX;
+      const rows = wheel_rows(wheel, event.deltaY, event.deltaMode, row_height_px);
+      if (rows !== 0) list.scroll(rows);
     },
     { passive: false },
   );
