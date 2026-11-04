@@ -16,12 +16,12 @@ export const STYLE = `
 }
 .oasisfox-hint {
   position: fixed; padding: 2px 4px; border-radius: 3px; text-transform: uppercase;
-  background: var(--oasisfox-bg, #0c0e13); color: var(--secondary); border: 1px solid var(--primary); box-shadow: 0 1px 3px #0008;
+  background: var(--oasisfox-bg-core, #0c0e13); color: var(--secondary); border: 1px solid var(--primary); box-shadow: 0 1px 3px #0008;
 }
-.oasisfox-hint b { color: color-mix(in srgb, var(--oasisfox-fg, #f5f5dc) 55%, var(--oasisfox-bg, #0c0e13)); font-weight: inherit; }
+.oasisfox-hint b { color: var(--oasisfox-fg-comment, #69809d); font-weight: inherit; }
 .oasisfox-hint-message {
   position: fixed; left: 50%; bottom: 48px; transform: translateX(-50%); padding: 8px 12px;
-  background: var(--oasisfox-bg, #0c0e13); color: var(--oasisfox-fg, #f5f5dc); font: var(--oasisfox-font, 14px system-ui, sans-serif); border-radius: var(--oasisfox-radius, 6px);
+  background: var(--oasisfox-bg-core, #0c0e13); color: var(--oasisfox-fg-core, #f5f5dc); font: var(--oasisfox-font, 14px system-ui, sans-serif); border-radius: var(--oasisfox-radius, 6px);
 }`;
 
 // Where the element sits on the top page: its own box plus the box of every frame around it.

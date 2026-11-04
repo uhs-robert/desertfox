@@ -4,10 +4,14 @@
 
 import type { CommandMeta } from "./command.ts";
 import type { KeymapConfig } from "./keymap.ts";
-import { DEFAULT_PALETTE } from "./mode_colors.ts";
 import type { LocalTheme } from "./mode_colors.ts";
+import type { LightIntensity } from "./theme/roles.ts";
 
 export const CONFIG_FORMAT_VERSION = 2;
+
+// Declared here, not in mode_colors.ts: that module holds the theme tables, which stay out of the content script.
+export const DEFAULT_PALETTE = "oasis_moonlight";
+export const DEFAULT_LIGHT_INTENSITY: LightIntensity = 3;
 
 export type SearchEngine = {
   // URL template. It holds the query slot and page slots; `%s` is the older spelling of the query slot.
@@ -36,8 +40,10 @@ export type Settings = {
   ignore_sites: string[];
   // The mode badge: always (NORMAL too), only outside normal mode, or never.
   mode_indicator: ModeIndicator;
-  // Theme name: `<config dir>/themes/<name>.toml` first, then a repo theme, then an oasis.nvim palette. Light or dark follows the system theme.
+  // Theme name: `<config dir>/themes/<name>.toml` first, then a built-in theme such as `oasis_moonlight`. Light or dark follows the system theme.
   palette: string;
+  // Which of the five light sets of an Oasis theme the light variant uses, 1 to 5. Other themes have one light set.
+  light_intensity: LightIntensity;
   // Prefixes of keys generated from `search_keys`: this tab, new tab.
   search_prefixes: { here: string; tab: string };
   // Prefixes of keys generated from `container_keys`: reopen, prompt in new tab.
@@ -96,6 +102,7 @@ export const DEFAULT_SETTINGS: Settings = {
   ignore_sites: [],
   mode_indicator: "always",
   palette: DEFAULT_PALETTE,
+  light_intensity: DEFAULT_LIGHT_INTENSITY,
   search_prefixes: { here: "s", tab: "S" },
   container_prefixes: { reopen: "c", tab: "C" },
   default_engine: FALLBACK_ENGINE_NAME,

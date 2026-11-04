@@ -4,6 +4,7 @@
 // strings stay strings until `resolve_bindings` in check.ts parses them.
 
 import { MODES } from "../../src/shared/command.ts";
+import { LIGHT_INTENSITIES } from "../../src/shared/theme/roles.ts";
 import { BUILT_IN_PAGE, is_web_url, MODE_INDICATOR_VALUES, WHICH_KEY_BORDER_VALUES } from "../../src/shared/config.ts";
 import type { SearchEngine, Settings } from "../../src/shared/config.ts";
 import { nodes_of_file, resolve_engines } from "../../src/shared/engines/index.ts";
@@ -134,6 +135,7 @@ const SETTING_CHECKS: Record<keyof Settings, (value: unknown) => boolean> = {
   ignore_sites: (value) => Array.isArray(value) && value.every((site) => typeof site === "string" && site !== ""),
   mode_indicator: (value) => (MODE_INDICATOR_VALUES as readonly unknown[]).includes(value),
   palette: (value) => typeof value === "string" && value !== "",
+  light_intensity: (value) => (LIGHT_INTENSITIES as readonly unknown[]).includes(value),
   search_prefixes: (value) => is_prefix_pair(value, "here"),
   container_prefixes: (value) => is_prefix_pair(value, "reopen"),
   home_page: (value) => typeof value === "string" && value !== "",
@@ -154,6 +156,7 @@ const SETTING_EXPECTATIONS: Record<keyof Settings, string> = {
   ignore_sites: "a list of match pattern strings",
   mode_indicator: '"always", "not_normal" or "off"',
   palette: "a theme name",
+  light_intensity: "a whole number from 1 to 5",
   search_prefixes: '{"here": "...", "tab": "..."} with non-empty strings',
   container_prefixes: '{"reopen": "...", "tab": "..."} with non-empty strings',
   home_page: "a non-empty URL string",

@@ -20,19 +20,21 @@ const per_variant = (dark: string, light: string) => (_colors: RoleColors, varia
 
 // In dependency order: a rule reads only required roles and roles above it.
 const DERIVATIONS: [Exclude<Role, RequiredRole>, (colors: RoleColors, variant: Variant) => string][] = [
-  // A dark theme layers lighter surfaces on bg, a light theme darker ones.
-  ["bg_mantle", (colors, variant) => (variant === "dark" ? mix(colors.bg, colors.fg, 0.08) : mix(colors.bg, BLACK, 0.15))],
-  ["bg_crust", (colors, variant) => (variant === "dark" ? mix(colors.bg, colors.fg, 0.16) : mix(colors.bg, BLACK, 0.3))],
-  ["selection", (colors) => mix(colors.bg, colors.fg, 0.15)],
-  ["muted", (colors) => mix(colors.fg, colors.bg, 0.45)],
+  // A dark theme layers lighter surfaces on bg_core, a light theme darker ones.
+  ["bg_mantle", (colors, variant) => (variant === "dark" ? mix(colors.bg_core, colors.fg_core, 0.08) : mix(colors.bg_core, BLACK, 0.15))],
+  ["bg_crust", (colors, variant) => (variant === "dark" ? mix(colors.bg_core, colors.fg_core, 0.16) : mix(colors.bg_core, BLACK, 0.3))],
+  ["selection", (colors) => mix(colors.bg_core, colors.fg_core, 0.15)],
+  ["fg_comment", (colors) => mix(colors.fg_core, colors.bg_core, 0.45)],
+  ["fg_dim", (colors) => mix(colors.fg_core, colors.bg_core, 0.55)],
+  ["fg_muted", (colors) => mix(colors.fg_core, colors.bg_core, 0.65)],
   ["secondary", (colors) => colors.accent],
-  ["border", (colors) => colors.muted],
+  ["border", (colors) => colors.fg_muted],
   ["error", per_variant("#ffa0a0", "#8e0f14")],
   ["warn", per_variant("#ffba75", "#793f0d")],
   ["ok", per_variant("#7fcf78", "#315e2d")],
   ["mode_normal", (colors) => colors.primary],
   ["mode_insert", (colors) => colors.error],
-  ["mode_ignore", (colors) => colors.muted],
+  ["mode_ignore", (colors) => colors.fg_dim],
   ["mode_caret", (colors) => colors.ok],
   ["mode_visual", (colors) => colors.warn],
 ];
