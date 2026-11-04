@@ -5,51 +5,82 @@ import type { BundleHostApi, ExitDestination } from "../bundle_host.ts";
 import { move_once, SCREEN_LINE_UNITS } from "./motion.ts";
 import type { Motion } from "./motion.ts";
 import { yank_text } from "./copy_text.ts";
-import { character_box, screen_line_target } from "./screen_line.ts";
+import { character_box, frame_offset, screen_line_target } from "./screen_line.ts";
 import { apply_selection_colors, clear_selection_colors } from "./selection_colors.ts";
 import { scroll_delta } from "./scroll_delta.ts";
 import { selected_text, selected_span, swap_ends, with_caret } from "./selection_state.ts";
 import type { Cursor } from "./selection_state.ts";
-import { build_text_model } from "./text_model.ts";
+import { build_text_model, documents_of, frame_document, trees_alive } from "./text_model.ts";
 import type { TextModel } from "./text_model.ts";
-import { first_index_from, in_other_tree, first_visible_index } from "./start_point.ts";
+import { first_visible_index } from "./start_point.ts";
 
 // `oasisfox_caret_target` is the element a hint picked. The hints bundle sets it just before it enters the mode.
 type CaretWindow = { oasisfox_host: BundleHostApi; oasisfox_caret_ready?: true; oasisfox_caret_target?: Element };
 const page = window as unknown as CaretWindow;
 
-type Session = { model: TextModel; cursor: Cursor; mode: "caret" | "visual"; goal_x: number | undefined };
+// `painted` holds the ends of each selection as the last paint left it, so a later change by the page shows.
+type Session = { model: TextModel; cursor: Cursor; mode: "caret" | "visual"; goal_x: number | undefined; painted: SelectionEnds[] };
+type SelectionEnds = { selection: Selection; ends: unknown[] };
 let session: Session | undefined;
 // Counts visual starts, so a copy can tell its own visual run from a later one in the same session.
 let visual_runs = 0;
 
+const selections_of = (model: TextModel): Selection[] => documents_of(model).flatMap((owner) => owner.getSelection() ?? []);
+
+function ends_of(selection: Selection): unknown[] {
+  if (selection.rangeCount === 0) return [];
+  const first = selection.getRangeAt(0);
+  const last = selection.getRangeAt(selection.rangeCount - 1);
+  return [first.startContainer, first.startOffset, last.endContainer, last.endOffset];
+}
+
+// A Range stays in one tree, so a span across a shadow root or a frame takes one range per tree. Firefox keeps several ranges in one selection.
 function paint(open: Session): void {
   const { from, to } = selected_span(open.cursor);
-  const selection = getSelection()!;
-  const start = open.model.point_at(from);
-  const end = open.model.point_at(to - 1);
-  const range = document.createRange();
-  range.setStart(start.node, start.offset);
-  // An empty line has no character to select, so the caret there is not drawn.
-  range.setEnd(end.node, open.model.text[to - 1] === "\n" ? end.offset : end.offset + 1);
-  selection.removeAllRanges();
-  selection.addRange(range);
+  const selections = selections_of(open.model);
+  for (const selection of selections) selection.removeAllRanges();
+  const runs = open.model.tree_runs(from, to);
+  runs.forEach((run, at) => {
+    // The line end before the next tree has no character to select.
+    let run_to = run.to;
+    while (at < runs.length - 1 && run_to > run.from + 1 && open.model.text[run_to - 1] === "\n") run_to--;
+    const start = open.model.point_at(run.from);
+    const end = open.model.point_at(run_to - 1);
+    const owner = start.node.ownerDocument!;
+    const range = owner.createRange();
+    range.setStart(start.node, start.offset);
+    // An empty line has no character to select, so the caret there is not drawn.
+    range.setEnd(end.node, open.model.text[run_to - 1] === "\n" ? end.offset : end.offset + 1);
+    owner.getSelection()?.addRange(range);
+  });
+  open.painted = selections.map((selection) => ({ selection, ends: ends_of(selection) }));
   scroll_to_caret(open);
 }
 
-// Only the caret's own character counts: its paragraph can be taller than the screen. Each scrollable ancestor scrolls first, then the window.
+// The next box out that can scroll: the parent, the host of a shadow root, or the frame around a document.
+const outer_view = (node: Node): Element | null =>
+  node.parentElement ?? (node.parentNode as ShadowRoot | null)?.host ?? (node.nodeType === Node.DOCUMENT_NODE ? ((node as Document).defaultView?.frameElement ?? null) : null);
+
+// Only the caret's own character counts: its paragraph can be taller than the screen. Each scrollable ancestor scrolls first, then the window, then the same again out through each frame.
+// The boxes are all in this script's window, so a view's edges shift by the frames around it.
 function scroll_to_caret(open: Session): void {
   const caret_node = open.model.point_at(open.cursor.caret).node;
-  for (let view = caret_node instanceof Element ? caret_node : caret_node.parentElement; view; view = view.parentElement) {
-    const nested = view !== document.documentElement && view !== document.body;
-    if (nested && view.scrollHeight <= view.clientHeight && view.scrollWidth <= view.clientWidth) continue;
+  for (let view = caret_node.nodeType === Node.ELEMENT_NODE ? (caret_node as Element) : outer_view(caret_node); view; ) {
+    const owner = view.ownerDocument;
+    const nested = view !== owner.documentElement && view !== owner.body;
+    if (nested && view.scrollHeight <= view.clientHeight && view.scrollWidth <= view.clientWidth) {
+      view = outer_view(view);
+      continue;
+    }
     const box = character_box(open.model, open.cursor.caret);
-    if (!box) return;
-    const edges = nested ? view.getBoundingClientRect() : { left: 0, right: innerWidth, top: 0, bottom: innerHeight };
-    const by_x = scroll_delta({ low: box.left, high: box.right }, { low: edges.left, high: edges.right }, box.height);
-    const by_y = scroll_delta({ low: box.top, high: box.bottom }, { low: edges.top, high: edges.bottom }, box.height);
-    if (by_x || by_y) (nested ? view : window).scrollBy(by_x, by_y);
-    if (!nested) return;
+    const window_of_view = owner.defaultView;
+    if (!box || !window_of_view) return;
+    const shift = frame_offset(owner);
+    const edges = nested ? view.getBoundingClientRect() : { left: 0, right: window_of_view.innerWidth, top: 0, bottom: window_of_view.innerHeight };
+    const by_x = scroll_delta({ low: box.left, high: box.right }, { low: edges.left + shift.x, high: edges.right + shift.x }, box.height);
+    const by_y = scroll_delta({ low: box.top, high: box.bottom }, { low: edges.top + shift.y, high: edges.bottom + shift.y }, box.height);
+    if (by_x || by_y) (nested ? view : window_of_view).scrollBy(by_x, by_y);
+    view = nested ? outer_view(view) : outer_view(owner);
   }
 }
 
@@ -57,54 +88,82 @@ function scroll_to_caret(open: Session): void {
 function start_session(mode: "caret" | "visual"): Session | undefined {
   const target = page.oasisfox_caret_target;
   delete page.oasisfox_caret_target;
-  if (target !== undefined && in_other_tree(target, document)) {
-    page.oasisfox_host.show_toast("Caret cannot start inside frames or widgets yet");
+  const is_other_site_frame = target !== undefined && (target.localName === "iframe" || target.localName === "frame") && !frame_document(target);
+  if (is_other_site_frame) {
+    page.oasisfox_host.show_toast("Caret cannot reach a frame from another site");
     return undefined;
   }
-  // The model covers the whole body, so motion is not trapped in the element.
-  const model = build_text_model(document.body);
-  const caret = target === undefined ? first_visible_index(model, getSelection()!) : first_index_from(model, target);
+  // The model covers the whole page, so motion is not trapped in the element.
+  const model = build_text_model(document.body, target);
+  const caret = target === undefined ? first_visible_index(model) : model.start_index;
   if (caret === undefined || model.text === "") {
     if (target !== undefined) page.oasisfox_host.show_toast("No text here");
     return undefined;
   }
-  return { model, cursor: { anchor: caret, caret }, mode, goal_x: undefined };
+  return { model, cursor: { anchor: caret, caret }, mode, goal_x: undefined, painted: [] };
+}
+
+// A frame or a shadow host left the page while the session was open. The caret keeps its character if that is still on the page.
+function rebuild_if_stale(open: Session): Session | undefined {
+  if (trees_alive(open.model)) return open;
+  for (const selection of selections_of(open.model)) selection.removeAllRanges();
+  const model = build_text_model(document.body);
+  if (model.text === "") return undefined;
+  // A node of a removed frame throws on any read.
+  const carry = (index: number) => {
+    const { node, offset } = open.model.point_at(index);
+    try {
+      return model.index_of(node, offset);
+    } catch {
+      return undefined;
+    }
+  };
+  const caret = carry(open.cursor.caret) ?? first_visible_index(model);
+  const anchor = open.mode === "visual" ? (carry(open.cursor.anchor) ?? caret) : caret;
+  return { ...open, model, cursor: { anchor, caret }, goal_x: undefined, painted: [] };
 }
 
 function end_session(): void {
-  session = undefined;
+  for (const selection of session ? selections_of(session.model) : []) selection.removeAllRanges();
   getSelection()?.removeAllRanges();
+  session = undefined;
   clear_selection_colors();
 }
 
-// The span of characters the page's own selection covers, when it lies in the model's text.
-function page_span(model: TextModel): { first: number; last: number } | undefined {
-  const selection = getSelection()!;
+// The span of characters a selection covers, when it lies in the model's text.
+function selection_span(model: TextModel, selection: Selection): { first: number; last: number } | undefined {
   if (selection.rangeCount === 0) return undefined;
   const range = selection.getRangeAt(0);
   const first = model.index_of(range.startContainer, range.startOffset);
-  const end = range.endContainer;
+  const last_range = selection.getRangeAt(selection.rangeCount - 1);
+  const end = last_range.endContainer;
   const end_in_text = end.nodeType === Node.TEXT_NODE;
   let last: number | undefined = first;
-  if (!range.collapsed) {
+  if (selection.rangeCount > 1 || !range.collapsed) {
     // An end on an empty line is the <br> itself, painted without the +1 a text end has. A text end at offset 0 excludes its own character, so the span stops one before it.
-    const end_index = model.index_of(end, end_in_text ? Math.max(range.endOffset - 1, 0) : range.endOffset);
-    last = end_in_text && range.endOffset === 0 && end_index !== undefined ? Math.max(end_index - 1, first ?? 0) : end_index;
+    const end_index = model.index_of(end, end_in_text ? Math.max(last_range.endOffset - 1, 0) : last_range.endOffset);
+    last = end_in_text && last_range.endOffset === 0 && end_index !== undefined ? Math.max(end_index - 1, first ?? 0) : end_index;
   }
   return first === undefined || last === undefined ? undefined : { first, last };
 }
 
-// Something else moved the page selection since the last paint, such as a find or a click. Caret mode takes the start of it. Visual mode keeps its anchor and takes the end.
+// Something else moved a page selection since the last paint, such as a find or a click. Caret mode takes the start of it. Visual mode keeps its anchor and takes the end.
 function adopt_page_selection(open: Session): void {
-  const found = page_span(open.model);
-  const { from, to } = selected_span(open.cursor);
-  if (!found || (found.first === from && found.last === to - 1)) return;
-  open.cursor = with_caret(open.cursor, open.mode === "visual" ? found.last : found.first, open.mode === "visual");
-  open.goal_x = undefined;
+  for (const selection of selections_of(open.model)) {
+    const ends = ends_of(selection);
+    const painted = open.painted.find((record) => record.selection === selection)?.ends ?? [];
+    if (ends.length === painted.length && ends.every((end, at) => end === painted[at])) continue;
+    const found = selection_span(open.model, selection);
+    if (!found) continue;
+    open.cursor = with_caret(open.cursor, open.mode === "visual" ? found.last : found.first, open.mode === "visual");
+    open.goal_x = undefined;
+    return;
+  }
 }
 
 function ensure_session(mode: "caret" | "visual"): Session | undefined {
   const mode_changed = !session || session.mode !== mode;
+  if (session) session = rebuild_if_stale(session);
   if (session) adopt_page_selection(session);
   session ??= start_session(mode);
   if (!session) {
@@ -117,7 +176,7 @@ function ensure_session(mode: "caret" | "visual"): Session | undefined {
   paint(session);
   if (mode_changed) {
     if (mode === "visual") visual_runs++;
-    void apply_selection_colors(mode);
+    void apply_selection_colors(mode, session.model.trees);
   }
   return session;
 }
@@ -143,7 +202,7 @@ const handle_move = (args: Record<string, unknown>): void => {
   const motion: Motion = { unit: args.unit as Motion["unit"], direction: (args.direction as Motion["direction"] | undefined) ?? "forward", big: args.big === true };
   let caret: number;
   if (SCREEN_LINE_UNITS.includes(motion.unit)) {
-    const target = screen_line_target(open.model, getSelection()!, open.cursor.caret, motion, open.goal_x);
+    const target = screen_line_target(open.model, open.cursor.caret, motion, open.goal_x);
     caret = target.index;
     open.goal_x = target.goal_x;
   } else {
