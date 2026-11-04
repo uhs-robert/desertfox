@@ -10,6 +10,14 @@ test("a line-mode notch of 3 lines moves 3 rows, up or down", () => {
   assert.equal(wheel_rows(fresh(), -3, 1, ROW), -3);
 });
 
+test("one mouse notch moves 3 rows whether Firefox reports deltaY 1 or 3", () => {
+  for (const delta of [1, 3]) {
+    assert.equal(wheel_rows(fresh(), delta, 1, ROW), 3);
+    assert.equal(wheel_rows(fresh(), -delta, 1, ROW), -3);
+  }
+  assert.equal(wheel_rows(fresh(), 6, 1, ROW), 6);
+});
+
 test("a page-mode notch moves ten rows per page", () => {
   assert.equal(wheel_rows(fresh(), 1, 2, ROW), 10);
 });
