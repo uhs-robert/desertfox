@@ -1,7 +1,8 @@
 // Key test case of the layering: where surfaces overlap, the one with the higher LAYERS number is on top.
 // The surfaces are top-layer popovers, where z-index has no effect, so the case hit-tests the page. At each grid point it
 // takes the top host, hides it, and sees which host shows through: the one hidden must have the higher layer attribute.
-// Which-key opens first and the toast comes after, so show order alone would put the toast on top.
+// A key press closes the which-key panel, so the toast comes first and the panel opens over it while the toast shows.
+// The re-show order itself is covered by test/content/surface.test.ts.
 import { evaluate_in_background } from "./rdp.mjs";
 
 export async function run_cases({ rdp, extension_id, run_case, send_keys, open_page, wait_event, events, expect, sleep }) {
@@ -33,11 +34,11 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, open_p
     await send_keys("v");
     await send_keys("e");
     let mark = events.length;
-    await send_keys(",", "w");
-    await wait_event(mark, (event) => event.type === "whichkey" && event.page_id === "p9_layers" && event.value !== "", "the which-key panel");
-    mark = events.length;
     await send_keys("y");
     await wait_event(mark, (event) => event.type === "toast" && event.page_id === "p9_layers", "the copied toast");
+    mark = events.length;
+    await send_keys(",w");
+    await wait_event(mark, (event) => event.type === "whichkey" && event.page_id === "p9_layers" && event.value !== "", "the which-key panel");
     const { hosts, overlaps } = JSON.parse((await in_active_tab(hit_test))[0]);
     await send_keys("-k", "Escape");
     await send_keys("-k", "Escape");
