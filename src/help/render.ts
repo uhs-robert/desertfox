@@ -150,6 +150,8 @@ function page_body(page: PageId, model: HelpModel, guide: Block[]): HTMLElement[
 function support_link(title: string, url: string): HTMLElement {
   const link = el("a", undefined, title);
   link.setAttribute("href", url);
+  link.setAttribute("target", "_blank");
+  link.setAttribute("rel", "noopener noreferrer");
   return link;
 }
 
