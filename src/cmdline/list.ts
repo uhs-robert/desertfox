@@ -109,7 +109,10 @@ export function create_list(element: HTMLElement, keys_of: (id: string) => strin
   let drawn: readonly Ranked<Row>[] | undefined;
   const images = create_image_pool();
   return {
-    render: (rows: readonly Ranked<Row>[], selected: number) => {
+    // While a live source loads there are no rows. Leaving the last rows drawn keeps the panel at its height, so the
+    // frame does not shrink and show the page behind it for a few frames.
+    render: (rows: readonly Ranked<Row>[], selected: number, loading = false) => {
+      if (loading && rows.length === 0) return;
       element.hidden = rows.length === 0;
       // A new ranking starts at the top. The same one, previewed, keeps the window.
       top = window_top(rows === drawn ? top : 0, selected, rows.length);

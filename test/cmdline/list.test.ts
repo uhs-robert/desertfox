@@ -36,6 +36,16 @@ test("the window shows at most ten rows and hides itself when there are none", (
   assert.equal(element.hidden, true);
 });
 
+test("rows that are still loading keep the last rows drawn, and an empty answer after loading hides the window", () => {
+  const { element, list } = setup();
+  list.render(rows(5), -1);
+  list.render([], -1, true);
+  assert.equal(element.hidden, false);
+  assert.equal(element.children.length, 5);
+  list.render([], -1, false);
+  assert.equal(element.hidden, true);
+});
+
 test("the window follows the selection down and up by the least that keeps it in view", () => {
   assert.equal(window_top(0, 9, 25), 0);
   assert.equal(window_top(0, 10, 25), 1);

@@ -96,7 +96,7 @@ async function open_line(start: Start, port: MessagePort): Promise<void> {
     note.textContent = shown;
     note.hidden = shown === "";
     document.body.classList.toggle("oasisfox-cmdline-error", message !== undefined);
-    list.render(session.get_rows(), session.get_selected());
+    list.render(session.get_rows(), session.get_selected(), session.get_hint() === "loading");
     // The host holds the frame at the height the panel needs, so the list grows upward and the line stays put.
     if (panel.offsetHeight !== told_height) tell_host({ kind: "resize", height: (told_height = panel.offsetHeight) });
   };
