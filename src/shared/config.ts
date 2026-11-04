@@ -60,14 +60,18 @@ export type Settings = {
 // The reserved value of `new_tab_page` and `home_page` that names the built-in new tab page.
 export const BUILT_IN_PAGE = "oasisfox";
 export const NEW_TAB_PAGE_FILE = "newtab.html";
+// `newtab.html?builtin` draws the built-in page even when `new_tab_page` redirects, so `home_page = "oasisfox"` still reaches it.
+export const BUILT_IN_QUERY = "builtin";
 
 // A URL value is opened by redirect, so only web schemes are accepted: `javascript:` or `data:` would run in the extension page.
-export const is_web_url = (text: string): boolean => /^https?:\/\/\S+$/i.test(text);
+// The parse check also refuses what the scheme check lets through but `location.replace` throws on, such as a bad port.
+export const is_web_url = (text: string): boolean => /^https?:\/\/\S+$/i.test(text) && URL.canParse(text);
 
 export type NewTabTarget = { kind: "built_in" } | { kind: "redirect"; url: string };
 
 // A value that is neither a web URL nor the reserved word falls back to the built-in page: the stored config can come from elsewhere than the build check.
-export function resolve_new_tab_page(new_tab_page: string | undefined): NewTabTarget {
+export function resolve_new_tab_page(new_tab_page: string | undefined, page_query = ""): NewTabTarget {
+  if (new URLSearchParams(page_query).has(BUILT_IN_QUERY)) return { kind: "built_in" };
   return new_tab_page !== undefined && is_web_url(new_tab_page) ? { kind: "redirect", url: new_tab_page } : { kind: "built_in" };
 }
 
