@@ -144,6 +144,7 @@ export function pick_tab(tabs: readonly ListedTab[], text: string, current_windo
     if (chosen.length === 1) return chosen[0] as ListedTab;
     throw new Error(`tab ${numbered?.[1]} exists in several windows: ${at_place.map((tab) => `"${tab.title}"`).join(" and ")}`);
   }
+  if (numbered && numbered[2] === undefined) throw new Error(`no tab at place ${numbered[1]}`);
   const match = best_match(typed, tabs, (tab) => ({ name: tab.title, description: tab.url }));
   if (match.found === "none") throw new Error(`no tab matches "${typed}"`);
   if (match.found === "tie") throw new Error(`"${typed}" matches "${match.first.number} ${match.first.title}" and "${match.second.number} ${match.second.title}" equally, use a number`);

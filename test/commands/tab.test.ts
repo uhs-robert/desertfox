@@ -183,6 +183,11 @@ test("a number with no tab there falls back to the text", () => {
   assert.equal(pick_tab([listed(1, 1, "2024 plans")], "2024 plans", 1).id, 1);
 });
 
+test("a bare number with no tab at that place is refused, not matched against titles and addresses", () => {
+  const five = [1, 2, 3, 4, 5].map((number) => listed(number, number, `Page 9 of ${number}`, 1, `https://site9.test/${number}`));
+  assert.throws(() => pick_tab(five, "9", 1), /no tab at place 9/);
+});
+
 test("pick_tab takes the best match on title and address", () => {
   assert.equal(pick_tab(LISTED, "mail", 1).id, 11);
   assert.equal(pick_tab(LISTED, "t14", 1).id, 14);

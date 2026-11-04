@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { bookmark_items, create_complete_items, listed_tabs } from "../../src/background/complete_items.ts";
+import { bookmark_items, create_complete_items, flatten_bookmarks, listed_tabs } from "../../src/background/complete_items.ts";
 import type { BookmarkNode, LineScope, TabLike } from "../../src/background/complete_items.ts";
 
 const tab = (id: number, index: number, window_id: number, incognito: boolean, title = `Tab ${id}`): TabLike => ({ id, index, windowId: window_id, title, url: `https://site${id}.test/`, incognito });
@@ -119,4 +119,14 @@ test("a tab that navigates or closes while the lookup runs gets nothing", async 
   assert.equal(await service.answer("tabs", NORMAL_LINE), undefined);
   opened.add(1);
   assert.equal(await service.answer("bookmarks", NORMAL_LINE), undefined);
+});
+
+test("the bookmark tree flattens to every nested bookmark, newest added first, with no cap", () => {
+  const tree: BookmarkNode[] = [
+    { type: "folder", dateAdded: 1, children: [{ type: "bookmark", title: "Old", url: "https://old.test/", dateAdded: 10 }, { type: "folder", dateAdded: 2, children: [{ type: "bookmark", title: "Deep", url: "https://deep.test/", dateAdded: 30 }] }] },
+    { type: "bookmark", title: "Mid", url: "https://mid.test/", dateAdded: 20 },
+  ];
+  assert.deepEqual(bookmark_items(flatten_bookmarks(tree)).map((item) => item.title), ["Deep", "Mid", "Old"]);
+  const many: BookmarkNode[] = Array.from({ length: 12_000 }, (_, index) => ({ type: "bookmark", title: `B${index}`, url: `https://b${index}.test/`, dateAdded: index }));
+  assert.equal(bookmark_items(flatten_bookmarks([{ type: "folder", children: many }])).length, 12_000);
 });

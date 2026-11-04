@@ -11,10 +11,7 @@ export type ListedTab = TabItem & { id: number; window_id: number };
 // The window and privacy of the tab that holds the line.
 export type LineScope = { window_id: number; incognito: boolean };
 
-export type BookmarkNode = { type?: string | undefined; title?: string | undefined; url?: string | undefined };
-
-// getRecent needs a count. No person keeps more bookmarks than this.
-const MOST_BOOKMARKS = 10_000;
+export type BookmarkNode = { type?: string | undefined; title?: string | undefined; url?: string | undefined; dateAdded?: number | undefined; children?: BookmarkNode[] | undefined };
 
 const one_line = (text: string) => text.replace(/\s+/g, " ").trim();
 
@@ -27,7 +24,20 @@ export function listed_tabs(tabs: readonly TabLike[], scope: LineScope): ListedT
     .sort((a, b) => Number(b.window_id === scope.window_id) - Number(a.window_id === scope.window_id) || a.window_id - b.window_id || a.number - b.number);
 }
 
-// Newest first as getRecent gives them. Folders, separators and a repeated address drop out.
+// Every node of the bookmark tree, folders included, newest added first. `getTree` has no cap, unlike `getRecent`, so an old bookmark still opens.
+export function flatten_bookmarks(roots: readonly BookmarkNode[]): BookmarkNode[] {
+  const flat: BookmarkNode[] = [];
+  const walk = (nodes: readonly BookmarkNode[]) => {
+    for (const node of nodes) {
+      flat.push(node);
+      if (node.children) walk(node.children);
+    }
+  };
+  walk(roots);
+  return flat.sort((a, b) => (b.dateAdded ?? 0) - (a.dateAdded ?? 0));
+}
+
+// Newest first, as `flatten_bookmarks` gives them. Folders, separators and a repeated address drop out.
 export function bookmark_items(nodes: readonly BookmarkNode[]): BookmarkItem[] {
   const seen = new Set<string>();
   const items: BookmarkItem[] = [];
@@ -46,7 +56,7 @@ export const read_tabs = async (query: TabQuery, scope: LineScope, all_windows: 
 
 export const browser_complete_items_deps = {
   query_tabs: ((window_id) => browser.tabs.query(window_id === undefined ? {} : { windowId: window_id })) as TabQuery,
-  recent_bookmarks: async (): Promise<BookmarkNode[]> => browser.bookmarks.getRecent(MOST_BOOKMARKS),
+  recent_bookmarks: async (): Promise<BookmarkNode[]> => flatten_bookmarks(await browser.bookmarks.getTree()),
 };
 
 export type CompleteItemsDeps = typeof browser_complete_items_deps & {
