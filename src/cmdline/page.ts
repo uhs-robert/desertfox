@@ -13,6 +13,7 @@ import { edit_forwarded, run_token, run_token_without_keymap } from "./key_input
 import type { TokenMatcher } from "./key_input.ts";
 import type { HostToPage, PageToHost } from "./protocol.ts";
 import { unwrap, wrap } from "./protocol.ts";
+import { key_labels } from "./completion/keys.ts";
 import { create_list } from "./list.ts";
 import { create_session } from "./session.ts";
 import type { Effect, Session } from "./session.ts";
@@ -34,7 +35,6 @@ type Start = Extract<HostToPage, { kind: "start" }>;
 async function open_line(start: Start, port: MessagePort): Promise<void> {
   const input = document.querySelector<HTMLInputElement>("#line")!;
   const note = document.querySelector<HTMLElement>("#note")!;
-  const list = create_list(document.querySelector<HTMLElement>("#list")!);
   const panel = document.querySelector<HTMLElement>(".oasisfox-cmdline")!;
 
   const [stored, opened] = await Promise.all([
@@ -49,6 +49,9 @@ async function open_line(start: Start, port: MessagePort): Promise<void> {
   user_style.textContent = opened.css;
   document.head.append(user_style);
   const keymap = stored[COMPILED_KEYMAP_STORAGE_KEY] as CompiledKeymap | undefined;
+  const opened_from = typeof start.mode === "string" ? start.mode : "normal";
+  const key_text = key_labels(keymap, opened.commands, opened_from);
+  const list = create_list(document.querySelector<HTMLElement>("#list")!, (id) => key_text.get(id) ?? "");
   const matcher: TokenMatcher | undefined = keymap?.modes.cmdline ? create_matcher(keymap) : undefined;
   // Asks the background for tabs and bookmarks only when a subject needs them, and only here, after the ticket redeemed.
   const live = create_live_source({
@@ -61,7 +64,7 @@ async function open_line(start: Start, port: MessagePort): Promise<void> {
   const session: Session = create_session({
     history: opened.history,
     parse: (text) => parse_command_line(lookup, text, opened.sources),
-    complete: create_completer(lookup, opened.commands, opened.command_aliases, opened.sources, typeof start.mode === "string" ? start.mode : "normal", live),
+    complete: create_completer(lookup, opened.commands, opened.command_aliases, opened.sources, opened_from, live),
     // Only a missing value is caught here. The router still checks everything else when it runs the command.
     precheck: (invocation) => {
       const command = lookup.find(invocation.id);
