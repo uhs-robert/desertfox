@@ -177,7 +177,7 @@ export function start_server() {
     if (url.pathname === "/find_scroll") {
       // Four matches of "marker": one at the top, one far below, one inside a box that scrolls sideways, and one at the bottom of a frame that scrolls itself.
       const inner = "<body style='margin:0'><div style='height:1500px'></div><p>marker four</p></body>";
-      const body = `<p id="m1">marker one</p><div style="height:2500px"></div><p id="m2">marker two</p><div style="height:2500px"></div><div id="wide" style="width:300px;overflow-x:scroll;white-space:nowrap;border:1px solid"><span style="display:inline-block;width:2000px"></span>marker three</div><div style="height:2500px"></div><iframe id="frame" srcdoc="${inner}" style="width:400px;height:200px;display:block"></iframe><div style="height:800px"></div>`;
+      const body = `<p id="m1">marker one</p><div style="width:4000px;height:30px"><span style="margin-left:3500px">marker five</span></div><div style="height:2500px"></div><p id="m6" style="width:3ch;word-break:break-all;font-family:monospace">marker</p><div style="height:2500px"></div><p id="m2">marker two</p><div style="height:2500px"></div><div id="wide" style="width:300px;overflow-x:scroll;white-space:nowrap;border:1px solid"><span style="display:inline-block;width:2000px"></span>marker three</div><div style="height:2500px"></div><iframe id="frame" srcdoc="${inner}" style="width:400px;height:200px;display:block"></iframe><div style="height:800px"></div>`;
       // With smooth in the id the page asks for animated scrolls, as many sites do.
       const smooth = id.includes("smooth") ? "<style>html, #wide { scroll-behavior: smooth }</style>" : "";
       return response.end(page(`find_scroll ${id}`, body, smooth));
