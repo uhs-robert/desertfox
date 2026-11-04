@@ -214,12 +214,13 @@ test("the precompiled ignore regex agrees with matches_pattern on every pattern 
   const patterns = [
     "<all_urls>", "*://*/*", "*://*.docs.test/*", "https://a.test/*", "https://a.test/app/*", "https://a.test/app?x=*",
     "http://a.test/", "file:///*", "ftp://f.test/*", "https://a.test/a*b*c", "https://A.test/*", "not a pattern", "https://*/x",
+    "https://*foo.com/*", "https://a*.test/*", "https://*.a*.test/*", "https://a.test:8080/*", "https://[::1]/*", "https://a.test/a#b", "https://a.test/*#*",
   ];
   const urls = [
     "https://a.test/", "https://a.test/x", "http://a.test/", "https://a.test:8080/app/x", "https://a.test/app?x=1", "https://a.test/app?y=1",
     "https://a.test/app#frag", "https://a.test/abc#c", "https://a.test/aXbYc", "https://a.docs.test/p?q=1", "http://docs.test/", "https://evildocs.test/",
     "https://evil.test/?x=@a.test/", "https://a.test@evil.test/", "https://user:pw@a.test/x", "https://b.test/x", "file:///tmp/x", "ftp://f.test/z",
-    "about:blank", "about:srcdoc", "data:text/html,hi", "blob:https://a.test/uuid", "javascript:void(0)", "https://[::1]:3000/x", "https://xa.test/",
+    "about:blank", "about:srcdoc", "data:text/html,hi", "blob:https://a.test/uuid", "javascript:void(0)", "https://[::1]:3000/x", "https://xa.test/", "https://foo.com/", "https://xfoo.com/", "https://a.test:8080/x", "https://a.test/a#b", "https://a.test/a", "https://ab.test/",
   ];
   for (const pattern of patterns) {
     for (const url of urls) {
@@ -227,6 +228,9 @@ test("the precompiled ignore regex agrees with matches_pattern on every pattern 
     }
   }
   assert.equal(is_ignored_site(patterns, "https://a.test/x"), true);
+  for (const bad of ["https://*foo.com/*", "https://a*.test/*", "https://a.test:8080/*", "https://a.test/a#b"]) {
+    assert.equal(ignore_regex_source([bad]), undefined, bad);
+  }
   assert.equal(ignore_regex_source([]), undefined);
   assert.equal(ignore_regex_source(["not a pattern"]), undefined);
 });

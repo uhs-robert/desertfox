@@ -2,10 +2,11 @@ import type { BundleName } from "../../shared/bundles.ts";
 import { bundles } from "../bundles.ts";
 import type { ContentHandler } from "./types.ts";
 
+const BUNDLE_LABELS: Record<string, string> = { hints: "hints", cmdline: "the command line", whichkey: "the which-key panel", caret: "caret mode" };
 
-// The code of these commands sits in a bundle that loads on the first run. A bundle that registers no handler yet refuses with `needs <bundle>`.
+// The code of these commands sits in a bundle that loads on the first run. A bundle that registers no handler yet refuses with `needs <label>`.
 const from_bundle = (command_id: string, bundle: BundleName): ContentHandler => ({
-  run: (args) => bundles.run_command(command_id, bundle, args, `needs ${bundle}`),
+  run: (args) => bundles.run_command(command_id, bundle, args, `needs ${BUNDLE_LABELS[bundle]}`),
 });
 
 export const hint_run = from_bundle("hint.run", "hints");

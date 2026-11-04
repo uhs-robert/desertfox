@@ -32,8 +32,10 @@ export function matches_pattern(pattern: string, url: string): boolean {
 }
 
 // One regex source over `location.href` for a list of patterns, so the content script holds no pattern parser.
-// It must agree with `matches_pattern` on every URL. A pattern that does not parse is dropped, as there.
-// `[^#]` stands where the path wildcard sits, because `matches_pattern` never looks at the fragment.
+// It must agree with `matches_pattern` on every URL, and it must never build a regex that throws.
+// A pattern that does not parse is dropped, as there. So is one that `matches_pattern` can never match:
+// a `*` inside a host label, a port in the host, or a `#` in the path, since it compares the bare host and never sees a fragment.
+// `[^#]` stands where the path wildcard sits, for the same reason.
 export function ignore_regex_source(patterns: readonly string[]): string | undefined {
   const alternatives: string[] = [];
   for (const pattern of patterns) {
@@ -44,6 +46,9 @@ export function ignore_regex_source(patterns: readonly string[]): string | undef
     const parts = PATTERN_PARTS.exec(pattern);
     if (!parts) continue;
     const [, scheme, host, path] = parts as unknown as [string, string, string, string];
+    const host_label = host.startsWith("*.") ? host.slice(2) : host;
+    if (host !== "*" && (host_label.includes("*") || (host_label.includes(":") && !host_label.startsWith("[")))) continue;
+    if (path.includes("#")) continue;
     const scheme_source = scheme === "*" ? "https?" : scheme;
     const host_source =
       host === "*" ? "[^/?#]*" : host.startsWith("*.") ? `(?:[^/?#@:]*\\.)?${escape_regex(host.slice(2))}` : escape_regex(host);
