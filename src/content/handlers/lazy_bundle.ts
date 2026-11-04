@@ -19,4 +19,7 @@ export const cmdline_history = from_bundle("cmdline.history", "cmdline");
 export const cmdline_clear = from_bundle("cmdline.clear", "cmdline");
 export const caret_move = from_bundle("caret.move", "caret");
 export const visual_act = from_bundle("visual.act", "caret");
+export const find_open = from_bundle("find.open", "caret");
+export const find_next = from_bundle("find.next", "caret");
+export const find_prev = from_bundle("find.prev", "caret");
 export const help_whichkey = from_bundle("help.whichkey", "whichkey");

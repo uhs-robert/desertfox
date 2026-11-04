@@ -2,6 +2,7 @@
 // The text model lets us ask from any character and read the answer back as a character.
 
 import type { Motion } from "./motion.ts";
+import { scroll_delta } from "./scroll_delta.ts";
 import type { TextModel, TreeRun } from "./text_model.ts";
 
 const DOCUMENT_NODE = 9;
@@ -30,6 +31,39 @@ export function character_box(model: TextModel, index: number): DOMRect | undefi
   if (box.height === 0) return undefined;
   const shift = frame_offset(node.ownerDocument!);
   return new DOMRect(box.x + shift.x, box.y + shift.y, box.width, box.height);
+}
+
+// The next box out that can scroll: the parent, the host of a shadow root, or the frame around a document.
+const outer_view = (node: Node): Element | null =>
+  node.parentElement ?? (node.parentNode as ShadowRoot | null)?.host ?? (node.nodeType === Node.DOCUMENT_NODE ? ((node as Document).defaultView?.frameElement ?? null) : null);
+
+// Only the one character counts: its paragraph can be taller than the screen. Each scrollable ancestor scrolls first, then the window, then the same again out through each frame.
+// The boxes are all in this script's window, so a view's edges shift by the frames around it.
+// `bottom_inset` keeps the match above something drawn over the bottom of the window, such as the command line. `before_scroll` sees each view just before it moves.
+export function scroll_to_index(model: TextModel, index: number, options: { before_scroll?: (view: Element | Window) => void; bottom_inset?: number } = {}): void {
+  const caret_node = model.point_at(index).node;
+  for (let view = caret_node.nodeType === Node.ELEMENT_NODE ? (caret_node as Element) : outer_view(caret_node); view; ) {
+    const owner = view.ownerDocument;
+    const nested = view !== owner.documentElement && view !== owner.body;
+    if (nested && view.scrollHeight <= view.clientHeight && view.scrollWidth <= view.clientWidth) {
+      view = outer_view(view);
+      continue;
+    }
+    const box = character_box(model, index);
+    const window_of_view = owner.defaultView;
+    if (!box || !window_of_view) return;
+    const shift = frame_offset(owner);
+    const edges = nested ? view.getBoundingClientRect() : { left: 0, right: window_of_view.innerWidth, top: 0, bottom: window_of_view.innerHeight - (options.bottom_inset ?? 0) };
+    const by_x = scroll_delta({ low: box.left, high: box.right }, { low: edges.left + shift.x, high: edges.right + shift.x }, box.height);
+    const by_y = scroll_delta({ low: box.top, high: box.bottom }, { low: edges.top + shift.y, high: edges.bottom + shift.y }, box.height);
+    if (by_x || by_y) {
+      const scrolled = nested ? view : window_of_view;
+      options.before_scroll?.(scrolled);
+      scrolled.scrollBy(by_x, by_y);
+    }
+    // The walk stops at this script's own document: past it, the box is in a different space than the outer views.
+    view = nested ? outer_view(view) : owner === document ? null : outer_view(owner);
+  }
 }
 
 // `goal_x` is where j and k aim on each new line, so a short line in between does not move the column. A caller keeps what comes back for the next j or k and drops it after any other motion.

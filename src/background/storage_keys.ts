@@ -42,3 +42,6 @@ export const WINDOW_FOCUS_STORAGE_KEY = "oasisfox_window_focus";
 // The last repeatable request in `storage.session`, for `.`. A private window has a slot of its own, so a private command never repeats in a normal window.
 export const REPEAT_STORAGE_KEY = "oasisfox_last_repeat";
 export const REPEAT_PRIVATE_STORAGE_KEY = "oasisfox_last_repeat_private";
+
+// The last page search, `{ query, direction }`, for `n` and `N` after a reload. Not written from a private window.
+export const FIND_LAST_STORAGE_KEY = "oasisfox_find_last";

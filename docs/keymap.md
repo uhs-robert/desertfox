@@ -20,7 +20,7 @@ A note "(prompts)" means the binding leaves a param out, so the command line ask
 
 <!-- BEGIN generated -->
 
-bound: 177 (normal 121, hint 2, cmdline 11, caret 18, visual 20, insert 1, ignore 1, browser 3) | later: 14 | dropped: 6
+bound: 181 (normal 125, hint 2, cmdline 11, caret 18, visual 20, insert 1, ignore 1, browser 3) | later: 14 | dropped: 6
 
 ### normal
 
@@ -145,6 +145,10 @@ bound: 177 (normal 121, hint 2, cmdline 11, caret 18, visual 20, insert 1, ignor
 | `;i` | bound | `hint --inputs` | Click input |  |
 | `;l` | bound | `hint --links` | Click link |  |
 | `:` | bound | `cmdline.open` | Command line |  |
+| `/` | bound | `find.open` | Find forward |  |
+| `?` | bound | `find.open --backward` | Find backward |  |
+| `n` | bound | `find.next` | Next match |  |
+| `N` | bound | `find.prev` | Previous match |  |
 | `g?` | bound | `help` | Help |  |
 | `gV` | bound | `mode caret` | Set mode |  |
 | `m` | later | `mark.add` |  | phase 3, key param |

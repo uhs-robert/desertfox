@@ -11,13 +11,16 @@ export type HostToPage =
   // Sent once the page said it is ready, with the port in its transfer list. The page trades `ticket` with the
   // background for its data, so a forged `start` gets nothing. `tokens` are the keys typed while the page loaded, in order.
   // `mode` is the mode the line was opened from, which decides the commands the list offers.
-  | { kind: "start"; ticket: string; text: string; tokens: string[]; mode: string }
+  // `search` makes the line a page search: it types no command, and the host reads each edit.
+  | { kind: "start"; ticket: string; text: string; tokens: string[]; mode: string; search?: "forward" | "backward" | undefined }
   // A key that reached the host script instead of the page, for example after a click on the page.
   | { kind: "token"; token: string }
   // Sent once the host moved focus into the frame, after every key it forwarded. Later keys reach the page directly.
   | { kind: "focused" }
   // Sent after the frame loaded. A page that is still ours answers `here`.
-  | { kind: "check" };
+  | { kind: "check" }
+  // The line to show under a search line, such as "3 of 17". Empty clears it.
+  | { kind: "find_status"; text: string };
 
 export type PageToHost =
   | { kind: "ready" }
@@ -27,6 +30,10 @@ export type PageToHost =
   | { kind: "close" }
   // The height in pixels the frame needs for the list, the note and the line.
   | { kind: "resize"; height: number }
+  // The text of a search line, sent after each edit.
+  | { kind: "find_text"; text: string }
+  // Enter on a search line.
+  | { kind: "find_commit" }
   | { kind: "submit"; invocation: Invocation };
 
 export const MESSAGE_MARK = "oasisfox_cmdline";

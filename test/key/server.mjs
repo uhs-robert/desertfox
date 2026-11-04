@@ -165,6 +165,19 @@ export function start_server() {
       const root = '<script>document.getElementById("host").attachShadow({ mode: "closed" }).innerHTML = "mid";</script>';
       return response.end(page(`caret_inline_host ${id}`, `<p id="first" style="width:12ch;font-family:monospace">aaa <span id="host"></span> bbb ccc ddd eee</p>${root}`));
     }
+    if (url.pathname === "/find_page") {
+      // Five matches of "needle": on the page, in a same-origin frame, in an open root, in a closed root, and far below the first screen.
+      const roots = `<script>
+        document.getElementById("open_host").attachShadow({ mode: "open" }).innerHTML = '<p>needle three</p>';
+        document.getElementById("closed_host").attachShadow({ mode: "closed" }).innerHTML = '<p>needle four</p>';
+      </script>`;
+      const body = `<p id="one">needle one</p><iframe id="frame" srcdoc="<p>needle two</p>" style="width:300px;height:60px"></iframe><div id="open_host"></div><div id="closed_host"></div><div style="height:1800px"></div><p id="five">needle five</p>${roots}`;
+      return response.end(page(`find_page ${id}`, body));
+    }
+    if (url.pathname === "/find_big") {
+      // A million matches of "e" in one text node, and one "ex" at the end: a scan for "e" takes many slices.
+      return response.end(page(`find_big ${id}`, `<p id="big" style="word-break:break-all">${"e ".repeat(1000000)}ex</p>`));
+    }
     if (url.pathname === "/caret_columns") {
       // The middle line is short: j over it must still come back to the column the caret left.
       return response.end(page(`caret_columns ${id}`, '<p style="font-family:monospace">abcdefghij<br>ab<br>abcdefghij</p>'));

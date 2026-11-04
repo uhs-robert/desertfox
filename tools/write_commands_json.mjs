@@ -22,6 +22,7 @@ const COMMAND_MODULES = [
   "src/commands/cmdline.ts",
   "src/commands/caret.ts",
   "src/commands/visual.ts",
+  "src/commands/find.ts",
   "src/commands/help.ts",
   "src/commands/engine.ts",
   "src/commands/command.ts",

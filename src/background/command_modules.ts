@@ -16,6 +16,7 @@ import "../commands/hint.ts";
 import "../commands/cmdline.ts";
 import "../commands/caret.ts";
 import "../commands/visual.ts";
+import "../commands/find.ts";
 import "../commands/help.ts";
 import "../commands/engine.ts";
 import "../commands/command.ts";

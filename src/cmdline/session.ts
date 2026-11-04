@@ -10,7 +10,9 @@ export type Effect =
   | { kind: "render" }
   | { kind: "close" }
   // The text parsed. `text` is what to put in the history.
-  | { kind: "submit"; invocation: Invocation; text: string };
+  | { kind: "submit"; invocation: Invocation; text: string }
+  // Enter on a search line: the search keeps its match.
+  | { kind: "find_commit" };
 
 export type SessionDeps = {
   history: readonly string[];
@@ -19,7 +21,9 @@ export type SessionDeps = {
   // Undefined when the command is fine. The pre-check must not touch the ticket, the port or `run`.
   precheck?: (invocation: Invocation) => string | undefined;
   // What the list offers for a text and a caret. Without it the line has no list.
-  complete?: (text: string, caret: number) => Completion;
+  complete?: ((text: string, caret: number) => Completion) | undefined;
+  // The line is a page search. Its text is a pattern and no command: Enter commits it, and the history and the list stay off.
+  search?: boolean;
 };
 
 const NO_ROWS: Completion["rows"] = [];
@@ -66,7 +70,11 @@ export function create_session(deps: SessionDeps) {
     caret = completion.start + row.insert.length;
   };
 
+  // Shown under a search line in place of the usage.
+  let status = "";
+
   const submit = (): Effect => {
+    if (deps.search) return text === "" ? { kind: "close" } : { kind: "find_commit" };
     const line = text.replace(/^[\s:]+/, "").trim();
     if (line === "") return { kind: "close" };
     const parsed = deps.parse(line);
@@ -107,6 +115,7 @@ export function create_session(deps: SessionDeps) {
   };
 
   const walk_history = (direction: unknown): Effect => {
+    if (deps.search) return { kind: "render" };
     if (!fresh && rows().length > 0) return step_selection(direction);
     const next = direction === "next" ? cursor.next() : cursor.prev(text);
     if (next !== undefined) {
@@ -126,6 +135,7 @@ export function create_session(deps: SessionDeps) {
     get_selected: () => selected,
     // For the note row: the selected row's usage, else "no match" for an empty list, else the typed command's usage.
     get_hint: (): string | undefined => {
+      if (deps.search) return status;
       const row = completion?.rows[selected];
       if (row) return row.usage;
       if (completion?.loading) return "loading";
@@ -149,6 +159,9 @@ export function create_session(deps: SessionDeps) {
     source_ready: () => {
       if (selected >= 0 || !completion) return;
       completion = deps.complete?.(text, caret);
+    },
+    set_status: (next: string) => {
+      status = next;
     },
     // The caret moved without a change to the text, for example by an arrow key or a click.
     set_caret: (next_caret: number) => {
