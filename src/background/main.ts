@@ -1,7 +1,7 @@
 import "./command_modules.ts";
 import type { ContentToBackground } from "../shared/messages.ts";
 import type { BoundInvocation } from "../shared/invocation.ts";
-import { bundle_loader_deps, container_names, make_router_deps, reinject_deps } from "./browser_deps.ts";
+import { bundle_loader_deps, container_names, make_router_deps, page_of, reinject_deps } from "./browser_deps.ts";
 import { create_cmdline_service } from "./cmdline_service.ts";
 import { browser_complete_items_deps, create_complete_items } from "./complete_items.ts";
 import { requirement_lookup } from "./availability.ts";
@@ -32,7 +32,13 @@ const cmdline = create_cmdline_service({
   },
 });
 
-const complete_items = create_complete_items({ ...browser_complete_items_deps, is_opener: cmdline.is_opener, all_windows: async () => (await get_config()).settings.completion_all_windows === true });
+const complete_items = create_complete_items({
+  ...browser_complete_items_deps,
+  is_opener: cmdline.is_opener,
+  all_windows: async () => (await get_config()).settings.completion_all_windows === true,
+  search_engines: async () => (await get_config()).search_engines,
+  page_of,
+});
 
 // Listeners register in the first turn, so no event is missed while the config loads.
 browser.runtime.onMessage.addListener((message: unknown, sender) => {

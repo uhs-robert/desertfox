@@ -7,7 +7,7 @@ import type { CommandLookup, EnumSources } from "../../shared/registry/index.ts"
 import { bare_word_param, flag_params, is_dynamic_values, static_values, subject_param } from "../../shared/registry/params.ts";
 import { rank } from "../../shared/score.ts";
 import type { Ranked } from "../../shared/score.ts";
-import type { BookmarkItem, TabItem } from "../../shared/messages.ts";
+import type { BookmarkItem, EngineItem, TabItem } from "../../shared/messages.ts";
 import type { LiveKind, LiveSource } from "./live.ts";
 import { cursor_context } from "./tokenize.ts";
 
@@ -24,6 +24,8 @@ export type Row = {
   keywords: string[];
   // The note row shows it while this row is selected.
   usage: string;
+  // An engine the line's page cannot fill. The list dims the row.
+  unavailable?: boolean;
 };
 
 export type Completion = {
@@ -156,11 +158,39 @@ function bookmark_rows(bookmarks: readonly BookmarkItem[], usage: string): Row[]
   return bookmarks.map((bookmark) => ({ name: bookmark.title, insert: `${quote_word(bookmark.url)} `, description: bookmark.url, args: "", also_named: [], keywords: [], usage }));
 }
 
-const live_kind_of = (param: ParamDef | undefined): LiveKind | undefined =>
-  param && is_dynamic_values(param.values) && (param.values.from === "tabs" || param.values.from === "bookmarks") ? param.values.from : undefined;
+// `engine.show` works on any engine, so only a search marks the ones the page cannot fill.
+function engine_rows(engines: readonly EngineItem[], usage: string, marks_unavailable: boolean, word: string): Row[] {
+  // A word that ends in a dot names a family, so only its engines are ranked.
+  const family = word.endsWith(".") ? engines.filter((engine) => engine.name.startsWith(word)) : engines;
+  return family.map((engine) => {
+    const unavailable = marks_unavailable && !engine.available;
+    return {
+      name: engine.name,
+      insert: `${quote_word(engine.name)} `,
+      description: engine.label,
+      args: unavailable ? "unavailable" : "",
+      also_named: [],
+      keywords: [],
+      usage,
+      ...(unavailable ? { unavailable } : {}),
+    };
+  });
+}
+
+const live_kind_of = (param: ParamDef | undefined): LiveKind | undefined => {
+  if (!param || !is_dynamic_values(param.values)) return undefined;
+  const from = param.values.from;
+  return from === "tabs" || from === "bookmarks" ? from : from === "search_engines" ? "engines" : undefined;
+};
+
+// The engine takes the first word of `search`, ahead of the query that follows it.
+function first_word_param(command: Command): ParamDef | undefined {
+  const bare = bare_word_param(command);
+  return bare && is_dynamic_values(bare.values) && bare.values.from === "search_engines" ? bare : (subject_param(command) ?? bare);
+}
 
 // The completer reads the commands once, so each keystroke only ranks.
-// `live` supplies the tabs and bookmarks. Without it those subjects list nothing.
+// `live` supplies the tabs, bookmarks and engines. Without it those subjects list nothing.
 export function create_completer(
   lookup: CommandLookup,
   commands: readonly CommandMeta[],
@@ -177,12 +207,18 @@ export function create_completer(
     if (context.kind === "command") return { ...span, rows: rank(context.word, all_commands), listing: true };
     const usage = usage_line(context.command);
     if (context.kind === "flag") return { ...span, usage, rows: rank(context.word, flag_rows(context.command)), listing: true };
-    const param = context.kind === "flag_value" ? context.param : context.position === 0 ? (subject_param(context.command) ?? bare_word_param(context.command)) : undefined;
+    const param = context.kind === "flag_value" ? context.param : context.position === 0 ? first_word_param(context.command) : undefined;
     const kind = live_kind_of(param);
     if (kind && live) {
       const read = live.read(kind);
       if (read.loading) return { ...span, usage, rows: [], listing: true, loading: true };
-      const ranked = rank(context.word, kind === "tabs" ? tab_rows(read.items as TabItem[], usage) : bookmark_rows(read.items as BookmarkItem[], usage));
+      const rows =
+        kind === "tabs"
+          ? tab_rows(read.items as TabItem[], usage)
+          : kind === "engines"
+            ? engine_rows(read.items as EngineItem[], usage, context.command.id !== "engine.show", context.word)
+            : bookmark_rows(read.items as BookmarkItem[], usage);
+      const ranked = rank(context.word, rows);
       return { ...span, usage, rows: kind === "bookmarks" && context.word.trim() === "" ? ranked.slice(0, RECENT_BOOKMARKS) : ranked, listing: true };
     }
     const rows = param ? value_rows(context.command, param, sources) : [];

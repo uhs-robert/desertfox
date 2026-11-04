@@ -4,7 +4,7 @@ import { create_live_source } from "../../src/cmdline/completion/live.ts";
 import { create_completer } from "../../src/cmdline/completion/sources.ts";
 import { create_session } from "../../src/cmdline/session.ts";
 import type { CommandMeta } from "../../src/shared/command.ts";
-import type { BookmarkItem, TabItem } from "../../src/shared/messages.ts";
+import type { BookmarkItem, EngineItem, TabItem } from "../../src/shared/messages.ts";
 import { parse_command_line } from "../../src/shared/registry/index.ts";
 import { create_word_lookup } from "../../src/cmdline/word_lookup.ts";
 
@@ -20,8 +20,27 @@ const COMMANDS: CommandMeta[] = [
       { name: "where", type: "enum", values: ["here", "tab"], default: "here", short: { tab: "t" }, description: { tab: "Open in a new tab." } },
     ],
   },
+  {
+    id: "open.search",
+    name: "search",
+    label: "Search",
+    intent: "Search the web.",
+    params: [
+      { name: "engine", type: "enum", values: { from: "search_engines" }, default: "duck" },
+      { name: "query", type: "string", rest: true, main: true },
+    ],
+  },
+  { id: "engine.show", name: "engine.show", label: "Show engine", intent: "Show an engine.", params: [{ name: "engine", type: "enum", values: { from: "search_engines" } }] },
 ];
-const SOURCES = { search_engines: [], containers: [] };
+const ENGINES: EngineItem[] = [
+  { name: "duck", label: "DuckDuckGo", available: true },
+  { name: "github.repo", label: "GitHub: this repo", available: false },
+  { name: "github.repo.issues", label: "GitHub: this repo: issues", available: false },
+  { name: "github.repo.fb", label: "GitHub: this repo, with fallback", available: true },
+  { name: "youtube.channel", label: "YouTube: this channel", available: false },
+];
+// The parser reads the full list, hidden engines included.
+const SOURCES = { search_engines: ENGINES.map((engine) => engine.name), containers: [] };
 const lookup = create_word_lookup(COMMANDS, {});
 
 const TABS: TabItem[] = [
@@ -34,7 +53,7 @@ const BOOKMARKS: BookmarkItem[] = Array.from({ length: 30 }, (_, index) => ({ ti
 
 // The background answers when the test says so.
 function make() {
-  const asks: { kind: string; answer: (items: TabItem[] | BookmarkItem[]) => void }[] = [];
+  const asks: { kind: string; answer: (items: TabItem[] | BookmarkItem[] | EngineItem[]) => void }[] = [];
   const live = create_live_source({
     ask: (kind) => new Promise((resolve) => void asks.push({ kind, answer: (items) => resolve({ items }) })),
     on_ready: () => session.source_ready(),
@@ -156,4 +175,65 @@ test("a reply for a fetch that a newer one replaced is dropped and the list keep
 test("without a live source the tab subject lists nothing and asks nothing", () => {
   const complete = create_completer(lookup, COMMANDS, {}, SOURCES);
   assert.deepEqual(complete("tab ", 4).rows, []);
+});
+
+test("an empty engine word lists every engine in config order, dims the hidden ones and marks them unavailable", async () => {
+  const { session, asks, settle } = make();
+  session.edit("search ");
+  assert.equal(session.get_hint(), "loading");
+  assert.equal(asks[0]!.kind, "engines");
+  asks[0]!.answer(ENGINES);
+  await settle();
+  assert.deepEqual(names(session), ENGINES.map((engine) => engine.name));
+  const rows = session.get_rows();
+  assert.deepEqual(rows.map((row) => row.unavailable === true), [false, true, true, false, true]);
+  assert.deepEqual(rows.map((row) => row.args), ["", "unavailable", "unavailable", "", "unavailable"]);
+  assert.equal(rows[1]!.description, "GitHub: this repo");
+});
+
+test("a fuzzy word finds an engine through the dot break", async () => {
+  const { session, asks, settle } = make();
+  session.edit("search gh");
+  asks[0]!.answer(ENGINES);
+  await settle();
+  assert.ok(names(session).includes("github.repo"));
+  assert.ok(!names(session).includes("youtube.channel"));
+});
+
+test("a word that ends in a dot lists every engine under the prefix, deeper ones included, and a pick keeps the line parsing", async () => {
+  const { session, asks, settle } = make();
+  session.edit("search github.");
+  asks[0]!.answer(ENGINES);
+  await settle();
+  assert.deepEqual(names(session).sort(), ["github.repo", "github.repo.fb", "github.repo.issues"]);
+  assert.deepEqual(session.get_rows().map((row) => row.unavailable === true).sort(), [false, true, true]);
+  tab_key(session);
+  assert.equal(session.get_text(), "search github.repo ");
+});
+
+test("the engine flag value lists engines too", async () => {
+  const { session, asks, settle } = make();
+  session.edit("search --engine=yo");
+  asks[0]!.answer(ENGINES);
+  await settle();
+  assert.deepEqual(names(session), ["youtube.channel"]);
+});
+
+test("engine.show lists every engine and dims none", async () => {
+  const { session, asks, settle } = make();
+  session.edit("engine.show ");
+  asks[0]!.answer(ENGINES);
+  await settle();
+  assert.equal(names(session).length, 5);
+  assert.ok(session.get_rows().every((row) => row.unavailable === undefined && row.args === ""));
+});
+
+test("a hidden engine still parses, and a failed fetch lists no engines", async () => {
+  const { session, asks, settle } = make();
+  session.edit("search github.repo foo");
+  assert.equal(session.run("cmdline.submit", undefined).kind, "submit");
+  session.edit("search ");
+  asks[0]!.answer(undefined as unknown as EngineItem[]);
+  await settle();
+  assert.deepEqual(names(session), []);
 });
