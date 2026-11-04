@@ -28,9 +28,9 @@
       .oasisfox-cmdline-row { display: flex; align-items: center; padding: .35rem .75rem; }
       .oasisfox-cmdline-prompt { color: var(--oasisfox-accent); margin-right: .5rem; }
       .oasisfox-cmdline-input { flex: 1; background: transparent; color: inherit; border: 0; outline: 0; font: inherit; }
-      /* Each row is 26px. A column for the keys goes at the right: --oasisfox-keys-width reserves its room. */
+      /* Each row is 26px. The keys column is last and never shrinks: --oasisfox-keys-width is its widest text. */
       .oasisfox-cmdline-list { overflow: hidden; }
-      .oasisfox-cmdline-item { display: flex; align-items: center; gap: .75rem; height: 26px; padding: 0 calc(.75rem + var(--oasisfox-keys-width, 0px)) 0 .75rem; white-space: nowrap; }
+      .oasisfox-cmdline-item { display: flex; align-items: center; gap: .75rem; height: 26px; padding: 0 .75rem; white-space: nowrap; }
       .oasisfox-cmdline-selected { background: var(--oasisfox-selection); }
       .oasisfox-cmdline-unavailable { opacity: .5; }
       .oasisfox-cmdline-name { flex: 0 0 var(--oasisfox-name-width); overflow: hidden; text-overflow: ellipsis; }
@@ -39,6 +39,7 @@
       .oasisfox-cmdline-description { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--oasisfox-muted); }
       .oasisfox-cmdline-args { flex: 0 1 auto; max-width: 45%; overflow: hidden; text-overflow: ellipsis; color: var(--oasisfox-muted); opacity: .8; }
       .oasisfox-cmdline-args-short { display: none; }
+      .oasisfox-cmdline-keys { flex: 0 0 var(--oasisfox-keys-width); text-align: right; color: var(--oasisfox-accent); }
       @container (max-width: 40rem) {
         .oasisfox-cmdline-args-full { display: none; }
         .oasisfox-cmdline-args-short { display: inline; }
