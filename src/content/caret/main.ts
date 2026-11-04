@@ -1,5 +1,5 @@
-// The `caret` bundle: caret mode and visual mode. Loaded on the first entry into caret or visual mode, it registers a sink for each mode and
-// the handlers of `caret.move` and `visual.act`.
+// The `caret` bundle: caret mode and visual mode, and page search. Loaded on the first entry into caret or visual mode or the first search, it registers a sink for each mode and
+// the handlers of `caret.move`, `visual.act` and the `find.*` commands.
 
 import type { BundleHostApi, ExitDestination } from "../bundle_host.ts";
 import { move_once, SCREEN_LINE_UNITS } from "./motion.ts";
