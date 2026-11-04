@@ -11,8 +11,9 @@ export type CaretMode = "caret" | "visual";
 export const starts_caret = (action: HintAction): action is CaretMode => action === "caret" || action === "visual";
 
 export type ActionDeps = {
-  open_link: (url: string, place: Place) => void;
-  copy: (text: string) => void;
+  // A promise settles when the action is finished, so the sequence that started the hints goes on after it.
+  open_link: (url: string, place: Place) => void | Promise<unknown>;
+  copy: (text: string) => void | Promise<unknown>;
   start_caret: (target: Element, mode: CaretMode) => void;
 };
 
@@ -32,7 +33,7 @@ export function link_address(target: Target): string | undefined {
   return typeof href === "string" && href !== "" && !/^javascript:/i.test(href) ? href : undefined;
 }
 
-export function perform(action: HintAction, target: Target, deps: ActionDeps): void {
+export function perform(action: HintAction, target: Target, deps: ActionDeps): void | Promise<unknown> {
   if (action === "delete") return target.remove();
   if (action === "focus") return target.focus();
   if (starts_caret(action)) return deps.start_caret(target as unknown as Element, action);

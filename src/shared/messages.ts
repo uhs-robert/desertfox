@@ -141,7 +141,11 @@ export type RecordRepeat = {
 
 export type ContentToBackground = RunRequest | ModeChanged | LoadBundle | ListKeys | IssueCmdlineTicket | OpenCmdline | RecordCmdline | CompleteItems | RecordRepeat;
 
-export type RunResponse = { ok: true } | { ok: false; refusal: Refusal };
+// How a command ended. Done is `{ ok: true }`. A handler that returns nothing is done, and one that throws is failed.
+// Cancelled means the user left a waiting step (Escape, an unrelated key, a page change), so the rest of a sequence does not run and nothing is shown.
+export type Outcome = { ok: true; cancelled?: true } | { ok: false; message: string };
+
+export type RunResponse = { ok: true; cancelled?: true } | { ok: false; refusal: Refusal };
 
 // Background to content
 

@@ -28,12 +28,22 @@
   .oasisfox-newtab .clock .cap { fill: var(--oasisfox-bg-mantle, #1a2330); }
   .oasisfox-newtab .date { margin: 0; font-size: 1.5em; font-weight: 500; color: var(--oasisfox-primary, #85a8cc); }
   .oasisfox-newtab .digital-clock { display: inline-flex; align-items: baseline; gap: 0.5rem; padding: 0.5rem 1rem; border-radius: 8px; background: var(--oasisfox-bg-mantle, #001400); color: var(--oasisfox-primary, #4af05c); }
-  .oasisfox-newtab .digital-clock .digits { font-family: "DSEG7 Classic", monospace; font-size: 3.5em; }
+  .oasisfox-newtab .digital-clock .digits { font-family: "DSEG7 Classic", monospace; font-size: min(84px, 22vw); }
   .oasisfox-newtab .digital-clock .meridiem { font-size: 0.75em; }
   .oasisfox-newtab .clock + .date, .oasisfox-newtab .digital-clock + .date { margin-top: 1rem; padding-top: 1rem; border-top: 2px solid var(--oasisfox-border, #4e6578); }
+  /* Fixed and layered above the script-drawn page, which fills the viewport with its own background. */
+  .builtin-links { position: fixed; z-index: 1; bottom: 1.5rem; left: 0; right: 0; display: flex; flex-wrap: wrap; justify-content: center; gap: 0.5rem 1.5rem; }
+  .builtin-links a { color: var(--oasisfox-primary, #85a8cc); text-decoration: none; padding: 0.25rem 0.5rem; border-bottom: 1px solid transparent; }
+  .builtin-links a:hover, .builtin-links a:focus-visible { border-bottom-color: var(--oasisfox-border, #4e6578); color: var(--oasisfox-accent, #f0e68c); outline: none; }
 </style>
 </head>
 <body>
+<!-- The one place the built-in link targets live. Plain anchors, so hints reach them with no extra code. -->
+<nav class="builtin-links">
+  <a href="help.html#/quick-start">Getting Started</a>
+  <a href="help.html">Help</a>
+  <a href="options.html">Settings</a>
+</nav>
 <!-- The page script comes first so a redirect starts before the key scripts load. -->
 <script src="newtab.js"></script>
 <!-- moz-extension:// pages do not match <all_urls>, and executeScript cannot reach them, so every key script loads by tag.

@@ -1,6 +1,8 @@
 // Command definition: the one shape the registry stores, the validator checks
 // and `commands.json` is cut from. Types, plus the list of runtime modes.
 
+import type { Outcome } from "./messages.ts";
+
 export type ParamType = "int" | "float" | "string" | "bool" | "enum";
 
 // Runtime modes. `browser` is not here: it is a keymap section, see KeymapMode.
@@ -63,7 +65,8 @@ export type CommandContext = {
 // Args reach `run` after the one validator has checked them and filled defaults.
 export type CheckedArgs = Record<string, unknown>;
 
-export type CommandRun = (ctx: CommandContext, args: CheckedArgs) => Promise<void> | void;
+// A content command may answer with an Outcome, or a promise of one that stays pending while it waits on the user. A background command returns nothing.
+export type CommandRun = (ctx: CommandContext, args: CheckedArgs) => Promise<void | Outcome> | void | Outcome;
 
 export type CommandDef = {
   // `group.name`, lowercase with underscores.
