@@ -2,7 +2,9 @@
 
 import { MODES } from "../shared/command.ts";
 import type { CommandMeta, ParamDef, ParamValue } from "../shared/command.ts";
+import { DEFAULT_SETTINGS } from "../shared/config.ts";
 import type { SearchEngine } from "../shared/config.ts";
+import { search_engine_name } from "../commands/url_build.ts";
 import { build_options_model } from "../options/model.ts";
 import type { ConfigStatus, SettingRow } from "../options/model.ts";
 import { ROLES } from "../shared/theme/roles.ts";
@@ -132,6 +134,9 @@ function compare_engine_names(left: string, right: string): number {
   return left_path.length - right_path.length;
 }
 
+// Only "<file> [<level>]" names a file. The resolver also writes "<name> (labels on the path)" and "generated under <path>".
+const FILE_ORIGIN = /^(.+) \[[^\]]*\]$/;
+
 // A url with slots such as {query} is not parseable, so the slots become a stand-in first.
 function url_host(url: string): string {
   try {
@@ -141,20 +146,21 @@ function url_host(url: string): string {
   }
 }
 
-function collect_engine_keys(node: TreeNode, path: string[], into: Map<string, string[]>): void {
+function collect_engine_keys(node: TreeNode, path: string[], default_engine: string, into: Map<string, string[]>): void {
   if (node.kind === "branch") {
-    for (const [token, child] of Object.entries(node.children)) collect_engine_keys(child, [...path, token], into);
+    for (const [token, child] of Object.entries(node.children)) collect_engine_keys(child, [...path, token], default_engine, into);
     return;
   }
   for (const step of node.steps) {
-    const engine = step.invocation.id === "open.search" ? step.invocation.args?.engine : undefined;
-    if (typeof engine === "string") into.set(engine, [...(into.get(engine) ?? []), path.join("")]);
+    if (step.invocation.id !== "open.search") continue;
+    const engine = search_engine_name(step.invocation.args?.engine, default_engine);
+    into.set(engine, [...(into.get(engine) ?? []), path.join("")]);
   }
 }
 
-function engine_rows(engines: Record<string, SearchEngine>, compiled: CompiledKeymap | undefined): EngineRow[] {
+function engine_rows(engines: Record<string, SearchEngine>, compiled: CompiledKeymap | undefined, default_engine: string): EngineRow[] {
   const keys = new Map<string, string[]>();
-  if (compiled?.modes.normal) collect_engine_keys(compiled.modes.normal, [], keys);
+  if (compiled?.modes.normal) collect_engine_keys(compiled.modes.normal, [], default_engine, keys);
   return Object.keys(engines)
     .sort(compare_engine_names)
     .map((name) => {
@@ -168,7 +174,7 @@ function engine_rows(engines: Record<string, SearchEngine>, compiled: CompiledKe
         needs: (engine.slots ?? []).map((slot) => `{${slot}}`).join(" "),
         fallback: engine.fallback ?? "",
         origins: Object.entries(engine.origins ?? {}).map(([field, origin]) => `${field}: ${origin}`),
-        files: [...new Set(Object.values(engine.origins ?? {}).map((origin) => origin.replace(/ \[[^\]]*\]$/, "")))],
+        files: [...new Set(Object.values(engine.origins ?? {}).flatMap((origin) => FILE_ORIGIN.exec(origin)?.[1] ?? []))],
       };
     });
 }
@@ -194,7 +200,7 @@ export function build_help_model(commands: CommandMeta[], compiled: CompiledKeym
     warnings,
     config_source: options.source_text,
     settings: options.settings,
-    engines: engine_rows(engines, compiled),
+    engines: engine_rows(engines, compiled, status?.settings.default_engine ?? DEFAULT_SETTINGS.default_engine),
     groups: [...groups].sort(([a], [b]) => a.localeCompare(b)).map(([name, rows]) => ({ name, commands: rows })),
   };
 }

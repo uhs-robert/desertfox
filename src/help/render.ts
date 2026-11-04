@@ -76,11 +76,12 @@ function engine_row(engine: EngineRow, show_files: boolean): HTMLElement {
 
 function engine_table(engines: EngineRow[]): HTMLElement {
   if (engines.length === 0) return el("span", "oasisfox-help-muted", "No engines.");
-  const files = new Set(engines.flatMap((engine) => engine.files));
+  const first_file = engines[0]!.files[0];
+  const one_file = first_file !== undefined && engines.every((engine) => engine.files.length === 1 && engine.files[0] === first_file);
   const head = el("tr", undefined, ...["engine", "label", "keys", "url"].map((name) => el("th", undefined, name)));
-  const table = el("table", "oasisfox-help-engines", head, ...engines.map((engine) => engine_row(engine, files.size > 1)));
-  if (files.size !== 1) return table;
-  return el("div", undefined, el("p", "oasisfox-help-muted", `Set by ${[...files][0]}`), table);
+  const table = el("table", "oasisfox-help-engines", head, ...engines.map((engine) => engine_row(engine, !one_file)));
+  if (!one_file) return table;
+  return el("div", undefined, el("p", "oasisfox-help-muted", `Set by ${first_file}`), table);
 }
 
 function inline_node(inline: Inline): Child {
