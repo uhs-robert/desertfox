@@ -14,8 +14,8 @@ export type BookmarkDeps = {
   // Newest first, the same list the completion shows.
   bookmarks: () => Promise<BookmarkItem[]>;
   open: (ctx: CommandContext, url: string, where: Where) => Promise<void>;
-  // The nodes whose address is exactly `url`.
-  nodes_for_url: (url: string) => Promise<{ id: string; type?: string | undefined }[]>;
+  // The nodes Firefox finds for `url`. It ignores case and a trailing slash, so the handler checks the address again.
+  nodes_for_url: (url: string) => Promise<{ id: string; url?: string | undefined; type?: string | undefined; unmodifiable?: string | undefined }[]>;
   tab_url: (tab_id: number | undefined) => Promise<string | undefined>;
   remove: (id: string) => Promise<void>;
   toast: (ctx: CommandContext, kind: ToastKind, message: string) => Promise<void>;
@@ -47,8 +47,11 @@ export function make_bookmark_handlers(deps: BookmarkDeps) {
       // Completion lists one row per address, so a picked row stands for every bookmark with that address.
       const url = args.bookmark.trim() === "" ? await deps.tab_url(ctx.tab_id) : pick_bookmark(await deps.bookmarks(), args.bookmark).url;
       const nodes = url === undefined ? [] : await deps.nodes_for_url(url);
-      const matches = nodes.filter((node) => node.type === "bookmark");
-      if (matches.length === 0) throw new Error("No bookmark for this page");
+      const found = nodes.filter((node) => node.url === url && (node.type === undefined || node.type === "bookmark"));
+      if (found.length === 0) throw new Error("No bookmark for this page");
+      // A managed bookmark rejects the removal, so it is left out before the first removal runs.
+      const matches = found.filter((node) => node.unmodifiable === undefined);
+      if (matches.length === 0) throw new Error("This page's bookmarks are managed and cannot be removed");
       for (const { id } of matches) await deps.remove(id);
       await deps.toast(ctx, "success", `Removed ${matches.length} ${matches.length === 1 ? "bookmark" : "bookmarks"}`);
     },

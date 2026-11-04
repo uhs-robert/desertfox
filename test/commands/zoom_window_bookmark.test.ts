@@ -124,7 +124,9 @@ test("bookmark.open opens the picked address where the flag says, and opens noth
   assert.deepEqual(opened, ["tab https://wiki.archlinux.org/"]);
 });
 
-function remove_fixture(nodes: { id: string; type?: string }[], tab_url: string | null = "https://a.test/") {
+type FakeNode = { id: string; url?: string; type?: string; unmodifiable?: string };
+
+function remove_fixture(nodes: FakeNode[], tab_url: string | null = "https://a.test/") {
   const log: string[] = [];
   const asked: string[] = [];
   const handlers = make_bookmark_handlers({
@@ -133,7 +135,7 @@ function remove_fixture(nodes: { id: string; type?: string }[], tab_url: string 
     open: async () => {},
     bookmarks: async () => BOOKMARKS,
     tab_url: async () => tab_url ?? undefined,
-    nodes_for_url: async (url) => (asked.push(url), nodes),
+    nodes_for_url: async (url) => (asked.push(url), nodes.map((node) => ({ url, ...node }))),
     remove: async (id) => void log.push(`remove ${id}`),
     toast: async (_ctx, kind, message) => void log.push(`${kind} ${message}`),
   });
@@ -173,6 +175,23 @@ test("bookmark.remove never removes a folder", async () => {
   const only_folder = remove_fixture([{ id: "dir", type: "folder" }]);
   await assert.rejects(only_folder.handlers.remove(ctx, { bookmark: "" }), /No bookmark/);
   assert.deepEqual(only_folder.log, []);
+});
+
+test("bookmark.remove keeps only the exact address, and skips managed and typeless-folder nodes", async () => {
+  const fixture = remove_fixture([
+    { id: "near", url: "https://A.test" },
+    { id: "plain" },
+    { id: "managed", unmodifiable: "managed" },
+    { id: "sep", type: "separator" },
+  ]);
+  await fixture.handlers.remove(ctx, { bookmark: "" });
+  assert.deepEqual(fixture.log, ["remove plain", "success Removed 1 bookmark"]);
+});
+
+test("bookmark.remove refuses before removing anything when every match is managed", async () => {
+  const fixture = remove_fixture([{ id: "managed", unmodifiable: "managed" }]);
+  await assert.rejects(fixture.handlers.remove(ctx, { bookmark: "" }), /managed and cannot be removed/);
+  assert.deepEqual(fixture.log, []);
 });
 
 // Windows in getAll order: 1 normal (the current one), 2 private, 3 normal used long ago, 4 normal used just now.
