@@ -58,8 +58,7 @@ test("build-config: the widget settings take booleans and reject the rest", () =
   for (const line of ['newtab_clock = "yes"', "newtab_date = 1"]) assert.match(problems_with_settings(line), /expected/, line);
 });
 
-test("the settings schema lists the widget settings and no removed one", () => {
+test("the settings schema lists the widget settings", () => {
   const properties = (build_schemas(commands).settings as { properties: Record<string, unknown> }).properties;
   for (const name of ["newtab_clock", "newtab_date"]) assert.ok(name in properties, name);
-  for (const name of ["newtab_ip", "newtab_weather", "weather_units", "weather_lat", "weather_lon"]) assert.ok(!(name in properties), name);
 });

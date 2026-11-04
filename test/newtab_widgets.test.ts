@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { clock_angles, unwrap_angle } from "../src/newtab/clock.ts";
+import { advance_hands, clock_angles, time_label, unwrap_angle } from "../src/newtab/clock.ts";
 import { date_text, enabled_widgets } from "../src/newtab/render.ts";
 
 test("clock angles: the hour hand turns once per 12 hours", () => {
@@ -23,7 +23,7 @@ test("unwrap_angle: a hand passes 360 without turning back", () => {
   assert.equal(unwrap_angle(360, 6), 366);
   assert.equal(unwrap_angle(714, 0), 720);
   assert.equal(unwrap_angle(0, 0), 0);
-  assert.equal(unwrap_angle(100, 98), 98, "a small step back stays a step back");
+  assert.equal(unwrap_angle(361, 359), 719, "forward only: a step back is the caller's to catch");
 });
 
 test("the date reads weekday, month and day, with no year", () => {
@@ -38,4 +38,32 @@ test("the date text changes across midnight", () => {
 test("each widget shows unless its setting is false", () => {
   assert.deepEqual(enabled_widgets({}), { clock: true, date: true });
   assert.deepEqual(enabled_widgets({ newtab_clock: false, newtab_date: false }), { clock: false, date: false });
+});
+
+test("advance_hands: a gap or a backward step jumps to the new angles instead of animating", () => {
+  const at = (seconds: number) => new Date(2026, 0, 1, 3, 15, seconds);
+  const first = advance_hands(null, at(10));
+  assert.equal(first.jumped, true);
+  const next = advance_hands(first, at(11));
+  assert.equal(next.jumped, false);
+  assert.equal(next.angles.second, 66);
+  const after_sleep = advance_hands(next, new Date(2026, 0, 1, 3, 20, 0));
+  assert.equal(after_sleep.jumped, true);
+  assert.equal(after_sleep.angles.second, 0, "a jump shows the plain angle, not an accumulated one");
+  const stepped_back = advance_hands(next, at(9));
+  assert.equal(stepped_back.jumped, true);
+  assert.equal(stepped_back.angles.second, 54);
+});
+
+test("advance_hands: across a wrap the hands keep turning forward", () => {
+  const first = advance_hands(null, new Date(2026, 0, 1, 3, 15, 59));
+  const wrapped = advance_hands(first, new Date(2026, 0, 1, 3, 16, 0));
+  assert.equal(wrapped.jumped, false);
+  assert.equal(wrapped.angles.second, 360);
+  assert.equal(wrapped.angles.minute, 16 * 6);
+});
+
+test("time_label gives hours and minutes", () => {
+  assert.equal(time_label(new Date(2026, 0, 1, 15, 5, 30)), time_label(new Date(2026, 0, 1, 15, 5, 59)));
+  assert.notEqual(time_label(new Date(2026, 0, 1, 15, 5, 30)), time_label(new Date(2026, 0, 1, 15, 6, 0)));
 });

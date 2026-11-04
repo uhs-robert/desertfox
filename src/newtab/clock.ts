@@ -10,10 +10,27 @@ export function clock_angles(time: Date): ClockAngles {
 }
 
 // The next angle to show: the target turned forward past `previous`, so the hand's CSS transition never spins back at a wrap.
-// A small step back (a corrected system clock) stays a step back.
 export function unwrap_angle(previous: number, target: number): number {
   const next = target + 360 * Math.floor(previous / 360);
-  return next < previous - 180 ? next + 360 : next;
+  return next < previous ? next + 360 : next;
+}
+
+// Longer than a tick plus timer jitter. A bigger step means a sleep, a throttled tab or a changed system clock.
+const MAX_ANIMATED_STEP_MS = 2500;
+
+export type ShownHands = { at_ms: number; angles: ClockAngles; jumped: boolean };
+
+// Animation only suits a normal one second step. After a gap or a backward step the hands jump to the plain angles: an animation would sweep the hand across the face or spin it almost a full turn.
+export function advance_hands(previous: ShownHands | null, time: Date): ShownHands {
+  const target = clock_angles(time);
+  const step_ms = previous === null ? Infinity : time.getTime() - previous.at_ms;
+  if (previous === null || step_ms < 0 || step_ms > MAX_ANIMATED_STEP_MS) return { at_ms: time.getTime(), angles: target, jumped: true };
+  const angles = { hour: unwrap_angle(previous.angles.hour, target.hour), minute: unwrap_angle(previous.angles.minute, target.minute), second: unwrap_angle(previous.angles.second, target.second) };
+  return { at_ms: time.getTime(), angles, jumped: false };
+}
+
+export function time_label(time: Date): string {
+  return time.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
 }
 
 const SVG_NS = "http://www.w3.org/2000/svg";
@@ -32,13 +49,19 @@ export function draw_clock(): { element: SVGElement; update(time: Date): void } 
     face.appendChild(svg_element("line", { class: name, x1: String(CENTER), y1: String(CENTER), x2: String(CENTER), y2: String(CENTER - length), "stroke-width": String(width), "stroke-linecap": "round" })) as SVGElement;
   const hands = { hour: hand("hour", 20, 3), minute: hand("minute", 35, 2), second: hand("second", 40, 1.5) };
   face.append(svg_element("circle", { class: "cap", cx: String(CENTER), cy: String(CENTER), r: "3" }));
-  const shown = { hour: 0, minute: 0, second: 0 };
+  let shown: ShownHands | null = null;
+  let label = "";
   const update = (time: Date) => {
-    const target = clock_angles(time);
-    for (const name of ["hour", "minute", "second"] as const) {
-      shown[name] = unwrap_angle(shown[name], target[name]);
-      hands[name].style.transform = `rotate(${shown[name]}deg)`;
+    shown = advance_hands(shown, time);
+    // A jump turns the transition off for one frame: reading offsetWidth applies the new angles before it comes back.
+    if (shown.jumped) face.classList.add("jumping");
+    for (const name of ["hour", "minute", "second"] as const) hands[name].style.transform = `rotate(${shown.angles[name]}deg)`;
+    if (shown.jumped) {
+      void face.getBoundingClientRect();
+      face.classList.remove("jumping");
     }
+    const next_label = time_label(time);
+    if (next_label !== label) face.setAttribute("aria-label", (label = next_label));
   };
   return { element: face, update };
 }

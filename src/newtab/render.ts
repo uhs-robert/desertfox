@@ -39,6 +39,15 @@ export function render_new_tab(body: HTMLElement, settings: WidgetSettings = {})
     clock?.update(now);
     if (enabled.date) date.textContent = date_text(now);
   };
-  tick();
-  setInterval(tick, 1000);
+  let timer: ReturnType<typeof setInterval> | undefined;
+  const start = () => {
+    tick();
+    timer = setInterval(tick, 1000);
+  };
+  // A hidden tab stops ticking. The first tick after it shows again lands past the animation gap, so the hands jump to the time.
+  document.addEventListener("visibilitychange", () => {
+    clearInterval(timer);
+    if (!document.hidden) start();
+  });
+  if (!document.hidden) start();
 }
