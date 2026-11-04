@@ -145,6 +145,7 @@ const SETTING_CHECKS: Record<keyof Settings, (value: unknown) => boolean> = {
   history_completion_max: (value) => typeof value === "number" && Number.isInteger(value) && value >= 0,
   newtab_clock: (value) => typeof value === "boolean",
   newtab_date: (value) => typeof value === "boolean",
+  open_quick_start_on_install: (value) => typeof value === "boolean",
 };
 
 const SETTING_EXPECTATIONS: Record<keyof Settings, string> = {
@@ -165,6 +166,7 @@ const SETTING_EXPECTATIONS: Record<keyof Settings, string> = {
   history_completion_max: "a whole number, 0 or more",
   newtab_clock: "true or false",
   newtab_date: "true or false",
+  open_quick_start_on_install: "true or false",
 };
 
 function is_prefix_pair(value: unknown, first_key: string): boolean {
