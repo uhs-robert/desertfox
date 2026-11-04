@@ -125,7 +125,7 @@ test("a change that throws leaves the overrides and the later changes alone", as
   assert.deepEqual(session[SETTING_OVERRIDES_STORAGE_KEY], { newtab_date: false });
 });
 
-// Only a model of a restart that keeps `storage.session`. Firefox is expected to clear it on `config.reload`; a key test settles that.
+// Only a model of a restart that keeps `storage.session`. `config.reload` clears it in Firefox, by design, so a live change does not survive a reload.
 test("a background restart that keeps session storage re-reads the file and the override still wins", async () => {
   const file = { value: managed({ hint_letters: "ab", which_key_delay_ms: 100 }) };
   const { local } = install_fake_browser(file);

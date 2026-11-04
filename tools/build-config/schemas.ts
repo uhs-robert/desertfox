@@ -49,7 +49,7 @@ function prefix_pair_schema(first_key: string): Schema {
   return { type: "object", properties: { [first_key]: prefix, tab: prefix }, required: [first_key, "tab"], additionalProperties: false };
 }
 
-// The values the schema module lists for a setting. Only the enums that use this follow the module: the other fragments below (defaults, limits, some enums) are written by hand and a test checks only the setting names.
+// The values the schema module lists for a setting. Only the enums that use this follow the module: the other fragments below (defaults, limits, some enums) are written by hand and a test checks only the setting names (see #85).
 const listed = (name: keyof typeof SETTING_SPECS): string[] => [...(SETTING_SPECS[name].listed_values?.() ?? [])];
 
 export function settings_schema(): Schema {
