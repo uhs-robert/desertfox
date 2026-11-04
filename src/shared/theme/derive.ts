@@ -32,6 +32,7 @@ const DERIVATIONS: [Exclude<Role, RequiredRole>, (colors: RoleColors, variant: V
   ["error", per_variant("#ffa0a0", "#8e0f14")],
   ["warn", per_variant("#ffba75", "#793f0d")],
   ["ok", per_variant("#7fcf78", "#315e2d")],
+  ["info", per_variant("#81c0ff", "#184571")],
   ["mode_normal", (colors) => colors.primary],
   ["mode_insert", (colors) => colors.error],
   ["mode_ignore", (colors) => colors.fg_dim],

@@ -185,6 +185,7 @@ const ROLE_MEANINGS: Record<Role, string> = {
   error: "Errors and refused commands",
   warn: "Warnings",
   ok: "Success",
+  info: "Information",
   mode_normal: "Mode badge in normal mode",
   mode_insert: "Mode badge in insert mode",
   mode_ignore: "Mode badge in ignore mode",

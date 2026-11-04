@@ -1,7 +1,9 @@
 // Mode badge colors from the palette setting, which names a theme.
 // A badge is the theme's `mode_*` role with `bg_core` as the text, so the page badge matches the editor.
 
-import type { LightIntensity, OasisTheme, Theme } from "./theme/roles.ts";
+import { DEFAULT_LIGHT_INTENSITY } from "./config.ts";
+import { LIGHT_INTENSITIES, ROLES } from "./theme/roles.ts";
+import type { LightIntensity, OasisTheme, RoleColors, Theme } from "./theme/roles.ts";
 import { OASIS_THEMES, REPO_THEMES } from "./themes.ts";
 
 export const MODE_COLOR_MODES = ["normal", "insert", "ignore", "caret", "visual"] as const;
@@ -31,8 +33,13 @@ function has_badge_roles(colors: unknown): colors is Theme {
   return typeof colors === "object" && colors !== null && variant_usable((colors as Theme).dark) && variant_usable((colors as Theme).light);
 }
 
-function oasis_theme_at(theme: OasisTheme, light_intensity: LightIntensity): Theme {
-  return { dark: theme.dark, light: theme.light[light_intensity] };
+const unpack = (colors: readonly string[]) => Object.fromEntries(ROLES.map((role, at) => [role, colors[at]])) as RoleColors;
+
+// The Oasis theme of a name, every set filled. Undefined when the name is not one.
+export function oasis_theme(name: string): OasisTheme | undefined {
+  if (!Object.hasOwn(OASIS_THEMES, name)) return undefined;
+  const packed = OASIS_THEMES[name]!;
+  return { dark: unpack(packed.dark), light: Object.fromEntries(LIGHT_INTENSITIES.map((intensity) => [intensity, unpack(packed.light[intensity])])) as OasisTheme["light"] };
 }
 
 // Every name `palette` accepts apart from the user's own theme files: the Oasis themes, then the contributed ones.
@@ -46,6 +53,7 @@ export function built_in_theme_names(): string[] {
 export function palette_mode_colors(name: string, light_intensity: LightIntensity, local_theme?: LocalTheme): ModeColors | undefined {
   if (local_theme?.name === name && has_badge_roles(local_theme.colors)) return mode_colors_of_theme(local_theme.colors);
   if (Object.hasOwn(REPO_THEMES, name)) return mode_colors_of_theme(REPO_THEMES[name]!);
-  if (Object.hasOwn(OASIS_THEMES, name)) return mode_colors_of_theme(oasis_theme_at(OASIS_THEMES[name]!, light_intensity));
-  return undefined;
+  const oasis = oasis_theme(name);
+  // A light_intensity outside 1 to 5 can come from a hand-edited managed config, so it falls back to the middle set instead of throwing.
+  return oasis && mode_colors_of_theme({ dark: oasis.dark, light: oasis.light[light_intensity] ?? oasis.light[DEFAULT_LIGHT_INTENSITY] });
 }

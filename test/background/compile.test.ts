@@ -116,6 +116,12 @@ test("the palette picks the badge colors: local theme, Oasis theme with its ligh
   const intense = compile({ ...empty_config(), settings: { palette: "oasis_moonlight", light_intensity: 5 } }).compiled.mode_colors;
   assert.deepEqual(intense, palette_mode_colors("oasis_moonlight", 5));
   assert.notDeepEqual(intense?.normal.light, palette_mode_colors("oasis_moonlight", 3)?.normal.light);
+  // A hand-edited managed config can hold any light_intensity. The keymap must still compile.
+  for (const bad of [0, 6, 2.5, "3"]) {
+    const edited = compile({ ...empty_config(), settings: { light_intensity: bad as never } });
+    assert.deepEqual(edited.compiled.mode_colors, palette_mode_colors("oasis_moonlight", 3));
+    assert.deepEqual(edited.warnings, [`settings: light_intensity ${JSON.stringify(bad)} is not 1 to 5, using 3`]);
+  }
   const unknown = compile({ ...empty_config(), settings: { palette: "moonlight" } });
   assert.deepEqual(unknown.compiled.mode_colors, palette_mode_colors("oasis_moonlight", 3));
   assert.deepEqual(unknown.warnings, ['settings: palette "moonlight" names no theme, using oasis_moonlight']);

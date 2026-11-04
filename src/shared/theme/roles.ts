@@ -17,6 +17,7 @@ export const ROLES = [
   "error",
   "warn",
   "ok",
+  "info",
   "mode_normal",
   "mode_insert",
   "mode_ignore",
@@ -39,6 +40,8 @@ export type Theme = Record<Variant, RoleColors>;
 export const LIGHT_INTENSITIES = [1, 2, 3, 4, 5] as const;
 export type LightIntensity = (typeof LIGHT_INTENSITIES)[number];
 export type OasisTheme = { dark: RoleColors; light: Record<LightIntensity, RoleColors> };
+// The generated module stores each set as colors in ROLES order, and the reader zips them back with ROLES.
+export type PackedOasisTheme = { dark: string[]; light: Record<LightIntensity, string[]> };
 
 export function is_role(name: string): name is Role {
   return (ROLES as readonly string[]).includes(name);

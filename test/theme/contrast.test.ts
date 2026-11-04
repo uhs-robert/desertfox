@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { oasis_theme } from "../../src/shared/mode_colors.ts";
 import { OASIS_THEMES } from "../../src/shared/themes.ts";
 import { LIGHT_INTENSITIES } from "../../src/shared/theme/roles.ts";
 import type { RoleColors } from "../../src/shared/theme/roles.ts";
@@ -18,9 +19,9 @@ function contrast(first: string, second: string): number {
 }
 
 // All 96 sets: 16 themes, each dark and five light.
-const sets: [string, RoleColors][] = Object.entries(OASIS_THEMES).flatMap(([name, theme]) => [
-  [`${name} dark`, theme.dark] as [string, RoleColors],
-  ...LIGHT_INTENSITIES.map((intensity) => [`${name} light ${intensity}`, theme.light[intensity]] as [string, RoleColors]),
+const sets: [string, RoleColors][] = Object.keys(OASIS_THEMES).flatMap((name) => [
+  [`${name} dark`, oasis_theme(name)!.dark] as [string, RoleColors],
+  ...LIGHT_INTENSITIES.map((intensity) => [`${name} light ${intensity}`, oasis_theme(name)!.light[intensity]] as [string, RoleColors]),
 ]);
 
 // fg_muted is for disabled text, so it has no floor.
