@@ -38,7 +38,8 @@ async function main(): Promise<void> {
     // The same shape the background stores, built from the fresh load so a config.reload shows at once.
     { source, settings: effective_settings(config.settings), managed_file_hint: `~/.mozilla/managed-storage/${browser.runtime.id}.json` },
   );
-  const guide = (await (await fetch(browser.runtime.getURL("search_engines_guide.json"))).json()) as Block[];
+  // A missing guide must not blank the other pages.
+  const guide = await fetch(browser.runtime.getURL("search_engines_guide.json")).then((response) => response.json() as Promise<Block[]>).catch(() => []);
   show_route(model, guide, false);
   window.addEventListener("hashchange", () => show_route(model, guide, true));
 }

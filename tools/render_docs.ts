@@ -69,6 +69,7 @@ export function parse_markdown(source: string, text: string): Block[] {
       continue;
     }
     if (line.includes("\t")) fail_at(index, "tabs are not supported");
+    if (line.includes("\r")) fail_at(index, "carriage returns are not supported. Use Unix line endings");
     const fence = FENCE.exec(line);
     if (fence) {
       const start = index;
