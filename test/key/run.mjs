@@ -9,7 +9,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
-import { connect_rdp, evaluate_in_background, install_temporary_addon } from "./rdp.mjs";
+import { connect_rdp, evaluate_in_background, evaluate_in_chrome, install_temporary_addon } from "./rdp.mjs";
 import { p1_cases } from "./p1.mjs";
 import { start_server } from "./server.mjs";
 
@@ -255,6 +255,15 @@ async function main() {
     // The caret bundle keeps its real code and gains the padding after it, so the caret cases run the real sinks. The which-key bundle stays real.
     writeFileSync(join(extension_dir, "caret.js"), readFileSync(join(dist_dir, "caret.js"), "utf8") + padded_bundle_text());
     await install_temporary_addon(rdp, extension_dir);
+    // The first new tab of the extension's page shows Firefox's "Your new tab has changed" notice. Once shown, its closed
+    // panel keeps the access key K of "Keep Changes" for the session, and that eats Alt+K on pages Firefox draws itself,
+    // such as about:support. Confirming the notice the way "Keep Changes" does keeps it from ever showing.
+    const notice_confirmation = await evaluate_in_chrome(rdp, `(async () => {
+      const { ExtensionSettingsStore } = ChromeUtils.importESModule("resource://gre/modules/ExtensionSettingsStore.sys.mjs");
+      await ExtensionSettingsStore.initialize();
+      await ExtensionSettingsStore.addSetting("${EXTENSION_ID}", "newTabNotification", "${EXTENSION_ID}", true, () => false);
+    })()`);
+    if (notice_confirmation?.error) throw new Error(`confirming the new tab notice failed: ${notice_confirmation.error}`);
     await sleep(1500);
     const read_injections = async (file) => {
       const all = await evaluate_in_background(rdp, EXTENSION_ID, `(async () => (await browser.storage.local.get("oasisfox_bundle_loads")).oasisfox_bundle_loads ?? [])()`);
@@ -383,9 +392,6 @@ async function main() {
     });
 
     await send_keys(...CTRL("t"));
-    // The first new tab of the extension's page shows Firefox's "extension controls your new tab" notice. It takes the next keys, so Escape dismisses it.
-    await sleep(1500);
-    await send_keys("-k", "Escape");
     await send_keys(...CTRL("l"), "about:support", "-k", "Return");
     await sleep(1500);
 
