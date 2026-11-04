@@ -1,7 +1,7 @@
 // Content script entry: a capture listener on keydown, the compiled keymap from
 // storage, and the modes. Runs in the top frame and in same-origin frames.
 
-import type { BackgroundToContent, CompiledKeymap, ContentToBackground, CountBehavior, Invocation, Mode, ModeIndicator, RunResponse, TreeLeaf } from "../shared/index.ts";
+import type { BackgroundToContent, CompiledKeymap, ContentToBackground, Mode, ModeIndicator, RunResponse, TreeLeaf } from "../shared/index.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY, COMPILED_KEYMAP_VERSION, DEFAULT_SETTINGS, current_keymap } from "../shared/index.ts";
 import { create_matcher, event_to_token } from "../shared/keys/index.ts";
 import type { BundleHostApi } from "./bundle_host.ts";
