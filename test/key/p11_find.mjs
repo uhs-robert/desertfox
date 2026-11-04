@@ -5,9 +5,12 @@
 import { evaluate_in_background } from "./rdp.mjs";
 
 export async function run_cases({ rdp, extension_id, run_case, expect, open_page, send_keys, sleep, events, wait_event, take_shot }) {
-  const in_active_tab = (code) => evaluate_in_background(rdp, extension_id, `(async () => { const [tab] = await browser.tabs.query({ active: true, currentWindow: true }); return (await browser.tabs.executeScript(tab.id, { code: ${JSON.stringify(code)} }))[0]; })()`);
+  const in_active_tab = (code) => evaluate_in_background(rdp, extension_id, `(async () => { const [tab] = await browser.tabs.query({ active: true, currentWindow: true }); return (await browser.tabs.executeScript(tab.id, { code: ${JSON.stringify(code)} }))[0]; })()`).then((value) => {
+    if (value?.error) throw new Error(`in the tab: ${JSON.stringify(value)}`);
+    return value;
+  });
   const READ_HIGHLIGHTS = `(() => {
-    const texts = (owner, name) => { const highlight = owner?.defaultView.CSS.highlights.get(name); return highlight ? [...highlight].map((range) => range.startContainer.data) : []; };
+    const texts = (owner, name) => { const highlight = owner?.defaultView.CSS.highlights.get(name); const found = []; highlight?.forEach((range) => found.push(range.startContainer.data)); return found; };
     const frame_document = document.getElementById("frame")?.contentDocument;
     const closed = document.getElementById("closed_host")?.openOrClosedShadowRoot;
     const open = document.getElementById("open_host")?.openOrClosedShadowRoot;
