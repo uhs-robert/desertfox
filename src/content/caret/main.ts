@@ -8,7 +8,7 @@ import { yank_text } from "./copy_text.ts";
 import { character_box, frame_offset, screen_line_target } from "./screen_line.ts";
 import { apply_selection_colors, clear_selection_colors } from "./selection_colors.ts";
 import { scroll_delta } from "./scroll_delta.ts";
-import { selected_text, selected_span, swap_ends, with_caret } from "./selection_state.ts";
+import { retarget, selected_text, selected_span, swap_ends, with_caret } from "./selection_state.ts";
 import type { Cursor } from "./selection_state.ts";
 import { build_text_model, documents_of, frame_document, trees_alive } from "./text_model.ts";
 import type { TextModel } from "./text_model.ts";
@@ -121,7 +121,7 @@ function rebuild_if_stale(open: Session): Session | undefined {
   };
   const caret = carry(open.cursor.caret) ?? first_visible_index(model);
   const anchor = open.mode === "visual" ? (carry(open.cursor.anchor) ?? caret) : caret;
-  return { ...open, model, cursor: { anchor, caret }, goal_x: undefined, painted: [] };
+  return retarget(open, model, { anchor, caret });
 }
 
 function end_session(): void {
