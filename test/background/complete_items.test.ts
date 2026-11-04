@@ -231,7 +231,7 @@ test("a private line lists bookmarks and no history, and does not read history",
 
 test("a failed browser call gives no open rows", async () => {
   const { service } = make({ fail: true });
-  assert.deepEqual(await service.answer("open", NORMAL_LINE), { items: { rows: [], history_max: 0 } });
+  assert.deepEqual(await service.answer("open", NORMAL_LINE), { items: { rows: [], history_max: 10 } });
 });
 
 test("the opener is checked before and after the history fetch", async () => {
@@ -253,4 +253,27 @@ test("the opener is checked before and after the history fetch", async () => {
     open_settings: async () => ({ sources: ["history"], history_max: 10 }),
   });
   assert.equal(await service.answer("open", NORMAL_LINE), undefined);
+});
+
+test("a failed history read leaves the bookmarks, and a failed bookmark read leaves the history", async () => {
+  const service = (failing: "history" | "bookmarks") =>
+    create_complete_items({
+      query_tabs: async () => [],
+      all_bookmarks: async () => {
+        if (failing === "bookmarks") throw new Error("no bookmarks");
+        return MARKS;
+      },
+      is_opener: async () => true,
+      all_windows: async () => false,
+      search_engines: async () => ENGINES,
+      page_of: async () => undefined,
+      search_history: async () => {
+        if (failing === "history") throw new Error("no history");
+        return VISITS;
+      },
+      open_settings: async () => ({ sources: ["bookmarks", "history"], history_max: 10 }),
+    });
+  const tags = async (failing: "history" | "bookmarks") => ((await service(failing).answer("open", NORMAL_LINE))?.items as { rows: { tag: string }[] }).rows.map((row) => row.tag);
+  assert.deepEqual(await tags("history"), ["bm", "bm"]);
+  assert.deepEqual(await tags("bookmarks"), ["hist", "hist", "hist"]);
 });

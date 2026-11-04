@@ -111,9 +111,9 @@ export type Asker = LineScope & { tab_id: number };
 export function create_complete_items(deps: CompleteItemsDeps) {
   const open_items = async (asker: Asker) => {
     const { sources, history_max } = await deps.open_settings();
-    const bookmarks = sources.includes("bookmarks") ? bookmark_items(await deps.all_bookmarks()) : [];
-    // Firefox records no private visit, so a private line lists none of the normal history either.
-    const history = sources.includes("history") && !asker.incognito ? history_items(await deps.search_history()) : [];
+    const bookmarks = sources.includes("bookmarks") ? bookmark_items(await deps.all_bookmarks().catch(() => [])) : [];
+    // One source failing leaves the other. Firefox records no private visit, so a private line lists none of the normal history either.
+    const history = sources.includes("history") && !asker.incognito ? history_items(await deps.search_history().catch(() => [])) : [];
     return { rows: open_rows(sources, bookmarks, history), history_max };
   };
 
