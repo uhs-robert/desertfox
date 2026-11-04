@@ -178,7 +178,9 @@ export function start_server() {
       // Four matches of "marker": one at the top, one far below, one inside a box that scrolls sideways, and one at the bottom of a frame that scrolls itself.
       const inner = "<body style='margin:0'><div style='height:1500px'></div><p>marker four</p></body>";
       const body = `<p id="m1">marker one</p><div style="height:2500px"></div><p id="m2">marker two</p><div style="height:2500px"></div><div id="wide" style="width:300px;overflow-x:scroll;white-space:nowrap;border:1px solid"><span style="display:inline-block;width:2000px"></span>marker three</div><div style="height:2500px"></div><iframe id="frame" srcdoc="${inner}" style="width:400px;height:200px;display:block"></iframe><div style="height:800px"></div>`;
-      return response.end(page(`find_scroll ${id}`, body));
+      // With smooth in the id the page asks for animated scrolls, as many sites do.
+      const smooth = id.includes("smooth") ? "<style>html, #wide { scroll-behavior: smooth }</style>" : "";
+      return response.end(page(`find_scroll ${id}`, body, smooth));
     }
     if (url.pathname === "/find_big") {
       // Three hundred thousand matches of "e" in one text node, and one "ex" at the end: a scan for "e" takes many slices.

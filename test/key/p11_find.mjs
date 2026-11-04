@@ -144,8 +144,7 @@ export async function run_cases({ rdp, extension_id, run_case, expect, open_page
     return { top: box_in(document), inner: box_in(frame?.contentDocument), frame: frame_rect && { top: frame_rect.top, bottom: frame_rect.bottom }, view_width: innerWidth, view_height: innerHeight };
   })())`)}))`;
 
-  await run_case("n and N bring each match fully into view: above, below, in a sideways scroller and in a frame", async () => {
-    const page_id = "find_scroll";
+  for (const page_id of ["find_scroll", "find_scroll_smooth"]) await run_case(`n and N bring each match fully into view: above, below, in a sideways scroller and in a frame (${page_id})`, async () => {
     await open_page("find_scroll", page_id, { new_tab: true });
     await send_keys("/marker");
     await sleep(800);
@@ -165,7 +164,7 @@ export async function run_cases({ rdp, extension_id, run_case, expect, open_page
     };
     // Around the four matches twice, so each is reached from below and from above.
     for (let step = 0; step < 8; step++) {
-      await send_keys(step % 2 === 0 ? "n" : "n");
+      await send_keys("n");
       let problem = "not read";
       for (let attempt = 0; attempt < 20 && problem; attempt++) {
         await sleep(250);
