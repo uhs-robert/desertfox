@@ -18,6 +18,12 @@ test("one mouse notch moves 3 rows whether Firefox reports deltaY 1 or 3", () =>
   assert.equal(wheel_rows(fresh(), 6, 1, ROW), 6);
 });
 
+test("fractional line-mode deltas from a touchpad accumulate one row per line", () => {
+  const state = fresh();
+  const moved = Array.from({ length: 10 }, () => wheel_rows(state, 0.1, 1, ROW));
+  assert.deepEqual(moved, [0, 0, 0, 0, 0, 0, 0, 0, 0, 1]);
+});
+
 test("a page-mode notch moves ten rows per page", () => {
   assert.equal(wheel_rows(fresh(), 1, 2, ROW), 10);
 });
