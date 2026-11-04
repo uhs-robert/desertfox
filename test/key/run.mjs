@@ -591,6 +591,8 @@ async function main() {
         state = await evaluate_in_background(rdp, EXTENSION_ID, `(() => { const view = ${extension_view("help.html")}; return { ready: !!view && !!view.document.querySelector("h1") }; })()`).catch(() => undefined);
       }
       expect(state?.ready, "the help page never rendered");
+      // Home is too short to scroll, so move to the long Commands page.
+      await evaluate_in_background(rdp, EXTENSION_ID, `(() => { ${extension_view("help.html")}.location.hash = "#/commands"; })()`);
       await sleep(800);
       const probe = () => evaluate_in_background(rdp, EXTENSION_ID, `(() => { const view = ${extension_view("help.html")}; return { y: view.scrollY, badge: view.document.querySelector("[data-oasisfox-mode]")?.getAttribute("data-oasisfox-mode") ?? null }; })()`);
       await send_keys("j", "j", "j");
