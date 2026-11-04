@@ -35,10 +35,10 @@ export async function run_cases({ run_case, expect, open_page, send_keys, sleep,
   await run_case("k passes two empty lines made with br (g, empty, empty, d)", () => check("empty_line", ["k", "k", "k"], "d", true));
   await run_case("k passes a blank line in pre (j, empty, g line)", () => check("pre", ["k", "k"], " ", true));
 
-  // Firefox's own quick find answers "/". After Enter and Escape its match stays selected on the page.
+  // Firefox's own find bar (Ctrl+F), because "/" is page search in normal mode. After Enter and Escape its match stays selected on the page.
   await run_case("V after a find with / starts at the found match", async () => {
     await open_page("caret_bug_find", "find_a", { new_tab: true });
-    await send_keys("/");
+    await send_keys("-M", "ctrl", "f", "-m", "ctrl");
     await send_keys("-d", "30", "needle");
     await send_keys("-k", "Return");
     await send_keys("-k", "Escape");
@@ -57,7 +57,7 @@ export async function run_cases({ run_case, expect, open_page, send_keys, sleep,
 
   await run_case("V right after a find with / ended by Return starts at the match", async () => {
     await open_page("caret_bug_find", "find_b", { new_tab: true });
-    await send_keys("/");
+    await send_keys("-M", "ctrl", "f", "-m", "ctrl");
     await send_keys("-d", "30", "needle");
     await send_keys("-k", "Return");
     await sleep(500);
