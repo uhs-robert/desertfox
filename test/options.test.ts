@@ -51,3 +51,15 @@ test("the status page lists every command with its id, label and intent, sorted 
     { id: "tab.next", label: "Next Tab", intent: "Go to the next tab." },
   ]);
 });
+
+test("a value that differs from the default is tagged with where it came from", () => {
+  const settings = { ...DEFAULT_SETTINGS, which_key_delay_ms: 500, hint_letters: "ab", palette: DEFAULT_SETTINGS.palette };
+  const status = { source: "managed" as const, settings, managed_file_hint: hint, overrides: ["which_key_delay_ms", "palette"], configured: ["which_key_delay_ms", "hint_letters", "palette"] };
+  const rows = build_options_model(status, []).settings;
+  const tag = (name: string) => rows.find((row) => row.name === name)?.tag;
+  assert.equal(tag("which_key_delay_ms"), "set");
+  assert.equal(tag("hint_letters"), "settings.toml");
+  // Equal to the default, so no tag even though both sources name it.
+  assert.equal(tag("palette"), undefined);
+  assert.equal(tag("which_key_border"), undefined);
+});

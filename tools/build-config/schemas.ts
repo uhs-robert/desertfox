@@ -2,9 +2,9 @@
 // (Taplo reads them for TOML) completes command names and setting names.
 
 import type { CommandMeta } from "../../src/shared/command.ts";
-import { BUILT_IN_PAGE, DEFAULT_SETTINGS, MODE_INDICATOR_VALUES, WHICH_KEY_BORDER_VALUES } from "../../src/shared/config.ts";
+import { BUILT_IN_PAGE, DEFAULT_SETTINGS } from "../../src/shared/config.ts";
 import { built_in_theme_names } from "../../src/shared/mode_colors.ts";
-import { LIGHT_INTENSITIES } from "../../src/shared/theme/roles.ts";
+import { SETTING_SPECS } from "../../src/shared/settings_schema.ts";
 import { KEYMAP_MODES } from "./merge.ts";
 import type { DataKind } from "./source_files.ts";
 
@@ -50,7 +50,10 @@ function prefix_pair_schema(first_key: string): Schema {
   return { type: "object", properties: { [first_key]: prefix, tab: prefix }, required: [first_key, "tab"], additionalProperties: false };
 }
 
-function settings_schema(): Schema {
+// The values the schema module lists for a setting, so the editor schema and the checks cannot disagree.
+const listed = (name: keyof typeof SETTING_SPECS): string[] => [...(SETTING_SPECS[name].listed_values?.() ?? [])];
+
+export function settings_schema(): Schema {
   return {
     $schema: DRAFT,
     title: "OasisFox settings",
@@ -59,10 +62,10 @@ function settings_schema(): Schema {
       which_key_delay_ms: { type: "number", minimum: 0, default: DEFAULT_SETTINGS.which_key_delay_ms },
       hint_letters: { type: "string", minLength: 2, default: DEFAULT_SETTINGS.hint_letters },
       ignore_sites: { type: "array", items: { type: "string" }, description: "Match patterns where OasisFox starts in ignore mode" },
-      which_key_border: { enum: [...WHICH_KEY_BORDER_VALUES], default: DEFAULT_SETTINGS.which_key_border, description: "Corner style of the which-key panel border" },
-      mode_indicator: { enum: [...MODE_INDICATOR_VALUES], default: DEFAULT_SETTINGS.mode_indicator, description: "When the mode badge shows: always (NORMAL too), not_normal, or off" },
+      which_key_border: { enum: listed("which_key_border"), default: DEFAULT_SETTINGS.which_key_border, description: "Corner style of the which-key panel border" },
+      mode_indicator: { enum: listed("mode_indicator"), default: DEFAULT_SETTINGS.mode_indicator, description: "When the mode badge shows: always (NORMAL too), not_normal, or off" },
       palette: { type: "string", minLength: 1, examples: built_in_theme_names(), default: DEFAULT_SETTINGS.palette, description: "Theme name: themes/<name>.toml in the config directory first, then a built-in theme. Light or dark follows the system theme" },
-      light_intensity: { enum: [...LIGHT_INTENSITIES], default: DEFAULT_SETTINGS.light_intensity, description: "Which of the five light sets of an Oasis theme the light variant uses, 1 (lightest) to 5" },
+      light_intensity: { enum: listed("light_intensity").map(Number), default: DEFAULT_SETTINGS.light_intensity, description: "Which of the five light sets of an Oasis theme the light variant uses, 1 (lightest) to 5" },
       search_prefixes: { ...prefix_pair_schema("here"), default: DEFAULT_SETTINGS.search_prefixes },
       container_prefixes: { ...prefix_pair_schema("reopen"), default: DEFAULT_SETTINGS.container_prefixes },
       home_page: { type: "string", minLength: 1, description: `URL that page.home opens, or "${BUILT_IN_PAGE}" for the built-in new tab page` },

@@ -1,5 +1,6 @@
 // Importing a command module registers its commands. tools/write_commands_json.mjs imports this file too.
 import "../commands/config.ts";
+import "../commands/settings.ts";
 import "../commands/scroll.ts";
 import "../commands/mode.ts";
 import "../commands/tab.ts";

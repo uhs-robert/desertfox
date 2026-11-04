@@ -78,7 +78,7 @@ The fields follow the Oasis action library (`home/hypr/.config/hypr/lib/act/init
 - `runs_in`: `background` or `content`. The router sends the invocation to that side. A command never runs in both.
 - `needs`: what must be true to run it. `content` means a content script in the tab. A permission name means an optional permission. The router refuses with a message instead of failing silently.
 - `count`: what a numeric prefix does. `repeat` runs the command that many times. A param name fills that param, for example `tab.goto` takes the count as its `index`. `ignore` drops it.
-- `repeatable`: whether `.` can replay the command. The default is true. Six commands opt out: `command.repeat`, `browser.close_all`, `browser.focus_page`, `config.reload`, `help.open` and `engine.show`.
+- `repeatable`: whether `.` can replay the command. The default is true. Eight commands opt out: `command.repeat`, `browser.close_all`, `browser.focus_page`, `config.reload`, `help.open`, `engine.show`, `settings.set` and `settings.unset`.
 - `modes`: the modes where a key can run the command. The default is normal.
 - `completion`: where the command line list offers the command. Absent means always. `hidden` means never, and a list of modes means only when the line was opened from one of them. Typing the name still runs the command.
 - `run`: the handler. It gets the context (tab, frame, mode) and the checked args.
@@ -254,6 +254,7 @@ Firefox reads the file only when the extension loads. The spike confirmed this: 
 - In Oasis Dots, a `just oasisfox-config` recipe runs the tool, and a key can run the recipe and then `config.reload`.
 - Users without a shell can import the merged file through the options page. OasisFox stores it in `storage.local`. Managed storage wins when both exist.
 - Since 0.1.1 the options page is a read-only status page: the config source, the settings in force, the warnings and the rebuild steps. It has no inputs. The import above stays in phase 3.
+- `set` and `unset` change a setting live, with no file edit. A change is an override in `storage.session` (`oasisfox_setting_overrides`), over the config value and under nothing else. It is global, private windows included, and a browser restart clears it. `set name value`, `set name=value`, `set name` (show) and `set name!` (flip a true or false setting) cover the cases. The two prefix settings are refused, because a live change could collide with other keys. The options page tags every value that differs from the default as from `settings.toml` or from a live `set`. Saving a live change back to `settings.toml` is not built.
 
 The background compiles the keymap into a prefix tree and writes it to `storage.local` for the content scripts.
 

@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { create_completer } from "../../../src/cmdline/completion/sources.ts";
+import { create_word_lookup } from "../../../src/cmdline/word_lookup.ts";
+import type { CommandMeta } from "../../../src/shared/command.ts";
 import { COMMAND_ALIASES, COMMANDS, SOURCES, lookup } from "./fixtures.ts";
+
+const SET: CommandMeta = { id: "settings.set", name: "set", label: "Set a setting", intent: "Change a setting.", params: [{ name: "setting", type: "string", rest: true, main: true, default: "" }] };
+const UNSET: CommandMeta = { id: "settings.unset", name: "unset", label: "Unset a setting", intent: "Drop a change.", params: [{ name: "setting", type: "string", rest: true, main: true, default: "" }] };
 
 const complete = create_completer(lookup, COMMANDS, COMMAND_ALIASES, SOURCES);
 const names = (text: string) => complete(text, text.length).rows.map((row) => row.name);
@@ -86,4 +91,24 @@ test("a typed short flag finds its row first and is no mismatch", () => {
   assert.equal(complete("tab.close -r", 12).rows[0]?.name, "--right -r");
   assert.equal(complete("search -t", 9).rows[0]?.name, "--tab -t");
   assert.equal(complete("search -c", 9).rows[0]?.name, "--container= -c=");
+});
+
+test("set offers the setting names, then the values the setting lists", () => {
+  const complete_set = create_completer(
+    create_word_lookup([...COMMANDS, SET, UNSET], {}),
+    [...COMMANDS, SET, UNSET],
+    {},
+    SOURCES,
+  );
+  const rows = (text: string) => complete_set(text, text.length).rows.map((row) => row.name);
+  assert.ok(rows("set ").includes("which_key_border"));
+  assert.deepEqual(rows("set which_key_b"), ["which_key_border"]);
+  assert.equal(complete_set("set which_key_border ", 21).rows.length, 3);
+  assert.deepEqual(rows("set which_key_border ro"), ["round"]);
+  assert.deepEqual(rows("set newtab_date "), ["true", "false"]);
+  assert.deepEqual(rows("set hint_letters "), []);
+  assert.deepEqual(rows("set which_key_border round "), []);
+  assert.deepEqual(rows("set open_completion history "), ["bookmarks", "history"]);
+  assert.ok(rows("unset ").includes("all"));
+  assert.deepEqual(rows("unset which_key_border "), []);
 });
