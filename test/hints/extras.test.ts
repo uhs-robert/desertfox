@@ -30,6 +30,12 @@ class FakeNode {
     return this.children.length;
   }
   setAttribute() {}
+  getAttribute() {
+    return null;
+  }
+  querySelectorAll() {
+    return [];
+  }
   matches(_selector: string) {
     return false;
   }
