@@ -40,6 +40,8 @@ export type RouteRequest = {
   // Set by keys and Firefox shortcuts: a missing value opens the command line. A snippet's `oasisfox.run` leaves it
   // unset and gets the validation failure instead, because nobody is there to type.
   may_prompt?: boolean;
+  // The request runs but does not replace what `.` repeats.
+  skip_repeat?: boolean;
 };
 
 export type Router = { run: (request: RouteRequest) => Promise<RunResponse> };
@@ -66,6 +68,8 @@ export function create_router(deps: RouterDeps): Router {
   }
 
   async function run(request: RouteRequest): Promise<RunResponse> {
+    // Read before any step: window.new, window.close and tab.attach change which tab is active.
+    const is_private = (await read_now(request)).active?.incognito === true;
     for (const invocation of request.invocations) {
       const outcome = await run_one(invocation, request).catch((error: unknown) => refuse(error instanceof Error ? error.message : String(error)));
       if (outcome.ok && outcome.waiting) return { ok: true };
@@ -75,19 +79,19 @@ export function create_router(deps: RouterDeps): Router {
       await deps.show_refusal(context.tab_id, refusal, context.frame_id);
       return { ok: false, refusal };
     }
-    await remember(request);
+    await remember(request, is_private);
     return { ok: true };
   }
 
   // Only a request that ran to the end counts. Content commands do not repeat here: the hint start records itself.
-  async function remember(request: RouteRequest): Promise<void> {
+  async function remember(request: RouteRequest, is_private: boolean): Promise<void> {
+    if (request.skip_repeat) return;
     const repeatable = request.invocations.filter((invocation) => {
       const command = deps.get_command(invocation.id);
       return command?.runs_in === "background" && command.repeatable !== false;
     });
     if (repeatable.length === 0) return;
-    const { active } = await read_now(request);
-    await deps.repeat_memory.save(repeatable.map(as_stored), active?.incognito === true).catch(() => undefined);
+    await deps.repeat_memory.save(repeatable.map(as_stored), is_private).catch(() => undefined);
   }
 
   async function run_one(invocation: BoundInvocation, request: RouteRequest): Promise<Outcome> {

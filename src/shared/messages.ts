@@ -20,6 +20,8 @@ export type RunRequest = {
   // Runs in order. Tab and frame come from the message sender.
   invocations: BoundInvocation[];
   mode: Mode;
+  // Set by the hints bundle on its link opens, so `.` keeps showing hints. The background honors it for a lone `open.url` only.
+  from_hints?: true;
 };
 
 export type ModeChanged = {

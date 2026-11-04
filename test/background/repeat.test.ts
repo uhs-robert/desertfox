@@ -105,14 +105,38 @@ test("the session memory keeps the two slots apart", async () => {
 
 test("a page may record only a content command whose args pass the validator", () => {
   const { fake } = repeat_setup({
-    "hint.fake": { label: "Hint", intent: "x", runs_in: "content", params: [{ name: "action", type: "enum", values: ["here", "tab"], default: "here" }], run: () => undefined },
+    "hint.run": { label: "Hint", intent: "x", runs_in: "content", params: [{ name: "action", type: "enum", values: ["here", "tab"], default: "here" }], run: () => undefined },
   });
   const get = (id: string) => fake.registry.get(id);
   const record = (invocation: unknown) => page_record({ type: "record_repeat", invocation }, get, {});
-  assert.deepEqual(record({ id: "hint.fake", args: { action: "tab" } }), { id: "hint.fake", args: { action: "tab" } });
-  assert.equal(record({ id: "hint.fake", args: { action: "nope" } }), undefined);
-  assert.equal(record({ id: "hint.fake", args: [] }), undefined);
+  assert.deepEqual(record({ id: "hint.run", args: { action: "tab" } }), { id: "hint.run", args: { action: "tab" } });
+  assert.equal(record({ id: "hint.run", args: { action: "nope" } }), undefined);
+  assert.equal(record({ id: "hint.run", args: [] }), undefined);
   assert.equal(record({ id: "tab.echo" }), undefined);
   assert.equal(record({ id: "missing.one" }), undefined);
   assert.equal(record(undefined), undefined);
+});
+
+test("the slot is the one of the tab that was active before the steps ran", async () => {
+  let incognito = false;
+  const { fake, router } = repeat_setup(
+    { "tab.flip": { ...echo, run: () => void (incognito = true) } },
+    { active_tab: async () => ({ tab_id: 7, window_id: 1, url: undefined, incognito }) },
+  );
+  await router.run({ invocations: [{ id: "tab.flip" }], mode: "normal" });
+  assert.deepEqual(fake.slots.normal, [{ id: "tab.flip" }]);
+  assert.equal(fake.slots.private, undefined);
+});
+
+test("a request marked skip_repeat runs and keeps the older memory", async () => {
+  const { fake, router, seen } = repeat_setup();
+  await router.run({ invocations: [{ id: "tab.echo", count: 2 }], mode: "normal" });
+  await router.run({ invocations: [{ id: "tab.echo", count: 5 }], mode: "normal", skip_repeat: true });
+  assert.deepEqual(seen, [2, 5]);
+  assert.deepEqual(fake.slots.normal, [{ id: "tab.echo", count: 2 }]);
+});
+
+test("a page may record only hint.run, not another content command", () => {
+  const { fake } = repeat_setup({ "page.look": { ...echo, runs_in: "content", run: () => undefined } });
+  assert.equal(page_record({ invocation: { id: "page.look" } }, (id) => fake.registry.get(id), {}), undefined);
 });

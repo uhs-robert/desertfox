@@ -92,6 +92,7 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
       invocations: request.invocations,
       mode: request.mode,
       may_prompt: true,
+      ...(request.from_hints === true && request.invocations.length === 1 && request.invocations[0]?.id === "open.url" ? { skip_repeat: true } : {}),
       ...(sender.tab?.id === undefined ? {} : { sender_tab_id: sender.tab.id }),
       ...(sender.frameId === undefined ? {} : { frame_id: sender.frameId }),
     }),

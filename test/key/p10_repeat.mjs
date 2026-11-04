@@ -46,4 +46,26 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, open_p
     await close_tabs_with("rp_hints");
     await sleep(300);
   });
+
+  // The pick navigates this tab, which can end the content script before it re-records anything, so the router must not store the open.
+  await run_case("an f pick that leaves the page then . shows hints again, and does not reopen the address", async () => {
+    await open_page("hints", "rp_here", { new_tab: true });
+    let mark = events.length;
+    await send_keys("f");
+    await send_keys("a");
+    await wait_event(mark, loaded("hint_one"), "this tab to load the first link");
+    await sleep(500);
+    await evaluate_in_background(rdp, extension_id, `(async () => { const [tab] = await browser.tabs.query({ active: true, currentWindow: true }); await browser.tabs.goBack(tab.id); })()`);
+    await sleep(1500);
+    mark = events.length;
+    await send_keys(".");
+    await sleep(700);
+    expect(!find_event(mark, loaded("hint_one")), ". reopened the address instead of showing hints");
+    await send_keys("s");
+    await wait_event(mark, loaded("hint_two"), "the second link to load after . and a label");
+    await sleep(500);
+    await close_tabs_with("hint_two");
+    await close_tabs_with("rp_here");
+    await sleep(300);
+  });
 }

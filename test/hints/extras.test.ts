@@ -370,7 +370,7 @@ test("caret with one text match starts at once at that link", async () => {
   assert.equal(page.mode(), "caret");
 });
 
-test("a hint start tells the background what `.` shows again, and says so again after a pick opened a link", async () => {
+test("a hint start tells the background what `.` shows again, and a pick that opens a link is marked from_hints", async () => {
   const page = await page_with(["one", "two"]);
   const args = { action: "tab", filter: "links", text: "", rapid: true };
   page.run(args);
@@ -378,6 +378,6 @@ test("a hint start tells the background what `.` shows again, and says so again 
   page.type(page.labels()[0]!.toLowerCase());
   await settle();
   const record = { type: "record_repeat", invocation: { id: "hint.run", args } };
-  // Once at the start and once after the pick opened its link, because the router stores that `open.url` first.
-  assert.deepEqual(page.repeat_records, [record, record]);
+  assert.deepEqual(page.repeat_records, [record]);
+  assert.equal((page.sent.at(-1) as { from_hints?: boolean }).from_hints, true);
 });

@@ -30,13 +30,13 @@ export function create_repeat_memory(storage: SessionStorage): RepeatMemory {
 // A key binding's prompt and label are not part of what ran.
 export const as_stored = ({ id, args, count }: BoundInvocation): BoundInvocation => ({ id, ...(args === undefined ? {} : { args }), ...(count === undefined ? {} : { count }) });
 
-// What a page script may record: one content command with checked args, which is the hint start. The page already
+// What a page script may record: the hint start (`hint.run`) with checked args. The page already
 // sends `run` messages, so this adds no reach, but the slot must hold only what the router would accept.
 export function page_record(message: unknown, get_command: (id: string) => CommandDef | undefined, sources: EnumSources): BoundInvocation | undefined {
   const invocation = (message as { invocation?: { id?: unknown; args?: unknown } } | undefined)?.invocation;
   if (typeof invocation?.id !== "string") return undefined;
   const command = get_command(invocation.id);
-  if (command?.runs_in !== "content" || command.repeatable === false) return undefined;
+  if (command?.id !== "hint.run" || command.runs_in !== "content" || command.repeatable === false) return undefined;
   const args = invocation.args;
   if (args !== undefined && (typeof args !== "object" || args === null || Array.isArray(args))) return undefined;
   const checked = check_args(command, args as Record<string, unknown> | undefined, sources);
