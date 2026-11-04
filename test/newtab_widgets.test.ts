@@ -67,3 +67,21 @@ test("time_label gives hours and minutes", () => {
   assert.equal(time_label(new Date(2026, 0, 1, 15, 5, 30)), time_label(new Date(2026, 0, 1, 15, 5, 59)));
   assert.notEqual(time_label(new Date(2026, 0, 1, 15, 5, 30)), time_label(new Date(2026, 0, 1, 15, 6, 0)));
 });
+
+// A Date whose local fields differ from its elapsed time, as across a daylight-saving change.
+const local_clock = (epoch_ms: number, hours: number, minutes: number, seconds: number) =>
+  Object.assign(new Date(epoch_ms), { getHours: () => hours, getMinutes: () => minutes, getSeconds: () => seconds });
+
+test("advance_hands: a daylight-saving fall-back jumps instead of sweeping the hour hand", () => {
+  const before = advance_hands(null, local_clock(0, 1, 59, 59));
+  const after = advance_hands(before, local_clock(1000, 1, 0, 0));
+  assert.equal(after.jumped, true);
+  assert.equal(after.angles.hour, 30);
+});
+
+test("advance_hands: a daylight-saving spring-forward jumps by the hour", () => {
+  const before = advance_hands(null, local_clock(0, 1, 59, 59));
+  const after = advance_hands(before, local_clock(1000, 3, 0, 0));
+  assert.equal(after.jumped, true);
+  assert.equal(after.angles.hour, 90);
+});

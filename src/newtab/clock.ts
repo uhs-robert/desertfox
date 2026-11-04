@@ -17,14 +17,21 @@ export function unwrap_angle(previous: number, target: number): number {
 
 // Longer than a tick plus timer jitter. A bigger step means a sleep, a throttled tab or a changed system clock.
 const MAX_ANIMATED_STEP_MS = 2500;
+// The most any hand turns in one animated step: the seconds hand over the longest allowed step. A hand that would turn more, or turn backward (a turn of nearly 360 forward), came from a changed local time.
+const MAX_ANIMATED_TURN_DEGREES = (MAX_ANIMATED_STEP_MS / 1000) * 6;
 
 export type ShownHands = { at_ms: number; angles: ClockAngles; jumped: boolean };
 
-// Animation only suits a normal one second step. After a gap or a backward step the hands jump to the plain angles: an animation would sweep the hand across the face or spin it almost a full turn.
+const turn_forward = (from: number, to: number) => (((to - from) % 360) + 360) % 360;
+
+// Animation only suits a normal one second step. After a gap, a backward step or a daylight-saving change of the local hour, the hands jump to the plain angles: an animation would sweep a hand across the face or spin it almost a full turn.
 export function advance_hands(previous: ShownHands | null, time: Date): ShownHands {
   const target = clock_angles(time);
-  const step_ms = previous === null ? Infinity : time.getTime() - previous.at_ms;
-  if (previous === null || step_ms < 0 || step_ms > MAX_ANIMATED_STEP_MS) return { at_ms: time.getTime(), angles: target, jumped: true };
+  const jump = { at_ms: time.getTime(), angles: target, jumped: true };
+  if (previous === null) return jump;
+  const step_ms = time.getTime() - previous.at_ms;
+  if (step_ms < 0 || step_ms > MAX_ANIMATED_STEP_MS) return jump;
+  if ((["hour", "minute", "second"] as const).some((name) => turn_forward(previous.angles[name], target[name]) > MAX_ANIMATED_TURN_DEGREES)) return jump;
   const angles = { hour: unwrap_angle(previous.angles.hour, target.hour), minute: unwrap_angle(previous.angles.minute, target.minute), second: unwrap_angle(previous.angles.second, target.second) };
   return { at_ms: time.getTime(), angles, jumped: false };
 }
