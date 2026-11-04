@@ -1,15 +1,24 @@
 // Where caret mode starts when no hint picked an element: where the page already is.
 
-import { character_box, frame_offset } from "./screen_line.ts";
+import { character_box } from "./screen_line.ts";
 import { documents_of } from "./text_model.ts";
 import type { TextModel } from "./text_model.ts";
 
+// The box must show in its own window and in the viewport of every frame around it.
 const on_screen = (node: Node): boolean => {
-  const range = node.ownerDocument!.createRange();
+  let owner = node.ownerDocument!;
+  const range = owner.createRange();
   range.selectNodeContents(node);
   const box = range.getBoundingClientRect();
-  const top = box.top + frame_offset(node.ownerDocument!).y;
-  return box.height > 0 && top + box.height > 0 && top < innerHeight;
+  if (box.height <= 0) return false;
+  let top = box.top;
+  for (;;) {
+    if (top + box.height <= 0 || top >= owner.defaultView!.innerHeight) return false;
+    const frame = owner.defaultView!.frameElement;
+    if (owner === document || !frame) return true;
+    top += frame.getBoundingClientRect().top + frame.clientTop;
+    owner = frame.ownerDocument;
+  }
 };
 
 // A character with no box of its own, such as a collapsed space, takes the next one that has a box.
