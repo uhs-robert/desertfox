@@ -20,6 +20,8 @@ export type RunRequest = {
   // Runs in order. Tab and frame come from the message sender.
   invocations: BoundInvocation[];
   mode: Mode;
+  // Set by the hints bundle on its link opens, so `.` keeps showing hints. The background honors it for a lone `open.url` only.
+  from_hints?: true;
 };
 
 export type ModeChanged = {
@@ -113,7 +115,13 @@ export type WindowItem = { number: number; title: string };
 
 export type CompleteItemsAnswer = { items: TabItem[] | BookmarkItem[] | EngineItem[] | OpenItems | WindowItem[] };
 
-export type ContentToBackground = RunRequest | ModeChanged | LoadBundle | ListKeys | IssueCmdlineTicket | OpenCmdline | RecordCmdline | CompleteItems;
+// From the `hints` bundle at the start of a pick: what `.` shows again. The background checks it like any page message, because the sender is a page script.
+export type RecordRepeat = {
+  type: "record_repeat";
+  invocation: BoundInvocation;
+};
+
+export type ContentToBackground = RunRequest | ModeChanged | LoadBundle | ListKeys | IssueCmdlineTicket | OpenCmdline | RecordCmdline | CompleteItems | RecordRepeat;
 
 export type RunResponse = { ok: true } | { ok: false; refusal: Refusal };
 

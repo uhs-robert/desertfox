@@ -20,7 +20,7 @@ A note "(prompts)" means the binding leaves a param out, so the command line ask
 
 <!-- BEGIN generated -->
 
-bound: 176 (normal 120, hint 2, cmdline 11, caret 18, visual 20, insert 1, ignore 1, browser 3) | later: 15 | dropped: 6
+bound: 177 (normal 121, hint 2, cmdline 11, caret 18, visual 20, insert 1, ignore 1, browser 3) | later: 14 | dropped: 6
 
 ### normal
 
@@ -46,6 +46,7 @@ bound: 176 (normal 120, hint 2, cmdline 11, caret 18, visual 20, insert 1, ignor
 | `xp` | bound | `page.stop` | Stop loading |  |
 | `gh` | bound | `page.home` | Home page |  |
 | `gH` | bound | `page.home --tab` | Home page |  |
+| `.` | bound | `repeat` | Repeat |  |
 | `J` | bound | `tab.next` | Next tab |  |
 | `K` | bound | `tab.prev` | Previous tab |  |
 | `gt` | bound | `tab.goto` | Next tab |  |
@@ -148,7 +149,6 @@ bound: 176 (normal 120, hint 2, cmdline 11, caret 18, visual 20, insert 1, ignor
 | `gV` | bound | `mode caret` | Set mode |  |
 | `m` | later | `mark.add` |  | phase 3, key param |
 | `M` | later | `quickmark.add` |  | phase 3, key param |
-| `.` | later | `command.repeat` |  | phase 3 |
 | `[[` | later | `page.follow --direction=prev` |  | phase 3 |
 | `[c` | later | `url.increment --step=-1` |  | phase 3 |
 | `]]` | later | `page.follow --direction=next` |  | phase 3 |

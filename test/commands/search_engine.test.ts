@@ -9,6 +9,7 @@ import { runs_with_empty } from "../../src/background/availability.ts";
 import { compile_config } from "../../src/background/compile.ts";
 import { empty_config } from "../../src/background/config_load.ts";
 import { create_router } from "../../src/background/router.ts";
+import { no_repeat_memory } from "../../src/background/repeat_memory.ts";
 import { get_config } from "../../src/background/startup.ts";
 import { current_page } from "../../src/commands/open_target.ts";
 import type { BoundInvocation } from "../../src/shared/invocation.ts";
@@ -151,6 +152,7 @@ async function press(text: string, selection: string): Promise<{ lines: string[]
     send_to_tab: async () => undefined,
     open_cmdline: async (_tab, _frame, line) => void lines.push(line),
     show_refusal: async (_tab, refusal) => void refusals.push(refusal.message),
+    repeat_memory: no_repeat_memory,
   });
   await router.run({ invocations: [compiled_key(text)], mode: "normal", may_prompt: true });
   return { lines, refusals };

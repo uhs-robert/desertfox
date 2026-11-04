@@ -35,3 +35,7 @@ export const CMDLINE_OPENER_STORAGE_PREFIX = "oasisfox_cmdline_opener_";
 
 // The ids of the windows in the order they were last focused, newest first, in `storage.session`. `tab.attach` with no window reads it.
 export const WINDOW_FOCUS_STORAGE_KEY = "oasisfox_window_focus";
+
+// The last repeatable request in `storage.session`, for `.`. A private window has a slot of its own, so a private command never repeats in a normal window.
+export const REPEAT_STORAGE_KEY = "oasisfox_last_repeat";
+export const REPEAT_PRIVATE_STORAGE_KEY = "oasisfox_last_repeat_private";

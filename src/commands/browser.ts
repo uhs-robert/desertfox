@@ -46,6 +46,7 @@ define("browser.focus_page", {
   label: "Focus page",
   intent: "Move focus from the address bar to the page. Firefox has no direct call, so this is a best effort.",
   runs_in: "background",
+  repeatable: false,
   run: (ctx) => handlers.focus_page(ctx),
 });
 
@@ -53,5 +54,6 @@ define("browser.close_all", {
   label: "Close all windows",
   intent: "Close every browser window, which quits Firefox.",
   runs_in: "background",
+  repeatable: false,
   run: () => handlers.close_all(),
 });

@@ -78,6 +78,7 @@ The fields follow the Oasis action library (`home/hypr/.config/hypr/lib/act/init
 - `runs_in`: `background` or `content`. The router sends the invocation to that side. A command never runs in both.
 - `needs`: what must be true to run it. `content` means a content script in the tab. A permission name means an optional permission. The router refuses with a message instead of failing silently.
 - `count`: what a numeric prefix does. `repeat` runs the command that many times. A param name fills that param, for example `tab.goto` takes the count as its `index`. `ignore` drops it.
+- `repeatable`: whether `.` can replay the command. The default is true. Six commands opt out: `command.repeat`, `browser.close_all`, `browser.focus_page`, `config.reload`, `help.open` and `engine.show`.
 - `modes`: the modes where a key can run the command. The default is normal.
 - `completion`: where the command line list offers the command. Absent means always. `hidden` means never, and a list of modes means only when the line was opened from one of them. Typing the name still runs the command.
 - `run`: the handler. It gets the context (tab, frame, mode) and the checked args.
@@ -305,6 +306,8 @@ The config file is code, so whoever can write it can run code on pages. The file
 
 A Firefox shortcut enters at step 4 through `commands.onCommand`.
 
+`.` (`command.repeat`) replays the last request that ran to the end. The router stores it in `storage.session` after every step succeeded, with the count it had. A private window has a slot of its own. Only `background` commands are stored, so `j` then `.` does nothing, and a request that opens the command line stores nothing until the typed command runs. A hint start records itself from the `hints` bundle, so `.` after a hint pick shows hints again with the same action and filter. `3.` replaces the stored count and `.` keeps it. With nothing stored, `.` shows "Nothing to repeat". A pick that opens a link runs as `open.url` marked `from_hints`, which the router does not store, so `.` shows hints and does not reopen the address. A replay re-reads context sources such as the selection and the clipboard, so it uses their values at that time.
+
 The content script must have the keymap before the first key. It reads the compiled prefix tree from `storage.local` at start, buffers keys until the read returns, then replays them. Phase 1 measured that read at 6-10 ms (median 8), so buffering is enough and inline registration is not needed (see [spike.md](spike.md), "Phase 1 measurements").
 
 ## Bundles and loading
@@ -392,7 +395,7 @@ Firefox keeps the background awake while the port is open, which also helps a la
 | Phase | Contents |
 | --- | --- |
 | v1 | Snippets and `config.reload`, with the managed storage config and `tools/build-config`. Normal, insert and ignore modes. Scrolling, back and forward, reload, stop, home, parent and root URL. Tab and window commands, including containers and closed-tab undo. Search engines and the prompt for missing args. Bookmarks. Hints with every action above, rapid mode included. Copying the URL in 6 formats. Zoom. Search engines with slots and children replace the former site commands (site search, GitHub, subreddit, archive, isdown, translate), which now ship as examples. |
-| Later | History completion. Marks and quickmarks. Changing the number in a URL, following next and previous page links, repeating the last command, the jump list, a QR code of the URL and view source. |
+| Later | History completion. Marks and quickmarks. Changing the number in a URL, following next and previous page links, the jump list, a QR code of the URL and view source. |
 | Dropped | Shell access, string eval, command strings with chaining and pipes, a config language, userChrome editing, rewriting Firefox prefs, an external editor, page-event hooks, per-site config, a key-grab mode, macros, a theme engine, an update nag, a tutorial and joke commands. |
 
 ## Trade-offs

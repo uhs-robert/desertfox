@@ -83,8 +83,9 @@ function copy_to_clipboard(text: string): void {
   });
 }
 
+// `from_hints` keeps the router from storing this `open.url`, so `.` shows hints again instead of reopening the address.
 function open_link(url: string, place: Place): void {
-  void browser.runtime.sendMessage({ type: "run", invocations: [{ id: "open.url", args: { url, where: place } }], mode: "normal" });
+  void browser.runtime.sendMessage({ type: "run", invocations: [{ id: "open.url", args: { url, where: place } }], mode: "normal", from_hints: true }).catch(() => undefined);
 }
 
 // The caret bundle reads the element in `start_session` when the mode starts, and loads on that first entry.
@@ -184,6 +185,7 @@ function register(host: BundleHostApi): void {
     }
     // With nothing to label the mode never changes, so keys held during the load run as normal keys.
     const text = (args.text as string | undefined) || undefined;
+    void browser.runtime.sendMessage({ type: "record_repeat", invocation: { id: "hint.run", args } });
     if (candidates.length === 0) return create_view().show_message(text === undefined ? "No hints on this page" : `No link matches ${text}`);
     // A caret start ends hint mode on the first pick, so rapid has nothing to repeat.
     const current: Session = { cancelled: false, action, waiting_tokens: [], rapid: args.rapid === true && !starts_caret(action), filter, custom_selector, text, lower_text: text?.toLowerCase() };

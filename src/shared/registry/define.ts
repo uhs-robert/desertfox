@@ -16,7 +16,7 @@ export class DefineError extends Error {
 }
 
 export type Registry = {
-  // Checks the definition, stores it and returns it with `count` and `modes` defaults applied.
+  // Checks the definition, stores it and returns it with `count`, `modes` and `repeatable` defaults applied.
   // Snippet commands go through the same call, so they share the name check.
   define(id: string, input: CommandInput): CommandDef;
   get(id: string): CommandDef | undefined;
@@ -49,7 +49,7 @@ export function create_registry(): Registry {
     check_flags(input, fail);
     check_count_and_modes(input, fail);
 
-    const command: CommandDef = { ...input, id, count: input.count ?? "ignore", modes: input.modes ?? ["normal"] };
+    const command: CommandDef = { ...input, id, count: input.count ?? "ignore", modes: input.modes ?? ["normal"], repeatable: input.repeatable ?? true };
     commands_by_id.set(id, command);
     for (const word of [id, ...(input.name ? [input.name] : []), ...(input.aliases ?? [])]) {
       commands_by_word.set(word, command);
