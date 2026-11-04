@@ -6,8 +6,15 @@ import type { ColorPair } from "../../shared/mode_colors.ts";
 import type { Matches } from "./find_match.ts";
 import type { TextModel, TextTree } from "./text_model.ts";
 
-// Painting a hundred thousand ranges would stall the page, so the matches nearest the current one in text order are painted.
+// Painting a hundred thousand ranges would stall the page, so only a window of matches around the current one is painted.
 export const PAINT_CAP = 2000;
+
+// The indexes to paint: the current match with about half the cap on each side, wrapping at the ends of the page.
+export function paint_indexes(current: number, count: number, cap = PAINT_CAP): number[] {
+  const shown = Math.min(count, cap);
+  const before = Math.floor(shown / 2);
+  return Array.from({ length: shown }, (_, at) => (((current - before + at) % count) + count) % count);
+}
 
 const ALL_NAME = "oasis-find";
 const CURRENT_NAME = "oasis-find-current";
@@ -98,11 +105,9 @@ export function create_painter() {
   // The match at `current` takes the strong color. Returns how many matches were drawn.
   const paint = (model: TextModel, matches: Matches, current: number, colors: FindColors): number => {
     clear_highlights();
-    const count = matches.from.length;
-    const shown = Math.min(count, PAINT_CAP);
+    const indexes = paint_indexes(current, matches.from.length);
     const by_document = new Map<Document, { all: Range[]; current: Range[] }>();
-    for (let step = 0; step < shown; step++) {
-      const index = (current + step) % count;
+    for (const index of indexes) {
       try {
         for (const range of ranges_of(model, matches.from[index]!, matches.to[index]!)) {
           const group = by_document.get(range.startContainer.ownerDocument!) ?? { all: [], current: [] };
@@ -125,7 +130,7 @@ export function create_painter() {
         painted_documents.add(owner);
       } catch {}
     }
-    return shown;
+    return indexes.length;
   };
 
   return { paint, clear };

@@ -5,7 +5,7 @@ import { define } from "../shared/registry/index.ts";
 define("find.open", {
   completion: "hidden",
   label: "Find",
-  intent: "Search the page text as you type. Enter keeps the match and Escape goes back to where you were. The text is a regular expression, and a capital letter makes it match case.",
+  intent: "Search the page text as you type. Enter keeps the match. Escape clears the highlights and keeps the search and the current match as your position. The text is a regular expression, and a capital letter makes it match case.",
   params: [{ name: "direction", type: "enum", values: ["forward", "backward"], default: "forward", value_labels: { backward: "backward" }, description: { backward: "Search up the page, and let n go up." } }],
   runs_in: "content",
   run: find_open.run,
