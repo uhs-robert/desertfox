@@ -495,4 +495,25 @@ test("a refused hint copy answers failed with one message, and a good copy answe
   await settle();
   assert.deepEqual(await answer, { ok: false, message: "Could not copy to the clipboard" });
   assert.deepEqual(page.messages(), []);
+
+  const good = await page_with(["one", "two"]);
+  const done = good.run({ action: "copy" });
+  await settle();
+  good.type(good.labels()[0]!.toLowerCase());
+  assert.deepEqual(await done, { ok: true });
+  assert.deepEqual(good.copied, ["https://example.com/one"]);
+});
+
+test("a refused open stops the sequence quietly, and a later rapid pick whose open is refused shows nothing", async () => {
+  const page = await page_with(["one", "two"]);
+  page.hold_sends(Promise.resolve({ ok: false, refusal: { id: "open.url", message: "No such tab" } }));
+  const answer = page.run({ action: "background", rapid: true });
+  await settle();
+  page.type(page.labels()[0]!.toLowerCase());
+  await settle();
+  assert.deepEqual(await answer, { ok: true, cancelled: true });
+  page.type(page.labels()[0]!.toLowerCase());
+  await settle();
+  assert.deepEqual(page.messages(), []);
+  page.escape();
 });

@@ -128,7 +128,9 @@ function register(host: BundleHostApi): void {
     current.finish(new Promise<Outcome>((resolve) => (answer = resolve)));
     void browser.runtime.sendMessage({ type: "record_repeat", invocation: { id: "hint.run", args: current.args } });
     const ended = (result: unknown) => {
-      const outcome = (result as Outcome | undefined) ?? done;
+      let outcome = (result as Outcome | undefined) ?? done;
+      // A refused open comes back as a RunResponse with no message. The background already showed it, so it only stops the sequence.
+      if (!outcome.ok && typeof outcome.message !== "string") outcome = { ok: true, cancelled: true };
       if (first) answer(outcome);
       else if (!outcome.ok) create_view().show_message(outcome.message);
     };
