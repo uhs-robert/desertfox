@@ -41,7 +41,7 @@ export async function run_cases({ rdp, extension_id, run_case, expect, open_page
     const page_id = "find_all";
     await open_page("find_page", page_id, { new_tab: true });
     await send_keys("/needle");
-    const state = await wait_highlights((read) => total_painted(read) === 3, "three matches in the top document, one in the frame");
+    const state = await wait_highlights((read) => total_painted(read) === 5, "five matches, four in the top document and one in the frame");
     expect(state.top_all.length + state.top_current.length === 4 && state.frame_all.length + state.frame_current.length === 1, `painted ${JSON.stringify(state)}`);
     expect(state.sheets.frame === 1 && state.sheets.open === 1 && state.sheets.top === 1, `sheets ${JSON.stringify(state.sheets)}`);
     expect(current_of(state) === "needle one", `the current match is ${current_of(state)}, expected needle one`);
@@ -89,7 +89,7 @@ export async function run_cases({ rdp, extension_id, run_case, expect, open_page
     const page_id = "find_escape";
     await open_page("find_page", page_id, { new_tab: true });
     await send_keys("/needle");
-    await wait_highlights((read) => total_painted(read) === 3, "the matches");
+    await wait_highlights((read) => total_painted(read) === 5, "the matches");
     await send_keys(" five");
     await wait_highlights((read) => current_of(read) === "needle five", "the match far below");
     const mark = events.length;
@@ -105,7 +105,7 @@ export async function run_cases({ rdp, extension_id, run_case, expect, open_page
     const page_id = "find_gone";
     await open_page("find_page", page_id, { new_tab: true });
     await send_keys("/needl");
-    await wait_highlights((read) => total_painted(read) === 3, "the first matches");
+    await wait_highlights((read) => total_painted(read) === 5, "the first matches");
     await in_active_tab(`document.getElementById("frame").remove(); document.getElementById("open_host").remove();`);
     const mark = events.length;
     await send_keys("e");
