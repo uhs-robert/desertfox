@@ -3,7 +3,7 @@ import { COMPILED_KEYMAP_STORAGE_KEY } from "../shared/prefix_tree.ts";
 import type { CompiledKeymap } from "../shared/prefix_tree.ts";
 import { load_config } from "../background/config_load.ts";
 import { WARNINGS_STORAGE_KEY } from "../background/storage_keys.ts";
-import { DEFAULT_SETTINGS } from "../shared/config.ts";
+import { effective_settings } from "../shared/config.ts";
 import { build_help_model } from "./model.ts";
 import type { HelpModel } from "./model.ts";
 import { engine_anchor, render_help } from "./render.ts";
@@ -35,7 +35,7 @@ async function main(): Promise<void> {
     { search_engines: Object.keys(config.search_engines) },
     config.search_engines,
     // The same shape the background stores, built from the fresh load so a config.reload shows at once.
-    { source, settings: { ...DEFAULT_SETTINGS, ...config.settings }, managed_file_hint: `~/.mozilla/managed-storage/${browser.runtime.id}.json` },
+    { source, settings: effective_settings(config.settings), managed_file_hint: `~/.mozilla/managed-storage/${browser.runtime.id}.json` },
   );
   show_route(model, false);
   window.addEventListener("hashchange", () => show_route(model, true));

@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { build_help_model, STYLE_VARIABLES } from "../src/help/model.ts";
 import { parse_route } from "../src/help/route.ts";
-import { DEFAULT_SETTINGS } from "../src/shared/config.ts";
+import { DEFAULT_SETTINGS, effective_settings } from "../src/shared/config.ts";
 import { ROLES } from "../src/shared/theme/roles.ts";
 import { token_name } from "../src/shared/theme/tokens.ts";
 import { compile_keymap } from "../src/shared/keys/compiler.ts";
@@ -151,4 +151,12 @@ test("the model carries the settings and config source for the home page", () =>
   assert.equal(model.config_source, "Managed storage file");
   assert.deepEqual(model.settings.find((row) => row.name === "palette"), { name: "palette", value: '"x"' });
   assert.equal(build_help_model(commands, compiled, []).config_source, "Unknown, the background has not written a status yet");
+});
+
+test("effective settings keep the default prefix a config leaves out", () => {
+  const settings = effective_settings({ search_prefixes: { tab: "T" } as { here: string; tab: string }, palette: "x" });
+  assert.deepEqual(settings.search_prefixes, { here: DEFAULT_SETTINGS.search_prefixes.here, tab: "T" });
+  assert.deepEqual(settings.container_prefixes, DEFAULT_SETTINGS.container_prefixes);
+  assert.equal(settings.palette, "x");
+  assert.equal(settings.hint_letters, DEFAULT_SETTINGS.hint_letters);
 });
