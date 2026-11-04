@@ -4,6 +4,7 @@
 
 import { BUILT_IN_PAGE, is_web_url, MODE_INDICATOR_VALUES, WHICH_KEY_BORDER_VALUES } from "./config.ts";
 import type { Settings } from "./config.ts";
+import { BUILT_IN_THEME_NAMES } from "./theme_names.ts";
 import { LIGHT_INTENSITIES } from "./theme/roles.ts";
 
 export type SettingSpec = {
@@ -16,7 +17,7 @@ export type SettingSpec = {
   is_group?: boolean;
   // A boolean `:set name!` flips. The value is what an absent setting reads as.
   flips_from_absent?: boolean;
-  // Values the command line offers for the second word. A function, and short lists only: the command line page bundles this module, and the theme names would pull in the theme tables (25 KB).
+  // Values the command line offers for the second word. A function, and short lists only: the command line page bundles this module, so it must not import the theme color tables (25 KB). The theme names come from the names-only `theme_names.ts`.
   listed_values?: () => readonly string[];
 };
 
@@ -39,7 +40,7 @@ export const SETTING_SPECS: Record<keyof Settings, SettingSpec> = {
   hint_letters: { check: (value) => typeof value === "string" && new Set(value).size === value.length && value.length >= 2, expectation: "a string of 2 or more distinct letters" },
   ignore_sites: { check: (value) => Array.isArray(value) && value.every(is_text), expectation: "a list of match pattern strings", is_list: true },
   mode_indicator: { check: (value) => (MODE_INDICATOR_VALUES as readonly unknown[]).includes(value), expectation: '"always", "not_normal" or "off"', listed_values: () => MODE_INDICATOR_VALUES },
-  palette: { check: is_text, expectation: "a theme name" },
+  palette: { check: is_text, expectation: "a theme name", listed_values: () => BUILT_IN_THEME_NAMES },
   light_intensity: { check: (value) => (LIGHT_INTENSITIES as readonly unknown[]).includes(value), expectation: "a whole number from 1 to 5", listed_values: () => LIGHT_INTENSITIES.map(String) },
   search_prefixes: { check: (value) => is_prefix_pair(value, "here"), expectation: '{"here": "...", "tab": "..."} with non-empty strings', is_group: true },
   container_prefixes: { check: (value) => is_prefix_pair(value, "reopen"), expectation: '{"reopen": "...", "tab": "..."} with non-empty strings', is_group: true },
@@ -60,11 +61,6 @@ export const SETTING_NAMES = Object.keys(SETTING_SPECS) as (keyof Settings)[];
 
 export function is_setting_name(name: string): name is keyof Settings {
   return Object.hasOwn(SETTING_SPECS, name);
-}
-
-// Whether `value` is valid for `name`. Unknown names are invalid.
-export function setting_is_valid(name: string, value: unknown): boolean {
-  return is_setting_name(name) && SETTING_SPECS[name].check(value);
 }
 
 export type ParsedSetting = { value: unknown } | { error: string };

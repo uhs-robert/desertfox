@@ -52,7 +52,8 @@ export function plan_set(text: string, current: SettingOverrides, config: Merged
   }
   if (value_text === "") return { toast: { kind: "info", message: show(name, in_force) } };
 
-  const parsed = parse_setting_words(name, spec.is_list ? value_text.split(/\s+/) : [value_text]);
+  // A bare `[]` is the empty list: an empty value shows the setting, so it needs a spelling of its own.
+  const parsed = parse_setting_words(name, spec.is_list ? (value_text === "[]" ? [] : value_text.split(/\s+/)) : [value_text]);
   if ("error" in parsed) throw new Error(parsed.error);
   const unmatched = naming_nothing(name, parsed.value, config);
   const message = unmatched === undefined ? show(name, parsed.value) : `${show(name, parsed.value)}, but ${unmatched}`;
@@ -83,11 +84,13 @@ export type SettingsDeps = {
 export function make_settings_handlers(deps: SettingsDeps) {
   // The toast waits for the publish, so a success means the change is in force.
   async function apply(ctx: CommandContext, plan_for: (current: SettingOverrides, config: MergedConfig) => SettingsPlan): Promise<void> {
-    let plan: SettingsPlan | undefined;
+    const plans: SettingsPlan[] = [];
     await deps.change_overrides((current, config) => {
-      plan = plan_for(current, config);
-      return plan.next;
+      const planned = plan_for(current, config);
+      plans.push(planned);
+      return planned.next;
     });
+    const plan = plans.at(-1);
     if (plan) await deps.toast(ctx, plan.toast.kind, plan.toast.message);
   }
   return {
@@ -104,7 +107,7 @@ const handlers = make_settings_handlers({
 define("settings.set", {
   name: "set",
   label: "Set a setting",
-  intent: "Change a setting until the browser restarts. Write set name value or set name=value to set it, set name to show it and set name! to flip a true or false setting. A list takes one item per word. The config file is not changed.",
+  intent: "Change a setting until the browser restarts. Write set name value or set name=value to set it, set name to show it and set name! to flip a true or false setting. A list takes one item per word, and [] is the empty list. The config file is not changed.",
   params: [{ name: "setting", type: "string", rest: true, main: true, default: "" }],
   runs_in: "background",
   repeatable: false,

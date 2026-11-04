@@ -45,6 +45,12 @@ test("a list takes one item per word", () => {
   assert.deepEqual(plan_set("ignore_sites a.com  b.com", {}, config()).next, { ignore_sites: ["a.com", "b.com"] });
 });
 
+test("[] sets an empty list, and a bare name still shows the list", () => {
+  assert.deepEqual(plan_set("ignore_sites []", {}, config({ ignore_sites: ["a.com"] })).next, { ignore_sites: [] });
+  assert.deepEqual(plan_set("open_completion []", {}, config()).next, { open_completion: [] });
+  assert.equal(plan_set("ignore_sites", {}, config({ ignore_sites: ["a.com"] })).next, undefined);
+});
+
 test("a bad value, an unknown name and a group setting are refused", () => {
   assert.throws(() => plan_set("light_intensity 9", {}, config()), /light_intensity: expected a whole number from 1 to 5/);
   assert.throws(() => plan_set("nope 1", {}, config()), /Unknown setting "nope"/);

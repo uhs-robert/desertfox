@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { DEFAULT_SETTINGS } from "../src/shared/config.ts";
-import { is_setting_name, parse_setting_words, SETTING_NAMES, SETTING_SPECS, setting_is_valid } from "../src/shared/settings_schema.ts";
+import { is_setting_name, parse_setting_words, SETTING_NAMES, SETTING_SPECS } from "../src/shared/settings_schema.ts";
 import { settings_schema } from "../tools/build-config/schemas.ts";
 
 test("the editor schema names exactly the settings the checks know", () => {
@@ -10,13 +10,12 @@ test("the editor schema names exactly the settings the checks know", () => {
 });
 
 test("every default passes its own check", () => {
-  for (const [name, value] of Object.entries(DEFAULT_SETTINGS)) assert.equal(setting_is_valid(name, value), true, name);
+  for (const [name, value] of Object.entries(DEFAULT_SETTINGS)) assert.equal(SETTING_SPECS[name as keyof typeof SETTING_SPECS].check(value), true, name);
 });
 
 test("unknown names are not settings", () => {
   assert.equal(is_setting_name("nope"), false);
   assert.equal(is_setting_name("toString"), false);
-  assert.equal(setting_is_valid("nope", 1), false);
 });
 
 test("a typed value takes the type its setting accepts", () => {

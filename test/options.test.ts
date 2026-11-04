@@ -63,3 +63,11 @@ test("a value that differs from the default is tagged with where it came from", 
   assert.equal(tag("palette"), undefined);
   assert.equal(tag("which_key_border"), undefined);
 });
+
+test("an optional true or false setting equal to what an absent one reads as is not tagged", () => {
+  const settings = { ...DEFAULT_SETTINGS, newtab_date: true, completion_all_windows: true };
+  const status = { source: "managed" as const, settings, managed_file_hint: hint, overrides: ["newtab_date", "completion_all_windows"], configured: ["newtab_date"] };
+  const rows = build_options_model(status, []).settings;
+  assert.equal(rows.find((row) => row.name === "newtab_date")?.tag, undefined);
+  assert.equal(rows.find((row) => row.name === "completion_all_windows")?.tag, "set");
+});

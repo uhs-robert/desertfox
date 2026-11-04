@@ -109,6 +109,8 @@ test("set offers the setting names, then the values the setting lists", () => {
   assert.deepEqual(rows("set hint_letters "), []);
   assert.deepEqual(rows("set which_key_border round "), []);
   assert.deepEqual(rows("set open_completion history "), ["bookmarks", "history"]);
+  assert.ok(rows("set palette ").includes("oasis_moonlight"));
+  assert.ok(!rows("set ").includes("search_prefixes"));
   assert.ok(rows("unset ").includes("all"));
   assert.deepEqual(rows("unset which_key_border "), []);
 });

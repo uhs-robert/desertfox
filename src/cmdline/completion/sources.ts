@@ -157,7 +157,7 @@ function setting_rows(context: Extract<CursorContext, { kind: "subject" }>, text
   if (command_id !== "settings.set" && command_id !== "settings.unset") return undefined;
   const row = (name: string, insert: string, description: string): Row => ({ name, insert, description, args: "", also_named: [], keywords: [], usage });
   if (context.position === 0) {
-    const names = SETTING_NAMES.map((name) => row(name, `${name} `, SETTING_SPECS[name].expectation));
+    const names = SETTING_NAMES.filter((name) => !SETTING_SPECS[name].is_group).map((name) => row(name, `${name} `, SETTING_SPECS[name].expectation));
     return command_id === "settings.unset" ? [row("all", "all ", "Drop every live change."), ...names] : names;
   }
   const typed = tokenize(text.slice(0, context.start));

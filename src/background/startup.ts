@@ -81,12 +81,19 @@ let change_queue: Promise<unknown> = Promise.resolve();
 export function change_overrides(decide: (current: SettingOverrides, config: MergedConfig) => SettingOverrides | undefined): Promise<void> {
   const change = change_queue.then(async () => {
     const config = await get_config();
-    const next = decide(await load_overrides(), config);
+    const before = await load_overrides();
+    const next = decide(before, config);
     if (next === undefined) return;
     await browser.storage.session.set({ [SETTING_OVERRIDES_STORAGE_KEY]: next });
-    // Assigned after the publish succeeds, so a failed one leaves the readers the last good config.
-    const published = await publish(await (load_step as Promise<LoadStep>), next);
-    current_config = Promise.resolve(published);
+    try {
+      // Assigned after the publish succeeds, so a failed one leaves the readers the last good config.
+      const published = await publish(await (load_step as Promise<LoadStep>), next);
+      current_config = Promise.resolve(published);
+    } catch (error) {
+      // Pages read the stored overrides themselves, so a failed publish must not leave them ahead of the config.
+      await browser.storage.session.set({ [SETTING_OVERRIDES_STORAGE_KEY]: before });
+      throw error;
+    }
   });
   change_queue = change.catch(() => undefined);
   return change;

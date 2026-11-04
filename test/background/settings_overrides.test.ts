@@ -125,7 +125,8 @@ test("a change that throws leaves the overrides and the later changes alone", as
   assert.deepEqual(session[SETTING_OVERRIDES_STORAGE_KEY], { newtab_date: false });
 });
 
-test("a reload with an override set: the new load reads the file again and the override still wins", async () => {
+// Only a model of a restart that keeps `storage.session`. Firefox is expected to clear it on `config.reload`; a key test settles that.
+test("a background restart that keeps session storage re-reads the file and the override still wins", async () => {
   const file = { value: managed({ hint_letters: "ab", which_key_delay_ms: 100 }) };
   const { local } = install_fake_browser(file);
   const before = await fresh_startup("reload_before");
@@ -148,13 +149,14 @@ test("a :set that is still writing when the reload starts leaves one consistent 
   const { session } = install_fake_browser(file);
   const old_background = await fresh_startup("race_before");
   await old_background.get_config();
+  // Imported first: the new load must then run on microtasks alone, before the old write's timer fires.
+  const new_background = await fresh_startup("race_after");
   const pending = old_background.change_overrides((current) => ({ ...current, hint_letters: "xy" }));
   file.value = managed({ hint_letters: "cd" });
-  const new_background = await fresh_startup("race_after");
   const first_read = (await new_background.get_config()).settings.hint_letters;
   await pending;
-  // Whether the new load saw the write or not, the stored value and a later load agree.
-  assert.ok(first_read === "xy" || first_read === "cd");
+  // The new load started before the write landed, so it shows the file value. The stored value and a later load show the override.
+  assert.equal(first_read, "cd");
   assert.deepEqual(session[SETTING_OVERRIDES_STORAGE_KEY], { hint_letters: "xy" });
   const later = await fresh_startup("race_later");
   assert.equal((await later.get_config()).settings.hint_letters, "xy");
@@ -165,5 +167,21 @@ test("a stored override that no longer passes is ignored at load", async () => {
   const { session } = install_fake_browser(file);
   session[SETTING_OVERRIDES_STORAGE_KEY] = { light_intensity: 9, newtab_date: false };
   const startup = await fresh_startup("stale");
+  assert.deepEqual((await startup.get_config()).settings, { newtab_date: false });
+});
+
+test("a failed publish puts the stored overrides back", async () => {
+  const file = { value: managed({}) };
+  const { session } = install_fake_browser(file);
+  const startup = await fresh_startup("rollback");
+  await startup.change_overrides(() => ({ newtab_date: false }));
+  const browser_stub = (globalThis as unknown as { browser: { tabs: { query: () => Promise<never> } } }).browser;
+  const working = browser_stub.tabs.query;
+  browser_stub.tabs.query = async () => {
+    throw new Error("tabs down");
+  };
+  await assert.rejects(startup.change_overrides((current) => ({ ...current, hint_letters: "xy" })), /tabs down/);
+  browser_stub.tabs.query = working;
+  assert.deepEqual(session[SETTING_OVERRIDES_STORAGE_KEY], { newtab_date: false });
   assert.deepEqual((await startup.get_config()).settings, { newtab_date: false });
 });
