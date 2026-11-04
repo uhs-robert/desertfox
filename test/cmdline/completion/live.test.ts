@@ -32,33 +32,40 @@ test("nothing is asked until a subject reads, and each kind is asked once", asyn
   assert.equal(asks.length, 1);
 });
 
-test("a reply older than the newest fetch is dropped, and its kind asks again when it comes back", async () => {
+test("two kinds in flight both land, whichever answers first", async () => {
   const { live, asks, settle, ready } = make();
   live.read("tabs");
   live.read("bookmarks");
   assert.deepEqual(asks.map((ask) => ask.kind), ["tabs", "bookmarks"]);
-  // The older reply lands after the newer one started, and after it too.
+  asks[1]!.answer({ items: BOOKMARKS });
+  await settle();
   asks[0]!.answer({ items: TABS });
   await settle();
+  assert.equal(ready(), 2);
+  assert.deepEqual(live.read("bookmarks"), { loading: false, items: BOOKMARKS });
+  assert.deepEqual(live.read("tabs"), { loading: false, items: TABS });
+  assert.equal(asks.length, 2);
+});
+
+test("a stale reply for a kind is dropped and the newer fetch of that kind lands", async () => {
+  const { live, asks, settle, ready } = make();
+  live.read("tabs");
+  live.read("bookmarks");
+  // The line closed and reopened: the first tabs fetch is stale and a second one runs.
+  live.close();
+  live.read("tabs");
+  assert.deepEqual(asks.map((ask) => ask.kind), ["tabs", "bookmarks", "tabs"]);
+  asks[0]!.answer({ items: [] });
+  await settle();
   assert.equal(ready(), 0);
+  assert.deepEqual(live.read("tabs"), { loading: true });
+  asks[2]!.answer({ items: TABS });
+  await settle();
+  assert.deepEqual(live.read("tabs"), { loading: false, items: TABS });
+  // The stale bookmarks reply is dropped too.
   asks[1]!.answer({ items: BOOKMARKS });
   await settle();
   assert.equal(ready(), 1);
-  assert.deepEqual(live.read("bookmarks"), { loading: false, items: BOOKMARKS });
-  assert.deepEqual(live.read("tabs"), { loading: true });
-  assert.equal(asks.length, 3);
-});
-
-test("an older reply that lands after a newer one is dropped", async () => {
-  const { live, asks, settle } = make();
-  live.read("tabs");
-  live.read("bookmarks");
-  asks[1]!.answer({ items: BOOKMARKS });
-  await settle();
-  asks[0]!.answer({ items: TABS });
-  await settle();
-  assert.deepEqual(live.read("bookmarks"), { loading: false, items: BOOKMARKS });
-  assert.deepEqual(live.read("tabs"), { loading: true });
 });
 
 test("a refused or failed fetch caches an empty list", async () => {
@@ -74,11 +81,23 @@ test("a refused or failed fetch caches an empty list", async () => {
   assert.equal(ready(), 2);
 });
 
-test("a reply that arrives after the line closed lands nowhere", async () => {
+test("close drops every kind in flight, and a reply after close does nothing", async () => {
   const { live, asks, settle, ready } = make();
   live.read("tabs");
+  live.read("bookmarks");
   live.close();
   asks[0]!.answer({ items: TABS });
+  asks[1]!.answer({ items: BOOKMARKS });
   await settle();
   assert.equal(ready(), 0);
+  assert.deepEqual(live.read("tabs"), { loading: true });
+  assert.deepEqual(live.read("bookmarks"), { loading: true });
+});
+
+test("a failed open fetch caches no rows", async () => {
+  const { live, asks, settle } = make();
+  live.read("open");
+  asks[0]!.fail();
+  await settle();
+  assert.deepEqual(live.read("open"), { loading: false, items: { rows: [], history_max: 0 } });
 });

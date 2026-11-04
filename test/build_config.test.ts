@@ -584,3 +584,8 @@ test("a snippet header requires names page slots, and an unknown name is an erro
   const bad = config_dir_with({ "snippets/a.js": `// id: myapp.one\n// requires: repo, ghost, query, title\n${SNIPPET_HEADER}` });
   assert.match(problems_of(bad).join("\n"), /unknown slot "ghost, query, title" in requires/);
 });
+
+test("an open_completion list with a repeated source is an error", () => {
+  const dir = config_dir_with({ "settings.toml": 'open_completion = ["history", "history"]' });
+  assert.match(problems_of(dir).join("\n"), /settings\.toml: open_completion: .*no repeat/);
+});

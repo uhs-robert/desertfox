@@ -43,6 +43,7 @@
     "clipboardWrite",
     "clipboardRead",
     "bookmarks",
+    "history",
     "contextualIdentities",
     "cookies",
     "sessions",

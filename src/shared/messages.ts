@@ -85,7 +85,7 @@ export type RecordCmdline = {
 // sender is a tab whose line redeemed a ticket, and it holds only tabs and windows of the sender's own privacy (private or not).
 export type CompleteItems = {
   type: "complete_items";
-  kind: "tabs" | "bookmarks" | "engines" | "windows";
+  kind: "tabs" | "bookmarks" | "engines" | "open" | "windows";
 };
 
 // `number` is the tab's place in its window's tab bar, counted from 1.
@@ -97,10 +97,21 @@ export type BookmarkItem = { title: string; url: string };
 // `label` is the config's resolved chain. `available` is whether the line's page can fill the engine's slots. The page URL itself never leaves the background.
 export type EngineItem = { name: string; label: string; available: boolean };
 
+// A history entry as the background reads it. It never goes to the page on its own: `open` answers with `OpenRow`.
+export type HistoryItem = { title: string; url: string };
+
+// Where an `open` row came from: `bm` is a bookmark, `hist` is history.
+export type OpenTag = "bm" | "hist";
+
+export type OpenRow = { title: string; url: string; tag: OpenTag };
+
+// Every row, in the group order of the `open_completion` setting and without a duplicate address. The page caps an empty word: 20 bookmarks and `history_max` history rows.
+export type OpenItems = { rows: OpenRow[]; history_max: number };
+
 // `number` is the window's place in `windows.getAll`, counted from 1, so it stays when other windows drop out of the list. `title` is its active tab's.
 export type WindowItem = { number: number; title: string };
 
-export type CompleteItemsAnswer = { items: TabItem[] | BookmarkItem[] | EngineItem[] | WindowItem[] };
+export type CompleteItemsAnswer = { items: TabItem[] | BookmarkItem[] | EngineItem[] | OpenItems | WindowItem[] };
 
 export type ContentToBackground = RunRequest | ModeChanged | LoadBundle | ListKeys | IssueCmdlineTicket | OpenCmdline | RecordCmdline | CompleteItems;
 

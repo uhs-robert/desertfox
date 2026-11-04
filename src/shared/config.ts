@@ -51,6 +51,10 @@ export type Settings = {
   // The `tab` completion list: absent or false lists the tabs of the line's window, true lists the tabs of every window.
   // Kept out of DEFAULT_SETTINGS because the content script bundles that object and has no use for this one.
   completion_all_windows?: boolean;
+  // The groups `open` completes from, in the order they list. A source left out is not read. Absent lists both.
+  open_completion?: ("bookmarks" | "history")[];
+  // History rows `open` shows for an empty word. Absent is 10.
+  history_completion_max?: number;
 };
 
 export const FALLBACK_ENGINE_NAME = "duck";

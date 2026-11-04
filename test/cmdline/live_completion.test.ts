@@ -4,7 +4,7 @@ import { create_live_source } from "../../src/cmdline/completion/live.ts";
 import { create_completer } from "../../src/cmdline/completion/sources.ts";
 import { create_session } from "../../src/cmdline/session.ts";
 import type { CommandMeta } from "../../src/shared/command.ts";
-import type { BookmarkItem, EngineItem, TabItem, WindowItem } from "../../src/shared/messages.ts";
+import type { BookmarkItem, EngineItem, OpenItems, WindowItem, TabItem } from "../../src/shared/messages.ts";
 import { parse_command_line } from "../../src/shared/registry/index.ts";
 import { create_word_lookup } from "../../src/cmdline/word_lookup.ts";
 
@@ -33,6 +33,7 @@ const COMMANDS: CommandMeta[] = [
   },
   { id: "engine.show", name: "engine.show", label: "Show engine", intent: "Show an engine.", params: [{ name: "engine", type: "enum", values: { from: "search_engines" } }] },
 ];
+COMMANDS.push({ id: "open.url", name: "open", label: "Open URL", intent: "Open a URL.", params: [{ name: "url", type: "string", main: true, values: { from: "open" } }] });
 const ENGINES: EngineItem[] = [
   { name: "duck", label: "DuckDuckGo", available: true },
   { name: "github.repo", label: "GitHub: this repo", available: false },
@@ -54,7 +55,7 @@ const BOOKMARKS: BookmarkItem[] = Array.from({ length: 30 }, (_, index) => ({ ti
 
 // The background answers when the test says so.
 function make() {
-  const asks: { kind: string; answer: (items: TabItem[] | BookmarkItem[] | EngineItem[] | WindowItem[]) => void }[] = [];
+  const asks: { kind: string; answer: (items: TabItem[] | BookmarkItem[] | EngineItem[] | OpenItems | WindowItem[]) => void }[] = [];
   const live = create_live_source({
     ask: (kind) => new Promise((resolve) => void asks.push({ kind, answer: (items) => resolve({ items }) })),
     on_ready: () => session.source_ready(),
@@ -159,16 +160,13 @@ test("a reply that lands while a row is previewed changes neither the list nor t
   assert.deepEqual({ text: session.get_text(), selected: session.get_selected(), rows: names(session) }, before);
 });
 
-test("a reply for a fetch that a newer one replaced is dropped and the list keeps waiting", async () => {
+test("a kind still in flight is not asked again when the word goes back to it", async () => {
   const { session, asks, settle } = make();
   session.edit("tab ");
   session.edit("bookmark ");
   session.edit("tab ");
-  assert.deepEqual(asks.map((ask) => ask.kind), ["tabs", "bookmarks", "tabs"]);
+  assert.deepEqual(asks.map((ask) => ask.kind), ["tabs", "bookmarks"]);
   asks[0]!.answer(TABS);
-  await settle();
-  assert.equal(session.get_hint(), "loading");
-  asks[2]!.answer(TABS);
   await settle();
   assert.equal(names(session).length, 4);
 });
@@ -261,4 +259,42 @@ test("a window pick puts its number and title in the line, and the list is fetch
   tab_key(session);
   assert.equal(session.get_text(), "tab.attach 3 Docs ");
   assert.equal(asks.length, 1);
+});
+
+const OPEN: OpenItems = {
+  history_max: 2,
+  rows: [
+    ...Array.from({ length: 25 }, (_, index) => ({ title: `Mark ${index}`, url: `https://m${index}.test/`, tag: "bm" as const })),
+    ...Array.from({ length: 5 }, (_, index) => ({ title: `Visit ${index}`, url: `https://v${index}.test/`, tag: "hist" as const })),
+  ],
+};
+
+test("open shows 20 bookmarks and the history cap on an empty word, in the order given, with tags", async () => {
+  const { session, asks, settle } = make();
+  session.edit("open ");
+  assert.equal(session.get_hint(), "loading");
+  assert.equal(asks[0]!.kind, "open");
+  asks[0]!.answer(OPEN);
+  await settle();
+  const rows = session.get_rows();
+  assert.equal(rows.length, 22);
+  assert.deepEqual([rows[0]!.tag, rows[19]!.tag, rows[20]!.tag, rows[21]!.name], ["bm", "bm", "hist", "Visit 1"]);
+});
+
+test("a typed word ranks every row, keeps the groups in the order given, and a pick inserts the address", async () => {
+  const { session, asks, settle } = make();
+  session.edit("open git");
+  asks[0]!.answer({
+    history_max: 1,
+    rows: [
+      { title: "Notes on a git hook", url: "https://notes.test/", tag: "bm" },
+      { title: "git", url: "https://git.test/", tag: "hist" },
+      { title: "Unrelated", url: "https://x.test/", tag: "hist" },
+    ],
+  });
+  await settle();
+  // The history row scores higher, yet the bookmark group stays first. Rows that do not match drop out, and the cap does not apply to a typed word.
+  assert.deepEqual(session.get_rows().map((row) => [row.name, row.tag]), [["Notes on a git hook", "bm"], ["git", "hist"]]);
+  tab_key(session);
+  assert.equal(session.get_text(), "open https://notes.test/ ");
 });
