@@ -9,17 +9,17 @@ export async function run_cases({ rdp, extension_id, run_case, expect, open_page
     if (value?.error) throw new Error(`in the tab: ${JSON.stringify(value)}`);
     return value;
   });
-  const READ_HIGHLIGHTS = `(() => {
+  // Read in the page's own world: ranges and sheets that the content script made are not readable from the script that tabs.executeScript runs. The closed root has no sheet count here, since only the content script can reach it.
+  const READ_HIGHLIGHTS = `JSON.parse(window.wrappedJSObject.eval(${JSON.stringify(`JSON.stringify((() => {
     const texts = (owner, name) => { const highlight = owner?.defaultView.CSS.highlights.get(name); const found = []; highlight?.forEach((range) => found.push(range.startContainer.data)); return found; };
     const frame_document = document.getElementById("frame")?.contentDocument;
-    const closed = document.getElementById("closed_host")?.openOrClosedShadowRoot;
-    const open = document.getElementById("open_host")?.openOrClosedShadowRoot;
+    const open = document.getElementById("open_host")?.shadowRoot;
     return {
       top_all: texts(document, "oasis-find"), top_current: texts(document, "oasis-find-current"),
       frame_all: texts(frame_document, "oasis-find"), frame_current: texts(frame_document, "oasis-find-current"),
-      sheets: { top: document.adoptedStyleSheets.length, frame: frame_document?.adoptedStyleSheets.length ?? 0, open: open?.adoptedStyleSheets.length ?? 0, closed: closed?.adoptedStyleSheets.length ?? 0 },
+      sheets: { top: document.adoptedStyleSheets.length, frame: frame_document?.adoptedStyleSheets.length ?? 0, open: open?.adoptedStyleSheets.length ?? 0 },
     };
-  })()`;
+  })())`)}))`;
   const total_painted = (state) => state.top_all.length + state.top_current.length + state.frame_all.length + state.frame_current.length;
   const current_of = (state) => [...state.top_current, ...state.frame_current].join("|");
   async function wait_highlights(predicate, what) {
@@ -41,7 +41,7 @@ export async function run_cases({ rdp, extension_id, run_case, expect, open_page
     const page_id = "find_all";
     await open_page("find_page", page_id, { new_tab: true });
     await send_keys("/needle");
-    const state = await wait_highlights((read) => total_painted(read) === 3 && read.sheets.closed === 1, "three matches in the top document, one in the frame, and a sheet in the closed root");
+    const state = await wait_highlights((read) => total_painted(read) === 3, "three matches in the top document, one in the frame");
     expect(state.top_all.length + state.top_current.length === 4 && state.frame_all.length + state.frame_current.length === 1, `painted ${JSON.stringify(state)}`);
     expect(state.sheets.frame === 1 && state.sheets.open === 1 && state.sheets.top === 1, `sheets ${JSON.stringify(state.sheets)}`);
     expect(current_of(state) === "needle one", `the current match is ${current_of(state)}, expected needle one`);
@@ -89,7 +89,7 @@ export async function run_cases({ rdp, extension_id, run_case, expect, open_page
     const page_id = "find_escape";
     await open_page("find_page", page_id, { new_tab: true });
     await send_keys("/needle");
-    await wait_highlights((read) => total_painted(read) === 3 && read.sheets.closed === 1, "the matches");
+    await wait_highlights((read) => total_painted(read) === 3, "the matches");
     await send_keys(" five");
     await wait_highlights((read) => current_of(read) === "needle five", "the match far below");
     const mark = events.length;
