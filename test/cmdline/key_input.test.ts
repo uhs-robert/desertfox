@@ -13,7 +13,7 @@ const leaf = (id: string) => ({ kind: "leaf" as const, steps: [{ invocation: { i
 function cmdline_keymap(extra: TreeBranch["children"] = {}): CompiledKeymap {
   const children: TreeBranch["children"] = { ...extra };
   for (const [token, binding] of Object.entries(DEFAULT_KEYMAP.cmdline ?? {})) children[token] = leaf((binding as { id: string }).id);
-  return { format_version: COMPILED_KEYMAP_VERSION, modes: { cmdline: { kind: "branch", children } }, ignore_sites: [], mode_indicator: "always", which_key_delay_ms: 0 };
+  return { format_version: COMPILED_KEYMAP_VERSION, modes: { cmdline: { kind: "branch", children } }, mode_indicator: "always", which_key_delay_ms: 0 };
 }
 
 const setup = (extra: TreeBranch["children"] = {}) => ({

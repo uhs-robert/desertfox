@@ -31,6 +31,25 @@ export function matches_pattern(pattern: string, url: string): boolean {
   return new RegExp(`^${path.split("*").map(escape_regex).join(".*")}$`).test(target.pathname + target.search);
 }
 
-export function is_ignored_site(patterns: readonly string[], url: string): boolean {
-  return patterns.some((pattern) => matches_pattern(pattern, url));
+// One regex source over `location.href` for a list of patterns, so the content script holds no pattern parser.
+// It must agree with `matches_pattern` on every URL. A pattern that does not parse is dropped, as there.
+// `[^#]` stands where the path wildcard sits, because `matches_pattern` never looks at the fragment.
+export function ignore_regex_source(patterns: readonly string[]): string | undefined {
+  const alternatives: string[] = [];
+  for (const pattern of patterns) {
+    if (pattern === "<all_urls>") {
+      alternatives.push("(?:https?|file|ftp):.*");
+      continue;
+    }
+    const parts = PATTERN_PARTS.exec(pattern);
+    if (!parts) continue;
+    const [, scheme, host, path] = parts as unknown as [string, string, string, string];
+    const scheme_source = scheme === "*" ? "https?" : scheme;
+    const host_source =
+      host === "*" ? "[^/?#]*" : host.startsWith("*.") ? `(?:[^/?#@:]*\\.)?${escape_regex(host.slice(2))}` : escape_regex(host);
+    const path_source = path.split("*").map(escape_regex).join("[^#]*");
+    // Userinfo and port are part of the href and not of the host.
+    alternatives.push(`${scheme_source}://(?:[^/?#@]*@)?${host_source}${host === "*" ? "" : "(?::\\d*)?"}${path_source}(?:#.*)?`);
+  }
+  return alternatives.length > 0 ? `^(?:${alternatives.join("|")})$` : undefined;
 }

@@ -4,14 +4,15 @@ import { takes_typing } from "../src/content/editable.ts";
 import { args_for_count } from "../src/content/invocation_args.ts";
 import { create_cancelled_keys } from "../src/content/cancelled_keys.ts";
 import { create_key_flow } from "../src/content/key_flow.ts";
-import { is_ignored_site, matches_pattern } from "../src/shared/match_pattern.ts";
+import { ignore_regex_source, matches_pattern } from "../src/shared/match_pattern.ts";
 import { mode_label } from "../src/content/mode_label.ts";
 import { wire_mode_reports } from "../src/content/mode_report.ts";
 import { create_mode_state } from "../src/content/mode_state.ts";
 import { plan_steps } from "../src/content/plan_steps.ts";
 import { percent_to_offset, pick_scroll_target } from "../src/content/scroll_target.ts";
 import { create_matcher } from "../src/shared/keys/index.ts";
-import { COMPILED_KEYMAP_VERSION } from "../src/shared/index.ts";
+import { COMPILED_KEYMAP_VERSION, current_keymap } from "../src/shared/index.ts";
+import { compile_keymap } from "../src/shared/keys/index.ts";
 import type { CompiledKeymap, TreeLeaf } from "../src/shared/index.ts";
 
 const leaf = (id: string): TreeLeaf => ({ kind: "leaf", steps: [{ invocation: { id }, runs_in: "content", count_rule: "ignore" }] });
@@ -20,7 +21,6 @@ const browser_chords = { kind: "branch", children: { "<A-j>": leaf("next_tab") }
 
 const keymap: CompiledKeymap = {
   format_version: COMPILED_KEYMAP_VERSION,
-  ignore_sites: [],
   mode_indicator: "always",
   which_key_delay_ms: 0,
   modes: {
@@ -202,6 +202,43 @@ test("match patterns", () => {
   assert.ok(!matches_pattern("https://a.test/app/*", "https://a.test/other"));
   assert.ok(is_ignored_site(["https://x.test/*", "https://a.test/*"], "https://a.test/z"));
   assert.ok(!is_ignored_site([], "https://a.test/z"));
+});
+
+// What the content script does with the compiled keymap: one regex against the page URL.
+const is_ignored_site = (patterns: string[], url: string): boolean => {
+  const source = ignore_regex_source(patterns);
+  return source !== undefined && new RegExp(source).test(url);
+};
+
+test("the precompiled ignore regex agrees with matches_pattern on every pattern and URL", () => {
+  const patterns = [
+    "<all_urls>", "*://*/*", "*://*.docs.test/*", "https://a.test/*", "https://a.test/app/*", "https://a.test/app?x=*",
+    "http://a.test/", "file:///*", "ftp://f.test/*", "https://a.test/a*b*c", "https://A.test/*", "not a pattern", "https://*/x",
+  ];
+  const urls = [
+    "https://a.test/", "https://a.test/x", "http://a.test/", "https://a.test:8080/app/x", "https://a.test/app?x=1", "https://a.test/app?y=1",
+    "https://a.test/app#frag", "https://a.test/abc#c", "https://a.test/aXbYc", "https://a.docs.test/p?q=1", "http://docs.test/", "https://evildocs.test/",
+    "https://evil.test/?x=@a.test/", "https://a.test@evil.test/", "https://user:pw@a.test/x", "https://b.test/x", "file:///tmp/x", "ftp://f.test/z",
+    "about:blank", "about:srcdoc", "data:text/html,hi", "blob:https://a.test/uuid", "javascript:void(0)", "https://[::1]:3000/x", "https://xa.test/",
+  ];
+  for (const pattern of patterns) {
+    for (const url of urls) {
+      assert.equal(is_ignored_site([pattern], url), matches_pattern(pattern, url), `${pattern} against ${url}`);
+    }
+  }
+  assert.equal(is_ignored_site(patterns, "https://a.test/x"), true);
+  assert.equal(ignore_regex_source([]), undefined);
+  assert.equal(ignore_regex_source(["not a pattern"]), undefined);
+});
+
+test("a keymap stored in the old format is treated as absent until the background recompiles it", () => {
+  const old_format = { format_version: 1, modes: {}, ignore_sites: ["*://*/*"], mode_indicator: "always", which_key_delay_ms: 0 } as unknown as CompiledKeymap;
+  assert.equal(current_keymap(old_format), undefined);
+  assert.equal(current_keymap(undefined), undefined);
+  const compiled = compile_keymap({}, { ignore_sites: ["https://a.test/*"] }, () => undefined as never).compiled;
+  assert.equal(current_keymap(compiled), compiled);
+  assert.equal(compiled.format_version, COMPILED_KEYMAP_VERSION);
+  assert.ok(new RegExp(compiled.ignore_regex ?? "").test("https://a.test/z"));
 });
 
 test("editable kinds", () => {

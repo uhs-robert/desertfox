@@ -9,7 +9,7 @@ import type { ModeColors } from "./mode_colors.ts";
 
 export const COMPILED_KEYMAP_STORAGE_KEY = "oasisfox_compiled_keymap";
 
-export const COMPILED_KEYMAP_VERSION = 1;
+export const COMPILED_KEYMAP_VERSION = 2;
 
 // One step of a binding. The side that runs it and the count rule are resolved at compile time.
 export type LeafStep = {
@@ -41,7 +41,8 @@ export type CompiledKeymap = {
   // Root branch per mode. A mode without bindings is absent.
   modes: Partial<Record<KeymapMode, TreeBranch>>;
   // Settings the content script needs before it can handle a key.
-  ignore_sites: string[];
+  // One regex source tested against the page URL. Absent when no site is ignored.
+  ignore_regex?: string;
   mode_indicator: ModeIndicator;
   // Badge colors from the palette setting. A tree stored before 0.1.1 has none, and the badge keeps its plain colors.
   mode_colors?: ModeColors;
@@ -50,3 +51,6 @@ export type CompiledKeymap = {
   which_key_border?: WhichKeyBorder;
 };
 
+// A tree stored by an older build has another shape, and the content script then treats it as absent until the background recompiles.
+export const current_keymap = (stored: CompiledKeymap | undefined): CompiledKeymap | undefined =>
+  stored?.format_version === COMPILED_KEYMAP_VERSION ? stored : undefined;

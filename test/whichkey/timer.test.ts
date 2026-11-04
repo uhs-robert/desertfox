@@ -14,7 +14,6 @@ const leaf = (id: string): TreeNode => ({ kind: "leaf", steps: [{ invocation: { 
 
 const keymap: CompiledKeymap = {
   format_version: COMPILED_KEYMAP_VERSION,
-  ignore_sites: [],
   mode_indicator: "always",
   which_key_delay_ms: DELAY_MS,
   modes: {
