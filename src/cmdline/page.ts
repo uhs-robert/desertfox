@@ -48,6 +48,7 @@ async function open_line(start: Start, port: MessagePort): Promise<void> {
   const user_style = document.createElement("style");
   user_style.textContent = opened.css;
   document.head.append(user_style);
+  if (opened.prompt) document.querySelector<HTMLElement>(".oasisfox-cmdline-prompt")!.textContent = opened.prompt;
   const keymap = stored[COMPILED_KEYMAP_STORAGE_KEY] as CompiledKeymap | undefined;
   const opened_from = typeof start.mode === "string" ? start.mode : "normal";
   const key_text = key_labels(keymap, opened.commands, opened_from);

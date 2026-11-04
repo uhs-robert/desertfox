@@ -92,6 +92,13 @@ test("palette must name a theme, and the error lists the known names", () => {
   assert.match(problems_of(dir).join("\n"), /settings\.toml: palette: no theme named "neon" \(known: mine, .*moonlight/);
 });
 
+test("cmdline_prompt takes 1 to 8 characters on one line", () => {
+  assert.equal(build_config(config_dir_with({ "settings.toml": 'cmdline_prompt = ">> "' }), commands).settings.cmdline_prompt, ">> ");
+  for (const bad of ['""', '"123456789"', '"a\\nb"', "5"]) {
+    assert.match(problems_of(config_dir_with({ "settings.toml": `cmdline_prompt = ${bad}` })).join("\n"), /settings\.toml: cmdline_prompt: /);
+  }
+});
+
 const LOCAL_THEME = '[dark]\nbg = "#101010"\nfg = "#eeeeee"\nprimary = "#88aaff"\naccent = "#ffcc66"\n';
 const REPO_THEME = { dark: derive_roles({ bg: "#000000", fg: "#ffffff", primary: "#ff0000", accent: "#00ff00" }, "dark"), light: derive_roles({ bg: "#ffffff", fg: "#000000", primary: "#ff0000", accent: "#00ff00" }, "light") };
 
