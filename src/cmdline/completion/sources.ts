@@ -184,9 +184,9 @@ const live_kind_of = (param: ParamDef | undefined): LiveKind | undefined => {
 };
 
 // The engine takes the first word of `search`, ahead of the query that follows it.
-function first_word_param(command: Command): ParamDef | undefined {
+function first_word_param(command: Command, engine_settled: boolean): ParamDef | undefined {
   const bare = bare_word_param(command);
-  return bare && is_dynamic_values(bare.values) && bare.values.from === "search_engines" ? bare : (subject_param(command) ?? bare);
+  return !engine_settled && bare && is_dynamic_values(bare.values) && bare.values.from === "search_engines" ? bare : (subject_param(command) ?? bare);
 }
 
 // The completer reads the commands once, so each keystroke only ranks.
@@ -207,7 +207,7 @@ export function create_completer(
     if (context.kind === "command") return { ...span, rows: rank(context.word, all_commands), listing: true };
     const usage = usage_line(context.command);
     if (context.kind === "flag") return { ...span, usage, rows: rank(context.word, flag_rows(context.command)), listing: true };
-    const param = context.kind === "flag_value" ? context.param : context.position === 0 ? first_word_param(context.command) : undefined;
+    const param = context.kind === "flag_value" ? context.param : context.position === 0 ? first_word_param(context.command, context.engine_settled) : undefined;
     const kind = live_kind_of(param);
     if (kind && live) {
       const read = live.read(kind);

@@ -237,3 +237,13 @@ test("a hidden engine still parses, and a failed fetch lists no engines", async 
   await settle();
   assert.deepEqual(names(session), []);
 });
+
+test("after `--` or an `--engine=` flag the first word is the query, so no engine rows show", async () => {
+  for (const text of ["search -- github.", "search --engine=duck github."]) {
+    const { session, asks, settle } = make();
+    session.edit(text);
+    await settle();
+    assert.equal(asks.length, 0, text);
+    assert.deepEqual(names(session), [], text);
+  }
+});
