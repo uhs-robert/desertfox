@@ -133,7 +133,7 @@ export function create_find(host: Host, deps: FindDeps = browser_deps()) {
   // A frame or shadow host that left the page takes its text with it, so the model is read again.
   const fresh_model = (model: TextModel): TextModel => (trees_alive(model) ? model : deps.build_model());
 
-  async function run_update(open: Live, text: string, run: number, report: (status: string) => void): Promise<void> {
+  async function run_update(open: Live, text: string, run: number, report: (status: string) => void, scan_costly = false): Promise<void> {
     const is_stale = () => live !== open || open.generation !== run;
     const query = compile_query(text);
     if (!query) {
@@ -146,13 +146,13 @@ export function create_find(host: Host, deps: FindDeps = browser_deps()) {
       open.start = deps.start_index(open.model);
     }
     // A pattern typed one key at a time passes through costly shapes such as `(a+)+`. It is not searched, and the results of the last keystroke stay on the page.
-    if (query.fallback === "costly") return report(`Pattern too slow as a regex: ${text}`);
+    if (query.fallback === "costly" && !scan_costly) return report(`Pattern too slow as a regex: ${text}`);
     const matches = await collect_matches(open.model.text, query.search, deps.slicing(is_stale));
     if (!matches || is_stale()) return;
     const colors = await open.colors;
     if (is_stale()) return;
     // The page can lose a frame while the scan runs. Then the match positions no longer fit the text, so the scan starts over.
-    if (!trees_alive(open.model)) return run_update(open, text, run, report);
+    if (!trees_alive(open.model)) return run_update(open, text, run, report, scan_costly);
     const first = nearest_match(matches.from, open.start, open.direction);
     if (!first) {
       open.found = undefined;
@@ -236,6 +236,8 @@ export function create_find(host: Host, deps: FindDeps = browser_deps()) {
       if (!keep) open.generation++;
       open.finished = (async () => {
         if (keep) await open.pending;
+        // Enter commits the pattern, so the text fallback that was skipped while typing runs now.
+        if (keep && live === open && open.found?.query !== open.text && compile_query(open.text)?.fallback === "costly") await run_update(open, open.text, ++open.generation, () => {}, true);
         // A new search may have begun while the scan finished, and it owns the page now.
         if (live !== open) return;
         live = undefined;

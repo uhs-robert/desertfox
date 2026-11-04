@@ -3,8 +3,8 @@
 
 export type Direction = "forward" | "backward";
 
-// Plain text is searched as text and never becomes a regex. A pattern that is not a regex, or that could freeze the tab, is also searched as its own characters, and `fallback` says why.
-export type Search = { kind: "literal"; needle: string; exact: boolean } | { kind: "regex"; regex: RegExp };
+// A capitalised plain-text query is a literal search and never becomes a regex. A pattern that is not a regex, or that could freeze the tab, is also searched as its own characters, and `fallback` says why.
+export type Search = { kind: "literal"; needle: string } | { kind: "regex"; regex: RegExp };
 
 export type Fallback = "invalid" | "costly";
 
@@ -13,6 +13,7 @@ export type Query = { search: Search; fallback: Fallback | undefined };
 export type Matches = { from: number[]; to: number[] };
 
 const ESCAPED = /[.*+?^${}()|[\]\\]/;
+const ESCAPED_EVERYWHERE = new RegExp(ESCAPED.source, "g");
 
 // The model keeps one space between words and a "\n" at a line break, so a typed space has to match either.
 function space_matches_line_break(source: string): string {
@@ -35,16 +36,18 @@ function space_matches_line_break(source: string): string {
 // It also flags harmless ones such as `(foo|bar)+`: the fallback is a text search, which costs the user little.
 const UNLIMITED_OR_CHOICE = /[*+|]|\{\d+,\}/u;
 
+// An escape or a character class holds no group, so a `)` in one is not the end of a group.
+const ESCAPE_OR_CLASS = /\\.|\[(?:\\.|[^\]\\])*\]/gu;
+
 export function is_costly_pattern(source: string): boolean {
   // The innermost groups first: the contents of a group that holds no other group are checked, then that group is replaced by a plain letter and the search repeats.
-  let rest = source;
+  let rest = source.replace(ESCAPE_OR_CLASS, "x");
   for (let guard = 0; guard < 64; guard++) {
     const innermost = /\((?:[^()\\]|\\.)*\)((?:[*+]|\{\d+,\})?)/u.exec(rest);
     if (!innermost) return false;
     const whole = innermost[0];
     const quantifier = innermost[1]!;
-    const inside = whole.slice(0, whole.length - quantifier.length).replace(/\\./gu, "");
-    const loose = UNLIMITED_OR_CHOICE.test(inside);
+    const loose = UNLIMITED_OR_CHOICE.test(whole.slice(0, whole.length - quantifier.length));
     if (quantifier !== "" && loose) return true;
     // The group becomes one letter, which repeats without a limit when the group did or held a repeat or a choice, so the group around it sees that.
     rest = rest.slice(0, innermost.index) + (quantifier !== "" || loose ? "x*" : "x") + rest.slice(innermost.index + whole.length);
@@ -55,12 +58,13 @@ export function is_costly_pattern(source: string): boolean {
 // Smartcase: a capital letter outside an escape such as \S makes the search exact.
 const is_exact = (query: string) => /\p{Lu}/u.test(query.replace(/\\./gu, ""));
 
+// Plain text with no capital searches as an escaped regex, since only `giu` folds case the way the page expects (`s` finds `ſ`, `σ` finds `ς`). An escaped regex has no group or repeat, so it cannot backtrack.
+// Plain text with a capital is exact, so it needs no folding and skips the regex.
 export function compile_query(query: string): Query | undefined {
   if (query === "") return undefined;
   const exact = is_exact(query);
-  if (!ESCAPED.test(query)) return { search: { kind: "literal", needle: query, exact }, fallback: undefined };
-  // Typed text, or a pattern that cannot run as a regex, is searched as its own characters.
-  const as_text: Search = { kind: "literal", needle: query, exact };
+  const as_text: Search = exact ? { kind: "literal", needle: query } : { kind: "regex", regex: new RegExp(space_matches_line_break(query.replace(ESCAPED_EVERYWHERE, "\\$&")), "giu") };
+  if (!ESCAPED.test(query)) return { search: as_text, fallback: undefined };
   if (is_costly_pattern(query)) return { search: as_text, fallback: "costly" };
   try {
     return { search: { kind: "regex", regex: new RegExp(space_matches_line_break(query), exact ? "gu" : "giu") }, fallback: undefined };
@@ -78,9 +82,6 @@ export type Slicing = {
   slice_ms: number;
 };
 
-// Lower case that keeps every length, so an index in the folded text is an index in the real one. A letter whose lower case is longer (such as "İ") stays as it is.
-const fold = (text: string) => text.replace(/\p{Lu}/gu, (letter) => (letter.toLowerCase().length === letter.length ? letter.toLowerCase() : letter));
-
 // A scan runs in slices, so a keystroke typed mid-scan is heard and the old scan stops. Undefined means the scan was dropped as stale.
 // A slice ends between two matches, and one `exec` cannot be interrupted, so a regex that could run away is kept out by is_costly_pattern.
 export async function collect_matches(text: string, search: Search, slicing: Slicing): Promise<Matches | undefined> {
@@ -89,10 +90,9 @@ export async function collect_matches(text: string, search: Search, slicing: Sli
   // The next match after the last one, or undefined when the scan is over.
   let next: () => { from: number; to: number } | undefined;
   if (search.kind === "literal") {
-    // A typed space matches a line break, as in the regex path. Both texts keep their length.
-    const flat = (value: string) => (search.exact ? value : fold(value)).replace(/\n/g, " ");
-    const haystack = flat(text);
-    const needle = flat(search.needle);
+    // A typed space matches a line break, as in the regex path. A string pattern keeps `replaceAll` from running a regex.
+    const haystack = text.replaceAll("\n", " ");
+    const needle = search.needle.replaceAll("\n", " ");
     let at = 0;
     next = () => {
       const from = haystack.indexOf(needle, at);

@@ -5,7 +5,7 @@ import type { FindDeps } from "../../../src/content/caret/find_session.ts";
 import type { TextModel } from "../../../src/content/caret/text_model.ts";
 
 // A page of "ab ab ab": matches of "ab" start at 0, 3 and 6.
-function fake_page() {
+function fake_page(page_text = "ab ab ab") {
   const painted: { current: number; count: number }[] = [];
   const toasts: string[] = [];
   const registers = new Map<string, string>();
@@ -14,7 +14,7 @@ function fake_page() {
   let selection = ["start"];
   let clock = 0;
   const make_model = (): TextModel =>
-    ({ text: "ab ab ab", trees: [], point_at: (index: number) => ({ node: { index }, offset: 0 }), index_of: (node: { index: number }) => node.index }) as unknown as TextModel;
+    ({ text: page_text, trees: [], point_at: (index: number) => ({ node: { index }, offset: 0 }), index_of: (node: { index: number }) => node.index }) as unknown as TextModel;
   const deps: FindDeps = {
     build_model: make_model,
     start_index: () => 0,
@@ -195,4 +195,18 @@ test("n on a costly last search searches its characters as text and does not han
   page.registers.set("/:direction", "forward");
   const find = create_find(page.host, page.deps);
   assert.deepEqual(await find.step(false), { ok: false, message: "Not found: (a+)+$" });
+});
+
+test("Enter on a costly pattern scans its characters as text instead of leaving no match", async () => {
+  const page = fake_page("x (a|b)+ y");
+  const find = create_find(page.host, page.deps);
+  find.begin("forward");
+  find.update("(a|b)+", () => {});
+  await page.settle();
+  assert.equal(page.painted.length, 0, "the costly pattern was scanned while typing");
+  const ending = find.end(true);
+  await page.settle();
+  await ending;
+  assert.equal(page.painted.length, 1);
+  assert.equal(find.position(page.deps.build_model()), 2);
 });
