@@ -93,6 +93,16 @@ test("a row marked unavailable carries the dim class and the others do not", () 
   assert.equal(second!.children[2]!.children[0]!.textContent, "unavailable");
 });
 
+test("a row with a tag gets a dim tag cell after the args and before the keys, and a row without one gets none", () => {
+  const { element, list } = setup();
+  const [plain, tagged] = rows(2);
+  list.render([plain!, { ...tagged!, tag: "hist" }], 0);
+  const [first, second] = element.children as [Node, Node];
+  assert.deepEqual(first.children.map((cell) => cell.className).slice(3), ["oasisfox-cmdline-keys"]);
+  assert.deepEqual(second.children.map((cell) => cell.className).slice(3), ["oasisfox-cmdline-tag", "oasisfox-cmdline-keys"]);
+  assert.equal(second.children[3]!.textContent, "hist");
+});
+
 test("a command row shows its keys in the last cell and a row with no id shows none", () => {
   Object.assign(globalThis, { document: { createElement: fake_node } });
   const element = fake_node("div");

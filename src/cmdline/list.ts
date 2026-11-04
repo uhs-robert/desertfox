@@ -64,7 +64,7 @@ export function create_list(element: HTMLElement, keys_of: (id: string) => strin
           const item = cell(`item${top + offset === selected ? " oasisfox-cmdline-selected" : ""}${row.unavailable ? " oasisfox-cmdline-unavailable" : ""}`);
           const args = cell("args");
           args.append(cell("args-full", row.args), cell("args-short", row.args ? "…" : ""));
-          item.append(name_cell(row), cell("description", row.description), args, cell("keys", keys[offset]));
+          item.append(name_cell(row), cell("description", row.description), args, ...(row.tag ? [cell("tag", row.tag)] : []), cell("keys", keys[offset]));
           return item;
         }),
       );

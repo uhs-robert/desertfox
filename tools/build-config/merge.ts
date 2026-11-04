@@ -141,6 +141,8 @@ const SETTING_CHECKS: Record<keyof Settings, (value: unknown) => boolean> = {
   default_engine: (value) => typeof value === "string" && value !== "",
   new_tab_page: (value) => typeof value === "string",
   completion_all_windows: (value) => typeof value === "boolean",
+  open_completion: (value) => Array.isArray(value) && new Set(value).size === value.length && value.every((source) => source === "bookmarks" || source === "history"),
+  history_completion_max: (value) => typeof value === "number" && Number.isInteger(value) && value >= 0,
 };
 
 const SETTING_EXPECTATIONS: Record<keyof Settings, string> = {
@@ -156,6 +158,8 @@ const SETTING_EXPECTATIONS: Record<keyof Settings, string> = {
   default_engine: "the name of a search engine",
   new_tab_page: "a string",
   completion_all_windows: "true or false",
+  open_completion: 'a list of "bookmarks" and "history" with no repeat',
+  history_completion_max: "a whole number, 0 or more",
 };
 
 function is_prefix_pair(value: unknown, first_key: string): boolean {
