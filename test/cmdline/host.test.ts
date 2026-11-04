@@ -8,7 +8,7 @@ type Posted = { message: { oasisfox_cmdline: Record<string, unknown> }; origin: 
 // Just enough DOM for the host script: elements that record what is done to them.
 function fake_element() {
   const element = {
-    style: { cssText: "", height: undefined as string | undefined },
+    style: { cssText: "", height: undefined as string | undefined, background: undefined as string | undefined },
     src: "",
     name: "",
     removed: false,
@@ -270,4 +270,17 @@ test("a resize over the port sets the frame holder's height, capped at the windo
   page_port.postMessage({ oasisfox_cmdline: { kind: "resize", height: "tall" } });
   await settle();
   assert.equal(holder.style.height, "600px");
+});
+
+test("the holder and frame start dark, take the background the page reports with resize, and keep it when a resize has none", async (t) => {
+  const { holder, frame, ready } = await load_host(t, "background");
+  assert.deepEqual([holder.style.background, frame.style.background], ["#0c0e13", "#0c0e13"]);
+  await ready();
+  const page_port = frame.posted[0]!.transfer[0]!;
+  page_port.postMessage({ oasisfox_cmdline: { kind: "resize", height: 200, bg: "#101820" } });
+  await until(() => holder.style.background === "#101820");
+  assert.deepEqual([holder.style.background, frame.style.background], ["#101820", "#101820"]);
+  page_port.postMessage({ oasisfox_cmdline: { kind: "resize", height: 300 } });
+  await until(() => holder.style.height === "300px");
+  assert.deepEqual([holder.style.background, frame.style.background], ["#101820", "#101820"]);
 });

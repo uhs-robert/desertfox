@@ -14,6 +14,8 @@ const page = window as unknown as CmdlineWindow;
 const READY_TIMEOUT_MS = 3000;
 // Room for the line and an error above it, until the page reports what it needs with `resize`. The page draws its background only on the part it uses.
 const BAR_HEIGHT = "5rem";
+// Paints the frame and its holder until the page reports its own background.
+const DEFAULT_BG = "#0c0e13";
 // After each load of the frame, the page must answer a check within this time, or the frame went somewhere else.
 const CHECK_TIMEOUT_MS = 1000;
 
@@ -68,6 +70,7 @@ if (!page.oasisfox_cmdline_ready) {
     holder.style.cssText = `all:initial;position:fixed;left:0;right:0;bottom:0;height:${BAR_HEIGHT};z-index:${LAYERS.command_line};`;
     const frame = document.createElement("iframe");
     frame.style.cssText = "all:initial;display:block;width:100%;height:100%;border:0;color-scheme:normal;";
+    holder.style.background = frame.style.background = DEFAULT_BG;
     // Before the frame joins the page, so its only load is cmdline.html.
     frame.src = browser.runtime.getURL("cmdline.html");
     const current: Open = {
@@ -121,7 +124,10 @@ if (!page.oasisfox_cmdline_ready) {
         channel.port1.postMessage(wrap<HostToPage>({ kind: "focused" }));
       } else if (message.kind === "here") clearTimeout(current.check_timer);
       else if (message.kind === "close") close();
-      else if (message.kind === "resize" && Number.isFinite(message.height)) current.holder.style.height = `${Math.min(message.height, window.innerHeight)}px`;
+      else if (message.kind === "resize" && Number.isFinite(message.height)) {
+        current.holder.style.height = `${Math.min(message.height, window.innerHeight)}px`;
+        if (typeof message.bg === "string" && message.bg) current.holder.style.background = current.frame.style.background = message.bg;
+      }
       else if (message.kind === "submit") void submit(message);
     };
     current.port = channel.port1;
