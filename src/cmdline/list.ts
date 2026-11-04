@@ -61,7 +61,7 @@ export function create_list(element: HTMLElement) {
           const item = cell(`item${top + offset === selected ? " oasisfox-cmdline-selected" : ""}${row.unavailable ? " oasisfox-cmdline-unavailable" : ""}`);
           const args = cell("args");
           args.append(cell("args-full", row.args), cell("args-short", row.args ? "…" : ""));
-          item.append(name_cell(row), cell("description", row.description), args);
+          item.append(name_cell(row), cell("description", row.description), args, ...(row.tag ? [cell("tag", row.tag)] : []));
           return item;
         }),
       );

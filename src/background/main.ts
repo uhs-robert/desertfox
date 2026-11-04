@@ -38,6 +38,10 @@ const complete_items = create_complete_items({
   all_windows: async () => (await get_config()).settings.completion_all_windows === true,
   search_engines: async () => (await get_config()).search_engines,
   page_of,
+  open_settings: async () => {
+    const { open_completion, history_completion_max } = (await get_config()).settings;
+    return { sources: open_completion ?? ["bookmarks", "history"], history_max: history_completion_max ?? 10 };
+  },
 });
 
 // Listeners register in the first turn, so no event is missed while the config loads.

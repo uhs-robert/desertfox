@@ -3,7 +3,7 @@
 
 import type { SearchEngine } from "../shared/config.ts";
 import type { PageInfo } from "../shared/engines/index.ts";
-import type { BookmarkItem, CompleteItemsAnswer, EngineItem, TabItem } from "../shared/messages.ts";
+import type { BookmarkItem, CompleteItemsAnswer, EngineItem, HistoryItem, OpenRow, TabItem } from "../shared/messages.ts";
 import { available_engine_names } from "./availability.ts";
 
 export type TabLike = { id?: number | undefined; index: number; windowId?: number | undefined; title?: string | undefined; url?: string | undefined; incognito: boolean };
@@ -52,6 +52,32 @@ export function bookmark_items(nodes: readonly BookmarkNode[]): BookmarkItem[] {
   return items;
 }
 
+// A visit to these is no page the user would open from the line.
+const SKIPPED_SCHEMES = /^(about|moz-extension|data):/i;
+
+export type HistoryNode = { title?: string | undefined; url?: string | undefined };
+
+// Newest first, as `history.search` gives them. Skipped schemes drop out.
+export function history_items(nodes: readonly HistoryNode[]): HistoryItem[] {
+  return nodes
+    .filter((node): node is HistoryNode & { url: string } => !!node.url && !SKIPPED_SCHEMES.test(node.url))
+    .map((node) => ({ title: one_line(node.title || node.url), url: node.url }));
+}
+
+export type OpenSource = "bookmarks" | "history";
+
+export type OpenSettings = { sources: readonly OpenSource[]; history_max: number };
+
+// Rows in the order of `sources`. A history row whose address is a bookmark drops out, so the address shows once, as the bookmark.
+export function open_rows(sources: readonly OpenSource[], bookmarks: readonly BookmarkItem[], history: readonly HistoryItem[]): OpenRow[] {
+  const bookmarked = new Set(bookmarks.map((bookmark) => bookmark.url));
+  const groups: Record<OpenSource, OpenRow[]> = {
+    bookmarks: bookmarks.map((bookmark) => ({ ...bookmark, tag: "bm" })),
+    history: history.filter((item) => !bookmarked.has(item.url)).map((item) => ({ ...item, tag: "hist" })),
+  };
+  return sources.flatMap((source) => groups[source]);
+}
+
 // Every engine in config order. The flag says whether the page can fill it, so the list can mark the rest. The page URL is read here and goes no further.
 export function engine_items(engines: Record<string, SearchEngine>, page: PageInfo | undefined): EngineItem[] {
   const available = new Set(available_engine_names(engines, page));
@@ -66,6 +92,8 @@ export const read_tabs = async (query: TabQuery, scope: LineScope, all_windows: 
 export const browser_complete_items_deps = {
   query_tabs: ((window_id) => browser.tabs.query(window_id === undefined ? {} : { windowId: window_id })) as TabQuery,
   all_bookmarks: async (): Promise<BookmarkNode[]> => flatten_bookmarks(await browser.bookmarks.getTree()),
+  // `startTime: 0` reaches all history, since the default is the last day. The page ranks, so it needs more than it shows.
+  search_history: async (): Promise<HistoryNode[]> => browser.history.search({ text: "", startTime: 0, maxResults: 1000 }),
 };
 
 export type CompleteItemsDeps = typeof browser_complete_items_deps & {
@@ -75,14 +103,24 @@ export type CompleteItemsDeps = typeof browser_complete_items_deps & {
   search_engines: () => Promise<Record<string, SearchEngine>>;
   // The page of the line's tab, undefined when it has none.
   page_of: (tab_id: number) => Promise<PageInfo | undefined>;
+  open_settings: () => Promise<OpenSettings>;
 };
 
 export type Asker = LineScope & { tab_id: number };
 
 export function create_complete_items(deps: CompleteItemsDeps) {
-  const fetch_items = async (kind: "tabs" | "bookmarks" | "engines", asker: Asker): Promise<CompleteItemsAnswer["items"]> => {
+  const open_items = async (asker: Asker) => {
+    const { sources, history_max } = await deps.open_settings();
+    const bookmarks = sources.includes("bookmarks") ? bookmark_items(await deps.all_bookmarks()) : [];
+    // Firefox records no private visit, so a private line lists none of the normal history either.
+    const history = sources.includes("history") && !asker.incognito ? history_items(await deps.search_history()) : [];
+    return { rows: open_rows(sources, bookmarks, history), history_max };
+  };
+
+  const fetch_items = async (kind: "tabs" | "bookmarks" | "engines" | "open", asker: Asker): Promise<CompleteItemsAnswer["items"]> => {
     // The set is read once per line. The line is modal over one tab, so the page cannot change under it.
     if (kind === "engines") return engine_items(await deps.search_engines(), await deps.page_of(asker.tab_id));
+    if (kind === "open") return open_items(asker);
     if (kind === "bookmarks") return bookmark_items(await deps.all_bookmarks());
     return (await read_tabs(deps.query_tabs, asker, await deps.all_windows())).map(({ number, title, url }) => ({ number, title, url }));
   };
@@ -91,8 +129,8 @@ export function create_complete_items(deps: CompleteItemsDeps) {
     // Undefined for a sender that is not a tab, for a tab that opened no line and for a tab that closed or navigated
     // while the lookup ran. A failed browser call gives an empty list.
     answer: async (kind: unknown, asker: Asker | undefined): Promise<CompleteItemsAnswer | undefined> => {
-      if ((kind !== "tabs" && kind !== "bookmarks" && kind !== "engines") || !asker || !(await deps.is_opener(asker.tab_id))) return undefined;
-      const items = await fetch_items(kind, asker).catch(() => []);
+      if ((kind !== "tabs" && kind !== "bookmarks" && kind !== "engines" && kind !== "open") || !asker || !(await deps.is_opener(asker.tab_id))) return undefined;
+      const items = await fetch_items(kind, asker).catch(() => (kind === "open" ? { rows: [], history_max: 0 } : []));
       return (await deps.is_opener(asker.tab_id)) ? { items } : undefined;
     },
   };
