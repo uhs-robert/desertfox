@@ -4,6 +4,7 @@ The help page, opened by `help.open`. It reads `commands.json`, the compiled key
 
 - `route.ts`: the pages and the hash parser. The sidebar lists Home, Quick Start, Commands, Search Engines and Styling, at `#/`, `#/quick-start`, `#/commands`, `#/search-engines` and `#/styling`. An unknown hash shows Home.
 - `quick_start.ts`: the Quick Start text as blocks. A `{name}` in a sentence is looked up in the compiled keymap by command and args, shortest key first. A command with no key shows its command line instead, so a rebind or unbind never leaves the text wrong.
+- The sidebar ends with one quiet line linking GitHub Sponsors and Ko-fi (`support_line` in `render.ts`).
 - `model.ts`: turns those three inputs into plain rows. Key args and the `flags` column are written by the registry printer, so the page matches the command line. Tests read the rows, so no DOM is needed.
 - Home: the warnings, then the settings in force, read-only like the options page.
 - Search Engines page: the guide from `docs/search_engines.md`, then every resolved engine in tree order with label, URL, needed slots, fallback and the file and level that set each field. `engine.show <name>` opens the page at `#engine=<name>`, which `route.ts` maps to this page, and `main.ts` scrolls to the row.

@@ -30,6 +30,8 @@
   .oasisfox-help-sidebar a { padding: .25rem .5rem; border-radius: var(--oasisfox-radius); color: var(--oasisfox-fg); text-decoration: none; }
   .oasisfox-help-sidebar a:hover { background: color-mix(in srgb, var(--oasisfox-fg) 12%, transparent); }
   .oasisfox-help-sidebar a[aria-current="page"] { color: var(--oasisfox-accent); background: color-mix(in srgb, var(--oasisfox-accent) 15%, transparent); }
+  .oasisfox-help-sidebar .oasisfox-help-support { margin-top: auto; padding: .25rem .5rem; font-size: .8em; opacity: .7; }
+  .oasisfox-help-support a { padding: 0; text-decoration: underline; }
   .oasisfox-help h1, .oasisfox-help h2 { color: var(--oasisfox-accent); }
   .oasisfox-help h1:focus { outline: none; }
   .oasisfox-help h3 { margin: 0 0 .25rem; }
@@ -62,6 +64,7 @@
   @media (max-width: 40rem) {
     .oasisfox-help { flex-direction: column; }
     .oasisfox-help-sidebar { position: static; width: auto; height: auto; flex-direction: row; flex-wrap: wrap; align-items: center; }
+    .oasisfox-help-sidebar .oasisfox-help-support { margin-top: 0; }
     .oasisfox-help-brand { margin: 0 .5rem 0 0; }
     .oasisfox-help-page { padding: 1rem; }
     .oasisfox-help-params, .oasisfox-help-params tr, .oasisfox-help-params td { display: block; }

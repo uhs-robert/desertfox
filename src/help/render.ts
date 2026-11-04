@@ -147,6 +147,23 @@ function page_body(page: PageId, model: HelpModel, guide: Block[]): HTMLElement[
   }
 }
 
+function support_link(title: string, url: string): HTMLElement {
+  const link = el("a", undefined, title);
+  link.setAttribute("href", url);
+  return link;
+}
+
+function support_line(): HTMLElement {
+  return el(
+    "div",
+    "oasisfox-help-support",
+    "Enjoying OasisFox? Support it: ",
+    support_link("GitHub Sponsors", "https://github.com/sponsors/uhs-robert"),
+    " or ",
+    support_link("Ko-fi", "https://ko-fi.com/uphillsolutions"),
+  );
+}
+
 function sidebar(current: PageId): HTMLElement {
   const links = PAGES.map((page) => {
     const link = el("a", undefined, page.title);
@@ -154,7 +171,7 @@ function sidebar(current: PageId): HTMLElement {
     if (page.id === current) link.setAttribute("aria-current", "page");
     return link;
   });
-  return el("nav", "oasisfox-help-sidebar", el("div", "oasisfox-help-brand", "OasisFox"), ...links);
+  return el("nav", "oasisfox-help-sidebar", el("div", "oasisfox-help-brand", "OasisFox"), ...links, support_line());
 }
 
 export function render_help(root: HTMLElement, model: HelpModel, route: Route, guide: Block[]): void {
