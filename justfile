@@ -35,7 +35,7 @@ key-test: build
         exit 2
     fi
     # A test Firefox that runs away would otherwise take the whole tmux window with it: the kernel kills it, and systemd then stops every process in the window's unit. In its own capped scope, only this run dies.
-    exec systemd-run --user --scope --quiet -p MemoryMax=16G -p MemorySwapMax=0 node test/key/run.mjs
+    exec systemd-run --user --scope --quiet -p MemoryMax=8G -p MemorySwapMax=0 node test/key/run.mjs
 
 # Sign dist/ as an unlisted add-on on addons.mozilla.org. Reads the AMO key from the environment only.
 sign: build
