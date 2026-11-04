@@ -116,6 +116,8 @@ function sidebar(current: PageId): HTMLElement {
 
 export function render_help(root: HTMLElement, model: HelpModel, route: Route): void {
   const title = PAGES.find((page) => page.id === route.page)?.title ?? "Home";
-  const page = el("main", "oasisfox-help-page", el("h1", undefined, title), ...page_body(route.page, model));
+  const heading = el("h1", undefined, title);
+  heading.tabIndex = -1;
+  const page = el("main", "oasisfox-help-page", heading, ...page_body(route.page, model));
   root.replaceChildren(el("div", "oasisfox-help", sidebar(route.page), page));
 }
