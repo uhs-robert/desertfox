@@ -1,5 +1,5 @@
 // The new tab page widgets: the analog clock and the date.
-// It swaps the config and reloads. The reload once hung when this file ran last; that did not reproduce in 10 runs. Shots go to OASISFOX_SHOT_DIR when it is set.
+// It swaps the config and reloads. The reload once hung when this file ran last; that did not reproduce in one filtered run with this file last. Shots go to OASISFOX_SHOT_DIR when it is set.
 import { cpSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
