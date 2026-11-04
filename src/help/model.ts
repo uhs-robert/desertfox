@@ -167,7 +167,7 @@ export function build_help_model(commands: CommandMeta[], compiled: CompiledKeym
     config_source: options.source_text,
     settings: options.settings,
     engines: engine_rows(engines),
-    quick_start: quick_start_blocks(compiled),
+    quick_start: quick_start_blocks(compiled, commands),
     groups: [...groups].sort(([a], [b]) => a.localeCompare(b)).map(([name, rows]) => ({ name, commands: rows })),
   };
 }

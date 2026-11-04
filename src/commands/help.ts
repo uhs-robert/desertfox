@@ -2,8 +2,6 @@ import { help_whichkey } from "../content/handlers/lazy_bundle.ts";
 import { HELP_PAGE_FILE } from "../help/route.ts";
 import { define } from "../shared/registry/index.ts";
 
-// The page is a file of the extension, so `help.html` needs no web-accessible entry for the background to open it.
-
 define("help.open", {
   name: "help",
   label: "Help",
