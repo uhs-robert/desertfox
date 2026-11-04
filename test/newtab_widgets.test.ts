@@ -85,3 +85,23 @@ test("advance_hands: a daylight-saving spring-forward jumps by the hour", () => 
   assert.equal(after.jumped, true);
   assert.equal(after.angles.hour, 90);
 });
+
+test("advance_hands: a normal tick animates", () => {
+  const first = advance_hands(null, new Date(2026, 0, 1, 3, 15, 10));
+  assert.equal(advance_hands(first, new Date(2026, 0, 1, 3, 15, 11)).jumped, false);
+});
+
+test("advance_hands: the longest animated gap can cross three second boundaries and still animates", () => {
+  const first = advance_hands(null, new Date(2026, 0, 1, 3, 15, 10, 900));
+  const next = advance_hands(first, new Date(2026, 0, 1, 3, 15, 13, 400));
+  assert.equal(next.jumped, false);
+  assert.equal(next.angles.second, 13 * 6);
+});
+
+test("advance_hands: the minute wrap and the hour wrap animate", () => {
+  const minute_wrap = advance_hands(advance_hands(null, new Date(2026, 0, 1, 3, 59, 59)), new Date(2026, 0, 1, 4, 0, 0));
+  assert.equal(minute_wrap.jumped, false);
+  const hour_wrap = advance_hands(advance_hands(null, new Date(2026, 0, 1, 11, 59, 59)), new Date(2026, 0, 1, 12, 0, 0));
+  assert.equal(hour_wrap.jumped, false);
+  assert.equal(hour_wrap.angles.hour, 360);
+});

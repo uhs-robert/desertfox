@@ -17,8 +17,8 @@ export function unwrap_angle(previous: number, target: number): number {
 
 // Longer than a tick plus timer jitter. A bigger step means a sleep, a throttled tab or a changed system clock.
 const MAX_ANIMATED_STEP_MS = 2500;
-// The most any hand turns in one animated step: the seconds hand over the longest allowed step. A hand that would turn more, or turn backward (a turn of nearly 360 forward), came from a changed local time.
-const MAX_ANIMATED_TURN_DEGREES = (MAX_ANIMATED_STEP_MS / 1000) * 6;
+// The most any hand turns in one animated step: the seconds hand over the longest allowed step, counted in whole seconds because `clock_angles` is. A hand that would turn more, or turn backward (a turn of nearly 360 forward), came from a changed local time.
+const MAX_ANIMATED_TURN_DEGREES = Math.ceil(MAX_ANIMATED_STEP_MS / 1000) * 6;
 
 export type ShownHands = { at_ms: number; angles: ClockAngles; jumped: boolean };
 
