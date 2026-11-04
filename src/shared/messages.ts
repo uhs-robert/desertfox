@@ -150,9 +150,13 @@ export type RunInContent = {
   invocations: Invocation[];
 };
 
+// One toast on the page. A refusal leaves `kind` out and shows as an error.
+export type ToastKind = "error" | "warning" | "info" | "success";
+
 export type ShowRefusal = {
   type: "refusal";
   refusal: Refusal;
+  kind?: ToastKind;
 };
 
 export type SetMode = {

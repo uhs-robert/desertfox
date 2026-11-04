@@ -1,6 +1,7 @@
 import type { CommandContext } from "../shared/command.ts";
 import { bookmark_items, browser_complete_items_deps } from "../background/complete_items.ts";
-import type { BookmarkItem } from "../shared/messages.ts";
+import { show_toast_on_tab } from "../background/browser_deps.ts";
+import type { BookmarkItem, ToastKind } from "../shared/messages.ts";
 import { define } from "../shared/registry/index.ts";
 import { best_match } from "../shared/score.ts";
 import { open_in, WHERE_PARAM } from "./open_target.ts";
@@ -13,6 +14,11 @@ export type BookmarkDeps = {
   // Newest first, the same list the completion shows.
   bookmarks: () => Promise<BookmarkItem[]>;
   open: (ctx: CommandContext, url: string, where: Where) => Promise<void>;
+  // The nodes Firefox finds for `url`. It ignores case and a trailing slash, so the handler checks the address again.
+  nodes_for_url: (url: string) => Promise<{ id: string; url?: string | undefined; type?: string | undefined; unmodifiable?: string | undefined }[]>;
+  tab_url: (tab_id: number | undefined) => Promise<string | undefined>;
+  remove: (id: string) => Promise<void>;
+  toast: (ctx: CommandContext, kind: ToastKind, message: string) => Promise<void>;
 };
 
 // An exact address wins, since a completion pick puts the address in the line. Other text is a fuzzy match on title
@@ -37,6 +43,18 @@ export function make_bookmark_handlers(deps: BookmarkDeps) {
       const picked = pick_bookmark(await deps.bookmarks(), args.bookmark);
       await deps.open(ctx, picked.url, args.where);
     },
+    remove: async (ctx: CommandContext, args: { bookmark: string }) => {
+      // Completion lists one row per address, so a picked row stands for every bookmark with that address.
+      const url = args.bookmark.trim() === "" ? await deps.tab_url(ctx.tab_id) : pick_bookmark(await deps.bookmarks(), args.bookmark).url;
+      const nodes = url === undefined ? [] : await deps.nodes_for_url(url);
+      const found = nodes.filter((node) => node.url === url && (node.type === undefined || node.type === "bookmark"));
+      if (found.length === 0) throw new Error("No bookmark for this page");
+      // A managed bookmark rejects the removal, so it is left out before the first removal runs.
+      const matches = found.filter((node) => node.unmodifiable === undefined);
+      if (matches.length === 0) throw new Error("This page's bookmarks are managed and cannot be removed");
+      for (const { id } of matches) await deps.remove(id);
+      await deps.toast(ctx, "success", `Removed ${matches.length} ${matches.length === 1 ? "bookmark" : "bookmarks"}`);
+    },
   };
 }
 
@@ -49,6 +67,10 @@ export const browser_bookmark_deps: BookmarkDeps = {
   create: async ({ url, title }) => void (await browser.bookmarks.create({ url, title })),
   bookmarks: async () => bookmark_items(await browser_complete_items_deps.all_bookmarks()),
   open: (ctx, url, where) => open_in(ctx, url, where),
+  nodes_for_url: (url) => browser.bookmarks.search({ url }),
+  tab_url: async (tab_id) => (tab_id === undefined ? undefined : (await browser.tabs.get(tab_id)).url),
+  remove: (id) => browser.bookmarks.remove(id),
+  toast: (ctx, kind, message) => show_toast_on_tab(ctx, "bookmark.remove", message, kind),
 };
 
 const handlers = make_bookmark_handlers(browser_bookmark_deps);
@@ -68,4 +90,12 @@ define("bookmark.open", {
   params: [{ name: "bookmark", type: "string", rest: true, main: true, values: { from: "bookmarks" } }, WHERE_PARAM],
   runs_in: "background",
   run: (ctx, args) => handlers.open(ctx, args as { bookmark: string; where: Where }),
+});
+
+define("bookmark.remove", {
+  label: "Remove bookmark",
+  intent: "Remove the current page's bookmarks. With an argument, remove the bookmark chosen by title or address.",
+  params: [{ name: "bookmark", type: "string", rest: true, main: true, default: "", values: { from: "bookmarks" } }],
+  runs_in: "background",
+  run: (ctx, args) => handlers.remove(ctx, args as { bookmark: string }),
 });
