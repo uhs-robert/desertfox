@@ -3,8 +3,8 @@
 
 import { CONFIG_STATUS_STORAGE_KEY } from "../../background/storage_keys.ts";
 import type { BundleHostApi } from "../bundle_host.ts";
-import { link_address, OPEN_PLACES, perform, UNBUILT_ACTIONS } from "./actions.ts";
-import type { HintAction, Place } from "./actions.ts";
+import { link_address, OPEN_PLACES, perform, starts_caret } from "./actions.ts";
+import type { CaretMode, HintAction, Place } from "./actions.ts";
 import { copy_text } from "../caret/copy_text.ts";
 import { collect, has_text, selector_for } from "./candidates.ts";
 import type { Found, HintFilter } from "./candidates.ts";
@@ -15,7 +15,7 @@ import { follow_windows } from "./follow.ts";
 import { keep_visible, uncovered_through_frames } from "./visible.ts";
 import type { PageProbe } from "./visible.ts";
 
-type HintsWindow = { oasisfox_host: BundleHostApi; oasisfox_hints_ready?: true };
+type HintsWindow = { oasisfox_host: BundleHostApi; oasisfox_hints_ready?: true; oasisfox_caret_target?: Element };
 const page = window as unknown as HintsWindow;
 
 type Session = {
@@ -87,7 +87,13 @@ function open_link(url: string, place: Place): void {
   void browser.runtime.sendMessage({ type: "run", invocations: [{ id: "open.url", args: { url, where: place } }], mode: "normal" });
 }
 
-const deps = { open_link, copy: copy_to_clipboard };
+// The caret bundle reads the element in `start_session` when the mode starts, and loads on that first entry.
+function start_caret(target: Element, mode: CaretMode): void {
+  page.oasisfox_caret_target = target;
+  page.oasisfox_host.set_mode(mode);
+}
+
+const deps = { open_link, copy: copy_to_clipboard, start_caret };
 
 function register(host: BundleHostApi): void {
   let session: Session | undefined;
@@ -167,7 +173,6 @@ function register(host: BundleHostApi): void {
 
   host.register_handler("hint.run", (args) => {
     const action = args.action as HintAction;
-    if (UNBUILT_ACTIONS.includes(action)) throw new Error(`hint ${action} is not built yet`);
     end_session();
     const filter = args.filter as HintFilter;
     const custom_selector = args.selector as string | undefined;
@@ -180,7 +185,8 @@ function register(host: BundleHostApi): void {
     // With nothing to label the mode never changes, so keys held during the load run as normal keys.
     const text = (args.text as string | undefined) || undefined;
     if (candidates.length === 0) return create_view().show_message(text === undefined ? "No hints on this page" : `No link matches ${text}`);
-    const current: Session = { cancelled: false, action, waiting_tokens: [], rapid: args.rapid === true, filter, custom_selector, text, lower_text: text?.toLowerCase() };
+    // A caret start ends hint mode on the first pick, so rapid has nothing to repeat.
+    const current: Session = { cancelled: false, action, waiting_tokens: [], rapid: args.rapid === true && !starts_caret(action), filter, custom_selector, text, lower_text: text?.toLowerCase() };
     session = current;
     host.set_mode("hint");
     void build(current, candidates, true);

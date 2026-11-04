@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-test("the hints bundle registers a hint sink and hint.run, refuses unbuilt actions before entering hint mode, and registers once", async () => {
+test("the hints bundle registers a hint sink and hint.run, and registers once", async () => {
   const registered: string[] = [];
   const handlers = new Map<string, (args: Record<string, unknown>) => void>();
   const sinks = new Map<string, { on_token: (token: string) => string; exit: () => void }>();
@@ -20,7 +20,6 @@ test("the hints bundle registers a hint sink and hint.run, refuses unbuilt actio
   await import(`${bundle_url}?second`);
   assert.deepEqual(registered, ["hint.run"]);
   assert.deepEqual([...sinks.keys()], ["hint"]);
-  for (const action of ["select"]) assert.throws(() => handlers.get("hint.run")!({ action }), /not built yet/);
   assert.deepEqual(modes, []);
   assert.equal(sinks.get("hint")!.on_token("a"), "pass");
   sinks.get("hint")!.exit();

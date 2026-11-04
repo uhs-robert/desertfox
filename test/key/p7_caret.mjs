@@ -14,7 +14,7 @@ export async function run_cases({ run_case, expect, open_page, send_keys, sleep,
   // The page text is "caret p7", "foo bar.baz", "second line here". From the first word, 3w lands on "bar".
   await run_case("V, 3w, v, e, y copies the word the selection reached and shows a toast", async () => {
     await open_page("caret", "caret_yank", { new_tab: true });
-    await send_keys("V");
+    await send_keys("gV");
     await send_keys("3w");
     await send_keys("v");
     await send_keys("e");
@@ -35,7 +35,7 @@ export async function run_cases({ run_case, expect, open_page, send_keys, sleep,
   await run_case("V shows the caret at once in the caret color, and Escape clears it with the colors", async () => {
     await open_page("caret", "caret_enter", { new_tab: true });
     const mark = events.length;
-    await send_keys("V");
+    await send_keys("gV");
     await wait_event(mark, selection_is("caret_enter", "c"), "the caret on the first character");
     await wait_event(mark, style_is("caret_enter", (css) => css.includes(CARET_BACKGROUND)), "the caret color");
     await send_keys("v");
@@ -46,7 +46,7 @@ export async function run_cases({ run_case, expect, open_page, send_keys, sleep,
     await wait_event(mark_escape, selection_is("caret_enter", ""), "an empty selection after Escape");
     await wait_event(mark_escape, style_is("caret_enter", no_style), "no highlight style after Escape");
     const mark_again = events.length;
-    await send_keys("V");
+    await send_keys("gV");
     await wait_event(mark_again, selection_is("caret_enter", "c"), "the caret again after leaving");
     await send_keys("-k", "Escape");
   });
@@ -54,7 +54,7 @@ export async function run_cases({ run_case, expect, open_page, send_keys, sleep,
   await run_case("switching tabs away from caret mode clears the highlight, and V works after coming back", async () => {
     await open_page("caret", "caret_tab", { new_tab: true });
     const mark = events.length;
-    await send_keys("V");
+    await send_keys("gV");
     await wait_event(mark, selection_is("caret_tab", "c"), "the caret");
     const mark_switch = events.length;
     // Caret mode binds no tab key, so the switch is Firefox's own Ctrl+Page Down.
@@ -64,7 +64,7 @@ export async function run_cases({ run_case, expect, open_page, send_keys, sleep,
     await send_keys("-M", "ctrl", "-k", "Prior", "-m", "ctrl");
     await sleep(500);
     const again = events.length;
-    await send_keys("V");
+    await send_keys("gV");
     await wait_event(again, selection_is("caret_tab", "c"), "the caret after coming back");
     await send_keys("-k", "Escape");
   });
@@ -73,7 +73,7 @@ export async function run_cases({ run_case, expect, open_page, send_keys, sleep,
     await open_page("caret_wrap", "caret_wrap", { new_tab: true });
     const mark = events.length;
     // The paragraph wraps to abc, def, ghi, jkl. The first visible text is the title above it.
-    await send_keys("V");
+    await send_keys("gV");
     await send_keys("j");
     await wait_event(mark, selection_is("caret_wrap", "a"), "the first screen line");
     await send_keys("j");
@@ -90,7 +90,7 @@ export async function run_cases({ run_case, expect, open_page, send_keys, sleep,
   await run_case("j and k keep the column over a shorter line", async () => {
     await open_page("caret_columns", "caret_columns", { new_tab: true });
     const mark = events.length;
-    await send_keys("V");
+    await send_keys("gV");
     await send_keys("j");
     await wait_event(mark, selection_is("caret_columns", "a"), "the first line");
     await send_keys("lllll");
@@ -105,7 +105,7 @@ export async function run_cases({ run_case, expect, open_page, send_keys, sleep,
 
   await run_case("j keeps the column while the next line is below the screen", async () => {
     await open_page("caret_long_columns", "caret_long", { new_tab: true });
-    await send_keys("V");
+    await send_keys("gV");
     await send_keys("j");
     await send_keys("lllll");
     await send_keys("120j");
@@ -118,7 +118,7 @@ export async function run_cases({ run_case, expect, open_page, send_keys, sleep,
 
   await run_case("the caret scrolls a nested scroller to stay in view", async () => {
     await open_page("caret_nested", "caret_nested", { new_tab: true });
-    await send_keys("V");
+    await send_keys("gV");
     await send_keys("j");
     await send_keys("60j");
     await sleep(1500);
@@ -132,7 +132,7 @@ export async function run_cases({ run_case, expect, open_page, send_keys, sleep,
     await open_page("caret_scrolled", "caret_scrolled", { new_tab: true });
     await sleep(500);
     const mark = events.length;
-    await send_keys("V");
+    await send_keys("gV");
     const shown = await wait_event(mark, (event) => event.type === "selection" && event.page_id === "caret_scrolled" && event.text !== "", "a caret");
     expect(shown.top !== null && shown.top > -30 && shown.top < 1000, `the caret starts at y ${shown.top}, off screen`);
     // Starting at the paragraph's first character would scroll the page back up to it.
@@ -140,11 +140,69 @@ export async function run_cases({ run_case, expect, open_page, send_keys, sleep,
     await send_keys("-k", "Escape");
   });
 
+  // A hint starts the mode at its element: label "a" is the only element, so it is picked at once.
+  const hint_into = async (page_id, flag, target) => {
+    await open_page("caret_hint", page_id, { new_tab: true });
+    const mark = events.length;
+    await send_keys(`:hint ${flag} --custom --selector=${target}`, "-k", "Return");
+    await sleep(300);
+    await send_keys("a");
+    return mark;
+  };
+  const badge_is = (page_id, label) => (event) => event.type === "indicator" && event.page_id === page_id && event.label === label;
+
+  await run_case("hint --caret on a paragraph starts caret mode on its first character", async () => {
+    const mark = await hint_into("hint_caret", "--caret", "#pick");
+    await wait_event(mark, badge_is("hint_caret", "CARET"), "the CARET badge");
+    await wait_event(mark, selection_is("hint_caret", "b"), "the caret on the first character of the paragraph");
+    await send_keys("-k", "Escape");
+  });
+
+  await run_case("hint --visual on a paragraph starts visual mode on its first character", async () => {
+    const mark = await hint_into("hint_visual", "--visual", "#pick");
+    await wait_event(mark, badge_is("hint_visual", "VISUAL"), "the VISUAL badge");
+    await wait_event(mark, selection_is("hint_visual", "b"), "one character selected");
+    await send_keys("-k", "Escape");
+    await send_keys("-k", "Escape");
+  });
+
+  await run_case("hint --caret on an image or a field jumps to the next text", async () => {
+    const image_mark = await hint_into("hint_image", "--caret", "#pic");
+    await wait_event(image_mark, selection_is("hint_image", "g"), "the caret on the text after the image");
+    await send_keys("-k", "Escape");
+    const field_mark = await hint_into("hint_field", "--caret", "#field");
+    await wait_event(field_mark, selection_is("hint_field", "o"), "the caret on the text after the field");
+    await send_keys("-k", "Escape");
+  });
+
+  await run_case("hint --caret with no text after the element shows a toast and stays in normal mode", async () => {
+    const mark = await hint_into("hint_none", "--caret", "#last");
+    await wait_event(mark, (event) => event.type === "toast" && event.page_id === "hint_none", "the No text here toast");
+    await wait_event(mark, badge_is("hint_none", "NORMAL"), "the NORMAL badge");
+  });
+
+  await run_case("v and V pick a hint for caret and visual mode", async () => {
+    await open_page("caret_hint", "hint_keys", { new_tab: true });
+    const mark = events.length;
+    await send_keys("v");
+    await sleep(300);
+    await send_keys("a");
+    await wait_event(mark, badge_is("hint_keys", "CARET"), "the CARET badge after v");
+    await send_keys("-k", "Escape");
+    const mark_visual = events.length;
+    await send_keys("V");
+    await sleep(300);
+    await send_keys("a");
+    await wait_event(mark_visual, badge_is("hint_keys", "VISUAL"), "the VISUAL badge after V");
+    await send_keys("-k", "Escape");
+    await send_keys("-k", "Escape");
+  });
+
   // `s` names no engine, so the default_engine setting decides, and the test config points the built-in duck at the test server.
   await run_case("V, 3w, v, e, s searches the selected word", async () => {
     await open_page("caret", "caret_search", { new_tab: true });
     const mark = events.length;
-    for (const keys of ["V", "3w", "v", "e", "s"]) await send_keys(keys);
+    for (const keys of ["gV", "3w", "v", "e", "s"]) await send_keys(keys);
     const result = await wait_event(mark, (event) => event.type === "tree_read" && event.page_id === "search_result", "the search result page");
     expect(new URLSearchParams(result.search).get("q") === "bar", `searched "${new URLSearchParams(result.search).get("q")}", expected "bar"`);
   });

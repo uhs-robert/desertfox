@@ -6,7 +6,7 @@ export async function run_cases({ run_case, expect, open_page, send_keys, sleep,
 
   // V starts on the title. Press a key n times and read the character under the caret ("" on an empty line, where no caret is drawn).
   async function caret_after(id, keys, after_g) {
-    await send_keys("V");
+    await send_keys("gV");
     if (after_g) await send_keys("G");
     await sleep(300);
     for (const key of keys) {
@@ -44,7 +44,7 @@ export async function run_cases({ run_case, expect, open_page, send_keys, sleep,
     await send_keys("-k", "Escape");
     await sleep(500);
     const mark = events.length;
-    await send_keys("V");
+    await send_keys("gV");
     await sleep(500);
     const shown = events.slice(mark).filter((event) => event.type === "selection" && event.page_id === "find_a" && event.text !== "").at(-1);
     expect(shown, "V drew no caret");
@@ -62,7 +62,7 @@ export async function run_cases({ run_case, expect, open_page, send_keys, sleep,
     await send_keys("-k", "Return");
     await sleep(500);
     const mark = events.length;
-    await send_keys("V");
+    await send_keys("gV");
     await sleep(500);
     const shown = events.slice(mark).filter((event) => event.type === "selection" && event.page_id === "find_b" && event.text !== "").at(-1);
     expect(shown && shown.text === "n", `the caret is on "${shown?.text}", expected "n" of needle`);
@@ -72,7 +72,7 @@ export async function run_cases({ run_case, expect, open_page, send_keys, sleep,
   // In caret mode "/" is not bound, so Firefox's quick find runs and moves the page selection under the session.
   await run_case("a find with / inside caret mode leaves the caret at the match for w", async () => {
     await open_page("caret_bug_find", "find_c", { new_tab: true });
-    await send_keys("V");
+    await send_keys("gV");
     await sleep(300);
     await send_keys("/");
     await send_keys("-d", "30", "needle");
@@ -88,7 +88,7 @@ export async function run_cases({ run_case, expect, open_page, send_keys, sleep,
 
   await run_case("j in visual mode passes two br empty lines (d, empty, empty, g)", async () => {
     await open_page("caret_bug_lines", "lines_empty_line", { new_tab: true });
-    await send_keys("V");
+    await send_keys("gV");
     await send_keys("v");
     for (let step = 0; step < 6; step++) {
       await send_keys("j");
@@ -103,7 +103,7 @@ export async function run_cases({ run_case, expect, open_page, send_keys, sleep,
   // Decision 3: visual mode keeps the anchor and moves the caret to the end of the match.
   await run_case("a find with / in visual mode keeps the anchor and ends at the match", async () => {
     await open_page("caret_bug_find", "find_d", { new_tab: true });
-    await send_keys("V");
+    await send_keys("gV");
     await send_keys("v");
     await sleep(300);
     await send_keys("/");
@@ -122,7 +122,7 @@ export async function run_cases({ run_case, expect, open_page, send_keys, sleep,
   // A drag in the page can end at offset 0 of a later text node. The span then ends at the character before it, not at its start.
   await run_case("a page selection ending at offset 0 of the next block keeps the whole span", async () => {
     await open_page("caret_bug_lines", "lines_blocks", { new_tab: true });
-    await send_keys("V");
+    await send_keys("gV");
     await send_keys("v");
     await sleep(300);
     await evaluate_in_background(rdp, extension_id, `(async () => {
