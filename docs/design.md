@@ -163,7 +163,7 @@ The keymap is data, not code. It maps a mode and a key sequence to an invocation
 - The background checks each entry against the registry when it loads. A bad entry logs a warning and is skipped, so one typo does not break the rest. The help page lists the warnings.
 - Key notation is vim style: `<C-x>`, `<A-j>`, `<S-Escape>`. Sequences match through a prefix tree. A complete match runs at once, with no timeout.
 - The modes are normal, insert, ignore, hint and cmdline. Caret and visual modes arrive in phase 2, see [Caret and visual](#caret-and-visual). Insert mode follows `focusin` and `focusout` on editable elements instead of checking the focused element on every key.
-- A mode badge sits in the bottom right corner, 8 px above the bottom edge. The `mode_indicator` setting controls it: `always` (the default), `not_normal` or `off`. The `palette` setting picks its colors from the 16 oasis.nvim palettes (default `moonlight`). Light or dark follows the system theme.
+- A mode badge sits in the bottom right corner, 8 px above the bottom edge. The `mode_indicator` setting controls it: `always` (the default), `not_normal` or `off`. The `palette` setting names a theme (default `moonlight`), see [Themes](#themes). Light or dark follows the system theme.
 - The which-key panel is a floating frame with a 1 px tinted border and its title set into the top border. The `which_key_border` setting picks the corners: `square` (the default), `round` or `chamfer`. A footer names the exit keys.
 - `browser` mode holds the chords for the Firefox shortcuts. The manifest reserves a fixed number of shortcut slots, and the background assigns the chords to them with `commands.update`. The content script also catches these chords. If it cancels a chord, Firefox does not fire the shortcut as well, which the spike's key-blocking page showed.
 
@@ -182,6 +182,7 @@ The tool reads `~/.config/oasisfox/` by default. Every data file is TOML. A left
 | `command_aliases.toml` | Extra command line names, for example `g = "open.search"`. |
 | `settings.toml` | Settings such as the which-key delay and the new tab page. |
 | `snippets/*.js` | One custom command per file. See [Snippets](#snippets). |
+| `themes/<name>.toml` | A local theme that `palette = "<name>"` picks. See [Themes](#themes). |
 | `style.css` | Custom CSS for the OasisFox surfaces. See [Styles](#styles). |
 
 Each data file can also have a matching directory, for example `keymap.d/`. The tool merges the main file first, then the files in the directory in name order. A later entry wins for the same key. This is how private config joins without editing public files: a private repo links `keymap.d/50-private.toml` and `snippets/` files into place.
@@ -264,6 +265,14 @@ Every surface (which-key, the command line, hints and the mode indicator) draws 
 - Setting variables covers colors, fonts and sizes. Full selectors can change layout. The documented class names on each surface are part of the public format, and the help page lists them.
 - In Oasis Dots, the theme switcher writes `style.d/00-oasis-theme.css` with the variables for the current Oasis theme, then runs the reload. Without Oasis, the built-in defaults apply.
 - CSS cannot run code. A `url()` in user CSS makes the page load that address, so the CSS stays in the user's own files like the snippets.
+
+### Themes
+
+A theme file maps colors onto a fixed public list of roles. The theme's own color names never reach OasisFox. A file is TOML with a `[dark]` table, a `[light]` table or both, and a file with one table serves both system settings. Each table maps a role to a `#rgb` or `#rrggbb` color.
+
+The roles: `bg`, `bg_mantle`, `bg_crust`, `selection`, `fg`, `muted`, `primary`, `secondary`, `accent`, `border`, `error`, `warn`, `ok`, `mode_normal`, `mode_insert`, `mode_ignore`, `mode_caret` and `mode_visual`. `bg`, `fg`, `primary` and `accent` are required. Every other role derives from them when missing, by the one table in `src/shared/theme/derive.ts`. A role's CSS variable is `--oasisfox-` plus the role with hyphens, for example `--oasisfox-bg-mantle`. The list is a contract: a later rename breaks contributed themes, an addition does not.
+
+`palette = "<name>"` looks in `<config dir>/themes/<name>.toml` first, then in the repo's `themes/`, then in the 16 oasis.nvim palettes. A local file wins over a repo theme of the same name. `tools/build-config` checks every local theme file and rejects an unknown role (the error lists the valid ones), a missing required role and a bad color, each with the file, table and key. `just themes` compiles the repo `themes/` into `src/shared/themes.ts`, and `just test` fails when that module is stale. Today a theme sets only the mode badge colors: the badge is the `mode_*` role with `bg` as the text.
 
 ## Snippets
 

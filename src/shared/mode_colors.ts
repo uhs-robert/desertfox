@@ -1,7 +1,12 @@
-// Mode badge colors from the oasis.nvim palettes, so the page badge matches the editor.
+// Mode badge colors from the palette setting, which names a theme.
+// The 16 oasis.nvim palettes below are not theme files yet, so a name falls through to them last.
+// Their badges keep today's look, so the page badge matches the editor.
 // Each palette keeps seven colors per variant, in the order of PaletteColors. They are the ones
 // oasis.nvim's lualine theme uses: its normal, insert, visual and command section colors, the core
 // and surface backgrounds, and the dim foreground. Every palette has all of them.
+
+import type { Theme } from "./theme/roles.ts";
+import { REPO_THEMES } from "./themes.ts";
 
 export const PALETTE_NAMES = [
   "abyss", "cactus", "canyon", "desert", "dune", "lagoon", "luna", "midnight",
@@ -43,10 +48,8 @@ export function is_palette_name(value: unknown): value is PaletteName {
   return (PALETTE_NAMES as readonly unknown[]).includes(value);
 }
 
-// A name the config check did not catch still gets a working badge.
-export function palette_or_default(value: unknown): PaletteName {
-  return is_palette_name(value) ? value : DEFAULT_PALETTE;
-}
+// The theme a user's config directory holds under the palette's name, filled by tools/build-config.
+export type LocalTheme = { name: string; colors: Theme };
 
 // Caret mode takes the lualine command colors and visual mode the visual ones.
 // Ignore mode takes the lualine inactive colors: it has no editor twin, and a muted badge says the editor is not driving the page.
@@ -63,4 +66,22 @@ export function resolve_mode_colors(palette: PaletteName): ModeColors {
   const { dark, light } = PALETTES[palette];
   const colors_of = (mode: ModeColorMode) => ({ dark: pair_of(dark, mode), light: pair_of(light, mode) });
   return Object.fromEntries(MODE_COLOR_MODES.map((mode) => [mode, colors_of(mode)])) as ModeColors;
+}
+
+// A theme badge is its mode role with `bg` as the text.
+export function mode_colors_of_theme(theme: Theme): ModeColors {
+  const colors_of = (mode: ModeColorMode) => ({
+    dark: [theme.dark[`mode_${mode}`], theme.dark.bg] as ColorPair,
+    light: [theme.light[`mode_${mode}`], theme.light.bg] as ColorPair,
+  });
+  return Object.fromEntries(MODE_COLOR_MODES.map((mode) => [mode, colors_of(mode)])) as ModeColors;
+}
+
+// A local theme wins over a repo theme of the same name. Undefined when the name finds nothing.
+export function palette_mode_colors(name: string, local_theme?: LocalTheme): ModeColors | undefined {
+  // Managed storage can be edited by hand, so the local theme's shape is not taken on trust.
+  const local_usable = local_theme?.name === name && typeof local_theme.colors?.dark === "object" && typeof local_theme.colors?.light === "object";
+  if (local_usable) return mode_colors_of_theme(local_theme.colors);
+  if (Object.hasOwn(REPO_THEMES, name)) return mode_colors_of_theme(REPO_THEMES[name]!);
+  return is_palette_name(name) ? resolve_mode_colors(name) : undefined;
 }

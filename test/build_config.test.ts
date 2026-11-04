@@ -10,6 +10,7 @@ import { fill_template } from "../src/shared/engines/index.ts";
 import { build_schemas } from "../tools/build-config/schemas.ts";
 import { build_commands_file, create_registry } from "../src/shared/registry/index.ts";
 import { parse_snippet } from "../tools/build-config/snippet.ts";
+import { derive_roles } from "../src/shared/theme/derive.ts";
 
 const FIXTURES = join(import.meta.dirname, "fixtures", "build-config");
 const commands = read_commands_file(join(FIXTURES, "commands.json"));
@@ -86,9 +87,40 @@ test("mode_indicator must be always, not_normal or off", () => {
   assert.match(problems_of(dir).join("\n"), /settings\.toml: mode_indicator: .*not_normal/);
 });
 
-test("palette must name an oasis palette", () => {
-  const dir = config_dir_with({ "settings.toml": 'palette = "neon"' });
-  assert.match(problems_of(dir).join("\n"), /settings\.toml: palette: .*moonlight/);
+test("palette must name a theme, and the error lists the known names", () => {
+  const dir = config_dir_with({ "settings.toml": 'palette = "neon"', "themes/mine.toml": LOCAL_THEME });
+  assert.match(problems_of(dir).join("\n"), /settings\.toml: palette: no theme named "neon" \(known: mine, .*moonlight/);
+});
+
+const LOCAL_THEME = '[dark]\nbg = "#101010"\nfg = "#eeeeee"\nprimary = "#88aaff"\naccent = "#ffcc66"\n';
+const REPO_THEME = { dark: derive_roles({ bg: "#000000", fg: "#ffffff", primary: "#ff0000", accent: "#00ff00" }, "dark"), light: derive_roles({ bg: "#ffffff", fg: "#000000", primary: "#ff0000", accent: "#00ff00" }, "light") };
+
+test("palette picks a local theme from the config directory's themes folder", () => {
+  const dir = config_dir_with({ "settings.toml": 'palette = "mine"', "themes/mine.toml": LOCAL_THEME });
+  const config = build_config(dir, commands);
+  assert.equal(config.local_theme?.name, "mine");
+  assert.equal(config.local_theme?.colors.light.bg, "#101010");
+  assert.equal(config.local_theme?.colors.dark.mode_normal, "#88aaff");
+});
+
+test("a local theme wins over a repo theme of the same name", () => {
+  const dir = config_dir_with({ "settings.toml": 'palette = "shared"', "themes/shared.toml": LOCAL_THEME });
+  assert.equal(build_config(dir, commands, [], { shared: REPO_THEME }).local_theme?.colors.dark.bg, "#101010");
+});
+
+test("a repo theme or a built-in palette needs no local theme in the output", () => {
+  const repo = config_dir_with({ "settings.toml": 'palette = "shared"' });
+  assert.equal(build_config(repo, commands, [], { shared: REPO_THEME }).local_theme, undefined);
+  const builtin = config_dir_with({ "settings.toml": 'palette = "cactus"', "themes/mine.toml": LOCAL_THEME });
+  assert.equal(build_config(builtin, commands).local_theme, undefined);
+});
+
+test("every local theme file is checked, even one palette does not pick", () => {
+  const dir = config_dir_with({ "themes/broken.toml": '[dark]\nbg = "#000"\nfg = "nope"\nprimary = "#fff"\naccent = "#fff"\nbg_mantel = "#111"', "themes/notes.txt": "x" });
+  const problems = problems_of(dir).join("\n");
+  assert.match(problems, /themes\/broken\.toml: \[dark\] fg: expected a color/);
+  assert.match(problems, /themes\/broken\.toml: \[dark\] bg_mantel: unknown role \(valid: bg, bg_mantle,/);
+  assert.match(problems, /themes\/notes\.txt: unknown file/);
 });
 
 test("settings, aliases, css and the format version come through", () => {
