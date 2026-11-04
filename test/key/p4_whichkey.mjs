@@ -114,11 +114,11 @@ export async function run_cases({ rdp, extension_id, take_shot, run_case, send_k
     await open_page("caret", "wk", { new_tab: true });
     const normal_rows = await rows_after([",w"], "normal");
     await send_keys("-k", "Escape");
-    await send_keys("V");
+    await send_keys("gV");
     const caret_rows = await rows_after([",w"], "caret");
     // Escape closes the panel and also leaves caret mode, so V starts caret mode again before v.
     await send_keys("-k", "Escape");
-    await send_keys("V");
+    await send_keys("gV");
     await send_keys("v");
     const visual_rows = await rows_after([",w"], "visual");
     await send_keys("-k", "Escape");
@@ -151,7 +151,7 @@ export async function run_cases({ rdp, extension_id, take_shot, run_case, send_k
       await sleep(900);
       await take_shot(`${shot_dir}/themed-panel.png`);
       await send_keys("-k", "Escape");
-      await send_keys("V");
+      await send_keys("gV");
       await send_keys("v");
       await send_keys("e");
       const mark = events.length;

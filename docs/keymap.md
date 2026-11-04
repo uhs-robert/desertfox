@@ -20,7 +20,7 @@ A note "(prompts)" means the binding leaves a param out, so the command line ask
 
 <!-- BEGIN generated -->
 
-bound: 174 (normal 118, hint 2, cmdline 11, caret 18, visual 20, insert 1, ignore 1, browser 3) | later: 15 | dropped: 7
+bound: 175 (normal 119, hint 2, cmdline 11, caret 18, visual 20, insert 1, ignore 1, browser 3) | later: 15 | dropped: 7
 
 ### normal
 
@@ -134,7 +134,8 @@ bound: 174 (normal 118, hint 2, cmdline 11, caret 18, visual 20, insert 1, ignor
 | `gO` | bound | `open --tab` (prompts) | Open URL |  |
 | `f` | bound | `hint` | Click element |  |
 | `F` | bound | `hint --background` | Click element in background tab |  |
-| `v` | bound | `hint --select` | Select element |  |
+| `v` | bound | `hint --caret --all` | Start caret mode at element |  |
+| `V` | bound | `hint --visual --all` | Start visual mode at element |  |
 | `;b` | bound | `hint` | Click element |  |
 | `;B` | bound | `hint --background` | Click element in background tab |  |
 | `;y` | bound | `hint --copy --links` | Copy link address |  |
@@ -143,7 +144,7 @@ bound: 174 (normal 118, hint 2, cmdline 11, caret 18, visual 20, insert 1, ignor
 | `;l` | bound | `hint --links` | Click link |  |
 | `:` | bound | `cmdline.open` | Command line |  |
 | `g?` | bound | `help` | Help |  |
-| `V` | bound | `mode caret` | Set mode |  |
+| `gV` | bound | `mode caret` | Set mode |  |
 | `m` | later | `mark.add` |  | phase 3, key param |
 | `M` | later | `quickmark.add` |  | phase 3, key param |
 | `.` | later | `command.repeat` |  | phase 3 |

@@ -494,7 +494,7 @@ async function main() {
       await open_page("page", "bundle_c", { new_tab: true });
       const is_label = (label) => (event) => event.type === "indicator" && event.page_id === "bundle_c" && event.label === label;
       const mark = events.length;
-      await send_keys("V");
+      await send_keys("gV");
       await wait_event(mark, is_label("CARET"), "the CARET badge");
       const caret_loads = await injections_of("caret.js", 1);
       expect(caret_loads.length >= 1 && caret_loads.at(-1).ok, "caret.js was not injected");
@@ -601,7 +601,7 @@ async function main() {
     await run_case("V on the help page does not leave it stuck in caret mode", async () => {
       const badge = () => evaluate_in_background(rdp, EXTENSION_ID, `${extension_view("help.html")}?.document.querySelector("[data-oasisfox-mode]")?.getAttribute("data-oasisfox-mode") ?? null`);
       const loads_before = await settled_injection_count("caret.js");
-      await send_keys("V");
+      await send_keys("gV");
       await sleep(1500);
       const loads = (await injections_of("caret.js")).slice(loads_before);
       measurements.help_page_caret_load = loads.length === 0 ? "not requested" : loads.at(-1).ok ? "executeScript ok" : "executeScript refused";

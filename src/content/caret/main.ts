@@ -1,4 +1,4 @@
-// The `caret` bundle: caret mode and visual mode. Loaded on the first `V`, it registers a sink for each mode and
+// The `caret` bundle: caret mode and visual mode. Loaded on the first entry into caret or visual mode, it registers a sink for each mode and
 // the handlers of `caret.move` and `visual.act`.
 
 import type { BundleHostApi, ExitDestination } from "../bundle_host.ts";
@@ -12,9 +12,10 @@ import { selected_text, selected_span, swap_ends, with_caret } from "./selection
 import type { Cursor } from "./selection_state.ts";
 import { build_text_model } from "./text_model.ts";
 import type { TextModel } from "./text_model.ts";
-import { first_visible_index } from "./start_point.ts";
+import { first_index_from, first_visible_index } from "./start_point.ts";
 
-type CaretWindow = { oasisfox_host: BundleHostApi; oasisfox_caret_ready?: true };
+// `oasisfox_caret_target` is the element a hint picked. The hints bundle sets it just before it enters the mode.
+type CaretWindow = { oasisfox_host: BundleHostApi; oasisfox_caret_ready?: true; oasisfox_caret_target?: Element };
 const page = window as unknown as CaretWindow;
 
 type Session = { model: TextModel; cursor: Cursor; mode: "caret" | "visual"; goal_x: number | undefined };
@@ -52,11 +53,17 @@ function scroll_to_caret(open: Session): void {
   }
 }
 
-// Where a new session starts: the caret's place in the page's own selection if it is on screen, else the first visible text.
-function start_session(mode: "caret" | "visual", element?: Element): Session | undefined {
-  const model = build_text_model(element ?? document.body);
-  if (model.text === "") return undefined;
-  const caret = first_visible_index(model, getSelection()!, element === undefined);
+// Where a new session starts: the text of the picked element or the next text after it, else the caret's place in the page's own selection if it is on screen, else the first visible text.
+function start_session(mode: "caret" | "visual"): Session | undefined {
+  const target = page.oasisfox_caret_target;
+  delete page.oasisfox_caret_target;
+  // The model covers the whole body, so motion is not trapped in the element.
+  const model = build_text_model(document.body);
+  const caret = target === undefined ? first_visible_index(model, getSelection()!) : first_index_from(model, target);
+  if (caret === undefined || model.text === "") {
+    if (target !== undefined) page.oasisfox_host.show_toast("No text here");
+    return undefined;
+  }
   return { model, cursor: { anchor: caret, caret }, mode, goal_x: undefined };
 }
 
@@ -112,7 +119,7 @@ function ensure_session(mode: "caret" | "visual"): Session | undefined {
 }
 
 const sink_for = (mode: "caret" | "visual") => ({
-  // Showing the caret on entry is what makes `V` draw it at once.
+  // Showing the caret on entry is what makes entering the mode draw it at once.
   enter: () => void ensure_session(mode),
   on_token: (token: string): "handled" | "pass" => {
     if (mode === "caret" || (token !== "<Escape>" && token !== "<C-[>")) return "pass";

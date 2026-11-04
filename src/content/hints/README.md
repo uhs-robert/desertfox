@@ -6,7 +6,7 @@ The `hints` bundle (`hints.js`). The background injects it into a frame on the f
 - `candidates.ts`: one selector per filter, and a walk that reaches open and closed shadow roots and same-origin frames. A cross-origin frame hints through its own copy of the bundle.
 - `visible.ts`: keeps what a person can click: inside every scrolling box, not hidden, and not under another element, tested in each parent document for a framed element. Reads the page only through `PageProbe`, so tests use a fake page.
 - `labels.ts`, `pick.ts`: the label generator (prefix-free, built from the letters) and the typing rules. Pure.
-- `actions.ts`: what a picked element gets: click or focus, open in a place, copy the address (`copy`, the text for a non-link) or the text (`copy_text`), focus, delete. `select` is declared on the command and refuses until its piece exists.
+- `actions.ts`: what a picked element gets: click or focus, open in a place, copy the address (`copy`, the text for a non-link) or the text (`copy_text`), focus, delete. `caret` and `visual` hand the element to the caret bundle (see `caret/start_point.ts`) and ignore `rapid`.
 - `view.ts`: labels in a closed shadow root. They use the which-key colors: `--oasisfox-secondary` text and `--oasisfox-accent` border on the `--oasisfox-bg` background.
 - `follow.ts`: repositions the labels on the next animation frame after a scroll or resize in the top window or a frame window.
 
