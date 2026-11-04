@@ -47,7 +47,7 @@ export const browser_bookmark_deps: BookmarkDeps = {
     return tab.url === url ? tab.title : undefined;
   },
   create: async ({ url, title }) => void (await browser.bookmarks.create({ url, title })),
-  bookmarks: async () => bookmark_items(await browser_complete_items_deps.recent_bookmarks()),
+  bookmarks: async () => bookmark_items(await browser_complete_items_deps.all_bookmarks()),
   open: (ctx, url, where) => open_in(ctx, url, where),
 };
 

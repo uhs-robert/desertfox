@@ -56,7 +56,7 @@ export const read_tabs = async (query: TabQuery, scope: LineScope, all_windows: 
 
 export const browser_complete_items_deps = {
   query_tabs: ((window_id) => browser.tabs.query(window_id === undefined ? {} : { windowId: window_id })) as TabQuery,
-  recent_bookmarks: async (): Promise<BookmarkNode[]> => flatten_bookmarks(await browser.bookmarks.getTree()),
+  all_bookmarks: async (): Promise<BookmarkNode[]> => flatten_bookmarks(await browser.bookmarks.getTree()),
 };
 
 export type CompleteItemsDeps = typeof browser_complete_items_deps & {
@@ -69,7 +69,7 @@ export type Asker = LineScope & { tab_id: number };
 
 export function create_complete_items(deps: CompleteItemsDeps) {
   const fetch_items = async (kind: "tabs" | "bookmarks", asker: Asker): Promise<CompleteItemsAnswer["items"]> => {
-    if (kind === "bookmarks") return bookmark_items(await deps.recent_bookmarks());
+    if (kind === "bookmarks") return bookmark_items(await deps.all_bookmarks());
     return (await read_tabs(deps.query_tabs, asker, await deps.all_windows())).map(({ number, title, url }) => ({ number, title, url }));
   };
 

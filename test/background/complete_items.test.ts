@@ -19,7 +19,7 @@ function make({ openers = [1, 2], all_windows = false, tabs = ALL_TABS, bookmark
       if (fail) throw new Error("no tabs");
       return tabs.filter((candidate) => window_id === undefined || candidate.windowId === window_id);
     },
-    recent_bookmarks: async () => {
+    all_bookmarks: async () => {
       if (fail) throw new Error("no bookmarks");
       return bookmarks;
     },
@@ -109,7 +109,7 @@ test("a tab that navigates or closes while the lookup runs gets nothing", async 
       opened.delete(1);
       return ALL_TABS;
     },
-    recent_bookmarks: async () => {
+    all_bookmarks: async () => {
       opened.delete(1);
       return [];
     },
