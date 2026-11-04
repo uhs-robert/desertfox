@@ -7,6 +7,7 @@
     "command_aliases": { "type": "object" },
     "settings": { "type": "object" },
     "snippets": { "type": "array" },
-    "css": { "type": "string" }
+    "css": { "type": "string" },
+    "local_theme": { "type": "object" }
   }
 }

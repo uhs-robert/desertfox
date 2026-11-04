@@ -10,7 +10,7 @@ import type { Prompt } from "../shared/invocation.ts";
 import { find_param, is_context_source } from "../shared/registry/params.ts";
 import { check_args } from "../shared/registry/check_args.ts";
 import type { EnumSources } from "../shared/registry/check_args.ts";
-import { DEFAULT_PALETTE, is_palette_name, palette_or_default, resolve_mode_colors } from "../shared/mode_colors.ts";
+import { DEFAULT_PALETTE, palette_mode_colors, resolve_mode_colors } from "../shared/mode_colors.ts";
 import { compile_keymap } from "../shared/keys/compiler.ts";
 import { merge_keymaps } from "./keymap_merge.ts";
 
@@ -30,11 +30,10 @@ export function compile_config(input: CompileInput): CompileOutput {
     return command && { runs_in: command.runs_in, label: command.label, count: command.count ?? "ignore", params: command.params ?? [] };
   }, { engine_labels: Object.fromEntries(Object.entries(input.config.search_engines).flatMap(([name, engine]) => (typeof engine?.label === "string" ? [[name, engine.label]] : []))) });
 
-  const requested_palette = input.config.settings.palette;
-  if (requested_palette !== undefined && !is_palette_name(requested_palette)) {
-    warnings.push(`settings: palette "${String(requested_palette)}" is not an oasis palette, using ${DEFAULT_PALETTE}`);
-  }
-  compiled.mode_colors = resolve_mode_colors(palette_or_default(requested_palette));
+  const requested_palette = input.config.settings.palette ?? DEFAULT_PALETTE;
+  const badge_colors = palette_mode_colors(String(requested_palette), input.config.local_theme);
+  if (!badge_colors) warnings.push(`settings: palette "${String(requested_palette)}" names no theme, using ${DEFAULT_PALETTE}`);
+  compiled.mode_colors = badge_colors ?? resolve_mode_colors(DEFAULT_PALETTE);
 
   for (const [mode, root] of Object.entries(compiled.modes) as [string, TreeBranch][]) {
     check_branch(root, [], mode, input, warnings);

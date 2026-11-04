@@ -4,6 +4,8 @@ import { compile_config } from "../../src/background/compile.ts";
 import { empty_config } from "../../src/background/config_load.ts";
 import { make_fake } from "./fakes.ts";
 import type { TreeLeaf } from "../../src/shared/prefix_tree.ts";
+import { resolve_mode_colors } from "../../src/shared/mode_colors.ts";
+import { derive_roles } from "../../src/shared/theme/derive.ts";
 
 const commands = {
   "tab.close": {
@@ -100,4 +102,18 @@ test("a binding in a mode the command does not allow is warned about and skipped
   assert.deepEqual(Object.keys(compiled.modes.ignore!.children), ["L"]);
   assert.ok(compiled.modes.browser!.children["<A-j>"]);
   assert.equal(warnings.filter((w) => w.includes("ignore") && w.includes("tab.close")).length, 1);
+});
+
+test("the palette picks the badge colors: local theme, built-in palette, or moonlight with a warning", () => {
+  const { registry } = make_fake(commands);
+  const compile = (config: ReturnType<typeof empty_config>) =>
+    compile_config({ config, default_keymap: {}, get_command: (id) => registry.get(id), enum_sources: { search_engines: [], containers: [] } });
+  const colors = derive_roles({ bg: "#101010", fg: "#eeeeee", primary: "#88aaff", accent: "#ffcc66" }, "dark");
+  const local = compile({ ...empty_config(), settings: { palette: "mine" }, local_theme: { name: "mine", colors: { dark: colors, light: colors } } });
+  assert.deepEqual(local.compiled.mode_colors?.normal.dark, ["#88aaff", "#101010"]);
+  assert.deepEqual(local.warnings, []);
+  assert.deepEqual(compile({ ...empty_config(), settings: { palette: "cactus" } }).compiled.mode_colors, resolve_mode_colors("cactus"));
+  const unknown = compile({ ...empty_config(), settings: { palette: "neon" } });
+  assert.deepEqual(unknown.compiled.mode_colors, resolve_mode_colors("moonlight"));
+  assert.deepEqual(unknown.warnings, ['settings: palette "neon" names no theme, using moonlight']);
 });

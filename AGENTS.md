@@ -49,8 +49,9 @@ This repository is public.
 
 ```bash
 just build       # bundle the extension
-just test        # docs check, then unit tests: registry, parser, prefix tree, config merge
+just test        # docs and themes check, then unit tests: registry, parser, prefix tree, config merge
 just docs-gen    # regenerate the tables in docs/keymap.md
+just themes      # regenerate src/shared/themes.ts from themes/*.toml
 just key-test    # real key presses in a nested Hyprland, about a minute
 just sign        # sign as unlisted on addons.mozilla.org
 just install     # install through the Firefox policy file (needs sudo)

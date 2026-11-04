@@ -5,7 +5,7 @@
 import type { CommandMeta } from "./command.ts";
 import type { KeymapConfig } from "./keymap.ts";
 import { DEFAULT_PALETTE } from "./mode_colors.ts";
-import type { PaletteName } from "./mode_colors.ts";
+import type { LocalTheme } from "./mode_colors.ts";
 
 export const CONFIG_FORMAT_VERSION = 2;
 
@@ -36,8 +36,8 @@ export type Settings = {
   ignore_sites: string[];
   // The mode badge: always (NORMAL too), only outside normal mode, or never.
   mode_indicator: ModeIndicator;
-  // Colors of both mode badges: the oasis.nvim palette. Light or dark follows the system theme.
-  palette: PaletteName;
+  // Theme name: `<config dir>/themes/<name>.toml` first, then a repo theme, then an oasis.nvim palette. Light or dark follows the system theme.
+  palette: string;
   // Prefixes of keys generated from `search_keys`: this tab, new tab.
   search_prefixes: { here: string; tab: string };
   // Prefixes of keys generated from `container_keys`: reopen, prompt in new tab.
@@ -118,4 +118,6 @@ export type MergedConfig = {
   snippets: SnippetEntry[];
   // User CSS as text: `style.css` then `style.d/*.css`.
   css: string;
+  // Present only when `palette` names a theme in the config directory.
+  local_theme?: LocalTheme;
 };
