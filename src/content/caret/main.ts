@@ -1,14 +1,15 @@
-// The `caret` bundle: caret mode and visual mode. Loaded on the first entry into caret or visual mode, it registers a sink for each mode and
-// the handlers of `caret.move` and `visual.act`.
+// The `caret` bundle: caret mode and visual mode, and page search. Loaded on the first entry into caret or visual mode or the first search, it registers a sink for each mode and
+// the handlers of `caret.move`, `visual.act` and the `find.*` commands.
 
 import type { BundleHostApi, ExitDestination } from "../bundle_host.ts";
 import { move_once, SCREEN_LINE_UNITS } from "./motion.ts";
 import type { Motion } from "./motion.ts";
 import { yank_text } from "./copy_text.ts";
-import { character_box, frame_offset, screen_line_target } from "./screen_line.ts";
+import { create_find } from "./find_session.ts";
+import { scroll_to_index, screen_line_target } from "./screen_line.ts";
 import { apply_selection_colors, clear_selection_colors } from "./selection_colors.ts";
-import { scroll_delta } from "./scroll_delta.ts";
-import { selected_text, selected_span, swap_ends, with_caret } from "./selection_state.ts";
+
+import { retarget, selected_text, selected_span, swap_ends, with_caret } from "./selection_state.ts";
 import type { Cursor } from "./selection_state.ts";
 import { build_text_model, documents_of, frame_document, trees_alive } from "./text_model.ts";
 import type { TextModel } from "./text_model.ts";
@@ -17,6 +18,7 @@ import { first_visible_index } from "./start_point.ts";
 // `oasisfox_caret_target` is the element a hint picked. The hints bundle sets it just before it enters the mode.
 type CaretWindow = { oasisfox_host: BundleHostApi; oasisfox_caret_ready?: true; oasisfox_caret_target?: Element };
 const page = window as unknown as CaretWindow;
+const find = create_find(page.oasisfox_host);
 
 // `painted` holds the ends of each selection as the last paint left it, so a later change by the page shows.
 type Session = { model: TextModel; cursor: Cursor; mode: "caret" | "visual"; goal_x: number | undefined; painted: SelectionEnds[] };
@@ -54,38 +56,10 @@ function paint(open: Session): void {
     owner.getSelection()?.addRange(range);
   });
   open.painted = selections.map((selection) => ({ selection, ends: ends_of(selection) }));
-  scroll_to_caret(open);
+  scroll_to_index(open.model, open.cursor.caret);
 }
 
-// The next box out that can scroll: the parent, the host of a shadow root, or the frame around a document.
-const outer_view = (node: Node): Element | null =>
-  node.parentElement ?? (node.parentNode as ShadowRoot | null)?.host ?? (node.nodeType === Node.DOCUMENT_NODE ? ((node as Document).defaultView?.frameElement ?? null) : null);
-
-// Only the caret's own character counts: its paragraph can be taller than the screen. Each scrollable ancestor scrolls first, then the window, then the same again out through each frame.
-// The boxes are all in this script's window, so a view's edges shift by the frames around it.
-function scroll_to_caret(open: Session): void {
-  const caret_node = open.model.point_at(open.cursor.caret).node;
-  for (let view = caret_node.nodeType === Node.ELEMENT_NODE ? (caret_node as Element) : outer_view(caret_node); view; ) {
-    const owner = view.ownerDocument;
-    const nested = view !== owner.documentElement && view !== owner.body;
-    if (nested && view.scrollHeight <= view.clientHeight && view.scrollWidth <= view.clientWidth) {
-      view = outer_view(view);
-      continue;
-    }
-    const box = character_box(open.model, open.cursor.caret);
-    const window_of_view = owner.defaultView;
-    if (!box || !window_of_view) return;
-    const shift = frame_offset(owner);
-    const edges = nested ? view.getBoundingClientRect() : { left: 0, right: window_of_view.innerWidth, top: 0, bottom: window_of_view.innerHeight };
-    const by_x = scroll_delta({ low: box.left, high: box.right }, { low: edges.left + shift.x, high: edges.right + shift.x }, box.height);
-    const by_y = scroll_delta({ low: box.top, high: box.bottom }, { low: edges.top + shift.y, high: edges.bottom + shift.y }, box.height);
-    if (by_x || by_y) (nested ? view : window_of_view).scrollBy(by_x, by_y);
-    // The walk stops at this script's own document: past it, the box is in a different space than the outer views.
-    view = nested ? outer_view(view) : owner === document ? null : outer_view(owner);
-  }
-}
-
-// Where a new session starts: the text of the picked element or the next text after it, else the caret's place in the page's own selection if it is on screen, else the first visible text.
+// Where a new session starts: the text of the picked element or the next text after it, else the match a search stands on while no later selection took the place, else the caret's place in the page's own selection if it is on screen, else the first visible text.
 function start_session(mode: "caret" | "visual"): Session | undefined {
   const target = page.oasisfox_caret_target;
   delete page.oasisfox_caret_target;
@@ -96,7 +70,7 @@ function start_session(mode: "caret" | "visual"): Session | undefined {
   }
   // The model covers the whole page, so motion is not trapped in the element.
   const model = build_text_model(document.body, target);
-  const caret = target === undefined ? first_visible_index(model) : model.start_index;
+  const caret = target === undefined ? (find.position(model) ?? first_visible_index(model)) : model.start_index;
   if (caret === undefined || model.text === "") {
     if (target !== undefined) page.oasisfox_host.show_toast("No text here");
     return undefined;
@@ -121,7 +95,7 @@ function rebuild_if_stale(open: Session): Session | undefined {
   };
   const caret = carry(open.cursor.caret) ?? first_visible_index(model);
   const anchor = open.mode === "visual" ? (carry(open.cursor.anchor) ?? caret) : caret;
-  return { ...open, model, cursor: { anchor, caret }, goal_x: undefined, painted: [] };
+  return retarget(open, model, { anchor, caret });
 }
 
 function end_session(): void {
@@ -244,4 +218,15 @@ if (!page.oasisfox_caret_ready) {
   page.oasisfox_host.register_sink("visual", sink_for("visual"));
   page.oasisfox_host.register_handler("caret.move", handle_move);
   page.oasisfox_host.register_handler("visual.act", handle_act);
+  page.oasisfox_host.register_handler("find.open", (args) => {
+    const direction = args.direction === "backward" ? "backward" : "forward";
+    find.begin(direction);
+    page.oasisfox_host.run_command("cmdline.open", "cmdline", { search: direction });
+  });
+  page.oasisfox_host.register_handler("find.next", () => void find.step(false));
+  page.oasisfox_host.register_handler("find.prev", () => void find.step(true));
+  // Called by the command line while it is open, and not by any key.
+  page.oasisfox_host.register_handler("find.live", (args) => find.update(args.text as string, args.report as (status: string) => void));
+  page.oasisfox_host.register_handler("find.end", (args) => void find.end(args.keep === true));
+  page.oasisfox_host.register_handler("find.clear", () => find.clear());
 }

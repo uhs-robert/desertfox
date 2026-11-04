@@ -17,3 +17,8 @@ export const with_caret = (cursor: Cursor, caret: number, extend: boolean): Curs
 export function swap_ends({ anchor, caret }: Cursor): Cursor {
   return { anchor: caret, caret: anchor };
 }
+
+// Points an open session at a rebuilt model with a new cursor, in place. A copy in flight holds the session object, and only the same object tells it the session is still its own.
+export function retarget<Open extends { model: unknown; cursor: Cursor; goal_x: number | undefined; painted: unknown[] }>(open: Open, model: Open["model"], cursor: Cursor): Open {
+  return Object.assign(open, { model, cursor, goal_x: undefined, painted: [] });
+}

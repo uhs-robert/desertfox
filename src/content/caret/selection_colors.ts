@@ -3,7 +3,7 @@
 
 import { COMPILED_KEYMAP_STORAGE_KEY } from "../../shared/prefix_tree.ts";
 import type { CompiledKeymap } from "../../shared/prefix_tree.ts";
-import type { ColorPair } from "../../shared/mode_colors.ts";
+import type { ColorPair, ModeColorMode } from "../../shared/mode_colors.ts";
 import type { TextTree } from "./text_model.ts";
 
 // A document rule does not reach into a shadow root or a frame, so each tree with text gets its own style.
@@ -13,10 +13,15 @@ let latest_call = 0;
 
 const rule = ([background, text]: ColorPair) => `::selection{background:${background} !important;color:${text} !important}`;
 
+// The badge colors of a mode, dark and light. Undefined until the config has compiled.
+export async function stored_mode_colors(mode: ModeColorMode): Promise<{ dark: ColorPair; light: ColorPair } | undefined> {
+  const stored = await browser.storage.local.get(COMPILED_KEYMAP_STORAGE_KEY);
+  return (stored[COMPILED_KEYMAP_STORAGE_KEY] as CompiledKeymap | undefined)?.mode_colors?.[mode];
+}
+
 export async function apply_selection_colors(mode: "caret" | "visual", trees: TextTree[]): Promise<void> {
   const this_call = ++latest_call;
-  const stored = await browser.storage.local.get(COMPILED_KEYMAP_STORAGE_KEY);
-  const colors = (stored[COMPILED_KEYMAP_STORAGE_KEY] as CompiledKeymap | undefined)?.mode_colors?.[mode];
+  const colors = await stored_mode_colors(mode);
   if (this_call !== latest_call || !colors) return;
   for (const tree of trees) {
     // A tree that died during the await throws on any use, and the later trees still need their style.

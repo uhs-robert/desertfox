@@ -37,6 +37,9 @@ type Open = {
   text: string;
   // The mode the key was pressed in, sent to the page in `start`.
   from_mode: string;
+  // Set when the line is a page search, and the way it searches. Enter sets `committed`, and the end of the line tells the search whether to keep its match.
+  search?: "forward" | "backward" | undefined;
+  committed: boolean;
   timer: ReturnType<typeof setTimeout>;
 };
 
@@ -52,6 +55,7 @@ if (!page.oasisfox_cmdline_ready) {
     clearTimeout(open.timer);
     clearTimeout(open.check_timer);
     open.removal_watch.disconnect();
+    if (open.search) host.run_command("find.end", "caret", { keep: open.committed });
     open.port?.close();
     open.holder.remove();
     open = undefined;
@@ -63,7 +67,7 @@ if (!page.oasisfox_cmdline_ready) {
     unmount();
   };
 
-  function mount(text: string, from_mode: string) {
+  function mount(text: string, from_mode: string, search?: "forward" | "backward") {
     const holder = document.createElement("div");
     holder.style.cssText = `all:initial;position:fixed;left:0;right:0;bottom:0;height:${BAR_HEIGHT};z-index:${LAYERS.command_line};`;
     const frame = document.createElement("iframe");
@@ -84,6 +88,8 @@ if (!page.oasisfox_cmdline_ready) {
       typed: [],
       text,
       from_mode,
+      search,
+      committed: false,
       timer: setTimeout(close, READY_TIMEOUT_MS),
     };
     // A page script can send the frame somewhere else, and then the port is dead. Firefox gives no event for that, so
@@ -123,9 +129,16 @@ if (!page.oasisfox_cmdline_ready) {
       else if (message.kind === "close") close();
       else if (message.kind === "resize" && Number.isFinite(message.height)) current.holder.style.height = `${Math.min(message.height, window.innerHeight)}px`;
       else if (message.kind === "submit") void submit(message);
+      else if (message.kind === "find_text") {
+        const report = (status: string) => open === current && current.port?.postMessage(wrap<HostToPage>({ kind: "find_status", text: status }));
+        host.run_command("find.live", "caret", { text: message.text, report });
+      } else if (message.kind === "find_commit") {
+        current.committed = true;
+        close();
+      }
     };
     current.port = channel.port1;
-    const message: HostToPage = { kind: "start", ticket, text: current.text, tokens: current.typed, mode: current.from_mode };
+    const message: HostToPage = { kind: "start", ticket, text: current.text, tokens: current.typed, mode: current.from_mode, search: current.search };
     current.frame.contentWindow?.postMessage(wrap(message), origin, [channel.port2]);
     current.typed = [];
   };
@@ -158,7 +171,7 @@ if (!page.oasisfox_cmdline_ready) {
 
   host.register_handler("cmdline.open", (args) => {
     if (open) return;
-    mount(typeof args.text === "string" ? args.text : "", host.get_mode());
+    mount(typeof args.text === "string" ? args.text : "", host.get_mode(), args.search === "forward" || args.search === "backward" ? args.search : undefined);
     host.set_mode("cmdline");
   });
 }

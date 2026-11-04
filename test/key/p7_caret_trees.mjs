@@ -79,6 +79,19 @@ export async function run_cases({ rdp, extension_id, run_case, expect, open_page
     await send_keys("-k", "Escape");
   });
 
+  await run_case("j over an inline shadow host in a wrapped paragraph goes to the next screen line", async () => {
+    const page_id = "inline_host";
+    const mark = await hint_into("caret_inline_host", page_id, "--caret", "#first");
+    await wait_event(mark, selection_is(page_id, "a"), "the caret on the first a");
+    const mark_j = events.length;
+    await send_keys("j");
+    await wait_event(mark_j, selection_is(page_id, "c"), "j onto the start of the second screen line");
+    const mark_k = events.length;
+    await send_keys("k");
+    await wait_event(mark_k, selection_is(page_id, "a"), "k back onto the first screen line");
+    await send_keys("-k", "Escape");
+  });
+
   await run_case("hint --caret starts in a same-origin frame, and j leaves it for the page", async () => {
     const page_id = "frames_pick";
     const mark = await hint_into("caret_frames", page_id, "--caret", "#inner_text");

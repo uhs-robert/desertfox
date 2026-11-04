@@ -16,7 +16,14 @@ build: install_deps
 
 # Check docs/keymap.md and src/shared/themes.ts are current, then run the unit tests from TypeScript source by Node's type stripping.
 test: install_deps
-    npm run --silent test
+    #!/usr/bin/env bash
+    set -euo pipefail
+    # A test that runs away dies with its scope, so nothing outlives the run.
+    if command -v systemd-run >/dev/null 2>&1 && systemd-run --user --scope --quiet true >/dev/null 2>&1; then
+        exec systemd-run --user --scope --quiet -p MemoryMax=8G -p MemorySwapMax=0 -p RuntimeMaxSec=900 npm run --silent test
+    fi
+    echo "test: no systemd user session, so this run has no memory cap or time limit." >&2
+    exec npm run --silent test
 
 [private]
 install_deps:
@@ -34,7 +41,12 @@ key-test: build
         echo "key-test needs SHADOW_SH: a script that runs 'up|spawn|keys|down <name>' in a nested, invisible compositor (optional: 'status', one '<name>: up|down ...' line per session). Cleanup of killed runs works only for drivers that keep sessions in /tmp/shadow-<uid>-<name>." >&2
         exit 2
     fi
-    node test/key/run.mjs
+    # A test Firefox that runs away would otherwise take the whole tmux window with it: the kernel kills it, and systemd then stops every process in the window's unit. In its own capped scope, only this run dies.
+    if command -v systemd-run >/dev/null 2>&1 && systemd-run --user --scope --quiet true >/dev/null 2>&1; then
+        exec systemd-run --user --scope --quiet -p MemoryMax=8G -p MemorySwapMax=0 -p RuntimeMaxSec=1800 node test/key/run.mjs
+    fi
+    echo "key-test: no systemd user session, so this run has no memory cap." >&2
+    exec node test/key/run.mjs
 
 # Sign dist/ as an unlisted add-on on addons.mozilla.org. Reads the AMO key from the environment only.
 sign: build

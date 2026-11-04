@@ -22,6 +22,8 @@ export type BundleHostApi = {
   // Any mode, the same path as a key that changes mode. A bundle uses it to enter its own mode.
   set_mode: (mode: Mode) => void;
   get_mode: () => Mode;
+  // Runs a handler of another bundle, loading that bundle first if needed. The id need not be a registry command: a bundle may offer handlers only its sibling calls. The args are bundle-internal and unchecked by the validator, and may hold functions.
+  run_command: (command_id: string, name: BundleName, args: Record<string, unknown>) => void;
   show_toast: (message: string) => void;
 };
 
@@ -68,6 +70,18 @@ export function create_bundle_host() {
     });
   }
 
+  // Runs a command whose code sits in a bundle, loading the bundle first if needed. `missing` is the refusal for a bundle that registers nothing.
+  // `args` reaches the handler as given. Nothing validates it, so it holds whatever the caller and the handler agree on, functions included. Take it only from bundle code, never from keymap or command-line input, which the registry validates first.
+  function run_command(command_id: string, name: BundleName, args: Record<string, unknown>, missing: string, hold = true): void {
+    const run = handlers.get(command_id);
+    if (run) return run(args);
+    after_load(name, (loaded) => {
+      const registered = handlers.get(command_id);
+      if (!registered) throw new Error(loaded ? missing : `OasisFox could not load ${name}`);
+      registered(args);
+    }, hold);
+  }
+
   return {
     connect: (next: BundleHostDeps) => {
       deps = next;
@@ -75,16 +89,7 @@ export function create_bundle_host() {
     is_loading: () => waiting > 0,
     sink_of: (mode: Mode) => sinks.get(mode),
     has_handler: (command_id: string) => handlers.has(command_id),
-    // Runs a command whose code sits in a bundle, loading the bundle first if needed. `missing` is the refusal for a bundle that registers nothing.
-    run_command: (command_id: string, name: BundleName, args: Record<string, unknown>, missing: string, hold = true): void => {
-      const run = handlers.get(command_id);
-      if (run) return run(args);
-      after_load(name, (loaded) => {
-        const registered = handlers.get(command_id);
-        if (!registered) throw new Error(loaded ? missing : `OasisFox could not load ${name}`);
-        registered(args);
-      }, hold);
-    },
+    run_command,
     // Called on every mode change: the mode left exits its sink, and a mode with a sink loads its bundle and enters it.
     enter_mode: (next: Mode): void => {
       const left = current_mode;
@@ -115,6 +120,7 @@ export function create_bundle_host() {
       register_handler: (command_id, handler) => void handlers.set(command_id, handler),
       set_mode: (mode) => deps.set_mode(mode),
       get_mode: () => current_mode,
+      run_command: (command_id, name, args) => run_command(command_id, name, args, `${name} has no ${command_id}`),
       show_toast: (message) => (deps.show_toast ?? deps.show_error)(message),
     } satisfies BundleHostApi,
   };
