@@ -61,7 +61,7 @@ async function page_with(texts: string[]) {
   const handlers = new Map<string, (args: Record<string, unknown>) => unknown>();
   let sink: { on_token: (token: string) => string; exit: () => void } | undefined;
   let mode = "normal";
-  let sends_held: Promise<unknown> | undefined;
+  let sends_held: (() => Promise<unknown>) | undefined;
 
   const win = {
     innerWidth: 800,
@@ -129,7 +129,7 @@ async function page_with(texts: string[]) {
   globals.browser = { storage: { local: { get: async () => ({}) } }, runtime: { sendMessage: async (message: unknown) => {
     const is_record = (message as { type?: string }).type === "record_repeat";
     (is_record ? repeat_records : sent).push(message);
-    return is_record ? undefined : sends_held;
+    return is_record ? undefined : sends_held?.();
   } } };
   Object.defineProperty(globalThis, "navigator", { value: { clipboard: { writeText: async (text: string) => void copied.push(text) } }, configurable: true });
   await import(`${new URL("../../src/content/hints/main.ts", import.meta.url).href}?extras${import_count++}`);
@@ -152,7 +152,7 @@ async function page_with(texts: string[]) {
     modes,
     // The next opened link answers when this promise settles.
     refuse_clipboard: () => Object.defineProperty(globalThis, "navigator", { value: { clipboard: { writeText: () => Promise.reject(new Error("denied")) } }, configurable: true }),
-    hold_sends: (held: Promise<unknown>) => void (sends_held = held),
+    hold_sends: (held: () => Promise<unknown>) => void (sends_held = held),
     mode: () => mode,
     active_listeners,
     // What the handler answers: an Outcome now, or a promise that stays pending while hints wait for the user.
@@ -477,7 +477,8 @@ test("Escape or zero candidates stores nothing for `.`, and a pick stores it", a
 test("hint.run answers done only after the picked link has been opened", async () => {
   const page = await page_with(["one", "two"]);
   let opened!: (value: unknown) => void;
-  page.hold_sends(new Promise((resolve) => (opened = resolve)));
+  const held = new Promise((resolve) => (opened = resolve));
+  page.hold_sends(() => held);
   const answer = page.run({ action: "background" });
   await settle();
   page.type(page.labels()[0]!.toLowerCase());
@@ -506,7 +507,7 @@ test("a refused hint copy answers failed with one message, and a good copy answe
 
 test("a refused open stops the sequence quietly, and a later rapid pick whose open is refused shows nothing", async () => {
   const page = await page_with(["one", "two"]);
-  page.hold_sends(Promise.resolve({ ok: false, refusal: { id: "open.url", message: "No such tab" } }));
+  page.hold_sends(async () => ({ ok: false, refusal: { id: "open.url", message: "No such tab" } }));
   const answer = page.run({ action: "background", rapid: true });
   await settle();
   page.type(page.labels()[0]!.toLowerCase());
@@ -516,4 +517,22 @@ test("a refused open stops the sequence quietly, and a later rapid pick whose op
   await settle();
   assert.deepEqual(page.messages(), []);
   page.escape();
+});
+
+test("a pick whose action throws answers failed, and one whose open reply is lost answers cancelled", async () => {
+  const thrown = await page_with(["one", "two"]);
+  thrown.links[0]!.on_click = () => {
+    throw new Error("can't access dead object");
+  };
+  const failed = thrown.run({ action: "here" });
+  await settle();
+  thrown.type(thrown.labels()[0]!.toLowerCase());
+  assert.deepEqual(await failed, { ok: false, message: "can't access dead object" });
+
+  const lost = await page_with(["one", "two"]);
+  lost.hold_sends(() => Promise.reject(new Error("The message channel closed")));
+  const cancelled = lost.run({ action: "background" });
+  await settle();
+  lost.type(lost.labels()[0]!.toLowerCase());
+  assert.deepEqual(await cancelled, { ok: true, cancelled: true });
 });

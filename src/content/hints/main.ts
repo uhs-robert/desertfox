@@ -97,7 +97,7 @@ function copy_to_clipboard(text: string): Promise<Outcome | undefined> {
 
 // `from_hints` keeps the router from storing this `open.url`, so `.` shows hints again instead of reopening the address.
 function open_link(url: string, place: Place): Promise<unknown> {
-  return browser.runtime.sendMessage({ type: "run", invocations: [{ id: "open.url", args: { url, where: place } }], mode: "normal", from_hints: true }).catch(() => undefined);
+  return browser.runtime.sendMessage({ type: "run", invocations: [{ id: "open.url", args: { url, where: place } }], mode: "normal", from_hints: true });
 }
 
 // The caret bundle reads the element in `start_session` when the mode starts, and loads on that first entry.
@@ -121,7 +121,7 @@ function register(host: BundleHostApi): void {
 
   // A pick records what `.` repeats, so Escape or a failed filter stores nothing. The wait ends when the returned function gets the
   // action's result, so a later step sees the opened tab or the copied text. Call it before `set_mode`, which ends the session as cancelled.
-  function begin_pick(current: Session): (result: unknown) => void {
+  function begin_pick(current: Session): (run: () => unknown) => void {
     let answer!: (outcome: Outcome) => void;
     const first = !current.picked;
     current.picked = true;
@@ -134,7 +134,16 @@ function register(host: BundleHostApi): void {
       if (first) answer(outcome);
       else if (!outcome.ok) create_view().show_message(outcome.message);
     };
-    return (result) => void Promise.resolve(result).then(ended, () => ended(undefined));
+    // A throw from the action is a failed pick, and a rejected open means the page went away, which cancels.
+    return (run) => {
+      let result: unknown;
+      try {
+        result = run();
+      } catch (error) {
+        result = { ok: false, message: String((error as Error)?.message ?? error) };
+      }
+      void Promise.resolve(result).then(ended, () => ended({ ok: true, cancelled: true }));
+    };
   }
 
   // Finds, labels and shows the hints. Keys typed meanwhile wait and replay. Rapid mode calls it again after each pick.
@@ -155,7 +164,7 @@ function register(host: BundleHostApi): void {
     if (first_build && current.lower_text !== undefined && found.length === 1) {
       const performed = begin_pick(current);
       host.set_mode("normal");
-      performed(perform(current.action, found[0]!.element as HTMLElement, deps));
+      performed(() => perform(current.action, found[0]!.element as HTMLElement, deps));
       return;
     }
     const labels = make_labels(found.length, letters);
@@ -184,14 +193,14 @@ function register(host: BundleHostApi): void {
       if (!current.rapid) {
         // Leave hint mode first: a picked field then raises insert mode through its own focus event.
         host.set_mode("normal");
-        performed(perform(current.action, picked, deps));
+        performed(() => perform(current.action, picked, deps));
         return "handled";
       }
       // Rapid: the pick may delete or move elements, so drop these labels and label the page again.
       ready.stop_following();
       ready.view.clear_labels();
       delete current.ready;
-      performed(perform(current.action, picked, deps));
+      performed(() => perform(current.action, picked, deps));
       if (!current.cancelled) void build(current, find_candidates(current.filter, current.custom_selector, current.action), false);
     }
     return "handled";
