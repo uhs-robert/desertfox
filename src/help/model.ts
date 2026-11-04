@@ -170,12 +170,14 @@ export function build_help_model(commands: CommandMeta[], compiled: CompiledKeym
 
 // The public styling surface from design.md "Styles" and "Themes".
 const ROLE_MEANINGS: Record<Role, string> = {
-  bg: "Background of a surface",
-  bg_mantle: "A surface layered on bg, for panels and rows",
-  bg_crust: "A second layer on bg, lighter than the mantle in a dark theme",
+  bg_core: "Background of a surface",
+  bg_mantle: "A surface layered on bg_core, for panels and rows",
+  bg_crust: "A second layer on bg_core, lighter than the mantle in a dark theme",
   selection: "Background of the selected row",
-  fg: "Text color",
-  muted: "Secondary text",
+  fg_core: "Text color",
+  fg_comment: "Secondary text, such as descriptions",
+  fg_dim: "Hints, such as the command line usage line",
+  fg_muted: "Disabled text and faint marks",
   primary: "Brand color: links and the normal mode badge",
   secondary: "Keys in which-key and hints",
   accent: "Highlight color for titles, groups, hint frames and the current item",
