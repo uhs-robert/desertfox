@@ -3,6 +3,11 @@
 import { MODES } from "../shared/command.ts";
 import type { CommandMeta, ParamDef, ParamValue } from "../shared/command.ts";
 import type { SearchEngine } from "../shared/config.ts";
+import { build_options_model } from "../options/model.ts";
+import type { ConfigStatus, SettingRow } from "../options/model.ts";
+import { ROLES } from "../shared/theme/roles.ts";
+import type { Role } from "../shared/theme/roles.ts";
+import { token_name } from "../shared/theme/tokens.ts";
 import type { KeymapMode } from "../shared/keymap.ts";
 import type { Prompt } from "../shared/invocation.ts";
 import type { CompiledKeymap, TreeNode } from "../shared/prefix_tree.ts";
@@ -46,7 +51,14 @@ export type EngineRow = {
   origins: string[];
 };
 
-export type HelpModel = { warnings: string[]; groups: HelpGroup[]; engines: EngineRow[] };
+export type HelpModel = {
+  warnings: string[];
+  // Where the settings came from, and the settings in force. Read-only: the page has no inputs.
+  config_source: string;
+  settings: SettingRow[];
+  groups: HelpGroup[];
+  engines: EngineRow[];
+};
 
 const MODE_ORDER: readonly KeymapMode[] = [...MODES, "browser"];
 
@@ -131,7 +143,8 @@ function engine_rows(engines: Record<string, SearchEngine>): EngineRow[] {
 }
 
 // `sources` are the configured engine names, so a query that starts with one prints with its `--` guard.
-export function build_help_model(commands: CommandMeta[], compiled: CompiledKeymap | undefined, warnings: string[], sources: EnumSources = {}, engines: Record<string, SearchEngine> = {}): HelpModel {
+export function build_help_model(commands: CommandMeta[], compiled: CompiledKeymap | undefined, warnings: string[], sources: EnumSources = {}, engines: Record<string, SearchEngine> = {}, status?: ConfigStatus): HelpModel {
+  const options = build_options_model(status, warnings);
   const keys = keys_by_command(compiled, { commands: new Map(commands.map((command) => [command.id, command])), sources });
   const groups = new Map<string, CommandRow[]>();
   for (const command of commands) {
@@ -148,21 +161,46 @@ export function build_help_model(commands: CommandMeta[], compiled: CompiledKeym
   }
   return {
     warnings,
+    config_source: options.source_text,
+    settings: options.settings,
     engines: engine_rows(engines),
     groups: [...groups].sort(([a], [b]) => a.localeCompare(b)).map(([name, rows]) => ({ name, commands: rows })),
   };
 }
 
-// The public styling surface from design.md "Styles". Only surfaces that exist in phase 1 are listed.
+// The public styling surface from design.md "Styles" and "Themes".
+const ROLE_MEANINGS: Record<Role, string> = {
+  bg: "Background of a surface",
+  bg_mantle: "A surface layered on bg, for panels and rows",
+  bg_crust: "A second layer on bg, lighter than the mantle in a dark theme",
+  selection: "Background of the selected row",
+  fg: "Text color",
+  muted: "Secondary text",
+  primary: "Brand color: links and the normal mode badge",
+  secondary: "Keys in which-key and hints",
+  accent: "Highlight color for titles, groups, hint frames and the current item",
+  border: "Borders and dividers",
+  error: "Errors and refused commands",
+  warn: "Warnings",
+  ok: "Success",
+  mode_normal: "Mode badge in normal mode",
+  mode_insert: "Mode badge in insert mode",
+  mode_ignore: "Mode badge in ignore mode",
+  mode_caret: "Mode badge in caret mode",
+  mode_visual: "Mode badge in visual mode",
+};
+
 export const STYLE_VARIABLES: { name: string; meaning: string }[] = [
-  { name: "--oasisfox-bg", meaning: "Background of a surface" },
-  { name: "--oasisfox-fg", meaning: "Text color" },
-  { name: "--oasisfox-accent", meaning: "Highlight color for keys and the current item" },
   { name: "--oasisfox-font", meaning: "Font shorthand, for example 14px system-ui, sans-serif" },
   { name: "--oasisfox-radius", meaning: "Corner radius" },
+  ...ROLES.map((role) => ({ name: token_name(role), meaning: ROLE_MEANINGS[role] })),
 ];
 
 export const STYLE_CLASSES: { name: string; meaning: string }[] = [
   { name: "oasisfox-toast", meaning: "The message toast a refused command shows in the page" },
   { name: "oasisfox-mode", meaning: "The badge that names the mode (NORMAL, INSERT, IGNORE, PASS)" },
+  { name: "oasisfox-whichkey", meaning: "The which-key panel" },
+  { name: "oasisfox-hint", meaning: "One hint label" },
+  { name: "oasisfox-hint-message", meaning: "The message hint mode shows at the bottom of the page" },
+  { name: "oasisfox-cmdline", meaning: "The command line panel" },
 ];
