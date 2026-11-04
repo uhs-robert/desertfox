@@ -51,7 +51,7 @@ export type Settings = {
   // The `tab` completion list: absent or false lists the tabs of the line's window, true lists the tabs of every window.
   // Kept out of DEFAULT_SETTINGS because the content script bundles that object and has no use for this one.
   completion_all_windows?: boolean;
-  // Text before the command line input, with its own trailing space. Absent shows `> `, set in cmdline.html.
+  // Before the command line input: "caret" (`> `), "colon", or custom text with its own trailing space. Absent is "caret".
   cmdline_prompt?: string;
   // The groups `open` completes from, in the order they list. A source left out is not read. Absent lists both.
   open_completion?: ("bookmarks" | "history")[];
