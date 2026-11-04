@@ -85,3 +85,16 @@ test("a scan that stays current returns every match", async () => {
   const result = await collect_matches("a ".repeat(50), /a/gu, slicing);
   assert.equal(result!.from.length, 50);
 });
+
+test("an empty match on text with emoji moves on by a whole code point, so the scan ends", async () => {
+  let reads = 0;
+  const slicing: Slicing = {
+    ...never_stale,
+    now: () => {
+      if (++reads > 1000) throw new Error("the scan looped");
+      return 0;
+    },
+  };
+  const result = await collect_matches("a😀b😀", compile_query("x*")!.regex, slicing);
+  assert.deepEqual(result, { from: [], to: [] });
+});

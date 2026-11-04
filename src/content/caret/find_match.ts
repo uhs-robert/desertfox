@@ -53,7 +53,8 @@ export async function collect_matches(text: string, regex: RegExp, slicing: Slic
   regex.lastIndex = 0;
   let slice_started = slicing.now();
   for (let hit = regex.exec(text); hit; hit = regex.exec(text)) {
-    if (hit[0] === "") regex.lastIndex++;
+    // An empty match moves on by a whole code point: from the middle of a pair, a `u` regex steps back and finds the same match again.
+    if (hit[0] === "") regex.lastIndex += hit.index + 1 < text.length && text.codePointAt(hit.index)! > 0xffff ? 2 : 1;
     else {
       found.from.push(hit.index);
       found.to.push(hit.index + hit[0].length);
