@@ -1,5 +1,6 @@
 import { get_config } from "../background/startup.ts";
 import { stop_page } from "../content/handlers/stop.ts";
+import { NEW_TAB_PAGE_FILE } from "../shared/config.ts";
 import { define } from "../shared/registry/index.ts";
 import { open_in, require_tab_id, typed_url_target, WHERE_PARAM } from "./open_target.ts";
 import type { Where } from "./open_target.ts";
@@ -43,7 +44,7 @@ define("page.home", {
   params: [WHERE_PARAM],
   runs_in: "background",
   run: async (ctx, args) => {
-    const home_url = home_page_url((await get_config()).settings.home_page);
+    const home_url = home_page_url((await get_config()).settings.home_page, () => browser.runtime.getURL(NEW_TAB_PAGE_FILE));
     await open_in(ctx, await typed_url_target(home_url), args.where as Where);
   },
 });

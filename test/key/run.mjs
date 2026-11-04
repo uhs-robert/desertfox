@@ -9,7 +9,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
-import { connect_rdp, evaluate_in_background, install_temporary_addon } from "./rdp.mjs";
+import { connect_rdp, evaluate_in_background, evaluate_in_chrome, install_temporary_addon } from "./rdp.mjs";
 import { p1_cases } from "./p1.mjs";
 import { start_server } from "./server.mjs";
 
@@ -257,6 +257,15 @@ async function main() {
     // The caret bundle keeps its real code and gains the padding after it, so the caret cases run the real sinks. The which-key bundle stays real.
     writeFileSync(join(extension_dir, "caret.js"), readFileSync(join(dist_dir, "caret.js"), "utf8") + padded_bundle_text());
     await install_temporary_addon(rdp, extension_dir);
+    // The first new tab of the extension's page shows Firefox's "Your new tab has changed" notice. Once shown, its closed
+    // panel keeps the access key K of "Keep Changes" for the session, and that eats Alt+K on pages Firefox draws itself,
+    // such as about:support. Confirming the notice the way "Keep Changes" does keeps it from ever showing.
+    const notice_confirmation = await evaluate_in_chrome(rdp, `(async () => {
+      const { ExtensionSettingsStore } = ChromeUtils.importESModule("resource://gre/modules/ExtensionSettingsStore.sys.mjs");
+      await ExtensionSettingsStore.initialize();
+      await ExtensionSettingsStore.addSetting("${EXTENSION_ID}", "newTabNotification", "${EXTENSION_ID}", true, () => false);
+    })()`);
+    if (notice_confirmation?.error) throw new Error(`confirming the new tab notice failed: ${notice_confirmation.error}`);
     await sleep(1500);
     const read_injections = async (file) => {
       const all = await evaluate_in_background(rdp, EXTENSION_ID, `(async () => (await browser.storage.local.get("oasisfox_bundle_loads")).oasisfox_bundle_loads ?? [])()`);
@@ -610,6 +619,38 @@ async function main() {
       expect(await badge() === "NORMAL", `the help page badge after V was ${await badge()}`);
     });
 
+    // The new tab page loads every key script by tag, since executeScript cannot reach an extension page.
+    await run_case("the new tab page takes : and f without asking executeScript", async () => {
+      const hints_before = await settled_injection_count("hints.js");
+      const cmdline_before = await settled_injection_count("cmdline.js");
+      await evaluate_in_background(rdp, EXTENSION_ID, `browser.tabs.create({ url: browser.runtime.getURL("newtab.html") })`);
+      let ready = false;
+      for (let attempt = 0; attempt < 40 && !ready; attempt++) {
+        await sleep(250);
+        ready = await evaluate_in_background(rdp, EXTENSION_ID, `!!${extension_view("newtab.html")}?.document.querySelector(".oasisfox-newtab")`).catch(() => false);
+      }
+      expect(ready, "the new tab page never rendered");
+      await sleep(800);
+      const mode = () => evaluate_in_background(rdp, EXTENSION_ID, `${extension_view("newtab.html")}?.oasisfox_host?.get_mode() ?? null`);
+      await send_keys(":");
+      await sleep(800);
+      expect(await mode() === "cmdline", `the mode after : was ${await mode()}`);
+      // The first Escape closes the completion list, the second closes the line.
+      await send_keys("-k", "Escape");
+      await send_keys("-k", "Escape");
+      await sleep(500);
+      expect(await mode() === "normal", `the mode after Escape was ${await mode()}`);
+      await evaluate_in_background(rdp, EXTENSION_ID, `(() => { const view = ${extension_view("newtab.html")}; const link = view.document.createElement("a"); link.href = "https://example.com/"; link.textContent = "link"; link.style.cssText = "position:fixed;top:20px;left:20px;color:white;"; view.document.body.append(link); })()`);
+      await send_keys("f");
+      await sleep(1500);
+      expect(await mode() === "hint", `the mode after f was ${await mode()}`);
+      await send_keys("-k", "Escape");
+      await sleep(500);
+      expect((await injections_of("hints.js")).length === hints_before, "hints.js went through executeScript");
+      expect((await injections_of("cmdline.js")).length === cmdline_before, "cmdline.js went through executeScript");
+      await evaluate_in_background(rdp, EXTENSION_ID, `(async () => { for (const tab of await browser.tabs.query({})) if (tab.url.endsWith("/newtab.html")) await browser.tabs.remove(tab.id); })()`);
+    });
+
     await run_case("the options page opens and shows the config source", async () => {
       const status = { source: "managed", settings: {}, managed_file_hint: "" };
       const text = await evaluate_in_background(rdp, EXTENSION_ID, `(async () => {
@@ -677,6 +718,9 @@ async function main() {
       const mark = events.length;
       await send_keys("tt");
       await sleep(1000);
+      // The first Escape closes the completion list and keeps the line. The second closes the line.
+      await send_keys("-k", "Escape");
+      await sleep(400);
       await send_keys("-k", "Escape");
       await sleep(400);
       expect(visible_events(mark).length === 0, "tt switched tabs");

@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>New Tab</title>
+<style>
+  html, body { margin: 0; height: 100%; }
+  /* The defaults sit on an inner element, like every OasisFox surface. */
+  .oasisfox-newtab {
+    --oasisfox-bg: #0c0e13;
+    --oasisfox-fg: #f5f5dc;
+    --oasisfox-accent: #7fa3c9;
+    min-height: 100vh;
+    background: var(--oasisfox-bg);
+    color: var(--oasisfox-fg);
+  }
+</style>
+</head>
+<body>
+<!-- The page script comes first so a redirect starts before the key scripts load. -->
+<script src="newtab.js"></script>
+<!-- moz-extension:// pages do not match <all_urls>, and executeScript cannot reach them, so every key script loads by tag.
+     content.js comes first because it creates the host that the others register with. -->
+<script src="content.js"></script>
+<script src="ui.js"></script>
+<script src="hints.js"></script>
+<script src="whichkey.js"></script>
+<script src="cmdline.js"></script>
+</body>
+</html>
