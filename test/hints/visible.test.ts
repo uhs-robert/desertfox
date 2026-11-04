@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { contains_composed, keep_visible, points_to_probe, uncovered_through_frames, visible_point } from "../../src/content/hints/visible.ts";
+import { contains_composed, keep_visible, points_to_probe, viewport_size, uncovered_through_frames, visible_point } from "../../src/content/hints/visible.ts";
 import type { PageProbe, Rect } from "../../src/content/hints/visible.ts";
 
 type Box = { name: string; rect: Rect; rects?: Rect[]; reachable_at?: (x: number, y: number) => boolean; intersecting?: boolean; hidden?: boolean; covered_by?: string };
@@ -102,4 +102,13 @@ test("points_to_probe stays inside a viewport narrower than the window by a scro
   const narrow = { width: 785, height: 600 };
   const points = points_to_probe([at(700, 10, 100, 20)], narrow);
   assert.ok(points.length > 0 && points.every((p) => p.x < 785));
+});
+
+test("viewport_size reads the root in standards mode and the body in quirks mode, and falls back to the window", () => {
+  const win = { innerWidth: 800, innerHeight: 600 };
+  const root = { clientWidth: 785, clientHeight: 2000 };
+  const body = { clientWidth: 785, clientHeight: 590 };
+  assert.deepEqual(viewport_size({ compatMode: "CSS1Compat", documentElement: root, body }, win), { width: 785, height: 2000 });
+  assert.deepEqual(viewport_size({ compatMode: "BackCompat", documentElement: root, body }, win), { width: 785, height: 590 });
+  assert.deepEqual(viewport_size({ compatMode: "CSS1Compat", documentElement: { clientWidth: 0, clientHeight: 0 }, body: null }, win), { width: 800, height: 600 });
 });

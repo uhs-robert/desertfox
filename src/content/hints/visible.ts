@@ -52,6 +52,17 @@ export function points_to_probe(rects: readonly Rect[], viewport: { width: numbe
   return points;
 }
 
+type Sized = { clientWidth: number; clientHeight: number };
+
+// The click-reachable size, without a classic scrollbar. In quirks mode the viewport is the body's client box, since the root's is the page height.
+export function viewport_size(
+  doc: { compatMode: string; documentElement: Sized; body: Sized | null },
+  win: { innerWidth: number; innerHeight: number },
+): { width: number; height: number } {
+  const box = doc.compatMode === "BackCompat" && doc.body !== null ? doc.body : doc.documentElement;
+  return { width: box.clientWidth || win.innerWidth, height: box.clientHeight || win.innerHeight };
+}
+
 export function keep_visible<T>(targets: readonly T[], probe: PageProbe<T>): T[] {
   return targets.filter((target) => {
     if (!probe.is_intersecting(target) || probe.is_hidden_by_style(target)) return false;
