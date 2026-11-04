@@ -290,14 +290,14 @@ test("a tab row carries its status, flags, favicon and container from the tab it
   session.edit("tab ");
   asks[0]!.answer([
     { number: 1, title: "Mail", url: "https://m.test/", active: true, pinned: true, favicon: "https://m.test/i.png" },
-    { number: 2, title: "Docs", url: "https://d.test/", alternate: true, audible: true, muted: true, container },
+    { number: 2, title: "Docs", url: "https://d.test/", alternate: true, muted: true, container },
     { number: 3, title: "Old", url: "https://o.test/", discarded: true },
   ]);
   await settle();
   const marks = session.get_rows().map((row) => row.tab);
   assert.deepEqual(marks, [
     { status: "%", flags: ["pinned"], favicon: "https://m.test/i.png" },
-    { status: "#", flags: ["audible", "muted"], container },
+    { status: "#", flags: ["muted"], container },
     { status: "", flags: ["discarded"] },
   ]);
 });

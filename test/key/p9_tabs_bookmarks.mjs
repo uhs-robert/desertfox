@@ -45,7 +45,9 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, open_p
   const shot_dir = process.env.OASISFOX_SHOT_DIR;
   if (shot_dir) {
     await run_case("screenshot of the tab list with status marks, a container and a favicon", async () => {
-      const made = await background(`(async () => {
+      let made;
+      try {
+      made = await background(`(async () => {
         const fox = await browser.contextualIdentities.create({ name: "Work", color: "orange", icon: "briefcase" });
         const ids = [];
         const open = async (props) => ids.push((await browser.tabs.create({ active: false, ...props })).id);
@@ -57,6 +59,12 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, open_p
         return { ids, container: fox.cookieStoreId };
       })()`);
       await sleep(1500);
+      // Go to p9e_one and back, so `#` has a tab to mark.
+      await background(`(async () => {
+        const [first, third] = ["p9e_one", "p9e_three"].map((id) => browser.tabs.query({ currentWindow: true, url: "*://*/*id=" + id }));
+        await browser.tabs.update((await first)[0].id, { active: true });
+        await browser.tabs.update((await third)[0].id, { active: true });
+      })()`);
       await background(`browser.tabs.discard(${made.ids[3]})`);
       await sleep(500);
       await send_keys(":");
@@ -68,7 +76,9 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, open_p
       await sleep(300);
       await send_keys("-k", "Escape");
       await sleep(400);
-      await background(`(async () => { await browser.tabs.remove(${JSON.stringify(made.ids)}); await browser.contextualIdentities.remove(${JSON.stringify(made.container)}); })()`);
+      } finally {
+        if (made) await background(`(async () => { await browser.tabs.remove(${JSON.stringify(made.ids)}); await browser.contextualIdentities.remove(${JSON.stringify(made.container)}); })()`);
+      }
     });
   }
 

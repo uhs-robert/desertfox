@@ -149,3 +149,32 @@ test("an image that fails to load is hidden, and a container icon that fails bec
   assert.ok(container.className.includes("oasisfox-cmdline-container-dot"));
   assert.equal(favicon.className, "oasisfox-cmdline-favicon");
 });
+
+test("a redraw reuses the image node of a favicon, so a keystroke fetches nothing again", () => {
+  const { element, list } = setup();
+  const tab = { ...rows(1)[0]!, tab: { status: "", flags: [], favicon: "https://a.test/i.png" } };
+  list.render([tab], -1);
+  const first = (element.children[0] as Node).children[2]!.children[0];
+  list.render([{ ...tab }], 0);
+  assert.equal((element.children[0] as Node).children[2]!.children[0], first);
+});
+
+test("a container icon that failed once is a dot again after a redraw", () => {
+  const { element, list } = setup();
+  const tab = { ...rows(1)[0]!, tab: { status: "", flags: [], container: { color: "red", icon: "resource://x/y.svg" } } };
+  list.render([tab], -1);
+  ((element.children[0] as Node).children[1]!.children[0] as unknown as { onerror: () => void }).onerror();
+  list.render([{ ...tab }], 0);
+  assert.ok((element.children[0] as Node).children[1]!.className.includes("oasisfox-cmdline-container-dot"));
+});
+
+test("rows with the same favicon each keep their own image node across a redraw", () => {
+  const { element, list } = setup();
+  const [one, two] = rows(2).map((row) => ({ ...row, tab: { status: "", flags: [], favicon: "https://a.test/i.png" } }));
+  list.render([one!, two!], -1);
+  const images = () => (element.children as Node[]).map((row) => row.children[2]!.children[0]);
+  const first = images();
+  assert.notEqual(first[0], first[1]);
+  list.render([one!, two!], 0);
+  assert.deepEqual(images(), first);
+});
