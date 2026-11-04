@@ -21,6 +21,12 @@ type Adopting = TextTree & { adoptedStyleSheets: CSSStyleSheet[] };
 
 const owner_of = (tree: TextTree): Document => (tree.nodeType === DOCUMENT_NODE ? (tree as Document) : (tree as ShadowRoot).ownerDocument);
 
+// A frame's window seen from this script answers `CSS` with this script's own, so its highlights would land in the wrong registry. The page's own view of the window gives the frame's.
+const page_view = (owner: Document): { Highlight: typeof Highlight; CSS: typeof CSS } => {
+  const window_of = owner.defaultView as unknown as { wrappedJSObject?: unknown };
+  return (window_of.wrappedJSObject ?? window_of) as { Highlight: typeof Highlight; CSS: typeof CSS };
+};
+
 const rule = (name: string, [background, text]: ColorPair) => `::highlight(${name}){background-color:${background};color:${text}}`;
 
 const sheet_text = ({ all, current }: FindColors) =>
@@ -63,7 +69,7 @@ export function create_painter() {
     // A removed frame or shadow host is a dead object, and any use of it throws. The rest still has to be cleared.
     for (const owner of painted_documents) {
       try {
-        const registry = owner.defaultView!.CSS.highlights as unknown as Registry;
+        const registry = page_view(owner).CSS.highlights as unknown as Registry;
         registry.delete(ALL_NAME);
         registry.delete(CURRENT_NAME);
       } catch {}
@@ -101,7 +107,7 @@ export function create_painter() {
     }
     for (const [owner, group] of by_document) {
       try {
-        const view = owner.defaultView as unknown as { Highlight: typeof Highlight; CSS: typeof CSS };
+        const view = page_view(owner);
         const registry = view.CSS.highlights as unknown as Registry;
         registry.set(ALL_NAME, new view.Highlight(...group.all));
         registry.set(CURRENT_NAME, new view.Highlight(...group.current));
