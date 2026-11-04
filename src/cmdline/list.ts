@@ -58,7 +58,7 @@ export function create_list(element: HTMLElement) {
       element.style.setProperty("--oasisfox-name-width", `${Math.min(MAX_NAME_COLUMNS, Math.max(...visible.map((row) => row.name.length), 0))}ch`);
       element.replaceChildren(
         ...visible.map((row, offset) => {
-          const item = cell(top + offset === selected ? "item oasisfox-cmdline-selected" : "item");
+          const item = cell(`item${top + offset === selected ? " oasisfox-cmdline-selected" : ""}${row.unavailable ? " oasisfox-cmdline-unavailable" : ""}`);
           const args = cell("args");
           args.append(cell("args-full", row.args), cell("args-short", row.args ? "…" : ""));
           item.append(name_cell(row), cell("description", row.description), args);

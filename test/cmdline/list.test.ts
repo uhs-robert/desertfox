@@ -82,3 +82,13 @@ test("a new ranking starts at the top, and the same ranking keeps its window whi
   list.render(rows(25), -1);
   assert.equal((element.children[0] as Node).children[0]!.children.map((part) => part.textContent).join(""), "cmd0");
 });
+
+test("a row marked unavailable carries the dim class and the others do not", () => {
+  const { element, list } = setup();
+  const [plain, dim] = rows(2);
+  list.render([plain!, { ...dim!, unavailable: true, args: "unavailable" }], 0);
+  const [first, second] = element.children;
+  assert.equal(first!.className, "oasisfox-cmdline-item oasisfox-cmdline-selected");
+  assert.equal(second!.className, "oasisfox-cmdline-item oasisfox-cmdline-unavailable");
+  assert.equal(second!.children[2]!.children[0]!.textContent, "unavailable");
+});

@@ -81,11 +81,11 @@ export type RecordCmdline = {
   text: string;
 };
 
-// From the command line page when the subject of `tab` or `bookmark` needs its list. The answer is undefined unless the
+// From the command line page when the subject of `tab` or `bookmark`, or the engine word of `search`, needs its list. The answer is undefined unless the
 // sender is a tab whose line redeemed a ticket, and it holds only tabs of the sender's own privacy (private or not).
 export type CompleteItems = {
   type: "complete_items";
-  kind: "tabs" | "bookmarks";
+  kind: "tabs" | "bookmarks" | "engines";
 };
 
 // `number` is the tab's place in its window's tab bar, counted from 1.
@@ -94,7 +94,10 @@ export type TabItem = { number: number; title: string; url: string };
 // Newest first.
 export type BookmarkItem = { title: string; url: string };
 
-export type CompleteItemsAnswer = { items: TabItem[] | BookmarkItem[] };
+// `label` is the config's resolved chain. `available` is whether the line's page can fill the engine's slots. The page URL itself never leaves the background.
+export type EngineItem = { name: string; label: string; available: boolean };
+
+export type CompleteItemsAnswer = { items: TabItem[] | BookmarkItem[] | EngineItem[] };
 
 export type ContentToBackground = RunRequest | ModeChanged | LoadBundle | ListKeys | IssueCmdlineTicket | OpenCmdline | RecordCmdline | CompleteItems;
 

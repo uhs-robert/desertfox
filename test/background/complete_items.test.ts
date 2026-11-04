@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { bookmark_items, create_complete_items, flatten_bookmarks, listed_tabs } from "../../src/background/complete_items.ts";
+import { bookmark_items, create_complete_items, engine_items, flatten_bookmarks, listed_tabs } from "../../src/background/complete_items.ts";
 import type { BookmarkNode, LineScope, TabLike } from "../../src/background/complete_items.ts";
 
 const tab = (id: number, index: number, window_id: number, incognito: boolean, title = `Tab ${id}`): TabLike => ({ id, index, windowId: window_id, title, url: `https://site${id}.test/`, incognito });
@@ -10,7 +10,14 @@ const PRIVATE_LINE = { tab_id: 2, window_id: 20, incognito: true };
 // Tabs of two normal windows and one private window.
 const ALL_TABS = [tab(1, 0, 10, false), tab(2, 1, 10, false), tab(3, 0, 11, false), tab(4, 0, 20, true), tab(5, 1, 20, true)];
 
-function make({ openers = [1, 2], all_windows = false, tabs = ALL_TABS, bookmarks = [] as BookmarkNode[], fail = false } = {}) {
+const ENGINES = {
+  duck: { url: "https://duckduckgo.com/?q={query}", label: "DuckDuckGo" },
+  "github.repo": { url: "https://github.com/{repo}", label: "GitHub: this repo", slots: ["repo"] },
+  "github.repo.issues": { url: "https://github.com/{repo}/issues?q={query}", label: "GitHub: this repo: issues", slots: ["repo"] },
+  "github.repo.fb": { url: "https://github.com/{repo}", label: "GitHub fallback", slots: ["repo"], fallback: "https://github.com/" },
+};
+
+function make({ openers = [1, 2], all_windows = false, tabs = ALL_TABS, bookmarks = [] as BookmarkNode[], fail = false, page = undefined as { url: string } | undefined } = {}) {
   const asked: (number | undefined)[] = [];
   const opened = new Set(openers);
   const service = create_complete_items({
@@ -25,6 +32,8 @@ function make({ openers = [1, 2], all_windows = false, tabs = ALL_TABS, bookmark
     },
     is_opener: async (tab_id) => opened.has(tab_id),
     all_windows: async () => all_windows,
+    search_engines: async () => ENGINES,
+    page_of: async () => page,
   });
   return { service, asked, opened };
 }
@@ -115,6 +124,8 @@ test("a tab that navigates or closes while the lookup runs gets nothing", async 
     },
     is_opener: async (tab_id) => opened.has(tab_id),
     all_windows: async () => false,
+    search_engines: async () => ENGINES,
+    page_of: async () => undefined,
   });
   assert.equal(await service.answer("tabs", NORMAL_LINE), undefined);
   opened.add(1);
@@ -129,4 +140,27 @@ test("the bookmark tree flattens to every nested bookmark, newest added first, w
   assert.deepEqual(bookmark_items(flatten_bookmarks(tree)).map((item) => item.title), ["Deep", "Mid", "Old"]);
   const many: BookmarkNode[] = Array.from({ length: 12_000 }, (_, index) => ({ type: "bookmark", title: `B${index}`, url: `https://b${index}.test/`, dateAdded: index }));
   assert.equal(bookmark_items(flatten_bookmarks([{ type: "folder", children: many }])).length, 12_000);
+});
+
+test("engines come back in config order with a yes or no, and a tab with no marker gets nothing", async () => {
+  const page = { url: "https://github.com/acme/widgets" };
+  const { service } = make({ page });
+  assert.deepEqual((await service.answer("engines", NORMAL_LINE))?.items, [
+    { name: "duck", label: "DuckDuckGo", available: true },
+    { name: "github.repo", label: "GitHub: this repo", available: true },
+    { name: "github.repo.issues", label: "GitHub: this repo: issues", available: true },
+    { name: "github.repo.fb", label: "GitHub fallback", available: true },
+  ]);
+  assert.equal(await make({ openers: [] }).service.answer("engines", NORMAL_LINE), undefined);
+});
+
+test("a page that cannot fill a slot marks the engine, a fallback engine stays available, and no URL leaves", async () => {
+  const { service } = make({ page: { url: "https://example.com/" } });
+  const items = (await service.answer("engines", NORMAL_LINE))!.items as { name: string; available: boolean }[];
+  assert.deepEqual(items.map((item) => [item.name, item.available]), [["duck", true], ["github.repo", false], ["github.repo.issues", false], ["github.repo.fb", true]]);
+  assert.ok(!JSON.stringify(items).includes("example.com"));
+});
+
+test("a line with no page offers only the engines that need no slot or have a fallback", () => {
+  assert.deepEqual(engine_items(ENGINES, undefined).filter((item) => item.available).map((item) => item.name), ["duck", "github.repo.fb"]);
 });
