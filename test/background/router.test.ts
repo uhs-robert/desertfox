@@ -363,15 +363,15 @@ test("a prompt binding with a bad fixed arg refuses instead of opening the line"
   assert.match(log[0]!, /^refuse 7 where expects/);
 });
 
-test("a reply lost after the line opened on a live page is done, as when Enter navigates this tab", async () => {
+test("a reply lost after the line opened on a live page is cancelled, as when Enter navigates this tab", async () => {
   const ran: string[] = [];
   const { deps, log } = make_fake(
     { "open.url": open_url, "tab.close": { label: "Close", intent: "x", runs_in: "background", run: () => void ran.push("closed") } },
     { open_cmdline: async () => { throw new Error("The message channel closed"); } },
   );
   const response = await create_router(deps).run({ invocations: [{ id: "open.url", prompt: { param: "url" } }, { id: "tab.close" }], mode: "normal", may_prompt: true });
-  assert.deepEqual(response, { ok: true });
-  assert.deepEqual(ran, ["closed"]);
+  assert.deepEqual(response, { ok: true, cancelled: true });
+  assert.deepEqual(ran, []);
   assert.deepEqual(log, []);
 });
 

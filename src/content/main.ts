@@ -55,10 +55,9 @@ async function send_to_background(message: ContentToBackground): Promise<RunResp
 
 async function run_leaf(leaf: TreeLeaf, count: number | undefined): Promise<void> {
   for (const segment of plan_steps(leaf.steps, count)) {
-    const outcome =
-      segment.runs_in === "content"
-        ? await run_content_invocation(segment.invocation, segment.count_rule)
-        : await send_to_background({ type: "run", invocations: segment.invocations, mode: page_mode.get_mode() });
+    const outcome = await (segment.runs_in === "content"
+      ? run_content_invocation(segment.invocation, segment.count_rule)
+      : send_to_background({ type: "run", invocations: segment.invocations, mode: page_mode.get_mode() }));
     // The background already shows a refusal toast itself, so a returned refusal is not shown again.
     if ("message" in outcome) show_toast(outcome.message);
     // A failed or cancelled step stops the rest of the leaf.

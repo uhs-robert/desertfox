@@ -44,7 +44,7 @@ export type BundleHostDeps = {
   on_sink_missing: (mode: Mode) => void;
 };
 
-export const message_of = (error: unknown) => (error instanceof Error ? error.message : String(error));
+export const message_of = (error: unknown) => String((error as Error)?.message ?? error);
 
 // Answers the outcome of a call: nothing is done, a throw is failed. Calls the handler on the spot, so a sync handler still runs in the caller's turn.
 export function settle(call: () => HandlerResult): Promise<Outcome> {

@@ -16,8 +16,9 @@ export const run_content_invocation = (invocation: Invocation, count_rule: Count
       filled[param] ??= read_context_source(source);
     }
     for (const args of args_for_count(filled, invocation.count, count_rule)) {
-      const outcome = await settle(() => handler.run(args));
-      if (!outcome.ok || outcome.cancelled) return outcome;
+      // A throw reaches the outer settle, which answers it as failed.
+      const outcome = (await handler.run(args)) as Outcome | undefined;
+      if (outcome && (!outcome.ok || outcome.cancelled)) return outcome;
     }
   });
 

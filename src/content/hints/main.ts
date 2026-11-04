@@ -24,6 +24,8 @@ const cancelled_outcome: Outcome = { ok: true, cancelled: true };
 
 type Session = {
   cancelled: boolean;
+  // Set at the first pick. Only that pick answers `hint.run`, so a later rapid pick that fails shows its own message.
+  picked?: true;
   // The hint.run args, which `.` repeats after a pick.
   args: Record<string, unknown>;
   // Settles the promise `hint.run` returned. The first call wins, so each path that leaves hint mode must call it before `set_mode`, because the mode change ends the session as cancelled.
@@ -84,10 +86,12 @@ async function read_letters(): Promise<string[]> {
   return clean_letters(status?.settings?.hint_letters);
 }
 
-function copy_to_clipboard(text: string): Promise<unknown> {
+// A refused copy answers failed and shows nothing here: the pick's answer carries it to the caller, which shows it once.
+function copy_to_clipboard(text: string): Promise<Outcome | undefined> {
   return copy_text(navigator.clipboard, text).then((copied) => {
+    if (!copied) return { ok: false, message: "Could not copy to the clipboard" };
     // A view of its own, so the notice does not wipe the labels that rapid mode shows.
-    create_view().show_message(copied ? `Copied ${text.length > 40 ? text.slice(0, 40) + "..." : text}` : "Could not copy to the clipboard");
+    create_view().show_message(`Copied ${text.length > 40 ? text.slice(0, 40) + "..." : text}`);
   });
 }
 
@@ -118,10 +122,17 @@ function register(host: BundleHostApi): void {
   // A pick records what `.` repeats, so Escape or a failed filter stores nothing. The wait ends when the returned function gets the
   // action's result, so a later step sees the opened tab or the copied text. Call it before `set_mode`, which ends the session as cancelled.
   function begin_pick(current: Session): (result: unknown) => void {
-    let release!: () => void;
-    current.finish(new Promise<Outcome>((resolve) => (release = () => resolve(done))));
+    let answer!: (outcome: Outcome) => void;
+    const first = !current.picked;
+    current.picked = true;
+    current.finish(new Promise<Outcome>((resolve) => (answer = resolve)));
     void browser.runtime.sendMessage({ type: "record_repeat", invocation: { id: "hint.run", args: current.args } });
-    return (result) => void Promise.resolve(result).then(release, release);
+    const ended = (result: unknown) => {
+      const outcome = (result as Outcome | undefined) ?? done;
+      if (first) answer(outcome);
+      else if (!outcome.ok) create_view().show_message(outcome.message);
+    };
+    return (result) => void Promise.resolve(result).then(ended, () => ended(undefined));
   }
 
   // Finds, labels and shows the hints. Keys typed meanwhile wait and replay. Rapid mode calls it again after each pick.

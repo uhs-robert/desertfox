@@ -151,6 +151,7 @@ async function page_with(texts: string[]) {
     copied,
     modes,
     // The next opened link answers when this promise settles.
+    refuse_clipboard: () => Object.defineProperty(globalThis, "navigator", { value: { clipboard: { writeText: () => Promise.reject(new Error("denied")) } }, configurable: true }),
     hold_sends: (held: Promise<unknown>) => void (sends_held = held),
     mode: () => mode,
     active_listeners,
@@ -455,7 +456,7 @@ test("rapid mode answers done at the first pick and Escape later changes nothing
   assert.deepEqual(await answer, { ok: true });
 });
 
-test("Escape or a failed filter stores nothing for `.`, and a pick stores it", async () => {
+test("Escape or zero candidates stores nothing for `.`, and a pick stores it", async () => {
   const page = await page_with(["one", "two"]);
   const answer = page.run({ action: "background" });
   await settle();
@@ -483,4 +484,15 @@ test("hint.run answers done only after the picked link has been opened", async (
   assert.equal(await peek(answer), undefined);
   opened({ ok: true });
   assert.deepEqual(await answer, { ok: true });
+});
+
+test("a refused hint copy answers failed with one message, and a good copy answers done", async () => {
+  const page = await page_with(["one", "two"]);
+  page.refuse_clipboard();
+  const answer = page.run({ action: "copy" });
+  await settle();
+  page.type(page.labels()[0]!.toLowerCase());
+  await settle();
+  assert.deepEqual(await answer, { ok: false, message: "Could not copy to the clipboard" });
+  assert.deepEqual(page.messages(), []);
 });
