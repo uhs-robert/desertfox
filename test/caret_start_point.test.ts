@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { first_index_from } from "../src/content/caret/start_point.ts";
+import { first_index_from, in_other_tree } from "../src/content/caret/start_point.ts";
 import type { TextModel } from "../src/content/caret/text_model.ts";
 
 // Nodes in document order: a heading text, an image, a field, a paragraph text, and a nested span text inside a link.
@@ -48,4 +48,11 @@ test("no text at or after the element gives undefined", () => {
   assert.equal(first_index_from({ ...model, text: "" }, nodes.image! as never), undefined);
   const before_all = { ...model, point_at: () => ({ node: nodes.heading_text as unknown as Node, offset: 0 }) };
   assert.equal(first_index_from(before_all, nodes.link! as never), undefined);
+});
+
+test("an element in another document or in a shadow root is out of reach of the page's text model", () => {
+  const top = {};
+  assert.equal(in_other_tree({ ownerDocument: top, getRootNode: () => top }, top), false);
+  assert.equal(in_other_tree({ ownerDocument: {}, getRootNode: () => top }, top), true);
+  assert.equal(in_other_tree({ ownerDocument: top, getRootNode: () => ({}) }, top), true);
 });

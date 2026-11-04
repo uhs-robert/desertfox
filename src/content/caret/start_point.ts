@@ -9,6 +9,11 @@ const CONTAINED_BY = 16;
 
 type Positioned = { compareDocumentPosition: (other: Node) => number };
 
+// The text model reads the top document only. An element in a frame or a shadow root has no place in it.
+export function in_other_tree(node: { ownerDocument: unknown; getRootNode: () => unknown }, top_document: unknown): boolean {
+  return node.ownerDocument !== top_document || node.getRootNode() !== top_document;
+}
+
 // The first character from the start of the node on: its own text, or for a node with none, the text after it. A field or an image has no text in the model, so it takes the next text. Undefined when no text is left.
 export function first_index_from(model: TextModel, node: Positioned): number | undefined {
   const not_before = (index: number): boolean => {
