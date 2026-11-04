@@ -35,8 +35,8 @@ test("mix moves each channel toward the target and rounds", () => {
 
 test("each missing role derives by the table", () => {
   const dark = derive_roles(REQUIRED, "dark");
-  assert.equal(dark.bg_mantle, mix("#202020", "#000000", 0.15));
-  assert.equal(dark.bg_crust, mix("#202020", "#000000", 0.3));
+  assert.equal(dark.bg_mantle, mix("#202020", "#e0e0e0", 0.08));
+  assert.equal(dark.bg_crust, mix("#202020", "#e0e0e0", 0.16));
   assert.equal(dark.selection, mix("#202020", "#e0e0e0", 0.15));
   assert.equal(dark.muted, mix("#e0e0e0", "#202020", 0.45));
   assert.equal(dark.secondary, "#f0e68c");
@@ -45,7 +45,29 @@ test("each missing role derives by the table", () => {
   assert.deepEqual([dark.mode_normal, dark.mode_insert, dark.mode_ignore, dark.mode_caret, dark.mode_visual], [dark.primary, dark.error, dark.muted, dark.ok, dark.warn]);
   const light = derive_roles(REQUIRED, "light");
   assert.deepEqual([light.error, light.warn, light.ok], ["#8e0f14", "#793f0d", "#315e2d"]);
+  assert.equal(light.bg_mantle, mix("#202020", "#000000", 0.15));
+  assert.equal(light.bg_crust, mix("#202020", "#000000", 0.3));
   assert.deepEqual(Object.keys(dark), [...ROLES]);
+});
+
+// WCAG relative luminance contrast ratio of two #rrggbb colors.
+function contrast(first: string, second: string): number {
+  const luminance = (color: string) => {
+    const [r, g, b] = [1, 3, 5].map((at) => {
+      const channel = Number.parseInt(color.slice(at, at + 2), 16) / 255;
+      return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+    });
+    return 0.2126 * r! + 0.7152 * g! + 0.0722 * b!;
+  };
+  const [light, dark] = [luminance(first), luminance(second)].sort((a, b) => b - a);
+  return (light! + 0.05) / (dark! + 0.05);
+}
+
+test("a dark theme's derived layers are lighter than bg and visibly apart from it", () => {
+  // Moonlight dark, as the command line page declares it.
+  const moonlight = derive_roles({ bg: "#0c0e13", fg: "#f5f5dc", primary: "#7fa3c9", accent: "#f0e68c" }, "dark");
+  assert.ok(contrast(moonlight.bg_mantle, moonlight.bg) >= 1.15, `mantle ${moonlight.bg_mantle}`);
+  assert.ok(contrast(moonlight.bg_crust, moonlight.bg) > contrast(moonlight.bg_mantle, moonlight.bg), `crust ${moonlight.bg_crust}`);
 });
 
 test("a given role wins over its derivation, and roles derived from it follow", () => {

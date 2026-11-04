@@ -274,6 +274,8 @@ The roles: `bg`, `bg_mantle`, `bg_crust`, `selection`, `fg`, `muted`, `primary`,
 
 `palette = "<name>"` looks in `<config dir>/themes/<name>.toml` first, then in the repo's `themes/`, then in the 16 oasis.nvim palettes. A local file wins over a repo theme of the same name. `tools/build-config` checks every local theme file and rejects an unknown role (the error lists the valid ones), a missing required role and a bad color, each with the file, table and key. `just themes` compiles the repo `themes/` into `src/shared/themes.ts`, and `just test` fails when that module is stale. Today a theme sets only the mode badge colors: the badge is the `mode_*` role with `bg` as the text.
 
+`primary` is the brand color (links, the normal mode badge) and `accent` is the hint background and focus marks. Today the surfaces use `--oasisfox-accent` for the brand color. From theme PR 2 on, `--oasisfox-accent` holds the `accent` role instead. A `style.css` that sets or reads `--oasisfox-accent` for the brand color moves to `--oasisfox-primary`.
+
 ## Snippets
 
 A snippet is a user command written as page code. It is how users add behavior that OasisFox does not ship, for example helpers for one private web app. OasisFox has no plugin system: snippets are the only extension point.

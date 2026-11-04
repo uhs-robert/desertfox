@@ -1,15 +1,16 @@
 // Compiles the repo `themes/*.toml` into src/shared/themes.ts, so the extension never parses TOML.
-// Usage: node tools/build_themes.ts --write | --check
+// Usage: node tools/build_themes.ts --write | --check [--out path]
 
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { read_theme_dir } from "./build-config/theme_dir.ts";
 
 const root = new URL("../", import.meta.url);
-const module_path = fileURLToPath(new URL("src/shared/themes.ts", root));
+const out_flag = process.argv.indexOf("--out");
+const module_path = out_flag >= 0 ? process.argv[out_flag + 1]! : fileURLToPath(new URL("src/shared/themes.ts", root));
 const write = process.argv.includes("--write");
 if (write === process.argv.includes("--check")) {
-  console.error("usage: node tools/build_themes.ts --write | --check");
+  console.error("usage: node tools/build_themes.ts --write | --check [--out path]");
   process.exit(2);
 }
 
@@ -27,10 +28,12 @@ import type { Theme } from "./theme/roles.ts";
 export const REPO_THEMES: Record<string, Theme> = ${JSON.stringify(themes, null, 2)};
 `;
 
-if (readFileSync(module_path, { encoding: "utf8", flag: "a+" }) === next) process.exit(0);
+// A missing module is stale, the same as an outdated one.
+const current = existsSync(module_path) ? readFileSync(module_path, "utf8") : undefined;
+if (current === next) process.exit(0);
 if (write) {
   writeFileSync(module_path, next);
 } else {
-  console.error("src/shared/themes.ts is stale against themes/; run `just themes`");
+  console.error(`${module_path} is stale against themes/; run \`just themes\``);
   process.exit(1);
 }

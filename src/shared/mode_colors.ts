@@ -77,11 +77,17 @@ export function mode_colors_of_theme(theme: Theme): ModeColors {
   return Object.fromEntries(MODE_COLOR_MODES.map((mode) => [mode, colors_of(mode)])) as ModeColors;
 }
 
+// Managed storage can be edited by hand, so a local theme's shape is not taken on trust.
+function has_badge_roles(colors: unknown): colors is Theme {
+  const badge_roles = ["bg", ...MODE_COLOR_MODES.map((mode) => `mode_${mode}`)];
+  const variant_usable = (variant: unknown) =>
+    typeof variant === "object" && variant !== null && badge_roles.every((role) => typeof (variant as Record<string, unknown>)[role] === "string");
+  return typeof colors === "object" && colors !== null && variant_usable((colors as Theme).dark) && variant_usable((colors as Theme).light);
+}
+
 // A local theme wins over a repo theme of the same name. Undefined when the name finds nothing.
 export function palette_mode_colors(name: string, local_theme?: LocalTheme): ModeColors | undefined {
-  // Managed storage can be edited by hand, so the local theme's shape is not taken on trust.
-  const local_usable = local_theme?.name === name && typeof local_theme.colors?.dark === "object" && typeof local_theme.colors?.light === "object";
-  if (local_usable) return mode_colors_of_theme(local_theme.colors);
+  if (local_theme?.name === name && has_badge_roles(local_theme.colors)) return mode_colors_of_theme(local_theme.colors);
   if (Object.hasOwn(REPO_THEMES, name)) return mode_colors_of_theme(REPO_THEMES[name]!);
   return is_palette_name(name) ? resolve_mode_colors(name) : undefined;
 }

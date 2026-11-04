@@ -42,3 +42,10 @@ test("the built-in palettes keep their badges, and an unknown name finds nothing
   assert.deepEqual(palette_mode_colors("moonlight", { name: "other", colors: { dark: local_colors, light: local_colors } }), resolve_mode_colors("moonlight"));
   assert.equal(palette_mode_colors("neon"), undefined);
 });
+
+test("a hand-edited local theme with a missing variant or role falls back instead of crashing", () => {
+  const broken = [{ dark: null, light: local_colors }, { dark: local_colors, light: { ...local_colors, bg: 3 } }, { dark: { bg: "#000000" }, light: local_colors }];
+  for (const colors of broken) {
+    assert.deepEqual(palette_mode_colors("moonlight", { name: "moonlight", colors } as never), resolve_mode_colors("moonlight"));
+  }
+});

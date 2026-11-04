@@ -20,8 +20,9 @@ const per_variant = (dark: string, light: string) => (_colors: RoleColors, varia
 
 // In dependency order: a rule reads only required roles and roles above it.
 const DERIVATIONS: [Exclude<Role, RequiredRole>, (colors: RoleColors, variant: Variant) => string][] = [
-  ["bg_mantle", (colors) => mix(colors.bg, BLACK, 0.15)],
-  ["bg_crust", (colors) => mix(colors.bg, BLACK, 0.3)],
+  // A dark theme layers lighter surfaces on bg, a light theme darker ones.
+  ["bg_mantle", (colors, variant) => (variant === "dark" ? mix(colors.bg, colors.fg, 0.08) : mix(colors.bg, BLACK, 0.15))],
+  ["bg_crust", (colors, variant) => (variant === "dark" ? mix(colors.bg, colors.fg, 0.16) : mix(colors.bg, BLACK, 0.3))],
   ["selection", (colors) => mix(colors.bg, colors.fg, 0.15)],
   ["muted", (colors) => mix(colors.fg, colors.bg, 0.45)],
   ["secondary", (colors) => colors.accent],
