@@ -132,9 +132,10 @@ export async function run_cases({ rdp, extension_id, run_case, expect, open_page
   await run_case("caret in a tall frame that is already on screen does not scroll the page", async () => {
     const page_id = "frames_tall";
     await open_page("caret_tall_frame", page_id, { new_tab: true });
-    await sleep(500);
     const frame_selection = `document.getElementById("tall").contentWindow.getSelection().toString()`;
     const scroll_y = async () => (await in_active_tab("scrollY"))[0];
+    // The load handler scrolls the page, so wait for that instead of a fixed time.
+    for (let wait = 0; (await scroll_y()) <= 1000 && wait < 40; wait++) await sleep(150);
     const before = await scroll_y();
     expect(before > 1000, `the page did not scroll to the frame text: ${before}`);
     await send_keys("gV");
