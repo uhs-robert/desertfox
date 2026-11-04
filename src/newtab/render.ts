@@ -1,12 +1,17 @@
-// The built-in page: the clock and the date.
+// The built-in page: the clock (analog or digital) and the date.
 import type { Settings } from "../shared/config.ts";
 import { draw_clock } from "./clock.ts";
+import { draw_digital_clock } from "./digital_clock.ts";
 
-type WidgetSettings = Pick<Settings, "newtab_clock" | "newtab_date">;
+type WidgetSettings = Pick<Settings, "newtab_clock" | "newtab_date" | "newtab_clock_format">;
 
-// Each widget needs only to be not `false`.
+// Each widget needs only to be not `false`. The clock is analog unless set to "digital".
 export function enabled_widgets(settings: WidgetSettings) {
-  return { clock: settings.newtab_clock !== false, date: settings.newtab_date !== false };
+  return {
+    clock: settings.newtab_clock !== false,
+    clock_style: settings.newtab_clock === "digital" ? ("digital" as const) : ("analog" as const),
+    date: settings.newtab_date !== false,
+  };
 }
 
 export function date_text(time: Date): string {
@@ -27,7 +32,7 @@ export function render_new_tab(body: HTMLElement, settings: WidgetSettings = {})
   slot.append(time_block);
   page.append(slot);
 
-  const clock = enabled.clock ? draw_clock() : null;
+  const clock = !enabled.clock ? null : enabled.clock_style === "digital" ? draw_digital_clock(settings.newtab_clock_format ?? 12) : draw_clock();
   if (clock) time_block.append(clock.element);
   const date = document.createElement("h3");
   date.className = "date";

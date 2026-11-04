@@ -4,6 +4,8 @@
 <meta charset="utf-8">
 <title>New Tab</title>
 <style>
+  /* Declared only on this page, so no other page or script pulls the font. Until it loads, swap shows the digits in monospace. */
+  @font-face { font-family: "DSEG7 Classic"; src: url("DSEG7Classic-Regular.ttf") format("truetype"); font-display: swap; }
   html { font-size: 14px; }
   html, body { margin: 0; height: 100%; }
   /* Colors are var() fallbacks, never declarations: a declaration here would shadow a theme or style.css value. */
@@ -25,7 +27,10 @@
   .oasisfox-newtab .clock .second { stroke: var(--oasisfox-accent, #f0e68c); }
   .oasisfox-newtab .clock .cap { fill: var(--oasisfox-bg-mantle, #1a2330); }
   .oasisfox-newtab .date { margin: 0; font-size: 1.5em; font-weight: 500; color: var(--oasisfox-primary, #85a8cc); }
-  .oasisfox-newtab .clock + .date { margin-top: 1rem; padding-top: 1rem; border-top: 2px solid var(--oasisfox-border, #4e6578); }
+  .oasisfox-newtab .digital-clock { display: inline-flex; align-items: baseline; gap: 0.5rem; padding: 0.5rem 1rem; border-radius: 8px; background: var(--oasisfox-bg-mantle, #001400); color: var(--oasisfox-primary, #4af05c); }
+  .oasisfox-newtab .digital-clock .digits { font-family: "DSEG7 Classic", monospace; font-size: 3.5em; }
+  .oasisfox-newtab .digital-clock .meridiem { font-size: 0.75em; }
+  .oasisfox-newtab .clock + .date, .oasisfox-newtab .digital-clock + .date { margin-top: 1rem; padding-top: 1rem; border-top: 2px solid var(--oasisfox-border, #4e6578); }
 </style>
 </head>
 <body>

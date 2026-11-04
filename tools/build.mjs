@@ -39,6 +39,9 @@ for (const file of ["manifest.json", "managed_schema.json", "help/help.html", "o
   await copyFile(`src/${file}`, `dist/${file.split("/").pop()}`);
 }
 
+// The font is copied as is with its licence: the licence reserves the name "DSEG", so a converted or edited font could not keep it.
+for (const file of ["DSEG7Classic-Regular.ttf", "OFL-DSEG.txt"]) await copyFile(`src/newtab/fonts/${file}`, `dist/${file}`);
+
 await mkdir("dist/icons", { recursive: true });
 await copyFile("src/icons/oasisfox.svg", "dist/icons/oasisfox.svg");
 

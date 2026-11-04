@@ -57,9 +57,11 @@ export type Settings = {
   open_completion?: ("bookmarks" | "history")[];
   // History rows `open` shows for an empty word. Absent is 10.
   history_completion_max?: number;
-  // The new tab page widgets. Each is on unless false.
-  newtab_clock?: boolean;
+  // The new tab page widgets. Each is on unless false. `true` on the clock means analog, as it did before the digital face.
+  newtab_clock?: boolean | "analog" | "digital";
   newtab_date?: boolean;
+  // The hours of the digital clock. Absent is 12. The analog face has no 12 or 24 form.
+  newtab_clock_format?: 12 | 24;
 };
 
 // The reserved value of `new_tab_page` and `home_page` that names the built-in new tab page.

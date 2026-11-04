@@ -75,8 +75,9 @@ function settings_schema(): Schema {
       cmdline_prompt: { type: "string", minLength: 1, maxLength: 8, pattern: "^[^\\r\\n]+$", default: "caret", description: "Before the command line input: \"caret\" for a bold > , \"colon\" for an accent :, or your own text (include the trailing space you want)" },
       open_completion: { type: "array", items: { enum: ["bookmarks", "history"] }, uniqueItems: true, description: "Groups that open completes from, in list order. A source left out is not read. Default is both" },
       history_completion_max: { type: "integer", minimum: 0, default: 10, description: "History rows that open completion shows for an empty word" },
-      newtab_clock: { type: "boolean", default: true, description: "Whether the new tab page shows the analog clock" },
+      newtab_clock: { oneOf: [{ type: "boolean" }, { enum: ["analog", "digital"] }], default: true, description: "The new tab page clock: false hides it, true or \"analog\" shows the analog face, \"digital\" shows the seven-segment digits" },
       newtab_date: { type: "boolean", default: true, description: "Whether the new tab page shows the date under the clock" },
+      newtab_clock_format: { enum: [12, 24], default: 12, description: "Hours on the digital clock: 12 with an AM or PM suffix, or 24. The analog clock ignores it" },
     },
     additionalProperties: false,
   };
