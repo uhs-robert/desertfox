@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { create_list, MAX_ROWS, window_top } from "../../src/cmdline/list.ts";
 import type { Row } from "../../src/cmdline/completion/sources.ts";
 
-type Node = { tag: string; className: string; textContent: string; children: Node[]; hidden: boolean; style: { setProperty: (name: string, value: string) => void; vars: Record<string, string> }; append: (...nodes: Node[]) => void; replaceChildren: (...nodes: Node[]) => void };
+type Node = { tag: string; className: string; textContent: string; children: Node[]; hidden: boolean; offsetHeight: number; style: { minHeight: string; setProperty: (name: string, value: string) => void; vars: Record<string, string> }; append: (...nodes: Node[]) => void; replaceChildren: (...nodes: Node[]) => void };
 
 function fake_node(tag = "span"): Node {
   const vars: Record<string, string> = {};
@@ -13,7 +13,8 @@ function fake_node(tag = "span"): Node {
     textContent: "",
     children: [],
     hidden: false,
-    style: { vars, setProperty: (name, value) => void (vars[name] = value) },
+    offsetHeight: 0,
+    style: { minHeight: "", vars, setProperty: (name, value) => void (vars[name] = value) },
     append: (...nodes) => void node.children.push(...nodes),
     replaceChildren: (...nodes) => void (node.children = nodes),
   };
@@ -33,6 +34,20 @@ test("the window shows at most ten rows and hides itself when there are none", (
   list.render(rows(25), -1);
   assert.equal(element.children.length, MAX_ROWS);
   list.render([], -1);
+  assert.equal(element.hidden, true);
+});
+
+test("while loading with no rows the list is empty and holds its height, and an empty result after loading hides it", () => {
+  const { element, list } = setup();
+  list.render(rows(5), 2);
+  (element as unknown as { offsetHeight: number }).offsetHeight = 100;
+  list.render([], -1, true);
+  assert.equal(element.hidden, false);
+  assert.equal(element.children.length, 0);
+  assert.equal(element.style.minHeight, "100px");
+  list.render(rows(3), -1);
+  assert.equal(element.style.minHeight, "");
+  list.render([], -1, false);
   assert.equal(element.hidden, true);
 });
 
