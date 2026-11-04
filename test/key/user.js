@@ -20,3 +20,4 @@ user_pref("browser.newtabpage.enabled", false);
 user_pref("browser.urlbar.suggest.searches", false);
 user_pref("browser.search.suggest.enabled", false);
 user_pref("browser.urlbar.autoFill", false);
+user_pref("privacy.userContext.enabled", true);

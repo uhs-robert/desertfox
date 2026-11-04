@@ -7,6 +7,7 @@ The background page. It loads the config, compiles the keymap, assigns the Firef
 - `config_load.ts`, `keymap_merge.ts`, `compile.ts`: managed config over imported config, default keymap under user keymap, and the args check per binding.
 - `default_keymap.ts`: the shipped keys. `docs/keymap.md` is generated from this file. Keys that need the user's engines or containers are left to the config. A binding with `prompt` compiles to a background step, and the router opens the command line with it typed in.
 - `slots.ts`: `browser` chords to the 10 manifest slots.
+- `repeat_memory.ts`: the request `.` replays, in `storage.session`, one slot for normal windows and one for private windows, and the check on what a page script may record.
 - `window_focus.ts`: the window ids in last-focused order, newest first, in `storage.session`. `tab.attach` with no window picks from it.
 - `tab_modes.ts`: the mode each tab last reported, in `storage.local`, and the ignore-mode gate for Firefox shortcuts.
 - `router.ts`: the one entry for run requests. A prompt, a missing required param or an empty `@selection` opens the command line with the printed command instead of refusing. An empty `@selection` runs the command instead when `runs_with_empty` says it can on this page, as a search on a `{query|url}` engine can. The prefill uses short flags, for example `open -t `. Its pieces are `count.ts` and `refusal.ts`.

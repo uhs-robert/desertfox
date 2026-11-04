@@ -66,6 +66,8 @@ export const DEFAULT_KEYMAP: KeymapConfig = {
     gh: { id: "page.home" },
     gH: { id: "page.home", args: { where: "tab" } },
 
+    ".": { id: "command.repeat" },
+
     J: { id: "tab.next" },
     K: { id: "tab.prev" },
     gt: { id: "tab.goto", label: "Next tab" },
