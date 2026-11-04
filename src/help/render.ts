@@ -1,5 +1,6 @@
 // Draws the help model with DOM calls only. Command text never goes through innerHTML.
 
+import type { Block, Inline } from "./blocks.ts";
 import type { CommandRow, EngineRow, HelpModel, KeyRow } from "./model.ts";
 import { STYLE_CLASSES, STYLE_VARIABLES } from "./model.ts";
 import { PAGES } from "./route.ts";
@@ -63,6 +64,27 @@ function engine_table(engines: EngineRow[]): HTMLElement {
   return el("table", "oasisfox-help-engines", head, ...body);
 }
 
+function inline_node(inline: Inline): Child {
+  switch (inline.kind) {
+    case "text": return inline.text;
+    case "code": return el("code", undefined, inline.text);
+    case "link": {
+      const link = el("a", undefined, inline.text);
+      link.setAttribute("href", inline.href);
+      return link;
+    }
+  }
+}
+
+function block_node(block: Block): HTMLElement {
+  switch (block.kind) {
+    case "heading": return el(`h${block.level}`, undefined, block.text);
+    case "paragraph": return el("p", undefined, ...block.inlines.map(inline_node));
+    case "list": return el("ul", undefined, ...block.items.map((item) => el("li", undefined, ...item.map(inline_node))));
+    case "code_block": return el("pre", "oasisfox-help-usage", block.text);
+  }
+}
+
 function definition_table(rows: { name: string; meaning: string }[]): HTMLElement {
   return el("table", undefined, ...rows.map((row) => el("tr", undefined, el("td", undefined, el("code", undefined, row.name)), el("td", undefined, row.meaning))));
 }
@@ -95,10 +117,10 @@ function styling_page(): HTMLElement[] {
   ];
 }
 
-function page_body(page: PageId, model: HelpModel): HTMLElement[] {
+function page_body(page: PageId, model: HelpModel, guide: Block[]): HTMLElement[] {
   switch (page) {
     case "home": return home_page(model);
-    case "search-engines": return [engine_table(model.engines)];
+    case "search-engines": return [...guide.map(block_node), el("h2", undefined, "Your engines"), engine_table(model.engines)];
     case "commands": return commands_page(model);
     case "styling": return styling_page();
   }
@@ -114,10 +136,10 @@ function sidebar(current: PageId): HTMLElement {
   return el("nav", "oasisfox-help-sidebar", el("div", "oasisfox-help-brand", "OasisFox"), ...links);
 }
 
-export function render_help(root: HTMLElement, model: HelpModel, route: Route): void {
+export function render_help(root: HTMLElement, model: HelpModel, route: Route, guide: Block[]): void {
   const title = PAGES.find((page) => page.id === route.page)?.title ?? "Home";
   const heading = el("h1", undefined, title);
   heading.tabIndex = -1;
-  const page = el("main", "oasisfox-help-page", heading, ...page_body(route.page, model));
+  const page = el("main", "oasisfox-help-page", heading, ...page_body(route.page, model, guide));
   root.replaceChildren(el("div", "oasisfox-help", sidebar(route.page), page));
 }
