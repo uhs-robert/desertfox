@@ -98,11 +98,37 @@ test("a caret session starts at the match until a later selection takes its plac
   assert.equal(find.position(model), undefined);
 });
 
-test("n with no search made says so", async () => {
+test("n with no search made answers failed and shows nothing itself", async () => {
   const page = fake_page();
   const find = create_find(page.host, page.deps);
-  await find.step(false);
-  assert.deepEqual(page.toasts, ["No previous search"]);
+  assert.deepEqual(await find.step(false), { ok: false, message: "No previous search" });
+  assert.deepEqual(page.toasts, []);
+});
+
+test("n answers done on a match and failed when the last search has no match any more", async () => {
+  const page = fake_page();
+  page.registers.set("/", "ab");
+  page.registers.set("/:direction", "forward");
+  const find = create_find(page.host, page.deps);
+  const found = find.step(false);
+  await page.settle();
+  assert.deepEqual(await found, { ok: true });
+  page.registers.set("/", "zz");
+  const lost = create_find(page.host, page.deps).step(false);
+  await page.settle();
+  assert.deepEqual(await lost, { ok: false, message: "Not found: zz" });
+  assert.deepEqual(page.toasts, ["1 of 3"]);
+});
+
+test("a step that a newer one replaced answers cancelled", async () => {
+  const page = fake_page();
+  page.registers.set("/", "ab");
+  page.registers.set("/:direction", "forward");
+  const find = create_find(page.host, page.deps);
+  const first = find.step(false);
+  find.begin("forward");
+  await page.settle();
+  assert.deepEqual(await first, { ok: true, cancelled: true });
 });
 
 test("two quick n presses move two matches, even when the register still has to be read", async () => {
