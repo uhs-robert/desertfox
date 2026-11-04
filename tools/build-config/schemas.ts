@@ -3,7 +3,8 @@
 
 import type { CommandMeta } from "../../src/shared/command.ts";
 import { BUILT_IN_PAGE, DEFAULT_SETTINGS, MODE_INDICATOR_VALUES, WHICH_KEY_BORDER_VALUES } from "../../src/shared/config.ts";
-import { PALETTE_NAMES } from "../../src/shared/mode_colors.ts";
+import { built_in_theme_names } from "../../src/shared/mode_colors.ts";
+import { LIGHT_INTENSITIES } from "../../src/shared/theme/roles.ts";
 import { KEYMAP_MODES } from "./merge.ts";
 import type { DataKind } from "./source_files.ts";
 
@@ -60,7 +61,8 @@ function settings_schema(): Schema {
       ignore_sites: { type: "array", items: { type: "string" }, description: "Match patterns where OasisFox starts in ignore mode" },
       which_key_border: { enum: [...WHICH_KEY_BORDER_VALUES], default: DEFAULT_SETTINGS.which_key_border, description: "Corner style of the which-key panel border" },
       mode_indicator: { enum: [...MODE_INDICATOR_VALUES], default: DEFAULT_SETTINGS.mode_indicator, description: "When the mode badge shows: always (NORMAL too), not_normal, or off" },
-      palette: { type: "string", minLength: 1, examples: [...PALETTE_NAMES], default: DEFAULT_SETTINGS.palette, description: "Theme name: themes/<name>.toml in the config directory first, then a built-in theme. Light or dark follows the system theme" },
+      palette: { type: "string", minLength: 1, examples: built_in_theme_names(), default: DEFAULT_SETTINGS.palette, description: "Theme name: themes/<name>.toml in the config directory first, then a built-in theme. Light or dark follows the system theme" },
+      light_intensity: { enum: [...LIGHT_INTENSITIES], default: DEFAULT_SETTINGS.light_intensity, description: "Which of the five light sets of an Oasis theme the light variant uses, 1 (lightest) to 5" },
       search_prefixes: { ...prefix_pair_schema("here"), default: DEFAULT_SETTINGS.search_prefixes },
       container_prefixes: { ...prefix_pair_schema("reopen"), default: DEFAULT_SETTINGS.container_prefixes },
       home_page: { type: "string", minLength: 1, description: `URL that page.home opens, or "${BUILT_IN_PAGE}" for the built-in new tab page` },
