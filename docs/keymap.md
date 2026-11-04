@@ -20,7 +20,7 @@ A note "(prompts)" means the binding leaves a param out, so the command line ask
 
 <!-- BEGIN generated -->
 
-bound: 184 (normal 128, hint 2, cmdline 11, caret 18, visual 20, insert 1, ignore 1, browser 3) | later: 14 | dropped: 6
+bound: 186 (normal 130, hint 2, cmdline 11, caret 18, visual 20, insert 1, ignore 1, browser 3) | later: 14 | dropped: 6
 
 ### normal
 
@@ -102,6 +102,8 @@ bound: 184 (normal 128, hint 2, cmdline 11, caret 18, visual 20, insert 1, ignor
 | `P` | bound | `paste --tab` | Open clipboard |  |
 | `aa` | bound | `bookmark.add` | Add bookmark |  |
 | `ab` | bound | `bookmark.add` (prompts) | Add bookmark, edit URL |  |
+| `ad` | bound | `bookmark.remove` | Remove bookmark |  |
+| `aD` | bound | `bookmark.remove` (prompts) | Remove bookmark, pick from list |  |
 | `b` | bound | `bookmark` (prompts) | Open bookmark |  |
 | `B` | bound | `bookmark --tab` (prompts) | Open bookmark |  |
 | `zi` | bound | `zoom.by 0.1` | Zoom in |  |
