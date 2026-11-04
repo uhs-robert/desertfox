@@ -8,9 +8,10 @@ function fixture(local: string, extra: Record<string, unknown> = {}) {
   const element = { localName: local, click: () => calls.push("click"), focus: () => calls.push("focus"), remove: () => calls.push("remove"), ...extra };
   const opened: [string, string][] = [];
   const copied: string[] = [];
-  const deps = { open_link: (url: string, place: string) => opened.push([url, place]), copy: (text: string) => copied.push(text) };
+  const started: string[] = [];
+  const deps = { open_link: (url: string, place: string) => opened.push([url, place]), copy: (text: string) => copied.push(text), start_caret: (_target: unknown, mode: string) => started.push(mode) };
   const run = (action: HintAction) => perform(action, element as never, deps as never);
-  return { calls, opened, copied, run };
+  return { calls, opened, copied, started, run };
 }
 
 test("here clicks a link", () => {
@@ -80,4 +81,18 @@ test("copy falls back to the text for an element with no address", () => {
   const heading = fixture("h1", { textContent: "Title" });
   heading.run("copy");
   assert.deepEqual(heading.copied, ["Title"]);
+});
+
+test("caret and visual hand the element to the caret start and do nothing else", () => {
+  for (const mode of ["caret", "visual"] as const) {
+    const page = fixture("p");
+    page.run(mode);
+    assert.deepEqual(page.started, [mode]);
+    assert.deepEqual(page.calls, []);
+  }
+  for (const action of ["here", "tab", "copy", "copy_text", "delete", "focus"] as const) {
+    const page = fixture("a", { href: "https://example.com/" });
+    page.run(action);
+    assert.deepEqual(page.started, []);
+  }
 });

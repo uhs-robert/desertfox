@@ -9,7 +9,7 @@ The `caret` bundle (`caret.js`): caret mode and visual mode.
 - `selection_colors.ts`: the lualine colors for the selection, from the compiled keymap in storage, in a style element that lives as long as the session.
 - `scroll_delta.ts`: how far a view scrolls to bring a box in.
 - `copy_text.ts`: the clipboard write and the yank that follows it. Visual mode ends only if the session is still the one that started the copy.
-- `start_point.ts`: where a new session starts, in the page's own selection if it is on screen, else the first visible text.
+- `start_point.ts`: where a new session starts: at the element a hint picked (its text, else the next text after it), else in the page's own selection if it is on screen, else the first visible text.
 - `main.ts`: the sinks, the `caret.move` and `visual.act` handlers and the drawing. Before each step it adopts the page selection if a find or a click moved it. A session starts in the sink's `enter` and ends in its `exit`, unless the page only moves between caret and visual mode.
 
 The caret is a one-character selection, because Firefox paints no caret on a collapsed selection in page text.

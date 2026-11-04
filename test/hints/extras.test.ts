@@ -147,6 +147,7 @@ async function page_with(texts: string[]) {
     label_tops: () => nodes_with_class("oasisfox-hint").map((node) => node.style.top),
     messages: () => nodes_with_class("oasisfox-hint-message").map((node) => node.textContent),
     host_count: () => document_root.children.length,
+    caret_target: () => win as unknown as { oasisfox_caret_target?: unknown },
   };
 }
 
@@ -344,4 +345,25 @@ test("keys typed while rapid mode builds again wait and replay, also when the fi
   await settle();
   assert.equal(page.sent.length, 4);
   page.escape();
+});
+
+test("caret and visual hand the picked element to the caret bundle and enter that mode, also with rapid", async () => {
+  for (const action of ["caret", "visual"]) {
+    const page = await page_with(["one", "two"]);
+    page.run({ action, rapid: true });
+    await settle();
+    page.type(page.labels()[1]!.toLowerCase());
+    await settle();
+    assert.equal(page.caret_target().oasisfox_caret_target, page.links[1]);
+    assert.equal(page.mode(), action);
+    assert.equal(page.labels().length, 0);
+  }
+});
+
+test("caret with one text match starts at once at that link", async () => {
+  const page = await page_with(["one", "two"]);
+  page.run({ action: "caret", text: "two" });
+  await settle();
+  assert.equal(page.caret_target().oasisfox_caret_target, page.links[1]);
+  assert.equal(page.mode(), "caret");
 });

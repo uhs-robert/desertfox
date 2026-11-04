@@ -165,7 +165,8 @@ export const DEFAULT_KEYMAP: KeymapConfig = {
     gO: { id: "open.url", args: { where: "tab" }, prompt: { param: "url", prefill: { from: "current_url" } } },
     f: { id: "hint.run", args: { action: "here" }, label: "Click element" },
     F: { id: "hint.run", args: { action: "background" }, label: "Click element in background tab" },
-    v: { id: "hint.run", args: { action: "select" }, label: "Select element" },
+    v: { id: "hint.run", args: { action: "caret", filter: "all" }, label: "Start caret mode at element" },
+    V: { id: "hint.run", args: { action: "visual", filter: "all" }, label: "Start visual mode at element" },
     ";b": { id: "hint.run", args: { filter: "clickable" }, label: "Click element" },
     ";B": { id: "hint.run", args: { action: "background" }, label: "Click element in background tab" },
     ";y": { id: "hint.run", args: { action: "copy", filter: "links" }, label: "Copy link address" },
@@ -174,7 +175,7 @@ export const DEFAULT_KEYMAP: KeymapConfig = {
     ";l": { id: "hint.run", args: { filter: "links" }, label: "Click link" },
     ":": { id: "cmdline.open" },
     "g?": { id: "help.open" },
-    V: { id: "mode.set", args: { mode: "caret" } },
+    gV: { id: "mode.set", args: { mode: "caret" } },
   },
   hint: {
     "<Escape>": { id: "mode.escape" },

@@ -1,17 +1,19 @@
 // What a picked hint does to its element.
 
-export type HintAction = "here" | "tab" | "background" | "window" | "select" | "copy" | "copy_text" | "delete" | "focus";
+export type HintAction = "here" | "tab" | "background" | "window" | "caret" | "visual" | "copy" | "copy_text" | "delete" | "focus";
 
 export type Place = "here" | "tab" | "background" | "window";
 
 export const OPEN_PLACES: readonly HintAction[] = ["tab", "background", "window"];
 
-// Actions that no piece has built yet. The command refuses them before it enters hint mode.
-export const UNBUILT_ACTIONS: readonly HintAction[] = ["select"];
+export type CaretMode = "caret" | "visual";
+
+export const starts_caret = (action: HintAction): action is CaretMode => action === "caret" || action === "visual";
 
 export type ActionDeps = {
   open_link: (url: string, place: Place) => void;
   copy: (text: string) => void;
+  start_caret: (target: Element, mode: CaretMode) => void;
 };
 
 type Target = Pick<HTMLElement, "click" | "focus" | "remove"> & { textContent?: string | null; href?: unknown; localName: string; type?: unknown; isContentEditable?: boolean };
@@ -33,6 +35,7 @@ export function link_address(target: Target): string | undefined {
 export function perform(action: HintAction, target: Target, deps: ActionDeps): void {
   if (action === "delete") return target.remove();
   if (action === "focus") return target.focus();
+  if (starts_caret(action)) return deps.start_caret(target as unknown as Element, action);
   // A copy of the address falls back to the text for an element that is no link.
   if (action === "copy") return deps.copy(link_address(target) ?? (target.textContent ?? "").trim());
   if (action === "copy_text") return deps.copy((target.textContent ?? "").trim());
