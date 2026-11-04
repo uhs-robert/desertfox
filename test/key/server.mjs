@@ -109,7 +109,7 @@ export function start_server() {
     }
     if (url.pathname === "/caret_hint") {
       // The hint targets: a paragraph, an image and a field, each followed by text, and an image with no text after it.
-      const body = '<p>alpha one</p><p id="pick">beta two</p><img id="pic" alt="" width="20" height="20" src="data:image/gif;base64,R0lGODlhAQABAAAAACw="><p>gamma three</p><input id="field"><p>omega four</p><img id="last" alt="" width="20" height="20" src="data:image/gif;base64,R0lGODlhAQABAAAAACw=">';
+      const body = '<p>alpha one</p><p id="pick">beta two</p><img id="pic" alt="" width="20" height="20" src="data:image/gif;base64,R0lGODlhAQABAAAAACw="><p>gamma three</p><input id="field"><p>omega four</p><iframe id="frame" srcdoc="<p id=inner>inner text</p>"></iframe><img id="last" alt="" width="20" height="20" src="data:image/gif;base64,R0lGODlhAQABAAAAACw=">';
       return response.end(page(`caret_hint ${id}`, body));
     }
     if (url.pathname === "/caret_wrap") {

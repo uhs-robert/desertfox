@@ -12,7 +12,7 @@ import { selected_text, selected_span, swap_ends, with_caret } from "./selection
 import type { Cursor } from "./selection_state.ts";
 import { build_text_model } from "./text_model.ts";
 import type { TextModel } from "./text_model.ts";
-import { first_index_from, first_visible_index } from "./start_point.ts";
+import { first_index_from, in_other_tree, first_visible_index } from "./start_point.ts";
 
 // `oasisfox_caret_target` is the element a hint picked. The hints bundle sets it just before it enters the mode.
 type CaretWindow = { oasisfox_host: BundleHostApi; oasisfox_caret_ready?: true; oasisfox_caret_target?: Element };
@@ -57,6 +57,10 @@ function scroll_to_caret(open: Session): void {
 function start_session(mode: "caret" | "visual"): Session | undefined {
   const target = page.oasisfox_caret_target;
   delete page.oasisfox_caret_target;
+  if (target !== undefined && in_other_tree(target, document)) {
+    page.oasisfox_host.show_toast("Caret cannot start inside frames or widgets yet");
+    return undefined;
+  }
   // The model covers the whole body, so motion is not trapped in the element.
   const model = build_text_model(document.body);
   const caret = target === undefined ? first_visible_index(model, getSelection()!) : first_index_from(model, target);
