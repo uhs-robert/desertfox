@@ -181,10 +181,13 @@ export async function run_cases({ run_case, expect, open_page, send_keys, sleep,
     await wait_event(mark, badge_is("hint_none", "NORMAL"), "the NORMAL badge");
   });
 
-  await run_case("hint --caret on an element inside a frame shows a notice and stays in normal mode", async () => {
+  // The frame's page has no reporter, so the badge and the missing notice show that caret mode started in it.
+  await run_case("hint --caret on an element inside a same-origin frame starts caret mode there", async () => {
     const mark = await hint_into("hint_frame", "--caret", "#inner");
-    await wait_event(mark, (event) => event.type === "toast" && event.page_id === "hint_frame", "the frame notice toast");
-    await wait_event(mark, badge_is("hint_frame", "NORMAL"), "the NORMAL badge");
+    await wait_event(mark, badge_is("hint_frame", "CARET"), "the CARET badge");
+    await sleep(500);
+    expect(!events.slice(mark).some((event) => event.type === "toast" && event.page_id === "hint_frame"), "a notice showed");
+    await send_keys("-k", "Escape");
   });
 
   await run_case("v and V pick a hint for caret and visual mode", async () => {

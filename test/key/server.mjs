@@ -116,6 +116,40 @@ export function start_server() {
       const body = '<p>alpha one</p><p id="pick">beta two</p><img id="pic" alt="" width="20" height="20" src="data:image/gif;base64,R0lGODlhAQABAAAAACw="><p>gamma three</p><input id="field"><p>omega four</p><iframe id="frame" srcdoc="<p id=inner>inner text</p>"></iframe><img id="last" alt="" width="20" height="20" src="data:image/gif;base64,R0lGODlhAQABAAAAACw=">';
       return response.end(page(`caret_hint ${id}`, body));
     }
+    if (url.pathname === "/caret_shadow") {
+      // An open root, a closed root and an open root inside the closed one. With remove_host in the id, the open host leaves the page a second after the caret first enters it.
+      const roots = `<script>
+        const open_root = document.getElementById("open_host").attachShadow({ mode: "open" });
+        open_root.innerHTML = '<p id="open_text">beta two</p>';
+        const closed_root = document.getElementById("closed_host").attachShadow({ mode: "closed" });
+        closed_root.innerHTML = '<p id="closed_text">gamma three</p><div id="nested_host"></div>';
+        closed_root.getElementById("nested_host").attachShadow({ mode: "open" }).innerHTML = '<p id="nested_text">delta four</p>';
+        if (location.search.includes("remove_host")) {
+          const watch = () => {
+            if (getSelection().anchorNode?.getRootNode() !== open_root) return;
+            document.removeEventListener("selectionchange", watch);
+            setTimeout(() => document.getElementById("open_host").remove(), 1000);
+          };
+          document.addEventListener("selectionchange", watch);
+        }
+      </script>`;
+      return response.end(page(`caret_shadow ${id}`, `<p id="before">alpha one</p><div id="open_host"></div><div id="closed_host"></div><p>omega five</p>${roots}`));
+    }
+    if (url.pathname === "/caret_frames") {
+      // A same-origin frame holding another, then a frame from another origin: localhost is not 127.0.0.1.
+      // With remove_frame in the id, the frame removes itself (see /caret_frame_inner).
+      const inner = `/caret_frame_inner?id=${id}_inner`;
+      const frames = `<iframe id="frame" src="${inner}" style="width:400px;height:160px"></iframe><p id="tail">top tail</p><iframe id="xframe" src="http://localhost:${request.socket.localPort}/page?id=${id}_cross" style="width:200px;height:60px"></iframe>`;
+      return response.end(page(`caret_frames ${id}`, `<p id="head">top head</p>${frames}`));
+    }
+    if (url.pathname === "/caret_frame_inner") {
+      // With remove_frame in the id, the frame takes itself off its parent a second after the caret first lands in it.
+      const remove = id.includes("remove_frame")
+        ? `<script>const watch = () => { if (!getSelection().anchorNode) return; document.removeEventListener("selectionchange", watch); setTimeout(() => frameElement.remove(), 1000); }; document.addEventListener("selectionchange", watch);</script>`
+        : "";
+      const deep = `<iframe id="deep" srcdoc="<p id=deep_text>deep words</p>" style="width:300px;height:50px"></iframe>`;
+      return response.end(page(`inner ${id}`, `<p id="inner_text">inner words here</p>${deep}${remove}`));
+    }
     if (url.pathname === "/caret_wrap") {
       // Each word fills a screen line: the column is 6 characters wide and the words are 3.
       return response.end(page(`caret_wrap ${id}`, '<p style="width:6ch;font-family:monospace">abc def ghi jkl</p>'));
