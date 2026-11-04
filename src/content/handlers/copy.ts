@@ -1,3 +1,4 @@
+import type { Outcome } from "../../shared/messages.ts";
 import { show_toast } from "../ui_proxy.ts";
 import type { ContentHandler } from "./types.ts";
 
@@ -44,9 +45,10 @@ export const copy_url: ContentHandler = {
       canonical_url: link_href("canonical"),
       short_url: link_href("shortlink"),
     });
-    navigator.clipboard.writeText(text).then(
+    // The failure goes to the caller, which shows it once.
+    return navigator.clipboard.writeText(text).then(
       () => show_toast(`Copied ${text}`),
-      () => show_toast("Could not copy to the clipboard"),
+      (): Outcome => ({ ok: false, message: "Could not copy to the clipboard" }),
     );
   },
 };

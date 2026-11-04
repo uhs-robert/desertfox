@@ -22,8 +22,9 @@ test("yank_text leaves visual mode only while the session that started the copy 
   }
 });
 
-test("yank_text keeps visual mode and shows a failure toast when the copy fails", async () => {
+test("yank_text keeps visual mode and answers failed, without a toast, when the copy fails", async () => {
   const done: string[] = [];
-  await yank_text(undefined, "abc", { is_same_session: () => true, toast: (message) => done.push(message), leave_visual: () => done.push("leave") });
-  assert.deepEqual(done, ["Could not copy to the clipboard"]);
+  const outcome = await yank_text(undefined, "abc", { is_same_session: () => true, toast: (message) => done.push(message), leave_visual: () => done.push("leave") });
+  assert.deepEqual(outcome, { ok: false, message: "Could not copy to the clipboard" });
+  assert.deepEqual(done, []);
 });

@@ -1,9 +1,10 @@
 // Content script entry: a capture listener on keydown, the compiled keymap from
 // storage, and the modes. Runs in the top frame and in same-origin frames.
 
-import type { BackgroundToContent, CompiledKeymap, ContentToBackground, CountBehavior, Invocation, Mode, ModeIndicator, RunResponse, TreeLeaf } from "../shared/index.ts";
+import type { BackgroundToContent, CompiledKeymap, ContentToBackground, Mode, ModeIndicator, RunResponse, TreeLeaf } from "../shared/index.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY, COMPILED_KEYMAP_VERSION, DEFAULT_SETTINGS, current_keymap } from "../shared/index.ts";
 import { create_matcher, event_to_token } from "../shared/keys/index.ts";
+import { message_of } from "./bundle_host.ts";
 import type { BundleHostApi } from "./bundle_host.ts";
 import { bundles } from "./bundles.ts";
 import { is_editable_element } from "./editable.ts";
@@ -16,7 +17,7 @@ import { show_mode_label, show_toast } from "./ui_proxy.ts";
 import { wire_mode_reports } from "./mode_report.ts";
 import { page_mode } from "./page_mode.ts";
 import { plan_steps } from "./plan_steps.ts";
-import { run_content_invocation } from "./run_content.ts";
+import { run_content_invocation, run_in_order } from "./run_content.ts";
 import { read_context_source } from "./context.ts";
 import { focus_page_content } from "./handlers/focus.ts";
 import { blur_focused_element } from "./handlers/page.ts";
@@ -43,7 +44,6 @@ function can_reach_top_document(): boolean {
   }
 }
 
-const message_of = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
 async function send_to_background(message: ContentToBackground): Promise<RunResponse> {
   try {
@@ -53,23 +53,15 @@ async function send_to_background(message: ContentToBackground): Promise<RunResp
   }
 }
 
-function run_content_step(invocation: Invocation, count_rule: CountBehavior): void {
-  try {
-    run_content_invocation(invocation, count_rule);
-  } catch (error) {
-    show_toast(message_of(error));
-  }
-}
-
 async function run_leaf(leaf: TreeLeaf, count: number | undefined): Promise<void> {
   for (const segment of plan_steps(leaf.steps, count)) {
-    if (segment.runs_in === "content") {
-      run_content_step(segment.invocation, segment.count_rule);
-      continue;
-    }
-    const response = await send_to_background({ type: "run", invocations: segment.invocations, mode: page_mode.get_mode() });
+    const outcome = await (segment.runs_in === "content"
+      ? run_content_invocation(segment.invocation, segment.count_rule)
+      : send_to_background({ type: "run", invocations: segment.invocations, mode: page_mode.get_mode() }));
     // The background already shows a refusal toast itself, so a returned refusal is not shown again.
-    if (!response.ok) return;
+    if ("message" in outcome) show_toast(outcome.message);
+    // A failed or cancelled step stops the rest of the leaf.
+    if (!outcome.ok || outcome.cancelled) return;
   }
 }
 
@@ -241,10 +233,9 @@ function start(): void {
       return Promise.resolve(true);
     }
     if (message.type === "run_in_content") {
-      // The router already applied the count, so each invocation runs once.
-      for (const invocation of message.invocations) run_content_step(invocation, "ignore");
-    }
-    else if (message.type === "refusal") show_toast(message.refusal.message, message.kind);
+      // The router already applied the count, so each invocation runs once. The router shows a failure.
+      return run_in_order(message.invocations);
+    } else if (message.type === "refusal") show_toast(message.refusal.message, message.kind);
     else if (message.type === "set_mode") page_mode.set_mode(message.mode);
     else if (message.type === "tree_updated") void read_keymap().then((keymap) => install_matcher(keymap));
   });
