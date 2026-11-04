@@ -12,6 +12,8 @@ import type { LiveKind, LiveSource } from "./live.ts";
 import { cursor_context } from "./tokenize.ts";
 
 export type Row = {
+  // The command id of a command row, which the keys column looks up. Flag, value and subject rows have none.
+  id?: string;
   // Shown in the first column and matched first.
   name: string;
   // Replaces the word under the caret. It ends in a space unless the line goes on at once, as after `--param=`.
@@ -91,6 +93,7 @@ export function command_rows(commands: readonly CommandMeta[], command_aliases: 
     .map((command): Row => {
       const name = command.name ?? command.id;
       return {
+        id: command.id,
         name,
         insert: command.params?.length ? `${name} ` : name,
         description: first_sentence(command.intent),

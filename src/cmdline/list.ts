@@ -45,7 +45,8 @@ function name_cell(row: Ranked<Row>): HTMLElement {
   return name;
 }
 
-export function create_list(element: HTMLElement) {
+// `keys_of` gives the keys cell text of a command id.
+export function create_list(element: HTMLElement, keys_of: (id: string) => string = () => "") {
   let top = 0;
   let drawn: readonly Ranked<Row>[] | undefined;
   return {
@@ -56,12 +57,14 @@ export function create_list(element: HTMLElement) {
       drawn = rows;
       const visible = rows.slice(top, top + MAX_ROWS);
       element.style.setProperty("--oasisfox-name-width", `${Math.min(MAX_NAME_COLUMNS, Math.max(...visible.map((row) => row.name.length), 0))}ch`);
+      const keys = visible.map((row) => (row.id === undefined ? "" : keys_of(row.id)));
+      element.style.setProperty("--oasisfox-keys-width", `${Math.max(...keys.map((text) => text.length), 0)}ch`);
       element.replaceChildren(
         ...visible.map((row, offset) => {
           const item = cell(`item${top + offset === selected ? " oasisfox-cmdline-selected" : ""}${row.unavailable ? " oasisfox-cmdline-unavailable" : ""}`);
           const args = cell("args");
           args.append(cell("args-full", row.args), cell("args-short", row.args ? "…" : ""));
-          item.append(name_cell(row), cell("description", row.description), args, ...(row.tag ? [cell("tag", row.tag)] : []));
+          item.append(name_cell(row), cell("description", row.description), args, ...(row.tag ? [cell("tag", row.tag)] : []), cell("keys", keys[offset]));
           return item;
         }),
       );

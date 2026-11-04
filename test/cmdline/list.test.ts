@@ -49,7 +49,7 @@ test("a row has a name, a description and args with the collapsed form beside th
   const { element, list } = setup();
   list.render(rows(3), 1);
   const [first, second] = element.children as [Node, Node];
-  assert.deepEqual(first.children.map((cell) => cell.className), ["oasisfox-cmdline-name", "oasisfox-cmdline-description", "oasisfox-cmdline-args"]);
+  assert.deepEqual(first.children.map((cell) => cell.className), ["oasisfox-cmdline-name", "oasisfox-cmdline-description", "oasisfox-cmdline-args", "oasisfox-cmdline-keys"]);
   const args = second.children[2]!;
   assert.deepEqual(args.children.map((cell) => [cell.className, cell.textContent]), [["oasisfox-cmdline-args-full", "--x"], ["oasisfox-cmdline-args-short", "…"]]);
   // A row with no args collapses to nothing, not to an ellipsis.
@@ -93,12 +93,23 @@ test("a row marked unavailable carries the dim class and the others do not", () 
   assert.equal(second!.children[2]!.children[0]!.textContent, "unavailable");
 });
 
-test("a row with a tag gets a dim tag cell after the args, and a row without one gets none", () => {
+test("a row with a tag gets a dim tag cell after the args and before the keys, and a row without one gets none", () => {
   const { element, list } = setup();
   const [plain, tagged] = rows(2);
   list.render([plain!, { ...tagged!, tag: "hist" }], 0);
   const [first, second] = element.children as [Node, Node];
-  assert.equal(first.children.length, 3);
-  assert.deepEqual(second.children.map((cell) => cell.className).slice(3), ["oasisfox-cmdline-tag"]);
+  assert.deepEqual(first.children.map((cell) => cell.className).slice(3), ["oasisfox-cmdline-keys"]);
+  assert.deepEqual(second.children.map((cell) => cell.className).slice(3), ["oasisfox-cmdline-tag", "oasisfox-cmdline-keys"]);
   assert.equal(second.children[3]!.textContent, "hist");
+});
+
+test("a command row shows its keys in the last cell and a row with no id shows none", () => {
+  Object.assign(globalThis, { document: { createElement: fake_node } });
+  const element = fake_node("div");
+  const list = create_list(element as unknown as HTMLElement, (id) => (id === "tab.close" ? "d dH +1" : ""));
+  const [command, flag, bare] = rows(3);
+  list.render([{ ...command!, id: "tab.close" }, flag!, { ...bare!, id: "tab.next" }], -1);
+  const texts = (element.children as Node[]).map((row) => row.children[3]!.textContent);
+  assert.deepEqual(texts, ["d dH +1", "", ""]);
+  assert.equal(element.style.vars["--oasisfox-keys-width"], "7ch");
 });
