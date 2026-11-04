@@ -29,6 +29,12 @@ class FakeNode {
   get childElementCount() {
     return this.children.length;
   }
+  setAttribute() {}
+  matches(_selector: string) {
+    return false;
+  }
+  showPopover() {}
+  hidePopover() {}
   attachShadow() {
     this.shadow = new FakeNode();
     return this.shadow;
