@@ -143,6 +143,8 @@ const SETTING_CHECKS: Record<keyof Settings, (value: unknown) => boolean> = {
   cmdline_prompt: (value) => typeof value === "string" && [...value].length >= 1 && [...value].length <= 8 && !/[\r\n]/.test(value),
   open_completion: (value) => Array.isArray(value) && new Set(value).size === value.length && value.every((source) => source === "bookmarks" || source === "history"),
   history_completion_max: (value) => typeof value === "number" && Number.isInteger(value) && value >= 0,
+  newtab_clock: (value) => typeof value === "boolean",
+  newtab_date: (value) => typeof value === "boolean",
 };
 
 const SETTING_EXPECTATIONS: Record<keyof Settings, string> = {
@@ -161,6 +163,8 @@ const SETTING_EXPECTATIONS: Record<keyof Settings, string> = {
   cmdline_prompt: "a string of 1 to 8 characters on one line",
   open_completion: 'a list of "bookmarks" and "history" with no repeat',
   history_completion_max: "a whole number, 0 or more",
+  newtab_clock: "true or false",
+  newtab_date: "true or false",
 };
 
 function is_prefix_pair(value: unknown, first_key: string): boolean {

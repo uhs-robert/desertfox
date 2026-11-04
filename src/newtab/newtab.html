@@ -4,16 +4,28 @@
 <meta charset="utf-8">
 <title>New Tab</title>
 <style>
+  html { font-size: 14px; }
   html, body { margin: 0; height: 100%; }
-  /* The defaults sit on an inner element, like every OasisFox surface. */
+  /* Colors are var() fallbacks, never declarations: a declaration here would shadow a theme or style.css value. */
   .oasisfox-newtab {
-    --oasisfox-bg: #0c0e13;
-    --oasisfox-fg: #f5f5dc;
-    --oasisfox-accent: #7fa3c9;
+    position: relative;
     min-height: 100vh;
-    background: var(--oasisfox-bg);
-    color: var(--oasisfox-fg);
+    background: var(--oasisfox-bg, #080d13);
+    color: var(--oasisfox-fg, #b0c8de);
+    font-family: -apple-system, system-ui, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    line-height: 1.25;
   }
+  .oasisfox-newtab .slot-middle-center { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); }
+  .oasisfox-newtab .time { margin: 1rem; font-size: 24px; text-align: center; font-variant-numeric: tabular-nums; }
+  .oasisfox-newtab .clock { display: block; width: 100%; max-width: 10em; margin: 0 auto; }
+  .oasisfox-newtab .clock .bezel { fill: transparent; stroke: var(--oasisfox-primary, #1670ad); stroke-width: 2; }
+  .oasisfox-newtab .clock line { transform-origin: 50px 50px; transition: transform 0.15s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+  .oasisfox-newtab .clock.jumping line { transition: none; }
+  .oasisfox-newtab .clock .hour, .oasisfox-newtab .clock .minute { stroke: var(--oasisfox-fg, #b0c8de); }
+  .oasisfox-newtab .clock .second { stroke: var(--oasisfox-accent, #f0e68c); }
+  .oasisfox-newtab .clock .cap { fill: var(--oasisfox-bg-mantle, #1a2330); }
+  .oasisfox-newtab .date { margin: 0; font-size: 1.5em; font-weight: 500; color: var(--oasisfox-primary, #85a8cc); }
+  .oasisfox-newtab .clock + .date { margin-top: 1rem; padding-top: 1rem; border-top: 2px solid var(--oasisfox-border, #4e6578); }
 </style>
 </head>
 <body>

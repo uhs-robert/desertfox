@@ -13,7 +13,7 @@ async function main(): Promise<void> {
       // A URL that passed the checks and still fails to load leaves the built-in page, not a blank tab.
     }
   }
-  render_new_tab(document.body);
+  render_new_tab(document.body, config.settings);
 }
 
 void main();
