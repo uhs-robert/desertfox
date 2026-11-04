@@ -5,7 +5,8 @@ The help page, opened by `help.open`. It reads `commands.json`, the compiled key
 - `route.ts`: the pages and the hash parser. The sidebar lists Home, Search Engines, Commands and Styling, at `#/`, `#/search-engines`, `#/commands` and `#/styling`. An unknown hash shows Home.
 - `model.ts`: turns those three inputs into plain rows. Key args and the `flags` column are written by the registry printer, so the page matches the command line. Tests read the rows, so no DOM is needed.
 - Home: the warnings, then the settings in force, read-only like the options page.
-- Search Engines page: every resolved engine in tree order with label, URL, needed slots, fallback and the file and level that set each field. `engine.show <name>` opens the page at `#engine=<name>`, which `route.ts` maps to this page, and `main.ts` scrolls to the row.
+- Search Engines page: the guide from `docs/search_engines.md`, then every resolved engine in tree order with label, URL, needed slots, fallback and the file and level that set each field. `engine.show <name>` opens the page at `#engine=<name>`, which `route.ts` maps to this page, and `main.ts` scrolls to the row.
+- `blocks.ts`: the block list type. `tools/render_docs.ts` turns the guide's markdown subset into blocks at build time (it fails on any other markdown) and `tools/build.mjs` writes `dist/search_engines_guide.json`. `main.ts` fetches it.
 - `render.ts`: draws the rows with DOM calls. Command text never goes through `innerHTML`.
 - `main.ts`: loads the inputs (`commands.json` through `shared/load_commands.ts`) and renders the route in the hash, and renders again on `hashchange`.
 - `help.html`: the page and its styles. The defaults use the `--oasisfox-` variables. It loads `content.js` by script tag, because `moz-extension://` pages do not match `<all_urls>`. That gives the page `j`, `k`, `gg` and the mode badge.
