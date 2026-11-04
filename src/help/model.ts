@@ -140,10 +140,11 @@ function compare_engine_names(left: string, right: string): number {
 // Only "<file> [<level>]" names a file. The resolver also writes "<name> (labels on the path)" and "generated under <path>".
 const FILE_ORIGIN = /^(.+) \[[^\]]*\]$/;
 
-// A url with slots such as {query} is not parseable, so the slots become a stand-in first.
+// A url with slots such as {query} is not parseable, so each slot becomes a host-safe stand-in first and is restored in the result.
 function url_host(url: string): string {
   try {
-    return new URL(url.replace(/\{[^}]*\}/g, "x")).host || url;
+    const parseable = url.replace(/\{(\w*)\}/g, "slot-$1-");
+    return new URL(parseable).host.replace(/slot-(\w*)-/g, "{$1}") || url;
   } catch {
     return url;
   }
