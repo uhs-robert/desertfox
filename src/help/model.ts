@@ -15,6 +15,8 @@ import { is_context_source, is_dynamic_values } from "../shared/registry/params.
 import type { EnumSources } from "../shared/registry/check_args.ts";
 import { print_command } from "../shared/registry/print_command.ts";
 import { subject_param } from "../shared/registry/params.ts";
+import type { Block } from "./blocks.ts";
+import { quick_start_blocks } from "./quick_start.ts";
 import { flag_alternatives, usage_line } from "../shared/registry/usage.ts";
 
 export type KeyRow = { mode: KeymapMode; keys: string; args: string };
@@ -58,6 +60,7 @@ export type HelpModel = {
   settings: SettingRow[];
   groups: HelpGroup[];
   engines: EngineRow[];
+  quick_start: Block[];
 };
 
 const MODE_ORDER: readonly KeymapMode[] = [...MODES, "browser"];
@@ -164,6 +167,7 @@ export function build_help_model(commands: CommandMeta[], compiled: CompiledKeym
     config_source: options.source_text,
     settings: options.settings,
     engines: engine_rows(engines),
+    quick_start: quick_start_blocks(compiled),
     groups: [...groups].sort(([a], [b]) => a.localeCompare(b)).map(([name, rows]) => ({ name, commands: rows })),
   };
 }
