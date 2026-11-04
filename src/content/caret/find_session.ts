@@ -71,6 +71,16 @@ async function recall(): Promise<Last | undefined> {
   return (last = stored && typeof stored.query === "string" && (stored.direction === "forward" || stored.direction === "backward") ? stored : undefined);
 }
 
+// Where the current match of `old` sits in a rebuilt model. Undefined when its text has left the page: a node of a removed frame throws on any read.
+function carry_index(old: Found, model: TextModel): number | undefined {
+  try {
+    const { node, offset } = old.model.point_at(old.matches.from[old.current]!);
+    return model.index_of(node, offset);
+  } catch {
+    return undefined;
+  }
+}
+
 export function create_find(host: Host) {
   const scroll_to = (found: Found, scrolled?: Live["scrolled"]) => {
     try {
@@ -177,7 +187,8 @@ export function create_find(host: Host) {
       if (!previous) return host.show_toast("No previous search");
       const direction = reverse ? opposite(previous.direction) : previous.direction;
       const colors = await read_colors();
-      let found = shown?.query === previous.query && shown.model && trees_alive(shown.model) ? shown : undefined;
+      const kept = shown?.query === previous.query ? shown : undefined;
+      let found = kept && trees_alive(kept.model) ? kept : undefined;
       let wrapped = false;
       if (found) {
         const stepped = step_match(found.current, found.matches.from.length, direction);
@@ -186,10 +197,13 @@ export function create_find(host: Host) {
       } else {
         const query = compile_query(previous.query);
         if (!query) return;
-        const model = fresh_model(shown?.model ?? build_text_model(document.body));
+        const model = kept ? fresh_model(kept.model) : build_text_model(document.body);
         const matches = await collect_matches(model.text, query.regex, slicing(() => run !== step_generation));
         if (!matches || run !== step_generation) return;
-        const first = nearest_match(matches.from, first_visible_index(model), direction);
+        // After a rebuild the step goes on from the match the user was on, when its text is still on the page.
+        const carried = kept && carry_index(kept, model);
+        const start = carried === undefined ? first_visible_index(model) : direction === "forward" ? carried + 1 : carried;
+        const first = nearest_match(matches.from, start, direction);
         if (!first) return host.show_toast(describe_match(previous.query, 0, 0, query.invalid));
         found = { model, query: previous.query, invalid: query.invalid, direction: previous.direction, matches, current: first.index };
         wrapped = first.wrapped;

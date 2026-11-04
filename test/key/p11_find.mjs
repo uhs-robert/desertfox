@@ -2,6 +2,7 @@
 // /find_page holds "needle" on the page (one, five), in a frame (two), in an open root (three) and in a closed root (four).
 // The cases read the highlights from the content script's own world, with tabs.executeScript.
 
+import { mkdirSync } from "node:fs";
 import { evaluate_in_background } from "./rdp.mjs";
 
 export async function run_cases({ rdp, extension_id, run_case, expect, open_page, send_keys, sleep, events, wait_event, take_shot }) {
@@ -34,6 +35,7 @@ export async function run_cases({ rdp, extension_id, run_case, expect, open_page
   const badge_is = (page_id, label) => (event) => event.type === "indicator" && event.page_id === page_id && event.label === label;
   const last_scroll_y = (page_id) => events.filter((event) => event.type === "scroll" && event.page_id === page_id).at(-1)?.y ?? 0;
   const shot_dir = process.env.OASISFOX_SHOT_DIR;
+  if (shot_dir) mkdirSync(shot_dir, { recursive: true });
   const ENTER = ["-k", "Return"];
   const ESCAPE = ["-k", "Escape"];
 
@@ -123,18 +125,29 @@ export async function run_cases({ rdp, extension_id, run_case, expect, open_page
   await run_case("a slow scan for an old query never paints over the newer query", async () => {
     const page_id = "find_race";
     await open_page("find_big", page_id, { new_tab: true });
-    // "e" has a million matches and takes many slices. "ex" arrives while it scans.
+    // "e" has hundreds of thousands of matches and takes many slices. "ex" arrives while it scans.
     await send_keys("/ex");
-    let state;
-    for (let attempt = 0; attempt < 60; attempt++) {
-      await sleep(250);
-      state = await in_active_tab(READ_HIGHLIGHTS);
-      if (total_painted(state) > 0) break;
+    // The page may be busy with the first scan for a while, and a read through it then gets no answer.
+    const read_when_idle = async () => {
+      for (let attempt = 0; attempt < 40; attempt++) {
+        try {
+          return await in_active_tab(READ_HIGHLIGHTS);
+        } catch {
+          await sleep(500);
+        }
+      }
+      throw new Error("the page never answered");
+    };
+    await sleep(4000);
+    let state = await read_when_idle();
+    for (let attempt = 0; attempt < 20 && total_painted(state) === 0; attempt++) {
+      await sleep(500);
+      state = await read_when_idle();
     }
     expect(total_painted(state) === 1, `${total_painted(state)} ranges painted, expected the single match of "ex"`);
     // A late paint of the old scan would land after this wait.
     await sleep(1500);
-    const later = await in_active_tab(READ_HIGHLIGHTS);
+    const later = await read_when_idle();
     expect(total_painted(later) === 1, `${total_painted(later)} ranges painted a moment later, expected 1`);
     await send_keys(...ESCAPE);
     await wait_highlights((read) => total_painted(read) === 0, "the highlights cleared");
