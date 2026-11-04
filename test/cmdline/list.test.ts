@@ -193,3 +193,29 @@ test("rows with the same favicon each keep their own image node across a redraw"
   list.render([one!, two!], 0);
   assert.deepEqual(images(), first);
 });
+
+const first_name = (element: Node) => element.children[0]!.children.find((child) => child.className.includes("name"))!.children.map((part) => part.textContent).join("");
+
+test("scroll moves the window by rows, keeps the selection, and stops at both ends", () => {
+  const { element, list } = setup();
+  list.render(rows(25), 0);
+  list.scroll(3);
+  assert.equal(first_name(element), "cmd3");
+  list.scroll(100);
+  assert.equal(first_name(element), "cmd15");
+  list.scroll(-100);
+  assert.equal(first_name(element), "cmd0");
+});
+
+test("render keeps a scrolled view for the same rows and selection, and follows a moved selection", () => {
+  const { element, list } = setup();
+  const ranked = rows(25);
+  list.render(ranked, 0);
+  list.scroll(6);
+  list.render(ranked, 0);
+  assert.equal(first_name(element), "cmd6");
+  list.render(ranked, 2);
+  assert.equal(first_name(element), "cmd2");
+  list.render(rows(25), 0);
+  assert.equal(first_name(element), "cmd0");
+});

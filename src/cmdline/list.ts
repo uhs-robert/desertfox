@@ -107,35 +107,48 @@ const favicon_cell = (marks: TabMarks, images: Images): HTMLElement => (marks.fa
 export function create_list(element: HTMLElement, keys_of: (id: string) => string = () => "") {
   let top = 0;
   let drawn: readonly Ranked<Row>[] | undefined;
+  let drawn_selected = -1;
+  let drawn_loading = false;
   const images = create_image_pool();
+  // `scroll_rows` moves the window for a wheel scroll, which leaves the selection where it is.
+  const draw = (rows: readonly Ranked<Row>[], selected: number, loading: boolean, scroll_rows: number) => {
+    const held_height = element.offsetHeight;
+    const holding = loading && rows.length === 0;
+    element.style.minHeight = holding ? `${held_height}px` : "";
+    element.hidden = rows.length === 0 && !holding;
+    // A new ranking starts at the top. The same one, previewed, keeps the window. The window follows the selection only
+    // when it moved, so a wheel scroll is not undone by the next redraw.
+    const same_ranking = rows === drawn;
+    const follows = !same_ranking || selected !== drawn_selected;
+    top = window_top(same_ranking ? top + scroll_rows : 0, follows ? selected : -1, rows.length);
+    drawn = rows;
+    drawn_selected = selected;
+    drawn_loading = loading;
+    const visible = rows.slice(top, top + MAX_ROWS);
+    element.style.setProperty("--oasisfox-name-width", `${Math.min(MAX_NAME_COLUMNS, Math.max(...visible.map((row) => row.name.length), 0))}ch`);
+    const keys = visible.map((row) => (row.id === undefined ? "" : keys_of(row.id)));
+    element.style.setProperty("--oasisfox-keys-width", `${Math.max(...keys.map((text) => text.length), 0)}ch`);
+    const flag_count = Math.max(...visible.map((row) => row.tab?.flags.length ?? 0), 0);
+    element.style.setProperty("--oasisfox-flags-width", `${flag_count * FLAG_WIDTH_PX}px`);
+    images.start_draw();
+    element.replaceChildren(
+      ...visible.map((row, offset) => {
+        const item = cell(`item${top + offset === selected ? " oasisfox-cmdline-selected" : ""}${row.unavailable ? " oasisfox-cmdline-unavailable" : ""}`);
+        const args = cell("args");
+        args.append(cell("args-full", row.args), cell("args-short", row.args ? "…" : ""));
+        if (row.tab) item.append(status_cell(row.tab), container_cell(row.tab, images), favicon_cell(row.tab, images));
+        item.append(name_cell(row), cell("description", row.description), args, ...(row.tag ? [cell("tag", row.tag)] : []), cell("keys", keys[offset]));
+        return item;
+      }),
+    );
+  };
   return {
     // While a live source loads there are no rows. The area keeps its last height, empty, so the frame does not shrink
     // and show the page behind it for a few frames.
-    render: (rows: readonly Ranked<Row>[], selected: number, loading = false) => {
-      const held_height = element.offsetHeight;
-      const holding = loading && rows.length === 0;
-      element.style.minHeight = holding ? `${held_height}px` : "";
-      element.hidden = rows.length === 0 && !holding;
-      // A new ranking starts at the top. The same one, previewed, keeps the window.
-      top = window_top(rows === drawn ? top : 0, selected, rows.length);
-      drawn = rows;
-      const visible = rows.slice(top, top + MAX_ROWS);
-      element.style.setProperty("--oasisfox-name-width", `${Math.min(MAX_NAME_COLUMNS, Math.max(...visible.map((row) => row.name.length), 0))}ch`);
-      const keys = visible.map((row) => (row.id === undefined ? "" : keys_of(row.id)));
-      element.style.setProperty("--oasisfox-keys-width", `${Math.max(...keys.map((text) => text.length), 0)}ch`);
-      const flag_count = Math.max(...visible.map((row) => row.tab?.flags.length ?? 0), 0);
-      element.style.setProperty("--oasisfox-flags-width", `${flag_count * FLAG_WIDTH_PX}px`);
-      images.start_draw();
-      element.replaceChildren(
-        ...visible.map((row, offset) => {
-          const item = cell(`item${top + offset === selected ? " oasisfox-cmdline-selected" : ""}${row.unavailable ? " oasisfox-cmdline-unavailable" : ""}`);
-          const args = cell("args");
-          args.append(cell("args-full", row.args), cell("args-short", row.args ? "…" : ""));
-          if (row.tab) item.append(status_cell(row.tab), container_cell(row.tab, images), favicon_cell(row.tab, images));
-          item.append(name_cell(row), cell("description", row.description), args, ...(row.tag ? [cell("tag", row.tag)] : []), cell("keys", keys[offset]));
-          return item;
-        }),
-      );
+    render: (rows: readonly Ranked<Row>[], selected: number, loading = false) => draw(rows, selected, loading, 0),
+    // Scrolls the view by whole rows, negative up. The selection stays.
+    scroll: (row_count: number) => {
+      if (drawn) draw(drawn, drawn_selected, drawn_loading, row_count);
     },
   };
 }
