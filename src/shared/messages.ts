@@ -73,6 +73,8 @@ export type CmdlineOpened = {
   // The runtime registry, snippets included, which `commands.json` lacks.
   commands: CommandMeta[];
   command_aliases: Record<string, string>;
+  // The commands with a card on the help page, which are the built-in ones. A snippet has none.
+  help_ids: string[];
   // User CSS, loaded after the built-in styles.
   css: string;
   // The `cmdline_prompt` setting. Absent keeps the page's own default.

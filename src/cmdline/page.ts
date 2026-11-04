@@ -67,7 +67,9 @@ async function open_line(start: Start, port: MessagePort): Promise<void> {
   const keymap = stored[COMPILED_KEYMAP_STORAGE_KEY] as CompiledKeymap | undefined;
   const opened_from = typeof start.mode === "string" ? start.mode : "normal";
   const key_text = key_labels(keymap, opened.commands, opened_from);
-  const list = create_list(document.querySelector<HTMLElement>("#list")!, (id) => key_text.get(id) ?? "");
+  const help_ids = new Set(opened.help_ids);
+  const has_help = (id: string) => help_ids.has(id);
+  const list = create_list(document.querySelector<HTMLElement>("#list")!, (id) => key_text.get(id) ?? "", has_help);
   const matcher: TokenMatcher | undefined = keymap?.modes.cmdline ? create_matcher(keymap) : undefined;
   // Asks the background for tabs and bookmarks only when a subject needs them, and only here, after the ticket redeemed.
   const live = create_live_source({
@@ -81,6 +83,7 @@ async function open_line(start: Start, port: MessagePort): Promise<void> {
     search: start.search !== undefined,
     history: start.search ? [] : opened.history,
     parse: (text) => parse_command_line(lookup, text, opened.sources),
+    has_help,
     command_id_of: (word) => lookup.find(word)?.id,
     complete: start.search ? undefined : create_completer(lookup, opened.commands, opened.command_aliases, opened.sources, opened_from, live),
     // Only a missing value is caught here. The router still checks everything else when it runs the command.

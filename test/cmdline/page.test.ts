@@ -21,6 +21,7 @@ const OPENED = {
     { id: "my.fetch", name: "fetch", label: "Fetch", intent: "", params: [{ name: "url", type: "string", main: true }] },
   ],
   command_aliases: { j: "my.jira" },
+  help_ids: ["my.jira"],
   css: ".oasisfox-cmdline { --oasisfox-bg-core: red; }",
   prompt: ">> ",
 };

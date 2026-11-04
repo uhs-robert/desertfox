@@ -233,3 +233,12 @@ test("only command rows get the help link, and each item carries its absolute in
   assert.ok(name_of(items[1]!).className.includes("oasisfox-cmdline-link"));
   assert.ok(!name_of(items[0]!).className.includes("oasisfox-cmdline-link"));
 });
+
+test("a command row without a help card gets no link", () => {
+  Object.assign(globalThis, { document: { createElement: fake_node } });
+  const element = fake_node("div");
+  const list = create_list(element as unknown as HTMLElement, () => "", (id) => id !== "snippet.one");
+  list.render([{ ...rows(2)[0]!, id: "snippet.one" }, { ...rows(2)[1]!, id: "tab.next" }], -1);
+  const name_of = (item: Node) => item.children.find((child) => child.className.startsWith("oasisfox-cmdline-name"))!;
+  assert.deepEqual(element.children.map((item) => name_of(item).dataset.help), [undefined, "tab.next"]);
+});

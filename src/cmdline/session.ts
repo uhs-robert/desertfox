@@ -28,6 +28,8 @@ export type SessionDeps = {
   search?: boolean;
   // The id of the command a typed word names, for help when no row is selected.
   command_id_of?: (word: string) => string | undefined;
+  // Whether the help page has a card for a command. Snippets have none. Without it every command has one.
+  has_help?: (command_id: string) => boolean;
 };
 
 const NO_ROWS: Completion["rows"] = [];
@@ -122,9 +124,10 @@ export function create_session(deps: SessionDeps) {
   const help = (): Effect => {
     const row = completion?.rows[selected];
     const word = text.replace(/^[\s:]+/, "").split(/\s/, 1)[0] ?? "";
-    const command_id = selected >= 0 ? row?.id : deps.command_id_of?.(word);
-    if (command_id !== undefined) return { kind: "help", command_id };
-    message = selected >= 0 ? "this row has no command help" : "no command to show help for";
+    // A history recall leaves `selected` set with no row behind it, so the row decides, not the index.
+    const command_id = row ? row.id : deps.command_id_of?.(word);
+    if (command_id !== undefined && (deps.has_help?.(command_id) ?? true)) return { kind: "help", command_id };
+    message = row ? "this row has no command help" : "no command to show help for";
     return { kind: "render" };
   };
 

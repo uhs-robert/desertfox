@@ -288,3 +288,32 @@ test("help on a selected row that is no command shows a note and stays open", ()
   assert.deepEqual(session.run("cmdline.help", undefined), { kind: "render" });
   assert.equal(session.get_message(), "this row has no command help");
 });
+
+test("help on a selected row whose command has no help card shows the note", () => {
+  const session = create_session({
+    history: [],
+    parse: (text) => parse_command_line(lookup, text, SOURCES),
+    complete: create_completer(lookup, COMMANDS, COMMAND_ALIASES, SOURCES),
+    has_help: () => false,
+  });
+  session.edit("tab.");
+  tab(session);
+  assert.deepEqual(session.run("cmdline.help", undefined), { kind: "render" });
+  assert.equal(session.get_message(), "this row has no command help");
+});
+
+test("help after a history recall uses the recalled command, not the stale selection", () => {
+  const session = create_session({
+    history: ["tab.close --right"],
+    parse: (text) => parse_command_line(lookup, text, SOURCES),
+    complete: create_completer(lookup, COMMANDS, COMMAND_ALIASES, SOURCES),
+    command_id_of: (word) => lookup.find(word)?.id,
+  });
+  session.edit("tab.");
+  tab(session);
+  // With the list closed, Up walks the history.
+  session.run("mode.escape", undefined);
+  up(session);
+  assert.equal(session.get_text(), "tab.close --right");
+  assert.deepEqual(session.run("cmdline.help", undefined), { kind: "help", command_id: "tab.close" });
+});
