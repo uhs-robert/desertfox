@@ -9,6 +9,7 @@ define("help.open", {
   label: "Help",
   intent: "Open the help page in a new tab. It lists every command, its keys and the config warnings.",
   runs_in: "background",
+  repeatable: false,
   run: async () => {
     await browser.tabs.create({ url: browser.runtime.getURL(HELP_PAGE) });
   },

@@ -16,6 +16,7 @@ test("typed names are the dotted id except the family words and one-word command
   const named = registry.list().filter((command) => command.name !== undefined).map((command) => `${command.id}=${command.name}`);
   assert.deepEqual(named.sort(), [
     "bookmark.open=bookmark",
+    "command.repeat=repeat",
     "copy.url=copy",
     "help.open=help",
     "hint.run=hint",
@@ -37,4 +38,9 @@ test("prefills use the short flags", () => {
   assert.equal(print_command(registry.get("hint.run")!, { action: "copy", filter: "links", rapid: true }), "hint -y -l -r");
   assert.equal(print_command(registry.get("copy.url")!, { format: "title" }), "copy -T");
   assert.equal(print_command(registry.get("scroll.to")!, { percent: 50, axis: "x" }), "scroll.to -x 50");
+});
+
+test("only these commands opt out of `.`, so a new command repeats unless someone decides otherwise", () => {
+  const opted_out = registry.list().filter((command) => command.repeatable === false).map((command) => command.id);
+  assert.deepEqual(opted_out.sort(), ["browser.close_all", "browser.focus_page", "command.repeat", "config.reload", "engine.show", "help.open"]);
 });

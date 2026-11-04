@@ -21,6 +21,7 @@ const OPENED = {
   ],
   command_aliases: { j: "my.jira" },
   css: ".oasisfox-cmdline { --oasisfox-bg: red; }",
+  prompt: ">> ",
 };
 
 const TAB_COMMAND = { id: "tab.switch", name: "tab", label: "Switch tab", intent: "Switch tab.", params: [{ name: "tab", type: "string", rest: true, main: true, values: { from: "tabs" } }] };
@@ -41,12 +42,13 @@ function fake_element() {
 }
 
 // Just enough DOM for the command line page. `head` records what is appended, `parent` what is posted to the web page.
-type PageSetup = { keymap?: unknown; with_tab_command?: boolean };
+type PageSetup = { keymap?: unknown; with_tab_command?: boolean; without_prompt?: boolean };
 
-async function load_page(t: TestContext, tag: string, { keymap = KEYMAP, with_tab_command = false }: PageSetup = {}) {
+async function load_page(t: TestContext, tag: string, { keymap = KEYMAP, with_tab_command = false, without_prompt = false }: PageSetup = {}) {
   const window_listeners: ((event: unknown) => void)[] = [];
   const input_listeners: Record<string, (event: unknown) => void> = {};
   const to_parent: unknown[] = [];
+  const opened_answer = without_prompt ? { ...OPENED, prompt: undefined } : OPENED;
   const head: { textContent: string }[] = [];
   // Every message the page sends to the background, in order.
   const to_background: string[] = [];
@@ -77,6 +79,8 @@ async function load_page(t: TestContext, tag: string, { keymap = KEYMAP, with_ta
   };
   const list = fake_element();
   const panel = fake_element();
+  // Starts with the default that cmdline.html holds.
+  const prompt = Object.assign(fake_element(), { textContent: "> " });
   const page_window = {
     parent: { postMessage: (message: unknown) => void to_parent.push(message) },
     addEventListener: (type: string, listener: (event: unknown) => void) => void (type === "message" && window_listeners.push(listener)),
@@ -84,7 +88,7 @@ async function load_page(t: TestContext, tag: string, { keymap = KEYMAP, with_ta
   Object.assign(globalThis, {
     window: page_window,
     document: {
-      querySelector: (selector: string) => (selector === "#line" ? input : selector === "#list" ? list : selector === ".oasisfox-cmdline" ? panel : { textContent: "", hidden: true }),
+      querySelector: (selector: string) => (selector === "#line" ? input : selector === "#list" ? list : selector === ".oasisfox-cmdline" ? panel : selector === ".oasisfox-cmdline-prompt" ? prompt : { textContent: "", hidden: true }),
       // The page listens for keys on the document. The fake sends them through the input's table.
       addEventListener: (type: string, listener: (event: unknown) => void) => void (input_listeners[type] = listener),
       body: { classList: { toggle: () => {} } },
@@ -98,8 +102,8 @@ async function load_page(t: TestContext, tag: string, { keymap = KEYMAP, with_ta
         sendMessage: async (message: { type: string; ticket?: string }) => {
           to_background.push(message.type);
           if (message.type === "complete_items") return new Promise((resolve) => void item_asks.push((items) => resolve({ items })));
-          if (message.type === "open_cmdline" && message.ticket === TICKET && with_tab_command) return { ...OPENED, commands: [...OPENED.commands, TAB_COMMAND] };
-          return message.type === "open_cmdline" && message.ticket === TICKET ? OPENED : undefined;
+          if (message.type === "open_cmdline" && message.ticket === TICKET && with_tab_command) return { ...opened_answer, commands: [...OPENED.commands, TAB_COMMAND] };
+          return message.type === "open_cmdline" && message.ticket === TICKET ? opened_answer : undefined;
         },
       },
       storage: { local: { get: async () => ({ [COMPILED_KEYMAP_STORAGE_KEY]: keymap }) } },
@@ -128,7 +132,7 @@ async function load_page(t: TestContext, tag: string, { keymap = KEYMAP, with_ta
   };
   const press_enter = () => input_listeners.keydown!({ isTrusted: true, isComposing: false, key: "Enter", code: "Enter", preventDefault: () => {} });
   const press = (key: string) => input_listeners.keydown!({ isTrusted: true, isComposing: false, key, code: key, preventDefault: () => {} });
-  return { input, list, panel, to_parent, to_background, item_asks, head, post_start, press_enter, press };
+  return { input, list, panel, prompt, to_parent, to_background, item_asks, head, post_start, press_enter, press };
 }
 
 // Port messages arrive on a later turn, and later still on a busy machine.
@@ -160,6 +164,18 @@ test("a submit goes over the host's port and never to the web page", async (t) =
   await until(() => host.submits().length === 1);
   assert.deepEqual(to_parent, [{ oasisfox_cmdline: { kind: "ready" } }]);
   assert.deepEqual(host.submits(), submit_of("my.jira"));
+});
+
+test("the prompt shows the configured text", async (t) => {
+  const { prompt, post_start } = await load_page(t, "prompt_text");
+  await post_start(TICKET, "j").opened();
+  assert.equal(prompt.textContent, OPENED.prompt);
+});
+
+test("the prompt keeps the page default when no prompt is configured", async (t) => {
+  const { prompt, post_start } = await load_page(t, "prompt_default", { without_prompt: true });
+  await post_start(TICKET, "j").opened();
+  assert.equal(prompt.textContent, "> ");
 });
 
 test("a configured alias resolves, and the user CSS loads", async (t) => {

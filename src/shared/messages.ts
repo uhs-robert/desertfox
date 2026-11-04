@@ -20,6 +20,8 @@ export type RunRequest = {
   // Runs in order. Tab and frame come from the message sender.
   invocations: BoundInvocation[];
   mode: Mode;
+  // Set by the hints bundle on its link opens, so `.` keeps showing hints. The background honors it for a lone `open.url` only.
+  from_hints?: true;
 };
 
 export type ModeChanged = {
@@ -73,6 +75,8 @@ export type CmdlineOpened = {
   command_aliases: Record<string, string>;
   // User CSS, loaded after the built-in styles.
   css: string;
+  // The `cmdline_prompt` setting. Absent keeps the page's own default.
+  prompt?: string;
 };
 
 // From the command line page when typed text parsed. The background keeps it in the history unless the tab is private.
@@ -88,8 +92,24 @@ export type CompleteItems = {
   kind: "tabs" | "bookmarks" | "engines" | "open" | "windows";
 };
 
-// `number` is the tab's place in its window's tab bar, counted from 1.
-export type TabItem = { number: number; title: string; url: string };
+// A tab's container, drawn as a mark in the container's color. Absent for the default container and for private tabs.
+export type TabContainer = { color: string; icon: string };
+
+// `number` is the tab's place in its window's tab bar, counted from 1. `favicon` is an http, https or short data: URL and is absent otherwise.
+// The flags are present only when true, which keeps the answer small.
+export type TabItem = {
+  number: number;
+  title: string;
+  url: string;
+  favicon?: string;
+  container?: TabContainer;
+  active?: true;
+  alternate?: true;
+  pinned?: true;
+  audible?: true;
+  muted?: true;
+  discarded?: true;
+};
 
 // Newest first.
 export type BookmarkItem = { title: string; url: string };
@@ -113,7 +133,13 @@ export type WindowItem = { number: number; title: string };
 
 export type CompleteItemsAnswer = { items: TabItem[] | BookmarkItem[] | EngineItem[] | OpenItems | WindowItem[] };
 
-export type ContentToBackground = RunRequest | ModeChanged | LoadBundle | ListKeys | IssueCmdlineTicket | OpenCmdline | RecordCmdline | CompleteItems;
+// From the `hints` bundle at the start of a pick: what `.` shows again. The background checks it like any page message, because the sender is a page script.
+export type RecordRepeat = {
+  type: "record_repeat";
+  invocation: BoundInvocation;
+};
+
+export type ContentToBackground = RunRequest | ModeChanged | LoadBundle | ListKeys | IssueCmdlineTicket | OpenCmdline | RecordCmdline | CompleteItems | RecordRepeat;
 
 export type RunResponse = { ok: true } | { ok: false; refusal: Refusal };
 

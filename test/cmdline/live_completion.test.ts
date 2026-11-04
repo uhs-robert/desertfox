@@ -79,7 +79,7 @@ test("the note row reads loading, then the result, and the rows rank the text as
   session.edit("tab git");
   asks[0]!.answer(TABS);
   await settle();
-  assert.deepEqual(names(session), ["2 GitHub", "3 GitHub Gist"]);
+  assert.deepEqual(names(session), ["2: GitHub", "3: GitHub Gist"]);
   assert.notEqual(session.get_hint(), "loading");
   assert.equal(asks.length, 1);
 });
@@ -89,13 +89,13 @@ test("a tab pick puts its tab bar number and title in the line, and the number s
   session.edit("tab ");
   asks[0]!.answer(TABS);
   await settle();
-  assert.deepEqual(names(session), ["1 Mail", "2 GitHub", "3 GitHub Gist", "4 Bob's \"page\""]);
+  assert.deepEqual(names(session), ["1: Mail", "2: GitHub", "3: GitHub Gist", "4: Bob's \"page\""]);
   session.edit("tab gist");
-  assert.deepEqual(names(session), ["3 GitHub Gist"]);
+  assert.deepEqual(names(session), ["3: GitHub Gist"]);
   tab_key(session);
   assert.equal(session.get_text(), "tab 3 GitHub Gist ");
   session.edit("tab 3");
-  assert.equal(names(session)[0], "3 GitHub Gist");
+  assert.equal(names(session)[0], "3: GitHub Gist");
 });
 
 test("a title with a quote is quoted so the line still parses", async () => {
@@ -144,7 +144,7 @@ test("a reply that lands after Escape closed the list does not reopen it, and ty
   assert.deepEqual(names(session), []);
   assert.equal(session.get_text(), "tab ");
   session.edit("tab mai");
-  assert.deepEqual(names(session), ["1 Mail"]);
+  assert.deepEqual(names(session), ["1: Mail"]);
   assert.equal(asks.length, 1);
 });
 
@@ -297,4 +297,22 @@ test("a typed word ranks every row, keeps the groups in the order given, and a p
   assert.deepEqual(session.get_rows().map((row) => [row.name, row.tag]), [["Notes on a git hook", "bm"], ["git", "hist"]]);
   tab_key(session);
   assert.equal(session.get_text(), "open https://notes.test/ ");
+});
+
+test("a tab row carries its status, flags, favicon and container from the tab item", async () => {
+  const container = { color: "#37adff", icon: "resource://usercontext-content/fingerprint.svg" };
+  const { session, asks, settle } = make();
+  session.edit("tab ");
+  asks[0]!.answer([
+    { number: 1, title: "Mail", url: "https://m.test/", active: true, pinned: true, favicon: "https://m.test/i.png" },
+    { number: 2, title: "Docs", url: "https://d.test/", alternate: true, muted: true, container },
+    { number: 3, title: "Old", url: "https://o.test/", discarded: true },
+  ]);
+  await settle();
+  const marks = session.get_rows().map((row) => row.tab);
+  assert.deepEqual(marks, [
+    { status: "%", flags: ["pinned"], favicon: "https://m.test/i.png" },
+    { status: "#", flags: ["muted"], container },
+    { status: "", flags: ["discarded"] },
+  ]);
 });

@@ -5,7 +5,7 @@
 import type { CommandMeta } from "./command.ts";
 import type { KeymapConfig } from "./keymap.ts";
 import { DEFAULT_PALETTE } from "./mode_colors.ts";
-import type { PaletteName } from "./mode_colors.ts";
+import type { LocalTheme } from "./mode_colors.ts";
 
 export const CONFIG_FORMAT_VERSION = 2;
 
@@ -36,8 +36,8 @@ export type Settings = {
   ignore_sites: string[];
   // The mode badge: always (NORMAL too), only outside normal mode, or never.
   mode_indicator: ModeIndicator;
-  // Colors of both mode badges: the oasis.nvim palette. Light or dark follows the system theme.
-  palette: PaletteName;
+  // Theme name: `<config dir>/themes/<name>.toml` first, then a repo theme, then an oasis.nvim palette. Light or dark follows the system theme.
+  palette: string;
   // Prefixes of keys generated from `search_keys`: this tab, new tab.
   search_prefixes: { here: string; tab: string };
   // Prefixes of keys generated from `container_keys`: reopen, prompt in new tab.
@@ -51,6 +51,8 @@ export type Settings = {
   // The `tab` completion list: absent or false lists the tabs of the line's window, true lists the tabs of every window.
   // Kept out of DEFAULT_SETTINGS because the content script bundles that object and has no use for this one.
   completion_all_windows?: boolean;
+  // Text before the command line input, with its own trailing space. Absent shows `> `, set in cmdline.html.
+  cmdline_prompt?: string;
   // The groups `open` completes from, in the order they list. A source left out is not read. Absent lists both.
   open_completion?: ("bookmarks" | "history")[];
   // History rows `open` shows for an empty word. Absent is 10.
@@ -121,4 +123,6 @@ export type MergedConfig = {
   snippets: SnippetEntry[];
   // User CSS as text: `style.css` then `style.d/*.css`.
   css: string;
+  // Present only when `palette` names a theme in the config directory.
+  local_theme?: LocalTheme;
 };

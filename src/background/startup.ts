@@ -10,9 +10,10 @@ import { load_config } from "./config_load.ts";
 import { DEFAULT_KEYMAP } from "./default_keymap.ts";
 import { CONFIG_STATUS_STORAGE_KEY, SLOT_TABLE_STORAGE_KEY, WARNINGS_STORAGE_KEY } from "./storage_keys.ts";
 import { apply_slot_plan, plan_slots, slot_table } from "./slots.ts";
+import { no_repeat_memory } from "./repeat_memory.ts";
 import { create_snippets } from "./snippets.ts";
 
-export const snippets = create_snippets(registry, snippet_deps, make_router_deps(get_config));
+export const snippets = create_snippets(registry, snippet_deps, make_router_deps(get_config, no_repeat_memory));
 
 // Derived from storage on every start, so a restart loses nothing.
 let loaded_config: Promise<MergedConfig> | undefined;

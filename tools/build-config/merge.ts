@@ -8,7 +8,6 @@ import { BUILT_IN_PAGE, is_web_url, MODE_INDICATOR_VALUES, WHICH_KEY_BORDER_VALU
 import type { SearchEngine, Settings } from "../../src/shared/config.ts";
 import { nodes_of_file, resolve_engines } from "../../src/shared/engines/index.ts";
 import type { EngineNode } from "../../src/shared/engines/index.ts";
-import { is_palette_name, PALETTE_NAMES } from "../../src/shared/mode_colors.ts";
 import type { KeymapConfig, ModeBindings } from "../../src/shared/keymap.ts";
 import { is_plain_object } from "./errors.ts";
 import type { DataLayer } from "./source_files.ts";
@@ -134,13 +133,14 @@ const SETTING_CHECKS: Record<keyof Settings, (value: unknown) => boolean> = {
   hint_letters: (value) => typeof value === "string" && new Set(value).size === value.length && value.length >= 2,
   ignore_sites: (value) => Array.isArray(value) && value.every((site) => typeof site === "string" && site !== ""),
   mode_indicator: (value) => (MODE_INDICATOR_VALUES as readonly unknown[]).includes(value),
-  palette: is_palette_name,
+  palette: (value) => typeof value === "string" && value !== "",
   search_prefixes: (value) => is_prefix_pair(value, "here"),
   container_prefixes: (value) => is_prefix_pair(value, "reopen"),
   home_page: (value) => typeof value === "string" && value !== "",
   default_engine: (value) => typeof value === "string" && value !== "",
   new_tab_page: (value) => typeof value === "string" && (value === BUILT_IN_PAGE || is_web_url(value)),
   completion_all_windows: (value) => typeof value === "boolean",
+  cmdline_prompt: (value) => typeof value === "string" && [...value].length >= 1 && [...value].length <= 8 && !/[\r\n]/.test(value),
   open_completion: (value) => Array.isArray(value) && new Set(value).size === value.length && value.every((source) => source === "bookmarks" || source === "history"),
   history_completion_max: (value) => typeof value === "number" && Number.isInteger(value) && value >= 0,
   newtab_clock: (value) => typeof value === "boolean",
@@ -153,13 +153,14 @@ const SETTING_EXPECTATIONS: Record<keyof Settings, string> = {
   hint_letters: "a string of 2 or more distinct letters",
   ignore_sites: "a list of match pattern strings",
   mode_indicator: '"always", "not_normal" or "off"',
-  palette: `one of ${PALETTE_NAMES.join(", ")}`,
+  palette: "a theme name",
   search_prefixes: '{"here": "...", "tab": "..."} with non-empty strings',
   container_prefixes: '{"reopen": "...", "tab": "..."} with non-empty strings',
   home_page: "a non-empty URL string",
   default_engine: "the name of a search engine",
   new_tab_page: `"${BUILT_IN_PAGE}" or an http or https URL`,
   completion_all_windows: "true or false",
+  cmdline_prompt: "a string of 1 to 8 characters on one line",
   open_completion: 'a list of "bookmarks" and "history" with no repeat',
   history_completion_max: "a whole number, 0 or more",
   newtab_clock: "true or false",

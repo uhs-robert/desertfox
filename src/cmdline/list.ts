@@ -1,7 +1,7 @@
 // The list view: a window of at most ten rows over the ranked rows, with no scroll bar. It draws rows only.
 // Widths belong to the page's CSS: the description shrinks first, then the args collapse to "…".
 
-import type { Row } from "./completion/sources.ts";
+import type { Row, TabMarks } from "./completion/sources.ts";
 import type { Ranked } from "../shared/score.ts";
 
 export const MAX_ROWS = 10;
@@ -45,10 +45,69 @@ function name_cell(row: Ranked<Row>): HTMLElement {
   return name;
 }
 
+// Every flag icon takes this much width, so the name column starts at the same place in every row.
+const FLAG_WIDTH_PX = 14;
+
+// Image nodes live for the line, so a redraw on each keystroke moves nodes instead of fetching again. Rows with the same favicon each get their own node, in row order.
+// A node that failed once stays hidden.
+function create_image_pool() {
+  const nodes = new Map<string, HTMLImageElement[]>();
+  const taken = new Map<string, number>();
+  return {
+    start_draw: () => taken.clear(),
+    take: (url: string): HTMLImageElement => {
+      const index = taken.get(url) ?? 0;
+      taken.set(url, index + 1);
+      const same_url = nodes.get(url) ?? [];
+      nodes.set(url, same_url);
+      if (!same_url[index]) {
+        const image = document.createElement("img");
+        image.src = url;
+        same_url[index] = image;
+      }
+      return same_url[index];
+    },
+  };
+}
+
+type Images = ReturnType<typeof create_image_pool>;
+
+function image_cell(class_name: string, url: string, images: Images, on_error: (holder: HTMLElement) => void): HTMLElement {
+  const holder = cell(class_name);
+  const image = images.take(url);
+  image.onerror = () => {
+    image.hidden = true;
+    on_error(holder);
+  };
+  if (image.hidden) on_error(holder);
+  holder.append(image);
+  return holder;
+}
+
+function status_cell(marks: TabMarks): HTMLElement {
+  const status = cell("tab-status");
+  status.append(cell("tab-mark", marks.status), ...marks.flags.map((flag) => cell(`flag oasisfox-cmdline-flag-${flag}`)));
+  return status;
+}
+
+// The icon is a mask over the container color, because an image of the icon would draw black: Firefox's icons take their fill from the page, which an <img> cannot give.
+// The <img> stays, hidden, only to learn whether the icon loads. A container without a loadable icon keeps its color as a dot.
+function container_cell(marks: TabMarks, images: Images): HTMLElement {
+  if (!marks.container) return cell("container");
+  const holder = image_cell("container", marks.container.icon, images, (failed) => void (failed.className += " oasisfox-cmdline-container-dot"));
+  holder.style.setProperty("--oasisfox-container-color", marks.container.color);
+  holder.style.setProperty("--oasisfox-container-icon", `url(${JSON.stringify(marks.container.icon)})`);
+  return holder;
+}
+
+// A tab without a loadable favicon keeps the plain glyph that every favicon cell draws behind its image.
+const favicon_cell = (marks: TabMarks, images: Images): HTMLElement => (marks.favicon ? image_cell("favicon", marks.favicon, images, () => {}) : cell("favicon"));
+
 // `keys_of` gives the keys cell text of a command id.
 export function create_list(element: HTMLElement, keys_of: (id: string) => string = () => "") {
   let top = 0;
   let drawn: readonly Ranked<Row>[] | undefined;
+  const images = create_image_pool();
   return {
     render: (rows: readonly Ranked<Row>[], selected: number) => {
       element.hidden = rows.length === 0;
@@ -59,11 +118,15 @@ export function create_list(element: HTMLElement, keys_of: (id: string) => strin
       element.style.setProperty("--oasisfox-name-width", `${Math.min(MAX_NAME_COLUMNS, Math.max(...visible.map((row) => row.name.length), 0))}ch`);
       const keys = visible.map((row) => (row.id === undefined ? "" : keys_of(row.id)));
       element.style.setProperty("--oasisfox-keys-width", `${Math.max(...keys.map((text) => text.length), 0)}ch`);
+      const flag_count = Math.max(...visible.map((row) => row.tab?.flags.length ?? 0), 0);
+      element.style.setProperty("--oasisfox-flags-width", `${flag_count * FLAG_WIDTH_PX}px`);
+      images.start_draw();
       element.replaceChildren(
         ...visible.map((row, offset) => {
           const item = cell(`item${top + offset === selected ? " oasisfox-cmdline-selected" : ""}${row.unavailable ? " oasisfox-cmdline-unavailable" : ""}`);
           const args = cell("args");
           args.append(cell("args-full", row.args), cell("args-short", row.args ? "…" : ""));
+          if (row.tab) item.append(status_cell(row.tab), container_cell(row.tab, images), favicon_cell(row.tab, images));
           item.append(name_cell(row), cell("description", row.description), args, ...(row.tag ? [cell("tag", row.tag)] : []), cell("keys", keys[offset]));
           return item;
         }),

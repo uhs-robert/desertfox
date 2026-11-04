@@ -8,6 +8,7 @@ import { registry } from "../shared/registry/index.ts";
 import { runs_with_empty } from "./availability.ts";
 import type { BundleLoaderDeps } from "./bundle_loader.ts";
 import { create_load_log } from "./load_log.ts";
+import type { RepeatMemory } from "./repeat_memory.ts";
 import type { ReinjectDeps } from "./reload.ts";
 import { BUNDLE_LOADS_STORAGE_KEY } from "./storage_keys.ts";
 import { deliver_refusal } from "./refusal.ts";
@@ -46,7 +47,7 @@ export async function container_names(): Promise<string[]> {
   return Array.isArray(identities) ? identities.map((identity) => identity.name) : [];
 }
 
-export function make_router_deps(get_config: () => Promise<MergedConfig>): RouterDeps {
+export function make_router_deps(get_config: () => Promise<MergedConfig>, repeat_memory: RepeatMemory): RouterDeps {
   const channels = { send_to_tab, notify };
   return {
     get_command: (command_id) => registry.get(command_id),
@@ -56,7 +57,7 @@ export function make_router_deps(get_config: () => Promise<MergedConfig>): Route
     }),
     active_tab: async () => {
       const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
-      return tab?.id === undefined ? undefined : { tab_id: tab.id, window_id: tab.windowId ?? -1, url: tab.url };
+      return tab?.id === undefined ? undefined : { tab_id: tab.id, window_id: tab.windowId ?? -1, url: tab.url, incognito: tab.incognito };
     },
     has_content_script,
     ask_selection: async (tab_id, frame_id) => {
@@ -69,6 +70,7 @@ export function make_router_deps(get_config: () => Promise<MergedConfig>): Route
     send_to_tab,
     open_cmdline: (tab_id, frame_id, text) => send_to_tab(tab_id, { type: "run_in_content", invocations: [{ id: "cmdline.open", args: { text } }] }, frame_id),
     show_refusal: (tab_id, refusal, frame_id) => deliver_refusal(channels, tab_id, refusal, frame_id),
+    repeat_memory,
   };
 }
 
