@@ -22,7 +22,9 @@ type Adopting = TextTree & { adoptedStyleSheets: CSSStyleSheet[] };
 const owner_of = (tree: TextTree): Document => (tree.nodeType === DOCUMENT_NODE ? (tree as Document) : (tree as ShadowRoot).ownerDocument);
 
 // A frame's window seen from this script answers `CSS` with this script's own, so its highlights would land in the wrong registry. The page's own view of the window gives the frame's.
+// This script's own document keeps its own globals, so page code cannot patch them and read each query.
 const page_view = (owner: Document): { Highlight: typeof Highlight; CSS: typeof CSS } => {
+  if (owner === document) return window;
   const window_of = owner.defaultView as unknown as { wrappedJSObject?: unknown };
   return (window_of.wrappedJSObject ?? window_of) as { Highlight: typeof Highlight; CSS: typeof CSS };
 };
@@ -56,7 +58,9 @@ export function create_painter() {
   const painted_documents = new Set<Document>();
 
   const adopt_sheet = (tree: TextTree, colors: FindColors) => {
-    if (sheets.has(tree)) return;
+    const kept = sheets.get(tree);
+    // The page may have replaced its sheets and dropped ours.
+    if (kept && (tree as Adopting).adoptedStyleSheets.includes(kept)) return;
     const owner = owner_of(tree);
     // A sheet works only in the document that made it, so a frame's tree takes the frame's own constructor.
     const sheet = new (owner.defaultView as unknown as { CSSStyleSheet: typeof CSSStyleSheet }).CSSStyleSheet();
@@ -65,8 +69,8 @@ export function create_painter() {
     sheets.set(tree, sheet);
   };
 
-  const clear = () => {
-    // A removed frame or shadow host is a dead object, and any use of it throws. The rest still has to be cleared.
+  // A removed frame or shadow host is a dead object, and any use of it throws. The rest still has to be cleared.
+  const clear_highlights = () => {
     for (const owner of painted_documents) {
       try {
         const registry = page_view(owner).CSS.highlights as unknown as Registry;
@@ -75,10 +79,17 @@ export function create_painter() {
       } catch {}
     }
     painted_documents.clear();
+  };
+
+  // The sheets stay for the whole search, so a keystroke does not rebuild one in every tree. Only the end of the search drops them.
+  const clear = () => {
+    clear_highlights();
     for (const [tree, sheet] of sheets) {
       try {
         const adopted = (tree as Adopting).adoptedStyleSheets;
-        adopted.splice(adopted.indexOf(sheet), 1);
+        // The page may have replaced its sheets and dropped ours.
+        const at = adopted.indexOf(sheet);
+        if (at >= 0) adopted.splice(at, 1);
       } catch {}
     }
     sheets.clear();
@@ -86,7 +97,7 @@ export function create_painter() {
 
   // The match at `current` takes the strong color. Returns how many matches were drawn.
   const paint = (model: TextModel, matches: Matches, current: number, colors: FindColors): number => {
-    clear();
+    clear_highlights();
     const count = matches.from.length;
     const shown = Math.min(count, PAINT_CAP);
     const by_document = new Map<Document, { all: Range[]; current: Range[] }>();
