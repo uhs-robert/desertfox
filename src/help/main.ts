@@ -4,14 +4,15 @@ import type { CompiledKeymap } from "../shared/prefix_tree.ts";
 import { load_config } from "../background/config_load.ts";
 import { WARNINGS_STORAGE_KEY } from "../background/storage_keys.ts";
 import { effective_settings } from "../shared/config.ts";
+import type { Block } from "./blocks.ts";
 import { build_help_model } from "./model.ts";
 import type { HelpModel } from "./model.ts";
 import { engine_anchor, render_help } from "./render.ts";
 import { parse_route } from "./route.ts";
 
-function show_route(model: HelpModel, moved_by_user: boolean): void {
+function show_route(model: HelpModel, guide: Block[], moved_by_user: boolean): void {
   const route = parse_route(location.hash);
-  render_help(document.body, model, route);
+  render_help(document.body, model, route, guide);
   // The render removed the link that had focus. Not on first load, where focus belongs to the browser.
   if (moved_by_user) document.querySelector<HTMLElement>(".oasisfox-help-page h1")?.focus({ preventScroll: true });
   // A new page starts at the top. An engine link scrolls to its row.
@@ -37,8 +38,10 @@ async function main(): Promise<void> {
     // The same shape the background stores, built from the fresh load so a config.reload shows at once.
     { source, settings: effective_settings(config.settings), managed_file_hint: `~/.mozilla/managed-storage/${browser.runtime.id}.json` },
   );
-  show_route(model, false);
-  window.addEventListener("hashchange", () => show_route(model, true));
+  // A missing guide must not blank the other pages.
+  const guide = await fetch(browser.runtime.getURL("search_engines_guide.json")).then((response) => response.json() as Promise<Block[]>).catch(() => []);
+  show_route(model, guide, false);
+  window.addEventListener("hashchange", () => show_route(model, guide, true));
 }
 
 void main();

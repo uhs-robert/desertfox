@@ -20,6 +20,6 @@ The background page. It loads the config, compiles the keymap, assigns the Firef
 - `complete_items.ts`: `complete_items` answers the command line page with the open tabs, the bookmarks or the engines it lists for `tab`, `bookmark` and `search`. The engines come in config order, each with its label and a yes or no for whether the line's tab page can fill it (`available_engine_names`). The page URL stays in the background. It answers only an opener tab, checks the marker again after the browser call, lists only tabs of the line's privacy, and gives an empty list when the browser call fails. The tab handler lists through the same code.
 - `reload.ts`: the marker and the tab repair behind `config.reload`.
 - `browser_deps.ts`: the only file that wires the router to Firefox calls.
-- `command_modules.ts`: one import per command group. Add the group to `COMMAND_MODULES` in `tools/write_commands_json.mjs` too.
+- `command_modules.ts`: one import per command group. The commands.json build tool imports it, so it is the only list.
 
 Everything except `browser_deps.ts` and `startup.ts` takes its browser access as arguments, so tests run without a browser.
