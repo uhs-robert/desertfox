@@ -30,6 +30,16 @@ const ask_background = <Answer>(message: ContentToBackground) => browser.runtime
 
 type Start = Extract<HostToPage, { kind: "start" }>;
 
+// "caret" is the markup's own default. "colon" swaps the style class. Any other value is custom text in the caret style.
+function show_prompt(prompt: HTMLElement, setting: string): void {
+  if (setting === "colon") {
+    prompt.textContent = ":";
+    prompt.className += " oasisfox-cmdline-prompt-colon";
+  } else if (setting !== "caret") {
+    prompt.textContent = setting;
+  }
+}
+
 // Page scripts can post a `start` too, to this frame or to a copy they embed. Only the background knows whether the
 // ticket is live, so every `start` is tried and the first one it accepts wins.
 async function open_line(start: Start, port: MessagePort): Promise<void> {
@@ -48,7 +58,7 @@ async function open_line(start: Start, port: MessagePort): Promise<void> {
   const user_style = document.createElement("style");
   user_style.textContent = opened.css;
   document.head.append(user_style);
-  if (opened.prompt) document.querySelector<HTMLElement>(".oasisfox-cmdline-prompt")!.textContent = opened.prompt;
+  if (opened.prompt) show_prompt(document.querySelector<HTMLElement>(".oasisfox-cmdline-prompt")!, opened.prompt);
   const keymap = stored[COMPILED_KEYMAP_STORAGE_KEY] as CompiledKeymap | undefined;
   const opened_from = typeof start.mode === "string" ? start.mode : "normal";
   const key_text = key_labels(keymap, opened.commands, opened_from);

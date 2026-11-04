@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import type { TestContext } from "node:test";
 import { COMPILED_KEYMAP_STORAGE_KEY, COMPILED_KEYMAP_VERSION } from "../../src/shared/prefix_tree.ts";
@@ -42,13 +43,13 @@ function fake_element() {
 }
 
 // Just enough DOM for the command line page. `head` records what is appended, `parent` what is posted to the web page.
-type PageSetup = { keymap?: unknown; with_tab_command?: boolean; without_prompt?: boolean };
+type PageSetup = { keymap?: unknown; with_tab_command?: boolean; without_prompt?: boolean; prompt?: string };
 
-async function load_page(t: TestContext, tag: string, { keymap = KEYMAP, with_tab_command = false, without_prompt = false }: PageSetup = {}) {
+async function load_page(t: TestContext, tag: string, { keymap = KEYMAP, with_tab_command = false, without_prompt = false, prompt: configured }: PageSetup = {}) {
   const window_listeners: ((event: unknown) => void)[] = [];
   const input_listeners: Record<string, (event: unknown) => void> = {};
   const to_parent: unknown[] = [];
-  const opened_answer = without_prompt ? { ...OPENED, prompt: undefined } : OPENED;
+  const opened_answer = without_prompt ? { ...OPENED, prompt: undefined } : { ...OPENED, ...(configured !== undefined && { prompt: configured }) };
   const head: { textContent: string }[] = [];
   // Every message the page sends to the background, in order.
   const to_background: string[] = [];
@@ -170,6 +171,25 @@ test("the prompt shows the configured text", async (t) => {
   const { prompt, post_start } = await load_page(t, "prompt_text");
   await post_start(TICKET, "j").opened();
   assert.equal(prompt.textContent, OPENED.prompt);
+});
+
+test("the caret preset keeps the page default text and style", async (t) => {
+  const { prompt, post_start } = await load_page(t, "prompt_caret", { prompt: "caret" });
+  await post_start(TICKET, "j").opened();
+  assert.deepEqual([prompt.textContent, prompt.className], ["> ", ""]);
+});
+
+test("the colon preset shows a colon with the colon class", async (t) => {
+  const { prompt, post_start } = await load_page(t, "prompt_colon", { prompt: "colon" });
+  await post_start(TICKET, "j").opened();
+  assert.deepEqual([prompt.textContent, prompt.className.trim()], [":", "oasisfox-cmdline-prompt-colon"]);
+});
+
+test("the colon class styles the prompt in the accent color with the old gap", () => {
+  const html = readFileSync(new URL("../../src/cmdline/cmdline.html", import.meta.url), "utf8");
+  const rule = html.match(/\.oasisfox-cmdline-prompt-colon \{([^}]*)\}/)![1]!;
+  assert.match(rule, /color: var\(--oasisfox-accent\)/);
+  assert.match(rule, /margin-right: \.5rem/);
 });
 
 test("the prompt keeps the page default when no prompt is configured", async (t) => {
