@@ -10,7 +10,6 @@ import { fill_template } from "../src/shared/engines/index.ts";
 import { build_schemas } from "../tools/build-config/schemas.ts";
 import { build_commands_file, create_registry } from "../src/shared/registry/index.ts";
 import { parse_snippet } from "../tools/build-config/snippet.ts";
-import { derive_roles } from "../src/shared/theme/derive.ts";
 
 const FIXTURES = join(import.meta.dirname, "fixtures", "build-config");
 const commands = read_commands_file(join(FIXTURES, "commands.json"));
@@ -102,34 +101,52 @@ test("cmdline_prompt takes 1 to 8 characters on one line", () => {
   }
 });
 
-const LOCAL_THEME = '[dark]\nbg = "#101010"\nfg = "#eeeeee"\nprimary = "#88aaff"\naccent = "#ffcc66"\n';
-const REPO_THEME = { dark: derive_roles({ bg: "#000000", fg: "#ffffff", primary: "#ff0000", accent: "#00ff00" }, "dark"), light: derive_roles({ bg: "#ffffff", fg: "#000000", primary: "#ff0000", accent: "#00ff00" }, "light") };
+test("a bare palette name such as moonlight is an error that lists the oasis_ names", () => {
+  assert.match(problems_of(config_dir_with({ "settings.toml": 'palette = "moonlight"' })).join("\n"), /settings\.toml: palette: no theme named "moonlight" \(known: oasis_abyss, .*oasis_moonlight/);
+});
+
+test("light_intensity is a whole number from 1 to 5, and defaults to 3 by being absent", () => {
+  assert.equal(build_config(config_dir_with({ "settings.toml": "light_intensity = 5" }), commands).settings.light_intensity, 5);
+  for (const bad of ["0", "6", "2.5", '"3"']) {
+    assert.match(problems_of(config_dir_with({ "settings.toml": `light_intensity = ${bad}` })).join("\n"), /settings\.toml: light_intensity: .*1 to 5/);
+  }
+});
+
+test("a local theme that still uses the old role names is an error", () => {
+  const dir = config_dir_with({ "themes/old.toml": '[dark]\nbg = "#000"\nfg = "#fff"\nmuted = "#888"\nprimary = "#fff"\naccent = "#fff"' });
+  const problems = problems_of(dir).join("\n");
+  assert.match(problems, /old\.toml: \[dark\] bg: unknown role \(valid: bg_core,/);
+  assert.match(problems, /old\.toml: \[dark\] muted: unknown role/);
+  assert.match(problems, /old\.toml: \[dark\]: missing required role bg_core/);
+});
+
+const LOCAL_THEME = '[dark]\nbg_core = "#101010"\nfg_core = "#eeeeee"\nprimary = "#88aaff"\naccent = "#ffcc66"\n';
 
 test("palette picks a local theme from the config directory's themes folder", () => {
   const dir = config_dir_with({ "settings.toml": 'palette = "mine"', "themes/mine.toml": LOCAL_THEME });
   const config = build_config(dir, commands);
   assert.equal(config.local_theme?.name, "mine");
-  assert.equal(config.local_theme?.colors.light.bg, "#101010");
+  assert.equal(config.local_theme?.colors.light.bg_core, "#101010");
   assert.equal(config.local_theme?.colors.dark.mode_normal, "#88aaff");
 });
 
 test("a local theme wins over a repo theme of the same name", () => {
   const dir = config_dir_with({ "settings.toml": 'palette = "shared"', "themes/shared.toml": LOCAL_THEME });
-  assert.equal(build_config(dir, commands, [], { shared: REPO_THEME }).local_theme?.colors.dark.bg, "#101010");
+  assert.equal(build_config(dir, commands, [], ["shared"]).local_theme?.colors.dark.bg_core, "#101010");
 });
 
-test("a repo theme or a built-in palette needs no local theme in the output", () => {
+test("a repo theme or an Oasis theme needs no local theme in the output", () => {
   const repo = config_dir_with({ "settings.toml": 'palette = "shared"' });
-  assert.equal(build_config(repo, commands, [], { shared: REPO_THEME }).local_theme, undefined);
-  const builtin = config_dir_with({ "settings.toml": 'palette = "cactus"', "themes/mine.toml": LOCAL_THEME });
+  assert.equal(build_config(repo, commands, [], ["shared"]).local_theme, undefined);
+  const builtin = config_dir_with({ "settings.toml": 'palette = "oasis_cactus"', "themes/mine.toml": LOCAL_THEME });
   assert.equal(build_config(builtin, commands).local_theme, undefined);
 });
 
 test("every local theme file is checked, even one palette does not pick", () => {
-  const dir = config_dir_with({ "themes/broken.toml": '[dark]\nbg = "#000"\nfg = "nope"\nprimary = "#fff"\naccent = "#fff"\nbg_mantel = "#111"', "themes/notes.txt": "x" });
+  const dir = config_dir_with({ "themes/broken.toml": '[dark]\nbg_core = "#000"\nfg_core = "nope"\nprimary = "#fff"\naccent = "#fff"\nbg_mantel = "#111"', "themes/notes.txt": "x" });
   const problems = problems_of(dir).join("\n");
-  assert.match(problems, /themes\/broken\.toml: \[dark\] fg: expected a color/);
-  assert.match(problems, /themes\/broken\.toml: \[dark\] bg_mantel: unknown role \(valid: bg, bg_mantle,/);
+  assert.match(problems, /themes\/broken\.toml: \[dark\] fg_core: expected a color/);
+  assert.match(problems, /themes\/broken\.toml: \[dark\] bg_mantel: unknown role \(valid: bg_core, bg_mantle,/);
   assert.match(problems, /themes\/notes\.txt: unknown file/);
 });
 
@@ -138,7 +155,7 @@ test("settings, aliases, css and the format version come through", () => {
   assert.equal(config.format_version, 2);
   assert.deepEqual(config.settings, { which_key_delay_ms: 150, hint_letters: "abcdef" });
   assert.deepEqual(config.command_aliases, { nt: "tab.next" });
-  assert.equal(config.css, "body { color: red; }\n\n:root { --oasisfox-bg: black; }\n");
+  assert.equal(config.css, "body { color: red; }\n\n:root { --oasisfox-bg-core: black; }\n");
 });
 
 test("an unknown file is rejected with its path", () => {

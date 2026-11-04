@@ -17,6 +17,8 @@ import { is_context_source, is_dynamic_values } from "../shared/registry/params.
 import type { EnumSources } from "../shared/registry/check_args.ts";
 import { print_command } from "../shared/registry/print_command.ts";
 import { subject_param } from "../shared/registry/params.ts";
+import type { Block } from "./blocks.ts";
+import { quick_start_blocks } from "./quick_start.ts";
 import { flag_alternatives, usage_line } from "../shared/registry/usage.ts";
 
 export type KeyRow = { mode: KeymapMode; keys: string; args: string };
@@ -66,6 +68,7 @@ export type HelpModel = {
   settings: SettingRow[];
   groups: HelpGroup[];
   engines: EngineRow[];
+  quick_start: Block[];
 };
 
 const MODE_ORDER: readonly KeymapMode[] = [...MODES, "browser"];
@@ -201,18 +204,21 @@ export function build_help_model(commands: CommandMeta[], compiled: CompiledKeym
     config_source: options.source_text,
     settings: options.settings,
     engines: engine_rows(engines, compiled, status?.settings.default_engine ?? DEFAULT_SETTINGS.default_engine),
+    quick_start: quick_start_blocks(compiled, commands),
     groups: [...groups].sort(([a], [b]) => a.localeCompare(b)).map(([name, rows]) => ({ name, commands: rows })),
   };
 }
 
 // The public styling surface from design.md "Styles" and "Themes".
 const ROLE_MEANINGS: Record<Role, string> = {
-  bg: "Background of a surface",
-  bg_mantle: "A surface layered on bg, for panels and rows",
-  bg_crust: "A second layer on bg, lighter than the mantle in a dark theme",
+  bg_core: "Background of a surface",
+  bg_mantle: "A surface layered on bg_core, for panels and rows",
+  bg_crust: "A second layer on bg_core, lighter than the mantle in a dark theme",
   selection: "Background of the selected row",
-  fg: "Text color",
-  muted: "Secondary text",
+  fg_core: "Text color",
+  fg_comment: "Secondary text, such as descriptions",
+  fg_dim: "Hints, such as the command line usage line",
+  fg_muted: "Disabled text and faint marks",
   primary: "Brand color: links and the normal mode badge",
   secondary: "Keys in which-key and hints",
   accent: "Highlight color for titles, groups, hint frames and the current item",
@@ -220,6 +226,7 @@ const ROLE_MEANINGS: Record<Role, string> = {
   error: "Errors and refused commands",
   warn: "Warnings",
   ok: "Success",
+  info: "Information",
   mode_normal: "Mode badge in normal mode",
   mode_insert: "Mode badge in insert mode",
   mode_ignore: "Mode badge in ignore mode",

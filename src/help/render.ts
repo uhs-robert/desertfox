@@ -140,6 +140,7 @@ function styling_page(): HTMLElement[] {
 function page_body(page: PageId, model: HelpModel, guide: Block[]): HTMLElement[] {
   switch (page) {
     case "home": return home_page(model);
+    case "quick-start": return model.quick_start.map(block_node);
     case "search-engines": return [...guide.map(block_node), el("h2", undefined, "Your engines"), engine_table(model.engines)];
     case "commands": return commands_page(model);
     case "styling": return styling_page();
