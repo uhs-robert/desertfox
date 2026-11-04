@@ -97,6 +97,7 @@ async function page_with(texts: string[]) {
         return true;
       },
       getBoundingClientRect: () => ({ left: 0, top: node.rect_top, right: 50, bottom: node.rect_top + 10 }),
+      getClientRects: () => [{ left: 0, top: node.rect_top, right: 50, bottom: node.rect_top + 10 }],
       remove: () => void links.splice(links.indexOf(node), 1),
       focus: () => {},
     });

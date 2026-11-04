@@ -6,7 +6,8 @@ export type PageProbe<T> = {
   // The IntersectionObserver result: the target shows inside every scrolling box that holds it.
   is_intersecting: (target: T) => boolean;
   // Position in the viewport of the document that holds the target, and that viewport's size.
-  rect_of: (target: T) => Rect;
+  // One box per line a wrapped link covers; the bounding box when there are none.
+  rects_of: (target: T) => Rect[];
   viewport_of: (target: T) => { width: number; height: number };
   is_hidden_by_style: (target: T) => boolean;
   // Whether the topmost thing at the point is the target, inside it or around it.
@@ -23,11 +24,36 @@ export function visible_point(rect: Rect, viewport: { width: number; height: num
   return { x: (left + right) / 2, y: (top + bottom) / 2 };
 }
 
+const MAX_LINE_BOXES = 4;
+const CORNER_INSET = 2;
+
+// The points to try for one link, cheapest and likeliest first: the middle of each line box, then the corners of the first box.
+// At most MAX_LINE_BOXES + 4 points, so a page with thousands of links stays fast. One middle point alone misses a wrapped link (its middle lands on plain text) and an item part covered by a sticky header.
+export function points_to_probe(rects: readonly Rect[], viewport: { width: number; height: number }): { x: number; y: number }[] {
+  const shown = rects.slice(0, MAX_LINE_BOXES).flatMap((rect) => {
+    const middle = visible_point(rect, viewport);
+    return middle === undefined ? [] : [{ rect, middle }];
+  });
+  const points = shown.map((entry) => entry.middle);
+  const first = shown[0]?.rect;
+  if (first === undefined) return points;
+  const left = Math.max(first.left, 0);
+  const top = Math.max(first.top, 0);
+  const right = Math.min(first.right, viewport.width);
+  const bottom = Math.min(first.bottom, viewport.height);
+  const inset_x = Math.min(CORNER_INSET, (right - left) / 2);
+  const inset_y = Math.min(CORNER_INSET, (bottom - top) / 2);
+  for (const x of [left + inset_x, right - inset_x]) {
+    for (const y of [top + inset_y, bottom - inset_y]) points.push({ x, y });
+  }
+  return points;
+}
+
 export function keep_visible<T>(targets: readonly T[], probe: PageProbe<T>): T[] {
   return targets.filter((target) => {
     if (!probe.is_intersecting(target) || probe.is_hidden_by_style(target)) return false;
-    const point = visible_point(probe.rect_of(target), probe.viewport_of(target));
-    return point !== undefined && probe.is_reachable_at(target, point.x, point.y);
+    const points = points_to_probe(probe.rects_of(target), probe.viewport_of(target));
+    return points.some((point) => probe.is_reachable_at(target, point.x, point.y));
   });
 }
 

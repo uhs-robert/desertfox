@@ -62,7 +62,10 @@ async function keep_visible_ones(candidates: Found[]): Promise<Found[]> {
   const seen = await observe_intersecting(candidates.map((found) => found.element));
   const probe: PageProbe<Found> = {
     is_intersecting: (found) => seen.has(found.element),
-    rect_of: (found) => found.element.getBoundingClientRect(),
+    rects_of: (found) => {
+      const lines = Array.from(found.element.getClientRects());
+      return lines.length > 0 ? lines : [found.element.getBoundingClientRect()];
+    },
     viewport_of: (found) => ({ width: window_of(found.element).innerWidth, height: window_of(found.element).innerHeight }),
     is_hidden_by_style: (found) => window_of(found.element).getComputedStyle(found.element).visibility === "hidden",
     is_reachable_at: (found, x, y) => uncovered_through_frames(found, x, y),
