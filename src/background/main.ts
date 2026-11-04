@@ -3,6 +3,7 @@ import type { ContentToBackground } from "../shared/messages.ts";
 import type { BoundInvocation } from "../shared/invocation.ts";
 import { bundle_loader_deps, container_names, make_router_deps, page_of, reinject_deps } from "./browser_deps.ts";
 import { create_cmdline_service } from "./cmdline_service.ts";
+import { create_previous_tabs } from "./previous_tab.ts";
 import { browser_complete_items_deps, create_complete_items } from "./complete_items.ts";
 import { requirement_lookup } from "./availability.ts";
 import { list_keys } from "./list_keys.ts";
@@ -43,8 +44,11 @@ const cmdline = create_cmdline_service({
   },
 });
 
+const previous_tabs = create_previous_tabs(browser.storage.session);
+
 const complete_items = create_complete_items({
   ...browser_complete_items_deps,
+  previous_tab: previous_tabs.previous_of,
   is_opener: cmdline.is_opener,
   all_windows: async () => (await get_config()).settings.completion_all_windows === true,
   search_engines: async () => (await get_config()).search_engines,
@@ -114,7 +118,10 @@ browser.tabs.onUpdated.addListener((tab_id, change) => {
   return forget_mode_on_navigation(browser.storage.local, tab_id, change);
 });
 
-browser.tabs.onRemoved.addListener((tab_id) => {
+browser.tabs.onActivated.addListener(({ windowId, previousTabId }) => previous_tabs.activated(windowId, previousTabId));
+
+browser.tabs.onRemoved.addListener((tab_id, { windowId, isWindowClosing }) => {
+  void previous_tabs.removed(tab_id, windowId, isWindowClosing);
   void cmdline.forget_opener(tab_id);
   return forget_tab_mode(browser.storage.local, tab_id);
 });

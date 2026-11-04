@@ -3,10 +3,37 @@
 
 import type { SearchEngine } from "../shared/config.ts";
 import type { PageInfo } from "../shared/engines/index.ts";
-import type { BookmarkItem, CompleteItemsAnswer, EngineItem, HistoryItem, OpenRow, TabItem, WindowItem } from "../shared/messages.ts";
+import type { BookmarkItem, CompleteItemsAnswer, EngineItem, HistoryItem, OpenRow, TabContainer, TabItem, WindowItem } from "../shared/messages.ts";
 import { available_engine_names } from "./availability.ts";
 
-export type TabLike = { id?: number | undefined; index: number; windowId?: number | undefined; title?: string | undefined; url?: string | undefined; incognito: boolean };
+export type TabLike = {
+  id?: number | undefined;
+  index: number;
+  windowId?: number | undefined;
+  title?: string | undefined;
+  url?: string | undefined;
+  incognito: boolean;
+  favIconUrl?: string | undefined;
+  cookieStoreId?: string | undefined;
+  active?: boolean | undefined;
+  pinned?: boolean | undefined;
+  audible?: boolean | undefined;
+  mutedInfo?: { muted?: boolean | undefined } | undefined;
+  discarded?: boolean | undefined;
+};
+
+// The containers by cookie store id, as `contextualIdentities` names them.
+export type ContainerMarks = ReadonlyMap<string, TabContainer>;
+
+// A longer data: favicon costs more on the wire than the mark is worth, and the row falls back to the plain glyph.
+const MAX_DATA_FAVICON = 2048;
+
+// Only what an extension page can load and that is cheap to send. A chrome: favicon would fail to load in the page anyway.
+export function listed_favicon(url: string | undefined): string | undefined {
+  if (!url) return undefined;
+  if (/^https?:\/\//i.test(url)) return url;
+  return /^data:/i.test(url) && url.length <= MAX_DATA_FAVICON ? url : undefined;
+}
 
 // A tab the line can list. The page gets `TabItem` only.
 export type ListedTab = TabItem & { id: number; window_id: number };
@@ -31,10 +58,31 @@ const one_line = (text: string) => text.replace(/\s+/g, " ").trim();
 
 // A normal line lists only normal tabs and a private line only private tabs. The line's own window comes first, so
 // that is where a number lands when several windows are listed.
-export function listed_tabs(tabs: readonly TabLike[], scope: LineScope): ListedTab[] {
-  return tabs
-    .filter((tab) => tab.id !== undefined && tab.windowId !== undefined && tab.incognito === scope.incognito)
-    .map((tab): ListedTab => ({ id: tab.id as number, window_id: tab.windowId as number, number: tab.index + 1, title: one_line(tab.title || tab.url || ""), url: tab.url ?? "" }))
+export function listed_tabs(tabs: readonly TabLike[], scope: LineScope, containers: ContainerMarks = new Map(), previous_tab_id?: number): ListedTab[] {
+  const shown = tabs.filter((tab) => tab.id !== undefined && tab.windowId !== undefined && tab.incognito === scope.incognito);
+  return shown
+    .map((tab): ListedTab => {
+      const favicon = listed_favicon(tab.favIconUrl);
+      const container = tab.cookieStoreId === undefined ? undefined : containers.get(tab.cookieStoreId);
+      return {
+        id: tab.id as number,
+        window_id: tab.windowId as number,
+        number: tab.index + 1,
+        title: one_line(tab.title || tab.url || ""),
+        url: tab.url ?? "",
+        ...(favicon ? { favicon } : {}),
+        ...(container ? { container } : {}),
+        // Another window's active tab is not the current one, so only the line's window marks `%` and `#`.
+        ...(tab.active && tab.windowId === scope.window_id ? { active: true as const } : {}),
+        // `previous_tab_id` is the line's window's, but a tab moved to another window keeps its id, so only the line's window marks `#`. A closed tab is not in `shown`, so it marks nothing.
+        ...(tab.id === previous_tab_id && !tab.active && tab.windowId === scope.window_id ? { alternate: true as const } : {}),
+        ...(tab.pinned ? { pinned: true as const } : {}),
+        // A muted tab that plays sound is audible too, and the speaker would contradict the crossed one.
+        ...(tab.audible && !tab.mutedInfo?.muted ? { audible: true as const } : {}),
+        ...(tab.mutedInfo?.muted ? { muted: true as const } : {}),
+        ...(tab.discarded ? { discarded: true as const } : {}),
+      };
+    })
     .sort((a, b) => Number(b.window_id === scope.window_id) - Number(a.window_id === scope.window_id) || a.window_id - b.window_id || a.number - b.number);
 }
 
@@ -110,8 +158,16 @@ export function engine_items(engines: Record<string, SearchEngine>, page: PageIn
 
 export type TabQuery = (window_id: number | undefined) => Promise<TabLike[]>;
 
-export const read_tabs = async (query: TabQuery, scope: LineScope, all_windows: boolean): Promise<ListedTab[]> =>
-  listed_tabs(await query(all_windows ? undefined : scope.window_id), scope);
+export const read_tabs = async (query: TabQuery, scope: LineScope, all_windows: boolean, containers?: ContainerMarks, previous_tab_id?: number): Promise<ListedTab[]> =>
+  listed_tabs(await query(all_windows ? undefined : scope.window_id), scope, containers, previous_tab_id);
+
+type IdentityLike = { cookieStoreId: string; colorCode: string; iconUrl: string };
+
+// With containers off the query rejects or answers false, and no tab gets a mark. The default container never appears in the answer.
+export async function read_containers(query: () => Promise<readonly IdentityLike[] | false>): Promise<ContainerMarks> {
+  const identities = await Promise.resolve().then(query).catch(() => false as const);
+  return new Map(Array.isArray(identities) ? identities.map((identity) => [identity.cookieStoreId, { color: identity.colorCode, icon: identity.iconUrl }]) : []);
+}
 
 export const browser_complete_items_deps = {
   query_tabs: ((window_id) => browser.tabs.query(window_id === undefined ? {} : { windowId: window_id })) as TabQuery,
@@ -119,12 +175,15 @@ export const browser_complete_items_deps = {
   all_bookmarks: async (): Promise<BookmarkNode[]> => flatten_bookmarks(await browser.bookmarks.getTree()),
   // `startTime: 0` reaches all history, since the default is the last day. The page ranks, so it needs more than it shows.
   search_history: async (): Promise<HistoryNode[]> => browser.history.search({ text: "", startTime: 0, maxResults: 1000 }),
+  containers: (): Promise<ContainerMarks> => read_containers(() => browser.contextualIdentities.query({})),
 };
 
 export type CompleteItemsDeps = typeof browser_complete_items_deps & {
   // Whether the tab redeemed a ticket and has not closed or navigated since.
   is_opener: (tab_id: number) => Promise<boolean>;
   all_windows: () => Promise<boolean>;
+  // The tab the line's window was on before its current one.
+  previous_tab: (window_id: number) => Promise<number | undefined>;
   search_engines: () => Promise<Record<string, SearchEngine>>;
   // The page of the line's tab, undefined when it has none.
   page_of: (tab_id: number) => Promise<PageInfo | undefined>;
@@ -148,7 +207,8 @@ export function create_complete_items(deps: CompleteItemsDeps) {
     if (kind === "open") return open_items(asker);
     if (kind === "windows") return listed_windows(await deps.query_windows(), asker).map(({ number, title }) => ({ number, title }));
     if (kind === "bookmarks") return bookmark_items(await deps.all_bookmarks());
-    return (await read_tabs(deps.query_tabs, asker, await deps.all_windows())).map(({ number, title, url }) => ({ number, title, url }));
+    const tabs = await read_tabs(deps.query_tabs, asker, await deps.all_windows(), await deps.containers(), await deps.previous_tab(asker.window_id));
+    return tabs.map(({ id, window_id, ...item }) => item);
   };
 
   return {
