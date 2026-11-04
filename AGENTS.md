@@ -24,7 +24,7 @@ If code and the design disagree, stop and ask the maintainer. Do not change the 
 
 - Define each command once, in the registry. Keymaps, the command line, help and which-key reference commands and never define behavior.
 - Check args only in the one validator. Keys, the command line, the native host and snippets all pass through it.
-- Keep the content script under 15 KB minified, with no runtime dependency. Load anything bigger on first use.
+- Keep the content script under 16 KB minified, with no runtime dependency. Load anything bigger on first use.
 - Do not evaluate strings. Snippets from the user's own config are the only exception.
 - Give the native host a fixed set of verbs. Never add a shell or eval verb.
 - Keep no state only in memory. Store it, so a later move to Manifest V3 stays small.
