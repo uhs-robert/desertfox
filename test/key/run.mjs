@@ -677,6 +677,9 @@ async function main() {
       const mark = events.length;
       await send_keys("tt");
       await sleep(1000);
+      // The first Escape closes the completion list and keeps the line. The second closes the line.
+      await send_keys("-k", "Escape");
+      await sleep(400);
       await send_keys("-k", "Escape");
       await sleep(400);
       expect(visible_events(mark).length === 0, "tt switched tabs");
