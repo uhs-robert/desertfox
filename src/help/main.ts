@@ -3,30 +3,42 @@ import { COMPILED_KEYMAP_STORAGE_KEY } from "../shared/prefix_tree.ts";
 import type { CompiledKeymap } from "../shared/prefix_tree.ts";
 import { load_config } from "../background/config_load.ts";
 import { WARNINGS_STORAGE_KEY } from "../background/storage_keys.ts";
+import { effective_settings } from "../shared/config.ts";
 import { build_help_model } from "./model.ts";
+import type { HelpModel } from "./model.ts";
 import { engine_anchor, render_help } from "./render.ts";
+import { parse_route } from "./route.ts";
 
-// `engine.show <name>` opens this page at #engine=<name>.
-function show_engine_from_hash(): void {
-  const name = /^#engine=(.+)$/.exec(decodeURIComponent(location.hash))?.[1];
-  const row = name === undefined ? null : document.getElementById(engine_anchor(name));
-  row?.classList.add("oasisfox-help-current");
-  row?.scrollIntoView();
+function show_route(model: HelpModel, moved_by_user: boolean): void {
+  const route = parse_route(location.hash);
+  render_help(document.body, model, route);
+  // The render removed the link that had focus. Not on first load, where focus belongs to the browser.
+  if (moved_by_user) document.querySelector<HTMLElement>(".oasisfox-help-page h1")?.focus({ preventScroll: true });
+  // A new page starts at the top. An engine link scrolls to its row.
+  const row = route.engine === undefined ? null : document.getElementById(engine_anchor(route.engine));
+  if (row) {
+    row.classList.add("oasisfox-help-current");
+    row.scrollIntoView();
+  } else {
+    window.scrollTo(0, 0);
+  }
 }
 
 async function main(): Promise<void> {
   const commands_file = await load_commands_file();
   const stored = await browser.storage.local.get([COMPILED_KEYMAP_STORAGE_KEY, WARNINGS_STORAGE_KEY]);
-  const { config } = await load_config();
+  const { config, source } = await load_config();
   const model = build_help_model(
     commands_file.commands,
     stored[COMPILED_KEYMAP_STORAGE_KEY] as CompiledKeymap | undefined,
     (stored[WARNINGS_STORAGE_KEY] as string[] | undefined) ?? [],
     { search_engines: Object.keys(config.search_engines) },
     config.search_engines,
+    // The same shape the background stores, built from the fresh load so a config.reload shows at once.
+    { source, settings: effective_settings(config.settings), managed_file_hint: `~/.mozilla/managed-storage/${browser.runtime.id}.json` },
   );
-  render_help(document.body, model);
-  show_engine_from_hash();
+  show_route(model, false);
+  window.addEventListener("hashchange", () => show_route(model, true));
 }
 
 void main();
