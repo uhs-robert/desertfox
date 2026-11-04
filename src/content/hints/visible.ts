@@ -5,7 +5,7 @@ export type Rect = { left: number; top: number; right: number; bottom: number };
 export type PageProbe<T> = {
   // The IntersectionObserver result: the target shows inside every scrolling box that holds it.
   is_intersecting: (target: T) => boolean;
-  // Position in the viewport of the document that holds the target, and that viewport's size.
+  // Position in the viewport of the document that holds the target, and the size of the part a click can reach (without scrollbars).
   // One box per line a wrapped link covers; the bounding box when there are none.
   rects_of: (target: T) => Rect[];
   viewport_of: (target: T) => { width: number; height: number };
@@ -30,10 +30,13 @@ const CORNER_INSET = 2;
 // The points to try for one link, cheapest and likeliest first: the middle of each line box, then the corners of the first box.
 // At most MAX_LINE_BOXES + 4 points, so a page with thousands of links stays fast. One middle point alone misses a wrapped link (its middle lands on plain text) and an item part covered by a sticky header.
 export function points_to_probe(rects: readonly Rect[], viewport: { width: number; height: number }): { x: number; y: number }[] {
-  const shown = rects.slice(0, MAX_LINE_BOXES).flatMap((rect) => {
-    const middle = visible_point(rect, viewport);
-    return middle === undefined ? [] : [{ rect, middle }];
-  });
+  // Cap after dropping off-screen boxes, so a long wrapped link that starts above the screen keeps its visible lines.
+  const shown = rects
+    .flatMap((rect) => {
+      const middle = visible_point(rect, viewport);
+      return middle === undefined ? [] : [{ rect, middle }];
+    })
+    .slice(0, MAX_LINE_BOXES);
   const points = shown.map((entry) => entry.middle);
   const first = shown[0]?.rect;
   if (first === undefined) return points;

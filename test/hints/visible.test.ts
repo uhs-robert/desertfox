@@ -91,3 +91,15 @@ test("keep_visible stops probing a link at the first hit", () => {
   keep_visible([box], probe);
   assert.equal(calls, 1);
 });
+
+test("points_to_probe keeps the visible lines of a long link that starts above the screen", () => {
+  const lines = Array.from({ length: 8 }, (_, i) => at(10, -100 + i * 20, 100, 20));
+  const points = points_to_probe(lines, viewport);
+  assert.deepEqual(points.slice(0, 3), [{ x: 60, y: 10 }, { x: 60, y: 30 }, { x: 60, y: 50 }]);
+});
+
+test("points_to_probe stays inside a viewport narrower than the window by a scrollbar", () => {
+  const narrow = { width: 785, height: 600 };
+  const points = points_to_probe([at(700, 10, 100, 20)], narrow);
+  assert.ok(points.length > 0 && points.every((p) => p.x < 785));
+});

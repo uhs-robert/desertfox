@@ -66,7 +66,11 @@ async function keep_visible_ones(candidates: Found[]): Promise<Found[]> {
       const lines = Array.from(found.element.getClientRects());
       return lines.length > 0 ? lines : [found.element.getBoundingClientRect()];
     },
-    viewport_of: (found) => ({ width: window_of(found.element).innerWidth, height: window_of(found.element).innerHeight }),
+    viewport_of: (found) => {
+      const root = found.element.ownerDocument.documentElement;
+      const win = window_of(found.element);
+      return { width: root.clientWidth || win.innerWidth, height: root.clientHeight || win.innerHeight };
+    },
     is_hidden_by_style: (found) => window_of(found.element).getComputedStyle(found.element).visibility === "hidden",
     is_reachable_at: (found, x, y) => uncovered_through_frames(found, x, y),
   };
