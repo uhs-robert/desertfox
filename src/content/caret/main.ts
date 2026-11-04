@@ -18,6 +18,7 @@ import { first_visible_index } from "./start_point.ts";
 // `oasisfox_caret_target` is the element a hint picked. The hints bundle sets it just before it enters the mode.
 type CaretWindow = { oasisfox_host: BundleHostApi; oasisfox_caret_ready?: true; oasisfox_caret_target?: Element };
 const page = window as unknown as CaretWindow;
+const find = create_find(page.oasisfox_host);
 
 // `painted` holds the ends of each selection as the last paint left it, so a later change by the page shows.
 type Session = { model: TextModel; cursor: Cursor; mode: "caret" | "visual"; goal_x: number | undefined; painted: SelectionEnds[] };
@@ -58,7 +59,7 @@ function paint(open: Session): void {
   scroll_to_index(open.model, open.cursor.caret);
 }
 
-// Where a new session starts: the text of the picked element or the next text after it, else the caret's place in the page's own selection if it is on screen, else the first visible text.
+// Where a new session starts: the text of the picked element or the next text after it, else the match a search stands on while no later selection took the place, else the caret's place in the page's own selection if it is on screen, else the first visible text.
 function start_session(mode: "caret" | "visual"): Session | undefined {
   const target = page.oasisfox_caret_target;
   delete page.oasisfox_caret_target;
@@ -69,7 +70,7 @@ function start_session(mode: "caret" | "visual"): Session | undefined {
   }
   // The model covers the whole page, so motion is not trapped in the element.
   const model = build_text_model(document.body, target);
-  const caret = target === undefined ? first_visible_index(model) : model.start_index;
+  const caret = target === undefined ? (find.position(model) ?? first_visible_index(model)) : model.start_index;
   if (caret === undefined || model.text === "") {
     if (target !== undefined) page.oasisfox_host.show_toast("No text here");
     return undefined;
@@ -217,7 +218,6 @@ if (!page.oasisfox_caret_ready) {
   page.oasisfox_host.register_sink("visual", sink_for("visual"));
   page.oasisfox_host.register_handler("caret.move", handle_move);
   page.oasisfox_host.register_handler("visual.act", handle_act);
-  const find = create_find(page.oasisfox_host);
   page.oasisfox_host.register_handler("find.open", (args) => {
     const direction = args.direction === "backward" ? "backward" : "forward";
     find.begin(direction);
@@ -228,4 +228,5 @@ if (!page.oasisfox_caret_ready) {
   // Called by the command line while it is open, and not by any key.
   page.oasisfox_host.register_handler("find.live", (args) => find.update(args.text as string, args.report as (status: string) => void));
   page.oasisfox_host.register_handler("find.end", (args) => void find.end(args.keep === true));
+  page.oasisfox_host.register_handler("find.clear", () => find.clear());
 }

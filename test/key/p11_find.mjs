@@ -87,20 +87,48 @@ export async function run_cases({ rdp, extension_id, run_case, expect, open_page
     expect((await current_now()) === "needle five", `N after ? gave ${await current_now()}, expected needle five`);
   });
 
-  await run_case("Escape puts the scroll position back and clears every highlight, in the frame and the roots too", async () => {
+  await run_case("Escape clears every highlight, in the frame and the roots too, and keeps the page where the match put it", async () => {
     const page_id = "find_escape";
     await open_page("find_page", page_id, { new_tab: true });
     await send_keys("/needle");
     await wait_highlights((read) => total_painted(read) === 5, "the matches");
     await send_keys(" five");
     await wait_highlights((read) => current_of(read) === "needle five", "the match far below");
-    const mark = events.length;
     await sleep(400);
-    expect(last_scroll_y(page_id) > 500, `the page did not scroll to the far match (y ${last_scroll_y(page_id)})`);
+    const scrolled_to = last_scroll_y(page_id);
+    expect(scrolled_to > 500, `the page did not scroll to the far match (y ${scrolled_to})`);
     await send_keys(...ESCAPE);
-    await wait_event(mark, (event) => event.type === "scroll" && event.page_id === page_id && event.y === 0, "the scroll back to the top");
     const state = await wait_highlights((read) => total_painted(read) === 0, "every highlight cleared");
     expect(Object.values(state.sheets).every((count) => count === 0), `a sheet was left behind: ${JSON.stringify(state.sheets)}`);
+    await sleep(500);
+    expect(last_scroll_y(page_id) === scrolled_to, `the page scrolled back to ${last_scroll_y(page_id)}`);
+    // The match is kept as the place: n goes on from "five" and wraps to "one".
+    await send_keys("n");
+    await wait_highlights((read) => current_of(read) === "needle one", "n from the kept match wrapping to needle one");
+  });
+
+  await run_case("Escape in normal mode after Enter clears the highlights, and n brings them back from the same match", async () => {
+    const page_id = "find_escape_normal";
+    await open_page("find_page", page_id, { new_tab: true });
+    await send_keys("/needle");
+    await wait_highlights((read) => total_painted(read) === 5, "the matches");
+    await send_keys(...ENTER);
+    await sleep(300);
+    await send_keys(...ESCAPE);
+    await wait_highlights((read) => total_painted(read) === 0, "every highlight cleared");
+    await send_keys("n");
+    await wait_highlights((read) => current_of(read) === "needle two", "n from needle one onto needle two");
+  });
+
+  await run_case("Enter then / at once starts a new search that finds its matches", async () => {
+    const page_id = "find_quick";
+    await open_page("find_page", page_id, { new_tab: true });
+    await send_keys("/needle");
+    await wait_highlights((read) => total_painted(read) === 5, "the matches");
+    await send_keys(...ENTER, "/", "four");
+    await wait_highlights((read) => total_painted(read) === 1 && current_of(read) === "needle four", "the second search painting needle four");
+    await send_keys(...ESCAPE);
+    await wait_highlights((read) => total_painted(read) === 0, "every highlight cleared");
   });
 
   await run_case("a frame and a root that leave the page mid-search do not break it, while typing or on n", async () => {

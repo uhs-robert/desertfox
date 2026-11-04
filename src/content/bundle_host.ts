@@ -22,7 +22,7 @@ export type BundleHostApi = {
   // Any mode, the same path as a key that changes mode. A bundle uses it to enter its own mode.
   set_mode: (mode: Mode) => void;
   get_mode: () => Mode;
-  // Runs a handler of another bundle, loading that bundle first if needed. The id need not be a registry command: a bundle may offer handlers only its sibling calls.
+  // Runs a handler of another bundle, loading that bundle first if needed. The id need not be a registry command: a bundle may offer handlers only its sibling calls. The args are bundle-internal and unchecked by the validator, and may hold functions.
   run_command: (command_id: string, name: BundleName, args: Record<string, unknown>) => void;
   show_toast: (message: string) => void;
 };

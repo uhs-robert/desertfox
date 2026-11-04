@@ -43,5 +43,5 @@ export const WINDOW_FOCUS_STORAGE_KEY = "oasisfox_window_focus";
 export const REPEAT_STORAGE_KEY = "oasisfox_last_repeat";
 export const REPEAT_PRIVATE_STORAGE_KEY = "oasisfox_last_repeat_private";
 
-// The last page search, `{ query, direction }`, for `n` and `N` after a reload. Not written from a private window.
-export const FIND_LAST_STORAGE_KEY = "oasisfox_find_last";
+// Prefix of one `storage.local` key per register, holding its text. Register `/` holds the last page search. Not written from a private window.
+export const REGISTER_STORAGE_PREFIX = "oasisfox_register_";
