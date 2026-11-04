@@ -326,19 +326,21 @@ The cursor word decides what the list offers. A first word completes command nam
 
 Tab previews the selected row in the line and cycles. The list keeps ranking the text the user typed, and typing starts over. A single match goes in at once. Up and Down move and preview like Tab while the list is open, and stop at its ends. On a fresh line, before any typing or Tab, and with the list closed, they walk the history, so `:` Up Enter reruns the last command. Escape closes the list first and the line second. Enter runs the line as shown. The note row shows the usage of the selected row, or "no match".
 
-Completion sources load only when the param being completed needs them: commands, open tabs, bookmarks, search engines, containers and enum values. History completion with ranking comes in phase 3.
+Completion sources load only when the param being completed needs them: commands, open tabs, bookmarks, search engines, containers and enum values.
 
-Tabs and bookmarks come from the background, because it knows the window and privacy of the line's tab. A string param asks for them with `values: { from: "tabs" }` or `{ from: "bookmarks" }`. The page asks once per kind, keeps the answer for the line and ranks it with the shared scorer on every key. The row list shows "loading" in the note row until the answer lands. A reply is dropped when a newer fetch has started or the line has closed. The background answers only a tab whose line redeemed a ticket, until that tab closes or navigates. A normal line lists only normal tabs and a private line only private tabs. Bookmarks list in both.
+Tabs and bookmarks come from the background, because it knows the window and privacy of the line's tab. A string param asks for them with `values: { from: "tabs" }` or `{ from: "bookmarks" }`. The page asks once per kind, keeps the answer for the line and ranks it with the shared scorer on every key. The row list shows "loading" in the note row until the answer lands. Each kind has its own fetch in flight, so kinds do not drop each other. A reply is dropped when the line has closed. The background answers only a tab whose line redeemed a ticket, until that tab closes or navigates. A normal line lists only normal tabs and a private line only private tabs. Bookmarks list in both.
 
 - A tab row reads `3 GitHub`: the number is the tab's place in its window's tab bar, counted from 1, so it stays while the user types. Picking it puts the number and title in the line. `tab` reads a leading number as that place, and the number wins over the title. Other text is a fuzzy match on title and address, and an equal tie is refused with both tabs named. The `completion_all_windows` setting (default false) lists the tabs of every window. The same number then exists once per window, so the title picks one, else the line's own window.
 - A bookmark row shows the title and the address. With no word typed, the list shows the 20 newest. Picking one puts the address in the line. `bookmark` takes an exact address first, then the best fuzzy match, and refuses an equal tie.
+- `open` and its tab variants complete from bookmarks and history (`values: { from: "open" }`, `kind: "open"`). The background answers every row, tagged `bm` or `hist`, in the group order of the `open_completion` setting (default `["bookmarks", "history"]`, a source left out is not read), and drops a history row whose address is a bookmark. History comes from `history.search` with all time and up to 1000 entries, minus `about:`, `moz-extension:` and `data:` addresses. A private line lists no history. With no word typed the page shows the 20 newest bookmarks and `history_completion_max` history rows (default 10), a cap that rides in the answer. A typed word ranks every row and keeps the groups in order. A dim `bm` or `hist` cell tells the rows apart. Enter on text that matches no row still opens the address or searches with the default engine. The `history` permission adds an install prompt on update.
+- Engines ride the same fetch (`kind: "engines"`) for the first word of `search`, `--engine=` and `engine.show`. A row shows the engine name and its label. The background marks each engine with a yes or no for whether the line's tab page can fill its slots, and sends no page data. A row the page cannot fill is dimmed and reads "unavailable" in the args column; `engine.show` marks none. A word that ends in a dot (`github.`) lists every engine under that prefix, deeper ones included. The parser still reads a hidden engine, so a picked or typed one runs and the router refuses it.
 
 ### Hints
 
 - Candidates come from one selector per filter: all, clickable, inputs, links. The search reaches open shadow roots and, through Firefox's `openOrClosedShadowRoot`, closed ones.
 - An IntersectionObserver batch finds visible candidates. An `elementFromPoint` check removes covered ones.
 - Labels render in a closed shadow root. All layout reads happen before any write.
-- The actions are open, background tab, new window, select text, copy link, copy text, delete element and focus. Rapid mode keeps hints open for several picks.
+- The actions are open, background tab, new window, start caret mode, start visual mode, copy link, copy text, delete element and focus. Rapid mode keeps hints open for several picks.
 
 ### Which-key
 
@@ -360,7 +362,7 @@ Two keys in one group may share a label only when they run the same binding (`zi
 
 Caret mode puts a text cursor in the page, so the user can move through text with vim motions. Visual mode extends a selection with the same motions.
 
-- Caret mode starts at the first visible text, or at a hinted element with `hint.run action=select`. `v` starts a character selection and `V` a line selection.
+- Caret mode starts at the first visible text, or at a hinted element with `hint.run action=caret`, and visual mode at one with `action=visual`. `v` starts a character selection and `V` a line selection.
 - The motions are `h`, `j`, `k`, `l`, `w`, `b`, `e`, `0`, `$`, `gg` and `G`, with count prefixes. The line motions (`j`, `k`, `0`, `^`, `$`) use Firefox's `Selection.modify`, so a wrapped paragraph moves per screen line, and `j` and `k` keep their column. The other motions run on a text model of the visible page, and word motions count letters and digits of any script.
 - In visual mode, `o` swaps the ends of the selection, `y` copies it, and `s` searches it with `open.search` and the `default_engine` setting. Any command whose param defaults to `{ from: "selection" }` uses it. Escape returns to caret mode, then to normal mode.
 - The motions are registry commands in the `caret` and `visual` modes, so keys, which-key and help cover them like any other command.

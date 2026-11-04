@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { check_args, parse_command_line, tokenize, usage_line } from "../../src/shared/registry/index.ts";
 import type { EnumSources } from "../../src/shared/registry/index.ts";
+import "../../src/commands/hint.ts";
+import { registry as real_registry } from "../../src/shared/registry/index.ts";
 import { grammar_registry, search_sources } from "./grammar_registry.ts";
 
 const registry = grammar_registry();
@@ -261,4 +263,20 @@ test("the usage line lists flags in param order, the engine first and the subjec
   assert.equal(usage_line(registry.get("open.url")!), "open [-c=<container>|--container=<container>] [-t|--tab|-b|--background|-w|--window] url");
   assert.equal(usage_line(registry.get("mode.set")!), "mode normal|insert|ignore");
   assert.equal(usage_line(registry.get("tab.shift")!), "tab.shift [-w|--wrap] offset");
+});
+
+test("hint takes caret or visual by long flag, short flag or --action, and one only", () => {
+  const hint_args = (text: string) => {
+    const result = parse_command_line(real_registry, text, search_sources);
+    assert.equal(result.kind, "invocation", JSON.stringify(result));
+    return result.kind === "invocation" ? result.invocation.args : never();
+  };
+  assert.deepEqual(hint_args("hint --caret"), { action: "caret" });
+  assert.deepEqual(hint_args("hint -c"), { action: "caret" });
+  assert.deepEqual(hint_args("hint -v"), { action: "visual" });
+  assert.deepEqual(hint_args("hint --action=visual"), { action: "visual" });
+  for (const text of ["hint --visual --caret", "hint --action=caret --visual"]) {
+    const result = parse_command_line(real_registry, text, search_sources);
+    assert.deepEqual(result.kind === "error" ? result.error : result, "action is set twice");
+  }
 });

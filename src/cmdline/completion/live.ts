@@ -1,10 +1,10 @@
-// The tabs and bookmarks the list offers. The background hands them out once per kind and the line keeps them, so
+// The tabs, bookmarks and engines the list offers. The background hands them out once per kind and the line keeps them, so
 // ranking a keystroke never waits. Pure: the page passes in the asking and the redraw.
 
-import type { BookmarkItem, CompleteItemsAnswer, TabItem } from "../../shared/messages.ts";
+import type { BookmarkItem, CompleteItemsAnswer, EngineItem, OpenItems, TabItem } from "../../shared/messages.ts";
 
-export type LiveKind = "tabs" | "bookmarks";
-export type LiveItems = { tabs: TabItem[]; bookmarks: BookmarkItem[] };
+export type LiveKind = "tabs" | "bookmarks" | "engines" | "open";
+export type LiveItems = { tabs: TabItem[]; bookmarks: BookmarkItem[]; engines: EngineItem[]; open: OpenItems };
 export type LiveRead<Kind extends LiveKind> = { loading: true } | { loading: false; items: LiveItems[Kind] };
 
 export type LiveDeps = {
@@ -13,26 +13,28 @@ export type LiveDeps = {
   on_ready: () => void;
 };
 
+const empty_items = (kind: LiveKind): CompleteItemsAnswer["items"] => (kind === "open" ? { rows: [], history_max: 0 } : []);
+
 export function create_live_source(deps: LiveDeps) {
   const cache: { [Kind in LiveKind]?: LiveItems[Kind] } = {};
-  // Only the newest fetch may land. Switching to the other kind starts a new one and drops the older reply, which asks again if its kind comes back.
+  // Each kind has one fetch in flight at most, so kinds read in one pass do not drop each other. A reply lands only while its own request is the one recorded.
   let latest = 0;
-  let pending: { kind: LiveKind; request: number } | undefined;
+  const pending = new Map<LiveKind, number>();
 
   const land = (kind: LiveKind, request: number, items: CompleteItemsAnswer["items"]) => {
-    if (pending?.request !== request) return;
-    pending = undefined;
+    if (pending.get(kind) !== request) return;
+    pending.delete(kind);
     (cache as Record<LiveKind, unknown>)[kind] = items;
     deps.on_ready();
   };
 
   const start = (kind: LiveKind) => {
     const request = ++latest;
-    pending = { kind, request };
+    pending.set(kind, request);
     // The background answers nothing for a line it did not open, and a failed call looks the same. Either way the line has no candidates.
     deps.ask(kind).then(
-      (answer) => land(kind, request, answer?.items ?? []),
-      () => land(kind, request, []),
+      (answer) => land(kind, request, answer?.items ?? empty_items(kind)),
+      () => land(kind, request, empty_items(kind)),
     );
   };
 
@@ -40,12 +42,12 @@ export function create_live_source(deps: LiveDeps) {
     read: <Kind extends LiveKind>(kind: Kind): LiveRead<Kind> => {
       const items = cache[kind] as LiveItems[Kind] | undefined;
       if (items) return { loading: false, items };
-      if (pending?.kind !== kind) start(kind);
+      if (!pending.has(kind)) start(kind);
       return { loading: true };
     },
     // The line closed: a reply still on its way lands nowhere.
     close: () => {
-      pending = undefined;
+      pending.clear();
     },
   };
 }

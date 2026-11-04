@@ -144,7 +144,7 @@ async function main() {
   const managed_file = join(managed_dir, `${EXTENSION_ID}.json`);
   const server = await start_server();
   // The built-in duck engine is replaced by this server, so a search from the keys lands on a page the test can read.
-  // The keysite, keyrepo, keysub and keypage engines are for p8_engines.mjs: the test page has a host but is no GitHub repo or subreddit.
+  // The keyfam.site engine is for p9_completion.mjs. The keysite, keyrepo, keysub and keypage engines are for p8_engines.mjs: the test page has a host but is no GitHub repo or subreddit.
   const engine_url = (id, slot) => `http://127.0.0.1:${server.port}/page?id=${id}&q=${slot}+{query}`;
   writeFileSync(
     join(config_dir, "search_engines.toml"),
@@ -154,6 +154,8 @@ async function main() {
       `[keyrepo]\nlabel = "Key repo"\nurl = "${engine_url("engine_repo", "{repo}")}"`,
       `[keysub]\nlabel = "Key sub"\nurl = "${engine_url("engine_sub", "{subreddit}")}"\nfallback = "duck"`,
       `[keypage]\nlabel = "Key page"\nurl = "http://127.0.0.1:${server.port}/page?id=engine_page&q={query|url}"`,
+      `[keyfam]\nlabel = "Key family"\nurl = "${engine_url("engine_family", "{host}")}"`,
+      `[keyfam.site]\nlabel = "Key family: site"\nurl = "${engine_url("engine_family", "{host}")}"`,
       "",
     ].join("\n"),
   );
@@ -503,7 +505,7 @@ async function main() {
       await open_page("page", "bundle_c", { new_tab: true });
       const is_label = (label) => (event) => event.type === "indicator" && event.page_id === "bundle_c" && event.label === label;
       const mark = events.length;
-      await send_keys("V");
+      await send_keys("gV");
       await wait_event(mark, is_label("CARET"), "the CARET badge");
       const caret_loads = await injections_of("caret.js", 1);
       expect(caret_loads.length >= 1 && caret_loads.at(-1).ok, "caret.js was not injected");
@@ -610,7 +612,7 @@ async function main() {
     await run_case("V on the help page does not leave it stuck in caret mode", async () => {
       const badge = () => evaluate_in_background(rdp, EXTENSION_ID, `${extension_view("help.html")}?.document.querySelector("[data-oasisfox-mode]")?.getAttribute("data-oasisfox-mode") ?? null`);
       const loads_before = await settled_injection_count("caret.js");
-      await send_keys("V");
+      await send_keys("gV");
       await sleep(1500);
       const loads = (await injections_of("caret.js")).slice(loads_before);
       measurements.help_page_caret_load = loads.length === 0 ? "not requested" : loads.at(-1).ok ? "executeScript ok" : "executeScript refused";

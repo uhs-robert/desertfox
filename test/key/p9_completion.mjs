@@ -1,7 +1,7 @@
 // Key test cases of piece P3 (command line completion). run.mjs calls run_cases with its helpers.
 // The line page sits in an iframe at the extension origin, which neither executeScript nor the debugger helper here
 // can read. The cases drive it with keys and check what the commands it runs did. The look is checked in screenshots:
-// set OASISFOX_SHOT_DIR to save the list on open, after a fuzzy match and in a narrow window.
+// set OASISFOX_SHOT_DIR to save the list on open, after a fuzzy match (tab.close shows its keys in the last column) and in a narrow window.
 import { evaluate_in_background } from "./rdp.mjs";
 
 const CTRL = (key) => ["-M", "ctrl", key, "-m", "ctrl"];
@@ -67,6 +67,17 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, open_p
     }
     expect(!urls.some((url) => url.includes("p9_right_")), "the tabs on the right are still open");
     expect(urls.some((url) => url.includes("p9_left")), "the active tab was closed too");
+  });
+
+  await run_case("search keyfam. lists the family, Tab previews its engine and Enter runs the search with it", async () => {
+    await send_keys(":");
+    await sleep(600);
+    const mark = events.length;
+    await send_keys("search keyfam.", "-k", "Tab", "hello", "-k", "Return");
+    const result = await wait_event(mark, (event) => event.type === "tree_read" && event.page_id === "engine_family", "the family engine page");
+    expect(decodeURIComponent(result.search).includes("hello"), `the page opened with ${result.search}`);
+    await send_keys(...CTRL("w"));
+    await sleep(500);
   });
 
   await run_case("Escape closes the list and then the line, so the page takes j again", async () => {
