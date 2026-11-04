@@ -176,7 +176,7 @@ export function start_server() {
     }
     if (url.pathname === "/find_big") {
       // Three hundred thousand matches of "e" in one text node, and one "ex" at the end: a scan for "e" takes many slices.
-      return response.end(page(`find_big ${id}`, `<p id="big" style="word-break:break-all">${"e ".repeat(300000)}ex</p>`));
+      return response.end(page(`find_big ${id}`, `<p id="big" style="word-break:break-all">${"e ".repeat(Number(/_(\d+)$/.exec(id)?.[1] ?? 300000))}ex</p>`));
     }
     if (url.pathname === "/caret_columns") {
       // The middle line is short: j over it must still come back to the column the caret left.
