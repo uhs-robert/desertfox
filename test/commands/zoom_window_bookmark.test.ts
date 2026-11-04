@@ -30,6 +30,7 @@ test("window.new turns an empty url into a blank window", async () => {
     close: async () => {},
     restore_last_closed_window: async () => false,
     windows: async () => [],
+    recent_window_ids: async () => [],
     move_tab_to_window: async () => {},
   });
   await handlers.create({ url: "", private: true });
@@ -116,19 +117,20 @@ test("bookmark.open opens the picked address where the flag says, and opens noth
 
 // Windows in getAll order: 1 normal (the current one), 2 private, 3 normal used long ago, 4 normal used just now.
 const attach_windows = (): WindowLike[] => [
-  { id: 2, incognito: false, tabs: [{ active: true, title: "Here", lastAccessed: 500 }] },
-  { id: 5, incognito: true, tabs: [{ active: true, title: "Secret", lastAccessed: 900 }] },
-  { id: 6, incognito: false, tabs: [{ active: true, title: "Old", lastAccessed: 100 }] },
-  { id: 7, incognito: false, tabs: [{ active: true, title: "Recent", lastAccessed: 800 }] },
+  { id: 2, type: "normal", incognito: false, tabs: [{ active: true, title: "Here", lastAccessed: 500 }] },
+  { id: 5, type: "normal", incognito: true, tabs: [{ active: true, title: "Secret", lastAccessed: 900 }] },
+  { id: 6, type: "normal", incognito: false, tabs: [{ active: true, title: "Old", lastAccessed: 100 }] },
+  { id: 7, type: "normal", incognito: false, tabs: [{ active: true, title: "Recent", lastAccessed: 800 }] },
 ];
 
-function attach_fake(windows: WindowLike[] = attach_windows()) {
+function attach_fake(windows: WindowLike[] = attach_windows(), recent_ids: number[] = []) {
   const log: string[] = [];
   const handlers = make_window_handlers({
     create: async () => {},
     close: async () => {},
     restore_last_closed_window: async () => false,
     windows: async () => windows,
+    recent_window_ids: async () => recent_ids,
     // A move never unpins: the only calls are the move and the focus.
     move_tab_to_window: async (tab_id, window_id) => void log.push(`move ${tab_id} to ${window_id}`),
   });
@@ -161,13 +163,39 @@ test("tab.attach refuses a private window from a normal one, and the reverse", a
 });
 
 test("tab.attach refuses with one window, its own window, an unknown number and text with no number", async () => {
-  const only = attach_fake([{ id: 2, incognito: false, tabs: [] }]);
+  const only = attach_fake([{ id: 2, type: "normal", incognito: false, tabs: [] }]);
   await assert.rejects(only.handlers.attach(ctx, { window: "" }), /No other window to move to/);
-  const no_match = attach_fake([{ id: 2, incognito: false, tabs: [] }, { id: 5, incognito: true, tabs: [] }]);
+  const no_match = attach_fake([{ id: 2, type: "normal", incognito: false, tabs: [] }, { id: 5, type: "normal", incognito: true, tabs: [] }]);
   await assert.rejects(no_match.handlers.attach(ctx, { window: "" }), /No other window to move to/);
   const { handlers, log } = attach_fake();
   await assert.rejects(handlers.attach(ctx, { window: "1" }), /already in that window/);
   await assert.rejects(handlers.attach(ctx, { window: "9" }), /No window 9/);
   await assert.rejects(handlers.attach(ctx, { window: "Old" }), /Give a window number/);
   assert.deepEqual(log, []);
+});
+
+test("a bare tab.attach never picks a popup window, even the one used last", async () => {
+  const windows = [...attach_windows(), { id: 8, type: "popup", incognito: false, tabs: [{ active: true, title: "Pop", lastAccessed: 999 }] }];
+  const { handlers, log } = attach_fake(windows, [8]);
+  await handlers.attach(ctx, { window: "" });
+  assert.deepEqual(log, ["move 7 to 7"]);
+  await assert.rejects(handlers.attach(ctx, { window: "5" }), /No window 5/);
+});
+
+test("a bare tab.attach goes to the window focused last, ahead of the one touched last", async () => {
+  const { handlers, log } = attach_fake(attach_windows(), [2, 6, 7]);
+  await handlers.attach(ctx, { window: "" });
+  assert.deepEqual(log, ["move 7 to 6"]);
+});
+
+test("a bare tab.attach skips a focused window that is closed, private or the current one", async () => {
+  const { handlers, log } = attach_fake(attach_windows(), [99, 5, 2, 6]);
+  await handlers.attach(ctx, { window: "" });
+  assert.deepEqual(log, ["move 7 to 6"]);
+});
+
+test("a bare tab.attach falls back to the last touched window when no focused window is a candidate", async () => {
+  const { handlers, log } = attach_fake(attach_windows(), [99, 5, 2]);
+  await handlers.attach(ctx, { window: "" });
+  assert.deepEqual(log, ["move 7 to 7"]);
 });

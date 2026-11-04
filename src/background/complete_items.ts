@@ -16,6 +16,8 @@ export type LineScope = { window_id: number; incognito: boolean };
 
 export type WindowLike = {
   id?: number | undefined;
+  // Only `normal` windows hold movable tabs. Popup, panel and app windows are skipped.
+  type?: string | undefined;
   incognito: boolean;
   tabs?: { active?: boolean | undefined; title?: string | undefined; url?: string | undefined; lastAccessed?: number | undefined }[] | undefined;
 };
@@ -36,10 +38,10 @@ export function listed_tabs(tabs: readonly TabLike[], scope: LineScope): ListedT
     .sort((a, b) => Number(b.window_id === scope.window_id) - Number(a.window_id === scope.window_id) || a.window_id - b.window_id || a.number - b.number);
 }
 
-// Every window with its place in `windows.getAll`, whatever its privacy: a typed number for a window the list hides still has to be found, to be refused by name.
+// Every normal window with its place in `windows.getAll` (popups still count a place, so numbers stay stable), whatever its privacy: a typed number for a window the list hides still has to be found, to be refused by name.
 export function numbered_windows(windows: readonly WindowLike[]): NumberedWindow[] {
   return windows.flatMap((window, place) => {
-    if (window.id === undefined) return [];
+    if (window.id === undefined || window.type !== "normal") return [];
     const active = window.tabs?.find((tab) => tab.active);
     return [{ id: window.id, incognito: window.incognito, number: place + 1, title: one_line(active?.title || active?.url || ""), last_used: active?.lastAccessed ?? 0 }];
   });

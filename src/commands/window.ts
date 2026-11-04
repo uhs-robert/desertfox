@@ -2,6 +2,7 @@ import type { CommandContext } from "../shared/command.ts";
 import { define } from "../shared/registry/index.ts";
 import { numbered_windows } from "../background/complete_items.ts";
 import type { NumberedWindow, WindowLike } from "../background/complete_items.ts";
+import { read_recent_window_ids } from "../background/window_focus.ts";
 import { typed_url_target } from "./open_target.ts";
 
 export type WindowDeps = {
@@ -10,18 +11,21 @@ export type WindowDeps = {
   // False when the closed-window list is empty.
   restore_last_closed_window: () => Promise<boolean>;
   windows: () => Promise<WindowLike[]>;
+  // Window ids, the one focused last first.
+  recent_window_ids: () => Promise<number[]>;
   // Moves the tab to the end of its kind (pinned or not) in the window, then shows it there.
   move_tab_to_window: (tab_id: number, window_id: number) => Promise<void>;
 };
 
 const LEADING_NUMBER = /^(\d+)(?:\s|$)/;
 
-// A bare attach goes to the window that was used last: the one whose active tab was touched most recently.
-function last_used_other(windows: readonly NumberedWindow[], current: NumberedWindow): NumberedWindow {
+// A bare attach goes to the window focused last. With no focus record of any candidate it goes to the one whose active tab was touched most recently.
+function last_used_other(windows: readonly NumberedWindow[], current: NumberedWindow, recent_ids: readonly number[]): NumberedWindow {
   const others = windows.filter((window) => window.id !== current.id && window.incognito === current.incognito);
   const [first, ...rest] = others;
   if (!first) throw new Error("No other window to move to");
-  return rest.reduce((best, window) => (window.last_used > best.last_used ? window : best), first);
+  const focused = recent_ids.map((id) => others.find((window) => window.id === id)).find((window) => window !== undefined);
+  return focused ?? rest.reduce((best, window) => (window.last_used > best.last_used ? window : best), first);
 }
 
 // `2 GitHub` is what a completion pick puts in the line. Only the number counts, because the title may have changed since the pick.
@@ -47,7 +51,7 @@ export function make_window_handlers(deps: WindowDeps) {
       const current = windows.find((window) => window.id === ctx.window_id);
       if (!current) throw new Error("no active window");
       const text = args.window.trim();
-      const target = text === "" ? last_used_other(windows, current) : window_by_number(windows, text);
+      const target = text === "" ? last_used_other(windows, current, await deps.recent_window_ids()) : window_by_number(windows, text);
       if (target.id === current.id) throw new Error("The tab is already in that window");
       if (target.incognito !== current.incognito) throw new Error("Cannot move a tab between private and normal windows");
       await deps.move_tab_to_window(ctx.tab_id, target.id);
@@ -64,6 +68,7 @@ export const browser_window_deps: WindowDeps = {
   },
   close: (window_id) => browser.windows.remove(window_id),
   windows: () => browser.windows.getAll({ populate: true }),
+  recent_window_ids: () => read_recent_window_ids(browser.storage.session),
   move_tab_to_window: async (tab_id, window_id) => {
     // Firefox ignores a move of a pinned tab past the pinned area, so a pinned tab goes to the end of the pinned tabs instead.
     const { pinned } = await browser.tabs.get(tab_id);

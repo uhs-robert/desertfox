@@ -17,8 +17,9 @@ const ENGINES = {
   "github.repo.fb": { url: "https://github.com/{repo}", label: "GitHub fallback", slots: ["repo"], fallback: "https://github.com/" },
 };
 
-const window_of = (id: number, incognito: boolean, title: string): WindowLike => ({
+const window_of = (id: number, incognito: boolean, title: string, type = "normal"): WindowLike => ({
   id,
+  type,
   incognito,
   tabs: [{ active: false, title: "background tab" }, { active: true, title, url: `https://w${id}.test/`, lastAccessed: id }],
 });
@@ -308,4 +309,9 @@ test("a failed history read leaves the bookmarks, and a failed bookmark read lea
   const tags = async (failing: "history" | "bookmarks") => ((await service(failing).answer("open", NORMAL_LINE))?.items as { rows: { tag: string }[] }).rows.map((row) => row.tag);
   assert.deepEqual(await tags("history"), ["bm", "bm"]);
   assert.deepEqual(await tags("bookmarks"), ["hist", "hist", "hist"]);
+});
+
+test("a popup window is not listed, and it still counts a place so the numbers stay put", () => {
+  const with_popup = [window_of(10, false, "Mail"), window_of(30, false, "Popup", "popup"), window_of(11, false, "Docs")];
+  assert.deepEqual(listed_windows(with_popup, NORMAL_LINE).map(({ number, title }) => ({ number, title })), [{ number: 3, title: "Docs" }]);
 });
