@@ -142,6 +142,12 @@ export function start_server() {
       const frames = `<iframe id="frame" src="${inner}" style="width:400px;height:160px"></iframe><p id="tail">top tail</p><iframe id="xframe" src="http://localhost:${request.socket.localPort}/page?id=${id}_cross" style="width:200px;height:60px"></iframe>`;
       return response.end(page(`caret_frames ${id}`, `<p id="head">top head</p>${frames}`));
     }
+    if (url.pathname === "/caret_tall_frame") {
+      // A tall same-origin frame below a spacer, with the page scrolled so the frame's text sits on screen. In the frame's own coordinates that text is far below the page's viewport edge, so a wrong space shows as a scroll.
+      const inner = '<body style=\'margin:0\'><div style=\'height:1200px\'></div><p>target words</p></body>';
+      const frame = `<div style="height:600px"></div><iframe id="tall" srcdoc="${inner}" style="width:400px;height:3000px;border:0;display:block"></iframe>`;
+      return response.end(page(`caret_tall_frame ${id}`, frame, "<script>addEventListener('load', () => { scrollTo(0, 1500); document.getElementById('tall').contentWindow.focus(); })</script>"));
+    }
     if (url.pathname === "/caret_frame_inner") {
       // With remove_frame in the id, the frame takes itself off its parent a second after the caret first lands in it.
       const remove = id.includes("remove_frame")
