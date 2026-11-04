@@ -2,7 +2,10 @@
 // The text model lets us ask from any character and read the answer back as a character.
 
 import type { Motion } from "./motion.ts";
-import type { TextModel } from "./text_model.ts";
+import { scroll_delta } from "./scroll_delta.ts";
+import type { TextModel, TreeRun } from "./text_model.ts";
+
+const DOCUMENT_NODE = 9;
 
 // Where a frame's document sits in this script's window: the content box of each frame element around it, added up.
 export function frame_offset(of_document: Document): { x: number; y: number } {
@@ -30,6 +33,45 @@ export function character_box(model: TextModel, index: number): DOMRect | undefi
   return new DOMRect(box.x + shift.x, box.y + shift.y, box.width, box.height);
 }
 
+// The box around the characters from `from` to `to`, so a match is brought in whole and not by its first letter.
+function span_box(model: TextModel, from: number, to = from): DOMRect | undefined {
+  const first = character_box(model, from);
+  const last = to === from ? first : character_box(model, to);
+  if (!first || !last) return first;
+  const left = Math.min(first.left, last.left);
+  const top = Math.min(first.top, last.top);
+  return new DOMRect(left, top, Math.max(first.right, last.right) - left, Math.max(first.bottom, last.bottom) - top);
+}
+
+// The next box out that can scroll: the parent, the host of a shadow root, or the frame around a document.
+const outer_view = (node: Node): Element | null =>
+  node.parentElement ?? (node.parentNode as ShadowRoot | null)?.host ?? (node.nodeType === Node.DOCUMENT_NODE ? ((node as Document).defaultView?.frameElement ?? null) : null);
+
+// Only the character, or the span up to `last_index`, counts: its paragraph can be taller than the screen. Each scrollable ancestor scrolls first, then the window, then the same again out through each frame.
+// The boxes are all in this script's window, so a view's edges shift by the frames around it.
+// `bottom_inset` keeps the match above something drawn over the bottom of this script's window, such as the command line. A frame's own viewport is not covered by it. 
+export function scroll_to_index(model: TextModel, index: number, options: { bottom_inset?: number; last_index?: number } = {}): void {
+  const caret_node = model.point_at(index).node;
+  for (let view = caret_node.nodeType === Node.ELEMENT_NODE ? (caret_node as Element) : outer_view(caret_node); view; ) {
+    const owner = view.ownerDocument;
+    const nested = view !== owner.documentElement && view !== owner.body;
+    if (nested && view.scrollHeight <= view.clientHeight && view.scrollWidth <= view.clientWidth) {
+      view = outer_view(view);
+      continue;
+    }
+    const box = span_box(model, index, options.last_index);
+    const window_of_view = owner.defaultView;
+    if (!box || !window_of_view) return;
+    const shift = frame_offset(owner);
+    const edges = nested ? view.getBoundingClientRect() : { left: 0, right: window_of_view.innerWidth, top: 0, bottom: window_of_view.innerHeight - (owner === document ? (options.bottom_inset ?? 0) : 0) };
+    const by_x = scroll_delta({ low: box.left, high: box.right }, { low: edges.left + shift.x, high: edges.right + shift.x }, box.height);
+    const by_y = scroll_delta({ low: box.top, high: box.bottom }, { low: edges.top + shift.y, high: edges.bottom + shift.y }, box.height);
+    if (by_x || by_y) (nested ? view : window_of_view).scrollBy(by_x, by_y);
+    // The walk stops at this script's own document: past it, the box is in a different space than the outer views.
+    view = nested ? outer_view(view) : owner === document ? null : outer_view(owner);
+  }
+}
+
 // `goal_x` is where j and k aim on each new line, so a short line in between does not move the column. A caller keeps what comes back for the next j or k and drops it after any other motion.
 export function screen_line_target(model: TextModel, from: number, motion: Motion, goal_x?: number): { index: number; goal_x: number | undefined } {
   const modified = modify_target(model, from, motion);
@@ -54,11 +96,22 @@ function adjacent_line_start(text: string, from: number, direction: Motion["dire
   return line_start > 0 ? text.lastIndexOf("\n", line_start - 2) + 1 : from;
 }
 
-// Selection.modify stays in one document. On a frame's last line it only goes to the line's end, and on the page it steps over a frame. Then the next or previous line of the model stands in.
-function line_target(model: TextModel, from: number, modified: number, direction: Motion["direction"]): number {
-  const crossed_tree = model.tree_runs(Math.min(from, modified), Math.max(from, modified) + 1).length > 1;
+// Selection.modify walks into a shadow root of its own document, so an inline host in a wrapped paragraph is on the screen line it shows. It stalls on a block host and stays inside one frame, so those two need the model's line.
+export function crosses_frame_or_block_host(runs: TreeRun[]): boolean {
+  const owner_of = (tree: TreeRun["tree"]) => (tree.nodeType === DOCUMENT_NODE ? (tree as Document) : (tree as ShadowRoot).ownerDocument);
+  const is_block_host = ({ tree }: TreeRun) => {
+    if (tree.nodeType === DOCUMENT_NODE) return false;
+    const host = (tree as ShadowRoot).host;
+    return !host.ownerDocument.defaultView!.getComputedStyle(host).display.startsWith("inline");
+  };
+  return runs.length > 1 && runs.some((run) => owner_of(run.tree) !== owner_of(runs[0]!.tree) || is_block_host(run));
+}
+
+// Where Selection.modify stalls or leaves its document, the next or previous line of the model stands in.
+export function line_target(model: TextModel, from: number, modified: number, direction: Motion["direction"]): number {
+  const crossed = crosses_frame_or_block_host(model.tree_runs(Math.min(from, modified), Math.max(from, modified) + 1));
   const stalled = modified === from || same_row(model, from, modified);
-  return crossed_tree || stalled ? adjacent_line_start(model.text, from, direction) : modified;
+  return crossed || stalled ? adjacent_line_start(model.text, from, direction) : modified;
 }
 
 // The character on the target's screen line whose left edge is nearest to x. It measures boxes, because caretPositionFromPoint answers null for a line below the screen.

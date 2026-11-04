@@ -1,6 +1,6 @@
 import { build } from "esbuild";
 import { write_commands_json } from "./write_commands_json.mjs";
-import { copyFile, mkdir, rm, stat } from "node:fs/promises";
+import { copyFile, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 
 // Minified size limits. content.js loads on every page, so its limit is the tightest. The rest load on first use.
 const MAX_BYTES = {
@@ -41,6 +41,11 @@ for (const file of ["manifest.json", "managed_schema.json", "help/help.html", "o
 
 await mkdir("dist/icons", { recursive: true });
 await copyFile("src/icons/oasisfox.svg", "dist/icons/oasisfox.svg");
+
+// A doc the renderer cannot read fails the build here, with the file and line.
+const { parse_markdown } = await import("./render_docs.ts");
+const guide_blocks = parse_markdown("docs/search_engines.md", await readFile("docs/search_engines.md", "utf8"));
+await writeFile("dist/search_engines_guide.json", `${JSON.stringify(guide_blocks)}\n`);
 
 const command_count = await write_commands_json("dist");
 

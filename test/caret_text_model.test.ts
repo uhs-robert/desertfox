@@ -141,3 +141,13 @@ test("the model is stale once a shadow host leaves the page", () => {
   assert.equal(trees_alive(model), false);
   assert.equal(documents_of(model).length, 1);
 });
+
+test("the text of a node is read once, because each read of a page node's data copies it", () => {
+  let reads = 0;
+  const long_text = text("word ".repeat(5000));
+  const data = long_text.data as string;
+  Object.defineProperty(long_text, "data", { get: () => (reads++, data) });
+  const model = model_of(element("body", [element("p", [long_text])]));
+  assert.ok(model.text.startsWith("word word word"));
+  assert.ok(reads <= 2, `the text was read ${reads} times`);
+});

@@ -1,4 +1,5 @@
 import type { Mode } from "../../shared/index.ts";
+import { bundles } from "../bundles.ts";
 import { page_mode } from "../page_mode.ts";
 import type { ContentHandler } from "./types.ts";
 import { blur_focused_element } from "./page.ts";
@@ -11,6 +12,8 @@ export const mode_set: ContentHandler = {
 
 export const mode_escape: ContentHandler = {
   run: () => {
+    // After a search, Escape takes the highlights off. Without the bundle there are none.
+    if (bundles.has_handler("find.clear")) bundles.run_command("find.clear", "caret", {}, "", false);
     page_mode.escape();
     blur_focused_element();
   },

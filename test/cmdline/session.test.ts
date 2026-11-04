@@ -84,3 +84,15 @@ test("the pre-check keeps the line open with its message and sends nothing", () 
   assert.deepEqual(session.run("cmdline.submit", undefined), { kind: "submit", invocation: { id: "scroll.by", args: { count: "2" } }, text: "scroll 2" });
   assert.deepEqual(checked, ["scroll.by", "scroll.by"]);
 });
+
+test("a search line commits on Enter, closes when empty, and ignores history and the list", () => {
+  const session = create_session({ search: true, history: ["old command"], parse: () => ({ kind: "error", error: "no" }) });
+  session.open("");
+  assert.deepEqual(session.run("cmdline.submit", undefined), { kind: "close" });
+  session.edit("foo");
+  assert.deepEqual(session.run("cmdline.submit", undefined), { kind: "find_commit" });
+  assert.deepEqual(session.run("cmdline.history", { direction: "prev" }), { kind: "render" });
+  assert.equal(session.get_text(), "foo");
+  session.set_status("1 of 3");
+  assert.equal(session.get_hint(), "1 of 3");
+});

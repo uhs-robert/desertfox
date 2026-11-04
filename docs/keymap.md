@@ -20,7 +20,7 @@ A note "(prompts)" means the binding leaves a param out, so the command line ask
 
 <!-- BEGIN generated -->
 
-bound: 177 (normal 121, hint 2, cmdline 11, caret 18, visual 20, insert 1, ignore 1, browser 3) | later: 14 | dropped: 6
+bound: 184 (normal 128, hint 2, cmdline 11, caret 18, visual 20, insert 1, ignore 1, browser 3) | later: 14 | dropped: 6
 
 ### normal
 
@@ -136,8 +136,11 @@ bound: 177 (normal 121, hint 2, cmdline 11, caret 18, visual 20, insert 1, ignor
 | `gO` | bound | `open --tab` (prompts) | Open URL |  |
 | `f` | bound | `hint` | Click element |  |
 | `F` | bound | `hint --background` | Click element in background tab |  |
-| `v` | bound | `hint --caret --all` | Start caret mode at element |  |
-| `V` | bound | `hint --visual --all` | Start visual mode at element |  |
+| `v` | bound | `mode caret` | Start caret mode |  |
+| `V` | bound | `mode visual` | Start visual mode |  |
+| `;v` | bound | `hint --caret --all` | Start caret mode at element |  |
+| `;V` | bound | `hint --visual --all` | Start visual mode at element |  |
+| `;;` | bound | `cmdline.open --text='hint '` | Open the command line with hint |  |
 | `;b` | bound | `hint` | Click element |  |
 | `;B` | bound | `hint --background` | Click element in background tab |  |
 | `;y` | bound | `hint --copy --links` | Copy link address |  |
@@ -145,6 +148,10 @@ bound: 177 (normal 121, hint 2, cmdline 11, caret 18, visual 20, insert 1, ignor
 | `;i` | bound | `hint --inputs` | Click input |  |
 | `;l` | bound | `hint --links` | Click link |  |
 | `:` | bound | `cmdline.open` | Command line |  |
+| `/` | bound | `find.open` | Find forward |  |
+| `?` | bound | `find.open --backward` | Find backward |  |
+| `n` | bound | `find.next` | Next match |  |
+| `N` | bound | `find.prev` | Previous match |  |
 | `g?` | bound | `help` | Help |  |
 | `gV` | bound | `mode caret` | Set mode |  |
 | `m` | later | `mark.add` |  | phase 3, key param |

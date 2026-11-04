@@ -58,7 +58,8 @@ async function open_line(start: Start, port: MessagePort): Promise<void> {
   const user_style = document.createElement("style");
   user_style.textContent = opened.css;
   document.head.append(user_style);
-  if (opened.prompt) show_prompt(document.querySelector<HTMLElement>(".oasisfox-cmdline-prompt")!, opened.prompt);
+  if (start.search) show_prompt(document.querySelector<HTMLElement>(".oasisfox-cmdline-prompt")!, start.search === "forward" ? "/ " : "? ");
+  else if (opened.prompt) show_prompt(document.querySelector<HTMLElement>(".oasisfox-cmdline-prompt")!, opened.prompt);
   const keymap = stored[COMPILED_KEYMAP_STORAGE_KEY] as CompiledKeymap | undefined;
   const opened_from = typeof start.mode === "string" ? start.mode : "normal";
   const key_text = key_labels(keymap, opened.commands, opened_from);
@@ -73,9 +74,10 @@ async function open_line(start: Start, port: MessagePort): Promise<void> {
     },
   });
   const session: Session = create_session({
-    history: opened.history,
+    search: start.search !== undefined,
+    history: start.search ? [] : opened.history,
     parse: (text) => parse_command_line(lookup, text, opened.sources),
-    complete: create_completer(lookup, opened.commands, opened.command_aliases, opened.sources, opened_from, live),
+    complete: start.search ? undefined : create_completer(lookup, opened.commands, opened.command_aliases, opened.sources, opened_from, live),
     // Only a missing value is caught here. The router still checks everything else when it runs the command.
     precheck: (invocation) => {
       const command = lookup.find(invocation.id);
@@ -85,7 +87,10 @@ async function open_line(start: Start, port: MessagePort): Promise<void> {
   });
 
   let told_height = 0;
+  let told_text = "";
   const render = () => {
+    // The search runs in the host's frame, so it needs each edit as it happens.
+    if (start.search && session.get_text() !== told_text) tell_host({ kind: "find_text", text: (told_text = session.get_text()) });
     if (input.value !== session.get_text()) {
       input.value = session.get_text();
       input.setSelectionRange(session.get_caret(), session.get_caret());
@@ -106,6 +111,7 @@ async function open_line(start: Start, port: MessagePort): Promise<void> {
       live.close();
       tell_host({ kind: "close" });
     }
+    else if (effect.kind === "find_commit") tell_host({ kind: "find_commit" });
     else if (effect.kind === "submit") {
       live.close();
       void ask_background({ type: "record_cmdline", text: effect.text });
@@ -154,6 +160,10 @@ async function open_line(start: Start, port: MessagePort): Promise<void> {
     const message = unwrap<HostToPage>(event.data);
     if (message?.kind === "token") press_forwarded(message.token);
     else if (message?.kind === "check") tell_host({ kind: "here" });
+    else if (message?.kind === "find_status") {
+      session.set_status(message.text);
+      render();
+    }
     else if (message?.kind === "focused" && typed_before_focused) {
       // Again now that the frame has focus. The first call ran while the host still held it.
       input.focus();
