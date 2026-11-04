@@ -99,16 +99,21 @@ function inline_node(inline: Inline): Child {
 
 const COPIED_LABEL_MS = 1500;
 
+// The pending "Copy" restore per button, so a second click restarts the 1.5 s instead of being cut short.
+const pending_restore = new WeakMap<object, unknown>();
+
 // A real button, so Tab and hints reach it. The label shows the result only after the clipboard took the text.
 export async function copy_code_and_confirm(
   clipboard: Parameters<typeof copy_text>[0],
   text: string,
   button: { textContent: string | null },
   later: (restore: () => void, ms: number) => unknown = setTimeout,
+  cancel: (handle: never) => void = clearTimeout,
 ): Promise<void> {
   if (!(await copy_text(clipboard, text))) return;
   button.textContent = "Copied";
-  later(() => { button.textContent = "Copy"; }, COPIED_LABEL_MS);
+  if (pending_restore.has(button)) cancel(pending_restore.get(button) as never);
+  pending_restore.set(button, later(() => { button.textContent = "Copy"; }, COPIED_LABEL_MS));
 }
 
 function code_block_node(text: string, language: string | undefined): HTMLElement {
