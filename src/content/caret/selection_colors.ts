@@ -19,16 +19,24 @@ export async function apply_selection_colors(mode: "caret" | "visual", trees: Te
   const colors = (stored[COMPILED_KEYMAP_STORAGE_KEY] as CompiledKeymap | undefined)?.mode_colors?.[mode];
   if (this_call !== latest_call || !colors) return;
   for (const tree of trees) {
-    const in_document = tree.nodeType === Node.DOCUMENT_NODE;
-    const style = styles.get(tree) ?? (in_document ? (tree as Document) : (tree as ShadowRoot).ownerDocument).createElement("style");
-    style.textContent = `${rule(colors.dark)}@media(prefers-color-scheme:light){${rule(colors.light)}}`;
-    (in_document ? (tree as Document).documentElement : tree).append(style);
-    styles.set(tree, style);
+    // A tree that died during the await throws on any use, and the later trees still need their style.
+    try {
+      const in_document = tree.nodeType === Node.DOCUMENT_NODE;
+      const style = styles.get(tree) ?? (in_document ? (tree as Document) : (tree as ShadowRoot).ownerDocument).createElement("style");
+      style.textContent = `${rule(colors.dark)}@media(prefers-color-scheme:light){${rule(colors.light)}}`;
+      (in_document ? (tree as Document).documentElement : tree).append(style);
+      styles.set(tree, style);
+    } catch {}
   }
 }
 
 export function clear_selection_colors(): void {
   latest_call++;
-  for (const style of styles.values()) style.remove();
+  // The style of a removed frame is a dead object, and its remove() throws.
+  for (const style of styles.values()) {
+    try {
+      style.remove();
+    } catch {}
+  }
   styles.clear();
 }

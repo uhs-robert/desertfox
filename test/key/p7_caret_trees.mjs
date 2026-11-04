@@ -2,7 +2,11 @@
 // /caret_shadow reads "alpha one", then "beta two" in an open root, "gamma three" in a closed root and "delta four" in an open root inside it.
 // /caret_frames reads "top head", a same-origin frame with "inner words here" and a frame inside it, "top tail", and a frame from another origin.
 
-export async function run_cases({ run_case, expect, open_page, send_keys, sleep, events, wait_event }) {
+import { evaluate_in_background } from "./rdp.mjs";
+
+export async function run_cases({ rdp, extension_id, run_case, expect, open_page, send_keys, sleep, events, wait_event }) {
+  const in_active_tab = (code) => evaluate_in_background(rdp, extension_id, `(async () => { const [tab] = await browser.tabs.query({ active: true, currentWindow: true }); return browser.tabs.executeScript(tab.id, { code: ${JSON.stringify(code)} }); })()`);
+  const selection_styles = `document.querySelectorAll("style").length && [...document.querySelectorAll("style")].filter((style) => style.textContent.includes("::selection")).length`;
   const selection_is = (page_id, text) => (event) => event.type === "selection" && event.page_id === page_id && event.text === text;
   const badge_is = (page_id, label) => (event) => event.type === "indicator" && event.page_id === page_id && event.label === label;
   const last_selection = (page_id) => events.filter((event) => event.type === "selection" && event.page_id === page_id).at(-1)?.text;
@@ -118,7 +122,11 @@ export async function run_cases({ run_case, expect, open_page, send_keys, sleep,
     await send_keys("w");
     await wait_event(mark_w, (event) => event.type === "selection" && event.page_id === page_id && event.text !== "", "a caret on the page after the frame left");
     expect(!events.slice(mark_w).some(badge_is(page_id, "NORMAL")), "caret mode ended");
+    const mark_escape = events.length;
     await send_keys("-k", "Escape");
+    await wait_event(mark_escape, badge_is(page_id, "NORMAL"), "the NORMAL badge after Escape");
+    await sleep(300);
+    expect((await in_active_tab(selection_styles))[0] === 0, "selection colors are still on the page after Escape");
   });
 
   await run_case("hint --caret on a frame from another origin shows a notice and stays in normal mode", async () => {

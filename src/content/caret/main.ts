@@ -163,6 +163,7 @@ function adopt_page_selection(open: Session): void {
 
 function ensure_session(mode: "caret" | "visual"): Session | undefined {
   const mode_changed = !session || session.mode !== mode;
+  const model_before = session?.model;
   if (session) session = rebuild_if_stale(session);
   if (session) adopt_page_selection(session);
   session ??= start_session(mode);
@@ -174,10 +175,9 @@ function ensure_session(mode: "caret" | "visual"): Session | undefined {
   if (mode === "caret") session.cursor = { anchor: session.cursor.caret, caret: session.cursor.caret };
   session.mode = mode;
   paint(session);
-  if (mode_changed) {
-    if (mode === "visual") visual_runs++;
-    void apply_selection_colors(mode, session.model.trees);
-  }
+  if (mode_changed && mode === "visual") visual_runs++;
+  // A rebuild brings new trees, which have no selection style yet.
+  if (mode_changed || session.model !== model_before) void apply_selection_colors(mode, session.model.trees);
   return session;
 }
 
