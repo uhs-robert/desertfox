@@ -12,6 +12,7 @@ The code map. Read a folder's README before you change or research code in it.
   - [`content/handlers/`](content/handlers/README.md): the content-side handler for each command group.
   - [`content/ui/`](content/ui/README.md): the `ui` bundle, the mode badge and the toast.
 - [`help/`](help/README.md): the help page.
+- [`newtab/`](newtab/README.md): the new tab page.
 - `icons/`: the extension icon.
 - [`options/`](options/README.md): the options page.
 - [`shared/`](shared/README.md): types and constants shared by all folders.
