@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { create_list, MAX_ROWS, window_top } from "../../src/cmdline/list.ts";
 import type { Row } from "../../src/cmdline/completion/sources.ts";
 
-type Node = { tag: string; className: string; textContent: string; children: Node[]; hidden: boolean; offsetHeight: number; style: { minHeight: string; setProperty: (name: string, value: string) => void; vars: Record<string, string> }; append: (...nodes: Node[]) => void; replaceChildren: (...nodes: Node[]) => void };
+type Node = { tag: string; className: string; textContent: string; dataset: Record<string, string>; children: Node[]; hidden: boolean; offsetHeight: number; style: { minHeight: string; setProperty: (name: string, value: string) => void; vars: Record<string, string> }; append: (...nodes: Node[]) => void; replaceChildren: (...nodes: Node[]) => void };
 
 function fake_node(tag = "span"): Node {
   const vars: Record<string, string> = {};
@@ -11,6 +11,7 @@ function fake_node(tag = "span"): Node {
     tag,
     className: "",
     textContent: "",
+    dataset: {},
     children: [],
     hidden: false,
     offsetHeight: 0,
@@ -218,4 +219,17 @@ test("render keeps a scrolled view for the same rows and selection, and follows 
   assert.equal(first_name(element), "cmd2");
   list.render(rows(25), 0);
   assert.equal(first_name(element), "cmd0");
+});
+
+test("only command rows get the help link, and each item carries its absolute index after a scroll", () => {
+  const { element, list } = setup();
+  const all = rows(25).map((row, index) => (index % 2 === 0 ? { ...row, id: `cmd.${index}` } : row));
+  list.render(all, -1);
+  list.scroll(5);
+  const items = element.children;
+  assert.deepEqual(items.map((item) => item.dataset.index), Array.from({ length: MAX_ROWS }, (_, offset) => String(5 + offset)));
+  const name_of = (item: Node) => item.children.find((child) => child.className.startsWith("oasisfox-cmdline-name"))!;
+  assert.deepEqual(items.map((item) => name_of(item).dataset.help), items.map((_, offset) => ((5 + offset) % 2 === 0 ? `cmd.${5 + offset}` : undefined)));
+  assert.ok(name_of(items[1]!).className.includes("oasisfox-cmdline-link"));
+  assert.ok(!name_of(items[0]!).className.includes("oasisfox-cmdline-link"));
 });

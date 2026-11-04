@@ -1,4 +1,4 @@
-import { cmdline_clear, cmdline_history, cmdline_next_completion, cmdline_open, cmdline_prev_completion, cmdline_submit } from "../content/handlers/lazy_bundle.ts";
+import { cmdline_clear, cmdline_help, cmdline_history, cmdline_next_completion, cmdline_open, cmdline_prev_completion, cmdline_submit } from "../content/handlers/lazy_bundle.ts";
 import { define } from "../shared/registry/index.ts";
 
 define("cmdline.open", {
@@ -54,4 +54,13 @@ define("cmdline.clear", {
   runs_in: "content",
   modes: ["cmdline"],
   run: cmdline_clear.run,
+});
+
+define("cmdline.help", {
+  completion: "hidden",
+  label: "Command help",
+  intent: "Open help for the selected or typed command.",
+  runs_in: "content",
+  modes: ["cmdline"],
+  run: cmdline_help.run,
 });

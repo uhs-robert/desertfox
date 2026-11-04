@@ -38,8 +38,10 @@ function params_table(command: CommandRow): HTMLElement | string {
   return el("table", "oasisfox-help-params", head, ...body);
 }
 
+export const command_anchor = (id: string): string => `command-${id}`;
+
 function command_card(command: CommandRow): HTMLElement {
-  return el(
+  const card = el(
     "section",
     "oasisfox-help-command",
     el("h3", undefined, command.label, " ", el("code", "oasisfox-help-muted", command.id)),
@@ -48,6 +50,8 @@ function command_card(command: CommandRow): HTMLElement {
     params_table(command),
     key_list(command.keys),
   );
+  card.id = command_anchor(command.id);
+  return card;
 }
 
 export const engine_anchor = (name: string): string => `engine-${name}`;

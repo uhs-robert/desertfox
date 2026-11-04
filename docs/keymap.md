@@ -20,7 +20,7 @@ A note "(prompts)" means the binding leaves a param out, so the command line ask
 
 <!-- BEGIN generated -->
 
-bound: 186 (normal 130, hint 2, cmdline 11, caret 18, visual 20, insert 1, ignore 1, browser 3) | later: 14 | dropped: 6
+bound: 187 (normal 130, hint 2, cmdline 12, caret 18, visual 20, insert 1, ignore 1, browser 3) | later: 14 | dropped: 6
 
 ### normal
 
@@ -219,6 +219,7 @@ Which-key group names:
 | `<ArrowUp>` | bound | `cmdline.history prev` | History |  |
 | `<ArrowDown>` | bound | `cmdline.history next` | History |  |
 | `<C-u>` | bound | `cmdline.clear` | Clear line |  |
+| `<C-h>` | bound | `cmdline.help` | Command help |  |
 
 ### caret
 

@@ -17,6 +17,7 @@ export const cmdline_prev_completion = from_bundle("cmdline.prev_completion", "c
 export const cmdline_submit = from_bundle("cmdline.submit", "cmdline");
 export const cmdline_history = from_bundle("cmdline.history", "cmdline");
 export const cmdline_clear = from_bundle("cmdline.clear", "cmdline");
+export const cmdline_help = from_bundle("cmdline.help", "cmdline");
 export const caret_move = from_bundle("caret.move", "caret");
 export const visual_act = from_bundle("visual.act", "caret");
 export const find_open = from_bundle("find.open", "caret");

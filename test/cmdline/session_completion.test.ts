@@ -236,3 +236,55 @@ test("a typed exact short flag shows its row and no no-match note", () => {
   tab(session);
   assert.equal(session.get_text(), "tab.close --left ");
 });
+
+test("pick takes the row at its absolute index, as Tab does, and ranks the new text", () => {
+  const session = make();
+  session.edit("tab");
+  const names = row_names(session);
+  session.pick(2);
+  assert.equal(session.get_selected(), -1);
+  assert.ok(names.length > 2);
+  assert.match(session.get_text(), new RegExp(`^${names[2]!.replace(/\./g, "\\.")} ?$`));
+});
+
+test("pick out of range or on a closed list does nothing", () => {
+  const session = make();
+  session.edit("tab");
+  session.pick(99);
+  session.pick(-1);
+  assert.equal(session.get_text(), "tab");
+  session.run("mode.escape", undefined);
+  session.pick(0);
+  assert.equal(session.get_text(), "tab");
+});
+
+test("help on a selected command row gives that row's id", () => {
+  const session = make();
+  session.edit("tab.");
+  tab(session);
+  const id = session.get_rows()[0]!.id;
+  assert.deepEqual(session.run("cmdline.help", undefined), { kind: "help", command_id: id });
+});
+
+test("help with no selection uses the typed command word, and says so when there is none", () => {
+  const session = create_session({
+    history: [],
+    parse: (text) => parse_command_line(lookup, text, SOURCES),
+    complete: create_completer(lookup, COMMANDS, COMMAND_ALIASES, SOURCES),
+    command_id_of: (word) => lookup.find(word)?.id,
+  });
+  session.edit(":tab.close --right");
+  assert.deepEqual(session.run("cmdline.help", undefined), { kind: "help", command_id: "tab.close" });
+  session.edit("zzz");
+  assert.deepEqual(session.run("cmdline.help", undefined), { kind: "render" });
+  assert.equal(session.get_message(), "no command to show help for");
+});
+
+test("help on a selected row that is no command shows a note and stays open", () => {
+  const session = make();
+  session.edit("tab.close --");
+  tab(session);
+  assert.equal(session.get_rows()[session.get_selected()]?.id, undefined);
+  assert.deepEqual(session.run("cmdline.help", undefined), { kind: "render" });
+  assert.equal(session.get_message(), "this row has no command help");
+});
