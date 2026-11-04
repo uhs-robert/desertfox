@@ -71,6 +71,7 @@ export function create_bundle_host() {
   }
 
   // Runs a command whose code sits in a bundle, loading the bundle first if needed. `missing` is the refusal for a bundle that registers nothing.
+  // `args` reaches the handler as given. Nothing validates it, so it holds whatever the caller and the handler agree on, functions included. Take it only from bundle code, never from keymap or command-line input, which the registry validates first.
   function run_command(command_id: string, name: BundleName, args: Record<string, unknown>, missing: string, hold = true): void {
     const run = handlers.get(command_id);
     if (run) return run(args);
