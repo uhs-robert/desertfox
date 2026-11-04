@@ -27,18 +27,34 @@
     padding: .75rem 1rem;
     border: 1px solid color-mix(in srgb, var(--oasisfox-fg) 25%, transparent);
     border-radius: var(--oasisfox-radius);
+    min-width: 0;
   }
   .oasisfox-help-usage, .oasisfox-help kbd, .oasisfox-help code {
     font-family: ui-monospace, monospace;
   }
-  .oasisfox-help-usage { margin: .25rem 0; }
+  .oasisfox-help-usage { margin: .25rem 0; white-space: pre-wrap; overflow-wrap: anywhere; }
   .oasisfox-help kbd { color: var(--oasisfox-accent); }
   .oasisfox-help-mode { display: inline-block; min-width: 4.5rem; margin-right: .5rem; opacity: .6; }
   .oasisfox-help-muted { opacity: .6; }
   .oasisfox-help-current { outline: 2px solid var(--oasisfox-accent); }
   .oasisfox-help-warnings { color: var(--oasisfox-accent); }
   .oasisfox-help table { border-collapse: collapse; margin: .5rem 0; }
+  .oasisfox-help-params { width: 100%; }
   .oasisfox-help th, .oasisfox-help td { padding: .1rem 1rem .1rem 0; text-align: left; vertical-align: top; }
+  /* Narrow screens: five columns leave each one a few letters wide, so each param stacks as labelled lines. */
+  @media (max-width: 40rem) {
+    .oasisfox-help-params, .oasisfox-help-params tbody, .oasisfox-help-params tr, .oasisfox-help-params td { display: block; }
+    .oasisfox-help-params td { overflow-wrap: anywhere; }
+    .oasisfox-help-params tr:first-child { display: none; }
+    .oasisfox-help-params tr { margin: .5rem 0; }
+    .oasisfox-help-params td:empty { display: none; }
+    .oasisfox-help-params td::before { opacity: .6; margin-right: .5rem; }
+    .oasisfox-help-params td:nth-child(1)::before { content: "param"; }
+    .oasisfox-help-params td:nth-child(2)::before { content: "type"; }
+    .oasisfox-help-params td:nth-child(3)::before { content: "default"; }
+    .oasisfox-help-params td:nth-child(4)::before { content: "values"; }
+    .oasisfox-help-params td:nth-child(5)::before { content: "flags"; }
+  }
 </style>
 </head>
 <body><script src="help.js"></script>
