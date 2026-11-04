@@ -174,6 +174,12 @@ export function start_server() {
       const body = `<p id="one">needle one</p><iframe id="frame" srcdoc="<p>needle two</p>" style="width:300px;height:60px"></iframe><div id="open_host"></div><div id="closed_host"></div><div style="height:1800px"></div><p id="five">needle five</p>${roots}`;
       return response.end(page(`find_page ${id}`, body));
     }
+    if (url.pathname === "/find_scroll") {
+      // Four matches of "marker": one at the top, one far below, one inside a box that scrolls sideways, and one at the bottom of a frame that scrolls itself.
+      const inner = "<body style='margin:0'><div style='height:1500px'></div><p>marker four</p></body>";
+      const body = `<p id="m1">marker one</p><div style="height:2500px"></div><p id="m2">marker two</p><div style="height:2500px"></div><div id="wide" style="width:300px;overflow-x:scroll;white-space:nowrap;border:1px solid"><span style="display:inline-block;width:2000px"></span>marker three</div><div style="height:2500px"></div><iframe id="frame" srcdoc="${inner}" style="width:400px;height:200px;display:block"></iframe><div style="height:800px"></div>`;
+      return response.end(page(`find_scroll ${id}`, body));
+    }
     if (url.pathname === "/find_big") {
       // Three hundred thousand matches of "e" in one text node, and one "ex" at the end: a scan for "e" takes many slices.
       return response.end(page(`find_big ${id}`, `<p id="big" style="word-break:break-all">${"e ".repeat(Number(/_(\d+)$/.exec(id)?.[1] ?? 300000))}ex</p>`));

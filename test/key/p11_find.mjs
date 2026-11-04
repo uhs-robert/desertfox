@@ -131,6 +131,59 @@ export async function run_cases({ rdp, extension_id, run_case, expect, open_page
     await wait_highlights((read) => total_painted(read) === 0, "every highlight cleared");
   });
 
+  // Each current match's box, with the window it sits in and the frame around it, read in the page's own world.
+  const READ_CURRENT_BOXES = `JSON.parse(window.wrappedJSObject.eval(${JSON.stringify(`JSON.stringify((() => {
+    const box_in = (owner) => {
+      const highlight = owner?.defaultView.CSS.highlights.get("oasis-find-current");
+      let found;
+      highlight?.forEach((range) => { const rect = range.getBoundingClientRect(); found = { top: rect.top, bottom: rect.bottom, left: rect.left, right: rect.right, view_width: owner.defaultView.innerWidth, view_height: owner.defaultView.innerHeight }; });
+      return found;
+    };
+    const frame = document.getElementById("frame");
+    const frame_rect = frame?.getBoundingClientRect();
+    return { top: box_in(document), inner: box_in(frame?.contentDocument), frame: frame_rect && { top: frame_rect.top, bottom: frame_rect.bottom }, view_width: innerWidth, view_height: innerHeight };
+  })())`)}))`;
+
+  await run_case("n and N bring each match fully into view: above, below, in a sideways scroller and in a frame", async () => {
+    const page_id = "find_scroll";
+    await open_page("find_scroll", page_id, { new_tab: true });
+    await send_keys("/marker");
+    await sleep(800);
+    await send_keys(...ENTER);
+    await sleep(500);
+    const fully_visible = (boxes) => {
+      const outer = boxes.top ?? boxes.inner;
+      if (!outer) return "no current match";
+      const inside = (box, width, height) => box.top >= 0 && box.bottom <= height && box.left >= 0 && box.right <= width;
+      if (boxes.top && !inside(boxes.top, boxes.view_width, boxes.view_height)) return `the page box ${JSON.stringify(boxes.top)} is outside the window`;
+      if (boxes.inner) {
+        const inner = boxes.inner;
+        if (!inside(inner, inner.view_width, inner.view_height)) return `the frame's match ${JSON.stringify(inner)} is outside the frame`;
+        if (boxes.frame.top + inner.top < 0 || boxes.frame.top + inner.bottom > boxes.view_height) return `the frame's match is outside the window, frame at ${boxes.frame.top}`;
+      }
+      return undefined;
+    };
+    // Around the four matches twice, so each is reached from below and from above.
+    for (let step = 0; step < 8; step++) {
+      await send_keys(step % 2 === 0 ? "n" : "n");
+      let problem = "not read";
+      for (let attempt = 0; attempt < 20 && problem; attempt++) {
+        await sleep(250);
+        problem = fully_visible(await in_active_tab(READ_CURRENT_BOXES));
+      }
+      expect(!problem, `after n number ${step + 1}: ${problem}`);
+    }
+    for (let step = 0; step < 4; step++) {
+      await send_keys("N");
+      let problem = "not read";
+      for (let attempt = 0; attempt < 20 && problem; attempt++) {
+        await sleep(250);
+        problem = fully_visible(await in_active_tab(READ_CURRENT_BOXES));
+      }
+      expect(!problem, `after N number ${step + 1}: ${problem}`);
+    }
+  });
+
   const selection_is = (page_id, text) => (event) => event.type === "selection" && event.page_id === page_id && event.text === text;
   const select_in_page = (text) => in_active_tab(`window.find(${JSON.stringify(text)})`);
 

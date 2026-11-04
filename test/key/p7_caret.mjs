@@ -225,7 +225,7 @@ export async function run_cases({ run_case, expect, open_page, send_keys, sleep,
     const mark = events.length;
     await send_keys(";;");
     await sleep(500);
-    await send_keys("--caret --custom --selector=#pick", "-k", "Return");
+    await send_keys(" --caret --custom --selector=#pick", "-k", "Return");
     await sleep(300);
     await send_keys("a");
     await wait_event(mark, badge_is("hint_line", "CARET"), "the CARET badge from the hint typed into the line");
