@@ -25,9 +25,8 @@ export type PageToHost =
   | { kind: "opened" }
   | { kind: "here" }
   | { kind: "close" }
-  // The height in pixels the frame needs for the list, the note and the line. `bg` is the page's computed background, so the
-  // host paints the strip a taller frame adds before the page has drawn into it.
-  | { kind: "resize"; height: number; bg?: string }
+  // The height in pixels the frame needs for the list, the note and the line.
+  | { kind: "resize"; height: number }
   | { kind: "submit"; invocation: Invocation };
 
 export const MESSAGE_MARK = "oasisfox_cmdline";

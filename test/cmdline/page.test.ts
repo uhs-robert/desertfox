@@ -88,7 +88,6 @@ async function load_page(t: TestContext, tag: string, { keymap = KEYMAP, with_ta
   };
   Object.assign(globalThis, {
     window: page_window,
-    getComputedStyle: () => ({ getPropertyValue: () => " #101820 " }),
     document: {
       querySelector: (selector: string) => (selector === "#line" ? input : selector === "#list" ? list : selector === ".oasisfox-cmdline" ? panel : selector === ".oasisfox-cmdline-prompt" ? prompt : { textContent: "", hidden: true }),
       // The page listens for keys on the document. The fake sends them through the input's table.
@@ -315,7 +314,7 @@ test("the list shows every command when the line opens, and the host hears the h
   assert.equal(list.children.length, OPENED.commands.length);
   assert.equal(list.hidden, false);
   const resizes = host.received.filter((data) => (data as { oasisfox_cmdline: { kind: string } }).oasisfox_cmdline.kind === "resize");
-  assert.deepEqual(resizes, [{ oasisfox_cmdline: { kind: "resize", height: 140, bg: "#101820" } }]);
+  assert.deepEqual(resizes, [{ oasisfox_cmdline: { kind: "resize", height: 140 } }]);
 });
 
 test("Tab previews a command in the line and Enter submits what the line shows", async (t) => {
