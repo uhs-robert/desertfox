@@ -1,6 +1,6 @@
 {
   "name": "oasisfox",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "private": true,
   "description": "Keyboard-first Firefox extension built around one command registry.",
   "license": "MPL-2.0",
