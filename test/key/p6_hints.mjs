@@ -54,6 +54,7 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, open_p
     await send_keys("j");
     const moved = await wait_event(mark, (event) => event.type === "panel_scroll" && event.page_id === "p6_scrollbox", "the panel to scroll after j");
     expect(moved.top > 0, `the panel is at ${moved.top} after j`);
+    await sleep(400); // The fixture reports a page scroll 150 ms after it settles.
     expect(!find_event(mark, (event) => event.type === "scroll" && event.page_id === "p6_scrollbox"), "the page scrolled with the panel");
     await sleep(1000);
     const [after] = await in_active_tab(`[document.getElementById("panel").style.outline, document.getElementById("panel").getAttribute("tabindex")]`);

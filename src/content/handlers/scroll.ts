@@ -16,9 +16,18 @@ function page_candidate(): ScrollCandidate<Element> | undefined {
   };
 }
 
+// Focus inside a shadow root shows on the host only, so the walk goes down to the inner element first and climbs out through the hosts.
+type ShadowHost = Element & { openOrClosedShadowRoot?: ShadowRoot | null };
+
+function focused_element(): Element | null {
+  let element = document.activeElement;
+  for (let inner = element; inner; inner = (inner as ShadowHost).openOrClosedShadowRoot?.activeElement ?? (inner as ShadowHost).shadowRoot?.activeElement ?? null) element = inner;
+  return element;
+}
+
 function focus_chain(): ScrollCandidate<Element>[] {
   const chain: ScrollCandidate<Element>[] = [];
-  for (let element = document.activeElement; element; element = element.parentElement) {
+  for (let element = focused_element(); element; element = element.parentElement ?? (element.getRootNode() as ShadowRoot).host ?? null) {
     if (element !== document.body && element !== document.documentElement) chain.push(candidate_of(element));
   }
   return chain;

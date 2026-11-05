@@ -17,7 +17,7 @@ export type ActionDeps = {
   start_caret: (target: Element, mode: CaretMode) => void;
 };
 
-type Target = Pick<HTMLElement, "click" | "focus" | "remove"> & { tabIndex?: number; hasAttribute?: (name: string) => boolean; setAttribute?: (name: string, value: string) => void; style?: CSSStyleDeclaration } & { textContent?: string | null; href?: unknown; localName: string; type?: unknown; isContentEditable?: boolean };
+type Target = Pick<HTMLElement, "click" | "focus" | "remove"> & { tabIndex?: number; setAttribute?: (name: string, value: string) => void; style?: CSSStyleDeclaration } & { textContent?: string | null; href?: unknown; localName: string; type?: unknown; isContentEditable?: boolean };
 
 const NON_TEXT_INPUTS = new Set(["button", "submit", "reset", "checkbox", "radio", "image", "file", "color", "range"]);
 
@@ -35,16 +35,25 @@ export function link_address(target: Target): string | undefined {
 
 const FLASH_MS = 700;
 
-// A box with no tabindex cannot take focus. tabindex=-1 lets a script focus it and leaves the tab order alone. A page's own tabindex stays.
+// The outline an element had before its flash, and the timer that puts it back. A second focus inside the flash must not save the flash as the old outline.
+const flashes = new WeakMap<object, { previous: readonly [string, string]; timer: ReturnType<typeof setTimeout> }>();
+
+// A box that is not focusable (tabIndex below 0) cannot take focus. tabindex=-1 lets a script focus it and leaves the tab order alone. A link, a button or a page tabindex stays as it is.
 function focus_target(target: Target): void {
-  if (!takes_typing(target) && target.hasAttribute?.("tabindex") === false) target.setAttribute?.("tabindex", "-1");
+  if (!takes_typing(target) && (target.tabIndex ?? 0) < 0) target.setAttribute?.("tabindex", "-1");
   target.focus();
   if (takes_typing(target) || !target.style) return;
   // Shows which element took the focus. The old inline outline comes back after a moment.
   const { style } = target;
-  const previous = [style.getPropertyValue("outline"), style.getPropertyPriority("outline")] as const;
+  const pending = flashes.get(target);
+  if (pending) clearTimeout(pending.timer);
+  const previous = pending?.previous ?? ([style.getPropertyValue("outline"), style.getPropertyPriority("outline")] as const);
   style.setProperty("outline", "2px solid currentColor", "important");
-  setTimeout(() => style.setProperty("outline", previous[0], previous[1]), FLASH_MS);
+  const timer = setTimeout(() => {
+    style.setProperty("outline", previous[0], previous[1]);
+    flashes.delete(target);
+  }, FLASH_MS);
+  flashes.set(target, { previous, timer });
 }
 
 export function perform(action: HintAction, target: Target, deps: ActionDeps): void | Promise<unknown> {

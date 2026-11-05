@@ -110,7 +110,7 @@ function box_fixture(attributes: Record<string, string>) {
     click: () => {},
     remove: () => {},
     focus: () => calls.push("focus"),
-    hasAttribute: (name: string) => name in attributes,
+    tabIndex: Number(attributes.tabindex ?? -1),
     setAttribute: (name: string, value: string) => { attributes[name] = value; calls.push(`set ${name}=${value}`); },
     style,
   };
@@ -133,6 +133,25 @@ test("focus keeps a tabindex the page set and restores an outline the page set",
   page.outline.value = "1px dotted red";
   perform("focus", page.element as never, { open_link: () => {}, copy: () => {}, start_caret: () => {} });
   assert.equal(page.attributes.tabindex, "0");
+  context.mock.timers.tick(5000);
+  assert.equal(page.outline.value, "1px dotted red");
+});
+
+test("focus on a box that is focusable already leaves its tabindex alone", () => {
+  const link = box_fixture({});
+  Object.assign(link.element, { localName: "a", tabIndex: 0 });
+  perform("focus", link.element as never, { open_link: () => {}, copy: () => {}, start_caret: () => {} });
+  assert.equal("tabindex" in link.attributes, false);
+});
+
+test("focus twice inside the flash still restores the original outline", (context) => {
+  context.mock.timers.enable({ apis: ["setTimeout"] });
+  const page = box_fixture({});
+  page.outline.value = "1px dotted red";
+  const deps = { open_link: () => {}, copy: () => {}, start_caret: () => {} };
+  perform("focus", page.element as never, deps);
+  context.mock.timers.tick(300);
+  perform("focus", page.element as never, deps);
   context.mock.timers.tick(5000);
   assert.equal(page.outline.value, "1px dotted red");
 });
