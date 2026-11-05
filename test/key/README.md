@@ -12,7 +12,9 @@ KEY_TEST_ONLY=<regex> just key-test
 It takes about a minute and needs a nested Hyprland.
 
 - `KEY_TEST_ONLY` runs only the cases whose name matches. It also runs the cases marked `{ setup: true }`, which leave state that later cases read. The output tags those as `SETUP`.
-- `SHADOW_SH` must name a script that runs `up|spawn|keys|down <name>` for a nested, invisible compositor session. It may also answer `status` with one `<name>: up|down ...` line per session, which the sweep reads. Cleanup of killed runs works only for drivers that keep a session's runtime dir in `/tmp/shadow-<uid>-<name>`. The recipe exits when `SHADOW_SH` is unset.
+- `SHADOW_SH` must name a script that runs `up|spawn|keys|down <name>` for a nested, invisible compositor session. It can also answer `status` with one `<name>: up|down ...` line per session, which the sweep reads.
+  Cleanup of killed runs works only for drivers that keep a session's runtime dir in `/tmp/shadow-<uid>-<name>`.
+  The recipe exits when `SHADOW_SH` is unset.
 - Each run starts its own shadow session, so runs from different worktrees go in parallel with no lock.
 
 ## Traps
