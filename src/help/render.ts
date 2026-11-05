@@ -284,9 +284,21 @@ export function reset_group_state(): void {
   last_page = undefined;
 }
 
+// Built with DOM calls, not markup. CSS turns it by the button's aria-expanded.
+function chevron_icon(): Element {
+  const svg_ns = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(svg_ns, "svg");
+  svg.setAttribute("viewBox", "0 0 16 16");
+  svg.setAttribute("aria-hidden", "true");
+  const path = document.createElementNS(svg_ns, "path");
+  path.setAttribute("d", "M6 3l5 5-5 5");
+  svg.append(path);
+  return svg;
+}
+
 // A real button, so keys and hints reach it.
 function section_toggle(page: PageId, title: string, list: HTMLElement): HTMLElement {
-  const button = el("button", "oasisfox-help-sections-toggle", list.hidden ? "\u25B8" : "\u25BE");
+  const button = el("button", "oasisfox-help-sections-toggle", chevron_icon());
   button.setAttribute("type", "button");
   button.setAttribute("aria-label", `${title} sections`);
   button.setAttribute("aria-controls", list.id);
@@ -295,7 +307,6 @@ function section_toggle(page: PageId, title: string, list: HTMLElement): HTMLEle
     list.hidden = !list.hidden;
     group_open.set(page, !list.hidden);
     button.setAttribute("aria-expanded", String(!list.hidden));
-    button.textContent = list.hidden ? "\u25B8" : "\u25BE";
   });
   return button;
 }

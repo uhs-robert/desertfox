@@ -25,7 +25,7 @@ class FakeNode {
 }
 
 function render_guide(guide: Block[]): FakeNode {
-  (globalThis as { document?: unknown }).document = { createElement: (tag: string) => new FakeNode(tag) };
+  (globalThis as { document?: unknown }).document = { createElement: (tag: string) => new FakeNode(tag), createElementNS: (_ns: string, tag: string) => new FakeNode(tag) };
   const root = new FakeNode("body");
   const model = { engines: [], quick_start: [], groups: [] } as never;
   render_help(root as never, model, { page: "search-engines" }, guide);

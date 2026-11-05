@@ -39,7 +39,7 @@ const QUICK_START: Block[] = [
 const GROUPS = [{ name: "scroll", commands: [] }, { name: "tab", commands: [] }];
 
 function render(route: Route, keep_state = false): FakeNode {
-  (globalThis as { document?: unknown }).document = { createElement: (tag: string) => new FakeNode(tag) };
+  (globalThis as { document?: unknown }).document = { createElement: (tag: string) => new FakeNode(tag), createElementNS: (_ns: string, tag: string) => new FakeNode(tag) };
   if (!keep_state) reset_group_state();
   const root = new FakeNode("body");
   render_help(root as never, { quick_start: QUICK_START, groups: GROUPS, warnings: [], settings: [], engines: [], tip: { kind: "tip", inlines: [] } } as never, route, []);
@@ -64,23 +64,23 @@ test("the current page's group is open and the others are closed", () => {
       const open = group.page === title;
       assert.equal(group.list.hidden, !open);
       assert.equal(group.toggle.attributes["aria-expanded"], String(open));
-      assert.equal(group.toggle.children[0], open ? "▾" : "▸");
+      assert.equal((group.toggle.children[0] as FakeNode).tag, "svg");
       assert.equal(group.toggle.attributes["aria-controls"], group.list.id);
     }
   }
   for (const group of group_nodes(render({ page: "search-engines" }))) assert.equal(group.list.hidden, true);
 });
 
-test("each toggle works alone and flips its glyph", () => {
+test("each toggle works alone and flips aria-expanded", () => {
   const groups = group_nodes(render({ page: "quick-start" }));
   const [home, quick_start] = [groups[0]!, groups[1]!];
   home.toggle.listeners["click"]!();
   assert.equal(home.list.hidden, false);
-  assert.equal(home.toggle.textContent, "▾");
+  assert.equal(home.toggle.attributes["aria-expanded"], "true");
   assert.equal(quick_start.list.hidden, false);
   quick_start.toggle.listeners["click"]!();
   assert.equal(quick_start.list.hidden, true);
-  assert.equal(quick_start.toggle.textContent, "▸");
+  assert.equal(quick_start.toggle.attributes["aria-expanded"], "false");
   assert.equal(home.list.hidden, false);
 });
 
