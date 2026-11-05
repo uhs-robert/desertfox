@@ -28,6 +28,20 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, open_p
     expect(pasted.value.endsWith("/page?id=hint_one"), `;y copied "${pasted.value}"`);
   });
 
+  await run_case(";t labels the elements with text of their own and copies the picked text", async () => {
+    // Labels run in page order: the heading "a", "alpha text" "s", "beta text" "d". A labelled wrapper div would take "s".
+    await open_page("prose", "p6_prose", { new_tab: true });
+    await send_keys(";t");
+    await send_keys("d");
+    await sleep(500);
+    await open_page("field", "p6_prose_paste", { new_tab: true });
+    await sleep(300);
+    const mark = events.length;
+    await send_keys(...paste_ctrl_v);
+    const pasted = await wait_event(mark, (event) => event.type === "input" && event.page_id === "p6_prose_paste", "the pasted text");
+    expect(pasted.value === "beta text", `;t d copied "${pasted.value}"`);
+  });
+
   await run_case(";r opens each pick in a background tab and keeps picking until Escape", async () => {
     await open_page("hints", "p6_rapid", { new_tab: true });
     const tabs_before = await tab_count();

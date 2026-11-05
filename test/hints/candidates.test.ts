@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { Found } from "../../src/content/hints/candidates.ts";
-import { collect, drop_redundant_weak, keep_visible_deduplicated, has_click_sign, has_text, make_weak_test, selector_for } from "../../src/content/hints/candidates.ts";
+import { collect, drop_redundant_weak, keep_visible_deduplicated, has_click_sign, has_own_text, NO_OWN_TEXT, has_text, make_weak_test, query_for } from "../../src/content/hints/candidates.ts";
 
 type Fake = { name: string; local: string; shadow?: Fake[]; frame?: Fake[] | "cross_origin"; href?: boolean };
 
@@ -30,31 +30,31 @@ test("a link in the top document, an open or closed shadow root and a same-origi
     { name: "host", local: "div", shadow: [{ name: "in shadow", local: "a", href: true }] },
     { name: "frame", local: "iframe", frame: [{ name: "in frame", local: "a", href: true }] },
   ]);
-  assert.deepEqual(names(collect(page, "links")), ["top", "in shadow", "in frame"]);
+  assert.deepEqual(names(collect(page, { selector: "links" })), ["top", "in shadow", "in frame"]);
 });
 
 test("an element in a frame knows which frames hold it", () => {
   const page = root_of([{ name: "outer", local: "iframe", frame: [{ name: "inner", local: "iframe", frame: [{ name: "deep", local: "a", href: true }] }] }]);
-  const [found] = collect(page, "links");
+  const [found] = collect(page, { selector: "links" });
   assert.equal(found!.frames.length, 2);
 });
 
 test("a cross-origin frame is skipped, not an error", () => {
   const page = root_of([{ name: "ad", local: "iframe", frame: "cross_origin" }, { name: "top", local: "a", href: true }]);
-  assert.deepEqual(names(collect(page, "links")), ["top"]);
+  assert.deepEqual(names(collect(page, { selector: "links" })), ["top"]);
 });
 
 test("an empty custom selector finds nothing", () => {
-  assert.deepEqual(collect(root_of([{ name: "top", local: "a", href: true }]), selector_for("custom", undefined)), []);
+  assert.deepEqual(collect(root_of([{ name: "top", local: "a", href: true }]), query_for("custom", undefined)), []);
 });
 
 test("each filter has its own selector", () => {
-  assert.equal(selector_for("links", undefined), "a[href]");
-  assert.match(selector_for("inputs", undefined), /textarea/);
-  assert.match(selector_for("clickable", undefined), /a\[href\]/);
-  assert.match(selector_for("clickable", undefined), /textarea/);
-  assert.match(selector_for("all", undefined), /h1/);
-  assert.equal(selector_for("custom", ".post a"), ".post a");
+  assert.equal(query_for("links", undefined).selector, "a[href]");
+  assert.match(query_for("inputs", undefined).selector, /textarea/);
+  assert.match(query_for("clickable", undefined).selector, /a\[href\]/);
+  assert.match(query_for("clickable", undefined).selector, /textarea/);
+  assert.match(query_for("all", undefined).selector, /h1/);
+  assert.equal(query_for("custom", ".post a").selector, ".post a");
 });
 
 test("has_text matches a lower-cased needle in the visible text, ignoring case", () => {
@@ -66,7 +66,7 @@ test("has_text matches a lower-cased needle in the visible text, ignoring case",
 });
 
 test("the clickable selector adds roving-tabindex items", () => {
-  const clickable = selector_for("clickable", undefined);
+  const clickable = query_for("clickable", undefined).selector;
   assert.match(clickable, /\[role=menuitemcheckbox\]/);
   assert.match(clickable, /\[tabindex]:not\(\[tabindex="-1"]\)/);
 });
@@ -185,4 +185,40 @@ test("a focusable ARIA menu does not hide its roving items", () => {
   const item = (name: string) => el({ name, local: "li", parent: menu as unknown as Dom });
   const [one, two] = [item("one"), item("two")];
   assert.deepEqual(names_of(drop_redundant_weak([strong(menu), weak(one), weak(two)])), ["menu", "one", "two"]);
+});
+
+const text_node = (value: string) => ({ nodeType: 3, nodeValue: value });
+const with_children = (local: string, children: unknown[], hidden = false) => ({ localName: local, hidden, childNodes: children }) as unknown as Element;
+
+test("prose keeps an element with a text node of its own", () => {
+  assert.equal(has_own_text(with_children("span", [text_node("hello")])), true);
+  assert.equal(has_own_text(with_children("div", [{ nodeType: 1 }, text_node(" tail ")])), true);
+});
+
+test("prose skips a wrapper whose text sits in its children, and blank text", () => {
+  assert.equal(has_own_text(with_children("div", [{ nodeType: 1, nodeValue: null }])), false);
+  assert.equal(has_own_text(with_children("div", [text_node(" \n\t "), { nodeType: 8, nodeValue: "comment" }])), false);
+  assert.equal(has_own_text(with_children("div", [])), false);
+});
+
+test("prose skips hidden elements and elements whose text is not page text", () => {
+  assert.equal(has_own_text(with_children("span", [text_node("hello")], true)), false);
+  for (const local of ["script", "style", "noscript", "template", "textarea", "option"]) assert.equal(has_own_text(with_children(local, [text_node("x")])), false, local);
+});
+
+test("prose covers inline, custom and unlisted tags and skips the tags that hold no prose", () => {
+  assert.equal(query_for("prose", undefined).selector, "*");
+  for (const local of ["b", "i", "small", "time", "summary", "figcaption", "yt-formatted-string"]) assert.equal(has_own_text(with_children(local, [text_node("x")])), true, local);
+  for (const local of ["svg", "math", "title", "head", "tspan"]) assert.ok(NO_OWN_TEXT.has(local), local);
+});
+
+test("the prose filter carries its test and the others carry none", () => {
+  assert.equal(query_for("prose", undefined).test, has_own_text);
+  for (const filter of ["all", "clickable", "inputs", "links"] as const) assert.equal(query_for(filter, undefined).test, undefined, filter);
+});
+
+test("collect keeps only the elements that pass the test", () => {
+  const page = root_of([{ name: "kept", local: "a", href: true }, { name: "dropped", local: "a", href: true }]);
+  const found = collect(page, { selector: "links", test: (element) => (element as unknown as { name: string }).name === "kept" });
+  assert.deepEqual(names(found), ["kept"]);
 });

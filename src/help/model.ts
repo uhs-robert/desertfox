@@ -18,7 +18,7 @@ import type { EnumSources } from "../shared/registry/check_args.ts";
 import { print_command } from "../shared/registry/print_command.ts";
 import { subject_param } from "../shared/registry/params.ts";
 import type { Block } from "./blocks.ts";
-import { quick_start_blocks } from "./quick_start.ts";
+import { quick_start_blocks, tip_block } from "./quick_start.ts";
 import { flag_alternatives, usage_line } from "../shared/registry/usage.ts";
 
 export type KeyRow = { mode: KeymapMode; keys: string; args: string };
@@ -71,6 +71,7 @@ export type HelpModel = {
   groups: HelpGroup[];
   engines: EngineRow[];
   quick_start: Block[];
+  tip: Block;
 };
 
 const MODE_ORDER: readonly KeymapMode[] = [...MODES, "browser"];
@@ -211,6 +212,7 @@ export function build_help_model(commands: CommandMeta[], compiled: CompiledKeym
     settings: options.settings,
     engines: engine_rows(engines, compiled, status?.settings.default_engine ?? DEFAULT_SETTINGS.default_engine),
     quick_start: quick_start_blocks(compiled, commands),
+    tip: tip_block(compiled, commands),
     groups: [...groups].sort(([a], [b]) => a.localeCompare(b)).map(([name, rows]) => ({ name, commands: rows })),
   };
 }
@@ -258,9 +260,9 @@ export const STYLE_CLASSES: { name: string; meaning: string }[] = [
   { name: "oasisfox-help-code-lang", meaning: "The language label of a code block" },
   { name: "oasisfox-help-code-copy", meaning: "The Copy button of a code block" },
   { name: "oasisfox-help-code-body", meaning: "The code text of a code block" },
-  { name: "oasisfox-help-sections", meaning: "The list of Quick Start sections under the Quick Start entry in the help sidebar" },
-  { name: "oasisfox-help-sections-toggle", meaning: "The button that expands and collapses the Quick Start section list" },
-  { name: "oasisfox-help-filter", meaning: "The filter text box on the Commands page" },
-  { name: "oasisfox-help-filter-count", meaning: "The line under the filter box that counts the shown commands" },
+  { name: "oasisfox-help-sections", meaning: "The list of section links under a page entry in the help sidebar" },
+  { name: "oasisfox-help-sections-toggle", meaning: "The button that expands and collapses a page's section list" },
+  { name: "oasisfox-help-tip", meaning: "The tip callout at the top of the Home and Commands pages" },
+  { name: "oasisfox-help-tip-label", meaning: "The bold \"Tip\" word that starts the callout" },
   { name: "oasisfox-help-inline-code", meaning: "A code snippet inside a sentence on the help page" },
 ];

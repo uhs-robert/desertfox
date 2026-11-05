@@ -17,6 +17,7 @@ import "../commands/cmdline.ts";
 import "../commands/caret.ts";
 import "../commands/visual.ts";
 import "../commands/find.ts";
-import "../commands/help.ts";
 import "../commands/engine.ts";
 import "../commands/command.ts";
+// Last, because help.open lists every command defined before it.
+import "../commands/help.ts";

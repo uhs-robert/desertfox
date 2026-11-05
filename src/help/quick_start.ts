@@ -122,6 +122,11 @@ function prefix_key(compiled: CompiledKeymap | undefined, commands: CommandMeta[
   return root?.kind === "branch" ? Object.entries(root.children).find(([, child]) => child.kind === "branch")?.[0] : undefined;
 }
 
+// The callout at the top of Home and Commands. The command line key follows the keymap like the Quick Start text.
+export function tip_block(compiled: CompiledKeymap | undefined, commands: CommandMeta[] = []): Block {
+  return { kind: "tip", inlines: sentence(compiled, commands, "Type [:help <name>] to jump to any command. Press {cmdline} to open the command line.") };
+}
+
 export function quick_start_blocks(compiled: CompiledKeymap | undefined, commands: CommandMeta[] = []): Block[] {
   const say = (template: string): Block => ({ kind: "paragraph", inlines: sentence(compiled, commands, template) });
   const prefix = prefix_key(compiled, commands);

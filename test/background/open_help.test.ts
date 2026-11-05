@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { create_open_help } from "../../src/background/open_help.ts";
+import { create_open_help, help_name_choices, help_name_url } from "../../src/background/open_help.ts";
 
 function make(openers: number[] = [7]) {
   const opened: unknown[] = [];
@@ -31,4 +31,19 @@ test("a sender with no ticket, no tab or a non-string id gets nothing", async ()
   await open_help.open("tab.next", undefined);
   await open_help.open({}, 7);
   assert.deepEqual(opened, []);
+});
+
+const ids = new Set(["scroll.top", "my snippet"]);
+const base = "moz-extension://x/help.html";
+
+test("help_name_url maps a command id to its card and a page title to its page", () => {
+  assert.equal(help_name_url(base, "scroll.top", ids), `${base}#command=scroll.top`);
+  assert.equal(help_name_url(base, "Quick Start", ids), `${base}#/quick-start`);
+  assert.equal(help_name_url(base, "search engines", ids), `${base}#/search-engines`);
+  assert.equal(help_name_url(base, "", ids), `${base}#/`);
+  assert.equal(help_name_url(base, "nope", ids), undefined);
+});
+
+test("help_name_choices lists the pages, then the commands, and no Quick Start section", () => {
+  assert.deepEqual(help_name_choices(["scroll.top"]), ["Home", "Quick Start", "Commands", "Search Engines", "Styling", "scroll.top"]);
 });

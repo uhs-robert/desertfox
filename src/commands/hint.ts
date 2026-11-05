@@ -39,14 +39,15 @@ define("hint.run", {
     {
       name: "filter",
       type: "enum",
-      values: ["all", "clickable", "inputs", "links", "custom"],
+      values: ["all", "clickable", "inputs", "links", "prose", "custom"],
       default: "clickable",
-      short: { all: "a", inputs: "i", links: "l", custom: "u" },
-      value_labels: { all: "for all elements", inputs: "for inputs", links: "for links", custom: "for a selector" },
+      short: { all: "a", inputs: "i", links: "l", prose: "p", custom: "u" },
+      value_labels: { all: "for all elements", inputs: "for inputs", links: "for links", prose: "for text", custom: "for a selector" },
       description: {
         all: "Label every element.",
         inputs: "Label only the inputs.",
         links: "Label only the links.",
+        prose: "Label the elements that hold text of their own.",
         custom: "Label the elements that match a selector.",
       },
     },
