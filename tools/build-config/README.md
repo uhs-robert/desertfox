@@ -9,7 +9,7 @@ just build-config [dir] [flags]
 node tools/build-config/cli.ts [dir] [flags]
 ```
 
-`just build-config` builds the extension first. The `node` form needs `dist/commands.json` to exist already.
+`just build-config` builds the extension first. The `node` form needs `dist/commands.json` to exist already. `just build` (or `npm run build`) writes it.
 
 - `dir`: the config directory. Defaults to `~/.config/oasisfox`.
 - `--commands <file>`: the command list from the build. Defaults to `dist/commands.json`.
@@ -20,7 +20,7 @@ Next to the output it writes `<out without .json>.engines.jsonl`, the resolved s
 
 ## Trap: the default output is the live config
 
-Without `--out`, the CLI writes `~/.mozilla/managed-storage/oasisfox@uhs-robert.json`, the file Firefox reads. A test run without `--out` overwrites the real config. Always pass `--out` for a trial run:
+Without `--out`, the CLI writes `~/.mozilla/managed-storage/oasisfox@uhs-robert.json`, the file Firefox reads. The `.engines.jsonl` side file lands in the same live directory. A test run without `--out` overwrites the real config. Always pass `--out` for a trial run:
 
 ```
 just build-config path/to/config_dir --out /tmp/oasisfox_test.json
