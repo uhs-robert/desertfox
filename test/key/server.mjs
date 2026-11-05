@@ -105,6 +105,11 @@ export function start_server() {
       const links = `<a href="/page?id=hint_hidden" style="display:none">hidden</a>${covered}<p><a href="/page?id=hint_one">one</a></p><p><a href="/page?id=hint_two">two</a></p>`;
       return response.end(page(`hints ${id}`, links + tall_filler));
     }
+    if (url.pathname === "/prose") {
+      // The heading, two spans in a wrapper div and a paragraph hold text of their own. The wrapper holds only blanks and children, so it gets no label.
+      const body = '<div id="card"> <span>alpha text</span> <span>beta text</span> </div><p>gamma <b>bold</b></p>';
+      return response.end(page(`prose ${id}`, body + tall_filler));
+    }
     if (url.pathname === "/caret" || url.pathname === "/caret_themed") {
       const text = "<p>foo bar.baz</p><p>second line here</p>";
       // caret_themed sets a non-default palette on the page, for the surfaces to inherit.

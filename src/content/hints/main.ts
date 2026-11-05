@@ -7,7 +7,7 @@ import type { BundleHostApi } from "../bundle_host.ts";
 import { link_address, OPEN_PLACES, perform, starts_caret } from "./actions.ts";
 import type { CaretMode, HintAction, Place } from "./actions.ts";
 import { copy_text } from "../caret/copy_text.ts";
-import { collect, has_text, keep_visible_deduplicated, selector_for, weak_test_for } from "./candidates.ts";
+import { collect, has_text, keep_visible_deduplicated, query_for, weak_test_for } from "./candidates.ts";
 import type { Found, HintFilter } from "./candidates.ts";
 import { clean_letters, make_labels } from "./labels.ts";
 import { create_picker } from "./pick.ts";
@@ -65,7 +65,7 @@ function windows_of(found: Found[]): Window[] {
 // Opening in another place needs an address, so only links qualify.
 function find_candidates(filter: HintFilter, custom_selector: string | undefined, action: HintAction): Found[] {
   const opens_elsewhere = OPEN_PLACES.includes(action);
-  return collect(document, selector_for(filter, custom_selector), weak_test_for(filter)).filter((found) => !opens_elsewhere || link_address(found.element as HTMLAnchorElement) !== undefined);
+  return collect(document, query_for(filter, custom_selector), weak_test_for(filter)).filter((found) => !opens_elsewhere || link_address(found.element as HTMLAnchorElement) !== undefined);
 }
 
 const parent_of = (element: Element): Element | null => element.parentElement ?? (element.parentNode as ShadowRoot | null)?.host ?? null;
