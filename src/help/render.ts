@@ -133,6 +133,12 @@ function block_node(block: Block): HTMLElement {
   }
 }
 
+function quick_start_node(block: Block): HTMLElement {
+  const node = block_node(block);
+  if (block.kind === "heading" && block.level === 2) node.id = section_anchor(block.text);
+  return node;
+}
+
 function definition_table(rows: { name: string; meaning: string }[]): HTMLElement {
   return el("table", undefined, ...rows.map((row) => el("tr", undefined, el("td", undefined, el("code", undefined, row.name)), el("td", undefined, row.meaning))));
 }
@@ -168,7 +174,7 @@ function styling_page(): HTMLElement[] {
 function page_body(page: PageId, model: HelpModel, guide: Block[]): HTMLElement[] {
   switch (page) {
     case "home": return home_page(model);
-    case "quick-start": return model.quick_start.map(block_node);
+    case "quick-start": return model.quick_start.map(quick_start_node);
     case "search-engines": return [...guide.map(block_node), el("h2", undefined, "Your engines"), engine_table(model.engines)];
     case "commands": return commands_page(model);
     case "styling": return styling_page();
@@ -194,14 +200,54 @@ function support_line(): HTMLElement {
   );
 }
 
-function sidebar(current: PageId): HTMLElement {
-  const links = PAGES.map((page) => {
+const section_anchor = (title: string): string => `quick-start-${title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}`;
+
+const quick_start_titles = (blocks: Block[]): string[] =>
+  blocks.flatMap((block) => (block.kind === "heading" && block.level === 2 ? [block.text] : []));
+
+// The links scroll without changing the hash, because the hash is the page route and the page would render again.
+function section_list(titles: string[]): HTMLElement {
+  const list = el("div", "oasisfox-help-sections");
+  list.id = "oasisfox-help-sections";
+  list.hidden = true;
+  for (const title of titles) {
+    const link = el("a", undefined, title);
+    link.setAttribute("href", `#${section_anchor(title)}`);
+    link.addEventListener("click", (event) => {
+      event.preventDefault();
+      document.getElementById(section_anchor(title))?.scrollIntoView();
+    });
+    list.append(link);
+  }
+  return list;
+}
+
+// A real button, so keys and hints reach it. The list starts collapsed on every load.
+function section_toggle(list: HTMLElement): HTMLElement {
+  const button = el("button", "oasisfox-help-sections-toggle", "\u25B8");
+  button.setAttribute("type", "button");
+  button.setAttribute("aria-label", "Quick Start sections");
+  button.setAttribute("aria-controls", list.id);
+  button.setAttribute("aria-expanded", "false");
+  button.addEventListener("click", () => {
+    list.hidden = !list.hidden;
+    button.setAttribute("aria-expanded", String(!list.hidden));
+    button.textContent = list.hidden ? "\u25B8" : "\u25BE";
+  });
+  return button;
+}
+
+// The section list shows only on the Quick Start page, where the anchors exist.
+function sidebar(current: PageId, quick_start: Block[]): HTMLElement {
+  const entries = PAGES.map((page): HTMLElement => {
     const link = el("a", undefined, page.title);
     link.setAttribute("href", page.hash);
     if (page.id === current) link.setAttribute("aria-current", "page");
-    return link;
+    if (page.id !== "quick-start" || current !== "quick-start") return link;
+    const list = section_list(quick_start_titles(quick_start));
+    return el("div", "oasisfox-help-nav-group", el("div", "oasisfox-help-nav-row", link, section_toggle(list)), list);
   });
-  return el("nav", "oasisfox-help-sidebar", el("div", "oasisfox-help-brand", "OasisFox"), ...links, support_line());
+  return el("nav", "oasisfox-help-sidebar", el("div", "oasisfox-help-brand", "OasisFox"), ...entries, support_line());
 }
 
 export function render_help(root: HTMLElement, model: HelpModel, route: Route, guide: Block[]): void {
@@ -209,5 +255,5 @@ export function render_help(root: HTMLElement, model: HelpModel, route: Route, g
   const heading = el("h1", undefined, title);
   heading.tabIndex = -1;
   const page = el("main", "oasisfox-help-page", heading, ...page_body(route.page, model, guide));
-  root.replaceChildren(el("div", "oasisfox-help", sidebar(route.page), page));
+  root.replaceChildren(el("div", "oasisfox-help", sidebar(route.page, model.quick_start), page));
 }

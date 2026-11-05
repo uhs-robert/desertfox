@@ -11,6 +11,7 @@ The help page, opened by `help.open`. It reads `commands.json`, the compiled key
 - `render.ts`: draws the rows with DOM calls. Command text never goes through `innerHTML`. A `code_block` gets its own themed box with the fence language as a label and a Copy button. The command usage line keeps the plain `oasisfox-help-usage` look.
 - `main.ts`: loads the inputs (`commands.json` through `shared/load_commands.ts`) and renders the route in the hash, and renders again on `hashchange`.
 - `help.html`: the page and its styles. The defaults use the `--oasisfox-` variables. It loads `content.js` by script tag, because `moz-extension://` pages do not match `<all_urls>`. That gives the page `j`, `k`, `gg` and the mode badge. `hints.js`, `whichkey.js`, `cmdline.js` and `caret.js` load the same way, for the Quick Start keys (`caret.js` also holds page search). `executeScript` cannot reach extension pages, so each bundle registers itself on load.
+- On the Quick Start page the sidebar nests a collapsed list of that page's sections under the Quick Start entry, behind a toggle button. Each section heading has an id and its link scrolls to it without changing the hash. Other pages show no list.
 - The sidebar ends with one quiet line linking GitHub Sponsors and Ko-fi (`support_line` in `render.ts`).
 
 `STYLE_VARIABLES` and `STYLE_CLASSES` in `model.ts` list the public styling surface. The variables come from the theme role list, so a new role shows on the Styling page with a meaning the compiler forces you to write. Add a surface's class names there when it ships.

@@ -11,11 +11,16 @@ class FakeNode {
   attributes: Record<string, string> = {};
   listeners: Record<string, () => void> = {};
   tag: string;
+  id?: string;
   constructor(tag: string) { this.tag = tag; }
   append(...nodes: (FakeNode | string)[]) { this.children.push(...nodes); }
   replaceChildren(...nodes: (FakeNode | string)[]) { this.children = nodes; }
   setAttribute(name: string, value: string) { this.attributes[name] = value; }
   addEventListener(name: string, listener: () => void) { this.listeners[name] = listener; }
+  find_tag(tag: string): FakeNode[] {
+    const below = this.children.flatMap((child) => (typeof child === "string" ? [] : child.find_tag(tag)));
+    return this.tag === tag ? [this, ...below] : below;
+  }
   get text(): string { return this.children.map((child) => (typeof child === "string" ? child : child.text)).join(""); }
   find_all(class_name: string): FakeNode[] {
     const own: FakeNode[] = this.className === class_name ? [this] : [];
@@ -88,4 +93,45 @@ test("inline code runs render as code elements with the inline class, other text
   assert.equal(first!.tag, "code");
   assert.equal(first!.text, "just build-config");
   assert.equal(second!.text, "<b>x</b>");
+});
+
+function render_quick_start(page: "quick-start" | "commands"): FakeNode {
+  (globalThis as { document?: unknown }).document = { createElement: (tag: string) => new FakeNode(tag) };
+  const root = new FakeNode("body");
+  const quick_start: Block[] = [
+    { kind: "paragraph", inlines: [{ kind: "text", text: "intro" }] },
+    { kind: "heading", level: 2, text: "Click with hints" },
+    { kind: "heading", level: 2, text: "Which-key" },
+  ];
+  render_help(root as never, { quick_start, groups: [] } as never, { page }, []);
+  return root;
+}
+
+test("Quick Start lists its sections collapsed behind a button, each linking to its heading id", () => {
+  const root = render_quick_start("quick-start");
+  const [toggle] = root.find_all("oasisfox-help-sections-toggle");
+  const [list] = root.find_all("oasisfox-help-sections") as (FakeNode & { hidden: boolean; id: string })[];
+  assert.equal(toggle!.tag, "button");
+  assert.equal(toggle!.attributes["aria-expanded"], "false");
+  assert.equal(toggle!.attributes["aria-controls"], list!.id);
+  assert.equal(list!.hidden, true);
+  const links = list!.children as FakeNode[];
+  assert.deepEqual(links.map((link) => link.attributes["href"]), ["#quick-start-click-with-hints", "#quick-start-which-key"]);
+  const heading_ids = root.find_tag("h2").map((node) => node.id);
+  assert.deepEqual(heading_ids, ["quick-start-click-with-hints", "quick-start-which-key"]);
+});
+
+test("the toggle expands and collapses the list", () => {
+  const root = render_quick_start("quick-start");
+  const [toggle] = root.find_all("oasisfox-help-sections-toggle");
+  const [list] = root.find_all("oasisfox-help-sections") as (FakeNode & { hidden: boolean })[];
+  toggle!.listeners["click"]!();
+  assert.equal(list!.hidden, false);
+  assert.equal(toggle!.attributes["aria-expanded"], "true");
+  toggle!.listeners["click"]!();
+  assert.equal(list!.hidden, true);
+});
+
+test("other pages show no section list", () => {
+  assert.equal(render_quick_start("commands").find_all("oasisfox-help-sections").length, 0);
 });
