@@ -43,7 +43,8 @@ function ends_of(selection: Selection): unknown[] {
   if (selection.rangeCount === 0) return [];
   const first = selection.getRangeAt(0);
   const last = selection.getRangeAt(selection.rangeCount - 1);
-  return [first.startContainer, first.startOffset, last.endContainer, last.endOffset];
+  // The anchor and focus are in it because a span drawn again the other way round has the same range ends.
+  return [first.startContainer, first.startOffset, last.endContainer, last.endOffset, selection.anchorNode, selection.anchorOffset, selection.focusNode, selection.focusOffset];
 }
 
 // A Range stays in one tree, so a span across a shadow root or a frame takes one range per tree. Firefox keeps several ranges in one selection.
@@ -69,7 +70,7 @@ function paint(open: Session): void {
   scroll_to_index(open.model, open.cursor.caret);
 }
 
-// Where a new session starts: the text of the picked element or the next text after it, else the page's own drag (whole in visual mode, ahead of a search match, so the match is selected whole), else the match a search stands on while no later selection took the place, else the end of the drag, else the caret's place in the page's own selection if it is on screen, else the first visible text.
+// Where a new session starts: the text of the picked element or the next text after it, else the match a search stands on while no later selection took the place, else the page's own drag (whole in visual mode, its release end in caret mode), else the caret's place in the page's own selection if it is on screen, else the first visible text.
 // A string is the reason no session could start.
 function start_session(mode: "caret" | "visual"): Session | string {
   const target = page.oasisfox_caret_target;
@@ -82,8 +83,10 @@ function start_session(mode: "caret" | "visual"): Session | string {
   const model = build_text_model(document.body, target);
   if (model.text === "") return "No text here";
   const dragged = target === undefined ? selections_of(model).flatMap((selection) => page_selection_cursor(model, selection) ?? [])[0] : undefined;
-  if (mode === "visual" && dragged) return { model, cursor: dragged, mode, goal_x: undefined, painted: [] };
-  const caret = target === undefined ? (find.position(model) ?? dragged?.caret ?? first_visible_index(model)) : model.start_index;
+  // A search position is valid only while no selection came after it, so it is newer than any drag and wins.
+  const searched = target === undefined ? find.position(model) : undefined;
+  if (mode === "visual" && dragged && searched === undefined) return { model, cursor: dragged, mode, goal_x: undefined, painted: [] };
+  const caret = target === undefined ? (searched ?? dragged?.caret ?? first_visible_index(model)) : model.start_index;
   if (caret === undefined) return "No text here";
   return { model, cursor: { anchor: caret, caret }, mode, goal_x: undefined, painted: [] };
 }
@@ -122,7 +125,7 @@ function end_session(): void {
   clear_selection_colors();
 }
 
-// Something else moved a page selection since the last paint, such as a find or a click. Caret mode takes the start of it. Visual mode takes a drag whole and, for a click, keeps its anchor and takes the click.
+// Something else moved a page selection since the last paint, such as a find, a drag or a click. A drag is taken whole in either mode, because the next key may switch the mode. A click keeps the anchor in visual mode and takes the click.
 function adopt_page_selection(open: Session): void {
   for (const selection of selections_of(open.model)) {
     const ends = ends_of(selection);
@@ -130,8 +133,7 @@ function adopt_page_selection(open: Session): void {
     if (ends.length === painted.length && ends.every((end, at) => end === painted[at])) continue;
     const found = selection_span(open.model, selection);
     if (!found) continue;
-    const dragged = open.mode === "visual" ? page_selection_cursor(open.model, selection) : undefined;
-    open.cursor = dragged ?? with_caret(open.cursor, open.mode === "visual" ? found.last : found.first, open.mode === "visual");
+    open.cursor = page_selection_cursor(open.model, selection) ?? with_caret(open.cursor, found.first, open.mode === "visual");
     open.goal_x = undefined;
     return;
   }

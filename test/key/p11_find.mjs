@@ -218,12 +218,12 @@ export async function run_cases({ rdp, extension_id, run_case, expect, open_page
     await wait_event(mark_visual, selection_is(page_id, "f"), "the selection on the match four");
     await send_keys("-k", "Escape");
     await send_keys("-k", "Escape");
-    // Something selected after the match wins: the word "one" on the first screen.
+    // Something selected after the match wins: the word "one" on the first screen. Caret mode puts the caret on the release end of a selection, the "e".
     await select_in_page("one");
     await sleep(300);
     const mark_later = events.length;
     await send_keys("v");
-    await wait_event(mark_later, selection_is(page_id, "o"), "the caret on the later selection, not on the match");
+    await wait_event(mark_later, selection_is(page_id, "e"), "the caret on the end of the later selection, not on the match");
     await send_keys("-k", "Escape");
   });
 
