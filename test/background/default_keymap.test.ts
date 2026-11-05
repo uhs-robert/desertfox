@@ -100,6 +100,11 @@ test("the keys of the new modes compile and resolve to their commands", () => {
   assert.equal(leaf_id("normal", ";", "V"), 'hint.run {"action":"visual","filter":"prose","text":"","rapid":false}');
   assert.equal(leaf_id("normal", ";", ";"), 'cmdline.open {"text":"hint "}');
   assert.equal(leaf_id("caret", "v"), 'mode.set {"mode":"visual"}');
+  for (const mode of ["caret", "visual"] as const) {
+    assert.equal(leaf_id(mode, "f"), 'caret.move {"unit":"char_find","direction":"forward","till":false,"big":false}', mode);
+    assert.equal(leaf_id(mode, "T"), 'caret.move {"unit":"char_find","direction":"back","till":true,"big":false}', mode);
+    assert.equal(leaf_id(mode, ","), 'caret.move {"unit":"find_repeat","direction":"back","till":false,"big":false}', mode);
+  }
   for (const mode of ["hint", "cmdline", "caret", "visual"] as const) {
     assert.equal(leaf_id(mode, "<Escape>"), "mode.escape {}", mode);
   }

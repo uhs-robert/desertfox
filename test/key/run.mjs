@@ -228,11 +228,13 @@ async function main() {
     expect(!find_event(mark, scroll_of(page_id)), `page ${page_id} scrolled`);
   }
 
+  // The active tab comes from the background, so a switch that landed on the wrong tab fails by name. A page report cannot say that.
   async function expect_exactly_one_visible(mark, expected_page_id) {
     await sleep(1500);
+    const active_url = await evaluate_in_background(rdp, EXTENSION_ID, `browser.tabs.query({ active: true, currentWindow: true }).then((tabs) => tabs[0]?.url)`);
+    expect(String(active_url).endsWith(`id=${expected_page_id}`), `expected the active tab to be ${expected_page_id}, it is ${active_url}`);
     const visible = visible_events(mark);
-    expect(visible.length === 1 && visible[0].page_id === expected_page_id,
-      `expected one switch to ${expected_page_id}, saw [${visible.map((event) => event.page_id).join(", ")}]`);
+    expect(visible.length <= 1, `expected one switch to ${expected_page_id}, saw [${visible.map((event) => event.page_id).join(", ")}]`);
   }
 
   try {

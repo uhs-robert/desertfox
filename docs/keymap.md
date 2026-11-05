@@ -20,7 +20,7 @@ A note "(prompts)" means the binding sets a `prompt` for a param, so the command
 
 <!-- BEGIN generated -->
 
-bound: 203 (normal 137, hint 2, cmdline 13, caret 20, visual 26, insert 1, ignore 1, browser 3) | later: 14 | dropped: 6
+bound: 215 (normal 137, hint 2, cmdline 13, caret 26, visual 32, insert 1, ignore 1, browser 3) | later: 14 | dropped: 6
 
 ### normal
 
@@ -253,6 +253,12 @@ Which-key group names:
 | `$` | bound | `caret.move --line-end` | Move caret |  |
 | `gg` | bound | `caret.move --start` | Move caret |  |
 | `G` | bound | `caret.move --end` | Move caret |  |
+| `f` | bound | `caret.move --char-find` | Move to a character |  |
+| `t` | bound | `caret.move --char-find --till` | Move before a character |  |
+| `F` | bound | `caret.move --char-find --back` | Move back to a character |  |
+| `T` | bound | `caret.move --char-find --back --till` | Move back after a character |  |
+| `;` | bound | `caret.move --find-repeat` | Repeat the character find |  |
+| `,` | bound | `caret.move --find-repeat --back` | Repeat the character find backward |  |
 
 ### visual
 
@@ -273,6 +279,12 @@ Which-key group names:
 | `$` | bound | `caret.move --line-end` | Move caret |  |
 | `gg` | bound | `caret.move --start` | Move caret |  |
 | `G` | bound | `caret.move --end` | Move caret |  |
+| `f` | bound | `caret.move --char-find` | Move to a character |  |
+| `t` | bound | `caret.move --char-find --till` | Move before a character |  |
+| `F` | bound | `caret.move --char-find --back` | Move back to a character |  |
+| `T` | bound | `caret.move --char-find --back --till` | Move back after a character |  |
+| `;` | bound | `caret.move --find-repeat` | Repeat the character find |  |
+| `,` | bound | `caret.move --find-repeat --back` | Repeat the character find backward |  |
 | `/` | bound | `find` | Find forward |  |
 | `?` | bound | `find --backward` | Find backward |  |
 | `*` | bound | `find --word` | Find word forward |  |
