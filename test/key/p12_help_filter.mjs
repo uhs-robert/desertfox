@@ -32,10 +32,10 @@ export async function run_cases({ run_case, send_keys, rdp, extension_id, expect
     await sleep(400);
     expect((await state()).focused === "oasisfox-help-filter", "gi did not focus the filter box");
 
-    await send_keys("scroll.down");
+    await send_keys("scroll.");
     await sleep(400);
     const narrowed = await state();
-    expect(narrowed.value === "scroll.down", `the box held "${narrowed.value}"`);
+    expect(narrowed.value === "scroll.", `the box held "${narrowed.value}"`);
     expect(narrowed.shown >= 1 && narrowed.shown < before.shown, `typing left ${narrowed.shown} of ${before.shown} rows`);
     expect(narrowed.count === `${narrowed.shown} of ${before.count.split(" of ")[1]}`, `the count line was "${narrowed.count}" for ${narrowed.shown} rows`);
 
@@ -48,7 +48,7 @@ export async function run_cases({ run_case, send_keys, rdp, extension_id, expect
     await sleep(400);
     const left = await state();
     expect(left.focused !== "oasisfox-help-filter", "Escape left the focus in the box");
-    expect(left.value === "scroll.down", `Escape changed the text to "${left.value}"`);
+    expect(left.value === "scroll.", `Escape changed the text to "${left.value}"`);
     await close_help_tabs();
   });
 }
