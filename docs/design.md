@@ -361,10 +361,11 @@ Tabs and bookmarks come from the background, because it knows the window and pri
 
 ### Hints
 
-- Candidates come from one query per filter (all, clickable, buttons, inputs, links, prose, scrollable): a selector plus an optional test, such as `prose` keeping elements with a text node of their own. The search reaches open shadow roots and, through Firefox's `openOrClosedShadowRoot`, closed ones.
+- Candidates come from one query per filter (all, clickable, buttons, inputs, links, prose, scrollable, headings): a selector plus an optional test, such as `prose` keeping elements with a text node of their own. The search reaches open shadow roots and, through Firefox's `openOrClosedShadowRoot`, closed ones.
 - An IntersectionObserver batch finds visible candidates. An `elementFromPoint` check removes covered ones.
 - Labels render in a closed shadow root. All layout reads happen before any write.
-- The actions are open, background tab, new window, start caret mode, start visual mode, copy link, copy text, delete element, focus and hover. Hover sends the pointer events a mouse sends on entering (over, enter and move), from the middle of the element, so a menu or preview that a script opens appears. The next hover, Escape, a hidden tab or another pick ends it, and a pick inside the hovered element keeps it entered. A CSS `:hover` rule does not react, because synthetic events do not set it. Rapid mode keeps hints open for several picks.
+- The actions are open, background tab, new window, start caret mode, start visual mode, copy link, copy text, delete element, focus, hover and scroll. Hover sends the pointer events a mouse sends on entering (over, enter and move), from the middle of the element, so a menu or preview that a script opens appears. The next hover, Escape, a hidden tab or another pick ends it, and a pick inside the hovered element keeps it entered. A CSS `:hover` rule does not react, because synthetic events do not set it. Rapid mode keeps hints open for several picks.
+- The `headings` filter (h1 to h6 and `role=heading`) skips the viewport and cover tests and opens a list panel instead of labels over the page. The panel has one row per heading in document order, indented by level, each with a label, so a heading below the screen is one pick away. The label typing is the one hints use. A hidden, empty, tiny or clipped heading, and one in a closed `<details>`, gets no row. A page with none says so and opens nothing. `;#` runs it with the `scroll` action, which puts the heading at the top of the view and leaves focus, caret and address alone. The panel keeps its own height and scrolls inside it.
 
 ### Which-key
 
