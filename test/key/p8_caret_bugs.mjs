@@ -214,4 +214,54 @@ export async function run_cases({ run_case, expect, open_page, send_keys, sleep,
       expect(text === expected, `the caret is on ${JSON.stringify(text)}, expected ${JSON.stringify(expected)}`);
     });
   }
+
+  await run_case("a drag made in caret mode is taken whole by v", async () => {
+    const page_id = "drag_in_caret";
+    await open_page("caret_bug_find", page_id, { new_tab: true });
+    await send_keys("gV");
+    await sleep(300);
+    await drag_in_page(4, 10);
+    await sleep(300);
+    await send_keys("v");
+    await sleep(500);
+    const text = last_selection_text(page_id);
+    await send_keys("-k", "Escape");
+    await send_keys("-k", "Escape");
+    expect(text === "needle", `the selection is ${JSON.stringify(text)}, expected "needle"`);
+  });
+
+  await run_case("V after a search that came after a drag starts at the match, not the drag", async () => {
+    const page_id = "drag_then_search";
+    await open_page("caret_bug_find", page_id, { new_tab: true });
+    await drag_in_page(4, 10);
+    await sleep(300);
+    await send_keys("/");
+    await send_keys("-d", "30", "filler line 7");
+    await send_keys("-k", "Return");
+    await sleep(500);
+    await send_keys("V");
+    await sleep(500);
+    const text = last_selection_text(page_id);
+    await send_keys("-k", "Escape");
+    await send_keys("-k", "Escape");
+    expect(text === "f", `the selection is ${JSON.stringify(text)}, expected "f", the first letter of the match`);
+  });
+
+  await run_case("drawing the painted span again the other way round moves the caret to the release end", async () => {
+    const page_id = "drag_reversed";
+    await open_page("caret_bug_find", page_id, { new_tab: true });
+    await drag_in_page(4, 10);
+    await sleep(300);
+    await send_keys("V");
+    await sleep(500);
+    await drag_in_page(10, 4);
+    await sleep(300);
+    // The caret is now on the "n", so l takes it one character in.
+    await send_keys("l");
+    await sleep(500);
+    const text = last_selection_text(page_id);
+    await send_keys("-k", "Escape");
+    await send_keys("-k", "Escape");
+    expect(text === "eedle", `the selection is ${JSON.stringify(text)}, expected "eedle"`);
+  });
 }
