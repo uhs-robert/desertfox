@@ -80,7 +80,7 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, open_p
     await sleep(500);
   });
 
-  await run_case("Escape closes the list and then the line, so the page takes j again", async () => {
+  await run_case("Escape hides the list, typing shows it again, and Escape twice more closes the line so the page takes j again", async () => {
     await send_keys(":");
     await sleep(600);
     await send_keys("-k", "Escape");
@@ -90,8 +90,15 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, open_p
     await send_keys("j");
     await sleep(500);
     expect(!events.slice(mark).some((event) => event.type === "scroll"), "j scrolled while the line was open");
+    // The typed j showed the list again, so this Escape only hides it. The next one closes the line.
     await send_keys("-k", "Escape");
     await sleep(400);
+    await send_keys("-k", "Escape");
+    await sleep(400);
+    const closed_mark = events.length;
+    await send_keys("j");
+    await sleep(500);
+    expect(events.slice(closed_mark).some((event) => event.type === "scroll"), "the line is still open: j did not scroll the page");
   });
 
   await run_case("Ctrl-h on a selected command row opens its help card in a new tab and closes the line", async () => {
