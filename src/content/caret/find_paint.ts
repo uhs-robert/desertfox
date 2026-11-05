@@ -3,7 +3,6 @@
 // So each tree with text, each shadow root and each frame document, adopts a sheet of its own.
 
 import type { ColorPair } from "../../shared/mode_colors.ts";
-import type { Matches } from "./find_match.ts";
 import type { TextModel, TextTree } from "./text_model.ts";
 
 // Painting a hundred thousand ranges would stall the page, so only a window of matches around the current one is painted.
@@ -21,6 +20,10 @@ export type HighlightNames = { all: string; current: string };
 export const SEARCH_NAMES: HighlightNames = { all: "oasis-find", current: "oasis-find-current" };
 export const CHAR_FIND_NAMES: HighlightNames = { all: "oasis-ft", current: "oasis-ft-current" };
 const DOCUMENT_NODE = 9;
+
+// Where matches start, and where each ends: one end per match, or one width for all.
+export type Spans = { from: number[] } & ({ to: number[] } | { width: number });
+const end_of = (spans: Spans, index: number): number => ("to" in spans ? spans.to[index]! : spans.from[index]! + spans.width);
 
 export type FindColors = { all: { dark: ColorPair; light: ColorPair }; current: { dark: ColorPair; light: ColorPair } };
 
@@ -105,12 +108,12 @@ export function create_painter(names: HighlightNames = SEARCH_NAMES) {
   };
 
   // The match at `current` takes the strong color. `indexes` are the matches to draw, by default a window around the current one. Returns how many matches were drawn.
-  const paint = (model: TextModel, matches: Matches, current: number, colors: FindColors, indexes = paint_indexes(current, matches.from.length)): number => {
+  const paint = (model: TextModel, matches: Spans, current: number, colors: FindColors, indexes = paint_indexes(current, matches.from.length)): number => {
     clear_highlights();
     const by_document = new Map<Document, { all: Range[]; current: Range[] }>();
     for (const index of indexes) {
       try {
-        for (const range of ranges_of(model, matches.from[index]!, matches.to[index]!)) {
+        for (const range of ranges_of(model, matches.from[index]!, end_of(matches, index))) {
           const group = by_document.get(range.startContainer.ownerDocument!) ?? { all: [], current: [] };
           group[index === current ? "current" : "all"].push(range);
           by_document.set(range.startContainer.ownerDocument!, group);

@@ -40,8 +40,15 @@ function make_page() {
   let watching = 0;
   let watchers_added = 0;
   const show_calls = { count: 0 };
-  const find_mode = create_find_mode({
-    show: () => void show_calls.count++,
+  const views: Array<{ colors: string | undefined; current: number | undefined }> = [];
+  let palette = 0;
+  let color_reads = 0;
+  const find_mode = create_find_mode<string>({
+    read_colors: async () => (color_reads++, `palette ${palette}`),
+    show: (view) => {
+      show_calls.count++;
+      views.push({ colors: view.colors, current: view.current });
+    },
     hide: () => log.push("hide"),
     watch_view: () => {
       watching++;
@@ -106,9 +113,10 @@ function make_page() {
     state.set_mode("caret");
     await settle();
     find_mode.start(till);
+    await settle();
     log.length = 0;
   };
-  return { state, find_mode, log, press, settle, start_find, show_calls, watch: () => ({ watching, watchers_added }), hides: () => log.filter((entry) => entry === "hide").length };
+  return { state, find_mode, log, views, set_palette: (value: number) => (palette = value), color_reads: () => color_reads, press, settle, start_find, show_calls, watch: () => ({ watching, watchers_added }), hides: () => log.filter((entry) => entry === "hide").length };
 }
 
 test("the same key family repeats and keeps the find alive past the microtask", async () => {
@@ -239,4 +247,45 @@ test("the character find paints under names of its own", () => {
   assert.notEqual(CHAR_FIND_NAMES.current, SEARCH_NAMES.current);
   assert.notEqual(CHAR_FIND_NAMES.all, SEARCH_NAMES.current);
   assert.notEqual(CHAR_FIND_NAMES.current, SEARCH_NAMES.all);
+});
+
+test("a new find starts with no current match, even after a find that had one", async () => {
+  const page = make_page();
+  await page.start_find();
+  page.find_mode.set_current(42, "model");
+  page.find_mode.refresh();
+  assert.equal(page.views.at(-1)!.current, 42);
+  // A new target that finds nothing sets no current match, so the old one must not linger.
+  page.find_mode.start(false);
+  page.find_mode.refresh();
+  assert.equal(page.views.at(-1)!.current, undefined);
+});
+
+test("every new find reads the colors again, and a repeat does not", async () => {
+  const page = make_page();
+  page.set_palette(1);
+  await page.start_find();
+  assert.equal(page.color_reads(), 1);
+  assert.equal(page.views.at(-1)!.colors, "palette 1");
+  page.press("f", "F", ";");
+  await page.settle();
+  page.find_mode.refresh();
+  assert.equal(page.color_reads(), 1);
+  // The palette changed while the find stayed live: the next target picks it up.
+  page.set_palette(2);
+  page.find_mode.start(false);
+  await page.settle();
+  assert.equal(page.color_reads(), 2);
+  assert.equal(page.views.at(-1)!.colors, "palette 2");
+});
+
+test("colors that arrive after the find ended draw nothing", async () => {
+  const page = make_page();
+  page.state.set_mode("caret");
+  await page.settle();
+  const before = page.show_calls.count;
+  page.find_mode.start(false);
+  page.find_mode.end();
+  await page.settle();
+  assert.equal(page.show_calls.count, before);
 });
