@@ -46,6 +46,8 @@ function make_fake(tabs: TabInfo[], containers: Record<string, string> = {}) {
     find_container_store_id: async (name) => containers[name],
     listed_tabs: async () => [],
     focus_window: async (id) => void log.push(`focus ${id}`),
+    discard: {} as TabDeps["discard"],
+    toast: async () => {},
   };
   return { handlers: make_tab_handlers(deps), log, deps };
 }
@@ -233,3 +235,114 @@ function make_switch_fake() {
   const deps: TabDeps = { ...fake.deps, listed_tabs: async () => tabs };
   return { handlers: make_tab_handlers(deps), log: fake.log, set_listed: (next: ListedTab[]) => void (tabs = next) };
 }
+
+// The unload and load commands over a fake `set_unloaded`: the log shows which ids reach it and with what option.
+function make_unload(tabs: TabInfo[], listed_tabs: ListedTab[] = []) {
+  const { deps, log } = make_fake(tabs);
+  const toast_tabs: (number | undefined)[] = [];
+  const states = new Map(tabs.map((tab) => [tab.id, { discarded: false, active: tab.id === 100 }]));
+  deps.listed_tabs = async () => listed_tabs;
+  deps.toast = async (ctx, kind, message) => void (log.push(`toast ${kind} ${message}`), toast_tabs.push(ctx.tab_id));
+  deps.discard = {
+    read_tab: async (id) => {
+      const tab = tabs.find((candidate) => candidate.id === id);
+      return tab && { id, window_id: 1, index: tab.index, audible: tab.audible, ...states.get(id)! };
+    },
+    tabs_in_window: async () => tabs.map((tab) => ({ id: tab.id, window_id: 1, index: tab.index, audible: tab.audible, ...states.get(tab.id)! })),
+    alternate_of: async () => undefined,
+    activate: async (id) => {
+      log.push(`activate ${id}`);
+      for (const [other, state] of states) state.active = other === id;
+    },
+    discard: async (id) => {
+      log.push(`discard ${id}`);
+      if (!states.get(id)!.active) states.get(id)!.discarded = true;
+    },
+    reload: async (id) => {
+      log.push(`reload ${id}`);
+      states.get(id)!.discarded = false;
+    },
+  };
+  return { handlers: make_tab_handlers(deps), log, states, toast_tabs };
+}
+const unload_args = (over: Partial<{ tab: string; side: "none" | "all_before" | "all_after"; count: number }> = {}) => ({ tab: "", side: "none" as const, count: 1, ...over });
+
+test("tab.unload on the current tab switches to a loaded tab first, then discards, and reports", async () => {
+  const { handlers, log } = make_unload(make_tabs(3));
+  await handlers.unload(ctx_at(100), unload_args());
+  assert.deepEqual(log, ["activate 101", "discard 100", "toast success unloaded 1 tab"]);
+});
+
+test("tab.unload by number or title unloads that tab and leaves focus alone", async () => {
+  const listed_tabs = [listed(100, 1, "Mail"), listed(101, 2, "GitHub"), listed(102, 3, "Docs")];
+  const { handlers, log } = make_unload(make_tabs(3), listed_tabs);
+  await handlers.unload(ctx_at(100), unload_args({ tab: "3" }));
+  await handlers.unload(ctx_at(100), unload_args({ tab: "github" }));
+  assert.deepEqual(log, ["discard 102", "toast success unloaded 1 tab", "discard 101", "toast success unloaded 1 tab"]);
+});
+
+test("tab.unload refuses a tied title and refuses when nothing changed", async () => {
+  const twins = [listed(100, 1, "News"), listed(101, 2, "News")];
+  const { handlers } = make_unload(make_tabs(2), twins);
+  await assert.rejects(handlers.unload(ctx_at(100), unload_args({ tab: "news" })), /equally/);
+  const { handlers: audible } = make_unload(make_tabs(2, [{}, { audible: true }]), [listed(101, 2, "Music")]);
+  await assert.rejects(audible.unload(ctx_at(100), unload_args({ tab: "2" })), /skipped 1 \(audible\)/);
+});
+
+test("tab.unload with all_after skips pinned and audible tabs and keeps the subject", async () => {
+  const { handlers, log } = make_unload(make_tabs(5, [{}, {}, {}, { pinned: true }, { audible: true }]));
+  await handlers.unload(ctx_at(100), unload_args({ side: "all_after" }));
+  assert.deepEqual(log, ["discard 101", "discard 102", "toast warning unloaded 2 tabs, skipped 1 (audible)"]);
+});
+
+test("tab.unload with all_before from a later tab skips pinned tabs and switches off the current tab when it is in range", async () => {
+  const { handlers, log } = make_unload(make_tabs(4, [{}, { pinned: true }, {}, {}]), [listed(103, 4, "Last")]);
+  await handlers.unload(ctx_at(100), unload_args({ tab: "4", side: "all_before" }));
+  assert.deepEqual(log, ["activate 101", "discard 100", "discard 102", "toast success unloaded 2 tabs"]);
+});
+
+test("tab.unload with count 3 unloads the subject and the two after it, skipping a pinned neighbor", async () => {
+  const { handlers, log } = make_unload(make_tabs(5, [{}, { pinned: true }, {}, {}, {}]), [listed(100, 1, "A")]);
+  await handlers.unload(ctx_at(100), unload_args({ tab: "1", count: 3 }));
+  assert.deepEqual(log, ["activate 101", "discard 100", "discard 102", "toast success unloaded 2 tabs"]);
+});
+
+test("a named pinned tab unloads", async () => {
+  const { handlers, log } = make_unload(make_tabs(3, [{}, { pinned: true }]), [listed(101, 2, "Pinned")]);
+  await handlers.unload(ctx_at(100), unload_args({ tab: "2" }));
+  assert.deepEqual(log, ["discard 101", "toast success unloaded 1 tab"]);
+});
+
+test("a partial result shows as a warning with the reasons", async () => {
+  const { handlers, log } = make_unload(make_tabs(4, [{}, {}, { audible: true }, {}]));
+  await handlers.unload(ctx_at(100), unload_args({ side: "all_after" }));
+  assert.equal(log.at(-1), "toast warning unloaded 2 tabs, skipped 1 (audible)");
+});
+
+test("tab.load loads the named tab in place, and on a loaded current tab it refuses", async () => {
+  const { handlers, log, states } = make_unload(make_tabs(3), [listed(102, 3, "Docs")]);
+  states.get(102)!.discarded = true;
+  await handlers.load(ctx_at(100), unload_args({ tab: "3" }));
+  assert.deepEqual(log, ["reload 102", "toast success loaded 1 tab"]);
+  await assert.rejects(handlers.load(ctx_at(100), unload_args()), /already loaded/);
+});
+
+test("tab.load with a side loads the unpinned unloaded tabs on that side and reports the loaded ones as skipped", async () => {
+  const { handlers, log, states } = make_unload(make_tabs(4, [{}, {}, {}, { pinned: true }]));
+  states.get(101)!.discarded = true;
+  states.get(103)!.discarded = true;
+  await handlers.load(ctx_at(100), unload_args({ side: "all_after" }));
+  assert.deepEqual(log, ["reload 101", "toast warning loaded 1 tab, skipped 1 (already loaded)"]);
+});
+
+test("the result toast goes to the tab that is active after the switch, not the unloaded one", async () => {
+  const { handlers, toast_tabs } = make_unload(make_tabs(3));
+  await handlers.unload(ctx_at(100), unload_args());
+  assert.deepEqual(toast_tabs, [101]);
+});
+
+test("a count below 1 is refused before any tab changes", async () => {
+  const { handlers, log } = make_unload(make_tabs(3));
+  for (const count of [0, -2]) await assert.rejects(handlers.unload(ctx_at(100), unload_args({ count })), /count must be 1 or more/);
+  assert.deepEqual(log, []);
+});

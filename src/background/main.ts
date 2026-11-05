@@ -5,6 +5,7 @@ import { bundle_loader_deps, container_names, make_router_deps, page_of, reinjec
 import { open_quick_start_on_install } from "./first_install.ts";
 import { create_cmdline_service } from "./cmdline_service.ts";
 import { create_previous_tabs } from "./previous_tab.ts";
+import { browser_discard_deps } from "./tab_discard.ts";
 import { browser_complete_items_deps, create_complete_items } from "./complete_items.ts";
 import { create_open_help } from "./open_help.ts";
 import { requirement_lookup } from "./availability.ts";
@@ -65,6 +66,8 @@ const complete_items = create_complete_items({
   all_windows: async () => (await get_config()).settings.completion_all_windows === true,
   search_engines: async () => (await get_config()).search_engines,
   page_of,
+  read_tab: (tab_id) => browser.tabs.get(tab_id).catch(() => undefined),
+  discard: { ...browser_discard_deps, alternate_of: previous_tabs.previous_of },
   open_settings: async () => {
     const { open_completion, history_completion_max } = (await get_config()).settings;
     return { sources: open_completion ?? ["bookmarks", "history"], history_max: history_completion_max ?? 10 };
@@ -86,6 +89,10 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
   if (request?.type === "complete_items") {
     const { id, windowId, incognito } = sender.tab ?? {};
     return complete_items.answer(request.kind, id === undefined || windowId === undefined ? undefined : { tab_id: id, window_id: windowId, incognito: incognito === true });
+  }
+  if (request?.type === "set_tab_unloaded") {
+    const { id, windowId, incognito } = sender.tab ?? {};
+    return complete_items.set_unloaded(request.tab_id, request.unloaded, id === undefined || windowId === undefined ? undefined : { tab_id: id, window_id: windowId, incognito: incognito === true });
   }
   if (request?.type === "open_help") return open_help.open(request.command_id, sender.tab?.id);
   if (request?.type === "record_cmdline") return cmdline.record(request.text, sender.tab?.incognito === true);

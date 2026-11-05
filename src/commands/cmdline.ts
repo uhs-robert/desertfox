@@ -1,4 +1,4 @@
-import { cmdline_clear, cmdline_help, cmdline_history, cmdline_next_completion, cmdline_open, cmdline_prev_completion, cmdline_submit } from "../content/handlers/lazy_bundle.ts";
+import { cmdline_clear, cmdline_help, cmdline_history, cmdline_next_completion, cmdline_open, cmdline_prev_completion, cmdline_submit, list_act } from "../content/handlers/lazy_bundle.ts";
 import { define } from "../shared/registry/index.ts";
 
 define("cmdline.open", {
@@ -63,4 +63,14 @@ define("cmdline.help", {
   runs_in: "content",
   modes: ["cmdline"],
   run: cmdline_help.run,
+});
+
+define("list.act", {
+  completion: "hidden",
+  label: "Act on row",
+  intent: "Act on the highlighted row of the command line list. A tab row unloads, or loads when it is unloaded.",
+  params: [{ name: "action", type: "enum", values: ["unload"], description: { unload: "Unload the highlighted tab, or load it when it is unloaded." } }],
+  runs_in: "content",
+  modes: ["cmdline"],
+  run: list_act.run,
 });
