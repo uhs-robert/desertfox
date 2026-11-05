@@ -5,6 +5,7 @@ import { evaluate_in_background } from "./rdp.mjs";
 export async function run_cases({ run_case, send_keys, rdp, extension_id, expect, sleep }) {
   const help_view = `(browser.extension.getViews({ type: "tab" }).find((view) => view.location.pathname === "/help.html"))`;
   const read_page = (expression) => evaluate_in_background(rdp, extension_id, `(() => { const view = ${help_view}; const doc = view.document; return ${expression}; })()`);
+  const close_help_tabs = () => evaluate_in_background(rdp, extension_id, `(async () => { for (const tab of await browser.tabs.query({})) if (tab.url.endsWith("/help.html")) await browser.tabs.remove(tab.id); })()`);
   const state = () => read_page(`({
     focused: doc.activeElement?.className ?? "",
     value: doc.querySelector(".oasisfox-help-filter")?.value ?? null,
@@ -14,6 +15,7 @@ export async function run_cases({ run_case, send_keys, rdp, extension_id, expect
   })`);
 
   await run_case("the help Commands filter: gi focuses it, typing narrows, Enter marks the first match, Escape leaves with the text kept", async () => {
+    await close_help_tabs();
     await send_keys("qh");
     let ready = false;
     for (let attempt = 0; attempt < 40 && !ready; attempt++) {
@@ -47,5 +49,6 @@ export async function run_cases({ run_case, send_keys, rdp, extension_id, expect
     const left = await state();
     expect(left.focused !== "oasisfox-help-filter", "Escape left the focus in the box");
     expect(left.value === "scroll.down", `Escape changed the text to "${left.value}"`);
+    await close_help_tabs();
   });
 }
