@@ -133,6 +133,7 @@ function block_node(block: Block): HTMLElement {
   switch (block.kind) {
     case "heading": return el(`h${block.level}`, undefined, block.text);
     case "paragraph": return el("p", undefined, ...block.inlines.map(inline_node));
+    case "tip": return el("div", "oasisfox-help-tip", el("strong", "oasisfox-help-tip-label", "Tip"), ": ", ...block.inlines.map(inline_node));
     case "list": return el("ul", undefined, ...block.items.map((item) => el("li", undefined, ...item.map(inline_node))));
     case "code_block": return code_block_node(block.text, block.language);
   }
@@ -160,6 +161,7 @@ function home_page(model: HelpModel): HTMLElement[] {
     : el("ul", "oasisfox-help-warnings", ...model.warnings.map((warning) => el("li", undefined, warning)));
   const settings = el("table", undefined, ...model.settings.map((row) => el("tr", undefined, el("td", undefined, el("code", undefined, row.name)), el("td", undefined, el("code", undefined, row.value)))));
   return [
+    block_node(model.tip),
     el("h2", undefined, "Warnings"),
     warnings,
     el("h2", undefined, "Settings"),
@@ -171,7 +173,9 @@ function home_page(model: HelpModel): HTMLElement[] {
 // Kept outside the tree: every render rebuilds the page, and the text must outlive it.
 let command_filter = "";
 
-function commands_page(model: HelpModel): HTMLElement[] {
+function commands_page(model: HelpModel, target_command: string | undefined): HTMLElement[] {
+  // A `#command=` link must land on a visible card, so it drops a filter that could hide it.
+  if (target_command !== undefined) command_filter = "";
   const input = el("input", "oasisfox-help-filter") as HTMLInputElement;
   input.setAttribute("type", "text");
   input.setAttribute("placeholder", "Filter by name, key or description");
@@ -222,7 +226,7 @@ function commands_page(model: HelpModel): HTMLElement[] {
     }
   });
 
-  return [input, count, ...groups.flatMap((group) => [group.heading, ...group.cards.map(({ card }) => card)])];
+  return [block_node(model.tip), input, count, ...groups.flatMap((group) => [group.heading, ...group.cards.map(({ card }) => card)])];
 }
 
 function styling_page(): HTMLElement[] {
@@ -235,12 +239,12 @@ function styling_page(): HTMLElement[] {
   ];
 }
 
-function page_body(page: PageId, model: HelpModel, guide: Block[]): HTMLElement[] {
-  switch (page) {
+function page_body(route: Route, model: HelpModel, guide: Block[]): HTMLElement[] {
+  switch (route.page) {
     case "home": return home_page(model);
     case "quick-start": return quick_start_page(model.quick_start);
     case "search-engines": return [...guide.map(block_node), el("h2", undefined, "Your engines"), engine_table(model.engines)];
-    case "commands": return commands_page(model);
+    case "commands": return commands_page(model, route.command);
     case "styling": return styling_page();
   }
 }
@@ -333,6 +337,6 @@ export function render_help(root: HTMLElement, model: HelpModel, route: Route, g
   const title = PAGES.find((page) => page.id === route.page)?.title ?? "Home";
   const heading = el("h1", undefined, title);
   heading.tabIndex = -1;
-  const page = el("main", "oasisfox-help-page", heading, ...page_body(route.page, model, guide));
+  const page = el("main", "oasisfox-help-page", heading, ...page_body(route, model, guide));
   root.replaceChildren(el("div", "oasisfox-help", sidebar(route.page, model.quick_start, route.section !== undefined), page));
 }

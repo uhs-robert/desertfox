@@ -54,16 +54,20 @@ class FakeNode {
 const MODEL = {
   engines: [],
   quick_start: [],
+  warnings: [],
+  config_source: "defaults",
+  settings: [],
+  tip: { kind: "tip", inlines: [{ kind: "text", text: "Type it." }] },
   groups: [
     { name: "tab", commands: [TAB_NEW, row("tab.close", "tabclose", "Close the tab")] },
     { name: "scroll", commands: [row("scroll.down", "down", "Scroll down", ["j"])] },
   ],
 } as unknown as HelpModel;
 
-function render(): FakeNode {
+function render(route: { page: "commands" | "home"; command?: string } = { page: "commands" }): FakeNode {
   (globalThis as { document?: unknown }).document = { createElement: (tag: string) => new FakeNode(tag) };
   const root = new FakeNode("body");
-  render_help(root as never, MODEL, { page: "commands" }, []);
+  render_help(root as never, MODEL, route, []);
   return root;
 }
 
@@ -120,4 +124,20 @@ test("the filter text survives a re-render", () => {
   assert.equal(shown_cards(second), 1);
   assert.equal(count_text(second), "1 of 3 commands");
   type(second, "");
+});
+
+test("a #command link clears the filter so the card is shown", () => {
+  type(render(), "scroll");
+  const root = render({ page: "commands", command: "tab.new" });
+  assert.equal(root.find_all("oasisfox-help-filter")[0]!.value, "");
+  assert.equal(shown_cards(root), 3);
+});
+
+test("the tip box leads the Commands list and the Home page, before the warnings", () => {
+  const commands = render().find_all("oasisfox-help-page")[0]!.children;
+  assert.ok((commands[1] as FakeNode).has("oasisfox-help-tip"));
+  const home = render({ page: "home" });
+  const home_page = home.find_all("oasisfox-help-page")[0]!.children;
+  assert.ok((home_page[1] as FakeNode).has("oasisfox-help-tip"));
+  assert.equal(home.find_all("oasisfox-help-tip-label").length, 1);
 });
