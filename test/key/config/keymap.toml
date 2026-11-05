@@ -14,3 +14,8 @@
 ",f" = ["find.next", "scroll.pixels --dy=300"]
 # The command line opens and the scroll waits for Enter or Escape.
 ",o" = ["cmdline.open", "scroll.pixels --dy=300"]
+
+# A prompt step: the line opens for a scroll distance and the scroll waits for Enter or Escape.
+",p" = [":scroll.pixels", "scroll.pixels --dy=300"]
+# A waiting step then a background step: the tab switch waits for the pick.
+",t" = ["hint.run --action=background", "tab.next"]
