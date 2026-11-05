@@ -3,10 +3,11 @@
 import { keep_visible } from "./visible.ts";
 import type { PageProbe } from "./visible.ts";
 
-export type HintFilter = "all" | "clickable" | "inputs" | "links" | "prose" | "custom";
+export type HintFilter = "all" | "clickable" | "buttons" | "inputs" | "links" | "prose" | "custom";
 
 const TEXT_FIELDS = 'input:not([type=hidden]):not([disabled]), textarea:not([disabled]), select:not([disabled]), [contenteditable=""], [contenteditable="true"]';
 const LINKS = "a[href]";
+const BUTTONS = ["button", '[role="button"]', ...["button", "submit", "reset", "image"].map((type) => `input[type="${type}"]`)].map((selector) => `${selector}:not([disabled])`).join(", ");
 const CLICKABLE_BY_ACTION = `${LINKS}, button:not([disabled]), summary, [onclick], [role=button], [role=link], [role=menuitem], [role=menuitemcheckbox], [role=menuitemradio], [role=tab], [role=checkbox], [role=switch], [role=option], [role=radio], label[for], ${TEXT_FIELDS}`;
 const CLICKABLE = `${CLICKABLE_BY_ACTION}, [tabindex]:not([tabindex="-1"])`;
 // A roving-tabindex widget keeps one item at tabindex 0 and the rest at -1, so -1 alone says nothing. A click-like role, or a place inside a menu, does.
@@ -34,6 +35,7 @@ export const has_own_text = (element: Element): boolean => {
 const QUERIES: Record<Exclude<HintFilter, "custom">, Query> = {
   all: { selector: ALL },
   clickable: { selector: CLICKABLE },
+  buttons: { selector: BUTTONS },
   inputs: { selector: TEXT_FIELDS },
   links: { selector: LINKS },
   prose: { selector: "*", test: has_own_text },
@@ -105,7 +107,7 @@ const dom_styles: ClickStyles = {
   parent_of: (element) => element.parentElement ?? (element.parentNode as ShadowRoot | null)?.host ?? null,
 };
 
-// Only the filters that mean "anything clickable" look for weak candidates. `links`, `inputs` and `custom` are exact.
+// Only the filters that mean "anything clickable" look for weak candidates. `links`, `buttons`, `inputs` and `custom` are exact.
 export const weak_test_for = (filter: HintFilter): WeakTest | undefined => (filter === "clickable" || filter === "all" ? make_weak_test(dom_styles) : undefined);
 
 type Climbable = { parentNode: unknown; host?: unknown };
