@@ -66,6 +66,8 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, open_p
     await sleep(300);
   };
   const toast_then_finish_typing = async (typed_before, step_keys, typed_after) => {
+    // A tall page, so the command typed in the line has room to scroll. Each case opens it, so each runs alone.
+    await open_page("page", "p9_layers_line", { new_tab: true });
     try {
       await type_around_toast(typed_before, step_keys, typed_after);
     } finally {
@@ -93,8 +95,6 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, open_p
   };
 
   await run_case("a toast shown while typing in the command line: typing continues and the line stays on top", async () => {
-    // A tall page, so the command typed in the line has room to scroll.
-    await open_page("page", "p9_layers_line", { new_tab: true });
     await toast_then_finish_typing("scroll.line", [], "s");
   });
 
