@@ -173,6 +173,7 @@ function check_param_shape(param: ParamDef, at: string, fail: Fail): void {
     const from = (param.values as { from: unknown }).from;
     if (from !== "search_engines" && from !== "containers" && from !== "tabs" && from !== "bookmarks" && from !== "open" && from !== "windows") fail(`${at}.values`, `unknown source "${String(from)}"`);
   }
+  check_rules(param, at, fail);
   check_value_labels(param, at, fail);
   check_description(param, at, fail);
   if (is_conditional_default(param.default)) {
@@ -185,6 +186,29 @@ function check_param_shape(param: ParamDef, at: string, fail: Fail): void {
       const problem = value_problem(param, param.default);
       if (problem) fail(`${at}.default`, problem);
     }
+  }
+}
+
+function check_rules(param: ParamDef, at: string, fail: Fail): void {
+  if (param.optional !== undefined) {
+    if (param.type !== "string" && param.type !== "enum") fail(`${at}.optional`, "only a string or enum param can be optional");
+    if (param.default !== undefined) fail(`${at}.optional`, "an optional param reads as an empty text, so it takes no `default`");
+    if (param.when) fail(`${at}.optional`, "an optional param cannot also carry `when`");
+  }
+  if (param.min !== undefined) {
+    if (param.type !== "int") fail(`${at}.min`, "only an int param takes a minimum");
+    else if (!Number.isInteger(param.min)) fail(`${at}.min`, "must be a whole number");
+  }
+  if (param.pattern !== undefined) {
+    if (param.type !== "string") fail(`${at}.pattern`, "only a string param takes a pattern");
+    try {
+      new RegExp(param.pattern);
+    } catch {
+      fail(`${at}.pattern`, `${JSON.stringify(param.pattern)} is not a regular expression`);
+    }
+  }
+  if (param.strict !== undefined && (param.type !== "string" || !static_values(param))) {
+    fail(`${at}.strict`, "only a string param with a fixed value list can be strict");
   }
 }
 

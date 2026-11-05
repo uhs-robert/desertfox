@@ -99,11 +99,20 @@ function coerce(param: ParamDef, given: unknown, sources: EnumSources): Coerced 
   if (param.type === "string" && is_context_source(given)) return { ok: true, value: given };
 
   switch (param.type) {
-    case "string":
-      return typeof given === "string" ? { ok: true, value: given } : bad("text");
+    case "string": {
+      if (typeof given !== "string") return bad("text");
+      // An optional param may be empty, whatever the other rules say of its text.
+      if (param.optional && given.trim() === "") return { ok: true, value: given };
+      const allowed = param.strict ? static_values(param) : undefined;
+      if (allowed && !allowed.includes(given)) return bad(`one of ${allowed.join(", ")}`);
+      if (param.pattern !== undefined && !new RegExp(param.pattern).test(given)) return bad(`text matching ${param.pattern}`);
+      return { ok: true, value: given };
+    }
     case "int": {
       const number = typeof given === "string" && /^-?\d+$/.test(given) ? Number(given) : given;
-      return Number.isInteger(number) ? { ok: true, value: number } : bad("a whole number");
+      if (!Number.isInteger(number)) return bad("a whole number");
+      if (param.min !== undefined && (number as number) < param.min) return bad(`a whole number, ${param.min} or more`);
+      return { ok: true, value: number };
     }
     case "float": {
       const number = typeof given === "string" && given.trim() !== "" ? Number(given) : given;

@@ -1,3 +1,4 @@
+import { RuntimeRefusal } from "../shared/command.ts";
 import { get_config } from "../background/startup.ts";
 import { define } from "../shared/registry/index.ts";
 import { CONTAINER_PARAM, current_page, open_in, typed_url_target, WHERE_PARAM } from "./open_target.ts";
@@ -28,8 +29,8 @@ define("open.search", {
   label: "Search",
   intent: "Search with a keyword engine. The engine comes from the search engine list. It defaults to the default_engine setting and the query to the selection.",
   params: [
-    // The empty default stands for "none named", which the validator needs to treat the param as optional.
-    { name: "engine", type: "enum", values: { from: "search_engines" }, default: "" },
+    // Empty stands for "none named", so the default_engine setting decides.
+    { name: "engine", type: "enum", values: { from: "search_engines" }, optional: true },
     { name: "query", type: "string", rest: true, main: true, default: { from: "selection" } },
     WHERE_PARAM,
     CONTAINER_PARAM,
@@ -38,7 +39,7 @@ define("open.search", {
   run: async (ctx, args) => {
     const { search_engines, settings } = await get_config();
     const name = search_engine_name(args.engine, settings.default_engine ?? DEFAULT_SETTINGS.default_engine);
-    if (!search_engines[name]) throw new Error(`No search engine named "${name}"`);
+    if (!search_engines[name]) throw new RuntimeRefusal(`No search engine named "${name}"`);
     const page = await current_page(ctx);
     const url = engine_url(search_engines, name, { query: args.query as string, ...(page ? { page } : {}) });
     await open_in(ctx, url, args.where as Where, container_of(args));

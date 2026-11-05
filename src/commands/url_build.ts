@@ -1,3 +1,4 @@
+import { RuntimeRefusal } from "../shared/command.ts";
 import { BUILT_IN_PAGE, BUILT_IN_QUERY } from "../shared/config.ts";
 import type { SearchEngine } from "../shared/config.ts";
 import { fill_template } from "../shared/engines/fill.ts";
@@ -37,7 +38,7 @@ export function root_url(page_url: string): string | undefined {
 // For typed text, which has no page behind it: a template that needs the page is refused.
 export function engine_search_url(template: string, query: string): string {
   const filled = fill_template(template, { query });
-  if (!filled.ok) throw new Error(filled.message);
+  if (!filled.ok) throw new RuntimeRefusal(filled.message);
   return filled.url;
 }
 
@@ -47,19 +48,19 @@ export function engine_url(engines: Record<string, SearchEngine>, name: string, 
   const tried: string[] = [];
   for (let next: string | undefined = name; next !== undefined && !tried.includes(next); next = engines[next]?.fallback) {
     const engine = engines[next];
-    if (!engine) throw new Error(`No search engine named "${next}"`);
+    if (!engine) throw new RuntimeRefusal(`No search engine named "${next}"`);
     tried.push(next);
     const filled = fill_template(engine.url, input);
     if (filled.ok) return filled.url;
-    if (engine.fallback === undefined) throw new Error(filled.message);
+    if (engine.fallback === undefined) throw new RuntimeRefusal(filled.message);
   }
-  throw new Error(`The fallbacks of search engine "${name}" loop`);
+  throw new RuntimeRefusal(`The fallbacks of search engine "${name}" loop`);
 }
 
 // Refusals are thrown: the router shows the message to the user.
 // `oasisfox` names the built-in new tab page, whose address only the browser knows. It is asked for only then.
 export function home_page_url(home_page: string | undefined, built_in_url: () => string): string {
-  if (!home_page) throw new Error("set home_page in settings.toml");
+  if (!home_page) throw new RuntimeRefusal("set home_page in settings.toml");
   return home_page === BUILT_IN_PAGE ? `${built_in_url()}?${BUILT_IN_QUERY}` : home_page;
 }
 
@@ -100,11 +101,11 @@ export function url_target(
   engines: Record<string, { url: string }>,
 ): string {
   const trimmed = text.trim();
-  if (trimmed === "") throw new Error("No URL");
+  if (trimmed === "") throw new RuntimeRefusal("No URL");
   const url = typed_url(trimmed);
   if (url !== undefined) return url;
   const engine = engines[default_engine];
-  if (!engine) throw new Error(`The text is not a URL and the default_engine setting names no search engine: "${default_engine}"`);
+  if (!engine) throw new RuntimeRefusal(`The text is not a URL and the default_engine setting names no search engine: "${default_engine}"`);
   return engine_search_url(engine.url, trimmed);
 }
 
