@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { Found } from "../../src/content/hints/candidates.ts";
-import { heading_level, is_heading, keep_present, collect, drop_redundant_weak, keep_visible_deduplicated, has_click_sign, has_own_text, NO_OWN_TEXT, has_text, make_weak_test, query_for } from "../../src/content/hints/candidates.ts";
+import { keep_text_matches, heading_level, is_heading, keep_present, collect, drop_redundant_weak, keep_visible_deduplicated, has_click_sign, has_own_text, NO_OWN_TEXT, has_text, make_weak_test, query_for } from "../../src/content/hints/candidates.ts";
 
 type Fake = { name: string; local: string; shadow?: Fake[]; frame?: Fake[] | "cross_origin"; href?: boolean };
 
@@ -296,4 +296,11 @@ test("keep_present drops hidden, boxless, clipped and tiny headings and keeps of
 test("a heading counts by its rendered text, not by hidden or script text in its content", () => {
   assert.equal(is_heading(heading({ localName: "h2", text: "x = 1", rendered: "" })), false);
   assert.equal(is_heading(heading({ localName: "h2", text: "Title", rendered: "Title" })), true);
+});
+
+test("text keeps the headings whose text holds it, and the links whose text holds it", () => {
+  const item = (local: string, text: string, href?: string) => ({ element: { localName: local, innerText: text, href } as unknown as Element, frames: [] });
+  const found = [item("h2", "Introduction"), item("h2", "Usage"), item("a", "Intro link", "https://example.com/"), item("a", "Intro without address")];
+  assert.deepEqual(keep_text_matches(found, "headings", "intro").map((entry) => (entry.element as unknown as { innerText: string }).innerText), ["Introduction", "Intro link", "Intro without address"]);
+  assert.deepEqual(keep_text_matches(found, "links", "intro").map((entry) => (entry.element as unknown as { innerText: string }).innerText), ["Intro link"]);
 });

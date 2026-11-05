@@ -1,7 +1,7 @@
 // Finds the elements a hint filter can label. Visibility is decided later, in visible.ts.
 
 import { is_scroll_box } from "../scroll_box.ts";
-import { takes_typing } from "./actions.ts";
+import { link_address, takes_typing } from "./actions.ts";
 import { clip_to, keep_visible } from "./visible.ts";
 import type { PageProbe, Rect } from "./visible.ts";
 
@@ -171,6 +171,10 @@ export function keep_present<T>(targets: readonly T[], probe: Pick<PageProbe<T>,
     return probe.rects_of(target).some((rect) => has_size(clip_to(rect, clips)));
   });
 }
+
+// The `text` param keeps the links whose text holds it. For headings, which are no links, it keeps the headings whose text holds it.
+export const keep_text_matches = (found: Found[], filter: HintFilter, lower_needle: string): Found[] =>
+  found.filter((item) => (filter === "headings" || link_address(item.element as HTMLAnchorElement) !== undefined) && has_text(item.element, lower_needle));
 
 // The visible text holds the needle, ignoring case. The needle arrives already lower-cased.
 // An empty innerText means the text is hidden, so only a missing innerText falls back to textContent.

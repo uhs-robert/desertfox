@@ -178,11 +178,11 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, open_p
   // Reads the panel through the content script world, which sees closed shadow roots.
   const panel_read = async (expression) => (await in_active_tab(`(() => { const host = document.documentElement.querySelector(':scope > [data-oasisfox-layer="${hints_layer}"]'); const panel = host?.openOrClosedShadowRoot?.querySelector(".oasisfox-headings"); return ${expression}; })()`))[0];
   // The labels of the generator: single letters split into more until there are enough.
-  const label_of_last = (count) => {
+  const label_at = (count, index) => {
     const letters = [..."asdfghjkl"];
     const labels = [...letters];
     while (labels.length < count) { const split = labels.shift(); for (const letter of letters) labels.push(split + letter); }
-    return labels[count - 1];
+    return labels[index];
   };
 
   await run_case(";# panel scrolls with PageDown, PageUp and Ctrl+d, and a row below its edge can be picked", async () => {
@@ -192,6 +192,7 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, open_p
     const rows = await panel_read("panel.querySelectorAll('.oasisfox-heading-row').length");
     expect(rows === 61, `expected 61 rows (title and 60 sections), got ${rows}`);
     expect((await panel_read("panel.scrollHeight > panel.clientHeight")) === true, "the panel does not overflow, so the case proves nothing");
+    const page_y = await scroll_y();
     await send_keys("-M", "ctrl", "d", "-m", "ctrl");
     await sleep(200);
     const after_ctrl_d = await panel_read("Math.round(panel.scrollTop)");
@@ -203,9 +204,11 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, open_p
     await send_keys("-k", "Prior");
     await sleep(200);
     expect((await panel_read("Math.round(panel.scrollTop)")) < after_page_down, "PageUp did not scroll the panel back");
+    expect((await scroll_y()) === page_y, "a panel scroll key moved the page");
     expect((await panel_hosts()) === 1, "a scroll key closed the panel");
-    // The first letter of the last label hides the rows that do not match, so the rest fit.
-    const last = label_of_last(61);
+    // The first letter of the label hides the rows that do not match, so the rest fit.
+    // Row 46 is "Section 45", past the panel's edge, with 15 sections of page left below it, so it can reach the top.
+    const last = label_at(61, 46);
     await send_keys(last[0]);
     await sleep(200);
     const shown = await panel_read("[...panel.querySelectorAll('.oasisfox-heading-row')].filter((row) => row.style.display !== 'none').length");
@@ -214,9 +217,20 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, open_p
     await sleep(200);
     expect((await panel_read("[...panel.querySelectorAll('.oasisfox-heading-row')].filter((row) => row.style.display !== 'none').length")) === 61, "backspace did not restore the rows");
     const delta = await scroll_delta_after("p6_headings_many", [...last]);
-    expect(delta > 0, `picking the last row did not scroll, delta ${delta}`);
-    const top = (await in_active_tab(`Math.round(document.getElementById("section_59").getBoundingClientRect().top)`))[0];
-    expect(Math.abs(top) <= 2 || (await in_active_tab(`scrollY + innerHeight >= document.documentElement.scrollHeight - 1`))[0], `Section 59 sits ${top}px from the top`);
+    expect(delta > 0, `picking a row below the edge did not scroll, delta ${delta}`);
+    const top = (await in_active_tab(`Math.round(document.getElementById("section_45").getBoundingClientRect().top)`))[0];
+    expect(Math.abs(top) <= 2, `Section 45 sits ${top}px from the top`);
+  });
+
+  await run_case(";# panel keys typed with the keys that start it scroll the panel, not the page", async () => {
+    await open_page("headings_many", "p6_headings_queued", { new_tab: true });
+    await send_keys(";#", "-k", "Next");
+    await sleep(700);
+    expect((await panel_hosts()) === 1, "the panel did not open");
+    expect((await scroll_y()) === 0, "PageDown typed during the load scrolled the page");
+    expect((await panel_read("Math.round(panel.scrollTop)")) > 0, "PageDown typed during the load did not scroll the panel");
+    await send_keys("-k", "Escape");
+    await sleep(300);
   });
 
   await run_case(";# lists a heading in a frame, skips one in a hidden frame, and scrolls the frame too", async () => {
