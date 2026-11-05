@@ -17,7 +17,7 @@ export type ActionDeps = {
   start_caret: (target: Element, mode: CaretMode) => void;
 };
 
-type Target = Pick<HTMLElement, "click" | "focus" | "remove"> & { tabIndex?: number; setAttribute?: (name: string, value: string) => void; style?: CSSStyleDeclaration } & { textContent?: string | null; href?: unknown; localName: string; type?: unknown; isContentEditable?: boolean };
+type Target = Pick<HTMLElement, "click" | "focus" | "remove"> & { dispatchEvent?: (event: Event) => boolean; getBoundingClientRect?: () => { left: number; top: number; width: number; height: number } } & { tabIndex?: number; setAttribute?: (name: string, value: string) => void; style?: CSSStyleDeclaration } & { textContent?: string | null; href?: unknown; localName: string; type?: unknown; isContentEditable?: boolean };
 
 const NON_TEXT_INPUTS = new Set(["button", "submit", "reset", "checkbox", "radio", "image", "file", "color", "range"]);
 
@@ -31,6 +31,26 @@ export function takes_typing(target: Target): boolean {
 export function link_address(target: Target): string | undefined {
   const href = target.href;
   return typeof href === "string" && href !== "" && !/^javascript:/i.test(href) ? href : undefined;
+}
+
+type MouseEventName = "pointerover" | "pointerenter" | "mouseover" | "pointerdown" | "mousedown" | "pointerup" | "mouseup";
+
+// One mouse-side event from the middle of the element, as the left button sends it. Returns false when the page cancelled it. Only pointerenter does not bubble.
+export function dispatch_mouse_event(target: Target, type: MouseEventName): boolean {
+  if (!target.dispatchEvent) return true;
+  const box = target.getBoundingClientRect?.();
+  const init = { bubbles: type !== "pointerenter", cancelable: true, composed: true, button: 0, buttons: type.endsWith("down") ? 1 : 0, clientX: box ? box.left + box.width / 2 : 0, clientY: box ? box.top + box.height / 2 : 0 };
+  return target.dispatchEvent(type.startsWith("pointer") ? new PointerEvent(type, { ...init, pointerType: "mouse", isPrimary: true }) : new MouseEvent(type, init));
+}
+
+// The events a real click gives, so a widget that opens on mousedown or pointerdown opens. A browser skips the mouse events after a cancelled pointerdown and the focus after a cancelled mousedown, and a widget such as Chosen relies on that to keep its own focus. The click comes last, from click(), so a link or button acts once.
+function click_like_a_mouse(target: Target): void {
+  for (const type of ["pointerover", "pointerenter", "mouseover"] as const) dispatch_mouse_event(target, type);
+  const pointer_pressed = dispatch_mouse_event(target, "pointerdown");
+  if (pointer_pressed && dispatch_mouse_event(target, "mousedown")) target.focus();
+  dispatch_mouse_event(target, "pointerup");
+  if (pointer_pressed) dispatch_mouse_event(target, "mouseup");
+  target.click();
 }
 
 const FLASH_MS = 700;
@@ -65,9 +85,9 @@ export function perform(action: HintAction, target: Target, deps: ActionDeps): v
   if (action === "copy_text") return deps.copy((target.textContent ?? "").trim());
   if (action === "tab" || action === "background" || action === "window") {
     const address = link_address(target);
-    if (address === undefined) return target.click();
+    if (address === undefined) return click_like_a_mouse(target);
     return deps.open_link(address, action);
   }
   if (takes_typing(target)) return target.focus();
-  target.click();
+  click_like_a_mouse(target);
 }
