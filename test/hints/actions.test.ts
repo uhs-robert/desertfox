@@ -376,3 +376,24 @@ test("every event of one move shares the point, whatever box its element has", a
   assert.deepEqual(new Set(entered_other.map((event) => `${event.clientX},${event.clientY}`)), new Set(["505,505"]));
   unhover();
 });
+
+test("hovering the element that is already hovered sends nothing", async () => {
+  const { unhover } = await import("../../src/content/hints/hover.ts");
+  unhover();
+  const page = fixture("div");
+  page.run("hover");
+  page.run("hover");
+  assert.deepEqual(page.calls, ENTER);
+  unhover();
+  assert.deepEqual(page.calls, [...ENTER, ...LEAVE]);
+});
+
+test("enter and leave events stay inside their shadow tree, the others cross it", async () => {
+  const { hover, unhover } = await import("../../src/content/hints/hover.ts");
+  unhover();
+  const sent: { type: string; composed: boolean }[] = [];
+  hover({ localName: "div", click: () => {}, focus: () => {}, remove: () => {}, dispatchEvent: (event: never) => sent.push(event) } as never);
+  unhover();
+  for (const event of sent) assert.equal(event.composed, !/(enter|leave)$/.test(event.type), event.type);
+  assert.ok(sent.some((event) => event.type === "mouseover" && event.composed));
+});

@@ -63,6 +63,8 @@ function release(): NonNullable<typeof hovered> | undefined {
 
 // A pointer moving between two elements leaves one and enters the other, so a menu the old element opened stays open when the new one is inside it.
 export function hover(target: Hoverable): void {
+  // A pointer that stays on its element sends nothing, so a preview that closes on out stays open.
+  if (hovered?.element === target) return;
   const old = release();
   if (old) leave(old, target);
   const at = center_of(target);
