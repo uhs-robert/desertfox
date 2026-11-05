@@ -130,6 +130,10 @@ shadow.innerHTML = '<div id="panel" style="position:fixed;right:0;top:0;width:20
 shadow.getElementById("panel").addEventListener("scroll", () => send("panel_scroll", { top: shadow.getElementById("panel").scrollTop }))</script>`;
       return response.end(page(`shadowbox ${id}`, host + tall_filler + build));
     }
+    if (url.pathname === "/caret_editable_shadow") {
+      const build = '<div id="host"></div><script>document.getElementById("host").attachShadow({ mode: "open" }).innerHTML = \'<div id="editable" contenteditable="true">hello world</div>\'</script>';
+      return response.end(page(`caret_editable_shadow ${id}`, "<p>foo bar.baz</p>" + build));
+    }
     if (url.pathname === "/prose") {
       // The heading, two spans in a wrapper div and a paragraph hold text of their own. The wrapper holds only blanks and children, so it gets no label.
       const body = '<div id="card"> <span>alpha text</span> <span>beta text</span> </div><p>gamma <b>bold</b></p>';

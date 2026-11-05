@@ -15,3 +15,10 @@ export function is_editable_element(target: EventTarget | Element | null): boole
   if (!(target instanceof HTMLElement)) return false;
   return takes_typing(target.tagName, target instanceof HTMLInputElement ? target.type : "", target.isContentEditable);
 }
+
+// Focus inside an open shadow root shows on the host only, so the walk goes down to the inner element.
+export function deepest_focused_element(): Element | null {
+  let focused = document.activeElement;
+  while (focused?.shadowRoot?.activeElement) focused = focused.shadowRoot.activeElement;
+  return focused;
+}

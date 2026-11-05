@@ -5,6 +5,7 @@ import type { Outcome, RunResponse } from "../../shared/messages.ts";
 import type { BundleHostApi, ExitDestination } from "../bundle_host.ts";
 import { find_char, move_once, SCREEN_LINE_UNITS } from "./motion.ts";
 import type { CharFind, Motion } from "./motion.ts";
+import { deepest_focused_element } from "../editable.ts";
 import { yank_text } from "./copy_text.ts";
 import { create_find } from "./find_session.ts";
 import { scroll_to_index, screen_line_target } from "./screen_line.ts";
@@ -104,7 +105,7 @@ function rebuild_if_stale(open: Session): Session | undefined {
 }
 
 function selection_is_in_focused_editable(selection: Selection): boolean {
-  const focused = document.activeElement;
+  const focused = deepest_focused_element();
   return focused instanceof HTMLElement && focused.isContentEditable && focused.contains(selection.anchorNode);
 }
 
