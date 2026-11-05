@@ -137,10 +137,12 @@ export function create_router(deps: RouterDeps): Router {
     const expanded = Object.fromEntries(Object.entries(filled.args).map(([name, value]) => [name, value === "" && is_context_source(checked.args[name]) ? checked.args[name] : value]));
     const rechecked = check_args(command, expanded, sources);
     if (!rechecked.ok) return refuse(rechecked.error);
+    // The handler gets the rechecked args, with a kept marker back as its empty text.
+    const final_args = Object.fromEntries(Object.entries(rechecked.args).map(([name, value]) => [name, is_context_source(value) ? filled.args[name] : value]));
 
-    if (command.runs_in === "content") return run_in_content(command, filled.args, counted.times, context);
+    if (command.runs_in === "content") return run_in_content(command, final_args, counted.times, context);
     for (let time = 0; time < counted.times; time++) {
-      const result = outcome_of_reply(await command.run(time === 0 ? context : (await read_now(request)).context, filled.args));
+      const result = outcome_of_reply(await command.run(time === 0 ? context : (await read_now(request)).context, final_args));
       if (!result.ok) return result;
     }
     return done;
