@@ -254,6 +254,11 @@ shadow.getElementById("panel").addEventListener("scroll", () => send("panel_scro
       const paragraphs = Array.from({ length: 5000 }, (_, index) => `<p>${index === 0 ? "needle " : ""}${filler}</p>`).join("");
       return response.end(page(`find_huge ${id}`, paragraphs));
     }
+    if (url.pathname === "/caret_ft") {
+      // Forty rows of 100 pixels, each with one "x" and no other: a screen holds a few, and the rest lie below it.
+      const rows = Array.from({ length: 40 }, (_, index) => `<p style="margin:0;height:100px">row ${index} x</p>`).join("");
+      return response.end(page(`caret_ft ${id}`, rows));
+    }
     if (url.pathname === "/caret_columns") {
       // The middle line is short: j over it must still come back to the column the caret left.
       return response.end(page(`caret_columns ${id}`, '<p style="font-family:monospace">abcdefghij<br>ab<br>abcdefghij</p>'));

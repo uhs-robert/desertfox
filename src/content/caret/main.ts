@@ -3,11 +3,14 @@
 
 import type { Outcome, RunResponse } from "../../shared/messages.ts";
 import type { BundleHostApi, ExitDestination } from "../bundle_host.ts";
-import { find_char, move_once, SCREEN_LINE_UNITS } from "./motion.ts";
+import { find_char_hit, find_char_matches, move_once, SCREEN_LINE_UNITS } from "./motion.ts";
 import type { CharFind, Motion } from "./motion.ts";
 import { deepest_focused_element } from "../editable.ts";
 import { yank_text } from "./copy_text.ts";
-import { create_find } from "./find_session.ts";
+import { create_find_mode } from "./find_mode.ts";
+import { CHAR_FIND_NAMES, create_painter } from "./find_paint.ts";
+import type { FindColors } from "./find_paint.ts";
+import { create_find, read_find_colors } from "./find_session.ts";
 import { scroll_to_index, screen_line_target } from "./screen_line.ts";
 import { apply_selection_colors, clear_selection_colors } from "./selection_colors.ts";
 
@@ -16,7 +19,8 @@ import type { Cursor } from "./selection_state.ts";
 import { build_text_model, documents_of, frame_document, trees_alive } from "./text_model.ts";
 import type { DomPoint, TextModel } from "./text_model.ts";
 import { page_selection_cursor, selection_span } from "./page_selection.ts";
-import { first_visible_index } from "./start_point.ts";
+import { first_visible_index, visible_index_range } from "./start_point.ts";
+import { indexes_in_range, pad_range } from "./visible_range.ts";
 
 // `oasisfox_caret_target` is the element a hint picked. The hints bundle sets it just before it enters the mode.
 type CaretWindow = { oasisfox_host: BundleHostApi; oasisfox_caret_ready?: true; oasisfox_caret_target?: Element };
@@ -36,6 +40,49 @@ let searching_from: Session | undefined;
 let pending_find: { direction: CharFind["direction"]; till: boolean; count: number } | undefined;
 // The last find for `;` and `,`. Per page, and not a register.
 let last_find: CharFind | undefined;
+
+// The matches of the last find's character that stay lit while the find is live. Exact case, so the keymap's case means what it says.
+const char_painter = create_painter(CHAR_FIND_NAMES);
+let char_colors: FindColors | undefined;
+// Where the match the caret stands at or next to sits in the text. A new model has other positions, so it falls back to the caret.
+let current_match: { model: TextModel; at: number } | undefined;
+let char_matches: { model: TextModel; char: string; from: number[]; to: number[] } | undefined;
+
+function show_char_matches(): void {
+  const open = session;
+  // The session is gone, or a frame or shadow host left the page under the find.
+  if (!open || !last_find || !trees_alive(open.model)) return find_mode.end();
+  if (!char_colors) return;
+  if (char_matches?.model !== open.model || char_matches.char !== last_find.char) {
+    const from = find_char_matches(open.model.text, last_find.char);
+    char_matches = { model: open.model, char: last_find.char, from, to: from.map((at) => at + last_find!.char.length) };
+  }
+  const { from } = char_matches;
+  const marked = current_match?.model === open.model ? current_match.at : open.cursor.caret;
+  const current = from.indexOf(marked);
+  const { first, last } = visible_index_range(open.model);
+  const padded = pad_range(first, last, open.model.text.length);
+  char_painter.paint(open.model, char_matches, current, char_colors, indexes_in_range(from, padded.first, padded.last, Math.max(current, 0)));
+}
+
+// One scroll or resize burst repaints once, in the next frame.
+function watch_view(on_change: () => void): () => void {
+  let frame = 0;
+  const on_event = () => {
+    if (frame === 0) frame = requestAnimationFrame(() => ((frame = 0), on_change()));
+  };
+  // Capture, because a scroll does not bubble out of a nested scroller.
+  window.addEventListener("scroll", on_event, { capture: true, passive: true });
+  window.addEventListener("resize", on_event, { passive: true });
+  return () => {
+    window.removeEventListener("scroll", on_event, { capture: true });
+    window.removeEventListener("resize", on_event);
+    cancelAnimationFrame(frame);
+    frame = 0;
+  };
+}
+
+const find_mode = create_find_mode({ show: show_char_matches, hide: () => char_painter.clear(), watch_view, defer: (task) => queueMicrotask(task) });
 
 const selections_of = (model: TextModel): Selection[] => documents_of(model).flatMap((owner) => owner.getSelection() ?? []);
 
@@ -122,6 +169,7 @@ function end_session(): void {
   const page_selection = getSelection();
   if (page_selection && !selection_is_in_focused_editable(page_selection)) page_selection.removeAllRanges();
   session = undefined;
+  find_mode.end();
   clear_selection_colors();
 }
 
@@ -174,24 +222,43 @@ function take_find_target(token: string): "handled" | "pass" {
   if (typeof open === "string") return "handled";
   last_find = { char, direction: find.direction, till: find.till };
   move_to_find(open, last_find, find.count, false);
+  begin_char_matches(find.till);
   return "handled";
 }
 
+// The caret goes to the count-th match, and the match is the current one for the highlights. With fewer matches the caret stays.
 function move_to_find(open: Session, find: CharFind, count: number, again: boolean): void {
-  open.cursor = with_caret(open.cursor, find_char(open.model.text, open.cursor.caret, find, count, again), open.mode === "visual");
+  const hit = find_char_hit(open.model.text, open.cursor.caret, find, count, again);
+  open.cursor = with_caret(open.cursor, hit?.caret ?? open.cursor.caret, open.mode === "visual");
+  if (hit) current_match = { model: open.model, at: hit.match };
   open.goal_x = undefined;
   paint(open);
+}
+
+function begin_char_matches(till: boolean): void {
+  const had_colors = char_colors !== undefined;
+  find_mode.start(till);
+  if (had_colors) return;
+  void read_find_colors().then((colors) => {
+    char_colors = colors;
+    find_mode.refresh();
+  });
 }
 
 const sink_for = (mode: "caret" | "visual") => ({
   // Showing the caret on entry is what makes entering the mode draw it at once.
   enter: () => {
     pending_find = undefined;
+    find_mode.end();
     const started = ensure_session(mode);
     if (typeof started === "string") page.oasisfox_host.show_toast(started);
   },
   on_token: (token: string): "handled" | "pass" => {
     if (pending_find) return take_find_target(token);
+    if (find_mode.is_live()) {
+      // Escape only ends the find, in visual mode too.
+      return find_mode.on_token(token);
+    }
     if (mode === "caret" || (token !== "<Escape>" && token !== "<C-[>")) return "pass";
     // Escape in visual mode goes back to caret mode, and the keymap never sees it.
     page.oasisfox_host.set_mode("caret");
@@ -201,6 +268,7 @@ const sink_for = (mode: "caret" | "visual") => ({
   exit: (destination: ExitDestination) => {
     const is_search_line = destination === "cmdline" && searching_from !== undefined && searching_from === session;
     pending_find = undefined;
+    find_mode.end();
     if (destination !== "caret" && destination !== "visual" && !is_search_line) end_session();
   },
 });
@@ -211,15 +279,29 @@ const handle_move = (args: Record<string, unknown>): Outcome | undefined => {
   const open = ensure_session(session?.mode ?? "caret");
   if (typeof open === "string") return { ok: false, message: open };
   if (args.unit === "char_find") {
+    const direction = (args.direction as CharFind["direction"] | undefined) ?? "forward";
+    const till = args.till === true;
+    find_mode.note_find_key();
+    if (find_mode.is_live() && last_find && find_mode.is_till() === till) {
+      // The same key family repeats in the key's own direction, which then is the direction of `;`.
+      last_find = { ...last_find, direction };
+      move_to_find(open, last_find, 1, till);
+      find_mode.refresh();
+      return;
+    }
+    // The other family ends this find and starts its own.
+    find_mode.end();
     if (pending_find) pending_find.count++;
-    else pending_find = { direction: (args.direction as CharFind["direction"] | undefined) ?? "forward", till: args.till === true, count: 1 };
+    else pending_find = { direction, till, count: 1 };
     return;
   }
   if (args.unit === "find_repeat") {
+    find_mode.note_find_key();
     if (!last_find) return;
     const reversed = args.direction === "back";
     const direction = reversed === (last_find.direction === "back") ? "forward" : "back";
     move_to_find(open, { ...last_find, direction }, 1, true);
+    find_mode.refresh();
     return;
   }
   const motion: Motion = { unit: args.unit as Motion["unit"], direction: (args.direction as Motion["direction"] | undefined) ?? "forward", big: args.big === true };
