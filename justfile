@@ -88,10 +88,37 @@ install:
 # Entry in the rbw vault that holds the AMO key: the secret as password, the issuer in the notes.
 export AMO_RBW_ENTRY := env("AMO_RBW_ENTRY", "Firefox AMO API Key")
 
-# Sign dist/ and install it for every profile. Fills the AMO key from rbw when either variable is empty.
+# Refuse to release from main or with uncommitted changes, so a bump never lands on main or mixes with other work.
+[private]
+release_guard:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [ "$(git branch --show-current)" = "main" ]; then
+        echo "release refuses to run on main. Switch to a release branch first." >&2
+        exit 1
+    fi
+    if [ -n "$(git status --porcelain)" ]; then
+        echo "release refuses to run with uncommitted changes. Commit or stash them first." >&2
+        exit 1
+    fi
+
+# Raise the patch version in package.json, package-lock.json and src/manifest.json. AMO rejects a version it has already signed. Runs no git.
+[private]
+release_bump:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    command -v jq >/dev/null || { echo "release needs jq to edit src/manifest.json." >&2; exit 1; }
+    new_version=$(npm version patch --no-git-tag-version | tr -d v)
+    manifest_tmp=$(mktemp)
+    jq --arg version "$new_version" '.version = $version' src/manifest.json > "$manifest_tmp"
+    mv "$manifest_tmp" src/manifest.json
+    echo "bumped version to $new_version"
+
+# Bump the patch version, sign dist/ and install it for every profile. Fills the AMO key from rbw when either variable is empty. Needs a clean release branch.
 release:
     #!/usr/bin/env bash
     set -euo pipefail
+    just release_guard
     if [ -z "${WEB_EXT_API_KEY:-}" ] || [ -z "${WEB_EXT_API_SECRET:-}" ]; then
         for tool in rbw jq; do
             command -v "$tool" >/dev/null || { echo "release needs $tool to read the AMO key from rbw. Install it, or set WEB_EXT_API_KEY and WEB_EXT_API_SECRET." >&2; exit 1; }
@@ -111,5 +138,7 @@ release:
         fi
         export WEB_EXT_API_KEY WEB_EXT_API_SECRET
     fi
+    just release_bump
     just sign
     just install
+    echo "Released $(jq -r .version package.json). Commit the bump on this branch and open a PR."
