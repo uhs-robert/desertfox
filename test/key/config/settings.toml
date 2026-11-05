@@ -1,0 +1,2 @@
+# The first-install Quick Start tab would open beside the first tab and move page a off the first slot, which Alt+J wraps to.
+open_quick_start_on_install = false

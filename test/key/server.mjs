@@ -80,6 +80,7 @@ export function start_server() {
       request.on("data", (chunk) => (text += chunk));
       request.on("end", () => {
         events.push({ at_ms: Date.now(), ...JSON.parse(text) });
+        if (process.env.KEY_TEST_LOG_REPORTS) { const { page_id, type } = events.at(-1); console.log(`report ${events.at(-1).at_ms} ${page_id} ${type}`); }
         response.writeHead(204).end();
       });
       return;
