@@ -17,14 +17,17 @@ export type ContextSource = { from: ContextSourceName };
 
 export type ParamValue = string | number | boolean;
 
-export type ParamDefault = ParamValue | ContextSource;
+// The param is valid only if the named sibling param has one of these values.
+export type ParamWhen = Record<string, readonly ParamValue[]>;
+
+// A default that applies only while the named sibling param has one of the listed values. Otherwise the param has no default and is required.
+export type ConditionalDefault = { value: ParamValue; when: ParamWhen };
+
+export type ParamDefault = ParamValue | ContextSource | ConditionalDefault;
 
 // Value lists filled at run time from the user's config or from Firefox. `tabs`, `bookmarks` and `windows` go on a string param and
 // only feed the completion list. The page asks the background for them (`complete_items`), nobody checks a typed value against them.
 export type DynamicValues = { from: "search_engines" | "containers" | "tabs" | "bookmarks" | "open" | "windows" };
-
-// The param is valid only if the named sibling param has one of these values.
-export type ParamWhen = Record<string, readonly ParamValue[]>;
 
 export type ParamDef = {
   name: string;
@@ -41,7 +44,7 @@ export type ParamDef = {
   rest?: boolean;
   // The one free-text param that config and the command line take as a bare word. At most one per command, `string` only.
   main?: boolean;
-  // A param with no default and no `when` is required.
+  // A param with no default that applies and no `when` is required.
   default?: ParamDefault;
   // Exactly one key, so `{ param: [values] }`.
   when?: ParamWhen;

@@ -66,13 +66,11 @@ test("page.home gives a bare home_page https", async () => {
 
 const NEW_TAB_URL = "moz-extension://test/newtab.html?builtin";
 
-test("bare open with no url is refused and opens nothing", async () => {
-  const opened: Opened[] = [];
-  install_browser(opened);
-  const checked = check_args(registry.get("open.url")!, {});
-  assert.equal(checked.ok, true);
-  await assert.rejects(run("open.url", checked.ok ? checked.args : {}), /missing <url>/);
-  assert.deepEqual(opened, []);
+test("bare open with no url fails the check with missing <url>, and -t -b -w pass it", () => {
+  const open = registry.get("open.url")!;
+  assert.deepEqual(check_args(open, {}), { ok: false, error: "missing <url>", missing_param: "url" });
+  assert.deepEqual(check_args(open, { url: "", where: "here" }), { ok: false, error: "missing <url>", missing_param: "url" });
+  for (const where of ["tab", "background", "window"]) assert.deepEqual(check_args(open, { where }), { ok: true, args: { url: "", where } });
 });
 
 test("open -t with no url opens the new tab page in a new tab", async () => {
@@ -94,20 +92,6 @@ test("open -w with no url opens the new tab page in a new window", async () => {
   install_browser(opened);
   await run("open.url", { url: "", where: "window" });
   assert.deepEqual(opened, [{ via: "create", url: NEW_TAB_URL }]);
-});
-
-test("bare open with a blank url is refused and opens nothing", async () => {
-  const opened: Opened[] = [];
-  install_browser(opened);
-  await assert.rejects(run("open.url", { url: "   ", where: "here" }), /missing <url>/);
-  assert.deepEqual(opened, []);
-});
-
-test("open -t with a blank url opens the new tab page", async () => {
-  const opened: Opened[] = [];
-  install_browser(opened);
-  await run("open.url", { url: "   ", where: "tab" });
-  assert.deepEqual(opened, [{ via: "tab_active", url: NEW_TAB_URL }]);
 });
 
 test("open.url opens a blob: link as it is", async () => {
@@ -198,4 +182,25 @@ test("a binding with a bad fixed arg still warns and is skipped", () => {
   });
   assert.equal(compiled.modes.normal?.children.o, undefined);
   assert.equal(warnings.length, 1);
+});
+
+test("a binding with no url and no prompt warns and is skipped, with a prompt it stays", () => {
+  const { compiled, warnings } = compile_config({
+    config: { ...empty_config(), keymap: { normal: { gx: { id: "open.url" }, gy: { id: "open.url", prompt: { param: "url" } }, gt: { id: "open.url", args: { where: "tab" } } } } },
+    default_keymap: {},
+    get_command: (id) => registry.get(id),
+    enum_sources: { search_engines: [], containers: [] },
+  });
+  const g = compiled.modes.normal!.children.g as unknown as { children: Record<string, unknown> };
+  assert.equal(g.children.x, undefined);
+  assert.ok(g.children.y && g.children.t);
+  assert.equal(warnings.filter((warning) => warning.includes("missing <url>")).length, 1);
+});
+
+test("the router refuses a bare open and opens nothing", async () => {
+  const opened: Opened[] = [];
+  install_browser(opened);
+  const { log } = await submit_typed({});
+  assert.match(log[0]!, /^refuse 7 .*missing <url>/);
+  assert.deepEqual(opened, []);
 });

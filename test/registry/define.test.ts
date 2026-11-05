@@ -200,3 +200,17 @@ test("value_labels: keys must be values, the default has no phrase, phrases are 
   rejects("tab.e", { ...base, params: [{ name: "engine", type: "enum", values: { from: "search_engines" }, value_labels: { a: "b" } }] }, /value_labels: only an enum with a fixed value list/);
   rejects("tab.f", { ...base, params: [{ name: "n", type: "int", value_labels: { a: "b" } }] }, /value_labels: only an enum/);
 });
+
+test("a conditional default checks its value and its when like a when", () => {
+  const with_default = (value: unknown, when: Record<string, readonly (string | number | boolean)[]>): CommandInput => ({
+    ...base,
+    params: [
+      { name: "where", type: "enum", values: ["a", "b"], default: "a" },
+      { name: "text", type: "string", default: { value, when } } as never,
+    ],
+  });
+  rejects("a.b", with_default("", { missing: ["a"] }), /params\[1\]\.default\.when: names "missing"/);
+  rejects("a.b", with_default("", { where: ["c"] }), /params\[1\]\.default\.when\.where: "c" is not one of a, b/);
+  rejects("a.b", with_default(3, { where: ["b"] }), /params\[1\]\.default\.value: 3 is not a string/);
+  assert.doesNotThrow(() => create_registry().define("a.b", with_default("", { where: ["b"] })));
+});

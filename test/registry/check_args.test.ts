@@ -141,3 +141,23 @@ test("types coerce from strings", () => {
   assert.match(error_of(check_args(command, { count_of: 1, ratio: 1, loud: "yes", text: "t" })), /loud expects true or false/);
   assert.match(error_of(check_args(command, { count_of: 1, ratio: 1, loud: true, text: 5 })), /text expects text/);
 });
+
+test("a conditional default fills only while its sibling has a listed value, else the param is required", () => {
+  const reg = create_registry();
+  reg.define("c.d", {
+    label: "CD",
+    intent: "x",
+    params: [
+      { name: "where", type: "enum", values: ["here", "tab"], default: "here" },
+      { name: "text", type: "string", main: true, default: { value: "", when: { where: ["tab"] } } },
+    ],
+    runs_in: "background",
+    run: () => {},
+  });
+  const command = reg.get("c.d")!;
+  assert.deepEqual(check_args(command, { where: "tab" }), { ok: true, args: { where: "tab", text: "" } });
+  assert.deepEqual(check_args(command, { where: "tab", text: "" }), { ok: true, args: { where: "tab", text: "" } });
+  assert.deepEqual(check_args(command, {}), { ok: false, error: "missing <text>", missing_param: "text" });
+  assert.deepEqual(check_args(command, { text: "" }), { ok: false, error: "missing <text>", missing_param: "text" });
+  assert.deepEqual(check_args(command, { text: "x" }), { ok: true, args: { where: "here", text: "x" } });
+});

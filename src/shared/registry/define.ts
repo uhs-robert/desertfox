@@ -3,7 +3,7 @@
 
 import type { CommandDef, ParamDef, ParamValue } from "../command.ts";
 import { MODES } from "../command.ts";
-import { find_param, is_context_source, is_dynamic_values, static_values } from "./params.ts";
+import { find_param, is_conditional_default, is_context_source, is_dynamic_values, static_values } from "./params.ts";
 import { description_problem } from "./summary.ts";
 
 export type CommandInput = Omit<CommandDef, "id">;
@@ -144,6 +144,7 @@ function check_params(input: CommandInput, fail: Fail): void {
     const at = `params[${index}]`;
     if (param.rest && param.type !== "string") fail(`${at}.rest`, "only a string param can take the rest");
     if (param.when) check_when(input, param, at, fail);
+    if (is_conditional_default(param.default)) check_when(input, { ...param, when: param.default.when }, `${at}.default`, fail);
   });
 
   const mains = params.filter((param) => param.main);
@@ -168,7 +169,10 @@ function check_param_shape(param: ParamDef, at: string, fail: Fail): void {
   }
   check_value_labels(param, at, fail);
   check_description(param, at, fail);
-  if (param.default !== undefined) {
+  if (is_conditional_default(param.default)) {
+    const problem = value_problem(param, param.default.value);
+    if (problem) fail(`${at}.default.value`, problem);
+  } else if (param.default !== undefined) {
     if (is_context_source(param.default)) {
       if (param.type !== "string") fail(`${at}.default`, "a context source fits only a string param");
     } else {

@@ -7,21 +7,20 @@ import { engine_url, home_page_url, search_engine_name } from "./url_build.ts";
 
 const container_of = (args: Record<string, unknown>) => (typeof args.container === "string" ? args.container : undefined);
 
-// A blank url with a new tab, background tab or window opens the built-in new tab page, the same page `page.home` opens for `oasisfox`.
-// Bare `open` has no tab to send the new tab page to, so it refuses.
-async function open_url_target(text: string, where: Where): Promise<string> {
+// A blank url opens the built-in new tab page, the same page `page.home` opens for `oasisfox`.
+// The param schema decides where a blank url is allowed, so this takes whatever the check let through.
+async function open_url_target(text: string): Promise<string> {
   if (text.trim() !== "") return typed_url_target(text);
-  if (where === "here") throw new Error("missing <url>");
   return home_page_url(BUILT_IN_PAGE, () => browser.runtime.getURL(NEW_TAB_PAGE_FILE));
 }
 
 define("open.url", {
   name: "open",
   label: "Open URL",
-  intent: "Open a URL. It opens here, in a new tab, in a background tab or in a new window. With no URL, a new tab, background tab or window opens the new tab page.",
-  params: [{ name: "url", type: "string", main: true, default: "", values: { from: "open" } }, WHERE_PARAM, CONTAINER_PARAM],
+  intent: "Open a URL. It opens here, in a new tab, in a background tab or in a new window. With no URL, a new tab, background tab or window opens the new tab page, and opening here needs a URL.",
+  params: [{ name: "url", type: "string", main: true, default: { value: "", when: { where: ["tab", "window", "background"] } }, values: { from: "open" } }, WHERE_PARAM, CONTAINER_PARAM],
   runs_in: "background",
-  run: async (ctx, args) => open_in(ctx, await open_url_target(args.url as string, args.where as Where), args.where as Where, container_of(args)),
+  run: async (ctx, args) => open_in(ctx, await open_url_target(args.url as string), args.where as Where, container_of(args)),
 });
 
 define("open.search", {

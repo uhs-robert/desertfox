@@ -29,7 +29,8 @@ If code and the design disagree, stop and ask the maintainer. Do not change the 
 - Give the native host a fixed set of verbs. Never add a shell or eval verb.
 - Keep no state only in memory. Store it, so a later move to Manifest V3 stays small.
 - Set each command line name by hand. Never derive it from the id. The registry rejects duplicate names.
-- Express flags that exclude each other as one `enum` param with preset flags. `when` is the only condition. Split a command that needs more.
+- Express flags that exclude each other as one `enum` param with preset flags. `when`, and the conditional `default` that reuses its syntax, are the only conditions. Split a command that needs more.
+- Keep every static argument rule in the param schema, checked by the one validator. A command handler reports runtime failures only, never a bad argument value.
 
 ## Public repo rules
 

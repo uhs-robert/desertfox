@@ -1,7 +1,7 @@
 // Small readers over a command's params, shared by the define checks, the
 // validator, the parser and the usage line.
 
-import type { CommandDef, ContextSource, DynamicValues, ParamDef, ParamValue } from "../command.ts";
+import type { CommandDef, ConditionalDefault, ContextSource, DynamicValues, ParamDef, ParamValue } from "../command.ts";
 
 export const CONTEXT_SOURCE_NAMES = ["current_url", "selection", "clipboard"] as const;
 
@@ -9,6 +9,17 @@ export function is_context_source(value: unknown): value is ContextSource {
   if (typeof value !== "object" || value === null) return false;
   const from = (value as { from?: unknown }).from;
   return CONTEXT_SOURCE_NAMES.some((name) => name === from);
+}
+
+export function is_conditional_default(value: unknown): value is ConditionalDefault {
+  return typeof value === "object" && value !== null && "value" in value && "when" in value;
+}
+
+// The default that applies once the sibling values are known, or undefined when the param has none and is required. `sibling` reads a sibling's value.
+export function applicable_default(param: ParamDef, sibling: (name: string) => unknown): Exclude<ParamDef["default"], ConditionalDefault> | undefined {
+  if (!is_conditional_default(param.default)) return param.default;
+  const [name, allowed] = Object.entries(param.default.when)[0] as [string, readonly ParamValue[]];
+  return allowed.includes(sibling(name) as ParamValue) ? param.default.value : undefined;
 }
 
 export function is_dynamic_values(values: ParamDef["values"]): values is DynamicValues {
