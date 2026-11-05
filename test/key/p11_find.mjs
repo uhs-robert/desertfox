@@ -572,6 +572,9 @@ export async function run_cases({ rdp, extension_id, run_case, expect, open_page
     await send_keys("*");
     await wait_toast(/^2 of 2$/, "two matches, not three");
     await wait_highlights((read) => current_of(read) === "zeta three", "the match past Zeta");
+    // n goes on past Zeta too: the next match wraps to the first lowercase one.
+    await send_keys("n");
+    await wait_highlights((read) => current_of(read) === "zeta one", "n skipping Zeta on the way round");
   });
 
   await run_case("* on a word that starts with a surrogate-pair letter takes the whole word", async () => {
@@ -584,5 +587,77 @@ export async function run_cases({ rdp, extension_id, run_case, expect, open_page
     await send_keys("*");
     await wait_toast(/^2 of 2$/, "the whole word matched twice");
     await wait_highlights((read) => current_of(read).startsWith("\u{1D49C}bc again"), "the match in the second paragraph");
+  });
+
+  await run_case("visual n steps from the caret after j moved it past matches, and not back to the last match", async () => {
+    const page_id = "find_vis_caret";
+    await open_page("find_words", page_id, { new_tab: true });
+    await start_visual(page_id);
+    await send_keys("/find_words");
+    await sleep(400);
+    await send_keys(...ENTER);
+    let state = await read_after("Enter");
+    expect(state.focus === "find_words aa", `after Enter ${JSON.stringify(state)}`);
+    await send_keys("j");
+    await send_keys("j");
+    await send_keys("l");
+    await sleep(300);
+    state = await read_after("j j l");
+    expect(state.focus === "find_words cc", `after j j l ${JSON.stringify(state)}`);
+    await send_keys("n");
+    state = await read_after("n");
+    expect(state.focus?.startsWith("find_words find_vis_caret") && state.focus_offset <= 1, `n went to ${JSON.stringify(state)}, expected the wrap to the title and not back to bb`);
+  });
+
+  await run_case("visual N onto a match before the anchor flips the selection", async () => {
+    const page_id = "find_vis_before";
+    await open_page("find_words", page_id, { new_tab: true });
+    await collapse_at("find_words bb");
+    await start_visual(page_id);
+    await send_keys("/find_words");
+    await sleep(400);
+    await send_keys(...ENTER);
+    let state = await read_after("Enter");
+    expect(state.anchor === "find_words bb" && state.focus === "find_words cc", `after Enter ${JSON.stringify(state)}`);
+    await send_keys("N");
+    await read_after("N onto the anchor's own match");
+    await send_keys("N");
+    state = await read_after("N before the anchor");
+    expect(state.anchor === "find_words bb" && state.focus === "find_words aa" && state.focus_offset <= 1, `after the second N ${JSON.stringify(state)}`);
+    expect(state.text.startsWith("find_words aa") && state.text.endsWith("f"), `the selected text is ${JSON.stringify(state.text)}`);
+  });
+
+  await run_case("a click in visual mode moves the anchor, and n then steps from there", async () => {
+    const page_id = "find_vis_click";
+    await open_page("find_words", page_id, { new_tab: true });
+    await start_visual(page_id);
+    await send_keys("/find_words");
+    await sleep(400);
+    await send_keys(...ENTER);
+    await read_after("Enter");
+    // A click collapses the page selection onto the clicked text.
+    await in_active_tab(`(() => { const text = [...document.querySelectorAll("p")].find((p) => p.textContent === "find_words bb").firstChild; getSelection().collapse(text, 0); return true; })()`);
+    await sleep(600);
+    await send_keys("n");
+    const state = await read_after("n after the click");
+    expect(state.anchor === "find_words bb" && state.focus === "find_words cc", `after the click and n ${JSON.stringify(state)}`);
+  });
+
+  await run_case("a fresh visual session after an earlier search: n goes to the first match after the caret", async () => {
+    const page_id = "find_vis_fresh";
+    await open_page("find_words", page_id, { new_tab: true });
+    await send_keys("/find_words");
+    await wait_highlights((read) => total_painted(read) === 4, "the four matches");
+    await send_keys(...ENTER);
+    await sleep(300);
+    await send_keys("n");
+    await sleep(400);
+    await send_keys(...ESCAPE);
+    await wait_highlights((read) => total_painted(read) === 0, "the highlights cleared");
+    await start_visual(page_id);
+    await send_keys("n");
+    const state = await read_after("n");
+    expect(state.focus === "find_words aa" && state.focus_offset <= 1, `n from the new caret went to ${JSON.stringify(state)}, expected the match after the title`);
+    expect(state.anchor?.startsWith("find_words find_vis_fresh"), `the anchor is ${JSON.stringify(state.anchor)}`);
   });
 }
