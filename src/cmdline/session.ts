@@ -12,7 +12,9 @@ export type Effect =
   // The text parsed. `text` is what to put in the history.
   | { kind: "submit"; invocation: Invocation; text: string }
   // Enter on a search line: the search keeps its match.
-  | { kind: "find_commit" };
+  | { kind: "find_commit" }
+  // Open the help page at this command.
+  | { kind: "help"; command_id: string };
 
 export type SessionDeps = {
   history: readonly string[];
@@ -24,6 +26,10 @@ export type SessionDeps = {
   complete?: ((text: string, caret: number) => Completion) | undefined;
   // The line is a page search. Its text is a pattern and no command: Enter commits it, and the history and the list stay off.
   search?: boolean;
+  // The id of the command a typed word names, for help when no row is selected.
+  command_id_of?: (word: string) => string | undefined;
+  // Whether the help page has a card for a command. Snippets have none. Without it every command has one.
+  has_help?: (command_id: string) => boolean;
 };
 
 const NO_ROWS: Completion["rows"] = [];
@@ -114,6 +120,17 @@ export function create_session(deps: SessionDeps) {
     return { kind: "render" };
   };
 
+  // The selected row decides. With none selected, the command word already typed does.
+  const help = (): Effect => {
+    const row = completion?.rows[selected];
+    const word = text.replace(/^[\s:]+/, "").split(/\s/, 1)[0] ?? "";
+    // A history recall leaves `selected` set with no row behind it, so the row decides, not the index.
+    const command_id = row ? row.id : deps.command_id_of?.(word);
+    if (command_id !== undefined && (deps.has_help?.(command_id) ?? true)) return { kind: "help", command_id };
+    message = row ? "this row has no command help" : "no command to show help for";
+    return { kind: "render" };
+  };
+
   const walk_history = (direction: unknown): Effect => {
     if (deps.search) return { kind: "render" };
     if (!fresh && rows().length > 0) return step_selection(direction);
@@ -163,6 +180,14 @@ export function create_session(deps: SessionDeps) {
     set_status: (next: string) => {
       status = next;
     },
+    // A click on a row: the same as moving to it and pressing Tab, so the line takes the row and the list ranks the new text.
+    // `index` counts from the first ranked row, not the first drawn one.
+    pick: (index: number) => {
+      if (!completion?.rows[index] || !list_shown) return;
+      fresh = false;
+      preview(index);
+      refresh();
+    },
     // The caret moved without a change to the text, for example by an arrow key or a click.
     set_caret: (next_caret: number) => {
       if (next_caret === caret) return;
@@ -180,6 +205,8 @@ export function create_session(deps: SessionDeps) {
           return cycle(1);
         case "cmdline.prev_completion":
           return cycle(-1);
+        case "cmdline.help":
+          return deps.search ? { kind: "render" } : help();
         case "cmdline.clear":
           fresh = false;
           replace_text("");

@@ -23,7 +23,7 @@ const setup = (extra: TreeBranch["children"] = {}) => ({
 
 test("every default cmdline key resolves to an effect", () => {
   const { matcher, session } = setup();
-  for (const token of ["<Tab>", "<S-Tab>", "<C-n>", "<C-p>", "<Escape>", "<C-u>", "<ArrowUp>", "<ArrowDown>", "<Enter>"]) {
+  for (const token of ["<Tab>", "<S-Tab>", "<C-n>", "<C-p>", "<Escape>", "<C-u>", "<C-h>", "<ArrowUp>", "<ArrowDown>", "<Enter>"]) {
     assert.equal(run_token(matcher, session, token).kind, "effect", token);
   }
 });

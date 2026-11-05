@@ -64,6 +64,14 @@
   }
   .oasisfox-help-code-copy:hover, .oasisfox-help-code-copy:focus-visible { border-color: var(--oasisfox-accent); color: var(--oasisfox-accent); }
   .oasisfox-help-code-body { margin: 0; padding: 0 1rem .75rem; font-family: ui-monospace, monospace; white-space: pre; overflow-x: auto; scrollbar-color: color-mix(in srgb, var(--oasisfox-fg) 35%, transparent) transparent; }
+  .oasisfox-help-filter {
+    box-sizing: border-box; width: 100%; padding: .4rem .6rem; font: inherit; color: inherit;
+    background: var(--oasisfox-bg-mantle, color-mix(in srgb, var(--oasisfox-fg) 6%, var(--oasisfox-bg)));
+    border: 1px solid var(--oasisfox-border, color-mix(in srgb, var(--oasisfox-fg) 25%, transparent)); border-radius: var(--oasisfox-radius);
+  }
+  .oasisfox-help-filter:focus { outline: none; border-color: var(--oasisfox-accent); }
+  .oasisfox-help-filter-count { margin: .25rem 0 0; }
+  .oasisfox-help [hidden] { display: none; }
   .oasisfox-help kbd { color: var(--oasisfox-accent); }
   .oasisfox-help-mode { display: inline-block; min-width: 4.5rem; margin-right: .5rem; opacity: .6; }
   .oasisfox-help-muted { opacity: .6; }
