@@ -10,7 +10,9 @@ const LINKS = "a[href]";
 const CLICKABLE = `${LINKS}, button:not([disabled]), summary, [onclick], [tabindex]:not([tabindex="-1"]), [role=button], [role=link], [role=menuitem], [role=menuitemcheckbox], [role=menuitemradio], [role=tab], [role=checkbox], [role=switch], [role=option], [role=radio], label[for], ${TEXT_FIELDS}`;
 // A roving-tabindex widget keeps one item at tabindex 0 and the rest at -1, so -1 alone says nothing. A click-like role, or a place inside a menu, does.
 const ROVING_ITEM = `${["button", "link", "menuitem", "menuitemcheckbox", "menuitemradio", "tab", "option", "checkbox", "switch", "radio"].map((role) => `[tabindex="-1"][role=${role}]`).join(", ")}`;
-const MENU_ITEM = `${ROVING_ITEM}, :is([role=menu], [role=menubar], menu) [tabindex="-1"]:not(:is([role=menu], [role=menubar], [role=none], [role=presentation], [role=separator], [role=group]))`;
+// Menus built from plain lists carry no role. Their roving group still shows: one item at tabindex 0 and its siblings at -1.
+const ROVING_GROUP = '[tabindex="0"] ~ [tabindex="-1"], [tabindex="-1"]:has(~ [tabindex="0"])';
+const MENU_ITEM = `${ROVING_ITEM}, ${ROVING_GROUP}, :is([role=menu], [role=menubar], menu) [tabindex="-1"]:not(:is([role=menu], [role=menubar], [role=none], [role=presentation], [role=separator], [role=group]))`;
 const ALL = `${CLICKABLE}, h1, h2, h3, h4, h5, h6, p, li, img, td, th, pre, code, blockquote`;
 
 const SELECTORS: Record<Exclude<HintFilter, "custom">, string> = { all: ALL, clickable: CLICKABLE, inputs: TEXT_FIELDS, links: LINKS };

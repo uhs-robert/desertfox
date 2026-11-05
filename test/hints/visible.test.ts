@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { scroll_clips_of, boxes_with_fallback, clip_to, clipping_boxes, contains_composed, keep_visible, points_to_probe, viewport_size, uncovered_through_frames, visible_point } from "../../src/content/hints/visible.ts";
+import { box_owners, scroll_clips_of, boxes_with_fallback, clip_to, clipping_boxes, contains_composed, keep_visible, points_to_probe, viewport_size, uncovered_through_frames, visible_point } from "../../src/content/hints/visible.ts";
 import type { PageProbe, Rect } from "../../src/content/hints/visible.ts";
 
 type Box = { name: string; rect: Rect; rects?: Rect[]; reachable_at?: (x: number, y: number) => boolean; intersecting?: boolean; hidden?: boolean; covered_by?: string; clips?: Rect[] };
@@ -146,7 +146,6 @@ test("boxes_with_fallback uses the boxes of an element, else of its children, to
   assert.deepEqual(boxes_with_fallback({ name: "zero", own: [at(0, 0, 0, 0)], kids: [child, { name: "empty", own: [] }] }, rects, kids), [at(1, 1, 10, 10)]);
   const nested = { name: "a", own: [], kids: [{ name: "b", own: [], kids: [child] }] };
   assert.deepEqual(boxes_with_fallback(nested, rects, kids), [at(1, 1, 10, 10)]);
-  assert.deepEqual(boxes_with_fallback(nested, rects, kids, 1), []);
   assert.deepEqual(boxes_with_fallback({ name: "none", own: [] }, rects, kids), []);
 });
 
@@ -183,4 +182,16 @@ test("scroll_clips_of keeps a real scroll box and lets a fixed target escape it"
   const scroller: Dom = { tag: "div", parent: body, overflow_x: "auto", overflow_y: "auto", box: at(0, 0, 50, 50) };
   assert.deepEqual(scroll_clips_of(link_in(scroller), reads), [at(0, 0, 50, 50)]);
   assert.deepEqual(scroll_clips_of({ tag: "a", parent: scroller, position: "fixed" }, reads), []);
+});
+
+test("box_owners names the element, or for one with no box the children that own boxes (so an observer can watch them)", () => {
+  const rects = (n: Node) => n.own;
+  const kids = (n: Node) => n.kids ?? [];
+  const a = { name: "a", own: [at(0, 0, 10, 10)] };
+  const b = { name: "b", own: [] };
+  assert.deepEqual(box_owners(a, rects, kids), [a]);
+  const contents = { name: "contents", own: [], kids: [a, b] };
+  assert.deepEqual(box_owners(contents, rects, kids).map((n) => n.name), ["a"]);
+  const nested = { name: "outer", own: [], kids: [contents] };
+  assert.deepEqual(box_owners(nested, rects, kids).map((n) => n.name), ["a"]);
 });

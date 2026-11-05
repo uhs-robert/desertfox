@@ -173,3 +173,9 @@ test("a visible wrapper keeps its hint when the clickable child inside it is hid
   };
   assert.deepEqual(names_of(keep_visible_deduplicated([weak(wrapper), strong(child)], probe)), ["wrapper"]);
 });
+
+test("the roving group rule is part of the weak menu selector, so plain-list menus are found", () => {
+  const seen: string[] = [];
+  make_weak_test(dom_styles)(Object.assign(el({ name: "item", local: "li" }), { matches: (s: string) => (seen.push(s), false) }));
+  assert.ok(seen.some((s) => s.includes('[tabindex="0"] ~ [tabindex="-1"]') && s.includes(':has(~ [tabindex="0"])')));
+});

@@ -74,11 +74,15 @@ export function clip_to(rect: Rect, clips: readonly Rect[]): Rect {
 const MAX_FALLBACK_DEPTH = 3;
 const MAX_FALLBACK_CHILDREN = 20;
 
-// The boxes of an element, or when it has none with an area (`display: contents`, a wrapper of floats), the boxes of its children.
-export function boxes_with_fallback<T>(element: T, rects: (e: T) => Rect[], children: (e: T) => T[], depth = MAX_FALLBACK_DEPTH): Rect[] {
-  const own = rects(element).filter(has_area);
-  if (own.length > 0 || depth === 0) return own;
-  return children(element).slice(0, MAX_FALLBACK_CHILDREN).flatMap((child) => boxes_with_fallback(child, rects, children, depth - 1));
+// The elements that own the boxes of an element: itself, or when it has no box with an area (`display: contents`, a wrapper of floats), its children's owners.
+// An IntersectionObserver reports nothing for a `display: contents` element, so the observer has to watch these instead.
+export function box_owners<T>(element: T, rects: (e: T) => Rect[], children: (e: T) => T[], depth = MAX_FALLBACK_DEPTH): T[] {
+  if (rects(element).some(has_area) || depth === 0) return [element];
+  return children(element).slice(0, MAX_FALLBACK_CHILDREN).flatMap((child) => box_owners(child, rects, children, depth - 1));
+}
+
+export function boxes_with_fallback<T>(element: T, rects: (e: T) => Rect[], children: (e: T) => T[]): Rect[] {
+  return box_owners(element, rects, children).flatMap((owner) => rects(owner).filter(has_area));
 }
 
 type Ancestor = { position: string; clips_x: boolean; clips_y: boolean; box: Rect };

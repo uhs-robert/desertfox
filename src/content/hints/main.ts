@@ -13,7 +13,7 @@ import { clean_letters, make_labels } from "./labels.ts";
 import { create_picker } from "./pick.ts";
 import { create_view } from "./view.ts";
 import { follow_windows } from "./follow.ts";
-import { boxes_with_fallback, scroll_clips_of, uncovered_through_frames, viewport_size } from "./visible.ts";
+import { box_owners, boxes_with_fallback, scroll_clips_of, uncovered_through_frames, viewport_size } from "./visible.ts";
 import type { PageProbe, Rect } from "./visible.ts";
 
 type HintsWindow = { oasisfox_host: BundleHostApi; oasisfox_hints_ready?: true; oasisfox_caret_target?: Element };
@@ -89,10 +89,13 @@ function scroll_clips_in_page(element: Element): Rect[] {
 }
 
 async function keep_visible_ones(candidates: Found[]): Promise<Found[]> {
-  const seen = await observe_intersecting(candidates.map((found) => found.element));
+  const own_rects = (element: Element) => Array.from(element.getClientRects());
+  const children = (element: Element) => Array.from(element.children);
+  const owners = new Map(candidates.map((found) => [found.element, box_owners(found.element, own_rects, children)]));
+  const seen = await observe_intersecting([...new Set([...owners.values()].flat())]);
   const probe: PageProbe<Found> = {
-    is_intersecting: (found) => seen.has(found.element),
-    rects_of: (found) => boxes_with_fallback(found.element, (element) => Array.from(element.getClientRects()), (element) => Array.from(element.children)),
+    is_intersecting: (found) => owners.get(found.element)!.some((owner) => seen.has(owner)),
+    rects_of: (found) => boxes_with_fallback(found.element, own_rects, children),
     clips_of: (found) => scroll_clips_in_page(found.element),
     viewport_of: (found) => viewport_size(found.element.ownerDocument, window_of(found.element)),
     is_hidden_by_style: (found) => window_of(found.element).getComputedStyle(found.element).visibility === "hidden",
