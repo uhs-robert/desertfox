@@ -193,6 +193,21 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, open_p
     expect(hover_events(mark, "p6_hover_nested").join(",") === "hover_in:menu,hover_in:item", `the page saw ${hover_events(mark, "p6_hover_nested")}`);
   });
 
+  await run_case("Escape closes a hovered menu after a click on an item inside it", async () => {
+    await open_page("hoverbox", "p6_hover_pick", { new_tab: true });
+    const mark = events.length;
+    await run_hint({ action: "hover", filter: "custom", selector: "#menu, #item" });
+    await sleep(400);
+    await send_keys("a");
+    await wait_event(mark, (event) => event.type === "hover_in" && event.box === "menu" && event.page_id === "p6_hover_pick", "mouseenter on the menu");
+    await run_hint({ action: "here", filter: "custom", selector: "#menu, #item" });
+    await sleep(400);
+    await send_keys("s");
+    await sleep(300);
+    await send_keys("-k", "Escape");
+    await wait_event(mark, (event) => event.type === "hover_out" && event.box === "menu" && event.page_id === "p6_hover_pick", "mouseleave on the menu after Escape");
+  });
+
   // Set OASISFOX_SHOT_DIR to also save the two screenshots.
   const shot_dir = process.env.OASISFOX_SHOT_DIR;
   if (shot_dir) {

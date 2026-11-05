@@ -7,13 +7,13 @@ Object.assign(globalThis, { document: { activeElement: null }, HTMLElement: clas
 
 test("Escape with no hints bundle loaded asks nothing and does not throw", () => {
   assert.equal(bundles.has_handler("hint.unhover"), false);
-  assert.doesNotThrow(() => mode_escape.run({}, {} as never));
+  assert.doesNotThrow(() => mode_escape.run({}));
 });
 
 test("Escape asks the loaded hints bundle to clear the hover", async () => {
   const cleared: string[] = [];
   bundles.api.register_handler("hint.unhover", () => void cleared.push("unhover"));
-  mode_escape.run({}, {} as never);
+  mode_escape.run({});
   await new Promise((resolve) => setTimeout(resolve, 10));
   assert.deepEqual(cleared, ["unhover"]);
 });
