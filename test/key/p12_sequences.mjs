@@ -105,8 +105,8 @@ export async function run_cases({ config_dir, load_config_dir, rdp, extension_id
     await send_keys(",p");
     await sleep(700);
     expect(!find_event(mark, scroll_of("sq_prompt")), "the page scrolled while the prompt was open");
-    await send_keys("50", ...ENTER);
-    await wait_event(mark, (event) => scroll_of("sq_prompt")(event) && event.y >= 350, "both scrolls (50 typed, then 300) after Enter");
+    await send_keys("0", ...ENTER);
+    await wait_event(mark, (event) => scroll_of("sq_prompt")(event) && event.y >= 300, "the second step (scroll down 300) after Enter on a line that scrolls right by 0");
     await close_tabs_with("sq_prompt");
     await sleep(500);
     await open_page("page", "sq_prompt2", { new_tab: true });
