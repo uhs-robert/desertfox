@@ -6,6 +6,7 @@ import { open_quick_start_on_install } from "./first_install.ts";
 import { create_cmdline_service } from "./cmdline_service.ts";
 import { create_previous_tabs } from "./previous_tab.ts";
 import { browser_complete_items_deps, create_complete_items } from "./complete_items.ts";
+import { create_open_help } from "./open_help.ts";
 import { requirement_lookup } from "./availability.ts";
 import { list_keys } from "./list_keys.ts";
 import { create_bundle_loader } from "./bundle_loader.ts";
@@ -24,6 +25,9 @@ import type { SnippetCall } from "./snippets.ts";
 // Mode reports wait for this, so the clear never removes a fresh report.
 const modes_cleared = forget_all_tab_modes(browser.storage.local);
 
+// Taken before the config loads, so it holds the built-in commands only, which are the ones the help page has cards for.
+const built_in_ids = new Set(registry.list().map((command) => command.id));
+
 const repeat_memory = create_repeat_memory(browser.storage.session);
 const router = create_router(make_router_deps(get_config, repeat_memory));
 const is_private_tab = async (tab_id: number | undefined) => tab_id !== undefined && (await browser.tabs.get(tab_id).catch(() => undefined))?.incognito === true;
@@ -41,11 +45,18 @@ const cmdline = create_cmdline_service({
   sources: async () => ({ search_engines: await get_search_engine_names(), containers: await container_names() }),
   page_config: async () => {
     const config = await get_config();
-    return { commands: registry.list().map(command_meta), command_aliases: config.command_aliases, css: config.css, ...(config.settings.cmdline_prompt !== undefined && { prompt: config.settings.cmdline_prompt }) };
+    return { commands: registry.list().map(command_meta), help_ids: [...built_in_ids], command_aliases: config.command_aliases, css: config.css, ...(config.settings.cmdline_prompt !== undefined && { prompt: config.settings.cmdline_prompt }) };
   },
 });
 
 const previous_tabs = create_previous_tabs(browser.storage.session);
+
+const open_help = create_open_help({
+  is_opener: cmdline.is_opener,
+  is_command: (command_id) => built_in_ids.has(command_id),
+  help_page_url: browser.runtime.getURL("help.html"),
+  open_tab: (tab) => browser.tabs.create(tab),
+});
 
 const complete_items = create_complete_items({
   ...browser_complete_items_deps,
@@ -76,6 +87,7 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
     const { id, windowId, incognito } = sender.tab ?? {};
     return complete_items.answer(request.kind, id === undefined || windowId === undefined ? undefined : { tab_id: id, window_id: windowId, incognito: incognito === true });
   }
+  if (request?.type === "open_help") return open_help.open(request.command_id, sender.tab?.id);
   if (request?.type === "record_cmdline") return cmdline.record(request.text, sender.tab?.incognito === true);
   if (request?.type === "record_repeat") {
     return get_config().then(async () => {
