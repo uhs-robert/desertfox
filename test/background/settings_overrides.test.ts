@@ -172,7 +172,7 @@ test("a stored override that no longer passes is ignored at load", async () => {
 
 test("a failed publish puts the stored overrides back", async () => {
   const file = { value: managed({}) };
-  const { session } = install_fake_browser(file);
+  const { session, local } = install_fake_browser(file);
   const startup = await fresh_startup("rollback");
   await startup.change_overrides(() => ({ newtab_date: false }));
   const browser_stub = (globalThis as unknown as { browser: { tabs: { query: () => Promise<never> } } }).browser;
@@ -182,6 +182,8 @@ test("a failed publish puts the stored overrides back", async () => {
   };
   await assert.rejects(startup.change_overrides((current) => ({ ...current, hint_letters: "xy" })), /tabs down/);
   browser_stub.tabs.query = working;
+  assert.deepEqual(stored_status(local).overrides, ["newtab_date"]);
+  assert.equal(stored_status(local).settings.hint_letters, "asdfghjkl");
   assert.deepEqual(session[SETTING_OVERRIDES_STORAGE_KEY], { newtab_date: false });
   assert.deepEqual((await startup.get_config()).settings, { newtab_date: false });
 });

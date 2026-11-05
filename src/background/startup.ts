@@ -92,6 +92,8 @@ export function change_overrides(decide: (current: SettingOverrides, config: Mer
     } catch (error) {
       // Pages read the stored overrides themselves, so a failed publish must not leave them ahead of the config.
       await browser.storage.session.set({ [SETTING_OVERRIDES_STORAGE_KEY]: before });
+      // Best effort: the failed publish may have written the keymap and status for `next` already.
+      await publish(await (load_step as Promise<LoadStep>), before).catch(() => undefined);
       throw error;
     }
   });

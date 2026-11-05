@@ -91,7 +91,7 @@ function fake_deps(initial: SettingOverrides = {}) {
   const state = { overrides: initial, publishes: 0 };
   const deps: SettingsDeps = {
     change_overrides: async (decide) => {
-      const next = decide(state.overrides, config());
+      const next = decide(state.overrides, config(state.overrides));
       if (next === undefined) return;
       state.overrides = next;
       state.publishes++;
@@ -108,7 +108,7 @@ test("the handler toasts after the change and publishes only on a change", async
   await handlers.set(ctx, { setting: "hint_letters" });
   await handlers.unset(ctx, { setting: "" });
   await handlers.unset(ctx, { setting: "all" });
-  assert.deepEqual(toasts, ['success hint_letters = "qwer"', 'info hint_letters = "asdfghjkl"', "info Name a setting to unset, or all", "success Cleared 1 override"]);
+  assert.deepEqual(toasts, ['success hint_letters = "qwer"', 'info hint_letters = "qwer"', "info Name a setting to unset, or all", "success Cleared 1 override"]);
   assert.equal(state.publishes, 2);
   assert.deepEqual(state.overrides, {});
 });
