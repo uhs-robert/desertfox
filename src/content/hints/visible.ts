@@ -8,6 +8,8 @@ export type PageProbe<T> = {
   // Position in the viewport of the document that holds the target, and the size of the part a click can reach (without scrollbars).
   // One box per line a wrapped link covers; the bounding box when there are none.
   rects_of: (target: T) => Rect[];
+  // The visible boxes of every scrolling ancestor, in the same coordinates as `rects_of`. A point outside one of them is clipped away, so it cannot hit the target.
+  clips_of: (target: T) => Rect[];
   viewport_of: (target: T) => { width: number; height: number };
   is_hidden_by_style: (target: T) => boolean;
   // Whether the topmost thing at the point is the target, inside it or around it.
@@ -63,10 +65,81 @@ export function viewport_size(
   return { width: box.clientWidth || win.innerWidth, height: box.clientHeight || win.innerHeight };
 }
 
+const has_area = (rect: Rect) => rect.right > rect.left && rect.bottom > rect.top;
+
+export function clip_to(rect: Rect, clips: readonly Rect[]): Rect {
+  return clips.reduce((r, c) => ({ left: Math.max(r.left, c.left), top: Math.max(r.top, c.top), right: Math.min(r.right, c.right), bottom: Math.min(r.bottom, c.bottom) }), rect);
+}
+
+const MAX_FALLBACK_DEPTH = 3;
+const MAX_FALLBACK_CHILDREN = 20;
+
+// The elements that own the boxes of an element: itself, or when it has no box with an area (`display: contents`, a wrapper of floats), its children's owners.
+// An IntersectionObserver reports nothing for a `display: contents` element, so the observer has to watch these instead.
+export function box_owners<T>(element: T, rects: (e: T) => Rect[], children: (e: T) => T[], depth = MAX_FALLBACK_DEPTH): T[] {
+  if (rects(element).some(has_area) || depth === 0) return [element];
+  return children(element).slice(0, MAX_FALLBACK_CHILDREN).flatMap((child) => box_owners(child, rects, children, depth - 1));
+}
+
+export function boxes_with_fallback<T>(element: T, rects: (e: T) => Rect[], children: (e: T) => T[]): Rect[] {
+  return box_owners(element, rects, children).flatMap((owner) => rects(owner).filter(has_area));
+}
+
+type Ancestor = { position: string; clips_x: boolean; clips_y: boolean; box: Rect };
+
+// The boxes that clip a target, from its chain of ancestors (nearest first, each with its computed position, the axes its overflow clips, and its visible box).
+// A box clips only the axes that its overflow clips. An absolutely positioned target escapes the clip of ancestors above it until its containing block, and a fixed one escapes them all.
+export function clipping_boxes(own_position: string, ancestors: readonly Ancestor[]): Rect[] {
+  if (own_position === "fixed") return [];
+  let escaping = own_position === "absolute";
+  const boxes: Rect[] = [];
+  for (const ancestor of ancestors) {
+    if (escaping && ancestor.position === "static") continue;
+    escaping = false;
+    if (!ancestor.clips_x && !ancestor.clips_y) continue;
+    const { box } = ancestor;
+    boxes.push({
+      left: ancestor.clips_x ? box.left : -Infinity,
+      right: ancestor.clips_x ? box.right : Infinity,
+      top: ancestor.clips_y ? box.top : -Infinity,
+      bottom: ancestor.clips_y ? box.bottom : Infinity,
+    });
+  }
+  return boxes;
+}
+
+// Page reads behind `scroll_clips_of`, so tests run on fake elements.
+export type ClipReads<T> = {
+  parent_of: (element: T) => T | null;
+  tag_of: (element: T) => string;
+  style_of: (element: T) => { position: string; display: string; overflow_x: string; overflow_y: string };
+  // The padding box, which is what an overflow clips to.
+  box_of: (element: T) => Rect;
+};
+
+// A body or root overflow goes to the viewport, which the probe already clips to. An inline or `contents` box has no client box of its own to clip to.
+const CANNOT_CLIP_TAGS = new Set(["body", "html"]);
+const CANNOT_CLIP_DISPLAYS = new Set(["inline", "contents"]);
+
+export function scroll_clips_of<T>(element: T, reads: ClipReads<T>): Rect[] {
+  const ancestors: Ancestor[] = [];
+  for (let up = reads.parent_of(element); up !== null; up = reads.parent_of(up)) {
+    if (CANNOT_CLIP_TAGS.has(reads.tag_of(up))) continue;
+    const style = reads.style_of(up);
+    const can_clip = !CANNOT_CLIP_DISPLAYS.has(style.display);
+    const clips_x = can_clip && style.overflow_x !== "visible";
+    const clips_y = can_clip && style.overflow_y !== "visible";
+    ancestors.push({ position: style.position, clips_x, clips_y, box: clips_x || clips_y ? reads.box_of(up) : { left: 0, top: 0, right: 0, bottom: 0 } });
+  }
+  return clipping_boxes(reads.style_of(element).position, ancestors);
+}
+
 export function keep_visible<T>(targets: readonly T[], probe: PageProbe<T>): T[] {
   return targets.filter((target) => {
     if (!probe.is_intersecting(target) || probe.is_hidden_by_style(target)) return false;
-    const points = points_to_probe(probe.rects_of(target), probe.viewport_of(target));
+    const clips = probe.clips_of(target);
+    const rects = probe.rects_of(target).map((rect) => clip_to(rect, clips)).filter(has_area);
+    const points = points_to_probe(rects, probe.viewport_of(target));
     return points.some((point) => probe.is_reachable_at(target, point.x, point.y));
   });
 }

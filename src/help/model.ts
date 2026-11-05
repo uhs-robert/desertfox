@@ -260,4 +260,5 @@ export const STYLE_CLASSES: { name: string; meaning: string }[] = [
   { name: "oasisfox-help-code-body", meaning: "The code text of a code block" },
   { name: "oasisfox-help-filter", meaning: "The filter text box on the Commands page" },
   { name: "oasisfox-help-filter-count", meaning: "The line under the filter box that counts the shown commands" },
+  { name: "oasisfox-help-inline-code", meaning: "A code snippet inside a sentence on the help page" },
 ];
