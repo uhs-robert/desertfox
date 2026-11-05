@@ -231,3 +231,21 @@ test("strict refuses a string outside its values", () => {
 test("an optional param reads as empty text when left out", () => {
   assert.deepEqual(check_args(rules_command, {}), { ok: true, args: { count: 1, pick: "", page: "", engine: "" } });
 });
+
+test("value_of checks the value with the named setting's spec", () => {
+  const set = create_registry().define("rules.set", {
+    label: "Set",
+    intent: "Set a setting.",
+    runs_in: "background",
+    params: [
+      { name: "name", type: "string", values: ["light_intensity", "hint_letters"], strict: true },
+      { name: "value", type: "string", optional: true, value_of: "name" },
+    ],
+    run: () => {},
+  });
+  assert.match(error_of(check_args(set, { name: "light_intensity", value: "9" })), /light_intensity: expected a whole number from 1 to 5/);
+  assert.equal(check_args(set, { name: "light_intensity", value: "4" }).ok, true);
+  assert.equal(check_args(set, { name: "hint_letters", value: "9" }).ok, false);
+  assert.equal(check_args(set, { name: "hint_letters", value: "ab" }).ok, true);
+  assert.equal(check_args(set, { name: "light_intensity" }).ok, true);
+});

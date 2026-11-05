@@ -5,8 +5,8 @@ import { create_word_lookup } from "../../../src/cmdline/word_lookup.ts";
 import type { CommandMeta } from "../../../src/shared/command.ts";
 import { COMMAND_ALIASES, COMMANDS, SOURCES, lookup } from "./fixtures.ts";
 
-const SET: CommandMeta = { id: "settings.set", name: "set", label: "Set a setting", intent: "Change a setting.", params: [{ name: "setting", type: "string", rest: true, main: true, default: "" }] };
-const UNSET: CommandMeta = { id: "settings.unset", name: "unset", label: "Unset a setting", intent: "Drop a change.", params: [{ name: "setting", type: "string", rest: true, main: true, default: "" }] };
+const SET: CommandMeta = { id: "settings.set", name: "set", label: "Set a setting", intent: "Change a setting.", params: [{ name: "name", type: "string", strict: true, values: ["which_key_border", "newtab_date"] }, { name: "value", type: "string", rest: true, main: true, optional: true, value_of: "name" }] };
+const UNSET: CommandMeta = { id: "settings.unset", name: "unset", label: "Unset a setting", intent: "Drop a change.", params: [{ name: "name", type: "string", main: true, strict: true, values: ["all", "which_key_border"] }] };
 
 const complete = create_completer(lookup, COMMANDS, COMMAND_ALIASES, SOURCES);
 const names = (text: string) => complete(text, text.length).rows.map((row) => row.name);

@@ -90,11 +90,17 @@ export function subject_param(command: Pick<CommandDef, "params">): ParamDef | u
   return bare && !is_dynamic_values(bare.values) ? bare : undefined;
 }
 
-// The params typed as flags: all but the subject and the engine that takes the first bare word.
+// The required `strict` string params that are not the subject. The command line fills them from the bare words in schema order, ahead of the subject: `set hint_letters asdf` gives `name` then `value`.
+export function positional_params(command: Pick<CommandDef, "params">): ParamDef[] {
+  return (command.params ?? []).filter((param) => param.type === "string" && param.strict === true && !param.main && !param.when && declared_default(param) === undefined);
+}
+
+// The params typed as flags: all but the subject, the positional words and the engine that takes the first bare word.
 export function flag_params(command: Pick<CommandDef, "params">): ParamDef[] {
   const subject = subject_param(command);
   const bare = bare_word_param(command);
-  return (command.params ?? []).filter((param) => param !== subject && !(param === bare && is_dynamic_values(param.values)));
+  const positional = positional_params(command);
+  return (command.params ?? []).filter((param) => param !== subject && !positional.includes(param) && !(param === bare && is_dynamic_values(param.values)));
 }
 
 export function find_param(command: Pick<CommandDef, "params">, name: string): ParamDef | undefined {

@@ -10,9 +10,6 @@ import type { EnumSources } from "../../src/shared/registry/check_args.ts";
 import { registry } from "../../src/shared/registry/index.ts";
 import { is_dynamic_values, static_values } from "../../src/shared/registry/params.ts";
 
-// `set` and `unset` still judge their text in the handler, until their params split into a name and a value.
-const STILL_JUDGE_IN_HANDLER = new Set(["settings.set", "settings.unset"]);
-
 const SOURCES: EnumSources = { search_engines: ["stub_engine"], containers: ["stub_container"] };
 const CTX: CommandContext = { tab_id: 1, window_id: 1, frame_id: 0, mode: "normal" };
 
@@ -55,7 +52,7 @@ test("no background handler refuses args the schema accepts", async () => {
   const failures: string[] = [];
   try {
     for (const command of registry.list()) {
-      if (command.runs_in !== "background" || STILL_JUDGE_IN_HANDLER.has(command.id)) continue;
+      if (command.runs_in !== "background") continue;
       for (const args of accepted_args(command)) {
         try {
           await Promise.race([Promise.resolve(command.run(CTX, args)), new Promise((resolve) => setTimeout(resolve, 200))]);

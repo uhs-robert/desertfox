@@ -13,7 +13,7 @@ import { token_name } from "../shared/theme/tokens.ts";
 import type { KeymapMode } from "../shared/keymap.ts";
 import type { Prompt } from "../shared/invocation.ts";
 import type { CompiledKeymap, TreeNode } from "../shared/prefix_tree.ts";
-import { describe_default, is_dynamic_values } from "../shared/registry/params.ts";
+import { describe_default, is_dynamic_values, positional_params } from "../shared/registry/params.ts";
 import type { EnumSources } from "../shared/registry/check_args.ts";
 import { print_command } from "../shared/registry/print_command.ts";
 import { subject_param } from "../shared/registry/params.ts";
@@ -76,7 +76,7 @@ export type HelpModel = {
 
 const MODE_ORDER: readonly KeymapMode[] = [...MODES, "browser"];
 
-function param_row(param: ParamDef, subject: ParamDef | undefined): ParamRow {
+function param_row(param: ParamDef, subject: ParamDef | undefined, positional: readonly ParamDef[]): ParamRow {
   let values = "";
   if (is_dynamic_values(param.values)) values = `from ${param.values.from}`;
   else if (param.values) values = param.values.join(", ");
@@ -85,7 +85,7 @@ function param_row(param: ParamDef, subject: ParamDef | undefined): ParamRow {
     type: param.type,
     default: describe_default(param),
     values,
-    flags: param === subject ? "" : flag_alternatives(param).join(" "),
+    flags: param === subject || positional.includes(param) ? "" : flag_alternatives(param).join(" "),
   };
 }
 
@@ -197,7 +197,7 @@ export function build_help_model(commands: CommandMeta[], compiled: CompiledKeym
       label: command.label,
       intent: command.intent,
       usage: usage_line(command),
-      params: (command.params ?? []).map((param) => param_row(param, subject_param(command))),
+      params: (command.params ?? []).map((param) => param_row(param, subject_param(command), positional_params(command))),
       keys: keys.get(command.id) ?? [],
     };
     groups.set(group_name, [...(groups.get(group_name) ?? []), row]);

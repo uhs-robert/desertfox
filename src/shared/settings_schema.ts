@@ -15,7 +15,7 @@ export type SettingSpec = {
   is_list?: boolean;
   // A table of several values. A live change could collide with other keys, so `:set` refuses it.
   is_group?: boolean;
-  // A boolean `:set name!` flips. The value is what an absent setting reads as.
+  // A boolean `:toggle` flips. The value is what an absent setting reads as.
   flips_from_absent?: boolean;
   // Values the command line offers for the second word. A function, and short lists only: the command line page bundles this module, so it must not import the theme color tables (25 KB). The theme names come from the names-only `theme_names.ts`.
   listed_values?: () => readonly string[];
@@ -64,6 +64,12 @@ export function is_setting_name(name: string): name is keyof Settings {
 }
 
 export type ParsedSetting = { value: unknown } | { error: string };
+
+// What a person types after a setting name: a list takes one word per item and `[]` is the empty list, because an empty value shows the setting instead.
+export function parse_setting_text(name: keyof Settings, text: string): ParsedSetting {
+  const spec = SETTING_SPECS[name];
+  return parse_setting_words(name, spec.is_list ? (text === "[]" ? [] : text.split(/\s+/)) : [text]);
+}
 
 // A list takes one item per word. A single value tries the typed text, then the number it spells, then true or false,
 // and keeps the first that the check accepts. So `300` is a number for a delay and a string for hint letters, and
