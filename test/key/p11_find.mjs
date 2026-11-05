@@ -681,4 +681,22 @@ export async function run_cases({ rdp, extension_id, run_case, expect, open_page
     const state = await read_after("Enter");
     // The caret is one character into cc, so the next match wraps to the title. From the stale caret on the title it would be aa.
     expect(state.focus?.startsWith("find_words find_vis_") && state.focus_offset <= 1, `the search went to ${JSON.stringify(state)}, expected the wrap to the title`);
-  });}
+  });
+
+  await run_case("visual j after a search lands moves from the column of the match, not from the column of an earlier j", async () => {
+    const page_id = "find_vis_goal";
+    await open_page("find_words", page_id, { new_tab: true });
+    await start_visual(page_id);
+    await send_keys("l", "l", "l", "l", "l", "l", "l", "l");
+    await send_keys("j");
+    await sleep(300);
+    await send_keys("/find_words");
+    await sleep(400);
+    await send_keys(...ENTER);
+    let state = await read_after("Enter");
+    expect(state.focus?.startsWith("find_words") && state.focus_offset <= 1, `after Enter ${JSON.stringify(state)}`);
+    await send_keys("j");
+    state = await read_after("j");
+    expect(state.focus?.startsWith("find_words") && state.focus_offset <= 1, `j went to column ${state.focus_offset} of ${JSON.stringify(state.focus)}, expected the match column`);
+  });
+}

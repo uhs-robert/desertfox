@@ -291,7 +291,10 @@ async function find_word(direction: "forward" | "backward"): Promise<Outcome> {
 async function end_visual_search(from: Session, keep: boolean): Promise<void> {
   if (session !== from) return;
   const landed = keep ? find.position(from.model) : undefined;
-  if (landed !== undefined) from.cursor = with_caret(from.cursor, landed, true);
+  if (landed !== undefined) {
+    from.cursor = with_caret(from.cursor, landed, true);
+    from.goal_x = undefined;
+  }
   page.oasisfox_host.set_mode("visual");
 }
 
