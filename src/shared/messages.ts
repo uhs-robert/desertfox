@@ -144,7 +144,10 @@ export type OpenItems = { rows: OpenRow[]; history_max: number };
 // `number` is the window's place in `windows.getAll`, counted from 1, so it stays when other windows drop out of the list. `title` is its active tab's.
 export type WindowItem = { number: number; title: string };
 
-export type CompleteItemsAnswer = { items: TabItem[] | BookmarkItem[] | EngineItem[] | OpenItems | WindowItem[] };
+// A heading of the page, from the host script. `level` is 1 to 6, `text` is the rendered text, trimmed.
+export type HeadingItem = { level: number; text: string };
+
+export type CompleteItemsAnswer = { items: TabItem[] | BookmarkItem[] | EngineItem[] | OpenItems | WindowItem[] | HeadingItem[] };
 
 // From the `hints` bundle at the start of a pick: what `.` shows again. The background checks it like any page message, because the sender is a page script.
 export type RecordRepeat = {

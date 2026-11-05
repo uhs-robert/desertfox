@@ -7,7 +7,7 @@ The code map. Read a folder's README before you change or research code in it.
 - [`commands/`](commands/README.md): the command definitions, made with `define` from the registry, plus helpers (`open_target.ts`, `url_build.ts`).
 - [`content/`](content/README.md): the content script. Captures keys, tracks the mode and loads the bundles.
   - [`content/caret/`](content/caret/README.md): caret and visual mode.
-  - [`content/hints/`](content/hints/README.md): link hints.
+  - [`content/hints/`](content/hints/README.md): link hints and the page headings list.
   - [`content/whichkey/`](content/whichkey/README.md): the which-key panel.
   - [`content/handlers/`](content/handlers/README.md): the content-side handler for each command group.
   - [`content/ui/`](content/ui/README.md): the `ui` bundle, the mode badge and the toast.

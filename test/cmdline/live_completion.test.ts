@@ -4,7 +4,7 @@ import { create_live_source } from "../../src/cmdline/completion/live.ts";
 import { create_completer } from "../../src/cmdline/completion/sources.ts";
 import { create_session } from "../../src/cmdline/session.ts";
 import type { CommandMeta } from "../../src/shared/command.ts";
-import type { BookmarkItem, EngineItem, OpenItems, WindowItem, TabItem } from "../../src/shared/messages.ts";
+import type { BookmarkItem, EngineItem, HeadingItem, OpenItems, WindowItem, TabItem } from "../../src/shared/messages.ts";
 import { parse_command_line } from "../../src/shared/registry/index.ts";
 import { create_word_lookup } from "../../src/cmdline/word_lookup.ts";
 
@@ -33,6 +33,7 @@ const COMMANDS: CommandMeta[] = [
   },
   { id: "engine.show", name: "engine.show", label: "Show engine", intent: "Show an engine.", params: [{ name: "engine", type: "enum", values: { from: "search_engines" } }] },
 ];
+COMMANDS.push({ id: "heading.go", name: "heading", label: "Go to heading", intent: "Go to a heading.", params: [{ name: "heading", type: "string", rest: true, main: true, values: { from: "headings" } }] });
 COMMANDS.push({ id: "open.url", name: "open", label: "Open URL", intent: "Open a URL.", params: [{ name: "url", type: "string", main: true, values: { from: "open" } }] });
 const ENGINES: EngineItem[] = [
   { name: "duck", label: "DuckDuckGo", available: true },
@@ -55,7 +56,7 @@ const BOOKMARKS: BookmarkItem[] = Array.from({ length: 30 }, (_, index) => ({ ti
 
 // The background answers when the test says so.
 function make() {
-  const asks: { kind: string; answer: (items: TabItem[] | BookmarkItem[] | EngineItem[] | OpenItems | WindowItem[]) => void }[] = [];
+  const asks: { kind: string; answer: (items: TabItem[] | BookmarkItem[] | EngineItem[] | OpenItems | WindowItem[] | HeadingItem[]) => void }[] = [];
   const live = create_live_source({
     ask: (kind) => new Promise((resolve) => void asks.push({ kind, answer: (items) => resolve({ items }) })),
     on_ready: () => session.source_ready(),
@@ -369,4 +370,64 @@ test("a refusal note is not shown after a later row action succeeds", () => {
   session.set_message("not unloaded: audible");
   session.set_message(undefined);
   assert.equal(session.get_message(), undefined);
+});
+
+const HEADINGS: HeadingItem[] = [
+  { level: 2, text: "Install" },
+  { level: 3, text: "From source" },
+  { level: 2, text: "Usage" },
+  { level: 3, text: "Install the plugin" },
+];
+
+test("headings list in page order with an empty word, indented from the shallowest level, each with a level tag", async () => {
+  const { session, asks, settle } = make();
+  session.edit("heading ");
+  assert.equal(session.get_hint(), "loading");
+  assert.deepEqual(asks.map((ask) => ask.kind), ["headings"]);
+  asks[0]!.answer(HEADINGS);
+  await settle();
+  const rows = session.get_rows();
+  assert.deepEqual(rows.map((row) => row.name), ["Install", "From source", "Usage", "Install the plugin"]);
+  assert.deepEqual(rows.map((row) => row.indent), [0, 1, 0, 1]);
+  assert.deepEqual(rows.map((row) => row.description), ["h2", "h3", "h2", "h3"]);
+});
+
+test("a page that starts at h3 loses no width to the missing levels", async () => {
+  const { session, asks, settle } = make();
+  session.edit("heading ");
+  asks[0]!.answer([{ level: 3, text: "A" }, { level: 4, text: "B" }]);
+  await settle();
+  assert.deepEqual(session.get_rows().map((row) => row.indent), [0, 1]);
+});
+
+test("typing ranks headings best match first and the highlight positions count the plain text", async () => {
+  const { session, asks, settle } = make();
+  session.edit("heading ");
+  asks[0]!.answer(HEADINGS);
+  await settle();
+  session.edit("heading plugin");
+  const [top] = session.get_rows();
+  assert.equal(top!.name, "Install the plugin");
+  assert.deepEqual(top!.positions, [12, 13, 14, 15, 16, 17]);
+  assert.equal(top!.indent, 1);
+});
+
+test("a heading pick puts its place and text in the line, and the list is fetched once", async () => {
+  const { session, asks, settle } = make();
+  session.edit("heading ");
+  asks[0]!.answer(HEADINGS);
+  await settle();
+  session.edit("heading source");
+  tab_key(session);
+  assert.equal(session.get_text(), "heading 2 From source ");
+  assert.equal(asks.length, 1);
+});
+
+test("a page with no headings lists nothing and says no match", async () => {
+  const { session, asks, settle } = make();
+  session.edit("heading ");
+  asks[0]!.answer([]);
+  await settle();
+  assert.deepEqual(session.get_rows(), []);
+  assert.equal(session.get_hint(), "no match");
 });

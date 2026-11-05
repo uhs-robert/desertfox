@@ -5,12 +5,12 @@ import { WHERE, WHERE_SHORT } from "./open_target.ts";
 define("hint.run", {
   name: "hint",
   label: "Hint",
-  intent: "Pick a page element by key and act on it. It labels the elements on the page with keys, then acts on the one you pick: open it here, in a tab, in a background tab or in a window, copy its address or its text, delete it, focus it, hover it or scroll to it. Hover sends the pointer events a mouse sends on entering, so menus, tooltips and previews that a script opens appear. A menu that only a CSS :hover rule opens does not. Escape or the next hover ends it. Caret and visual start caret mode or visual mode at the element. Rapid keeps hint mode open for more picks. Headings opens a list of every heading on the page, indented by level, so a pick can scroll to one that is off screen. Text keeps only the links whose text holds it.",
+  intent: "Pick a page element by key and act on it. It labels the elements on the page with keys, then acts on the one you pick: open it here, in a tab, in a background tab or in a window, copy its address or its text, delete it, focus it or hover it. Hover sends the pointer events a mouse sends on entering, so menus, tooltips and previews that a script opens appear. A menu that only a CSS :hover rule opens does not. Escape or the next hover ends it. Caret and visual start caret mode or visual mode at the element. Rapid keeps hint mode open for more picks. Text keeps only the links whose text holds it.",
   params: [
     {
       name: "action",
       type: "enum",
-      values: [...WHERE, "caret", "visual", "copy", "copy_text", "delete", "focus", "hover", "scroll"],
+      values: [...WHERE, "caret", "visual", "copy", "copy_text", "delete", "focus", "hover"],
       default: "here",
       short: { ...WHERE_SHORT, caret: "c", visual: "v", copy: "y", copy_text: "Y", delete: "d", focus: "f" },
       value_labels: {
@@ -24,7 +24,6 @@ define("hint.run", {
         delete: "to delete",
         focus: "to focus",
         hover: "to hover",
-        scroll: "to scroll to it",
       },
       description: {
         tab: "Open the element in a new tab.",
@@ -37,16 +36,15 @@ define("hint.run", {
         delete: "Delete the element from the page.",
         focus: "Focus the element.",
         hover: "Hover the element, which a CSS :hover rule ignores.",
-        scroll: "Scroll the element to the top of the view.",
       },
     },
     {
       name: "filter",
       type: "enum",
-      values: ["all", "clickable", "buttons", "inputs", "links", "prose", "scrollable", "headings", "custom"],
+      values: ["all", "clickable", "buttons", "inputs", "links", "prose", "scrollable", "custom"],
       default: "clickable",
-      short: { all: "a", buttons: "B", inputs: "i", links: "l", prose: "p", scrollable: "s", headings: "H", custom: "u" },
-      value_labels: { all: "for all elements", buttons: "for buttons", inputs: "for inputs", links: "for links", prose: "for text", scrollable: "for scroll boxes", headings: "for headings", custom: "for a selector" },
+      short: { all: "a", buttons: "B", inputs: "i", links: "l", prose: "p", scrollable: "s", custom: "u" },
+      value_labels: { all: "for all elements", buttons: "for buttons", inputs: "for inputs", links: "for links", prose: "for text", scrollable: "for scroll boxes", custom: "for a selector" },
       description: {
         all: "Label every element.",
         buttons: "Label only the buttons.",
@@ -54,12 +52,11 @@ define("hint.run", {
         links: "Label only the links.",
         prose: "Label the elements that hold text of their own.",
         scrollable: "Label the boxes that scroll, to focus one.",
-        headings: "List every heading in a panel, on screen or not.",
         custom: "Label the elements that match a selector.",
       },
     },
     { name: "selector", type: "string", when: { filter: ["custom"] }, description: "Label the elements that match this CSS selector." },
-    { name: "text", type: "string", optional: true, description: "Keep only the links or headings whose text holds this." },
+    { name: "text", type: "string", optional: true, description: "Keep only the links whose text holds this." },
     { name: "rapid", type: "bool", default: false, short: "r", description: "Keep hint mode open for more picks." },
   ],
   runs_in: "content",

@@ -6,7 +6,7 @@ import { create_matcher, event_to_token } from "../shared/keys/index.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY } from "../shared/prefix_tree.ts";
 import type { CompiledKeymap } from "../shared/prefix_tree.ts";
 import { check_args, parse_command_line } from "../shared/registry/index.ts";
-import type { CmdlineOpened, CompleteItemsAnswer, ContentToBackground, SetTabUnloadedAnswer } from "../shared/messages.ts";
+import type { CmdlineOpened, CompleteItemsAnswer, ContentToBackground, HeadingItem, SetTabUnloadedAnswer } from "../shared/messages.ts";
 import { create_live_source } from "./completion/live.ts";
 import { create_completer, marks_of } from "./completion/sources.ts";
 import { edit_forwarded, run_token, run_token_without_keymap } from "./key_input.ts";
@@ -71,9 +71,16 @@ async function open_line(start: Start, port: MessagePort): Promise<void> {
   const has_help = (id: string) => help_ids.has(id);
   const list = create_list(document.querySelector<HTMLElement>("#list")!, (id) => key_text.get(id) ?? "", has_help);
   const matcher: TokenMatcher | undefined = keymap?.modes.cmdline ? create_matcher(keymap) : undefined;
+  // The headings are in the page, so the host script reads them and answers over the port.
+  let headings_reply: ((items: HeadingItem[]) => void) | undefined;
+  const ask_headings = () =>
+    new Promise<CompleteItemsAnswer>((resolve) => {
+      headings_reply = (items) => resolve({ items });
+      tell_host({ kind: "list_headings" });
+    });
   // Asks the background for tabs and bookmarks only when a subject needs them, and only here, after the ticket redeemed.
   const live = create_live_source({
-    ask: (kind) => ask_background<CompleteItemsAnswer | undefined>({ type: "complete_items", kind }),
+    ask: (kind) => (kind === "headings" ? ask_headings() : ask_background<CompleteItemsAnswer | undefined>({ type: "complete_items", kind })),
     on_ready: () => {
       session.source_ready();
       render();
@@ -218,7 +225,10 @@ async function open_line(start: Start, port: MessagePort): Promise<void> {
     if (message?.kind === "token") press_forwarded(message.token);
     else if (message?.kind === "check") tell_host({ kind: "here" });
     else if (message?.kind === "refocus") input.focus();
-    else if (message?.kind === "find_status") {
+    else if (message?.kind === "headings") {
+      headings_reply?.(message.items);
+      headings_reply = undefined;
+    } else if (message?.kind === "find_status") {
       session.set_status(message.text);
       render();
     }

@@ -7,7 +7,7 @@ The command definitions. Each file is a command module: it calls `define` from `
 - Modules by group: `tab`, `window` (it also holds `tab.attach`, which moves the tab to another window), `bookmark`, `browser`, `zoom`, `page`, `url`, `scroll`, `mode`, `copy`, `config`, `settings` and `help`. `help.ts` builds the `:help` choices from the registry: the page names (`quick_start`) and the command ids, matched exactly, so `command_modules.ts` imports it last. `open.ts` holds `open.url`, `open.search` and `open.clipboard`. `engine.ts` holds `engine.show`. `command.ts` holds `command.repeat`, which replays the stored request through a router that `main.ts` wires in.
 - `settings.ts` holds `set`, `toggle` and `unset`. The pure `plan_set`, `plan_toggle` and `plan_unset` turn the checked params into the overrides to keep and the toast that answers. The handlers publish through `change_overrides` in `startup.ts` and toast after the publish.
 - A handler throws `RuntimeRefusal` (`src/shared/command.ts`) for a failure that depends on browser or config state. A bad argument value belongs in the param schema (`min`, `pattern`, `strict`, `optional`), never in a handler.
-- `hint.ts`, `cmdline.ts`, `caret.ts` and `visual.ts` hold commands whose code sits in a bundle. Running one loads the bundle, or refuses with a `NEEDS_*` message until the bundle registers a handler (`src/content/handlers/lazy_bundle.ts`).
+- `hint.ts`, `heading.ts`, `cmdline.ts`, `caret.ts` and `visual.ts` hold commands whose code sits in a bundle. Running one loads the bundle, or refuses with a `NEEDS_*` message until the bundle registers a handler (`src/content/handlers/lazy_bundle.ts`).
 
 Helpers:
 

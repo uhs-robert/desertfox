@@ -25,9 +25,9 @@ export type ConditionalDefault = { value: ParamValue; when: ParamWhen };
 
 export type ParamDefault = ParamValue | ContextSource | ConditionalDefault;
 
-// Value lists filled at run time from the user's config or from Firefox. `tabs`, `bookmarks` and `windows` go on a string param and
-// only feed the completion list. The page asks the background for them (`complete_items`), nobody checks a typed value against them.
-export type DynamicValues = { from: "search_engines" | "containers" | "tabs" | "bookmarks" | "open" | "windows" };
+// Value lists filled at run time from the user's config or from Firefox. `tabs`, `bookmarks`, `windows` and `headings` go on a string param and
+// only feed the completion list. The page asks the background for the first three (`complete_items`) and the host script for the headings, nobody checks a typed value against them.
+export type DynamicValues = { from: "search_engines" | "containers" | "tabs" | "bookmarks" | "open" | "windows" | "headings" };
 
 export type ParamDef = {
   name: string;
