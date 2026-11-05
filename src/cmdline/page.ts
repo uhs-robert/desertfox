@@ -181,6 +181,7 @@ async function open_line(start: Start, port: MessagePort): Promise<void> {
     const message = unwrap<HostToPage>(event.data);
     if (message?.kind === "token") press_forwarded(message.token);
     else if (message?.kind === "check") tell_host({ kind: "here" });
+    else if (message?.kind === "refocus") input.focus();
     else if (message?.kind === "find_status") {
       session.set_status(message.text);
       render();

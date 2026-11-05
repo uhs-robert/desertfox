@@ -68,7 +68,8 @@ async function load_page(t: TestContext, tag: string, { keymap = KEYMAP, with_ta
     },
     selectionStart: 0,
     selectionEnd: 0,
-    focus: () => {},
+    focus_count: 0,
+    focus: () => void input.focus_count++,
     setSelectionRange(start: number, end: number) {
       input.selectionStart = start;
       input.selectionEnd = end;
@@ -368,4 +369,15 @@ test("a tab reply that lands after the line submitted draws nothing", async (t) 
   item_asks[0]!([{ number: 1, title: "Alpha", url: "https://alpha.test/" }]);
   await settle();
   assert.equal(list.children.length, drawn);
+});
+
+test("a refocus from the host focuses the input and leaves the caret and selection alone", async (t) => {
+  const { input, post_start } = await load_page(t, "refocus");
+  const host = post_start(TICKET, "open here");
+  await host.opened();
+  input.setSelectionRange(2, 6);
+  const before = input.focus_count;
+  host.port.postMessage({ oasisfox_cmdline: { kind: "refocus" } });
+  await until(() => input.focus_count === before + 1);
+  assert.deepEqual([input.focus_count, input.value, input.selectionStart, input.selectionEnd], [before + 1, "open here", 2, 6]);
 });

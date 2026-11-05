@@ -48,4 +48,35 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, open_p
     const wrong = overlaps.filter(([top, under]) => top < under);
     expect(wrong.length === 0, `a lower layer is on top of a higher one at ${wrong.length} points, first ${JSON.stringify(wrong[0])}`);
   });
+
+  // The line is a top-layer popover shown last. A surface mounted over it shows it again, which drops the frame's focus, and
+  // the host gives the focus back. The text cannot be read from outside the iframe, so the case types a command in two parts
+  // around the toast and checks that Enter ran it whole. Not yet run: the key-test queue belongs to another session.
+  const push_toast = () => evaluate_in_background(rdp, extension_id, `(async () => { const [tab] = await browser.tabs.query({ active: true, currentWindow: true }); await browser.tabs.sendMessage(tab.id, { type: "refusal", refusal: { message: "x" }, kind: "info" }); })()`);
+  const toast_then_finish_typing = async (typed_before, step_keys, typed_after) => {
+    await send_keys(":");
+    await sleep(600);
+    await send_keys(typed_before);
+    if (step_keys.length > 0) await send_keys(...step_keys);
+    let mark = events.length;
+    await push_toast();
+    await wait_event(mark, (event) => event.type === "toast" && event.page_id === "p9_layers_line", "the pushed toast");
+    const { overlaps } = JSON.parse((await in_active_tab(hit_test))[0]);
+    const wrong = overlaps.filter(([top, under]) => top < under);
+    expect(wrong.length === 0, `a lower layer is on top of a higher one at ${wrong.length} points, first ${JSON.stringify(wrong[0])}`);
+    await send_keys(typed_after);
+    mark = events.length;
+    await send_keys("-k", "Return");
+    await wait_event(mark, (event) => event.type === "scroll" && event.page_id === "p9_layers_line", "scroll.down run from the typed line");
+  };
+
+  await run_case("a toast shown while typing in the command line: typing continues and the line stays on top", async () => {
+    await open_page("caret", "p9_layers_line", { new_tab: true });
+    await toast_then_finish_typing("scroll.dow", [], "n");
+  });
+
+  await run_case("a toast shown with the caret in the middle of the line: typing lands at the caret", async () => {
+    // Five Left keys put the caret after "scrol", so the "l" typed after the toast completes "scroll.down".
+    await toast_then_finish_typing("scrol.down", ["-k", "Left", "-k", "Left", "-k", "Left", "-k", "Left", "-k", "Left"], "l");
+  });
 }
