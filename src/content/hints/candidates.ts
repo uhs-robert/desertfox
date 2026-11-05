@@ -1,6 +1,7 @@
 // Finds the elements a hint filter can label. Visibility is decided later, in visible.ts.
 
 import { is_scroll_box } from "../scroll_box.ts";
+import { takes_typing } from "./actions.ts";
 import { keep_visible } from "./visible.ts";
 import type { PageProbe } from "./visible.ts";
 
@@ -40,7 +41,7 @@ const QUERIES: Record<Exclude<HintFilter, "custom">, Query> = {
   inputs: { selector: TEXT_FIELDS },
   links: { selector: LINKS },
   prose: { selector: "*", test: has_own_text },
-  scrollable: { selector: "*", test: (element) => is_scroll_box(element) },
+  scrollable: { selector: "*", test: (element) => !takes_typing(element as HTMLElement) && is_scroll_box(element) },
 };
 
 export const query_for = (filter: HintFilter, custom_selector: string | undefined): Query =>
