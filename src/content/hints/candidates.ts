@@ -1,5 +1,8 @@
 // Finds the elements a hint filter can label. Visibility is decided later, in visible.ts.
 
+import { keep_visible } from "./visible.ts";
+import type { PageProbe } from "./visible.ts";
+
 export type HintFilter = "all" | "clickable" | "inputs" | "links" | "custom";
 
 const TEXT_FIELDS = 'input:not([type=hidden]):not([disabled]), textarea:not([disabled]), select:not([disabled]), [contenteditable=""], [contenteditable="true"]';
@@ -84,12 +87,14 @@ export const weak_test_for = (filter: HintFilter): WeakTest | undefined => (filt
 type Climbable = { parentNode: unknown; host?: unknown };
 
 // One hint per thing to click. A weak candidate gives way to a candidate inside it (the innermost wins) and to a strong candidate around it (that one gets the hint).
+// Only a candidate of the clickable kind counts as that stronger one: with the `all` filter a plain `li` or `p` must not hide the link in it.
 export function drop_redundant_weak(found: Found[]): Found[] {
   const weak = new Set<unknown>(found.filter((item) => item.weak).map((item) => item.element));
   if (weak.size === 0) return found;
-  const strong = new Set<unknown>(found.filter((item) => !item.weak).map((item) => item.element));
+  const clickable = found.filter((item) => item.weak || item.element.matches(CLICKABLE));
+  const strong = new Set<unknown>(clickable.filter((item) => !item.weak).map((item) => item.element));
   const dropped = new Set<unknown>();
-  for (const item of found) {
+  for (const item of clickable) {
     const own_weak = item.weak === true;
     for (let up = (item.element as unknown as Climbable).parentNode as Climbable | null; up; up = (up.parentNode ?? up.host) as Climbable | null) {
       if (weak.has(up)) dropped.add(up);
@@ -98,6 +103,9 @@ export function drop_redundant_weak(found: Found[]): Found[] {
   }
   return found.filter((item) => !dropped.has(item.element));
 }
+
+// Visibility comes first: a wrapper must not give way to a hidden or off-screen candidate that gets no hint.
+export const keep_visible_deduplicated = (found: Found[], probe: PageProbe<Found>): Found[] => drop_redundant_weak(keep_visible(found, probe));
 
 // The visible text holds the needle, ignoring case. The needle arrives already lower-cased.
 // An empty innerText means the text is hidden, so only a missing innerText falls back to textContent.

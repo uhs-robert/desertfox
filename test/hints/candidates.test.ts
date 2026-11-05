@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { Found } from "../../src/content/hints/candidates.ts";
-import { collect, drop_redundant_weak, has_click_sign, has_text, make_weak_test, selector_for } from "../../src/content/hints/candidates.ts";
+import { collect, drop_redundant_weak, keep_visible_deduplicated, has_click_sign, has_text, make_weak_test, selector_for } from "../../src/content/hints/candidates.ts";
 
 type Fake = { name: string; local: string; shadow?: Fake[]; frame?: Fake[] | "cross_origin"; href?: boolean };
 
@@ -72,7 +72,7 @@ test("the clickable selector adds roving-tabindex items", () => {
 });
 
 // A fake page element for the click sign: a tag, a cursor, a parent and attributes.
-type Dom = { name: string; local: string; cursor?: string; parent?: Dom; attrs?: Record<string, string>; in_menu?: boolean };
+type Dom = { name: string; local: string; cursor?: string; parent?: Dom; attrs?: Record<string, string>; in_menu?: boolean; plain?: boolean };
 const dom_styles = {
   cursor_of: (e: Element) => (e as unknown as Dom).cursor ?? "auto",
   parent_of: (e: Element) => ((e as unknown as Dom).parent ?? null) as unknown as Element | null,
@@ -82,7 +82,7 @@ const el = (d: Dom) =>
     localName: d.local,
     hasAttribute: (n: string) => d.attrs?.[n] !== undefined,
     getAttribute: (n: string) => d.attrs?.[n] ?? null,
-    matches: (_s: string) => d.in_menu === true,
+    matches: (s: string) => (s.includes("a[href]") ? d.plain !== true : d.in_menu === true),
     parentNode: d.parent ?? null,
   }) as unknown as Element;
 
@@ -140,4 +140,36 @@ test("Knack dropdown: the href-less Log Out link gets the hint, its li and ul do
   const page = [ul, href_li, href_a, out_li, out_a, icon];
   const found = page.map((element) => (element === href_a ? strong(element) : weak_test(element) ? weak(element) : undefined)).filter((f): f is Found => f !== undefined);
   assert.deepEqual(names_of(drop_redundant_weak(found)), ["my-info", "log out"]);
+});
+
+const plain_li = (parent: Dom) => el({ name: "plain li", local: "li", plain: true, parent });
+const knack_log_out = () => {
+  const li = plain_li({ name: "ul", local: "ul" });
+  const a = el({ name: "log out", local: "a", cursor: "pointer", parent: li as unknown as Dom });
+  return { li, a };
+};
+
+test("with the all filter a plain li or p around a weak link does not hide it", () => {
+  const { li, a } = knack_log_out();
+  assert.deepEqual(names_of(drop_redundant_weak([strong(li), weak(a)])), ["plain li", "log out"]);
+});
+
+test("with the all filter a plain p inside a weak wrapper does not hide the wrapper", () => {
+  const wrapper = el({ name: "pointer card", local: "div", cursor: "pointer" });
+  const text = plain_li(wrapper as unknown as Dom);
+  assert.deepEqual(names_of(drop_redundant_weak([weak(wrapper), strong(text)])), ["pointer card", "plain li"]);
+});
+
+test("a visible wrapper keeps its hint when the clickable child inside it is hidden", () => {
+  const wrapper = el({ name: "wrapper", local: "div", cursor: "pointer" });
+  const child = el({ name: "hidden button", local: "button", parent: wrapper as unknown as Dom });
+  const probe = {
+    is_intersecting: (f: Found) => f.element !== child,
+    rects_of: () => [{ left: 0, top: 0, right: 10, bottom: 10 }],
+    clips_of: () => [],
+    viewport_of: () => ({ width: 100, height: 100 }),
+    is_hidden_by_style: () => false,
+    is_reachable_at: () => true,
+  };
+  assert.deepEqual(names_of(keep_visible_deduplicated([weak(wrapper), strong(child)], probe)), ["wrapper"]);
 });

@@ -81,10 +81,10 @@ export function boxes_with_fallback<T>(element: T, rects: (e: T) => Rect[], chil
   return children(element).slice(0, MAX_FALLBACK_CHILDREN).flatMap((child) => boxes_with_fallback(child, rects, children, depth - 1));
 }
 
-type Ancestor = { position: string; clips: boolean; box: Rect };
+type Ancestor = { position: string; clips_x: boolean; clips_y: boolean; box: Rect };
 
-// The boxes that clip a target, from its chain of ancestors (nearest first, each with its computed position, whether its overflow clips, and its visible box).
-// An absolutely positioned target escapes the clip of ancestors above it until its containing block, and a fixed one escapes them all.
+// The boxes that clip a target, from its chain of ancestors (nearest first, each with its computed position, the axes its overflow clips, and its visible box).
+// A box clips only the axes that its overflow clips. An absolutely positioned target escapes the clip of ancestors above it until its containing block, and a fixed one escapes them all.
 export function clipping_boxes(own_position: string, ancestors: readonly Ancestor[]): Rect[] {
   if (own_position === "fixed") return [];
   let escaping = own_position === "absolute";
@@ -92,9 +92,42 @@ export function clipping_boxes(own_position: string, ancestors: readonly Ancesto
   for (const ancestor of ancestors) {
     if (escaping && ancestor.position === "static") continue;
     escaping = false;
-    if (ancestor.clips) boxes.push(ancestor.box);
+    if (!ancestor.clips_x && !ancestor.clips_y) continue;
+    const { box } = ancestor;
+    boxes.push({
+      left: ancestor.clips_x ? box.left : -Infinity,
+      right: ancestor.clips_x ? box.right : Infinity,
+      top: ancestor.clips_y ? box.top : -Infinity,
+      bottom: ancestor.clips_y ? box.bottom : Infinity,
+    });
   }
   return boxes;
+}
+
+// Page reads behind `scroll_clips_of`, so tests run on fake elements.
+export type ClipReads<T> = {
+  parent_of: (element: T) => T | null;
+  tag_of: (element: T) => string;
+  style_of: (element: T) => { position: string; display: string; overflow_x: string; overflow_y: string };
+  // The padding box, which is what an overflow clips to.
+  box_of: (element: T) => Rect;
+};
+
+// A body or root overflow goes to the viewport, which the probe already clips to. An inline or `contents` box has no client box of its own to clip to.
+const CANNOT_CLIP_TAGS = new Set(["body", "html"]);
+const CANNOT_CLIP_DISPLAYS = new Set(["inline", "contents"]);
+
+export function scroll_clips_of<T>(element: T, reads: ClipReads<T>): Rect[] {
+  const ancestors: Ancestor[] = [];
+  for (let up = reads.parent_of(element); up !== null; up = reads.parent_of(up)) {
+    if (CANNOT_CLIP_TAGS.has(reads.tag_of(up))) continue;
+    const style = reads.style_of(up);
+    const can_clip = !CANNOT_CLIP_DISPLAYS.has(style.display);
+    const clips_x = can_clip && style.overflow_x !== "visible";
+    const clips_y = can_clip && style.overflow_y !== "visible";
+    ancestors.push({ position: style.position, clips_x, clips_y, box: clips_x || clips_y ? reads.box_of(up) : { left: 0, top: 0, right: 0, bottom: 0 } });
+  }
+  return clipping_boxes(reads.style_of(element).position, ancestors);
 }
 
 export function keep_visible<T>(targets: readonly T[], probe: PageProbe<T>): T[] {
