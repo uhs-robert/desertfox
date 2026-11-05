@@ -1,6 +1,6 @@
-// Key cases of piece P6 (hint extras): copy, rapid mode and the text filter. run.mjs calls run_cases with its helpers.
+// Key cases of piece P6 (hint extras): copy, rapid mode, the text filter and the `;#` headings list. run.mjs calls run_cases with its helpers.
 // The fixture page /hints has a hidden link and a covered link before the visible links "one" and "two", labelled "a" and "s".
-// There is no key for the text filter yet, so the cases send the same `run` message a key sends, from the active tab.
+// There is no key for the text filter yet, so its cases send the same `run` message a key sends, from the active tab.
 import { evaluate_in_background } from "./rdp.mjs";
 
 export async function run_cases({ rdp, extension_id, run_case, send_keys, open_page, wait_event, find_event, events, expect, sleep, scroll_delta_after, became_visible, take_shot }) {
@@ -157,136 +157,118 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, open_p
     expect((await scroll_delta_after("p6_no_match", ["j"])) > 0, "keys did not work after a text with no match");
   });
 
-  // The panel is a surface host on the root element, in the hints layer. Its shadow root is closed, so the host count is what a page can see. The which-key panel and the mode badge sit in other layers.
-  const hints_layer = 2147483647 - 4;
-  const panel_hosts = async () => (await in_active_tab(`document.documentElement.querySelectorAll(':scope > [data-oasisfox-layer="${hints_layer}"]').length`))[0];
+  // `;#` opens the command line with `heading ` typed. The list lives in the extension's frame, which the page cannot read, so these cases check what a pick does to the page.
+  const toast_layer = 2147483647 - 2;
+  const toast_text = async () => (await in_active_tab(`(() => { const host = [...document.documentElement.children].find((child) => child.style.zIndex === "${toast_layer}"); return host?.openOrClosedShadowRoot?.textContent ?? ""; })()`))[0];
   const scroll_y = async () => (await in_active_tab(`Math.round(scrollY)`))[0];
-
-  await run_case(";# lists the headings and a label scrolls to one below the screen", async () => {
-    await open_page("headings", "p6_headings", { new_tab: true });
+  const top_of = async (id) => (await in_active_tab(`Math.round(document.getElementById(${JSON.stringify(id)}).getBoundingClientRect().top)`))[0];
+  const scrolled_since = (mark, page_id) => find_event(mark, (event) => event.type === "scroll" && event.page_id === page_id);
+  const tab_key = ["-k", "Tab"];
+  const enter_key = ["-k", "Return"];
+  const open_headings_line = async () => {
     await send_keys(";#");
-    await sleep(400);
-    expect((await panel_hosts()) === 1, "the headings panel did not open");
-    const delta = await scroll_delta_after("p6_headings", ["d"]);
-    expect(delta > 0, `the page did not scroll, delta ${delta}`);
-    const top = (await in_active_tab(`Math.round(document.getElementById("below").getBoundingClientRect().top)`))[0];
-    expect(Math.abs(top) <= 2, `Below the fold sits ${top}px from the top, the hidden headings may have taken labels`);
-    expect((await panel_hosts()) === 0, "the panel stayed after the pick");
-    expect((await scroll_delta_after("p6_headings", ["j"])) > 0, "keys did not work again after the pick");
-  });
-
-  // Reads the panel through the content script world, which sees closed shadow roots.
-  const panel_read = async (expression) => (await in_active_tab(`(() => { const host = document.documentElement.querySelector(':scope > [data-oasisfox-layer="${hints_layer}"]'); const panel = host?.openOrClosedShadowRoot?.querySelector(".oasisfox-headings"); return ${expression}; })()`))[0];
-  // The labels of the generator: single letters split into more until there are enough.
-  const label_at = (count, index) => {
-    const letters = [..."asdfghjkl"];
-    const labels = [...letters];
-    while (labels.length < count) { const split = labels.shift(); for (const letter of letters) labels.push(split + letter); }
-    return labels[index];
-  };
-
-  await run_case(";# panel scrolls with PageDown, PageUp and Ctrl+d, and a row below its edge can be picked", async () => {
-    await open_page("headings_many", "p6_headings_many", { new_tab: true });
-    await send_keys(";#");
-    await sleep(500);
-    const rows = await panel_read("panel.querySelectorAll('.oasisfox-heading-row').length");
-    expect(rows === 61, `expected 61 rows (title and 60 sections), got ${rows}`);
-    expect((await panel_read("panel.scrollHeight > panel.clientHeight")) === true, "the panel does not overflow, so the case proves nothing");
-    const page_y = await scroll_y();
-    await send_keys("-M", "ctrl", "d", "-m", "ctrl");
-    await sleep(200);
-    const after_ctrl_d = await panel_read("Math.round(panel.scrollTop)");
-    expect(after_ctrl_d > 0, "Ctrl+d did not scroll the panel");
-    await send_keys("-k", "Next");
-    await sleep(200);
-    const after_page_down = await panel_read("Math.round(panel.scrollTop)");
-    expect(after_page_down > after_ctrl_d, `PageDown did not scroll the panel further, ${after_ctrl_d} then ${after_page_down}`);
-    await send_keys("-k", "Prior");
-    await sleep(200);
-    expect((await panel_read("Math.round(panel.scrollTop)")) < after_page_down, "PageUp did not scroll the panel back");
-    expect((await scroll_y()) === page_y, "a panel scroll key moved the page");
-    expect((await panel_hosts()) === 1, "a scroll key closed the panel");
-    // The first letter of the label hides the rows that do not match, so the rest fit.
-    // Row 46 is "Section 45", past the panel's edge, with 15 sections of page left below it, so it can reach the top.
-    const last = label_at(61, 46);
-    await send_keys(last[0]);
-    await sleep(200);
-    const shown = await panel_read("[...panel.querySelectorAll('.oasisfox-heading-row')].filter((row) => row.style.display !== 'none').length");
-    expect(shown < 61 && shown > 0, `typing a label letter left ${shown} rows`);
-    await send_keys("-k", "BackSpace");
-    await sleep(200);
-    expect((await panel_read("[...panel.querySelectorAll('.oasisfox-heading-row')].filter((row) => row.style.display !== 'none').length")) === 61, "backspace did not restore the rows");
-    const delta = await scroll_delta_after("p6_headings_many", [...last]);
-    expect(delta > 0, `picking a row below the edge did not scroll, delta ${delta}`);
-    const top = (await in_active_tab(`Math.round(document.getElementById("section_45").getBoundingClientRect().top)`))[0];
-    expect(Math.abs(top) <= 2, `Section 45 sits ${top}px from the top`);
-  });
-
-  await run_case(";# panel keys typed with the keys that start it scroll the panel, not the page", async () => {
-    await open_page("headings_many", "p6_headings_queued", { new_tab: true });
-    await send_keys(";#", "-k", "Next");
     await sleep(700);
-    expect((await panel_hosts()) === 1, "the panel did not open");
-    expect((await scroll_y()) === 0, "PageDown typed during the load scrolled the page");
-    expect((await panel_read("Math.round(panel.scrollTop)")) > 0, "PageDown typed during the load did not scroll the panel");
-    await send_keys("-k", "Escape");
-    await sleep(300);
+  };
+  // The /headings page lists the title, Intro, Below the fold and Last. The hidden, closed and screen-reader-only headings are not rows.
+  const run_heading = (heading) => in_active_tab(`browser.runtime.sendMessage({ type: "run", invocations: [{ id: "heading.go", args: { heading: ${JSON.stringify(heading)} } }], mode: "normal" }); 0`);
+
+  await run_case(";# lists the headings in page order and Tab then Enter scrolls to one below the screen", async () => {
+    await open_page("headings", "p6_headings", { new_tab: true });
+    await open_headings_line();
+    // With no text typed the rows keep page order: the third row is "Below the fold".
+    await send_keys(...tab_key, ...tab_key, ...tab_key);
+    await sleep(200);
+    const delta = await scroll_delta_after("p6_headings", enter_key);
+    expect(delta > 0, `the page did not scroll, delta ${delta}`);
+    const top = await top_of("below");
+    expect(Math.abs(top) <= 2, `Below the fold sits ${top}px from the top`);
+    expect((await scroll_delta_after("p6_headings", ["j"])) > 0, "keys did not work again after the jump");
   });
 
-  await run_case(";# lists a heading in a frame, skips one in a hidden frame, and scrolls the frame too", async () => {
-    await open_page("headings_frames", "p6_headings_frames", { new_tab: true });
-    await send_keys(";#");
-    await sleep(500);
-    const rows = await panel_read("panel.querySelectorAll('.oasisfox-heading-row').length");
-    expect(rows === 3, `expected 3 rows (title, Top, In frame), got ${rows}`);
-    const delta = await scroll_delta_after("p6_headings_frames", ["d"]);
+  await run_case(";# typing narrows the list and Enter with text takes the best match", async () => {
+    await open_page("headings", "p6_headings_typed", { new_tab: true });
+    await open_headings_line();
+    await send_keys("last");
+    await sleep(200);
+    const delta = await scroll_delta_after("p6_headings_typed", enter_key);
     expect(delta > 0, `the page did not scroll, delta ${delta}`);
-    const top = (await in_active_tab(`(() => { const frame = document.getElementById("shown"); return Math.round(frame.getBoundingClientRect().top + frame.contentDocument.getElementById("in_frame").getBoundingClientRect().top); })()`))[0];
-    expect(Math.abs(top) <= 2, `the heading in the frame sits ${top}px from the top of the view`);
+    const top = await top_of("last");
+    expect(Math.abs(top) <= 2, `Last sits ${top}px from the top`);
   });
 
   await run_case(";# reaches a heading above the screen", async () => {
     await open_page("headings", "p6_headings_up", { new_tab: true });
     await scroll_delta_after("p6_headings_up", ["G"]);
-    await send_keys(";#");
-    await sleep(400);
-    const delta = await scroll_delta_after("p6_headings_up", ["s"]);
+    await open_headings_line();
+    const delta = await scroll_delta_after("p6_headings_up", ["intro", ...enter_key]);
     expect(delta < 0, `the page did not scroll up, delta ${delta}`);
-    const top = (await in_active_tab(`Math.round(document.getElementById("intro").getBoundingClientRect().top)`))[0];
+    const top = await top_of("intro");
     expect(Math.abs(top) <= 2, `Intro sits ${top}px from the top`);
   });
 
-  await run_case(";# closes on Escape without moving, and a wrong key or a second ;# keeps it open", async () => {
+  await run_case(";# jumps to a heading in a same-origin frame, skips one in a hidden frame, and scrolls the frame too", async () => {
+    await open_page("headings_frames", "p6_headings_frames", { new_tab: true });
+    await open_headings_line();
+    // The rows are the title, Top and "In frame". The heading in the hidden frame is no row.
+    await send_keys(...tab_key, ...tab_key, ...tab_key);
+    await sleep(200);
+    const delta = await scroll_delta_after("p6_headings_frames", enter_key);
+    expect(delta > 0, `the page did not scroll, delta ${delta}`);
+    const top = (await in_active_tab(`(() => { const frame = document.getElementById("shown"); return Math.round(frame.getBoundingClientRect().top + frame.contentDocument.getElementById("in_frame").getBoundingClientRect().top); })()`))[0];
+    expect(Math.abs(top) <= 2, `the heading in the frame sits ${top}px from the top of the view`);
+  });
+
+  await run_case(";# closes on Escape without moving, and keys work again", async () => {
     await open_page("headings", "p6_headings_close", { new_tab: true });
-    await send_keys(";#");
-    await sleep(400);
-    await send_keys("z");
-    await send_keys(";#");
-    await sleep(300);
-    expect((await panel_hosts()) === 1, "a wrong key or a second ;# changed the panel");
+    await open_headings_line();
+    await send_keys(...tab_key);
+    // The list is open, so the first Escape closes it and the second closes the line.
+    await send_keys("-k", "Escape");
     await send_keys("-k", "Escape");
     await sleep(300);
-    expect((await panel_hosts()) === 0, "Escape left the panel");
     expect((await scroll_y()) === 0, "Escape moved the page");
     expect((await scroll_delta_after("p6_headings_close", ["j"])) > 0, "keys did not work again after Escape");
   });
 
-  await run_case(";# leaves nothing behind when the page changes", async () => {
-    await open_page("headings", "p6_headings_leave", { new_tab: true });
-    await send_keys(";#");
-    await sleep(400);
-    await open_page("hints", "p6_headings_after", { new_tab: false });
-    expect((await panel_hosts()) === 0, "the panel stayed on the next page");
-    expect((await scroll_delta_after("p6_headings_after", ["j"])) > 0, "keys did not work on the next page");
-  });
-
-  await run_case(";# on a page with no headings opens no panel", async () => {
+  await run_case(";# on a page with no headings opens the line with no rows, and Escape leaves it", async () => {
     await open_page("headings", "p6_headings_none", { new_tab: true });
     await in_active_tab(`document.querySelectorAll("h1, h2, h3, [role=heading]").forEach((heading) => heading.remove()); 0`);
-    await send_keys(";#");
+    await open_headings_line();
+    const mark = events.length;
+    await send_keys("j");
     await sleep(500);
-    expect((await panel_hosts()) === 0, "an empty panel opened");
-    expect((await scroll_delta_after("p6_headings_none", ["j"])) > 0, "hint mode stayed after the empty list");
+    expect(!scrolled_since(mark, "p6_headings_none"), "j reached the page while the line was open");
+    await send_keys("-k", "Escape");
+    await send_keys("-k", "Escape");
+    await sleep(300);
+    expect((await scroll_delta_after("p6_headings_none", ["j"])) > 0, "keys did not work after the line closed");
+  });
+
+  await run_case(";# then Escape drops the snapshot, so the next heading.go reads the page as it is now", async () => {
+    await open_page("headings", "p6_headings_stale", { new_tab: true });
+    await open_headings_line();
+    await send_keys("-k", "Escape");
+    await send_keys("-k", "Escape");
+    await sleep(300);
+    // A heading that came after the first list. A snapshot that survived the Escape would not know it.
+    await in_active_tab(`document.body.insertAdjacentHTML("beforeend", '<h2 id="fresh">Fresh news</h2><div style="height:3000px"></div>'); 0`);
+    await run_heading("Fresh news");
+    await sleep(500);
+    const top = await top_of("fresh");
+    expect(Math.abs(top) <= 2, `Fresh news sits ${top}px from the top, so the old snapshot answered`);
+  });
+
+  await run_case(";# then Enter on a heading the page removed since gives That heading is gone and does not move", async () => {
+    await open_page("headings", "p6_headings_gone", { new_tab: true });
+    await open_headings_line();
+    await in_active_tab(`document.getElementById("below").remove(); 0`);
+    await send_keys(...tab_key, ...tab_key, ...tab_key);
+    await send_keys(...enter_key);
+    await sleep(500);
+    expect((await scroll_y()) === 0, "the page moved for a heading that is gone");
+    const toast = await toast_text();
+    expect(toast.includes("That heading is gone"), `the notice read "${toast}"`);
+    expect((await scroll_delta_after("p6_headings_gone", ["j"])) > 0, "keys did not work after the refusal");
   });
 
   // The selector keeps the labels fixed: #card is "a", #other is "s".
@@ -354,11 +336,12 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, open_p
       await sleep(300);
     });
 
-    await run_case("screenshot of the headings panel", async () => {
+    await run_case("screenshot of the headings list", async () => {
       await open_page("headings", "p6_shot_headings", { new_tab: true });
       await send_keys(";#");
-      await sleep(600);
-      await take_shot(`${shot_dir}/p6_headings_panel.png`);
+      await sleep(900);
+      await take_shot(`${shot_dir}/p6_headings_list.png`);
+      await send_keys("-k", "Escape");
       await send_keys("-k", "Escape");
       await sleep(300);
     });
