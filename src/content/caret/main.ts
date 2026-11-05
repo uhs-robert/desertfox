@@ -13,7 +13,7 @@ import { apply_selection_colors, clear_selection_colors } from "./selection_colo
 import { retarget, selected_text, selected_span, swap_ends, with_caret } from "./selection_state.ts";
 import type { Cursor } from "./selection_state.ts";
 import { build_text_model, documents_of, frame_document, trees_alive } from "./text_model.ts";
-import type { TextModel } from "./text_model.ts";
+import type { DomPoint, TextModel } from "./text_model.ts";
 import { first_visible_index } from "./start_point.ts";
 
 // `oasisfox_caret_target` is the element a hint picked. The hints bundle sets it just before it enters the mode.
@@ -27,6 +27,8 @@ type SelectionEnds = { selection: Selection; ends: unknown[] };
 let session: Session | undefined;
 // Counts visual starts, so a copy can tell its own visual run from a later one in the same session.
 let visual_runs = 0;
+// The visual session a `/` or `?` started from. The command line takes the mode while it is open, and the session waits for the end of the search.
+let searching_from: Session | undefined;
 
 const selections_of = (model: TextModel): Selection[] => documents_of(model).flatMap((owner) => owner.getSelection() ?? []);
 
@@ -172,7 +174,8 @@ const sink_for = (mode: "caret" | "visual") => ({
   },
   // Between caret and visual the highlight stays. Every other way out clears it.
   exit: (destination: ExitDestination) => {
-    if (destination !== "caret" && destination !== "visual") end_session();
+    const is_search_line = destination === "cmdline" && searching_from !== undefined && searching_from === session;
+    if (destination !== "caret" && destination !== "visual" && !is_search_line) end_session();
   },
 });
 
@@ -218,6 +221,54 @@ const handle_act = (args: Record<string, unknown>): Outcome | Promise<Outcome> |
   });
 };
 
+const WORD_CHARACTER = /[\p{L}\p{N}_]/u;
+const escape_regex = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+// What `*` and `#` search for and where it starts. A visual selection is searched as text. Otherwise it is the word under the caret, whole.
+// With no session the start of the visible text stands in for the caret.
+function word_target(): { pattern: string; from: DomPoint } | string {
+  const model = session?.model ?? build_text_model(document.body);
+  if (model.text === "") return "No text here";
+  const at = session ? undefined : (find.position(model) ?? first_visible_index(model));
+  const cursor = session?.cursor ?? { anchor: at!, caret: at! };
+  if (session?.mode === "visual" && cursor.anchor !== cursor.caret) {
+    const { from, to } = selected_span(cursor);
+    return { pattern: escape_regex(model.text.slice(from, to)), from: model.point_at(from) };
+  }
+  const on_word = (index: number) => index >= 0 && index < model.text.length && WORD_CHARACTER.test(model.text[index]!);
+  if (!on_word(cursor.caret)) return "No word under the caret";
+  let first = cursor.caret;
+  let end = cursor.caret + 1;
+  while (on_word(first - 1)) first--;
+  while (on_word(end)) end++;
+  // Lookarounds and not `\b`, which treats a letter outside ASCII as a boundary.
+  const pattern = `(?<![\\p{L}\\p{N}_])${escape_regex(model.text.slice(first, end))}(?![\\p{L}\\p{N}_])`;
+  return { pattern, from: model.point_at(first) };
+}
+
+// `*` and `#`: search for the word or selection at once, and let an open session follow the match.
+async function find_word(direction: "forward" | "backward"): Promise<Outcome> {
+  const target = word_target();
+  if (typeof target === "string") return { ok: false, message: target };
+  const outcome = await find.jump(target.pattern, direction, target.from);
+  const open = session;
+  const landed = open && outcome.ok && !("cancelled" in outcome && outcome.cancelled) ? find.position(open.model) : undefined;
+  if (open && landed !== undefined) {
+    open.cursor = with_caret(open.cursor, landed, open.mode === "visual");
+    open.goal_x = undefined;
+    paint(open);
+  }
+  return outcome;
+}
+
+// The search line closed on a visual session. Enter takes the caret end to the match, and either way the mode goes back to visual.
+async function end_visual_search(from: Session, keep: boolean): Promise<void> {
+  if (session !== from) return;
+  const landed = keep ? find.position(from.model) : undefined;
+  if (landed !== undefined) from.cursor = with_caret(from.cursor, landed, true);
+  page.oasisfox_host.set_mode("visual");
+}
+
 // A bundle may run twice, and a second run would hold fresh state next to the first.
 if (!page.oasisfox_caret_ready) {
   page.oasisfox_caret_ready = true;
@@ -227,13 +278,22 @@ if (!page.oasisfox_caret_ready) {
   page.oasisfox_host.register_handler("visual.act", handle_act);
   page.oasisfox_host.register_handler("find.open", (args) => {
     const direction = args.direction === "backward" ? "backward" : "forward";
-    find.begin(direction);
+    if (args.source === "word") return find_word(direction);
+    const from = session?.mode === "visual" ? session : undefined;
+    searching_from = from;
+    find.begin(direction, from?.model.point_at(from.cursor.caret));
     return page.oasisfox_host.run_command("cmdline.open", "cmdline", { search: direction });
   });
   page.oasisfox_host.register_handler("find.next", () => find.step(false));
   page.oasisfox_host.register_handler("find.prev", () => find.step(true));
   // Called by the command line while it is open, and not by any key.
   page.oasisfox_host.register_handler("find.live", (args) => find.update(args.text as string, args.report as (status: string) => void));
-  page.oasisfox_host.register_handler("find.end", (args) => find.end(args.keep === true));
+  page.oasisfox_host.register_handler("find.end", async (args) => {
+    const keep = args.keep === true;
+    await find.end(keep);
+    const from = searching_from;
+    searching_from = undefined;
+    if (from) await end_visual_search(from, keep);
+  });
   page.oasisfox_host.register_handler("find.clear", () => find.clear());
 }

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { build_text_model, documents_of, trees_alive } from "../src/content/caret/text_model.ts";
+import { build_text_model, documents_of, MAX_TEXT_CHARS, trees_alive } from "../src/content/caret/text_model.ts";
 
 // A fake rendered tree: just the DOM members the walk reads.
 type FakeNode = Record<string, unknown> & { nodeType: number; tree?: FakeTree };
@@ -150,4 +150,12 @@ test("the text of a node is read once, because each read of a page node's data c
   const model = model_of(element("body", [element("p", [long_text])]));
   assert.ok(model.text.startsWith("word word word"));
   assert.ok(reads <= 2, `the text was read ${reads} times`);
+});
+
+test("the walk stops at the size cap and says so", () => {
+  const paragraph = () => element("p", [text("x".repeat(MAX_TEXT_CHARS / 4))]);
+  const long = model_of(element("body", [paragraph(), paragraph(), paragraph(), paragraph(), paragraph(), paragraph()]));
+  assert.equal(long.truncated, true);
+  assert.equal(long.text.length < MAX_TEXT_CHARS * 1.5, true);
+  assert.equal(model_of(element("body", [element("p", [text("short")])])).truncated, false);
 });

@@ -13,8 +13,10 @@ function fake_page(page_text = "ab ab ab") {
   let clears = 0;
   let selection = ["start"];
   let clock = 0;
+  const watchers: (() => void)[] = [];
+  let builds = 0;
   const make_model = (): TextModel =>
-    ({ text: page_text, trees: [], point_at: (index: number) => ({ node: { index }, offset: 0 }), index_of: (node: { index: number }) => node.index }) as unknown as TextModel;
+    (builds++, { text: page_text, trees: [], point_at: (index: number) => ({ node: { index }, offset: 0 }), index_of: (node: { index: number }) => node.index }) as unknown as TextModel;
   const deps: FindDeps = {
     build_model: make_model,
     start_index: () => 0,
@@ -29,6 +31,7 @@ function fake_page(page_text = "ab ab ab") {
     // Each match ends a slice, and the page runs only when the test lets the scan go on.
     slicing: (is_stale) => ({ is_stale, now: () => (clock += 10), slice_ms: 8, yield_to_page: () => new Promise<void>((resume) => gates.push(resume)) }),
     selection_key: () => selection,
+    watch_page: (on_change) => (watchers.push(on_change), () => {}),
   };
   const settle = async () => {
     for (let round = 0; round < 30; round++) {
@@ -36,7 +39,7 @@ function fake_page(page_text = "ab ab ab") {
       await new Promise((resume) => setImmediate(resume));
     }
   };
-  return { deps, painted, toasts, registers, settle, clears: () => clears, set_selection: (next: string[]) => (selection = next), host: { show_toast: (message: string) => void toasts.push(message) } };
+  return { deps, builds: () => builds, change_page: () => watchers.forEach((notify) => notify()), painted, toasts, registers, settle, clears: () => clears, set_selection: (next: string[]) => (selection = next), host: { show_toast: (message: string) => void toasts.push(message) } };
 }
 
 test("a search begun while Enter waits for the old scan keeps its own state", async () => {
@@ -209,4 +212,61 @@ test("Enter on a costly pattern scans its characters as text instead of leaving 
   await ending;
   assert.equal(page.painted.length, 1);
   assert.equal(find.position(page.deps.build_model()), 2);
+});
+
+test("a change to the page makes the next n read the model again, and no change keeps it", async () => {
+  const page = fake_page();
+  const find = create_find(page.host, page.deps);
+  find.begin("forward");
+  find.update("ab", () => {});
+  await page.settle();
+  await find.end(true);
+  const built = page.builds();
+  await find.step(false);
+  assert.equal(page.builds(), built, "an unchanged page was read again");
+  page.change_page();
+  await page.settle();
+  const stepping = find.step(false);
+  await page.settle();
+  await stepping;
+  assert.equal(page.builds(), built + 1);
+});
+
+test("a change to the page makes the next keystroke read the model again", async () => {
+  const page = fake_page();
+  const find = create_find(page.host, page.deps);
+  find.begin("forward");
+  find.update("ab", () => {});
+  await page.settle();
+  const built = page.builds();
+  page.change_page();
+  find.update("ab ", () => {});
+  await page.settle();
+  assert.equal(page.builds(), built + 1);
+});
+
+test("a search that begins at a point looks past it going forward", async () => {
+  const page = fake_page();
+  const find = create_find(page.host, page.deps);
+  const reports: string[] = [];
+  find.begin("forward", { node: { index: 3 } as unknown as Node, offset: 0 });
+  find.update("ab", (status) => reports.push(status));
+  await page.settle();
+  assert.equal(reports.at(-1), "3 of 3");
+});
+
+test("a jump searches from the word, forward past it and backward before it, and sets the last search", async () => {
+  const page = fake_page();
+  const find = create_find(page.host, page.deps);
+  const from = { node: { index: 3 } as unknown as Node, offset: 0 };
+  const forward = find.jump("ab", "forward", from);
+  await page.settle();
+  assert.deepEqual(await forward, { ok: true });
+  assert.deepEqual(page.toasts, ["3 of 3"]);
+  assert.equal(page.registers.get("/"), "ab");
+  const backward = find.jump("ab", "backward", from);
+  await page.settle();
+  await backward;
+  assert.equal(page.toasts.at(-1), "1 of 3");
+  assert.equal(page.registers.get("/:direction"), "backward");
 });

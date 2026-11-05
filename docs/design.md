@@ -63,7 +63,7 @@ define("open.search", {
 The fields follow the Oasis action library (`home/hypr/.config/hypr/lib/act/init.lua`) so the two lists have one shape:
 
 - `id`: `group.name`, lowercase with underscores. Same pattern as Oasis actions.
-- `name`: the command line name, set by hand. It is optional, and it holds no `.`. The full id always works on the command line, and it is the name of most commands: you type `tab.close`, `window.new`, `tab.pin`. Only two kinds of command get a name. The one-word commands are `open`, `search`, `paste`, `copy`, `hint` and `github`. The family words are `tab` (switch), `bookmark` (open), `zoom` (set), `scroll` (lines), `mode` (set) and `help` (open), one per group, for the main action. Names are never derived from the id, because derived names collide (`tab.close` and `window.close`).
+- `name`: the command line name, set by hand. It is optional, and it holds no `.`. The full id always works on the command line, and it is the name of most commands: you type `tab.close`, `window.new`, `tab.pin`. Only two kinds of command get a name. The one-word commands are `open`, `search`, `paste`, `copy`, `hint`, `find` and `github`. The family words are `tab` (switch), `bookmark` (open), `zoom` (set), `scroll` (lines), `mode` (set) and `help` (open), one per group, for the main action. Names are never derived from the id, because derived names collide (`tab.close` and `window.close`).
 - `aliases`: more command line names. The defaults ship none.
 - `label`: a short title in sentence case ("Close tab"). Which-key, the palette and completion show it. A key shows this label plus a phrase for each arg its binding sets, see [Which-key](#which-key).
 - `intent`: plain text on one line. Its first sentence is the summary that the completion list shows: it starts with a verb, takes at most 60 characters and names no other command. Later sentences are detail. Help, the status page and which-key hover show all of it. The registry rejects an empty or multi-line one, and a test holds every built-in command to the summary rule.
@@ -385,6 +385,16 @@ Caret mode puts a text cursor in the page, so the user can move through text wit
 - In visual mode, `o` swaps the ends of the selection, `y` copies it, and `s` searches it with `open.search` and the `default_engine` setting. Any command whose param defaults to `{ from: "selection" }` uses it. Escape returns to caret mode, then to normal mode.
 - The motions are registry commands in the `caret` and `visual` modes, so keys, which-key and help cover them like any other command.
 - Page text inside inputs and text areas belongs to insert mode, not caret mode.
+
+### Page search
+
+- `/` and `?` open the command line as a search line and search the page text as you type. `n` and `N` go to the next and previous match in the direction of the last search, and the last search is kept in register `/`. The code lives in `caret.js`, and `content.js` holds only `find.open`, `find.next` and `find.prev`.
+- The search covers the page, open and closed shadow roots and same-origin frames. Text in fields is left out. The query is a regular expression with smartcase: a capital letter makes it exact. A typed space matches a line break. A pattern that is invalid, or that could backtrack without end, is searched as plain text instead, and the line says so.
+- Enter keeps the highlights and the match, Escape clears the highlights. Both keep the search and the match as the place `n`, `N` and a new caret or visual session go on from.
+- In visual mode `/` and `?` move the caret end to the match and keep the anchor. Escape on the line leaves the selection as it was.
+- `*` and `#` are `find.open --word` and `find.open --word --backward`. They search the word under the caret, whole and case-sensitive, with no line. In visual mode with a selection they search the selected text. In normal mode the start of the visible text stands in for the caret. They set register `/` like a typed search.
+- A `MutationObserver` marks the text model stale when the page changes its text or markup, ignoring the elements OasisFox adds itself. The next keystroke or `n` reads the model again. The observer starts with the first search.
+- A page with more than 4 million characters of text is searched only up to that point, and the line and toast say so.
 
 ### Help and palette
 

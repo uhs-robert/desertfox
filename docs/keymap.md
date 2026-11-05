@@ -20,7 +20,7 @@ A note "(prompts)" means the binding leaves a param out, so the command line ask
 
 <!-- BEGIN generated -->
 
-bound: 186 (normal 130, hint 2, cmdline 11, caret 18, visual 20, insert 1, ignore 1, browser 3) | later: 14 | dropped: 6
+bound: 194 (normal 132, hint 2, cmdline 11, caret 20, visual 24, insert 1, ignore 1, browser 3) | later: 14 | dropped: 6
 
 ### normal
 
@@ -150,8 +150,10 @@ bound: 186 (normal 130, hint 2, cmdline 11, caret 18, visual 20, insert 1, ignor
 | `;i` | bound | `hint --inputs` | Click input |  |
 | `;l` | bound | `hint --links` | Click link |  |
 | `:` | bound | `cmdline.open` | Command line |  |
-| `/` | bound | `find.open` | Find forward |  |
-| `?` | bound | `find.open --backward` | Find backward |  |
+| `/` | bound | `find` | Find forward |  |
+| `?` | bound | `find --backward` | Find backward |  |
+| `*` | bound | `find --word` | Find word forward |  |
+| `#` | bound | `find --backward --word` | Find word backward |  |
 | `n` | bound | `find.next` | Next match |  |
 | `N` | bound | `find.prev` | Previous match |  |
 | `g?` | bound | `help` | Help |  |
@@ -228,6 +230,8 @@ Which-key group names:
 | `v` | bound | `mode visual` | Set mode |  |
 | `<Escape>` | bound | `mode.escape` | Escape |  |
 | `<C-[>` | bound | `mode.escape` | Escape |  |
+| `*` | bound | `find --word` | Find word forward |  |
+| `#` | bound | `find --backward --word` | Find word backward |  |
 | `h` | bound | `caret.move --char --back` | Move caret |  |
 | `l` | bound | `caret.move --char` | Move caret |  |
 | `j` | bound | `caret.move --line` | Move caret |  |
@@ -262,6 +266,10 @@ Which-key group names:
 | `$` | bound | `caret.move --line-end` | Move caret |  |
 | `gg` | bound | `caret.move --start` | Move caret |  |
 | `G` | bound | `caret.move --end` | Move caret |  |
+| `/` | bound | `find` | Find forward |  |
+| `?` | bound | `find --backward` | Find backward |  |
+| `*` | bound | `find --word` | Find word forward |  |
+| `#` | bound | `find --backward --word` | Find word backward |  |
 | `y` | bound | `visual.act yank` | Act on selection |  |
 | `o` | bound | `visual.act swap` | Act on selection |  |
 | `s` | bound | `visual.act search` | Act on selection |  |
