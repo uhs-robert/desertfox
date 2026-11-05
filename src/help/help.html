@@ -10,7 +10,7 @@
   .oasisfox-help {
     --oasisfox-bg: #0c0e13;
     --oasisfox-fg: #f5f5dc;
-    --oasisfox-accent: #7fa3c9;
+    --oasisfox-primary: #7fa3c9;
     --oasisfox-font: 15px/1.5 system-ui, sans-serif;
     --oasisfox-radius: 6px;
     display: flex;
@@ -26,10 +26,10 @@
     display: flex; flex-direction: column; gap: .25rem;
     background: color-mix(in srgb, var(--oasisfox-fg) 6%, var(--oasisfox-bg));
   }
-  .oasisfox-help-brand { margin-bottom: .75rem; color: var(--oasisfox-accent); font-weight: bold; }
+  .oasisfox-help-brand { margin-bottom: .75rem; color: var(--oasisfox-primary); font-weight: bold; }
   .oasisfox-help-sidebar a { padding: .25rem .5rem; border-radius: var(--oasisfox-radius); color: var(--oasisfox-fg); text-decoration: none; }
   .oasisfox-help-sidebar a:hover { background: color-mix(in srgb, var(--oasisfox-fg) 12%, transparent); }
-  .oasisfox-help-sidebar a[aria-current="page"] { color: var(--oasisfox-accent); background: color-mix(in srgb, var(--oasisfox-accent) 15%, transparent); }
+  .oasisfox-help-sidebar a[aria-current="page"] { color: var(--oasisfox-primary); background: color-mix(in srgb, var(--oasisfox-primary) 15%, transparent); }
   .oasisfox-help-nav-row { display: flex; align-items: center; gap: .25rem; }
   .oasisfox-help-nav-row a { flex: 1; }
   .oasisfox-help-sections-toggle { padding: .25rem .5rem; border: 0; border-radius: var(--oasisfox-radius); background: none; color: var(--oasisfox-fg); font: inherit; cursor: pointer; }
@@ -39,16 +39,16 @@
   .oasisfox-help-sections-toggle:hover { background: color-mix(in srgb, var(--oasisfox-fg) 12%, transparent); }
   .oasisfox-help-sections { display: flex; flex-direction: column; margin-left: 1rem; font-size: .9em; }
   .oasisfox-help-sections[hidden] { display: none; }
-  .oasisfox-help-sidebar .oasisfox-help-support { display: flex; flex-direction: column; gap: .35rem; margin-top: auto; padding: .6rem .7rem; border: 1px solid var(--oasisfox-accent); border-radius: calc(var(--oasisfox-radius) * 2); font-size: .85em; }
+  .oasisfox-help-sidebar .oasisfox-help-support { display: flex; flex-direction: column; gap: .35rem; margin-top: auto; padding: .6rem .7rem; border: 1px solid var(--oasisfox-primary); border-radius: calc(var(--oasisfox-radius) * 2); font-size: .85em; }
   .oasisfox-help-support-heading { display: flex; align-items: center; justify-content: center; gap: .4rem; font-weight: bold; }
-  .oasisfox-help-support-heart { flex: none; transform-origin: center; width: 1.1em; height: 1.1em; fill: var(--oasisfox-accent); }
+  .oasisfox-help-support-heart { flex: none; transform-origin: center; width: 1.1em; height: 1.1em; fill: var(--oasisfox-primary); }
   .oasisfox-help-support:hover .oasisfox-help-support-heart { animation: oasisfox-help-heart-pulse 400ms ease-out 1; }
   @keyframes oasisfox-help-heart-pulse { 50% { transform: scale(1.35); } }
   @media (prefers-reduced-motion: reduce) { .oasisfox-help-support:hover .oasisfox-help-support-heart { animation: none; } }
   .oasisfox-help-support-note { opacity: .7; text-align: center; }
-  .oasisfox-help-sidebar .oasisfox-help-support-link { padding: .25rem .6rem; border: 1px solid var(--oasisfox-accent); border-radius: 999px; color: var(--oasisfox-accent); text-align: center; }
-  .oasisfox-help-sidebar .oasisfox-help-support-link:hover { background: color-mix(in srgb, var(--oasisfox-accent) 15%, transparent); }
-  .oasisfox-help h1, .oasisfox-help h2 { color: var(--oasisfox-accent); }
+  .oasisfox-help-sidebar .oasisfox-help-support-link { padding: .25rem .6rem; border: 1px solid var(--oasisfox-primary); border-radius: 999px; color: var(--oasisfox-primary); text-align: center; }
+  .oasisfox-help-sidebar .oasisfox-help-support-link:hover { background: color-mix(in srgb, var(--oasisfox-primary) 15%, transparent); }
+  .oasisfox-help h1, .oasisfox-help h2 { color: var(--oasisfox-primary); }
   .oasisfox-help h1:focus { outline: none; }
   .oasisfox-help h3 { margin: 0 0 .25rem; }
   .oasisfox-help-command {
@@ -78,19 +78,19 @@
     margin-left: auto; padding: .1rem .6rem; font: .8em system-ui, sans-serif; color: inherit; cursor: pointer;
     background: transparent; border: 1px solid var(--code-border); border-radius: var(--oasisfox-radius);
   }
-  .oasisfox-help-code-copy:hover, .oasisfox-help-code-copy:focus-visible { border-color: var(--oasisfox-accent); color: var(--oasisfox-accent); }
+  .oasisfox-help-code-copy:hover, .oasisfox-help-code-copy:focus-visible { border-color: var(--oasisfox-primary); color: var(--oasisfox-primary); }
   .oasisfox-help-code-body { margin: 0; padding: 0 1rem .75rem; font-family: ui-monospace, monospace; white-space: pre; overflow-x: auto; scrollbar-color: color-mix(in srgb, var(--oasisfox-fg) 35%, transparent) transparent; }
   .oasisfox-help [hidden] { display: none; }
-  .oasisfox-help kbd { color: var(--oasisfox-accent); }
+  .oasisfox-help kbd { color: var(--oasisfox-primary); }
   .oasisfox-help-mode { display: inline-block; min-width: 4.5rem; margin-right: .5rem; opacity: .6; }
   .oasisfox-help-muted { opacity: .6; }
-  .oasisfox-help-current { outline: 2px solid var(--oasisfox-accent); }
+  .oasisfox-help-current { outline: 2px solid var(--oasisfox-primary); }
   .oasisfox-help-tip {
-    margin: 0 0 1rem; padding: .6rem .9rem; border-left: 4px solid var(--oasisfox-accent); border-radius: var(--oasisfox-radius);
+    margin: 0 0 1rem; padding: .6rem .9rem; border-left: 4px solid var(--oasisfox-primary); border-radius: var(--oasisfox-radius);
     background: var(--oasisfox-bg-mantle, color-mix(in srgb, var(--oasisfox-fg) 6%, var(--oasisfox-bg)));
   }
-  .oasisfox-help-tip-label { color: var(--oasisfox-accent); }
-  .oasisfox-help-warnings { color: var(--oasisfox-accent); }
+  .oasisfox-help-tip-label { color: var(--oasisfox-primary); }
+  .oasisfox-help-warnings { color: var(--oasisfox-primary); }
   .oasisfox-help table { border-collapse: collapse; margin: .5rem 0; }
   .oasisfox-help-params { width: 100%; }
   .oasisfox-help-engines { width: 100%; table-layout: fixed; overflow-wrap: anywhere; }
