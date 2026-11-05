@@ -133,7 +133,7 @@ test("a command row shows its keys in the last cell and a row with no id shows n
 test("a tab row leads with the status, container and favicon cells, and a row without tab marks has none", () => {
   const { element, list } = setup();
   const [plain] = rows(1);
-  const tab = { ...plain!, tab: { status: "%", flags: ["pinned", "muted"] as ("pinned" | "muted")[], favicon: "https://a.test/i.png", container: { color: "#37adff", icon: "resource://usercontext-content/fingerprint.svg" } } };
+  const tab = { ...plain!, tab: { id: 1, status: "%", flags: ["pinned", "muted"] as ("pinned" | "muted")[], favicon: "https://a.test/i.png", container: { color: "#37adff", icon: "resource://usercontext-content/fingerprint.svg" } } };
   list.render([plain!, tab], -1);
   const [first, second] = element.children as [Node, Node];
   assert.equal(first.children[0]!.className, "oasisfox-cmdline-name");
@@ -147,7 +147,7 @@ test("a tab row leads with the status, container and favicon cells, and a row wi
 
 test("a tab with no container or favicon draws empty cells, and no flags take no width", () => {
   const { element, list } = setup();
-  list.render([{ ...rows(1)[0]!, tab: { status: "", flags: [] } }], -1);
+  list.render([{ ...rows(1)[0]!, tab: { id: 1, status: "", flags: [] } }], -1);
   const [container, favicon] = (element.children[0] as Node).children.slice(1, 3) as [Node, Node];
   assert.deepEqual([container.children.length, favicon.children.length], [0, 0]);
   assert.equal(element.style.vars["--oasisfox-flags-width"], "0px");
@@ -155,7 +155,7 @@ test("a tab with no container or favicon draws empty cells, and no flags take no
 
 test("an image that fails to load is hidden, and a container icon that fails becomes a dot", () => {
   const { element, list } = setup();
-  list.render([{ ...rows(1)[0]!, tab: { status: "#", flags: [], favicon: "https://a.test/i.png", container: { color: "red", icon: "resource://x/y.svg" } } }], -1);
+  list.render([{ ...rows(1)[0]!, tab: { id: 1, status: "#", flags: [], favicon: "https://a.test/i.png", container: { color: "red", icon: "resource://x/y.svg" } } }], -1);
   const [container, favicon] = (element.children[0] as Node).children.slice(1, 3) as [Node, Node];
   for (const holder of [container, favicon]) {
     const image = holder.children[0] as unknown as { hidden: boolean; onerror: () => void };
@@ -168,7 +168,7 @@ test("an image that fails to load is hidden, and a container icon that fails bec
 
 test("a redraw reuses the image node of a favicon, so a keystroke fetches nothing again", () => {
   const { element, list } = setup();
-  const tab = { ...rows(1)[0]!, tab: { status: "", flags: [], favicon: "https://a.test/i.png" } };
+  const tab = { ...rows(1)[0]!, tab: { id: 1, status: "", flags: [], favicon: "https://a.test/i.png" } };
   list.render([tab], -1);
   const first = (element.children[0] as Node).children[2]!.children[0];
   list.render([{ ...tab }], 0);
@@ -177,7 +177,7 @@ test("a redraw reuses the image node of a favicon, so a keystroke fetches nothin
 
 test("a container icon that failed once is a dot again after a redraw", () => {
   const { element, list } = setup();
-  const tab = { ...rows(1)[0]!, tab: { status: "", flags: [], container: { color: "red", icon: "resource://x/y.svg" } } };
+  const tab = { ...rows(1)[0]!, tab: { id: 1, status: "", flags: [], container: { color: "red", icon: "resource://x/y.svg" } } };
   list.render([tab], -1);
   ((element.children[0] as Node).children[1]!.children[0] as unknown as { onerror: () => void }).onerror();
   list.render([{ ...tab }], 0);
@@ -186,7 +186,7 @@ test("a container icon that failed once is a dot again after a redraw", () => {
 
 test("rows with the same favicon each keep their own image node across a redraw", () => {
   const { element, list } = setup();
-  const [one, two] = rows(2).map((row) => ({ ...row, tab: { status: "", flags: [], favicon: "https://a.test/i.png" } }));
+  const [one, two] = rows(2).map((row) => ({ ...row, tab: { id: 1, status: "", flags: [], favicon: "https://a.test/i.png" } }));
   list.render([one!, two!], -1);
   const images = () => (element.children as Node[]).map((row) => row.children[2]!.children[0]);
   const first = images();
@@ -241,4 +241,16 @@ test("a command row without a help card gets no link", () => {
   list.render([{ ...rows(2)[0]!, id: "snippet.one" }, { ...rows(2)[1]!, id: "tab.next" }], -1);
   const name_of = (item: Node) => item.children.find((child) => child.className.startsWith("oasisfox-cmdline-name"))!;
   assert.deepEqual(element.children.map((item) => name_of(item).dataset.help), [undefined, "tab.next"]);
+});
+
+test("an unloaded tab row gets the dim class, a selected one keeps only its selection class beside it", () => {
+  const { element, list } = setup();
+  const [plain] = rows(1);
+  const row = (flags: ("discarded")[]) => ({ ...plain!, tab: { id: 1, status: "", flags } });
+  list.render([row([]), row(["discarded"]), row(["discarded"])], 2);
+  assert.deepEqual((element.children as Node[]).map((item) => item.className), [
+    "oasisfox-cmdline-item",
+    "oasisfox-cmdline-item oasisfox-cmdline-item-discarded",
+    "oasisfox-cmdline-item oasisfox-cmdline-selected oasisfox-cmdline-item-discarded",
+  ]);
 });

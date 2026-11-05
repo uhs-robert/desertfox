@@ -100,6 +100,10 @@ export const DEFAULT_KEYMAP: KeymapConfig = {
     ta: { id: "tab.goto_audible" },
     tf: { id: "tab.goto", args: { index: 1 }, label: "First tab" },
     tl: { id: "tab.goto", args: { index: -1 }, label: "Last tab" },
+    tu: { id: "tab.unload" },
+    tU: { id: "tab.load" },
+    tH: { id: "tab.unload", args: { side: "all_before" }, label: "Unload tabs before this one" },
+    tL: { id: "tab.unload", args: { side: "all_after" }, label: "Unload tabs after this one" },
 
     // The w group works on windows.
     W: { id: "window.new", prompt: { param: "url", prefill: { from: "current_url" } }, label: "New window, edit current URL" },
@@ -209,6 +213,7 @@ export const DEFAULT_KEYMAP: KeymapConfig = {
     "<ArrowDown>": { id: "cmdline.history", args: { direction: "next" } },
     "<C-u>": { id: "cmdline.clear" },
     "<C-h>": { id: "cmdline.help" },
+    "<A-u>": { id: "list.act", args: { action: "unload" }, label: "Unload or load the tab" },
   },
   caret: {
     v: { id: "mode.set", args: { mode: "visual" } },

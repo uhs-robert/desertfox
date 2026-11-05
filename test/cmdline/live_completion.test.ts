@@ -46,10 +46,10 @@ const SOURCES = { search_engines: ENGINES.map((engine) => engine.name), containe
 const lookup = create_word_lookup(COMMANDS, {});
 
 const TABS: TabItem[] = [
-  { number: 1, title: "Mail", url: "https://mail.test/" },
-  { number: 2, title: "GitHub", url: "https://github.com/" },
-  { number: 3, title: "GitHub Gist", url: "https://gist.github.com/" },
-  { number: 4, title: "Bob's \"page\"", url: "https://bob.test/" },
+  { id: 11, number: 1, title: "Mail", url: "https://mail.test/" },
+  { id: 12, number: 2, title: "GitHub", url: "https://github.com/" },
+  { id: 13, number: 3, title: "GitHub Gist", url: "https://gist.github.com/" },
+  { id: 14, number: 4, title: "Bob's \"page\"", url: "https://bob.test/" },
 ];
 const BOOKMARKS: BookmarkItem[] = Array.from({ length: 30 }, (_, index) => ({ title: `Mark ${index}`, url: `https://m${index}.test/` }));
 
@@ -304,15 +304,62 @@ test("a tab row carries its status, flags, favicon and container from the tab it
   const { session, asks, settle } = make();
   session.edit("tab ");
   asks[0]!.answer([
-    { number: 1, title: "Mail", url: "https://m.test/", active: true, pinned: true, favicon: "https://m.test/i.png" },
-    { number: 2, title: "Docs", url: "https://d.test/", alternate: true, muted: true, container },
-    { number: 3, title: "Old", url: "https://o.test/", discarded: true },
+    { id: 21, number: 1, title: "Mail", url: "https://m.test/", active: true, pinned: true, favicon: "https://m.test/i.png" },
+    { id: 22, number: 2, title: "Docs", url: "https://d.test/", alternate: true, muted: true, container },
+    { id: 23, number: 3, title: "Old", url: "https://o.test/", discarded: true },
   ]);
   await settle();
   const marks = session.get_rows().map((row) => row.tab);
   assert.deepEqual(marks, [
-    { status: "%", flags: ["pinned"], favicon: "https://m.test/i.png" },
-    { status: "#", flags: ["muted"], container },
-    { status: "", flags: ["discarded"] },
+    { id: 21, status: "%", flags: ["pinned"], favicon: "https://m.test/i.png" },
+    { id: 22, status: "#", flags: ["muted"], container },
+    { id: 23, status: "", flags: ["discarded"] },
   ]);
+});
+
+const unload_key = (session: ReturnType<typeof make>["session"]) => session.run("list.act", { action: "unload" });
+
+test("the row key on a loaded tab row asks to unload it, and on an unloaded row to load it, and the list and selection stay", async () => {
+  const { session, live, asks, settle } = make();
+  session.edit("tab ");
+  asks[0]!.answer([...TABS.slice(0, 2), { id: 23, number: 3, title: "Old", url: "https://o.test/", discarded: true }]);
+  await settle();
+  session.run("cmdline.next_completion", undefined);
+  assert.deepEqual(unload_key(session), { kind: "set_tab_unloaded", tab_id: 11, unloaded: true });
+  session.run("cmdline.next_completion", undefined);
+  session.run("cmdline.next_completion", undefined);
+  assert.deepEqual(unload_key(session), { kind: "set_tab_unloaded", tab_id: 23, unloaded: false });
+  assert.equal(session.get_selected(), 2);
+  assert.equal(session.get_rows().length, 3);
+  assert.equal(live.read("tabs").loading, false);
+});
+
+test("patch_tab changes only that row's marks, in place, and later rankings show it", async () => {
+  const { session, live, asks, settle } = make();
+  session.edit("tab ");
+  asks[0]!.answer(TABS);
+  await settle();
+  session.run("cmdline.next_completion", undefined);
+  const before = session.get_rows();
+  const marks = { id: 12, status: "", flags: ["discarded" as const] };
+  session.patch_tab(marks);
+  live.patch_tab({ ...TABS[1]!, discarded: true });
+  assert.equal(session.get_rows(), before);
+  assert.deepEqual(session.get_rows().map((row) => row.tab?.flags), [[], ["discarded"], [], []]);
+  session.edit("tab git");
+  assert.deepEqual(session.get_rows().map((row) => row.tab?.flags), [["discarded"], []]);
+});
+
+test("the row key on a command row, an empty selection or a closed list does nothing but show a note", async () => {
+  const { session, asks, settle } = make();
+  session.edit("ta");
+  assert.deepEqual(unload_key(session), { kind: "render" });
+  assert.equal(session.get_message(), "select a tab row first");
+  session.edit("tab ");
+  asks[0]!.answer(TABS);
+  await settle();
+  assert.deepEqual(unload_key(session), { kind: "render" });
+  session.run("cmdline.next_completion", undefined);
+  session.run("mode.escape", undefined);
+  assert.deepEqual(unload_key(session), { kind: "render" });
 });

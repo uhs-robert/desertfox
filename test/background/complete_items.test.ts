@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { bookmark_items, create_complete_items, engine_items, flatten_bookmarks, history_items, listed_favicon, listed_tabs, listed_windows, read_containers } from "../../src/background/complete_items.ts";
+import type { DiscardDeps } from "../../src/background/tab_discard.ts";
 import type { BookmarkNode, HistoryNode, LineScope, OpenSettings, TabLike, WindowLike } from "../../src/background/complete_items.ts";
 
 const tab = (id: number, index: number, window_id: number, incognito: boolean, title = `Tab ${id}`): TabLike => ({ id, index, windowId: window_id, title, url: `https://site${id}.test/`, incognito });
@@ -26,7 +27,7 @@ const window_of = (id: number, incognito: boolean, title: string, type = "normal
 // Two normal windows and one private window, in `windows.getAll` order.
 const WINDOWS = [window_of(10, false, "Mail"), window_of(20, true, "Secret"), window_of(11, false, "Docs\n tab")];
 
-function make({ openers = [1, 2], all_windows = false, tabs = ALL_TABS, bookmarks = [] as BookmarkNode[], fail = false, page = undefined as { url: string } | undefined, history = [] as HistoryNode[], open = { sources: ["bookmarks", "history"], history_max: 10 } as OpenSettings } = {}) {
+function make({ openers = [1, 2], all_windows = false, tabs = ALL_TABS, bookmarks = [] as BookmarkNode[], fail = false, page = undefined as { url: string } | undefined, history = [] as HistoryNode[], open = { sources: ["bookmarks", "history"], history_max: 10 } as OpenSettings, read_tab = (async () => undefined) as (id: number) => Promise<TabLike | undefined>, discard = {} as DiscardDeps } = {}) {
   const history_reads: number[] = [];
   const asked: (number | undefined)[] = [];
   const opened = new Set(openers);
@@ -48,6 +49,8 @@ function make({ openers = [1, 2], all_windows = false, tabs = ALL_TABS, bookmark
     all_windows: async () => all_windows,
     containers: async () => new Map(),
     previous_tab: async () => undefined,
+    read_tab,
+    discard,
     search_engines: async () => ENGINES,
     page_of: async () => page,
     search_history: async () => {
@@ -101,8 +104,8 @@ test("the number is the place in the tab bar counted from 1, current tab include
   const { service } = make();
   const answer = await service.answer("tabs", NORMAL_LINE);
   assert.deepEqual(answer?.items, [
-    { number: 1, title: "Tab 1", url: "https://site1.test/" },
-    { number: 2, title: "Tab 2", url: "https://site2.test/" },
+    { id: 1, number: 1, title: "Tab 1", url: "https://site1.test/" },
+    { id: 2, number: 2, title: "Tab 2", url: "https://site2.test/" },
   ]);
 });
 
@@ -149,6 +152,8 @@ test("a tab that navigates or closes while the lookup runs gets nothing", async 
     all_windows: async () => false,
     containers: async () => new Map(),
     previous_tab: async () => undefined,
+    read_tab: async () => undefined,
+    discard: {} as DiscardDeps,
     search_engines: async () => ENGINES,
     page_of: async () => undefined,
     search_history: async () => [],
@@ -282,6 +287,8 @@ test("the opener is checked before and after the history fetch", async () => {
     all_windows: async () => false,
     containers: async () => new Map(),
     previous_tab: async () => undefined,
+    read_tab: async () => undefined,
+    discard: {} as DiscardDeps,
     search_engines: async () => ENGINES,
     page_of: async () => undefined,
     search_history: async () => {
@@ -306,6 +313,8 @@ test("a failed history read leaves the bookmarks, and a failed bookmark read lea
       all_windows: async () => false,
       containers: async () => new Map(),
       previous_tab: async () => undefined,
+    read_tab: async () => undefined,
+    discard: {} as DiscardDeps,
       search_engines: async () => ENGINES,
       page_of: async () => undefined,
       search_history: async () => {
@@ -381,7 +390,7 @@ test("the container lookup maps identities, and gives none when containers are o
   assert.equal((await read_containers(async () => false)).size, 0);
 });
 
-test("the answer drops the ids, keeps the new fields, and sends a long data: favicon nowhere", async () => {
+test("the answer keeps the tab id and drops the window id, keeps the new fields, and sends a long data: favicon nowhere", async () => {
   const long = `data:image/png;base64,${"A".repeat(5000)}`;
   const tabs = [
     in_window(1, { active: true, favIconUrl: long, pinned: true }),
@@ -394,6 +403,8 @@ test("the answer drops the ids, keeps the new fields, and sends a long data: fav
     all_windows: async () => false,
     containers: async () => new Map([["firefox-container-1", FOX]]),
     previous_tab: async () => 2,
+    read_tab: async () => undefined,
+    discard: {} as DiscardDeps,
     query_windows: async () => [],
     search_engines: async () => ENGINES,
     page_of: async () => undefined,
@@ -402,8 +413,8 @@ test("the answer drops the ids, keeps the new fields, and sends a long data: fav
   });
   const answer = await service.answer("tabs", NORMAL_LINE);
   assert.deepEqual(answer?.items, [
-    { number: 1, title: "Tab 1", url: "https://site1.test/", active: true, pinned: true },
-    { number: 2, title: "Tab 2", url: "https://site2.test/", favicon: "https://a.test/i.png", container: FOX, alternate: true },
+    { id: 1, number: 1, title: "Tab 1", url: "https://site1.test/", active: true, pinned: true },
+    { id: 2, number: 2, title: "Tab 2", url: "https://site2.test/", favicon: "https://a.test/i.png", container: FOX, alternate: true },
   ]);
   assert.ok(JSON.stringify(answer).length < 600);
 });
@@ -417,16 +428,69 @@ test("a private line lists private tabs with their favicon and flags and no cont
     all_windows: async () => false,
     containers: async () => new Map([["firefox-container-1", FOX]]),
     previous_tab: async () => undefined,
+    read_tab: async () => undefined,
+    discard: {} as DiscardDeps,
     query_windows: async () => [],
     search_engines: async () => ENGINES,
     page_of: async () => undefined,
     search_history: async () => [],
     open_settings: async () => ({ sources: [], history_max: 0 }),
   });
-  assert.deepEqual((await service.answer("tabs", PRIVATE_LINE))?.items, [{ number: 1, title: "Tab 4", url: "https://site4.test/", favicon: "https://p.test/i.png", active: true }]);
+  assert.deepEqual((await service.answer("tabs", PRIVATE_LINE))?.items, [{ id: 4, number: 1, title: "Tab 4", url: "https://site4.test/", favicon: "https://p.test/i.png", active: true }]);
 });
 
 test("a popup window is not listed, and it still counts a place so the numbers stay put", () => {
   const with_popup = [window_of(10, false, "Mail"), window_of(30, false, "Popup", "popup"), window_of(11, false, "Docs")];
   assert.deepEqual(listed_windows(with_popup, NORMAL_LINE).map(({ number, title }) => ({ number, title })), [{ number: 3, title: "Docs" }]);
+});
+
+// A tab that Firefox can discard: it keeps what it read before, as a real one does, except a loading tab loses its address.
+function discardable(initial: TabLike) {
+  let current: TabLike = { ...initial };
+  const log: string[] = [];
+  const deps: DiscardDeps = {
+    read_tab: async () => ({ id: 1, window_id: 10, index: 0, active: !!current.active, audible: !!current.audible, discarded: !!current.discarded }),
+    tabs_in_window: async () => [],
+    alternate_of: async () => undefined,
+    activate: async () => {},
+    discard: async () => {
+      log.push("discard");
+      current = { ...current, discarded: true, url: "about:blank", title: "about:blank" };
+    },
+    reload: async () => {
+      log.push("reload");
+      current = { ...current, discarded: false, url: "https://site1.test/", title: "Tab 1" };
+    },
+  };
+  return { deps, log, read_tab: async (id: number) => (id === 1 ? current : id === 4 ? { ...tab(4, 0, 20, true) } : undefined) };
+}
+
+test("set_unloaded answers the row as it is now, with the address read before a still loading tab went blank", async () => {
+  const tab_1 = discardable({ ...tab(1, 0, 10, false), title: "Loading", url: "https://slow.test/" });
+  const { service } = make({ read_tab: tab_1.read_tab, discard: tab_1.deps });
+  const answer = await service.set_unloaded(1, true, { ...NORMAL_LINE, tab_id: 2 });
+  assert.deepEqual(answer, { item: { id: 1, number: 1, title: "Loading", url: "https://slow.test/", discarded: true } });
+  const loaded = await service.set_unloaded(1, false, { ...NORMAL_LINE, tab_id: 2 });
+  assert.deepEqual(loaded, { item: { id: 1, number: 1, title: "Tab 1", url: "https://site1.test/" } });
+  assert.deepEqual(tab_1.log, ["discard", "reload"]);
+});
+
+test("set_unloaded reports the reason when the tab did not change, and keeps the row", async () => {
+  const playing = discardable({ ...tab(1, 0, 10, false), audible: true });
+  const { service } = make({ read_tab: playing.read_tab, discard: playing.deps });
+  assert.deepEqual(await service.set_unloaded(1, true, NORMAL_LINE), { item: { id: 1, number: 1, title: "Tab 1", url: "https://site1.test/", audible: true }, refusal: "audible" });
+  assert.deepEqual(playing.log, []);
+});
+
+test("set_unloaded answers nothing for a line without a ticket, a tab of the other privacy, a gone tab or a bad argument", async () => {
+  const tab_1 = discardable(tab(1, 0, 10, false));
+  const { service } = make({ openers: [], read_tab: tab_1.read_tab, discard: tab_1.deps });
+  assert.equal(await service.set_unloaded(1, true, NORMAL_LINE), undefined);
+  const { service: opened } = make({ read_tab: tab_1.read_tab, discard: tab_1.deps });
+  assert.equal(await opened.set_unloaded(4, true, NORMAL_LINE), undefined);
+  assert.equal(await opened.set_unloaded(99, true, NORMAL_LINE), undefined);
+  assert.equal(await opened.set_unloaded("1", true, NORMAL_LINE), undefined);
+  assert.equal(await opened.set_unloaded(1, "yes", NORMAL_LINE), undefined);
+  assert.equal(await opened.set_unloaded(1, true, undefined), undefined);
+  assert.deepEqual(tab_1.log, []);
 });

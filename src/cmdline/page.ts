@@ -6,9 +6,9 @@ import { create_matcher, event_to_token } from "../shared/keys/index.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY } from "../shared/prefix_tree.ts";
 import type { CompiledKeymap } from "../shared/prefix_tree.ts";
 import { check_args, parse_command_line } from "../shared/registry/index.ts";
-import type { CmdlineOpened, CompleteItemsAnswer, ContentToBackground } from "../shared/messages.ts";
+import type { CmdlineOpened, CompleteItemsAnswer, ContentToBackground, SetTabUnloadedAnswer } from "../shared/messages.ts";
 import { create_live_source } from "./completion/live.ts";
-import { create_completer } from "./completion/sources.ts";
+import { create_completer, marks_of } from "./completion/sources.ts";
 import { edit_forwarded, run_token, run_token_without_keymap } from "./key_input.ts";
 import type { TokenMatcher } from "./key_input.ts";
 import type { HostToPage, PageToHost } from "./protocol.ts";
@@ -125,6 +125,18 @@ async function open_line(start: Start, port: MessagePort): Promise<void> {
     tell_host({ kind: "close" });
   };
 
+  const flip_tab = (tab_id: number, unloaded: boolean) => {
+    void ask_background<SetTabUnloadedAnswer | undefined>({ type: "set_tab_unloaded", tab_id, unloaded }).then(
+      (answer) => {
+        if (!answer) return session.set_message("could not change the tab");
+        live.patch_tab(answer.item);
+        session.patch_tab(marks_of(answer.item));
+        if (answer.refusal) session.set_message(`not ${unloaded ? "unloaded" : "loaded"}: ${answer.refusal}`);
+      },
+      () => session.set_message("could not change the tab"),
+    ).finally(render);
+  };
+
   const carry_out = (effect: Effect) => {
     if (effect.kind === "close") {
       live.close();
@@ -132,6 +144,7 @@ async function open_line(start: Start, port: MessagePort): Promise<void> {
     }
     else if (effect.kind === "find_commit") tell_host({ kind: "find_commit" });
     else if (effect.kind === "help") show_help(effect.command_id);
+    else if (effect.kind === "set_tab_unloaded") flip_tab(effect.tab_id, effect.unloaded);
     else if (effect.kind === "submit") {
       live.close();
       void ask_background({ type: "record_cmdline", text: effect.text });

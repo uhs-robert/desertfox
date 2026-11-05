@@ -16,7 +16,7 @@ import type { CursorContext } from "./tokenize.ts";
 export type TabFlag = "pinned" | "audible" | "muted" | "discarded";
 
 // What a tab row draws before its name. `status` is `%` for the current tab, `#` for the alternate one and empty otherwise.
-export type TabMarks = { status: string; flags: TabFlag[]; favicon?: string; container?: TabContainer };
+export type TabMarks = { id: number; status: string; flags: TabFlag[]; favicon?: string; container?: TabContainer };
 
 export type Row = {
   // The command id of a command row, which the keys column looks up. Flag, value and subject rows have none.
@@ -187,7 +187,8 @@ function open_ranked(word: string, rows: Row[], items: OpenItems): Ranked<Row>[]
 
 const FLAGS: TabFlag[] = ["pinned", "audible", "muted", "discarded"];
 
-const marks_of = (tab: TabItem): TabMarks => ({
+export const marks_of = (tab: TabItem): TabMarks => ({
+  id: tab.id,
   status: tab.active ? "%" : tab.alternate ? "#" : "",
   flags: FLAGS.filter((flag) => tab[flag]),
   ...(tab.favicon ? { favicon: tab.favicon } : {}),
