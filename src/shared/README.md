@@ -19,4 +19,4 @@ Types and constants that fix the hand-off formats between the background page, t
 - `config.ts`: the merged config file and the settings with their defaults. `apply_overrides` puts the live `set` values over the config's settings.
 - `settings_schema.ts`: what each setting accepts. The build tool, `set` and the command line completion share it. The content script must not import it.
 
-The content script imports only types and `prefix_tree.ts` from here, so the 15 KB bundle stays small.
+The content script imports only types and `prefix_tree.ts` from here, so the 16 KB bundle stays small.

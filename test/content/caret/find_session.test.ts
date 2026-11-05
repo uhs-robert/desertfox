@@ -5,7 +5,7 @@ import type { FindDeps } from "../../../src/content/caret/find_session.ts";
 import type { TextModel } from "../../../src/content/caret/text_model.ts";
 
 // A page of "ab ab ab": matches of "ab" start at 0, 3 and 6.
-function fake_page() {
+function fake_page(page_text = "ab ab ab") {
   const painted: { current: number; count: number }[] = [];
   const toasts: string[] = [];
   const registers = new Map<string, string>();
@@ -14,7 +14,7 @@ function fake_page() {
   let selection = ["start"];
   let clock = 0;
   const make_model = (): TextModel =>
-    ({ text: "ab ab ab", trees: [], point_at: (index: number) => ({ node: { index }, offset: 0 }), index_of: (node: { index: number }) => node.index }) as unknown as TextModel;
+    ({ text: page_text, trees: [], point_at: (index: number) => ({ node: { index }, offset: 0 }), index_of: (node: { index: number }) => node.index }) as unknown as TextModel;
   const deps: FindDeps = {
     build_model: make_model,
     start_index: () => 0,
@@ -98,11 +98,37 @@ test("a caret session starts at the match until a later selection takes its plac
   assert.equal(find.position(model), undefined);
 });
 
-test("n with no search made says so", async () => {
+test("n with no search made answers failed and shows nothing itself", async () => {
   const page = fake_page();
   const find = create_find(page.host, page.deps);
-  await find.step(false);
-  assert.deepEqual(page.toasts, ["No previous search"]);
+  assert.deepEqual(await find.step(false), { ok: false, message: "No previous search" });
+  assert.deepEqual(page.toasts, []);
+});
+
+test("n answers done on a match and failed when the last search has no match any more", async () => {
+  const page = fake_page();
+  page.registers.set("/", "ab");
+  page.registers.set("/:direction", "forward");
+  const find = create_find(page.host, page.deps);
+  const found = find.step(false);
+  await page.settle();
+  assert.deepEqual(await found, { ok: true });
+  page.registers.set("/", "zz");
+  const lost = create_find(page.host, page.deps).step(false);
+  await page.settle();
+  assert.deepEqual(await lost, { ok: false, message: "Not found: zz" });
+  assert.deepEqual(page.toasts, ["1 of 3"]);
+});
+
+test("a step that a newer one replaced answers cancelled", async () => {
+  const page = fake_page();
+  page.registers.set("/", "ab");
+  page.registers.set("/:direction", "forward");
+  const find = create_find(page.host, page.deps);
+  const first = find.step(false);
+  find.begin("forward");
+  await page.settle();
+  assert.deepEqual(await first, { ok: true, cancelled: true });
 });
 
 test("two quick n presses move two matches, even when the register still has to be read", async () => {
@@ -131,4 +157,56 @@ test("a search that finds nothing, or ends with Escape, does not keep the old ma
   await page.settle();
   await find.end(false);
   assert.equal(find.position(model), undefined);
+});
+
+test("a costly pattern is not searched, says so, and leaves the older results in place", async () => {
+  const page = fake_page();
+  const find = create_find(page.host, page.deps);
+  find.begin("forward");
+  const lines: string[] = [];
+  find.update("(a+)", (status) => lines.push(status));
+  await page.settle();
+  const painted = page.painted.length;
+  const clears = page.clears();
+  find.update("(a+)+", (status) => lines.push(status));
+  await page.settle();
+  assert.equal(page.painted.length, painted);
+  assert.equal(page.clears(), clears);
+  assert.match(lines.at(-1)!, /too slow/);
+});
+
+test("a keystroke after a costly one searches again, and a newer keystroke still drops an older scan", async () => {
+  const page = fake_page();
+  const find = create_find(page.host, page.deps);
+  find.begin("forward");
+  const lines: string[] = [];
+  find.update("a", (status) => lines.push(`a:${status}`));
+  find.update("(a+)+", (status) => lines.push(`costly:${status}`));
+  find.update("ab", (status) => lines.push(`ab:${status}`));
+  await page.settle();
+  assert.deepEqual(lines.filter((line) => line.startsWith("a:")), []);
+  assert.deepEqual(lines.at(-1), "ab:1 of 3");
+  assert.equal(page.painted.length, 1);
+});
+
+test("n on a costly last search searches its characters as text and does not hang", async () => {
+  const page = fake_page();
+  page.registers.set("/", "(a+)+$");
+  page.registers.set("/:direction", "forward");
+  const find = create_find(page.host, page.deps);
+  assert.deepEqual(await find.step(false), { ok: false, message: "Not found: (a+)+$" });
+});
+
+test("Enter on a costly pattern scans its characters as text instead of leaving no match", async () => {
+  const page = fake_page("x (a|b)+ y");
+  const find = create_find(page.host, page.deps);
+  find.begin("forward");
+  find.update("(a|b)+", () => {});
+  await page.settle();
+  assert.equal(page.painted.length, 0, "the costly pattern was scanned while typing");
+  const ending = find.end(true);
+  await page.settle();
+  await ending;
+  assert.equal(page.painted.length, 1);
+  assert.equal(find.position(page.deps.build_model()), 2);
 });

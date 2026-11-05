@@ -1,5 +1,6 @@
 // Draws the help model with DOM calls only. Command text never goes through innerHTML.
 
+import { copy_text } from "../content/caret/copy_text.ts";
 import type { Block, Inline } from "./blocks.ts";
 import type { CommandRow, EngineRow, HelpModel, KeyRow } from "./model.ts";
 import { STYLE_CLASSES, STYLE_VARIABLES } from "./model.ts";
@@ -52,22 +53,42 @@ function command_card(command: CommandRow): HTMLElement {
 
 export const engine_anchor = (name: string): string => `engine-${name}`;
 
+const file_name = (path: string): string => path.split("/").pop() ?? path;
+
+function engine_row(engine: EngineRow, show_files: boolean): HTMLElement {
+  const name = el("td", undefined, engine.name);
+  if (engine.needs) name.append(" ", el("span", "oasisfox-help-badge", `needs ${engine.needs}`));
+  if (engine.fallback) name.append(" ", el("span", "oasisfox-help-badge", `falls back to ${engine.fallback}`));
+  if (show_files) {
+    for (const file of engine.files) {
+      const badge = el("span", "oasisfox-help-badge", file_name(file));
+      badge.title = file;
+      name.append(" ", badge);
+    }
+  }
+  const keys = el("td", undefined, ...engine.keys.flatMap((sequence) => [el("kbd", undefined, sequence), " "]));
+  const host = el("summary", undefined, engine.host);
+  host.title = engine.url;
+  const full = el("div", "oasisfox-help-muted", engine.url, ...engine.origins.map((line) => el("div", undefined, line)));
+  const row = el("tr", undefined, name, el("td", undefined, engine.label), keys, el("td", undefined, el("details", undefined, host, full)));
+  row.id = engine_anchor(engine.name);
+  return row;
+}
+
 function engine_table(engines: EngineRow[]): HTMLElement {
   if (engines.length === 0) return el("span", "oasisfox-help-muted", "No engines.");
-  const head = el("tr", undefined, ...["engine", "label", "url", "needs", "falls back to", "set by"].map((name) => el("th", undefined, name)));
-  const body = engines.map((engine) => {
-    const row = el("tr", undefined, ...[engine.name, engine.label, engine.url, engine.needs, engine.fallback].map((text) => el("td", undefined, text)));
-    row.id = engine_anchor(engine.name);
-    row.append(el("td", "oasisfox-help-muted", ...engine.origins.map((line) => el("div", undefined, line))));
-    return row;
-  });
-  return el("table", "oasisfox-help-engines", head, ...body);
+  const first_file = engines[0]!.files[0];
+  const one_file = first_file !== undefined && engines.every((engine) => engine.files.length === 1 && engine.files[0] === first_file);
+  const head = el("tr", undefined, ...["engine", "label", "keys", "url"].map((name) => el("th", undefined, name)));
+  const table = el("table", "oasisfox-help-engines", head, ...engines.map((engine) => engine_row(engine, !one_file)));
+  if (!one_file) return table;
+  return el("div", undefined, el("p", "oasisfox-help-muted", `Set by ${first_file}`), table);
 }
 
 function inline_node(inline: Inline): Child {
   switch (inline.kind) {
     case "text": return inline.text;
-    case "code": return el("code", undefined, inline.text);
+    case "code": return el("code", "oasisfox-help-inline-code", inline.text);
     case "link": {
       const link = el("a", undefined, inline.text);
       link.setAttribute("href", inline.href);
@@ -76,12 +97,39 @@ function inline_node(inline: Inline): Child {
   }
 }
 
+const COPIED_LABEL_MS = 1500;
+
+// The pending "Copy" restore per button, so a second click restarts the 1.5 s instead of being cut short.
+const pending_restore = new WeakMap<object, unknown>();
+
+// A real button, so Tab and hints reach it. The label shows the result only after the clipboard took the text.
+export async function copy_code_and_confirm(
+  clipboard: Parameters<typeof copy_text>[0],
+  text: string,
+  button: { textContent: string | null },
+  later: (restore: () => void, ms: number) => unknown = setTimeout,
+  cancel: (handle: never) => void = clearTimeout,
+): Promise<void> {
+  if (!(await copy_text(clipboard, text))) return;
+  button.textContent = "Copied";
+  if (pending_restore.has(button)) cancel(pending_restore.get(button) as never);
+  pending_restore.set(button, later(() => { button.textContent = "Copy"; }, COPIED_LABEL_MS));
+}
+
+function code_block_node(text: string, language: string | undefined): HTMLElement {
+  const button = el("button", "oasisfox-help-code-copy", "Copy");
+  button.setAttribute("type", "button");
+  button.addEventListener("click", () => void copy_code_and_confirm(navigator.clipboard, text, button));
+  const head = el("div", "oasisfox-help-code-head", ...(language ? [el("span", "oasisfox-help-code-lang", language)] : []), button);
+  return el("div", "oasisfox-help-code", head, el("pre", "oasisfox-help-code-body", text));
+}
+
 function block_node(block: Block): HTMLElement {
   switch (block.kind) {
     case "heading": return el(`h${block.level}`, undefined, block.text);
     case "paragraph": return el("p", undefined, ...block.inlines.map(inline_node));
     case "list": return el("ul", undefined, ...block.items.map((item) => el("li", undefined, ...item.map(inline_node))));
-    case "code_block": return el("pre", "oasisfox-help-usage", block.text);
+    case "code_block": return code_block_node(block.text, block.language);
   }
 }
 
@@ -127,6 +175,25 @@ function page_body(page: PageId, model: HelpModel, guide: Block[]): HTMLElement[
   }
 }
 
+function support_link(title: string, url: string): HTMLElement {
+  const link = el("a", undefined, title);
+  link.setAttribute("href", url);
+  link.setAttribute("target", "_blank");
+  link.setAttribute("rel", "noopener noreferrer");
+  return link;
+}
+
+function support_line(): HTMLElement {
+  return el(
+    "div",
+    "oasisfox-help-support",
+    "Enjoying OasisFox? Support it: ",
+    support_link("GitHub Sponsors", "https://github.com/sponsors/uhs-robert"),
+    " or ",
+    support_link("Ko-fi", "https://ko-fi.com/uphillsolutions"),
+  );
+}
+
 function sidebar(current: PageId): HTMLElement {
   const links = PAGES.map((page) => {
     const link = el("a", undefined, page.title);
@@ -134,7 +201,7 @@ function sidebar(current: PageId): HTMLElement {
     if (page.id === current) link.setAttribute("aria-current", "page");
     return link;
   });
-  return el("nav", "oasisfox-help-sidebar", el("div", "oasisfox-help-brand", "OasisFox"), ...links);
+  return el("nav", "oasisfox-help-sidebar", el("div", "oasisfox-help-brand", "OasisFox"), ...links, support_line());
 }
 
 export function render_help(root: HTMLElement, model: HelpModel, route: Route, guide: Block[]): void {

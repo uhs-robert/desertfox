@@ -2,7 +2,9 @@
 
 import { MODES } from "../shared/command.ts";
 import type { CommandMeta, ParamDef, ParamValue } from "../shared/command.ts";
+import { DEFAULT_SETTINGS } from "../shared/config.ts";
 import type { SearchEngine } from "../shared/config.ts";
+import { search_engine_name } from "../commands/url_build.ts";
 import { build_options_model } from "../options/model.ts";
 import type { ConfigStatus, SettingRow } from "../options/model.ts";
 import { ROLES } from "../shared/theme/roles.ts";
@@ -45,12 +47,18 @@ export type EngineRow = {
   name: string;
   label: string;
   url: string;
+  // The host alone, for a narrow table. The full url stays in `url`.
+  host: string;
+  // Every normal-mode key sequence that opens this engine, prefix included.
+  keys: string[];
   // Page slots the engine needs, or "" when it runs anywhere.
   needs: string;
   // Where the engine falls back to, or "".
   fallback: string;
   // One "field: file [level]" line per field that has an origin.
   origins: string[];
+  // The config files the origins name, without their level, in first-seen order.
+  files: string[];
 };
 
 export type HelpModel = {
@@ -129,7 +137,36 @@ function compare_engine_names(left: string, right: string): number {
   return left_path.length - right_path.length;
 }
 
-function engine_rows(engines: Record<string, SearchEngine>): EngineRow[] {
+// Only "<file> [<level>]" names a file. The resolver also writes "<name> (labels on the path)" and "generated under <path>".
+const FILE_ORIGIN = /^(.+) \[[^\]]*\]$/;
+
+// A url with slots such as {query} or {host:raw} is not parseable, so each slot becomes a numbered host-safe stand-in first and the original slot text is restored in the result.
+function url_host(url: string): string {
+  const slots: string[] = [];
+  const parseable = url.replace(/\{[^}]*\}/g, (slot) => `slot-${slots.push(slot) - 1}-`);
+  try {
+    const host = new URL(parseable).host;
+    return host ? host.replace(/slot-(\d+)-/g, (_, index) => slots[Number(index)]!) : url;
+  } catch {
+    return url;
+  }
+}
+
+function collect_engine_keys(node: TreeNode, path: string[], default_engine: string, into: Map<string, string[]>): void {
+  if (node.kind === "branch") {
+    for (const [token, child] of Object.entries(node.children)) collect_engine_keys(child, [...path, token], default_engine, into);
+    return;
+  }
+  for (const step of node.steps) {
+    if (step.invocation.id !== "open.search") continue;
+    const engine = search_engine_name(step.invocation.args?.engine, default_engine);
+    into.set(engine, [...(into.get(engine) ?? []), path.join("")]);
+  }
+}
+
+function engine_rows(engines: Record<string, SearchEngine>, compiled: CompiledKeymap | undefined, default_engine: string): EngineRow[] {
+  const keys = new Map<string, string[]>();
+  if (compiled?.modes.normal) collect_engine_keys(compiled.modes.normal, [], default_engine, keys);
   return Object.keys(engines)
     .sort(compare_engine_names)
     .map((name) => {
@@ -138,9 +175,12 @@ function engine_rows(engines: Record<string, SearchEngine>): EngineRow[] {
         name,
         label: engine.label,
         url: engine.url,
+        host: url_host(engine.url),
+        keys: keys.get(name) ?? [],
         needs: (engine.slots ?? []).map((slot) => `{${slot}}`).join(" "),
         fallback: engine.fallback ?? "",
         origins: Object.entries(engine.origins ?? {}).map(([field, origin]) => `${field}: ${origin}`),
+        files: [...new Set(Object.values(engine.origins ?? {}).flatMap((origin) => FILE_ORIGIN.exec(origin)?.[1] ?? []))],
       };
     });
 }
@@ -166,7 +206,7 @@ export function build_help_model(commands: CommandMeta[], compiled: CompiledKeym
     warnings,
     config_source: options.source_text,
     settings: options.settings,
-    engines: engine_rows(engines),
+    engines: engine_rows(engines, compiled, status?.settings.default_engine ?? DEFAULT_SETTINGS.default_engine),
     quick_start: quick_start_blocks(compiled, commands),
     groups: [...groups].sort(([a], [b]) => a.localeCompare(b)).map(([name, rows]) => ({ name, commands: rows })),
   };
@@ -210,4 +250,10 @@ export const STYLE_CLASSES: { name: string; meaning: string }[] = [
   { name: "oasisfox-hint", meaning: "One hint label" },
   { name: "oasisfox-hint-message", meaning: "The message hint mode shows at the bottom of the page" },
   { name: "oasisfox-cmdline", meaning: "The command line panel" },
+  { name: "oasisfox-help-code", meaning: "A code block on the help page, holding the head and the body" },
+  { name: "oasisfox-help-code-head", meaning: "The row above a code block with the language label and the Copy button" },
+  { name: "oasisfox-help-code-lang", meaning: "The language label of a code block" },
+  { name: "oasisfox-help-code-copy", meaning: "The Copy button of a code block" },
+  { name: "oasisfox-help-code-body", meaning: "The code text of a code block" },
+  { name: "oasisfox-help-inline-code", meaning: "A code snippet inside a sentence on the help page" },
 ];

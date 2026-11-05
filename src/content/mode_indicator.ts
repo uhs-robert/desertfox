@@ -3,7 +3,8 @@
 
 import { LAYERS } from "../shared/layers.ts";
 import type { ColorPair } from "../shared/mode_colors.ts";
-import { create_surface } from "./surface.ts";
+import { BADGE_HOST_ATTRIBUTE, remove_badge_hosts } from "./badge_hosts.ts";
+import { create_surface, mount_surface } from "./surface.ts";
 
 export const STYLE = `
 .oasisfox-mode {
@@ -22,8 +23,9 @@ let surface: ReturnType<typeof create_surface> | undefined;
 
 export function show_mode_label(label: string | undefined, colors?: BadgeColors): void {
   if (window !== window.top) return;
-  if (label === undefined) return surface?.host.remove();
+  if (label === undefined) return remove_badge_hosts();
   surface ??= create_surface("oasisfox-mode", STYLE, LAYERS.mode_badge);
+  surface.host.setAttribute(BADGE_HOST_ATTRIBUTE, "");
   surface.text.textContent = label;
   const { style } = surface.text;
   const set = (name: string, value: string | undefined) => (value === undefined ? style.removeProperty(name) : style.setProperty(name, value));
@@ -34,5 +36,6 @@ export function show_mode_label(label: string | undefined, colors?: BadgeColors)
   // The key test reads this attribute, because the shadow root is closed.
   surface.host.setAttribute("data-oasisfox-mode", label);
   surface.host.style.pointerEvents = "none";
-  document.documentElement.append(surface.host);
+  remove_badge_hosts();
+  mount_surface(surface.host);
 }
