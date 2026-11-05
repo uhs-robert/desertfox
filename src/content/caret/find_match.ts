@@ -32,9 +32,9 @@ function space_matches_line_break(source: string): string {
   return out;
 }
 
-// A group that repeats without a limit and holds an unlimited repeat or a choice, such as `(a+)+` or `(a|a)*`. A regex engine backtracks without end on these, and one `exec` cannot be interrupted.
+// A group that repeats (`*`, `+` or a `{n}` count) and holds an unlimited repeat or a choice, such as `(a+)+` or `(a|a)*`. A regex engine backtracks without end on these, and one `exec` cannot be interrupted.
 // It also flags harmless ones such as `(foo|bar)+`: the fallback is a text search, which costs the user little.
-const UNLIMITED_OR_CHOICE = /[*+|]|\{\d+,\}/u;
+const UNLIMITED_OR_CHOICE = /[*+|]|\{\d+(?:,\d*)?\}/u;
 
 // An escape or a character class holds no group, so a `)` in one is not the end of a group.
 const ESCAPE_OR_CLASS = /\\.|\[(?:\\.|[^\]\\])*\]/gu;
@@ -43,7 +43,7 @@ export function is_costly_pattern(source: string): boolean {
   // The innermost groups first: the contents of a group that holds no other group are checked, then that group is replaced by a plain letter and the search repeats.
   let rest = source.replace(ESCAPE_OR_CLASS, "x");
   for (let guard = 0; guard < 64; guard++) {
-    const innermost = /\((?:[^()\\]|\\.)*\)((?:[*+]|\{\d+,\})?)/u.exec(rest);
+    const innermost = /\((?:[^()\\]|\\.)*\)((?:[*+]|\{\d+(?:,\d*)?\})?)/u.exec(rest);
     if (!innermost) return false;
     const whole = innermost[0];
     const quantifier = innermost[1]!;

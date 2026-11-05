@@ -125,7 +125,7 @@ test("the literal path follows the same space rule as the regex path, and a capi
   assert.deepEqual((await scan("Xa\nb", "Xa b"))!.from, [0]);
 });
 
-const COSTLY = ["([)a]+)+$", "(\\)a+)+$", "(a+)+$", "(a|a)*b", "(.*)*x", "((a+))+", "(a*)*", "(x+x+)+y", "(a|b){2,}"];
+const COSTLY = ["(a|a){1,40}$", "([)a]+)+$", "(\\)a+)+$", "(a+)+$", "(a|a)*b", "(.*)*x", "((a+))+", "(a*)*", "(x+x+)+y", "(a|b){2,}"];
 const ORDINARY = ["foo.*bar", "\\d+", "colou?r", "(foo)bar", "(ab)?c", "(ab){2}", "a+b+", "(\\d+)-(\\d+)", "\\(a+\\)", "([)]a)+", "(\\)|b)"];
 
 test("costly shapes are flagged and ordinary patterns are not", () => {
