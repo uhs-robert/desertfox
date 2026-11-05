@@ -1,3 +1,4 @@
+import { RuntimeRefusal } from "../shared/command.ts";
 import type { CommandContext } from "../shared/command.ts";
 import type { ToastKind } from "../shared/messages.ts";
 import type { ListedTab } from "../background/complete_items.ts";
@@ -51,11 +52,11 @@ type Position = { tabs: TabInfo[]; current: TabInfo };
 
 export function make_tab_handlers(deps: TabDeps) {
   async function position_of(ctx: CommandContext): Promise<Position> {
-    if (ctx.window_id === undefined) throw new Error("No window");
+    if (ctx.window_id === undefined) throw new RuntimeRefusal("No window");
     require_tab_id(ctx);
     const tabs = await deps.tabs_in_window(ctx.window_id);
     const current = tabs.find((tab) => tab.id === ctx.tab_id);
-    if (!current) throw new Error("the active tab is gone");
+    if (!current) throw new RuntimeRefusal("the active tab is gone");
     return { tabs, current };
   }
 
@@ -66,13 +67,12 @@ export function make_tab_handlers(deps: TabDeps) {
 
   // The subject is the tab named by `tab`, else the line's own tab. A side acts on the neighbors and leaves the subject. A count adds neighbors after the subject. Neighbors skip pinned tabs, the subject never does.
   async function change_loaded(ctx: CommandContext, args: { tab: string; side: UnloadSide; count: number }, unloaded: boolean): Promise<void> {
-    if (args.count < 1) throw new Error("count must be 1 or more");
     const named = args.tab.trim() === "" ? undefined : pick_tab(await deps.listed_tabs(ctx), args.tab, ctx.window_id);
     const window_id = named?.window_id ?? ctx.window_id;
-    if (window_id === undefined) throw new Error("No window");
+    if (window_id === undefined) throw new RuntimeRefusal("No window");
     const tabs = await deps.tabs_in_window(window_id);
     const subject = tabs.find((tab) => tab.id === (named?.id ?? require_tab_id(ctx)));
-    if (!subject) throw new Error("the tab is gone");
+    if (!subject) throw new RuntimeRefusal("the tab is gone");
     const unpinned = tabs.filter((tab) => !tab.pinned);
     const ids = (
       args.side === "none"
@@ -86,7 +86,7 @@ export function make_tab_handlers(deps: TabDeps) {
   // The toast goes to the tab that is active now: the command's own tab may have just unloaded, and a discarded tab shows nothing.
   async function report(ctx: CommandContext, window_id: number, verb: "unloaded" | "loaded", result: SetUnloadedResult): Promise<void> {
     const message = describe_result(verb, result);
-    if (result.changed.length === 0) throw new Error(message);
+    if (result.changed.length === 0) throw new RuntimeRefusal(message);
     const active = (await deps.discard.tabs_in_window(window_id)).find((tab) => tab.active);
     await deps.toast(active ? { ...ctx, tab_id: active.id, frame_id: 0 } : ctx, result.skipped.length === 0 ? "success" : "warning", message);
   }
@@ -115,13 +115,13 @@ export function make_tab_handlers(deps: TabDeps) {
     },
     detach: async (ctx: CommandContext) => {
       const { tabs, current } = await position_of(ctx);
-      if (tabs.length === 1) throw new Error("this is the only tab in its window");
+      if (tabs.length === 1) throw new RuntimeRefusal("this is the only tab in its window");
       await deps.detach_to_new_window(current.id);
     },
     goto_audible: async (ctx: CommandContext) => {
       const { tabs, current } = await position_of(ctx);
       const target = next_audible_index(tabs, current.index);
-      if (target === undefined) throw new Error("no tab is playing sound");
+      if (target === undefined) throw new RuntimeRefusal("no tab is playing sound");
       await activate_at(tabs, target);
     },
     pin: async (ctx: CommandContext) => {
@@ -144,7 +144,7 @@ export function make_tab_handlers(deps: TabDeps) {
       await deps.remove([current.id]);
     },
     undo_close: async () => {
-      if (!(await deps.restore_last_closed_tab())) throw new Error("no closed tab to restore");
+      if (!(await deps.restore_last_closed_tab())) throw new RuntimeRefusal("no closed tab to restore");
     },
     switch: async (ctx: CommandContext, args: { tab: string }) => {
       const picked = pick_tab(await deps.listed_tabs(ctx), args.tab, ctx.window_id);
@@ -155,7 +155,7 @@ export function make_tab_handlers(deps: TabDeps) {
     load: (ctx: CommandContext, args: { tab: string; side: UnloadSide; count: number }) => change_loaded(ctx, args, false),
     reopen_in_container: async (ctx: CommandContext, args: { container: string }) => {
       const { current } = await position_of(ctx);
-      if (current.url === undefined || ctx.window_id === undefined) throw new Error("this tab has no address to reopen");
+      if (current.url === undefined || ctx.window_id === undefined) throw new RuntimeRefusal("this tab has no address to reopen");
       const cookie_store_id = await resolve_container_store_id(args.container, deps.find_container_store_id);
       await deps.open_tab({ window_id: ctx.window_id, url: current.url, index: current.index, pinned: current.pinned, cookie_store_id });
       await deps.remove([current.id]);
@@ -180,12 +180,12 @@ export function pick_tab(tabs: readonly ListedTab[], text: string, current_windo
     const own = at_place.filter((tab) => tab.window_id === current_window_id);
     const chosen = by_title.length === 1 ? by_title : own;
     if (chosen.length === 1) return chosen[0] as ListedTab;
-    throw new Error(`tab ${numbered?.[1]} exists in several windows: ${at_place.map((tab) => `"${tab.title}"`).join(" and ")}`);
+    throw new RuntimeRefusal(`tab ${numbered?.[1]} exists in several windows: ${at_place.map((tab) => `"${tab.title}"`).join(" and ")}`);
   }
-  if (numbered && numbered[2] === undefined) throw new Error(`no tab at place ${numbered[1]}`);
+  if (numbered && numbered[2] === undefined) throw new RuntimeRefusal(`no tab at place ${numbered[1]}`);
   const match = best_match(typed, tabs, (tab) => ({ name: tab.title, description: tab.url }));
-  if (match.found === "none") throw new Error(`no tab matches "${typed}"`);
-  if (match.found === "tie") throw new Error(`"${typed}" matches "${match.first.number} ${match.first.title}" and "${match.second.number} ${match.second.title}" equally, use a number`);
+  if (match.found === "none") throw new RuntimeRefusal(`no tab matches "${typed}"`);
+  if (match.found === "tie") throw new RuntimeRefusal(`"${typed}" matches "${match.first.number} ${match.first.title}" and "${match.second.number} ${match.second.title}" equally, use a number`);
   return match.item;
 }
 
@@ -260,7 +260,7 @@ export const browser_tab_deps: TabDeps = {
   find_container_store_id,
   listed_tabs: async (ctx) => {
     const tab = await browser.tabs.get(require_tab_id(ctx));
-    if (tab.windowId === undefined) throw new Error("No window");
+    if (tab.windowId === undefined) throw new RuntimeRefusal("No window");
     const settings = (await get_config()).settings;
     return read_tabs(browser_complete_items_deps.query_tabs, { window_id: tab.windowId, incognito: tab.incognito }, settings.completion_all_windows === true);
   },
@@ -271,7 +271,7 @@ export const browser_tab_deps: TabDeps = {
 
 const handlers = make_tab_handlers(browser_tab_deps);
 
-const subject_param = { name: "tab", type: "string", rest: true, main: true, default: "", values: { from: "tabs" } } as const;
+const subject_param = { name: "tab", type: "string", rest: true, main: true, optional: true, values: { from: "tabs" } } as const;
 
 const side_param = (verb: "Unload" | "Load") =>
   ({
@@ -284,7 +284,7 @@ const side_param = (verb: "Unload" | "Load") =>
     description: { all_before: `${verb} every unpinned tab before the tab.`, all_after: `${verb} every unpinned tab after the tab.` },
   }) as const;
 
-const count_param = { name: "count", type: "int", default: 1, when: { side: ["none"] }, description: "Act on this many tabs, the tab and the ones after it." } as const;
+const count_param = { name: "count", type: "int", min: 1, default: 1, when: { side: ["none"] }, description: "Act on this many tabs, the tab and the ones after it." } as const;
 
 define("tab.next", {
   label: "Next tab",

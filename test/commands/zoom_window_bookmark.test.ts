@@ -3,6 +3,8 @@ import { test } from "node:test";
 import { make_bookmark_handlers, pick_bookmark } from "../../src/commands/bookmark.ts";
 import { make_browser_handlers } from "../../src/commands/browser.ts";
 import { clamp_zoom, make_zoom_handlers } from "../../src/commands/zoom.ts";
+import { check_args } from "../../src/shared/registry/check_args.ts";
+import { registry } from "../../src/shared/registry/index.ts";
 import { make_window_handlers } from "../../src/commands/window.ts";
 import type { WindowLike } from "../../src/background/complete_items.ts";
 import type { CommandContext } from "../../src/shared/command.ts";
@@ -241,7 +243,7 @@ test("tab.attach refuses a private window from a normal one, and the reverse", a
   assert.deepEqual(log, []);
 });
 
-test("tab.attach refuses with one window, its own window, an unknown number and text with no number", async () => {
+test("tab.attach refuses with one window, its own window and an unknown number", async () => {
   const only = attach_fake([{ id: 2, type: "normal", incognito: false, tabs: [] }]);
   await assert.rejects(only.handlers.attach(ctx, { window: "" }), /No other window to move to/);
   const no_match = attach_fake([{ id: 2, type: "normal", incognito: false, tabs: [] }, { id: 5, type: "normal", incognito: true, tabs: [] }]);
@@ -249,7 +251,6 @@ test("tab.attach refuses with one window, its own window, an unknown number and 
   const { handlers, log } = attach_fake();
   await assert.rejects(handlers.attach(ctx, { window: "1" }), /already in that window/);
   await assert.rejects(handlers.attach(ctx, { window: "9" }), /No window 9/);
-  await assert.rejects(handlers.attach(ctx, { window: "Old" }), /Give a window number/);
   assert.deepEqual(log, []);
 });
 
@@ -277,4 +278,11 @@ test("a bare tab.attach falls back to the last touched window when no focused wi
   const { handlers, log } = attach_fake(attach_windows(), [99, 5, 2]);
   await handlers.attach(ctx, { window: "" });
   assert.deepEqual(log, ["move 7 to 7"]);
+});
+
+test("the schema refuses a tab.attach pick with no leading number, and lets an empty pick through", () => {
+  const attach = registry.get("tab.attach")!;
+  assert.equal(check_args(attach, { window: "Old" }, {}).ok, false);
+  for (const window of ["", "  ", "2", "2 GitHub", " 2 GitHub"]) assert.equal(check_args(attach, { window }, {}).ok, true, window);
+  assert.deepEqual(check_args(attach, undefined, {}), { ok: true, args: { window: "" } });
 });

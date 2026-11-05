@@ -11,6 +11,8 @@ import {
   type TabDeps,
   type TabInfo,
 } from "../../src/commands/tab.ts";
+import { check_args } from "../../src/shared/registry/check_args.ts";
+import { registry } from "../../src/shared/registry/index.ts";
 import type { ListedTab } from "../../src/background/complete_items.ts";
 import type { CommandContext } from "../../src/shared/command.ts";
 
@@ -341,8 +343,12 @@ test("the result toast goes to the tab that is active after the switch, not the 
   assert.deepEqual(toast_tabs, [101]);
 });
 
-test("a count below 1 is refused before any tab changes", async () => {
-  const { handlers, log } = make_unload(make_tabs(3));
-  for (const count of [0, -2]) await assert.rejects(handlers.unload(ctx_at(100), unload_args({ count })), /count must be 1 or more/);
-  assert.deepEqual(log, []);
+test("the schema refuses a count below 1 before any handler runs", () => {
+  for (const id of ["tab.unload", "tab.load"]) {
+    for (const count of [0, -2]) {
+      const result = check_args(registry.get(id)!, { count }, {});
+      assert.deepEqual(result, { ok: false, error: `count expects a whole number, 1 or more, got ${count}` });
+    }
+    assert.equal(check_args(registry.get(id)!, { count: 1 }, {}).ok, true);
+  }
 });

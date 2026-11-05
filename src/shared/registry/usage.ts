@@ -1,5 +1,5 @@
 import type { CommandDef, ParamDef } from "../command.ts";
-import { bare_word_param, default_value, literal_default, flag_params, is_dynamic_values, static_values, subject_param } from "./params.ts";
+import { bare_word_param, default_value, literal_default, flag_params, is_dynamic_values, positional_params, static_values, subject_param } from "./params.ts";
 
 type Usable = Pick<CommandDef, "id" | "name" | "params">;
 
@@ -10,7 +10,7 @@ export function usage_line(command: Usable): string {
   const subject = subject_param(command);
   const flags = flag_params(command);
   const engine = bare && is_dynamic_values(bare.values) ? [`[<${bare.name}>]`] : [];
-  return [command.name ?? command.id, ...engine, ...flags.map(flag_usage), ...(subject ? [subject_usage(subject)] : [])].join(" ");
+  return [command.name ?? command.id, ...engine, ...flags.map(flag_usage), ...positional_params(command).map((param) => `<${param.name}>`), ...(subject ? [subject_usage(subject)] : [])].join(" ");
 }
 
 function is_optional(param: ParamDef): boolean {

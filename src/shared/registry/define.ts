@@ -4,6 +4,7 @@
 import type { CommandDef, ParamDef, ParamValue } from "../command.ts";
 import { MODES } from "../command.ts";
 import { default_value, find_param, is_conditional_default, is_context_source, is_dynamic_values, static_values } from "./params.ts";
+import { is_setting_name } from "../settings_schema.ts";
 import { description_problem } from "./summary.ts";
 
 export type CommandInput = Omit<CommandDef, "id">;
@@ -143,6 +144,11 @@ function check_params(input: CommandInput, fail: Fail): void {
   params.forEach((param, index) => {
     const at = `params[${index}]`;
     if (param.rest && param.type !== "string") fail(`${at}.rest`, "only a string param can take the rest");
+    if (param.value_of !== undefined) {
+      const sibling = find_param(input, param.value_of);
+      if (sibling?.strict !== true) fail(`${at}.value_of`, `names "${param.value_of}", which is not a strict string param`);
+      else if (!(static_values(sibling) ?? []).every(is_setting_name)) fail(`${at}.value_of`, `names "${param.value_of}", whose values are not all setting names`);
+    }
     if (param.when) check_when(input, param, at, fail);
     if (is_conditional_default(param.default) && param.when) fail(`${at}.default`, "a conditional default cannot be combined with `when` on the same param");
     if (is_conditional_default(param.default)) {
@@ -173,6 +179,7 @@ function check_param_shape(param: ParamDef, at: string, fail: Fail): void {
     const from = (param.values as { from: unknown }).from;
     if (from !== "search_engines" && from !== "containers" && from !== "tabs" && from !== "bookmarks" && from !== "open" && from !== "windows") fail(`${at}.values`, `unknown source "${String(from)}"`);
   }
+  check_rules(param, at, fail);
   check_value_labels(param, at, fail);
   check_description(param, at, fail);
   if (is_conditional_default(param.default)) {
@@ -185,6 +192,30 @@ function check_param_shape(param: ParamDef, at: string, fail: Fail): void {
       const problem = value_problem(param, param.default);
       if (problem) fail(`${at}.default`, problem);
     }
+  }
+}
+
+function check_rules(param: ParamDef, at: string, fail: Fail): void {
+  if (param.optional !== undefined) {
+    if (param.type !== "string" && param.type !== "enum") fail(`${at}.optional`, "only a string or enum param can be optional");
+    if (param.default !== undefined) fail(`${at}.optional`, "an optional param reads as an empty text, so it takes no `default`");
+    if (param.when) fail(`${at}.optional`, "an optional param cannot also carry `when`");
+  }
+  if (param.min !== undefined) {
+    if (param.type !== "int") fail(`${at}.min`, "only an int param takes a minimum");
+    else if (!Number.isInteger(param.min)) fail(`${at}.min`, "must be a whole number");
+  }
+  if (param.pattern !== undefined) {
+    if (param.type !== "string") fail(`${at}.pattern`, "only a string param takes a pattern");
+    try {
+      new RegExp(param.pattern);
+    } catch {
+      fail(`${at}.pattern`, `${JSON.stringify(param.pattern)} is not a regular expression`);
+    }
+  }
+  if (param.value_of !== undefined && param.type !== "string") fail(`${at}.value_of`, "only a string param can hold a setting value");
+  if (param.strict !== undefined && (param.type !== "string" || !static_values(param))) {
+    fail(`${at}.strict`, "only a string param with a fixed value list can be strict");
   }
 }
 
@@ -231,6 +262,9 @@ function value_problem(param: ParamDef, value: unknown): string | null {
   if (param.type === "enum" && list && !list.includes(value as string)) {
     return `${JSON.stringify(value)} is not one of ${list.join(", ")}`;
   }
+  if (param.type === "int" && param.min !== undefined && (value as number) < param.min) return `${JSON.stringify(value)} is below the minimum ${param.min}`;
+  if (param.type === "string" && param.pattern !== undefined && !new RegExp(param.pattern).test(value as string)) return `${JSON.stringify(value)} does not match ${param.pattern}`;
+  if (param.type === "string" && param.strict && list && !list.includes(value as string)) return `${JSON.stringify(value)} is not one of ${list.join(", ")}`;
   return null;
 }
 

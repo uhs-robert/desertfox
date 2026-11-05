@@ -1,11 +1,17 @@
 // Writes files so a reader never sees a half-written one: write beside, then rename.
 
 import { mkdirSync, renameSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import type { MergedConfig, SearchEngine } from "../../src/shared/config.ts";
 import type { DataKind } from "./source_files.ts";
 
 export const EXTENSION_ID = "oasisfox@uhs-robert";
+
+// The file Firefox reads. Only the CLI's --live flag may target it.
+export function live_managed_storage_path(): string {
+  return join(homedir(), ".mozilla", "managed-storage", `${EXTENSION_ID}.json`);
+}
 
 export function managed_storage_document(config: MergedConfig) {
   return {

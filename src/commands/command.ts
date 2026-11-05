@@ -1,3 +1,4 @@
+import { RuntimeRefusal } from "../shared/command.ts";
 import type { CommandContext } from "../shared/command.ts";
 import type { BoundInvocation } from "../shared/invocation.ts";
 import { define } from "../shared/registry/index.ts";
@@ -17,7 +18,7 @@ export function make_repeat_handler(get_deps: () => RepeatDeps | undefined) {
   return async (ctx: CommandContext, args: { count?: unknown }) => {
     const deps = get_deps();
     const stored = deps && (await deps.load(ctx));
-    if (!deps || !stored?.length) throw new Error("Nothing to repeat");
+    if (!deps || !stored?.length) throw new RuntimeRefusal("Nothing to repeat");
     const count = typeof args.count === "number" && args.count > 0 ? args.count : undefined;
     await deps.run_batch(count === undefined ? stored : stored.map((invocation) => ({ ...invocation, count })), ctx);
   };
@@ -29,7 +30,7 @@ define("command.repeat", {
   name: "repeat",
   label: "Repeat",
   intent: "Run the last repeatable command again. A count replaces the one it had, and 0 keeps it. A hint pick starts a new pick of the same kind.",
-  params: [{ name: "count", type: "int", default: 0, description: "Replace the saved count with this one. 0 keeps it." }],
+  params: [{ name: "count", type: "int", min: 0, default: 0, description: "Replace the saved count with this one. 0 keeps it." }],
   count: { param: "count" },
   runs_in: "background",
   repeatable: false,

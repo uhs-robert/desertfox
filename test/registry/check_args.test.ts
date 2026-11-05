@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { check_args, create_registry } from "../../src/shared/registry/index.ts";
+import type { CommandInput } from "../../src/shared/registry/index.ts";
 import { design_registry, search_sources } from "./fixtures.ts";
 
 const registry = design_registry();
@@ -195,4 +196,56 @@ test("a conditional default reads a bool sibling after it is coerced from text",
   const command = conditional_command({ name: "flag", type: "bool" });
   assert.deepEqual(check_args(command, { flag: "true" }), { ok: true, args: { flag: true, text: "" } });
   assert.equal(check_args(command, { flag: "false" }).ok, false);
+});
+
+const rules_input: CommandInput = {
+  label: "Rules",
+  intent: "Check the rule kinds.",
+  runs_in: "background",
+  params: [
+    { name: "count", type: "int", min: 1, default: 1 },
+    { name: "pick", type: "string", pattern: "^\\d+$", optional: true },
+    { name: "page", type: "string", values: ["home", "help"], strict: true, optional: true },
+    { name: "engine", type: "enum", values: { from: "search_engines" }, optional: true },
+  ],
+  run: () => {},
+};
+const rules_command = create_registry().define("rules.check", rules_input);
+
+test("min refuses an int below it", () => {
+  assert.match(error_of(check_args(rules_command, { count: 0 })), /count expects a whole number, 1 or more, got 0/);
+  assert.deepEqual(check_args(rules_command, { count: "1" }).ok, true);
+});
+
+test("pattern refuses text that does not match, and an optional param may be empty", () => {
+  assert.match(error_of(check_args(rules_command, { pick: "x" })), /pick expects text matching \^\\d\+\$, got "x"/);
+  assert.deepEqual(check_args(rules_command, { pick: "7" }).ok, true);
+  for (const pick of ["", "  "]) assert.deepEqual(check_args(rules_command, { pick }).ok, true);
+});
+
+test("strict refuses a string outside its values", () => {
+  assert.match(error_of(check_args(rules_command, { page: "nope" })), /page expects one of home, help, got "nope"/);
+  assert.deepEqual(check_args(rules_command, { page: "help" }).ok, true);
+});
+
+test("an optional param reads as empty text when left out", () => {
+  assert.deepEqual(check_args(rules_command, {}), { ok: true, args: { count: 1, pick: "", page: "", engine: "" } });
+});
+
+test("value_of checks the value with the named setting's spec", () => {
+  const set = create_registry().define("rules.set", {
+    label: "Set",
+    intent: "Set a setting.",
+    runs_in: "background",
+    params: [
+      { name: "name", type: "string", values: ["light_intensity", "hint_letters"], strict: true },
+      { name: "value", type: "string", optional: true, value_of: "name" },
+    ],
+    run: () => {},
+  });
+  assert.match(error_of(check_args(set, { name: "light_intensity", value: "9" })), /light_intensity: expected a whole number from 1 to 5/);
+  assert.equal(check_args(set, { name: "light_intensity", value: "4" }).ok, true);
+  assert.equal(check_args(set, { name: "hint_letters", value: "9" }).ok, false);
+  assert.equal(check_args(set, { name: "hint_letters", value: "ab" }).ok, true);
+  assert.equal(check_args(set, { name: "light_intensity" }).ok, true);
 });

@@ -1,3 +1,4 @@
+import { RuntimeRefusal } from "../shared/command.ts";
 // Opens a URL where the command asks. Shared by open, page.home and the other commands that open pages.
 
 import { get_config } from "../background/startup.ts";
@@ -53,18 +54,18 @@ export async function resolve_container_store_id(
   if (container_name === undefined) return undefined;
   if (container_name === DEFAULT_CONTAINER_NAME) return DEFAULT_COOKIE_STORE_ID;
   const store_id = await find(container_name);
-  if (store_id === undefined) throw new Error(`No container named "${container_name}"`);
+  if (store_id === undefined) throw new RuntimeRefusal(`No container named "${container_name}"`);
   return store_id;
 }
 
 export function require_tab_id(ctx: CommandContext): number {
-  if (ctx.tab_id === undefined) throw new Error("No tab");
+  if (ctx.tab_id === undefined) throw new RuntimeRefusal("No tab");
   return ctx.tab_id;
 }
 
 export async function current_tab_url(ctx: CommandContext): Promise<string> {
   const tab = await browser.tabs.get(require_tab_id(ctx));
-  if (!tab.url) throw new Error("This tab has no address");
+  if (!tab.url) throw new RuntimeRefusal("This tab has no address");
   return tab.url;
 }
 
@@ -90,7 +91,7 @@ export async function open_in(ctx: CommandContext, url: string, where: Where, co
     await open_in_unchecked(ctx, url, where, container);
   } catch (error) {
     if (!ABOUT_URL.test(url) || !PRIVILEGED_URL_REFUSAL.test(String(error))) throw error;
-    throw new Error(`Firefox does not let extensions open ${url}`);
+    throw new RuntimeRefusal(`Firefox does not let extensions open ${url}`);
   }
 }
 
