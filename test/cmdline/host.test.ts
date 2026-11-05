@@ -13,6 +13,9 @@ function fake_element() {
     name: "",
     removed: false,
     focused: false,
+    focus_count: 0,
+    attributes: {} as Record<string, string>,
+    shown: false,
     // Tracks the light DOM: true once appended to the page, false once removed.
     isConnected: false,
     listeners: {} as Record<string, () => void>,
@@ -23,7 +26,12 @@ function fake_element() {
     attachShadow: () => ({ append: () => {} }),
     append: () => {},
     addEventListener: (type: string, listener: () => void) => void (element.listeners[type] = listener),
-    focus: () => void (element.focused = true),
+    focus: () => {
+      element.focused = true;
+      element.focus_count++;
+    },
+    setAttribute: (name: string, value: string) => void (element.attributes[name] = value),
+    showPopover: () => void (element.shown = true),
     remove: () => {
       element.removed = true;
       element.isConnected = false;
@@ -69,7 +77,7 @@ async function load_host(t: TestContext, tag: string, { ticket_fails = false, ru
         },
       },
     },
-    document: { body: { append: (child: { isConnected: boolean }) => void (child.isConnected = true) }, createElement: () => { const element = fake_element(); elements.push(element); return element; } },
+    document: { documentElement: { append: (child: { isConnected: boolean }) => void (child.isConnected = true) }, createElement: () => { const element = fake_element(); elements.push(element); return element; } },
     window: {
       innerHeight: 600,
       oasisfox_host: {
@@ -371,4 +379,56 @@ test("committing a search answers done only after find.end has finished, and a f
     page.finish_search(end);
     assert.deepEqual(await page.answer, expected);
   }
+});
+
+test("the line is a top-layer popover on the root with the top layer number, shown once", async (t) => {
+  const { holder } = await load_host(t, "popover");
+  assert.deepEqual([holder.attributes.popover, holder.attributes["data-oasisfox-layer"], holder.shown, holder.isConnected], ["manual", "2147483647", true, true]);
+});
+
+// What `mount_surface` does to the holder when a lower surface mounts: it hides it, shows it again and sends this event.
+const restacked = (holder: ReturnType<typeof fake_element>) => holder.listeners["oasisfox-restacked"]!();
+
+test("a surface mounted over the open line sends the focus back to the frame and the input, once per mount", async (t) => {
+  const { holder, frame, ready, page_opened } = await load_host(t, "restacked");
+  await ready();
+  const received: string[] = [];
+  frame.posted[0]!.transfer[0]!.onmessage = (event) => void received.push(event.data.oasisfox_cmdline.kind);
+  await page_opened();
+  restacked(holder);
+  await until(() => received.includes("refocus"));
+  assert.deepEqual([received, frame.focus_count], [["focused", "refocus"], 2]);
+  restacked(holder);
+  await until(() => received.length === 3);
+  assert.deepEqual([received.slice(2), frame.focus_count], [["refocus"], 3]);
+});
+
+test("two surfaces mounted in one tick send two refocus messages and nothing more", async (t) => {
+  const { holder, frame, ready, page_opened } = await load_host(t, "two_mounts");
+  await ready();
+  const received: string[] = [];
+  frame.posted[0]!.transfer[0]!.onmessage = (event) => void received.push(event.data.oasisfox_cmdline.kind);
+  await page_opened();
+  restacked(holder);
+  restacked(holder);
+  await settle();
+  assert.deepEqual(received, ["focused", "refocus", "refocus"]);
+});
+
+test("a restack before the page opened, or after the line closed, moves no focus and sends nothing", async (t) => {
+  const { holder, frame, modes, ready, page_opened } = await load_host(t, "restacked_early");
+  restacked(holder);
+  await ready();
+  restacked(holder);
+  const received: string[] = [];
+  frame.posted[0]!.transfer[0]!.onmessage = (event) => void received.push(event.data.oasisfox_cmdline.kind);
+  await settle();
+  assert.deepEqual([received, frame.focus_count], [[], 0]);
+  await page_opened();
+  frame.posted[0]!.transfer[0]!.postMessage({ oasisfox_cmdline: { kind: "close" } });
+  await until(() => modes.length === 2);
+  // A refocus that was in flight when the line closed.
+  assert.doesNotThrow(() => restacked(holder));
+  await settle();
+  assert.deepEqual([received, frame.focus_count, modes], [["focused"], 1, ["cmdline", "normal"]]);
 });

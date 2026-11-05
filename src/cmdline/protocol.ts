@@ -17,6 +17,8 @@ export type HostToPage =
   | { kind: "token"; token: string }
   // Sent once the host moved focus into the frame, after every key it forwarded. Later keys reach the page directly.
   | { kind: "focused" }
+  // The host showed the frame again and moved focus back to it. The page focuses its input, which keeps the caret and selection.
+  | { kind: "refocus" }
   // Sent after the frame loaded. A page that is still ours answers `here`.
   | { kind: "check" }
   // The line to show under a search line, such as "3 of 17". Empty clears it.

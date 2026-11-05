@@ -67,7 +67,9 @@ async function open_line(start: Start, port: MessagePort): Promise<void> {
   const keymap = stored[COMPILED_KEYMAP_STORAGE_KEY] as CompiledKeymap | undefined;
   const opened_from = typeof start.mode === "string" ? start.mode : "normal";
   const key_text = key_labels(keymap, opened.commands, opened_from);
-  const list = create_list(document.querySelector<HTMLElement>("#list")!, (id) => key_text.get(id) ?? "");
+  const help_ids = new Set(opened.help_ids);
+  const has_help = (id: string) => help_ids.has(id);
+  const list = create_list(document.querySelector<HTMLElement>("#list")!, (id) => key_text.get(id) ?? "", has_help);
   const matcher: TokenMatcher | undefined = keymap?.modes.cmdline ? create_matcher(keymap) : undefined;
   // Asks the background for tabs and bookmarks only when a subject needs them, and only here, after the ticket redeemed.
   const live = create_live_source({
@@ -81,6 +83,8 @@ async function open_line(start: Start, port: MessagePort): Promise<void> {
     search: start.search !== undefined,
     history: start.search ? [] : opened.history,
     parse: (text) => parse_command_line(lookup, text, opened.sources),
+    has_help,
+    command_id_of: (word) => lookup.find(word)?.id,
     complete: start.search ? undefined : create_completer(lookup, opened.commands, opened.command_aliases, opened.sources, opened_from, live),
     // Only a missing value is caught here. The router still checks everything else when it runs the command.
     precheck: (invocation) => {
@@ -114,12 +118,20 @@ async function open_line(start: Start, port: MessagePort): Promise<void> {
     if (panel.offsetHeight !== told_height) tell_host({ kind: "resize", height: (told_height = panel.offsetHeight) });
   };
 
+  // The help opens in a new tab, which takes the focus, so the line on this tab closes.
+  const show_help = (command_id: string) => {
+    void ask_background({ type: "open_help", command_id });
+    live.close();
+    tell_host({ kind: "close" });
+  };
+
   const carry_out = (effect: Effect) => {
     if (effect.kind === "close") {
       live.close();
       tell_host({ kind: "close" });
     }
     else if (effect.kind === "find_commit") tell_host({ kind: "find_commit" });
+    else if (effect.kind === "help") show_help(effect.command_id);
     else if (effect.kind === "submit") {
       live.close();
       void ask_background({ type: "record_cmdline", text: effect.text });
@@ -172,6 +184,17 @@ async function open_line(start: Start, port: MessagePort): Promise<void> {
     },
     { passive: false },
   );
+  // A press on a row must not take the focus from the input, which would lose the caret.
+  list_element.addEventListener("mousedown", (event) => event.preventDefault());
+  list_element.addEventListener("click", (event) => {
+    const target = event.target as HTMLElement | null;
+    const help_id = target?.closest<HTMLElement>(".oasisfox-cmdline-link")?.dataset.help;
+    if (help_id !== undefined) return show_help(help_id);
+    const index = target?.closest<HTMLElement>("[data-index]")?.dataset.index;
+    if (index === undefined) return;
+    session.pick(Number(index));
+    render();
+  });
   input.addEventListener("input", () => {
     session.edit(input.value, input.selectionStart ?? input.value.length);
     render();
@@ -181,6 +204,7 @@ async function open_line(start: Start, port: MessagePort): Promise<void> {
     const message = unwrap<HostToPage>(event.data);
     if (message?.kind === "token") press_forwarded(message.token);
     else if (message?.kind === "check") tell_host({ kind: "here" });
+    else if (message?.kind === "refocus") input.focus();
     else if (message?.kind === "find_status") {
       session.set_status(message.text);
       render();

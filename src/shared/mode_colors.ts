@@ -5,6 +5,7 @@ import { DEFAULT_LIGHT_INTENSITY } from "./config.ts";
 import { LIGHT_INTENSITIES, ROLES } from "./theme/roles.ts";
 import type { LightIntensity, OasisTheme, RoleColors, Theme } from "./theme/roles.ts";
 import { OASIS_THEMES, REPO_THEMES } from "./themes.ts";
+import { BUILT_IN_THEME_NAMES } from "./theme_names.ts";
 
 export const MODE_COLOR_MODES = ["normal", "insert", "ignore", "caret", "visual"] as const;
 export type ModeColorMode = (typeof MODE_COLOR_MODES)[number];
@@ -45,7 +46,7 @@ export function oasis_theme(name: string): OasisTheme | undefined {
 // Every name `palette` accepts apart from the user's own theme files: the Oasis themes, then the contributed ones.
 // A function, not a constant: a constant made of the tables cannot be tree-shaken, and the content script imports this module through the barrel.
 export function built_in_theme_names(): string[] {
-  return [...Object.keys(OASIS_THEMES), ...Object.keys(REPO_THEMES)];
+  return [...BUILT_IN_THEME_NAMES];
 }
 
 // A local theme wins over a built-in one of the same name. Only an Oasis theme has light intensities.

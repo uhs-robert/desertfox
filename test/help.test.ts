@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { build_help_model, STYLE_VARIABLES } from "../src/help/model.ts";
-import { parse_route } from "../src/help/route.ts";
+import { command_help_url, parse_route } from "../src/help/route.ts";
 import { DEFAULT_SETTINGS, effective_settings } from "../src/shared/config.ts";
 import { ROLES } from "../src/shared/theme/roles.ts";
 import { token_name } from "../src/shared/theme/tokens.ts";
@@ -179,4 +179,27 @@ test("effective settings keep the default prefix a config leaves out", () => {
   assert.deepEqual(settings.container_prefixes, DEFAULT_SETTINGS.container_prefixes);
   assert.equal(settings.palette, "x");
   assert.equal(settings.hint_letters, DEFAULT_SETTINGS.hint_letters);
+});
+
+test("a command link lands on the Commands page with the decoded id", () => {
+  assert.deepEqual(parse_route("#command=tab.next"), { page: "commands", command: "tab.next" });
+  assert.deepEqual(parse_route("#command=my%20snippet"), { page: "commands", command: "my snippet" });
+  assert.deepEqual(parse_route("#command="), { page: "home" });
+  assert.deepEqual(parse_route(command_help_url("", "a b/c")), { page: "commands", command: "a b/c" });
+});
+
+test("the help page scrolls to and highlights the command card the way it does an engine row", () => {
+  const render = readFileSync(new URL("../src/help/render.ts", import.meta.url), "utf8");
+  const main = readFileSync(new URL("../src/help/main.ts", import.meta.url), "utf8");
+  assert.match(render, /card\.id = command_anchor\(command\.id\)/);
+  assert.match(main, /route\.command !== undefined \? command_anchor\(route\.command\)/);
+  assert.match(main, /row\.classList\.add\("oasisfox-help-current"\)/);
+});
+
+test("the tip names :help and takes the command line key from the keymap", () => {
+  const { commands, compiled } = sample();
+  const text = (compiled_arg: typeof compiled | undefined) => JSON.stringify(build_help_model(commands, compiled_arg, []).tip);
+  assert.match(text(compiled), /"kind":"tip"/);
+  assert.match(text(compiled), /:help <name>/);
+  assert.match(text(undefined), /:help <name>/);
 });

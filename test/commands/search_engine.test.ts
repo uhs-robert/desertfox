@@ -66,6 +66,7 @@ const opened: Opened[] = [];
   storage: {
     managed: { get: async () => ({ format_version: CONFIG_FORMAT_VERSION, search_engines: stored_engines(), settings: { default_engine: "duck" } }) },
     local: { get: async () => ({}), set: async () => ({}), remove: async () => ({}) },
+    session: { get: async () => ({}), set: async () => ({}) },
     onChanged: { addListener() {} },
   },
   tabs: { query: async () => [], get: async () => page, update: async (_id: number, props: { url: string }) => opened.push({ url: props.url }) },

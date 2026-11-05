@@ -94,6 +94,31 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, open_p
     await sleep(400);
   });
 
+  await run_case("Ctrl-h on a selected command row opens its help card in a new tab and closes the line", async () => {
+    const before = (await tab_urls()).length;
+    await send_keys(":");
+    await sleep(600);
+    await send_keys("tab.close", "-k", "Tab", ...CTRL("h"));
+    await sleep(900);
+    const urls = await tab_urls();
+    expect(urls.length === before + 1, `expected one new tab, got ${urls.length - before}`);
+    expect(urls.some((url) => url.includes("help.html#command=tab.close")), "no help tab at the command card");
+    await send_keys(...CTRL("w"));
+    await sleep(500);
+  });
+
+  await run_case("Ctrl-h with only a typed command word opens that command's help", async () => {
+    const before = (await tab_urls()).length;
+    await send_keys(":");
+    await sleep(600);
+    await send_keys("tab.close --right", ...CTRL("h"));
+    await sleep(900);
+    const urls = await tab_urls();
+    expect(urls.length === before + 1 && urls.some((url) => url.includes("help.html#command=tab.close")), "no help tab for the typed word");
+    await send_keys(...CTRL("w"));
+    await sleep(500);
+  });
+
   await send_keys(...CTRL("w"));
   await sleep(700);
 }

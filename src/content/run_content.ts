@@ -1,4 +1,4 @@
-import type { CountBehavior, Invocation, Outcome } from "../shared/index.ts";
+import type { CountBehavior, Invocation, LeafStep, Outcome } from "../shared/index.ts";
 import { settle } from "./bundle_host.ts";
 import { read_context_source } from "./context.ts";
 import { content_handlers } from "./handler_map.ts";
@@ -26,6 +26,21 @@ export const run_content_invocation = (invocation: Invocation, count_rule: Count
 export async function run_in_order(invocations: Invocation[]): Promise<Outcome> {
   for (const invocation of invocations) {
     const outcome = await run_content_invocation(invocation, "ignore");
+    if (!outcome.ok || outcome.cancelled) return outcome;
+  }
+  return { ok: true };
+}
+
+// A leaf's steps with the typed count on each. The router applies the count rule of a step it runs.
+export const counted_invocations = (steps: readonly LeafStep[], count: number | undefined): Invocation[] =>
+  steps.map((step) => (count === undefined ? step.invocation : { ...step.invocation, count }));
+
+// Runs a leaf of content steps here. A step starts after the one before it has finished, and the first runs in the caller's turn.
+// Stops at the first step that is not done, so a wait the user leaves or a failure ends the leaf.
+export async function run_content_steps(steps: readonly LeafStep[], count: number | undefined): Promise<Outcome> {
+  const invocations = counted_invocations(steps, count);
+  for (const [index, step] of steps.entries()) {
+    const outcome = await run_content_invocation(invocations[index]!, step.count_rule);
     if (!outcome.ok || outcome.cancelled) return outcome;
   }
   return { ok: true };

@@ -9,6 +9,9 @@ export const WARNINGS_STORAGE_KEY = "oasisfox_warnings";
 // Where the config came from and the settings in force, for the options page. Written at every startup.
 export const CONFIG_STATUS_STORAGE_KEY = "oasisfox_config_status";
 
+// Setting name to the value `:set` gave it, in `storage.session`: a browser restart clears it. Global, private windows included.
+export const SETTING_OVERRIDES_STORAGE_KEY = "oasisfox_setting_overrides";
+
 // Slot name to the invocations its chord runs. `commands.onCommand` reads it, because the background can restart.
 export const SLOT_TABLE_STORAGE_KEY = "oasisfox_slot_table";
 
