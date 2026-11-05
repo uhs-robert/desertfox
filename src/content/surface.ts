@@ -1,7 +1,7 @@
 // A closed shadow root on the page for one small surface. A surface style must not declare --oasisfox-bg-core, -fg-core,
 // -font or -radius: a declaration shadows a value the page or host sets. Write each default as a var() fallback.
 
-const LAYER_ATTRIBUTE = "data-oasisfox-layer";
+import { LAYER_ATTRIBUTE, RESTACKED_EVENT } from "../shared/layers.ts";
 
 export function create_surface(class_name: string, style: string, layer: number): { host: HTMLElement; text: HTMLElement } {
   const host = document.createElement("div");
@@ -19,9 +19,11 @@ export function create_surface(class_name: string, style: string, layer: number)
 
 // Mounts a surface in the top layer, above any modal dialog or popover. Top-layer order follows show order and ignores
 // z-index, so the mounted host and every open host of a higher layer are shown again, lowest first: the order of LAYERS
-// holds whichever surface mounts last. Hosts of other bundles are found by their layer attribute.
+// holds whichever surface mounts last. Hosts of other bundles are found by their layer attribute. A host already on the page
+// is not appended again: moving an iframe host reloads its frame. Hiding takes the focus out of a host, so each host shown
+// again, except the mounted one, hears `RESTACKED_EVENT` and may take its focus back.
 export function mount_surface(host: HTMLElement): void {
-  document.documentElement.append(host);
+  if (host.parentElement !== document.documentElement) document.documentElement.append(host);
   const layer_of = (element: Element) => Number(element.getAttribute(LAYER_ATTRIBUTE));
   const restack = Array.from(document.documentElement.querySelectorAll<HTMLElement>(`:scope > [${LAYER_ATTRIBUTE}]`))
     .filter((other) => other === host || (layer_of(other) > layer_of(host) && other.matches(":popover-open")))
@@ -30,4 +32,5 @@ export function mount_surface(host: HTMLElement): void {
     if (surface_host.matches(":popover-open")) surface_host.hidePopover();
     surface_host.showPopover();
   }
+  for (const surface_host of restack) if (surface_host !== host) surface_host.dispatchEvent(new Event(RESTACKED_EVENT));
 }

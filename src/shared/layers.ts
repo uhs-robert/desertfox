@@ -1,6 +1,11 @@
-// Layers of the surfaces the content script puts on a page, bottom to top. The numbers are the z-index of the command
-// line, which is not in the top layer. The other surfaces are top-layer popovers, where z-index has no effect: they stack
-// in the order shown, and `mount_surface` shows them again in this order. Numbers only, so content.js stays small.
+// Layers of the surfaces the content script puts on a page, bottom to top. Every surface, the command line included, is a
+// top-layer popover, where z-index has no effect: they stack in the order shown, and `mount_surface` shows them again in
+// this order. The numbers double as the z-index each host carries as a fallback. Constants only, so content.js stays small.
+
+// Marks a surface host with its layer, so a bundle finds the hosts of the others.
+export const LAYER_ATTRIBUTE = "data-oasisfox-layer";
+// Sent to a host that `mount_surface` showed again, which hid it and so took the focus out of it.
+export const RESTACKED_EVENT = "oasisfox-restacked";
 
 const BROWSER_MAX_Z_INDEX = 2147483647;
 

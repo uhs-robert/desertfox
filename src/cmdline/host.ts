@@ -4,7 +4,7 @@
 
 import type { BundleHostApi } from "../content/bundle_host.ts";
 import type { Outcome } from "../shared/messages.ts";
-import { LAYERS } from "../shared/layers.ts";
+import { LAYER_ATTRIBUTE, LAYERS, RESTACKED_EVENT } from "../shared/layers.ts";
 import type { HostToPage, PageToHost } from "./protocol.ts";
 import { unwrap, wrap } from "./protocol.ts";
 
@@ -75,6 +75,10 @@ if (!page.oasisfox_cmdline_ready) {
 
   function mount(text: string, from_mode: string, finish: (outcome: Outcome | Promise<Outcome>) => void, search?: "forward" | "backward") {
     const holder = document.createElement("div");
+    // A top-layer popover like the other surfaces. It is shown last, so it draws above them. It is not made by `create_surface`: its
+    // shadow root and text would cost the 4 KB budget of this bundle.
+    holder.setAttribute("popover", "manual");
+    holder.setAttribute(LAYER_ATTRIBUTE, String(LAYERS.command_line));
     holder.style.cssText = `all:initial;position:fixed;left:0;right:0;bottom:0;height:${BAR_HEIGHT};z-index:${LAYERS.command_line};`;
     const frame = document.createElement("iframe");
     frame.style.cssText = "all:initial;display:block;width:100%;height:100%;border:0;color-scheme:normal;";
@@ -110,7 +114,15 @@ if (!page.oasisfox_cmdline_ready) {
       current.port.postMessage(wrap<HostToPage>({ kind: "check" }));
     });
     holder.attachShadow({ mode: "closed" }).append(frame);
-    (document.body ?? document.documentElement).append(holder);
+    // On the root, where `mount_surface` looks for hosts, and never moved again: moving the holder reloads the frame.
+    document.documentElement.append(holder);
+    holder.showPopover();
+    // A surface mounted later showed the holder again, and that dropped the frame's focus. The page puts it back in the input, which keeps its caret and selection.
+    holder.addEventListener(RESTACKED_EVENT, () => {
+      if (open !== current || !current.page_opened) return;
+      current.frame.focus();
+      current.port?.postMessage(wrap<HostToPage>({ kind: "refocus" }));
+    });
     current.removal_watch.observe(document, { childList: true, subtree: true });
     open = current;
   }
