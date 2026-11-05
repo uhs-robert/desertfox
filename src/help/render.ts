@@ -1,5 +1,6 @@
 // Draws the help model with DOM calls only. Command text never goes through innerHTML.
 
+import { command_matches, count_line } from "./filter.ts";
 import { copy_text } from "../content/caret/copy_text.ts";
 import type { Block, Inline } from "./blocks.ts";
 import type { CommandRow, EngineRow, HelpModel, KeyRow } from "./model.ts";
@@ -151,8 +152,72 @@ function home_page(model: HelpModel): HTMLElement[] {
   ];
 }
 
+// Kept outside the tree: every render rebuilds the page, and the text must outlive it.
+let command_filter = "";
+
 function commands_page(model: HelpModel): HTMLElement[] {
-  return model.groups.flatMap((group) => [el("h2", undefined, group.name), ...group.commands.map(command_card)]);
+  const input = el("input", "oasisfox-help-filter") as HTMLInputElement;
+  input.setAttribute("type", "text");
+  input.setAttribute("placeholder", "Filter by name, key or description");
+  input.setAttribute("aria-label", "Filter commands");
+  input.value = command_filter;
+  const count = el("p", "oasisfox-help-filter-count oasisfox-help-muted");
+  count.setAttribute("aria-live", "polite");
+
+  const groups = model.groups.map((group) => {
+    const heading = el("h2", undefined, group.name);
+    return { heading, cards: group.commands.map((command) => ({ command, card: command_card(command) })) };
+  });
+  const total = model.groups.reduce((sum, group) => sum + group.commands.length, 0);
+
+  const apply_filter = (): HTMLElement | undefined => {
+    let shown = 0;
+    let first: HTMLElement | undefined;
+    for (const group of groups) {
+      let group_shown = 0;
+      for (const { command, card } of group.cards) {
+        const match = command_matches(command, command_filter);
+        card.hidden = !match;
+        card.classList.remove("oasisfox-help-current");
+        if (match) {
+          group_shown += 1;
+          first ??= card;
+        }
+      }
+      group.heading.hidden = group_shown === 0;
+      shown += group_shown;
+    }
+    count.textContent = count_line(shown, total);
+    return first;
+  };
+  apply_filter();
+
+  input.addEventListener("input", () => {
+    command_filter = input.value;
+    apply_filter();
+  });
+  input.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      const first = apply_filter();
+      if (!first) return;
+      first.classList.add("oasisfox-help-current");
+      first.scrollIntoView();
+    } else if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      // Clears first. An empty box blurs, which returns the keys to the page.
+      if (input.value === "") {
+        input.blur();
+        return;
+      }
+      input.value = "";
+      command_filter = "";
+      apply_filter();
+    }
+  });
+
+  return [input, count, ...groups.flatMap((group) => [group.heading, ...group.cards.map(({ card }) => card)])];
 }
 
 function styling_page(): HTMLElement[] {
