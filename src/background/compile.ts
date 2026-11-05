@@ -70,6 +70,9 @@ function keep_node(node: TreeNode, path: string[], mode: string, input: CompileI
       warnings.push(`${mode}: skipped "${path.join("")}": ${mode_error}`);
       return false;
     }
+    // A binding that omits such a param prompts for it, as one that omits a required param does. The typed command line does not come here, so it keeps the default.
+    const unbound = step.invocation.prompt ? undefined : unbound_ask_param(command, step.invocation.args);
+    if (unbound !== undefined) step.invocation = { ...step.invocation, prompt: { param: unbound } };
     const prompt_error = prompt_problem(step.invocation.prompt, command);
     if (prompt_error) {
       warnings.push(`${mode}: skipped "${path.join("")}": ${prompt_error}`);
@@ -83,11 +86,6 @@ function keep_node(node: TreeNode, path: string[], mode: string, input: CompileI
         return false;
       }
       // Only the router can open the command line with the typed text, so the step goes to the background.
-      step.runs_in = "background";
-      continue;
-    }
-    if (unbound_ask_param(command, step.invocation.args) !== undefined) {
-      // The router opens the command line for it, so no defaults are filled in.
       step.runs_in = "background";
       continue;
     }

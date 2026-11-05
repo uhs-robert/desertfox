@@ -5,7 +5,7 @@ import type { BoundInvocation } from "../shared/invocation.ts";
 import type { BackgroundToContent, Outcome, Refusal, RunResponse } from "../shared/messages.ts";
 import { check_args } from "../shared/registry/check_args.ts";
 import type { EnumSources } from "../shared/registry/check_args.ts";
-import { is_context_source, unbound_ask_param } from "../shared/registry/params.ts";
+import { is_context_source } from "../shared/registry/params.ts";
 import { print_command } from "../shared/registry/print_command.ts";
 import { apply_count } from "./count.ts";
 import { as_stored, type RepeatMemory } from "./repeat_memory.ts";
@@ -123,8 +123,6 @@ export function create_router(deps: RouterDeps): Router {
     }
 
     const counted = apply_count(command, invocation);
-    const asked = unbound_ask_param(command, counted.args);
-    if (asked !== undefined && request.may_prompt) return open(counted.args ?? {}, asked);
     const checked = check_args(command, counted.args, sources);
     if (!checked.ok) {
       if (checked.missing_param === undefined || !request.may_prompt) return refuse(checked.error);

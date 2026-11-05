@@ -144,20 +144,58 @@ test("a binding that omits the url compiles to a prompting step, with no default
     enum_sources: { search_engines: [], containers: ["Work"] },
   });
   const children = compiled.modes.normal!.children as unknown as Record<string, TreeLeaf>;
-  assert.equal(children.o!.steps[0]!.invocation.args, undefined);
+  assert.deepEqual(children.o!.steps[0]!.invocation.prompt, { param: "url" });
   assert.equal(children.o!.steps[0]!.runs_in, "background");
-  assert.equal(children.e!.steps[0]!.invocation.args?.url, undefined);
+  assert.deepEqual(children.e!.steps[0]!.invocation.prompt, { param: "url" });
 });
 
-test("a binding that omits the url opens the command line instead of the new tab page", async () => {
-  for (const invocation of [{ id: "open.url" }, { id: "open.url", args: { container: "Work", where: "tab" } }]) {
+test("a compiled binding that omits the url opens the command line instead of the new tab page", async () => {
+  const keymap = { normal: { o: { id: "open.url" }, e: { id: "open.url", args: { container: "Work", where: "tab" } } } };
+  const { compiled } = compile_config({ config: { ...empty_config(), keymap }, default_keymap: {}, get_command: (id) => registry.get(id), enum_sources: { search_engines: [], containers: ["Work"] } });
+  const children = compiled.modes.normal!.children as unknown as Record<string, TreeLeaf>;
+  for (const key of ["o", "e"]) {
     const { deps, log } = make_fake({});
     await create_router({ ...deps, get_command: (id) => registry.get(id), get_enum_sources: async () => ({ search_engines: [], containers: ["Work"] }) }).run({
-      invocations: [invocation],
+      invocations: [children[key]!.steps[0]!.invocation],
       mode: "normal",
       may_prompt: true,
     });
     assert.equal(log.length, 1);
     assert.match(log[0]!, /^cmdline 7 0 open /);
   }
+});
+
+// The command line submits `{ id, args }` with the typed flags and no url, through the router.
+async function submit_typed(args: Record<string, unknown>) {
+  const { deps, log } = make_fake({});
+  const result = await create_router({ ...deps, get_command: (id) => registry.get(id) }).run({ invocations: [{ id: "open.url", args }], mode: "normal", may_prompt: true });
+  return { result, log };
+}
+
+test("typed open -t with no url runs and opens the new tab page, not the command line", async () => {
+  const opened: Opened[] = [];
+  install_browser(opened);
+  const { log } = await submit_typed({ where: "tab" });
+  assert.deepEqual(log, []);
+  assert.deepEqual(opened, [{ via: "tab_active", url: NEW_TAB_URL }]);
+});
+
+test("typed bare open is refused and opens nothing", async () => {
+  const opened: Opened[] = [];
+  install_browser(opened);
+  const { log } = await submit_typed({});
+  assert.equal(log.length, 1);
+  assert.match(log[0]!, /^refuse 7 .*missing <url>/);
+  assert.deepEqual(opened, []);
+});
+
+test("a binding with a bad fixed arg still warns and is skipped", () => {
+  const { compiled, warnings } = compile_config({
+    config: { ...empty_config(), keymap: { normal: { o: { id: "open.url", args: { where: "nowhere" } } } } },
+    default_keymap: {},
+    get_command: (id) => registry.get(id),
+    enum_sources: { search_engines: [], containers: [] },
+  });
+  assert.equal(compiled.modes.normal?.children.o, undefined);
+  assert.equal(warnings.length, 1);
 });

@@ -75,6 +75,7 @@ The fields follow the Oasis action library (`home/hypr/.config/hypr/lib/act/init
 - `rest`: marks a `string` param as text with spaces. The grammar already lets the `main` value run to the end of the line.
 - `when`: the param is valid only if one other param has one of the listed values. For example, `container` needs `where` to open a new tab or window, because Firefox cannot change the container of an open tab. This is the only kind of condition. A command that needs more is split into two commands.
 - `default`: a value, or a context source (`{ from: "current_url" }`, `"selection"`, `"clipboard"`). The router fills a context source where it is available, so a background command can ask for the page selection.
+- `ask_when_unbound`: a flag. A key binding that leaves the param out compiles to a prompt for it, though the default would let it run. The typed command line still takes the default. `open.url` sets it on `url`.
 - `runs_in`: `background` or `content`. The router sends the invocation to that side. A command never runs in both.
 - `needs`: what must be true to run it. `content` means a content script in the tab. A permission name means an optional permission. The router refuses with a message instead of failing silently.
 - `count`: what a numeric prefix does. `repeat` runs the command that many times. A param name fills that param, for example `tab.goto` takes the count as its `index`. `ignore` drops it.
