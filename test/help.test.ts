@@ -195,3 +195,11 @@ test("the help page scrolls to and highlights the command card the way it does a
   assert.match(main, /route\.command !== undefined \? command_anchor\(route\.command\)/);
   assert.match(main, /row\.classList\.add\("oasisfox-help-current"\)/);
 });
+
+test("the tip names :help and takes the command line key from the keymap", () => {
+  const { commands, compiled } = sample();
+  const text = (compiled_arg: typeof compiled | undefined) => JSON.stringify(build_help_model(commands, compiled_arg, []).tip);
+  assert.match(text(compiled), /"kind":"tip"/);
+  assert.match(text(compiled), /:help <name>/);
+  assert.match(text(undefined), /:help <name>/);
+});

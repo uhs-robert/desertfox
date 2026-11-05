@@ -39,7 +39,7 @@ const QUICK_START: Block[] = [
 function render(route: Route): FakeNode {
   (globalThis as { document?: unknown }).document = { createElement: (tag: string) => new FakeNode(tag) };
   const root = new FakeNode("body");
-  render_help(root as never, { quick_start: QUICK_START, groups: [], warnings: [], settings: [], engines: [] } as never, route, []);
+  render_help(root as never, { quick_start: QUICK_START, groups: [], warnings: [], settings: [], engines: [], tip: { kind: "tip", inlines: [] } } as never, route, []);
   return root;
 }
 
