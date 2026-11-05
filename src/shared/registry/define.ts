@@ -145,7 +145,12 @@ function check_params(input: CommandInput, fail: Fail): void {
     if (param.rest && param.type !== "string") fail(`${at}.rest`, "only a string param can take the rest");
     if (param.when) check_when(input, param, at, fail);
     if (is_conditional_default(param.default) && param.when) fail(`${at}.default`, "a conditional default cannot be combined with `when` on the same param");
-    if (is_conditional_default(param.default)) check_when(input, { ...param, when: param.default.when }, `${at}.default`, fail);
+    if (is_conditional_default(param.default)) {
+      if (param.type === "enum") fail(`${at}.default`, "a conditional default is not allowed on an enum param");
+      check_when(input, { ...param, when: param.default.when }, `${at}.default`, fail);
+      const sibling_name = Object.keys(param.default.when)[0] as string;
+      if (is_conditional_default(find_param(input, sibling_name)?.default)) fail(`${at}.default.when`, `names "${sibling_name}", which has a conditional default itself`);
+    }
   });
 
   const mains = params.filter((param) => param.main);
