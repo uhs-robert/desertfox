@@ -9,7 +9,7 @@ export type OpenHelpDeps = {
 
 const COMMANDS_PAGE_HASH = PAGES.find((page) => page.id === "commands")!.hash;
 
-// Opens the help page in the foreground next to the asking tab. An id the registry does not know opens the Commands page
+// Opens the help page in the foreground next to the asking tab. An id without a help card opens the Commands page
 // at its top, because a snippet or alias can name a card that does not exist. A sender without a redeemed ticket gets nothing.
 export function create_open_help(deps: OpenHelpDeps) {
   return {
