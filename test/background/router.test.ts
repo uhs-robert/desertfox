@@ -441,3 +441,37 @@ test("a background step then a content step sends the content step to the tab th
   await create_router(deps).run({ invocations: [{ id: "tab.next" }, { id: "scroll.to" }], mode: "normal", sender_tab_id: 1, frame_id: 3 });
   assert.deepEqual(sent, [[2, 0]]);
 });
+
+test("a context source that expands to text the schema refuses is refused before the command runs", async () => {
+  const seen: unknown[] = [];
+  const commands = {
+    "settings.set": {
+      label: "Set",
+      intent: "x",
+      name: "set",
+      params: [
+        { name: "name", type: "string", values: ["light_intensity"], strict: true },
+        { name: "value", type: "string", main: true, optional: true, value_of: "name" },
+      ],
+      runs_in: "background",
+      run: (_ctx: unknown, args: unknown) => void seen.push(args),
+    },
+    "page.pick": {
+      label: "Pick",
+      intent: "x",
+      params: [{ name: "pick", type: "string", main: true, pattern: "^[a-z]+$" }],
+      runs_in: "background",
+      run: (_ctx: unknown, args: unknown) => void seen.push(args),
+    },
+  } as const;
+  const bad = make_fake(commands, { ask_selection: async () => "9" });
+  const refused = await create_router(bad.deps).run({ invocations: [{ id: "settings.set", args: { name: "light_intensity", value: { from: "selection" } } }], mode: "normal" });
+  assert.equal(refused.ok, false);
+  assert.match(refused.ok ? "" : refused.refusal.message, /light_intensity: expected a whole number from 1 to 5/);
+  const unmatched = await create_router(bad.deps).run({ invocations: [{ id: "page.pick", args: { pick: { from: "selection" } } }], mode: "normal" });
+  assert.equal(unmatched.ok, false);
+  assert.deepEqual(seen, []);
+  const good = make_fake(commands, { ask_selection: async () => "4" });
+  assert.deepEqual(await create_router(good.deps).run({ invocations: [{ id: "settings.set", args: { name: "light_intensity", value: { from: "selection" } } }], mode: "normal" }), { ok: true });
+  assert.deepEqual(seen, [{ name: "light_intensity", value: "4" }]);
+});

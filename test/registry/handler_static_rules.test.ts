@@ -10,16 +10,56 @@ import type { EnumSources } from "../../src/shared/registry/check_args.ts";
 import { registry } from "../../src/shared/registry/index.ts";
 import { is_dynamic_values, static_values } from "../../src/shared/registry/params.ts";
 
+// Handlers that throw a TypeError on the stub whatever the args, each with the reason. Empty now: every background handler runs through. Nothing else may throw a TypeError.
+const CANNOT_RUN_ON_STUB: Record<string, string> = {};
+
 const SOURCES: EnumSources = { search_engines: ["stub_engine"], containers: ["stub_container"] };
 const CTX: CommandContext = { tab_id: 1, window_id: 1, frame_id: 0, mode: "normal" };
 
-// A value that answers every call and every property, so a handler gets past its browser calls to its own checks.
-function stub_value(): unknown {
-  const target = function () {};
-  return new Proxy(target, {
-    get: (_target, key) => (key === "then" ? undefined : key === Symbol.iterator ? function* () {} : key === Symbol.toPrimitive ? () => "" : stub_value()),
-    apply: () => Promise.resolve(stub_value()),
-  });
+const STUB_TAB = { id: 1, windowId: 1, index: 0, active: true, pinned: false, audible: false, discarded: false, incognito: false, status: "complete", url: "https://example.org/a", title: "A", cookieStoreId: "firefox-default", lastAccessed: 3, mutedInfo: { muted: false } };
+const STUB_TABS = [STUB_TAB, { ...STUB_TAB, id: 2, index: 1, active: false, url: "https://example.org/b", title: "B", lastAccessed: 2 }, { ...STUB_TAB, id: 3, index: 2, active: false, title: "C", lastAccessed: 1 }];
+const STUB_WINDOWS = [
+  { id: 1, type: "normal", incognito: false, focused: true, tabs: STUB_TABS },
+  { id: 2, type: "normal", incognito: false, focused: false, tabs: [{ ...STUB_TAB, id: 4, windowId: 2 }] },
+];
+const STUB_CLOSED = [{ tab: { ...STUB_TAB, sessionId: "s1" } }, { window: { sessionId: "s2" } }];
+const STUB_MARK = { id: "b1", title: "Mark", url: "https://example.org/m", type: "bookmark" };
+
+// What each browser call answers. A call that is not listed answers undefined.
+const STUB_ANSWERS: Record<string, unknown> = {
+  "tabs.query": STUB_TABS,
+  "tabs.get": STUB_TAB,
+  "tabs.update": STUB_TAB,
+  "tabs.create": STUB_TAB,
+  "tabs.duplicate": STUB_TAB,
+  "tabs.move": [STUB_TAB],
+  "tabs.getZoom": 1,
+  "tabs.executeScript": [null],
+  "windows.getAll": STUB_WINDOWS,
+  "windows.get": STUB_WINDOWS[0],
+  "windows.create": STUB_WINDOWS[0],
+  "windows.update": STUB_WINDOWS[0],
+  "sessions.getRecentlyClosed": STUB_CLOSED,
+  "bookmarks.search": [STUB_MARK],
+  "bookmarks.getTree": [{ id: "root", title: "", children: [STUB_MARK] }],
+  "bookmarks.create": STUB_MARK,
+  "history.search": [],
+  "contextualIdentities.query": [{ name: "stub_container", cookieStoreId: "firefox-container-1", color: "blue", icon: "circle" }],
+  "permissions.contains": true,
+  "storage.session.get": {},
+  "storage.local.get": {},
+  "storage.managed.get": {},
+  "runtime.getURL": "moz-extension://stub/help.html",
+};
+
+// A `browser` whose calls answer from STUB_ANSWERS, so a handler runs past its first browser call into its own checks.
+function stub_browser(): unknown {
+  const namespace = (path: string): unknown =>
+    new Proxy(function () {}, {
+      get: (_target, key) => (typeof key === "symbol" || key === "then" ? undefined : key === "id" ? "stub@oasisfox" : namespace(`${path}${path === "" ? "" : "."}${key}`)),
+      apply: () => (path.startsWith("runtime.getURL") ? STUB_ANSWERS["runtime.getURL"] : Promise.resolve(STUB_ANSWERS[path])),
+    });
+  return namespace("");
 }
 
 function candidates(param: ParamDef): readonly unknown[] {
@@ -48,8 +88,10 @@ function accepted_args(command: NonNullable<ReturnType<typeof registry.get>>): R
 }
 
 test("no background handler refuses args the schema accepts", async () => {
-  (globalThis as unknown as { browser: unknown }).browser = stub_value();
+  (globalThis as unknown as { browser: unknown }).browser = stub_browser();
+  Object.defineProperty(globalThis.navigator, "clipboard", { value: { readText: async () => "stub text" }, configurable: true });
   const failures: string[] = [];
+  const stuck = new Set<string>();
   try {
     for (const command of registry.list()) {
       if (command.runs_in !== "background") continue;
@@ -57,14 +99,20 @@ test("no background handler refuses args the schema accepts", async () => {
         try {
           await Promise.race([Promise.resolve(command.run(CTX, args)), new Promise((resolve) => setTimeout(resolve, 200))]);
         } catch (error) {
-          // A TypeError comes from the stub's shape, not from a rule.
-          if (error instanceof TypeError || (error as Error).name === "RuntimeRefusal") continue;
-          failures.push(`${command.id} ${JSON.stringify(args)}: ${(error as Error).message}`);
+          if ((error as Error).name === "RuntimeRefusal") continue;
+          if (error instanceof TypeError && Object.hasOwn(CANNOT_RUN_ON_STUB, command.id)) {
+            stuck.add(command.id);
+            continue;
+          }
+          failures.push(`${command.id} ${JSON.stringify(args)}: ${(error as Error).name}: ${(error as Error).message}`);
         }
       }
     }
   } finally {
     delete (globalThis as unknown as { browser?: unknown }).browser;
+    delete (globalThis.navigator as { clipboard?: unknown }).clipboard;
   }
   assert.deepEqual(failures, []);
+  // An entry that no longer gets stuck is stale, so the list stays honest.
+  assert.deepEqual(Object.keys(CANNOT_RUN_ON_STUB).filter((id) => !stuck.has(id)), []);
 });

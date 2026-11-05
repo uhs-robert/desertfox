@@ -21,16 +21,19 @@ export function create_open_help(deps: OpenHelpDeps) {
   };
 }
 
-// What `:help <name>` resolves to: a help page by its title, or a built-in command by its id. Anything else has no target.
+// A page is named by its id with underscores, like every other lowercase name (`quick_start`). The title is only what the sidebar shows.
+const page_name = (page: (typeof PAGES)[number]): string => page.id.replaceAll("-", "_");
+
+// What `:help <name>` resolves to: a help page by its name, or a built-in command by its id. Anything else has no target.
 export function help_name_url(help_page_url: string, name: string, command_ids: ReadonlySet<string>): string | undefined {
   if (name === "") return help_page_url + PAGES[0].hash;
-  const page = PAGES.find((candidate) => candidate.title.toLowerCase() === name.toLowerCase());
+  const page = PAGES.find((candidate) => page_name(candidate) === name);
   if (page) return help_page_url + page.hash;
   return command_ids.has(name) ? command_help_url(help_page_url, name) : undefined;
 }
 
 // The names `:help` completes: the help pages, then every command id.
-export const help_name_choices = (command_ids: Iterable<string>): string[] => [...PAGES.map((page) => page.title), ...command_ids];
+export const help_name_choices = (command_ids: Iterable<string>): string[] => [...PAGES.map(page_name), ...command_ids];
 
 export type HelpTabPlan = { kind: "update"; tab_id: number; url: string } | { kind: "create"; url: string; opener?: { openerTabId: number; windowId?: number | undefined } };
 

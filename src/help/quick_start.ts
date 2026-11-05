@@ -125,7 +125,7 @@ function prefix_key(compiled: CompiledKeymap | undefined, commands: CommandMeta[
 
 // The callout at the top of Home and Commands. The command line key follows the keymap like the Quick Start text.
 export function tip_block(compiled: CompiledKeymap | undefined, commands: CommandMeta[] = []): Block {
-  return { kind: "tip", inlines: sentence(compiled, commands, "Type [:help <name>] to jump to any command. Press {cmdline} to open the command line.") };
+  return { kind: "tip", inlines: sentence(compiled, commands, "Type [:help <name>] to jump to any command or page, for example [:help quick_start]. Press {cmdline} to open the command line.") };
 }
 
 export function quick_start_blocks(compiled: CompiledKeymap | undefined, commands: CommandMeta[] = []): Block[] {
