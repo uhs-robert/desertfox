@@ -1,10 +1,4 @@
-// Every `storage.local` key the background owns. The compiled keymap key lives in `shared/prefix_tree.ts`.
-
-// The theme in force as `{ dark, light }` role colors, from the `palette` and `light_intensity` settings under any live `set`. Surfaces turn it into CSS. Rewritten at every publish.
-export const THEME_STORAGE_KEY = "oasisfox_theme";
-
-// `style.css` then `style.d/*.css` as text, for the surfaces the content script draws. Rewritten at every publish.
-export const USER_CSS_STORAGE_KEY = "oasisfox_user_css";
+// Every `storage.local` key the background owns. The compiled keymap key lives in `shared/prefix_tree.ts`, the theme and user CSS keys in `shared/theme/apply.ts`.
 
 // Phase 3 writes the merged config file here when the user imports it.
 export const IMPORTED_CONFIG_STORAGE_KEY = "oasisfox_imported_config";

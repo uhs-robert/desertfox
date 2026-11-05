@@ -223,7 +223,7 @@ const ROLE_MEANINGS: Record<Role, string> = {
   fg_comment: "Secondary text, such as descriptions",
   fg_dim: "Hints, such as the command line usage line",
   fg_muted: "Disabled text and faint marks",
-  primary: "Brand color: links, titles, groups, hint labels and the normal mode badge",
+  primary: "Brand color: links, titles, groups, hint labels",
   secondary: "Keys in which-key",
   accent: "Highlight marks, such as the new tab clock second hand",
   border: "Borders and dividers",

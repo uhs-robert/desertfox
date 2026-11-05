@@ -1,9 +1,14 @@
 // Turns the stored theme into CSS for one surface and keeps it current. Runs in pages and in the lazy content bundles, never in content.js.
 
-import { THEME_STORAGE_KEY } from "../../background/storage_keys.ts";
 import { ROLES } from "./roles.ts";
 import type { RoleColors } from "./roles.ts";
 import { token_name } from "./tokens.ts";
+
+// The theme in force as `{ dark, light }` role colors, from the `palette` and `light_intensity` settings under any live `set`. Rewritten at every publish.
+export const THEME_STORAGE_KEY = "oasisfox_theme";
+
+// `style.css` then `style.d/*.css` as text, for the surfaces the content script draws. Rewritten at every publish.
+export const USER_CSS_STORAGE_KEY = "oasisfox_user_css";
 
 // The light set is already the one `light_intensity` picked.
 export type StoredTheme = { dark: RoleColors; light: RoleColors };

@@ -1,8 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { create_surface } from "../../src/content/surface.ts";
-import { THEME_STORAGE_KEY, USER_CSS_STORAGE_KEY } from "../../src/background/storage_keys.ts";
-import { theme_css, watch_stored } from "../../src/shared/theme/apply.ts";
+import { theme_css, THEME_STORAGE_KEY, USER_CSS_STORAGE_KEY, watch_stored } from "../../src/shared/theme/apply.ts";
 import type { StoredTheme } from "../../src/shared/theme/apply.ts";
 import { load_theme } from "../../src/shared/theme/load.ts";
 
@@ -51,7 +50,7 @@ test("watch_stored reports the stored value, then each change of its key in loca
 // Just enough DOM to read the order of a surface's shadow children.
 function fake_surface_dom() {
   const appended: { textContent: string; tag: string }[] = [];
-  const element = (tag: string) => ({ tag, textContent: "", style: {}, setAttribute: () => {}, attachShadow: () => ({ append: (...nodes: typeof appended) => void appended.push(...nodes) }) });
+  const element = (tag: string) => ({ tag, textContent: "", style: {}, isConnected: true, setAttribute: () => {}, attachShadow: () => ({ append: (...nodes: typeof appended) => void appended.push(...nodes) }) });
   Object.assign(globalThis, { document: { createElement: element } });
   return appended;
 }

@@ -6,12 +6,10 @@ import { OASIS_THEMES, REPO_THEMES } from "../themes.ts";
 import { LIGHT_INTENSITIES, ROLES } from "./roles.ts";
 import type { LightIntensity, OasisTheme, RoleColors, Theme } from "./roles.ts";
 
-// Managed storage can be edited by hand, so a local theme's shape is not taken on trust.
-const BADGE_MODES = ["normal", "insert", "ignore", "caret", "visual"];
-function has_badge_roles(colors: unknown): colors is Theme {
-  const badge_roles = ["bg_core", ...BADGE_MODES.map((mode) => `mode_${mode}`)];
-  const variant_usable = (variant: unknown) =>
-    typeof variant === "object" && variant !== null && badge_roles.every((role) => typeof (variant as Record<string, unknown>)[role] === "string");
+// Managed storage can be edited by hand, so a local theme's shape is not taken on trust. Every role is needed, because the
+// stored theme sets every token and a missing one would leave a surface on its fallback.
+function has_all_roles(colors: unknown): colors is Theme {
+  const variant_usable = (variant: unknown) => typeof variant === "object" && variant !== null && ROLES.every((role) => typeof (variant as Record<string, unknown>)[role] === "string");
   return typeof colors === "object" && colors !== null && variant_usable((colors as Theme).dark) && variant_usable((colors as Theme).light);
 }
 
@@ -27,7 +25,7 @@ export function oasis_theme(name: string): OasisTheme | undefined {
 // A local theme wins over a built-in one of the same name. Only an Oasis theme has light intensities.
 // Undefined when the name finds nothing.
 export function load_theme(name: string, light_intensity: LightIntensity, local_theme?: LocalTheme): Theme | undefined {
-  if (local_theme?.name === name && has_badge_roles(local_theme.colors)) return local_theme.colors;
+  if (local_theme?.name === name && has_all_roles(local_theme.colors)) return local_theme.colors;
   if (Object.hasOwn(REPO_THEMES, name)) return REPO_THEMES[name]!;
   const oasis = oasis_theme(name);
   // A light_intensity outside 1 to 5 can come from a hand-edited managed config, so it falls back to the middle set instead of throwing.
