@@ -229,3 +229,22 @@ test("collect keeps only the elements that pass the test", () => {
   const found = collect(page, { selector: "links", test: (element) => (element as unknown as { name: string }).name === "kept" });
   assert.deepEqual(names(found), ["kept"]);
 });
+
+test("the scrollable filter keeps only the scroll boxes", () => {
+  const query = query_for("scrollable", undefined);
+  assert.equal(query.selector, "*");
+  assert.equal(typeof query.test, "function");
+});
+
+test("the scrollable filter leaves out a text field that overflows, because focusing it starts typing", (context) => {
+  const global_scope = globalThis as unknown as { getComputedStyle?: unknown };
+  global_scope.getComputedStyle = () => ({ overflowX: "visible", overflowY: "auto" });
+  context.after(() => delete global_scope.getComputedStyle);
+  const owner = { documentElement: {}, body: {} };
+  const overflowing = (local: string, extra: Record<string, unknown> = {}) =>
+    ({ localName: local, scrollWidth: 100, clientWidth: 100, scrollHeight: 900, clientHeight: 100, ownerDocument: owner, ...extra }) as unknown as Element;
+  const { test: is_hit } = query_for("scrollable", undefined);
+  assert.equal(is_hit?.(overflowing("div")), true);
+  assert.equal(is_hit?.(overflowing("textarea")), false);
+  assert.equal(is_hit?.(overflowing("div", { isContentEditable: true })), false);
+});

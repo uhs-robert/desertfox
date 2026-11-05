@@ -42,6 +42,38 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, open_p
     expect(pasted.value === "beta text", `;t d copied "${pasted.value}"`);
   });
 
+  await run_case(";s focuses a scroll box, then j scrolls the box and not the page", async () => {
+    // The only scroll box is the side panel, so it gets the label "a". The page root is left out.
+    await open_page("scrollbox", "p6_scrollbox", { new_tab: true });
+    await send_keys(";s");
+    await send_keys("a");
+    await sleep(300);
+    const [outlined] = await in_active_tab(`getComputedStyle(document.getElementById("panel")).outlineStyle`);
+    expect(outlined === "solid", `the box has outline ${outlined} right after the pick`);
+    const mark = events.length;
+    await send_keys("j");
+    const moved = await wait_event(mark, (event) => event.type === "panel_scroll" && event.page_id === "p6_scrollbox", "the panel to scroll after j");
+    expect(moved.top > 0, `the panel is at ${moved.top} after j`);
+    await sleep(400); // The fixture reports a page scroll 150 ms after it settles.
+    expect(!find_event(mark, (event) => event.type === "scroll" && event.page_id === "p6_scrollbox"), "the page scrolled with the panel");
+    await sleep(1000);
+    const [after] = await in_active_tab(`[document.getElementById("panel").style.outline, document.getElementById("panel").getAttribute("tabindex")]`);
+    expect(after[0] === "" && after[1] === "-1", `after the flash: inline outline "${after[0]}", tabindex ${after[1]}`);
+  });
+
+  await run_case(";s focuses a scroll box inside a shadow root, then j scrolls that box and not the page", async () => {
+    await open_page("shadowbox", "p6_shadowbox", { new_tab: true });
+    await send_keys(";s");
+    await send_keys("a");
+    await sleep(300);
+    const mark = events.length;
+    await send_keys("j");
+    const moved = await wait_event(mark, (event) => event.type === "panel_scroll" && event.page_id === "p6_shadowbox", "the shadow panel to scroll after j");
+    expect(moved.top > 0, `the shadow panel is at ${moved.top} after j`);
+    await sleep(400); // The fixture reports a page scroll 150 ms after it settles.
+    expect(!find_event(mark, (event) => event.type === "scroll" && event.page_id === "p6_shadowbox"), "the page scrolled with the shadow panel");
+  });
+
   await run_case(";r opens each pick in a background tab and keeps picking until Escape", async () => {
     await open_page("hints", "p6_rapid", { new_tab: true });
     const tabs_before = await tab_count();

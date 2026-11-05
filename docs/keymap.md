@@ -20,7 +20,7 @@ A note "(prompts)" means the binding leaves a param out, so the command line ask
 
 <!-- BEGIN generated -->
 
-bound: 197 (normal 132, hint 2, cmdline 12, caret 20, visual 26, insert 1, ignore 1, browser 3) | later: 14 | dropped: 6
+bound: 198 (normal 133, hint 2, cmdline 12, caret 20, visual 26, insert 1, ignore 1, browser 3) | later: 14 | dropped: 6
 
 ### normal
 
@@ -147,6 +147,7 @@ bound: 197 (normal 132, hint 2, cmdline 12, caret 20, visual 26, insert 1, ignor
 | `;y` | bound | `hint --copy --links` | Copy link address |  |
 | `;r` | bound | `hint --background --links --rapid` | Open links rapidly in background tabs |  |
 | `;t` | bound | `hint --copy-text --prose` | Copy text of element |  |
+| `;s` | bound | `hint --focus --scrollable` | Focus scroll box |  |
 | `;i` | bound | `hint --inputs` | Click input |  |
 | `;l` | bound | `hint --links` | Click link |  |
 | `:` | bound | `cmdline.open` | Command line |  |

@@ -96,3 +96,62 @@ test("caret and visual hand the element to the caret start and do nothing else",
     assert.deepEqual(page.started, []);
   }
 });
+
+function box_fixture(attributes: Record<string, string>) {
+  const calls: string[] = [];
+  const outline = { value: "", priority: "" };
+  const style = {
+    getPropertyValue: () => outline.value,
+    getPropertyPriority: () => outline.priority,
+    setProperty: (_name: string, value: string, priority = "") => { outline.value = value; outline.priority = priority; calls.push(`outline ${value}`); },
+  };
+  const element = {
+    localName: "div",
+    click: () => {},
+    remove: () => {},
+    focus: () => calls.push("focus"),
+    tabIndex: Number(attributes.tabindex ?? -1),
+    setAttribute: (name: string, value: string) => { attributes[name] = value; calls.push(`set ${name}=${value}`); },
+    style,
+  };
+  return { element, calls, outline, attributes };
+}
+
+test("focus gives a box without tabindex tabindex=-1 before it focuses, and flashes an outline that then goes away", async (context) => {
+  context.mock.timers.enable({ apis: ["setTimeout"] });
+  const page = box_fixture({});
+  perform("focus", page.element as never, { open_link: () => {}, copy: () => {}, start_caret: () => {} });
+  assert.deepEqual(page.calls.slice(0, 3), ["set tabindex=-1", "focus", "outline 2px solid currentColor"]);
+  assert.equal(page.outline.priority, "important");
+  context.mock.timers.tick(5000);
+  assert.equal(page.outline.value, "");
+});
+
+test("focus keeps a tabindex the page set and restores an outline the page set", (context) => {
+  context.mock.timers.enable({ apis: ["setTimeout"] });
+  const page = box_fixture({ tabindex: "0" });
+  page.outline.value = "1px dotted red";
+  perform("focus", page.element as never, { open_link: () => {}, copy: () => {}, start_caret: () => {} });
+  assert.equal(page.attributes.tabindex, "0");
+  context.mock.timers.tick(5000);
+  assert.equal(page.outline.value, "1px dotted red");
+});
+
+test("focus on a box that is focusable already leaves its tabindex alone", () => {
+  const link = box_fixture({});
+  Object.assign(link.element, { localName: "a", tabIndex: 0 });
+  perform("focus", link.element as never, { open_link: () => {}, copy: () => {}, start_caret: () => {} });
+  assert.equal("tabindex" in link.attributes, false);
+});
+
+test("focus twice inside the flash still restores the original outline", (context) => {
+  context.mock.timers.enable({ apis: ["setTimeout"] });
+  const page = box_fixture({});
+  page.outline.value = "1px dotted red";
+  const deps = { open_link: () => {}, copy: () => {}, start_caret: () => {} };
+  perform("focus", page.element as never, deps);
+  context.mock.timers.tick(300);
+  perform("focus", page.element as never, deps);
+  context.mock.timers.tick(5000);
+  assert.equal(page.outline.value, "1px dotted red");
+});
