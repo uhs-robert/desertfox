@@ -3,7 +3,7 @@
 import { keep_visible } from "./visible.ts";
 import type { PageProbe } from "./visible.ts";
 
-export type HintFilter = "all" | "clickable" | "inputs" | "links" | "custom";
+export type HintFilter = "all" | "clickable" | "inputs" | "links" | "prose" | "custom";
 
 const TEXT_FIELDS = 'input:not([type=hidden]):not([disabled]), textarea:not([disabled]), select:not([disabled]), [contenteditable=""], [contenteditable="true"]';
 const LINKS = "a[href]";
@@ -16,10 +16,31 @@ const ROVING_GROUP = '[tabindex="0"] ~ [tabindex="-1"], [tabindex="-1"]:has(~ [t
 const MENU_ITEM = `${ROVING_ITEM}, ${ROVING_GROUP}, :is([role=menu], [role=menubar], menu) [tabindex="-1"]:not(:is([role=menu], [role=menubar], [role=none], [role=presentation], [role=separator], [role=group]))`;
 const ALL = `${CLICKABLE}, h1, h2, h3, h4, h5, h6, p, li, img, td, th, pre, code, blockquote`;
 
-const SELECTORS: Record<Exclude<HintFilter, "custom">, string> = { all: ALL, clickable: CLICKABLE, inputs: TEXT_FIELDS, links: LINKS };
 
-export const selector_for = (filter: HintFilter, custom_selector: string | undefined): string =>
-  filter === "custom" ? (custom_selector ?? "") : SELECTORS[filter];
+// What a filter labels: the elements that match the selector and pass the test, if there is one.
+// The test holds what a selector cannot say, such as a fact about the content or the layout.
+export type ElementTest = (element: Element) => boolean;
+export type Query = { selector: string; test?: ElementTest };
+
+// Tags whose text is code, markup data or form state, not prose a person reads. Any other tag counts, so custom elements and inline tags get hints.
+export const NO_OWN_TEXT = new Set(["script", "style", "noscript", "template", "textarea", "option", "title", "meta", "link", "head", "svg", "math", "text", "tspan", "desc", "defs", "mi", "mn", "mo", "mtext", "annotation", "datalist", "optgroup", "select"]);
+
+// A wrapper whose text sits in its children is no hit, so a card of spans gets a hint per span.
+export const has_own_text = (element: Element): boolean => {
+  if (NO_OWN_TEXT.has(element.localName) || (element as HTMLElement).hidden) return false;
+  return Array.from(element.childNodes).some((node) => node.nodeType === 3 && (node.nodeValue ?? "").trim() !== "");
+};
+
+const QUERIES: Record<Exclude<HintFilter, "custom">, Query> = {
+  all: { selector: ALL },
+  clickable: { selector: CLICKABLE },
+  inputs: { selector: TEXT_FIELDS },
+  links: { selector: LINKS },
+  prose: { selector: "*", test: has_own_text },
+};
+
+export const query_for = (filter: HintFilter, custom_selector: string | undefined): Query =>
+  filter === "custom" ? { selector: custom_selector ?? "" } : QUERIES[filter];
 
 // An element and the iframes that hold it, outermost first. The frames give its place on the top page.
 // `weak` marks an element that only looks clickable (a pointer cursor, a spot in a menu), see `drop_redundant_weak`.
@@ -46,16 +67,16 @@ const is_frame = (element: Element) => element.localName === "iframe" || element
 export type WeakTest = (element: Element) => boolean;
 
 // Walks the whole tree once, so shadow hosts and same-origin frames are found where they stand.
-export function collect(root: ParentNode, selector: string, is_weak?: WeakTest, frames: Element[] = [], found: Found[] = []): Found[] {
-  if (selector === "") return found;
+export function collect(root: ParentNode, query: Query, is_weak?: WeakTest, frames: Element[] = [], found: Found[] = []): Found[] {
+  if (query.selector === "") return found;
   for (const element of Array.from(root.querySelectorAll("*"))) {
-    if (element.matches(selector)) found.push({ element, frames });
+    if (element.matches(query.selector) && (query.test?.(element) ?? true)) found.push({ element, frames });
     else if (is_weak?.(element)) found.push({ element, frames, weak: true });
     const shadow = shadow_root_of(element);
-    if (shadow) collect(shadow, selector, is_weak, frames, found);
+    if (shadow) collect(shadow, query, is_weak, frames, found);
     if (is_frame(element) && frames.length < MAX_FRAME_DEPTH) {
       const inner = document_of_frame(element);
-      if (inner) collect(inner, selector, is_weak, [...frames, element], found);
+      if (inner) collect(inner, query, is_weak, [...frames, element], found);
     }
   }
   return found;
