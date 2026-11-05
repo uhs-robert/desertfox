@@ -32,7 +32,7 @@ If code and the design disagree, stop and ask the maintainer. Do not change the 
 - Keep no state only in memory. Store it, so a later move to Manifest V3 stays small.
 - Set each command line name by hand. Never derive it from the id. The registry rejects duplicate names.
 - Express flags that exclude each other as one `enum` param with preset flags. `when`, and the conditional `default` that reuses its syntax, are the only conditions. Split a command that needs more.
-- Keep every static argument rule in the param schema, checked by the one validator. A command handler reports runtime failures only, never a bad argument value. This is the target: some handlers still refuse argument values (`tab.ts` count, `settings.ts` and others), tracked in issue #152.
+- Keep every static argument rule in the param schema, checked by the one validator. A command handler reports runtime failures only, never a bad argument value. Throw runtime failures as `RuntimeRefusal`. A test fails when a handler refuses args the schema accepts.
 
 ## Public repo rules
 
@@ -60,7 +60,7 @@ just sign        # sign as unlisted on addons.mozilla.org
 just install     # install through the Firefox policy file (needs sudo)
 just release     # from a clean non-main branch: bump the patch version, sign and install, reading the AMO key from rbw when unset
 just install-profile <dir>  # install into one Firefox profile directory
-just build-config [dir]     # compile the user config into the managed storage config
+just build-config [dir]     # compile the user config into the LIVE managed storage config (trial runs: the CLI with --out, see tools/build-config/README.md)
 ```
 
 After `just build`, reload the add-on in Firefox. A rebuilt `dist/` under a loaded add-on runs old and new scripts together.

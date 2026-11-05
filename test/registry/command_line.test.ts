@@ -284,3 +284,49 @@ test("hint takes caret or visual by long flag, short flag or --action, and one o
 test("the usage line shows a conditional-default subject as required", () => {
   assert.match(usage_line(registry.get("open.url")!), / url$/);
 });
+
+test("the rule kinds refuse a typed value after the parse, through check_args", () => {
+  const rules = grammar_registry();
+  rules.define("rules.check", {
+    label: "Rules",
+    intent: "Check the rule kinds.",
+    runs_in: "background",
+    params: [
+      { name: "count", type: "int", min: 1, default: 1 },
+      { name: "pick", type: "string", main: true, pattern: "^\\d+$", optional: true },
+    ],
+    run: () => {},
+  });
+  const check = (text: string) => {
+    const result = parse_command_line(rules, text);
+    assert.equal(result.kind, "invocation", text);
+    return result.kind === "invocation" ? check_args(rules.get("rules.check")!, result.invocation.args) : never();
+  };
+  assert.equal(check("rules.check --count=0").ok, false);
+  assert.equal(check("rules.check abc").ok, false);
+  assert.equal(check("rules.check 7").ok, true);
+  assert.equal(check("rules.check").ok, true);
+});
+
+test("bare words fill the required strict params in schema order, then the subject takes the rest", () => {
+  const positional = grammar_registry();
+  positional.define("pos.set", {
+    label: "Pos",
+    intent: "Take a name, then text.",
+    runs_in: "background",
+    params: [
+      { name: "name", type: "string", values: ["alpha", "beta"], strict: true },
+      { name: "value", type: "string", rest: true, main: true, optional: true },
+    ],
+    run: () => {},
+  });
+  const parse = (text: string) => {
+    const result = parse_command_line(positional, text);
+    return result.kind === "invocation" ? result.invocation.args : never();
+  };
+  assert.deepEqual(parse("pos.set alpha one two"), { name: "alpha", value: "one two" });
+  assert.deepEqual(parse("pos.set alpha"), { name: "alpha" });
+  assert.deepEqual(parse("pos.set typo"), { name: "typo" });
+  assert.equal(check_args(positional.get("pos.set")!, parse("pos.set typo")).ok, false);
+  assert.equal(usage_line(positional.get("pos.set")!), "pos.set <name> [value...]");
+});

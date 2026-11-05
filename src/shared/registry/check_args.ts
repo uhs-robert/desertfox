@@ -2,6 +2,7 @@
 // all end here.
 
 import type { CheckedArgs, CommandDef, DynamicValues, ParamDef, ParamValue } from "../command.ts";
+import { is_setting_name, parse_setting_text } from "../settings_schema.ts";
 import {
   default_of as applicable_default_of,
   default_value,
@@ -81,6 +82,13 @@ export function check_args(
       return { ok: false, error: `missing <${param.name}>`, missing_param: param.name };
     }
   }
+  for (const param of params) {
+    if (param.value_of === undefined) continue;
+    const [text, name] = [args[param.name], args[param.value_of]];
+    if (typeof text !== "string" || text.trim() === "" || typeof name !== "string" || !is_setting_name(name)) continue;
+    const parsed = parse_setting_text(name, text);
+    if ("error" in parsed) return fail(parsed.error);
+  }
   return { ok: true, args };
 }
 
@@ -97,13 +105,22 @@ function coerce(param: ParamDef, given: unknown, sources: EnumSources): Coerced 
   });
 
   if (param.type === "string" && is_context_source(given)) return { ok: true, value: given };
+  // An optional param left empty, or with only spaces, reads as "" whatever its other rules say of its text.
+  if (param.optional && typeof given === "string" && given.trim() === "") return { ok: true, value: "" };
 
   switch (param.type) {
-    case "string":
-      return typeof given === "string" ? { ok: true, value: given } : bad("text");
+    case "string": {
+      if (typeof given !== "string") return bad("text");
+      const allowed = param.strict ? static_values(param) : undefined;
+      if (allowed && !allowed.includes(given)) return bad(`one of ${allowed.join(", ")}`);
+      if (param.pattern !== undefined && !new RegExp(param.pattern).test(given)) return bad(`text matching ${param.pattern}`);
+      return { ok: true, value: given };
+    }
     case "int": {
       const number = typeof given === "string" && /^-?\d+$/.test(given) ? Number(given) : given;
-      return Number.isInteger(number) ? { ok: true, value: number } : bad("a whole number");
+      if (!Number.isInteger(number)) return bad("a whole number");
+      if (param.min !== undefined && (number as number) < param.min) return bad(`a whole number, ${param.min} or more`);
+      return { ok: true, value: number };
     }
     case "float": {
       const number = typeof given === "string" && given.trim() !== "" ? Number(given) : given;

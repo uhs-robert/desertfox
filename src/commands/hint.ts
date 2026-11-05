@@ -59,7 +59,7 @@ define("hint.run", {
       },
     },
     { name: "selector", type: "string", when: { filter: ["custom"] }, description: "Label the elements that match this CSS selector." },
-    { name: "text", type: "string", default: "", description: "Keep only the links whose text holds this." },
+    { name: "text", type: "string", optional: true, description: "Keep only the links whose text holds this." },
     { name: "rapid", type: "bool", default: false, short: "r", description: "Keep hint mode open for more picks." },
   ],
   runs_in: "content",

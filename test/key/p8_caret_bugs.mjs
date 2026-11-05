@@ -37,7 +37,7 @@ export async function run_cases({ run_case, expect, open_page, send_keys, sleep,
 
   // Something else selects the match, as a find does: `window.find`, because "/" is page search in normal mode and leaves the page selection alone.
   const select_needle = () => evaluate_in_background(rdp, extension_id, `(async () => { const [tab] = await browser.tabs.query({ active: true, currentWindow: true }); return browser.tabs.executeScript(tab.id, { code: 'window.find("needle")' }); })()`);
-  await run_case("V after a find selected the match starts at it", async () => {
+  await run_case("V after a find selected the match puts the caret on its last letter", async () => {
     await open_page("caret_bug_find", "find_a", { new_tab: true });
     await select_needle();
     await sleep(500);
@@ -46,7 +46,7 @@ export async function run_cases({ run_case, expect, open_page, send_keys, sleep,
     await sleep(500);
     const shown = events.slice(mark).filter((event) => event.type === "selection" && event.page_id === "find_a" && event.text !== "").at(-1);
     expect(shown, "V drew no caret");
-    expect(shown.text === "n", `the caret is on "${shown.text}", expected "n" of needle`);
+    expect(shown.text === "e", `the caret is on "${shown.text}", expected "e", the last letter of needle`);
     const mark_w = events.length;
     await send_keys("w");
     await wait_event(mark_w, (event) => event.type === "selection" && event.page_id === "find_a" && event.text === "s", "w to the word after the match");
@@ -119,8 +119,8 @@ export async function run_cases({ run_case, expect, open_page, send_keys, sleep,
     const text = events.filter((event) => event.type === "selection" && event.page_id === "lines_blocks").at(-1)?.text ?? "";
     await send_keys("-k", "Escape");
     await send_keys("-k", "Escape");
-    // The caret rests on the line end after "two", which paints no character, so the text stops before "o". The unfixed code stopped at "one".
-    expect(text.endsWith("one tw"), `the selection ends ${JSON.stringify(text.slice(-10))}, expected it to end with "one tw"`);
+    // Visual mode takes the drag whole, so it starts at the drag's start. The caret rests on the line end after "two", which paints no character, so the text stops before "o". The unfixed code stopped at "one".
+    expect(text === "e tw", `the selection is ${JSON.stringify(text)}, expected "e tw"`);
   });
 
   // Focus entering a field in caret or visual mode must switch to insert, so motion keys do not swallow typing.
@@ -177,5 +177,110 @@ export async function run_cases({ run_case, expect, open_page, send_keys, sleep,
     const text = (await in_active_tab("document.getElementById('host').shadowRoot.getElementById('editable').textContent"))[0];
     await send_keys("-k", "Escape");
     expect(text === "hellojv world", `the field holds ${JSON.stringify(text)}, expected "hellojv world"`);
+  });
+
+  // A mouse drag leaves a page selection, which `setBaseAndExtent` stands in for: the code reads only the Selection. The text is "the needle sits here", so 4 to 10 is "needle".
+  const drag_in_page = (from, to) => in_active_tab(`(() => { const text = [...document.querySelectorAll('p')].find((p) => p.textContent === 'the needle sits here').firstChild; getSelection().setBaseAndExtent(text, ${from}, text, ${to}); })()`);
+  const last_selection_text = (page_id) => events.filter((event) => event.type === "selection" && event.page_id === page_id && event.text !== "").at(-1)?.text;
+  for (const [name, from, to] of [["forward", 4, 10], ["backward", 10, 4]]) {
+    await run_case(`V after a ${name} drag selects the dragged text`, async () => {
+      const page_id = `drag_v_${name}`;
+      await open_page("caret_bug_find", page_id, { new_tab: true });
+      await drag_in_page(from, to);
+      await sleep(300);
+      await send_keys("V");
+      await sleep(500);
+      const text = last_selection_text(page_id);
+      expect(text === "needle", `the selection is ${JSON.stringify(text)}, expected "needle"`);
+      // The caret is on the end the mouse was released at, so l moves that end one character: out for a forward drag, in for a backward one.
+      await send_keys("l");
+      await sleep(500);
+      const moved = last_selection_text(page_id);
+      const expected = name === "forward" ? "needle " : "eedle";
+      await send_keys("-k", "Escape");
+      await send_keys("-k", "Escape");
+      expect(moved === expected, `after l the selection is ${JSON.stringify(moved)}, expected ${JSON.stringify(expected)}`);
+    });
+    await run_case(`v after a ${name} drag puts the caret where the mouse was released`, async () => {
+      const page_id = `drag_c_${name}`;
+      await open_page("caret_bug_find", page_id, { new_tab: true });
+      await drag_in_page(from, to);
+      await sleep(300);
+      await send_keys("v");
+      await sleep(500);
+      const text = last_selection_text(page_id);
+      await send_keys("-k", "Escape");
+      const expected = name === "forward" ? "e" : "n";
+      expect(text === expected, `the caret is on ${JSON.stringify(text)}, expected ${JSON.stringify(expected)}`);
+    });
+  }
+
+  await run_case("a drag made in caret mode is taken whole by v", async () => {
+    const page_id = "drag_in_caret";
+    await open_page("caret_bug_find", page_id, { new_tab: true });
+    await send_keys("gV");
+    await sleep(300);
+    await drag_in_page(4, 10);
+    await sleep(300);
+    await send_keys("v");
+    await sleep(500);
+    const text = last_selection_text(page_id);
+    await send_keys("-k", "Escape");
+    await send_keys("-k", "Escape");
+    expect(text === "needle", `the selection is ${JSON.stringify(text)}, expected "needle"`);
+  });
+
+  await run_case("V after a search that came after a drag starts at the match, not the drag", async () => {
+    const page_id = "drag_then_search";
+    await open_page("caret_bug_find", page_id, { new_tab: true });
+    await drag_in_page(4, 10);
+    await sleep(300);
+    await send_keys("/");
+    await send_keys("-d", "30", "filler line 7");
+    await send_keys("-k", "Return");
+    await sleep(500);
+    await send_keys("V");
+    await sleep(500);
+    const text = last_selection_text(page_id);
+    await send_keys("-k", "Escape");
+    await send_keys("-k", "Escape");
+    expect(text === "f", `the selection is ${JSON.stringify(text)}, expected "f", the first letter of the match`);
+  });
+
+  await run_case("drawing the painted span again the other way round moves the caret to the release end", async () => {
+    const page_id = "drag_reversed";
+    await open_page("caret_bug_find", page_id, { new_tab: true });
+    await drag_in_page(4, 10);
+    await sleep(300);
+    await send_keys("V");
+    await sleep(500);
+    await drag_in_page(10, 4);
+    await sleep(300);
+    // The caret is now on the "n", so l takes it one character in.
+    await send_keys("l");
+    await sleep(500);
+    const text = last_selection_text(page_id);
+    await send_keys("-k", "Escape");
+    await send_keys("-k", "Escape");
+    expect(text === "eedle", `the selection is ${JSON.stringify(text)}, expected "eedle"`);
+  });
+
+  await run_case("a drag from the same anchor after a search takes the place of the match", async () => {
+    const page_id = "drag_same_anchor";
+    await open_page("caret_bug_find", page_id, { new_tab: true });
+    await drag_in_page(4, 10);
+    await sleep(300);
+    await send_keys("/");
+    await send_keys("-d", "30", "filler line 7");
+    await send_keys("-k", "Return");
+    await sleep(500);
+    await drag_in_page(4, 15);
+    await sleep(300);
+    await send_keys("V");
+    await sleep(500);
+    const text = last_selection_text(page_id);
+    await send_keys("-k", "Escape");
+    await send_keys("-k", "Escape");
+    expect(text === "needle sits", `the selection is ${JSON.stringify(text)}, expected "needle sits"`);
   });
 }

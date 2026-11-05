@@ -1,3 +1,4 @@
+import { RuntimeRefusal } from "../shared/command.ts";
 import type { CommandContext } from "../shared/command.ts";
 import { bookmark_items, browser_complete_items_deps } from "../background/complete_items.ts";
 import { show_toast_on_tab } from "../background/browser_deps.ts";
@@ -28,8 +29,8 @@ export function pick_bookmark(bookmarks: readonly BookmarkItem[], text: string):
   const exact = bookmarks.find((bookmark) => bookmark.url === typed);
   if (exact) return exact;
   const match = best_match(typed, bookmarks, (bookmark) => ({ name: bookmark.title, description: bookmark.url }));
-  if (match.found === "none") throw new Error(`no bookmark matches "${typed}"`);
-  if (match.found === "tie") throw new Error(`"${typed}" matches "${match.first.title}" (${match.first.url}) and "${match.second.title}" (${match.second.url}) equally, use the address`);
+  if (match.found === "none") throw new RuntimeRefusal(`no bookmark matches "${typed}"`);
+  if (match.found === "tie") throw new RuntimeRefusal(`"${typed}" matches "${match.first.title}" (${match.first.url}) and "${match.second.title}" (${match.second.url}) equally, use the address`);
   return match.item;
 }
 
@@ -48,10 +49,10 @@ export function make_bookmark_handlers(deps: BookmarkDeps) {
       const url = args.bookmark.trim() === "" ? await deps.tab_url(ctx.tab_id) : pick_bookmark(await deps.bookmarks(), args.bookmark).url;
       const nodes = url === undefined ? [] : await deps.nodes_for_url(url);
       const found = nodes.filter((node) => node.url === url && (node.type === undefined || node.type === "bookmark"));
-      if (found.length === 0) throw new Error("No bookmark for this page");
+      if (found.length === 0) throw new RuntimeRefusal("No bookmark for this page");
       // A managed bookmark rejects the removal, so it is left out before the first removal runs.
       const matches = found.filter((node) => node.unmodifiable === undefined);
-      if (matches.length === 0) throw new Error("This page's bookmarks are managed and cannot be removed");
+      if (matches.length === 0) throw new RuntimeRefusal("This page's bookmarks are managed and cannot be removed");
       for (const { id } of matches) await deps.remove(id);
       await deps.toast(ctx, "success", `Removed ${matches.length} ${matches.length === 1 ? "bookmark" : "bookmarks"}`);
     },
@@ -95,7 +96,7 @@ define("bookmark.open", {
 define("bookmark.remove", {
   label: "Remove bookmark",
   intent: "Remove the current page's bookmarks. With an argument, remove the bookmark chosen by title or address.",
-  params: [{ name: "bookmark", type: "string", rest: true, main: true, default: "", values: { from: "bookmarks" } }],
+  params: [{ name: "bookmark", type: "string", rest: true, main: true, optional: true, values: { from: "bookmarks" } }],
   runs_in: "background",
   run: (ctx, args) => handlers.remove(ctx, args as { bookmark: string }),
 });

@@ -5,7 +5,7 @@
 import type { CommandDef, ContextSourceName, ParamDef } from "../command.ts";
 import type { Invocation } from "../invocation.ts";
 import type { EnumSources } from "./check_args.ts";
-import { bare_word_param, CONTEXT_SOURCE_NAMES, is_dynamic_values, static_values } from "./params.ts";
+import { bare_word_param, CONTEXT_SOURCE_NAMES, is_dynamic_values, positional_params, static_values } from "./params.ts";
 import { usage_line } from "./usage.ts";
 
 export type Token = {
@@ -100,6 +100,7 @@ function parse_words(command: ParsedCommand, words: Token[], sources: EnumSource
   const number_params = params.filter((param) => param.type === "int" || param.type === "float");
   const only_number = number_params.length === 1 ? number_params[0] : undefined;
   const bare_param = bare_word_param(command);
+  const positional = positional_params(command);
   let options_ended = false;
   // Only the first unmarked word can be the engine or the one required value.
   let bare_open = true;
@@ -132,6 +133,15 @@ function parse_words(command: ParsedCommand, words: Token[], sources: EnumSource
     }
     if (unquoted && number_param && !Object.hasOwn(args, number_param.name)) {
       args[number_param.name] = word.text;
+      continue;
+    }
+
+    // A required strict param takes the word whatever it says, so a typo reads "name expects one of ..." instead of landing in the subject.
+    const next_positional = positional.find((param) => !Object.hasOwn(args, param.name));
+    if (next_positional) {
+      const value = value_of(word.text, unquoted);
+      if (typeof value === "object" && "error" in value) return error(value.error);
+      args[next_positional.name] = value;
       continue;
     }
 

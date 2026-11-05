@@ -5,7 +5,7 @@ define("cmdline.open", {
   completion: "hidden",
   label: "Command line",
   intent: "Open the command line, with text already typed if given.",
-  params: [{ name: "text", type: "string", default: "", description: "Put this text in the line." }],
+  params: [{ name: "text", type: "string", optional: true, description: "Put this text in the line." }],
   runs_in: "content",
   run: cmdline_open.run,
 });
