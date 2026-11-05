@@ -5,11 +5,11 @@ Compiles the user config directory into the managed storage config that the exte
 ## Run
 
 ```
-just build-config [dir]
+just build-config [dir] [flags]
 node tools/build-config/cli.ts [dir] (--out <file> | --live) [flags]
 ```
 
-`just build-config` builds the extension first and writes the live config. The `node` form needs `dist/commands.json` to exist already. `just build` (or `npm run build`) writes it.
+`just build-config` builds the extension first and writes the live config. It passes `--live` and forwards the other flags, so `--out` there exits 2. The `node` form needs `dist/commands.json` to exist already. `just build` (or `npm run build`) writes it.
 
 - `dir`: the config directory. Defaults to `~/.config/oasisfox`.
 - `--live`: write `~/.mozilla/managed-storage/oasisfox@uhs-robert.json`, the file Firefox reads.
