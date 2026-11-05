@@ -112,6 +112,15 @@ export function start_server() {
       const report = '<script>document.getElementById("panel").addEventListener("scroll", () => send("panel_scroll", { top: document.getElementById("panel").scrollTop }))</script>';
       return response.end(page(`scrollbox ${id}`, panel + tall_filler + report));
     }
+    if (url.pathname === "/shadowbox") {
+      // The same side panel, but inside an open shadow root. After a pick the page sees only the host as focused.
+      const lines = Array.from({ length: 60 }, (_, index) => `<p>line ${index}</p>`).join("");
+      const host = '<div id="host"></div>';
+      const build = `<script>const shadow = document.getElementById("host").attachShadow({ mode: "open" });
+shadow.innerHTML = '<div id="panel" style="position:fixed;right:0;top:0;width:200px;height:200px;overflow:auto;background:#eee">${lines}</div>';
+shadow.getElementById("panel").addEventListener("scroll", () => send("panel_scroll", { top: shadow.getElementById("panel").scrollTop }))</script>`;
+      return response.end(page(`shadowbox ${id}`, host + tall_filler + build));
+    }
     if (url.pathname === "/prose") {
       // The heading, two spans in a wrapper div and a paragraph hold text of their own. The wrapper holds only blanks and children, so it gets no label.
       const body = '<div id="card"> <span>alpha text</span> <span>beta text</span> </div><p>gamma <b>bold</b></p>';

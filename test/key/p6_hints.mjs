@@ -61,6 +61,19 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, open_p
     expect(after[0] === "" && after[1] === "-1", `after the flash: inline outline "${after[0]}", tabindex ${after[1]}`);
   });
 
+  await run_case(";s focuses a scroll box inside a shadow root, then j scrolls that box and not the page", async () => {
+    await open_page("shadowbox", "p6_shadowbox", { new_tab: true });
+    await send_keys(";s");
+    await send_keys("a");
+    await sleep(300);
+    const mark = events.length;
+    await send_keys("j");
+    const moved = await wait_event(mark, (event) => event.type === "panel_scroll" && event.page_id === "p6_shadowbox", "the shadow panel to scroll after j");
+    expect(moved.top > 0, `the shadow panel is at ${moved.top} after j`);
+    await sleep(400); // The fixture reports a page scroll 150 ms after it settles.
+    expect(!find_event(mark, (event) => event.type === "scroll" && event.page_id === "p6_shadowbox"), "the page scrolled with the shadow panel");
+  });
+
   await run_case(";r opens each pick in a background tab and keeps picking until Escape", async () => {
     await open_page("hints", "p6_rapid", { new_tab: true });
     const tabs_before = await tab_count();
