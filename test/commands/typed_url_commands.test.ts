@@ -2,6 +2,11 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import "../../src/background/command_modules.ts";
 import { CONFIG_FORMAT_VERSION } from "../../src/shared/config.ts";
+import { compile_config } from "../../src/background/compile.ts";
+import { empty_config } from "../../src/background/config_load.ts";
+import { create_router } from "../../src/background/router.ts";
+import type { TreeLeaf } from "../../src/shared/prefix_tree.ts";
+import { make_fake } from "../background/fakes.ts";
 import { check_args, registry } from "../../src/shared/registry/index.ts";
 
 type Opened = { via: string; url: string | undefined };
@@ -128,4 +133,31 @@ test("open.url passes other errors on an about: page through unchanged", async (
     throw new Error("No tab with id 1");
   };
   await assert.rejects(run("open.url", { url: "about:config", where: "here" }), /No tab with id 1/);
+});
+
+test("a binding that omits the url compiles to a prompting step, with no default filled in", () => {
+  const keymap = { normal: { o: { id: "open.url" }, cw: { id: "open.url", args: { container: "Work", where: "tab" } } } };
+  const { compiled } = compile_config({
+    config: { ...empty_config(), keymap },
+    default_keymap: {},
+    get_command: (id) => registry.get(id),
+    enum_sources: { search_engines: [], containers: ["Work"] },
+  });
+  const children = compiled.modes.normal!.children as unknown as Record<string, TreeLeaf>;
+  assert.equal(children.o!.steps[0]!.invocation.args, undefined);
+  assert.equal(children.o!.steps[0]!.runs_in, "background");
+  assert.equal(children.cw!.steps[0]!.invocation.args?.url, undefined);
+});
+
+test("a binding that omits the url opens the command line instead of the new tab page", async () => {
+  for (const invocation of [{ id: "open.url" }, { id: "open.url", args: { container: "Work", where: "tab" } }]) {
+    const { deps, log } = make_fake({});
+    await create_router({ ...deps, get_command: (id) => registry.get(id), get_enum_sources: async () => ({ search_engines: [], containers: ["Work"] }) }).run({
+      invocations: [invocation],
+      mode: "normal",
+      may_prompt: true,
+    });
+    assert.equal(log.length, 1);
+    assert.match(log[0]!, /^cmdline 7 0 open /);
+  }
 });

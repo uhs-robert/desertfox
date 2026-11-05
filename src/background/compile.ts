@@ -7,7 +7,7 @@ import type { MergedConfig } from "../shared/config.ts";
 import type { KeymapConfig } from "../shared/keymap.ts";
 import type { CompiledKeymap, TreeBranch, TreeNode } from "../shared/prefix_tree.ts";
 import type { Prompt } from "../shared/invocation.ts";
-import { find_param, is_context_source } from "../shared/registry/params.ts";
+import { find_param, is_context_source, unbound_ask_param } from "../shared/registry/params.ts";
 import { check_args } from "../shared/registry/check_args.ts";
 import type { EnumSources } from "../shared/registry/check_args.ts";
 import { DEFAULT_LIGHT_INTENSITY, DEFAULT_PALETTE } from "../shared/config.ts";
@@ -83,6 +83,11 @@ function keep_node(node: TreeNode, path: string[], mode: string, input: CompileI
         return false;
       }
       // Only the router can open the command line with the typed text, so the step goes to the background.
+      step.runs_in = "background";
+      continue;
+    }
+    if (unbound_ask_param(command, step.invocation.args) !== undefined) {
+      // The router opens the command line for it, so no defaults are filled in.
       step.runs_in = "background";
       continue;
     }
