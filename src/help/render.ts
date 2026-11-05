@@ -275,7 +275,7 @@ function section_list(page: PageId, sections: Section[], expanded: boolean): HTM
   return list;
 }
 
-// Kept outside the tree, like any state a render would wipe: a group the reader opened or closed stays that way across renders.
+// Kept outside the tree, like any state a render would wipe. Holds only chevron toggles, never the automatic opening of the current page.
 const group_open = new Map<PageId, boolean>();
 let last_page: PageId | undefined;
 
@@ -300,9 +300,9 @@ function section_toggle(page: PageId, title: string, list: HTMLElement): HTMLEle
   return button;
 }
 
-// Going to a page opens its group. Other groups keep what the reader set, closed at first. Each toggle works alone.
+// The current page's group is open unless the reader toggled it on this page. Going to a page drops its stored toggle, so a menu click always opens it. Other groups keep what the reader set, closed at first. Each toggle works alone.
 function sidebar(current: PageId, model: HelpModel): HTMLElement {
-  if (current !== last_page) group_open.set(current, true);
+  if (current !== last_page) group_open.delete(current);
   last_page = current;
   const entries = PAGES.map((page): HTMLElement => {
     const link = el("a", undefined, page.title);
@@ -310,7 +310,7 @@ function sidebar(current: PageId, model: HelpModel): HTMLElement {
     if (page.id === current) link.setAttribute("aria-current", "page");
     const sections = page_sections(page.id, model);
     if (sections.length === 0) return link;
-    const list = section_list(page.id, sections, group_open.get(page.id) ?? false);
+    const list = section_list(page.id, sections, group_open.get(page.id) ?? page.id === current);
     return el("div", "oasisfox-help-nav-group", el("div", "oasisfox-help-nav-row", link, section_toggle(page.id, page.title, list)), list);
   });
   return el("nav", "oasisfox-help-sidebar", el("div", "oasisfox-help-brand", "OasisFox"), ...entries, support_line());

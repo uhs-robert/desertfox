@@ -121,9 +121,22 @@ test("section routes parse for every page and reject an unknown page", () => {
   assert.deepEqual(parse_route("#section=quick-start"), { page: "home" });
 });
 
-test("a group the reader toggled keeps its state across renders, and a new page still opens its group", () => {
+test("a toggle persists across renders, auto-opening does not, and a menu click reopens a closed group", () => {
   render({ page: "home" });
   group_nodes(render({ page: "home" }, true))[2]!.toggle.listeners["click"]!();
   assert.deepEqual(group_nodes(render({ page: "home" }, true)).map((group) => !group.list.hidden), [true, false, true, false]);
-  assert.deepEqual(group_nodes(render({ page: "styling" }, true)).map((group) => !group.list.hidden), [true, false, true, true]);
+  assert.deepEqual(group_nodes(render({ page: "styling" }, true)).map((group) => !group.list.hidden), [false, false, true, true]);
+  // Home and Styling were only open by default, so they close, and the toggled Commands group stays open.
+  const on_commands = group_nodes(render({ page: "commands" }, true)).map((group) => !group.list.hidden);
+  assert.deepEqual(on_commands, [false, false, true, false]);
+});
+
+test("automatic opening piles nothing up", () => {
+  render({ page: "home" });
+  assert.deepEqual(group_nodes(render({ page: "commands" }, true)).map((group) => !group.list.hidden), [false, false, true, false]);
+  const closed = group_nodes(render({ page: "commands" }, true))[2]!;
+  closed.toggle.listeners["click"]!();
+  assert.equal(group_nodes(render({ page: "commands" }, true))[2]!.list.hidden, true);
+  render({ page: "home" }, true);
+  assert.equal(group_nodes(render({ page: "commands" }, true))[2]!.list.hidden, false);
 });
