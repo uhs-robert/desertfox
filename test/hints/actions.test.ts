@@ -3,9 +3,19 @@ import { test } from "node:test";
 import { link_address, perform, takes_typing } from "../../src/content/hints/actions.ts";
 import type { HintAction } from "../../src/content/hints/actions.ts";
 
+// Node has no DOM events. The fakes only need the type and the position.
+class FakeMouseEvent {
+  type: string;
+  constructor(type: string, init: { clientX?: number; clientY?: number; button?: number } = {}) {
+    this.type = type;
+    Object.assign(this, init);
+  }
+}
+Object.assign(globalThis, { MouseEvent: FakeMouseEvent, PointerEvent: FakeMouseEvent });
+
 function fixture(local: string, extra: Record<string, unknown> = {}) {
   const calls: string[] = [];
-  const element = { localName: local, click: () => calls.push("click"), focus: () => calls.push("focus"), remove: () => calls.push("remove"), ...extra };
+  const element = { localName: local, click: () => calls.push("click"), focus: () => calls.push("focus"), remove: () => calls.push("remove"), dispatchEvent: (event: { type: string }) => calls.push(event.type), getBoundingClientRect: () => ({ left: 10, top: 20, width: 100, height: 40 }), ...extra };
   const opened: [string, string][] = [];
   const copied: string[] = [];
   const started: string[] = [];
@@ -14,10 +24,27 @@ function fixture(local: string, extra: Record<string, unknown> = {}) {
   return { calls, opened, copied, started, run };
 }
 
+const MOUSE_SEQUENCE = ["pointerover", "pointerenter", "mouseover", "pointerdown", "mousedown", "focus", "pointerup", "mouseup", "click"];
+
+test("here sends the mouse events a real click sends, with click last", () => {
+  const page = fixture("a", { href: "https://example.com/" });
+  page.run("here");
+  assert.deepEqual(page.calls, MOUSE_SEQUENCE);
+  assert.deepEqual(page.opened, []);
+});
+
+test("here sends the mouse events from the middle of the element", () => {
+  const sent: { type: string; clientX?: number; clientY?: number; button?: number }[] = [];
+  const element = { localName: "div", click: () => {}, focus: () => {}, remove: () => {}, dispatchEvent: (event: never) => sent.push(event), getBoundingClientRect: () => ({ left: 10, top: 20, width: 100, height: 40 }) };
+  perform("here", element as never, { open_link: () => {}, copy: () => {}, start_caret: () => {} });
+  const down = sent.find((event) => event.type === "mousedown");
+  assert.deepEqual([down?.clientX, down?.clientY, down?.button], [60, 40, 0]);
+});
+
 test("here clicks a link", () => {
   const page = fixture("a", { href: "https://example.com/" });
   page.run("here");
-  assert.deepEqual(page.calls, ["click"]);
+  assert.equal(page.calls.at(-1), "click");
   assert.deepEqual(page.opened, []);
 });
 
@@ -33,7 +60,7 @@ test("tab, background and window open the address in that place", () => {
 test("an element with no usable address is clicked instead of opened", () => {
   const page = fixture("button");
   page.run("tab");
-  assert.deepEqual(page.calls, ["click"]);
+  assert.deepEqual(page.calls, MOUSE_SEQUENCE);
   const script = fixture("a", { href: "javascript:void(0)" });
   script.run("background");
   assert.deepEqual(script.opened, []);
@@ -45,7 +72,7 @@ test("here focuses a text field and clicks a checkbox", () => {
   assert.deepEqual(text.calls, ["focus"]);
   const box = fixture("input", { type: "checkbox" });
   box.run("here");
-  assert.deepEqual(box.calls, ["click"]);
+  assert.deepEqual(box.calls, MOUSE_SEQUENCE);
 });
 
 test("focus focuses and delete removes", () => {
