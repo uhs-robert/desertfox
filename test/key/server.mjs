@@ -151,7 +151,7 @@ shadow.getElementById("panel").addEventListener("scroll", () => send("panel_scro
     if (url.pathname === "/caret" || url.pathname === "/caret_themed") {
       const text = "<p>foo bar.baz</p><p>second line here</p>";
       // caret_themed sets a non-default palette on the page, for the surfaces to inherit.
-      const theme = url.pathname === "/caret_themed" ? "<style>:root { --oasisfox-bg-core: #3b1d4a; --oasisfox-fg-core: #f4e6ff; --oasisfox-accent: #ff6ec7; --oasisfox-secondary: #9bffb0; }</style>" : "";
+      const theme = url.pathname === "/caret_themed" ? "<style>:root { --oasisfox-bg-core: #3b1d4a; --oasisfox-fg-core: #f4e6ff; --oasisfox-primary: #ff6ec7; --oasisfox-secondary: #9bffb0; }</style>" : "";
       return response.end(page(`caret ${id}`, `${text}<input id="paste_target">`, theme));
     }
     if (url.pathname === "/caret_editable") {

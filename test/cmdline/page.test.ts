@@ -192,10 +192,10 @@ test("the colon preset shows a colon with the colon class", async (t) => {
   assert.deepEqual([prompt.textContent, prompt.className.trim()], [":", "oasisfox-cmdline-prompt-colon"]);
 });
 
-test("the colon class styles the prompt in the accent color with the old gap", () => {
+test("the colon class styles the prompt in the primary color with the old gap", () => {
   const html = readFileSync(new URL("../../src/cmdline/cmdline.html", import.meta.url), "utf8");
   const rule = html.match(/\.oasisfox-cmdline-prompt-colon \{([^}]*)\}/)![1]!;
-  assert.match(rule, /color: var\(--oasisfox-accent\)/);
+  assert.match(rule, /color: var\(--oasisfox-primary\)/);
   assert.match(rule, /margin-right: \.5rem/);
 });
 
