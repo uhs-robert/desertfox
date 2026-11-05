@@ -4,7 +4,7 @@
 import { LAYERS } from "../shared/layers.ts";
 import type { ColorPair } from "../shared/mode_colors.ts";
 import { BADGE_HOST_ATTRIBUTE, remove_badge_hosts } from "./badge_hosts.ts";
-import { create_surface } from "./surface.ts";
+import { create_surface, mount_surface } from "./surface.ts";
 
 export const STYLE = `
 .oasisfox-mode {
@@ -37,5 +37,5 @@ export function show_mode_label(label: string | undefined, colors?: BadgeColors)
   surface.host.setAttribute("data-oasisfox-mode", label);
   surface.host.style.pointerEvents = "none";
   remove_badge_hosts();
-  document.documentElement.append(surface.host);
+  mount_surface(surface.host);
 }

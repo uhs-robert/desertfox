@@ -145,7 +145,6 @@ function stop_listening(): void {
   window.removeEventListener("focusout", on_focusout, true);
   removeEventListener("pagehide", bundles.page_hidden);
   document.removeEventListener("visibilitychange", on_visibility_change);
-  show_mode_label(undefined);
 }
 
 function on_visibility_change(): void {

@@ -43,7 +43,8 @@ function fake_root(): FakeRoot {
       root.children.push(node);
     },
     querySelectorAll: (selector: string) => {
-      assert.equal(selector, ":scope > [data-oasisfox-badge]");
+      // The surface mount also looks up layered hosts to restack them, and the fake page has none.
+      if (selector !== ":scope > [data-oasisfox-badge]") return [];
       return root.children.filter((node) => node.attributes.has("data-oasisfox-badge"));
     },
   };
