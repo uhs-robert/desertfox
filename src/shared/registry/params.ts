@@ -22,6 +22,21 @@ export function applicable_default(param: ParamDef, sibling: (name: string) => u
   return allowed.includes(sibling(name) as ParamValue) ? param.default.value : undefined;
 }
 
+// `applicable_default` for a param of `command`, reading siblings from `values` (a sibling not in `values` counts by its own plain default).
+// Every consumer that asks "does this param have a default" or "is it required" goes through here.
+export function default_of(command: Pick<CommandDef, "params">, param: ParamDef, values: Record<string, unknown>): ReturnType<typeof applicable_default> {
+  return applicable_default(param, (name) => {
+    if (values[name] !== undefined) return values[name];
+    const sibling = find_param(command, name);
+    return sibling && !is_conditional_default(sibling.default) ? sibling.default : undefined;
+  });
+}
+
+// The default value to compare a given value against, whichever form the default has.
+export function default_value(param: ParamDef): ParamValue | ContextSource | undefined {
+  return is_conditional_default(param.default) ? param.default.value : param.default;
+}
+
 export function is_dynamic_values(values: ParamDef["values"]): values is DynamicValues {
   return values !== undefined && !Array.isArray(values);
 }

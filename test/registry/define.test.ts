@@ -214,3 +214,14 @@ test("a conditional default checks its value and its when like a when", () => {
   rejects("a.b", with_default(3, { where: ["b"] }), /params\[1\]\.default\.value: 3 is not a string/);
   assert.doesNotThrow(() => create_registry().define("a.b", with_default("", { where: ["b"] })));
 });
+
+test("a conditional default is rejected next to when on the same param, and an enum one must hold a valid value", () => {
+  const params = (extra: object, default_value: unknown = "x"): CommandInput => ({
+    ...base,
+    params: [{ name: "where", type: "enum", values: ["a", "b"], default: "a" }, { name: "pick", type: "enum", values: ["x", "y"], default: { value: default_value, when: { where: ["b"] } }, ...extra } as never],
+  });
+  rejects("a.b", params({ when: { where: ["b"] } }), /params\[1\]\.default: a conditional default cannot be combined with `when`/);
+  rejects("a.b", params({}, "z"), /params\[1\]\.default\.value: "z" is not one of x, y/);
+  rejects("a.b", params({ short: { x: "k" } }), /the default value has no short/);
+  assert.doesNotThrow(() => create_registry().define("a.b", params({})));
+});

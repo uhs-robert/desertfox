@@ -55,7 +55,17 @@
         {
           "name": "url",
           "type": "string",
-          "main": true
+          "main": true,
+          "default": {
+            "value": "",
+            "when": {
+              "where": [
+                "tab",
+                "window",
+                "background"
+              ]
+            }
+          }
         },
         {
           "name": "container",

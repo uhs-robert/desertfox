@@ -280,3 +280,7 @@ test("hint takes caret or visual by long flag, short flag or --action, and one o
     assert.deepEqual(result.kind === "error" ? result.error : result, "action is set twice");
   }
 });
+
+test("the usage line shows a conditional-default subject as required", () => {
+  assert.match(usage_line(registry.get("open.url")!), / url$/);
+});

@@ -4,7 +4,7 @@
 import type { CommandMeta } from "../../shared/command.ts";
 import type { KeymapMode } from "../../shared/keymap.ts";
 import type { CompiledKeymap, TreeNode } from "../../shared/prefix_tree.ts";
-import { flag_params } from "../../shared/registry/params.ts";
+import { default_of, flag_params } from "../../shared/registry/params.ts";
 
 // Keys shown before the rest fold into `+N`.
 const SHOWN_KEYS = 2;
@@ -28,10 +28,10 @@ function bareness(command: CommandMeta, args: Record<string, unknown> | undefine
   for (const param of command.params ?? []) {
     const given = args?.[param.name];
     if (given === undefined) {
-      if (param.default === undefined && param.type !== "bool" && !param.when) return undefined;
+      if (default_of(command, param, args ?? {}) === undefined && param.type !== "bool" && !param.when) return undefined;
       continue;
     }
-    if (param.default !== undefined && JSON.stringify(given) === JSON.stringify(param.default)) continue;
+    if (JSON.stringify(given) === JSON.stringify(default_of(command, param, args ?? {}))) continue;
     if (!flags.has(param.name)) return undefined;
     kind = "flags";
   }

@@ -178,3 +178,39 @@ test("a whitespace-only text counts as missing for a required param, and a defau
   assert.deepEqual(check_args(command, { text: "   " }), { ok: false, error: "missing <text>", missing_param: "text" });
   assert.deepEqual(check_args(command, { text: "a", note: "  " }), { ok: true, args: { text: "a", note: "  " } });
 });
+
+function conditional_command(sibling: object) {
+  const reg = create_registry();
+  reg.define("c.e", {
+    label: "CE",
+    intent: "x",
+    params: [sibling as never, { name: "text", type: "string", main: true, default: { value: "", when: { flag: [true] } } }],
+    runs_in: "background",
+    run: () => {},
+  });
+  return reg.get("c.e")!;
+}
+
+test("a conditional default reads a bool sibling after it is coerced from text", () => {
+  const command = conditional_command({ name: "flag", type: "bool" });
+  assert.deepEqual(check_args(command, { flag: "true" }), { ok: true, args: { flag: true, text: "" } });
+  assert.equal(check_args(command, { flag: "false" }).ok, false);
+});
+
+test("a conditional default of an enum with a runtime list stays valid when the args are checked again", () => {
+  const reg = create_registry();
+  reg.define("c.f", {
+    label: "CF",
+    intent: "x",
+    params: [
+      { name: "where", type: "enum", values: ["here", "tab"], default: "here" },
+      { name: "engine", type: "enum", values: { from: "search_engines" }, default: { value: "", when: { where: ["tab"] } } },
+    ],
+    runs_in: "background",
+    run: () => {},
+  });
+  const command = reg.get("c.f")!;
+  const first = check_args(command, { where: "tab" }, search_sources);
+  assert.deepEqual(first, { ok: true, args: { where: "tab", engine: "" } });
+  assert.equal(check_args(command, first.ok ? first.args : {}, search_sources).ok, true);
+});

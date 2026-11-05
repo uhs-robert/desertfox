@@ -1,5 +1,5 @@
 import type { CommandDef, ParamDef } from "../command.ts";
-import { bare_word_param, flag_params, is_context_source, is_dynamic_values, static_values, subject_param } from "./params.ts";
+import { applicable_default, bare_word_param, flag_params, is_context_source, is_dynamic_values, static_values, subject_param } from "./params.ts";
 
 type Usable = Pick<CommandDef, "id" | "name" | "params">;
 
@@ -14,7 +14,7 @@ export function usage_line(command: Usable): string {
 }
 
 function is_optional(param: ParamDef): boolean {
-  return param.type === "bool" || param.when !== undefined || (param.default !== undefined && !is_context_source(param.default));
+  return param.type === "bool" || param.when !== undefined || (applicable_default(param, () => undefined) !== undefined && !is_context_source(param.default));
 }
 
 function subject_usage(param: ParamDef): string {

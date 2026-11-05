@@ -80,3 +80,9 @@ test("the real default keymap shows tab.close as dd xx +5", () => {
   });
   assert.equal(key_labels(compiled, registry.list().map(command_meta), "normal").get("tab.close"), "dd xx +5");
 });
+
+test("a key bound to open -t gets its label, the conditional url default counts as the default", () => {
+  const meta = [command_meta(registry.get("open.url")!)] as never;
+  const labels = key_labels(keymap({ normal: branch({ T: leaf("open.url", { where: "tab", url: "" }) }) }), meta, "normal");
+  assert.equal(labels.get("open.url"), "T");
+});

@@ -30,7 +30,7 @@ If code and the design disagree, stop and ask the maintainer. Do not change the 
 - Keep no state only in memory. Store it, so a later move to Manifest V3 stays small.
 - Set each command line name by hand. Never derive it from the id. The registry rejects duplicate names.
 - Express flags that exclude each other as one `enum` param with preset flags. `when`, and the conditional `default` that reuses its syntax, are the only conditions. Split a command that needs more.
-- Keep every static argument rule in the param schema, checked by the one validator. A command handler reports runtime failures only, never a bad argument value.
+- Keep every static argument rule in the param schema, checked by the one validator. A command handler reports runtime failures only, never a bad argument value. This is the target: some handlers still refuse argument values (`tab.ts` count, `settings.ts` and others), tracked in issue #152.
 
 ## Public repo rules
 
