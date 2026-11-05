@@ -17,7 +17,7 @@ const command_ids = new Set([...registry.list().map((command) => command.id), "h
 define("help.open", {
   name: "help",
   label: "Help",
-  intent: "Open the help page in a new tab, or go to the page in place when this tab is the help page. Name a command to open its card, or a page such as Commands. It lists every command, its keys and the config warnings.",
+  intent: "Open the help page. On the help page itself, it goes there in place instead of a new tab. Name a command to open its card, or a page such as Commands. It lists every command, its keys and the config warnings.",
   params: [{ name: "name", type: "string", main: true, default: "", values: help_name_choices(command_ids) }],
   runs_in: "background",
   repeatable: false,

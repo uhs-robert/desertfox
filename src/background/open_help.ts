@@ -32,7 +32,7 @@ export function help_name_url(help_page_url: string, name: string, command_ids: 
 // The names `:help` completes: the help pages, then every command id.
 export const help_name_choices = (command_ids: Iterable<string>): string[] => [...PAGES.map((page) => page.title), ...command_ids];
 
-export type HelpTabPlan = { kind: "update"; tab_id: number; url: string } | { kind: "create"; url: string; opener?: { openerTabId: number; windowId: number } };
+export type HelpTabPlan = { kind: "update"; tab_id: number; url: string } | { kind: "create"; url: string; opener?: { openerTabId: number; windowId?: number | undefined } };
 
 // A tab already on the help page navigates by hash, which its hashchange handler routes. Any other tab opens a new one beside it.
 export function plan_help_tab(
@@ -43,5 +43,5 @@ export function plan_help_tab(
   if (asking_tab.id === undefined) return { kind: "create", url: target_url };
   const on_help_page = asking_tab.url !== undefined && asking_tab.url.split("#")[0] === help_page_url;
   if (on_help_page) return { kind: "update", tab_id: asking_tab.id, url: target_url };
-  return { kind: "create", url: target_url, opener: { openerTabId: asking_tab.id, windowId: asking_tab.window_id! } };
+  return { kind: "create", url: target_url, opener: { openerTabId: asking_tab.id, windowId: asking_tab.window_id } };
 }
