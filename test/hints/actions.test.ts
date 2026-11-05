@@ -222,12 +222,11 @@ test("a second hover clears the first exactly once, before its own enter events"
   const second = fixture("div");
   first.run("hover");
   second.run("hover");
-  second.run("hover");
   assert.deepEqual(first.calls, [...ENTER, ...LEAVE]);
-  assert.deepEqual(second.calls, [...ENTER, ...LEAVE, ...ENTER]);
+  assert.deepEqual(second.calls, ENTER);
   unhover();
   unhover();
-  assert.deepEqual(second.calls, [...ENTER, ...LEAVE, ...ENTER, ...LEAVE]);
+  assert.deepEqual(second.calls, [...ENTER, ...LEAVE]);
 });
 
 test("unhover with nothing hovered sends nothing, and a removed element is dropped without events", async () => {
@@ -247,9 +246,8 @@ function tree() {
   const menu = fixture("div");
   const item = fixture("a", { href: "https://example.com/" });
   const outside = fixture("div");
-  Object.assign(menu.element, { contains: (other: unknown) => other === menu.element || other === item.element });
-  Object.assign(item.element, { parentElement: menu.element, contains: (other: unknown) => other === item.element });
-  Object.assign(outside.element, { contains: (other: unknown) => other === outside.element });
+  Object.assign(menu.element, { parentElement: null });
+  Object.assign(item.element, { parentElement: menu.element });
   return { menu, item, outside };
 }
 
@@ -287,8 +285,17 @@ test("a click pick inside the hovered menu leaves the menu entered, then clicks"
   item.run("here");
   assert.deepEqual(menu.calls.slice(before), OUT_ONLY);
   assert.equal(item.calls.at(-1), "click");
+});
+
+test("after a pick inside the hovered menu, Escape still closes the menu", async () => {
+  const { unhover } = await import("../../src/content/hints/hover.ts");
   unhover();
-  assert.equal(menu.calls.length, before + 2);
+  const { menu, item } = tree();
+  menu.run("hover");
+  item.run("here");
+  const before = menu.calls.length;
+  unhover();
+  assert.deepEqual(menu.calls.slice(before), ["pointerleave", "mouseleave"]);
 });
 
 test("a click pick outside the hovered element leaves it fully, before the click", async () => {
@@ -335,4 +342,37 @@ test("the tab listener goes on once and a hidden tab clears the hover", async ()
     delete (globalThis as Record<string, unknown>).document;
     unhover();
   }
+});
+
+test("a move from a shadow host to an item inside its shadow root keeps the host entered", async () => {
+  const { unhover } = await import("../../src/content/hints/hover.ts");
+  unhover();
+  const host = fixture("div");
+  const inner = fixture("div");
+  Object.assign(inner.element, { parentElement: null, getRootNode: () => ({ host: host.element }) });
+  host.run("hover");
+  const before = host.calls.length;
+  inner.run("hover");
+  assert.deepEqual(host.calls.slice(before), OUT_ONLY);
+  unhover();
+  assert.deepEqual(host.calls.slice(before + 2), ["pointerleave", "mouseleave"]);
+});
+
+test("every event of one move shares the point, whatever box its element has", async () => {
+  const { hover, unhover } = await import("../../src/content/hints/hover.ts");
+  unhover();
+  const sent: { type: string; clientX: number; clientY: number }[] = [];
+  const make = (box: { left: number; top: number; width: number; height: number }, parent?: unknown) => ({ localName: "div", click: () => {}, focus: () => {}, remove: () => {}, parentElement: parent ?? null, dispatchEvent: (event: never) => sent.push(event), getBoundingClientRect: () => box });
+  const wide = make({ left: 0, top: 0, width: 1000, height: 1000 });
+  const small = make({ left: 10, top: 10, width: 20, height: 20 }, wide);
+  const other = make({ left: 500, top: 500, width: 10, height: 10 });
+  hover(small as never);
+  const entered = sent.splice(0);
+  assert.deepEqual(new Set(entered.map((event) => `${event.clientX},${event.clientY}`)), new Set(["20,20"]));
+  hover(other as never);
+  const left = sent.filter((event) => event.type.endsWith("out") || event.type.endsWith("leave"));
+  const entered_other = sent.filter((event) => !left.includes(event));
+  assert.deepEqual(new Set(left.map((event) => `${event.clientX},${event.clientY}`)), new Set(["20,20"]));
+  assert.deepEqual(new Set(entered_other.map((event) => `${event.clientX},${event.clientY}`)), new Set(["505,505"]));
+  unhover();
 });
