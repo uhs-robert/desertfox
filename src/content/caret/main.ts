@@ -7,9 +7,10 @@ import { find_char_hit, find_char_matches, move_once, SCREEN_LINE_UNITS } from "
 import type { CharFind, Motion } from "./motion.ts";
 import { deepest_focused_element } from "../editable.ts";
 import { yank_text } from "./copy_text.ts";
-import { create_find_mode } from "./find_mode.ts";
+import { create_find_mode, is_escape } from "./find_mode.ts";
 import { CHAR_FIND_NAMES, create_painter } from "./find_paint.ts";
 import type { FindColors } from "./find_paint.ts";
+import type { FindView } from "./find_mode.ts";
 import { create_find, read_find_colors } from "./find_session.ts";
 import { scroll_to_index, screen_line_target } from "./screen_line.ts";
 import { apply_selection_colors, clear_selection_colors } from "./selection_colors.ts";
@@ -43,26 +44,21 @@ let last_find: CharFind | undefined;
 
 // The matches of the last find's character that stay lit while the find is live. Exact case, so the keymap's case means what it says.
 const char_painter = create_painter(CHAR_FIND_NAMES);
-let char_colors: FindColors | undefined;
-// Where the match the caret stands at or next to sits in the text. A new model has other positions, so it falls back to the caret.
-let current_match: { model: TextModel; at: number } | undefined;
-let char_matches: { model: TextModel; char: string; from: number[]; to: number[] } | undefined;
+let char_matches: { model: TextModel; char: string; from: number[] } | undefined;
 
-function show_char_matches(): void {
+// `view.current` is where the match the caret stands at or next to sits. A find that found nothing has none, and a new model has other positions, so both fall back to the caret.
+function show_char_matches(view: FindView<FindColors>): void {
   const open = session;
   // The session is gone, or a frame or shadow host left the page under the find.
   if (!open || !last_find || !trees_alive(open.model)) return find_mode.end();
-  if (!char_colors) return;
-  if (char_matches?.model !== open.model || char_matches.char !== last_find.char) {
-    const from = find_char_matches(open.model.text, last_find.char);
-    char_matches = { model: open.model, char: last_find.char, from, to: from.map((at) => at + last_find!.char.length) };
-  }
+  if (!view.colors) return;
+  if (char_matches?.model !== open.model || char_matches.char !== last_find.char) char_matches = { model: open.model, char: last_find.char, from: find_char_matches(open.model.text, last_find.char) };
   const { from } = char_matches;
-  const marked = current_match?.model === open.model ? current_match.at : open.cursor.caret;
+  const marked = view.current !== undefined && view.current_owner === open.model ? view.current : open.cursor.caret;
   const current = from.indexOf(marked);
   const { first, last } = visible_index_range(open.model);
   const padded = pad_range(first, last, open.model.text.length);
-  char_painter.paint(open.model, char_matches, current, char_colors, indexes_in_range(from, padded.first, padded.last, Math.max(current, 0)));
+  char_painter.paint(open.model, { from, width: last_find.char.length }, current, view.colors, indexes_in_range(from, padded.first, padded.last, Math.max(current, 0)));
 }
 
 // One scroll or resize burst repaints once, in the next frame.
@@ -82,7 +78,7 @@ function watch_view(on_change: () => void): () => void {
   };
 }
 
-const find_mode = create_find_mode({ show: show_char_matches, hide: () => char_painter.clear(), watch_view, defer: (task) => queueMicrotask(task) });
+const find_mode = create_find_mode({ read_colors: read_find_colors, show: show_char_matches, hide: () => char_painter.clear(), watch_view, defer: (task) => queueMicrotask(task) });
 
 const selections_of = (model: TextModel): Selection[] => documents_of(model).flatMap((owner) => owner.getSelection() ?? []);
 
@@ -215,14 +211,15 @@ function ensure_session(mode: "caret" | "visual"): Session | string {
 function take_find_target(token: string): "handled" | "pass" {
   const find = pending_find!;
   pending_find = undefined;
-  if (token === "<Escape>" || token === "<C-[>") return "handled";
+  if (is_escape(token)) return "handled";
   const char = token === "<Space>" ? " " : token;
   if ([...char].length !== 1) return "pass";
   const open = ensure_session(session?.mode ?? "caret");
   if (typeof open === "string") return "handled";
   last_find = { char, direction: find.direction, till: find.till };
+  find_mode.start(find.till);
   move_to_find(open, last_find, find.count, false);
-  begin_char_matches(find.till);
+  find_mode.refresh();
   return "handled";
 }
 
@@ -230,19 +227,9 @@ function take_find_target(token: string): "handled" | "pass" {
 function move_to_find(open: Session, find: CharFind, count: number, again: boolean): void {
   const hit = find_char_hit(open.model.text, open.cursor.caret, find, count, again);
   open.cursor = with_caret(open.cursor, hit?.caret ?? open.cursor.caret, open.mode === "visual");
-  if (hit) current_match = { model: open.model, at: hit.match };
+  if (hit) find_mode.set_current(hit.match, open.model);
   open.goal_x = undefined;
   paint(open);
-}
-
-function begin_char_matches(till: boolean): void {
-  const had_colors = char_colors !== undefined;
-  find_mode.start(till);
-  if (had_colors) return;
-  void read_find_colors().then((colors) => {
-    char_colors = colors;
-    find_mode.refresh();
-  });
 }
 
 const sink_for = (mode: "caret" | "visual") => ({
@@ -259,7 +246,7 @@ const sink_for = (mode: "caret" | "visual") => ({
       // Escape only ends the find, in visual mode too.
       return find_mode.on_token(token);
     }
-    if (mode === "caret" || (token !== "<Escape>" && token !== "<C-[>")) return "pass";
+    if (mode === "caret" || !is_escape(token)) return "pass";
     // Escape in visual mode goes back to caret mode, and the keymap never sees it.
     page.oasisfox_host.set_mode("caret");
     return "handled";
