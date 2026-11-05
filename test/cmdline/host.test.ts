@@ -22,6 +22,7 @@ function fake_element() {
     },
     attachShadow: () => ({ append: () => {} }),
     append: () => {},
+    setAttribute: () => {},
     addEventListener: (type: string, listener: () => void) => void (element.listeners[type] = listener),
     focus: () => void (element.focused = true),
     remove: () => {
