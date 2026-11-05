@@ -16,14 +16,14 @@ const ROVING_GROUP = '[tabindex="0"] ~ [tabindex="-1"], [tabindex="-1"]:has(~ [t
 const MENU_ITEM = `${ROVING_ITEM}, ${ROVING_GROUP}, :is([role=menu], [role=menubar], menu) [tabindex="-1"]:not(:is([role=menu], [role=menubar], [role=none], [role=presentation], [role=separator], [role=group]))`;
 const ALL = `${CLICKABLE}, h1, h2, h3, h4, h5, h6, p, li, img, td, th, pre, code, blockquote`;
 
-const PROSE = "p, li, td, th, dd, dt, h1, h2, h3, h4, h5, h6, pre, blockquote, span, div, label, a, button, code, em, strong";
 
 // What a filter labels: the elements that match the selector and pass the test, if there is one.
 // The test holds what a selector cannot say, such as a fact about the content or the layout.
 export type ElementTest = (element: Element) => boolean;
 export type Query = { selector: string; test?: ElementTest };
 
-const NO_OWN_TEXT = new Set(["script", "style", "noscript", "template", "textarea", "option"]);
+// Tags whose text is code, markup data or form state, not prose a person reads. Any other tag counts, so custom elements and inline tags get hints.
+export const NO_OWN_TEXT = new Set(["script", "style", "noscript", "template", "textarea", "option", "title", "meta", "link", "head", "svg", "math", "text", "tspan", "desc", "defs", "mi", "mn", "mo", "mtext", "annotation", "datalist", "optgroup", "select"]);
 
 // A wrapper whose text sits in its children is no hit, so a card of spans gets a hint per span.
 export const has_own_text = (element: Element): boolean => {
@@ -36,7 +36,7 @@ const QUERIES: Record<Exclude<HintFilter, "custom">, Query> = {
   clickable: { selector: CLICKABLE },
   inputs: { selector: TEXT_FIELDS },
   links: { selector: LINKS },
-  prose: { selector: PROSE, test: has_own_text },
+  prose: { selector: "*", test: has_own_text },
 };
 
 export const query_for = (filter: HintFilter, custom_selector: string | undefined): Query =>

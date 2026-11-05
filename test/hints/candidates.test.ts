@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { Found } from "../../src/content/hints/candidates.ts";
-import { collect, drop_redundant_weak, keep_visible_deduplicated, has_click_sign, has_own_text, has_text, make_weak_test, query_for } from "../../src/content/hints/candidates.ts";
+import { collect, drop_redundant_weak, keep_visible_deduplicated, has_click_sign, has_own_text, NO_OWN_TEXT, has_text, make_weak_test, query_for } from "../../src/content/hints/candidates.ts";
 
 type Fake = { name: string; local: string; shadow?: Fake[]; frame?: Fake[] | "cross_origin"; href?: boolean };
 
@@ -204,6 +204,12 @@ test("prose skips a wrapper whose text sits in its children, and blank text", ()
 test("prose skips hidden elements and elements whose text is not page text", () => {
   assert.equal(has_own_text(with_children("span", [text_node("hello")], true)), false);
   for (const local of ["script", "style", "noscript", "template", "textarea", "option"]) assert.equal(has_own_text(with_children(local, [text_node("x")])), false, local);
+});
+
+test("prose covers inline, custom and unlisted tags and skips the tags that hold no prose", () => {
+  assert.equal(query_for("prose", undefined).selector, "*");
+  for (const local of ["b", "i", "small", "time", "summary", "figcaption", "yt-formatted-string"]) assert.equal(has_own_text(with_children(local, [text_node("x")])), true, local);
+  for (const local of ["svg", "math", "title", "head", "tspan"]) assert.ok(NO_OWN_TEXT.has(local), local);
 });
 
 test("the prose filter carries its test and the others carry none", () => {
