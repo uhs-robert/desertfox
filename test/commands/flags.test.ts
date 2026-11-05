@@ -18,6 +18,7 @@ test("typed names are the dotted id except the family words and one-word command
     "bookmark.open=bookmark",
     "command.repeat=repeat",
     "copy.url=copy",
+    "find.open=find",
     "help.open=help",
     "hint.run=hint",
     "mode.set=mode",
@@ -45,4 +46,12 @@ test("prefills use the short flags", () => {
 test("only these commands opt out of `.`, so a new command repeats unless someone decides otherwise", () => {
   const opted_out = registry.list().filter((command) => command.repeatable === false).map((command) => command.id);
   assert.deepEqual(opted_out.sort(), ["browser.close_all", "browser.focus_page", "command.repeat", "config.reload", "engine.show", "help.open", "settings.set", "settings.unset"]);
+});
+
+test("the search keys run in visual mode too, and the registry lets them", async () => {
+  const { DEFAULT_KEYMAP } = await import("../../src/background/default_keymap.ts");
+  for (const [key, id] of [["/", "find.open"], ["?", "find.open"], ["*", "find.open"], ["#", "find.open"], ["n", "find.next"], ["N", "find.prev"]] as const) {
+    assert.equal((DEFAULT_KEYMAP.visual![key] as { id: string }).id, id, key);
+    assert.ok(registry.get(id)!.modes?.includes("visual"), id);
+  }
 });

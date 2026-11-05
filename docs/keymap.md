@@ -20,7 +20,7 @@ A note "(prompts)" means the binding leaves a param out, so the command line ask
 
 <!-- BEGIN generated -->
 
-bound: 189 (normal 132, hint 2, cmdline 12, caret 18, visual 20, insert 1, ignore 1, browser 3) | later: 14 | dropped: 6
+bound: 198 (normal 133, hint 2, cmdline 12, caret 20, visual 26, insert 1, ignore 1, browser 3) | later: 14 | dropped: 6
 
 ### normal
 
@@ -140,11 +140,10 @@ bound: 189 (normal 132, hint 2, cmdline 12, caret 18, visual 20, insert 1, ignor
 | `F` | bound | `hint --background` | Click element in background tab |  |
 | `v` | bound | `mode caret` | Start caret mode |  |
 | `V` | bound | `mode visual` | Start visual mode |  |
-| `;v` | bound | `hint --caret --all` | Start caret mode at element |  |
-| `;V` | bound | `hint --visual --all` | Start visual mode at element |  |
+| `;v` | bound | `hint --caret --prose` | Start caret mode at text |  |
+| `;V` | bound | `hint --visual --prose` | Start visual mode at text |  |
 | `;;` | bound | `cmdline.open --text='hint '` | Open the command line with hint |  |
-| `;b` | bound | `hint` | Click element |  |
-| `;B` | bound | `hint --background` | Click element in background tab |  |
+| `;b` | bound | `hint --buttons` | Click button |  |
 | `;y` | bound | `hint --copy --links` | Copy link address |  |
 | `;r` | bound | `hint --background --links --rapid` | Open links rapidly in background tabs |  |
 | `;t` | bound | `hint --copy-text --prose` | Copy text of element |  |
@@ -152,8 +151,10 @@ bound: 189 (normal 132, hint 2, cmdline 12, caret 18, visual 20, insert 1, ignor
 | `;i` | bound | `hint --inputs` | Click input |  |
 | `;l` | bound | `hint --links` | Click link |  |
 | `:` | bound | `cmdline.open` | Command line |  |
-| `/` | bound | `find.open` | Find forward |  |
-| `?` | bound | `find.open --backward` | Find backward |  |
+| `/` | bound | `find` | Find forward |  |
+| `?` | bound | `find --backward` | Find backward |  |
+| `*` | bound | `find --word` | Find word forward |  |
+| `#` | bound | `find --backward --word` | Find word backward |  |
 | `n` | bound | `find.next` | Next match |  |
 | `N` | bound | `find.prev` | Previous match |  |
 | `g?` | bound | `help` | Help |  |
@@ -231,6 +232,8 @@ Which-key group names:
 | `v` | bound | `mode visual` | Set mode |  |
 | `<Escape>` | bound | `mode.escape` | Escape |  |
 | `<C-[>` | bound | `mode.escape` | Escape |  |
+| `*` | bound | `find --word` | Find word forward |  |
+| `#` | bound | `find --backward --word` | Find word backward |  |
 | `h` | bound | `caret.move --char --back` | Move caret |  |
 | `l` | bound | `caret.move --char` | Move caret |  |
 | `j` | bound | `caret.move --line` | Move caret |  |
@@ -265,6 +268,12 @@ Which-key group names:
 | `$` | bound | `caret.move --line-end` | Move caret |  |
 | `gg` | bound | `caret.move --start` | Move caret |  |
 | `G` | bound | `caret.move --end` | Move caret |  |
+| `/` | bound | `find` | Find forward |  |
+| `?` | bound | `find --backward` | Find backward |  |
+| `*` | bound | `find --word` | Find word forward |  |
+| `#` | bound | `find --backward --word` | Find word backward |  |
+| `n` | bound | `find.next` | Next match |  |
+| `N` | bound | `find.prev` | Previous match |  |
 | `y` | bound | `visual.act yank` | Act on selection |  |
 | `o` | bound | `visual.act swap` | Act on selection |  |
 | `s` | bound | `visual.act search` | Act on selection |  |

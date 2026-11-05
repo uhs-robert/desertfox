@@ -80,6 +80,7 @@ if (!page.oasisfox_cmdline_ready) {
     holder.setAttribute("popover", "manual");
     holder.setAttribute(LAYER_ATTRIBUTE, String(LAYERS.command_line));
     holder.style.cssText = `all:initial;position:fixed;left:0;right:0;bottom:0;height:${BAR_HEIGHT};z-index:${LAYERS.command_line};`;
+    holder.setAttribute("data-oasisfox-layer", String(LAYERS.command_line));
     const frame = document.createElement("iframe");
     frame.style.cssText = "all:initial;display:block;width:100%;height:100%;border:0;color-scheme:normal;";
     // Before the frame joins the page, so its only load is cmdline.html.

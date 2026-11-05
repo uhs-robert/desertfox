@@ -212,9 +212,16 @@ test("prose covers inline, custom and unlisted tags and skips the tags that hold
   for (const local of ["svg", "math", "title", "head", "tspan"]) assert.ok(NO_OWN_TEXT.has(local), local);
 });
 
+test("buttons matches button-like elements and skips disabled ones", () => {
+  const { selector } = query_for("buttons", undefined);
+  for (const part of ["button:not([disabled])", '[role="button"]:not([disabled])', 'input[type="submit"]:not([disabled])', 'input[type="reset"]:not([disabled])', 'input[type="image"]:not([disabled])', 'input[type="button"]:not([disabled])'])
+    assert.ok(selector.split(", ").includes(part), part);
+  assert.ok(!selector.includes("a[href]") && !selector.includes("textarea"));
+});
+
 test("the prose filter carries its test and the others carry none", () => {
   assert.equal(query_for("prose", undefined).test, has_own_text);
-  for (const filter of ["all", "clickable", "inputs", "links"] as const) assert.equal(query_for(filter, undefined).test, undefined, filter);
+  for (const filter of ["all", "clickable", "buttons", "inputs", "links"] as const) assert.equal(query_for(filter, undefined).test, undefined, filter);
 });
 
 test("collect keeps only the elements that pass the test", () => {
