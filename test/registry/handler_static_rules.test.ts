@@ -16,6 +16,25 @@ const CANNOT_RUN_ON_STUB: Record<string, string> = {};
 // One text each setting accepts. A name missing here gets "x", which the validator may drop.
 const VALID_SETTING_TEXT: Record<string, string> = { which_key_delay_ms: "500", hint_letters: "asdf", ignore_sites: "a.com b.com", light_intensity: "4", home_page: "https://example.org", default_engine: "stub", palette: "stub", cmdline_prompt: ">", history_completion_max: "5", newtab_clock: "digital", newtab_clock_format: "24", open_completion: "bookmarks", which_key_border: "round", mode_indicator: "off", new_tab_page: "oasisfox" };
 
+// Refusals a handler may give on the stub, from its state or the config and not from an argument value: no sound playing, no
+// container, bookmark or home page, a tab that cannot unload, nothing to repeat. A refusal that matches no entry fails, so a
+// handler that starts refusing accepted args shows up. An entry that never matches fails too.
+const EXPECTED_REFUSALS: Record<string, RegExp[]> = {
+  "tab.goto_audible": [/no tab is playing sound/],
+  "tab.switch": [/matches .* equally, use a number/],
+  "tab.unload": [/matches .* equally/, /unloaded 0 tabs/],
+  "tab.load": [/matches .* equally/, /loaded 0 tabs/],
+  "tab.reopen_in_container": [/No container named/],
+  "tab.attach": [/already in that window/],
+  "bookmark.open": [/no bookmark matches/],
+  "bookmark.remove": [/no bookmark matches/, /No bookmark for this page/],
+  "page.home": [/set home_page in settings.toml/],
+  "open.url": [/No container named/],
+  "open.search": [/No search engine named/],
+  "open.clipboard": [/No container named/],
+  "command.repeat": [/Nothing to repeat/],
+};
+
 const SOURCES: EnumSources = { search_engines: ["stub_engine"], containers: ["stub_container"] };
 const CTX: CommandContext = { tab_id: 1, window_id: 1, frame_id: 0, mode: "normal" };
 
@@ -98,6 +117,7 @@ test("no background handler refuses args the schema accepts", async () => {
   Object.defineProperty(globalThis.navigator, "clipboard", { value: { readText: async () => "stub text" }, configurable: true });
   const failures: string[] = [];
   const stuck = new Set<string>();
+  const used = new Set<string>();
   try {
     for (const command of registry.list()) {
       if (command.runs_in !== "background") continue;
@@ -105,7 +125,12 @@ test("no background handler refuses args the schema accepts", async () => {
         try {
           await Promise.race([Promise.resolve(command.run(CTX, args)), new Promise((resolve) => setTimeout(resolve, 200))]);
         } catch (error) {
-          if ((error as Error).name === "RuntimeRefusal") continue;
+          if ((error as Error).name === "RuntimeRefusal") {
+            const index = (EXPECTED_REFUSALS[command.id] ?? []).findIndex((pattern) => pattern.test((error as Error).message));
+            if (index >= 0) used.add(`${command.id}#${index}`);
+            else failures.push(`${command.id} ${JSON.stringify(args)}: unexpected refusal: ${(error as Error).message}`);
+            continue;
+          }
           if (error instanceof TypeError && Object.hasOwn(CANNOT_RUN_ON_STUB, command.id)) {
             stuck.add(command.id);
             continue;
@@ -120,5 +145,7 @@ test("no background handler refuses args the schema accepts", async () => {
   }
   assert.deepEqual(failures, []);
   // An entry that no longer gets stuck is stale, so the list stays honest.
+  const stale_refusals = Object.entries(EXPECTED_REFUSALS).flatMap(([id, patterns]) => patterns.map((_, index) => `${id}#${index}`)).filter((key) => !used.has(key));
+  assert.deepEqual(stale_refusals, []);
   assert.deepEqual(Object.keys(CANNOT_RUN_ON_STUB).filter((id) => !stuck.has(id)), []);
 });
