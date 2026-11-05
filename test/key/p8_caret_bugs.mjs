@@ -162,4 +162,20 @@ export async function run_cases({ run_case, expect, open_page, send_keys, sleep,
     await send_keys("-k", "Escape");
     expect(text === "hellojv world", `the field holds ${JSON.stringify(text)}, expected "hellojv world"`);
   });
+
+  await run_case("focusing a contenteditable field in an open shadow root keeps its caret", async () => {
+    const page_id = "focus_editable_shadow";
+    await open_page("caret_editable_shadow", page_id, { new_tab: true });
+    await send_keys("gV");
+    await wait_event(0, badge_is(page_id, "CARET"), "the CARET badge");
+    const mark = events.length;
+    await in_active_tab("(() => { const field = document.getElementById('host').shadowRoot.getElementById('editable'); const range = document.createRange(); range.setStart(field.firstChild, 5); range.collapse(true); const selection = getSelection(); selection.removeAllRanges(); selection.addRange(range); field.focus(); })()");
+    await wait_event(mark, badge_is(page_id, "INSERT"), "the INSERT badge after the field took focus");
+    await sleep(300);
+    await send_keys("jv");
+    await sleep(500);
+    const text = (await in_active_tab("document.getElementById('host').shadowRoot.getElementById('editable').textContent"))[0];
+    await send_keys("-k", "Escape");
+    expect(text === "hellojv world", `the field holds ${JSON.stringify(text)}, expected "hellojv world"`);
+  });
 }
