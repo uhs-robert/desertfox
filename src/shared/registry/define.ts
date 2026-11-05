@@ -4,6 +4,7 @@
 import type { CommandDef, ParamDef, ParamValue } from "../command.ts";
 import { MODES } from "../command.ts";
 import { default_value, find_param, is_conditional_default, is_context_source, is_dynamic_values, static_values } from "./params.ts";
+import { is_setting_name } from "../settings_schema.ts";
 import { description_problem } from "./summary.ts";
 
 export type CommandInput = Omit<CommandDef, "id">;
@@ -143,7 +144,11 @@ function check_params(input: CommandInput, fail: Fail): void {
   params.forEach((param, index) => {
     const at = `params[${index}]`;
     if (param.rest && param.type !== "string") fail(`${at}.rest`, "only a string param can take the rest");
-    if (param.value_of !== undefined && find_param(input, param.value_of)?.strict !== true) fail(`${at}.value_of`, `names "${param.value_of}", which is not a strict string param`);
+    if (param.value_of !== undefined) {
+      const sibling = find_param(input, param.value_of);
+      if (sibling?.strict !== true) fail(`${at}.value_of`, `names "${param.value_of}", which is not a strict string param`);
+      else if (!(static_values(sibling) ?? []).every(is_setting_name)) fail(`${at}.value_of`, `names "${param.value_of}", whose values are not all setting names`);
+    }
     if (param.when) check_when(input, param, at, fail);
     if (is_conditional_default(param.default) && param.when) fail(`${at}.default`, "a conditional default cannot be combined with `when` on the same param");
     if (is_conditional_default(param.default)) {
@@ -257,6 +262,9 @@ function value_problem(param: ParamDef, value: unknown): string | null {
   if (param.type === "enum" && list && !list.includes(value as string)) {
     return `${JSON.stringify(value)} is not one of ${list.join(", ")}`;
   }
+  if (param.type === "int" && param.min !== undefined && (value as number) < param.min) return `${JSON.stringify(value)} is below the minimum ${param.min}`;
+  if (param.type === "string" && param.pattern !== undefined && !new RegExp(param.pattern).test(value as string)) return `${JSON.stringify(value)} does not match ${param.pattern}`;
+  if (param.type === "string" && param.strict && list && !list.includes(value as string)) return `${JSON.stringify(value)} is not one of ${list.join(", ")}`;
   return null;
 }
 

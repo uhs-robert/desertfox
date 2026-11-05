@@ -83,3 +83,22 @@ test("a context source prints as its marker", () => {
   assert.equal(print_command(command_of("open.search"), { engine: "arch", query: { from: "selection" } }), "search arch @selection");
   assert.equal(print_command(command_of("open.url"), { url: { from: "current_url" }, where: "tab" }), "open -t @current_url");
 });
+
+test("a context source in a positional param prints as its marker and reads back", () => {
+  const positional = grammar_registry();
+  positional.define("pos.set", {
+    label: "Pos",
+    intent: "Take a name, then text.",
+    runs_in: "background",
+    params: [
+      { name: "name", type: "string", values: ["alpha", "beta"], strict: true },
+      { name: "value", type: "string", rest: true, main: true, optional: true },
+    ],
+    run: () => {},
+  });
+  const command = positional.get("pos.set")!;
+  const printed = print_command(command, { name: { from: "selection" }, value: "text" });
+  assert.equal(printed, "pos.set @selection text");
+  const parsed = parse_command_line(positional, printed);
+  assert.deepEqual(parsed.kind === "invocation" && parsed.invocation.args, { name: { from: "selection" }, value: "text" });
+});

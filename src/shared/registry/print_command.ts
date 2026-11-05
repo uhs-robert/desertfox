@@ -85,7 +85,7 @@ function assemble(command: Printable, args: Record<string, unknown>, options: Pr
     if (param === engine && plan.engine === "bare" && args[param.name] !== undefined) continue;
     words.push(print_flag(param, args[param.name], style));
   }
-  for (const param of positional) if (shown(param)) words.push(quoted(String(args[param.name])));
+  for (const param of positional) if (shown(param)) words.push(value_text(args[param.name]));
   if (subject && shown(subject)) {
     const value = args[subject.name];
     const empty = value === undefined || value === "";

@@ -498,8 +498,10 @@ test("an optional param with a blank expansion reaches the handler as empty, an 
   const pick = { name: { from: "clipboard" } };
   assert.deepEqual(await create_router(blank.deps).run({ invocations: [{ id: "page.name", args: pick }], mode: "normal" }), { ok: true });
   assert.deepEqual(seen, [{ name: "" }]);
-  const empty = make_fake(commands, { ask_selection: async () => "" });
-  await create_router(empty.deps).run({ invocations: [{ id: "page.name", args: { name: { from: "selection" } } }], mode: "normal" });
+  const empty = make_fake(commands, { ask_selection: async () => "", runs_with_empty: async () => true });
+  const calls = seen.length;
+  assert.deepEqual(await create_router(empty.deps).run({ invocations: [{ id: "page.name", args: { name: { from: "selection" } } }], mode: "normal" }), { ok: true });
+  assert.equal(seen.length, calls + 1);
   assert.deepEqual(seen.at(-1), { name: "" });
   const content = make_fake(commands, { ask_selection: async () => "9" });
   const refused = await create_router(content.deps).run({ invocations: [{ id: "page.pick", args: { pick: { from: "selection" } } }], mode: "normal" });
