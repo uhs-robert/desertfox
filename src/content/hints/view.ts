@@ -1,7 +1,7 @@
 // Draws the labels in a closed shadow root and keeps them over their elements.
 
 import { LAYERS } from "../../shared/layers.ts";
-import { create_surface } from "../surface.ts";
+import { create_surface, mount_surface } from "../surface.ts";
 import type { Found } from "./candidates.ts";
 
 const MESSAGE_MS = 1500;
@@ -44,7 +44,7 @@ export function create_view() {
   let drawn: DrawnLabel[] = [];
   let message_timer: ReturnType<typeof setTimeout> | undefined;
 
-  const mount = () => document.documentElement.append(surface.host);
+  const mount = () => mount_surface(surface.host);
 
   // All reads first, then all writes, so the page lays out once.
   function reposition(): void {

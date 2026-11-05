@@ -20,7 +20,7 @@ test("headings, paragraphs, lists, code and links become blocks", () => {
       ],
     },
     { kind: "list", items: [[{ kind: "text", text: "one more" }], [{ kind: "text", text: "two" }]] },
-    { kind: "code_block", text: "a = 1\n\nb = 2" },
+    { kind: "code_block", text: "a = 1\n\nb = 2", language: "toml" },
   ]);
 });
 
@@ -86,4 +86,15 @@ test("docs/search_engines.md renders", () => {
   const blocks = parse_markdown("docs/search_engines.md", readFileSync(new URL("../../docs/search_engines.md", import.meta.url), "utf8"));
   assert.ok(blocks.some((block) => block.kind === "code_block"));
   assert.ok(blocks.every((block) => block.kind !== "heading" || block.level >= 2));
+});
+
+test("a fence keeps its language word in the block, and a bare fence has no language field", () => {
+  assert.deepEqual(parse("```toml\na = 1\n```"), [{ kind: "code_block", text: "a = 1", language: "toml" }]);
+  assert.equal("language" in parse("```\na = 1\n```")[0]!, false);
+});
+
+test("the built guide JSON carries the language of its code blocks", () => {
+  const blocks = parse(readFileSync(new URL("../../docs/search_engines.md", import.meta.url), "utf8"));
+  const code = blocks.filter((block) => block.kind === "code_block");
+  assert.ok(code.length > 0 && code.every((block) => block.kind === "code_block" && block.language === "toml"));
 });

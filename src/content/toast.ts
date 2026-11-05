@@ -2,7 +2,7 @@
 
 import { LAYERS } from "../shared/layers.ts";
 import type { ToastKind } from "../shared/messages.ts";
-import { create_surface } from "./surface.ts";
+import { create_surface, mount_surface } from "./surface.ts";
 
 const TOAST_MS = 3000;
 
@@ -25,7 +25,7 @@ export function show_toast(message: string, kind: ToastKind = "error"): void {
   surface ??= create_surface("oasisfox-toast", STYLE, LAYERS.toast);
   surface.text.textContent = message;
   surface.text.className = `oasisfox-toast ${kind}`;
-  document.documentElement.append(surface.host);
+  mount_surface(surface.host);
   clearTimeout(hide_timer);
   hide_timer = setTimeout(() => surface?.host.remove(), TOAST_MS);
 }

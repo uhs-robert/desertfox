@@ -9,4 +9,5 @@ export type Block =
   | { kind: "heading"; level: 2 | 3; text: string }
   | { kind: "paragraph"; inlines: Inline[] }
   | { kind: "list"; items: Inline[][] }
-  | { kind: "code_block"; text: string };
+  // `language` is the word after the opening fence. It is absent when the fence has none.
+  | { kind: "code_block"; text: string; language?: string };

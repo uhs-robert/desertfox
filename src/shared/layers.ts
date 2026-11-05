@@ -1,5 +1,6 @@
-// Stacking order of the surfaces the content script puts on a page, bottom to top. The command line takes the browser
-// maximum for z-index, and each layer below it is one less. Numbers only, so content.js stays small.
+// Layers of the surfaces the content script puts on a page, bottom to top. The numbers are the z-index of the command
+// line, which is not in the top layer. The other surfaces are top-layer popovers, where z-index has no effect: they stack
+// in the order shown, and `mount_surface` shows them again in this order. Numbers only, so content.js stays small.
 
 const BROWSER_MAX_Z_INDEX = 2147483647;
 
