@@ -8,11 +8,11 @@ import { unhover } from "./hover.ts";
 import { link_address, OPEN_PLACES, perform, starts_caret } from "./actions.ts";
 import type { CaretMode, HintAction, Place } from "./actions.ts";
 import { copy_text } from "../caret/copy_text.ts";
-import { collect, has_text, keep_present, keep_visible_deduplicated, query_for, weak_test_for } from "./candidates.ts";
+import { collect, keep_present, keep_text_matches, keep_visible_deduplicated, query_for, weak_test_for } from "./candidates.ts";
 import type { Found, HintFilter } from "./candidates.ts";
 import { clean_letters, make_labels } from "./labels.ts";
 import { create_picker } from "./pick.ts";
-import { create_list_view } from "./list_view.ts";
+import { create_list_view, PANEL_SCROLL_KEYS, waits_for_panel } from "./list_view.ts";
 import { create_view } from "./view.ts";
 import type { HintView } from "./view.ts";
 import { follow_windows } from "./follow.ts";
@@ -114,10 +114,7 @@ function keep_present_headings(candidates: Found[]): Found[] {
 }
 
 const none_message = (filter: HintFilter, text: string | undefined): string =>
-  filter === "headings" ? "No headings on this page" : text === undefined ? "No hints on this page" : `No link matches ${text}`;
-
-// How far each key moves the headings panel, in panel heights.
-const PANEL_SCROLL_KEYS: Record<string, number> = { "<PageDown>": 1, "<PageUp>": -1, "<C-d>": 0.5, "<C-u>": -0.5 };
+  filter === "headings" ? (text === undefined ? "No headings on this page" : `No heading matches ${text}`) : text === undefined ? "No hints on this page" : `No link matches ${text}`;
 
 async function keep_visible_ones(candidates: Found[]): Promise<Found[]> {
   const own_rects = (element: Element) => Array.from(element.getClientRects());
@@ -205,7 +202,7 @@ function register(host: BundleHostApi): void {
   async function build(current: Session, candidates: Found[], first_build: boolean): Promise<void> {
     const [letters, visible] = await Promise.all([read_letters(), current.filter === "headings" ? keep_present_headings(candidates) : keep_visible_ones(candidates)]);
     if (current.cancelled) return;
-    const found = current.lower_text === undefined ? visible : visible.filter((item) => link_address(item.element as HTMLAnchorElement) !== undefined && has_text(item.element, current.lower_text!));
+    const found = current.lower_text === undefined ? visible : keep_text_matches(visible, current.filter, current.lower_text);
     if (found.length === 0) {
       const message = none_message(current.filter, current.text);
       current.finish({ ok: false, message });
@@ -274,7 +271,7 @@ function register(host: BundleHostApi): void {
     on_token: (token) => {
       if (!session) return "pass";
       if (session.ready) return handle_token(session, token);
-      if (token.length !== 1) return "pass";
+      if (token.length !== 1 && !waits_for_panel(session.filter, token)) return "pass";
       session.waiting_tokens.push(token);
       return "handled";
     },

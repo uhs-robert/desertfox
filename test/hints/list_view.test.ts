@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { MAX_ROW_TEXT, row_of } from "../../src/content/hints/list_view.ts";
+import { MAX_ROW_TEXT, row_of, waits_for_panel } from "../../src/content/hints/list_view.ts";
 
 const heading = (local: string, text: string, level?: string) =>
   ({ localName: local, textContent: text, innerText: text, getAttribute: (name: string) => (name === "aria-level" ? (level ?? null) : null) }) as unknown as Element;
@@ -18,4 +18,12 @@ test("a long heading is cut with dots", () => {
 test("a row shows the rendered text, not the script text in the heading", () => {
   const element = { localName: "h2", textContent: "Title var x = 1", innerText: "Title", getAttribute: () => null } as unknown as Element;
   assert.equal(row_of(element).text, "Title");
+});
+
+test("a panel key waits for the panel only for the headings filter", () => {
+  for (const token of ["<PageDown>", "<PageUp>", "<C-d>", "<C-u>"]) {
+    assert.equal(waits_for_panel("headings", token), true, token);
+    assert.equal(waits_for_panel("links", token), false, token);
+  }
+  assert.equal(waits_for_panel("headings", "<Escape>"), false);
 });

@@ -9,6 +9,12 @@ import { STYLE as HINT_STYLE } from "./view.ts";
 
 export const MAX_ROW_TEXT = 100;
 
+// How far each key moves the panel, in panel heights.
+export const PANEL_SCROLL_KEYS: Record<string, number> = { "<PageDown>": 1, "<PageUp>": -1, "<C-d>": 0.5, "<C-u>": -0.5 };
+
+// While the headings load, a panel key waits like a label letter does, so it cannot scroll the page instead.
+export const waits_for_panel = (filter: string, token: string): boolean => filter === "headings" && token in PANEL_SCROLL_KEYS;
+
 export function row_of(element: Element): { level: number; text: string } {
   const text = rendered_text(element).replace(/\s+/g, " ");
   return { level: heading_level(element), text: text.length > MAX_ROW_TEXT ? `${text.slice(0, MAX_ROW_TEXT)}...` : text };
