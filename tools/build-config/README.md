@@ -5,23 +5,22 @@ Compiles the user config directory into the managed storage config that the exte
 ## Run
 
 ```
-just build-config [dir] [flags]
-node tools/build-config/cli.ts [dir] [flags]
+just build-config [dir]
+node tools/build-config/cli.ts [dir] (--out <file> | --live) [flags]
 ```
 
-`just build-config` builds the extension first. The `node` form needs `dist/commands.json` to exist already. `just build` (or `npm run build`) writes it.
+`just build-config` builds the extension first and writes the live config. The `node` form needs `dist/commands.json` to exist already. `just build` (or `npm run build`) writes it.
 
 - `dir`: the config directory. Defaults to `~/.config/oasisfox`.
+- `--live`: write `~/.mozilla/managed-storage/oasisfox@uhs-robert.json`, the file Firefox reads.
+- `--out <file>`: write the managed storage file here instead.
 - `--commands <file>`: the command list from the build. Defaults to `dist/commands.json`.
-- `--out <file>`: where to write the managed storage file. See the trap below.
 - `--schemas <dir>`: also write the data schemas into this directory.
 
-Next to the output it writes `<out without .json>.engines.jsonl`, the resolved search engines, one per line. It prints config warnings to stderr and exits with 1 on a config error.
-
-## Trap: the default output is the live config
-
-Without `--out`, the CLI writes `~/.mozilla/managed-storage/oasisfox@uhs-robert.json`, the file Firefox reads. The `.engines.jsonl` side file lands in the same live directory. A test run without `--out` overwrites the real config. Always pass `--out` for a trial run:
+Pass exactly one of `--live` and `--out`. With neither or both, the CLI exits with 2 and writes nothing, so a trial run never reaches the live config by accident. Use `--out` for a trial run:
 
 ```
-just build-config path/to/config_dir --out /tmp/oasisfox_test.json
+node tools/build-config/cli.ts path/to/config_dir --out /tmp/oasisfox_test.json
 ```
+
+Next to the output it writes `<out without .json>.engines.jsonl`, the resolved search engines, one per line. With `--live` that file lands in the live directory too. It prints config warnings to stderr and exits with 1 on a config error.
