@@ -1,13 +1,14 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { contains_composed, keep_visible, points_to_probe, viewport_size, uncovered_through_frames, visible_point } from "../../src/content/hints/visible.ts";
+import { box_owners, scroll_clips_of, boxes_with_fallback, clip_to, clipping_boxes, contains_composed, keep_visible, points_to_probe, viewport_size, uncovered_through_frames, visible_point } from "../../src/content/hints/visible.ts";
 import type { PageProbe, Rect } from "../../src/content/hints/visible.ts";
 
-type Box = { name: string; rect: Rect; rects?: Rect[]; reachable_at?: (x: number, y: number) => boolean; intersecting?: boolean; hidden?: boolean; covered_by?: string };
+type Box = { name: string; rect: Rect; rects?: Rect[]; reachable_at?: (x: number, y: number) => boolean; intersecting?: boolean; hidden?: boolean; covered_by?: string; clips?: Rect[] };
 
 const probe: PageProbe<Box> = {
   is_intersecting: (box) => box.intersecting ?? true,
   rects_of: (box) => box.rects ?? [box.rect],
+  clips_of: (box) => box.clips ?? [],
   viewport_of: () => ({ width: 800, height: 600 }),
   is_hidden_by_style: (box) => box.hidden ?? false,
   is_reachable_at: (box, x, y) => box.covered_by === undefined && (box.reachable_at?.(x, y) ?? true),
@@ -111,4 +112,86 @@ test("viewport_size reads the root in standards mode and the body in quirks mode
   assert.deepEqual(viewport_size({ compatMode: "CSS1Compat", documentElement: root, body }, win), { width: 785, height: 2000 });
   assert.deepEqual(viewport_size({ compatMode: "BackCompat", documentElement: root, body }, win), { width: 785, height: 590 });
   assert.deepEqual(viewport_size({ compatMode: "CSS1Compat", documentElement: { clientWidth: 0, clientHeight: 0 }, body: null }, win), { width: 800, height: 600 });
+});
+
+test("a link half scrolled out of its box is kept through its visible half, and one fully out is dropped", () => {
+  const clips = [at(0, 100, 400, 200)];
+  // The middle of the whole link is above the scroll box, where another element sits.
+  const half: Box = { name: "half", rect: at(10, 80, 100, 40), clips, reachable_at: (_x, y) => y >= 100 };
+  const out: Box = { name: "out", rect: at(10, 40, 100, 40), clips, reachable_at: () => true };
+  const inside: Box = { name: "scrolled but inside", rect: at(10, 150, 100, 20), clips, reachable_at: () => true };
+  assert.deepEqual(keep_visible([half, out, inside], probe).map((box) => box.name), ["half", "scrolled but inside"]);
+});
+
+test("clip_to intersects with every box", () => {
+  assert.deepEqual(clip_to(at(0, 0, 100, 100), [at(10, 10, 50, 200), at(0, 0, 30, 30)]), { left: 10, top: 10, right: 30, bottom: 30 });
+});
+
+test("clipping_boxes lets absolute and fixed targets escape ancestors that are not their containing block", () => {
+  const static_clip = { position: "static", clips_x: true, clips_y: true, box: at(0, 0, 10, 10) };
+  const relative_clip = { position: "relative", clips_x: true, clips_y: true, box: at(0, 0, 20, 20) };
+  const no_clip = { position: "static", clips_x: false, clips_y: false, box: at(0, 0, 5, 5) };
+  assert.deepEqual(clipping_boxes("static", [static_clip, no_clip, relative_clip]), [static_clip.box, relative_clip.box]);
+  assert.deepEqual(clipping_boxes("absolute", [static_clip, relative_clip]), [relative_clip.box]);
+  assert.deepEqual(clipping_boxes("fixed", [static_clip, relative_clip]), []);
+});
+
+type Node = { name: string; own: Rect[]; kids?: Node[] };
+
+test("boxes_with_fallback uses the boxes of an element, else of its children, to a limited depth", () => {
+  const rects = (n: Node) => n.own;
+  const kids = (n: Node) => n.kids ?? [];
+  const child = { name: "child", own: [at(1, 1, 10, 10)] };
+  assert.deepEqual(boxes_with_fallback({ name: "own", own: [at(0, 0, 5, 5)], kids: [child] }, rects, kids), [at(0, 0, 5, 5)]);
+  assert.deepEqual(boxes_with_fallback({ name: "zero", own: [at(0, 0, 0, 0)], kids: [child, { name: "empty", own: [] }] }, rects, kids), [at(1, 1, 10, 10)]);
+  const nested = { name: "a", own: [], kids: [{ name: "b", own: [], kids: [child] }] };
+  assert.deepEqual(boxes_with_fallback(nested, rects, kids), [at(1, 1, 10, 10)]);
+  assert.deepEqual(boxes_with_fallback({ name: "none", own: [] }, rects, kids), []);
+});
+
+type Dom = { tag: string; parent: Dom | null; position?: string; display?: string; overflow_x?: string; overflow_y?: string; box?: Rect };
+const reads = {
+  parent_of: (e: Dom) => e.parent,
+  tag_of: (e: Dom) => e.tag,
+  style_of: (e: Dom) => ({ position: e.position ?? "static", display: e.display ?? "block", overflow_x: e.overflow_x ?? "visible", overflow_y: e.overflow_y ?? "visible" }),
+  box_of: (e: Dom) => e.box ?? at(0, 0, 0, 0),
+};
+const html: Dom = { tag: "html", parent: null, overflow_x: "hidden", overflow_y: "auto", box: at(0, 0, 10, 10) };
+const body: Dom = { tag: "body", parent: html, overflow_x: "hidden", overflow_y: "hidden", box: at(0, 0, 10, 10) };
+const link_in = (parent: Dom): Dom => ({ tag: "a", parent });
+
+test("scroll_clips_of skips body and html, whose overflow belongs to the viewport", () => {
+  assert.deepEqual(scroll_clips_of(link_in(body), reads), []);
+});
+
+test("scroll_clips_of skips inline and contents ancestors, which have a zero client box", () => {
+  const inline: Dom = { tag: "span", parent: body, display: "inline", overflow_x: "hidden", overflow_y: "hidden", box: at(0, 0, 0, 0) };
+  const contents: Dom = { tag: "div", parent: inline, display: "contents", overflow_x: "auto", overflow_y: "auto", box: at(0, 0, 0, 0) };
+  assert.deepEqual(scroll_clips_of(link_in(contents), reads), []);
+});
+
+test("scroll_clips_of clips each axis on its own", () => {
+  const box = at(10, 20, 100, 50);
+  const x_only: Dom = { tag: "div", parent: body, overflow_x: "clip", overflow_y: "visible", box };
+  assert.deepEqual(scroll_clips_of(link_in(x_only), reads), [{ left: 10, right: 110, top: -Infinity, bottom: Infinity }]);
+  const y_only: Dom = { tag: "div", parent: body, overflow_x: "visible", overflow_y: "scroll", box };
+  assert.deepEqual(scroll_clips_of(link_in(y_only), reads), [{ left: -Infinity, right: Infinity, top: 20, bottom: 70 }]);
+});
+
+test("scroll_clips_of keeps a real scroll box and lets a fixed target escape it", () => {
+  const scroller: Dom = { tag: "div", parent: body, overflow_x: "auto", overflow_y: "auto", box: at(0, 0, 50, 50) };
+  assert.deepEqual(scroll_clips_of(link_in(scroller), reads), [at(0, 0, 50, 50)]);
+  assert.deepEqual(scroll_clips_of({ tag: "a", parent: scroller, position: "fixed" }, reads), []);
+});
+
+test("box_owners names the element, or for one with no box the children that own boxes (so an observer can watch them)", () => {
+  const rects = (n: Node) => n.own;
+  const kids = (n: Node) => n.kids ?? [];
+  const a = { name: "a", own: [at(0, 0, 10, 10)] };
+  const b = { name: "b", own: [] };
+  assert.deepEqual(box_owners(a, rects, kids), [a]);
+  const contents = { name: "contents", own: [], kids: [a, b] };
+  assert.deepEqual(box_owners(contents, rects, kids).map((n) => n.name), ["a"]);
+  const nested = { name: "outer", own: [], kids: [contents] };
+  assert.deepEqual(box_owners(nested, rects, kids).map((n) => n.name), ["a"]);
 });
