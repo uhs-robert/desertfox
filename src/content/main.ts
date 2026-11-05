@@ -16,8 +16,7 @@ import type { BadgeColors } from "./mode_indicator.ts";
 import { show_mode_label, show_toast } from "./ui_proxy.ts";
 import { wire_mode_reports } from "./mode_report.ts";
 import { page_mode } from "./page_mode.ts";
-import { plan_steps } from "./plan_steps.ts";
-import { run_content_invocation, run_in_order } from "./run_content.ts";
+import { counted_invocations, run_content_steps, run_in_order } from "./run_content.ts";
 import { read_context_source } from "./context.ts";
 import { focus_page_content } from "./handlers/focus.ts";
 import { blur_focused_element } from "./handlers/page.ts";
@@ -53,16 +52,16 @@ async function send_to_background(message: ContentToBackground): Promise<RunResp
   }
 }
 
+// A leaf with a background step goes to the router whole: it reads the active tab at each step, so a step after tab.next runs in the new tab.
+// A leaf of content steps runs here and shows its own failure.
 async function run_leaf(leaf: TreeLeaf, count: number | undefined): Promise<void> {
-  for (const segment of plan_steps(leaf.steps, count)) {
-    const outcome = await (segment.runs_in === "content"
-      ? run_content_invocation(segment.invocation, segment.count_rule)
-      : send_to_background({ type: "run", invocations: segment.invocations, mode: page_mode.get_mode() }));
-    // The background already shows a refusal toast itself, so a returned refusal is not shown again.
-    if ("message" in outcome) show_toast(outcome.message);
-    // A failed or cancelled step stops the rest of the leaf.
-    if (!outcome.ok || outcome.cancelled) return;
+  if (leaf.steps.some((step) => step.runs_in === "background")) {
+    // The background shows a refusal itself.
+    await send_to_background({ type: "run", invocations: counted_invocations(leaf.steps, count), mode: page_mode.get_mode() });
+    return;
   }
+  const outcome = await run_content_steps(leaf.steps, count);
+  if (!outcome.ok) show_toast(outcome.message);
 }
 
 // Zero turns which-key off.
