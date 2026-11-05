@@ -25,6 +25,8 @@ define("help.open", {
     const name = args.name as string;
     const url = help_name_url(browser.runtime.getURL(HELP_PAGE_FILE), name, command_ids);
     if (url === undefined) throw new Error(`No help for "${name}". The command line completes the names`);
-    await browser.tabs.create({ url, active: true, ...(ctx.tab_id === undefined ? {} : { openerTabId: ctx.tab_id }) });
+    // Firefox rejects an openerTabId from another window, so the window goes with it.
+    const opener = ctx.tab_id === undefined ? {} : { openerTabId: ctx.tab_id, windowId: ctx.window_id };
+    await browser.tabs.create({ url, active: true, ...opener });
   },
 });
