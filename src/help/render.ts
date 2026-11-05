@@ -229,13 +229,21 @@ function section_list(sections: Section[], expanded: boolean): HTMLElement {
   list.hidden = !expanded;
   for (const { title, slug } of sections) {
     const link = el("a", undefined, title);
-    link.setAttribute("href", `#section=${slug}`);
+    const hash = `#section=${slug}`;
+    link.setAttribute("href", hash);
+    // The same hash fires no hashchange, so a click would not scroll back from where the reader moved.
+    link.addEventListener("click", () => {
+      if (location.hash !== hash) return;
+      const heading = document.getElementById(section_anchor(slug));
+      heading?.scrollIntoView();
+      heading?.focus({ preventScroll: true });
+    });
     list.append(link);
   }
   return list;
 }
 
-// A real button, so keys and hints reach it. The list starts collapsed on every load.
+// A real button, so keys and hints reach it.
 function section_toggle(list: HTMLElement): HTMLElement {
   const button = el("button", "oasisfox-help-sections-toggle", list.hidden ? "\u25B8" : "\u25BE");
   button.setAttribute("type", "button");
