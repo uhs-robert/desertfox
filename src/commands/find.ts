@@ -16,14 +16,16 @@ define("find.open", {
 
 define("find.next", {
   completion: "hidden",
+  modes: ["normal", "visual"],
   label: "Next match",
-  intent: "Go to the next match of the last search. It goes the way the search was started.",
+  intent: "Go to the next match of the last search. It goes the way the search was started. In visual mode the caret end goes to the match and the anchor stays.",
   runs_in: "content",
   run: find_next.run,
 });
 
 define("find.prev", {
   completion: "hidden",
+  modes: ["normal", "visual"],
   label: "Previous match",
   intent: "Go to the previous match of the last search. It goes against the way the search was started.",
   runs_in: "content",

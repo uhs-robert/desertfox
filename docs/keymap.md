@@ -20,7 +20,7 @@ A note "(prompts)" means the binding leaves a param out, so the command line ask
 
 <!-- BEGIN generated -->
 
-bound: 194 (normal 132, hint 2, cmdline 11, caret 20, visual 24, insert 1, ignore 1, browser 3) | later: 14 | dropped: 6
+bound: 196 (normal 132, hint 2, cmdline 11, caret 20, visual 26, insert 1, ignore 1, browser 3) | later: 14 | dropped: 6
 
 ### normal
 
@@ -270,6 +270,8 @@ Which-key group names:
 | `?` | bound | `find --backward` | Find backward |  |
 | `*` | bound | `find --word` | Find word forward |  |
 | `#` | bound | `find --backward --word` | Find word backward |  |
+| `n` | bound | `find.next` | Next match |  |
+| `N` | bound | `find.prev` | Previous match |  |
 | `y` | bound | `visual.act yank` | Act on selection |  |
 | `o` | bound | `visual.act swap` | Act on selection |  |
 | `s` | bound | `visual.act search` | Act on selection |  |

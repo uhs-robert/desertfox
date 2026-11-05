@@ -246,6 +246,19 @@ function word_target(): { pattern: string; from: DomPoint } | string {
   return { pattern, from: model.point_at(first) };
 }
 
+// `n` and `N`: step to the match, and a visual session takes its caret end there.
+async function find_step(reverse: boolean): Promise<Outcome> {
+  const outcome = await find.step(reverse);
+  const open = session;
+  const landed = open?.mode === "visual" && outcome.ok && !("cancelled" in outcome && outcome.cancelled) ? find.position(open.model) : undefined;
+  if (open && landed !== undefined) {
+    open.cursor = with_caret(open.cursor, landed, true);
+    open.goal_x = undefined;
+    paint(open);
+  }
+  return outcome;
+}
+
 // `*` and `#`: search for the word or selection at once, and let an open session follow the match.
 async function find_word(direction: "forward" | "backward"): Promise<Outcome> {
   const target = word_target();
@@ -284,8 +297,8 @@ if (!page.oasisfox_caret_ready) {
     find.begin(direction, from?.model.point_at(from.cursor.caret));
     return page.oasisfox_host.run_command("cmdline.open", "cmdline", { search: direction });
   });
-  page.oasisfox_host.register_handler("find.next", () => find.step(false));
-  page.oasisfox_host.register_handler("find.prev", () => find.step(true));
+  page.oasisfox_host.register_handler("find.next", () => find_step(false));
+  page.oasisfox_host.register_handler("find.prev", () => find_step(true));
   // Called by the command line while it is open, and not by any key.
   page.oasisfox_host.register_handler("find.live", (args) => find.update(args.text as string, args.report as (status: string) => void));
   page.oasisfox_host.register_handler("find.end", async (args) => {

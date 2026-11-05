@@ -222,6 +222,8 @@ export const DEFAULT_KEYMAP: KeymapConfig = {
     "?": { id: "find.open", args: { direction: "backward" }, label: "Find backward" },
     "*": { id: "find.open", args: { source: "word" }, label: "Find word forward" },
     "#": { id: "find.open", args: { source: "word", direction: "backward" }, label: "Find word backward" },
+    n: { id: "find.next" },
+    N: { id: "find.prev" },
     y: { id: "visual.act", args: { action: "yank" } },
     o: { id: "visual.act", args: { action: "swap" } },
     s: { id: "visual.act", args: { action: "search" } },
