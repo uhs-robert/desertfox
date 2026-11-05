@@ -18,4 +18,4 @@ Types and constants that fix the hand-off formats between the background page, t
 - `layers.ts`: the `z-index` of each surface the content script draws, bottom to top: hints, mode badge, toast, which-key panel, command line.
 - `config.ts`: the merged config file and the settings with their defaults.
 
-The content script imports only types and `prefix_tree.ts` from here, so the 15 KB bundle stays small.
+The content script imports only types and `prefix_tree.ts` from here, so the 16 KB bundle stays small.

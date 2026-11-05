@@ -43,6 +43,25 @@
     font-family: ui-monospace, monospace;
   }
   .oasisfox-help-usage { margin: .25rem 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+  /* The role tokens may not reach this page, so each falls back to the page's own colours. */
+  .oasisfox-help-code {
+    --code-bg: var(--oasisfox-bg-mantle, color-mix(in srgb, var(--oasisfox-fg) 6%, var(--oasisfox-bg)));
+    --code-border: var(--oasisfox-border, color-mix(in srgb, var(--oasisfox-fg) 25%, transparent));
+    margin: .75rem 0; background: var(--code-bg); border: 1px solid var(--code-border); border-radius: var(--oasisfox-radius);
+  }
+  .oasisfox-help-inline-code {
+    padding: .1em .35em; font-size: .9em; border-radius: calc(var(--oasisfox-radius) / 2);
+    background: var(--oasisfox-bg-mantle, color-mix(in srgb, var(--oasisfox-fg) 6%, var(--oasisfox-bg)));
+    border: 1px solid var(--oasisfox-border, color-mix(in srgb, var(--oasisfox-fg) 25%, transparent));
+  }
+  .oasisfox-help-code-head { display: flex; align-items: center; justify-content: space-between; gap: .5rem; padding: .25rem .5rem .25rem 1rem; min-height: 1.75rem; }
+  .oasisfox-help-code-lang { font: .8em ui-monospace, monospace; opacity: .6; }
+  .oasisfox-help-code-copy {
+    margin-left: auto; padding: .1rem .6rem; font: .8em system-ui, sans-serif; color: inherit; cursor: pointer;
+    background: transparent; border: 1px solid var(--code-border); border-radius: var(--oasisfox-radius);
+  }
+  .oasisfox-help-code-copy:hover, .oasisfox-help-code-copy:focus-visible { border-color: var(--oasisfox-accent); color: var(--oasisfox-accent); }
+  .oasisfox-help-code-body { margin: 0; padding: 0 1rem .75rem; font-family: ui-monospace, monospace; white-space: pre; overflow-x: auto; scrollbar-color: color-mix(in srgb, var(--oasisfox-fg) 35%, transparent) transparent; }
   .oasisfox-help kbd { color: var(--oasisfox-accent); }
   .oasisfox-help-mode { display: inline-block; min-width: 4.5rem; margin-right: .5rem; opacity: .6; }
   .oasisfox-help-muted { opacity: .6; }
