@@ -64,10 +64,12 @@ const FALLBACK_COLORS: FindColors = {
 const QUERY_REGISTER = "/";
 const DIRECTION_REGISTER = "/:direction";
 
-// An element of OasisFox itself (the command line, the toast, the hint labels) comes and goes with a search, and its text is not in the model.
-const is_own_element = (node: Node) => node.nodeType === Node.ELEMENT_NODE && (node as HTMLElement).style.getPropertyValue("all") === "initial";
+// An element of OasisFox itself (the command line, the surfaces, the selection style) comes and goes with a search, and its text is not in the model.
+// Marked by an attribute: a style check such as `all: initial` stops holding once the element sets a longhand, as the command line does when it resizes.
+const OWN_ATTRIBUTES = ["data-oasisfox-layer", "data-oasisfox"];
+const is_own_element = (node: Node) => node.nodeType === 1 && OWN_ATTRIBUTES.some((name) => (node as Element).hasAttribute(name));
 
-const is_page_change = (record: MutationRecord) =>
+export const is_page_change = (record: MutationRecord) =>
   record.type === "characterData" || [...Array.from(record.addedNodes), ...Array.from(record.removedNodes)].some((node) => !is_own_element(node));
 
 const browser_deps = (): FindDeps => ({

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { create_find } from "../../../src/content/caret/find_session.ts";
+import { create_find, is_page_change } from "../../../src/content/caret/find_session.ts";
 import type { FindDeps } from "../../../src/content/caret/find_session.ts";
 import type { TextModel } from "../../../src/content/caret/text_model.ts";
 
@@ -310,4 +310,13 @@ test("a step from a caret goes on from the caret and not from the last match", a
   await page.settle();
   await backward;
   assert.equal(page.toasts.at(-1), "1 of 3");
+});
+
+test("nodes that OasisFox adds are not a page change, wherever they sit and whatever their style says", () => {
+  const own = (name: string) => ({ nodeType: 1, hasAttribute: (asked: string) => asked === name });
+  const page_node = { nodeType: 1, hasAttribute: () => false };
+  const record = (added: unknown[], removed: unknown[] = []) => ({ type: "childList", addedNodes: added, removedNodes: removed }) as unknown as MutationRecord;
+  assert.equal(is_page_change(record([own("data-oasisfox-layer")], [own("data-oasisfox")])), false);
+  assert.equal(is_page_change(record([own("data-oasisfox-layer"), page_node])), true);
+  assert.equal(is_page_change({ type: "characterData", addedNodes: [], removedNodes: [] } as unknown as MutationRecord), true);
 });

@@ -634,7 +634,7 @@ export async function run_cases({ rdp, extension_id, run_case, expect, open_page
     expect(state.text === "find_words aa\n\nf", `after the second N ${JSON.stringify(state)}`);
   });
 
-  await run_case("a click in visual mode moves the anchor, and n then steps from there", async () => {
+  await run_case("a click in visual mode keeps the anchor, takes the caret end, and n then steps from there", async () => {
     const page_id = "find_vis_click";
     await open_page("find_words", page_id, { new_tab: true });
     await start_visual(page_id);
@@ -647,7 +647,8 @@ export async function run_cases({ rdp, extension_id, run_case, expect, open_page
     await sleep(600);
     await send_keys("n");
     const state = await read_after("n after the click");
-    expect(state.text === "find_words bb\n\nf" || (state.anchor === "find_words bb" && state.focus === "find_words cc"), `after the click and n ${JSON.stringify(state)}, expected the anchor on bb`);
+    // Visual mode keeps its anchor on a click and takes the clicked text as the caret end, so n goes on from bb to cc.
+    expect(state.anchor === "find_words find_vis_" && state.focus === "find_words cc", `after the click and n ${JSON.stringify(state)}, expected the anchor on the title and the focus on cc`);
   });
 
   await run_case("a fresh visual session after an earlier search: n goes to the first match after the caret", async () => {
