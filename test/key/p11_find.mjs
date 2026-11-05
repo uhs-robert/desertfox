@@ -668,4 +668,17 @@ export async function run_cases({ rdp, extension_id, run_case, expect, open_page
     // V starts at the search match aa, so the first match after the caret is bb.
     expect(state.text === "find_words aa\n\nf", `n from the new caret went to ${JSON.stringify(state)}, expected aa to bb`);
   });
-}
+
+  await run_case("visual / after a click searches from the clicked text, not from the caret the session held before", async () => {
+    const page_id = "find_vis_open_click";
+    await open_page("find_words", page_id, { new_tab: true });
+    await start_visual(page_id);
+    await in_active_tab(`(() => { const text = [...document.querySelectorAll("p")].find((p) => p.textContent === "find_words cc").firstChild; getSelection().collapse(text, 1); return true; })()`);
+    await sleep(600);
+    await send_keys("/find_words");
+    await sleep(400);
+    await send_keys(...ENTER);
+    const state = await read_after("Enter");
+    // The caret is one character into cc, so the next match wraps to the title. From the stale caret on the title it would be aa.
+    expect(state.focus?.startsWith("find_words find_vis_") && state.focus_offset <= 1, `the search went to ${JSON.stringify(state)}, expected the wrap to the title`);
+  });}
