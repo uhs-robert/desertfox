@@ -3,7 +3,7 @@
 
 import type { WhichKeyPanel } from "../../shared/messages.ts";
 import { LAYERS } from "../../shared/layers.ts";
-import { create_surface } from "../surface.ts";
+import { create_surface, mount_surface } from "../surface.ts";
 import { choose_columns, fit_title } from "./layout.ts";
 
 const CHAMFER_PX = 8;
@@ -75,7 +75,7 @@ export function show_panel({ title, rows, border }: WhichKeyPanel): void {
   surface.text.replaceChildren(title_bar, frame);
   // The key test reads these attributes, because the shadow root is closed.
   surface.host.setAttribute("data-oasisfox-whichkey", `${columns}:${rows.length}`);
-  document.documentElement.append(surface.host);
+  mount_surface(surface.host);
   // Only a rendered chip can say whether it overflows.
   const { text, dropped } = fit_title(title, (candidate) => ((chip.textContent = candidate), chip.scrollWidth > chip.clientWidth));
   chip.textContent = text;
