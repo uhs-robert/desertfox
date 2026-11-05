@@ -143,6 +143,13 @@ shadow.getElementById("panel").addEventListener("scroll", () => send("panel_scro
       const build = '<div id="host"></div><script>document.getElementById("host").attachShadow({ mode: "open" }).innerHTML = \'<div id="editable" contenteditable="true">hello world</div>\'</script>';
       return response.end(page(`caret_editable_shadow ${id}`, "<p>foo bar.baz</p>" + build));
     }
+    if (url.pathname === "/headings") {
+      // In document order the labels are: the title h1 "a", Intro "s", Below "d", Last "f". The three hidden headings get none, so "d" is Below only when they are dropped.
+      const dropped = '<h2 style="visibility:hidden">Hidden</h2><details><summary>More</summary><h3>Closed</h3></details><h2 style="position:absolute;width:1px;height:1px;overflow:hidden">Screen reader only</h2>';
+      const filler = '<div style="height:3000px;background:linear-gradient(#fff,#ccc)"></div>';
+      const body = `<h2 id="intro">Intro</h2>${dropped}${filler}<div id="below" role="heading" aria-level="2">Below the fold</div>${filler}<h3 id="last">Last</h3>${filler}`;
+      return response.end(page(`headings ${id}`, body));
+    }
     if (url.pathname === "/prose") {
       // The heading, two spans in a wrapper div and a paragraph hold text of their own. The wrapper holds only blanks and children, so it gets no label.
       const body = '<div id="card"> <span>alpha text</span> <span>beta text</span> </div><p>gamma <b>bold</b></p>';

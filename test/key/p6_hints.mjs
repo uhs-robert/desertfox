@@ -157,6 +157,68 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, open_p
     expect((await scroll_delta_after("p6_no_match", ["j"])) > 0, "keys did not work after a text with no match");
   });
 
+  // The panel is a surface host on the root element, in the hints layer. Its shadow root is closed, so the host count is what a page can see. The which-key panel and the mode badge sit in other layers.
+  const hints_layer = 2147483647 - 4;
+  const panel_hosts = async () => (await in_active_tab(`document.documentElement.querySelectorAll(':scope > [data-oasisfox-layer="${hints_layer}"]').length`))[0];
+  const scroll_y = async () => (await in_active_tab(`Math.round(scrollY)`))[0];
+
+  await run_case(";# lists the headings and a label scrolls to one below the screen", async () => {
+    await open_page("headings", "p6_headings", { new_tab: true });
+    await send_keys(";#");
+    await sleep(400);
+    expect((await panel_hosts()) === 1, "the headings panel did not open");
+    const delta = await scroll_delta_after("p6_headings", ["d"]);
+    expect(delta > 0, `the page did not scroll, delta ${delta}`);
+    const top = (await in_active_tab(`Math.round(document.getElementById("below").getBoundingClientRect().top)`))[0];
+    expect(Math.abs(top) <= 2, `Below the fold sits ${top}px from the top, the hidden headings may have taken labels`);
+    expect((await panel_hosts()) === 0, "the panel stayed after the pick");
+    expect((await scroll_delta_after("p6_headings", ["j"])) > 0, "keys did not work again after the pick");
+  });
+
+  await run_case(";# reaches a heading above the screen", async () => {
+    await open_page("headings", "p6_headings_up", { new_tab: true });
+    await scroll_delta_after("p6_headings_up", ["G"]);
+    await send_keys(";#");
+    await sleep(400);
+    const delta = await scroll_delta_after("p6_headings_up", ["s"]);
+    expect(delta < 0, `the page did not scroll up, delta ${delta}`);
+    const top = (await in_active_tab(`Math.round(document.getElementById("intro").getBoundingClientRect().top)`))[0];
+    expect(Math.abs(top) <= 2, `Intro sits ${top}px from the top`);
+  });
+
+  await run_case(";# closes on Escape without moving, and a wrong key or a second ;# keeps it open", async () => {
+    await open_page("headings", "p6_headings_close", { new_tab: true });
+    await send_keys(";#");
+    await sleep(400);
+    await send_keys("z");
+    await send_keys(";#");
+    await sleep(300);
+    expect((await panel_hosts()) === 1, "a wrong key or a second ;# changed the panel");
+    await send_keys("-k", "Escape");
+    await sleep(300);
+    expect((await panel_hosts()) === 0, "Escape left the panel");
+    expect((await scroll_y()) === 0, "Escape moved the page");
+    expect((await scroll_delta_after("p6_headings_close", ["j"])) > 0, "keys did not work again after Escape");
+  });
+
+  await run_case(";# leaves nothing behind when the page changes", async () => {
+    await open_page("headings", "p6_headings_leave", { new_tab: true });
+    await send_keys(";#");
+    await sleep(400);
+    await open_page("hints", "p6_headings_after", { new_tab: false });
+    expect((await panel_hosts()) === 0, "the panel stayed on the next page");
+    expect((await scroll_delta_after("p6_headings_after", ["j"])) > 0, "keys did not work on the next page");
+  });
+
+  await run_case(";# on a page with no headings opens no panel", async () => {
+    await open_page("headings", "p6_headings_none", { new_tab: true });
+    await in_active_tab(`document.querySelectorAll("h1, h2, h3, [role=heading]").forEach((heading) => heading.remove()); 0`);
+    await send_keys(";#");
+    await sleep(500);
+    expect((await panel_hosts()) === 0, "an empty panel opened");
+    expect((await scroll_delta_after("p6_headings_none", ["j"])) > 0, "hint mode stayed after the empty list");
+  });
+
   // The selector keeps the labels fixed: #card is "a", #other is "s".
   const hover_pick = (label) => run_hint({ action: "hover", filter: "custom", selector: "#card, #other" }).then(() => sleep(400)).then(() => send_keys(label));
   const hover_events = (mark, page_id) => events.slice(mark).filter((event) => event.page_id === page_id && event.type.startsWith("hover_")).map((event) => `${event.type}:${event.box}`);
@@ -219,6 +281,15 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, open_p
       await take_shot(`${shot_dir}/p6_rapid_after_pick.png`);
       await send_keys("-k", "Escape");
       await close_tabs_with("hint_one");
+      await sleep(300);
+    });
+
+    await run_case("screenshot of the headings panel", async () => {
+      await open_page("headings", "p6_shot_headings", { new_tab: true });
+      await send_keys(";#");
+      await sleep(600);
+      await take_shot(`${shot_dir}/p6_headings_panel.png`);
+      await send_keys("-k", "Escape");
       await sleep(300);
     });
 
