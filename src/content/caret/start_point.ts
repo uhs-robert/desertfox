@@ -38,14 +38,24 @@ export function first_visible_index(model: TextModel): number {
     const index = model.index_of(anchor, selection!.anchorOffset);
     if (index !== undefined) return index;
   }
+  return first_index_not_before(model, (box) => box.bottom < 0);
+}
+
+// Text runs down the page, so the first character that is not before an edge is found by halving. The box is the character's own, because a paragraph's box starts above the screen.
+function first_index_not_before(model: TextModel, is_before: (box: DOMRect) => boolean): number {
   let low = 0;
   let high = model.text.length - 1;
-  // Text runs down the page, so the first character below the top edge is found by halving. The box is the character's own, because a paragraph's box starts above the screen.
   while (low < high) {
     const middle = (low + high) >> 1;
     const box = box_from(model, middle);
-    if (box && box.bottom < 0) low = middle + 1;
+    if (box && is_before(box)) low = middle + 1;
     else high = middle;
   }
   return Math.max(low, 0);
+}
+
+// The characters from the top edge to the bottom edge of this window. Layout is not monotonic (fixed boxes, columns, nested scrollers), so the callers pad it.
+export function visible_index_range(model: TextModel): { first: number; last: number } {
+  const bottom_edge = window.innerHeight;
+  return { first: first_index_not_before(model, (box) => box.bottom < 0), last: first_index_not_before(model, (box) => box.top <= bottom_edge) };
 }

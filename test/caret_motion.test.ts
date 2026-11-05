@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { find_char, move_once } from "../src/content/caret/motion.ts";
+import { find_char, find_char_hit, find_char_matches, move_once } from "../src/content/caret/motion.ts";
 import type { Motion, MotionUnit } from "../src/content/caret/motion.ts";
 import { selected_text, swap_ends, with_caret } from "../src/content/caret/selection_state.ts";
 
@@ -82,7 +82,7 @@ test("word motions keep accented and non-Latin letters inside the word", () => {
 // "foo bar.baz" is 0-10, its "\n" is 11, the empty line is 12, "  qux quux" is 13-22.
 const find = (from: number, char: string, direction: "forward" | "back", till: boolean, count = 1, again = false) => find_char(TEXT, from, { char, direction, till }, count, again);
 
-test("f and t find the next match in the paragraph, exact case", () => {
+test("f and t find the next match, exact case", () => {
   assert.equal(find(0, "b", "forward", false), 4);
   assert.equal(find(0, "b", "forward", true), 3);
   assert.equal(find(0, "B", "forward", false), 0);
@@ -95,16 +95,43 @@ test("F and T find backward", () => {
   assert.equal(find(10, "b", "back", true), 9);
 });
 
-test("a count picks the Nth match and a short paragraph does not move", () => {
+test("a count picks the Nth match and too few matches do not move", () => {
   assert.equal(find(0, "o", "forward", false, 2), 2);
-  assert.equal(find(0, "a", "forward", false, 3), 0);
+  assert.equal(find(0, "a", "forward", false, 3), 25);
+  assert.equal(find(0, "a", "forward", false, 4), 0);
   assert.equal(find(0, "a", "forward", false, 2), 9);
 });
 
-test("a find stops at the paragraph ends", () => {
-  assert.equal(find(0, "q", "forward", false), 0);
-  assert.equal(find(15, "f", "back", false), 15);
-  assert.equal(find(12, "f", "forward", false), 12);
+test("a find reaches across line breaks, forward and back", () => {
+  assert.equal(find(0, "q", "forward", false), 15);
+  assert.equal(find(15, "f", "back", false), 0);
+  assert.equal(find(12, "l", "forward", false), 24);
+  assert.equal(find(0, "o", "forward", false, 3), 0);
+});
+
+test("a till find that would stop on a line break stops on the last character of the line", () => {
+  assert.equal(find(0, "l", "forward", true), 22);
+  assert.equal(find(26, "x", "back", true), 22);
+  assert.equal(find_char("foo\nbar", 0, { char: "b", direction: "forward", till: true }, 1), 2);
+});
+
+test("the hit names the match, not the caret", () => {
+  assert.deepEqual(find_char_hit(TEXT, 0, { char: "b", direction: "forward", till: true }, 1), { caret: 3, match: 4 });
+  assert.equal(find_char_hit(TEXT, 0, { char: "Z", direction: "forward", till: false }, 1), undefined);
+});
+
+test("repeating a till find skips a match whose stop is where the caret already stands", () => {
+  const till_b = { char: "b", direction: "forward", till: true } as const;
+  assert.equal(find_char("a\nbxb", 0, till_b, 1), 0);
+  assert.equal(find_char("a\nbxb", 0, till_b, 1, true), 3);
+});
+
+test("find_char_matches lists every start, exact case, with a surrogate pair whole", () => {
+  assert.deepEqual(find_char_matches("abAb b", "b"), [1, 3, 5]);
+  assert.deepEqual(find_char_matches("abAb b", "A"), [2]);
+  assert.deepEqual(find_char_matches("a\u{1F600}b\u{1F600}", "\u{1F600}"), [1, 4]);
+  assert.deepEqual(find_char_matches("", "a"), []);
+  assert.deepEqual(find_char_matches("a b", " "), [1]);
 });
 
 test("repeating a till find steps over the adjacent match", () => {

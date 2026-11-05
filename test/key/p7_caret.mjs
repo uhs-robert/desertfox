@@ -1,7 +1,10 @@
 // Key cases of the caret and visual piece. run.mjs calls run_cases with its helpers.
 // The pages report each change of their selection, and the highlight style the bundle puts on the document.
 
-export async function run_cases({ run_case, expect, open_page, send_keys, sleep, events, wait_event }) {
+import { mkdirSync } from "node:fs";
+import { evaluate_in_background } from "./rdp.mjs";
+
+export async function run_cases({ rdp, extension_id, take_shot, run_case, expect, open_page, send_keys, sleep, events, wait_event }) {
   const paste_ctrl_v = ["-M", "ctrl", "v", "-m", "ctrl"];
   // Moonlight, the default palette, dark: the caret takes the command color and visual mode the visual color.
   const CARET_BACKGROUND = "#7fcf78";
@@ -250,6 +253,8 @@ export async function run_cases({ run_case, expect, open_page, send_keys, sleep,
       const mark = events.length;
       await send_keys(keys);
       await wait_event(mark, selection_is("caret_find", text), `${keys} to "${text}"`);
+      // The find lights its matches and the same key family repeats it, so Escape ends it before the next find.
+      await send_keys("-k", "Escape");
     }
     await send_keys("-k", "Escape");
   });
@@ -264,6 +269,7 @@ export async function run_cases({ run_case, expect, open_page, send_keys, sleep,
     await wait_event(mark, selection_is("caret_find_cancel", "a"), "l after the cancelled find");
     // w is bound to a word motion, and here it is the target: the heading has no w, so the caret stays and the find is over.
     await send_keys("fw");
+    await send_keys("-k", "Escape");
     mark = events.length;
     await send_keys("fd");
     await wait_event(mark, selection_is("caret_find_cancel", "d"), "fd after a find with no match");
@@ -278,6 +284,116 @@ export async function run_cases({ run_case, expect, open_page, send_keys, sleep,
     await send_keys("f");
     await send_keys(" ");
     await wait_event(mark, selection_is("caret_find_space", " "), "f then Space to the space after caret");
+    await send_keys("-k", "Escape");
+  });
+
+  // /caret_ft holds forty rows "row N x", 100 pixels apart. The highlights are read from the page's own world, by the names of the character find and of a kept `/` search.
+  const in_active_tab = (code) => evaluate_in_background(rdp, extension_id, `(async () => { const [tab] = await browser.tabs.query({ active: true, currentWindow: true }); return (await browser.tabs.executeScript(tab.id, { code: ${JSON.stringify(code)} }))[0]; })()`).then((value) => {
+    if (value?.error) throw new Error(`in the tab: ${JSON.stringify(value)}`);
+    return value;
+  });
+  const READ_FT = `JSON.parse(window.wrappedJSObject.eval(${JSON.stringify(`JSON.stringify((() => {
+    const texts = (name) => { const found = []; CSS.highlights.get(name)?.forEach((range) => found.push(range.startContainer.data)); return found; };
+    return { all: texts("oasis-ft"), current: texts("oasis-ft-current"), search: texts("oasis-find").length + texts("oasis-find-current").length, y: scrollY };
+  })())`)}))`;
+  const row_of = (text) => Number(/row (\d+)/.exec(text)?.[1]);
+  const lit = (state) => state.all.length + state.current.length;
+  async function wait_ft(predicate, what) {
+    let state;
+    for (let attempt = 0; attempt < 40; attempt++) {
+      state = await in_active_tab(READ_FT);
+      if (predicate(state)) return state;
+      await sleep(150);
+    }
+    throw new Error(`timed out waiting for ${what}, last state ${JSON.stringify(state)}`);
+  }
+  const current_row = (state) => (state.current.length === 1 ? row_of(state.current[0]) : -1);
+  const shot_dir = process.env.OASISFOX_SHOT_DIR;
+  if (shot_dir) mkdirSync(shot_dir, { recursive: true });
+
+  await run_case("fx lights the visible matches, f and F repeat across the page and scroll it, 3f counts", async () => {
+    await open_page("caret_ft", "ft_repeat", { new_tab: true });
+    await send_keys("gV");
+    await send_keys("fx");
+    const first = await wait_ft((state) => current_row(state) === 0 && lit(state) >= 3, "the matches of the first screen with row 0 current");
+    expect(lit(first) < 25, `lit ${lit(first)} matches of forty rows: only the visible ones and a screen around should be lit`);
+    expect(first.y === 0, `the first f scrolled to ${first.y}`);
+    if (shot_dir) await take_shot(`${shot_dir}/char-find-highlights.png`);
+    await send_keys("3f");
+    await wait_ft((state) => current_row(state) === 3, "3f to row 3");
+    // Far past the first screen: the page scrolls and the new screen is lit, with the neighbours of the current row.
+    for (let step = 0; step < 14; step++) await send_keys("f");
+    const far = await wait_ft((state) => current_row(state) === 17 && state.y > 0, "row 17 current after the page scrolled");
+    expect(far.all.some((text) => row_of(text) === 16) || far.all.some((text) => row_of(text) === 18), `the new screen is not lit: ${JSON.stringify(far)}`);
+    await send_keys("F");
+    await wait_ft((state) => current_row(state) === 16, "F back to row 16");
+    await send_keys("-k", "Escape");
+  });
+
+  await run_case("t after f starts a till find, and the match next to the caret is the current one", async () => {
+    await open_page("caret_ft", "ft_till", { new_tab: true });
+    await send_keys("gV");
+    await send_keys("fx");
+    await wait_ft((state) => current_row(state) === 0, "row 0 current");
+    await send_keys("t");
+    await wait_ft((state) => lit(state) === 0, "no highlights while the till find waits for its target");
+    await send_keys("x");
+    await wait_ft((state) => current_row(state) === 1, "the x of row 1 current after tx");
+    await send_keys("t");
+    await wait_ft((state) => current_row(state) === 2, "t repeats the till find to row 2");
+    await send_keys("T");
+    await wait_ft((state) => current_row(state) === 1, "T repeats it back to row 1");
+    await send_keys("-k", "Escape");
+  });
+
+  await run_case("another key, Escape and a mode change clear the highlights, and ; repeats without them", async () => {
+    await open_page("caret_ft", "ft_end", { new_tab: true });
+    await send_keys("gV");
+    await send_keys("fx");
+    await wait_ft((state) => current_row(state) === 0, "row 0 current");
+    await send_keys("l");
+    await wait_ft((state) => lit(state) === 0, "cleared by l");
+    await send_keys(";");
+    await sleep(400);
+    expect(lit(await in_active_tab(READ_FT)) === 0, "; after the end drew highlights");
+    await send_keys("fx");
+    await wait_ft((state) => lit(state) > 0, "lit again by a new find");
+    await send_keys("-k", "Escape");
+    await wait_ft((state) => lit(state) === 0, "cleared by Escape");
+    await send_keys("fx");
+    await wait_ft((state) => lit(state) > 0, "lit once more");
+    await send_keys("v");
+    await wait_ft((state) => lit(state) === 0, "cleared by a mode change to visual");
+    await send_keys("-k", "Escape");
+    await send_keys("-k", "Escape");
+  });
+
+  await run_case("scrolling the page moves the highlights while the find is live and stops when it ends", async () => {
+    await open_page("caret_ft", "ft_scroll", { new_tab: true });
+    await send_keys("gV");
+    await send_keys("fx");
+    await wait_ft((state) => current_row(state) === 0, "row 0 current");
+    await in_active_tab("window.scrollTo(0, 2400); 0");
+    await wait_ft((state) => state.all.some((text) => row_of(text) >= 22), "highlights on the scrolled screen");
+    await send_keys("l");
+    await wait_ft((state) => lit(state) === 0, "cleared by l");
+    await in_active_tab("window.scrollTo(0, 0); 0");
+    await sleep(500);
+    expect(lit(await in_active_tab(READ_FT)) === 0, "a scroll after the end drew highlights");
+    await send_keys("-k", "Escape");
+  });
+
+  await run_case("a kept / search stays lit through a character find and after it ends", async () => {
+    await open_page("caret_ft", "ft_search", { new_tab: true });
+    await send_keys("/row 3");
+    await send_keys("-k", "Return");
+    const kept = await wait_ft((state) => state.search > 0, "the kept search highlights");
+    await send_keys("gV");
+    await send_keys("fx");
+    await wait_ft((state) => lit(state) > 0 && state.search === kept.search, "both sets lit");
+    await send_keys("l");
+    const after = await wait_ft((state) => lit(state) === 0, "the character find cleared");
+    expect(after.search === kept.search, `the kept search lost highlights: ${kept.search} then ${after.search}`);
     await send_keys("-k", "Escape");
   });
 }
