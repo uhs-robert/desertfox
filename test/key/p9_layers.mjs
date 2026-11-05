@@ -37,7 +37,7 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, open_p
     await send_keys("y");
     await wait_event(mark, (event) => event.type === "toast" && event.page_id === "p9_layers", "the copied toast");
     mark = events.length;
-    await send_keys(",w");
+    await send_keys("_w");
     await wait_event(mark, (event) => event.type === "whichkey" && event.page_id === "p9_layers" && event.value !== "", "the which-key panel");
     const { hosts, overlaps } = JSON.parse((await in_active_tab(hit_test))[0]);
     await send_keys("-k", "Escape");
