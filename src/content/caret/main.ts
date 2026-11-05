@@ -252,10 +252,12 @@ function word_target(): { pattern: string; from: DomPoint } | string {
   return { pattern, from: model.point_at(first) };
 }
 
+// A visual session searches from its caret, so it first catches up with the page. Other modes have nothing to catch up.
+const visual_session_now = () => (session?.mode === "visual" ? ensure_session("visual") : undefined);
+
 // `n` and `N`: step to the match, and a visual session takes its caret end there.
 async function find_step(reverse: boolean): Promise<Outcome> {
-  // A visual session steps from its caret, after it has caught up with the page.
-  const started = session?.mode === "visual" ? ensure_session("visual") : undefined;
+  const started = visual_session_now();
   if (typeof started === "string") return { ok: false, message: started };
   const outcome = await find.step(reverse, started && started.model.point_at(started.cursor.caret));
   const open = session;
@@ -270,6 +272,8 @@ async function find_step(reverse: boolean): Promise<Outcome> {
 
 // `*` and `#`: search for the word or selection at once, and let an open session follow the match.
 async function find_word(direction: "forward" | "backward"): Promise<Outcome> {
+  const started = visual_session_now();
+  if (typeof started === "string") return { ok: false, message: started };
   const target = word_target();
   if (typeof target === "string") return { ok: false, message: target };
   const outcome = await find.jump(target.pattern, direction, target.from);
@@ -287,7 +291,10 @@ async function find_word(direction: "forward" | "backward"): Promise<Outcome> {
 async function end_visual_search(from: Session, keep: boolean): Promise<void> {
   if (session !== from) return;
   const landed = keep ? find.position(from.model) : undefined;
-  if (landed !== undefined) from.cursor = with_caret(from.cursor, landed, true);
+  if (landed !== undefined) {
+    from.cursor = with_caret(from.cursor, landed, true);
+    from.goal_x = undefined;
+  }
   page.oasisfox_host.set_mode("visual");
 }
 
@@ -301,9 +308,10 @@ if (!page.oasisfox_caret_ready) {
   page.oasisfox_host.register_handler("find.open", (args) => {
     const direction = args.direction === "backward" ? "backward" : "forward";
     if (args.source === "word") return find_word(direction);
-    const from = session?.mode === "visual" ? session : undefined;
-    searching_from = from;
-    find.begin(direction, from?.model.point_at(from.cursor.caret));
+    const started = visual_session_now();
+    if (typeof started === "string") return { ok: false, message: started };
+    searching_from = started;
+    find.begin(direction, started?.model.point_at(started.cursor.caret));
     return page.oasisfox_host.run_command("cmdline.open", "cmdline", { search: direction });
   });
   page.oasisfox_host.register_handler("find.next", () => find_step(false));

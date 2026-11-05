@@ -114,3 +114,66 @@ test("set offers the setting names, then the values the setting lists", () => {
   assert.ok(rows("unset ").includes("all"));
   assert.deepEqual(rows("unset which_key_border "), []);
 });
+
+const WHOLE_TEXT_COMMANDS: CommandMeta[] = [
+  { id: "help.open", name: "help", label: "Help", intent: "Help.", params: [{ name: "name", type: "string", rest: true, main: true, default: "", values: ["Quick Start", "Commands"] }] },
+  { id: "tab.switch", name: "tab", label: "Switch tab", intent: "Switch tab.", params: [{ name: "tab", type: "string", rest: true, main: true, values: { from: "tabs" } }] },
+  { id: "bookmark.open", name: "bookmark", label: "Open bookmark", intent: "Open bookmark.", params: [{ name: "bookmark", type: "string", rest: true, main: true, values: { from: "bookmarks" } }] },
+  { id: "tab.attach", label: "Attach tab", intent: "Attach tab.", params: [{ name: "window", type: "string", rest: true, main: true, default: "", values: { from: "windows" } }] },
+  ...COMMANDS.filter((command) => command.id === "open.search"),
+  SET,
+];
+const LIVE_ITEMS = {
+  tabs: [{ number: 1, title: "Mail", url: "https://mail.test/" }, { number: 2, title: "Some Page Title", url: "https://p.test/" }],
+  bookmarks: [{ title: "Arch Wiki Home", url: "https://wiki.test/" }, { title: "Other", url: "https://o.test/" }],
+  windows: [{ number: 1, title: "Work Window" }, { number: 2, title: "Home" }],
+};
+const whole_text = create_completer(
+  create_word_lookup(WHOLE_TEXT_COMMANDS, {}),
+  WHOLE_TEXT_COMMANDS,
+  {},
+  SOURCES,
+  "normal",
+  { read: (kind) => ({ loading: false, items: (LIVE_ITEMS[kind as keyof typeof LIVE_ITEMS] ?? []) as never }) },
+);
+const picks = (text: string) => whole_text(text, text.length).rows.map((row) => row.insert);
+
+test("a help name with several words completes on all of them", () => {
+  assert.deepEqual(picks("help Quick S"), ['"Quick Start" ']);
+  assert.deepEqual(picks("help Quick Start "), ['"Quick Start" ']);
+  const found = whole_text("help Quick S", 12);
+  assert.deepEqual([found.start, found.end], [5, 12]);
+});
+
+test("a tab title with several words completes on all of them", () => {
+  assert.deepEqual(picks("tab Some Page T"), ["2 Some Page Title "]);
+  assert.deepEqual(picks("tab 2 Some P"), ["2 Some Page Title "]);
+});
+
+test("a bookmark title with several words completes on all of them", () => {
+  assert.deepEqual(picks("bookmark Arch Wiki H"), ["https://wiki.test/ "]);
+});
+
+test("a window title with several words completes on all of them", () => {
+  assert.deepEqual(picks("tab.attach Work Win"), ["1 Work Window "]);
+});
+
+test("search and set keep one word per position", () => {
+  assert.deepEqual(picks("search duck two words"), []);
+  assert.deepEqual(picks("set which_key_border round "), []);
+  assert.deepEqual(picks("set open_completion history "), ["bookmarks ", "history "]);
+});
+
+test("the line right after a quoted pick still lists the picked row", () => {
+  assert.deepEqual(picks('help "Quick Start" '), ['"Quick Start" ']);
+  assert.deepEqual(picks('help "Quick" S'), ['"Quick Start" ']);
+});
+
+test("a mid-line caret in a whole-text subject ranks the words before it and replaces to the end", () => {
+  const text = "tab Some Page T --x";
+  const found = whole_text(text, 15);
+  assert.deepEqual(found.rows.map((row) => row.insert), ["2 Some Page Title "]);
+  assert.deepEqual([found.start, found.end], [4, text.length]);
+  const foo = whole_text("tab foo --x", 7);
+  assert.deepEqual([foo.start, foo.end], [4, 11]);
+});
