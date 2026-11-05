@@ -28,7 +28,7 @@ function make({ slow_set = false, stuck_ticket = "" } = {}) {
     tickets,
     new_ticket: () => `ticket-${++issued}`,
     sources: async () => ({ search_engines: ["arch"], containers: [] }),
-    page_config: async () => ({ commands: [{ id: "my.snippet", label: "Mine", intent: "page" }], command_aliases: { g: "open.search" }, css: "a{}", prompt: ">> " }),
+    page_config: async () => ({ commands: [{ id: "my.snippet", label: "Mine", intent: "page" }], help_ids: ["tab.next"], command_aliases: { g: "open.search" }, css: "a{}", prompt: ">> " }),
   });
   // Opens the line the way the host and the page do: a ticket for tab 7, redeemed from tab 7.
   const open = async () => (await service.open(await service.issue_ticket(7), 7))!;

@@ -12,10 +12,11 @@ export const PAGES = [
 
 export type PageId = (typeof PAGES)[number]["id"];
 
-export type Route = { page: PageId; engine?: string; section?: string };
+export type Route = { page: PageId; engine?: string; command?: string; section?: string };
 
 // `engine.show <name>` opens `#engine=<name>`, which stays valid and lands on the Search Engines page.
 // `#section=<slug>` lands on the Quick Start page at that section, the same way.
+// `#command=<id>` lands on the Commands page at that command's card.
 // An unknown hash shows Home.
 export function parse_route(hash: string): Route {
   let text = hash;
@@ -28,6 +29,11 @@ export function parse_route(hash: string): Route {
   if (engine !== undefined) return { page: "search-engines", engine };
   const section = /^#section=(.+)$/.exec(text)?.[1];
   if (section !== undefined) return { page: "quick-start", section };
+  const command = /^#command=(.+)$/.exec(text)?.[1];
+  if (command !== undefined) return { page: "commands", command };
   const page = PAGES.find((candidate) => candidate.hash === text);
   return { page: page?.id ?? "home" };
 }
+
+// The URL that opens help at a command's card. The id is encoded, so a snippet id with odd characters stays one value.
+export const command_help_url = (base: string, command_id: string): string => `${base}#command=${encodeURIComponent(command_id)}`;
