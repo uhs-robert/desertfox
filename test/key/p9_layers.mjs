@@ -62,6 +62,7 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, open_p
     await push_toast();
     await wait_event(mark, (event) => event.type === "toast" && event.page_id === "p9_layers_line", "the pushed toast");
     const { overlaps } = JSON.parse((await in_active_tab(hit_test))[0]);
+    expect(overlaps.length > 0, "the toast and the line do not overlap in the bottom 160px, so the order is not tested");
     const wrong = overlaps.filter(([top, under]) => top < under);
     expect(wrong.length === 0, `a lower layer is on top of a higher one at ${wrong.length} points, first ${JSON.stringify(wrong[0])}`);
     await send_keys(typed_after);
