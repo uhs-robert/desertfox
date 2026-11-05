@@ -13,7 +13,7 @@ function show_route(model: HelpModel, guide: Block[], moved_by_user: boolean): v
   const route = parse_route(location.hash);
   render_help(document.body, model, route, guide);
   // The render removed the link that had focus. Not on first load, where focus belongs to the browser.
-  const section_heading = route.section === undefined ? null : document.getElementById(section_anchor(route.section));
+  const section_heading = route.section === undefined ? null : document.getElementById(section_anchor(route.page, route.section));
   if (section_heading) {
     section_heading.scrollIntoView();
     section_heading.focus({ preventScroll: true });

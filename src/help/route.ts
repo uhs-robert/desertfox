@@ -15,7 +15,7 @@ export type PageId = (typeof PAGES)[number]["id"];
 export type Route = { page: PageId; engine?: string; command?: string; section?: string };
 
 // `engine.show <name>` opens `#engine=<name>`, which stays valid and lands on the Search Engines page.
-// `#section=<slug>` lands on the Quick Start page at that section, the same way.
+// `#section=<page>/<slug>` lands on that page at that section, the same way, for every page with sections.
 // `#command=<id>` lands on the Commands page at that command's card.
 // An unknown hash shows Home.
 export function parse_route(hash: string): Route {
@@ -27,8 +27,9 @@ export function parse_route(hash: string): Route {
   }
   const engine = /^#engine=(.+)$/.exec(text)?.[1];
   if (engine !== undefined) return { page: "search-engines", engine };
-  const section = /^#section=(.+)$/.exec(text)?.[1];
-  if (section !== undefined) return { page: "quick-start", section };
+  const section = /^#section=([^/]+)\/(.+)$/.exec(text);
+  const section_page = PAGES.find((candidate) => candidate.id === section?.[1]);
+  if (section_page !== undefined) return { page: section_page.id, section: section![2]! };
   const command = /^#command=(.+)$/.exec(text)?.[1];
   if (command !== undefined) return { page: "commands", command };
   const page = PAGES.find((candidate) => candidate.hash === text);

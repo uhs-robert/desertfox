@@ -1,6 +1,5 @@
 // Draws the help model with DOM calls only. Command text never goes through innerHTML.
 
-import { command_matches, count_line } from "./filter.ts";
 import { copy_text } from "../content/caret/copy_text.ts";
 import type { Block, Inline } from "./blocks.ts";
 import type { CommandRow, EngineRow, HelpModel, KeyRow } from "./model.ts";
@@ -139,15 +138,12 @@ function block_node(block: Block): HTMLElement {
   }
 }
 
+// The level-2 headings of the guide get the ids the sidebar links to. Their slugs come from the same list, in order.
 function quick_start_page(blocks: Block[]): HTMLElement[] {
-  const slugs = quick_start_sections(blocks).map((section) => section.slug);
+  const sections = [...page_sections("quick-start", blocks)];
   return blocks.map((block) => {
-    const node = block_node(block);
-    if (block.kind === "heading" && block.level === 2) {
-      node.id = section_anchor(slugs.shift() ?? "");
-      node.tabIndex = -1;
-    }
-    return node;
+    if (block.kind !== "heading" || block.level !== 2) return block_node(block);
+    return section_heading("quick-start", sections.shift()!);
   });
 }
 
@@ -156,85 +152,36 @@ function definition_table(rows: { name: string; meaning: string }[]): HTMLElemen
 }
 
 function home_page(model: HelpModel): HTMLElement[] {
+  const [warnings_section, settings_section] = HOME_SECTIONS as [Section, Section];
   const warnings = model.warnings.length === 0
     ? el("p", "oasisfox-help-muted", "No warnings.")
     : el("ul", "oasisfox-help-warnings", ...model.warnings.map((warning) => el("li", undefined, warning)));
   const settings = el("table", undefined, ...model.settings.map((row) => el("tr", undefined, el("td", undefined, el("code", undefined, row.name)), el("td", undefined, el("code", undefined, row.value)))));
   return [
     block_node(model.tip),
-    el("h2", undefined, "Warnings"),
+    section_heading("home", warnings_section),
     warnings,
-    el("h2", undefined, "Settings"),
+    section_heading("home", settings_section),
     el("p", undefined, `Config source: ${model.config_source}. This list is read-only.`),
     settings,
   ];
 }
 
-// Kept outside the tree: every render rebuilds the page, and the text must outlive it.
-let command_filter = "";
-
-function commands_page(model: HelpModel, target_command: string | undefined): HTMLElement[] {
-  // A `#command=` link must land on a visible card, so it drops a filter that could hide it.
-  if (target_command !== undefined) command_filter = "";
-  const input = el("input", "oasisfox-help-filter") as HTMLInputElement;
-  input.setAttribute("type", "text");
-  input.setAttribute("placeholder", "Filter by name, key or description");
-  input.setAttribute("aria-label", "Filter commands");
-  input.value = command_filter;
-  const count = el("p", "oasisfox-help-filter-count oasisfox-help-muted");
-  count.setAttribute("aria-live", "polite");
-
-  const groups = model.groups.map((group) => {
-    const heading = el("h2", undefined, group.name);
-    return { heading, cards: group.commands.map((command) => ({ command, card: command_card(command) })) };
-  });
-  const total = model.groups.reduce((sum, group) => sum + group.commands.length, 0);
-
-  const apply_filter = (): HTMLElement | undefined => {
-    let shown = 0;
-    let first: HTMLElement | undefined;
-    for (const group of groups) {
-      let group_shown = 0;
-      for (const { command, card } of group.cards) {
-        const match = command_matches(command, command_filter);
-        card.hidden = !match;
-        card.classList.remove("oasisfox-help-current");
-        if (match) {
-          group_shown += 1;
-          first ??= card;
-        }
-      }
-      group.heading.hidden = group_shown === 0;
-      shown += group_shown;
-    }
-    count.textContent = count_line(shown, total);
-    return first;
-  };
-  apply_filter();
-
-  input.addEventListener("input", () => {
-    command_filter = input.value;
-    apply_filter();
-  });
-  input.addEventListener("keydown", (event) => {
-    if (event.key === "Enter") {
-      event.preventDefault();
-      const first = apply_filter();
-      if (!first) return;
-      first.classList.add("oasisfox-help-current");
-      first.scrollIntoView();
-    }
-  });
-
-  return [block_node(model.tip), input, count, ...groups.flatMap((group) => [group.heading, ...group.cards.map(({ card }) => card)])];
+function commands_page(model: HelpModel): HTMLElement[] {
+  const sections = page_sections("commands", model);
+  return [
+    block_node(model.tip),
+    ...model.groups.flatMap((group, index) => [section_heading("commands", sections[index]!), ...group.commands.map(command_card)]),
+  ];
 }
 
 function styling_page(): HTMLElement[] {
+  const [variables_section, classes_section] = STYLING_SECTIONS as [Section, Section];
   return [
     el("p", undefined, "Set these CSS variables in style.css to restyle OasisFox. A surface reads the roles it needs, so a role no surface reads yet has no visible effect. The class names below are stable."),
-    el("h2", undefined, "Variables"),
+    section_heading("styling", variables_section),
     definition_table(STYLE_VARIABLES),
-    el("h2", undefined, "Classes"),
+    section_heading("styling", classes_section),
     definition_table(STYLE_CLASSES.map((entry) => ({ ...entry, name: `.${entry.name}` }))),
   ];
 }
@@ -244,7 +191,7 @@ function page_body(route: Route, model: HelpModel, guide: Block[]): HTMLElement[
     case "home": return home_page(model);
     case "quick-start": return quick_start_page(model.quick_start);
     case "search-engines": return [...guide.map(block_node), el("h2", undefined, "Your engines"), engine_table(model.engines)];
-    case "commands": return commands_page(model, route.command);
+    case "commands": return commands_page(model);
     case "styling": return styling_page();
   }
 }
@@ -268,35 +215,58 @@ function support_line(): HTMLElement {
   );
 }
 
-export const section_anchor = (slug: string): string => `quick-start-${slug}`;
+export const section_anchor = (page: PageId, slug: string): string => `${page}-${slug}`;
 
 export type Section = { title: string; slug: string };
 
-// Slugs are unique, because they become element ids and route values. A repeat or a title with no letters gets a number.
-export function quick_start_sections(blocks: Block[]): Section[] {
+// Slugs are unique within a page, because they become element ids and route values. A repeat or a title with no letters gets a number.
+export function sections_from_titles(titles: string[]): Section[] {
   const seen = new Set<string>();
-  return blocks.flatMap((block) => {
-    if (block.kind !== "heading" || block.level !== 2) return [];
-    const base = block.text.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "section";
+  return titles.map((title) => {
+    const base = title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "section";
     let slug = base;
     for (let count = 2; seen.has(slug); count += 1) slug = `${base}-${count}`;
     seen.add(slug);
-    return [{ title: block.text, slug }];
+    return { title, slug };
   });
 }
 
-function section_list(sections: Section[], expanded: boolean): HTMLElement {
+const HOME_SECTIONS = sections_from_titles(["Warnings", "Settings"]);
+const STYLING_SECTIONS = sections_from_titles(["Variables", "Classes"]);
+
+// The sections a page lists in the sidebar. Search Engines has none, because its guide loads late and its headings have no ids.
+export function page_sections(page: PageId, source: HelpModel | Block[]): Section[] {
+  const quick_start = Array.isArray(source) ? source : source.quick_start;
+  switch (page) {
+    case "home": return HOME_SECTIONS;
+    case "quick-start": return sections_from_titles(quick_start.flatMap((block) => (block.kind === "heading" && block.level === 2 ? [block.text] : [])));
+    case "commands": return Array.isArray(source) ? [] : sections_from_titles(source.groups.map((group) => group.name));
+    case "search-engines": return [];
+    case "styling": return STYLING_SECTIONS;
+  }
+}
+
+function section_heading(page: PageId, section: Section): HTMLElement {
+  const heading = el("h2", undefined, section.title);
+  heading.id = section_anchor(page, section.slug);
+  heading.tabIndex = -1;
+  return heading;
+}
+
+export const section_hash = (page: PageId, slug: string): string => `#section=${page}/${encodeURIComponent(slug)}`;
+
+function section_list(page: PageId, sections: Section[], expanded: boolean): HTMLElement {
   const list = el("div", "oasisfox-help-sections");
-  list.id = "oasisfox-help-sections";
+  list.id = `oasisfox-help-sections-${page}`;
   list.hidden = !expanded;
   for (const { title, slug } of sections) {
     const link = el("a", undefined, title);
-    const hash = `#section=${slug}`;
+    const hash = section_hash(page, slug);
     link.setAttribute("href", hash);
     // The same hash fires no hashchange, so a click would not scroll back from where the reader moved.
     link.addEventListener("click", () => {
-      if (location.hash !== hash) return;
-      const heading = document.getElementById(section_anchor(slug));
+      if (decodeURIComponent(location.hash) !== decodeURIComponent(hash)) return;
+      const heading = document.getElementById(section_anchor(page, slug));
       heading?.scrollIntoView();
       heading?.focus({ preventScroll: true });
     });
@@ -305,30 +275,43 @@ function section_list(sections: Section[], expanded: boolean): HTMLElement {
   return list;
 }
 
+// Kept outside the tree, like any state a render would wipe. Holds only chevron toggles, never the automatic opening of the current page.
+const group_open = new Map<PageId, boolean>();
+let last_page: PageId | undefined;
+
+export function reset_group_state(): void {
+  group_open.clear();
+  last_page = undefined;
+}
+
 // A real button, so keys and hints reach it.
-function section_toggle(list: HTMLElement): HTMLElement {
+function section_toggle(page: PageId, title: string, list: HTMLElement): HTMLElement {
   const button = el("button", "oasisfox-help-sections-toggle", list.hidden ? "\u25B8" : "\u25BE");
   button.setAttribute("type", "button");
-  button.setAttribute("aria-label", "Quick Start sections");
+  button.setAttribute("aria-label", `${title} sections`);
   button.setAttribute("aria-controls", list.id);
   button.setAttribute("aria-expanded", String(!list.hidden));
   button.addEventListener("click", () => {
     list.hidden = !list.hidden;
+    group_open.set(page, !list.hidden);
     button.setAttribute("aria-expanded", String(!list.hidden));
     button.textContent = list.hidden ? "\u25B8" : "\u25BE";
   });
   return button;
 }
 
-// A section route renders the list open, so following a link does not collapse it. Otherwise it starts collapsed.
-function sidebar(current: PageId, quick_start: Block[], open_section: boolean): HTMLElement {
+// The current page's group is open unless the reader toggled it on this page. Going to a page drops its stored toggle, so a menu click always opens it. Other groups keep what the reader set, closed at first. Each toggle works alone.
+function sidebar(current: PageId, model: HelpModel): HTMLElement {
+  if (current !== last_page) group_open.delete(current);
+  last_page = current;
   const entries = PAGES.map((page): HTMLElement => {
     const link = el("a", undefined, page.title);
     link.setAttribute("href", page.hash);
     if (page.id === current) link.setAttribute("aria-current", "page");
-    if (page.id !== "quick-start") return link;
-    const list = section_list(quick_start_sections(quick_start), open_section);
-    return el("div", "oasisfox-help-nav-group", el("div", "oasisfox-help-nav-row", link, section_toggle(list)), list);
+    const sections = page_sections(page.id, model);
+    if (sections.length === 0) return link;
+    const list = section_list(page.id, sections, group_open.get(page.id) ?? page.id === current);
+    return el("div", "oasisfox-help-nav-group", el("div", "oasisfox-help-nav-row", link, section_toggle(page.id, page.title, list)), list);
   });
   return el("nav", "oasisfox-help-sidebar", el("div", "oasisfox-help-brand", "OasisFox"), ...entries, support_line());
 }
@@ -338,5 +321,5 @@ export function render_help(root: HTMLElement, model: HelpModel, route: Route, g
   const heading = el("h1", undefined, title);
   heading.tabIndex = -1;
   const page = el("main", "oasisfox-help-page", heading, ...page_body(route, model, guide));
-  root.replaceChildren(el("div", "oasisfox-help", sidebar(route.page, model.quick_start, route.section !== undefined), page));
+  root.replaceChildren(el("div", "oasisfox-help", sidebar(route.page, model), page));
 }
