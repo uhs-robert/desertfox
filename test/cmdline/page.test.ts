@@ -21,6 +21,7 @@ const OPENED = {
     { id: "my.fetch", name: "fetch", label: "Fetch", intent: "", params: [{ name: "url", type: "string", main: true }] },
   ],
   command_aliases: { j: "my.jira" },
+  help_ids: ["my.jira"],
   css: ".oasisfox-cmdline { --oasisfox-bg-core: red; }",
   prompt: ">> ",
 };
@@ -35,10 +36,12 @@ function fake_element() {
     hidden: false,
     offsetHeight: 0,
     children: [] as unknown[],
+    dataset: {} as Record<string, string>,
     style: { setProperty: () => {} },
     append: (...nodes: unknown[]) => void element.children.push(...nodes),
     replaceChildren: (...nodes: unknown[]) => void (element.children = nodes),
-    addEventListener: () => {},
+    listeners: {} as Record<string, (event: unknown) => void>,
+    addEventListener: (type: string, listener: (event: unknown) => void) => void (element.listeners[type] = listener),
   };
   return element;
 }
@@ -54,6 +57,7 @@ async function load_page(t: TestContext, tag: string, { keymap = KEYMAP, with_ta
   const head: { textContent: string }[] = [];
   // Every message the page sends to the background, in order.
   const to_background: string[] = [];
+  const sent: { type: string; command_id?: string }[] = [];
   // The `complete_items` asks that wait for the test to answer them.
   const item_asks: ((items: unknown[]) => void)[] = [];
   // Setting the value puts the caret at the end, as Firefox does.
@@ -104,6 +108,7 @@ async function load_page(t: TestContext, tag: string, { keymap = KEYMAP, with_ta
         // The background answers only the ticket it issued.
         sendMessage: async (message: { type: string; ticket?: string }) => {
           to_background.push(message.type);
+          sent.push(message);
           if (message.type === "complete_items") return new Promise((resolve) => void item_asks.push((items) => resolve({ items })));
           if (message.type === "open_cmdline" && message.ticket === TICKET && with_tab_command) return { ...opened_answer, commands: [...OPENED.commands, TAB_COMMAND] };
           return message.type === "open_cmdline" && message.ticket === TICKET ? opened_answer : undefined;
@@ -135,7 +140,7 @@ async function load_page(t: TestContext, tag: string, { keymap = KEYMAP, with_ta
   };
   const press_enter = () => input_listeners.keydown!({ isTrusted: true, isComposing: false, key: "Enter", code: "Enter", preventDefault: () => {} });
   const press = (key: string) => input_listeners.keydown!({ isTrusted: true, isComposing: false, key, code: key, preventDefault: () => {} });
-  return { input, list, panel, prompt, to_parent, to_background, item_asks, head, post_start, press_enter, press };
+  return { input, list, panel, prompt, to_parent, to_background, sent, item_asks, head, post_start, press_enter, press };
 }
 
 // Port messages arrive on a later turn, and later still on a busy machine.
@@ -380,4 +385,35 @@ test("a refocus from the host focuses the input and leaves the caret and selecti
   host.port.postMessage({ oasisfox_cmdline: { kind: "refocus" } });
   await until(() => input.focus_count === before + 1);
   assert.deepEqual([input.focus_count, input.value, input.selectionStart, input.selectionEnd], [before + 1, "open here", 2, 6]);
+});
+
+// A click target the way the page reads it: the name cell with a help id, or an item with its index.
+const click_on_name = (help: string) => ({ target: { closest: (selector: string) => (selector === ".oasisfox-cmdline-link" ? { dataset: { help } } : undefined) } });
+const click_on_item = (index: number) => ({ target: { closest: (selector: string) => (selector === "[data-index]" ? { dataset: { index: String(index) } } : undefined) } });
+
+test("a click on a command name asks for its help and closes the line", async (t) => {
+  const { list, sent, post_start } = await load_page(t, "click_help");
+  const host = post_start(TICKET, "ji");
+  await host.opened();
+  list.listeners.click!(click_on_name("my.jira"));
+  await until(() => sent.some((message) => message.type === "open_help"));
+  assert.deepEqual(sent.filter((message) => message.type === "open_help"), [{ type: "open_help", command_id: "my.jira" }]);
+  await until(() => host.received.some((data) => (data as { oasisfox_cmdline: { kind: string } }).oasisfox_cmdline.kind === "close"));
+  assert.ok(host.received.some((data) => (data as { oasisfox_cmdline: { kind: string } }).oasisfox_cmdline.kind === "close"));
+});
+
+test("a click elsewhere on a row picks it by absolute index and sends no help request", async (t) => {
+  const { input, list, sent, post_start } = await load_page(t, "click_pick");
+  await post_start(TICKET, "").opened();
+  list.listeners.click!(click_on_item(1));
+  assert.equal(input.value, "jira");
+  assert.equal(sent.some((message) => message.type === "open_help"), false);
+});
+
+test("a press on the list keeps the focus in the input", async (t) => {
+  const { list, post_start } = await load_page(t, "mousedown");
+  await post_start(TICKET, "").opened();
+  let prevented = false;
+  list.listeners.mousedown!({ preventDefault: () => void (prevented = true) });
+  assert.equal(prevented, true);
 });

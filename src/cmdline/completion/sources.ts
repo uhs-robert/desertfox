@@ -2,14 +2,16 @@
 // the text to put in the line, the three list columns and the usage the note row shows.
 
 import type { CommandMeta, Mode, ParamDef } from "../../shared/command.ts";
-import { first_sentence, flag_alternatives, usage_line } from "../../shared/registry/index.ts";
+import { first_sentence, flag_alternatives, tokenize, usage_line } from "../../shared/registry/index.ts";
 import type { CommandLookup, EnumSources } from "../../shared/registry/index.ts";
 import { bare_word_param, flag_params, is_dynamic_values, static_values, subject_param } from "../../shared/registry/params.ts";
 import { rank } from "../../shared/score.ts";
+import { is_setting_name, SETTING_NAMES, SETTING_SPECS } from "../../shared/settings_schema.ts";
 import type { Ranked } from "../../shared/score.ts";
 import type { BookmarkItem, EngineItem, OpenItems, OpenRow, TabContainer, TabItem, WindowItem } from "../../shared/messages.ts";
 import type { LiveKind, LiveSource } from "./live.ts";
 import { cursor_context } from "./tokenize.ts";
+import type { CursorContext } from "./tokenize.ts";
 
 export type TabFlag = "pinned" | "audible" | "muted" | "discarded";
 
@@ -149,6 +151,23 @@ function value_rows(command: Command, param: ParamDef, sources: EnumSources): Ro
   }));
 }
 
+// `set` and `unset` take setting names first. The words after the name of a setting that lists values offer those values.
+function setting_rows(context: Extract<CursorContext, { kind: "subject" }>, text: string, usage: string): Row[] | undefined {
+  const command_id = context.command.id;
+  if (command_id !== "settings.set" && command_id !== "settings.unset") return undefined;
+  const row = (name: string, insert: string, description: string): Row => ({ name, insert, description, args: "", also_named: [], keywords: [], usage });
+  if (context.position === 0) {
+    const names = SETTING_NAMES.filter((name) => !SETTING_SPECS[name].is_group).map((name) => row(name, `${name} `, SETTING_SPECS[name].expectation));
+    return command_id === "settings.unset" ? [row("all", "all ", "Drop every live change."), ...names] : names;
+  }
+  const typed = tokenize(text.slice(0, context.start));
+  const setting = Array.isArray(typed) ? typed[1]?.text : undefined;
+  if (command_id !== "settings.set" || setting === undefined || !is_setting_name(setting)) return [];
+  const spec = SETTING_SPECS[setting];
+  if (context.position > 1 && !spec.is_list) return [];
+  return (spec.listed_values?.() ?? []).map((value) => row(value, `${quote_word(value)} `, ""));
+}
+
 // With no word typed, the bookmark list shows this many of the newest.
 const RECENT_BOOKMARKS = 20;
 
@@ -256,6 +275,8 @@ export function create_completer(
     if (context.kind === "command") return { ...span, rows: rank(context.word, all_commands), listing: true };
     const usage = usage_line(context.command);
     if (context.kind === "flag") return { ...span, usage, rows: rank(context.word, flag_rows(context.command)), listing: true };
+    const settings = context.kind === "subject" ? setting_rows(context, text, usage) : undefined;
+    if (settings) return { ...span, usage, rows: rank(context.word, settings), listing: settings.length > 0 };
     const param = context.kind === "flag_value" ? context.param : context.position === 0 ? first_word_param(context.command, context.engine_settled) : undefined;
     const kind = live_kind_of(param);
     if (kind && live) {

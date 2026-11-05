@@ -3,7 +3,8 @@
 The background page. It loads the config, compiles the keymap, assigns the Firefox shortcut slots and routes run requests.
 
 - `main.ts`: registers the listeners, then waits for the config.
-- `startup.ts`: load, compile, publish to `storage.local`, tell open tabs.
+- `startup.ts`: load, compile, publish to `storage.local`, tell open tabs. The load runs once. `publish` runs again for each `set` and `unset` (`change_overrides`, one at a time) and replaces the config `get_config` returns.
+- `config_load.ts` also holds the live setting overrides in `storage.session` (`load_overrides`, `load_effective_config` for pages that read the config themselves) and `build_config_status`.
 - `config_load.ts`, `keymap_merge.ts`, `compile.ts`: managed config over imported config, default keymap under user keymap, and the args check per binding.
 - `default_keymap.ts`: the shipped keys. `docs/keymap.md` is generated from this file. Keys that need the user's engines or containers are left to the config. A binding with `prompt` compiles to a background step, and the router opens the command line with it typed in.
 - `slots.ts`: `browser` chords to the 10 manifest slots.
@@ -17,6 +18,7 @@ The background page. It loads the config, compiles the keymap, assigns the Firef
 - `load_log.ts`: the last 20 bundle loads in storage, which the key test reads. Writes run one at a time and a storage failure is dropped, so the log never fails a load. Pure.
 - `snippets.ts`: the user's snippets as commands. `matches` and `requires` are checked here against the tab URL, the code runs in the top frame only, and `oasisfox.run` calls come back through the `snippet_run` message with the caller's depth (limit 5).
 - `cmdline_service.ts`: what the command line page asks for. `issue_cmdline_ticket` gives the host a one-time ticket for its tab, kept in `storage.session`. `open_cmdline` takes that ticket once and returns the history, the engine and container lists, the registry's commands (snippets included), the configured aliases and the user CSS, and `record_cmdline` adds a parsed line to the history (last 100, newest last, a repeat moves to the end, nothing from a private tab). Redeeming a ticket also marks the tab as an opener in `storage.session`. Tab close and the start of a navigation remove the marker.
+- `open_help.ts`: `open_help` opens the help page at a command card in a foreground tab beside the asking tab, only for a tab whose line redeemed a ticket. An id without a card (a snippet or unknown id) opens the Commands page at its top.
 - `complete_items.ts`: `complete_items` answers the command line page with the open tabs, the bookmarks or the engines it lists for `tab`, `bookmark` and `search`. The engines come in config order, each with its label and a yes or no for whether the line's tab page can fill it (`available_engine_names`). The page URL stays in the background. It answers only an opener tab, checks the marker again after the browser call, lists only tabs of the line's privacy, and gives an empty list when the browser call fails. The tab handler lists through the same code.
 - `first_install.ts`: opens the help page at Quick Start when `runtime.onInstalled` gives reason `install` and `open_quick_start_on_install` is not false. Nothing else opens it.
 - `reload.ts`: the marker and the tab repair behind `config.reload`.

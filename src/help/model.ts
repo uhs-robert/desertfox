@@ -34,6 +34,8 @@ export type ParamRow = {
 
 export type CommandRow = {
   id: string;
+  // The command line name, set by hand in the registry.
+  name: string;
   label: string;
   intent: string;
   usage: string;
@@ -194,6 +196,7 @@ export function build_help_model(commands: CommandMeta[], compiled: CompiledKeym
     const group_name = command.id.split(".")[0] ?? command.id;
     const row: CommandRow = {
       id: command.id,
+      name: command.name ?? command.id,
       label: command.label,
       intent: command.intent,
       usage: usage_line(command),
@@ -255,4 +258,9 @@ export const STYLE_CLASSES: { name: string; meaning: string }[] = [
   { name: "oasisfox-help-code-lang", meaning: "The language label of a code block" },
   { name: "oasisfox-help-code-copy", meaning: "The Copy button of a code block" },
   { name: "oasisfox-help-code-body", meaning: "The code text of a code block" },
+  { name: "oasisfox-help-sections", meaning: "The list of Quick Start sections under the Quick Start entry in the help sidebar" },
+  { name: "oasisfox-help-sections-toggle", meaning: "The button that expands and collapses the Quick Start section list" },
+  { name: "oasisfox-help-filter", meaning: "The filter text box on the Commands page" },
+  { name: "oasisfox-help-filter-count", meaning: "The line under the filter box that counts the shown commands" },
+  { name: "oasisfox-help-inline-code", meaning: "A code snippet inside a sentence on the help page" },
 ];

@@ -205,6 +205,7 @@ export const DEFAULT_KEYMAP: KeymapConfig = {
     "<ArrowUp>": { id: "cmdline.history", args: { direction: "prev" } },
     "<ArrowDown>": { id: "cmdline.history", args: { direction: "next" } },
     "<C-u>": { id: "cmdline.clear" },
+    "<C-h>": { id: "cmdline.help" },
   },
   caret: {
     v: { id: "mode.set", args: { mode: "visual" } },

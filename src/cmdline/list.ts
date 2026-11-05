@@ -22,8 +22,13 @@ function cell(class_name: string, text = ""): HTMLElement {
 }
 
 // The name with the matched letters in bold.
-function name_cell(row: Ranked<Row>): HTMLElement {
+function name_cell(row: Ranked<Row>, has_help: (id: string) => boolean): HTMLElement {
   const name = cell("name");
+  // Only a command row has help. The page reads `data-help` on click.
+  if (row.id !== undefined && has_help(row.id)) {
+    name.className += " oasisfox-cmdline-link";
+    name.dataset.help = row.id;
+  }
   const hits = new Set(row.positions);
   let run = "";
   let run_hit = false;
@@ -103,8 +108,8 @@ function container_cell(marks: TabMarks, images: Images): HTMLElement {
 // A tab without a loadable favicon keeps the plain glyph that every favicon cell draws behind its image.
 const favicon_cell = (marks: TabMarks, images: Images): HTMLElement => (marks.favicon ? image_cell("favicon", marks.favicon, images, () => {}) : cell("favicon"));
 
-// `keys_of` gives the keys cell text of a command id.
-export function create_list(element: HTMLElement, keys_of: (id: string) => string = () => "") {
+// `keys_of` gives the keys cell text of a command id. `has_help` says whether the name links to a help card.
+export function create_list(element: HTMLElement, keys_of: (id: string) => string = () => "", has_help: (id: string) => boolean = () => true) {
   let top = 0;
   let drawn: readonly Ranked<Row>[] | undefined;
   let drawn_selected = -1;
@@ -134,10 +139,12 @@ export function create_list(element: HTMLElement, keys_of: (id: string) => strin
     element.replaceChildren(
       ...visible.map((row, offset) => {
         const item = cell(`item${top + offset === selected ? " oasisfox-cmdline-selected" : ""}${row.unavailable ? " oasisfox-cmdline-unavailable" : ""}`);
+        // The absolute index, because a click picks by it and the window may be scrolled.
+        item.dataset.index = String(top + offset);
         const args = cell("args");
         args.append(cell("args-full", row.args), cell("args-short", row.args ? "…" : ""));
         if (row.tab) item.append(status_cell(row.tab), container_cell(row.tab, images), favicon_cell(row.tab, images));
-        item.append(name_cell(row), cell("description", row.description), args, ...(row.tag ? [cell("tag", row.tag)] : []), cell("keys", keys[offset]));
+        item.append(name_cell(row, has_help), cell("description", row.description), args, ...(row.tag ? [cell("tag", row.tag)] : []), cell("keys", keys[offset]));
         return item;
       }),
     );

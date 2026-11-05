@@ -4,7 +4,7 @@
 import type { Outcome } from "../../shared/messages.ts";
 import type { BundleHostApi } from "../bundle_host.ts";
 import { collect_matches, compile_query, describe_match, nearest_match, opposite, step_match } from "./find_match.ts";
-import type { Direction, Matches, Slicing } from "./find_match.ts";
+import type { Direction, Fallback, Matches, Slicing } from "./find_match.ts";
 import { create_painter } from "./find_paint.ts";
 import type { FindColors, Painter } from "./find_paint.ts";
 import { get_register, set_register } from "./registers.ts";
@@ -17,7 +17,7 @@ import type { TextModel } from "./text_model.ts";
 // What the engine needs of the host script. A bundle reaches it through `window.oasisfox_host`.
 type Host = Pick<BundleHostApi, "show_toast">;
 
-type Found = { model: TextModel; query: string; invalid: boolean; direction: Direction; matches: Matches; current: number };
+type Found = { model: TextModel; query: string; fallback: Fallback | undefined; direction: Direction; matches: Matches; current: number };
 
 // While the line is open. `start` is where the search began, so each keystroke looks from the same place.
 type Live = {
@@ -133,7 +133,7 @@ export function create_find(host: Host, deps: FindDeps = browser_deps()) {
   // A frame or shadow host that left the page takes its text with it, so the model is read again.
   const fresh_model = (model: TextModel): TextModel => (trees_alive(model) ? model : deps.build_model());
 
-  async function run_update(open: Live, text: string, run: number, report: (status: string) => void): Promise<void> {
+  async function run_update(open: Live, text: string, run: number, report: (status: string) => void, scan_costly = false): Promise<void> {
     const is_stale = () => live !== open || open.generation !== run;
     const query = compile_query(text);
     if (!query) {
@@ -145,23 +145,25 @@ export function create_find(host: Host, deps: FindDeps = browser_deps()) {
       open.model = deps.build_model();
       open.start = deps.start_index(open.model);
     }
-    const matches = await collect_matches(open.model.text, query.regex, deps.slicing(is_stale));
+    // A pattern typed one key at a time passes through costly shapes such as `(a+)+`. It is not searched, and the results of the last keystroke stay on the page.
+    if (query.fallback === "costly" && !scan_costly) return report(`Pattern too slow as a regex: ${text}`);
+    const matches = await collect_matches(open.model.text, query.search, deps.slicing(is_stale));
     if (!matches || is_stale()) return;
     const colors = await open.colors;
     if (is_stale()) return;
     // The page can lose a frame while the scan runs. Then the match positions no longer fit the text, so the scan starts over.
-    if (!trees_alive(open.model)) return run_update(open, text, run, report);
+    if (!trees_alive(open.model)) return run_update(open, text, run, report, scan_costly);
     const first = nearest_match(matches.from, open.start, open.direction);
     if (!first) {
       open.found = undefined;
       drop_highlights();
-      return report(describe_match(text, 0, 0, query.invalid));
+      return report(describe_match(text, 0, 0, query.fallback));
     }
-    const found: Found = { model: open.model, query: text, invalid: query.invalid, direction: open.direction, matches, current: first.index };
+    const found: Found = { model: open.model, query: text, fallback: query.fallback, direction: open.direction, matches, current: first.index };
     open.found = found;
     paint(found, colors);
     scroll_to(found, LINE_HEIGHT_PX);
-    report(describe_match(text, matches.from.length, first.index, query.invalid, first.wrapped));
+    report(describe_match(text, matches.from.length, first.index, query.fallback, first.wrapped));
   }
 
   // Done on a match. Failed when there is no previous search or no match, with the message left for the caller to show.
@@ -188,20 +190,20 @@ export function create_find(host: Host, deps: FindDeps = browser_deps()) {
       const query = compile_query(previous.query);
       if (!query) return { ok: false, message: "No previous search" };
       const model = kept ? fresh_model(kept.model) : deps.build_model();
-      const matches = await collect_matches(model.text, query.regex, deps.slicing(() => run !== step_generation));
+      const matches = await collect_matches(model.text, query.search, deps.slicing(() => run !== step_generation));
       if (!matches || run !== step_generation) return taken_over;
       // After a rebuild the step goes on from the match the user was on, when its text is still on the page.
       const carried = kept && carry_index(kept, model);
       const start = carried === undefined ? deps.start_index(model) : direction === "forward" ? carried + 1 : carried;
       const first = nearest_match(matches.from, start, direction);
-      if (!first) return { ok: false, message: describe_match(previous.query, 0, 0, query.invalid) };
-      found = { model, query: previous.query, invalid: query.invalid, direction: previous.direction, matches, current: first.index };
+      if (!first) return { ok: false, message: describe_match(previous.query, 0, 0, query.fallback) };
+      found = { model, query: previous.query, fallback: query.fallback, direction: previous.direction, matches, current: first.index };
       wrapped = first.wrapped;
     }
     stand_on(found);
     paint(found, colors);
     scroll_to(found, 0);
-    host.show_toast(describe_match(found.query, found.matches.from.length, found.current, found.invalid, wrapped));
+    host.show_toast(describe_match(found.query, found.matches.from.length, found.current, found.fallback, wrapped));
     return { ok: true };
   }
 
@@ -234,6 +236,8 @@ export function create_find(host: Host, deps: FindDeps = browser_deps()) {
       if (!keep) open.generation++;
       open.finished = (async () => {
         if (keep) await open.pending;
+        // Enter commits the pattern, so the text fallback that was skipped while typing runs now.
+        if (keep && live === open && open.found?.query !== open.text && compile_query(open.text)?.fallback === "costly") await run_update(open, open.text, ++open.generation, () => {}, true);
         // A new search may have begun while the scan finished, and it owns the page now.
         if (live !== open) return;
         live = undefined;

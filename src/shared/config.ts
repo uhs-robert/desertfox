@@ -138,6 +138,14 @@ export type MergedConfig = {
   local_theme?: LocalTheme;
 };
 
+// Settings set live with `:set`. Each wins over the same name in the config until `:unset` or the browser restarts.
+export type SettingOverrides = Partial<Settings>;
+
+// Applied before `effective_settings`, which fills the defaults under the result.
+export function apply_overrides(settings: Partial<Settings>, overrides: SettingOverrides): Partial<Settings> {
+  return { ...settings, ...overrides };
+}
+
 // The settings in force: the defaults under the config's own values. The two prefix maps merge one level deeper, so a config that sets only `search_prefixes.tab` keeps the default `here`. The key compiler merges them the same way.
 export function effective_settings(settings: Partial<Settings>): Settings {
   return {
