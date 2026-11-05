@@ -240,4 +240,33 @@ export async function run_cases({ run_case, expect, open_page, send_keys, sleep,
     const result = await wait_event(mark, (event) => event.type === "tree_read" && event.page_id === "search_result", "the search result page");
     expect(new URLSearchParams(result.search).get("q") === "bar", `searched "${new URLSearchParams(result.search).get("q")}", expected "bar"`);
   });
+
+  // gV starts on the heading "caret <page id>", and its first paragraph is that heading. f, F, t and T read the next key as the target.
+  await run_case("f F t T move to a typed character within the paragraph", async () => {
+    await open_page("caret", "caret_find", { new_tab: true });
+    await send_keys("gV");
+    // The heading is "caret caret_find": the first t is at 4, the underscore at 11 and the second c at 6.
+    for (const [keys, text] of [["ft", "t"], ["Fc", "c"], ["t_", "t"], ["Tc", "a"]]) {
+      const mark = events.length;
+      await send_keys(keys);
+      await wait_event(mark, selection_is("caret_find", text), `${keys} to "${text}"`);
+    }
+    await send_keys("-k", "Escape");
+  });
+
+  await run_case("Escape cancels a pending find and stays in caret mode, and a bound key is a target", async () => {
+    await open_page("caret", "caret_find_cancel", { new_tab: true });
+    await send_keys("gV");
+    await send_keys("f");
+    await send_keys("-k", "Escape");
+    let mark = events.length;
+    await send_keys("l");
+    await wait_event(mark, selection_is("caret_find_cancel", "a"), "l after the cancelled find");
+    // w is bound to a word motion, and here it is the target: the heading has no w, so the caret stays and the find is over.
+    await send_keys("fw");
+    mark = events.length;
+    await send_keys("fd");
+    await wait_event(mark, selection_is("caret_find_cancel", "d"), "fd after a find with no match");
+    await send_keys("-k", "Escape");
+  });
 }

@@ -99,3 +99,18 @@ export function move_once(text: string, from: number, motion: Motion): number {
       return first_non_blank_of(text, text.length - 1);
   }
 }
+
+export type CharFind = { char: string; direction: "forward" | "back"; till: boolean };
+
+// `f`, `t`, `F` and `T`: the position of the count-th match within the paragraph (the text between two newlines), or `from` when fewer remain.
+// `again` is `;` and `,`: a till find then steps over an adjacent match, as vim does, so repeating it advances.
+export function find_char(text: string, from: number, find: CharFind, count: number, again = false): number {
+  const step = find.direction === "forward" ? 1 : -1;
+  let at = from + step * (find.till && again ? 2 : 1);
+  let remaining = count;
+  while (at >= 0 && at < text.length && text[at] !== "\n") {
+    if (text.startsWith(find.char, at) && --remaining === 0) return find.till ? at - step : at;
+    at += step;
+  }
+  return from;
+}

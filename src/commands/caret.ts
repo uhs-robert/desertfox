@@ -9,7 +9,7 @@ define("caret.move", {
     {
       name: "unit",
       type: "enum",
-      values: ["char", "word", "word_end", "line", "line_start", "line_first", "line_end", "start", "end"],
+      values: ["char", "word", "word_end", "line", "line_start", "line_first", "line_end", "start", "end", "char_find", "find_repeat"],
       value_labels: {
         char: "by character",
         word: "by word",
@@ -20,6 +20,8 @@ define("caret.move", {
         line_end: "to line end",
         start: "to text start",
         end: "to text end",
+        char_find: "to a typed character",
+        find_repeat: "repeat the last character find",
       },
       description: {
         char: "Move by character.",
@@ -31,9 +33,12 @@ define("caret.move", {
         line_end: "Move to the end of the line.",
         start: "Move to the start of the text.",
         end: "Move to the end of the text.",
+        char_find: "Move to the next typed character in the paragraph.",
+        find_repeat: "Repeat the last character find.",
       },
     },
     { name: "direction", type: "enum", values: ["forward", "back"], default: "forward", value_labels: { back: "backward" }, description: { back: "Move backward." } },
+    { name: "till", type: "bool", default: false, description: "Stop before the match, or after it going backward." },
     { name: "big", type: "bool", default: false, description: "Read a word as any run of non-blank characters." },
   ],
   runs_in: "content",
