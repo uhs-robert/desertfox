@@ -140,8 +140,8 @@ bound: 198 (normal 133, hint 2, cmdline 12, caret 20, visual 26, insert 1, ignor
 | `F` | bound | `hint --background` | Click element in background tab |  |
 | `v` | bound | `mode caret` | Start caret mode |  |
 | `V` | bound | `mode visual` | Start visual mode |  |
-| `;v` | bound | `hint --caret --all` | Start caret mode at element |  |
-| `;V` | bound | `hint --visual --all` | Start visual mode at element |  |
+| `;v` | bound | `hint --caret --prose` | Start caret mode at text |  |
+| `;V` | bound | `hint --visual --prose` | Start visual mode at text |  |
 | `;;` | bound | `cmdline.open --text='hint '` | Open the command line with hint |  |
 | `;b` | bound | `hint` | Click element |  |
 | `;B` | bound | `hint --background` | Click element in background tab |  |
