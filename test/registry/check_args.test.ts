@@ -161,3 +161,20 @@ test("a conditional default fills only while its sibling has a listed value, els
   assert.deepEqual(check_args(command, { text: "" }), { ok: false, error: "missing <text>", missing_param: "text" });
   assert.deepEqual(check_args(command, { text: "x" }), { ok: true, args: { where: "here", text: "x" } });
 });
+
+test("a whitespace-only text counts as missing for a required param, and a default still applies", () => {
+  const reg = create_registry();
+  reg.define("w.x", {
+    label: "WX",
+    intent: "x",
+    params: [
+      { name: "text", type: "string", main: true },
+      { name: "note", type: "string", default: "" },
+    ],
+    runs_in: "background",
+    run: () => {},
+  });
+  const command = reg.get("w.x")!;
+  assert.deepEqual(check_args(command, { text: "   " }), { ok: false, error: "missing <text>", missing_param: "text" });
+  assert.deepEqual(check_args(command, { text: "a", note: "  " }), { ok: true, args: { text: "a", note: "  " } });
+});

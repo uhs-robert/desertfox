@@ -46,8 +46,8 @@ export function check_args(
   for (const param of params) {
     const given = raw[param.name];
     if (given === undefined) continue;
-    // An empty value, such as the `offset=` a prompt leaves, counts as left out for a param with no default that applies.
-    if (given === "" && default_of(param) === undefined && !param.when) {
+    // An empty or whitespace-only text, such as the `offset=` a prompt leaves, counts as left out for a param with no default that applies.
+    if (typeof given === "string" && given.trim() === "" && default_of(param) === undefined && !param.when) {
       return { ok: false, error: `missing <${param.name}>`, missing_param: param.name };
     }
     const coerced = coerce(param, given, sources);

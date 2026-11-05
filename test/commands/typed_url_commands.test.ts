@@ -70,6 +70,7 @@ test("bare open with no url fails the check with missing <url>, and -t -b -w pas
   const open = registry.get("open.url")!;
   assert.deepEqual(check_args(open, {}), { ok: false, error: "missing <url>", missing_param: "url" });
   assert.deepEqual(check_args(open, { url: "", where: "here" }), { ok: false, error: "missing <url>", missing_param: "url" });
+  assert.deepEqual(check_args(open, { url: "    " }), { ok: false, error: "missing <url>", missing_param: "url" });
   for (const where of ["tab", "background", "window"]) assert.deepEqual(check_args(open, { where }), { ok: true, args: { url: "", where } });
 });
 
@@ -203,4 +204,14 @@ test("the router refuses a bare open and opens nothing", async () => {
   const { log } = await submit_typed({});
   assert.match(log[0]!, /^refuse 7 .*missing <url>/);
   assert.deepEqual(opened, []);
+});
+
+test("typed open -t with only spaces opens the new tab page, in the current tab it is refused", async () => {
+  const opened: Opened[] = [];
+  install_browser(opened);
+  const { log } = await submit_typed({ url: "    ", where: "tab" });
+  assert.deepEqual(log, []);
+  assert.deepEqual(opened, [{ via: "tab_active", url: NEW_TAB_URL }]);
+  const refused = await submit_typed({ url: "    " });
+  assert.match(refused.log[0]!, /^refuse 7 .*missing <url>/);
 });
