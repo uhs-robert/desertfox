@@ -1,5 +1,9 @@
 import type { CommandContext } from "../shared/command.ts";
+import type { ToastKind } from "../shared/messages.ts";
 import type { ListedTab } from "../background/complete_items.ts";
+import { show_toast_on_tab } from "../background/browser_deps.ts";
+import { browser_discard_deps, describe_result, set_unloaded } from "../background/tab_discard.ts";
+import type { DiscardDeps, SetUnloadedResult } from "../background/tab_discard.ts";
 import { browser_complete_items_deps, read_tabs } from "../background/complete_items.ts";
 import { get_config } from "../background/startup.ts";
 import { best_match } from "../shared/score.ts";
@@ -34,7 +38,12 @@ export type TabDeps = {
   // The tabs the line lists, the same list the completion shows: the line's window, or every window, and only tabs of the line's privacy.
   listed_tabs: (ctx: CommandContext) => Promise<ListedTab[]>;
   focus_window: (window_id: number) => Promise<void>;
+  // What `tab.unload` and `tab.load` act through.
+  discard: DiscardDeps;
+  toast: (ctx: CommandContext, kind: ToastKind, message: string) => Promise<void>;
 };
+
+type UnloadSide = "none" | "all_before" | "all_after";
 
 type CloseSide = "none" | "all_before" | "all_after" | "focus_previous";
 
@@ -53,6 +62,33 @@ export function make_tab_handlers(deps: TabDeps) {
   async function activate_at(tabs: TabInfo[], index: number): Promise<void> {
     const target = tabs[index];
     if (target) await deps.activate(target.id);
+  }
+
+  // The subject is the tab named by `tab`, else the line's own tab. A side acts on the neighbors and leaves the subject. A count adds neighbors after the subject. Neighbors skip pinned tabs, the subject never does.
+  async function change_loaded(ctx: CommandContext, args: { tab: string; side: UnloadSide; count: number }, unloaded: boolean): Promise<void> {
+    if (args.count < 1) throw new Error("count must be 1 or more");
+    const named = args.tab.trim() === "" ? undefined : pick_tab(await deps.listed_tabs(ctx), args.tab, ctx.window_id);
+    const window_id = named?.window_id ?? ctx.window_id;
+    if (window_id === undefined) throw new Error("No window");
+    const tabs = await deps.tabs_in_window(window_id);
+    const subject = tabs.find((tab) => tab.id === (named?.id ?? require_tab_id(ctx)));
+    if (!subject) throw new Error("the tab is gone");
+    const unpinned = tabs.filter((tab) => !tab.pinned);
+    const ids = (
+      args.side === "none"
+        ? [subject, ...unpinned.filter((tab) => tab.index > subject.index && tab.index < subject.index + args.count)]
+        : unpinned.filter((tab) => (args.side === "all_before" ? tab.index < subject.index : tab.index > subject.index))
+    ).map((tab) => tab.id);
+    const result = await set_unloaded(deps.discard, ids, unloaded, ctx.tab_id === undefined ? {} : { leave_active: ctx.tab_id });
+    await report(ctx, window_id, unloaded ? "unloaded" : "loaded", result);
+  }
+
+  // The toast goes to the tab that is active now: the command's own tab may have just unloaded, and a discarded tab shows nothing.
+  async function report(ctx: CommandContext, window_id: number, verb: "unloaded" | "loaded", result: SetUnloadedResult): Promise<void> {
+    const message = describe_result(verb, result);
+    if (result.changed.length === 0) throw new Error(message);
+    const active = (await deps.discard.tabs_in_window(window_id)).find((tab) => tab.active);
+    await deps.toast(active ? { ...ctx, tab_id: active.id, frame_id: 0 } : ctx, result.skipped.length === 0 ? "success" : "warning", message);
   }
 
   return {
@@ -115,6 +151,8 @@ export function make_tab_handlers(deps: TabDeps) {
       await deps.activate(picked.id);
       if (picked.window_id !== ctx.window_id) await deps.focus_window(picked.window_id);
     },
+    unload: (ctx: CommandContext, args: { tab: string; side: UnloadSide; count: number }) => change_loaded(ctx, args, true),
+    load: (ctx: CommandContext, args: { tab: string; side: UnloadSide; count: number }) => change_loaded(ctx, args, false),
     reopen_in_container: async (ctx: CommandContext, args: { container: string }) => {
       const { current } = await position_of(ctx);
       if (current.url === undefined || ctx.window_id === undefined) throw new Error("this tab has no address to reopen");
@@ -227,9 +265,26 @@ export const browser_tab_deps: TabDeps = {
     return read_tabs(browser_complete_items_deps.query_tabs, { window_id: tab.windowId, incognito: tab.incognito }, settings.completion_all_windows === true);
   },
   focus_window: async (window_id) => void (await browser.windows.update(window_id, { focused: true })),
+  discard: browser_discard_deps,
+  toast: (ctx, kind, message) => show_toast_on_tab(ctx, "tab.unload", message, kind),
 };
 
 const handlers = make_tab_handlers(browser_tab_deps);
+
+const subject_param = { name: "tab", type: "string", rest: true, main: true, default: "", values: { from: "tabs" } } as const;
+
+const side_param = (verb: "Unload" | "Load") =>
+  ({
+    name: "side",
+    type: "enum",
+    values: ["none", "all_before", "all_after"],
+    default: "none",
+    short: { all_before: "B", all_after: "A" },
+    value_labels: { all_before: "for all before it", all_after: "for all after it" },
+    description: { all_before: `${verb} every unpinned tab before the tab.`, all_after: `${verb} every unpinned tab after the tab.` },
+  }) as const;
+
+const count_param = { name: "count", type: "int", default: 1, when: { side: ["none"] }, description: "Act on this many tabs, the tab and the ones after it." } as const;
 
 define("tab.next", {
   label: "Next tab",
@@ -346,4 +401,22 @@ define("tab.switch", {
   params: [{ name: "tab", type: "string", rest: true, main: true, values: { from: "tabs" } }],
   runs_in: "background",
   run: (ctx, args) => handlers.switch(ctx, args as { tab: string }),
+});
+
+define("tab.unload", {
+  label: "Unload tab",
+  intent: "Unload the tab to free its memory. It stays in the tab bar and loads again when opened. Audible tabs stay loaded. Without a tab it unloads this one and switches to a loaded tab first. With all_before or all_after it keeps the tab and unloads the unpinned tabs on that side. A count prefix unloads that many tabs from the tab on.",
+  params: [subject_param, side_param("Unload"), count_param],
+  runs_in: "background",
+  count: { param: "count" },
+  run: (ctx, args) => handlers.unload(ctx, args as { tab: string; side: UnloadSide; count: number }),
+});
+
+define("tab.load", {
+  label: "Load tab",
+  intent: "Load an unloaded tab in place, without switching to it. Without a tab it acts on this one. With all_before or all_after it keeps the tab and loads the unpinned tabs on that side. A count prefix loads that many tabs from the tab on.",
+  params: [subject_param, side_param("Load"), count_param],
+  runs_in: "background",
+  count: { param: "count" },
+  run: (ctx, args) => handlers.load(ctx, args as { tab: string; side: UnloadSide; count: number }),
 });

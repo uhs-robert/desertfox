@@ -94,12 +94,23 @@ export type CompleteItems = {
   kind: "tabs" | "bookmarks" | "engines" | "open" | "windows";
 };
 
+// From the command line page when the row key unloads or loads one tab of the list. The answer is undefined unless the sender is a tab whose line redeemed a ticket
+// and `tab_id` is a tab of the sender's own privacy. `item` is the tab as it is now, `refusal` says why it did not change.
+export type SetTabUnloaded = {
+  type: "set_tab_unloaded";
+  tab_id: number;
+  unloaded: boolean;
+};
+
+export type SetTabUnloadedAnswer = { item: TabItem; refusal?: string };
+
 // A tab's container, drawn as a mark in the container's color. Absent for the default container and for private tabs.
 export type TabContainer = { color: string; icon: string };
 
-// `number` is the tab's place in its window's tab bar, counted from 1. `favicon` is an http, https or short data: URL and is absent otherwise.
+// `id` is the browser's tab id, which the row key sends back in `set_tab_unloaded`. `number` is the tab's place in its window's tab bar, counted from 1. `favicon` is an http, https or short data: URL and is absent otherwise.
 // The flags are present only when true, which keeps the answer small.
 export type TabItem = {
+  id: number;
   number: number;
   title: string;
   url: string;
@@ -148,7 +159,7 @@ export type OpenHelp = {
   command_id: string;
 };
 
-export type ContentToBackground = RunRequest | ModeChanged | LoadBundle | ListKeys | IssueCmdlineTicket | OpenCmdline | RecordCmdline | CompleteItems | OpenHelp | RecordRepeat;
+export type ContentToBackground = RunRequest | ModeChanged | LoadBundle | ListKeys | IssueCmdlineTicket | OpenCmdline | RecordCmdline | CompleteItems | SetTabUnloaded | OpenHelp | RecordRepeat;
 
 // How a command ended. Done is `{ ok: true }`. A handler that returns nothing is done, and one that throws is failed.
 // Cancelled means the user left a waiting step (Escape, an unrelated key, a page change), so the rest of a sequence does not run and nothing is shown.

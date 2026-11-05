@@ -100,6 +100,10 @@ export const DEFAULT_KEYMAP: KeymapConfig = {
     ta: { id: "tab.goto_audible" },
     tf: { id: "tab.goto", args: { index: 1 }, label: "First tab" },
     tl: { id: "tab.goto", args: { index: -1 }, label: "Last tab" },
+    tu: { id: "tab.unload" },
+    tU: { id: "tab.load" },
+    tH: { id: "tab.unload", args: { side: "all_before" }, label: "Unload tabs before this one" },
+    tL: { id: "tab.unload", args: { side: "all_after" }, label: "Unload tabs after this one" },
 
     // The w group works on windows.
     W: { id: "window.new", prompt: { param: "url", prefill: { from: "current_url" } }, label: "New window, edit current URL" },
@@ -179,6 +183,7 @@ export const DEFAULT_KEYMAP: KeymapConfig = {
     ";y": { id: "hint.run", args: { action: "copy", filter: "links" }, label: "Copy link address" },
     ";r": { id: "hint.run", args: { action: "background", filter: "links", rapid: true }, label: "Open links rapidly in background tabs" },
     ";t": { id: "hint.run", args: { action: "copy_text", filter: "prose" }, label: "Copy text of element" },
+    ";s": { id: "hint.run", args: { action: "focus", filter: "scrollable" }, label: "Focus scroll box" },
     ";i": { id: "hint.run", args: { filter: "inputs" }, label: "Click input" },
     ";l": { id: "hint.run", args: { filter: "links" }, label: "Click link" },
     ":": { id: "cmdline.open" },
@@ -208,6 +213,7 @@ export const DEFAULT_KEYMAP: KeymapConfig = {
     "<ArrowDown>": { id: "cmdline.history", args: { direction: "next" } },
     "<C-u>": { id: "cmdline.clear" },
     "<C-h>": { id: "cmdline.help" },
+    "<A-u>": { id: "list.act", args: { action: "unload" }, label: "Unload or load the tab" },
   },
   caret: {
     v: { id: "mode.set", args: { mode: "visual" } },

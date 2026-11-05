@@ -20,7 +20,7 @@ A note "(prompts)" means the binding leaves a param out, so the command line ask
 
 <!-- BEGIN generated -->
 
-bound: 197 (normal 132, hint 2, cmdline 12, caret 20, visual 26, insert 1, ignore 1, browser 3) | later: 14 | dropped: 6
+bound: 203 (normal 137, hint 2, cmdline 13, caret 20, visual 26, insert 1, ignore 1, browser 3) | later: 14 | dropped: 6
 
 ### normal
 
@@ -77,6 +77,10 @@ bound: 197 (normal 132, hint 2, cmdline 12, caret 20, visual 26, insert 1, ignor
 | `ta` | bound | `tab.goto_audible` | Go to audible tab |  |
 | `tf` | bound | `tab.goto 1` | First tab |  |
 | `tl` | bound | `tab.goto -1` | Last tab |  |
+| `tu` | bound | `tab.unload` | Unload tab |  |
+| `tU` | bound | `tab.load` | Load tab |  |
+| `tH` | bound | `tab.unload --all-before` | Unload tabs before this one |  |
+| `tL` | bound | `tab.unload --all-after` | Unload tabs after this one |  |
 | `W` | bound | `window.new` (prompts) | New window, edit current URL |  |
 | `ww` | bound | `window.new` (prompts) | New window, edit current URL |  |
 | `wo` | bound | `window.new` (prompts) | New window, enter URL |  |
@@ -147,6 +151,7 @@ bound: 197 (normal 132, hint 2, cmdline 12, caret 20, visual 26, insert 1, ignor
 | `;y` | bound | `hint --copy --links` | Copy link address |  |
 | `;r` | bound | `hint --background --links --rapid` | Open links rapidly in background tabs |  |
 | `;t` | bound | `hint --copy-text --prose` | Copy text of element |  |
+| `;s` | bound | `hint --focus --scrollable` | Focus scroll box |  |
 | `;i` | bound | `hint --inputs` | Click input |  |
 | `;l` | bound | `hint --links` | Click link |  |
 | `:` | bound | `cmdline.open` | Command line |  |
@@ -222,6 +227,7 @@ Which-key group names:
 | `<ArrowDown>` | bound | `cmdline.history next` | History |  |
 | `<C-u>` | bound | `cmdline.clear` | Clear line |  |
 | `<C-h>` | bound | `cmdline.help` | Command help |  |
+| `<A-u>` | bound | `list.act unload` | Unload or load the tab |  |
 
 ### caret
 

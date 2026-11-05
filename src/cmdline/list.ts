@@ -138,7 +138,7 @@ export function create_list(element: HTMLElement, keys_of: (id: string) => strin
     images.start_draw();
     element.replaceChildren(
       ...visible.map((row, offset) => {
-        const item = cell(`item${top + offset === selected ? " oasisfox-cmdline-selected" : ""}${row.unavailable ? " oasisfox-cmdline-unavailable" : ""}`);
+        const item = cell(`item${top + offset === selected ? " oasisfox-cmdline-selected" : ""}${row.unavailable ? " oasisfox-cmdline-unavailable" : ""}${row.tab?.flags.includes("discarded") ? " oasisfox-cmdline-item-discarded" : ""}`);
         // The absolute index, because a click picks by it and the window may be scrolled.
         item.dataset.index = String(top + offset);
         const args = cell("args");

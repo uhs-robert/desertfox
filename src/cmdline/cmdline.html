@@ -38,6 +38,7 @@
       .oasisfox-cmdline-item { display: flex; align-items: center; gap: .75rem; height: 20px; padding: 0 .75rem; white-space: nowrap; }
       .oasisfox-cmdline-selected { background: var(--oasisfox-selection); color: var(--oasisfox-secondary, #f0e68c); }
       .oasisfox-cmdline-unavailable { opacity: .5; }
+      .oasisfox-cmdline-item-discarded:not(.oasisfox-cmdline-selected) .oasisfox-cmdline-name { color: var(--oasisfox-fg-dim); }
       /* Tab rows lead with fixed-width cells, so the names line up. The flag icons are masks, so they take the text color. */
       .oasisfox-cmdline-tab-status { flex: 0 0 calc(1ch + var(--oasisfox-flags-width, 0px)); display: flex; align-items: center; color: var(--oasisfox-accent); }
       .oasisfox-cmdline-tab-mark { flex: 0 0 1ch; text-align: center; }

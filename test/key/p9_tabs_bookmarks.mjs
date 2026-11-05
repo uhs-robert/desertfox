@@ -3,6 +3,7 @@
 import { evaluate_in_background } from "./rdp.mjs";
 
 const CTRL = (key) => ["-M", "ctrl", key, "-m", "ctrl"];
+const ALT = (key) => ["-M", "alt", key, "-m", "alt"];
 
 export async function run_cases({ rdp, extension_id, run_case, send_keys, open_page, wait_event, events, expect, sleep, url_of, became_visible, take_shot }) {
   const background = (code) => evaluate_in_background(rdp, extension_id, code);
@@ -81,6 +82,41 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, open_p
       }
     });
   }
+
+  await run_case("tab list: A-u unloads the highlighted tab, keeps the list open, and A-u again loads it", async () => {
+    const tab_id = await background(`(async () => (await browser.tabs.create({ url: ${JSON.stringify(url_of("page", "p9u_target"))}, active: false })).id)()`);
+    const discarded = () => background(`browser.tabs.get(${tab_id}).then((tab) => tab.discarded)`);
+    try {
+      await sleep(1200);
+      await send_keys(":");
+      await sleep(700);
+      await send_keys("tab p9u_target", "-k", "Down");
+      await sleep(400);
+      await send_keys(...ALT("u"));
+      await sleep(800);
+      expect(await discarded() === true, "A-u did not unload the highlighted tab");
+      await send_keys(...ALT("u"));
+      await sleep(800);
+      expect(await discarded() === false, "the second A-u did not load the tab again, so the list was not kept open");
+    } finally {
+      await send_keys("-k", "Escape");
+      await sleep(300);
+      await send_keys("-k", "Escape");
+      await sleep(400);
+      await background(`browser.tabs.remove(${tab_id})`);
+    }
+  });
+
+  await run_case("tu unloads the current tab after switching to a loaded one", async () => {
+    await open_page("page", "p9u_current", { new_tab: true });
+    const tab_id = await background(`(async () => (await browser.tabs.query({ active: true, currentWindow: true }))[0].id)()`);
+    await send_keys("tu");
+    await sleep(1200);
+    const after = await background(`browser.tabs.get(${tab_id}).then((tab) => ({ discarded: tab.discarded, active: tab.active }))`);
+    await background(`browser.tabs.remove(${tab_id})`);
+    expect(after.discarded === true, "tu did not unload the tab");
+    expect(after.active === false, "tu left the unloaded tab active");
+  });
 
   // Called straight on the browser, with the index tab.attach uses for a pinned tab: the end of the pinned tabs. Firefox ignores a move of a
   // pinned tab to index -1 and answers with no tab, so the pin must be kept by choosing an index inside the pinned area.
