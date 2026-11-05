@@ -157,6 +157,31 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, open_p
     expect((await scroll_delta_after("p6_no_match", ["j"])) > 0, "keys did not work after a text with no match");
   });
 
+  // The selector keeps the labels fixed: #card is "a", #other is "s".
+  const hover_pick = (label) => run_hint({ action: "hover", filter: "custom", selector: "#card, #other" }).then(() => sleep(400)).then(() => send_keys(label));
+  const hover_events = (mark, page_id) => events.slice(mark).filter((event) => event.page_id === page_id && event.type.startsWith("hover_")).map((event) => `${event.type}:${event.box}`);
+
+  await run_case("hover opens a mouseenter-only preview and Escape closes it", async () => {
+    await open_page("hoverbox", "p6_hover", { new_tab: true });
+    const mark = events.length;
+    await hover_pick("a");
+    await wait_event(mark, (event) => event.type === "hover_in" && event.page_id === "p6_hover", "mouseenter on the card");
+    await send_keys("-k", "Escape");
+    await wait_event(mark, (event) => event.type === "hover_out" && event.page_id === "p6_hover", "mouseleave after Escape");
+    await sleep(300);
+    expect(hover_events(mark, "p6_hover").join(",") === "hover_in:card,hover_out:card", `the page saw ${hover_events(mark, "p6_hover")}`);
+  });
+
+  await run_case("a second hover clears the first once", async () => {
+    await open_page("hoverbox", "p6_hover_swap", { new_tab: true });
+    const mark = events.length;
+    await hover_pick("a");
+    await hover_pick("s");
+    await wait_event(mark, (event) => event.type === "hover_in" && event.box === "other" && event.page_id === "p6_hover_swap", "mouseenter on the other box");
+    await sleep(300);
+    expect(hover_events(mark, "p6_hover_swap").join(",") === "hover_in:card,hover_out:card,hover_in:other", `the page saw ${hover_events(mark, "p6_hover_swap")}`);
+  });
+
   // Set OASISFOX_SHOT_DIR to also save the two screenshots.
   const shot_dir = process.env.OASISFOX_SHOT_DIR;
   if (shot_dir) {

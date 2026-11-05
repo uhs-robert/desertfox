@@ -194,3 +194,62 @@ test("focus twice inside the flash still restores the original outline", (contex
   context.mock.timers.tick(5000);
   assert.equal(page.outline.value, "1px dotted red");
 });
+
+const ENTER = ["pointerover", "pointerenter", "mouseover", "mouseenter", "pointermove", "mousemove"];
+const LEAVE = ["pointerout", "pointerleave", "mouseout", "mouseleave"];
+
+test("hover sends the enter events in order, with no click and no focus", async () => {
+  const { unhover } = await import("../../src/content/hints/hover.ts");
+  unhover();
+  const page = fixture("div");
+  page.run("hover");
+  assert.deepEqual(page.calls, ENTER);
+  unhover();
+});
+
+test("hover events bubble except enter and leave, and come from the middle", async () => {
+  const { hover, unhover } = await import("../../src/content/hints/hover.ts");
+  const sent: { type: string; bubbles: boolean; clientX: number; clientY: number }[] = [];
+  hover({ localName: "div", click: () => {}, focus: () => {}, remove: () => {}, dispatchEvent: (event: never) => sent.push(event), getBoundingClientRect: () => ({ left: 10, top: 20, width: 100, height: 40 }) } as never);
+  unhover();
+  for (const event of sent) assert.equal(event.bubbles, !/(enter|leave)$/.test(event.type), event.type);
+  assert.deepEqual([sent[0]!.clientX, sent[0]!.clientY], [60, 40]);
+});
+
+test("a second hover clears the first exactly once, before its own enter events", async () => {
+  const { unhover } = await import("../../src/content/hints/hover.ts");
+  const first = fixture("div");
+  const second = fixture("div");
+  first.run("hover");
+  second.run("hover");
+  second.run("hover");
+  assert.deepEqual(first.calls, [...ENTER, ...LEAVE]);
+  assert.deepEqual(second.calls, [...ENTER, ...LEAVE, ...ENTER]);
+  unhover();
+  unhover();
+  assert.deepEqual(second.calls, [...ENTER, ...LEAVE, ...ENTER, ...LEAVE]);
+});
+
+test("unhover with nothing hovered sends nothing, and a removed element is dropped without events", async () => {
+  const { unhover } = await import("../../src/content/hints/hover.ts");
+  unhover();
+  const page = fixture("div", { isConnected: true });
+  const element = fixture("div", { isConnected: false });
+  page.run("hover");
+  element.run("hover");
+  assert.deepEqual(page.calls, [...ENTER, ...LEAVE]);
+  unhover();
+  assert.deepEqual(element.calls, ENTER);
+});
+
+test("a click pick leaves the hover alone, so a menu stays open for the click", async () => {
+  const { unhover } = await import("../../src/content/hints/hover.ts");
+  unhover();
+  const menu = fixture("div");
+  const item = fixture("a", { href: "https://example.com/" });
+  menu.run("hover");
+  item.run("here");
+  assert.deepEqual(menu.calls, ENTER);
+  assert.equal(item.calls.at(-1), "click");
+  unhover();
+});
