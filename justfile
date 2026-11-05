@@ -104,7 +104,7 @@ release_guard:
     fi
     # A bump left behind by a failed sign or install looks like this.
     if [ -z "$(git status --porcelain -- . ':!package.json' ':!package-lock.json' ':!src/manifest.json')" ]; then
-        echo "release found only a version bump left in package.json, package-lock.json and src/manifest.json. If AMO did not accept that version, run 'git checkout -- package.json package-lock.json src/manifest.json' and rerun. If signing succeeded, commit the bump instead." >&2
+        echo "release found changes only in package.json, package-lock.json and src/manifest.json. That may be a bump left by a failed sign or install. Run 'git diff package.json package-lock.json src/manifest.json'. If it shows only the version line, run 'git checkout -- package.json package-lock.json src/manifest.json' and rerun. Otherwise commit or keep your edits. If signing succeeded, commit the bump instead." >&2
         exit 1
     fi
     echo "release refuses to run with uncommitted changes. Commit or stash them first." >&2
@@ -116,7 +116,8 @@ release_bump:
     #!/usr/bin/env bash
     set -euo pipefail
     command -v jq >/dev/null || { echo "release needs jq to edit src/manifest.json." >&2; exit 1; }
-    new_version=$(npm version patch --no-git-tag-version | tr -d v)
+    npm version patch --no-git-tag-version >/dev/null
+    new_version=$(jq -r .version package.json)
     manifest_tmp=$(mktemp)
     jq --arg version "$new_version" '.version = $version' src/manifest.json > "$manifest_tmp"
     mv "$manifest_tmp" src/manifest.json
