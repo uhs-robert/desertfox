@@ -17,7 +17,7 @@ export type ActionDeps = {
   start_caret: (target: Element, mode: CaretMode) => void;
 };
 
-type Target = Pick<HTMLElement, "click" | "focus" | "remove"> & { textContent?: string | null; href?: unknown; localName: string; type?: unknown; isContentEditable?: boolean };
+type Target = Pick<HTMLElement, "click" | "focus" | "remove"> & { tabIndex?: number; hasAttribute?: (name: string) => boolean; setAttribute?: (name: string, value: string) => void; style?: CSSStyleDeclaration } & { textContent?: string | null; href?: unknown; localName: string; type?: unknown; isContentEditable?: boolean };
 
 const NON_TEXT_INPUTS = new Set(["button", "submit", "reset", "checkbox", "radio", "image", "file", "color", "range"]);
 
@@ -33,9 +33,23 @@ export function link_address(target: Target): string | undefined {
   return typeof href === "string" && href !== "" && !/^javascript:/i.test(href) ? href : undefined;
 }
 
+const FLASH_MS = 700;
+
+// A box with no tabindex cannot take focus. tabindex=-1 lets a script focus it and leaves the tab order alone. A page's own tabindex stays.
+function focus_target(target: Target): void {
+  if (!takes_typing(target) && target.hasAttribute?.("tabindex") === false) target.setAttribute?.("tabindex", "-1");
+  target.focus();
+  if (takes_typing(target) || !target.style) return;
+  // Shows which element took the focus. The old inline outline comes back after a moment.
+  const { style } = target;
+  const previous = [style.getPropertyValue("outline"), style.getPropertyPriority("outline")] as const;
+  style.setProperty("outline", "2px solid currentColor", "important");
+  setTimeout(() => style.setProperty("outline", previous[0], previous[1]), FLASH_MS);
+}
+
 export function perform(action: HintAction, target: Target, deps: ActionDeps): void | Promise<unknown> {
   if (action === "delete") return target.remove();
-  if (action === "focus") return target.focus();
+  if (action === "focus") return focus_target(target);
   if (starts_caret(action)) return deps.start_caret(target as unknown as Element, action);
   // A copy of the address falls back to the text for an element that is no link.
   if (action === "copy") return deps.copy(link_address(target) ?? (target.textContent ?? "").trim());

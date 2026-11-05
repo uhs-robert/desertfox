@@ -1,20 +1,9 @@
 import type { ScrollCandidate, ScrollAxis } from "../scroll_target.ts";
 import { LINE_PIXELS, percent_to_offset, pick_scroll_target } from "../scroll_target.ts";
+import { candidate_of } from "../scroll_box.ts";
 import type { ContentHandler } from "./types.ts";
 
 export const SCROLL_TO_DEFAULT_AXIS = "y";
-
-const is_scrolling_overflow = (value: string) => value === "auto" || value === "scroll" || value === "overlay";
-
-function candidate_of(element: Element): ScrollCandidate<Element> {
-  const style = getComputedStyle(element);
-  return {
-    ref: element,
-    can_scroll_x: element.scrollWidth > element.clientWidth && is_scrolling_overflow(style.overflowX),
-    can_scroll_y: element.scrollHeight > element.clientHeight && is_scrolling_overflow(style.overflowY),
-    area: element.clientWidth * element.clientHeight,
-  };
-}
 
 function page_candidate(): ScrollCandidate<Element> | undefined {
   const root = document.scrollingElement;
@@ -39,7 +28,7 @@ function scroll_target(axis: ScrollAxis): Element {
   const target = pick_scroll_target(
     focus_chain(),
     page_candidate(),
-    () => Array.from(document.querySelectorAll("*"), candidate_of),
+    () => Array.from(document.querySelectorAll("*"), (element) => candidate_of(element)),
     axis,
   );
   return target ?? document.scrollingElement ?? document.documentElement;

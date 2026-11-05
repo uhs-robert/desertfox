@@ -356,7 +356,7 @@ Tabs and bookmarks come from the background, because it knows the window and pri
 
 ### Hints
 
-- Candidates come from one query per filter (all, clickable, inputs, links, prose): a selector plus an optional test, such as `prose` keeping elements with a text node of their own. The search reaches open shadow roots and, through Firefox's `openOrClosedShadowRoot`, closed ones.
+- Candidates come from one query per filter (all, clickable, inputs, links, prose, scrollable): a selector plus an optional test, such as `prose` keeping elements with a text node of their own. The search reaches open shadow roots and, through Firefox's `openOrClosedShadowRoot`, closed ones.
 - An IntersectionObserver batch finds visible candidates. An `elementFromPoint` check removes covered ones.
 - Labels render in a closed shadow root. All layout reads happen before any write.
 - The actions are open, background tab, new window, start caret mode, start visual mode, copy link, copy text, delete element and focus. Rapid mode keeps hints open for several picks.

@@ -222,3 +222,9 @@ test("collect keeps only the elements that pass the test", () => {
   const found = collect(page, { selector: "links", test: (element) => (element as unknown as { name: string }).name === "kept" });
   assert.deepEqual(names(found), ["kept"]);
 });
+
+test("the scrollable filter keeps only the scroll boxes", () => {
+  const query = query_for("scrollable", undefined);
+  assert.equal(query.selector, "*");
+  assert.equal(typeof query.test, "function");
+});

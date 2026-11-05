@@ -10,6 +10,7 @@ The content script. It runs at `document_start` in the top frame and in same-ori
 - `mode_state.ts`, `page_mode.ts`: the modes and the pass-next flag. `page_mode` is the one shared instance.
 - `invocation_args.ts`: applies a command's count rule. Pure.
 - `scroll_target.ts`, `editable.ts`: pure helpers for scroll choice and focus.
+- `scroll_box.ts`: whether an element is a box that scrolls (`candidate_of`), used by the scroll keys and the `scrollable` hint filter.
 - `run_content.ts`: runs one invocation, or a list in order, and answers an `Outcome` that never rejects: nothing returned is done, a throw is failed, and `cancelled` means the user left a wait. The caller shows a failure once. `run_content_steps` runs a leaf of content steps in order, each after the one before has finished. A leaf with any background step skips it and goes to the router whole (`run_leaf` in `main.ts`), which reads the active tab per step.
 - `handlers/`: one plain function per content command. `handler_map.ts` is the only id-to-code link. The definitions in `src/commands` import the same handler objects, so the count rule lives in one place.
 - `surface.ts`, `toast.ts`: the closed shadow root in a top-layer popover host (above modals) and the message surface, for refusals and for error, warning, info and success notices. Only the `ui` bundle imports them.
