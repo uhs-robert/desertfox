@@ -17,4 +17,21 @@ export async function run_cases({ run_case, send_keys, rdp, extension_id, open_p
     expect(urls.length === 1 && urls[0].endsWith("/help.html#command=scroll.to"), `the help tabs were ${JSON.stringify(urls)}`);
     await close_help_tabs();
   });
+
+  await run_case("`:help <command>` on the help page keeps the tab count and shows the card", async () => {
+    await close_help_tabs();
+    await open_page("page", "p13_help", { new_tab: true });
+    await send_keys("-k", "Escape", "-k", "Escape");
+    await sleep(500);
+    await send_keys(":help", "-k", "Return");
+    await sleep(1500);
+    const tab_count = () => evaluate_in_background(rdp, extension_id, `(async () => (await browser.tabs.query({})).length)()`);
+    const before = await tab_count();
+    await send_keys(":help scroll.to", "-k", "Return");
+    await sleep(1500);
+    const urls = await help_urls();
+    expect(urls.length === 1 && urls[0].endsWith("/help.html#command=scroll.to"), `the help tabs were ${JSON.stringify(urls)}`);
+    expect((await tab_count()) === before, "the tab count changed");
+    await close_help_tabs();
+  });
 }
