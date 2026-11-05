@@ -53,7 +53,8 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, open_p
   // The line is a top-layer popover shown last. A surface mounted over it shows it again, which drops the frame's focus, and
   // the host gives the focus back. The text cannot be read from outside the iframe, so the case types a command in two parts
   // around the toast and checks that Enter ran it whole. Not yet run: the key-test queue belongs to another session.
-  const push_toast = () => evaluate_in_background(rdp, extension_id, `(async () => { const [tab] = await browser.tabs.query({ active: true, currentWindow: true }); await browser.tabs.sendMessage(tab.id, { type: "refusal", refusal: { message: "a toast long enough to cover many grid points" }, kind: "info" }); })()`);
+  // Not awaited: the page listener returns nothing for this message, and the debugger evaluation then never gets an answer.
+  const push_toast = () => evaluate_in_background(rdp, extension_id, `(async () => { const [tab] = await browser.tabs.query({ active: true, currentWindow: true }); browser.tabs.sendMessage(tab.id, { type: "refusal", refusal: { message: "a toast long enough to cover many grid points" }, kind: "info" }).catch(() => {}); })()`);
   // Escape closes the line, so a failed case does not leave it open for the next one.
   const close_line = async () => {
     await send_keys("-k", "Escape");
