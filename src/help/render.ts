@@ -203,17 +203,6 @@ function commands_page(model: HelpModel): HTMLElement[] {
       if (!first) return;
       first.classList.add("oasisfox-help-current");
       first.scrollIntoView();
-    } else if (event.key === "Escape") {
-      event.preventDefault();
-      event.stopPropagation();
-      // Clears first. An empty box blurs, which returns the keys to the page.
-      if (input.value === "") {
-        input.blur();
-        return;
-      }
-      input.value = "";
-      command_filter = "";
-      apply_filter();
     }
   });
 

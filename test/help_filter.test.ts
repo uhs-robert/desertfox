@@ -40,8 +40,6 @@ class FakeNode {
   setAttribute(name: string, value: string) { this.attributes[name] = value; }
   addEventListener(name: string, listener: (event: unknown) => void) { this.listeners[name] = listener; }
   scrollIntoView() { this.scrolled = true; }
-  blur() { this.blurred = true; }
-  blurred = false;
   classList = {
     add: (name: string) => { if (!this.has(name)) this.className += ` ${name}`; },
     remove: (name: string) => { this.className = this.className.split(" ").filter((part) => part !== name).join(" "); },
@@ -121,16 +119,4 @@ test("the filter text survives a re-render", () => {
   assert.equal(shown_cards(second), 1);
   assert.equal(count_text(second), "1 of 3 commands");
   type(second, "");
-});
-
-test("Escape clears a filled box, then blurs an empty one", () => {
-  const root = render();
-  const input = type(root, "scroll");
-  const event = { key: "Escape", preventDefault: () => {}, stopPropagation: () => {} };
-  input.listeners["keydown"]!(event);
-  assert.equal(input.value, "");
-  assert.equal(shown_cards(root), 3);
-  assert.ok(!input.blurred);
-  input.listeners["keydown"]!(event);
-  assert.ok(input.blurred);
 });
