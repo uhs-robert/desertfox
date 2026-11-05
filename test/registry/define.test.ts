@@ -236,3 +236,12 @@ test("the rule kinds are rejected on a param that cannot carry them", () => {
   rejects("a.b", with_param({ name: "n", type: "string", optional: true, default: "x" }), /params\[0\]\.optional: an optional param reads as an empty text/);
   assert.doesNotThrow(() => create_registry().define("a.b", with_param({ name: "n", type: "string", values: ["a"], strict: true, pattern: "^a$", optional: true })));
 });
+
+test("value_of must sit on a string and name a strict string param", () => {
+  const name = { name: "name", type: "string", values: ["a"], strict: true };
+  const with_params = (...params: object[]): CommandInput => ({ ...base, params: params as never });
+  rejects("a.b", with_params(name, { name: "value", type: "string", value_of: "other" }), /params\[1\]\.value_of: names "other", which is not a strict string param/);
+  rejects("a.b", with_params({ name: "name", type: "string" }, { name: "value", type: "string", value_of: "name" }), /not a strict string param/);
+  rejects("a.b", with_params(name, { name: "value", type: "int", value_of: "name" }), /params\[1\]\.value_of: only a string param/);
+  assert.doesNotThrow(() => create_registry().define("a.b", with_params(name, { name: "value", type: "string", value_of: "name" })));
+});

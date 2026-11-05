@@ -143,6 +143,7 @@ function check_params(input: CommandInput, fail: Fail): void {
   params.forEach((param, index) => {
     const at = `params[${index}]`;
     if (param.rest && param.type !== "string") fail(`${at}.rest`, "only a string param can take the rest");
+    if (param.value_of !== undefined && find_param(input, param.value_of)?.strict !== true) fail(`${at}.value_of`, `names "${param.value_of}", which is not a strict string param`);
     if (param.when) check_when(input, param, at, fail);
     if (is_conditional_default(param.default) && param.when) fail(`${at}.default`, "a conditional default cannot be combined with `when` on the same param");
     if (is_conditional_default(param.default)) {
@@ -207,6 +208,7 @@ function check_rules(param: ParamDef, at: string, fail: Fail): void {
       fail(`${at}.pattern`, `${JSON.stringify(param.pattern)} is not a regular expression`);
     }
   }
+  if (param.value_of !== undefined && param.type !== "string") fail(`${at}.value_of`, "only a string param can hold a setting value");
   if (param.strict !== undefined && (param.type !== "string" || !static_values(param))) {
     fail(`${at}.strict`, "only a string param with a fixed value list can be strict");
   }

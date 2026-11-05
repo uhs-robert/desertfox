@@ -4,7 +4,7 @@
 import type { CommandMeta, Mode, ParamDef } from "../../shared/command.ts";
 import { first_sentence, flag_alternatives, tokenize, usage_line } from "../../shared/registry/index.ts";
 import type { CommandLookup, EnumSources } from "../../shared/registry/index.ts";
-import { bare_word_param, default_value, flag_params, is_dynamic_values, static_values, subject_param } from "../../shared/registry/params.ts";
+import { bare_word_param, default_value, flag_params, is_dynamic_values, positional_params, static_values, subject_param } from "../../shared/registry/params.ts";
 import { rank } from "../../shared/score.ts";
 import { is_setting_name, SETTING_NAMES, SETTING_SPECS } from "../../shared/settings_schema.ts";
 import type { Ranked } from "../../shared/score.ts";
@@ -87,7 +87,7 @@ function args_of(command: Command): string {
   const bare = bare_word_param(command);
   const subject = subject_param(command);
   const engine = bare && is_dynamic_values(bare.values) ? [`<${bare.name}>`] : [];
-  return [...engine, ...flag_params(command).flatMap(flags_of).map((flag) => flag.long), ...(subject ? [`<${subject.name}>`] : [])].join(" ");
+  return [...engine, ...flag_params(command).flatMap(flags_of).map((flag) => flag.long), ...positional_params(command).map((param) => `<${param.name}>`), ...(subject ? [`<${subject.name}>`] : [])].join(" ");
 }
 
 // Whether the list offers the command on a line opened from `opened_from`.
@@ -151,13 +151,14 @@ function value_rows(command: Command, param: ParamDef, sources: EnumSources): Ro
   }));
 }
 
-// `set` and `unset` take setting names first. The words after the name of a setting that lists values offer those values.
+// `set`, `toggle` and `unset` take setting names first. The words after the name of a setting that lists values offer those values.
 function setting_rows(context: Extract<CursorContext, { kind: "subject" }>, text: string, usage: string): Row[] | undefined {
   const command_id = context.command.id;
-  if (command_id !== "settings.set" && command_id !== "settings.unset") return undefined;
+  if (command_id !== "settings.set" && command_id !== "settings.unset" && command_id !== "settings.toggle") return undefined;
   const row = (name: string, insert: string, description: string): Row => ({ name, insert, description, args: "", also_named: [], keywords: [], usage });
   if (context.position === 0) {
-    const names = SETTING_NAMES.filter((name) => !SETTING_SPECS[name].is_group).map((name) => row(name, `${name} `, SETTING_SPECS[name].expectation));
+    const wanted = (name: keyof typeof SETTING_SPECS) => !SETTING_SPECS[name].is_group && (command_id !== "settings.toggle" || SETTING_SPECS[name].flips_from_absent !== undefined);
+    const names = SETTING_NAMES.filter(wanted).map((name) => row(name, `${name} `, SETTING_SPECS[name].expectation));
     return command_id === "settings.unset" ? [row("all", "all ", "Drop every live change."), ...names] : names;
   }
   const typed = tokenize(text.slice(0, context.start));

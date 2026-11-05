@@ -307,3 +307,26 @@ test("the rule kinds refuse a typed value after the parse, through check_args", 
   assert.equal(check("rules.check 7").ok, true);
   assert.equal(check("rules.check").ok, true);
 });
+
+test("bare words fill the required strict params in schema order, then the subject takes the rest", () => {
+  const positional = grammar_registry();
+  positional.define("pos.set", {
+    label: "Pos",
+    intent: "Take a name, then text.",
+    runs_in: "background",
+    params: [
+      { name: "name", type: "string", values: ["alpha", "beta"], strict: true },
+      { name: "value", type: "string", rest: true, main: true, optional: true },
+    ],
+    run: () => {},
+  });
+  const parse = (text: string) => {
+    const result = parse_command_line(positional, text);
+    return result.kind === "invocation" ? result.invocation.args : never();
+  };
+  assert.deepEqual(parse("pos.set alpha one two"), { name: "alpha", value: "one two" });
+  assert.deepEqual(parse("pos.set alpha"), { name: "alpha" });
+  assert.deepEqual(parse("pos.set typo"), { name: "typo" });
+  assert.equal(check_args(positional.get("pos.set")!, parse("pos.set typo")).ok, false);
+  assert.equal(usage_line(positional.get("pos.set")!), "pos.set <name> [value...]");
+});

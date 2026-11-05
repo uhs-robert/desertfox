@@ -4,7 +4,7 @@
 import type { CommandDef, ParamDef } from "../command.ts";
 import type { EnumSources } from "./check_args.ts";
 import { parse_command_line } from "./command_line.ts";
-import { bare_word_param, default_of, is_context_source, is_dynamic_values, static_values, subject_param } from "./params.ts";
+import { bare_word_param, default_of, is_context_source, is_dynamic_values, positional_params, static_values, subject_param } from "./params.ts";
 
 type Printable = Pick<CommandDef, "id" | "name" | "params">;
 
@@ -79,11 +79,13 @@ function assemble(command: Printable, args: Record<string, unknown>, options: Pr
   };
 
   if (engine && plan.engine === "bare" && shown(engine) && args[engine.name] !== undefined) words.push(quoted(String(args[engine.name])));
+  const positional = positional_params(command);
   for (const param of command.params ?? []) {
-    if (param === subject || !shown(param)) continue;
+    if (param === subject || positional.includes(param) || !shown(param)) continue;
     if (param === engine && plan.engine === "bare" && args[param.name] !== undefined) continue;
     words.push(print_flag(param, args[param.name], style));
   }
+  for (const param of positional) if (shown(param)) words.push(quoted(String(args[param.name])));
   if (subject && shown(subject)) {
     const value = args[subject.name];
     const empty = value === undefined || value === "";

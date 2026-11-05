@@ -2,6 +2,7 @@
 // all end here.
 
 import type { CheckedArgs, CommandDef, DynamicValues, ParamDef, ParamValue } from "../command.ts";
+import { is_setting_name, parse_setting_text } from "../settings_schema.ts";
 import {
   default_of as applicable_default_of,
   default_value,
@@ -80,6 +81,13 @@ export function check_args(
     if (args[param.name] === undefined && !param.when && param.type !== "bool") {
       return { ok: false, error: `missing <${param.name}>`, missing_param: param.name };
     }
+  }
+  for (const param of params) {
+    if (param.value_of === undefined) continue;
+    const [text, name] = [args[param.name], args[param.value_of]];
+    if (typeof text !== "string" || text.trim() === "" || typeof name !== "string" || !is_setting_name(name)) continue;
+    const parsed = parse_setting_text(name, text);
+    if ("error" in parsed) return fail(parsed.error);
   }
   return { ok: true, args };
 }

@@ -52,8 +52,10 @@ export type ParamDef = {
   min?: number;
   // A `string` param whose text must match this regular expression (source text, so it travels in `commands.json`). An optional param may still be empty.
   pattern?: string;
-  // A `string` param with a static `values` list accepts only those values. Without it the list is for completion only.
+  // A `string` param with a static `values` list accepts only those values, compared exactly like an enum value. Without it the list is for completion only.
   strict?: boolean;
+  // A `string` param that holds the value of the setting named by the sibling param of this name. `check_args` checks it with that setting's entry in `SETTING_SPECS`. An empty value passes.
+  value_of?: string;
   // Exactly one key, so `{ param: [values] }`.
   when?: ParamWhen;
 };
