@@ -14,6 +14,7 @@ function fake_page(page_text = "ab ab ab") {
   let selection = ["start"];
   let clock = 0;
   const watchers: (() => void)[] = [];
+  let retargets = 0;
   let builds = 0;
   const make_model = (): TextModel =>
     (builds++, { text: page_text, trees: [], point_at: (index: number) => ({ node: { index }, offset: 0 }), index_of: (node: { index: number }) => node.index }) as unknown as TextModel;
@@ -31,7 +32,7 @@ function fake_page(page_text = "ab ab ab") {
     // Each match ends a slice, and the page runs only when the test lets the scan go on.
     slicing: (is_stale) => ({ is_stale, now: () => (clock += 10), slice_ms: 8, yield_to_page: () => new Promise<void>((resume) => gates.push(resume)) }),
     selection_key: () => selection,
-    watch_page: (on_change) => (watchers.push(on_change), () => {}),
+    watch_page: (on_change) => (watchers.push(on_change), () => void retargets++),
   };
   const settle = async () => {
     for (let round = 0; round < 30; round++) {
@@ -39,7 +40,7 @@ function fake_page(page_text = "ab ab ab") {
       await new Promise((resume) => setImmediate(resume));
     }
   };
-  return { deps, builds: () => builds, change_page: () => watchers.forEach((notify) => notify()), painted, toasts, registers, settle, clears: () => clears, set_selection: (next: string[]) => (selection = next), host: { show_toast: (message: string) => void toasts.push(message) } };
+  return { deps, retargets: () => retargets, builds: () => builds, change_page: () => watchers.forEach((notify) => notify()), painted, toasts, registers, settle, clears: () => clears, set_selection: (next: string[]) => (selection = next), host: { show_toast: (message: string) => void toasts.push(message) } };
 }
 
 test("a search begun while Enter waits for the old scan keeps its own state", async () => {
@@ -269,4 +270,27 @@ test("a jump searches from the word, forward past it and backward before it, and
   await backward;
   assert.equal(page.toasts.at(-1), "1 of 3");
   assert.equal(page.registers.get("/:direction"), "backward");
+});
+
+test("a rebuild during typing keeps the origin of a search that began at a point", async () => {
+  const page = fake_page();
+  const find = create_find(page.host, page.deps);
+  const reports: string[] = [];
+  find.begin("forward", { node: { index: 3 } as unknown as Node, offset: 0 });
+  find.update("ab", (status) => reports.push(status));
+  await page.settle();
+  page.change_page();
+  find.update("a", (status) => reports.push(status));
+  await page.settle();
+  assert.equal(reports.at(-1), "3 of 3");
+});
+
+test("the watcher is pointed at the trees of each model the search reads", async () => {
+  const page = fake_page();
+  const find = create_find(page.host, page.deps);
+  find.begin("forward");
+  page.change_page();
+  find.update("ab", () => {});
+  await page.settle();
+  assert.equal(page.retargets(), 2);
 });

@@ -159,3 +159,9 @@ test("the walk stops at the size cap and says so", () => {
   assert.equal(long.text.length < MAX_TEXT_CHARS * 1.5, true);
   assert.equal(model_of(element("body", [element("p", [text("short")])])).truncated, false);
 });
+
+test("one text node above the cap is cut at the cap", () => {
+  const model = model_of(element("body", [element("p", [text("x".repeat(MAX_TEXT_CHARS + 1000))])]));
+  assert.equal(model.truncated, true);
+  assert.equal(model.text.length <= MAX_TEXT_CHARS, true);
+});

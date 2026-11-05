@@ -12,7 +12,7 @@ import { scroll_to_index } from "./screen_line.ts";
 import { stored_mode_colors } from "./selection_colors.ts";
 import { first_visible_index } from "./start_point.ts";
 import { build_text_model, documents_of, MAX_TEXT_CHARS, trees_alive } from "./text_model.ts";
-import type { DomPoint, TextModel } from "./text_model.ts";
+import type { DomPoint, TextModel, TextTree } from "./text_model.ts";
 
 // What the engine needs of the host script. A bundle reaches it through `window.oasisfox_host`.
 type Host = Pick<BundleHostApi, "show_toast">;
@@ -24,6 +24,8 @@ type Live = {
   model: TextModel;
   direction: Direction;
   start: number;
+  // `start` as a point in the page, so a rebuilt model keeps the same origin.
+  start_point: DomPoint | undefined;
   // Bumped by each keystroke and by the end of the search. A scan or paint that finds it changed drops its work.
   generation: number;
   // The text of the line as of the last keystroke.
@@ -47,8 +49,8 @@ export type FindDeps = {
   slicing: (is_stale: () => boolean) => Slicing;
   // Where each document's own selection sits. A click moves it, which makes a later position win over an older match.
   selection_key: (model: TextModel) => unknown[];
-  // Calls `on_change` when the page changes its text or markup, until the returned function stops it.
-  watch_page: (on_change: () => void) => () => void;
+  // Calls `on_change` when text changes in the page or in any of the trees the model read. The returned function points the watcher at the trees of a new model.
+  watch_page: (on_change: () => void) => (trees: TextTree[]) => void;
 };
 
 const SLICE_MS = 8;
@@ -83,8 +85,10 @@ const browser_deps = (): FindDeps => ({
   selection_key: (model) => documents_of(model).flatMap((owner) => [owner.getSelection()?.anchorNode, owner.getSelection()?.anchorOffset]),
   watch_page: (on_change) => {
     const observer = new MutationObserver((records) => records.some(is_page_change) && on_change());
-    observer.observe(document, { childList: true, characterData: true, subtree: true });
-    return () => observer.disconnect();
+    return (trees) => {
+      observer.disconnect();
+      for (const tree of [document, ...trees]) observer.observe(tree, { childList: true, characterData: true, subtree: true });
+    };
   },
 });
 
@@ -115,7 +119,7 @@ export function create_find(host: Host, deps: FindDeps = browser_deps()) {
   let steps: Promise<void> = Promise.resolve();
   // The page changed its text since the search read its model, so the model is read again before it is used.
   let page_changed = false;
-  let watching = false;
+  let observe_trees: ((trees: TextTree[]) => void) | undefined;
   // Where a jump to a word starts, as a point in the page. `step_once` consumes it.
   let origin: DomPoint | undefined;
 
@@ -150,10 +154,7 @@ export function create_find(host: Host, deps: FindDeps = browser_deps()) {
   const read_model = (): TextModel => {
     const model = deps.build_model();
     page_changed = false;
-    if (!watching) {
-      watching = true;
-      deps.watch_page(() => (page_changed = true));
-    }
+    (observe_trees ??= deps.watch_page(() => (page_changed = true)))(model.trees);
     return model;
   };
 
@@ -176,7 +177,7 @@ export function create_find(host: Host, deps: FindDeps = browser_deps()) {
     }
     if (!is_current(open.model)) {
       open.model = read_model();
-      open.start = deps.start_index(open.model);
+      open.start = locate(open.model, open.start_point) ?? deps.start_index(open.model);
     }
     // A pattern typed one key at a time passes through costly shapes such as `(a+)+`. It is not searched, and the results of the last keystroke stay on the page.
     if (query.fallback === "costly" && !scan_costly) return report(`Pattern too slow as a regex: ${text}`);
@@ -199,15 +200,26 @@ export function create_find(host: Host, deps: FindDeps = browser_deps()) {
     report(cut_note(open.model, describe_match(text, matches.from.length, first.index, query.fallback, first.wrapped)));
   }
 
-  // The index to search from for a jump: forward skips the word itself, which starts at the origin.
-  const from_origin = (model: TextModel, direction: Direction): number | undefined => {
-    if (!origin) return undefined;
+  const locate = (model: TextModel, point: DomPoint | undefined): number | undefined => {
     try {
-      const index = model.index_of(origin.node, origin.offset);
-      return index === undefined ? undefined : direction === "forward" ? index + 1 : index;
+      return point && model.index_of(point.node, point.offset);
     } catch {
       return undefined;
     }
+  };
+
+  const point_of = (model: TextModel, index: number): DomPoint | undefined => {
+    try {
+      return model.point_at(index);
+    } catch {
+      return undefined;
+    }
+  };
+
+  // The index to search from for a jump: forward skips the word itself, which starts at the origin.
+  const from_origin = (model: TextModel, direction: Direction): number | undefined => {
+    const index = locate(model, origin);
+    return index === undefined ? undefined : direction === "forward" ? index + 1 : index;
   };
 
   // Done on a match. Failed when there is no previous search or no match, with the message left for the caller to show.
@@ -263,7 +275,7 @@ export function create_find(host: Host, deps: FindDeps = browser_deps()) {
       origin = from;
       const start = from_origin(model, direction) ?? deps.start_index(model);
       origin = undefined;
-      live = { model, direction, start, generation: 0, text: "", found: undefined, pending: Promise.resolve(), colors: deps.read_colors(), finished: undefined };
+      live = { model, direction, start, start_point: point_of(model, start), generation: 0, text: "", found: undefined, pending: Promise.resolve(), colors: deps.read_colors(), finished: undefined };
     },
 
     // The text of the line changed. `report` gets the line to show under it.

@@ -393,7 +393,7 @@ Caret mode puts a text cursor in the page, so the user can move through text wit
 - Enter keeps the highlights and the match, Escape clears the highlights. Both keep the search and the match as the place `n`, `N` and a new caret or visual session go on from.
 - In visual mode `/` and `?` move the caret end to the match and keep the anchor. Escape on the line leaves the selection as it was. `n` and `N` do the same with the next and previous match: the caret end goes to the start of the match, so a match before the anchor flips the selection.
 - `*` and `#` are `find.open --word` and `find.open --word --backward`. They search the word under the caret, whole and case-sensitive, with no line. In visual mode with a selection they search the selected text. In normal mode the start of the visible text stands in for the caret. They set register `/` like a typed search.
-- A `MutationObserver` marks the text model stale when the page changes its text or markup, ignoring the elements OasisFox adds itself. The next keystroke or `n` reads the model again. The observer starts with the first search.
+- A `MutationObserver` marks the text model stale when nodes or text change in the page, its shadow roots or its same-origin frames, ignoring the elements OasisFox adds itself. A class or style change that only shows or hides text is not seen, and a new `/` always reads the model again. The next keystroke or `n` reads the model again. The observer starts with the first search.
 - A page with more than 4 million characters of text is searched only up to that point, and the line and toast say so.
 
 ### Help and palette

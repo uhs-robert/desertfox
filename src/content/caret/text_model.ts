@@ -102,6 +102,10 @@ export function build_text_model(root: Element = document.body, start_node?: Nod
     // `node.data` is a copy of the whole text on each read when the node is the page's, so a long text read per character fills the memory.
     const data = node.data;
     for (let offset = 0; offset < data.length; offset++) {
+      if (text.length + piece.length >= MAX_TEXT_CHARS) {
+        truncated = true;
+        break;
+      }
       const char = data[offset]!;
       const is_blank: boolean = /\s/.test(char) && !(preformatted && char === "\n");
       if (is_blank && !preformatted) {

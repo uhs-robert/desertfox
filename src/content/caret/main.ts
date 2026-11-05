@@ -221,7 +221,15 @@ const handle_act = (args: Record<string, unknown>): Outcome | Promise<Outcome> |
   });
 };
 
-const WORD_CHARACTER = /[\p{L}\p{N}_]/u;
+const WORD_CHARACTER = /^[\p{L}\p{N}_]$/u;
+// Part of a word, read by code point: both halves of a surrogate pair give the same answer.
+function in_word(text: string, index: number): boolean {
+  const unit = text.charCodeAt(index);
+  const start = unit >= 0xdc00 && unit <= 0xdfff && index > 0 ? index - 1 : index;
+  return index >= 0 && index < text.length && WORD_CHARACTER.test(text.slice(start, start + (text.codePointAt(start)! > 0xffff ? 2 : 1)));
+}
+// Zero width, and its capital makes the search exact under smartcase.
+const EXACT_MARK = "(?:\\p{Lu}{0})";
 const escape_regex = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 // What `*` and `#` search for and where it starts. A visual selection is searched as text. Otherwise it is the word under the caret, whole.
@@ -231,11 +239,11 @@ function word_target(): { pattern: string; from: DomPoint } | string {
   if (model.text === "") return "No text here";
   const at = session ? undefined : (find.position(model) ?? first_visible_index(model));
   const cursor = session?.cursor ?? { anchor: at!, caret: at! };
-  if (session?.mode === "visual" && cursor.anchor !== cursor.caret) {
+  if (session?.mode === "visual") {
     const { from, to } = selected_span(cursor);
-    return { pattern: escape_regex(model.text.slice(from, to)), from: model.point_at(from) };
+    return { pattern: escape_regex(model.text.slice(from, to)) + EXACT_MARK, from: model.point_at(from) };
   }
-  const on_word = (index: number) => index >= 0 && index < model.text.length && WORD_CHARACTER.test(model.text[index]!);
+  const on_word = (index: number) => in_word(model.text, index);
   if (!on_word(cursor.caret)) return "No word under the caret";
   let first = cursor.caret;
   let end = cursor.caret + 1;
