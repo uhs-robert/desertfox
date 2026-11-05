@@ -3,3 +3,14 @@
 "<A-,>" = "browser.focus_page"
 # Runs the command line open command from a Firefox shortcut, for the page with no content script.
 "<A-.>" = "cmdline.open"
+
+# Array bindings: one key, several steps run in order.
+[normal]
+# The second step scrolls the tab that tab.next made active.
+",n" = ["tab.next", "scroll.to --percent=0"]
+# A waiting step: the pick resumes the sequence, so the scroll runs after the pick, and Escape cancels the rest.
+",h" = ["hint.run --action=background", "scroll.pixels --dy=300"]
+# find.next with no earlier search fails and stops the sequence.
+",f" = ["find.next", "scroll.pixels --dy=300"]
+# The command line opens and the scroll waits for Enter or Escape.
+",o" = ["cmdline.open", "scroll.pixels --dy=300"]
