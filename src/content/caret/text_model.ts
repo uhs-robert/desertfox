@@ -17,6 +17,8 @@ export type TextModel = {
   tree_runs: (from: number, to: number) => TreeRun[];
   // The first character of the `start_node` given to the build, or of the text after it. Undefined when no text follows it.
   start_index: number | undefined;
+  // True when the walk stopped at MAX_TEXT_CHARS, so the text is only the start of the page.
+  truncated: boolean;
 };
 
 export type DomPoint = { node: Node; offset: number };
@@ -30,6 +32,8 @@ const TEXT_NODE = 3;
 const DOCUMENT_NODE = 9;
 const SKIPPED = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEXTAREA", "INPUT", "SELECT", "TEMPLATE", "HEAD"]);
 const MAX_FRAME_DEPTH = 4;
+// A page with more text than this is searched only up to here. The string, the offsets and each scan grow with the text, and a tab that holds tens of millions of characters stalls.
+export const MAX_TEXT_CHARS = 4_000_000;
 
 const is_block = (style: CSSStyleDeclaration) => !style.display.startsWith("inline") && style.display !== "contents";
 
@@ -67,6 +71,7 @@ export function build_text_model(root: Element = document.body, start_node?: Nod
   let after_space = true;
   let start_seen = false;
   let start_index: number | undefined;
+  let truncated = false;
 
   // The last blank before a line end is the line end, so a line never ends in a space.
   const end_line = () => {
@@ -97,6 +102,10 @@ export function build_text_model(root: Element = document.body, start_node?: Nod
     // `node.data` is a copy of the whole text on each read when the node is the page's, so a long text read per character fills the memory.
     const data = node.data;
     for (let offset = 0; offset < data.length; offset++) {
+      if (text.length + piece.length >= MAX_TEXT_CHARS) {
+        truncated = true;
+        break;
+      }
       const char = data[offset]!;
       const is_blank: boolean = /\s/.test(char) && !(preformatted && char === "\n");
       if (is_blank && !preformatted) {
@@ -124,6 +133,10 @@ export function build_text_model(root: Element = document.body, start_node?: Nod
 
   // `block` is the nearest block around the node in the rendered tree, so inline text in a shadow root stays on its host's line.
   const visit = (node: Node, block: Element, preformatted: boolean, frame_depth: number): void => {
+    if (text.length >= MAX_TEXT_CHARS) {
+      truncated = true;
+      return;
+    }
     if (node === start_node) start_seen = true;
     if (node.nodeType === TEXT_NODE) return add_text(node as Text, block, preformatted);
     if (node.nodeType !== ELEMENT_NODE) return;
@@ -152,6 +165,7 @@ export function build_text_model(root: Element = document.body, start_node?: Nod
     trees: [...trees],
     tree_runs: (from, to) => tree_runs(tree_starts, from, to),
     start_index,
+    truncated,
   };
 }
 

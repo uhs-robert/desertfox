@@ -196,6 +196,23 @@ export function start_server() {
       // Three hundred thousand matches of "e" in one text node, and one "ex" at the end: a scan for "e" takes many slices.
       return response.end(page(`find_big ${id}`, `<p id="big" style="word-break:break-all">${"e ".repeat(Number(/_(\d+)$/.exec(id)?.[1] ?? 300000))}ex</p>`));
     }
+    if (url.pathname === "/find_words") {
+      // The title in the h1 is the first word on the page, and "find_words" is in three more places. "quick" is a word once, then the start of "quickly" and a word again.
+      return response.end(page(`find_words ${id}`, '<p>find_words aa</p><p>find_words bb</p><p>find_words cc</p><p>quick fox</p><p>quickly now</p><p>a quick one</p><input id="paste_target">'));
+    }
+    if (url.pathname === "/find_case") {
+      return response.end(page(`find_case ${id}`, "<p>zeta one</p><p>Zeta two</p><p>zeta three</p>"));
+    }
+    if (url.pathname === "/find_astral") {
+      // A word that starts with a letter outside the basic plane: MATHEMATICAL SCRIPT CAPITAL A, two UTF-16 units.
+      return response.end(page(`find_astral ${id}`, "<p>x \u{1D49C}bc y</p><p>\u{1D49C}bc again</p><p>bc</p>"));
+    }
+    if (url.pathname === "/find_huge") {
+      // Five million characters in five thousand paragraphs, past the 4 million that a search reads. The only "needle" is in the first paragraph.
+      const filler = "lorem ".repeat(166) + "lore";
+      const paragraphs = Array.from({ length: 5000 }, (_, index) => `<p>${index === 0 ? "needle " : ""}${filler}</p>`).join("");
+      return response.end(page(`find_huge ${id}`, paragraphs));
+    }
     if (url.pathname === "/caret_columns") {
       // The middle line is short: j over it must still come back to the column the caret left.
       return response.end(page(`caret_columns ${id}`, '<p style="font-family:monospace">abcdefghij<br>ab<br>abcdefghij</p>'));

@@ -85,7 +85,7 @@ export async function run_cases({ run_case, expect, open_page, send_keys, sleep,
   });
 
   // Decision 3: visual mode keeps the anchor and moves the caret to the end of the match.
-  await run_case("a find with / in visual mode keeps the anchor and ends at the match", async () => {
+  await run_case("a find with / in visual mode keeps the anchor and ends on the first character of the match", async () => {
     await open_page("caret_bug_find", "find_d", { new_tab: true });
     await send_keys("gV");
     await send_keys("v");
@@ -100,7 +100,7 @@ export async function run_cases({ run_case, expect, open_page, send_keys, sleep,
     const text = events.filter((event) => event.type === "selection" && event.page_id === "find_d").at(-1)?.text ?? "";
     await send_keys("-k", "Escape");
     await send_keys("-k", "Escape");
-    expect(text.startsWith("caret_bug_find") && text.trimEnd().endsWith("needle"), `the selection is ${JSON.stringify(text.slice(0, 20))}...${JSON.stringify(text.slice(-12))}, expected from the title to "needle"`);
+    expect(text.startsWith("caret_bug_find") && text.trimEnd().endsWith("n") && !text.trimEnd().endsWith("needle"), `the selection is ${JSON.stringify(text.slice(0, 20))}...${JSON.stringify(text.slice(-12))}, expected from the title to the "n" of "needle"`);
   });
 
   // A drag in the page can end at offset 0 of a later text node. The span then ends at the character before it, not at its start.

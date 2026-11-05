@@ -165,3 +165,9 @@ test("a pattern typed one key at a time is flagged only at the costly steps", ()
   const steps = ["(", "(a", "(a+", "(a+)", "(a+)+", "(a+)+$"].map((typed) => compile_query(typed)!.fallback);
   assert.deepEqual(steps, ["invalid", "invalid", "invalid", undefined, "costly", "costly"]);
 });
+
+test("a (?-i:...) group stays exact under a lowercase query", () => {
+  const search = compile_query("(?-i:foo)")!.search;
+  assert.equal(search.kind === "regex" && search.regex.test("FOO"), false);
+  assert.equal(search.kind === "regex" && (search.regex.lastIndex = 0, search.regex.test("foo")), true);
+});
