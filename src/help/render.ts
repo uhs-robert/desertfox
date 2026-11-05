@@ -147,6 +147,19 @@ function quick_start_page(blocks: Block[]): HTMLElement[] {
   });
 }
 
+const GUIDE_SUBSECTION_LEVEL = 3;
+const YOUR_ENGINES = "Your engines";
+
+// The guide's level-3 headings and the engines table are the Search Engines sections. The sole level-2 heading in the guide is a wrapper, so it gets no entry.
+function search_engines_page(guide: Block[], model: HelpModel): HTMLElement[] {
+  const sections = [...page_sections("search-engines", model, guide)];
+  const body = guide.map((block) => {
+    if (block.kind !== "heading" || block.level !== GUIDE_SUBSECTION_LEVEL) return block_node(block);
+    return section_heading("search-engines", sections.shift()!, GUIDE_SUBSECTION_LEVEL);
+  });
+  return [...body, section_heading("search-engines", sections.shift()!), engine_table(model.engines)];
+}
+
 function definition_table(rows: { name: string; meaning: string }[]): HTMLElement {
   return el("table", undefined, ...rows.map((row) => el("tr", undefined, el("td", undefined, el("code", undefined, row.name)), el("td", undefined, row.meaning))));
 }
@@ -190,7 +203,7 @@ function page_body(route: Route, model: HelpModel, guide: Block[]): HTMLElement[
   switch (route.page) {
     case "home": return home_page(model);
     case "quick-start": return quick_start_page(model.quick_start);
-    case "search-engines": return [...guide.map(block_node), el("h2", undefined, "Your engines"), engine_table(model.engines)];
+    case "search-engines": return search_engines_page(guide, model);
     case "commands": return commands_page(model);
     case "styling": return styling_page();
   }
@@ -247,20 +260,20 @@ export function sections_from_titles(titles: string[]): Section[] {
 const HOME_SECTIONS = sections_from_titles(["Warnings", "Settings"]);
 const STYLING_SECTIONS = sections_from_titles(["Variables", "Classes"]);
 
-// The sections a page lists in the sidebar. Search Engines has none, because its guide loads late and its headings have no ids.
-export function page_sections(page: PageId, source: HelpModel | Block[]): Section[] {
+// The sections a page lists in the sidebar. Only Search Engines reads the guide.
+export function page_sections(page: PageId, source: HelpModel | Block[], guide: Block[] = []): Section[] {
   const quick_start = Array.isArray(source) ? source : source.quick_start;
   switch (page) {
     case "home": return HOME_SECTIONS;
     case "quick-start": return sections_from_titles(quick_start.flatMap((block) => (block.kind === "heading" && block.level === 2 ? [block.text] : [])));
     case "commands": return Array.isArray(source) ? [] : sections_from_titles(source.groups.map((group) => group.name));
-    case "search-engines": return [];
+    case "search-engines": return sections_from_titles([...guide.flatMap((block) => (block.kind === "heading" && block.level === GUIDE_SUBSECTION_LEVEL ? [block.text] : [])), YOUR_ENGINES]);
     case "styling": return STYLING_SECTIONS;
   }
 }
 
-function section_heading(page: PageId, section: Section): HTMLElement {
-  const heading = el("h2", undefined, section.title);
+function section_heading(page: PageId, section: Section, level = 2): HTMLElement {
+  const heading = el(`h${level}`, undefined, section.title);
   heading.id = section_anchor(page, section.slug);
   heading.tabIndex = -1;
   return heading;
@@ -325,14 +338,14 @@ function section_toggle(page: PageId, title: string, list: HTMLElement): HTMLEle
 }
 
 // The current page's group is open unless the reader toggled it on this page. Going to a page drops its stored toggle, so a menu click always opens it. Other groups keep what the reader set, closed at first. Each toggle works alone.
-function sidebar(current: PageId, model: HelpModel): HTMLElement {
+function sidebar(current: PageId, model: HelpModel, guide: Block[]): HTMLElement {
   if (current !== last_page) group_open.delete(current);
   last_page = current;
   const entries = PAGES.map((page): HTMLElement => {
     const link = el("a", undefined, page.title);
     link.setAttribute("href", page.hash);
     if (page.id === current) link.setAttribute("aria-current", "page");
-    const sections = page_sections(page.id, model);
+    const sections = page_sections(page.id, model, guide);
     if (sections.length === 0) return link;
     const list = section_list(page.id, sections, group_open.get(page.id) ?? page.id === current);
     const toggle = section_toggle(page.id, page.title, list);
@@ -352,5 +365,5 @@ export function render_help(root: HTMLElement, model: HelpModel, route: Route, g
   const heading = el("h1", undefined, title);
   heading.tabIndex = -1;
   const page = el("main", "oasisfox-help-page", heading, ...page_body(route, model, guide));
-  root.replaceChildren(el("div", "oasisfox-help", sidebar(route.page, model), page));
+  root.replaceChildren(el("div", "oasisfox-help", sidebar(route.page, model, guide), page));
 }
