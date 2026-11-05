@@ -52,6 +52,8 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, open_p
     const seen = events.slice(mark).filter((event) => event.page_id === "p6_chosen" && event.type.startsWith("chosen_")).map((event) => event.type);
     const order = seen.filter((type) => type !== "chosen_open").join(",");
     expect(order === "chosen_pointerdown,chosen_mousedown,chosen_mouseup,chosen_click", `the page saw ${order}`);
+    const [focused] = await in_active_tab(`document.activeElement.id`);
+    expect(focused === "search", `the focus is on ${focused}, not the search field the page chose`);
   });
 
   await run_case(";s focuses a scroll box, then j scrolls the box and not the page", async () => {
