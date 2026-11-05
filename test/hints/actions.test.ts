@@ -15,7 +15,7 @@ Object.assign(globalThis, { MouseEvent: FakeMouseEvent, PointerEvent: FakeMouseE
 
 function fixture(local: string, extra: Record<string, unknown> = {}) {
   const calls: string[] = [];
-  const element = { localName: local, click: () => calls.push("click"), focus: () => calls.push("focus"), remove: () => calls.push("remove"), dispatchEvent: (event: { type: string }) => calls.push(event.type), getBoundingClientRect: () => ({ left: 10, top: 20, width: 100, height: 40 }), ...extra };
+  const element = { localName: local, click: () => calls.push("click"), focus: () => calls.push("focus"), remove: () => calls.push("remove"), dispatchEvent: (event: { type: string }) => { calls.push(event.type); return !(extra.cancel as string[] | undefined)?.includes(event.type); }, getBoundingClientRect: () => ({ left: 10, top: 20, width: 100, height: 40 }), ...extra };
   const opened: [string, string][] = [];
   const copied: string[] = [];
   const started: string[] = [];
@@ -31,6 +31,18 @@ test("here sends the mouse events a real click sends, with click last", () => {
   page.run("here");
   assert.deepEqual(page.calls, MOUSE_SEQUENCE);
   assert.deepEqual(page.opened, []);
+});
+
+test("a cancelled mousedown keeps the focus where the page put it", () => {
+  const page = fixture("a", { href: "https://example.com/", cancel: ["mousedown"] });
+  page.run("here");
+  assert.deepEqual(page.calls, MOUSE_SEQUENCE.filter((type) => type !== "focus"));
+});
+
+test("a cancelled pointerdown skips mousedown, mouseup and focus and still clicks", () => {
+  const page = fixture("a", { href: "https://example.com/", cancel: ["pointerdown"] });
+  page.run("here");
+  assert.deepEqual(page.calls, ["pointerover", "pointerenter", "mouseover", "pointerdown", "pointerup", "click"]);
 });
 
 test("here sends the mouse events from the middle of the element", () => {

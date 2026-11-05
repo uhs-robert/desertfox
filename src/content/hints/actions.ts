@@ -35,19 +35,21 @@ export function link_address(target: Target): string | undefined {
 
 type MouseEventName = "pointerover" | "pointerenter" | "mouseover" | "pointerdown" | "mousedown" | "pointerup" | "mouseup";
 
-// One mouse-side event from the middle of the element, as the left button sends it. The enter and over events must not bubble to the page the way a press does.
-export function dispatch_mouse_event(target: Target, type: MouseEventName): void {
-  if (!target.dispatchEvent) return;
+// One mouse-side event from the middle of the element, as the left button sends it. Returns false when the page cancelled it. Only pointerenter does not bubble.
+export function dispatch_mouse_event(target: Target, type: MouseEventName): boolean {
+  if (!target.dispatchEvent) return true;
   const box = target.getBoundingClientRect?.();
   const init = { bubbles: type !== "pointerenter", cancelable: true, composed: true, button: 0, buttons: type.endsWith("down") ? 1 : 0, clientX: box ? box.left + box.width / 2 : 0, clientY: box ? box.top + box.height / 2 : 0 };
-  target.dispatchEvent(type.startsWith("pointer") ? new PointerEvent(type, { ...init, pointerType: "mouse", isPrimary: true }) : new MouseEvent(type, init));
+  return target.dispatchEvent(type.startsWith("pointer") ? new PointerEvent(type, { ...init, pointerType: "mouse", isPrimary: true }) : new MouseEvent(type, init));
 }
 
-// The events a real click gives, so a widget that opens on mousedown or pointerdown opens. The click comes last, from click(), so a link or button acts once.
+// The events a real click gives, so a widget that opens on mousedown or pointerdown opens. A browser skips the mouse events after a cancelled pointerdown and the focus after a cancelled mousedown, and a widget such as Chosen relies on that to keep its own focus. The click comes last, from click(), so a link or button acts once.
 function click_like_a_mouse(target: Target): void {
-  for (const type of ["pointerover", "pointerenter", "mouseover", "pointerdown", "mousedown"] as const) dispatch_mouse_event(target, type);
-  target.focus();
-  for (const type of ["pointerup", "mouseup"] as const) dispatch_mouse_event(target, type);
+  for (const type of ["pointerover", "pointerenter", "mouseover"] as const) dispatch_mouse_event(target, type);
+  const pointer_pressed = dispatch_mouse_event(target, "pointerdown");
+  if (pointer_pressed && dispatch_mouse_event(target, "mousedown")) target.focus();
+  dispatch_mouse_event(target, "pointerup");
+  if (pointer_pressed) dispatch_mouse_event(target, "mouseup");
   target.click();
 }
 
