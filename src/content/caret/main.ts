@@ -15,6 +15,7 @@ import { retarget, selected_text, selected_span, swap_ends, with_caret } from ".
 import type { Cursor } from "./selection_state.ts";
 import { build_text_model, documents_of, frame_document, trees_alive } from "./text_model.ts";
 import type { DomPoint, TextModel } from "./text_model.ts";
+import { page_selection_cursor, selection_span } from "./page_selection.ts";
 import { first_visible_index } from "./start_point.ts";
 
 // `oasisfox_caret_target` is the element a hint picked. The hints bundle sets it just before it enters the mode.
@@ -68,7 +69,7 @@ function paint(open: Session): void {
   scroll_to_index(open.model, open.cursor.caret);
 }
 
-// Where a new session starts: the text of the picked element or the next text after it, else the match a search stands on while no later selection took the place, else the caret's place in the page's own selection if it is on screen, else the first visible text.
+// Where a new session starts: the text of the picked element or the next text after it, else the page's own drag (whole in visual mode, ahead of a search match, so the match is selected whole), else the match a search stands on while no later selection took the place, else the end of the drag, else the caret's place in the page's own selection if it is on screen, else the first visible text.
 // A string is the reason no session could start.
 function start_session(mode: "caret" | "visual"): Session | string {
   const target = page.oasisfox_caret_target;
@@ -79,8 +80,11 @@ function start_session(mode: "caret" | "visual"): Session | string {
   }
   // The model covers the whole page, so motion is not trapped in the element.
   const model = build_text_model(document.body, target);
-  const caret = target === undefined ? (find.position(model) ?? first_visible_index(model)) : model.start_index;
-  if (caret === undefined || model.text === "") return "No text here";
+  if (model.text === "") return "No text here";
+  const dragged = target === undefined ? selections_of(model).flatMap((selection) => page_selection_cursor(model, selection) ?? [])[0] : undefined;
+  if (mode === "visual" && dragged) return { model, cursor: dragged, mode, goal_x: undefined, painted: [] };
+  const caret = target === undefined ? (find.position(model) ?? dragged?.caret ?? first_visible_index(model)) : model.start_index;
+  if (caret === undefined) return "No text here";
   return { model, cursor: { anchor: caret, caret }, mode, goal_x: undefined, painted: [] };
 }
 
@@ -118,24 +122,7 @@ function end_session(): void {
   clear_selection_colors();
 }
 
-// The span of characters a selection covers, when it lies in the model's text.
-function selection_span(model: TextModel, selection: Selection): { first: number; last: number } | undefined {
-  if (selection.rangeCount === 0) return undefined;
-  const range = selection.getRangeAt(0);
-  const first = model.index_of(range.startContainer, range.startOffset);
-  const last_range = selection.getRangeAt(selection.rangeCount - 1);
-  const end = last_range.endContainer;
-  const end_in_text = end.nodeType === Node.TEXT_NODE;
-  let last: number | undefined = first;
-  if (selection.rangeCount > 1 || !range.collapsed) {
-    // An end on an empty line is the <br> itself, painted without the +1 a text end has. A text end at offset 0 excludes its own character, so the span stops one before it.
-    const end_index = model.index_of(end, end_in_text ? Math.max(last_range.endOffset - 1, 0) : last_range.endOffset);
-    last = end_in_text && last_range.endOffset === 0 && end_index !== undefined ? Math.max(end_index - 1, first ?? 0) : end_index;
-  }
-  return first === undefined || last === undefined ? undefined : { first, last };
-}
-
-// Something else moved a page selection since the last paint, such as a find or a click. Caret mode takes the start of it. Visual mode keeps its anchor and takes the end.
+// Something else moved a page selection since the last paint, such as a find or a click. Caret mode takes the start of it. Visual mode takes a drag whole and, for a click, keeps its anchor and takes the click.
 function adopt_page_selection(open: Session): void {
   for (const selection of selections_of(open.model)) {
     const ends = ends_of(selection);
@@ -143,7 +130,8 @@ function adopt_page_selection(open: Session): void {
     if (ends.length === painted.length && ends.every((end, at) => end === painted[at])) continue;
     const found = selection_span(open.model, selection);
     if (!found) continue;
-    open.cursor = with_caret(open.cursor, open.mode === "visual" ? found.last : found.first, open.mode === "visual");
+    const dragged = open.mode === "visual" ? page_selection_cursor(open.model, selection) : undefined;
+    open.cursor = dragged ?? with_caret(open.cursor, open.mode === "visual" ? found.last : found.first, open.mode === "visual");
     open.goal_x = undefined;
     return;
   }
