@@ -3,14 +3,14 @@
 
 import { LAYERS } from "../../shared/layers.ts";
 import { create_surface, mount_surface } from "../surface.ts";
-import { heading_level } from "./candidates.ts";
+import { heading_level, rendered_text } from "./candidates.ts";
 import type { Found } from "./candidates.ts";
 import { STYLE as HINT_STYLE } from "./view.ts";
 
 export const MAX_ROW_TEXT = 100;
 
 export function row_of(element: Element): { level: number; text: string } {
-  const text = (element.textContent ?? "").replace(/\s+/g, " ").trim();
+  const text = rendered_text(element).replace(/\s+/g, " ");
   return { level: heading_level(element), text: text.length > MAX_ROW_TEXT ? `${text.slice(0, MAX_ROW_TEXT)}...` : text };
 }
 
@@ -66,6 +66,11 @@ export function create_list_view() {
         row.typed_part.textContent = typed;
         row.rest_part.textContent = row.text.slice(typed.length);
       });
+    },
+    // A fraction of the panel's height, down when positive. The rows below the edge are otherwise out of reach for the keyboard.
+    scroll_by: (panel_heights: number): void => {
+      const panel = surface.text.firstElementChild;
+      if (panel) panel.scrollTop += panel_heights * panel.clientHeight;
     },
     // The panel does not sit over the headings, so scrolling or resizing the page leaves it as it is.
     reposition: (): void => {},

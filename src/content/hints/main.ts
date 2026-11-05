@@ -26,7 +26,7 @@ const done: Outcome = { ok: true };
 const cancelled_outcome: Outcome = { ok: true, cancelled: true };
 
 // What a session needs from its labels: the hint labels over the page, or the headings panel.
-type LabelView = Pick<HintView, "show" | "show_progress" | "clear_labels" | "reposition">;
+type LabelView = Pick<HintView, "show" | "show_progress" | "clear_labels" | "reposition"> & { scroll_by?: (panel_heights: number) => void };
 
 type Session = {
   cancelled: boolean;
@@ -98,16 +98,26 @@ function scroll_clips_in_page(element: Element): Rect[] {
 function keep_present_headings(candidates: Found[]): Found[] {
   const own_rects = (element: Element) => Array.from(element.getClientRects());
   const children = (element: Element) => Array.from(element.children);
-  return keep_present(candidates, {
-    rects_of: (found) => boxes_with_fallback(found.element, own_rects, children),
-    clips_of: (found) => scroll_clips_in_page(found.element),
-    // `checkVisibility` also catches the content of a closed `<details>`, which Firefox still gives a box.
-    is_hidden: (found) => !found.element.checkVisibility({ visibilityProperty: true }),
-  });
+  const keep_present_elements = (elements: Element[]) =>
+    new Set(
+      keep_present(elements, {
+        rects_of: (element) => boxes_with_fallback(element, own_rects, children),
+        clips_of: scroll_clips_in_page,
+        // `checkVisibility` also catches the content of a closed `<details>`, which Firefox still gives a box.
+        is_hidden: (element) => !element.checkVisibility({ visibilityProperty: true, opacityProperty: true }),
+      }),
+    );
+  // A heading in a hidden or clipped frame is as hidden as the frame, so each frame passes the same rules as the heading.
+  const kept_frames = keep_present_elements([...new Set(candidates.flatMap((found) => found.frames))]);
+  const kept_elements = keep_present_elements(candidates.map((found) => found.element));
+  return candidates.filter((found) => kept_elements.has(found.element) && found.frames.every((frame) => kept_frames.has(frame)));
 }
 
 const none_message = (filter: HintFilter, text: string | undefined): string =>
   filter === "headings" ? "No headings on this page" : text === undefined ? "No hints on this page" : `No link matches ${text}`;
+
+// How far each key moves the headings panel, in panel heights.
+const PANEL_SCROLL_KEYS: Record<string, number> = { "<PageDown>": 1, "<PageUp>": -1, "<C-d>": 0.5, "<C-u>": -0.5 };
 
 async function keep_visible_ones(candidates: Found[]): Promise<Found[]> {
   const own_rects = (element: Element) => Array.from(element.getClientRects());
@@ -208,7 +218,7 @@ function register(host: BundleHostApi): void {
     if (first_build && current.lower_text !== undefined && found.length === 1) {
       const performed = begin_pick(current);
       host.set_mode("normal");
-      performed(() => perform(current.action, found[0]!.element as HTMLElement, deps));
+      performed(() => perform(current.action, found[0]!.element as HTMLElement, deps, found[0]!.frames as HTMLElement[]));
       return;
     }
     const view = current.filter === "headings" ? create_list_view() : create_view();
@@ -229,23 +239,30 @@ function register(host: BundleHostApi): void {
 
   function handle_token(current: Session, token: string): "handled" | "pass" {
     const ready = current.ready!;
+    const panel_scroll = PANEL_SCROLL_KEYS[token];
+    // Never a label key: the panel is the only view with rows below its edge, and the others leave these keys to the page.
+    if (panel_scroll !== undefined && ready.view.scroll_by) {
+      ready.view.scroll_by(panel_scroll);
+      return "handled";
+    }
     const outcome = ready.picker.on_token(token);
     if (outcome.kind === "pass") return "pass";
     ready.view.show_progress(outcome.typed, new Set(outcome.still_possible));
     if (outcome.picked !== undefined) {
-      const picked = ready.found[outcome.picked]!.element as HTMLElement;
+      const { element, frames } = ready.found[outcome.picked]!;
+      const picked = element as HTMLElement;
       const performed = begin_pick(current);
       if (!current.rapid) {
         // Leave hint mode first: a picked field then raises insert mode through its own focus event.
         host.set_mode("normal");
-        performed(() => perform(current.action, picked, deps));
+        performed(() => perform(current.action, picked, deps, frames as HTMLElement[]));
         return "handled";
       }
       // Rapid: the pick may delete or move elements, so drop these labels and label the page again.
       ready.stop_following();
       ready.view.clear_labels();
       delete current.ready;
-      performed(() => perform(current.action, picked, deps));
+      performed(() => perform(current.action, picked, deps, frames as HTMLElement[]));
       if (!current.cancelled) void build(current, find_candidates(current.filter, current.custom_selector, current.action), false);
     }
     return "handled";

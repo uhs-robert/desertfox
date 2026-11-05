@@ -175,6 +175,62 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, open_p
     expect((await scroll_delta_after("p6_headings", ["j"])) > 0, "keys did not work again after the pick");
   });
 
+  // Reads the panel through the content script world, which sees closed shadow roots.
+  const panel_read = async (expression) => (await in_active_tab(`(() => { const host = document.documentElement.querySelector(':scope > [data-oasisfox-layer="${hints_layer}"]'); const panel = host?.openOrClosedShadowRoot?.querySelector(".oasisfox-headings"); return ${expression}; })()`))[0];
+  // The labels of the generator: single letters split into more until there are enough.
+  const label_of_last = (count) => {
+    const letters = [..."asdfghjkl"];
+    const labels = [...letters];
+    while (labels.length < count) { const split = labels.shift(); for (const letter of letters) labels.push(split + letter); }
+    return labels[count - 1];
+  };
+
+  await run_case(";# panel scrolls with PageDown, PageUp and Ctrl+d, and a row below its edge can be picked", async () => {
+    await open_page("headings_many", "p6_headings_many", { new_tab: true });
+    await send_keys(";#");
+    await sleep(500);
+    const rows = await panel_read("panel.querySelectorAll('.oasisfox-heading-row').length");
+    expect(rows === 61, `expected 61 rows (title and 60 sections), got ${rows}`);
+    expect((await panel_read("panel.scrollHeight > panel.clientHeight")) === true, "the panel does not overflow, so the case proves nothing");
+    await send_keys("-M", "ctrl", "d", "-m", "ctrl");
+    await sleep(200);
+    const after_ctrl_d = await panel_read("Math.round(panel.scrollTop)");
+    expect(after_ctrl_d > 0, "Ctrl+d did not scroll the panel");
+    await send_keys("-k", "Next");
+    await sleep(200);
+    const after_page_down = await panel_read("Math.round(panel.scrollTop)");
+    expect(after_page_down > after_ctrl_d, `PageDown did not scroll the panel further, ${after_ctrl_d} then ${after_page_down}`);
+    await send_keys("-k", "Prior");
+    await sleep(200);
+    expect((await panel_read("Math.round(panel.scrollTop)")) < after_page_down, "PageUp did not scroll the panel back");
+    expect((await panel_hosts()) === 1, "a scroll key closed the panel");
+    // The first letter of the last label hides the rows that do not match, so the rest fit.
+    const last = label_of_last(61);
+    await send_keys(last[0]);
+    await sleep(200);
+    const shown = await panel_read("[...panel.querySelectorAll('.oasisfox-heading-row')].filter((row) => row.style.display !== 'none').length");
+    expect(shown < 61 && shown > 0, `typing a label letter left ${shown} rows`);
+    await send_keys("-k", "BackSpace");
+    await sleep(200);
+    expect((await panel_read("[...panel.querySelectorAll('.oasisfox-heading-row')].filter((row) => row.style.display !== 'none').length")) === 61, "backspace did not restore the rows");
+    const delta = await scroll_delta_after("p6_headings_many", [...last]);
+    expect(delta > 0, `picking the last row did not scroll, delta ${delta}`);
+    const top = (await in_active_tab(`Math.round(document.getElementById("section_59").getBoundingClientRect().top)`))[0];
+    expect(Math.abs(top) <= 2 || (await in_active_tab(`scrollY + innerHeight >= document.documentElement.scrollHeight - 1`))[0], `Section 59 sits ${top}px from the top`);
+  });
+
+  await run_case(";# lists a heading in a frame, skips one in a hidden frame, and scrolls the frame too", async () => {
+    await open_page("headings_frames", "p6_headings_frames", { new_tab: true });
+    await send_keys(";#");
+    await sleep(500);
+    const rows = await panel_read("panel.querySelectorAll('.oasisfox-heading-row').length");
+    expect(rows === 3, `expected 3 rows (title, Top, In frame), got ${rows}`);
+    const delta = await scroll_delta_after("p6_headings_frames", ["d"]);
+    expect(delta > 0, `the page did not scroll, delta ${delta}`);
+    const top = (await in_active_tab(`(() => { const frame = document.getElementById("shown"); return Math.round(frame.getBoundingClientRect().top + frame.contentDocument.getElementById("in_frame").getBoundingClientRect().top); })()`))[0];
+    expect(Math.abs(top) <= 2, `the heading in the frame sits ${top}px from the top of the view`);
+  });
+
   await run_case(";# reaches a heading above the screen", async () => {
     await open_page("headings", "p6_headings_up", { new_tab: true });
     await scroll_delta_after("p6_headings_up", ["G"]);
