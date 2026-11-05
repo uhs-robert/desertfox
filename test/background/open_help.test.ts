@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { create_open_help, help_name_choices, help_name_url } from "../../src/background/open_help.ts";
+import { create_open_help, help_name_choices, help_name_url, plan_help_tab } from "../../src/background/open_help.ts";
 
 function make(openers: number[] = [7]) {
   const opened: unknown[] = [];
@@ -46,4 +46,24 @@ test("help_name_url maps a command id to its card and a page title to its page",
 
 test("help_name_choices lists the pages, then the commands, and no Quick Start section", () => {
   assert.deepEqual(help_name_choices(["scroll.top"]), ["Home", "Quick Start", "Commands", "Search Engines", "Styling", "scroll.top"]);
+});
+
+const HELP = "moz-extension://x/help.html";
+
+test("the help tab asking for a target updates itself", () => {
+  const plan = plan_help_tab(HELP, HELP + "#command=tab.next", { id: 3, window_id: 1, url: HELP + "#/commands" });
+  assert.deepEqual(plan, { kind: "update", tab_id: 3, url: HELP + "#command=tab.next" });
+});
+
+test("any other tab opens a new tab beside it", () => {
+  const plan = plan_help_tab(HELP, HELP + "#/", { id: 3, window_id: 1, url: "https://example.com/" });
+  assert.deepEqual(plan, { kind: "create", url: HELP + "#/", opener: { openerTabId: 3, windowId: 1 } });
+});
+
+test("a page whose address only starts like the help page opens a new tab", () => {
+  assert.equal(plan_help_tab(HELP, HELP, { id: 3, window_id: 1, url: HELP + "x.html" }).kind, "create");
+});
+
+test("no asking tab opens a plain new tab", () => {
+  assert.deepEqual(plan_help_tab(HELP, HELP, { id: undefined, window_id: undefined, url: undefined }), { kind: "create", url: HELP });
 });
