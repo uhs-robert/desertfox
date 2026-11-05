@@ -4,13 +4,12 @@
 // strings stay strings until `resolve_bindings` in check.ts parses them.
 
 import { MODES } from "../../src/shared/command.ts";
-import { LIGHT_INTENSITIES } from "../../src/shared/theme/roles.ts";
-import { BUILT_IN_PAGE, is_web_url, MODE_INDICATOR_VALUES, WHICH_KEY_BORDER_VALUES } from "../../src/shared/config.ts";
 import type { SearchEngine, Settings } from "../../src/shared/config.ts";
 import { nodes_of_file, resolve_engines } from "../../src/shared/engines/index.ts";
 import type { EngineNode } from "../../src/shared/engines/index.ts";
 import type { KeymapConfig, ModeBindings } from "../../src/shared/keymap.ts";
 import { is_plain_object } from "./errors.ts";
+import { is_setting_name, SETTING_NAMES, SETTING_SPECS } from "../../src/shared/settings_schema.ts";
 import type { DataLayer } from "./source_files.ts";
 
 export const KEYMAP_MODES = [...MODES, "browser"] as const;
@@ -128,68 +127,14 @@ function merge_command_aliases(layers: DataLayer[], origins: Origins, problems: 
   }) as Record<string, string>;
 }
 
-const SETTING_CHECKS: Record<keyof Settings, (value: unknown) => boolean> = {
-  which_key_delay_ms: (value) => typeof value === "number" && Number.isFinite(value) && value >= 0,
-  which_key_border: (value) => (WHICH_KEY_BORDER_VALUES as readonly unknown[]).includes(value),
-  hint_letters: (value) => typeof value === "string" && new Set(value).size === value.length && value.length >= 2,
-  ignore_sites: (value) => Array.isArray(value) && value.every((site) => typeof site === "string" && site !== ""),
-  mode_indicator: (value) => (MODE_INDICATOR_VALUES as readonly unknown[]).includes(value),
-  palette: (value) => typeof value === "string" && value !== "",
-  light_intensity: (value) => (LIGHT_INTENSITIES as readonly unknown[]).includes(value),
-  search_prefixes: (value) => is_prefix_pair(value, "here"),
-  container_prefixes: (value) => is_prefix_pair(value, "reopen"),
-  home_page: (value) => typeof value === "string" && value !== "",
-  default_engine: (value) => typeof value === "string" && value !== "",
-  new_tab_page: (value) => typeof value === "string" && (value === BUILT_IN_PAGE || is_web_url(value)),
-  completion_all_windows: (value) => typeof value === "boolean",
-  cmdline_prompt: (value) => typeof value === "string" && [...value].length >= 1 && [...value].length <= 8 && !/[\r\n]/.test(value),
-  open_completion: (value) => Array.isArray(value) && new Set(value).size === value.length && value.every((source) => source === "bookmarks" || source === "history"),
-  history_completion_max: (value) => typeof value === "number" && Number.isInteger(value) && value >= 0,
-  newtab_clock: (value) => typeof value === "boolean" || value === "analog" || value === "digital",
-  newtab_date: (value) => typeof value === "boolean",
-  newtab_clock_format: (value) => value === 12 || value === 24,
-  open_quick_start_on_install: (value) => typeof value === "boolean",
-};
-
-const SETTING_EXPECTATIONS: Record<keyof Settings, string> = {
-  which_key_delay_ms: "a number of milliseconds, 0 or more",
-  which_key_border: '"square", "round" or "chamfer"',
-  hint_letters: "a string of 2 or more distinct letters",
-  ignore_sites: "a list of match pattern strings",
-  mode_indicator: '"always", "not_normal" or "off"',
-  palette: "a theme name",
-  light_intensity: "a whole number from 1 to 5",
-  search_prefixes: '{"here": "...", "tab": "..."} with non-empty strings',
-  container_prefixes: '{"reopen": "...", "tab": "..."} with non-empty strings',
-  home_page: "a non-empty URL string",
-  default_engine: "the name of a search engine",
-  new_tab_page: `"${BUILT_IN_PAGE}" or an http or https URL`,
-  completion_all_windows: "true or false",
-  cmdline_prompt: "a string of 1 to 8 characters on one line",
-  open_completion: 'a list of "bookmarks" and "history" with no repeat',
-  history_completion_max: "a whole number, 0 or more",
-  newtab_clock: 'true, false, "analog" or "digital"',
-  newtab_date: "true or false",
-  newtab_clock_format: "12 or 24",
-  open_quick_start_on_install: "true or false",
-};
-
-function is_prefix_pair(value: unknown, first_key: string): boolean {
-  if (!is_plain_object(value)) return false;
-  const keys = Object.keys(value).sort();
-  if (keys.join() !== [first_key, "tab"].sort().join()) return false;
-  return Object.values(value).every((prefix) => typeof prefix === "string" && prefix !== "");
-}
-
 function merge_settings(layers: DataLayer[], origins: Origins, problems: string[]) {
   return merge_map_layers(layers, "settings", origins, problems, (value, where, name) => {
-    if (!Object.hasOwn(SETTING_CHECKS, name)) {
-      problems.push(`${where}: unknown setting (known: ${Object.keys(SETTING_CHECKS).join(", ")})`);
+    if (!is_setting_name(name)) {
+      problems.push(`${where}: unknown setting (known: ${SETTING_NAMES.join(", ")})`);
       return false;
     }
-    const setting = name as keyof Settings;
-    const valid = SETTING_CHECKS[setting](value);
-    if (!valid) problems.push(`${where}: expected ${SETTING_EXPECTATIONS[setting]}`);
+    const valid = SETTING_SPECS[name].check(value);
+    if (!valid) problems.push(`${where}: expected ${SETTING_SPECS[name].expectation}`);
     return valid;
   }) as Partial<Settings>;
 }

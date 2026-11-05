@@ -386,3 +386,54 @@ test("a background command that returns a failed outcome stops the sequence with
   assert.deepEqual(ran, []);
   assert.deepEqual(log, ["refuse 7 nothing to do"]);
 });
+
+// A content step the test answers by hand, like a hint pick that the user has not made yet.
+function pending_content() {
+  const replies: ((reply: unknown) => void)[] = [];
+  return { send_to_tab: () => new Promise<unknown>((resolve) => replies.push(resolve)), reply: (value: unknown) => replies.shift()!(value) };
+}
+const waiting_commands = (ran: string[]) => ({
+  "hint.run": { label: "Hint", intent: "x", runs_in: "content" as const, run: () => {} },
+  "tab.next": { label: "Next", intent: "x", runs_in: "background" as const, run: () => void ran.push("tab.next") },
+});
+
+test("a waiting content step resumes the sequence after the pick, and not before", async () => {
+  const ran: string[] = [];
+  const pick = pending_content();
+  const { deps } = make_fake(waiting_commands(ran), { send_to_tab: pick.send_to_tab });
+  const running = create_router(deps).run({ invocations: [{ id: "hint.run" }, { id: "tab.next" }], mode: "normal" });
+  await turn();
+  assert.deepEqual(ran, []);
+  pick.reply({ ok: true });
+  assert.deepEqual(await running, { ok: true });
+  assert.deepEqual(ran, ["tab.next"]);
+});
+
+test("Escape on a waiting content step cancels the rest with no toast", async () => {
+  const ran: string[] = [];
+  const pick = pending_content();
+  const { deps, log } = make_fake(waiting_commands(ran), { send_to_tab: pick.send_to_tab });
+  const running = create_router(deps).run({ invocations: [{ id: "hint.run" }, { id: "tab.next" }], mode: "normal" });
+  await turn();
+  pick.reply({ ok: true, cancelled: true });
+  assert.deepEqual(await running, { ok: true, cancelled: true });
+  assert.deepEqual(ran, []);
+  assert.deepEqual(log, []);
+});
+
+test("a background step then a content step sends the content step to the tab that is active by then", async () => {
+  let active = 1;
+  const sent: [number, number | undefined][] = [];
+  const { deps } = make_fake(
+    {
+      "tab.next": { label: "Next", intent: "x", runs_in: "background", run: () => void active++ },
+      "scroll.to": { label: "Scroll", intent: "x", runs_in: "content", run: () => {} },
+    },
+    {
+      active_tab: async () => ({ tab_id: active, window_id: 1, url: undefined }),
+      send_to_tab: async (tab_id, _message, frame_id) => void sent.push([tab_id, frame_id]),
+    },
+  );
+  await create_router(deps).run({ invocations: [{ id: "tab.next" }, { id: "scroll.to" }], mode: "normal", sender_tab_id: 1, frame_id: 3 });
+  assert.deepEqual(sent, [[2, 0]]);
+});

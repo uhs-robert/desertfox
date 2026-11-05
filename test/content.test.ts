@@ -8,7 +8,6 @@ import { ignore_regex_source, matches_pattern } from "../src/shared/match_patter
 import { mode_label } from "../src/content/mode_label.ts";
 import { wire_mode_reports } from "../src/content/mode_report.ts";
 import { create_mode_state } from "../src/content/mode_state.ts";
-import { plan_steps } from "../src/content/plan_steps.ts";
 import { percent_to_offset, pick_scroll_target } from "../src/content/scroll_target.ts";
 import { create_matcher } from "../src/shared/keys/index.ts";
 import { COMPILED_KEYMAP_VERSION, current_keymap } from "../src/shared/index.ts";
@@ -261,13 +260,6 @@ test("count rules", () => {
   assert.deepEqual(args_for_count(args, 3, "ignore"), [args]);
   assert.equal(args_for_count(args, 3, "repeat").length, 3);
   assert.deepEqual(args_for_count(args, 3, { param: "n" }), [{ a: 1, n: 3 }]);
-});
-
-test("plan steps batches background runs in order", () => {
-  const step = (id: string, runs_in: "content" | "background") => ({ invocation: { id }, runs_in, count_rule: "ignore" }) as const;
-  const segments = plan_steps([step("a", "background"), step("b", "background"), step("c", "content"), step("d", "background")], 2);
-  assert.deepEqual(segments.map((s) => s.runs_in), ["background", "content", "background"]);
-  assert.deepEqual(segments[0], { runs_in: "background", invocations: [{ id: "a", count: 2 }, { id: "b", count: 2 }] });
 });
 
 const area = (ref: string, can_scroll_x: boolean, can_scroll_y: boolean, size: number) => ({ ref, can_scroll_x, can_scroll_y, area: size });

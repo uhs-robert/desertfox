@@ -7,14 +7,14 @@ import type { BundleHostApi } from "../bundle_host.ts";
 import { link_address, OPEN_PLACES, perform, starts_caret } from "./actions.ts";
 import type { CaretMode, HintAction, Place } from "./actions.ts";
 import { copy_text } from "../caret/copy_text.ts";
-import { collect, has_text, selector_for } from "./candidates.ts";
+import { collect, has_text, keep_visible_deduplicated, selector_for, weak_test_for } from "./candidates.ts";
 import type { Found, HintFilter } from "./candidates.ts";
 import { clean_letters, make_labels } from "./labels.ts";
 import { create_picker } from "./pick.ts";
 import { create_view } from "./view.ts";
 import { follow_windows } from "./follow.ts";
-import { keep_visible, uncovered_through_frames, viewport_size } from "./visible.ts";
-import type { PageProbe } from "./visible.ts";
+import { box_owners, boxes_with_fallback, scroll_clips_of, uncovered_through_frames, viewport_size } from "./visible.ts";
+import type { PageProbe, Rect } from "./visible.ts";
 
 type HintsWindow = { oasisfox_host: BundleHostApi; oasisfox_hints_ready?: true; oasisfox_caret_target?: Element };
 const page = window as unknown as HintsWindow;
@@ -65,22 +65,43 @@ function windows_of(found: Found[]): Window[] {
 // Opening in another place needs an address, so only links qualify.
 function find_candidates(filter: HintFilter, custom_selector: string | undefined, action: HintAction): Found[] {
   const opens_elsewhere = OPEN_PLACES.includes(action);
-  return collect(document, selector_for(filter, custom_selector)).filter((found) => !opens_elsewhere || link_address(found.element as HTMLAnchorElement) !== undefined);
+  return collect(document, selector_for(filter, custom_selector), weak_test_for(filter)).filter((found) => !opens_elsewhere || link_address(found.element as HTMLAnchorElement) !== undefined);
+}
+
+const parent_of = (element: Element): Element | null => element.parentElement ?? (element.parentNode as ShadowRoot | null)?.host ?? null;
+
+function scroll_clips_in_page(element: Element): Rect[] {
+  const win = window_of(element);
+  return scroll_clips_of(element, {
+    parent_of,
+    tag_of: (e) => e.localName,
+    style_of: (e) => {
+      const style = win.getComputedStyle(e);
+      return { position: style.position, display: style.display, overflow_x: style.overflowX, overflow_y: style.overflowY };
+    },
+    box_of: (e) => {
+      const box = e.getBoundingClientRect();
+      const left = box.left + e.clientLeft;
+      const top = box.top + e.clientTop;
+      return { left, top, right: left + e.clientWidth, bottom: top + e.clientHeight };
+    },
+  });
 }
 
 async function keep_visible_ones(candidates: Found[]): Promise<Found[]> {
-  const seen = await observe_intersecting(candidates.map((found) => found.element));
+  const own_rects = (element: Element) => Array.from(element.getClientRects());
+  const children = (element: Element) => Array.from(element.children);
+  const owners = new Map(candidates.map((found) => [found.element, box_owners(found.element, own_rects, children)]));
+  const seen = await observe_intersecting([...new Set([...owners.values()].flat())]);
   const probe: PageProbe<Found> = {
-    is_intersecting: (found) => seen.has(found.element),
-    rects_of: (found) => {
-      const lines = Array.from(found.element.getClientRects());
-      return lines.length > 0 ? lines : [found.element.getBoundingClientRect()];
-    },
+    is_intersecting: (found) => owners.get(found.element)!.some((owner) => seen.has(owner)),
+    rects_of: (found) => boxes_with_fallback(found.element, own_rects, children),
+    clips_of: (found) => scroll_clips_in_page(found.element),
     viewport_of: (found) => viewport_size(found.element.ownerDocument, window_of(found.element)),
     is_hidden_by_style: (found) => window_of(found.element).getComputedStyle(found.element).visibility === "hidden",
     is_reachable_at: (found, x, y) => uncovered_through_frames(found, x, y),
   };
-  return keep_visible(candidates, probe);
+  return keep_visible_deduplicated(candidates, probe);
 }
 
 async function read_letters(): Promise<string[]> {

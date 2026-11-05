@@ -20,7 +20,7 @@ export function render_options(root: HTMLElement, model: OptionsModel): void {
     el("h2", undefined, "Config source"),
     el("p", undefined, model.source_text),
     el("h2", undefined, "Settings"),
-    el("table", undefined, ...model.settings.map((row) => el("tr", undefined, el("td", undefined, el("code", undefined, row.name)), el("td", undefined, el("code", undefined, row.value))))),
+    el("table", undefined, ...model.settings.map((row) => el("tr", undefined, el("td", undefined, el("code", undefined, row.name)), el("td", undefined, el("code", undefined, row.value)), el("td", "oasisfox-options-muted", row.tag ?? "")))),
     el("h2", undefined, warning_heading),
   );
   if (model.warnings.length === 0) page.append(el("p", "oasisfox-options-muted", "No warnings."));

@@ -73,6 +73,8 @@ export type CmdlineOpened = {
   // The runtime registry, snippets included, which `commands.json` lacks.
   commands: CommandMeta[];
   command_aliases: Record<string, string>;
+  // The commands with a card on the help page, which are the built-in ones. A snippet has none.
+  help_ids: string[];
   // User CSS, loaded after the built-in styles.
   css: string;
   // The `cmdline_prompt` setting. Absent keeps the page's own default.
@@ -139,7 +141,14 @@ export type RecordRepeat = {
   invocation: BoundInvocation;
 };
 
-export type ContentToBackground = RunRequest | ModeChanged | LoadBundle | ListKeys | IssueCmdlineTicket | OpenCmdline | RecordCmdline | CompleteItems | RecordRepeat;
+// From the command line page when the user asks for help on a command, by link or by key. The background opens the help page
+// at that command's card, and only for a tab whose line redeemed a ticket.
+export type OpenHelp = {
+  type: "open_help";
+  command_id: string;
+};
+
+export type ContentToBackground = RunRequest | ModeChanged | LoadBundle | ListKeys | IssueCmdlineTicket | OpenCmdline | RecordCmdline | CompleteItems | OpenHelp | RecordRepeat;
 
 // How a command ended. Done is `{ ok: true }`. A handler that returns nothing is done, and one that throws is failed.
 // Cancelled means the user left a waiting step (Escape, an unrelated key, a page change), so the rest of a sequence does not run and nothing is shown.
