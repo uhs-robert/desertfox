@@ -88,19 +88,27 @@ install:
 # Entry in the rbw vault that holds the AMO key: the secret as password, the issuer in the notes.
 export AMO_RBW_ENTRY := env("AMO_RBW_ENTRY", "Firefox AMO API Key")
 
-# Refuse to release from main or with uncommitted changes, so a bump never lands on main or mixes with other work.
+# Refuse to release from main, a detached HEAD or with uncommitted changes, so a bump never lands on main or mixes with other work.
 [private]
 release_guard:
     #!/usr/bin/env bash
     set -euo pipefail
-    if [ "$(git branch --show-current)" = "main" ]; then
-        echo "release refuses to run on main. Switch to a release branch first." >&2
+    branch=$(git branch --show-current)
+    if [ -z "$branch" ] || [ "$branch" = "main" ]; then
+        echo "release refuses to run on main or a detached HEAD. Switch to a release branch first." >&2
         exit 1
     fi
-    if [ -n "$(git status --porcelain)" ]; then
-        echo "release refuses to run with uncommitted changes. Commit or stash them first." >&2
+    changed=$(git status --porcelain)
+    if [ -z "$changed" ]; then
+        exit 0
+    fi
+    # A bump left behind by a failed sign or install looks like this.
+    if [ -z "$(git status --porcelain -- . ':!package.json' ':!package-lock.json' ':!src/manifest.json')" ]; then
+        echo "release found only a version bump left in package.json, package-lock.json and src/manifest.json. If AMO did not accept that version, run 'git checkout -- package.json package-lock.json src/manifest.json' and rerun. If signing succeeded, commit the bump instead." >&2
         exit 1
     fi
+    echo "release refuses to run with uncommitted changes. Commit or stash them first." >&2
+    exit 1
 
 # Raise the patch version in package.json, package-lock.json and src/manifest.json. AMO rejects a version it has already signed. Runs no git.
 [private]
