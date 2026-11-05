@@ -170,10 +170,11 @@ function take_find_target(token: string): "handled" | "pass" {
   const find = pending_find!;
   pending_find = undefined;
   if (token === "<Escape>" || token === "<C-[>") return "handled";
-  if ([...token].length !== 1) return "pass";
+  const char = token === "<Space>" ? " " : token;
+  if ([...char].length !== 1) return "pass";
   const open = ensure_session(session?.mode ?? "caret");
   if (typeof open === "string") return "handled";
-  last_find = { char: token, direction: find.direction, till: find.till };
+  last_find = { char, direction: find.direction, till: find.till };
   move_to_find(open, last_find, find.count, false);
   return "handled";
 }
@@ -187,6 +188,7 @@ function move_to_find(open: Session, find: CharFind, count: number, again: boole
 const sink_for = (mode: "caret" | "visual") => ({
   // Showing the caret on entry is what makes entering the mode draw it at once.
   enter: () => {
+    pending_find = undefined;
     const started = ensure_session(mode);
     if (typeof started === "string") page.oasisfox_host.show_toast(started);
   },
@@ -206,6 +208,8 @@ const sink_for = (mode: "caret" | "visual") => ({
 });
 
 const handle_move = (args: Record<string, unknown>): Outcome | undefined => {
+  // From the command line the mode is normal, so no sink would take the target key.
+  if (args.unit === "char_find" && !["caret", "visual"].includes(page.oasisfox_host.get_mode())) return;
   const open = ensure_session(session?.mode ?? "caret");
   if (typeof open === "string") return { ok: false, message: open };
   if (args.unit === "char_find") {
