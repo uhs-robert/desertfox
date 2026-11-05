@@ -265,6 +265,6 @@ test("a heading row pads its name by its indent, and the name column counts the 
   // The padding moves the drawing, not the letters: the matched run still starts at the first letter of the name.
   assert.deepEqual(second.children[0]!.children.map((part) => [part.tag, part.textContent]), [["b", "Ne"], ["span", "sted"]]);
   assert.equal(element.style.vars["--oasisfox-name-width"], `${"Nested".length + 2.4}ch`);
-  list.render([{ ...flat!, name: "x".repeat(80), indent: 0 }], -1);
-  assert.equal(element.style.vars["--oasisfox-name-width"], "60ch");
+  list.render([{ ...flat!, name: "x".repeat(150), indent: 0 }], -1);
+  assert.equal(element.style.vars["--oasisfox-name-width"], "100ch");
 });

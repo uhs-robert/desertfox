@@ -10,7 +10,6 @@ import type { PageProbe, Rect } from "./visible.ts";
 
 const HEADINGS = "h1, h2, h3, h4, h5, h6, [role=heading]";
 const DEFAULT_HEADING_LEVEL = 2;
-const MAX_ROW_TEXT = 100;
 // Boxes thinner than this are the "visually hidden" trick (1px, clipped), made for screen readers only.
 const MIN_BOX_SIDE = 2;
 
@@ -33,7 +32,7 @@ export function heading_level(element: Element): number {
 
 export function row_of(element: Element): HeadingItem {
   const text = rendered_text(element).replace(/\s+/g, " ");
-  return { level: heading_level(element), text: text.length > MAX_ROW_TEXT ? `${text.slice(0, MAX_ROW_TEXT)}...` : text };
+  return { level: heading_level(element), text };
 }
 
 // The list shows off-screen headings, so it skips the viewport and cover tests of `keep_visible`.
@@ -68,7 +67,7 @@ function keep_present_headings(candidates: Found[]): Found[] {
 const NUMBER_PICK = /^(\d+)(?:\s+(.*))?$/s;
 
 // `3 Install` is what a completion pick puts in the line: the heading at place 3 of the list, then its text. The number wins over the text,
-// because the text may have changed since the pick. A number past the end of the list, with text after it, is part of the text: "2024 plan".
+// because the text may have changed since the pick. A number past the end of the list is part of the text, so "2024" finds a heading titled 2024.
 // Other text is the best fuzzy match, the same ranking the list shows. An equal tie takes the one that comes first on the page.
 export function pick_heading(rows: readonly HeadingItem[], typed: string): number {
   const text = typed.trim();
@@ -76,7 +75,6 @@ export function pick_heading(rows: readonly HeadingItem[], typed: string): numbe
   if (numbered) {
     const place = Number(numbered[1]);
     if (place >= 1 && place <= rows.length) return place - 1;
-    if (numbered[2] === undefined) throw new Error(`No heading at place ${place}`);
   }
   const match = best_match(text, rows.map((row, index) => ({ row, index })), ({ row }) => ({ name: row.text, description: `h${row.level}` }));
   if (match.found === "none") throw new Error(`No heading matches ${text}`);
