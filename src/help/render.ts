@@ -197,20 +197,33 @@ function page_body(route: Route, model: HelpModel, guide: Block[]): HTMLElement[
 }
 
 function support_link(title: string, url: string): HTMLElement {
-  const link = el("a", undefined, title);
+  const link = el("a", "oasisfox-help-support-link", title);
   link.setAttribute("href", url);
   link.setAttribute("target", "_blank");
   link.setAttribute("rel", "noopener noreferrer");
   return link;
 }
 
-function support_line(): HTMLElement {
+function heart_icon(): SVGElement {
+  const svg_ns = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(svg_ns, "svg");
+  svg.setAttribute("viewBox", "0 0 16 16");
+  svg.setAttribute("aria-hidden", "true");
+  svg.setAttribute("class", "oasisfox-help-support-heart");
+  const path = document.createElementNS(svg_ns, "path");
+  path.setAttribute("d", "M8 14 C2 9.8 1 7.4 1 5.5 C1 3.5 2.5 2 4.3 2 C5.8 2 7.1 2.8 8 4.1 C8.9 2.8 10.2 2 11.7 2 C13.5 2 15 3.5 15 5.5 C15 7.4 14 9.8 8 14 Z");
+  svg.append(path);
+  return svg;
+}
+
+function support_card(): HTMLElement {
+  const heading = el("div", "oasisfox-help-support-heading", heart_icon(), "Enjoying OasisFox?");
   return el(
     "div",
     "oasisfox-help-support",
-    "Enjoying OasisFox? Support it: ",
+    heading,
+    el("div", "oasisfox-help-support-note", "Support its work"),
     support_link("GitHub Sponsors", "https://github.com/sponsors/uhs-robert"),
-    " or ",
     support_link("Ko-fi", "https://ko-fi.com/uphillsolutions"),
   );
 }
@@ -324,7 +337,7 @@ function sidebar(current: PageId, model: HelpModel): HTMLElement {
     const list = section_list(page.id, sections, group_open.get(page.id) ?? page.id === current);
     return el("div", "oasisfox-help-nav-group", el("div", "oasisfox-help-nav-row", link, section_toggle(page.id, page.title, list)), list);
   });
-  return el("nav", "oasisfox-help-sidebar", el("div", "oasisfox-help-brand", "OasisFox"), ...entries, support_line());
+  return el("nav", "oasisfox-help-sidebar", el("div", "oasisfox-help-brand", "OasisFox"), ...entries, support_card());
 }
 
 export function render_help(root: HTMLElement, model: HelpModel, route: Route, guide: Block[]): void {
