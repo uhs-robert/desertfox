@@ -1,0 +1,35 @@
+// Turns the stored theme into CSS for one surface and keeps it current. Runs in pages and in the lazy content bundles, never in content.js.
+
+import { THEME_STORAGE_KEY } from "../../background/storage_keys.ts";
+import { ROLES } from "./roles.ts";
+import type { RoleColors } from "./roles.ts";
+import { token_name } from "./tokens.ts";
+
+// The light set is already the one `light_intensity` picked.
+export type StoredTheme = { dark: RoleColors; light: RoleColors };
+
+// Dark is the base block and light sits under the system's light scheme. A value that is not a string is skipped, because the stored
+// value can come from a hand-edited local theme. `selector` is the inner element of the surface: a block on the host would lose to the hex blocks that pages still declare there.
+export function theme_css(theme: StoredTheme, selector: string): string {
+  const block = (colors: RoleColors) => ROLES.filter((role) => typeof colors?.[role] === "string").map((role) => `${token_name(role)}: ${colors[role]};`).join(" ");
+  return `${selector} { ${block(theme.dark)} }\n@media (prefers-color-scheme: light) { ${selector} { ${block(theme.light)} } }`;
+}
+
+// Calls `on_value` with the stored value now and again at every change. Nothing is called when storage is unavailable, so the fallbacks show.
+export function watch_stored<T>(key: string, on_value: (value: T | undefined) => void): void {
+  if (typeof browser === "undefined") return;
+  void browser.storage.local.get(key).then((stored) => on_value(stored[key] as T | undefined), () => {});
+  browser.storage.onChanged.addListener((changes, area) => {
+    if (area === "local" && key in changes) on_value(changes[key]!.newValue as T | undefined);
+  });
+}
+
+// A page that is not a shadow root. The sheet goes at the end of the head, so it follows the built-in styles.
+export function follow_theme(selector: string): HTMLStyleElement {
+  const sheet = document.createElement("style");
+  document.head.append(sheet);
+  watch_stored<StoredTheme>(THEME_STORAGE_KEY, (theme) => {
+    sheet.textContent = theme ? theme_css(theme, selector) : "";
+  });
+  return sheet;
+}

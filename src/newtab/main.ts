@@ -1,6 +1,7 @@
 import { resolve_new_tab_page } from "../shared/config.ts";
 import { load_effective_config } from "../background/config_load.ts";
 import { render_new_tab } from "./render.ts";
+import { follow_theme } from "../shared/theme/apply.ts";
 
 async function main(): Promise<void> {
   const { config } = await load_effective_config();
@@ -16,4 +17,5 @@ async function main(): Promise<void> {
   render_new_tab(document.body, config.settings);
 }
 
+follow_theme(":root");
 void main();

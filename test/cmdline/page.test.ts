@@ -114,7 +114,7 @@ async function load_page(t: TestContext, tag: string, { keymap = KEYMAP, with_ta
           return message.type === "open_cmdline" && message.ticket === TICKET ? opened_answer : undefined;
         },
       },
-      storage: { local: { get: async () => ({ [COMPILED_KEYMAP_STORAGE_KEY]: keymap }) } },
+      storage: { local: { get: async () => ({ [COMPILED_KEYMAP_STORAGE_KEY]: keymap }) }, onChanged: { addListener: () => {} } },
     },
     // `commands.json` holds only the built-in commands.
     fetch: async () => ({ json: async () => ({ format_version: 1, commands: [] }) }),
@@ -205,7 +205,7 @@ test("the prompt keeps the page default when no prompt is configured", async (t)
   assert.equal(prompt.textContent, "> ");
 });
 
-test("a configured alias resolves, and the user CSS loads", async (t) => {
+test("a configured alias resolves, and the user CSS loads after the theme sheet", async (t) => {
   const { head, post_start, press_enter } = await load_page(t, "alias_css");
   const host = post_start(TICKET, "j");
   await host.opened();
@@ -213,7 +213,7 @@ test("a configured alias resolves, and the user CSS loads", async (t) => {
   press_enter();
   await until(() => host.submits().length === 1);
   assert.deepEqual(host.submits(), submit_of("my.jira"));
-  assert.deepEqual(head.map((element) => element.textContent), [OPENED.css]);
+  assert.deepEqual(head.map((element) => element.textContent), ["", OPENED.css]);
 });
 
 test("a copy that a site embedded itself, with a ticket it made up, sends no history over the site's port", async (t) => {

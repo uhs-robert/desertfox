@@ -4,6 +4,7 @@ import { compile_config } from "../../src/background/compile.ts";
 import { empty_config } from "../../src/background/config_load.ts";
 import { make_fake } from "./fakes.ts";
 import type { TreeLeaf } from "../../src/shared/prefix_tree.ts";
+import { load_theme } from "../../src/shared/theme/load.ts";
 import { palette_mode_colors } from "../../src/shared/mode_colors.ts";
 import { derive_roles } from "../../src/shared/theme/derive.ts";
 
@@ -125,7 +126,10 @@ test("the palette picks the badge colors: local theme, Oasis theme with its ligh
     assert.deepEqual(edited.compiled.mode_colors, palette_mode_colors("oasis_moonlight", 3));
     assert.deepEqual(edited.warnings, [`settings: light_intensity ${JSON.stringify(bad)} is not 1 to 5, using 3`]);
   }
+  const moonlight = load_theme("oasis_moonlight", 5)!;
+  assert.deepEqual(compile({ ...empty_config(), settings: { palette: "oasis_moonlight", light_intensity: 5 } }).theme, { dark: moonlight.dark, light: moonlight.light });
   const unknown = compile({ ...empty_config(), settings: { palette: "moonlight" } });
+  assert.deepEqual(unknown.theme.dark, load_theme("oasis_moonlight", 3)!.dark);
   assert.deepEqual(unknown.compiled.mode_colors, palette_mode_colors("oasis_moonlight", 3));
   assert.deepEqual(unknown.warnings, ['settings: palette "moonlight" names no theme, using oasis_moonlight']);
 });

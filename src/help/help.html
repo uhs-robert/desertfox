@@ -4,19 +4,19 @@
 <meta charset="utf-8">
 <title>OasisFox help</title>
 <style>
-  html { background: var(--oasisfox-bg, #0c0e13); color-scheme: dark; }
+  html { background: var(--oasisfox-bg-core, #0c0e13); color-scheme: dark light; }
   body { margin: 0; }
   /* The defaults sit on an inner element, like every OasisFox surface. */
   .oasisfox-help {
-    --oasisfox-bg: #0c0e13;
-    --oasisfox-fg: #f5f5dc;
+    --oasisfox-bg-core: #0c0e13;
+    --oasisfox-fg-core: #f5f5dc;
     --oasisfox-primary: #7fa3c9;
     --oasisfox-font: 15px/1.5 system-ui, sans-serif;
     --oasisfox-radius: 6px;
     display: flex;
     min-height: 100vh;
-    background: var(--oasisfox-bg);
-    color: var(--oasisfox-fg);
+    background: var(--oasisfox-bg-core);
+    color: var(--oasisfox-fg-core);
     font: var(--oasisfox-font);
   }
   .oasisfox-help-page { box-sizing: border-box; flex: 1; min-width: 0; max-width: 60rem; padding: 1rem 2rem 4rem; }
@@ -24,19 +24,19 @@
     position: sticky; top: 0; align-self: flex-start;
     box-sizing: border-box; flex: none; width: 12rem; height: 100vh; padding: 1rem; overflow-y: auto;
     display: flex; flex-direction: column; gap: .25rem;
-    background: color-mix(in srgb, var(--oasisfox-fg) 6%, var(--oasisfox-bg));
+    background: color-mix(in srgb, var(--oasisfox-fg-core) 6%, var(--oasisfox-bg-core));
   }
   .oasisfox-help-brand { margin-bottom: .75rem; color: var(--oasisfox-primary); font-weight: bold; }
-  .oasisfox-help-sidebar a { padding: .25rem .5rem; border-radius: var(--oasisfox-radius); color: var(--oasisfox-fg); text-decoration: none; }
-  .oasisfox-help-sidebar a:hover { background: color-mix(in srgb, var(--oasisfox-fg) 12%, transparent); }
+  .oasisfox-help-sidebar a { padding: .25rem .5rem; border-radius: var(--oasisfox-radius); color: var(--oasisfox-fg-core); text-decoration: none; }
+  .oasisfox-help-sidebar a:hover { background: color-mix(in srgb, var(--oasisfox-fg-core) 12%, transparent); }
   .oasisfox-help-sidebar a[aria-current="page"] { color: var(--oasisfox-primary); background: color-mix(in srgb, var(--oasisfox-primary) 15%, transparent); }
   .oasisfox-help-nav-row { display: flex; align-items: center; gap: .25rem; }
   .oasisfox-help-nav-row a { flex: 1; }
-  .oasisfox-help-sections-toggle { padding: .25rem .5rem; border: 0; border-radius: var(--oasisfox-radius); background: none; color: var(--oasisfox-fg); font: inherit; cursor: pointer; }
+  .oasisfox-help-sections-toggle { padding: .25rem .5rem; border: 0; border-radius: var(--oasisfox-radius); background: none; color: var(--oasisfox-fg-core); font: inherit; cursor: pointer; }
   .oasisfox-help-sections-toggle svg { display: block; width: 1em; height: 1em; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; transition: transform 120ms; }
   .oasisfox-help-sections-toggle[aria-expanded="true"] svg { transform: rotate(90deg); }
   @media (prefers-reduced-motion: reduce) { .oasisfox-help-sections-toggle svg { transition: none; } }
-  .oasisfox-help-sections-toggle:hover { background: color-mix(in srgb, var(--oasisfox-fg) 12%, transparent); }
+  .oasisfox-help-sections-toggle:hover { background: color-mix(in srgb, var(--oasisfox-fg-core) 12%, transparent); }
   .oasisfox-help-sections { display: flex; flex-direction: column; margin-left: 1rem; font-size: .9em; }
   .oasisfox-help-sections[hidden] { display: none; }
   .oasisfox-help-sidebar .oasisfox-help-support { display: flex; flex-direction: column; gap: .35rem; margin-top: auto; padding: .6rem .7rem; border: 1px solid var(--oasisfox-primary); border-radius: calc(var(--oasisfox-radius) * 2); font-size: .85em; }
@@ -54,7 +54,7 @@
   .oasisfox-help-command {
     margin: 1rem 0;
     padding: .75rem 1rem;
-    border: 1px solid color-mix(in srgb, var(--oasisfox-fg) 25%, transparent);
+    border: 1px solid color-mix(in srgb, var(--oasisfox-fg-core) 25%, transparent);
     border-radius: var(--oasisfox-radius);
   }
   .oasisfox-help-usage, .oasisfox-help kbd, .oasisfox-help code {
@@ -63,14 +63,14 @@
   .oasisfox-help-usage { margin: .25rem 0; white-space: pre-wrap; overflow-wrap: anywhere; }
   /* The role tokens may not reach this page, so each falls back to the page's own colours. */
   .oasisfox-help-code {
-    --code-bg: var(--oasisfox-bg-mantle, color-mix(in srgb, var(--oasisfox-fg) 6%, var(--oasisfox-bg)));
-    --code-border: var(--oasisfox-border, color-mix(in srgb, var(--oasisfox-fg) 25%, transparent));
+    --code-bg: var(--oasisfox-bg-mantle, color-mix(in srgb, var(--oasisfox-fg-core) 6%, var(--oasisfox-bg-core)));
+    --code-border: var(--oasisfox-border, color-mix(in srgb, var(--oasisfox-fg-core) 25%, transparent));
     margin: .75rem 0; background: var(--code-bg); border: 1px solid var(--code-border); border-radius: var(--oasisfox-radius);
   }
   .oasisfox-help-inline-code {
     padding: .1em .35em; font-size: .9em; border-radius: calc(var(--oasisfox-radius) / 2);
-    background: var(--oasisfox-bg-mantle, color-mix(in srgb, var(--oasisfox-fg) 6%, var(--oasisfox-bg)));
-    border: 1px solid var(--oasisfox-border, color-mix(in srgb, var(--oasisfox-fg) 25%, transparent));
+    background: var(--oasisfox-bg-mantle, color-mix(in srgb, var(--oasisfox-fg-core) 6%, var(--oasisfox-bg-core)));
+    border: 1px solid var(--oasisfox-border, color-mix(in srgb, var(--oasisfox-fg-core) 25%, transparent));
   }
   .oasisfox-help-code-head { display: flex; align-items: center; justify-content: space-between; gap: .5rem; padding: .25rem .5rem .25rem 1rem; min-height: 1.75rem; }
   .oasisfox-help-code-lang { font: .8em ui-monospace, monospace; opacity: .6; }
@@ -79,7 +79,7 @@
     background: transparent; border: 1px solid var(--code-border); border-radius: var(--oasisfox-radius);
   }
   .oasisfox-help-code-copy:hover, .oasisfox-help-code-copy:focus-visible { border-color: var(--oasisfox-primary); color: var(--oasisfox-primary); }
-  .oasisfox-help-code-body { margin: 0; padding: 0 1rem .75rem; font-family: ui-monospace, monospace; white-space: pre; overflow-x: auto; scrollbar-color: color-mix(in srgb, var(--oasisfox-fg) 35%, transparent) transparent; }
+  .oasisfox-help-code-body { margin: 0; padding: 0 1rem .75rem; font-family: ui-monospace, monospace; white-space: pre; overflow-x: auto; scrollbar-color: color-mix(in srgb, var(--oasisfox-fg-core) 35%, transparent) transparent; }
   .oasisfox-help [hidden] { display: none; }
   .oasisfox-help kbd { color: var(--oasisfox-primary); }
   .oasisfox-help-mode { display: inline-block; min-width: 4.5rem; margin-right: .5rem; opacity: .6; }
@@ -87,7 +87,7 @@
   .oasisfox-help-current { outline: 2px solid var(--oasisfox-primary); }
   .oasisfox-help-tip {
     margin: 0 0 1rem; padding: .6rem .9rem; border-left: 4px solid var(--oasisfox-primary); border-radius: var(--oasisfox-radius);
-    background: var(--oasisfox-bg-mantle, color-mix(in srgb, var(--oasisfox-fg) 6%, var(--oasisfox-bg)));
+    background: var(--oasisfox-bg-mantle, color-mix(in srgb, var(--oasisfox-fg-core) 6%, var(--oasisfox-bg-core)));
   }
   .oasisfox-help-tip-label { color: var(--oasisfox-primary); }
   .oasisfox-help-warnings { color: var(--oasisfox-primary); }
@@ -98,7 +98,7 @@
   .oasisfox-help-engines th:nth-child(2) { width: 28%; }
   .oasisfox-help-engines th:nth-child(3) { width: 20%; }
   .oasisfox-help-engines summary { cursor: pointer; }
-  .oasisfox-help-badge { display: inline-block; padding: 0 .4rem; border-radius: var(--oasisfox-radius); font-size: .8em; background: color-mix(in srgb, var(--oasisfox-fg) 15%, transparent); }
+  .oasisfox-help-badge { display: inline-block; padding: 0 .4rem; border-radius: var(--oasisfox-radius); font-size: .8em; background: color-mix(in srgb, var(--oasisfox-fg-core) 15%, transparent); }
   .oasisfox-help th, .oasisfox-help td { padding: .1rem 1rem .1rem 0; text-align: left; vertical-align: top; }
   .oasisfox-help-params td:nth-child(n+4) { overflow-wrap: anywhere; }
   /* Narrow screens: five columns leave each one a few letters wide, so each param stacks as labelled lines. */
