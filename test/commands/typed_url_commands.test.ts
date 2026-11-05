@@ -14,7 +14,7 @@ function install_browser(opened: Opened[]): void {
   const empty = async () => ({});
   const storage_area = { get: async () => ({}), set: empty, remove: empty };
   (globalThis as unknown as { browser: unknown }).browser = {
-    storage: { managed: { get: async () => ({ format_version: CONFIG_FORMAT_VERSION, settings: SETTINGS }) }, local: storage_area, onChanged: { addListener() {} } },
+    storage: { managed: { get: async () => ({ format_version: CONFIG_FORMAT_VERSION, settings: SETTINGS }) }, local: storage_area, session: storage_area, onChanged: { addListener() {} } },
     tabs: { query: async () => [], update: async (_id: number, props: { url: string }) => opened.push({ via: "update", url: props.url }) },
     windows: { create: async (props: { url?: string }) => opened.push({ via: "create", url: props.url }) },
     commands: { update: async () => undefined, reset: async () => undefined },

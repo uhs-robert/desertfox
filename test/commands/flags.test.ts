@@ -25,6 +25,8 @@ test("typed names are the dotted id except the family words and one-word command
     "open.search=search",
     "open.url=open",
     "scroll.lines=scroll",
+    "settings.set=set",
+    "settings.unset=unset",
     "tab.switch=tab",
     "zoom.set=zoom",
   ]);
@@ -42,5 +44,5 @@ test("prefills use the short flags", () => {
 
 test("only these commands opt out of `.`, so a new command repeats unless someone decides otherwise", () => {
   const opted_out = registry.list().filter((command) => command.repeatable === false).map((command) => command.id);
-  assert.deepEqual(opted_out.sort(), ["browser.close_all", "browser.focus_page", "command.repeat", "config.reload", "engine.show", "help.open"]);
+  assert.deepEqual(opted_out.sort(), ["browser.close_all", "browser.focus_page", "command.repeat", "config.reload", "engine.show", "help.open", "settings.set", "settings.unset"]);
 });
