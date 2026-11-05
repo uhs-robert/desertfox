@@ -47,7 +47,7 @@ export type FindDeps = {
   get_register: (name: string) => Promise<string | undefined>;
   set_register: (name: string, text: string) => Promise<void>;
   slicing: (is_stale: () => boolean) => Slicing;
-  // Where each document's own selection sits. A click moves it, which makes a later position win over an older match.
+  // Where each document's own selection sits, both ends: a drag from the same anchor to a new point moves it too. A click moves it, which makes a later position win over an older match.
   selection_key: (model: TextModel) => unknown[];
   // Calls `on_change` when text changes in the page or in any of the trees the model read. The returned function points the watcher at the trees of a new model.
   watch_page: (on_change: () => void) => (trees: TextTree[]) => void;
@@ -89,7 +89,7 @@ const browser_deps = (): FindDeps => ({
   get_register,
   set_register,
   slicing: (is_stale) => ({ is_stale, yield_to_page: () => new Promise<void>((resume) => setTimeout(resume, 0)), now: () => performance.now(), slice_ms: SLICE_MS }),
-  selection_key: (model) => documents_of(model).flatMap((owner) => [owner.getSelection()?.anchorNode, owner.getSelection()?.anchorOffset]),
+  selection_key: (model) => documents_of(model).flatMap((owner) => [owner.getSelection()?.anchorNode, owner.getSelection()?.anchorOffset, owner.getSelection()?.focusNode, owner.getSelection()?.focusOffset]),
   watch_page: (on_change) => {
     const observer = new MutationObserver((records) => records.some(is_page_change) && on_change());
     return (trees) => {

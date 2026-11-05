@@ -264,4 +264,23 @@ export async function run_cases({ run_case, expect, open_page, send_keys, sleep,
     await send_keys("-k", "Escape");
     expect(text === "eedle", `the selection is ${JSON.stringify(text)}, expected "eedle"`);
   });
+
+  await run_case("a drag from the same anchor after a search takes the place of the match", async () => {
+    const page_id = "drag_same_anchor";
+    await open_page("caret_bug_find", page_id, { new_tab: true });
+    await drag_in_page(4, 10);
+    await sleep(300);
+    await send_keys("/");
+    await send_keys("-d", "30", "filler line 7");
+    await send_keys("-k", "Return");
+    await sleep(500);
+    await drag_in_page(4, 15);
+    await sleep(300);
+    await send_keys("V");
+    await sleep(500);
+    const text = last_selection_text(page_id);
+    await send_keys("-k", "Escape");
+    await send_keys("-k", "Escape");
+    expect(text === "needle sits", `the selection is ${JSON.stringify(text)}, expected "needle sits"`);
+  });
 }
