@@ -1,6 +1,6 @@
 // What a picked hint does to its element.
 
-import { hover } from "./hover.ts";
+import { hover, leave_toward } from "./hover.ts";
 
 export type HintAction = "here" | "tab" | "background" | "window" | "caret" | "visual" | "copy" | "copy_text" | "delete" | "focus" | "hover";
 
@@ -40,10 +40,10 @@ export type MouseEventName =
   | "mouseover" | "mouseenter" | "mousemove" | "mouseout" | "mouseleave" | "mousedown" | "mouseup";
 
 // One mouse-side event from the middle of the element, as the left button sends it. Returns false when the page cancelled it. The enter and leave events do not bubble.
-export function dispatch_mouse_event(target: Target, type: MouseEventName): boolean {
+export function dispatch_mouse_event(target: Target, type: MouseEventName, related_target: EventTarget | null = null): boolean {
   if (!target.dispatchEvent) return true;
   const box = target.getBoundingClientRect?.();
-  const init = { bubbles: !/(enter|leave)$/.test(type), cancelable: true, composed: true, button: 0, buttons: type.endsWith("down") ? 1 : 0, clientX: box ? box.left + box.width / 2 : 0, clientY: box ? box.top + box.height / 2 : 0 };
+  const init = { bubbles: !/(enter|leave)$/.test(type), cancelable: true, composed: true, button: 0, buttons: type.endsWith("down") ? 1 : 0, relatedTarget: related_target, clientX: box ? box.left + box.width / 2 : 0, clientY: box ? box.top + box.height / 2 : 0 };
   return target.dispatchEvent(type.startsWith("pointer") ? new PointerEvent(type, { ...init, pointerType: "mouse", isPrimary: true }) : new MouseEvent(type, init));
 }
 
@@ -81,6 +81,7 @@ function focus_target(target: Target): void {
 }
 
 export function perform(action: HintAction, target: Target, deps: ActionDeps): void | Promise<unknown> {
+  if (action !== "hover") leave_toward(target);
   if (action === "delete") return target.remove();
   if (action === "focus") return focus_target(target);
   if (action === "hover") return hover(target);

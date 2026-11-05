@@ -108,8 +108,8 @@ export function start_server() {
     }
     if (url.pathname === "/hoverbox") {
       // Plain divs with a mouseenter listener only, no click role and no CSS :hover rule. The page reports each enter and leave.
-      const boxes = '<div id="card" style="width:200px;height:60px;background:#eee">card</div><div id="other" style="width:200px;height:60px;background:#ddd">other</div>';
-      const script = `<script>for (const box of document.querySelectorAll("#card, #other")) {
+      const boxes = '<div id="card" style="width:200px;height:60px;background:#eee">card</div><div id="other" style="width:200px;height:60px;background:#ddd">other</div><div id="menu" style="width:200px;height:80px;background:#ccc">menu<div id="item" style="width:100px;height:30px;background:#bbb">item</div></div>';
+      const script = `<script>for (const box of document.querySelectorAll("#card, #other, #menu, #item")) {
   box.addEventListener("mouseenter", () => send("hover_in", { box: box.id }));
   box.addEventListener("mouseleave", () => send("hover_out", { box: box.id }));
 }</script>`;
