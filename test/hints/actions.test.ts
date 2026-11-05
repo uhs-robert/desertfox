@@ -397,19 +397,3 @@ test("enter and leave events stay inside their shadow tree, the others cross it"
   for (const event of sent) assert.equal(event.composed, !/(enter|leave)$/.test(event.type), event.type);
   assert.ok(sent.some((event) => event.type === "mouseover" && event.composed));
 });
-
-test("scroll puts the element at the top of the view and does nothing else to it", () => {
-  const scrolls: unknown[] = [];
-  const page = fixture("h2", { scrollIntoView: (options: unknown) => scrolls.push(options), setAttribute: () => page.calls.push("setAttribute") });
-  page.run("scroll");
-  assert.deepEqual(scrolls, [{ block: "start", behavior: "instant" }]);
-  assert.deepEqual(page.calls, []);
-});
-
-test("scroll also scrolls each frame that holds the element, innermost first, so the top view follows", () => {
-  const scrolls: string[] = [];
-  const at = (name: string) => ({ scrollIntoView: () => scrolls.push(name) });
-  const page = fixture("h2", at("heading"));
-  perform("scroll", page.element as never, { open_link: () => {}, copy: () => {}, start_caret: () => {} }, [at("outer") as never, at("inner") as never]);
-  assert.deepEqual(scrolls, ["heading", "inner", "outer"]);
-});

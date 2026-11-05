@@ -3,7 +3,7 @@
 // It stays small because it runs inside the page's own script world.
 
 import type { BundleHostApi } from "../content/bundle_host.ts";
-import type { Outcome } from "../shared/messages.ts";
+import type { HeadingItem, Outcome } from "../shared/messages.ts";
 import { LAYER_ATTRIBUTE, LAYERS, RESTACKED_EVENT } from "../shared/layers.ts";
 import type { HostToPage, PageToHost } from "./protocol.ts";
 import { unwrap, wrap } from "./protocol.ts";
@@ -41,6 +41,10 @@ type Open = {
   // Set when the line is a page search, and the way it searches. Enter sets `committed`, and the end of the line tells the search whether to keep its match.
   search?: "forward" | "backward" | undefined;
   committed: boolean;
+  // The line asked for the headings, so the hints bundle holds a snapshot of them. `submit` sets `submitted`: the command that
+  // runs next may be `heading.go`, which needs the snapshot, so the line drops it only after the command ran.
+  asked_headings: boolean;
+  submitted: boolean;
   // The end of the page search, once the line has closed. Enter waits for it, so the next step sees the committed match.
   search_ended?: Promise<Outcome>;
   // Settles the promise `cmdline.open` returned. The first call wins, so Enter settles it before `close` ends the line as cancelled.
@@ -61,6 +65,7 @@ if (!page.oasisfox_cmdline_ready) {
     clearTimeout(open.timer);
     clearTimeout(open.check_timer);
     open.removal_watch.disconnect();
+    if (open.asked_headings && !open.submitted) void host.run_command("heading.clear", "hints", {});
     if (open.search) open.search_ended = host.run_command("find.end", "caret", { keep: open.committed });
     open.port?.close();
     open.holder.remove();
@@ -101,6 +106,8 @@ if (!page.oasisfox_cmdline_ready) {
       from_mode,
       search,
       committed: false,
+      asked_headings: false,
+      submitted: false,
       finish,
       timer: setTimeout(close, READY_TIMEOUT_MS),
     };
@@ -133,8 +140,10 @@ if (!page.oasisfox_cmdline_ready) {
     // the router refuses with its own toast, so a refusal in the answer is not shown again.
     let answered!: () => void;
     current.finish(new Promise<Outcome>((resolve) => (answered = () => resolve({ ok: true }))));
+    current.submitted = true;
     close();
     await browser.runtime.sendMessage({ type: "run", invocations: [message.invocation], mode: "normal" }).catch(() => undefined);
+    if (current.asked_headings) void host.run_command("heading.clear", "hints", {});
     answered();
   }
 
@@ -153,7 +162,12 @@ if (!page.oasisfox_cmdline_ready) {
       else if (message.kind === "close") close();
       else if (message.kind === "resize" && Number.isFinite(message.height)) current.holder.style.height = `${Math.min(message.height, window.innerHeight)}px`;
       else if (message.kind === "submit") void submit(current, message);
-      else if (message.kind === "find_text") {
+      else if (message.kind === "list_headings") {
+        current.asked_headings = true;
+        // The hints bundle may still be loading, so the line can close first. Its `heading.clear` then runs after this handler, and the late answer goes nowhere.
+        const report = (items: HeadingItem[]) => open === current && current.port?.postMessage(wrap<HostToPage>({ kind: "headings", items }));
+        void host.run_command("heading.list", "hints", { report }).then((outcome) => outcome.ok || report([]));
+      } else if (message.kind === "find_text") {
         const report = (status: string) => open === current && current.port?.postMessage(wrap<HostToPage>({ kind: "find_status", text: status }));
         host.run_command("find.live", "caret", { text: message.text, report });
       } else if (message.kind === "find_commit") {

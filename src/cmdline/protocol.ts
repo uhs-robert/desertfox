@@ -6,6 +6,7 @@
 // and everything after it travels over that port, which page scripts never hold.
 
 import type { Invocation } from "../shared/invocation.ts";
+import type { HeadingItem } from "../shared/messages.ts";
 
 export type HostToPage =
   // Sent once the page said it is ready, with the port in its transfer list. The page trades `ticket` with the
@@ -22,7 +23,9 @@ export type HostToPage =
   // Sent after the frame loaded. A page that is still ours answers `here`.
   | { kind: "check" }
   // The line to show under a search line, such as "3 of 17". Empty clears it.
-  | { kind: "find_status"; text: string };
+  | { kind: "find_status"; text: string }
+  // The answer to `list_headings`: every heading of the page, in page order.
+  | { kind: "headings"; items: HeadingItem[] };
 
 export type PageToHost =
   | { kind: "ready" }
@@ -36,6 +39,8 @@ export type PageToHost =
   | { kind: "find_text"; text: string }
   // Enter on a search line.
   | { kind: "find_commit" }
+  // The completion list reads the headings of the page for the first time.
+  | { kind: "list_headings" }
   | { kind: "submit"; invocation: Invocation };
 
 export const MESSAGE_MARK = "oasisfox_cmdline";

@@ -1,10 +1,10 @@
-// The tabs, bookmarks and engines the list offers. The background hands them out once per kind and the line keeps them, so
+// The tabs, bookmarks, engines and headings the list offers. The background hands out the first kinds and the host script the headings, once per kind, and the line keeps them, so
 // ranking a keystroke never waits. Pure: the page passes in the asking and the redraw.
 
-import type { BookmarkItem, CompleteItemsAnswer, EngineItem, OpenItems, TabItem, WindowItem } from "../../shared/messages.ts";
+import type { BookmarkItem, CompleteItemsAnswer, EngineItem, HeadingItem, OpenItems, TabItem, WindowItem } from "../../shared/messages.ts";
 
-export type LiveKind = "tabs" | "bookmarks" | "engines" | "open" | "windows";
-export type LiveItems = { tabs: TabItem[]; bookmarks: BookmarkItem[]; engines: EngineItem[]; open: OpenItems; windows: WindowItem[] };
+export type LiveKind = "tabs" | "bookmarks" | "engines" | "open" | "windows" | "headings";
+export type LiveItems = { tabs: TabItem[]; bookmarks: BookmarkItem[]; engines: EngineItem[]; open: OpenItems; windows: WindowItem[]; headings: HeadingItem[] };
 export type LiveRead<Kind extends LiveKind> = { loading: true } | { loading: false; items: LiveItems[Kind] };
 
 export type LiveDeps = {

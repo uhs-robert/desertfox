@@ -47,13 +47,14 @@ async function until(condition: () => boolean): Promise<void> {
 // For a message that must not arrive: long enough for one that would.
 const settle = () => new Promise((resolve) => setTimeout(resolve, 50));
 
-async function load_host(t: TestContext, tag: string, { ticket_fails = false, run_answer = undefined as (() => Promise<unknown>) | undefined, search = undefined as ((finish: (outcome: unknown) => void) => void) | undefined } = {}) {
+async function load_host(t: TestContext, tag: string, { ticket_fails = false, run_answer = undefined as (() => Promise<unknown>) | undefined, search = undefined as ((finish: (outcome: unknown) => void) => void) | undefined, command = undefined as ((id: string, args: Record<string, unknown>) => Promise<unknown>) | undefined } = {}) {
   const modes: string[] = [];
   const handlers = new Map<string, (args: Record<string, unknown>) => unknown>();
   const sinks = new Map<string, Sink>();
   const elements: ReturnType<typeof fake_element>[] = [];
   const window_listeners: Record<string, (event: unknown) => void> = {};
   const sent: unknown[] = [];
+  const calls: { id: string; args: Record<string, unknown> }[] = [];
   const observers: (() => void)[] = [];
   Object.assign(globalThis, {
     MutationObserver: class {
@@ -83,8 +84,11 @@ async function load_host(t: TestContext, tag: string, { ticket_fails = false, ru
       oasisfox_host: {
         set_mode: (mode: string) => void modes.push(mode),
         get_mode: () => "normal",
-        // Only find.end is called here. Its answer is the test's to give.
-        run_command: () => new Promise((resolve) => search?.(resolve)),
+        // find.end and the heading commands are called here. Their answers are the test's to give.
+        run_command: (id: string, _bundle: string, args: Record<string, unknown>) => {
+          calls.push({ id, args });
+          return command?.(id, args) ?? new Promise((resolve) => search?.(resolve));
+        },
         register_sink: (mode: string, sink: Sink) => void sinks.set(mode, sink),
         register_handler: (id: string, handler: (args: Record<string, unknown>) => unknown) => void handlers.set(id, handler),
       },
@@ -111,7 +115,7 @@ async function load_host(t: TestContext, tag: string, { ticket_fails = false, ru
     await until(() => frame.focused);
   };
   const page_mutated = () => observers.forEach((callback) => callback());
-  return { modes, sent, holder, frame, sink: sinks.get("cmdline")!, on_window, ready, page_opened, page_mutated, answer, opened_again };
+  return { modes, sent, calls, elements, window_listeners, handlers, holder, frame, sink: sinks.get("cmdline")!, on_window, ready, page_opened, page_mutated, answer, opened_again };
 }
 
 test("opening mounts the line, hands over the kept keys with a port, and a close over the port leaves it", async (t) => {
@@ -431,4 +435,93 @@ test("a restack before the page opened, or after the line closed, moves no focus
   assert.doesNotThrow(() => restacked(holder));
   await settle();
   assert.deepEqual([received, frame.focus_count, modes], [["focused"], 1, ["cmdline", "normal"]]);
+});
+
+// The headings list: the page asks over the port, the host script answers from the hints bundle and drops the snapshot when the line is done.
+const HEADINGS = [{ level: 1, text: "Title" }, { level: 2, text: "Usage" }];
+const ask_for_headings = (frame: ReturnType<typeof fake_element>) => frame.posted[0]!.transfer[0]!.postMessage({ oasisfox_cmdline: { kind: "list_headings" } });
+const collect_messages = (frame: ReturnType<typeof fake_element>) => {
+  const received: Record<string, unknown>[] = [];
+  frame.posted[0]!.transfer[0]!.onmessage = (event) => void received.push(event.data.oasisfox_cmdline);
+  return received;
+};
+
+test("list_headings runs heading.list and the report goes back over the port", async (t) => {
+  const { calls, frame, ready } = await load_host(t, "headings_list", {
+    command: async (id, args) => {
+      if (id === "heading.list") (args.report as (items: unknown) => void)(HEADINGS);
+      return { ok: true };
+    },
+  });
+  await ready();
+  const received = collect_messages(frame);
+  ask_for_headings(frame);
+  await until(() => received.length === 1);
+  assert.deepEqual(received, [{ kind: "headings", items: HEADINGS }]);
+  assert.deepEqual(calls.map((call) => call.id), ["heading.list"]);
+});
+
+test("a failed heading.list answers an empty list, so the line does not wait for ever", async (t) => {
+  const { frame, ready } = await load_host(t, "headings_failed", { command: async () => ({ ok: false, message: "OasisFox could not load hints" }) });
+  await ready();
+  const received = collect_messages(frame);
+  ask_for_headings(frame);
+  await until(() => received.length === 1);
+  assert.deepEqual(received, [{ kind: "headings", items: [] }]);
+});
+
+test("a list_headings answer that arrives after the line closed is ignored, also when another line is open", async (t) => {
+  let late_report!: (items: unknown) => void;
+  const { calls, elements, window_listeners, handlers, frame, ready, sink } = await load_host(t, "headings_late", {
+    command: (id, args) => {
+      if (id === "heading.list") late_report = args.report as typeof late_report;
+      return Promise.resolve({ ok: true });
+    },
+  });
+  await ready();
+  ask_for_headings(frame);
+  await until(() => late_report !== undefined);
+  sink.on_token("<Escape>");
+  await until(() => calls.some((call) => call.id === "heading.clear"));
+  // A second line opens before the first line's answer lands: the answer must not reach the second line's port.
+  handlers.get("cmdline.open")!({ text: "heading " });
+  const second_frame = elements[3]!;
+  window_listeners.message!({ data: { oasisfox_cmdline: { kind: "ready" } }, source: second_frame.contentWindow });
+  await until(() => second_frame.posted.length > 0);
+  const received = collect_messages(second_frame);
+  late_report(HEADINGS);
+  await settle();
+  assert.deepEqual(received, []);
+  second_frame.posted.forEach((posted) => posted.transfer.forEach((port) => port.close()));
+});
+
+test("the snapshot is dropped when the line closes, but only if the line read the headings", async (t) => {
+  const asked = await load_host(t, "headings_clear_asked", { command: async () => ({ ok: true }) });
+  await asked.ready();
+  ask_for_headings(asked.frame);
+  await until(() => asked.calls.length === 1);
+  asked.sink.on_token("<Escape>");
+  assert.deepEqual(asked.calls.map((call) => call.id), ["heading.list", "heading.clear"]);
+
+  const not_asked = await load_host(t, "headings_clear_not_asked", { command: async () => ({ ok: true }) });
+  await not_asked.ready();
+  not_asked.sink.on_token("<Escape>");
+  assert.deepEqual(not_asked.calls, []);
+});
+
+test("a submit keeps the snapshot until the submitted command has run, then drops it", async (t) => {
+  let finish_run!: (value: unknown) => void;
+  const { modes, calls, frame, ready } = await load_host(t, "headings_clear_submit", {
+    run_answer: () => new Promise((resolve) => (finish_run = resolve)),
+    command: async () => ({ ok: true }),
+  });
+  await ready();
+  ask_for_headings(frame);
+  await until(() => calls.length === 1);
+  frame.posted[0]!.transfer[0]!.postMessage({ oasisfox_cmdline: { kind: "submit", invocation: { id: "heading.go", args: { heading: "1 Title" } } } });
+  await until(() => modes.length === 2);
+  assert.deepEqual(calls.map((call) => call.id), ["heading.list"]);
+  finish_run({ ok: true });
+  await until(() => calls.length === 2);
+  assert.deepEqual(calls.map((call) => call.id), ["heading.list", "heading.clear"]);
 });

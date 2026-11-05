@@ -184,7 +184,7 @@ export const DEFAULT_KEYMAP: KeymapConfig = {
     V: { id: "mode.set", args: { mode: "visual" }, label: "Start visual mode" },
     ";v": { id: "hint.run", args: { action: "caret", filter: "prose" }, label: "Start caret mode at text" },
     ";V": { id: "hint.run", args: { action: "visual", filter: "prose" }, label: "Start visual mode at text" },
-    ";#": { id: "hint.run", args: { action: "scroll", filter: "headings" }, label: "Jump to heading" },
+    ";#": { id: "cmdline.open", args: { text: "heading " }, label: "Jump to heading" },
     ";;": { id: "cmdline.open", args: { text: "hint " }, label: "Open the command line with hint" },
     ";b": { id: "hint.run", args: { filter: "buttons" }, label: "Click button" },
     ";y": { id: "hint.run", args: { action: "copy", filter: "links" }, label: "Copy link address" },
