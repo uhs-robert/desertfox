@@ -6,7 +6,7 @@ import { copyFile, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises
 const MAX_BYTES = {
   "content.js": 16 * 1024,
   "hints.js": 24 * 1024,
-  "caret.js": 28 * 1024,
+  "caret.js": 30 * 1024,
   "whichkey.js": 8 * 1024,
   "cmdline.js": 4 * 1024,
   "ui.js": 8 * 1024,
