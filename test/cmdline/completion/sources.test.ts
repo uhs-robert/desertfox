@@ -163,3 +163,17 @@ test("search and set keep one word per position", () => {
   assert.deepEqual(picks("set which_key_border round "), []);
   assert.deepEqual(picks("set open_completion history "), ["bookmarks ", "history "]);
 });
+
+test("the line right after a quoted pick still lists the picked row", () => {
+  assert.deepEqual(picks('help "Quick Start" '), ['"Quick Start" ']);
+  assert.deepEqual(picks('help "Quick" S'), ['"Quick Start" ']);
+});
+
+test("a mid-line caret in a whole-text subject ranks the words before it and replaces to the end", () => {
+  const text = "tab Some Page T --x";
+  const found = whole_text(text, 15);
+  assert.deepEqual(found.rows.map((row) => row.insert), ["2 Some Page Title "]);
+  assert.deepEqual([found.start, found.end], [4, text.length]);
+  const foo = whole_text("tab foo --x", 7);
+  assert.deepEqual([foo.start, foo.end], [4, 11]);
+});

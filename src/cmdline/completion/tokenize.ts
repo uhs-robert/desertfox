@@ -94,6 +94,7 @@ export function cursor_context(text: string, caret: number, find: CommandLookup[
   let position = 0;
   let engine_settled = false;
   let subject_start: number | undefined;
+  let subject_first: number | undefined;
   for (const [index, earlier] of rest.entries()) {
     if (flags_open && earlier.quoted_from === null && earlier.text === "--") {
       flags_open = false;
@@ -104,6 +105,7 @@ export function cursor_context(text: string, caret: number, find: CommandLookup[
       flags_open = false;
       position += 1;
       subject_start ??= starts[index + 1];
+      subject_first ??= index;
     }
   }
   if (flags_open && word.startsWith("-") && !NUMBER_WORD.test(word)) {
@@ -111,7 +113,9 @@ export function cursor_context(text: string, caret: number, find: CommandLookup[
   }
   if (picks_by_whole_text(command)) {
     const from = subject_start === undefined ? start : lead + subject_start;
-    return { kind: "subject", command, position: 0, engine_settled, word: text.slice(from, caret), start: from, end: text.length };
+    // The span replaces the raw text, but ranking reads the subject as the parser does: quotes removed, one space between words.
+    const subject_words = [...rest.slice(subject_first ?? rest.length), ...(cursor ? [cursor] : [])].map((token) => token.text);
+    return { kind: "subject", command, position: 0, engine_settled, word: subject_words.join(" "), start: from, end: text.length };
   }
   return { kind: "subject", command, position, engine_settled, word, start, end };
 }
