@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { move_once } from "../src/content/caret/motion.ts";
+import { find_char, move_once } from "../src/content/caret/motion.ts";
 import type { Motion, MotionUnit } from "../src/content/caret/motion.ts";
 import { selected_text, swap_ends, with_caret } from "../src/content/caret/selection_state.ts";
 
@@ -77,4 +77,39 @@ test("word motions keep accented and non-Latin letters inside the word", () => {
   assert.deepEqual([0, 5, 10].map((from) => move_once(text, from, motion("word"))), [5, 10, 14]);
   assert.deepEqual([0, 5].map((from) => move_once(text, from, motion("word_end"))), [3, 8]);
   assert.equal(move_once(text, 14, motion("word", { direction: "back" })), 10);
+});
+
+// "foo bar.baz" is 0-10, its "\n" is 11, the empty line is 12, "  qux quux" is 13-22.
+const find = (from: number, char: string, direction: "forward" | "back", till: boolean, count = 1, again = false) => find_char(TEXT, from, { char, direction, till }, count, again);
+
+test("f and t find the next match in the paragraph, exact case", () => {
+  assert.equal(find(0, "b", "forward", false), 4);
+  assert.equal(find(0, "b", "forward", true), 3);
+  assert.equal(find(0, "B", "forward", false), 0);
+  assert.equal(find(0, ".", "forward", false), 7);
+});
+
+test("F and T find backward", () => {
+  assert.equal(find(10, "o", "back", false), 2);
+  assert.equal(find(10, "o", "back", true), 3);
+  assert.equal(find(10, "b", "back", true), 9);
+});
+
+test("a count picks the Nth match and a short paragraph does not move", () => {
+  assert.equal(find(0, "o", "forward", false, 2), 2);
+  assert.equal(find(0, "a", "forward", false, 3), 0);
+  assert.equal(find(0, "a", "forward", false, 2), 9);
+});
+
+test("a find stops at the paragraph ends", () => {
+  assert.equal(find(0, "q", "forward", false), 0);
+  assert.equal(find(15, "f", "back", false), 15);
+  assert.equal(find(12, "f", "forward", false), 12);
+});
+
+test("repeating a till find steps over the adjacent match", () => {
+  assert.equal(find(0, "o", "forward", true), 0);
+  assert.equal(find(0, "o", "forward", true, 1, true), 1);
+  assert.equal(find(10, "a", "back", true), 10);
+  assert.equal(find(10, "a", "back", true, 1, true), 6);
 });
