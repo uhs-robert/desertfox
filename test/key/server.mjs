@@ -143,6 +143,24 @@ shadow.getElementById("panel").addEventListener("scroll", () => send("panel_scro
       const build = '<div id="host"></div><script>document.getElementById("host").attachShadow({ mode: "open" }).innerHTML = \'<div id="editable" contenteditable="true">hello world</div>\'</script>';
       return response.end(page(`caret_editable_shadow ${id}`, "<p>foo bar.baz</p>" + build));
     }
+    if (url.pathname === "/headings") {
+      // In document order the labels are: the title h1 "a", Intro "s", Below "d", Last "f". The three hidden headings get none, so "d" is Below only when they are dropped.
+      const dropped = '<h2 style="visibility:hidden">Hidden</h2><details><summary>More</summary><h3>Closed</h3></details><h2 style="position:absolute;width:1px;height:1px;overflow:hidden">Screen reader only</h2>';
+      const filler = '<div style="height:3000px;background:linear-gradient(#fff,#ccc)"></div>';
+      const body = `<h2 id="intro">Intro</h2>${dropped}${filler}<div id="below" role="heading" aria-level="2">Below the fold</div>${filler}<h3 id="last">Last</h3>${filler}`;
+      return response.end(page(`headings ${id}`, body));
+    }
+    if (url.pathname === "/headings_many") {
+      // Sixty headings, more than the panel shows. "Section 59" is the last row, so its label is below the panel's edge.
+      const sections = Array.from({ length: 60 }, (_, index) => `<h2 id="section_${index}">Section ${index}</h2><div style="height:200px"></div>`).join("");
+      return response.end(page(`headings_many ${id}`, sections));
+    }
+    if (url.pathname === "/headings_frames") {
+      // Rows: the title, Top and "In frame". The heading in the hidden frame gets none. "In frame" sits low inside a frame that is itself below the top view.
+      const inner = '<div style="height:900px"></div><h3 id="in_frame">In frame</h3><div style="height:900px"></div>';
+      const frames = `<div style="height:2000px"></div><iframe id="shown" style="display:block;width:400px;height:300px" srcdoc='${inner}'></iframe><iframe id="hidden_frame" style="visibility:hidden;width:400px;height:100px" srcdoc="<h3>Hidden frame</h3>"></iframe><div style="height:3000px"></div>`;
+      return response.end(page(`headings_frames ${id}`, `<h2>Top</h2>${frames}`));
+    }
     if (url.pathname === "/prose") {
       // The heading, two spans in a wrapper div and a paragraph hold text of their own. The wrapper holds only blanks and children, so it gets no label.
       const body = '<div id="card"> <span>alpha text</span> <span>beta text</span> </div><p>gamma <b>bold</b></p>';

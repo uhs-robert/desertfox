@@ -20,7 +20,7 @@ A note "(prompts)" means the binding sets a `prompt` for a param, so the command
 
 <!-- BEGIN generated -->
 
-bound: 216 (normal 138, hint 2, cmdline 13, caret 26, visual 32, insert 1, ignore 1, browser 3) | later: 14 | dropped: 6
+bound: 217 (normal 139, hint 2, cmdline 13, caret 26, visual 32, insert 1, ignore 1, browser 3) | later: 14 | dropped: 6
 
 ### normal
 
@@ -146,6 +146,7 @@ bound: 216 (normal 138, hint 2, cmdline 13, caret 26, visual 32, insert 1, ignor
 | `V` | bound | `mode visual` | Start visual mode |  |
 | `;v` | bound | `hint --caret --prose` | Start caret mode at text |  |
 | `;V` | bound | `hint --visual --prose` | Start visual mode at text |  |
+| `;#` | bound | `hint --scroll --headings` | Jump to heading |  |
 | `;;` | bound | `cmdline.open --text='hint '` | Open the command line with hint |  |
 | `;b` | bound | `hint --buttons` | Click button |  |
 | `;y` | bound | `hint --copy --links` | Copy link address |  |

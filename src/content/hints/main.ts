@@ -8,11 +8,13 @@ import { unhover } from "./hover.ts";
 import { link_address, OPEN_PLACES, perform, starts_caret } from "./actions.ts";
 import type { CaretMode, HintAction, Place } from "./actions.ts";
 import { copy_text } from "../caret/copy_text.ts";
-import { collect, has_text, keep_visible_deduplicated, query_for, weak_test_for } from "./candidates.ts";
+import { collect, keep_present, keep_text_matches, keep_visible_deduplicated, query_for, weak_test_for } from "./candidates.ts";
 import type { Found, HintFilter } from "./candidates.ts";
 import { clean_letters, make_labels } from "./labels.ts";
 import { create_picker } from "./pick.ts";
+import { create_list_view, PANEL_SCROLL_KEYS, waits_for_panel } from "./list_view.ts";
 import { create_view } from "./view.ts";
+import type { HintView } from "./view.ts";
 import { follow_windows } from "./follow.ts";
 import { box_owners, boxes_with_fallback, scroll_clips_of, uncovered_through_frames, viewport_size } from "./visible.ts";
 import type { PageProbe, Rect } from "./visible.ts";
@@ -22,6 +24,9 @@ const page = window as unknown as HintsWindow;
 
 const done: Outcome = { ok: true };
 const cancelled_outcome: Outcome = { ok: true, cancelled: true };
+
+// What a session needs from its labels: the hint labels over the page, or the headings panel.
+type LabelView = Pick<HintView, "show" | "show_progress" | "clear_labels" | "reposition"> & { scroll_by?: (panel_heights: number) => void };
 
 type Session = {
   cancelled: boolean;
@@ -41,7 +46,7 @@ type Session = {
   // The `text` param as typed, and lower-cased for the match. Both are undefined without it.
   text: string | undefined;
   lower_text: string | undefined;
-  ready?: { picker: ReturnType<typeof create_picker>; found: Found[]; view: ReturnType<typeof create_view>; stop_following: () => void };
+  ready?: { picker: ReturnType<typeof create_picker>; found: Found[]; view: LabelView; stop_following: () => void };
 };
 
 function observe_intersecting(elements: Element[]): Promise<Set<Element>> {
@@ -88,6 +93,28 @@ function scroll_clips_in_page(element: Element): Rect[] {
     },
   });
 }
+
+// The headings list takes headings off screen too, so it checks only that each has a box a person could read.
+function keep_present_headings(candidates: Found[]): Found[] {
+  const own_rects = (element: Element) => Array.from(element.getClientRects());
+  const children = (element: Element) => Array.from(element.children);
+  const keep_present_elements = (elements: Element[]) =>
+    new Set(
+      keep_present(elements, {
+        rects_of: (element) => boxes_with_fallback(element, own_rects, children),
+        clips_of: scroll_clips_in_page,
+        // `checkVisibility` also catches the content of a closed `<details>`, which Firefox still gives a box.
+        is_hidden: (element) => !element.checkVisibility({ visibilityProperty: true, opacityProperty: true }),
+      }),
+    );
+  // A heading in a hidden or clipped frame is as hidden as the frame, so each frame passes the same rules as the heading.
+  const kept_frames = keep_present_elements([...new Set(candidates.flatMap((found) => found.frames))]);
+  const kept_elements = keep_present_elements(candidates.map((found) => found.element));
+  return candidates.filter((found) => kept_elements.has(found.element) && found.frames.every((frame) => kept_frames.has(frame)));
+}
+
+const none_message = (filter: HintFilter, text: string | undefined): string =>
+  filter === "headings" ? (text === undefined ? "No headings on this page" : `No heading matches ${text}`) : text === undefined ? "No hints on this page" : `No link matches ${text}`;
 
 async function keep_visible_ones(candidates: Found[]): Promise<Found[]> {
   const own_rects = (element: Element) => Array.from(element.getClientRects());
@@ -173,25 +200,25 @@ function register(host: BundleHostApi): void {
 
   // Finds, labels and shows the hints. Keys typed meanwhile wait and replay. Rapid mode calls it again after each pick.
   async function build(current: Session, candidates: Found[], first_build: boolean): Promise<void> {
-    const [letters, visible] = await Promise.all([read_letters(), keep_visible_ones(candidates)]);
+    const [letters, visible] = await Promise.all([read_letters(), current.filter === "headings" ? keep_present_headings(candidates) : keep_visible_ones(candidates)]);
     if (current.cancelled) return;
-    const found = current.lower_text === undefined ? visible : visible.filter((item) => link_address(item.element as HTMLAnchorElement) !== undefined && has_text(item.element, current.lower_text!));
-    const view = create_view();
+    const found = current.lower_text === undefined ? visible : keep_text_matches(visible, current.filter, current.lower_text);
     if (found.length === 0) {
-      const message = current.text === undefined ? "No hints on this page" : `No link matches ${current.text}`;
+      const message = none_message(current.filter, current.text);
       current.finish({ ok: false, message });
       host.set_mode("normal");
       // Only a rapid rebuild gets here with its promise already settled, so nobody else shows the message.
-      if (!first_build) view.show_message(message);
+      if (!first_build) create_view().show_message(message);
       return;
     }
     // One match needs no label. Only the first build does this, so rapid mode cannot repeat the same pick.
     if (first_build && current.lower_text !== undefined && found.length === 1) {
       const performed = begin_pick(current);
       host.set_mode("normal");
-      performed(() => perform(current.action, found[0]!.element as HTMLElement, deps));
+      performed(() => perform(current.action, found[0]!.element as HTMLElement, deps, found[0]!.frames as HTMLElement[]));
       return;
     }
+    const view = current.filter === "headings" ? create_list_view() : create_view();
     const labels = make_labels(found.length, letters);
     view.show(found.map((item, index) => ({ found: item, text: labels[index]! })));
     current.ready = { picker: create_picker(labels), found, view, stop_following: follow_windows(windows_of(found), view.reposition) };
@@ -209,23 +236,30 @@ function register(host: BundleHostApi): void {
 
   function handle_token(current: Session, token: string): "handled" | "pass" {
     const ready = current.ready!;
+    const panel_scroll = PANEL_SCROLL_KEYS[token];
+    // Never a label key: the panel is the only view with rows below its edge, and the others leave these keys to the page.
+    if (panel_scroll !== undefined && ready.view.scroll_by) {
+      ready.view.scroll_by(panel_scroll);
+      return "handled";
+    }
     const outcome = ready.picker.on_token(token);
     if (outcome.kind === "pass") return "pass";
     ready.view.show_progress(outcome.typed, new Set(outcome.still_possible));
     if (outcome.picked !== undefined) {
-      const picked = ready.found[outcome.picked]!.element as HTMLElement;
+      const { element, frames } = ready.found[outcome.picked]!;
+      const picked = element as HTMLElement;
       const performed = begin_pick(current);
       if (!current.rapid) {
         // Leave hint mode first: a picked field then raises insert mode through its own focus event.
         host.set_mode("normal");
-        performed(() => perform(current.action, picked, deps));
+        performed(() => perform(current.action, picked, deps, frames as HTMLElement[]));
         return "handled";
       }
       // Rapid: the pick may delete or move elements, so drop these labels and label the page again.
       ready.stop_following();
       ready.view.clear_labels();
       delete current.ready;
-      performed(() => perform(current.action, picked, deps));
+      performed(() => perform(current.action, picked, deps, frames as HTMLElement[]));
       if (!current.cancelled) void build(current, find_candidates(current.filter, current.custom_selector, current.action), false);
     }
     return "handled";
@@ -237,7 +271,7 @@ function register(host: BundleHostApi): void {
     on_token: (token) => {
       if (!session) return "pass";
       if (session.ready) return handle_token(session, token);
-      if (token.length !== 1) return "pass";
+      if (token.length !== 1 && !waits_for_panel(session.filter, token)) return "pass";
       session.waiting_tokens.push(token);
       return "handled";
     },
@@ -257,7 +291,7 @@ function register(host: BundleHostApi): void {
     }
     // With nothing to label the mode never changes, so keys held during the load run as normal keys.
     const text = (args.text as string | undefined) || undefined;
-    if (candidates.length === 0) return { ok: false, message: text === undefined ? "No hints on this page" : `No link matches ${text}` };
+    if (candidates.length === 0) return { ok: false, message: none_message(filter, text) };
     // Pending until the user picks a label or leaves hint mode.
     return new Promise<Outcome>((finish) => {
       // A caret start ends hint mode on the first pick, so rapid has nothing to repeat.

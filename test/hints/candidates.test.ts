@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { Found } from "../../src/content/hints/candidates.ts";
-import { collect, drop_redundant_weak, keep_visible_deduplicated, has_click_sign, has_own_text, NO_OWN_TEXT, has_text, make_weak_test, query_for } from "../../src/content/hints/candidates.ts";
+import { keep_text_matches, heading_level, is_heading, keep_present, collect, drop_redundant_weak, keep_visible_deduplicated, has_click_sign, has_own_text, NO_OWN_TEXT, has_text, make_weak_test, query_for } from "../../src/content/hints/candidates.ts";
 
 type Fake = { name: string; local: string; shadow?: Fake[]; frame?: Fake[] | "cross_origin"; href?: boolean };
 
@@ -247,4 +247,60 @@ test("the scrollable filter leaves out a text field that overflows, because focu
   assert.equal(is_hit?.(overflowing("div")), true);
   assert.equal(is_hit?.(overflowing("textarea")), false);
   assert.equal(is_hit?.(overflowing("div", { isContentEditable: true })), false);
+});
+
+type FakeHeading = { localName: string; text?: string; rendered?: string; role?: string; level?: string; hidden?: boolean };
+const heading = (fake: FakeHeading) => ({ localName: fake.localName, textContent: fake.text ?? "Title", innerText: fake.rendered ?? fake.text ?? "Title", getAttribute: (name: string) => (name === "role" ? (fake.role ?? null) : name === "aria-level" ? (fake.level ?? null) : null) }) as unknown as Element;
+
+test("the headings filter selects h1 to h6 and role=heading", () => {
+  const { selector } = query_for("headings", undefined);
+  for (const wanted of ["h1", "h6", "[role=heading]"]) assert.ok(selector.split(", ").includes(wanted), wanted);
+});
+
+test("a heading with its text in a child counts, an empty one or one stripped of its role does not", () => {
+  assert.equal(is_heading(heading({ localName: "h2" })), true);
+  assert.equal(is_heading(heading({ localName: "div", role: "heading" })), true);
+  assert.equal(is_heading(heading({ localName: "h2", text: " \n " })), false);
+  assert.equal(is_heading(heading({ localName: "h2", role: "presentation" })), false);
+  assert.equal(is_heading(heading({ localName: "h3", role: "none" })), false);
+  assert.equal(is_heading(heading({ localName: "h3", role: "button" })), false);
+});
+
+test("the level comes from aria-level, else the tag, else 2", () => {
+  assert.equal(heading_level(heading({ localName: "h4" })), 4);
+  assert.equal(heading_level(heading({ localName: "h4", level: "1" })), 1);
+  assert.equal(heading_level(heading({ localName: "div", role: "heading", level: "3" })), 3);
+  assert.equal(heading_level(heading({ localName: "div", role: "heading" })), 2);
+  assert.equal(heading_level(heading({ localName: "div", role: "heading", level: "99" })), 2);
+});
+
+test("keep_present drops hidden, boxless, clipped and tiny headings and keeps off-screen ones", () => {
+  const box = (top: number, height = 20) => [{ left: 0, top, right: 100, bottom: top + height }];
+  const probe = (rects: Record<string, ReturnType<typeof box>>, hidden: string[] = [], clips: Record<string, ReturnType<typeof box>> = {}) => ({
+    rects_of: (name: string) => rects[name] ?? [],
+    clips_of: (name: string) => clips[name] ?? [],
+    is_hidden: (name: string) => hidden.includes(name),
+  });
+  const names_in = ["above", "below", "none", "hidden", "clipped", "tiny"];
+  const kept = keep_present(
+    names_in,
+    probe(
+      { above: box(-500), below: box(5000), hidden: box(0), clipped: box(0), tiny: box(0, 1) },
+      ["hidden"],
+      { clipped: [{ left: 0, top: 100, right: 100, bottom: 200 }] },
+    ),
+  );
+  assert.deepEqual(kept, ["above", "below"]);
+});
+
+test("a heading counts by its rendered text, not by hidden or script text in its content", () => {
+  assert.equal(is_heading(heading({ localName: "h2", text: "x = 1", rendered: "" })), false);
+  assert.equal(is_heading(heading({ localName: "h2", text: "Title", rendered: "Title" })), true);
+});
+
+test("text keeps the headings whose text holds it, and the links whose text holds it", () => {
+  const item = (local: string, text: string, href?: string) => ({ element: { localName: local, innerText: text, href } as unknown as Element, frames: [] });
+  const found = [item("h2", "Introduction"), item("h2", "Usage"), item("a", "Intro link", "https://example.com/"), item("a", "Intro without address")];
+  assert.deepEqual(keep_text_matches(found, "headings", "intro").map((entry) => (entry.element as unknown as { innerText: string }).innerText), ["Introduction", "Intro link", "Intro without address"]);
+  assert.deepEqual(keep_text_matches(found, "links", "intro").map((entry) => (entry.element as unknown as { innerText: string }).innerText), ["Intro link"]);
 });

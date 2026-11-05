@@ -1,11 +1,11 @@
 // Finds the elements a hint filter can label. Visibility is decided later, in visible.ts.
 
 import { is_scroll_box } from "../scroll_box.ts";
-import { takes_typing } from "./actions.ts";
-import { keep_visible } from "./visible.ts";
-import type { PageProbe } from "./visible.ts";
+import { link_address, takes_typing } from "./actions.ts";
+import { clip_to, keep_visible } from "./visible.ts";
+import type { PageProbe, Rect } from "./visible.ts";
 
-export type HintFilter = "all" | "clickable" | "buttons" | "inputs" | "links" | "prose" | "scrollable" | "custom";
+export type HintFilter = "all" | "clickable" | "buttons" | "inputs" | "links" | "prose" | "scrollable" | "headings" | "custom";
 
 const TEXT_FIELDS = 'input:not([type=hidden]):not([disabled]), textarea:not([disabled]), select:not([disabled]), [contenteditable=""], [contenteditable="true"]';
 const LINKS = "a[href]";
@@ -34,6 +34,26 @@ export const has_own_text = (element: Element): boolean => {
   return Array.from(element.childNodes).some((node) => node.nodeType === 3 && (node.nodeValue ?? "").trim() !== "");
 };
 
+const HEADINGS = "h1, h2, h3, h4, h5, h6, [role=heading]";
+const DEFAULT_HEADING_LEVEL = 2;
+
+// The role wins over the tag, so `<h2 role=presentation>` and `<h2 role=button>` are no heading. An empty heading is no jump target.
+// The text test reads the rendered text because a heading often keeps its text in a child span, which `has_own_text` would refuse.
+// The text a person reads: it leaves out hidden text and script text, which `textContent` would add. A fake element in a test has no `innerText`.
+export const rendered_text = (element: Element): string => ((element as HTMLElement).innerText ?? element.textContent ?? "").trim();
+
+export const is_heading = (element: Element): boolean => {
+  const role = element.getAttribute("role")?.trim().split(/\s+/)[0]?.toLowerCase();
+  return (role === undefined || role === "" || role === "heading") && rendered_text(element) !== "";
+};
+
+// aria-level wins over the tag. A role=heading with no usable level is level 2, the ARIA default.
+export function heading_level(element: Element): number {
+  const level = Number(element.getAttribute("aria-level"));
+  if (Number.isInteger(level) && level >= 1 && level <= 6) return level;
+  return /^h[1-6]$/.test(element.localName) ? Number(element.localName[1]) : DEFAULT_HEADING_LEVEL;
+}
+
 const QUERIES: Record<Exclude<HintFilter, "custom">, Query> = {
   all: { selector: ALL },
   clickable: { selector: CLICKABLE },
@@ -41,6 +61,7 @@ const QUERIES: Record<Exclude<HintFilter, "custom">, Query> = {
   inputs: { selector: TEXT_FIELDS },
   links: { selector: LINKS },
   prose: { selector: "*", test: has_own_text },
+  headings: { selector: HEADINGS, test: is_heading },
   scrollable: { selector: "*", test: (element) => !takes_typing(element as HTMLElement) && is_scroll_box(element) },
 };
 
@@ -136,6 +157,24 @@ export function drop_redundant_weak(found: Found[]): Found[] {
 
 // Visibility comes first: a wrapper must not give way to a hidden or off-screen candidate that gets no hint.
 export const keep_visible_deduplicated = (found: Found[], probe: PageProbe<Found>): Found[] => drop_redundant_weak(keep_visible(found, probe));
+
+// Boxes thinner than this are the "visually hidden" trick (1px, clipped), made for screen readers only.
+const MIN_BOX_SIDE = 2;
+
+// The headings list shows off-screen headings, so it skips the viewport and cover tests of `keep_visible`.
+// A heading stays when it has a box of real size that no scrolling ancestor clips away and the page does not hide, by `display`, `visibility` or a closed `<details>`.
+export function keep_present<T>(targets: readonly T[], probe: Pick<PageProbe<T>, "rects_of" | "clips_of"> & { is_hidden: (target: T) => boolean }): T[] {
+  const has_size = (rect: Rect) => rect.right - rect.left >= MIN_BOX_SIDE && rect.bottom - rect.top >= MIN_BOX_SIDE;
+  return targets.filter((target) => {
+    if (probe.is_hidden(target)) return false;
+    const clips = probe.clips_of(target);
+    return probe.rects_of(target).some((rect) => has_size(clip_to(rect, clips)));
+  });
+}
+
+// The `text` param keeps the links whose text holds it. For headings, which are no links, it keeps the headings whose text holds it.
+export const keep_text_matches = (found: Found[], filter: HintFilter, lower_needle: string): Found[] =>
+  found.filter((item) => (filter === "headings" || link_address(item.element as HTMLAnchorElement) !== undefined) && has_text(item.element, lower_needle));
 
 // The visible text holds the needle, ignoring case. The needle arrives already lower-cased.
 // An empty innerText means the text is hidden, so only a missing innerText falls back to textContent.

@@ -2,7 +2,7 @@
 
 import { hover, leave_toward } from "./hover.ts";
 
-export type HintAction = "here" | "tab" | "background" | "window" | "caret" | "visual" | "copy" | "copy_text" | "delete" | "focus" | "hover";
+export type HintAction = "here" | "tab" | "background" | "window" | "caret" | "visual" | "copy" | "copy_text" | "delete" | "focus" | "hover" | "scroll";
 
 export type Place = "here" | "tab" | "background" | "window";
 
@@ -19,7 +19,7 @@ export type ActionDeps = {
   start_caret: (target: Element, mode: CaretMode) => void;
 };
 
-type Target = Pick<HTMLElement, "click" | "focus" | "remove"> & { dispatchEvent?: (event: Event) => boolean; getBoundingClientRect?: () => { left: number; top: number; width: number; height: number } } & { tabIndex?: number; setAttribute?: (name: string, value: string) => void; style?: CSSStyleDeclaration } & { textContent?: string | null; href?: unknown; localName: string; type?: unknown; isContentEditable?: boolean };
+type Target = Pick<HTMLElement, "click" | "focus" | "remove"> & { dispatchEvent?: (event: Event) => boolean; getBoundingClientRect?: () => { left: number; top: number; width: number; height: number } } & { tabIndex?: number; setAttribute?: (name: string, value: string) => void; style?: CSSStyleDeclaration } & { scrollIntoView?: (options: ScrollIntoViewOptions) => void } & { textContent?: string | null; href?: unknown; localName: string; type?: unknown; isContentEditable?: boolean };
 
 const NON_TEXT_INPUTS = new Set(["button", "submit", "reset", "checkbox", "radio", "image", "file", "color", "range"]);
 
@@ -85,11 +85,17 @@ function focus_target(target: Target): void {
   flashes.set(target, { previous, timer });
 }
 
-export function perform(action: HintAction, target: Target, deps: ActionDeps): void | Promise<unknown> {
+// `frames` are the iframes that hold the target, outermost first. `scrollIntoView` moves only the target's own document, so each frame scrolls to the top in turn, innermost first.
+export function perform(action: HintAction, target: Target, deps: ActionDeps, frames: readonly Target[] = []): void | Promise<unknown> {
   if (action !== "hover") leave_toward(target);
   if (action === "delete") return target.remove();
   if (action === "focus") return focus_target(target);
   if (action === "hover") return hover(target);
+  // The same call as `scroll.align`. It leaves focus, selection and the address alone, which `focus` and a fragment would not.
+  if (action === "scroll") {
+    for (const element of [target, ...[...frames].reverse()]) element.scrollIntoView?.({ block: "start", behavior: "instant" });
+    return;
+  }
   if (starts_caret(action)) return deps.start_caret(target as unknown as Element, action);
   // A copy of the address falls back to the text for an element that is no link.
   if (action === "copy") return deps.copy(link_address(target) ?? (target.textContent ?? "").trim());
