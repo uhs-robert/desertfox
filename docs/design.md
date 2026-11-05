@@ -75,7 +75,6 @@ The fields follow the Oasis action library (`home/hypr/.config/hypr/lib/act/init
 - `rest`: marks a `string` param as text with spaces. The grammar already lets the `main` value run to the end of the line.
 - `when`: the param is valid only if one other param has one of the listed values. For example, `container` needs `where` to open a new tab or window, because Firefox cannot change the container of an open tab. This is the only kind of condition. A command that needs more is split into two commands.
 - `default`: a value, or a context source (`{ from: "current_url" }`, `"selection"`, `"clipboard"`). The router fills a context source where it is available, so a background command can ask for the page selection.
-- `ask_when_unbound`: a flag. A key binding that leaves the param out compiles to a prompt for it, though the default would let it run. The typed command line still takes the default. `open.url` sets it on `url`.
 - `runs_in`: `background` or `content`. The router sends the invocation to that side. A command never runs in both.
 - `needs`: what must be true to run it. `content` means a content script in the tab. A permission name means an optional permission. The router refuses with a message instead of failing silently.
 - `count`: what a numeric prefix does. `repeat` runs the command that many times. A param name fills that param, for example `tab.goto` takes the count as its `index`. `ignore` drops it.
@@ -107,8 +106,8 @@ type Invocation = { id: string; args?: Record<string, unknown>; count?: number }
 ```
 
 - A key binding is one invocation, or an array of invocations that run in order. Pipes have no replacement, because context sources cover the cases the config uses. If a binding ever needs one command's result, a command declares `returns` with a type, and a later step in the array takes it with `{ from: "previous" }`. The keymap loader checks the types. This is not built until a binding needs it.
-- If a binding leaves a required param out, the command line opens and asks for it, with completion for that param's type. This replaces 89 old bindings that opened the command line with text already typed. A binding can prefill the prompt from a context source, for example the current URL for editing.
-- A binding that starts with `:` carries `prompt: { param, prefill? }` in the stored file. The key types its command into the command line and waits, and the user edits it and presses Enter. Phase 1 refuses such a binding.
+- A binding asks for input only through an explicit `prompt`. If a binding leaves a required param out and sets no `prompt`, the loader warns and skips the key. The prompt opens the command line with completion for that param's type. A binding can prefill the prompt from a context source, for example the current URL for editing.
+- A binding that starts with `:` carries `prompt: { param, prefill? }` in the stored file. The key types its command into the command line and waits, and the user edits it and presses Enter.
 - The command line and the config parse the same grammar into an invocation, as described below. Keymaps and the native host also accept the `args` object.
 
 ### Command line syntax
@@ -211,7 +210,7 @@ ww = { run = ":open -w @current_url", label = "New window, edit current URL" }
 ```
 
 - `sa` searches with the `arch` engine in this tab, and `Sa` in a new tab.
-- `ca` reopens the current page in the Family container, and `Ca` opens a prompt prefilled with the current URL in a new Family tab.
+- `ca` reopens the current page in the Family container, and `Ca` opens a prompt, set by an explicit `prompt` on the generated key, prefilled with the current URL in a new Family tab.
 - Containers themselves need no file. Firefox lists their names, colors and icons through `contextualIdentities.query()`, and completion and the `container` param use that list. A name in `container_keys` that does not exist gets a warning at load and is skipped.
 - The prefixes for generated bindings (`s` and `S`, `c` and `C`) are settings. An explicit binding in the keymap wins over a generated one.
 
@@ -301,7 +300,7 @@ window.wrappedJSObject.my_app.toggle_ids(args.query);
 
 - `short=` gives a bool or a valued param its flag letter (`short=a`). An enum maps values to letters: `short=tab:t,window:w`. The letter rules are the define-time checks above.
 - `modes` is optional. It lists the modes where a key can run the snippet, from `normal`, `caret` and `visual`. The default is `normal`. Any other name is a build-config error.
-- `tools/build-config` turns the header into a normal registry entry. Snippet commands get keys, which-key rows, help, completion and prompts for missing params the same as built-in commands.
+- `tools/build-config` turns the header into a normal registry entry. Snippet commands get keys, which-key rows, help, completion and prompts (through an explicit `prompt`) the same as built-in commands.
 - The router checks args, then runs the code in the tab's content script with `tabs.executeScript`, with `args` defined. `window.wrappedJSObject` reaches the page's own functions.
 - `matches` limits where the command runs. On other pages the router refuses with a message.
 - Errors from the code are caught and shown as a message, with the snippet id.
@@ -451,7 +450,7 @@ Firefox keeps the background awake while the port is open, which also helps a la
 
 1. Phase 0, spike. Done. See [spike.md](spike.md).
 2. Phase 1, core. It covers the registry, `commands.json`, the managed storage config, `tools/build-config`, `config.reload`, keymap validation, the prefix tree, modes, scroll and page commands, tab commands, the shortcut slots and the help page. Exit: every v1 row of the binding map that needs no hints or command line works, and the content script stays under its size target.
-3. Phase 2, interfaces. Command line, completion, prompts for missing args, hints, which-key, snippets, and caret and visual modes. Exit: the whole v1 column of the binding map works, and OasisFox replaces the current extension in daily use.
+3. Phase 2, interfaces. Command line, completion, explicit prompts, hints, which-key, snippets, and caret and visual modes. Exit: the whole v1 column of the binding map works, and OasisFox replaces the current extension in daily use.
 4. Phase 3, browser data. History completion, marks, the remaining later rows, and the options page import for users without a shell.
 5. Phase 4, Oasis. The native host merged with voxcmd's, `oasisfox list` and `run`, the Quickshell which-key, and the Oasis theme file written on theme change.
 

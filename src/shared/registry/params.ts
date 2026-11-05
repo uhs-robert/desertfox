@@ -56,8 +56,3 @@ export function join_alternatives(values: readonly ParamValue[]): string {
   if (words.length <= 1) return words.join("");
   return `${words.slice(0, -1).join(", ")} or ${words[words.length - 1]}`;
 }
-
-// The param a key binding must prompt for because it leaves out a param marked `ask_when_unbound`.
-export function unbound_ask_param(command: Pick<CommandDef, "params">, args: Record<string, unknown> | undefined): string | undefined {
-  return (command.params ?? []).find((param) => param.ask_when_unbound && args?.[param.name] === undefined)?.name;
-}

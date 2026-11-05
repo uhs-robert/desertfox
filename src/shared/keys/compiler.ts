@@ -35,7 +35,7 @@ function generated_bindings(keymap: KeymapConfig, settings: Partial<Settings>): 
   }
   for (const [last_key, container] of Object.entries(keymap.container_keys ?? {})) {
     bindings[container_prefixes.reopen + last_key] = { id: "tab.reopen_in_container", args: { container } };
-    bindings[container_prefixes.tab + last_key] = { id: "open.url", args: { where: "tab", container } };
+    bindings[container_prefixes.tab + last_key] = { id: "open.url", args: { where: "tab", container }, prompt: { param: "url", prefill: { from: "current_url" } } };
   }
   return bindings;
 }

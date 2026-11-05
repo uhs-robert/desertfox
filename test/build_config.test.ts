@@ -356,13 +356,13 @@ test("one schema per data file offers command names", () => {
 
 const SNIPPET_HEADER = "// label: L\n// intent: I\n// matches: *://*/*\n";
 
-test("a binding that leaves out a required param is valid, it asks for the prompt", () => {
+test("a binding that leaves out a required param without a prompt is a problem, a defaulted param is fine", () => {
   const dir = config_dir_with({
-    "keymap.toml": '[normal]\no = "open.url"\ns = "open.search"',
+    "keymap.toml": '[normal]\no = "open.url"\ns = "open.search"\nw = ":open"',
   });
-  const normal = build_config(dir, commands).keymap.normal;
-  assert.deepEqual(normal?.["o"], { id: "open.url" });
-  assert.deepEqual(normal?.["s"], { id: "open.search" });
+  const text = problems_of(dir).join("\n");
+  assert.match(text, /keymap normal "o": missing <url>/);
+  assert.doesNotMatch(text, /keymap normal "[sw]"/);
 });
 
 test("keymap keys are parsed, in every mode", () => {

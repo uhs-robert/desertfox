@@ -18,7 +18,7 @@ const by_length_lowercase_first = (left: string, right: string) => {
 };
 
 // The compiled tree fills defaults into `args`, so an arg set to its default says nothing. Only a value that differs from
-// the default marks the binding. A required param left out makes the command prompt on its own, so that is not bare.
+// the default marks the binding.
 // `none` runs the command with nothing typed after it, `flags` only with flags. Any other binding gives a value
 // (`sg` for the google engine) and belongs to the row of that value.
 function bareness(command: CommandMeta, args: Record<string, unknown> | undefined, prompted: boolean): "none" | "flags" | undefined {

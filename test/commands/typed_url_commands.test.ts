@@ -135,8 +135,8 @@ test("open.url passes other errors on an about: page through unchanged", async (
   await assert.rejects(run("open.url", { url: "about:config", where: "here" }), /No tab with id 1/);
 });
 
-test("a binding that omits the url compiles to a prompting step, with no default filled in", () => {
-  const keymap = { normal: { o: { id: "open.url" }, e: { id: "open.url", args: { container: "Work", where: "tab" } } } };
+test("a binding with an explicit url prompt compiles to a prompting step, with no default filled in", () => {
+  const keymap = { normal: { o: { id: "open.url", prompt: { param: "url" } }, e: { id: "open.url", args: { container: "Work", where: "tab" }, prompt: { param: "url" } } } };
   const { compiled } = compile_config({
     config: { ...empty_config(), keymap },
     default_keymap: {},
@@ -149,8 +149,8 @@ test("a binding that omits the url compiles to a prompting step, with no default
   assert.deepEqual(children.e!.steps[0]!.invocation.prompt, { param: "url" });
 });
 
-test("a compiled binding that omits the url opens the command line instead of the new tab page", async () => {
-  const keymap = { normal: { o: { id: "open.url" }, e: { id: "open.url", args: { container: "Work", where: "tab" } } } };
+test("a compiled binding with an explicit url prompt opens the command line instead of the new tab page", async () => {
+  const keymap = { normal: { o: { id: "open.url", prompt: { param: "url" } }, e: { id: "open.url", args: { container: "Work", where: "tab" }, prompt: { param: "url" } } } };
   const { compiled } = compile_config({ config: { ...empty_config(), keymap }, default_keymap: {}, get_command: (id) => registry.get(id), enum_sources: { search_engines: [], containers: ["Work"] } });
   const children = compiled.modes.normal!.children as unknown as Record<string, TreeLeaf>;
   for (const key of ["o", "e"]) {

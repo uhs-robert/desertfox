@@ -7,7 +7,7 @@ import type { MergedConfig } from "../shared/config.ts";
 import type { KeymapConfig } from "../shared/keymap.ts";
 import type { CompiledKeymap, TreeBranch, TreeNode } from "../shared/prefix_tree.ts";
 import type { Prompt } from "../shared/invocation.ts";
-import { find_param, is_context_source, unbound_ask_param } from "../shared/registry/params.ts";
+import { find_param, is_context_source } from "../shared/registry/params.ts";
 import { check_args } from "../shared/registry/check_args.ts";
 import type { EnumSources } from "../shared/registry/check_args.ts";
 import { DEFAULT_LIGHT_INTENSITY, DEFAULT_PALETTE } from "../shared/config.ts";
@@ -70,9 +70,6 @@ function keep_node(node: TreeNode, path: string[], mode: string, input: CompileI
       warnings.push(`${mode}: skipped "${path.join("")}": ${mode_error}`);
       return false;
     }
-    // A binding that omits such a param prompts for it, as one that omits a required param does. The typed command line does not come here, so it keeps the default.
-    const unbound = step.invocation.prompt ? undefined : unbound_ask_param(command, step.invocation.args);
-    if (unbound !== undefined) step.invocation = { ...step.invocation, prompt: { param: unbound } };
     const prompt_error = prompt_problem(step.invocation.prompt, command);
     if (prompt_error) {
       warnings.push(`${mode}: skipped "${path.join("")}": ${prompt_error}`);
@@ -93,12 +90,9 @@ function keep_node(node: TreeNode, path: string[], mode: string, input: CompileI
     if (result.ok) {
       // Defaults filled in, so a content-side leaf runs without the registry.
       step.invocation = { ...step.invocation, args: result.args };
-    } else if (result.missing_param === undefined) {
+    } else {
       warnings.push(`${mode}: skipped "${path.join("")}": ${result.error}`);
       return false;
-    } else {
-      // A missing param means the binding wants a prompt. The router opens the command line for it.
-      step.runs_in = "background";
     }
   }
   return true;

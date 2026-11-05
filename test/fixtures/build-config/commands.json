@@ -98,7 +98,8 @@
           "type": "enum",
           "values": {
             "from": "search_engines"
-          }
+          },
+          "default": ""
         },
         {
           "name": "query",

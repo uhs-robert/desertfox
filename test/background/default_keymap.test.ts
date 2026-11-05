@@ -179,3 +179,15 @@ test("a prompt binding with a bad fixed arg is skipped with a warning", () => {
 test("`.` repeats the last command", () => {
   assert.deepEqual((DEFAULT_KEYMAP.normal as Record<string, unknown>)["."], { id: "command.repeat" });
 });
+
+test("the generated search and container keys compile against the full registry with no warnings", () => {
+  const config = { ...empty_config(), keymap: { search_keys: { a: "arch" }, container_keys: { a: "Family" } } };
+  const { warnings, compiled } = compile_config({
+    config,
+    default_keymap: DEFAULT_KEYMAP,
+    get_command: (id) => registry.get(id),
+    enum_sources: { search_engines: ["arch"], containers: ["Family"] },
+  });
+  assert.deepEqual(warnings, []);
+  for (const prefix of ["s", "S", "c", "C"]) assert.ok((compiled.modes.normal!.children[prefix] as TreeBranch).children.a, `${prefix}a is bound`);
+});

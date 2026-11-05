@@ -43,8 +43,6 @@ export type ParamDef = {
   main?: boolean;
   // A param with no default and no `when` is required.
   default?: ParamDefault;
-  // A key binding that leaves this param out opens the command line for it, though the default would let the command run. Typed command lines still take the default.
-  ask_when_unbound?: boolean;
   // Exactly one key, so `{ param: [values] }`.
   when?: ParamWhen;
 };

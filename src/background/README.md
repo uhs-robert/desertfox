@@ -6,7 +6,7 @@ The background page. It loads the config, compiles the keymap, assigns the Firef
 - `startup.ts`: load, compile, publish to `storage.local`, tell open tabs. The load runs once. `publish` runs again for each `set` and `unset` (`change_overrides`, one at a time) and replaces the config `get_config` returns.
 - `config_load.ts` also holds the live setting overrides in `storage.session` (`load_overrides`, `load_effective_config` for pages that read the config themselves) and `build_config_status`.
 - `config_load.ts`, `keymap_merge.ts`, `compile.ts`: managed config over imported config, default keymap under user keymap, and the args check per binding.
-- `default_keymap.ts`: the shipped keys. `docs/keymap.md` is generated from this file. Keys that need the user's engines or containers are left to the config. A binding with `prompt` compiles to a background step, and the router opens the command line with it typed in.
+- `default_keymap.ts`: the shipped keys. `docs/keymap.md` is generated from this file. Keys that need the user's engines or containers are left to the config. A binding asks for input only through `prompt`, and one that leaves out a required param without it is skipped with a warning. A binding with `prompt` compiles to a background step, and the router opens the command line with it typed in.
 - `slots.ts`: `browser` chords to the 10 manifest slots.
 - `repeat_memory.ts`: the request `.` replays, in `storage.session`, one slot for normal windows and one for private windows, and the check on what a page script may record.
 - `window_focus.ts`: the window ids in last-focused order, newest first, in `storage.session`. `tab.attach` with no window picks from it.

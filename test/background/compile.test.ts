@@ -30,7 +30,7 @@ const commands = {
 
 test("bad args warn and skip, defaults are filled, prompt bindings stay", () => {
   const { registry } = make_fake(commands);
-  const config = { ...empty_config(), keymap: { normal: { D: { id: "tab.close" }, X: { id: "tab.close", args: { focus: "up" } }, o: { id: "open.url" } }, search_keys: { a: "arch", z: "nope" } } };
+  const config = { ...empty_config(), keymap: { normal: { D: { id: "tab.close" }, X: { id: "tab.close", args: { focus: "up" } }, o: { id: "open.url", prompt: { param: "url" } } }, search_keys: { a: "arch", z: "nope" } } };
   const { compiled, warnings } = compile_config({
     config,
     default_keymap: {},
@@ -46,17 +46,20 @@ test("bad args warn and skip, defaults are filled, prompt bindings stay", () => 
   assert.equal(warnings.filter((w) => w.includes("focus")).length, 1);
 });
 
-test("a content binding that lacks a required param compiles to a background step", () => {
+test("a binding that lacks a required param and sets no prompt warns and is skipped", () => {
   const { registry } = make_fake({
     "mode.set": { label: "Mode", intent: "x", params: [{ name: "mode", type: "enum" as const, values: ["normal", "ignore"] }], runs_in: "content", run: () => {} },
   });
-  const { compiled } = compile_config({
-    config: { ...empty_config(), keymap: { normal: { i: { id: "mode.set" } } } },
+  const { compiled, warnings } = compile_config({
+    config: { ...empty_config(), keymap: { normal: { i: { id: "mode.set" }, j: { id: "mode.set", prompt: { param: "mode" } } } } },
     default_keymap: {},
     get_command: (id) => registry.get(id),
     enum_sources: { search_engines: [], containers: [] },
   });
-  assert.equal((compiled.modes.normal!.children.i as TreeLeaf).steps[0]!.runs_in, "background");
+  assert.equal(compiled.modes.normal!.children.i, undefined);
+  assert.equal(warnings.length, 1);
+  assert.match(warnings[0]!, /skipped "i"/);
+  assert.equal((compiled.modes.normal!.children.j as TreeLeaf).steps[0]!.runs_in, "background");
 });
 
 test("a prompt leaf goes to the background so the router can refuse it", () => {
