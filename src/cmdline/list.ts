@@ -7,8 +7,8 @@ import type { Ranked } from "../shared/score.ts";
 export const MAX_ROWS = 10;
 // Names longer than this are cut with an ellipsis, so one long name cannot take the whole row.
 const MAX_NAME_COLUMNS = 28;
-// A heading is a sentence, so its rows may use more of the line.
-const MAX_HEADING_COLUMNS = 60;
+// A heading is a sentence, so its rows may use more of the line. The page sends the whole text, so this is where a long heading is cut.
+const MAX_HEADING_COLUMNS = 100;
 // How far each level below the shallowest one moves a heading name in.
 const INDENT_COLUMNS = 1.2;
 
