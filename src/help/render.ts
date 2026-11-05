@@ -335,7 +335,14 @@ function sidebar(current: PageId, model: HelpModel): HTMLElement {
     const sections = page_sections(page.id, model);
     if (sections.length === 0) return link;
     const list = section_list(page.id, sections, group_open.get(page.id) ?? page.id === current);
-    return el("div", "oasisfox-help-nav-group", el("div", "oasisfox-help-nav-row", link, section_toggle(page.id, page.title, list)), list);
+    const toggle = section_toggle(page.id, page.title, list);
+    // A click on the current page's entry fires no hashchange and so no render, and a click from one of its sections renders on the same page. Neither reaches the reset above, so the click does it.
+    link.addEventListener("click", () => {
+      group_open.delete(page.id);
+      list.hidden = false;
+      toggle.setAttribute("aria-expanded", "true");
+    });
+    return el("div", "oasisfox-help-nav-group", el("div", "oasisfox-help-nav-row", link, toggle), list);
   });
   return el("nav", "oasisfox-help-sidebar", el("div", "oasisfox-help-brand", "OasisFox"), ...entries, support_card());
 }

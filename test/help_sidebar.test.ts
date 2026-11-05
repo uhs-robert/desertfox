@@ -48,6 +48,7 @@ function render(route: Route, keep_state = false): FakeNode {
 
 const group_nodes = (root: FakeNode) => root.find_all(by_class("oasisfox-help-nav-group")).map((group) => ({
   page: (group.find_all((node) => node.tag === "a")[0]!.children[0]) as string,
+  page_link: group.find_all((node) => node.tag === "a")[0]!,
   toggle: group.find_all(by_class("oasisfox-help-sections-toggle"))[0]!,
   list: group.find_all(by_class("oasisfox-help-sections"))[0]!,
 }));
@@ -138,5 +139,22 @@ test("automatic opening piles nothing up", () => {
   closed.toggle.listeners["click"]!();
   assert.equal(group_nodes(render({ page: "commands" }, true))[2]!.list.hidden, true);
   render({ page: "home" }, true);
+  assert.equal(group_nodes(render({ page: "commands" }, true))[2]!.list.hidden, false);
+});
+
+test("clicking the current page's menu entry reopens a group the chevron closed", () => {
+  const commands = group_nodes(render({ page: "commands" }))[2]!;
+  commands.toggle.listeners["click"]!();
+  assert.equal(commands.list.hidden, true);
+  commands.page_link.listeners["click"]!();
+  assert.equal(commands.list.hidden, false);
+  assert.equal(commands.toggle.attributes["aria-expanded"], "true");
+  assert.equal(group_nodes(render({ page: "commands" }, true))[2]!.list.hidden, false);
+});
+
+test("a menu click from a section of the same page reopens a closed group", () => {
+  const commands = group_nodes(render({ page: "commands", section: "tab" }))[2]!;
+  commands.toggle.listeners["click"]!();
+  commands.page_link.listeners["click"]!();
   assert.equal(group_nodes(render({ page: "commands" }, true))[2]!.list.hidden, false);
 });
