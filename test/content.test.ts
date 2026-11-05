@@ -48,7 +48,7 @@ function make_flow(in_field = false) {
   return { state, ran, flow };
 }
 
-test("mode state follows focus only from normal and insert", () => {
+test("mode state follows focus into a field from normal, caret and visual only", () => {
   const state = create_mode_state();
   const seen: string[] = [];
   state.listen((mode) => seen.push(mode));
@@ -59,6 +59,35 @@ test("mode state follows focus only from normal and insert", () => {
   state.escape();
   state.focus_left_editable();
   assert.deepEqual(seen, ["insert", "normal", "ignore"]);
+});
+
+for (const mode of ["caret", "visual"] as const) {
+  test(`focus in a field leaves ${mode} mode for insert, and leaving the field returns to normal`, () => {
+    const state = create_mode_state();
+    state.set_mode(mode);
+    state.focus_entered_editable();
+    assert.equal(state.get_mode(), "insert");
+    state.focus_left_editable();
+    assert.equal(state.get_mode(), "normal");
+  });
+}
+
+for (const mode of ["ignore", "hint", "cmdline"] as const) {
+  test(`focus in a field keeps ${mode} mode`, () => {
+    const state = create_mode_state();
+    state.set_mode(mode);
+    state.focus_entered_editable();
+    assert.equal(state.get_mode(), mode);
+  });
+}
+
+test("typing in a field after focus from caret mode passes through the key flow", () => {
+  const { state, ran, flow } = make_flow(true);
+  flow.set_matcher(create_matcher({ ...keymap, modes: { ...keymap.modes, caret: { kind: "branch", children: { j: leaf("caret_down") } } } }));
+  state.set_mode("caret");
+  state.focus_entered_editable();
+  assert.equal(flow.handle_token("j"), "pass");
+  assert.deepEqual(ran, []);
 });
 
 test("escape leaves insert but not ignore", () => {

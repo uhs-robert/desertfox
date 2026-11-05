@@ -122,4 +122,27 @@ export async function run_cases({ run_case, expect, open_page, send_keys, sleep,
     // The caret rests on the line end after "two", which paints no character, so the text stops before "o". The unfixed code stopped at "one".
     expect(text.endsWith("one tw"), `the selection ends ${JSON.stringify(text.slice(-10))}, expected it to end with "one tw"`);
   });
+
+  // Focus entering a field in caret or visual mode must switch to insert, so motion keys do not swallow typing.
+  const in_active_tab = (code) => evaluate_in_background(rdp, extension_id, `(async () => { const [tab] = await browser.tabs.query({ active: true, currentWindow: true }); return browser.tabs.executeScript(tab.id, { code: ${JSON.stringify(code)} }); })()`);
+  const badge_is = (page_id, label) => (event) => event.type === "indicator" && event.page_id === page_id && event.label === label;
+  for (const kind of ["caret", "visual"]) {
+    await run_case(`focusing a field in ${kind} mode switches to insert and typing reaches the field`, async () => {
+      const page_id = `focus_${kind}`;
+      await open_page("caret", page_id, { new_tab: true });
+      await send_keys("gV");
+      if (kind === "visual") await send_keys("v");
+      await wait_event(0, badge_is(page_id, kind === "visual" ? "VISUAL" : "CARET"), `the ${kind} badge`);
+      const mark = events.length;
+      await in_active_tab("document.getElementById('paste_target').focus()");
+      await wait_event(mark, badge_is(page_id, "INSERT"), "the INSERT badge after the field took focus");
+      await send_keys("jv");
+      await wait_event(mark, (event) => event.type === "input" && event.page_id === page_id && event.value === "jv", "the field to hold jv");
+      const state = JSON.parse((await in_active_tab("JSON.stringify({ active: document.activeElement.id, start: document.activeElement.selectionStart, end: document.activeElement.selectionEnd })"))[0]);
+      expect(state.active === "paste_target" && state.start === 2 && state.end === 2, `the field lost its caret: ${JSON.stringify(state)}`);
+      const mark_escape = events.length;
+      await send_keys("-k", "Escape");
+      await wait_event(mark_escape, badge_is(page_id, "NORMAL"), "the NORMAL badge after Escape");
+    });
+  }
 }
