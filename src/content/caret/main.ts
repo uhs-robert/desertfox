@@ -228,8 +228,6 @@ function in_word(text: string, index: number): boolean {
   const start = unit >= 0xdc00 && unit <= 0xdfff && index > 0 ? index - 1 : index;
   return index >= 0 && index < text.length && WORD_CHARACTER.test(text.slice(start, start + (text.codePointAt(start)! > 0xffff ? 2 : 1)));
 }
-// Zero width, and its capital makes the search exact under smartcase.
-const EXACT_MARK = "(?:\\p{Lu}{0})";
 const escape_regex = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 // What `*` and `#` search for and where it starts. A visual selection is searched as text. Otherwise it is the word under the caret, whole.
@@ -241,7 +239,7 @@ function word_target(): { pattern: string; from: DomPoint } | string {
   const cursor = session?.cursor ?? { anchor: at!, caret: at! };
   if (session?.mode === "visual") {
     const { from, to } = selected_span(cursor);
-    return { pattern: escape_regex(model.text.slice(from, to)) + EXACT_MARK, from: model.point_at(from) };
+    return { pattern: `(?-i:${escape_regex(model.text.slice(from, to))})`, from: model.point_at(from) };
   }
   const on_word = (index: number) => in_word(model.text, index);
   if (!on_word(cursor.caret)) return "No word under the caret";
@@ -256,7 +254,10 @@ function word_target(): { pattern: string; from: DomPoint } | string {
 
 // `n` and `N`: step to the match, and a visual session takes its caret end there.
 async function find_step(reverse: boolean): Promise<Outcome> {
-  const outcome = await find.step(reverse);
+  // A visual session steps from its caret, after it has caught up with the page.
+  const started = session?.mode === "visual" ? ensure_session("visual") : undefined;
+  if (typeof started === "string") return { ok: false, message: started };
+  const outcome = await find.step(reverse, started && started.model.point_at(started.cursor.caret));
   const open = session;
   const landed = open?.mode === "visual" && outcome.ok && !("cancelled" in outcome && outcome.cancelled) ? find.position(open.model) : undefined;
   if (open && landed !== undefined) {

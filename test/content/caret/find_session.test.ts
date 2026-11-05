@@ -294,3 +294,20 @@ test("the watcher is pointed at the trees of each model the search reads", async
   await page.settle();
   assert.equal(page.retargets(), 2);
 });
+
+test("a step from a caret goes on from the caret and not from the last match", async () => {
+  const page = fake_page();
+  const find = create_find(page.host, page.deps);
+  find.begin("forward");
+  find.update("ab", () => {});
+  await page.settle();
+  await find.end(true);
+  const stepping = find.step(false, { node: { index: 3 } as unknown as Node, offset: 0 });
+  await page.settle();
+  await stepping;
+  assert.deepEqual(page.toasts, ["3 of 3"]);
+  const backward = find.step(true, { node: { index: 3 } as unknown as Node, offset: 0 });
+  await page.settle();
+  await backward;
+  assert.equal(page.toasts.at(-1), "1 of 3");
+});

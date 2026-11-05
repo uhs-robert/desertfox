@@ -27,7 +27,7 @@ define("find.prev", {
   completion: "hidden",
   modes: ["normal", "visual"],
   label: "Previous match",
-  intent: "Go to the previous match of the last search. It goes against the way the search was started.",
+  intent: "Go to the previous match of the last search. It goes against the way the search was started. In visual mode the caret end goes to the match and the anchor stays.",
   runs_in: "content",
   run: find_prev.run,
 });

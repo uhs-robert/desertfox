@@ -238,22 +238,24 @@ export function create_find(host: Host, deps: FindDeps = browser_deps()) {
     const kept = shown?.query === previous.query ? shown : undefined;
     let found = kept && is_current(kept.model) ? kept : undefined;
     let wrapped = false;
-    if (found) {
+    // A step from a caret (visual mode) looks from the caret, as the search line does, and not from the last match.
+    if (found && !origin) {
       const stepped = step_match(found.current, found.matches.from.length, direction);
       found = { ...found, current: stepped.index };
       wrapped = stepped.wrapped;
     } else {
-      const query = compile_query(previous.query);
-      if (!query) return { ok: false, message: "No previous search" };
-      const model = kept ? fresh_model(kept.model) : read_model();
-      const matches = await collect_matches(model.text, query.search, deps.slicing(() => run !== step_generation));
+      const query = found ? undefined : compile_query(previous.query);
+      if (!found && !query) return { ok: false, message: "No previous search" };
+      const model = found?.model ?? (kept ? fresh_model(kept.model) : read_model());
+      const matches = found?.matches ?? (await collect_matches(model.text, query!.search, deps.slicing(() => run !== step_generation)));
       if (!matches || run !== step_generation) return taken_over;
+      const fallback = found ? found.fallback : query!.fallback;
       // After a rebuild the step goes on from the match the user was on, when its text is still on the page.
       const carried = kept && carry_index(kept, model);
-      const start = carried === undefined ? (from_origin(model, direction) ?? deps.start_index(model)) : direction === "forward" ? carried + 1 : carried;
+      const start = from_origin(model, direction) ?? (carried === undefined ? deps.start_index(model) : direction === "forward" ? carried + 1 : carried);
       const first = nearest_match(matches.from, start, direction);
-      if (!first) return { ok: false, message: describe_match(previous.query, 0, 0, query.fallback) };
-      found = { model, query: previous.query, fallback: query.fallback, direction: previous.direction, matches, current: first.index };
+      if (!first) return { ok: false, message: describe_match(previous.query, 0, 0, fallback) };
+      found = { model, query: previous.query, fallback, direction: previous.direction, matches, current: first.index };
       wrapped = first.wrapped;
     }
     stand_on(found);
@@ -330,8 +332,16 @@ export function create_find(host: Host, deps: FindDeps = browser_deps()) {
     },
 
     // The key `n` or `N`: repeat the last search in its direction, or the other way.
-    step(reverse: boolean): Promise<Outcome> {
-      const done = steps.then(() => step_once(reverse));
+    // `from` is the caret of a visual session. The step then goes on from it and not from the last match.
+    step(reverse: boolean, from?: DomPoint): Promise<Outcome> {
+      const done = steps.then(async () => {
+        origin = from;
+        try {
+          return await step_once(reverse);
+        } finally {
+          origin = undefined;
+        }
+      });
       steps = done.then(() => {}, () => {});
       return done;
     },
