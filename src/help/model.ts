@@ -250,4 +250,10 @@ export const STYLE_CLASSES: { name: string; meaning: string }[] = [
   { name: "oasisfox-hint", meaning: "One hint label" },
   { name: "oasisfox-hint-message", meaning: "The message hint mode shows at the bottom of the page" },
   { name: "oasisfox-cmdline", meaning: "The command line panel" },
+  { name: "oasisfox-help-code", meaning: "A code block on the help page, holding the head and the body" },
+  { name: "oasisfox-help-code-head", meaning: "The row above a code block with the language label and the Copy button" },
+  { name: "oasisfox-help-code-lang", meaning: "The language label of a code block" },
+  { name: "oasisfox-help-code-copy", meaning: "The Copy button of a code block" },
+  { name: "oasisfox-help-code-body", meaning: "The code text of a code block" },
+  { name: "oasisfox-help-inline-code", meaning: "A code snippet inside a sentence on the help page" },
 ];

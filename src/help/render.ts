@@ -1,5 +1,6 @@
 // Draws the help model with DOM calls only. Command text never goes through innerHTML.
 
+import { copy_text } from "../content/caret/copy_text.ts";
 import type { Block, Inline } from "./blocks.ts";
 import type { CommandRow, EngineRow, HelpModel, KeyRow } from "./model.ts";
 import { STYLE_CLASSES, STYLE_VARIABLES } from "./model.ts";
@@ -87,7 +88,7 @@ function engine_table(engines: EngineRow[]): HTMLElement {
 function inline_node(inline: Inline): Child {
   switch (inline.kind) {
     case "text": return inline.text;
-    case "code": return el("code", undefined, inline.text);
+    case "code": return el("code", "oasisfox-help-inline-code", inline.text);
     case "link": {
       const link = el("a", undefined, inline.text);
       link.setAttribute("href", inline.href);
@@ -96,12 +97,39 @@ function inline_node(inline: Inline): Child {
   }
 }
 
+const COPIED_LABEL_MS = 1500;
+
+// The pending "Copy" restore per button, so a second click restarts the 1.5 s instead of being cut short.
+const pending_restore = new WeakMap<object, unknown>();
+
+// A real button, so Tab and hints reach it. The label shows the result only after the clipboard took the text.
+export async function copy_code_and_confirm(
+  clipboard: Parameters<typeof copy_text>[0],
+  text: string,
+  button: { textContent: string | null },
+  later: (restore: () => void, ms: number) => unknown = setTimeout,
+  cancel: (handle: never) => void = clearTimeout,
+): Promise<void> {
+  if (!(await copy_text(clipboard, text))) return;
+  button.textContent = "Copied";
+  if (pending_restore.has(button)) cancel(pending_restore.get(button) as never);
+  pending_restore.set(button, later(() => { button.textContent = "Copy"; }, COPIED_LABEL_MS));
+}
+
+function code_block_node(text: string, language: string | undefined): HTMLElement {
+  const button = el("button", "oasisfox-help-code-copy", "Copy");
+  button.setAttribute("type", "button");
+  button.addEventListener("click", () => void copy_code_and_confirm(navigator.clipboard, text, button));
+  const head = el("div", "oasisfox-help-code-head", ...(language ? [el("span", "oasisfox-help-code-lang", language)] : []), button);
+  return el("div", "oasisfox-help-code", head, el("pre", "oasisfox-help-code-body", text));
+}
+
 function block_node(block: Block): HTMLElement {
   switch (block.kind) {
     case "heading": return el(`h${block.level}`, undefined, block.text);
     case "paragraph": return el("p", undefined, ...block.inlines.map(inline_node));
     case "list": return el("ul", undefined, ...block.items.map((item) => el("li", undefined, ...item.map(inline_node))));
-    case "code_block": return el("pre", "oasisfox-help-usage", block.text);
+    case "code_block": return code_block_node(block.text, block.language);
   }
 }
 

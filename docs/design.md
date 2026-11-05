@@ -326,7 +326,7 @@ The content script must have the keymap before the first key. It reads the compi
 ## Bundles and loading
 
 - `background.js`: the registry, the handlers, keymap validation and the shortcut slots.
-- `content.js`: the key listener, the prefix tree, the modes and scrolling. Target: under 15 KB minified.
+- `content.js`: the key listener, the prefix tree, the modes and scrolling. Target: under 16 KB minified.
 - Hints, which-key, caret and visual mode are separate files. Snippets run as their own code. The background injects one with `tabs.executeScript` on first use in a tab.
 - `cmdline.html`: an extension page in an iframe. It has its own bundle with completion and fuzzy matching.
 

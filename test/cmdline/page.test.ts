@@ -38,6 +38,7 @@ function fake_element() {
     style: { setProperty: () => {} },
     append: (...nodes: unknown[]) => void element.children.push(...nodes),
     replaceChildren: (...nodes: unknown[]) => void (element.children = nodes),
+    addEventListener: () => {},
   };
   return element;
 }
