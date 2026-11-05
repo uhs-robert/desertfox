@@ -182,6 +182,17 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, open_p
     expect(hover_events(mark, "p6_hover_swap").join(",") === "hover_in:card,hover_out:card,hover_in:other", `the page saw ${hover_events(mark, "p6_hover_swap")}`);
   });
 
+  await run_case("hovering an item inside a hovered menu keeps the menu open", async () => {
+    await open_page("hoverbox", "p6_hover_nested", { new_tab: true });
+    const mark = events.length;
+    const pick_nested = (label) => run_hint({ action: "hover", filter: "custom", selector: "#menu, #item" }).then(() => sleep(400)).then(() => send_keys(label));
+    await pick_nested("a");
+    await pick_nested("s");
+    await wait_event(mark, (event) => event.type === "hover_in" && event.box === "item" && event.page_id === "p6_hover_nested", "mouseenter on the item");
+    await sleep(300);
+    expect(hover_events(mark, "p6_hover_nested").join(",") === "hover_in:menu,hover_in:item", `the page saw ${hover_events(mark, "p6_hover_nested")}`);
+  });
+
   // Set OASISFOX_SHOT_DIR to also save the two screenshots.
   const shot_dir = process.env.OASISFOX_SHOT_DIR;
   if (shot_dir) {

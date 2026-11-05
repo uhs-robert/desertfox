@@ -21,7 +21,7 @@ function fixture(local: string, extra: Record<string, unknown> = {}) {
   const started: string[] = [];
   const deps = { open_link: (url: string, place: string) => opened.push([url, place]), copy: (text: string) => copied.push(text), start_caret: (_target: unknown, mode: string) => started.push(mode) };
   const run = (action: HintAction) => perform(action, element as never, deps as never);
-  return { calls, opened, copied, started, run };
+  return { calls, opened, copied, started, run, element };
 }
 
 const MOUSE_SEQUENCE = ["pointerover", "pointerenter", "mouseover", "pointerdown", "mousedown", "focus", "pointerup", "mouseup", "click"];
@@ -242,14 +242,97 @@ test("unhover with nothing hovered sends nothing, and a removed element is dropp
   assert.deepEqual(element.calls, ENTER);
 });
 
-test("a click pick leaves the hover alone, so a menu stays open for the click", async () => {
-  const { unhover } = await import("../../src/content/hints/hover.ts");
-  unhover();
+// Nested fakes: a menu holds an item, and contains() answers for the tree.
+function tree() {
   const menu = fixture("div");
   const item = fixture("a", { href: "https://example.com/" });
+  const outside = fixture("div");
+  Object.assign(menu.element, { contains: (other: unknown) => other === menu.element || other === item.element });
+  Object.assign(item.element, { parentElement: menu.element, contains: (other: unknown) => other === item.element });
+  Object.assign(outside.element, { contains: (other: unknown) => other === outside.element });
+  return { menu, item, outside };
+}
+
+const OUT_ONLY = ["pointerout", "mouseout"];
+
+test("hovering an item inside the hovered menu leaves the menu entered", async () => {
+  const { unhover } = await import("../../src/content/hints/hover.ts");
+  unhover();
+  const { menu, item } = tree();
   menu.run("hover");
+  const before = menu.calls.length;
+  item.run("hover");
+  assert.deepEqual(menu.calls.slice(before), OUT_ONLY);
+  assert.deepEqual(item.calls.filter((type) => type === "mouseenter" || type === "pointerenter"), ["pointerenter", "mouseenter"]);
+  unhover();
+  assert.deepEqual(item.calls.slice(-4), LEAVE);
+});
+
+test("hovering an item inside the menu enters the item and not the menu again", async () => {
+  const { unhover } = await import("../../src/content/hints/hover.ts");
+  unhover();
+  const { menu, item } = tree();
+  menu.run("hover");
+  item.run("hover");
+  assert.equal(menu.calls.filter((type) => type === "mouseenter").length, 1);
+  unhover();
+});
+
+test("a click pick inside the hovered menu leaves the menu entered, then clicks", async () => {
+  const { unhover } = await import("../../src/content/hints/hover.ts");
+  unhover();
+  const { menu, item } = tree();
+  menu.run("hover");
+  const before = menu.calls.length;
   item.run("here");
-  assert.deepEqual(menu.calls, ENTER);
+  assert.deepEqual(menu.calls.slice(before), OUT_ONLY);
   assert.equal(item.calls.at(-1), "click");
   unhover();
+  assert.equal(menu.calls.length, before + 2);
+});
+
+test("a click pick outside the hovered element leaves it fully, before the click", async () => {
+  const { unhover } = await import("../../src/content/hints/hover.ts");
+  unhover();
+  const { menu, outside } = tree();
+  menu.run("hover");
+  outside.run("here");
+  assert.deepEqual(menu.calls, [...ENTER, ...LEAVE]);
+  unhover();
+  assert.deepEqual(menu.calls, [...ENTER, ...LEAVE]);
+});
+
+test("the leave events name the element the pointer goes to", async () => {
+  const { hover, unhover } = await import("../../src/content/hints/hover.ts");
+  unhover();
+  const sent: { type: string; relatedTarget: unknown }[] = [];
+  const make = () => ({ localName: "div", click: () => {}, focus: () => {}, remove: () => {}, dispatchEvent: (event: never) => sent.push(event) });
+  const one = make();
+  const two = make();
+  hover(one as never);
+  hover(two as never);
+  assert.equal(sent.find((event) => event.type === "mouseout")!.relatedTarget, two);
+  assert.equal(sent.filter((event) => event.type === "mouseover").at(-1)!.relatedTarget, one);
+  unhover();
+});
+
+test("the tab listener goes on once and a hidden tab clears the hover", async () => {
+  const { hover, unhover } = await import("../../src/content/hints/hover.ts");
+  unhover();
+  const listeners: (() => void)[] = [];
+  const fake_document = { hidden: false, addEventListener: (_type: string, listener: () => void) => void listeners.push(listener) };
+  Object.assign(globalThis, { document: fake_document });
+  const page = fixture("div");
+  try {
+    hover(page.element as never);
+    hover(page.element as never);
+    assert.equal(listeners.length, 1);
+    fake_document.hidden = true;
+    const before = page.calls.length;
+    listeners[0]!();
+    assert.deepEqual(page.calls.slice(before), LEAVE);
+  } finally {
+    delete (globalThis as Record<string, unknown>).document;
+    unhover();
+  }
 });
