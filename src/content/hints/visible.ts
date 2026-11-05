@@ -8,6 +8,8 @@ export type PageProbe<T> = {
   // Position in the viewport of the document that holds the target, and the size of the part a click can reach (without scrollbars).
   // One box per line a wrapped link covers; the bounding box when there are none.
   rects_of: (target: T) => Rect[];
+  // The visible boxes of every scrolling ancestor, in the same coordinates as `rects_of`. A point outside one of them is clipped away, so it cannot hit the target.
+  clips_of: (target: T) => Rect[];
   viewport_of: (target: T) => { width: number; height: number };
   is_hidden_by_style: (target: T) => boolean;
   // Whether the topmost thing at the point is the target, inside it or around it.
@@ -63,10 +65,44 @@ export function viewport_size(
   return { width: box.clientWidth || win.innerWidth, height: box.clientHeight || win.innerHeight };
 }
 
+const has_area = (rect: Rect) => rect.right > rect.left && rect.bottom > rect.top;
+
+export function clip_to(rect: Rect, clips: readonly Rect[]): Rect {
+  return clips.reduce((r, c) => ({ left: Math.max(r.left, c.left), top: Math.max(r.top, c.top), right: Math.min(r.right, c.right), bottom: Math.min(r.bottom, c.bottom) }), rect);
+}
+
+const MAX_FALLBACK_DEPTH = 3;
+const MAX_FALLBACK_CHILDREN = 20;
+
+// The boxes of an element, or when it has none with an area (`display: contents`, a wrapper of floats), the boxes of its children.
+export function boxes_with_fallback<T>(element: T, rects: (e: T) => Rect[], children: (e: T) => T[], depth = MAX_FALLBACK_DEPTH): Rect[] {
+  const own = rects(element).filter(has_area);
+  if (own.length > 0 || depth === 0) return own;
+  return children(element).slice(0, MAX_FALLBACK_CHILDREN).flatMap((child) => boxes_with_fallback(child, rects, children, depth - 1));
+}
+
+type Ancestor = { position: string; clips: boolean; box: Rect };
+
+// The boxes that clip a target, from its chain of ancestors (nearest first, each with its computed position, whether its overflow clips, and its visible box).
+// An absolutely positioned target escapes the clip of ancestors above it until its containing block, and a fixed one escapes them all.
+export function clipping_boxes(own_position: string, ancestors: readonly Ancestor[]): Rect[] {
+  if (own_position === "fixed") return [];
+  let escaping = own_position === "absolute";
+  const boxes: Rect[] = [];
+  for (const ancestor of ancestors) {
+    if (escaping && ancestor.position === "static") continue;
+    escaping = false;
+    if (ancestor.clips) boxes.push(ancestor.box);
+  }
+  return boxes;
+}
+
 export function keep_visible<T>(targets: readonly T[], probe: PageProbe<T>): T[] {
   return targets.filter((target) => {
     if (!probe.is_intersecting(target) || probe.is_hidden_by_style(target)) return false;
-    const points = points_to_probe(probe.rects_of(target), probe.viewport_of(target));
+    const clips = probe.clips_of(target);
+    const rects = probe.rects_of(target).map((rect) => clip_to(rect, clips)).filter(has_area);
+    const points = points_to_probe(rects, probe.viewport_of(target));
     return points.some((point) => probe.is_reachable_at(target, point.x, point.y));
   });
 }

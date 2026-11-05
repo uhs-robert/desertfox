@@ -1,13 +1,14 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { contains_composed, keep_visible, points_to_probe, viewport_size, uncovered_through_frames, visible_point } from "../../src/content/hints/visible.ts";
+import { boxes_with_fallback, clip_to, clipping_boxes, contains_composed, keep_visible, points_to_probe, viewport_size, uncovered_through_frames, visible_point } from "../../src/content/hints/visible.ts";
 import type { PageProbe, Rect } from "../../src/content/hints/visible.ts";
 
-type Box = { name: string; rect: Rect; rects?: Rect[]; reachable_at?: (x: number, y: number) => boolean; intersecting?: boolean; hidden?: boolean; covered_by?: string };
+type Box = { name: string; rect: Rect; rects?: Rect[]; reachable_at?: (x: number, y: number) => boolean; intersecting?: boolean; hidden?: boolean; covered_by?: string; clips?: Rect[] };
 
 const probe: PageProbe<Box> = {
   is_intersecting: (box) => box.intersecting ?? true,
   rects_of: (box) => box.rects ?? [box.rect],
+  clips_of: (box) => box.clips ?? [],
   viewport_of: () => ({ width: 800, height: 600 }),
   is_hidden_by_style: (box) => box.hidden ?? false,
   is_reachable_at: (box, x, y) => box.covered_by === undefined && (box.reachable_at?.(x, y) ?? true),
@@ -111,4 +112,40 @@ test("viewport_size reads the root in standards mode and the body in quirks mode
   assert.deepEqual(viewport_size({ compatMode: "CSS1Compat", documentElement: root, body }, win), { width: 785, height: 2000 });
   assert.deepEqual(viewport_size({ compatMode: "BackCompat", documentElement: root, body }, win), { width: 785, height: 590 });
   assert.deepEqual(viewport_size({ compatMode: "CSS1Compat", documentElement: { clientWidth: 0, clientHeight: 0 }, body: null }, win), { width: 800, height: 600 });
+});
+
+test("a link half scrolled out of its box is kept through its visible half, and one fully out is dropped", () => {
+  const clips = [at(0, 100, 400, 200)];
+  // The middle of the whole link is above the scroll box, where another element sits.
+  const half: Box = { name: "half", rect: at(10, 80, 100, 40), clips, reachable_at: (_x, y) => y >= 100 };
+  const out: Box = { name: "out", rect: at(10, 40, 100, 40), clips, reachable_at: () => true };
+  const inside: Box = { name: "scrolled but inside", rect: at(10, 150, 100, 20), clips, reachable_at: () => true };
+  assert.deepEqual(keep_visible([half, out, inside], probe).map((box) => box.name), ["half", "scrolled but inside"]);
+});
+
+test("clip_to intersects with every box", () => {
+  assert.deepEqual(clip_to(at(0, 0, 100, 100), [at(10, 10, 50, 200), at(0, 0, 30, 30)]), { left: 10, top: 10, right: 30, bottom: 30 });
+});
+
+test("clipping_boxes lets absolute and fixed targets escape ancestors that are not their containing block", () => {
+  const static_clip = { position: "static", clips: true, box: at(0, 0, 10, 10) };
+  const relative_clip = { position: "relative", clips: true, box: at(0, 0, 20, 20) };
+  const no_clip = { position: "static", clips: false, box: at(0, 0, 5, 5) };
+  assert.deepEqual(clipping_boxes("static", [static_clip, no_clip, relative_clip]), [static_clip.box, relative_clip.box]);
+  assert.deepEqual(clipping_boxes("absolute", [static_clip, relative_clip]), [relative_clip.box]);
+  assert.deepEqual(clipping_boxes("fixed", [static_clip, relative_clip]), []);
+});
+
+type Node = { name: string; own: Rect[]; kids?: Node[] };
+
+test("boxes_with_fallback uses the boxes of an element, else of its children, to a limited depth", () => {
+  const rects = (n: Node) => n.own;
+  const kids = (n: Node) => n.kids ?? [];
+  const child = { name: "child", own: [at(1, 1, 10, 10)] };
+  assert.deepEqual(boxes_with_fallback({ name: "own", own: [at(0, 0, 5, 5)], kids: [child] }, rects, kids), [at(0, 0, 5, 5)]);
+  assert.deepEqual(boxes_with_fallback({ name: "zero", own: [at(0, 0, 0, 0)], kids: [child, { name: "empty", own: [] }] }, rects, kids), [at(1, 1, 10, 10)]);
+  const nested = { name: "a", own: [], kids: [{ name: "b", own: [], kids: [child] }] };
+  assert.deepEqual(boxes_with_fallback(nested, rects, kids), [at(1, 1, 10, 10)]);
+  assert.deepEqual(boxes_with_fallback(nested, rects, kids, 1), []);
+  assert.deepEqual(boxes_with_fallback({ name: "none", own: [] }, rects, kids), []);
 });
