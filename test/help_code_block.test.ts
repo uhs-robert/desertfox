@@ -77,3 +77,15 @@ test("a second click cancels the first restore timer so Copied lasts a full peri
   await copy_code_and_confirm(clipboard, "x", button, later, (handle) => void cancelled.push(handle));
   assert.deepEqual(cancelled, [1]);
 });
+
+test("inline code runs render as code elements with the inline class, other text stays plain", () => {
+  const root = render_guide([
+    { kind: "paragraph", inlines: [{ kind: "text", text: "Run " }, { kind: "code", text: "just build-config" }, { kind: "text", text: " now" }] },
+    { kind: "list", items: [[{ kind: "code", text: "<b>x</b>" }]] },
+  ]);
+  const [first, second] = root.find_all("oasisfox-help-inline-code");
+  assert.equal(root.find_all("oasisfox-help-inline-code").length, 2);
+  assert.equal(first!.tag, "code");
+  assert.equal(first!.text, "just build-config");
+  assert.equal(second!.text, "<b>x</b>");
+});

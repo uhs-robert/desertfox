@@ -88,7 +88,7 @@ function engine_table(engines: EngineRow[]): HTMLElement {
 function inline_node(inline: Inline): Child {
   switch (inline.kind) {
     case "text": return inline.text;
-    case "code": return el("code", undefined, inline.text);
+    case "code": return el("code", "oasisfox-help-inline-code", inline.text);
     case "link": {
       const link = el("a", undefined, inline.text);
       link.setAttribute("href", inline.href);

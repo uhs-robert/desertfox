@@ -255,4 +255,5 @@ export const STYLE_CLASSES: { name: string; meaning: string }[] = [
   { name: "oasisfox-help-code-lang", meaning: "The language label of a code block" },
   { name: "oasisfox-help-code-copy", meaning: "The Copy button of a code block" },
   { name: "oasisfox-help-code-body", meaning: "The code text of a code block" },
+  { name: "oasisfox-help-inline-code", meaning: "A code snippet inside a sentence on the help page" },
 ];
