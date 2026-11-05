@@ -42,6 +42,18 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, open_p
     expect(pasted.value === "beta text", `;t d copied "${pasted.value}"`);
   });
 
+  await run_case("f opens a dropdown that opens on mousedown, with one click after the mouse events", async () => {
+    await open_page("chosen", "p6_chosen", { new_tab: true });
+    const mark = events.length;
+    await send_keys("f");
+    await send_keys("a");
+    await wait_event(mark, (event) => event.type === "chosen_open" && event.page_id === "p6_chosen", "the dropdown to open on mousedown");
+    await sleep(300);
+    const seen = events.slice(mark).filter((event) => event.page_id === "p6_chosen" && event.type.startsWith("chosen_")).map((event) => event.type);
+    const order = seen.filter((type) => type !== "chosen_open").join(",");
+    expect(order === "chosen_pointerdown,chosen_mousedown,chosen_mouseup,chosen_click", `the page saw ${order}`);
+  });
+
   await run_case(";s focuses a scroll box, then j scrolls the box and not the page", async () => {
     // The only scroll box is the side panel, so it gets the label "a". The page root is left out.
     await open_page("scrollbox", "p6_scrollbox", { new_tab: true });
