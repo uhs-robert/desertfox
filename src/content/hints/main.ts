@@ -13,7 +13,7 @@ import { clean_letters, make_labels } from "./labels.ts";
 import { create_picker } from "./pick.ts";
 import { create_view } from "./view.ts";
 import { follow_windows } from "./follow.ts";
-import { keep_visible, uncovered_through_frames } from "./visible.ts";
+import { keep_visible, uncovered_through_frames, viewport_size } from "./visible.ts";
 import type { PageProbe } from "./visible.ts";
 
 type HintsWindow = { oasisfox_host: BundleHostApi; oasisfox_hints_ready?: true; oasisfox_caret_target?: Element };
@@ -72,8 +72,11 @@ async function keep_visible_ones(candidates: Found[]): Promise<Found[]> {
   const seen = await observe_intersecting(candidates.map((found) => found.element));
   const probe: PageProbe<Found> = {
     is_intersecting: (found) => seen.has(found.element),
-    rect_of: (found) => found.element.getBoundingClientRect(),
-    viewport_of: (found) => ({ width: window_of(found.element).innerWidth, height: window_of(found.element).innerHeight }),
+    rects_of: (found) => {
+      const lines = Array.from(found.element.getClientRects());
+      return lines.length > 0 ? lines : [found.element.getBoundingClientRect()];
+    },
+    viewport_of: (found) => viewport_size(found.element.ownerDocument, window_of(found.element)),
     is_hidden_by_style: (found) => window_of(found.element).getComputedStyle(found.element).visibility === "hidden",
     is_reachable_at: (found, x, y) => uncovered_through_frames(found, x, y),
   };
