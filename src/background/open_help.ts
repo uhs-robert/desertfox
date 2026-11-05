@@ -20,3 +20,14 @@ export function create_open_help(deps: OpenHelpDeps) {
     },
   };
 }
+
+// What `:help <name>` resolves to: a help page by its title, or a built-in command by its id. Anything else has no target.
+export function help_name_url(help_page_url: string, name: string, command_ids: ReadonlySet<string>): string | undefined {
+  if (name === "") return help_page_url + PAGES[0].hash;
+  const page = PAGES.find((candidate) => candidate.title.toLowerCase() === name.toLowerCase());
+  if (page) return help_page_url + page.hash;
+  return command_ids.has(name) ? command_help_url(help_page_url, name) : undefined;
+}
+
+// The names `:help` completes: the help pages, then every command id.
+export const help_name_choices = (command_ids: Iterable<string>): string[] => [...PAGES.map((page) => page.title), ...command_ids];
