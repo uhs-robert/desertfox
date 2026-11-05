@@ -191,6 +191,7 @@ export const DEFAULT_KEYMAP: KeymapConfig = {
     ";t": { id: "hint.run", args: { action: "copy_text", filter: "prose" }, label: "Copy text of element" },
     ";s": { id: "hint.run", args: { action: "focus", filter: "scrollable" }, label: "Focus scroll box" },
     ";i": { id: "hint.run", args: { filter: "inputs" }, label: "Click input" },
+    ";h": { id: "hint.run", args: { action: "hover", filter: "all" }, label: "Hover element" },
     ";l": { id: "hint.run", args: { filter: "links" }, label: "Click link" },
     ":": { id: "cmdline.open" },
     "/": { id: "find.open", label: "Find forward" },

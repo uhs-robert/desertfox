@@ -106,6 +106,15 @@ export function start_server() {
       const links = `<a href="/page?id=hint_hidden" style="display:none">hidden</a>${covered}<p><a href="/page?id=hint_one">one</a></p><p><a href="/page?id=hint_two">two</a></p>`;
       return response.end(page(`hints ${id}`, links + tall_filler));
     }
+    if (url.pathname === "/hoverbox") {
+      // Plain divs with a mouseenter listener only, no click role and no CSS :hover rule. The page reports each enter and leave.
+      const boxes = '<div id="card" style="width:200px;height:60px;background:#eee">card</div><div id="other" style="width:200px;height:60px;background:#ddd">other</div><div id="menu" style="width:200px;height:80px;background:#ccc">menu<div id="item" style="width:100px;height:30px;background:#bbb">item</div></div>';
+      const script = `<script>for (const box of document.querySelectorAll("#card, #other, #menu, #item")) {
+  box.addEventListener("mouseenter", () => send("hover_in", { box: box.id }));
+  box.addEventListener("mouseleave", () => send("hover_out", { box: box.id }));
+}</script>`;
+      return response.end(page(`hoverbox ${id}`, boxes + script));
+    }
     if (url.pathname === "/chosen") {
       // A custom dropdown that opens on mousedown, as Chosen does: mousedown cancels the default and focuses its own search field. Its click handler only cancels the default. The page reports each mouse event it receives.
       const widget = '<div id="c"><a id="single" href="javascript:void(0)" tabindex="-1">Select</a><ul id="drop" style="position:absolute;left:-9000px"><li><input id="search"></li></ul></div>';

@@ -429,7 +429,7 @@ async function main() {
       writeFileSync(join(config_dir, "keymap.toml"), [
         "[normal]",
         'm = "scroll.to 50"',
-        'go = "open"',
+        'go = ":open"',
         "[browser]",
         '"<A-,>" = "browser.focus_page"',
         '"<A-.>" = "cmdline.open"',

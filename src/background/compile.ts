@@ -90,12 +90,9 @@ function keep_node(node: TreeNode, path: string[], mode: string, input: CompileI
     if (result.ok) {
       // Defaults filled in, so a content-side leaf runs without the registry.
       step.invocation = { ...step.invocation, args: result.args };
-    } else if (result.missing_param === undefined) {
+    } else {
       warnings.push(`${mode}: skipped "${path.join("")}": ${result.error}`);
       return false;
-    } else {
-      // A missing param means the binding wants a prompt. The router opens the command line for it.
-      step.runs_in = "background";
     }
   }
   return true;

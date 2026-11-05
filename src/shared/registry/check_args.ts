@@ -3,6 +3,8 @@
 
 import type { CheckedArgs, CommandDef, DynamicValues, ParamDef, ParamValue } from "../command.ts";
 import {
+  default_of as applicable_default_of,
+  default_value,
   find_param,
   is_context_source,
   is_dynamic_values,
@@ -37,12 +39,22 @@ export function check_args(
     if (!find_param(command, key)) return fail(`${command.id}: unknown arg "${key}"`);
   }
 
+  // A conditional default reads a sibling as the binding or line gave it, coerced (a bool or number arrives as text from the command line), else as that sibling's own default.
+  const known: Record<string, unknown> = {};
+  for (const param of params) {
+    const given = raw[param.name];
+    if (given === undefined) continue;
+    const coerced = coerce(param, given, sources);
+    known[param.name] = coerced.ok ? coerced.value : given;
+  }
+  const default_of = (param: ParamDef) => applicable_default_of(command, param, known);
+
   const args: CheckedArgs = {};
   for (const param of params) {
     const given = raw[param.name];
     if (given === undefined) continue;
-    // An empty value, such as the `offset=` a prompt leaves, counts as left out for a param with no default.
-    if (given === "" && param.default === undefined && !param.when) {
+    // An empty or whitespace-only text, such as the `offset=` a prompt leaves, counts as left out for a param with no default that applies.
+    if (typeof given === "string" && given.trim() === "" && default_of(param) === undefined && !param.when) {
       return { ok: false, error: `missing <${param.name}>`, missing_param: param.name };
     }
     const coerced = coerce(param, given, sources);
@@ -52,12 +64,13 @@ export function check_args(
 
   // Params with `when` come last in this pass: their condition reads a sibling's final value, defaults included.
   for (const param of params) {
-    if (!param.when && args[param.name] === undefined && param.default !== undefined) args[param.name] = param.default;
+    const fallback = default_of(param);
+    if (!param.when && args[param.name] === undefined && fallback !== undefined) args[param.name] = fallback;
   }
   for (const param of params) {
     if (!param.when) continue;
     const explicit = args[param.name] !== undefined;
-    const value = explicit ? args[param.name] : param.default;
+    const value = explicit ? args[param.name] : default_of(param);
     if (value === undefined) continue;
     const error = when_error(command, param, args);
     if (error && explicit) return fail(error);
@@ -105,7 +118,7 @@ function coerce(param: ParamDef, given: unknown, sources: EnumSources): Coerced 
     case "enum": {
       if (typeof given !== "string") return bad("text");
       // The compile stores defaults in each key, so the router sees a default such as search's "" (no engine named) again.
-      if (given === param.default) return { ok: true, value: given };
+      if (given === default_value(param)) return { ok: true, value: given };
       const allowed = enum_values(param, sources);
       if (allowed && !allowed.includes(given)) return bad(`one of ${allowed.join(", ")}`);
       return { ok: true, value: given };

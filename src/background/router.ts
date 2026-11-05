@@ -125,8 +125,7 @@ export function create_router(deps: RouterDeps): Router {
     const counted = apply_count(command, invocation);
     const checked = check_args(command, counted.args, sources);
     if (!checked.ok) {
-      if (checked.missing_param === undefined || !request.may_prompt) return refuse(checked.error);
-      return open(counted.args ?? {}, checked.missing_param);
+      return refuse(checked.error);
     }
 
     const filled = await fill_context_sources(command.id, checked.args, context, active);

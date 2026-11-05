@@ -3,7 +3,7 @@
 
 import type { CommandDef, ParamDef, ParamValue } from "../command.ts";
 import { MODES } from "../command.ts";
-import { find_param, is_context_source, is_dynamic_values, static_values } from "./params.ts";
+import { default_value, find_param, is_conditional_default, is_context_source, is_dynamic_values, static_values } from "./params.ts";
 import { description_problem } from "./summary.ts";
 
 export type CommandInput = Omit<CommandDef, "id">;
@@ -114,7 +114,7 @@ function check_flags(input: CommandInput, fail: Fail): void {
       if (param.type !== "enum" || !values) fail(`${at}.short`, "only an enum with a fixed value list takes a short map");
       for (const [value, letter] of Object.entries(param.short)) {
         if (!values?.includes(value)) fail(`${at}.short.${value}`, "is not one of the values");
-        if (value === param.default) fail(`${at}.short.${value}`, "the default value has no short, because the printer leaves it out");
+        if (value === default_value(param)) fail(`${at}.short.${value}`, "the default value has no short, because the printer leaves it out");
         add_short(letter, `${at}.short.${value}`);
       }
     }
@@ -144,6 +144,13 @@ function check_params(input: CommandInput, fail: Fail): void {
     const at = `params[${index}]`;
     if (param.rest && param.type !== "string") fail(`${at}.rest`, "only a string param can take the rest");
     if (param.when) check_when(input, param, at, fail);
+    if (is_conditional_default(param.default) && param.when) fail(`${at}.default`, "a conditional default cannot be combined with `when` on the same param");
+    if (is_conditional_default(param.default)) {
+      if (param.type === "enum") fail(`${at}.default`, "a conditional default is not allowed on an enum param");
+      check_when(input, { ...param, when: param.default.when }, `${at}.default`, fail);
+      const sibling_name = Object.keys(param.default.when)[0] as string;
+      if (is_conditional_default(find_param(input, sibling_name)?.default)) fail(`${at}.default.when`, `names "${sibling_name}", which has a conditional default itself`);
+    }
   });
 
   const mains = params.filter((param) => param.main);
@@ -168,7 +175,10 @@ function check_param_shape(param: ParamDef, at: string, fail: Fail): void {
   }
   check_value_labels(param, at, fail);
   check_description(param, at, fail);
-  if (param.default !== undefined) {
+  if (is_conditional_default(param.default)) {
+    const problem = value_problem(param, param.default.value);
+    if (problem) fail(`${at}.default.value`, problem);
+  } else if (param.default !== undefined) {
     if (is_context_source(param.default)) {
       if (param.type !== "string") fail(`${at}.default`, "a context source fits only a string param");
     } else {
@@ -185,7 +195,7 @@ function check_value_labels(param: ParamDef, at: string, fail: Fail): void {
   for (const [value, phrase] of Object.entries(param.value_labels)) {
     if (!list.includes(value)) fail(`${at}.value_labels.${value}`, "is not one of the values");
     else if (phrase === "" || phrase !== phrase.trim()) fail(`${at}.value_labels.${value}`, "must be a non-empty phrase without edge spaces");
-    else if (value === param.default) fail(`${at}.value_labels.${value}`, "the default value has no phrase");
+    else if (value === default_value(param)) fail(`${at}.value_labels.${value}`, "the default value has no phrase");
   }
 }
 
@@ -203,7 +213,7 @@ function check_description(param: ParamDef, at: string, fail: Fail): void {
   if (!list) return fail(`${at}.description`, "only an enum with a fixed value list takes a map");
   for (const [value, text] of Object.entries(description)) {
     if (!list.includes(value)) fail(`${at}.description.${value}`, "is not one of the values");
-    else if (value === param.default) fail(`${at}.description.${value}`, "the default value has no flag to describe");
+    else if (value === default_value(param)) fail(`${at}.description.${value}`, "the default value has no flag to describe");
     const problem = description_problem(text);
     if (problem) fail(`${at}.description.${value}`, problem);
   }

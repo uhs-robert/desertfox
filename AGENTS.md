@@ -6,6 +6,8 @@ Guidance for coding agents in this repository. `CLAUDE.md` points here. Keep the
 
 OasisFox is a keyboard-first Firefox extension built around one command registry. Every command is defined once, and keys, the command line, completion, help and which-key all read that definition. It works on its own. Oasis Dots integration is optional, through a native host.
 
+OasisFox has no official release and no users yet, so a breaking change costs nothing. Choose the best long-term design, not the cheap migration. This rule ends at the first official release.
+
 ## Where to look
 
 Read the design for an area before you change it. Read a folder's README before you change or research code in that folder.
@@ -29,7 +31,8 @@ If code and the design disagree, stop and ask the maintainer. Do not change the 
 - Give the native host a fixed set of verbs. Never add a shell or eval verb.
 - Keep no state only in memory. Store it, so a later move to Manifest V3 stays small.
 - Set each command line name by hand. Never derive it from the id. The registry rejects duplicate names.
-- Express flags that exclude each other as one `enum` param with preset flags. `when` is the only condition. Split a command that needs more.
+- Express flags that exclude each other as one `enum` param with preset flags. `when`, and the conditional `default` that reuses its syntax, are the only conditions. Split a command that needs more.
+- Keep every static argument rule in the param schema, checked by the one validator. A command handler reports runtime failures only, never a bad argument value. This is the target: some handlers still refuse argument values (`tab.ts` count, `settings.ts` and others), tracked in issue #152.
 
 ## Public repo rules
 
@@ -60,9 +63,13 @@ just install-profile <dir>  # install into one Firefox profile directory
 just build-config [dir]     # compile the user config into the managed storage config
 ```
 
+After `just build`, reload the add-on in Firefox. A rebuilt `dist/` under a loaded add-on runs old and new scripts together.
+
+Reproduce a visual bug and record it, at 60 fps so flicker shows, before you ask the maintainer or build a fix.
+
 `docs/keymap.md` is generated between its markers from `src/background/default_keymap.ts` and `docs/keymap_planned.toml` (keys that are `later` or `dropped`). Edit those two, then run `just docs-gen`. `just test` fails when the doc is stale.
 
-Run `just test` before every commit. Run `just key-test` after a change to keys, modes, the content script or config reload. It needs a nested Hyprland and runs on demand only. Key tests can run in parallel from different worktrees, with no lock: each run has its own shadow session and clears the ones that dead runs left. Do not run two from one worktree, because each `just key-test` rebuilds and clears that worktree's `dist/`. `KEY_TEST_ONLY=<regex>` runs only the cases whose name matches, plus the cases marked `{ setup: true }` in `test/key/`, which leave state that later cases read. The output tags those as `SETUP`.
+Run `just test` before every commit. Run `just key-test` after a change to keys, modes, the content script or config reload. It needs a nested Hyprland and runs on demand only. Read [`test/key/README.md`](test/key/README.md) before you run it.
 
 ## Planning
 

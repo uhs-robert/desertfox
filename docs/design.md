@@ -67,13 +67,15 @@ The fields follow the Oasis action library (`home/hypr/.config/hypr/lib/act/init
 - `aliases`: more command line names. The defaults ship none.
 - `label`: a short title in sentence case ("Close tab"). Which-key, the palette and completion show it. A key shows this label plus a phrase for each arg its binding sets, see [Which-key](#which-key).
 - `intent`: plain text on one line. Its first sentence is the summary that the completion list shows: it starts with a verb, takes at most 60 characters and names no other command. Later sentences are detail. Help, the status page and which-key hover show all of it. The registry rejects an empty or multi-line one, and a test holds every built-in command to the summary rule.
-- `params`: typed and named. The types are `int`, `float`, `string`, `bool` and `enum`. A later phase adds `key` (one key press, for marks). A param with no `default` and no `when` is required. The order is for display only.
+- `params`: typed and named. The types are `int`, `float`, `string`, `bool` and `enum`. A later phase adds `key` (one key press, for marks). A param with no `default` that applies and no `when` is required. The order is for display only.
 - `value_labels`: on an `enum` param with a fixed value list, a short phrase for each value ("and focus previous"). Which-key adds the phrase to the label when a binding sets that value, and completion shows it beside the value. Every key must be one of `values`, and the default value has no phrase. A value with no phrase reads as the raw value with spaces for underscores. The registry checks this at define time.
 - `description`: one sentence for a flag, under the same rule as the first sentence of an `intent`. A string on a bool or valued param. A map from value to sentence on an enum with a fixed value list, with no entry for the default value. Completion shows it beside the flag. Every flag of a built-in command has one, and a test checks it. The registry checks the sentence at define time when one is present.
 - `main`: the one `string` param that config and the command line take as the subject, for example the URL of `open` or the query of `search`. At most one per command.
 - `short`: the one-letter flag of a param. A string for a bool or a valued param (`short: "r"` gives `-r`, `short: "c"` on a string gives `-c=Work`). A map from value to letter for an enum with a fixed value list (`{ tab: "t" }` gives `-t`). Never on `main`, `rest` or an enum with a runtime list. `-t -b -w` mean where (tab, background, window) and `-c` means container on every command that has those params. A default value gets no letter, because the printer leaves it out.
 - `rest`: marks a `string` param as text with spaces. The grammar already lets the `main` value run to the end of the line.
-- `when`: the param is valid only if one other param has one of the listed values. For example, `container` needs `where` to open a new tab or window, because Firefox cannot change the container of an open tab. This is the only kind of condition. A command that needs more is split into two commands.
+- `when`: the param is valid only if one other param has one of the listed values. For example, `container` needs `where` to open a new tab or window, because Firefox cannot change the container of an open tab. This is the only kind of condition, apart from the conditional default below. A command that needs more is split into two commands.
+- Conditional `default`: `default: { value, when }` with the same `when` syntax. The default applies only while the named param has one of the listed values. Otherwise the param has no default and is required. `open.url` sets `default: { value: "", when: { where: ["tab", "window", "background"] } }` on `url`, so `open` with no URL is an error for `here` and opens the new tab page elsewhere. The default travels in `commands.json`. A conditional default is not allowed on an enum param. Its `when` cannot name a param that has a conditional default itself.
+- Every static argument rule lives in the param schema, and one `check_args` applies it for the command line, key map compile, `tools/build-config` and the router. A command handler should never judge argument values. It should report only runtime failures, such as a tab that is gone, a refusal from Firefox or an empty selection. This is the target. Some handlers still refuse argument values (`tab.ts` count, `settings.ts` and others), tracked in issue #152.
 - `default`: a value, or a context source (`{ from: "current_url" }`, `"selection"`, `"clipboard"`). The router fills a context source where it is available, so a background command can ask for the page selection.
 - `runs_in`: `background` or `content`. The router sends the invocation to that side. A command never runs in both.
 - `needs`: what must be true to run it. `content` means a content script in the tab. A permission name means an optional permission. The router refuses with a message instead of failing silently.
@@ -91,7 +93,7 @@ Define-time checks cover names and params too:
 - At most one param is `main`, and it is a `string`.
 - A long flag names at most one param of a command: no two enum params share a value, and no bool name repeats a value. `_` reads as `-` in a flag, and no value or bool is called `help`. Names and values are lowercase with underscores.
 - A short letter is one ASCII letter, never `h`, and unique within the command.
-- A `when` names a param that exists, with valid values, and never the param itself.
+- A `when`, and the `when` of a conditional default, names a param that exists, with valid values, and never the param itself.
 
 A set of options where at most one can apply, for example open, background tab or copy link for a hint, is one `enum` param with a value per option. Two flags from the set both set that param, so the command line rejects them together. No list of exclusions exists. This turns the hint command into five params: `action`, `filter`, `selector` (with `when: { filter: "custom" }`), `text` and the `rapid` switch.
 
@@ -106,8 +108,8 @@ type Invocation = { id: string; args?: Record<string, unknown>; count?: number }
 ```
 
 - A key binding is one invocation, or an array of invocations that run in order. Pipes have no replacement, because context sources cover the cases the config uses. If a binding ever needs one command's result, a command declares `returns` with a type, and a later step in the array takes it with `{ from: "previous" }`. The keymap loader checks the types. This is not built until a binding needs it.
-- If a binding leaves a required param out, the command line opens and asks for it, with completion for that param's type. This replaces 89 old bindings that opened the command line with text already typed. A binding can prefill the prompt from a context source, for example the current URL for editing.
-- A binding that starts with `:` carries `prompt: { param, prefill? }` in the stored file. The key types its command into the command line and waits, and the user edits it and presses Enter. Phase 1 refuses such a binding.
+- A binding asks for input only through an explicit `prompt`. If a binding leaves a required param out and sets no `prompt`, the loader warns and skips the key. The prompt opens the command line with completion for that param's type. A binding can prefill the prompt from a context source, for example the current URL for editing.
+- A binding that starts with `:` carries `prompt: { param, prefill? }` in the stored file. The key types its command into the command line and waits, and the user edits it and presses Enter.
 - The command line and the config parse the same grammar into an invocation, as described below. Keymaps and the native host also accept the `args` object.
 
 ### Command line syntax
@@ -210,7 +212,7 @@ ww = { run = ":open -w @current_url", label = "New window, edit current URL" }
 ```
 
 - `sa` searches with the `arch` engine in this tab, and `Sa` in a new tab.
-- `ca` reopens the current page in the Family container, and `Ca` opens a prompt prefilled with the current URL in a new Family tab.
+- `ca` reopens the current page in the Family container, and `Ca` opens a prompt, set by an explicit `prompt` on the generated key, prefilled with the current URL in a new Family tab.
 - Containers themselves need no file. Firefox lists their names, colors and icons through `contextualIdentities.query()`, and completion and the `container` param use that list. A name in `container_keys` that does not exist gets a warning at load and is skipped.
 - The prefixes for generated bindings (`s` and `S`, `c` and `C`) are settings. An explicit binding in the keymap wins over a generated one.
 
@@ -300,7 +302,7 @@ window.wrappedJSObject.my_app.toggle_ids(args.query);
 
 - `short=` gives a bool or a valued param its flag letter (`short=a`). An enum maps values to letters: `short=tab:t,window:w`. The letter rules are the define-time checks above.
 - `modes` is optional. It lists the modes where a key can run the snippet, from `normal`, `caret` and `visual`. The default is `normal`. Any other name is a build-config error.
-- `tools/build-config` turns the header into a normal registry entry. Snippet commands get keys, which-key rows, help, completion and prompts for missing params the same as built-in commands.
+- `tools/build-config` turns the header into a normal registry entry. Snippet commands get keys, which-key rows, help, completion and prompts (through an explicit `prompt`) the same as built-in commands.
 - The router checks args, then runs the code in the tab's content script with `tabs.executeScript`, with `args` defined. `window.wrappedJSObject` reaches the page's own functions.
 - `matches` limits where the command runs. On other pages the router refuses with a message.
 - Errors from the code are caught and shown as a message, with the snippet id.
@@ -360,7 +362,7 @@ Tabs and bookmarks come from the background, because it knows the window and pri
 - Candidates come from one query per filter (all, clickable, buttons, inputs, links, prose, scrollable): a selector plus an optional test, such as `prose` keeping elements with a text node of their own. The search reaches open shadow roots and, through Firefox's `openOrClosedShadowRoot`, closed ones.
 - An IntersectionObserver batch finds visible candidates. An `elementFromPoint` check removes covered ones.
 - Labels render in a closed shadow root. All layout reads happen before any write.
-- The actions are open, background tab, new window, start caret mode, start visual mode, copy link, copy text, delete element and focus. Rapid mode keeps hints open for several picks.
+- The actions are open, background tab, new window, start caret mode, start visual mode, copy link, copy text, delete element, focus and hover. Hover sends the pointer events a mouse sends on entering (over, enter and move), from the middle of the element, so a menu or preview that a script opens appears. The next hover, Escape, a hidden tab or another pick ends it, and a pick inside the hovered element keeps it entered. A CSS `:hover` rule does not react, because synthetic events do not set it. Rapid mode keeps hints open for several picks.
 
 ### Which-key
 
@@ -422,9 +424,9 @@ Firefox keeps the background awake while the port is open, which also helps a la
 
 | Phase | Contents |
 | --- | --- |
-| v1 | Snippets and `config.reload`, with the managed storage config and `tools/build-config`. Normal, insert and ignore modes. Scrolling, back and forward, reload, stop, home, parent and root URL. Tab and window commands, including containers and closed-tab undo. Search engines and the prompt for missing args. Bookmarks. Hints with every action above, rapid mode included. Copying the URL in 6 formats. Zoom. Search engines with slots and children replace the former site commands (site search, GitHub, subreddit, archive, isdown, translate), which now ship as examples. |
+| v1 | Snippets and `config.reload`, with the managed storage config and `tools/build-config`. Normal, insert and ignore modes. Scrolling, back and forward, reload, stop, home, parent and root URL. Tab and window commands, including containers and closed-tab undo. Search engines and explicit prompts. Bookmarks. Hints with every action above, rapid mode included. Copying the URL in 6 formats. Zoom. Search engines with slots and children replace the former site commands (site search, GitHub, subreddit, archive, isdown, translate), which now ship as examples. |
 | Later | History completion. Marks and quickmarks. Changing the number in a URL, following next and previous page links, the jump list, a QR code of the URL and view source. |
-| Dropped | Shell access, string eval, command strings with chaining and pipes, a config language, userChrome editing, rewriting Firefox prefs, an external editor, page-event hooks, per-site config, a key-grab mode, macros, a theme engine, an update nag, an interactive tutorial and joke commands. |
+| Dropped | Shell access, string eval, command strings with chaining and pipes, a config language, userChrome editing, rewriting Firefox prefs, an external editor, page-event hooks, a key-grab mode, a theme engine, an update nag, an interactive tutorial and joke commands. |
 
 ## Trade-offs
 
@@ -451,9 +453,17 @@ Firefox keeps the background awake while the port is open, which also helps a la
 
 1. Phase 0, spike. Done. See [spike.md](spike.md).
 2. Phase 1, core. It covers the registry, `commands.json`, the managed storage config, `tools/build-config`, `config.reload`, keymap validation, the prefix tree, modes, scroll and page commands, tab commands, the shortcut slots and the help page. Exit: every v1 row of the binding map that needs no hints or command line works, and the content script stays under its size target.
-3. Phase 2, interfaces. Command line, completion, prompts for missing args, hints, which-key, snippets, and caret and visual modes. Exit: the whole v1 column of the binding map works, and OasisFox replaces the current extension in daily use.
-4. Phase 3, browser data. History completion, marks, the remaining later rows, and the options page import for users without a shell.
-5. Phase 4, Oasis. The native host merged with voxcmd's, `oasisfox list` and `run`, the Quickshell which-key, and the Oasis theme file written on theme change.
+3. Phase 2, interfaces. Command line, completion, explicit prompts, hints, which-key, snippets, and caret and visual modes. Exit: the whole v1 column of the binding map works, and OasisFox replaces the current extension in daily use.
+4. Command line status area. A `statusbar_widgets` list setting, default `url, scroll, tabs`, on the right of the open command line. `url` is colored by security state from the theme's ok, warn and error tokens. `scroll` shows Top, N%, Bot or All. `tabs` shows [n/m]. Each value is a snapshot taken when the line opens. `history` is a later widget. `keypress`, `progress`, `scroll_raw`, `text` and `clock` are not planned. `search_match` waits for a page search built on Firefox's find API, because Firefox's find bar hides its count.
+5. Phase 3, browser data. History completion, marks, the remaining later rows, and the options page import for users without a shell.
+6. Per-site key pass-through. The need: keep some keys off on chosen sites and the rest on, where `ignore_sites` turns off every key. The design is open.
+7. Registers, before macros. `"` holds the last yank, `a` to `z` are named, `+` is the clipboard, `_` is the black hole and `/` is the last search. `"ay` yanks into a register, `"ap` pastes from it and `:registers` lists them.
+8. Macros, with `.` repeat first. `.` repeats the last command or inserted text. Recording and replay follow: `q<reg>` records into a register, `@<reg>` replays it, a count (`5@q`) or `@@` repeats it. A macro records commands and the text typed in insert mode. Replay inserts text like a paste, not as key events, and stops at the first failed step.
+9. Base16 theme importer, after macros.
+10. Toolbar click menu and icon. The menu turns OasisFox on and off and opens help. The icon greys out when it is off. The design is open: it does not yet say whether off applies to all sites or one, or how it differs from `ignore_sites`. The icon is a placeholder until a real one with an off state exists.
+11. Phase 4, Oasis. The native host merged with voxcmd's, `oasisfox list` and `run`, the Quickshell which-key, and the Oasis theme file written on theme change.
+12. Phase 4, write-back of `:set`. `:set` and `:unset` change settings for the session only. Phase 4 writes them to the TOML config through the native host. Add-on storage never holds them, so nothing drifts from the user's config.
+13. Release path. The maintainer installs through `just release` (signed, unlisted) now. A listed addons.mozilla.org release is a later piece: the listing, a source upload, Mozilla review, permission justifications and a privacy note.
 
 ## Open questions
 

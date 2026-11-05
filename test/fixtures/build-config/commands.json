@@ -55,7 +55,17 @@
         {
           "name": "url",
           "type": "string",
-          "main": true
+          "main": true,
+          "default": {
+            "value": "",
+            "when": {
+              "where": [
+                "tab",
+                "window",
+                "background"
+              ]
+            }
+          }
         },
         {
           "name": "container",
@@ -80,7 +90,12 @@
             "background",
             "window"
           ],
-          "default": "here"
+          "default": "here",
+          "short": {
+            "tab": "t",
+            "background": "b",
+            "window": "w"
+          }
         }
       ]
     },
@@ -98,7 +113,8 @@
           "type": "enum",
           "values": {
             "from": "search_engines"
-          }
+          },
+          "default": ""
         },
         {
           "name": "query",

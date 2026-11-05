@@ -5,12 +5,12 @@ import { WHERE, WHERE_SHORT } from "./open_target.ts";
 define("hint.run", {
   name: "hint",
   label: "Hint",
-  intent: "Pick a page element by key and act on it. It labels the elements on the page with keys, then acts on the one you pick: open it here, in a tab, in a background tab or in a window, copy its address or its text, delete it or focus it. Caret and visual start caret mode or visual mode at the element. Rapid keeps hint mode open for more picks. Text keeps only the links whose text holds it.",
+  intent: "Pick a page element by key and act on it. It labels the elements on the page with keys, then acts on the one you pick: open it here, in a tab, in a background tab or in a window, copy its address or its text, delete it, focus it or hover it. Hover sends the pointer events a mouse sends on entering, so menus, tooltips and previews that a script opens appear. A menu that only a CSS :hover rule opens does not. Escape or the next hover ends it. Caret and visual start caret mode or visual mode at the element. Rapid keeps hint mode open for more picks. Text keeps only the links whose text holds it.",
   params: [
     {
       name: "action",
       type: "enum",
-      values: [...WHERE, "caret", "visual", "copy", "copy_text", "delete", "focus"],
+      values: [...WHERE, "caret", "visual", "copy", "copy_text", "delete", "focus", "hover"],
       default: "here",
       short: { ...WHERE_SHORT, caret: "c", visual: "v", copy: "y", copy_text: "Y", delete: "d", focus: "f" },
       value_labels: {
@@ -23,6 +23,7 @@ define("hint.run", {
         copy_text: "to copy text",
         delete: "to delete",
         focus: "to focus",
+        hover: "to hover",
       },
       description: {
         tab: "Open the element in a new tab.",
@@ -34,6 +35,7 @@ define("hint.run", {
         copy_text: "Copy the text of the element.",
         delete: "Delete the element from the page.",
         focus: "Focus the element.",
+        hover: "Hover the element, which a CSS :hover rule ignores.",
       },
     },
     {

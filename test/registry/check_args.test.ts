@@ -141,3 +141,58 @@ test("types coerce from strings", () => {
   assert.match(error_of(check_args(command, { count_of: 1, ratio: 1, loud: "yes", text: "t" })), /loud expects true or false/);
   assert.match(error_of(check_args(command, { count_of: 1, ratio: 1, loud: true, text: 5 })), /text expects text/);
 });
+
+test("a conditional default fills only while its sibling has a listed value, else the param is required", () => {
+  const reg = create_registry();
+  reg.define("c.d", {
+    label: "CD",
+    intent: "x",
+    params: [
+      { name: "where", type: "enum", values: ["here", "tab"], default: "here" },
+      { name: "text", type: "string", main: true, default: { value: "", when: { where: ["tab"] } } },
+    ],
+    runs_in: "background",
+    run: () => {},
+  });
+  const command = reg.get("c.d")!;
+  assert.deepEqual(check_args(command, { where: "tab" }), { ok: true, args: { where: "tab", text: "" } });
+  assert.deepEqual(check_args(command, { where: "tab", text: "" }), { ok: true, args: { where: "tab", text: "" } });
+  assert.deepEqual(check_args(command, {}), { ok: false, error: "missing <text>", missing_param: "text" });
+  assert.deepEqual(check_args(command, { text: "" }), { ok: false, error: "missing <text>", missing_param: "text" });
+  assert.deepEqual(check_args(command, { text: "x" }), { ok: true, args: { where: "here", text: "x" } });
+});
+
+test("a whitespace-only text counts as missing for a required param, and a default still applies", () => {
+  const reg = create_registry();
+  reg.define("w.x", {
+    label: "WX",
+    intent: "x",
+    params: [
+      { name: "text", type: "string", main: true },
+      { name: "note", type: "string", default: "" },
+    ],
+    runs_in: "background",
+    run: () => {},
+  });
+  const command = reg.get("w.x")!;
+  assert.deepEqual(check_args(command, { text: "   " }), { ok: false, error: "missing <text>", missing_param: "text" });
+  assert.deepEqual(check_args(command, { text: "a", note: "  " }), { ok: true, args: { text: "a", note: "  " } });
+});
+
+function conditional_command(sibling: object) {
+  const reg = create_registry();
+  reg.define("c.e", {
+    label: "CE",
+    intent: "x",
+    params: [sibling as never, { name: "text", type: "string", main: true, default: { value: "", when: { flag: [true] } } }],
+    runs_in: "background",
+    run: () => {},
+  });
+  return reg.get("c.e")!;
+}
+
+test("a conditional default reads a bool sibling after it is coerced from text", () => {
+  const command = conditional_command({ name: "flag", type: "bool" });
+  assert.deepEqual(check_args(command, { flag: "true" }), { ok: true, args: { flag: true, text: "" } });
+  assert.equal(check_args(command, { flag: "false" }).ok, false);
+});

@@ -139,6 +139,18 @@ test("search_keys and container_keys generate bindings, explicit ones win", () =
   assert.ok(children["S"] && children["c"] && children["C"]);
 });
 
+test("a generated C key asks for the url, prefilled with the current page", () => {
+  const { compiled, warnings } = compile({ container_keys: { a: "Family", b: "Work" } });
+  assert.deepEqual(warnings, []);
+  const c = compiled.modes.normal!.children["C"] as unknown as { children: Record<string, { steps: { invocation: { id: string; args: unknown; prompt: unknown } }[] }> };
+  for (const [key, container] of [["a", "Family"], ["b", "Work"]]) {
+    const invocation = c.children[key!]!.steps[0]!.invocation;
+    assert.equal(invocation.id, "open.url");
+    assert.deepEqual(invocation.args, { where: "tab", container });
+    assert.deepEqual(invocation.prompt, { param: "url", prefill: { from: "current_url" } });
+  }
+});
+
 const walk = (matcher: ReturnType<typeof create_matcher>, mode: string, keys: string[]) =>
   keys.map((key) => matcher.feed(mode, key));
 

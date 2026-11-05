@@ -4,7 +4,7 @@
 import type { CommandMeta, Mode, ParamDef } from "../../shared/command.ts";
 import { first_sentence, flag_alternatives, tokenize, usage_line } from "../../shared/registry/index.ts";
 import type { CommandLookup, EnumSources } from "../../shared/registry/index.ts";
-import { bare_word_param, flag_params, is_dynamic_values, static_values, subject_param } from "../../shared/registry/params.ts";
+import { bare_word_param, default_value, flag_params, is_dynamic_values, static_values, subject_param } from "../../shared/registry/params.ts";
 import { rank } from "../../shared/score.ts";
 import { is_setting_name, SETTING_NAMES, SETTING_SPECS } from "../../shared/settings_schema.ts";
 import type { Ranked } from "../../shared/score.ts";
@@ -62,7 +62,7 @@ type Flag = { long: string; short: string | undefined; description: string; valu
 
 // One flag per `--` form that `flag_alternatives` lists, with the short forms before it.
 function flags_of(param: ParamDef): Flag[] {
-  const values = param.type === "enum" ? static_values(param)?.filter((value) => value !== param.default) : undefined;
+  const values = param.type === "enum" ? static_values(param)?.filter((value) => value !== default_value(param)) : undefined;
   const flags: Flag[] = [];
   let shorts: string[] = [];
   for (const form of flag_alternatives(param)) {

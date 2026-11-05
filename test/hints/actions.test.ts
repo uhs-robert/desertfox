@@ -21,7 +21,7 @@ function fixture(local: string, extra: Record<string, unknown> = {}) {
   const started: string[] = [];
   const deps = { open_link: (url: string, place: string) => opened.push([url, place]), copy: (text: string) => copied.push(text), start_caret: (_target: unknown, mode: string) => started.push(mode) };
   const run = (action: HintAction) => perform(action, element as never, deps as never);
-  return { calls, opened, copied, started, run };
+  return { calls, opened, copied, started, run, element };
 }
 
 const MOUSE_SEQUENCE = ["pointerover", "pointerenter", "mouseover", "pointerdown", "mousedown", "focus", "pointerup", "mouseup", "click"];
@@ -193,4 +193,207 @@ test("focus twice inside the flash still restores the original outline", (contex
   perform("focus", page.element as never, deps);
   context.mock.timers.tick(5000);
   assert.equal(page.outline.value, "1px dotted red");
+});
+
+const ENTER = ["pointerover", "pointerenter", "mouseover", "mouseenter", "pointermove", "mousemove"];
+const LEAVE = ["pointerout", "pointerleave", "mouseout", "mouseleave"];
+
+test("hover sends the enter events in order, with no click and no focus", async () => {
+  const { unhover } = await import("../../src/content/hints/hover.ts");
+  unhover();
+  const page = fixture("div");
+  page.run("hover");
+  assert.deepEqual(page.calls, ENTER);
+  unhover();
+});
+
+test("hover events bubble except enter and leave, and come from the middle", async () => {
+  const { hover, unhover } = await import("../../src/content/hints/hover.ts");
+  const sent: { type: string; bubbles: boolean; clientX: number; clientY: number }[] = [];
+  hover({ localName: "div", click: () => {}, focus: () => {}, remove: () => {}, dispatchEvent: (event: never) => sent.push(event), getBoundingClientRect: () => ({ left: 10, top: 20, width: 100, height: 40 }) } as never);
+  unhover();
+  for (const event of sent) assert.equal(event.bubbles, !/(enter|leave)$/.test(event.type), event.type);
+  assert.deepEqual([sent[0]!.clientX, sent[0]!.clientY], [60, 40]);
+});
+
+test("a second hover clears the first exactly once, before its own enter events", async () => {
+  const { unhover } = await import("../../src/content/hints/hover.ts");
+  const first = fixture("div");
+  const second = fixture("div");
+  first.run("hover");
+  second.run("hover");
+  assert.deepEqual(first.calls, [...ENTER, ...LEAVE]);
+  assert.deepEqual(second.calls, ENTER);
+  unhover();
+  unhover();
+  assert.deepEqual(second.calls, [...ENTER, ...LEAVE]);
+});
+
+test("unhover with nothing hovered sends nothing, and a removed element is dropped without events", async () => {
+  const { unhover } = await import("../../src/content/hints/hover.ts");
+  unhover();
+  const page = fixture("div", { isConnected: true });
+  const element = fixture("div", { isConnected: false });
+  page.run("hover");
+  element.run("hover");
+  assert.deepEqual(page.calls, [...ENTER, ...LEAVE]);
+  unhover();
+  assert.deepEqual(element.calls, ENTER);
+});
+
+// Nested fakes: a menu holds an item, and contains() answers for the tree.
+function tree() {
+  const menu = fixture("div");
+  const item = fixture("a", { href: "https://example.com/" });
+  const outside = fixture("div");
+  Object.assign(menu.element, { parentElement: null });
+  Object.assign(item.element, { parentElement: menu.element });
+  return { menu, item, outside };
+}
+
+const OUT_ONLY = ["pointerout", "mouseout"];
+
+test("hovering an item inside the hovered menu leaves the menu entered", async () => {
+  const { unhover } = await import("../../src/content/hints/hover.ts");
+  unhover();
+  const { menu, item } = tree();
+  menu.run("hover");
+  const before = menu.calls.length;
+  item.run("hover");
+  assert.deepEqual(menu.calls.slice(before), OUT_ONLY);
+  assert.deepEqual(item.calls.filter((type) => type === "mouseenter" || type === "pointerenter"), ["pointerenter", "mouseenter"]);
+  unhover();
+  assert.deepEqual(item.calls.slice(-4), LEAVE);
+});
+
+test("hovering an item inside the menu enters the item and not the menu again", async () => {
+  const { unhover } = await import("../../src/content/hints/hover.ts");
+  unhover();
+  const { menu, item } = tree();
+  menu.run("hover");
+  item.run("hover");
+  assert.equal(menu.calls.filter((type) => type === "mouseenter").length, 1);
+  unhover();
+});
+
+test("a click pick inside the hovered menu leaves the menu entered, then clicks", async () => {
+  const { unhover } = await import("../../src/content/hints/hover.ts");
+  unhover();
+  const { menu, item } = tree();
+  menu.run("hover");
+  const before = menu.calls.length;
+  item.run("here");
+  assert.deepEqual(menu.calls.slice(before), OUT_ONLY);
+  assert.equal(item.calls.at(-1), "click");
+});
+
+test("after a pick inside the hovered menu, Escape still closes the menu", async () => {
+  const { unhover } = await import("../../src/content/hints/hover.ts");
+  unhover();
+  const { menu, item } = tree();
+  menu.run("hover");
+  item.run("here");
+  const before = menu.calls.length;
+  unhover();
+  assert.deepEqual(menu.calls.slice(before), ["pointerleave", "mouseleave"]);
+});
+
+test("a click pick outside the hovered element leaves it fully, before the click", async () => {
+  const { unhover } = await import("../../src/content/hints/hover.ts");
+  unhover();
+  const { menu, outside } = tree();
+  menu.run("hover");
+  outside.run("here");
+  assert.deepEqual(menu.calls, [...ENTER, ...LEAVE]);
+  unhover();
+  assert.deepEqual(menu.calls, [...ENTER, ...LEAVE]);
+});
+
+test("the leave events name the element the pointer goes to", async () => {
+  const { hover, unhover } = await import("../../src/content/hints/hover.ts");
+  unhover();
+  const sent: { type: string; relatedTarget: unknown }[] = [];
+  const make = () => ({ localName: "div", click: () => {}, focus: () => {}, remove: () => {}, dispatchEvent: (event: never) => sent.push(event) });
+  const one = make();
+  const two = make();
+  hover(one as never);
+  hover(two as never);
+  assert.equal(sent.find((event) => event.type === "mouseout")!.relatedTarget, two);
+  assert.equal(sent.filter((event) => event.type === "mouseover").at(-1)!.relatedTarget, one);
+  unhover();
+});
+
+test("the tab listener goes on once and a hidden tab clears the hover", async () => {
+  const { hover, unhover } = await import("../../src/content/hints/hover.ts");
+  unhover();
+  const listeners: (() => void)[] = [];
+  const fake_document = { hidden: false, addEventListener: (_type: string, listener: () => void) => void listeners.push(listener) };
+  Object.assign(globalThis, { document: fake_document });
+  const page = fixture("div");
+  try {
+    hover(page.element as never);
+    hover(page.element as never);
+    assert.equal(listeners.length, 1);
+    fake_document.hidden = true;
+    const before = page.calls.length;
+    listeners[0]!();
+    assert.deepEqual(page.calls.slice(before), LEAVE);
+  } finally {
+    delete (globalThis as Record<string, unknown>).document;
+    unhover();
+  }
+});
+
+test("a move from a shadow host to an item inside its shadow root keeps the host entered", async () => {
+  const { unhover } = await import("../../src/content/hints/hover.ts");
+  unhover();
+  const host = fixture("div");
+  const inner = fixture("div");
+  Object.assign(inner.element, { parentElement: null, getRootNode: () => ({ host: host.element }) });
+  host.run("hover");
+  const before = host.calls.length;
+  inner.run("hover");
+  assert.deepEqual(host.calls.slice(before), OUT_ONLY);
+  unhover();
+  assert.deepEqual(host.calls.slice(before + 2), ["pointerleave", "mouseleave"]);
+});
+
+test("every event of one move shares the point, whatever box its element has", async () => {
+  const { hover, unhover } = await import("../../src/content/hints/hover.ts");
+  unhover();
+  const sent: { type: string; clientX: number; clientY: number }[] = [];
+  const make = (box: { left: number; top: number; width: number; height: number }, parent?: unknown) => ({ localName: "div", click: () => {}, focus: () => {}, remove: () => {}, parentElement: parent ?? null, dispatchEvent: (event: never) => sent.push(event), getBoundingClientRect: () => box });
+  const wide = make({ left: 0, top: 0, width: 1000, height: 1000 });
+  const small = make({ left: 10, top: 10, width: 20, height: 20 }, wide);
+  const other = make({ left: 500, top: 500, width: 10, height: 10 });
+  hover(small as never);
+  const entered = sent.splice(0);
+  assert.deepEqual(new Set(entered.map((event) => `${event.clientX},${event.clientY}`)), new Set(["20,20"]));
+  hover(other as never);
+  const left = sent.filter((event) => event.type.endsWith("out") || event.type.endsWith("leave"));
+  const entered_other = sent.filter((event) => !left.includes(event));
+  assert.deepEqual(new Set(left.map((event) => `${event.clientX},${event.clientY}`)), new Set(["20,20"]));
+  assert.deepEqual(new Set(entered_other.map((event) => `${event.clientX},${event.clientY}`)), new Set(["505,505"]));
+  unhover();
+});
+
+test("hovering the element that is already hovered sends nothing", async () => {
+  const { unhover } = await import("../../src/content/hints/hover.ts");
+  unhover();
+  const page = fixture("div");
+  page.run("hover");
+  page.run("hover");
+  assert.deepEqual(page.calls, ENTER);
+  unhover();
+  assert.deepEqual(page.calls, [...ENTER, ...LEAVE]);
+});
+
+test("enter and leave events stay inside their shadow tree, the others cross it", async () => {
+  const { hover, unhover } = await import("../../src/content/hints/hover.ts");
+  unhover();
+  const sent: { type: string; composed: boolean }[] = [];
+  hover({ localName: "div", click: () => {}, focus: () => {}, remove: () => {}, dispatchEvent: (event: never) => sent.push(event) } as never);
+  unhover();
+  for (const event of sent) assert.equal(event.composed, !/(enter|leave)$/.test(event.type), event.type);
+  assert.ok(sent.some((event) => event.type === "mouseover" && event.composed));
 });

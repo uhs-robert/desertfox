@@ -16,11 +16,11 @@ A key shows the command label plus a phrase for each arg its binding sets, for e
 
 The `caret`, `visual` and `cmdline` rows bind placeholder commands that refuse until their piece builds them.
 
-A note "(prompts)" means the binding leaves a param out, so the command line asks for it.
+A note "(prompts)" means the binding sets a `prompt` for a param, so the command line asks for it.
 
 <!-- BEGIN generated -->
 
-bound: 215 (normal 137, hint 2, cmdline 13, caret 26, visual 32, insert 1, ignore 1, browser 3) | later: 14 | dropped: 6
+bound: 216 (normal 138, hint 2, cmdline 13, caret 26, visual 32, insert 1, ignore 1, browser 3) | later: 14 | dropped: 6
 
 ### normal
 
@@ -153,6 +153,7 @@ bound: 215 (normal 137, hint 2, cmdline 13, caret 26, visual 32, insert 1, ignor
 | `;t` | bound | `hint --copy-text --prose` | Copy text of element |  |
 | `;s` | bound | `hint --focus --scrollable` | Focus scroll box |  |
 | `;i` | bound | `hint --inputs` | Click input |  |
+| `;h` | bound | `hint --hover --all` | Hover element |  |
 | `;l` | bound | `hint --links` | Click link |  |
 | `:` | bound | `cmdline.open` | Command line |  |
 | `/` | bound | `find` | Find forward |  |

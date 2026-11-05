@@ -4,7 +4,7 @@
 import type { CommandMeta } from "../../shared/command.ts";
 import type { KeymapMode } from "../../shared/keymap.ts";
 import type { CompiledKeymap, TreeNode } from "../../shared/prefix_tree.ts";
-import { flag_params } from "../../shared/registry/params.ts";
+import { default_of, flag_params } from "../../shared/registry/params.ts";
 
 // Keys shown before the rest fold into `+N`.
 const SHOWN_KEYS = 2;
@@ -18,7 +18,7 @@ const by_length_lowercase_first = (left: string, right: string) => {
 };
 
 // The compiled tree fills defaults into `args`, so an arg set to its default says nothing. Only a value that differs from
-// the default marks the binding. A required param left out makes the command prompt on its own, so that is not bare.
+// the default marks the binding.
 // `none` runs the command with nothing typed after it, `flags` only with flags. Any other binding gives a value
 // (`sg` for the google engine) and belongs to the row of that value.
 function bareness(command: CommandMeta, args: Record<string, unknown> | undefined, prompted: boolean): "none" | "flags" | undefined {
@@ -28,10 +28,10 @@ function bareness(command: CommandMeta, args: Record<string, unknown> | undefine
   for (const param of command.params ?? []) {
     const given = args?.[param.name];
     if (given === undefined) {
-      if (param.default === undefined && param.type !== "bool" && !param.when) return undefined;
+      if (default_of(command, param, args ?? {}) === undefined && param.type !== "bool" && !param.when) return undefined;
       continue;
     }
-    if (param.default !== undefined && JSON.stringify(given) === JSON.stringify(param.default)) continue;
+    if (JSON.stringify(given) === JSON.stringify(default_of(command, param, args ?? {}))) continue;
     if (!flags.has(param.name)) return undefined;
     kind = "flags";
   }

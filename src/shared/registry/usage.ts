@@ -1,5 +1,5 @@
 import type { CommandDef, ParamDef } from "../command.ts";
-import { bare_word_param, flag_params, is_context_source, is_dynamic_values, static_values, subject_param } from "./params.ts";
+import { bare_word_param, default_value, literal_default, flag_params, is_dynamic_values, static_values, subject_param } from "./params.ts";
 
 type Usable = Pick<CommandDef, "id" | "name" | "params">;
 
@@ -14,7 +14,7 @@ export function usage_line(command: Usable): string {
 }
 
 function is_optional(param: ParamDef): boolean {
-  return param.type === "bool" || param.when !== undefined || (param.default !== undefined && !is_context_source(param.default));
+  return param.type === "bool" || param.when !== undefined || literal_default(param) !== undefined;
 }
 
 function subject_usage(param: ParamDef): string {
@@ -35,7 +35,7 @@ export function flag_alternatives(param: ParamDef): string[] {
     alternatives = [...(typeof param.short === "string" ? [`-${param.short}`] : []), `--${dashed(param.name)}`];
   } else if (param.type === "enum" && static_values(param)) {
     // The default value is the state without the flag, so it needs no mention.
-    const values = (static_values(param) ?? []).filter((value) => value !== param.default);
+    const values = (static_values(param) ?? []).filter((value) => value !== default_value(param));
     alternatives = values.flatMap((value) => {
       const letter = typeof param.short === "object" ? param.short[value] : undefined;
       return [...(letter ? [`-${letter}`] : []), `--${dashed(value)}`];

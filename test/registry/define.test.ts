@@ -200,3 +200,27 @@ test("value_labels: keys must be values, the default has no phrase, phrases are 
   rejects("tab.e", { ...base, params: [{ name: "engine", type: "enum", values: { from: "search_engines" }, value_labels: { a: "b" } }] }, /value_labels: only an enum with a fixed value list/);
   rejects("tab.f", { ...base, params: [{ name: "n", type: "int", value_labels: { a: "b" } }] }, /value_labels: only an enum/);
 });
+
+test("a conditional default checks its value and its when like a when", () => {
+  const with_default = (value: unknown, when: Record<string, readonly (string | number | boolean)[]>): CommandInput => ({
+    ...base,
+    params: [
+      { name: "where", type: "enum", values: ["a", "b"], default: "a" },
+      { name: "text", type: "string", default: { value, when } } as never,
+    ],
+  });
+  rejects("a.b", with_default("", { missing: ["a"] }), /params\[1\]\.default\.when: names "missing"/);
+  rejects("a.b", with_default("", { where: ["c"] }), /params\[1\]\.default\.when\.where: "c" is not one of a, b/);
+  rejects("a.b", with_default(3, { where: ["b"] }), /params\[1\]\.default\.value: 3 is not a string/);
+  assert.doesNotThrow(() => create_registry().define("a.b", with_default("", { where: ["b"] })));
+});
+
+test("a conditional default is rejected next to when, on an enum, and when it names another conditional default", () => {
+  const where = { name: "where", type: "enum", values: ["a", "b"], default: "a" };
+  const text = (extra: object) => ({ name: "text", type: "string", default: { value: "", when: { where: ["b"] } }, ...extra });
+  const with_params = (...params: object[]): CommandInput => ({ ...base, params: params as never });
+  rejects("a.b", with_params(where, text({ when: { where: ["b"] } })), /params\[1\]\.default: a conditional default cannot be combined with `when`/);
+  rejects("a.b", with_params(where, { name: "pick", type: "enum", values: ["x", "y"], default: { value: "x", when: { where: ["b"] } } }), /params\[1\]\.default: a conditional default is not allowed on an enum param/);
+  rejects("a.b", with_params(where, text({}), { name: "more", type: "string", default: { value: "", when: { text: [""] } } }), /params\[2\]\.default\.when: names "text", which has a conditional default itself/);
+  assert.doesNotThrow(() => create_registry().define("a.b", with_params(where, text({}))));
+});

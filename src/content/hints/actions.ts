@@ -1,6 +1,8 @@
 // What a picked hint does to its element.
 
-export type HintAction = "here" | "tab" | "background" | "window" | "caret" | "visual" | "copy" | "copy_text" | "delete" | "focus";
+import { hover, leave_toward } from "./hover.ts";
+
+export type HintAction = "here" | "tab" | "background" | "window" | "caret" | "visual" | "copy" | "copy_text" | "delete" | "focus" | "hover";
 
 export type Place = "here" | "tab" | "background" | "window";
 
@@ -33,13 +35,20 @@ export function link_address(target: Target): string | undefined {
   return typeof href === "string" && href !== "" && !/^javascript:/i.test(href) ? href : undefined;
 }
 
-type MouseEventName = "pointerover" | "pointerenter" | "mouseover" | "pointerdown" | "mousedown" | "pointerup" | "mouseup";
+export type MouseEventName =
+  | "pointerover" | "pointerenter" | "pointermove" | "pointerout" | "pointerleave" | "pointerdown" | "pointerup"
+  | "mouseover" | "mouseenter" | "mousemove" | "mouseout" | "mouseleave" | "mousedown" | "mouseup";
 
-// One mouse-side event from the middle of the element, as the left button sends it. Returns false when the page cancelled it. Only pointerenter does not bubble.
-export function dispatch_mouse_event(target: Target, type: MouseEventName): boolean {
-  if (!target.dispatchEvent) return true;
+export function center_of(target: Target): { x: number; y: number } {
   const box = target.getBoundingClientRect?.();
-  const init = { bubbles: type !== "pointerenter", cancelable: true, composed: true, button: 0, buttons: type.endsWith("down") ? 1 : 0, clientX: box ? box.left + box.width / 2 : 0, clientY: box ? box.top + box.height / 2 : 0 };
+  return { x: box ? box.left + box.width / 2 : 0, y: box ? box.top + box.height / 2 : 0 };
+}
+
+// One mouse-side event as the left button sends it. Returns false when the page cancelled it. The enter and leave events do not bubble. The point defaults to the middle of the target. A move across several elements passes one point, so every event of it agrees.
+export function dispatch_mouse_event(target: Target, type: MouseEventName, related_target: EventTarget | null = null, at = center_of(target)): boolean {
+  if (!target.dispatchEvent) return true;
+  const stays_inside = /(enter|leave)$/.test(type);
+  const init = { bubbles: !stays_inside, cancelable: true, composed: !stays_inside, button: 0, buttons: type.endsWith("down") ? 1 : 0, relatedTarget: related_target, clientX: at.x, clientY: at.y };
   return target.dispatchEvent(type.startsWith("pointer") ? new PointerEvent(type, { ...init, pointerType: "mouse", isPrimary: true }) : new MouseEvent(type, init));
 }
 
@@ -77,8 +86,10 @@ function focus_target(target: Target): void {
 }
 
 export function perform(action: HintAction, target: Target, deps: ActionDeps): void | Promise<unknown> {
+  if (action !== "hover") leave_toward(target);
   if (action === "delete") return target.remove();
   if (action === "focus") return focus_target(target);
+  if (action === "hover") return hover(target);
   if (starts_caret(action)) return deps.start_caret(target as unknown as Element, action);
   // A copy of the address falls back to the text for an element that is no link.
   if (action === "copy") return deps.copy(link_address(target) ?? (target.textContent ?? "").trim());
