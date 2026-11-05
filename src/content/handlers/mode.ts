@@ -14,6 +14,7 @@ export const mode_escape: ContentHandler = {
   run: () => {
     // After a search, Escape takes the highlights off. Without the bundle there are none.
     if (bundles.has_handler("find.clear")) bundles.run_command("find.clear", "caret", {}, "", false);
+    if (bundles.has_handler("hint.unhover")) bundles.run_command("hint.unhover", "hints", {}, "", false);
     page_mode.escape();
     blur_focused_element();
   },

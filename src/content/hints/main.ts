@@ -4,6 +4,7 @@
 import type { Outcome } from "../../shared/messages.ts";
 import { CONFIG_STATUS_STORAGE_KEY } from "../../background/storage_keys.ts";
 import type { BundleHostApi } from "../bundle_host.ts";
+import { unhover } from "./hover.ts";
 import { link_address, OPEN_PLACES, perform, starts_caret } from "./actions.ts";
 import type { CaretMode, HintAction, Place } from "./actions.ts";
 import { copy_text } from "../caret/copy_text.ts";
@@ -229,6 +230,8 @@ function register(host: BundleHostApi): void {
     }
     return "handled";
   }
+
+  host.register_handler("hint.unhover", () => unhover());
 
   host.register_sink("hint", {
     on_token: (token) => {
