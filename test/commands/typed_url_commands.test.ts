@@ -61,13 +61,13 @@ test("page.home gives a bare home_page https", async () => {
 
 const NEW_TAB_URL = "moz-extension://test/newtab.html?builtin";
 
-test("open with no url opens the new tab page here", async () => {
+test("bare open with no url is refused and opens nothing", async () => {
   const opened: Opened[] = [];
   install_browser(opened);
   const checked = check_args(registry.get("open.url")!, {});
   assert.equal(checked.ok, true);
-  await run("open.url", checked.ok ? checked.args : {});
-  assert.deepEqual(opened, [{ via: "update", url: NEW_TAB_URL }]);
+  await assert.rejects(run("open.url", checked.ok ? checked.args : {}), /missing <url>/);
+  assert.deepEqual(opened, []);
 });
 
 test("open -t with no url opens the new tab page in a new tab", async () => {
@@ -91,11 +91,18 @@ test("open -w with no url opens the new tab page in a new window", async () => {
   assert.deepEqual(opened, [{ via: "create", url: NEW_TAB_URL }]);
 });
 
-test("open with a blank url opens the new tab page", async () => {
+test("bare open with a blank url is refused and opens nothing", async () => {
   const opened: Opened[] = [];
   install_browser(opened);
-  await run("open.url", { url: "   ", where: "here" });
-  assert.deepEqual(opened, [{ via: "update", url: NEW_TAB_URL }]);
+  await assert.rejects(run("open.url", { url: "   ", where: "here" }), /missing <url>/);
+  assert.deepEqual(opened, []);
+});
+
+test("open -t with a blank url opens the new tab page", async () => {
+  const opened: Opened[] = [];
+  install_browser(opened);
+  await run("open.url", { url: "   ", where: "tab" });
+  assert.deepEqual(opened, [{ via: "tab_active", url: NEW_TAB_URL }]);
 });
 
 test("open.url opens a blob: link as it is", async () => {
