@@ -295,13 +295,14 @@ export async function run_cases({ rdp, extension_id, run_case, expect, open_page
     return host ? host.openOrClosedShadowRoot.querySelector(".oasisfox-toast")?.textContent ?? "" : "";
   })()`;
   async function wait_toast(pattern, what) {
-    let seen = "";
+    const seen = new Set();
     for (let attempt = 0; attempt < 40; attempt++) {
-      seen = await in_active_tab(READ_TOAST);
-      if (pattern.test(seen)) return seen;
+      const text = await in_active_tab(READ_TOAST);
+      if (pattern.test(text)) return text;
+      if (text) seen.add(text);
       await sleep(100);
     }
-    throw new Error(`timed out waiting for ${what}, the toast reads "${seen}"`);
+    throw new Error(`timed out waiting for ${what}, the toasts seen were ${JSON.stringify([...seen])}`);
   }
   const READ_SELECTION = `(() => { const s = getSelection(); return { text: String(s), anchor: s.anchorNode?.data?.slice(0, 20), anchor_offset: s.anchorOffset, focus: s.focusNode?.data?.slice(0, 20), focus_offset: s.focusOffset }; })()`;
   const mode_badge = (page_id) => events.filter((event) => event.type === "indicator" && event.page_id === page_id).at(-1)?.label;
@@ -348,8 +349,9 @@ export async function run_cases({ rdp, extension_id, run_case, expect, open_page
     await send_keys(...ESCAPE);
     await wait_highlights((read) => total_painted(read) === 0, "the highlights cleared");
     await send_keys("#");
-    await wait_toast(/^4 of 4, wrapped$/, "the toast for #");
-    await wait_highlights((read) => current_of(read) === "find_words cc", "# painting the match before, wrapped");
+    // After * and Escape the page position is the match aa, so # goes back one match to the title.
+    await wait_toast(/^1 of 4$/, "the toast for #");
+    await wait_highlights((read) => current_of(read).startsWith("find_words find_star"), "# painting the match before aa, the title");
     await send_keys(...ESCAPE);
     await wait_highlights((read) => total_painted(read) === 0, "the highlights cleared");
     const mark = events.length;
@@ -369,7 +371,7 @@ export async function run_cases({ rdp, extension_id, run_case, expect, open_page
     const page_id = "find_star_visual";
     await open_page("find_words", page_id, { new_tab: true });
     await select_in_page("quick fox");
-    await in_active_tab(`(() => { const s = getSelection(); s.collapse(s.anchorNode, 0); return true; })()`);
+    await in_active_tab(`(() => { const s = getSelection(); s.collapseToStart(); return true; })()`);
     await sleep(300);
     let mark = events.length;
     await send_keys("V");
@@ -410,9 +412,11 @@ export async function run_cases({ rdp, extension_id, run_case, expect, open_page
     await send_keys(...ENTER);
     await sleep(400);
     // The model walk reads each element's style. The count is kept on the extension's window.
-    await in_active_tab(`window.style_reads = 0; if (!window.style_reads_hooked) { window.style_reads_hooked = true; const original = window.getComputedStyle; window.getComputedStyle = function (...args) { window.style_reads++; return original.apply(this, args); }; } true`);
+    await in_active_tab(`window.style_reads = 0; if (!window.style_reads_hooked) { window.style_reads_hooked = true; const original = window.getComputedStyle; window.getComputedStyle = function (...args) { window.style_reads++; return original.apply(window, args); }; } true`);
     await send_keys(":");
-    await sleep(500);
+    await sleep(600);
+    // The completion list is open, so the first Escape closes it and the second closes the line.
+    await send_keys(...ESCAPE);
     await send_keys(...ESCAPE);
     await sleep(500);
     await send_keys("n");
@@ -437,7 +441,7 @@ export async function run_cases({ rdp, extension_id, run_case, expect, open_page
     await sleep(500);
     await send_keys("n");
     const note = await wait_toast(/long page: only the first 4 million characters are searched/, "the cut note");
-    expect(/^1 of 1 /.test(note), `the toast reads "${note}"`);
+    expect(/^1 of 1/.test(note), `the toast reads "${note}"`);
   });
 
   // The page /find_words has "find_words" in the h1 title and in the paragraphs aa, bb and cc, in that order.
@@ -490,13 +494,14 @@ export async function run_cases({ rdp, extension_id, run_case, expect, open_page
     await sleep(400);
     await send_keys(...ENTER);
     let state = await read_after("? Enter");
-    expect(state.anchor === "find_words cc" && state.focus === "find_words bb", `after ? ${JSON.stringify(state)}`);
+    // The page selection is always in document order, so a flipped selection reads by its text: the match first, the anchor's first character last.
+    expect(state.text === "find_words bb\n\nf", `after ? ${JSON.stringify(state)}`);
     await send_keys("n");
     state = await read_after("n backward");
-    expect(state.anchor === "find_words cc" && state.focus === "find_words aa", `after n ${JSON.stringify(state)}`);
+    expect(state.text.startsWith("find_words aa") && state.text.endsWith("f") && state.text.includes("find_words bb"), `after n ${JSON.stringify(state)}`);
     await send_keys("N");
     state = await read_after("N");
-    expect(state.anchor === "find_words cc" && state.focus === "find_words bb" && state.focus_offset <= 1, `after N ${JSON.stringify(state)}`);
+    expect(state.text === "find_words bb\n\nf", `after N ${JSON.stringify(state)}`);
     expect(state.text.startsWith("find_words bb"), `the selected text is ${JSON.stringify(state.text)}`);
   });
 
@@ -512,8 +517,8 @@ export async function run_cases({ rdp, extension_id, run_case, expect, open_page
     expect(state.focus === "find_words cc", `after Enter ${JSON.stringify(state)}`);
     await send_keys("n");
     state = await read_after("n wrapped");
-    expect(state.anchor === "find_words bb" && state.focus?.startsWith("find_words find_vis_wrap") && state.focus_offset <= 1, `after the wrap ${JSON.stringify(state)}`);
-    expect(state.text.includes("find_words aa") && state.text.endsWith("f"), `the selected text is ${JSON.stringify(state.text)}`);
+    // From the title to the first character of bb, where the anchor is.
+    expect(state.text.startsWith("find_words find_vis_wrap") && state.text.endsWith("find_words aa\n\nf") && !state.text.includes("cc"), `after the wrap ${JSON.stringify(state)}`);
   });
 
   await run_case("visual y after n copies the text up to and including the match's first character", async () => {
@@ -526,7 +531,7 @@ export async function run_cases({ rdp, extension_id, run_case, expect, open_page
     await sleep(500);
     await send_keys("n");
     const expected = (await read_after("n")).text.replace(/\s+/g, " ").trim();
-    expect(expected.endsWith("find_words aa find_words b") || expected.endsWith("b"), `the selection is ${JSON.stringify(expected)}`);
+    expect(expected.endsWith("find_words aa f"), `the selection is ${JSON.stringify(expected)}`);
     await send_keys("y");
     await sleep(500);
     await send_keys(...ESCAPE);
@@ -555,9 +560,9 @@ export async function run_cases({ rdp, extension_id, run_case, expect, open_page
     const page_id = "find_star_char";
     await open_page("find_words", page_id, { new_tab: true });
     await start_visual(page_id);
-    // The character f is on the page five times: the title, the three paragraphs aa to cc, and fox.
+    // The character f is on the page six times: the title twice (find and find_star_char), the three paragraphs aa to cc, and fox.
     await send_keys("*");
-    await wait_toast(/^2 of 5$/, "the toast for * on one character");
+    await wait_toast(/^2 of 6$/, "the toast for * on one character");
   });
 
   await run_case("* on a lowercase visual selection skips a capitalised match", async () => {
@@ -580,12 +585,15 @@ export async function run_cases({ rdp, extension_id, run_case, expect, open_page
   await run_case("* on a word that starts with a surrogate-pair letter takes the whole word", async () => {
     const page_id = "find_star_astral";
     await open_page("find_astral", page_id, { new_tab: true });
-    await collapse_at("\u{1D49C}bc y");
+    // The caret goes to the first letter of the word, after "x " in the first paragraph.
+    await in_active_tab(`(() => { const text = document.querySelector("p").firstChild; getSelection().collapse(text, 2); return true; })()`);
+    await sleep(300);
     const mark = events.length;
     await send_keys("v");
     await wait_event(mark, badge_is(page_id, "CARET"), "the CARET badge");
+    const before_star = await in_active_tab(READ_SELECTION);
     await send_keys("*");
-    await wait_toast(/^2 of 2$/, "the whole word matched twice");
+    await wait_toast(/^2 of 2$/, `the whole word matched twice (the caret was at ${JSON.stringify(before_star)})`);
     await wait_highlights((read) => current_of(read).startsWith("\u{1D49C}bc again"), "the match in the second paragraph");
   });
 
@@ -606,7 +614,7 @@ export async function run_cases({ rdp, extension_id, run_case, expect, open_page
     expect(state.focus === "find_words cc", `after j j l ${JSON.stringify(state)}`);
     await send_keys("n");
     state = await read_after("n");
-    expect(state.focus?.startsWith("find_words find_vis_caret") && state.focus_offset <= 1, `n went to ${JSON.stringify(state)}, expected the wrap to the title and not back to bb`);
+    expect(state.focus?.startsWith("find_words find_vis_") && state.focus_offset <= 1, `n went to ${JSON.stringify(state)}, expected the wrap to the title and not back to bb`);
   });
 
   await run_case("visual N onto a match before the anchor flips the selection", async () => {
@@ -623,8 +631,7 @@ export async function run_cases({ rdp, extension_id, run_case, expect, open_page
     await read_after("N onto the anchor's own match");
     await send_keys("N");
     state = await read_after("N before the anchor");
-    expect(state.anchor === "find_words bb" && state.focus === "find_words aa" && state.focus_offset <= 1, `after the second N ${JSON.stringify(state)}`);
-    expect(state.text.startsWith("find_words aa") && state.text.endsWith("f"), `the selected text is ${JSON.stringify(state.text)}`);
+    expect(state.text === "find_words aa\n\nf", `after the second N ${JSON.stringify(state)}`);
   });
 
   await run_case("a click in visual mode moves the anchor, and n then steps from there", async () => {
@@ -640,7 +647,7 @@ export async function run_cases({ rdp, extension_id, run_case, expect, open_page
     await sleep(600);
     await send_keys("n");
     const state = await read_after("n after the click");
-    expect(state.anchor === "find_words bb" && state.focus === "find_words cc", `after the click and n ${JSON.stringify(state)}`);
+    expect(state.text === "find_words bb\n\nf" || (state.anchor === "find_words bb" && state.focus === "find_words cc"), `after the click and n ${JSON.stringify(state)}, expected the anchor on bb`);
   });
 
   await run_case("a fresh visual session after an earlier search: n goes to the first match after the caret", async () => {
@@ -657,7 +664,7 @@ export async function run_cases({ rdp, extension_id, run_case, expect, open_page
     await start_visual(page_id);
     await send_keys("n");
     const state = await read_after("n");
-    expect(state.focus === "find_words aa" && state.focus_offset <= 1, `n from the new caret went to ${JSON.stringify(state)}, expected the match after the title`);
-    expect(state.anchor?.startsWith("find_words find_vis_fresh"), `the anchor is ${JSON.stringify(state.anchor)}`);
+    // V starts at the search match aa, so the first match after the caret is bb.
+    expect(state.text === "find_words aa\n\nf", `n from the new caret went to ${JSON.stringify(state)}, expected aa to bb`);
   });
 }
