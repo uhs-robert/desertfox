@@ -426,7 +426,7 @@ Firefox keeps the background awake while the port is open, which also helps a la
 | --- | --- |
 | v1 | Snippets and `config.reload`, with the managed storage config and `tools/build-config`. Normal, insert and ignore modes. Scrolling, back and forward, reload, stop, home, parent and root URL. Tab and window commands, including containers and closed-tab undo. Search engines and explicit prompts. Bookmarks. Hints with every action above, rapid mode included. Copying the URL in 6 formats. Zoom. Search engines with slots and children replace the former site commands (site search, GitHub, subreddit, archive, isdown, translate), which now ship as examples. |
 | Later | History completion. Marks and quickmarks. Changing the number in a URL, following next and previous page links, the jump list, a QR code of the URL and view source. |
-| Dropped | Shell access, string eval, command strings with chaining and pipes, a config language, userChrome editing, rewriting Firefox prefs, an external editor, page-event hooks, per-site config, a key-grab mode, macros, a theme engine, an update nag, an interactive tutorial and joke commands. |
+| Dropped | Shell access, string eval, command strings with chaining and pipes, a config language, userChrome editing, rewriting Firefox prefs, an external editor, page-event hooks, a key-grab mode, a theme engine, an update nag, an interactive tutorial and joke commands. |
 
 ## Trade-offs
 
@@ -454,8 +454,16 @@ Firefox keeps the background awake while the port is open, which also helps a la
 1. Phase 0, spike. Done. See [spike.md](spike.md).
 2. Phase 1, core. It covers the registry, `commands.json`, the managed storage config, `tools/build-config`, `config.reload`, keymap validation, the prefix tree, modes, scroll and page commands, tab commands, the shortcut slots and the help page. Exit: every v1 row of the binding map that needs no hints or command line works, and the content script stays under its size target.
 3. Phase 2, interfaces. Command line, completion, explicit prompts, hints, which-key, snippets, and caret and visual modes. Exit: the whole v1 column of the binding map works, and OasisFox replaces the current extension in daily use.
-4. Phase 3, browser data. History completion, marks, the remaining later rows, and the options page import for users without a shell.
-5. Phase 4, Oasis. The native host merged with voxcmd's, `oasisfox list` and `run`, the Quickshell which-key, and the Oasis theme file written on theme change.
+4. Command line status area. A `statusbar_widgets` list setting, default `url, scroll, tabs`, on the right of the open command line. `url` is colored by security state from the theme's ok, warn and error tokens. `scroll` shows Top, N%, Bot or All. `tabs` shows [n/m]. Each value is a snapshot taken when the line opens. `history` is a later widget. `keypress`, `progress`, `scroll_raw`, `text` and `clock` are not planned. `search_match` waits for a page search built on Firefox's find API, because Firefox's find bar hides its count.
+5. Phase 3, browser data. History completion, marks, the remaining later rows, and the options page import for users without a shell.
+6. Per-site key pass-through. The need: keep some keys off on chosen sites and the rest on, where `ignore_sites` turns off every key. The design is open.
+7. Registers, before macros. `"` holds the last yank, `a` to `z` are named, `+` is the clipboard, `_` is the black hole and `/` is the last search. `"ay` yanks into a register, `"ap` pastes from it and `:registers` lists them.
+8. Macros, with `.` repeat first. `.` repeats the last command or inserted text. Recording and replay follow: `q<reg>` records into a register, `@<reg>` replays it, a count (`5@q`) or `@@` repeats it. A macro records commands and the text typed in insert mode. Replay inserts text like a paste, not as key events, and stops at the first failed step.
+9. Base16 theme importer, after macros.
+10. Toolbar click menu and icon. The menu turns OasisFox on and off and opens help. The icon greys out when it is off. The design is open: it does not yet say whether off applies to all sites or one, or how it differs from `ignore_sites`. The icon is a placeholder until a real one with an off state exists.
+11. Phase 4, Oasis. The native host merged with voxcmd's, `oasisfox list` and `run`, the Quickshell which-key, and the Oasis theme file written on theme change.
+12. Phase 4, write-back of `:set`. `:set` and `:unset` change settings for the session only. Phase 4 writes them to the TOML config through the native host. Add-on storage never holds them, so nothing drifts from the user's config.
+13. Release path. The maintainer installs through `just release` (signed, unlisted) now. A listed addons.mozilla.org release is a later piece: the listing, a source upload, Mozilla review, permission justifications and a privacy note.
 
 ## Open questions
 
