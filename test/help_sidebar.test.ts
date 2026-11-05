@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { render_help, section_hash } from "../src/help/render.ts";
+import { render_help, reset_group_state, section_hash } from "../src/help/render.ts";
 import { parse_route } from "../src/help/route.ts";
 import type { Route } from "../src/help/route.ts";
 import type { Block } from "../src/help/blocks.ts";
@@ -38,8 +38,9 @@ const QUICK_START: Block[] = [
 
 const GROUPS = [{ name: "scroll", commands: [] }, { name: "tab", commands: [] }];
 
-function render(route: Route): FakeNode {
+function render(route: Route, keep_state = false): FakeNode {
   (globalThis as { document?: unknown }).document = { createElement: (tag: string) => new FakeNode(tag) };
+  if (!keep_state) reset_group_state();
   const root = new FakeNode("body");
   render_help(root as never, { quick_start: QUICK_START, groups: GROUPS, warnings: [], settings: [], engines: [], tip: { kind: "tip", inlines: [] } } as never, route, []);
   return root;
@@ -118,4 +119,11 @@ test("section routes parse for every page and reject an unknown page", () => {
   assert.deepEqual(parse_route(section_hash("styling", "classes")), { page: "styling", section: "classes" });
   assert.deepEqual(parse_route("#section=nowhere/x"), { page: "home" });
   assert.deepEqual(parse_route("#section=quick-start"), { page: "home" });
+});
+
+test("a group the reader toggled keeps its state across renders, and a new page still opens its group", () => {
+  render({ page: "home" });
+  group_nodes(render({ page: "home" }, true))[2]!.toggle.listeners["click"]!();
+  assert.deepEqual(group_nodes(render({ page: "home" }, true)).map((group) => !group.list.hidden), [true, false, true, false]);
+  assert.deepEqual(group_nodes(render({ page: "styling" }, true)).map((group) => !group.list.hidden), [true, false, true, true]);
 });

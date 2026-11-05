@@ -275,8 +275,17 @@ function section_list(page: PageId, sections: Section[], expanded: boolean): HTM
   return list;
 }
 
+// Kept outside the tree, like any state a render would wipe: a group the reader opened or closed stays that way across renders.
+const group_open = new Map<PageId, boolean>();
+let last_page: PageId | undefined;
+
+export function reset_group_state(): void {
+  group_open.clear();
+  last_page = undefined;
+}
+
 // A real button, so keys and hints reach it.
-function section_toggle(title: string, list: HTMLElement): HTMLElement {
+function section_toggle(page: PageId, title: string, list: HTMLElement): HTMLElement {
   const button = el("button", "oasisfox-help-sections-toggle", list.hidden ? "\u25B8" : "\u25BE");
   button.setAttribute("type", "button");
   button.setAttribute("aria-label", `${title} sections`);
@@ -284,22 +293,25 @@ function section_toggle(title: string, list: HTMLElement): HTMLElement {
   button.setAttribute("aria-expanded", String(!list.hidden));
   button.addEventListener("click", () => {
     list.hidden = !list.hidden;
+    group_open.set(page, !list.hidden);
     button.setAttribute("aria-expanded", String(!list.hidden));
     button.textContent = list.hidden ? "\u25B8" : "\u25BE";
   });
   return button;
 }
 
-// The current page's group starts open and the others closed. Each toggle works alone.
+// Going to a page opens its group. Other groups keep what the reader set, closed at first. Each toggle works alone.
 function sidebar(current: PageId, model: HelpModel): HTMLElement {
+  if (current !== last_page) group_open.set(current, true);
+  last_page = current;
   const entries = PAGES.map((page): HTMLElement => {
     const link = el("a", undefined, page.title);
     link.setAttribute("href", page.hash);
     if (page.id === current) link.setAttribute("aria-current", "page");
     const sections = page_sections(page.id, model);
     if (sections.length === 0) return link;
-    const list = section_list(page.id, sections, page.id === current);
-    return el("div", "oasisfox-help-nav-group", el("div", "oasisfox-help-nav-row", link, section_toggle(page.title, list)), list);
+    const list = section_list(page.id, sections, group_open.get(page.id) ?? false);
+    return el("div", "oasisfox-help-nav-group", el("div", "oasisfox-help-nav-row", link, section_toggle(page.id, page.title, list)), list);
   });
   return el("nav", "oasisfox-help-sidebar", el("div", "oasisfox-help-brand", "OasisFox"), ...entries, support_line());
 }
