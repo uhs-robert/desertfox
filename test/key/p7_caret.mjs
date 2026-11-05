@@ -269,4 +269,15 @@ export async function run_cases({ run_case, expect, open_page, send_keys, sleep,
     await wait_event(mark, selection_is("caret_find_cancel", "d"), "fd after a find with no match");
     await send_keys("-k", "Escape");
   });
+
+  // A space arrives as the token <Space>, longer than one character, and is still a target.
+  await run_case("f then Space moves to the first space of the paragraph", async () => {
+    await open_page("caret", "caret_find_space", { new_tab: true });
+    await send_keys("gV");
+    const mark = events.length;
+    await send_keys("f");
+    await send_keys(" ");
+    await wait_event(mark, selection_is("caret_find_space", " "), "f then Space to the space after caret");
+    await send_keys("-k", "Escape");
+  });
 }
