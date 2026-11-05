@@ -18,14 +18,13 @@ define("help.open", {
   name: "help",
   label: "Help",
   intent: "Open the help page. On the help page itself, it goes there in place instead of a new tab. Name a command to open its card, or a page such as Commands. It lists every command, its keys and the config warnings.",
-  params: [{ name: "name", type: "string", rest: true, main: true, default: "", values: help_name_choices(command_ids) }],
+  params: [{ name: "name", type: "string", rest: true, main: true, optional: true, values: help_name_choices(command_ids), strict: true }],
   runs_in: "background",
   repeatable: false,
   run: async (ctx, args) => {
     const name = args.name as string;
     const help_page_url = browser.runtime.getURL(HELP_PAGE_FILE);
-    const url = help_name_url(help_page_url, name, command_ids);
-    if (url === undefined) throw new Error(`No help for "${name}". The command line completes the names`);
+    const url = help_name_url(help_page_url, name, command_ids) as string; // `strict` limits name to the choices that resolve
     const asking_tab = ctx.tab_id === undefined ? undefined : await browser.tabs.get(ctx.tab_id);
     const plan = plan_help_tab(help_page_url, url, { id: ctx.tab_id, window_id: ctx.window_id, url: asking_tab?.url });
     if (plan.kind === "update") {

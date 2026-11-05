@@ -1,3 +1,4 @@
+import { RuntimeRefusal } from "../shared/command.ts";
 import type { CommandContext } from "../shared/command.ts";
 import { define } from "../shared/registry/index.ts";
 import { numbered_windows } from "../background/complete_items.ts";
@@ -23,7 +24,7 @@ const LEADING_NUMBER = /^(\d+)(?:\s|$)/;
 function last_used_other(windows: readonly NumberedWindow[], current: NumberedWindow, recent_ids: readonly number[]): NumberedWindow {
   const others = windows.filter((window) => window.id !== current.id && window.incognito === current.incognito);
   const [first, ...rest] = others;
-  if (!first) throw new Error("No other window to move to");
+  if (!first) throw new RuntimeRefusal("No other window to move to");
   const focused = recent_ids.map((id) => others.find((window) => window.id === id)).find((window) => window !== undefined);
   return focused ?? rest.reduce((best, window) => (window.last_used > best.last_used ? window : best), first);
 }
@@ -31,9 +32,8 @@ function last_used_other(windows: readonly NumberedWindow[], current: NumberedWi
 // `2 GitHub` is what a completion pick puts in the line. Only the number counts, because the title may have changed since the pick.
 function window_by_number(windows: readonly NumberedWindow[], text: string): NumberedWindow {
   const number = LEADING_NUMBER.exec(text)?.[1];
-  if (number === undefined) throw new Error(`Give a window number, not "${text}"`);
   const found = windows.find((window) => window.number === Number(number));
-  if (!found) throw new Error(`No window ${number}`);
+  if (!found) throw new RuntimeRefusal(`No window ${number}`);
   return found;
 }
 
@@ -42,22 +42,22 @@ export function make_window_handlers(deps: WindowDeps) {
     create: (args: { url: string; private: boolean }) =>
       deps.create({ url: args.url === "" ? undefined : args.url, private_window: args.private }),
     close: async (ctx: CommandContext) => {
-      if (ctx.window_id === undefined) throw new Error("no active window");
+      if (ctx.window_id === undefined) throw new RuntimeRefusal("no active window");
       await deps.close(ctx.window_id);
     },
     attach: async (ctx: CommandContext, args: { window: string }) => {
-      if (ctx.window_id === undefined || ctx.tab_id === undefined) throw new Error("no active tab");
+      if (ctx.window_id === undefined || ctx.tab_id === undefined) throw new RuntimeRefusal("no active tab");
       const windows = numbered_windows(await deps.windows());
       const current = windows.find((window) => window.id === ctx.window_id);
-      if (!current) throw new Error("no active window");
+      if (!current) throw new RuntimeRefusal("no active window");
       const text = args.window.trim();
       const target = text === "" ? last_used_other(windows, current, await deps.recent_window_ids()) : window_by_number(windows, text);
-      if (target.id === current.id) throw new Error("The tab is already in that window");
-      if (target.incognito !== current.incognito) throw new Error("Cannot move a tab between private and normal windows");
+      if (target.id === current.id) throw new RuntimeRefusal("The tab is already in that window");
+      if (target.incognito !== current.incognito) throw new RuntimeRefusal("Cannot move a tab between private and normal windows");
       await deps.move_tab_to_window(ctx.tab_id, target.id);
     },
     undo_close: async () => {
-      if (!(await deps.restore_last_closed_window())) throw new Error("no closed window to restore");
+      if (!(await deps.restore_last_closed_window())) throw new RuntimeRefusal("no closed window to restore");
     },
   };
 }
@@ -91,7 +91,7 @@ define("window.new", {
   label: "New window",
   intent: "Open a new window. It is blank unless a url is given. With private on, the window is private.",
   params: [
-    { name: "url", type: "string", main: true, default: "" },
+    { name: "url", type: "string", main: true, optional: true },
     { name: "private", type: "bool", default: false, short: "p", description: "Open a private window." },
   ],
   runs_in: "background",
@@ -119,7 +119,7 @@ define("window.undo_close", {
 define("tab.attach", {
   label: "Attach tab to window",
   intent: "Move the current tab to another window of the same privacy. Without a window it goes to the one used last.",
-  params: [{ name: "window", type: "string", rest: true, main: true, default: "", values: { from: "windows" } }],
+  params: [{ name: "window", type: "string", rest: true, main: true, optional: true, values: { from: "windows" }, pattern: "^\\s*\\d+(\\s|$)" }],
   runs_in: "background",
   run: (ctx, args) => handlers.attach(ctx, args as { window: string }),
 });

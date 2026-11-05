@@ -1,3 +1,4 @@
+import { RuntimeRefusal } from "../shared/command.ts";
 import type { CommandContext } from "../shared/command.ts";
 import type { FocusPage } from "../shared/messages.ts";
 import { define } from "../shared/registry/index.ts";
@@ -20,7 +21,7 @@ export function make_browser_handlers(deps: BrowserDeps) {
     // page, is the best attempt. The key test decides whether it works.
     focus_page: async (ctx: CommandContext) => {
       const tab_id = require_tab_id(ctx);
-      if (ctx.window_id === undefined) throw new Error("No window");
+      if (ctx.window_id === undefined) throw new RuntimeRefusal("No window");
       await deps.focus_window(ctx.window_id);
       await deps.activate_tab(tab_id);
       await deps.focus_page_content(tab_id);

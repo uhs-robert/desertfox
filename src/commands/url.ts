@@ -1,3 +1,4 @@
+import { RuntimeRefusal } from "../shared/command.ts";
 import { define } from "../shared/registry/index.ts";
 import { current_tab_url, open_in } from "./open_target.ts";
 import { parent_url, root_url } from "./url_build.ts";
@@ -11,7 +12,7 @@ define("url.parent", {
   count: { param: "levels" },
   run: async (ctx, args) => {
     const parent = parent_url(await current_tab_url(ctx), args.levels as number);
-    if (parent === undefined) throw new Error("This address has no parent");
+    if (parent === undefined) throw new RuntimeRefusal("This address has no parent");
     await open_in(ctx, parent, "here");
   },
 });
@@ -22,7 +23,7 @@ define("url.root", {
   runs_in: "background",
   run: async (ctx) => {
     const root = root_url(await current_tab_url(ctx));
-    if (root === undefined) throw new Error("This address has no site root");
+    if (root === undefined) throw new RuntimeRefusal("This address has no site root");
     await open_in(ctx, root, "here");
   },
 });

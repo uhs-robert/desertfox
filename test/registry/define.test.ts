@@ -224,3 +224,15 @@ test("a conditional default is rejected next to when, on an enum, and when it na
   rejects("a.b", with_params(where, text({}), { name: "more", type: "string", default: { value: "", when: { text: [""] } } }), /params\[2\]\.default\.when: names "text", which has a conditional default itself/);
   assert.doesNotThrow(() => create_registry().define("a.b", with_params(where, text({}))));
 });
+
+test("the rule kinds are rejected on a param that cannot carry them", () => {
+  const with_param = (param: object): CommandInput => ({ ...base, params: [param as never] });
+  rejects("a.b", with_param({ name: "n", type: "string", min: 1 }), /params\[0\]\.min: only an int param takes a minimum/);
+  rejects("a.b", with_param({ name: "n", type: "int", min: 1.5 }), /params\[0\]\.min: must be a whole number/);
+  rejects("a.b", with_param({ name: "n", type: "int", pattern: "x" }), /params\[0\]\.pattern: only a string param takes a pattern/);
+  rejects("a.b", with_param({ name: "n", type: "string", pattern: "(" }), /params\[0\]\.pattern: .* is not a regular expression/);
+  rejects("a.b", with_param({ name: "n", type: "string", strict: true }), /params\[0\]\.strict: only a string param with a fixed value list/);
+  rejects("a.b", with_param({ name: "n", type: "int", optional: true }), /params\[0\]\.optional: only a string or enum param/);
+  rejects("a.b", with_param({ name: "n", type: "string", optional: true, default: "x" }), /params\[0\]\.optional: an optional param reads as an empty text/);
+  assert.doesNotThrow(() => create_registry().define("a.b", with_param({ name: "n", type: "string", values: ["a"], strict: true, pattern: "^a$", optional: true })));
+});

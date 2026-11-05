@@ -32,7 +32,7 @@ export type DynamicValues = { from: "search_engines" | "containers" | "tabs" | "
 export type ParamDef = {
   name: string;
   type: ParamType;
-  // Allowed values. Required for `enum`. A `string` param may use it for completion only.
+  // Allowed values. Required for `enum`. A `string` param uses it for completion, and for membership when `strict`.
   values?: readonly string[] | DynamicValues;
   // Which-key phrase per enum value, added to the command label when a binding sets that value. The default value has none. A value missing here reads as the raw value with spaces for underscores.
   value_labels?: Readonly<Record<string, string>>;
@@ -44,8 +44,16 @@ export type ParamDef = {
   rest?: boolean;
   // The one free-text param that config and the command line take as a bare word. At most one per command, `string` only.
   main?: boolean;
-  // A param with no default that applies and no `when` is required.
+  // A param with no default that applies, no `optional` and no `when` is required.
   default?: ParamDefault;
+  // A `string` or `enum` param that may be left out or empty: it then reads as "". Stands for `default: ""`.
+  optional?: boolean;
+  // Smallest value of an `int` param.
+  min?: number;
+  // A `string` param whose text must match this regular expression (source text, so it travels in `commands.json`). An optional param may still be empty.
+  pattern?: string;
+  // A `string` param with a static `values` list accepts only those values. Without it the list is for completion only.
+  strict?: boolean;
   // Exactly one key, so `{ param: [values] }`.
   when?: ParamWhen;
 };
@@ -64,6 +72,11 @@ export type CommandContext = {
   frame_id: number;
   mode: Mode;
 };
+
+// What a handler throws for a failure that depends on the state of the browser or the config, such as a tab that is gone or a search engine the config lacks. A bad argument value is never one of these: the param schema rules it out before the handler runs.
+export class RuntimeRefusal extends Error {
+  override name = "RuntimeRefusal";
+}
 
 // Args reach `run` after the one validator has checked them and filled defaults.
 export type CheckedArgs = Record<string, unknown>;
