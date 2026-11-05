@@ -145,4 +145,21 @@ export async function run_cases({ run_case, expect, open_page, send_keys, sleep,
       await wait_event(mark_escape, badge_is(page_id, "NORMAL"), "the NORMAL badge after Escape");
     });
   }
+
+  // A contenteditable field uses the document selection as its caret, so ending the caret session must not clear it.
+  await run_case("focusing a contenteditable field in caret mode keeps its caret and typing lands there", async () => {
+    const page_id = "focus_editable";
+    await open_page("caret_editable", page_id, { new_tab: true });
+    await send_keys("gV");
+    await wait_event(0, badge_is(page_id, "CARET"), "the CARET badge");
+    const mark = events.length;
+    await in_active_tab("(() => { const field = document.getElementById('editable'); const range = document.createRange(); range.setStart(field.firstChild, 5); range.collapse(true); const selection = getSelection(); selection.removeAllRanges(); selection.addRange(range); field.focus(); })()");
+    await wait_event(mark, badge_is(page_id, "INSERT"), "the INSERT badge after the field took focus");
+    await sleep(300);
+    await send_keys("jv");
+    await sleep(500);
+    const text = (await in_active_tab("document.getElementById('editable').textContent"))[0];
+    await send_keys("-k", "Escape");
+    expect(text === "hellojv world", `the field holds ${JSON.stringify(text)}, expected "hellojv world"`);
+  });
 }

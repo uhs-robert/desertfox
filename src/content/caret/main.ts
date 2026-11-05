@@ -103,9 +103,16 @@ function rebuild_if_stale(open: Session): Session | undefined {
   return retarget(open, model, { anchor, caret });
 }
 
+function selection_is_in_focused_editable(selection: Selection): boolean {
+  const focused = document.activeElement;
+  return focused instanceof HTMLElement && focused.isContentEditable && focused.contains(selection.anchorNode);
+}
+
 function end_session(): void {
-  for (const selection of session ? selections_of(session.model) : []) selection.removeAllRanges();
-  getSelection()?.removeAllRanges();
+  // A focused contenteditable field keeps its own caret in the document selection.
+  for (const selection of session ? selections_of(session.model) : []) if (!selection_is_in_focused_editable(selection)) selection.removeAllRanges();
+  const page_selection = getSelection();
+  if (page_selection && !selection_is_in_focused_editable(page_selection)) page_selection.removeAllRanges();
   session = undefined;
   clear_selection_colors();
 }

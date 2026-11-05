@@ -141,6 +141,9 @@ shadow.getElementById("panel").addEventListener("scroll", () => send("panel_scro
       const theme = url.pathname === "/caret_themed" ? "<style>:root { --oasisfox-bg-core: #3b1d4a; --oasisfox-fg-core: #f4e6ff; --oasisfox-accent: #ff6ec7; --oasisfox-secondary: #9bffb0; }</style>" : "";
       return response.end(page(`caret ${id}`, `${text}<input id="paste_target">`, theme));
     }
+    if (url.pathname === "/caret_editable") {
+      return response.end(page(`caret_editable ${id}`, '<p>foo bar.baz</p><div id="editable" contenteditable="true">hello world</div>'));
+    }
     if (url.pathname === "/caret_hint") {
       // The hint targets: a paragraph, an image and a field, each followed by text, and an image with no text after it.
       const body = '<p>alpha one</p><p id="pick">beta two</p><img id="pic" alt="" width="20" height="20" src="data:image/gif;base64,R0lGODlhAQABAAAAACw="><p>gamma three</p><input id="field"><p>omega four</p><iframe id="frame" srcdoc="<p id=inner>inner text</p>"></iframe><img id="last" alt="" width="20" height="20" src="data:image/gif;base64,R0lGODlhAQABAAAAACw=">';
