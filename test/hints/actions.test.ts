@@ -405,3 +405,11 @@ test("scroll puts the element at the top of the view and does nothing else to it
   assert.deepEqual(scrolls, [{ block: "start", behavior: "instant" }]);
   assert.deepEqual(page.calls, []);
 });
+
+test("scroll also scrolls each frame that holds the element, innermost first, so the top view follows", () => {
+  const scrolls: string[] = [];
+  const at = (name: string) => ({ scrollIntoView: () => scrolls.push(name) });
+  const page = fixture("h2", at("heading"));
+  perform("scroll", page.element as never, { open_link: () => {}, copy: () => {}, start_caret: () => {} }, [at("outer") as never, at("inner") as never]);
+  assert.deepEqual(scrolls, ["heading", "inner", "outer"]);
+});

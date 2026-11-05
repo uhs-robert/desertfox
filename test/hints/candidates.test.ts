@@ -249,8 +249,8 @@ test("the scrollable filter leaves out a text field that overflows, because focu
   assert.equal(is_hit?.(overflowing("div", { isContentEditable: true })), false);
 });
 
-type FakeHeading = { localName: string; text?: string; role?: string; level?: string; hidden?: boolean };
-const heading = (fake: FakeHeading) => ({ localName: fake.localName, textContent: fake.text ?? "Title", getAttribute: (name: string) => (name === "role" ? (fake.role ?? null) : name === "aria-level" ? (fake.level ?? null) : null) }) as unknown as Element;
+type FakeHeading = { localName: string; text?: string; rendered?: string; role?: string; level?: string; hidden?: boolean };
+const heading = (fake: FakeHeading) => ({ localName: fake.localName, textContent: fake.text ?? "Title", innerText: fake.rendered ?? fake.text ?? "Title", getAttribute: (name: string) => (name === "role" ? (fake.role ?? null) : name === "aria-level" ? (fake.level ?? null) : null) }) as unknown as Element;
 
 test("the headings filter selects h1 to h6 and role=heading", () => {
   const { selector } = query_for("headings", undefined);
@@ -291,4 +291,9 @@ test("keep_present drops hidden, boxless, clipped and tiny headings and keeps of
     ),
   );
   assert.deepEqual(kept, ["above", "below"]);
+});
+
+test("a heading counts by its rendered text, not by hidden or script text in its content", () => {
+  assert.equal(is_heading(heading({ localName: "h2", text: "x = 1", rendered: "" })), false);
+  assert.equal(is_heading(heading({ localName: "h2", text: "Title", rendered: "Title" })), true);
 });
