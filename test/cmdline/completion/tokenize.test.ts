@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { cursor_context } from "../../../src/cmdline/completion/tokenize.ts";
+import { create_word_lookup } from "../../../src/cmdline/word_lookup.ts";
+import type { CommandMeta } from "../../../src/shared/command.ts";
 import { lookup } from "./fixtures.ts";
 
 const at_end = (text: string) => cursor_context(text, text.length, lookup.find);
@@ -75,4 +77,22 @@ test("a flag whose value is quoted keeps the flags open", () => {
   assert.equal(shape('search -c="Work X" -t'), "flag:-t:19-21");
   // A quote before the equals sign makes the word text, as in the grammar.
   assert.equal(shape('search "--container=Work" -').split(":")[0], "subject");
+});
+
+const HELP: CommandMeta = { id: "help.open", name: "help", label: "Help", intent: "Help.", params: [{ name: "name", type: "string", rest: true, main: true, default: "", values: ["Quick Start", "Commands"] }] };
+const whole_text = create_word_lookup([HELP], {}).find;
+
+test("a subject that picks by whole text spans from its first word to the end of the line", () => {
+  const text = "help Quick S";
+  const context = cursor_context(text, text.length, whole_text);
+  assert.deepEqual(context.kind === "subject" && [context.position, context.word, context.start, context.end], [0, "Quick S", 5, 12]);
+  const middle = cursor_context("help Quick S more", 12, whole_text);
+  assert.deepEqual(middle.kind === "subject" && [middle.position, middle.word, middle.start, middle.end], [0, "Quick S", 5, 17]);
+  const flagged = cursor_context("help -- Quick S", 15, whole_text);
+  assert.deepEqual(flagged.kind === "subject" && [flagged.word, flagged.start], ["Quick S", 8]);
+});
+
+test("search keeps one word per position, with the engine first", () => {
+  const context = at_end("search duck two");
+  assert.deepEqual(context.kind === "subject" && [context.position, context.word, context.start, context.end], [1, "two", 12, 15]);
 });
