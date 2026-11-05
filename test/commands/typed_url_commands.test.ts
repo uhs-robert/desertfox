@@ -136,7 +136,7 @@ test("open.url passes other errors on an about: page through unchanged", async (
 });
 
 test("a binding that omits the url compiles to a prompting step, with no default filled in", () => {
-  const keymap = { normal: { o: { id: "open.url" }, cw: { id: "open.url", args: { container: "Work", where: "tab" } } } };
+  const keymap = { normal: { o: { id: "open.url" }, e: { id: "open.url", args: { container: "Work", where: "tab" } } } };
   const { compiled } = compile_config({
     config: { ...empty_config(), keymap },
     default_keymap: {},
@@ -146,7 +146,7 @@ test("a binding that omits the url compiles to a prompting step, with no default
   const children = compiled.modes.normal!.children as unknown as Record<string, TreeLeaf>;
   assert.equal(children.o!.steps[0]!.invocation.args, undefined);
   assert.equal(children.o!.steps[0]!.runs_in, "background");
-  assert.equal(children.cw!.steps[0]!.invocation.args?.url, undefined);
+  assert.equal(children.e!.steps[0]!.invocation.args?.url, undefined);
 });
 
 test("a binding that omits the url opens the command line instead of the new tab page", async () => {
