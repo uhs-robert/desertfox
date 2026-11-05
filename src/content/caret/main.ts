@@ -3,8 +3,8 @@
 
 import type { Outcome, RunResponse } from "../../shared/messages.ts";
 import type { BundleHostApi, ExitDestination } from "../bundle_host.ts";
-import { move_once, SCREEN_LINE_UNITS } from "./motion.ts";
-import type { Motion } from "./motion.ts";
+import { find_char, move_once, SCREEN_LINE_UNITS } from "./motion.ts";
+import type { CharFind, Motion } from "./motion.ts";
 import { yank_text } from "./copy_text.ts";
 import { create_find } from "./find_session.ts";
 import { scroll_to_index, screen_line_target } from "./screen_line.ts";
@@ -29,6 +29,11 @@ let session: Session | undefined;
 let visual_runs = 0;
 // The visual session a `/` or `?` started from. The command line takes the mode while it is open, and the session waits for the end of the search.
 let searching_from: Session | undefined;
+
+// `f` arms this and the next printable key is its target. A count arrives as repeated calls of the handler, which add to `count`.
+let pending_find: { direction: CharFind["direction"]; till: boolean; count: number } | undefined;
+// The last find for `;` and `,`. Per page, and not a register.
+let last_find: CharFind | undefined;
 
 const selections_of = (model: TextModel): Selection[] => documents_of(model).flatMap((owner) => owner.getSelection() ?? []);
 
@@ -160,6 +165,25 @@ function ensure_session(mode: "caret" | "visual"): Session | string {
   return session;
 }
 
+// A printable key is the target. Escape cancels and is spent. A chord or named key cancels and then runs as usual.
+function take_find_target(token: string): "handled" | "pass" {
+  const find = pending_find!;
+  pending_find = undefined;
+  if (token === "<Escape>" || token === "<C-[>") return "handled";
+  if ([...token].length !== 1) return "pass";
+  const open = ensure_session(session?.mode ?? "caret");
+  if (typeof open === "string") return "handled";
+  last_find = { char: token, direction: find.direction, till: find.till };
+  move_to_find(open, last_find, find.count, false);
+  return "handled";
+}
+
+function move_to_find(open: Session, find: CharFind, count: number, again: boolean): void {
+  open.cursor = with_caret(open.cursor, find_char(open.model.text, open.cursor.caret, find, count, again), open.mode === "visual");
+  open.goal_x = undefined;
+  paint(open);
+}
+
 const sink_for = (mode: "caret" | "visual") => ({
   // Showing the caret on entry is what makes entering the mode draw it at once.
   enter: () => {
@@ -167,6 +191,7 @@ const sink_for = (mode: "caret" | "visual") => ({
     if (typeof started === "string") page.oasisfox_host.show_toast(started);
   },
   on_token: (token: string): "handled" | "pass" => {
+    if (pending_find) return take_find_target(token);
     if (mode === "caret" || (token !== "<Escape>" && token !== "<C-[>")) return "pass";
     // Escape in visual mode goes back to caret mode, and the keymap never sees it.
     page.oasisfox_host.set_mode("caret");
@@ -175,6 +200,7 @@ const sink_for = (mode: "caret" | "visual") => ({
   // Between caret and visual the highlight stays. Every other way out clears it.
   exit: (destination: ExitDestination) => {
     const is_search_line = destination === "cmdline" && searching_from !== undefined && searching_from === session;
+    pending_find = undefined;
     if (destination !== "caret" && destination !== "visual" && !is_search_line) end_session();
   },
 });
@@ -182,6 +208,18 @@ const sink_for = (mode: "caret" | "visual") => ({
 const handle_move = (args: Record<string, unknown>): Outcome | undefined => {
   const open = ensure_session(session?.mode ?? "caret");
   if (typeof open === "string") return { ok: false, message: open };
+  if (args.unit === "char_find") {
+    if (pending_find) pending_find.count++;
+    else pending_find = { direction: (args.direction as CharFind["direction"] | undefined) ?? "forward", till: args.till === true, count: 1 };
+    return;
+  }
+  if (args.unit === "find_repeat") {
+    if (!last_find) return;
+    const reversed = args.direction === "back";
+    const direction = reversed === (last_find.direction === "back") ? "forward" : "back";
+    move_to_find(open, { ...last_find, direction }, 1, true);
+    return;
+  }
   const motion: Motion = { unit: args.unit as Motion["unit"], direction: (args.direction as Motion["direction"] | undefined) ?? "forward", big: args.big === true };
   let caret: number;
   if (SCREEN_LINE_UNITS.includes(motion.unit)) {
