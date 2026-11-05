@@ -274,4 +274,18 @@ export async function run_cases({ rdp, extension_id, run_case, expect, open_page
     await send_keys(...ESCAPE);
     await wait_highlights((read) => total_painted(read) === 0, "the highlights cleared");
   });
+
+  await run_case("a pattern that would backtrack without end is not run, and the tab keeps answering", async () => {
+    const page_id = "find_costly";
+    await open_page("find_page", page_id, { new_tab: true });
+    // 40 letters and then a character that fails the pattern: (a+)+$ takes about 2^40 steps if it runs as a regex.
+    await in_active_tab(`document.body.textContent = ${JSON.stringify("a".repeat(40) + "!")}; true`);
+    await send_keys("/(a+)+$");
+    // A frozen tab never answers, so the read races a time limit.
+    const answered = await Promise.race([in_active_tab("document.title").then(() => true), sleep(5000).then(() => false)]);
+    expect(answered, "the tab did not answer within 5 seconds of a costly pattern");
+    const mark = events.length;
+    await send_keys(...ESCAPE);
+    await wait_event(mark, badge_is(page_id, "NORMAL"), "normal mode after Escape");
+  });
 }
