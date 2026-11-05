@@ -1,7 +1,7 @@
 // Key test cases of array bindings (awaitable commands, routing). run.mjs calls run_cases with its helpers.
 // The bindings live in config/keymap.toml: ,n = [tab.next, scroll.to 0], ,h = [hint.run background, scroll 300],
 // ,f = [find.next, scroll 300], ,o = [cmdline.open, scroll 300], ,p = [:scroll.pixels, scroll 300], ,t = [hint.run background, tab.next].
-import { cpSync } from "node:fs";
+import { cpSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { evaluate_in_background } from "./rdp.mjs";
@@ -19,9 +19,11 @@ export async function run_cases({ config_dir, load_config_dir, rdp, extension_id
     expect(await scroll_delta_after(page_id, ["j"]) > 0, "j did not scroll the page, so the command line is still open");
   };
 
+  let keymap_before;
   // The config.reload case wrote a reduced keymap into config_dir, so put the test keymap back before the sequences run.
   await run_case("the test keymap with the sequence bindings is loaded", async () => {
     await open_page("page", "sq_config", { new_tab: true });
+    keymap_before = readFileSync(join(config_dir, "keymap.toml"), "utf8");
     cpSync(join(dirname(fileURLToPath(import.meta.url)), "config", "keymap.toml"), join(config_dir, "keymap.toml"));
     await load_config_dir(config_dir);
     await close_tabs_with("sq_config");
@@ -140,4 +142,13 @@ export async function run_cases({ config_dir, load_config_dir, rdp, extension_id
     await close_tabs_with("sq_tabhint2");
     await sleep(300);
   });
+
+  // Later pieces (p2_prompts) rely on the keymap config.reload left, where go has no prefill.
+  await run_case("the keymap from before the sequence cases is loaded again", async () => {
+    await open_page("page", "sq_restore", { new_tab: true });
+    writeFileSync(join(config_dir, "keymap.toml"), keymap_before);
+    await load_config_dir(config_dir);
+    await close_tabs_with("sq_restore");
+    await sleep(300);
+  }, { setup: true });
 }
