@@ -2,18 +2,24 @@ import { get_config } from "../background/startup.ts";
 import { define } from "../shared/registry/index.ts";
 import { CONTAINER_PARAM, current_page, open_in, typed_url_target, WHERE_PARAM } from "./open_target.ts";
 import type { Where } from "./open_target.ts";
-import { DEFAULT_SETTINGS } from "../shared/config.ts";
-import { engine_url, search_engine_name } from "./url_build.ts";
+import { BUILT_IN_PAGE, DEFAULT_SETTINGS, NEW_TAB_PAGE_FILE } from "../shared/config.ts";
+import { engine_url, home_page_url, search_engine_name } from "./url_build.ts";
 
 const container_of = (args: Record<string, unknown>) => (typeof args.container === "string" ? args.container : undefined);
+
+// A blank url means none was given, so the built-in new tab page opens, the same page `page.home` opens for `oasisfox`.
+async function open_url_target(text: string): Promise<string> {
+  if (text.trim() === "") return home_page_url(BUILT_IN_PAGE, () => browser.runtime.getURL(NEW_TAB_PAGE_FILE));
+  return typed_url_target(text);
+}
 
 define("open.url", {
   name: "open",
   label: "Open URL",
-  intent: "Open a URL. It opens here, in a new tab, in a background tab or in a new window.",
-  params: [{ name: "url", type: "string", main: true, values: { from: "open" } }, WHERE_PARAM, CONTAINER_PARAM],
+  intent: "Open a URL. It opens here, in a new tab, in a background tab or in a new window. With no URL, it opens the new tab page.",
+  params: [{ name: "url", type: "string", main: true, default: "", values: { from: "open" } }, WHERE_PARAM, CONTAINER_PARAM],
   runs_in: "background",
-  run: async (ctx, args) => open_in(ctx, await typed_url_target(args.url as string), args.where as Where, container_of(args)),
+  run: async (ctx, args) => open_in(ctx, await open_url_target(args.url as string), args.where as Where, container_of(args)),
 });
 
 define("open.search", {

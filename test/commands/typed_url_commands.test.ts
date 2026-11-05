@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import "../../src/background/command_modules.ts";
 import { CONFIG_FORMAT_VERSION } from "../../src/shared/config.ts";
-import { registry } from "../../src/shared/registry/index.ts";
+import { check_args, registry } from "../../src/shared/registry/index.ts";
 
 type Opened = { via: string; url: string | undefined };
 
@@ -15,11 +15,15 @@ function install_browser(opened: Opened[]): void {
   const storage_area = { get: async () => ({}), set: empty, remove: empty };
   (globalThis as unknown as { browser: unknown }).browser = {
     storage: { managed: { get: async () => ({ format_version: CONFIG_FORMAT_VERSION, settings: SETTINGS }) }, local: storage_area, session: storage_area, onChanged: { addListener() {} } },
-    tabs: { query: async () => [], update: async (_id: number, props: { url: string }) => opened.push({ via: "update", url: props.url }) },
+    tabs: {
+      query: async () => [],
+      update: async (_id: number, props: { url: string }) => opened.push({ via: "update", url: props.url }),
+      create: async (props: { url?: string; active?: boolean }) => opened.push({ via: `tab_${props.active ? "active" : "background"}`, url: props.url }),
+    },
     windows: { create: async (props: { url?: string }) => opened.push({ via: "create", url: props.url }) },
     commands: { update: async () => undefined, reset: async () => undefined },
     contextualIdentities: { query: async () => [] },
-    runtime: { onMessage: { addListener() {} } },
+    runtime: { onMessage: { addListener() {} }, getURL: (path: string) => `moz-extension://test/${path}` },
   };
 }
 
@@ -53,6 +57,45 @@ test("page.home gives a bare home_page https", async () => {
   install_browser(opened);
   await run("page.home", { where: "here" });
   assert.deepEqual(opened, [{ via: "update", url: "https://example.com" }]);
+});
+
+const NEW_TAB_URL = "moz-extension://test/newtab.html?builtin";
+
+test("open with no url opens the new tab page here", async () => {
+  const opened: Opened[] = [];
+  install_browser(opened);
+  const checked = check_args(registry.get("open.url")!, {});
+  assert.equal(checked.ok, true);
+  await run("open.url", checked.ok ? checked.args : {});
+  assert.deepEqual(opened, [{ via: "update", url: NEW_TAB_URL }]);
+});
+
+test("open -t with no url opens the new tab page in a new tab", async () => {
+  const opened: Opened[] = [];
+  install_browser(opened);
+  await run("open.url", { url: "", where: "tab" });
+  assert.deepEqual(opened, [{ via: "tab_active", url: NEW_TAB_URL }]);
+});
+
+test("open -b with no url opens the new tab page in a background tab", async () => {
+  const opened: Opened[] = [];
+  install_browser(opened);
+  await run("open.url", { url: "", where: "background" });
+  assert.deepEqual(opened, [{ via: "tab_background", url: NEW_TAB_URL }]);
+});
+
+test("open -w with no url opens the new tab page in a new window", async () => {
+  const opened: Opened[] = [];
+  install_browser(opened);
+  await run("open.url", { url: "", where: "window" });
+  assert.deepEqual(opened, [{ via: "create", url: NEW_TAB_URL }]);
+});
+
+test("open with a blank url opens the new tab page", async () => {
+  const opened: Opened[] = [];
+  install_browser(opened);
+  await run("open.url", { url: "   ", where: "here" });
+  assert.deepEqual(opened, [{ via: "update", url: NEW_TAB_URL }]);
 });
 
 test("open.url opens a blob: link as it is", async () => {
