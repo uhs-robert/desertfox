@@ -13,6 +13,9 @@ import { is_dynamic_values, static_values } from "../../src/shared/registry/para
 // Handlers that throw a TypeError on the stub whatever the args, each with the reason. Empty now: every background handler runs through. Nothing else may throw a TypeError.
 const CANNOT_RUN_ON_STUB: Record<string, string> = {};
 
+// One text each setting accepts. A name missing here gets "x", which the validator may drop.
+const VALID_SETTING_TEXT: Record<string, string> = { which_key_delay_ms: "500", hint_letters: "asdf", ignore_sites: "a.com b.com", light_intensity: "4", home_page: "https://example.org", default_engine: "stub", palette: "stub", cmdline_prompt: ">", history_completion_max: "5", newtab_clock: "digital", newtab_clock_format: "24", open_completion: "bookmarks", which_key_border: "round", mode_indicator: "off", new_tab_page: "oasisfox" };
+
 const SOURCES: EnumSources = { search_engines: ["stub_engine"], containers: ["stub_container"] };
 const CTX: CommandContext = { tab_id: 1, window_id: 1, frame_id: 0, mode: "normal" };
 
@@ -84,6 +87,9 @@ function accepted_args(command: NonNullable<ReturnType<typeof registry.get>>): R
   for (const param of params) for (const value of candidates(param)) sets.push({ [param.name]: value });
   const required = Object.fromEntries(params.map((param) => [param.name, candidates(param).at(-1)]));
   sets.push(required);
+  // A value that the named setting accepts, so a handler's parse branch runs. One-param-at-a-time sets leave `value` empty.
+  const value_param = params.find((param) => param.value_of !== undefined);
+  if (value_param) for (const name of static_values(params.find((param) => param.name === value_param.value_of)!) ?? []) sets.push({ [value_param.value_of as string]: name, [value_param.name]: VALID_SETTING_TEXT[name] ?? "x" });
   return sets.filter((args) => check_args(command, args, SOURCES).ok).map((args) => (check_args(command, args, SOURCES) as { args: Record<string, unknown> }).args);
 }
 
