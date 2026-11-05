@@ -72,7 +72,7 @@ test("the clickable selector adds roving-tabindex items", () => {
 });
 
 // A fake page element for the click sign: a tag, a cursor, a parent and attributes.
-type Dom = { name: string; local: string; cursor?: string; parent?: Dom; attrs?: Record<string, string>; in_menu?: boolean; plain?: boolean };
+type Dom = { name: string; local: string; cursor?: string; parent?: Dom; attrs?: Record<string, string>; in_menu?: boolean; plain?: boolean; focus_only?: boolean };
 const dom_styles = {
   cursor_of: (e: Element) => (e as unknown as Dom).cursor ?? "auto",
   parent_of: (e: Element) => ((e as unknown as Dom).parent ?? null) as unknown as Element | null,
@@ -82,7 +82,7 @@ const el = (d: Dom) =>
     localName: d.local,
     hasAttribute: (n: string) => d.attrs?.[n] !== undefined,
     getAttribute: (n: string) => d.attrs?.[n] ?? null,
-    matches: (s: string) => (s.includes("a[href]") ? d.plain !== true : d.in_menu === true),
+    matches: (s: string) => (s.includes("a[href]") ? d.plain !== true && !(d.focus_only === true && !s.includes("[tabindex]:not(")) : d.in_menu === true),
     parentNode: d.parent ?? null,
   }) as unknown as Element;
 
@@ -178,4 +178,11 @@ test("the roving group rule is part of the weak menu selector, so plain-list men
   const seen: string[] = [];
   make_weak_test(dom_styles)(Object.assign(el({ name: "item", local: "li" }), { matches: (s: string) => (seen.push(s), false) }));
   assert.ok(seen.some((s) => s.includes('[tabindex="0"] ~ [tabindex="-1"]') && s.includes(':has(~ [tabindex="0"])')));
+});
+
+test("a focusable ARIA menu does not hide its roving items", () => {
+  const menu = el({ name: "menu", local: "ul", focus_only: true });
+  const item = (name: string) => el({ name, local: "li", parent: menu as unknown as Dom });
+  const [one, two] = [item("one"), item("two")];
+  assert.deepEqual(names_of(drop_redundant_weak([strong(menu), weak(one), weak(two)])), ["menu", "one", "two"]);
 });

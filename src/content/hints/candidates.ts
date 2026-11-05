@@ -7,7 +7,8 @@ export type HintFilter = "all" | "clickable" | "inputs" | "links" | "custom";
 
 const TEXT_FIELDS = 'input:not([type=hidden]):not([disabled]), textarea:not([disabled]), select:not([disabled]), [contenteditable=""], [contenteditable="true"]';
 const LINKS = "a[href]";
-const CLICKABLE = `${LINKS}, button:not([disabled]), summary, [onclick], [tabindex]:not([tabindex="-1"]), [role=button], [role=link], [role=menuitem], [role=menuitemcheckbox], [role=menuitemradio], [role=tab], [role=checkbox], [role=switch], [role=option], [role=radio], label[for], ${TEXT_FIELDS}`;
+const CLICKABLE_BY_ACTION = `${LINKS}, button:not([disabled]), summary, [onclick], [role=button], [role=link], [role=menuitem], [role=menuitemcheckbox], [role=menuitemradio], [role=tab], [role=checkbox], [role=switch], [role=option], [role=radio], label[for], ${TEXT_FIELDS}`;
+const CLICKABLE = `${CLICKABLE_BY_ACTION}, [tabindex]:not([tabindex="-1"])`;
 // A roving-tabindex widget keeps one item at tabindex 0 and the rest at -1, so -1 alone says nothing. A click-like role, or a place inside a menu, does.
 const ROVING_ITEM = `${["button", "link", "menuitem", "menuitemcheckbox", "menuitemradio", "tab", "option", "checkbox", "switch", "radio"].map((role) => `[tabindex="-1"][role=${role}]`).join(", ")}`;
 // Menus built from plain lists carry no role. Their roving group still shows: one item at tabindex 0 and its siblings at -1.
@@ -94,7 +95,8 @@ export function drop_redundant_weak(found: Found[]): Found[] {
   const weak = new Set<unknown>(found.filter((item) => item.weak).map((item) => item.element));
   if (weak.size === 0) return found;
   const clickable = found.filter((item) => item.weak || item.element.matches(CLICKABLE));
-  const strong = new Set<unknown>(clickable.filter((item) => !item.weak).map((item) => item.element));
+  // A container that is only focusable (an ARIA menu with tabindex 0) must not hide the items in it, so as an ancestor it needs a click sign.
+  const strong = new Set<unknown>(clickable.filter((item) => !item.weak && item.element.matches(CLICKABLE_BY_ACTION)).map((item) => item.element));
   const dropped = new Set<unknown>();
   for (const item of clickable) {
     const own_weak = item.weak === true;
