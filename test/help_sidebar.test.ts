@@ -38,24 +38,31 @@ const QUICK_START: Block[] = [
 
 const GROUPS = [{ name: "scroll", commands: [] }, { name: "tab", commands: [] }];
 
-function render(route: Route, keep_state = false): FakeNode {
+const GUIDE: Block[] = [
+  { kind: "heading", level: 2, text: "Set up your engines" },
+  { kind: "heading", level: 3, text: "Slots" },
+  { kind: "heading", level: 3, text: "Trees" },
+];
+
+function render(route: Route, keep_state = false, guide: Block[] = []): FakeNode {
   (globalThis as { document?: unknown }).document = { createElement: (tag: string) => new FakeNode(tag), createElementNS: (_ns: string, tag: string) => new FakeNode(tag) };
   if (!keep_state) reset_group_state();
   const root = new FakeNode("body");
-  render_help(root as never, { quick_start: QUICK_START, groups: GROUPS, warnings: [], settings: [], engines: [], tip: { kind: "tip", inlines: [] } } as never, route, []);
+  render_help(root as never, { quick_start: QUICK_START, groups: GROUPS, warnings: [], settings: [], engines: [], tip: { kind: "tip", inlines: [] } } as never, route, guide);
   return root;
 }
 
 const group_nodes = (root: FakeNode) => root.find_all(by_class("oasisfox-help-nav-group")).map((group) => ({
   page: (group.find_all((node) => node.tag === "a")[0]!.children[0]) as string,
+  page_link: group.find_all((node) => node.tag === "a")[0]!,
   toggle: group.find_all(by_class("oasisfox-help-sections-toggle"))[0]!,
   list: group.find_all(by_class("oasisfox-help-sections"))[0]!,
 }));
 
 const links = (list: FakeNode) => (list.children as FakeNode[]).map((link) => link.attributes["href"]);
 
-test("Home, Quick Start, Commands and Styling have a group, Search Engines does not", () => {
-  assert.deepEqual(group_nodes(render({ page: "home" })).map((group) => group.page), ["Home", "Quick Start", "Commands", "Styling"]);
+test("every page has a group", () => {
+  assert.deepEqual(group_nodes(render({ page: "home" })).map((group) => group.page), ["Home", "Quick Start", "Commands", "Search Engines", "Styling"]);
 });
 
 test("the current page's group is open and the others are closed", () => {
@@ -68,7 +75,8 @@ test("the current page's group is open and the others are closed", () => {
       assert.equal(group.toggle.attributes["aria-controls"], group.list.id);
     }
   }
-  for (const group of group_nodes(render({ page: "search-engines" }))) assert.equal(group.list.hidden, true);
+  const engines = group_nodes(render({ page: "search-engines" }, false, GUIDE));
+  assert.deepEqual(engines.map((group) => !group.list.hidden), [false, false, false, true, false]);
 });
 
 test("each toggle works alone and flips aria-expanded", () => {
@@ -112,7 +120,7 @@ test("each section link round-trips through the router to a heading on its page"
 
 test("a section route opens its page's group", () => {
   const groups = group_nodes(render({ page: "commands", section: "tab" }));
-  assert.deepEqual(groups.map((group) => !group.list.hidden), [false, false, true, false]);
+  assert.deepEqual(groups.map((group) => !group.list.hidden), [false, false, true, false, false]);
 });
 
 test("section routes parse for every page and reject an unknown page", () => {
@@ -124,19 +132,48 @@ test("section routes parse for every page and reject an unknown page", () => {
 test("a toggle persists across renders, auto-opening does not, and a menu click reopens a closed group", () => {
   render({ page: "home" });
   group_nodes(render({ page: "home" }, true))[2]!.toggle.listeners["click"]!();
-  assert.deepEqual(group_nodes(render({ page: "home" }, true)).map((group) => !group.list.hidden), [true, false, true, false]);
-  assert.deepEqual(group_nodes(render({ page: "styling" }, true)).map((group) => !group.list.hidden), [false, false, true, true]);
+  assert.deepEqual(group_nodes(render({ page: "home" }, true)).map((group) => !group.list.hidden), [true, false, true, false, false]);
+  assert.deepEqual(group_nodes(render({ page: "styling" }, true)).map((group) => !group.list.hidden), [false, false, true, false, true]);
   // Home and Styling were only open by default, so they close, and the toggled Commands group stays open.
   const on_commands = group_nodes(render({ page: "commands" }, true)).map((group) => !group.list.hidden);
-  assert.deepEqual(on_commands, [false, false, true, false]);
+  assert.deepEqual(on_commands, [false, false, true, false, false]);
 });
 
 test("automatic opening piles nothing up", () => {
   render({ page: "home" });
-  assert.deepEqual(group_nodes(render({ page: "commands" }, true)).map((group) => !group.list.hidden), [false, false, true, false]);
+  assert.deepEqual(group_nodes(render({ page: "commands" }, true)).map((group) => !group.list.hidden), [false, false, true, false, false]);
   const closed = group_nodes(render({ page: "commands" }, true))[2]!;
   closed.toggle.listeners["click"]!();
   assert.equal(group_nodes(render({ page: "commands" }, true))[2]!.list.hidden, true);
   render({ page: "home" }, true);
   assert.equal(group_nodes(render({ page: "commands" }, true))[2]!.list.hidden, false);
+});
+
+test("clicking the current page's menu entry reopens a group the chevron closed", () => {
+  const commands = group_nodes(render({ page: "commands" }))[2]!;
+  commands.toggle.listeners["click"]!();
+  assert.equal(commands.list.hidden, true);
+  commands.page_link.listeners["click"]!();
+  assert.equal(commands.list.hidden, false);
+  assert.equal(commands.toggle.attributes["aria-expanded"], "true");
+  assert.equal(group_nodes(render({ page: "commands" }, true))[2]!.list.hidden, false);
+});
+
+test("a menu click from a section of the same page reopens a closed group", () => {
+  const commands = group_nodes(render({ page: "commands", section: "tab" }))[2]!;
+  commands.toggle.listeners["click"]!();
+  commands.page_link.listeners["click"]!();
+  assert.equal(group_nodes(render({ page: "commands" }, true))[2]!.list.hidden, false);
+});
+
+test("Search Engines lists the guide's level-3 headings and Your engines, with matching heading ids", () => {
+  const root = render({ page: "search-engines" }, false, GUIDE);
+  const group = group_nodes(root)[3]!;
+  assert.deepEqual(links(group.list), ["#section=search-engines/slots", "#section=search-engines/trees", "#section=search-engines/your-engines"]);
+  const headings = root.find_all((node) => node.id.startsWith("search-engines-"));
+  assert.deepEqual(headings.map((node) => [node.tag, node.id, node.tabIndex]), [["h3", "search-engines-slots", -1], ["h3", "search-engines-trees", -1], ["h2", "search-engines-your-engines", -1]]);
+});
+
+test("without the guide, Search Engines lists only Your engines", () => {
+  assert.deepEqual(links(group_nodes(render({ page: "search-engines" }))[3]!.list), ["#section=search-engines/your-engines"]);
 });

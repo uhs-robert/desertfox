@@ -4,7 +4,7 @@
 import type { ParamDef } from "../../shared/command.ts";
 import { tokenize } from "../../shared/registry/index.ts";
 import type { CommandLookup } from "../../shared/registry/index.ts";
-import { find_param } from "../../shared/registry/params.ts";
+import { bare_word_param, find_param, is_dynamic_values, subject_param } from "../../shared/registry/params.ts";
 
 type Command = NonNullable<ReturnType<CommandLookup["find"]>>;
 
@@ -16,7 +16,7 @@ export type CursorContext =
   | ({ kind: "flag"; command: Command } & Span)
   // The cursor is after the `=` of `--param=` or `-c=`, so the span is the value only.
   | ({ kind: "flag_value"; command: Command; param: ParamDef } & Span)
-  // `position` counts the unmarked words before this one, so 0 is the first.
+  // `position` counts the unmarked words before this one, so 0 is the first. A subject that picks by whole text is always 0, and its span runs from its first word to the end of the line.
   // `engine_settled`: a `--` or an `--engine=` flag came first, so the first word is the query and no engine.
   | ({ kind: "subject"; command: Command; position: number; engine_settled: boolean } & Span)
   | { kind: "none" };
@@ -33,18 +33,32 @@ function is_flag_token(token: { text: string; quoted_from: number | null }): boo
   return equals > 0 && token.quoted_from > equals && is_flag_word(token.text.slice(0, equals));
 }
 
-// Where the word that ends at the end of `head` begins, or null while a quote is still open.
-function last_word_start(head: string): number | null {
-  let start = 0;
+// Where each word of `head` begins, and whether the text ends inside a word or inside an open quote.
+function word_starts(head: string): { starts: number[]; in_word: boolean; quote_open: boolean } {
+  const starts: number[] = [];
+  let in_word = false;
   let quote = "";
   for (let index = 0; index < head.length; index++) {
     const char = head[index] as string;
+    if (!quote && /\s/.test(char)) {
+      in_word = false;
+      continue;
+    }
+    if (!in_word) starts.push(index);
+    in_word = true;
     if (char === "\\" && quote !== "'") index += 1;
     else if (quote) quote = char === quote ? "" : quote;
     else if (char === '"' || char === "'") quote = char;
-    else if (/\s/.test(char)) start = index + 1;
   }
-  return quote ? null : start;
+  return { starts, in_word, quote_open: quote !== "" };
+}
+
+// A subject that picks one of a list by its whole text, as a help name or a tab title does, so its words never split
+// across positions. `set` has no list and `search` gives its first word to the engine, so both keep one word per position.
+function picks_by_whole_text(command: Command): boolean {
+  const subject = subject_param(command);
+  const engine = bare_word_param(command);
+  return subject?.main === true && subject.rest === true && subject.values !== undefined && !(engine && is_dynamic_values(engine.values));
 }
 
 function flag_value_context(command: Command, word: string, start: number, end: number): CursorContext {
@@ -60,7 +74,8 @@ export function cursor_context(text: string, caret: number, find: CommandLookup[
   const lead = text.match(/^[\s:]*/)?.[0].length ?? 0;
   if (caret < lead) return { kind: "none" };
   const head = text.slice(lead, caret);
-  const word_start = last_word_start(head);
+  const { starts, in_word, quote_open } = word_starts(head);
+  const word_start = quote_open ? null : in_word ? (starts.at(-1) as number) : head.length;
   const tokens = word_start === null ? undefined : tokenize(head);
   if (word_start === null || !tokens || "error" in tokens) return { kind: "none" };
   const cursor = word_start === head.length ? undefined : tokens.at(-1);
@@ -78,7 +93,9 @@ export function cursor_context(text: string, caret: number, find: CommandLookup[
   let flags_open = true;
   let position = 0;
   let engine_settled = false;
-  for (const earlier of rest) {
+  let subject_start: number | undefined;
+  let subject_first: number | undefined;
+  for (const [index, earlier] of rest.entries()) {
     if (flags_open && earlier.quoted_from === null && earlier.text === "--") {
       flags_open = false;
       engine_settled = true;
@@ -87,10 +104,18 @@ export function cursor_context(text: string, caret: number, find: CommandLookup[
     } else {
       flags_open = false;
       position += 1;
+      subject_start ??= starts[index + 1];
+      subject_first ??= index;
     }
   }
   if (flags_open && word.startsWith("-") && !NUMBER_WORD.test(word)) {
     return word.includes("=") ? flag_value_context(command, word, start, end) : { kind: "flag", command, word, start, end };
+  }
+  if (picks_by_whole_text(command)) {
+    const from = subject_start === undefined ? start : lead + subject_start;
+    // The span replaces the raw text, but ranking reads the subject as the parser does: quotes removed, one space between words.
+    const subject_words = [...rest.slice(subject_first ?? rest.length), ...(cursor ? [cursor] : [])].map((token) => token.text);
+    return { kind: "subject", command, position: 0, engine_settled, word: subject_words.join(" "), start: from, end: text.length };
   }
   return { kind: "subject", command, position, engine_settled, word, start, end };
 }

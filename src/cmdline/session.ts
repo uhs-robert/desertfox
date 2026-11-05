@@ -3,7 +3,7 @@
 
 import type { Invocation } from "../shared/invocation.ts";
 import type { ParseResult } from "../shared/registry/index.ts";
-import type { Completion } from "./completion/sources.ts";
+import type { Completion, TabMarks } from "./completion/sources.ts";
 import { create_history_cursor } from "./history_cursor.ts";
 
 export type Effect =
@@ -14,7 +14,9 @@ export type Effect =
   // Enter on a search line: the search keeps its match.
   | { kind: "find_commit" }
   // Open the help page at this command.
-  | { kind: "help"; command_id: string };
+  | { kind: "help"; command_id: string }
+  // `list.act --action=unload` on a tab row: the page asks the background to flip it, then calls `patch_tab`.
+  | { kind: "set_tab_unloaded"; tab_id: number; unloaded: boolean };
 
 export type SessionDeps = {
   history: readonly string[];
@@ -131,6 +133,16 @@ export function create_session(deps: SessionDeps) {
     return { kind: "render" };
   };
 
+  // The highlighted row decides. A history recall leaves `selected` set with no row behind it, so the row is read, not the index.
+  const act_on_row = (): Effect => {
+    const marks = rows()[selected]?.tab;
+    if (!marks) {
+      message = "select a tab row first";
+      return { kind: "render" };
+    }
+    return { kind: "set_tab_unloaded", tab_id: marks.id, unloaded: !marks.flags.includes("discarded") };
+  };
+
   const walk_history = (direction: unknown): Effect => {
     if (deps.search) return { kind: "render" };
     if (!fresh && rows().length > 0) return step_selection(direction);
@@ -177,6 +189,13 @@ export function create_session(deps: SessionDeps) {
       if (selected >= 0 || !completion) return;
       completion = deps.complete?.(text, caret);
     },
+    // The background changed a tab: its row takes the new marks in place, so the selection and the window stay.
+    patch_tab: (marks: TabMarks) => {
+      for (const row of completion?.rows ?? []) if (row.tab?.id === marks.id) row.tab = marks;
+    },
+    set_message: (next: string | undefined) => {
+      message = next;
+    },
     set_status: (next: string) => {
       status = next;
     },
@@ -205,6 +224,8 @@ export function create_session(deps: SessionDeps) {
           return cycle(1);
         case "cmdline.prev_completion":
           return cycle(-1);
+        case "list.act":
+          return act_on_row();
         case "cmdline.help":
           return deps.search ? { kind: "render" } : help();
         case "cmdline.clear":

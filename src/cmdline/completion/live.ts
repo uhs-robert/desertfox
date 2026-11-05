@@ -45,6 +45,10 @@ export function create_live_source(deps: LiveDeps) {
       if (!pending.has(kind)) start(kind);
       return { loading: true };
     },
+    // A tab changed after the list was fetched: later rankings show it too.
+    patch_tab: (item: TabItem) => {
+      if (cache.tabs) cache.tabs = cache.tabs.map((tab) => (tab.id === item.id ? item : tab));
+    },
     // The line closed: a reply still on its way lands nowhere.
     close: () => {
       pending.clear();

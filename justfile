@@ -88,10 +88,46 @@ install:
 # Entry in the rbw vault that holds the AMO key: the secret as password, the issuer in the notes.
 export AMO_RBW_ENTRY := env("AMO_RBW_ENTRY", "Firefox AMO API Key")
 
-# Sign dist/ and install it for every profile. Fills the AMO key from rbw when either variable is empty.
+# Refuse to release from main, a detached HEAD or with uncommitted changes, so a bump never lands on main or mixes with other work.
+[private]
+release_guard:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    branch=$(git branch --show-current)
+    if [ -z "$branch" ] || [ "$branch" = "main" ]; then
+        echo "release refuses to run on main or a detached HEAD. Switch to a release branch first." >&2
+        exit 1
+    fi
+    changed=$(git status --porcelain)
+    if [ -z "$changed" ]; then
+        exit 0
+    fi
+    # A bump left behind by a failed sign or install looks like this.
+    if [ -z "$(git status --porcelain -- . ':!package.json' ':!package-lock.json' ':!src/manifest.json')" ]; then
+        echo "release found changes only in package.json, package-lock.json and src/manifest.json. That may be a bump left by a failed sign or install. Run 'git diff HEAD -- package.json package-lock.json src/manifest.json'. If it shows only the version line, run 'git checkout -- package.json package-lock.json src/manifest.json' and rerun. Otherwise commit or keep your edits. If signing succeeded, commit the bump instead." >&2
+        exit 1
+    fi
+    echo "release refuses to run with uncommitted changes. Commit or stash them first." >&2
+    exit 1
+
+# Raise the patch version in package.json, package-lock.json and src/manifest.json. AMO rejects a version it has already signed. Runs no git.
+[private]
+release_bump:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    command -v jq >/dev/null || { echo "release needs jq to edit src/manifest.json." >&2; exit 1; }
+    npm version patch --no-git-tag-version >/dev/null
+    new_version=$(jq -r .version package.json)
+    manifest_tmp=$(mktemp)
+    jq --arg version "$new_version" '.version = $version' src/manifest.json > "$manifest_tmp"
+    mv "$manifest_tmp" src/manifest.json
+    echo "bumped version to $new_version"
+
+# Bump the patch version, sign dist/ and install it for every profile. Fills the AMO key from rbw when either variable is empty. Needs a clean release branch.
 release:
     #!/usr/bin/env bash
     set -euo pipefail
+    just release_guard
     if [ -z "${WEB_EXT_API_KEY:-}" ] || [ -z "${WEB_EXT_API_SECRET:-}" ]; then
         for tool in rbw jq; do
             command -v "$tool" >/dev/null || { echo "release needs $tool to read the AMO key from rbw. Install it, or set WEB_EXT_API_KEY and WEB_EXT_API_SECRET." >&2; exit 1; }
@@ -111,5 +147,7 @@ release:
         fi
         export WEB_EXT_API_KEY WEB_EXT_API_SECRET
     fi
+    just release_bump
     just sign
     just install
+    echo "Released $(jq -r .version package.json). Commit the bump on this branch and open a PR."

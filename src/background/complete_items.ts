@@ -3,8 +3,10 @@
 
 import type { SearchEngine } from "../shared/config.ts";
 import type { PageInfo } from "../shared/engines/index.ts";
-import type { BookmarkItem, CompleteItemsAnswer, EngineItem, HistoryItem, OpenRow, TabContainer, TabItem, WindowItem } from "../shared/messages.ts";
+import type { BookmarkItem, CompleteItemsAnswer, SetTabUnloadedAnswer, EngineItem, HistoryItem, OpenRow, TabContainer, TabItem, WindowItem } from "../shared/messages.ts";
 import { available_engine_names } from "./availability.ts";
+import { set_unloaded } from "./tab_discard.ts";
+import type { DiscardDeps } from "./tab_discard.ts";
 
 export type TabLike = {
   id?: number | undefined;
@@ -36,7 +38,7 @@ export function listed_favicon(url: string | undefined): string | undefined {
 }
 
 // A tab the line can list. The page gets `TabItem` only.
-export type ListedTab = TabItem & { id: number; window_id: number };
+export type ListedTab = TabItem & { window_id: number };
 
 // The window and privacy of the tab that holds the line.
 export type LineScope = { window_id: number; incognito: boolean };
@@ -188,6 +190,8 @@ export type CompleteItemsDeps = typeof browser_complete_items_deps & {
   // The page of the line's tab, undefined when it has none.
   page_of: (tab_id: number) => Promise<PageInfo | undefined>;
   open_settings: () => Promise<OpenSettings>;
+  read_tab: (tab_id: number) => Promise<TabLike | undefined>;
+  discard: DiscardDeps;
 };
 
 export type Asker = LineScope & { tab_id: number };
@@ -208,10 +212,25 @@ export function create_complete_items(deps: CompleteItemsDeps) {
     if (kind === "windows") return listed_windows(await deps.query_windows(), asker).map(({ number, title }) => ({ number, title }));
     if (kind === "bookmarks") return bookmark_items(await deps.all_bookmarks());
     const tabs = await read_tabs(deps.query_tabs, asker, await deps.all_windows(), await deps.containers(), await deps.previous_tab(asker.window_id));
-    return tabs.map(({ id, window_id, ...item }) => item);
+    return tabs.map(({ window_id, ...item }) => item);
   };
 
   return {
+    // Unloads or loads one tab of the list. Undefined for a sender that is not an opener and for a tab that is gone or of the other privacy.
+    // The address and title come from before the change: a tab still loading reads about:blank once unloaded.
+    set_unloaded: async (tab_id: unknown, unloaded: unknown, asker: Asker | undefined): Promise<SetTabUnloadedAnswer | undefined> => {
+      if (typeof tab_id !== "number" || typeof unloaded !== "boolean" || !asker || !(await deps.is_opener(asker.tab_id))) return undefined;
+      const before = await deps.read_tab(tab_id);
+      if (!before || before.incognito !== asker.incognito) return undefined;
+      const { skipped } = await set_unloaded(deps.discard, [tab_id], unloaded);
+      const after = await deps.read_tab(tab_id);
+      if (!after) return undefined;
+      const shown = unloaded ? { ...after, url: before.url, title: before.title } : after;
+      const [item] = listed_tabs([shown], asker, await deps.containers(), await deps.previous_tab(asker.window_id));
+      if (!item) return undefined;
+      const { window_id, ...row } = item;
+      return { item: row, ...(skipped[0] ? { refusal: skipped[0].reason } : {}) };
+    },
     // Undefined for a sender that is not a tab, for a tab that opened no line and for a tab that closed or navigated
     // while the lookup ran. A failed browser call gives an empty list.
     answer: async (kind: unknown, asker: Asker | undefined): Promise<CompleteItemsAnswer | undefined> => {
