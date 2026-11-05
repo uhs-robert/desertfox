@@ -66,11 +66,6 @@ test("an arg the compiler filled with its default does not hide the key", () => 
   assert.equal(labels.get("window.new"), "wn");
 });
 
-test("a binding that leaves a required subject out prompts on its own, so it is not bare", () => {
-  const meta = [{ id: "open.url", label: "Open", intent: "Open.", params: [{ name: "url", type: "string", main: true }] }] as never;
-  assert.equal(key_labels(keymap({ normal: branch({ o: leaf("open.url") }) }), meta, "normal").size, 0);
-});
-
 test("keys with no flag come before flag keys, then shorter, then lowercase before uppercase", () => {
   const user = branch({ B: leaf("tab.close"), b: leaf("tab.close"), aa: leaf("tab.close"), L: leaf("tab.close", { right: true }) });
   assert.equal(key_labels(keymap({ normal: user }), COMMANDS, "normal").get("tab.close"), "b B +2");
@@ -84,4 +79,10 @@ test("the real default keymap shows tab.close as dd xx +5", () => {
     enum_sources: { search_engines: ["google"], containers: [] },
   });
   assert.equal(key_labels(compiled, registry.list().map(command_meta), "normal").get("tab.close"), "dd xx +5");
+});
+
+test("a key bound to open -t gets its label, the conditional url default counts as the default", () => {
+  const meta = [command_meta(registry.get("open.url")!)] as never;
+  const labels = key_labels(keymap({ normal: branch({ T: leaf("open.url", { where: "tab", url: "" }) }) }), meta, "normal");
+  assert.equal(labels.get("open.url"), "T");
 });

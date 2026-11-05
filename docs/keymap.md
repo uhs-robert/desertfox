@@ -16,7 +16,7 @@ A key shows the command label plus a phrase for each arg its binding sets, for e
 
 The `caret`, `visual` and `cmdline` rows bind placeholder commands that refuse until their piece builds them.
 
-A note "(prompts)" means the binding leaves a param out, so the command line asks for it.
+A note "(prompts)" means the binding sets a `prompt` for a param, so the command line asks for it.
 
 <!-- BEGIN generated -->
 

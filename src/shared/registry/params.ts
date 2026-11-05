@@ -1,7 +1,7 @@
 // Small readers over a command's params, shared by the define checks, the
 // validator, the parser and the usage line.
 
-import type { CommandDef, ContextSource, DynamicValues, ParamDef, ParamValue } from "../command.ts";
+import type { CommandDef, ConditionalDefault, ContextSource, DynamicValues, ParamDef, ParamValue } from "../command.ts";
 
 export const CONTEXT_SOURCE_NAMES = ["current_url", "selection", "clipboard"] as const;
 
@@ -9,6 +9,48 @@ export function is_context_source(value: unknown): value is ContextSource {
   if (typeof value !== "object" || value === null) return false;
   const from = (value as { from?: unknown }).from;
   return CONTEXT_SOURCE_NAMES.some((name) => name === from);
+}
+
+export function is_conditional_default(value: unknown): value is ConditionalDefault {
+  return typeof value === "object" && value !== null && "value" in value && "when" in value;
+}
+
+// The default that applies once the sibling values are known, or undefined when the param has none and is required. `sibling` reads a sibling's value.
+export function applicable_default(param: ParamDef, sibling: (name: string) => unknown): Exclude<ParamDef["default"], ConditionalDefault> | undefined {
+  if (!is_conditional_default(param.default)) return param.default;
+  const [name, allowed] = Object.entries(param.default.when)[0] as [string, readonly ParamValue[]];
+  return allowed.includes(sibling(name) as ParamValue) ? param.default.value : undefined;
+}
+
+// `applicable_default` for a param of `command`, reading siblings from `values` (a sibling not in `values` counts by its own plain default).
+// Every consumer that asks "does this param have a default" or "is it required" goes through here.
+export function default_of(command: Pick<CommandDef, "params">, param: ParamDef, values: Record<string, unknown>): ReturnType<typeof applicable_default> {
+  return applicable_default(param, (name) => {
+    if (values[name] !== undefined) return values[name];
+    const sibling = find_param(command, name);
+    return sibling && !is_conditional_default(sibling.default) ? sibling.default : undefined;
+  });
+}
+
+// The default value to compare a given value against, whichever form the default has.
+export function default_value(param: ParamDef): ParamValue | ContextSource | undefined {
+  return is_conditional_default(param.default) ? param.default.value : param.default;
+}
+
+// A default that is a plain value: not a context source, not conditional.
+export function literal_default(param: ParamDef): ParamValue | undefined {
+  const value = param.default;
+  return value === undefined || is_context_source(value) || is_conditional_default(value) ? undefined : value;
+}
+
+// A default as the help page prints it.
+export function describe_default(param: ParamDef): string {
+  const value = param.default;
+  if (value === undefined) return "";
+  if (is_context_source(value)) return `from ${value.from}`;
+  if (!is_conditional_default(value)) return String(value);
+  const [name, allowed] = Object.entries(value.when)[0] as [string, readonly ParamValue[]];
+  return `${JSON.stringify(value.value)} when ${name} is ${join_alternatives(allowed)}`;
 }
 
 export function is_dynamic_values(values: ParamDef["values"]): values is DynamicValues {

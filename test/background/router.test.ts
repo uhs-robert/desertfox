@@ -81,12 +81,16 @@ test("an empty selection in an explicit @selection arg opens the line, a full on
   assert.deepEqual(full.log, []);
 });
 
-test("a missing required param opens the command line with the command typed in", async () => {
+test("a missing required param without a prompt is refused, an explicit prompt opens the command line", async () => {
   const { deps, log } = make_fake({
     "open.url": { label: "Open", intent: "x", name: "open", params: [{ name: "url", type: "string" }], runs_in: "background", run: () => assert.fail() },
   });
-  assert.deepEqual(await create_router(deps).run({ invocations: [{ id: "open.url" }], mode: "normal", may_prompt: true }), { ok: true });
-  assert.deepEqual(log, ["cmdline 7 0 open --url="]);
+  const refused = await create_router(deps).run({ invocations: [{ id: "open.url" }], mode: "normal", may_prompt: true });
+  assert.equal(refused.ok, false);
+  assert.match(log[0]!, /^refuse 7 .*url/);
+  assert.equal(log.length, 1);
+  assert.deepEqual(await create_router(deps).run({ invocations: [{ id: "open.url", prompt: { param: "url" } }], mode: "normal", may_prompt: true }), { ok: true });
+  assert.deepEqual(log.slice(1), ["cmdline 7 0 open --url="]);
 });
 
 test("a prompt opens the line with the prefill resolved now, and runs nothing", async () => {
@@ -114,7 +118,7 @@ test("opening the line on a tab with no content script refuses", async () => {
     { "open.url": { label: "Open", intent: "x", name: "open", params: [{ name: "url", type: "string" }], runs_in: "background", run: () => assert.fail() } },
     { has_content_script: async () => false, open_cmdline: async () => { throw new Error("no receiver"); } },
   );
-  const response = await create_router(deps).run({ invocations: [{ id: "open.url" }], mode: "normal", may_prompt: true });
+  const response = await create_router(deps).run({ invocations: [{ id: "open.url", prompt: { param: "url" } }], mode: "normal", may_prompt: true });
   assert.equal(response.ok, false);
   assert.deepEqual(log, ["refuse 7 Open needs a page OasisFox runs on"]);
 });

@@ -1,5 +1,5 @@
 // Key test cases of piece P2 (prompts). run.mjs calls run_cases with its helpers.
-// `go = "open"` in the test keymap leaves out the url, so the router opens the command line with `open ` typed in.
+// `go = ":open"` in the test keymap carries an explicit prompt, so the router opens the command line with `open ` typed in.
 import { evaluate_in_background } from "./rdp.mjs";
 
 const ALT = (key) => ["-M", "alt", key, "-m", "alt"];

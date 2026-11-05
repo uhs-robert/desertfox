@@ -4,7 +4,7 @@
 import type { CommandDef, ParamDef } from "../command.ts";
 import type { EnumSources } from "./check_args.ts";
 import { parse_command_line } from "./command_line.ts";
-import { bare_word_param, is_context_source, is_dynamic_values, static_values, subject_param } from "./params.ts";
+import { bare_word_param, default_of, is_context_source, is_dynamic_values, static_values, subject_param } from "./params.ts";
 
 type Printable = Pick<CommandDef, "id" | "name" | "params">;
 
@@ -46,8 +46,10 @@ export function print_flag(param: ParamDef, value: unknown, style: FlagStyle = "
 }
 
 // A source stays in the text even when it is the default, so a binding keeps showing where its value comes from.
-function is_default(param: ParamDef, value: unknown): boolean {
-  return param.default !== undefined && !is_context_source(param.default) && !is_context_source(value) && String(param.default) === String(value);
+// A conditional default counts only while its condition holds for the other args.
+function is_default(command: Printable, param: ParamDef, value: unknown, args: Record<string, unknown>): boolean {
+  const applicable = default_of(command, param, args);
+  return applicable !== undefined && !is_context_source(applicable) && !is_context_source(value) && String(applicable) === String(value);
 }
 
 type SubjectStyle = "raw" | "guard" | "quoted" | "named";
@@ -73,7 +75,7 @@ function assemble(command: Printable, args: Record<string, unknown>, options: Pr
   const shown = (param: ParamDef): boolean => {
     const value = args[param.name];
     if (param.name === options.open_param) return true;
-    return value !== undefined && value !== "" && !is_default(param, value);
+    return value !== undefined && value !== "" && !is_default(command, param, value, args);
   };
 
   if (engine && plan.engine === "bare" && shown(engine) && args[engine.name] !== undefined) words.push(quoted(String(args[engine.name])));
@@ -109,7 +111,7 @@ function reads_back(command: Printable, args: Record<string, unknown>, options: 
   const parsed = parse_command_line({ find: () => command }, text, sources);
   if (parsed.kind !== "invocation") return false;
   const params = new Map((command.params ?? []).map((param) => [param.name, param]));
-  const given = Object.entries(args).filter(([name, value]) => value !== undefined && value !== "" && !is_default(params.get(name) as ParamDef, value));
+  const given = Object.entries(args).filter(([name, value]) => value !== undefined && value !== "" && !is_default(command, params.get(name) as ParamDef, value, args));
   // `-c=` with nothing after it reads back as an empty string, which is the open param.
   const got = Object.fromEntries(Object.entries(parsed.invocation.args ?? {}).filter(([, value]) => value !== ""));
   if (Object.keys(got).length !== given.length) return false;

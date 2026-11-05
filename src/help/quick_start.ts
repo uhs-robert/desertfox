@@ -3,7 +3,7 @@
 
 import type { KeymapMode } from "../shared/keymap.ts";
 import type { CommandMeta } from "../shared/command.ts";
-import { is_context_source } from "../shared/registry/params.ts";
+import { literal_default } from "../shared/registry/params.ts";
 import { print_command } from "../shared/registry/print_command.ts";
 import type { CompiledKeymap, TreeNode } from "../shared/prefix_tree.ts";
 import type { Block, Inline } from "./blocks.ts";
@@ -17,7 +17,8 @@ type Binding = { mode: KeymapMode; id: string; args: Args; test: (args: Args) =>
 function with_defaults(commands: CommandMeta[], id: string, args: Args | undefined): Args {
   const filled: Args = {};
   for (const param of commands.find((command) => command.id === id)?.params ?? []) {
-    if (param.default !== undefined && !is_context_source(param.default)) filled[param.name] = param.default;
+    const literal = literal_default(param);
+    if (literal !== undefined) filled[param.name] = literal;
   }
   for (const [name, value] of Object.entries(args ?? {})) filled[name] = value;
   return filled;

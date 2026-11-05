@@ -9,7 +9,7 @@ import { DEFAULT_SETTINGS } from "../config.ts";
 import type { Settings } from "../config.ts";
 import type { BoundInvocation, KeyBinding } from "../invocation.ts";
 import type { KeymapConfig, KeymapMode } from "../keymap.ts";
-import { is_dynamic_values } from "../registry/params.ts";
+import { default_value, is_dynamic_values } from "../registry/params.ts";
 import { parse_sequence } from "./notation.ts";
 
 export type CommandInfo = { runs_in: RunsIn; label: string; count: CountBehavior; params?: readonly ParamDef[] };
@@ -35,7 +35,7 @@ function generated_bindings(keymap: KeymapConfig, settings: Partial<Settings>): 
   }
   for (const [last_key, container] of Object.entries(keymap.container_keys ?? {})) {
     bindings[container_prefixes.reopen + last_key] = { id: "tab.reopen_in_container", args: { container } };
-    bindings[container_prefixes.tab + last_key] = { id: "open.url", args: { where: "tab", container } };
+    bindings[container_prefixes.tab + last_key] = { id: "open.url", args: { where: "tab", container }, prompt: { param: "url", prefill: { from: "current_url" } } };
   }
   return bindings;
 }
@@ -88,9 +88,9 @@ function derived_label(invocation: BoundInvocation, info: CommandInfo, settings:
         const engine = typeof value === "string" && value !== "" ? value : (settings.default_engine ?? DEFAULT_SETTINGS.default_engine);
         label = sources.engine_labels[engine] ?? label;
       }
-    } else if (param.type === "enum" && typeof value === "string" && value !== param.default) {
+    } else if (param.type === "enum" && typeof value === "string" && value !== default_value(param)) {
       phrases.push(param.value_labels?.[value] ?? value.replaceAll("_", " "));
-    } else if (param.type === "bool" && value === true && value !== param.default) {
+    } else if (param.type === "bool" && value === true && value !== default_value(param)) {
       phrases.push(param.name.replaceAll("_", " "));
     }
   }

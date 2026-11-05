@@ -203,3 +203,20 @@ test("the tip names :help and takes the command line key from the keymap", () =>
   assert.match(text(compiled), /:help <name>/);
   assert.match(text(undefined), /:help <name>/);
 });
+
+test("a conditional default reads as the value and its condition", () => {
+  const registry = create_registry();
+  registry.define("open.url", {
+    name: "open",
+    label: "Open",
+    intent: "Open.",
+    runs_in: "background",
+    params: [
+      { name: "url", type: "string", main: true, default: { value: "", when: { where: ["tab", "background", "window"] } } },
+      { name: "where", type: "enum", values: ["here", "tab", "background", "window"], default: "here" },
+    ],
+    run: () => {},
+  });
+  const model = build_help_model(build_commands_file(registry).commands, undefined, []);
+  assert.equal(model.groups[0]!.commands[0]!.params[0]!.default, '"" when where is tab, background or window');
+});

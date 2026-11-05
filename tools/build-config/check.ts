@@ -1,8 +1,7 @@
 // Checks merged data against `commands.json`. Commands and snippets go through
 // the real registry, so they get the define-time checks. Binding strings are
-// parsed by the registry's grammar, then go through `check_args`, with one
-// difference: a missing param is valid, because it is how a binding asks for
-// the prompt.
+// parsed by the registry's grammar, then go through `check_args`. A binding
+// that leaves out a required param needs a `prompt`, as it does at load.
 
 import type { CommandMeta, Mode } from "../../src/shared/command.ts";
 import { with_fallback_engines, type SnippetEntry } from "../../src/shared/config.ts";
@@ -54,7 +53,8 @@ function check_invocation(invocation: BoundInvocation, registry: Registry, engin
   if (!allowed.includes(runtime_mode as Mode)) errors.push(`${command.id} runs in ${allowed.join(", ")} mode, not ${runtime_mode}`);
 
   const result = check_args(command, invocation.args, { search_engines: engine_names });
-  if (!result.ok && result.missing_param === undefined) errors.push(result.error);
+  // With a prompt, the prompted param may be left out.
+  if (!result.ok && !(invocation.prompt !== undefined && result.missing_param !== undefined)) errors.push(result.error);
   if (invocation.prompt !== undefined) errors.push(...check_prompt(invocation.prompt, command));
   return errors;
 }
