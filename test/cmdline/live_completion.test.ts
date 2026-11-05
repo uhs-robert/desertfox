@@ -363,3 +363,10 @@ test("the row key on a command row, an empty selection or a closed list does not
   session.run("mode.escape", undefined);
   assert.deepEqual(unload_key(session), { kind: "render" });
 });
+
+test("a refusal note is not shown after a later row action succeeds", () => {
+  const { session } = make();
+  session.set_message("not unloaded: audible");
+  session.set_message(undefined);
+  assert.equal(session.get_message(), undefined);
+});

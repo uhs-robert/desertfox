@@ -66,6 +66,7 @@ export function make_tab_handlers(deps: TabDeps) {
 
   // The subject is the tab named by `tab`, else the line's own tab. A side acts on the neighbors and leaves the subject. A count adds neighbors after the subject. Neighbors skip pinned tabs, the subject never does.
   async function change_loaded(ctx: CommandContext, args: { tab: string; side: UnloadSide; count: number }, unloaded: boolean): Promise<void> {
+    if (args.count < 1) throw new Error("count must be 1 or more");
     const named = args.tab.trim() === "" ? undefined : pick_tab(await deps.listed_tabs(ctx), args.tab, ctx.window_id);
     const window_id = named?.window_id ?? ctx.window_id;
     if (window_id === undefined) throw new Error("No window");
@@ -79,13 +80,15 @@ export function make_tab_handlers(deps: TabDeps) {
         : unpinned.filter((tab) => (args.side === "all_before" ? tab.index < subject.index : tab.index > subject.index))
     ).map((tab) => tab.id);
     const result = await set_unloaded(deps.discard, ids, unloaded, ctx.tab_id === undefined ? {} : { leave_active: ctx.tab_id });
-    await report(ctx, unloaded ? "unloaded" : "loaded", result);
+    await report(ctx, window_id, unloaded ? "unloaded" : "loaded", result);
   }
 
-  async function report(ctx: CommandContext, verb: "unloaded" | "loaded", result: SetUnloadedResult): Promise<void> {
+  // The toast goes to the tab that is active now: the command's own tab may have just unloaded, and a discarded tab shows nothing.
+  async function report(ctx: CommandContext, window_id: number, verb: "unloaded" | "loaded", result: SetUnloadedResult): Promise<void> {
     const message = describe_result(verb, result);
     if (result.changed.length === 0) throw new Error(message);
-    await deps.toast(ctx, result.skipped.length === 0 ? "success" : "warning", message);
+    const active = (await deps.discard.tabs_in_window(window_id)).find((tab) => tab.active);
+    await deps.toast(active ? { ...ctx, tab_id: active.id, frame_id: 0 } : ctx, result.skipped.length === 0 ? "success" : "warning", message);
   }
 
   return {

@@ -193,7 +193,7 @@ export function create_session(deps: SessionDeps) {
     patch_tab: (marks: TabMarks) => {
       for (const row of completion?.rows ?? []) if (row.tab?.id === marks.id) row.tab = marks;
     },
-    set_message: (next: string) => {
+    set_message: (next: string | undefined) => {
       message = next;
     },
     set_status: (next: string) => {

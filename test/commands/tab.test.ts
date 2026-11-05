@@ -239,9 +239,10 @@ function make_switch_fake() {
 // The unload and load commands over a fake `set_unloaded`: the log shows which ids reach it and with what option.
 function make_unload(tabs: TabInfo[], listed_tabs: ListedTab[] = []) {
   const { deps, log } = make_fake(tabs);
+  const toast_tabs: (number | undefined)[] = [];
   const states = new Map(tabs.map((tab) => [tab.id, { discarded: false, active: tab.id === 100 }]));
   deps.listed_tabs = async () => listed_tabs;
-  deps.toast = async (_ctx, kind, message) => void log.push(`toast ${kind} ${message}`);
+  deps.toast = async (ctx, kind, message) => void (log.push(`toast ${kind} ${message}`), toast_tabs.push(ctx.tab_id));
   deps.discard = {
     read_tab: async (id) => {
       const tab = tabs.find((candidate) => candidate.id === id);
@@ -262,7 +263,7 @@ function make_unload(tabs: TabInfo[], listed_tabs: ListedTab[] = []) {
       states.get(id)!.discarded = false;
     },
   };
-  return { handlers: make_tab_handlers(deps), log, states };
+  return { handlers: make_tab_handlers(deps), log, states, toast_tabs };
 }
 const unload_args = (over: Partial<{ tab: string; side: "none" | "all_before" | "all_after"; count: number }> = {}) => ({ tab: "", side: "none" as const, count: 1, ...over });
 
@@ -332,4 +333,16 @@ test("tab.load with a side loads the unpinned unloaded tabs on that side and rep
   states.get(103)!.discarded = true;
   await handlers.load(ctx_at(100), unload_args({ side: "all_after" }));
   assert.deepEqual(log, ["reload 101", "toast warning loaded 1 tab, skipped 1 (already loaded)"]);
+});
+
+test("the result toast goes to the tab that is active after the switch, not the unloaded one", async () => {
+  const { handlers, toast_tabs } = make_unload(make_tabs(3));
+  await handlers.unload(ctx_at(100), unload_args());
+  assert.deepEqual(toast_tabs, [101]);
+});
+
+test("a count below 1 is refused before any tab changes", async () => {
+  const { handlers, log } = make_unload(make_tabs(3));
+  for (const count of [0, -2]) await assert.rejects(handlers.unload(ctx_at(100), unload_args({ count })), /count must be 1 or more/);
+  assert.deepEqual(log, []);
 });

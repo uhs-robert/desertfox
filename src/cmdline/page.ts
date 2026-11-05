@@ -131,7 +131,7 @@ async function open_line(start: Start, port: MessagePort): Promise<void> {
         if (!answer) return session.set_message("could not change the tab");
         live.patch_tab(answer.item);
         session.patch_tab(marks_of(answer.item));
-        if (answer.refusal) session.set_message(`not ${unloaded ? "unloaded" : "loaded"}: ${answer.refusal}`);
+        session.set_message(answer.refusal ? `not ${unloaded ? "unloaded" : "loaded"}: ${answer.refusal}` : undefined);
       },
       () => session.set_message("could not change the tab"),
     ).finally(render);
