@@ -102,3 +102,21 @@ test("a context source in a positional param prints as its marker and reads back
   const parsed = parse_command_line(positional, printed);
   assert.deepEqual(parsed.kind === "invocation" && parsed.invocation.args, { name: { from: "selection" }, value: "text" });
 });
+
+test("an open positional param prints as an empty word, and an open subject after it too", () => {
+  const positional = grammar_registry();
+  positional.define("pos.set", {
+    label: "Pos",
+    intent: "Take a name, then text.",
+    runs_in: "background",
+    params: [
+      { name: "name", type: "string", values: ["alpha", "beta"], strict: true },
+      { name: "value", type: "string", rest: true, main: true, optional: true },
+    ],
+    run: () => {},
+  });
+  const command = positional.get("pos.set")!;
+  assert.equal(print_command(command, {}, { open_param: "name" }), "pos.set ");
+  assert.equal(print_command(command, { name: "" }, { open_param: "name" }), "pos.set ");
+  assert.equal(print_command(command, { name: "alpha" }, { open_param: "value" }), "pos.set alpha ");
+});
