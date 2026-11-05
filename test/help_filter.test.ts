@@ -53,6 +53,7 @@ class FakeNode {
 
 const MODEL = {
   engines: [],
+  quick_start: [],
   groups: [
     { name: "tab", commands: [TAB_NEW, row("tab.close", "tabclose", "Close the tab")] },
     { name: "scroll", commands: [row("scroll.down", "down", "Scroll down", ["j"])] },

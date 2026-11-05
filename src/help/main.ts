@@ -7,13 +7,19 @@ import { effective_settings } from "../shared/config.ts";
 import type { Block } from "./blocks.ts";
 import { build_help_model } from "./model.ts";
 import type { HelpModel } from "./model.ts";
-import { command_anchor, engine_anchor, render_help } from "./render.ts";
+import { command_anchor, engine_anchor, render_help, section_anchor } from "./render.ts";
 import { parse_route } from "./route.ts";
 
 function show_route(model: HelpModel, guide: Block[], moved_by_user: boolean): void {
   const route = parse_route(location.hash);
   render_help(document.body, model, route, guide);
   // The render removed the link that had focus. Not on first load, where focus belongs to the browser.
+  const section_heading = route.section === undefined ? null : document.getElementById(section_anchor(route.section));
+  if (section_heading) {
+    section_heading.scrollIntoView();
+    section_heading.focus({ preventScroll: true });
+    return;
+  }
   if (moved_by_user) document.querySelector<HTMLElement>(".oasisfox-help-page h1")?.focus({ preventScroll: true });
   // A new page starts at the top. An engine or command link scrolls to its row or card.
   const anchor = route.engine !== undefined ? engine_anchor(route.engine) : route.command !== undefined ? command_anchor(route.command) : undefined;

@@ -138,6 +138,18 @@ function block_node(block: Block): HTMLElement {
   }
 }
 
+function quick_start_page(blocks: Block[]): HTMLElement[] {
+  const slugs = quick_start_sections(blocks).map((section) => section.slug);
+  return blocks.map((block) => {
+    const node = block_node(block);
+    if (block.kind === "heading" && block.level === 2) {
+      node.id = section_anchor(slugs.shift() ?? "");
+      node.tabIndex = -1;
+    }
+    return node;
+  });
+}
+
 function definition_table(rows: { name: string; meaning: string }[]): HTMLElement {
   return el("table", undefined, ...rows.map((row) => el("tr", undefined, el("td", undefined, el("code", undefined, row.name)), el("td", undefined, row.meaning))));
 }
@@ -226,7 +238,7 @@ function styling_page(): HTMLElement[] {
 function page_body(page: PageId, model: HelpModel, guide: Block[]): HTMLElement[] {
   switch (page) {
     case "home": return home_page(model);
-    case "quick-start": return model.quick_start.map(block_node);
+    case "quick-start": return quick_start_page(model.quick_start);
     case "search-engines": return [...guide.map(block_node), el("h2", undefined, "Your engines"), engine_table(model.engines)];
     case "commands": return commands_page(model);
     case "styling": return styling_page();
@@ -252,14 +264,69 @@ function support_line(): HTMLElement {
   );
 }
 
-function sidebar(current: PageId): HTMLElement {
-  const links = PAGES.map((page) => {
+export const section_anchor = (slug: string): string => `quick-start-${slug}`;
+
+export type Section = { title: string; slug: string };
+
+// Slugs are unique, because they become element ids and route values. A repeat or a title with no letters gets a number.
+export function quick_start_sections(blocks: Block[]): Section[] {
+  const seen = new Set<string>();
+  return blocks.flatMap((block) => {
+    if (block.kind !== "heading" || block.level !== 2) return [];
+    const base = block.text.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "section";
+    let slug = base;
+    for (let count = 2; seen.has(slug); count += 1) slug = `${base}-${count}`;
+    seen.add(slug);
+    return [{ title: block.text, slug }];
+  });
+}
+
+function section_list(sections: Section[], expanded: boolean): HTMLElement {
+  const list = el("div", "oasisfox-help-sections");
+  list.id = "oasisfox-help-sections";
+  list.hidden = !expanded;
+  for (const { title, slug } of sections) {
+    const link = el("a", undefined, title);
+    const hash = `#section=${slug}`;
+    link.setAttribute("href", hash);
+    // The same hash fires no hashchange, so a click would not scroll back from where the reader moved.
+    link.addEventListener("click", () => {
+      if (location.hash !== hash) return;
+      const heading = document.getElementById(section_anchor(slug));
+      heading?.scrollIntoView();
+      heading?.focus({ preventScroll: true });
+    });
+    list.append(link);
+  }
+  return list;
+}
+
+// A real button, so keys and hints reach it.
+function section_toggle(list: HTMLElement): HTMLElement {
+  const button = el("button", "oasisfox-help-sections-toggle", list.hidden ? "\u25B8" : "\u25BE");
+  button.setAttribute("type", "button");
+  button.setAttribute("aria-label", "Quick Start sections");
+  button.setAttribute("aria-controls", list.id);
+  button.setAttribute("aria-expanded", String(!list.hidden));
+  button.addEventListener("click", () => {
+    list.hidden = !list.hidden;
+    button.setAttribute("aria-expanded", String(!list.hidden));
+    button.textContent = list.hidden ? "\u25B8" : "\u25BE";
+  });
+  return button;
+}
+
+// A section route renders the list open, so following a link does not collapse it. Otherwise it starts collapsed.
+function sidebar(current: PageId, quick_start: Block[], open_section: boolean): HTMLElement {
+  const entries = PAGES.map((page): HTMLElement => {
     const link = el("a", undefined, page.title);
     link.setAttribute("href", page.hash);
     if (page.id === current) link.setAttribute("aria-current", "page");
-    return link;
+    if (page.id !== "quick-start") return link;
+    const list = section_list(quick_start_sections(quick_start), open_section);
+    return el("div", "oasisfox-help-nav-group", el("div", "oasisfox-help-nav-row", link, section_toggle(list)), list);
   });
-  return el("nav", "oasisfox-help-sidebar", el("div", "oasisfox-help-brand", "OasisFox"), ...links, support_line());
+  return el("nav", "oasisfox-help-sidebar", el("div", "oasisfox-help-brand", "OasisFox"), ...entries, support_line());
 }
 
 export function render_help(root: HTMLElement, model: HelpModel, route: Route, guide: Block[]): void {
@@ -267,5 +334,5 @@ export function render_help(root: HTMLElement, model: HelpModel, route: Route, g
   const heading = el("h1", undefined, title);
   heading.tabIndex = -1;
   const page = el("main", "oasisfox-help-page", heading, ...page_body(route.page, model, guide));
-  root.replaceChildren(el("div", "oasisfox-help", sidebar(route.page), page));
+  root.replaceChildren(el("div", "oasisfox-help", sidebar(route.page, model.quick_start, route.section !== undefined), page));
 }
