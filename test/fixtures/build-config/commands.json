@@ -90,7 +90,12 @@
             "background",
             "window"
           ],
-          "default": "here"
+          "default": "here",
+          "short": {
+            "tab": "t",
+            "background": "b",
+            "window": "w"
+          }
         }
       ]
     },

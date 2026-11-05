@@ -37,6 +37,22 @@ export function default_value(param: ParamDef): ParamValue | ContextSource | und
   return is_conditional_default(param.default) ? param.default.value : param.default;
 }
 
+// A default that is a plain value: not a context source, not conditional.
+export function literal_default(param: ParamDef): ParamValue | undefined {
+  const value = param.default;
+  return value === undefined || is_context_source(value) || is_conditional_default(value) ? undefined : value;
+}
+
+// A default as the help page prints it.
+export function describe_default(param: ParamDef): string {
+  const value = param.default;
+  if (value === undefined) return "";
+  if (is_context_source(value)) return `from ${value.from}`;
+  if (!is_conditional_default(value)) return String(value);
+  const [name, allowed] = Object.entries(value.when)[0] as [string, readonly ParamValue[]];
+  return `${JSON.stringify(value.value)} when ${name} is ${join_alternatives(allowed)}`;
+}
+
 export function is_dynamic_values(values: ParamDef["values"]): values is DynamicValues {
   return values !== undefined && !Array.isArray(values);
 }

@@ -4,7 +4,7 @@
 import type { CommandDef, ParamDef } from "../command.ts";
 import type { EnumSources } from "./check_args.ts";
 import { parse_command_line } from "./command_line.ts";
-import { bare_word_param, is_context_source, is_dynamic_values, static_values, subject_param } from "./params.ts";
+import { bare_word_param, literal_default, is_context_source, is_dynamic_values, static_values, subject_param } from "./params.ts";
 
 type Printable = Pick<CommandDef, "id" | "name" | "params">;
 
@@ -47,7 +47,8 @@ export function print_flag(param: ParamDef, value: unknown, style: FlagStyle = "
 
 // A source stays in the text even when it is the default, so a binding keeps showing where its value comes from.
 function is_default(param: ParamDef, value: unknown): boolean {
-  return param.default !== undefined && !is_context_source(param.default) && !is_context_source(value) && String(param.default) === String(value);
+  const default_text = literal_default(param);
+  return default_text !== undefined && !is_context_source(value) && String(default_text) === String(value);
 }
 
 type SubjectStyle = "raw" | "guard" | "quoted" | "named";

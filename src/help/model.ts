@@ -13,7 +13,7 @@ import { token_name } from "../shared/theme/tokens.ts";
 import type { KeymapMode } from "../shared/keymap.ts";
 import type { Prompt } from "../shared/invocation.ts";
 import type { CompiledKeymap, TreeNode } from "../shared/prefix_tree.ts";
-import { is_conditional_default, join_alternatives, is_context_source, is_dynamic_values } from "../shared/registry/params.ts";
+import { describe_default, is_dynamic_values } from "../shared/registry/params.ts";
 import type { EnumSources } from "../shared/registry/check_args.ts";
 import { print_command } from "../shared/registry/print_command.ts";
 import { subject_param } from "../shared/registry/params.ts";
@@ -76,10 +76,6 @@ export type HelpModel = {
 
 const MODE_ORDER: readonly KeymapMode[] = [...MODES, "browser"];
 
-function describe_value(value: ParamValue | { from: string }): string {
-  return is_context_source(value) ? `from ${value.from}` : String(value);
-}
-
 function param_row(param: ParamDef, subject: ParamDef | undefined): ParamRow {
   let values = "";
   if (is_dynamic_values(param.values)) values = `from ${param.values.from}`;
@@ -87,7 +83,7 @@ function param_row(param: ParamDef, subject: ParamDef | undefined): ParamRow {
   return {
     name: param.name,
     type: param.type,
-    default: param.default === undefined ? "" : is_conditional_default(param.default) ? `${JSON.stringify(param.default.value)} when ${Object.entries(param.default.when).map(([name, values]) => `${name} is ${join_alternatives(values)}`).join("")}` : describe_value(param.default),
+    default: describe_default(param),
     values,
     flags: param === subject ? "" : flag_alternatives(param).join(" "),
   };

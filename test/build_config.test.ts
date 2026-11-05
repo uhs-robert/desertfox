@@ -648,3 +648,10 @@ test("an open_completion list with a repeated source is an error", () => {
   const dir = config_dir_with({ "settings.toml": 'open_completion = ["history", "history"]' });
   assert.match(problems_of(dir).join("\n"), /settings\.toml: open_completion: .*no repeat/);
 });
+
+test("a key bound to open -t with no url builds, the conditional url default fills it", () => {
+  const dir = config_dir_with({ "keymap.toml": '[normal]\nt = "open -t"\nT = "open -w"' });
+  const normal = build_config(dir, commands).keymap.normal;
+  assert.deepEqual(normal?.["t"], { id: "open.url", args: { where: "tab" } });
+  assert.deepEqual(normal?.["T"], { id: "open.url", args: { where: "window" } });
+});
