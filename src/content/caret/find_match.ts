@@ -41,8 +41,8 @@ const ESCAPE_OR_CLASS = /\\.|\[(?:\\.|[^\]\\])*\]/gu;
 
 // The same atom with an unlimited repeat twice in a row, such as `a*a*b`, `\w*\w*x` or `.*.*=`. The two repeats split a run of that atom in every possible way, so the cost grows with each repeat. A longer chain, such as `.*.*.*`, holds this pair too.
 // Only identical atoms count. A different atom next (`a+b+`, `foo.*bar`) is allowed, and so are overlapping ones such as `.*a*b` or `\w*a*b`: a static check cannot tell them from ordinary searches, and the time limit in #193 is meant for them.
-// The pattern is walked one atom at a time (an escape, a class or one character), so a match never starts inside a class or after an escape.
-const ATOM = /\\.|\[(?:\\.|[^\]\\])*\]|[^]/uy;
+// The pattern is walked one atom at a time (an escape such as `\x61` or `\p{L}` taken whole, a class or one character), so a match never starts inside a class or after an escape.
+const ATOM = /\\(?:x[\da-f]{2}|u[\da-f]{4}|u\{[\da-f]+\}|c[a-z]|[pP]\{[^}]*\}|k<[^>]*>|\d+)|\\.|\[(?:\\.|[^\]\\])*\]|[^]/iuy;
 const UNLIMITED = /(?:[*+]|\{\d+,\})\??/uy;
 
 function has_stacked_repeats(source: string): boolean {
