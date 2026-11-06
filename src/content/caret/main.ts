@@ -387,9 +387,14 @@ const open_session_now = () => (session ? ensure_session(session.mode) : undefin
 // Moves the caret to the current match. True when the session changed and needs a paint.
 // The session model holds only the text it was built from, so a match in text the page added since takes a rebuild.
 function land_on_match(open: Session): boolean {
+  const model_before = open.model;
+  // Paint runs before the next mode change, so a frame that left the page must leave the model first.
+  rebuild_if_stale(open);
   let landed = find.position(open.model);
-  const rebuilt = landed === undefined && rebuild_model(open) !== undefined;
-  if (rebuilt) landed = find.position(open.model);
+  if (landed === undefined && rebuild_model(open)) landed = find.position(open.model);
+  const rebuilt = open.model !== model_before;
+  // A rebuild brings new trees, which have no selection style yet.
+  if (rebuilt) void apply_selection_colors(open.mode, open.model.trees);
   if (landed === undefined) return rebuilt;
   open.cursor = with_caret(open.cursor, landed, is_visual(open.mode));
   open.goal_x = undefined;
