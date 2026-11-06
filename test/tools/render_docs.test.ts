@@ -62,6 +62,17 @@ const UNSUPPORTED: [string, string][] = [
   ["a table row on a later paragraph line", "text\n| a | b |"],
   ["a tilde fence on a later paragraph line", "text\n~~~"],
   ["a list glued to a paragraph", "text\n- item"],
+  ["bold in a link label", "[**bold**](https://a.example)"],
+  ["underscore emphasis in a link label", "[_x_](https://a.example)"],
+  ["html in a link label", "[<b>](https://a.example)"],
+  ["a quote on a list continuation line", "- a\n  > q"],
+  ["a table row on a list continuation line", "- a\n  | t"],
+  ["a rule on a list continuation line", "- a\n  ---"],
+  ["a heading on a list continuation line", "- a\n  ## h"],
+  ["a tilde fence on a list continuation line", "- a\n  ~~~"],
+  ["a fence on a list continuation line", "- a\n  ```"],
+  ["a tab on a later paragraph line", "para\n\tb"],
+  ["a tab on a list continuation line", "- a\n\tb"],
 ];
 
 for (const [name, text] of UNSUPPORTED) {
@@ -76,6 +87,36 @@ test("an inline error on a later paragraph line names that line", () => {
 
 test("a block marker on a later paragraph line names that line", () => {
   assert.throws(() => parse("fine\n> quoted"), /doc\.md:2:/);
+});
+
+test("a block marker on a list continuation line names that line", () => {
+  assert.throws(() => parse("- a\n  > q"), /doc\.md:2:/);
+  assert.throws(() => parse("- a\n  ## h"), /doc\.md:2:/);
+});
+
+test("an inline error on a list continuation line names that line", () => {
+  assert.throws(() => parse("- a\n- b\n  more **bold**"), /doc\.md:3:/);
+});
+
+test("a tab on a later row names that line", () => {
+  assert.throws(() => parse("para\n\tb"), /doc\.md:2:/);
+  assert.throws(() => parse("- a\n\tb"), /doc\.md:2:/);
+});
+
+test("a link cannot span two list lines", () => {
+  assert.throws(() => parse("- a [lab\n  el](https://a.example)"), /doc\.md:/);
+});
+
+test("link labels with underscores stay plain", () => {
+  const [block] = parse("[a_b](https://a.example) and [snake_case](https://b.example)");
+  assert.deepEqual(block, {
+    kind: "paragraph",
+    inlines: [
+      { kind: "link", text: "a_b", href: "https://a.example" },
+      { kind: "text", text: " and " },
+      { kind: "link", text: "snake_case", href: "https://b.example" },
+    ],
+  });
 });
 
 test("the error names the line", () => {

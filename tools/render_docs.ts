@@ -35,6 +35,8 @@ function parse_inlines(text: string, fail: (reason: string) => never): Inline[] 
     } else if (char === "[") {
       const link = /^\[([^\][`]+)\]\((https:\/\/[^\s()]+)\)/.exec(text.slice(i));
       if (!link) fail("a [ must start a link written [text](https://...) with plain text");
+      // The label goes through this parser so it gets the same checks as a heading.
+      if (parse_inlines(link![1]!, fail).some((inline) => inline.kind !== "text")) fail("a link label takes plain text only");
       flush();
       inlines.push({ kind: "link", text: link![1]!, href: link![2]! });
       i += link![0].length;
@@ -122,25 +124,32 @@ export function parse_markdown(source: string, text: string): Block[] {
     }
     if (line.startsWith("- ") || LIST_MARKER.test(line)) {
       if (!line.startsWith("- ")) fail_at(index, "only flat lists that start with `- ` are supported");
-      const raw_items: { line_index: number; text: string }[] = [];
+      // Each physical line is kept with its index, so an error names the line itself.
+      const raw_items: { line_index: number; text: string }[][] = [];
       while (index < lines.length && lines[index]!.trim() !== "") {
         const row = lines[index]!;
+        if (row.includes("\t")) fail_at(index, "tabs are not supported");
         if (row.startsWith("- ")) {
-          raw_items.push({ line_index: index, text: row.slice(2) });
+          raw_items.push([{ line_index: index, text: row.slice(2) }]);
         } else if (row.startsWith("  ") && !LIST_MARKER.test(row.trimStart())) {
-          raw_items[raw_items.length - 1]!.text += ` ${row.trim()}`;
+          const text = row.trim();
+          if (FENCE.test(text) || HEADING.test(text)) fail_at(index, "leave a blank line before a heading or code block");
+          const unsupported_row = unsupported_block_start(text);
+          if (unsupported_row) fail_at(index, unsupported_row);
+          raw_items[raw_items.length - 1]!.push({ line_index: index, text: ` ${text}` });
         } else {
           fail_at(index, "a list item continues only on lines indented by two spaces. Nested lists are not supported");
         }
         index += 1;
       }
-      const items = raw_items.map((item) => inlines_at(item.line_index, item.text));
+      const items = raw_items.map((item_lines) => merge_text(item_lines.flatMap((part) => inlines_at(part.line_index, part.text))));
       blocks.push({ kind: "list", items });
       continue;
     }
     const paragraph: Inline[] = [];
     while (index < lines.length && lines[index]!.trim() !== "") {
       const row = lines[index]!;
+      if (row.includes("\t")) fail_at(index, "tabs are not supported");
       if (FENCE.test(row) || HEADING.test(row) || LIST_MARKER.test(row)) fail_at(index, "leave a blank line before a heading, list or code block");
       const unsupported_row = unsupported_block_start(row);
       if (unsupported_row) fail_at(index, unsupported_row);

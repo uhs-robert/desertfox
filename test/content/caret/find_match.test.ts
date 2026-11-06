@@ -1,12 +1,15 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { collect_matches, compile_query, describe_match, nearest_match, opposite, step_match } from "../../../src/content/caret/find_match.ts";
-import type { Slicing } from "../../../src/content/caret/find_match.ts";
+import { collect_matches, compile_query, describe_match, describe_timeout, nearest_match, opposite, step_match } from "../../../src/content/caret/find_match.ts";
+import type { Matches, ScanRegex, Slicing } from "../../../src/content/caret/find_match.ts";
+import { scan_regex } from "../../../src/background/regex_scan.ts";
 
 const never_stale: Slicing = { is_stale: () => false, yield_to_page: async () => {}, now: () => 0, slice_ms: 8 };
+// The background's scan, run in place of the Worker.
+const in_place: ScanRegex = async (text, { source, flags }) => ({ ok: true, ...scan_regex({ text, source, flags }) });
 const scan = async (text: string, query: string) => {
   const compiled = compile_query(query)!;
-  return collect_matches(text, compiled.search, never_stale);
+  return (await collect_matches(text, compiled.search, never_stale, in_place)) as Matches | undefined;
 };
 
 test("an empty query compiles to nothing", () => {
@@ -74,7 +77,7 @@ test("a scan that a newer keystroke made stale stops and returns nothing", async
     now: () => (clock += 5),
     slice_ms: 8,
   };
-  const result = await collect_matches("a ".repeat(100), { kind: "regex", regex: /a/gu }, slicing);
+  const result = await collect_matches("a ".repeat(100), { kind: "folded", regex: /a/gu }, slicing, in_place);
   assert.equal(result, undefined);
   assert.equal(yields, 2);
 });
@@ -82,8 +85,8 @@ test("a scan that a newer keystroke made stale stops and returns nothing", async
 test("a scan that stays current returns every match", async () => {
   let clock = 0;
   const slicing: Slicing = { ...never_stale, now: () => (clock += 5) };
-  const result = await collect_matches("a ".repeat(50), { kind: "regex", regex: /a/gu }, slicing);
-  assert.equal(result!.from.length, 50);
+  const result = await collect_matches("a ".repeat(50), { kind: "folded", regex: /a/gu }, slicing, in_place);
+  assert.equal((result as Matches).from.length, 50);
 });
 
 test("an empty match on text with emoji moves on by a whole code point, so the scan ends", async () => {
@@ -95,16 +98,29 @@ test("an empty match on text with emoji moves on by a whole code point, so the s
       return 0;
     },
   };
-  const result = await collect_matches("a😀b😀", compile_query("x*")!.search, slicing);
+  const result = await collect_matches("a😀b😀", compile_query("x*")!.search, slicing, async (text, { source, flags }) => {
+    // The scan runs in the background, so the guard is on its loop count.
+    let steps = 0;
+    const exec = RegExp.prototype.exec;
+    RegExp.prototype.exec = function (this: RegExp, ...args: [string]) {
+      if (++steps > 1000) throw new Error("the scan looped");
+      return exec.apply(this, args);
+    };
+    try {
+      return { ok: true, ...scan_regex({ text, source, flags }) };
+    } finally {
+      RegExp.prototype.exec = exec;
+    }
+  });
   assert.deepEqual(result, { from: [], to: [] });
 });
 
-test("an exact-case plain query is a literal search with no regex, and a lower-case one is an escaped regex", () => {
+test("an exact-case plain query is a literal search with no regex, a lower-case one is an escaped regex in the page, and a pattern goes to the background", () => {
   for (const plain of ["Foo", "Foo bar", "A-b", "X/y"]) assert.equal(compile_query(plain)!.search.kind, "literal", plain);
   for (const plain of ["foo", "foo bar", "a-b", "100%"]) {
     const { search } = compile_query(plain)!;
-    assert.equal(search.kind, "regex", plain);
-    assert.equal(search.kind === "regex" && /[.*+?^${}()|[\]\\]/.test(search.regex.source.replace(/\[ \\n\]/g, "").replace(/\\./g, "")), false, `${plain} keeps no regex syntax`);
+    assert.equal(search.kind, "folded", plain);
+    assert.equal(search.kind === "folded" && /[.*+?^${}()|[\]\\]/.test(search.regex.source.replace(/\[ \\n\]/g, "").replace(/\\./g, "")), false, `${plain} keeps no regex syntax`);
   }
   for (const pattern of ["fo.", "a*", "(a)", "a|b", "[ab]", "a+", "a?", "^a", "a$", "\\d", "a{2}"]) assert.equal(compile_query(pattern)!.search.kind, "regex", pattern);
 });
@@ -118,7 +134,7 @@ test("the literal path follows the same space rule as the regex path, and a capi
   const text = "Foo foo FOO\nfoo bar\nFoo";
   for (const query of ["foo", "Foo", "FOO", "foo bar", "o b"]) {
     const compiled = await scan(text, query);
-    const regex = await collect_matches(text, { kind: "regex", regex: new RegExp(query.replace(/ /g, "[ \\n]"), /\p{Lu}/u.test(query) ? "gu" : "giu") }, never_stale);
+    const regex = await collect_matches(text, { kind: "regex", regex: new RegExp(query.replace(/ /g, "[ \\n]"), /\p{Lu}/u.test(query) ? "gu" : "giu") }, never_stale, in_place);
     assert.deepEqual(compiled, regex, query);
   }
   assert.deepEqual((await scan("a\nb", "a b"))!.from, [0]);
@@ -152,7 +168,7 @@ test("a costly pattern never reaches exec as a pattern, only as escaped text, an
     const text = "a".repeat(40) + "!";
     for (const [pattern, search] of searches) {
       const before = sources.length;
-      assert.deepEqual(await collect_matches(text, search, fake_clock), { from: [], to: [] }, pattern);
+      assert.deepEqual(await collect_matches(text, search, fake_clock, async () => assert.fail(`${pattern} went to the background as a regex`)), { from: [], to: [] }, pattern);
       for (const source of sources.slice(before)) assert.notEqual(source, pattern, `${pattern} ran as a regex`);
     }
   } finally {
@@ -170,4 +186,30 @@ test("a (?-i:...) group stays exact under a lowercase query", () => {
   const search = compile_query("(?-i:foo)")!.search;
   assert.equal(search.kind === "regex" && search.regex.test("FOO"), false);
   assert.equal(search.kind === "regex" && (search.regex.lastIndex = 0, search.regex.test("foo")), true);
+});
+
+test("a regex goes to the background scan, and its answer becomes the match list, a timeout, nothing or an error", async () => {
+  const regex = compile_query("a.*b")!.search;
+  assert.equal(regex.kind, "regex");
+  const answer = (value: Awaited<ReturnType<ScanRegex>>): ScanRegex => async () => value;
+  assert.deepEqual(await collect_matches("ab", regex, never_stale, answer({ ok: true, from: Int32Array.of(0), to: Int32Array.of(2) })), { from: [0], to: [2] });
+  assert.equal(await collect_matches("ab", regex, never_stale, answer({ ok: false, reason: "timeout" })), "timeout");
+  assert.equal(await collect_matches("ab", regex, never_stale, answer({ ok: false, reason: "superseded" })), undefined);
+  await assert.rejects(collect_matches("ab", regex, never_stale, answer({ ok: false, reason: "failed", message: "out of memory" })), /out of memory/);
+  // A newer keystroke while the scan ran drops even a good answer.
+  assert.equal(await collect_matches("ab", regex, { ...never_stale, is_stale: () => true }, answer({ ok: true, from: Int32Array.of(0), to: Int32Array.of(2) })), undefined);
+});
+
+test("the timeout line names the background's limit", async () => {
+  const { FIND_SCAN_LIMIT_MS } = await import("../../../src/background/find_scan.ts");
+  assert.equal(describe_timeout("a.*b"), `Pattern too slow, stopped after ${FIND_SCAN_LIMIT_MS / 1000} s: a.*b`);
+});
+
+test("a background scan that fails to send is dropped when stale and thrown when current", async () => {
+  const regex = compile_query("a.*b")!.search;
+  const rejected: ScanRegex = async () => {
+    throw new Error("Could not establish connection");
+  };
+  assert.equal(await collect_matches("ab", regex, { ...never_stale, is_stale: () => true }, rejected), undefined);
+  await assert.rejects(collect_matches("ab", regex, never_stale, rejected), /Could not establish connection/);
 });
