@@ -291,7 +291,7 @@ The 25 roles: `bg_core`, `bg_mantle`, `bg_crust`, `selection`, `fg_core`, `fg_co
 
 The 16 Oasis themes are not TOML. `themes/oasis/` holds byte copies of the oasis.nvim CSS files, one dark file and five light files per theme (`just oasis-themes <oasis.nvim dir>` copies them). `tools/build_themes.ts` reads each role from one named `--oasis-*` variable, with no mixing, and the table of which variable fills which role is at the top of that file. The `light_intensity` setting (1 to 5, default 3) picks the light set of an Oasis theme. Other themes have one light set. `tools/build-config` checks every local theme file and rejects an unknown role (the error lists the valid ones), a missing required role and a bad color, each with the file, table and key. `just themes` compiles `themes/oasis/*.css` and the contributed `themes/*.toml` into `src/shared/themes.ts`, and `just test` fails when that module is stale. The stored theme sets every role token on every surface.
 
-`primary` is the brand color: links, titles, groups, the hint labels (a filled label with `bg_core` text and a 1px primary border). `accent` marks highlights, such as the new tab clock second hand. A `style.css` that sets or reads `--desertfox-accent` for the brand color moves to `--desertfox-primary`.
+`primary` is the brand color: links, titles, groups, the hint labels (a filled label with `bg_core` text and a 1px primary border). `secondary` colors the keys in which-key and the new tab clock second hand. `accent` marks highlights. A `style.css` that sets or reads `--desertfox-accent` for the brand color moves to `--desertfox-primary`.
 
 ## Snippets
 
