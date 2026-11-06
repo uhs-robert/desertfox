@@ -37,9 +37,9 @@ The keys follow Vim habits: modes, `hjkl` to scroll, `gg` and `G` to jump, `yy` 
 
 ## 🔍 How it compares
 
-DesertFox is for Firefox users who want a powerful keyboard browsing experience without memorizing a manual first. It needs no hours of customization, no new web browser and no loss of your Firefox add-ons.
+Power without a manual to memorize, a new browser to learn, or your Firefox add-ons to give up.
 
-This is how we compare to the rest of the competition. These facts come from each project's source and, for add-ons, its Mozilla download in November 2026.
+Sources: each project's code and shipped add-on, November 2026.
 
 | Feature | DesertFox | Vimium | Tridactyl | qutebrowser |
 | --- | --- | --- | --- | --- |
