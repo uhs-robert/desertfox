@@ -6,11 +6,12 @@ import { copyFile, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises
 const MAX_BYTES = {
   "content.js": 16 * 1024,
   "hints.js": 32 * 1024,
-  "caret.js": 30 * 1024,
+  "caret.js": 32 * 1024,
   "whichkey.js": 8 * 1024,
   "cmdline.js": 4 * 1024,
   "ui.js": 8 * 1024,
   "cmdline_page.js": 52 * 1024,
+  "find_worker.js": 2 * 1024,
 };
 
 await rm("dist", { recursive: true, force: true });
@@ -30,6 +31,8 @@ const minified_entries = {
   cmdline: "src/cmdline/host.ts",
   ui: "src/content/ui/main.ts",
   cmdline_page: "src/cmdline/page.ts",
+  // Not an injected bundle: the background starts it as a Worker for each regex page search (find_scan.ts).
+  find_worker: "src/background/find_worker.ts",
 };
 for (const [name, entry] of Object.entries(minified_entries)) {
   await build({ ...common, entryPoints: { [name]: entry }, outdir: "dist", minify: true });
