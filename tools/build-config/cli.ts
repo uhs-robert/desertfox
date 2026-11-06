@@ -4,9 +4,9 @@ import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { build_config, read_commands_file } from "./build_config.ts";
-import { ConfigErrors } from "./errors.ts";
+import { ConfigErrors } from "../../src/shared/config_build/errors.ts";
 import { live_managed_storage_path, write_managed_storage, write_resolved_engines, write_schemas } from "./output.ts";
-import { build_schemas } from "./schemas.ts";
+import { build_schemas } from "../../src/shared/config_build/schemas.ts";
 
 const { values, positionals } = parseArgs({
   allowPositionals: true,

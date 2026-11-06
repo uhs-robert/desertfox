@@ -13,8 +13,8 @@ import { compile_keymap } from "../src/shared/keys/compiler.ts";
 import { command_meta, registry } from "../src/shared/registry/index.ts";
 import { parse_command_line } from "../src/shared/registry/command_line.ts";
 import { build_config, read_commands_file } from "../tools/build-config/build_config.ts";
-import { ConfigErrors } from "../tools/build-config/errors.ts";
-import { build_schemas } from "../tools/build-config/schemas.ts";
+import { ConfigErrors } from "../src/shared/config_build/errors.ts";
+import { build_schemas } from "../src/shared/config_build/schemas.ts";
 
 const FIXTURES = join(import.meta.dirname, "fixtures", "build-config");
 const commands = read_commands_file(join(FIXTURES, "commands.json"));

@@ -3,13 +3,13 @@
 // A later layer wins per key. Nothing here knows the command list, so binding
 // strings stay strings until `resolve_bindings` in check.ts parses them.
 
-import { MODES } from "../../src/shared/command.ts";
-import type { SearchEngine, Settings } from "../../src/shared/config.ts";
-import { nodes_of_file, resolve_engines } from "../../src/shared/engines/index.ts";
-import type { EngineNode } from "../../src/shared/engines/index.ts";
-import type { KeymapConfig, ModeBindings } from "../../src/shared/keymap.ts";
+import { MODES } from "../command.ts";
+import type { SearchEngine, Settings } from "../config.ts";
+import { nodes_of_file, resolve_engines } from "../engines/index.ts";
+import type { EngineNode } from "../engines/index.ts";
+import type { KeymapConfig, ModeBindings } from "../keymap.ts";
 import { is_plain_object } from "./errors.ts";
-import { is_setting_name, SETTING_NAMES, SETTING_SPECS } from "../../src/shared/settings_schema.ts";
+import { is_setting_name, SETTING_NAMES, SETTING_SPECS } from "../settings_schema.ts";
 import type { DataLayer } from "./source_files.ts";
 
 export const KEYMAP_MODES = [...MODES, "browser"] as const;

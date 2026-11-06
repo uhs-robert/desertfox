@@ -7,8 +7,8 @@ import { make_browser_handlers } from "../src/commands/browser.ts";
 import { url_target, home_page_url } from "../src/commands/url_build.ts";
 import { focus_page_content, start_content_once, start_on_first_focus } from "../src/content/handlers/focus.ts";
 import { build_config, read_commands_file } from "../tools/build-config/build_config.ts";
-import { ConfigErrors } from "../tools/build-config/errors.ts";
-import { build_schemas } from "../tools/build-config/schemas.ts";
+import { ConfigErrors } from "../src/shared/config_build/errors.ts";
+import { build_schemas } from "../src/shared/config_build/schemas.ts";
 
 const FIXTURES = join(import.meta.dirname, "fixtures", "build-config");
 const commands = read_commands_file(join(FIXTURES, "commands.json"));

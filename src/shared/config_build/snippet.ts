@@ -8,9 +8,9 @@
 // A bare `default=` word that names a context source (current_url, selection,
 // clipboard) is that source. A double-quoted default is always a literal string.
 
-import type { ContextSourceName, Mode, ParamDef, ParamType, ParamValue } from "../../src/shared/command.ts";
-import { SLOTS } from "../../src/shared/engines/index.ts";
-import type { SnippetEntry } from "../../src/shared/config.ts";
+import type { ContextSourceName, Mode, ParamDef, ParamType, ParamValue } from "../command.ts";
+import { SLOTS } from "../engines/index.ts";
+import type { SnippetEntry } from "../config.ts";
 
 const PARAM_TYPES: readonly string[] = ["int", "float", "string", "bool", "enum"];
 const CONTEXT_SOURCES: readonly string[] = ["current_url", "selection", "clipboard"];

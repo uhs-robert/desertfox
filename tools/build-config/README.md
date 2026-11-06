@@ -2,6 +2,14 @@
 
 Compiles the user config directory into the managed storage config that the extension reads. It merges the files, parses snippets and key bindings, checks every argument and theme, and writes one JSON file. `docs/design.md` describes the config format.
 
+The merge, check and parse code lives in `src/shared/config_build/` (see its README) and uses no Node API. This folder holds what needs Node:
+
+- `cli.ts`: the command line.
+- `build_config.ts`: reads `commands.json`, then runs the shared `build_config` on the directory's files.
+- `source_files.ts`: reads the config directory into the raw file map (`read_config_files`).
+- `theme_dir.ts`: reads the repo `themes/` folder for `tools/build_themes.ts`.
+- `output.ts`: writes the managed storage file, the engines list and the schemas.
+
 ## Run
 
 ```

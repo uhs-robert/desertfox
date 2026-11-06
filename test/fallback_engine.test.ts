@@ -7,7 +7,7 @@ import { empty_config, pick_config } from "../src/background/config_load.ts";
 import { url_target } from "../src/commands/url_build.ts";
 import { CONFIG_FORMAT_VERSION, DEFAULT_SETTINGS, FALLBACK_ENGINE, FALLBACK_ENGINE_NAME, with_fallback_engines } from "../src/shared/config.ts";
 import { build_config, read_commands_file } from "../tools/build-config/build_config.ts";
-import { ConfigErrors } from "../tools/build-config/errors.ts";
+import { ConfigErrors } from "../src/shared/config_build/errors.ts";
 
 const commands = read_commands_file(join(import.meta.dirname, "fixtures", "build-config", "commands.json"));
 

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { DEFAULT_SETTINGS } from "../src/shared/config.ts";
 import { is_setting_name, parse_setting_words, SETTING_NAMES, SETTING_SPECS } from "../src/shared/settings_schema.ts";
-import { settings_schema } from "../tools/build-config/schemas.ts";
+import { settings_schema } from "../src/shared/config_build/schemas.ts";
 
 test("the editor schema names exactly the settings the checks know", () => {
   const properties = Object.keys((settings_schema().properties as Record<string, unknown>)).sort();
