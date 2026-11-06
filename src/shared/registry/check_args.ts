@@ -5,7 +5,7 @@ import type { CheckedArgs, CommandDef, DynamicValues, ParamDef, ParamValue } fro
 import { is_setting_name, parse_setting_text } from "../settings_schema.ts";
 import {
   default_of as applicable_default_of,
-  default_value,
+  possible_defaults,
   find_param,
   is_context_source,
   is_dynamic_values,
@@ -40,7 +40,7 @@ export function check_args(
     if (!find_param(command, key)) return fail(`${command.id}: unknown arg "${key}"`);
   }
 
-  // A conditional default reads a sibling as the binding or line gave it, coerced (a bool or number arrives as text from the command line), else as that sibling's own default.
+  // A default list reads a sibling as the binding or line gave it, coerced (a bool or number arrives as text from the command line), else as that sibling's own default.
   const known: Record<string, unknown> = {};
   for (const param of params) {
     const given = raw[param.name];
@@ -135,7 +135,7 @@ function coerce(param: ParamDef, given: unknown, sources: EnumSources): Coerced 
     case "enum": {
       if (typeof given !== "string") return bad("text");
       // The compile stores defaults in each key, so the router sees a default such as search's "" (no engine named) again.
-      if (given === default_value(param)) return { ok: true, value: given };
+      if (possible_defaults(param).includes(given)) return { ok: true, value: given };
       const allowed = enum_values(param, sources);
       if (allowed && !allowed.includes(given)) return bad(`one of ${allowed.join(", ")}`);
       return { ok: true, value: given };

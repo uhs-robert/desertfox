@@ -56,16 +56,18 @@
           "name": "url",
           "type": "string",
           "main": true,
-          "default": {
-            "value": "",
-            "when": {
-              "where": [
-                "tab",
-                "window",
-                "background"
-              ]
+          "default": [
+            {
+              "value": "",
+              "when": {
+                "where": [
+                  "tab",
+                  "window",
+                  "background"
+                ]
+              }
             }
-          }
+          ]
         },
         {
           "name": "container",

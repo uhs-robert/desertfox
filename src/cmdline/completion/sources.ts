@@ -4,7 +4,7 @@
 import type { CommandMeta, Mode, ParamDef } from "../../shared/command.ts";
 import { first_sentence, flag_alternatives, tokenize, usage_line } from "../../shared/registry/index.ts";
 import type { CommandLookup, EnumSources } from "../../shared/registry/index.ts";
-import { bare_word_param, default_value, flag_params, is_dynamic_values, positional_params, static_values, subject_param } from "../../shared/registry/params.ts";
+import { always_default, bare_word_param, default_of, flag_params, is_dynamic_values, positional_params, static_values, subject_param } from "../../shared/registry/params.ts";
 import { rank } from "../../shared/score.ts";
 import { is_setting_name, SETTING_NAMES, SETTING_SPECS } from "../../shared/settings_schema.ts";
 import type { Ranked } from "../../shared/score.ts";
@@ -63,16 +63,26 @@ type Command = NonNullable<ReturnType<CommandLookup["find"]>>;
 type Flag = { long: string; short: string | undefined; description: string; valued: boolean };
 
 // One flag per `--` form that `flag_alternatives` lists, with the short forms before it.
-function flags_of(param: ParamDef): Flag[] {
-  const values = param.type === "enum" ? static_values(param)?.filter((value) => value !== default_value(param)) : undefined;
+// The value that is the default given the `typed` flags is the state without a flag, so only it is hidden.
+function flags_of(command: Command, typed: Record<string, unknown>): (param: ParamDef) => Flag[] {
+  return (param) => flags_for_param(param, default_of(command, param, typed));
+}
+
+function flags_for_param(param: ParamDef, resolved_default: unknown): Flag[] {
+  const values = param.type === "enum" ? static_values(param)?.filter((value) => !always_default(param, value)) : undefined;
   const flags: Flag[] = [];
   let shorts: string[] = [];
+  let form_index = 0;
   for (const form of flag_alternatives(param)) {
     if (!form.startsWith("--")) {
       shorts.push(form);
       continue;
     }
-    const value = values?.[flags.length];
+    const value = values?.[form_index++];
+    if (value !== undefined && value === resolved_default) {
+      shorts = [];
+      continue;
+    }
     const described = value === undefined ? param.description : typeof param.description === "object" ? param.description[value] : undefined;
     flags.push({
       long: form.split("=")[0] as string,
@@ -89,7 +99,7 @@ function args_of(command: Command): string {
   const bare = bare_word_param(command);
   const subject = subject_param(command);
   const engine = bare && is_dynamic_values(bare.values) ? [`<${bare.name}>`] : [];
-  return [...engine, ...flag_params(command).flatMap(flags_of).map((flag) => flag.long), ...positional_params(command).map((param) => `<${param.name}>`), ...(subject ? [`<${subject.name}>`] : [])].join(" ");
+  return [...engine, ...flag_params(command).flatMap(flags_of(command, {})).map((flag) => flag.long), ...positional_params(command).map((param) => `<${param.name}>`), ...(subject ? [`<${subject.name}>`] : [])].join(" ");
 }
 
 // Whether the list offers the command on a line opened from `opened_from`.
@@ -117,9 +127,9 @@ export function command_rows(commands: readonly CommandMeta[], command_aliases: 
     .sort((left, right) => (left.name < right.name ? -1 : left.name > right.name ? 1 : 0));
 }
 
-function flag_rows(command: Command): Row[] {
+function flag_rows(command: Command, typed: Record<string, unknown>): Row[] {
   const usage = usage_line(command);
-  return flag_params(command).flatMap(flags_of).map((flag) => {
+  return flag_params(command).flatMap(flags_of(command, typed)).map((flag) => {
     const equals = flag.valued ? "=" : "";
     const long = `${flag.long}${equals}`;
     const short = flag.short ? `${flag.short}${equals}` : undefined;
@@ -294,7 +304,7 @@ export function create_completer(
     const span = { start: context.start, end: context.end };
     if (context.kind === "command") return { ...span, rows: rank(context.word, all_commands), listing: true };
     const usage = usage_line(context.command);
-    if (context.kind === "flag") return { ...span, usage, rows: rank(context.word, flag_rows(context.command)), listing: true };
+    if (context.kind === "flag") return { ...span, usage, rows: rank(context.word, flag_rows(context.command, context.typed)), listing: true };
     const settings = context.kind === "subject" ? setting_rows(context, text, usage) : undefined;
     if (settings) return { ...span, usage, rows: rank(context.word, settings), listing: settings.length > 0 };
     const param = context.kind === "flag_value" ? context.param : context.position === 0 ? first_word_param(context.command, context.engine_settled) : undefined;

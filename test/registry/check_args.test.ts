@@ -150,7 +150,7 @@ test("a conditional default fills only while its sibling has a listed value, els
     intent: "x",
     params: [
       { name: "where", type: "enum", values: ["here", "tab"], default: "here" },
-      { name: "text", type: "string", main: true, default: { value: "", when: { where: ["tab"] } } },
+      { name: "text", type: "string", main: true, default: [{ value: "", when: { where: ["tab"] } }] },
     ],
     runs_in: "background",
     run: () => {},
@@ -185,7 +185,7 @@ function conditional_command(sibling: object) {
   reg.define("c.e", {
     label: "CE",
     intent: "x",
-    params: [sibling as never, { name: "text", type: "string", main: true, default: { value: "", when: { flag: [true] } } }],
+    params: [sibling as never, { name: "text", type: "string", main: true, default: [{ value: "", when: { flag: [true] } }] }],
     runs_in: "background",
     run: () => {},
   });
