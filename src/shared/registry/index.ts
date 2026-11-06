@@ -8,7 +8,7 @@ export { COMMAND_ID_PATTERN, create_registry, DefineError } from "./define.ts";
 export type { CommandInput, Registry } from "./define.ts";
 export { check_args } from "./check_args.ts";
 export type { CheckResult, EnumSources } from "./check_args.ts";
-export { parse_command_line, tokenize } from "./command_line.ts";
+export { parse_command_line, read_flag, tokenize } from "./command_line.ts";
 export type { CommandLookup, ParseResult, Token } from "./command_line.ts";
 export { description_problem, first_sentence, summary_problem, summary_problems } from "./summary.ts";
 export { flag_alternatives, usage_line } from "./usage.ts";

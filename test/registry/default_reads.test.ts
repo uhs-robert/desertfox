@@ -8,7 +8,7 @@ import { print_command } from "../../src/shared/registry/index.ts";
 const WHERE: ParamDef = { name: "where", type: "enum", values: ["here", "tab"], default: "here" };
 
 test("the printer drops a literal default and a conditional default only while its condition holds", () => {
-  const note: ParamDef = { name: "note", type: "string", default: { value: "x", when: { where: ["tab"] } } };
+  const note: ParamDef = { name: "note", type: "string", default: [{ value: "x", when: { where: ["tab"] } }] };
   const label: ParamDef = { name: "label", type: "string", default: "plain" };
   const command = { id: "c.n", name: "cn", label: "N", intent: "Note.", params: [WHERE, note, label] } as CommandMeta;
   assert.equal(print_command(command, { where: "tab", note: "x", label: "plain" }, {}), "cn --tab");

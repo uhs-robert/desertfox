@@ -2,7 +2,7 @@
 // or the subject. Pure: it reads the text and a lookup, never the DOM.
 
 import type { ParamDef } from "../../shared/command.ts";
-import { tokenize } from "../../shared/registry/index.ts";
+import { read_flag, tokenize } from "../../shared/registry/index.ts";
 import type { CommandLookup } from "../../shared/registry/index.ts";
 import { bare_word_param, find_param, is_dynamic_values, subject_param } from "../../shared/registry/params.ts";
 
@@ -13,7 +13,8 @@ type Span = { word: string; start: number; end: number };
 
 export type CursorContext =
   | ({ kind: "command" } & Span)
-  | ({ kind: "flag"; command: Command } & Span)
+  // `typed` holds the flags already on the line, so a default that depends on them resolves.
+  | ({ kind: "flag"; command: Command; typed: Record<string, unknown> } & Span)
   // The cursor is after the `=` of `--param=` or `-c=`, so the span is the value only.
   | ({ kind: "flag_value"; command: Command; param: ParamDef } & Span)
   // `position` counts the unmarked words before this one, so 0 is the first. A subject that picks by whole text is always 0, and its span runs from its first word to the end of the line.
@@ -93,6 +94,7 @@ export function cursor_context(text: string, caret: number, find: CommandLookup[
   let flags_open = true;
   let position = 0;
   let engine_settled = false;
+  const typed: Record<string, unknown> = {};
   let subject_start: number | undefined;
   let subject_first: number | undefined;
   for (const [index, earlier] of rest.entries()) {
@@ -101,6 +103,8 @@ export function cursor_context(text: string, caret: number, find: CommandLookup[
       engine_settled = true;
     } else if (flags_open && is_flag_token(earlier)) {
       if (earlier.text.startsWith("--engine=")) engine_settled = true;
+      const read = read_flag(command.name ?? command.id, command.params ?? [], earlier);
+      if (!("error" in read)) typed[read.param.name] = read.value;
     } else {
       flags_open = false;
       position += 1;
@@ -109,7 +113,7 @@ export function cursor_context(text: string, caret: number, find: CommandLookup[
     }
   }
   if (flags_open && word.startsWith("-") && !NUMBER_WORD.test(word)) {
-    return word.includes("=") ? flag_value_context(command, word, start, end) : { kind: "flag", command, word, start, end };
+    return word.includes("=") ? flag_value_context(command, word, start, end) : { kind: "flag", command, typed, word, start, end };
   }
   if (picks_by_whole_text(command)) {
     const from = subject_start === undefined ? start : lead + subject_start;

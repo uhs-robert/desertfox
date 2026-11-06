@@ -1,9 +1,9 @@
 // The registry and its define-time checks. Every rejection throws a
 // DefineError that names the command and the field.
 
-import type { CommandDef, ParamDef, ParamValue } from "../command.ts";
+import type { CommandDef, DefaultArm, ParamDef, ParamValue } from "../command.ts";
 import { MODES } from "../command.ts";
-import { default_value, find_param, is_conditional_default, is_context_source, is_dynamic_values, static_values } from "./params.ts";
+import { always_default, arm_condition, declared_default, find_param, is_context_source, is_default_list, is_dynamic_values, split_default, static_values } from "./params.ts";
 import { is_setting_name } from "../settings_schema.ts";
 import { description_problem } from "./summary.ts";
 
@@ -115,7 +115,7 @@ function check_flags(input: CommandInput, fail: Fail): void {
       if (param.type !== "enum" || !values) fail(`${at}.short`, "only an enum with a fixed value list takes a short map");
       for (const [value, letter] of Object.entries(param.short)) {
         if (!values?.includes(value)) fail(`${at}.short.${value}`, "is not one of the values");
-        if (value === default_value(param)) fail(`${at}.short.${value}`, "the default value has no short, because the printer leaves it out");
+        if (always_default(param, value)) fail(`${at}.short.${value}`, "the default value has no short, because the printer leaves it out");
         add_short(letter, `${at}.short.${value}`);
       }
     }
@@ -150,19 +150,43 @@ function check_params(input: CommandInput, fail: Fail): void {
       else if (!(static_values(sibling) ?? []).every(is_setting_name)) fail(`${at}.value_of`, `names "${param.value_of}", whose values are not all setting names`);
     }
     if (param.when) check_when(input, param, at, fail);
-    if (is_conditional_default(param.default) && param.when) fail(`${at}.default`, "a conditional default cannot be combined with `when` on the same param");
-    if (is_conditional_default(param.default)) {
-      if (param.type === "enum") fail(`${at}.default`, "a conditional default is not allowed on an enum param");
-      check_when(input, { ...param, when: param.default.when }, `${at}.default`, fail);
-      const sibling_name = Object.keys(param.default.when)[0] as string;
-      if (is_conditional_default(find_param(input, sibling_name)?.default)) fail(`${at}.default.when`, `names "${sibling_name}", which has a conditional default itself`);
-    }
+    if (is_default_list(param.default)) check_default_arms(input, param, at, fail);
   });
+  check_default_cycles(input, fail);
 
   const mains = params.filter((param) => param.main);
   if (mains.length > 1) fail("params.main", `only one param can be main, found ${mains.map((param) => param.name).join(", ")}`);
   const main = mains[0];
   if (main && main.type !== "string") fail(`params.${main.name}.main`, "only a string param can be main");
+}
+
+// Each arm reads one sibling like a `when`. Only the last item may be a plain value, and a param with `when` takes a plain default only.
+function check_default_arms(input: CommandInput, param: ParamDef, at: string, fail: Fail): void {
+  const list = param.default as readonly unknown[];
+  if (list.length === 0) fail(`${at}.default`, "a default list must not be empty");
+  if (param.when) fail(`${at}.default`, "a default list cannot be combined with `when` on the same param");
+  list.forEach((item, index) => {
+    const here = `${at}.default[${index}]`;
+    if (typeof item !== "object" || item === null) {
+      if (index !== list.length - 1) fail(here, "a plain value must be the last item, because it matches whatever comes before it");
+      return;
+    }
+    check_when(input, { ...param, when: (item as DefaultArm).when }, here, fail);
+  });
+}
+
+// An arm names the sibling it reads, so the arms of all params form a graph that must have no cycle.
+function check_default_cycles(input: CommandInput, fail: Fail): void {
+  const reads = (name: string): string[] => {
+    const declared = find_param(input, name) && declared_default(find_param(input, name) as ParamDef);
+    return is_default_list(declared) ? split_default(declared).arms.map((arm) => arm_condition(arm)[0]) : [];
+  };
+  const visit = (name: string, path: string[]): void => {
+    const loop_at = path.indexOf(name);
+    if (loop_at >= 0) fail(`params.${name}.default`, `defaults depend on each other: ${[...path.slice(loop_at), name].join(" -> ")}`);
+    for (const next of reads(name)) visit(next, [...path, name]);
+  };
+  for (const param of input.params ?? []) visit(param.name, []);
 }
 
 function check_param_shape(param: ParamDef, at: string, fail: Fail): void {
@@ -182,9 +206,11 @@ function check_param_shape(param: ParamDef, at: string, fail: Fail): void {
   check_rules(param, at, fail);
   check_value_labels(param, at, fail);
   check_description(param, at, fail);
-  if (is_conditional_default(param.default)) {
-    const problem = value_problem(param, param.default.value);
-    if (problem) fail(`${at}.default.value`, problem);
+  if (is_default_list(param.default)) {
+    param.default.forEach((item, index) => {
+      const problem = value_problem(param, typeof item === "object" ? item.value : item);
+      if (problem) fail(`${at}.default[${index}]${typeof item === "object" ? ".value" : ""}`, problem);
+    });
   } else if (param.default !== undefined) {
     if (is_context_source(param.default)) {
       if (param.type !== "string") fail(`${at}.default`, "a context source fits only a string param");
@@ -226,7 +252,7 @@ function check_value_labels(param: ParamDef, at: string, fail: Fail): void {
   for (const [value, phrase] of Object.entries(param.value_labels)) {
     if (!list.includes(value)) fail(`${at}.value_labels.${value}`, "is not one of the values");
     else if (phrase === "" || phrase !== phrase.trim()) fail(`${at}.value_labels.${value}`, "must be a non-empty phrase without edge spaces");
-    else if (value === default_value(param)) fail(`${at}.value_labels.${value}`, "the default value has no phrase");
+    else if (always_default(param, value)) fail(`${at}.value_labels.${value}`, "the default value has no phrase");
   }
 }
 
@@ -244,7 +270,7 @@ function check_description(param: ParamDef, at: string, fail: Fail): void {
   if (!list) return fail(`${at}.description`, "only an enum with a fixed value list takes a map");
   for (const [value, text] of Object.entries(description)) {
     if (!list.includes(value)) fail(`${at}.description.${value}`, "is not one of the values");
-    else if (value === default_value(param)) fail(`${at}.description.${value}`, "the default value has no flag to describe");
+    else if (always_default(param, value)) fail(`${at}.description.${value}`, "the default value has no flag to describe");
     const problem = description_problem(text);
     if (problem) fail(`${at}.description.${value}`, problem);
   }

@@ -26,11 +26,11 @@ test("a conditional default is exported as data", () => {
     intent: "x",
     params: [
       { name: "where", type: "enum", values: ["here", "tab"], default: "here" },
-      { name: "text", type: "string", default: { value: "", when: { where: ["tab"] } } },
+      { name: "text", type: "string", default: [{ value: "", when: { where: ["tab"] } }] },
     ],
     runs_in: "background",
     run: () => {},
   });
   const file = JSON.parse(JSON.stringify(build_commands_file(registry)));
-  assert.deepEqual(file.commands[0].params[1].default, { value: "", when: { where: ["tab"] } });
+  assert.deepEqual(file.commands[0].params[1].default, [{ value: "", when: { where: ["tab"] } }]);
 });
