@@ -315,7 +315,8 @@ class ReleaseStepTest(InstallCase):
         remote = os.path.join(self.tmp.name, "remote.git")
         os.makedirs(os.path.join(work, "src"))
         shutil.copy(os.path.join(repo_root, "justfile"), work)
-        git_env = dict(os.environ, GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@e", GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@e")
+        # The user's global git config (a signing key, hooks) must not decide this test.
+        git_env = dict(os.environ, GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_SYSTEM=os.devnull, GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@e", GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@e")
 
         def git(*args, cwd=work):
             return subprocess.run(["git", *args], cwd=cwd, env=git_env, capture_output=True, text=True, check=True).stdout.strip()
@@ -337,6 +338,34 @@ class ReleaseStepTest(InstallCase):
         self.assertEqual(git("log", "-1", "--format=%s"), "chore(release): bump version to 0.0.2")
         self.assertEqual(git("rev-parse", "HEAD"), git("rev-parse", "release-branch", cwd=remote))
         self.assertEqual(git("status", "--porcelain"), "M other.txt")
+
+    def test_failed_push_names_the_recovery_recipes_and_a_rerun_does_not_recommit(self):
+        repo_root = os.path.dirname(HOST_DIR)
+        work = os.path.join(self.tmp.name, "work2")
+        os.makedirs(os.path.join(work, "src"))
+        shutil.copy(os.path.join(repo_root, "justfile"), work)
+        env = dict(os.environ, GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_SYSTEM=os.devnull, GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@e", GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@e")
+
+        def git(*args):
+            return subprocess.run(["git", *args], cwd=work, env=env, capture_output=True, text=True, check=True).stdout.strip()
+
+        git("init", "-q", "-b", "release-branch")
+        git("remote", "add", "origin", os.path.join(self.tmp.name, "missing.git"))
+        for name in ("package.json", "package-lock.json", "src/manifest.json"):
+            with open(os.path.join(work, name), "w") as file:
+                file.write('{"version": "0.0.1"}')
+        git("add", "-A")
+        git("commit", "-q", "-m", "base")
+        with open(os.path.join(work, "package.json"), "w") as file:
+            file.write('{"version": "0.0.2"}')
+        done = subprocess.run(["just", "release_commit_push"], cwd=work, env=env, capture_output=True, text=True, timeout=60)
+        self.assertNotEqual(done.returncode, 0)
+        self.assertIn("bump commit is local", done.stderr)
+        self.assertIn("just release_publish", done.stderr)
+        self.assertEqual(git("log", "-1", "--format=%s"), "chore(release): bump version to 0.0.2")
+        again = subprocess.run(["just", "release_commit_push"], cwd=work, env=env, capture_output=True, text=True, timeout=60)
+        self.assertIn("bump commit is local", again.stderr)
+        self.assertEqual(git("rev-list", "--count", "HEAD"), "2")
 
     def test_dry_run_creates_nothing(self):
         done = self.publish(RELEASE_DRY_RUN="1")

@@ -27,13 +27,13 @@ build: install_deps
 test: install_deps
     #!/usr/bin/env bash
     set -euo pipefail
-    just host-test
-    # A test that runs away dies with its scope, so nothing outlives the run.
+    # A test that runs away dies with its scope, so nothing outlives the run. The host tests share the scope and its time limit.
+    all_tests='just host-test && npm run --silent test'
     if command -v systemd-run >/dev/null 2>&1 && systemd-run --user --scope --quiet -p MemoryMax=8G -p MemorySwapMax=0 -p RuntimeMaxSec=900 true >/dev/null 2>&1; then
-        exec systemd-run --user --scope --quiet -p MemoryMax=8G -p MemorySwapMax=0 -p RuntimeMaxSec=900 npm run --silent test
+        exec systemd-run --user --scope --quiet -p MemoryMax=8G -p MemorySwapMax=0 -p RuntimeMaxSec=900 bash -c "$all_tests"
     fi
     echo "test: no systemd user session, so this run has no memory cap or time limit." >&2
-    exec npm run --silent test
+    exec bash -c "$all_tests"
 
 [private]
 install_deps:
@@ -119,7 +119,7 @@ release_guard:
     fi
     # A bump left behind by a failed sign or install looks like this.
     if [ -z "$(git status --porcelain -- . ':!package.json' ':!package-lock.json' ':!src/manifest.json')" ]; then
-        echo "release found changes only in package.json, package-lock.json and src/manifest.json. That may be a bump left by a failed sign or install. Run 'git diff HEAD -- package.json package-lock.json src/manifest.json'. If it shows only the version line, run 'git checkout -- package.json package-lock.json src/manifest.json' and rerun. Otherwise commit or keep your edits. If signing succeeded, commit the bump instead." >&2
+        echo "release found changes only in package.json, package-lock.json and src/manifest.json. That may be a bump left by a failed sign or install. Run 'git diff HEAD -- package.json package-lock.json src/manifest.json'. If it shows only the version line, run 'git checkout -- package.json package-lock.json src/manifest.json' and rerun. Otherwise commit or keep your edits. If signing succeeded, do not rerun: run 'just release_commit_push' and then 'just release_publish' instead." >&2
         exit 1
     fi
     echo "release refuses to run with uncommitted changes. Commit or stash them first." >&2
@@ -145,8 +145,11 @@ release_commit_push:
     set -euo pipefail
     version=$(jq -r .version package.json)
     git add package.json package-lock.json src/manifest.json
-    git commit -q -m "chore(release): bump version to $version"
-    git push -u origin "$(git branch --show-current)"
+    # A rerun after a failed push finds the bump already committed.
+    if ! git diff --cached --quiet; then
+        git commit -q -m "chore(release): bump version to $version" || { echo "The bump commit failed, so the bump is uncommitted. Fix git, then run 'just release_commit_push' and 'just release_publish'. Do not rerun 'just release': it signs a second version." >&2; exit 1; }
+    fi
+    git push -u origin "$(git branch --show-current)" || { echo "The push failed. The bump commit is local. Fix the push, then run 'just release_commit_push' and 'just release_publish'. Do not rerun 'just release': it signs a second version." >&2; exit 1; }
 
 # Create the GitHub release v<package.json version> with the host, its checksum and the install script, so a release build installs the host of its own version. The tag targets HEAD, so push it first (release does). RELEASE_DRY_RUN=1 prints the gh command and creates nothing.
 [private]
