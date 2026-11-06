@@ -17,7 +17,7 @@ test("the printer drops a literal default and a conditional default only while i
 });
 
 // A read of a param's `default` anywhere else would skip the conditional form. The files below write or check the definition, or read a different `default`.
-const MAY_READ = new Set(["src/shared/registry/params.ts", "src/shared/registry/define.ts", "tools/build-config/snippet.ts", "src/shared/engines/resolve.ts", "src/help/render.ts"]);
+const MAY_READ = new Set(["src/shared/registry/params.ts", "src/shared/registry/define.ts", "tools/build-config/snippet.ts", "src/shared/engines/resolve.ts", "src/help/render.ts", "tools/build-config/schemas.ts", "tools/build_default_settings.ts"]);
 
 const READ_FORMS: RegExp[] = [
   /\.default\b/, // param.default

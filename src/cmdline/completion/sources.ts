@@ -169,7 +169,7 @@ function setting_rows(context: Extract<CursorContext, { kind: "subject" }>, text
   if (command_id !== "settings.set" && command_id !== "settings.unset" && command_id !== "settings.toggle") return undefined;
   const row = (name: string, insert: string, description: string): Row => ({ name, insert, description, args: "", also_named: [], keywords: [], usage });
   if (context.position === 0) {
-    const wanted = (name: keyof typeof SETTING_SPECS) => !SETTING_SPECS[name].is_group && (command_id !== "settings.toggle" || SETTING_SPECS[name].flips_from_absent !== undefined);
+    const wanted = (name: keyof typeof SETTING_SPECS) => SETTING_SPECS[name].settable && (command_id !== "settings.toggle" || SETTING_SPECS[name].is_toggle);
     const names = SETTING_NAMES.filter(wanted).map((name) => row(name, `${name} `, SETTING_SPECS[name].expectation));
     return command_id === "settings.unset" ? [row("all", "all ", "Drop every live change."), ...names] : names;
   }

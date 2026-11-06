@@ -2,7 +2,7 @@
 // storage, and the modes. Runs in the top frame and in same-origin frames.
 
 import type { BackgroundToContent, CompiledKeymap, ContentToBackground, Mode, ModeIndicator, RunResponse, TreeLeaf } from "../shared/index.ts";
-import { COMPILED_KEYMAP_STORAGE_KEY, COMPILED_KEYMAP_VERSION, DEFAULT_SETTINGS, current_keymap } from "../shared/index.ts";
+import { COMPILED_KEYMAP_STORAGE_KEY, COMPILED_KEYMAP_VERSION, DEFAULT_MODE_INDICATOR, current_keymap } from "../shared/index.ts";
 import { create_matcher, event_to_token } from "../shared/keys/index.ts";
 import { message_of } from "./bundle_host.ts";
 import type { BundleHostApi } from "./bundle_host.ts";
@@ -21,7 +21,7 @@ import { focus_page_content, start_on_first_focus } from "./handlers/focus.ts";
 import { blur_focused_element } from "./handlers/page.ts";
 
 // Until the tree is read the setting is unknown, and the default applies.
-let mode_indicator: ModeIndicator = DEFAULT_SETTINGS.mode_indicator;
+let mode_indicator: ModeIndicator = DEFAULT_MODE_INDICATOR;
 
 function refresh_mode_indicator(): void {
   const mode = page_mode.get_mode();
@@ -169,7 +169,7 @@ function is_ignored_site(source: string | undefined): boolean {
 function install_matcher(keymap: CompiledKeymap | undefined): void {
   const usable = current_keymap(keymap);
   // A tree stored before the setting existed has no value, which means the default.
-  mode_indicator = usable?.mode_indicator ?? DEFAULT_SETTINGS.mode_indicator;
+  mode_indicator = usable?.mode_indicator ?? DEFAULT_MODE_INDICATOR;
   which_key_delay_ms = usable?.which_key_delay_ms;
   // The mode comes first, so keys held during the load replay in the right mode.
   const first_install = !matcher_installed;
@@ -179,7 +179,7 @@ function install_matcher(keymap: CompiledKeymap | undefined): void {
   if (first_usable && is_ignored_site(usable.ignore_regex)) page_mode.set_mode("ignore");
   else if (first_install && is_editable_element(document.activeElement)) page_mode.focus_entered_editable();
   refresh_mode_indicator();
-  key_flow.set_matcher(create_matcher(usable ?? { format_version: COMPILED_KEYMAP_VERSION, modes: {}, mode_indicator: DEFAULT_SETTINGS.mode_indicator, which_key_delay_ms: 0 }), usable?.modes.browser);
+  key_flow.set_matcher(create_matcher(usable ?? { format_version: COMPILED_KEYMAP_VERSION, modes: {}, mode_indicator: DEFAULT_MODE_INDICATOR, which_key_delay_ms: 0 }), usable?.modes.browser);
 }
 
 async function read_keymap(): Promise<CompiledKeymap | undefined> {

@@ -2,8 +2,6 @@
 import { is_web_url, type NewTabLink, type Settings } from "../shared/config.ts";
 import { bookmark_items, flatten_bookmarks, listed_tabs, type BookmarkNode, type TabLike } from "../background/complete_items.ts";
 
-export const DEFAULT_ROWS = 8;
-
 export type ListRow = { label: string; url: string; tab?: { id: number; window_id: number } };
 export type ListSection = { title: string; rows: ListRow[] };
 
@@ -12,7 +10,7 @@ export type ListSettings = Pick<Settings, "newtab_bookmarks" | "newtab_bookmarks
 export type TabWithUse = TabLike & { lastAccessed?: number | undefined };
 
 // A list is off unless its flag is true. A max of 0 shows no rows.
-const row_cap = (flag: boolean | undefined, max: number | undefined) => (flag === true ? (max ?? DEFAULT_ROWS) : 0);
+const row_cap = (shown: boolean, max: number) => (shown ? max : 0);
 
 // Open web tabs, last used first. A private tab never shows, and nothing shows on a private page, so a private window does not list the tabs of a normal one.
 export function recent_tab_rows(tabs: readonly TabWithUse[], max: number, page_is_private: boolean): ListRow[] {
@@ -53,7 +51,7 @@ export type PageReaders = {
 
 // A reader that fails (a permission, a browser without the API) leaves its list out, so the clock still draws.
 export async function read_sections(settings: ListSettings, readers: PageReaders): Promise<ListSection[]> {
-  const sections: ListSection[] = link_sections(settings.newtab_links ?? []);
+  const sections: ListSection[] = link_sections(settings.newtab_links);
   const tab_cap = row_cap(settings.newtab_recent_tabs, settings.newtab_recent_tabs_max);
   const bookmark_cap = row_cap(settings.newtab_bookmarks, settings.newtab_bookmarks_max);
   const [tabs, bookmarks] = await Promise.all([

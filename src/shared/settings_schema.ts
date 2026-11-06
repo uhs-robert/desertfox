@@ -1,105 +1,146 @@
-// What each setting accepts, in one place: the build tool checks settings.toml with it, `:set` checks a typed value
-// with it and the command line completes names and values from it. Background, extension pages and build tools import
-// this module. The content script must not: it has a 15 KB budget and needs none of this.
+// What each setting accepts, derived from its row in `settings_table.ts`: the build tool checks settings.toml with
+// it, `:set` checks a typed value with it and the command line completes names and values from it. Background,
+// extension pages and build tools import this module. The content script must not: it has a 16 KB budget and needs
+// none of this.
 
-import { BUILT_IN_PAGE, is_web_url, MODE_INDICATOR_VALUES, WHICH_KEY_BORDER_VALUES } from "./config.ts";
-import type { Settings } from "./config.ts";
+import { BUILT_IN_PAGE, is_web_url } from "./config.ts";
+import { SETTINGS_TABLE, type SettingName, type SettingRow } from "./settings_table.ts";
 import { BUILT_IN_THEME_NAMES } from "./theme_names.ts";
-import { LIGHT_INTENSITIES } from "./theme/roles.ts";
 
 export type SettingSpec = {
   check: (value: unknown) => boolean;
   // What a valid value looks like, in the words of a problem message: "expected <expectation>".
   expectation: string;
   // One word per list item on the command line, instead of one value.
-  is_list?: boolean;
-  // A table of several values. A live change could collide with other keys, so `:set` refuses it.
-  is_group?: boolean;
-  // A boolean `:toggle` flips. The value is what an absent setting reads as.
-  flips_from_absent?: boolean;
+  is_list: boolean;
+  // Whether `:set` takes it.
+  settable: boolean;
+  // A boolean `:toggle` flips.
+  is_toggle: boolean;
   // Names what failed in a value that `check` refused, for a value with parts such as a list of tables. Appended to the expectation in the build problem.
   explain?: (value: unknown) => string | undefined;
   // Values the command line offers for the second word. A function, and short lists only: the command line page bundles this module, so it must not import the theme color tables (25 KB). The theme names come from the names-only `theme_names.ts`.
   listed_values?: () => readonly string[];
 };
 
+type Rule = Pick<SettingSpec, "check" | "expectation" | "explain" | "listed_values">;
+
 const is_text = (value: unknown): value is string => typeof value === "string" && value !== "";
-const is_whole = (value: unknown): value is number => typeof value === "number" && Number.isInteger(value);
-const is_boolean = (value: unknown): boolean => typeof value === "boolean";
+const is_table = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
 
-function is_prefix_pair(value: unknown, first_key: string): boolean {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
-  const keys = Object.keys(value).sort();
-  if (keys.join() !== [first_key, "tab"].sort().join()) return false;
-  return Object.values(value).every(is_text);
+// "a", "a or b", "a, b or c".
+function join_words(words: readonly string[], last_join: string): string {
+  return words.length < 2 ? words.join("") : `${words.slice(0, -1).join(", ")} ${last_join} ${words.at(-1)}`;
 }
 
-const NEW_TAB_LINK_FIELDS = ["label", "url", "group"];
+// A string value quoted, any other as written.
+const value_words = (values: readonly unknown[]): string[] => values.map((value) => (typeof value === "string" ? `"${value}"` : String(value)));
 
-// What is wrong with one link, or undefined when it is fine. A link takes a label, an http or https url and an optional group. Any other field is a typo.
-function new_tab_link_problem(value: unknown): string | undefined {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) return "is not a table";
-  const link = value as Record<string, unknown>;
-  const unknown_field = Object.keys(link).find((key) => !NEW_TAB_LINK_FIELDS.includes(key));
+// Three or more whole numbers in a row read as a range: "a whole number from 1 to 5".
+function enum_expectation(values: readonly unknown[]): string {
+  const is_run = values.length >= 3 && values.every((value, index) => Number.isInteger(value) && value === (values[0] as number) + index);
+  return is_run ? `a whole number from ${values[0]} to ${values.at(-1)}` : join_words(value_words(values), "or");
+}
+
+type TableFields = Extract<SettingRow, { kind: "table_list" }>["fields"];
+
+// What is wrong with one table, or undefined when it is fine. A field the row does not name is a typo.
+function table_problem(fields: TableFields, value: unknown): string | undefined {
+  if (!is_table(value)) return "is not a table";
+  const unknown_field = Object.keys(value).find((key) => !Object.hasOwn(fields, key));
   if (unknown_field !== undefined) return `has the unknown field "${unknown_field}"`;
-  if (!is_text(link.label)) return 'needs a non-empty "label"';
-  if (!is_text(link.url) || !is_web_url(link.url)) return 'needs an http or https "url"';
-  if (link.group !== undefined && !is_text(link.group)) return 'has an empty or non-text "group"';
-  return undefined;
-}
-
-function explain_new_tab_links(value: unknown): string | undefined {
-  if (!Array.isArray(value)) return "it is not a list of tables";
-  for (const [index, link] of value.entries()) {
-    const problem = new_tab_link_problem(link);
-    if (problem === undefined) continue;
-    const label = typeof link?.label === "string" && link.label !== "" ? ` ("${link.label}")` : "";
-    return `item ${index + 1}${label} ${problem}`;
+  for (const [field, rule] of Object.entries(fields)) {
+    const field_value = value[field];
+    if (rule.optional && field_value === undefined) continue;
+    if (is_text(field_value) && (rule.value !== "web_url" || is_web_url(field_value))) continue;
+    if (rule.optional) return `has an empty or non-text "${field}"`;
+    return rule.value === "web_url" ? `needs an http or https "${field}"` : `needs a non-empty "${field}"`;
   }
   return undefined;
 }
 
-const true_or_false = ["true", "false"] as const;
+// A problem names the item by its `label` when it has one.
+function table_list_rule(fields: TableFields): Rule {
+  const explain = (value: unknown): string | undefined => {
+    if (!Array.isArray(value)) return "it is not a list of tables";
+    for (const [index, item] of value.entries()) {
+      const problem = table_problem(fields, item);
+      if (problem === undefined) continue;
+      const label = typeof item?.label === "string" && item.label !== "" ? ` ("${item.label}")` : "";
+      return `item ${index + 1}${label} ${problem}`;
+    }
+    return undefined;
+  };
+  const field_words = Object.entries(fields).map(([field, rule]) => (rule.optional ? `an optional "${field}"` : rule.value === "web_url" ? `an http or https "${field}"` : `"${field}"`));
+  return { check: (value) => explain(value) === undefined, explain, expectation: `a list of tables with ${join_words(field_words, "and")}` };
+}
 
-export const SETTING_SPECS: Record<keyof Settings, SettingSpec> = {
-  which_key_delay_ms: { check: (value) => typeof value === "number" && Number.isFinite(value) && value >= 0, expectation: "a number of milliseconds, 0 or more" },
-  which_key_border: { check: (value) => (WHICH_KEY_BORDER_VALUES as readonly unknown[]).includes(value), expectation: '"square", "round" or "chamfer"', listed_values: () => WHICH_KEY_BORDER_VALUES },
+// Code points, not UTF-16 units, so an emoji counts once.
+const line_length = (text: string): number => [...text].length;
+
+function rule_of(row: Exclude<SettingRow, { kind: "custom" }>): Rule {
+  switch (row.kind) {
+    case "boolean":
+      return { check: (value) => typeof value === "boolean", expectation: "true or false", listed_values: () => ["true", "false"] };
+    case "enum":
+      return { check: (value) => (row.values as readonly unknown[]).includes(value), expectation: enum_expectation(row.values), listed_values: () => row.values.map(String) };
+    case "number": {
+      const is_number = (value: unknown): value is number => typeof value === "number" && (row.whole ? Number.isInteger(value) : Number.isFinite(value));
+      return { check: (value) => is_number(value) && value >= row.min, expectation: `a ${row.whole ? "whole number" : "number"}${row.unit ? ` of ${row.unit}` : ""}, ${row.min} or more` };
+    }
+    case "text":
+      return { check: is_text, expectation: row.expectation };
+    case "line":
+      return {
+        check: (value) => typeof value === "string" && line_length(value) >= row.min_length && line_length(value) <= row.max_length && !/[\r\n]/.test(value),
+        expectation: `a string of ${row.min_length} to ${row.max_length} characters on one line`,
+        listed_values: () => row.suggestions,
+      };
+    case "text_list":
+      return { check: (value) => Array.isArray(value) && value.every(is_text), expectation: row.expectation };
+    case "enum_list":
+      return {
+        check: (value) => Array.isArray(value) && new Set(value).size === value.length && value.every((item) => row.values.includes(item)),
+        expectation: `a list of ${join_words(value_words(row.values), "and")} with no repeat`,
+        listed_values: () => row.values,
+      };
+    case "text_table": {
+      const sorted_keys = [...row.keys].sort().join();
+      return {
+        check: (value) => is_table(value) && Object.keys(value).sort().join() === sorted_keys && Object.values(value).every(is_text),
+        expectation: `{${row.keys.map((key) => `"${key}": "..."`).join(", ")}} with non-empty strings`,
+      };
+    }
+    case "table_list":
+      return table_list_rule(row.fields);
+  }
+}
+
+type CustomName = { [K in SettingName]: (typeof SETTINGS_TABLE)[K] extends { kind: "custom" } ? K : never }[SettingName];
+
+const CUSTOM_RULES: Record<CustomName, Rule> = {
   hint_letters: { check: (value) => typeof value === "string" && new Set(value).size === value.length && value.length >= 2, expectation: "a string of 2 or more distinct letters" },
-  ignore_sites: { check: (value) => Array.isArray(value) && value.every(is_text), expectation: "a list of match pattern strings", is_list: true },
-  mode_indicator: { check: (value) => (MODE_INDICATOR_VALUES as readonly unknown[]).includes(value), expectation: '"always", "not_normal" or "off"', listed_values: () => MODE_INDICATOR_VALUES },
   palette: { check: is_text, expectation: "a theme name", listed_values: () => BUILT_IN_THEME_NAMES },
-  light_intensity: { check: (value) => (LIGHT_INTENSITIES as readonly unknown[]).includes(value), expectation: "a whole number from 1 to 5", listed_values: () => LIGHT_INTENSITIES.map(String) },
-  search_prefixes: { check: (value) => is_prefix_pair(value, "here"), expectation: '{"here": "...", "tab": "..."} with non-empty strings', is_group: true },
-  container_prefixes: { check: (value) => is_prefix_pair(value, "reopen"), expectation: '{"reopen": "...", "tab": "..."} with non-empty strings', is_group: true },
-  home_page: { check: is_text, expectation: "a non-empty URL string" },
-  default_engine: { check: is_text, expectation: "the name of a search engine" },
   new_tab_page: { check: (value) => is_text(value) && (value === BUILT_IN_PAGE || is_web_url(value)), expectation: `"${BUILT_IN_PAGE}" or an http or https URL`, listed_values: () => [BUILT_IN_PAGE] },
-  completion_all_windows: { check: is_boolean, expectation: "true or false", flips_from_absent: false, listed_values: () => true_or_false },
-  cmdline_prompt: { check: (value) => typeof value === "string" && [...value].length >= 1 && [...value].length <= 8 && !/[\r\n]/.test(value), expectation: "a string of 1 to 8 characters on one line", listed_values: () => ["caret", "colon"] },
-  open_completion: { check: (value) => Array.isArray(value) && new Set(value).size === value.length && value.every((source) => source === "bookmarks" || source === "history"), expectation: 'a list of "bookmarks" and "history" with no repeat', is_list: true, listed_values: () => ["bookmarks", "history"] },
-  history_completion_max: { check: (value) => is_whole(value) && value >= 0, expectation: "a whole number, 0 or more" },
-  newtab_clock: { check: (value) => is_boolean(value) || value === "analog" || value === "digital", expectation: 'true, false, "analog" or "digital"', listed_values: () => ["true", "false", "analog", "digital"] },
-  newtab_date: { check: is_boolean, expectation: "true or false", flips_from_absent: true, listed_values: () => true_or_false },
-  newtab_clock_format: { check: (value) => value === 12 || value === 24, expectation: "12 or 24", listed_values: () => ["12", "24"] },
-  newtab_bookmarks: { check: is_boolean, expectation: "true or false", flips_from_absent: false, listed_values: () => true_or_false },
-  newtab_bookmarks_max: { check: (value) => is_whole(value) && value >= 0, expectation: "a whole number, 0 or more" },
-  newtab_recent_tabs: { check: is_boolean, expectation: "true or false", flips_from_absent: false, listed_values: () => true_or_false },
-  newtab_recent_tabs_max: { check: (value) => is_whole(value) && value >= 0, expectation: "a whole number, 0 or more" },
-  // A group, so `:set` refuses it: a list of tables has no typed form.
-  newtab_links: { check: (value) => explain_new_tab_links(value) === undefined, explain: explain_new_tab_links, expectation: 'a list of tables with "label", an http or https "url" and an optional "group"', is_group: true },
-  open_quick_start_on_install: { check: is_boolean, expectation: "true or false", flips_from_absent: true, listed_values: () => true_or_false },
 };
 
-export const SETTING_NAMES = Object.keys(SETTING_SPECS) as (keyof Settings)[];
+function spec_of(name: SettingName, row: SettingRow): SettingSpec {
+  const rule = row.kind === "custom" ? CUSTOM_RULES[name as CustomName] : rule_of(row);
+  return { ...rule, is_list: row.kind === "text_list" || row.kind === "enum_list", settable: row.settable !== false, is_toggle: row.kind === "boolean" };
+}
 
-export function is_setting_name(name: string): name is keyof Settings {
-  return Object.hasOwn(SETTING_SPECS, name);
+export const SETTING_NAMES = Object.keys(SETTINGS_TABLE) as SettingName[];
+
+export const SETTING_SPECS = Object.fromEntries(SETTING_NAMES.map((name) => [name, spec_of(name, SETTINGS_TABLE[name])])) as Record<SettingName, SettingSpec>;
+
+export function is_setting_name(name: string): name is SettingName {
+  return Object.hasOwn(SETTINGS_TABLE, name);
 }
 
 export type ParsedSetting = { value: unknown } | { error: string };
 
 // What a person types after a setting name: a list takes one word per item and `[]` is the empty list, because an empty value shows the setting instead.
-export function parse_setting_text(name: keyof Settings, text: string): ParsedSetting {
+export function parse_setting_text(name: SettingName, text: string): ParsedSetting {
   const spec = SETTING_SPECS[name];
   return parse_setting_words(name, spec.is_list ? (text === "[]" ? [] : text.split(/\s+/)) : [text]);
 }
@@ -107,7 +148,7 @@ export function parse_setting_text(name: keyof Settings, text: string): ParsedSe
 // A list takes one item per word. A single value tries the typed text, then the number it spells, then true or false,
 // and keeps the first that the check accepts. So `300` is a number for a delay and a string for hint letters, and
 // `true` is a boolean for `newtab_clock` and text for `cmdline_prompt`.
-export function parse_setting_words(name: keyof Settings, words: readonly string[]): ParsedSetting {
+export function parse_setting_words(name: SettingName, words: readonly string[]): ParsedSetting {
   const spec = SETTING_SPECS[name];
   if (spec.is_list) return spec.check([...words]) ? { value: [...words] } : { error: `${name}: expected ${spec.expectation}` };
   const text = words.join(" ");

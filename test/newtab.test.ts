@@ -74,8 +74,8 @@ test("the settings schema lists the widget settings", () => {
 });
 
 test("the settings schema pins the clock values and the format", () => {
-  const properties = (build_schemas(commands).settings as { properties: Record<string, { oneOf?: unknown[]; enum?: unknown[]; default?: unknown }> }).properties;
-  assert.deepEqual(properties.newtab_clock?.oneOf, [{ type: "boolean" }, { enum: ["analog", "digital"] }]);
+  const properties = (build_schemas(commands).settings as { properties: Record<string, { enum?: unknown[]; default?: unknown }> }).properties;
+  assert.deepEqual(properties.newtab_clock?.enum, [true, false, "analog", "digital"]);
   assert.deepEqual(properties.newtab_clock_format?.enum, [12, 24]);
   assert.equal(properties.newtab_clock_format?.default, 12);
 });

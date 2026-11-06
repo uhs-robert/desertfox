@@ -53,7 +53,7 @@ export function draw_sections(sections: readonly ListSection[]): HTMLElement {
   return lists;
 }
 
-export function render_new_tab(body: HTMLElement, settings: WidgetSettings = {}, readers: PageReaders = browser_page_readers): void {
+export function render_new_tab(body: HTMLElement, settings: WidgetSettings, readers: PageReaders = browser_page_readers): void {
   const page = document.createElement("main");
   page.className = "desertfox-newtab";
   body.prepend(page);
@@ -71,7 +71,7 @@ export function render_new_tab(body: HTMLElement, settings: WidgetSettings = {},
   slot.append(time_block);
   page.append(slot);
 
-  const clock = !enabled.clock ? null : enabled.clock_style === "digital" ? draw_digital_clock(settings.newtab_clock_format ?? 12) : draw_clock();
+  const clock = !enabled.clock ? null : enabled.clock_style === "digital" ? draw_digital_clock(settings.newtab_clock_format) : draw_clock();
   if (clock) time_block.append(clock.element);
   const date = document.createElement("h3");
   date.className = "date";

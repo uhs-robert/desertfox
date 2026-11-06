@@ -52,9 +52,10 @@ This repository is public.
 
 ```bash
 just build       # bundle the extension
-just test        # old-name, docs and themes checks, then unit tests: registry, parser, prefix tree, config merge
+just test        # old-name, docs, themes and settings defaults checks, then unit tests: registry, parser, prefix tree, config merge
 just docs-gen    # regenerate the tables in docs/keymap.md
 just themes      # regenerate src/shared/themes.ts from themes/*.toml
+just settings-defaults  # regenerate src/shared/default_settings.ts from src/shared/settings_table.ts
 just key-test    # real key presses in a nested Hyprland, about a minute
 just sign        # sign as unlisted on addons.mozilla.org
 just install     # install through the Firefox policy file (needs sudo)
