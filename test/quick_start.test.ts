@@ -32,6 +32,10 @@ test("quick start: the keys come from the keymap", () => {
   for (const key of ["j", "k", "gg", "G", "f", ":", "/", "?", "n", "N", "v", ";v", ";V", "g?", "y", "o", "<Escape>"]) assert.ok(codes.includes(key), key);
 });
 
+test("quick start: the copy example names a key that copies a link address", () => {
+  assert.ok(codes_of(quick_start_blocks(compile(DEFAULT_KEYMAP), all_commands)).includes(";yl"));
+});
+
 test("quick start: a rebind changes the page and an unbound key falls back to the command line", () => {
   const { f: _hint, v: _caret, gV: _caret_too, ...rest } = DEFAULT_KEYMAP.normal!;
   const rebound = { ...DEFAULT_KEYMAP, normal: { ...rest, "<A-f>": { id: "hint.run", args: { action: "here" } } } };

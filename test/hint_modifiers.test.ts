@@ -87,6 +87,22 @@ test("a null under a modifier removes that variant and leaves its siblings", () 
   assert.ok(node_at(compiled, ";", "b", "i"));
 });
 
+test("a null on a modifier key drops that modifier and all its variants", () => {
+  const { compiled, warnings } = compile(keymap_with({ ";r": null }, { ";r": { rapid: true }, ";b": { action: "background" } }));
+  assert.deepEqual(warnings, []);
+  assert.equal(node_at(compiled, ";", "r"), undefined);
+  assert.ok(node_at(compiled, ";", "b", "l"));
+});
+
+test("a key whose required param comes from a prompt still gets variants", () => {
+  const prompted = { id: "open.url", args: { where: "tab" }, prompt: { param: "url" } };
+  // Opening here needs a url, so the variant is valid only because the prompt supplies it.
+  const { compiled, warnings } = compile(keymap_with({ ";o": prompted }, { ";t": { where: "here" } }));
+  assert.deepEqual(warnings, []);
+  const variant = node_at(compiled, ";", "t", "o");
+  assert.equal(variant?.kind === "leaf" && variant.steps[0]!.invocation.args?.where, "here");
+});
+
 test("the default modifiers give the owner's keys and no stacked or refused ones", () => {
   const { compiled, warnings } = compile(DEFAULT_KEYMAP);
   assert.deepEqual(warnings, []);

@@ -78,6 +78,8 @@ test("modifiers come through as written, and a modifier outside a group or with 
   assert.match(outside, /must sit inside a group/);
   const shape = problems_of(config_dir_with({ "keymap.toml": '[modifiers]\n";r" = "rapid"' })).join("\n");
   assert.match(shape, /modifiers\[";r"\] must be a table of args/);
+  const label = problems_of(config_dir_with({ "keymap.toml": '[modifiers]\n";r" = { rapid = true, label = 5 }' })).join("\n");
+  assert.match(label, /a label must be a string/);
 });
 
 test("an empty string in the keymap is stored as null to remove a default binding", () => {
