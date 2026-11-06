@@ -97,12 +97,17 @@ export type MergedConfig = {
   local_theme?: LocalTheme;
 };
 
-// Settings set live with `:set`. Each wins over the same name in the config until `:unset` or the browser restarts.
+// One layer of settings changed in the browser, by `:set`, `:toggle` or the settings page.
 export type SettingOverrides = Partial<Settings>;
 
+// The browser edits over the config file's settings. `saved` lasts until `:unset`. `temp` (`:set --temp`) also ends when the browser restarts, and wins over `saved`.
+export type SettingEdits = { saved: SettingOverrides; temp: SettingOverrides };
+
+export const NO_EDITS: SettingEdits = { saved: {}, temp: {} };
+
 // Applied before `effective_settings`, which fills the defaults under the result.
-export function apply_overrides(settings: Partial<Settings>, overrides: SettingOverrides): Partial<Settings> {
-  return { ...settings, ...overrides };
+export function apply_edits(settings: Partial<Settings>, edits: SettingEdits): Partial<Settings> {
+  return { ...settings, ...edits.saved, ...edits.temp };
 }
 
 // The settings in force: the defaults under the config's own values. The two prefix maps merge one level deeper, so a config that sets only `search_prefixes.tab` keeps the default `here`. The key compiler merges them the same way.
