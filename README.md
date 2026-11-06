@@ -1,12 +1,23 @@
-# DesertFox
+# 🦊 DesertFox
 
-<img src="src/icons/desertfox.svg" alt="DesertFox logo" width="96" height="96">
+<p align="center"><img src="./src/icons/desertfox.svg" height="128" alt="DesertFox logo"/></p>
+
+<hr/>
+
+<p align="center">
+  <a href="https://github.com/uhs-robert/desertfox/stargazers"><img src="https://img.shields.io/github/stars/uhs-robert/desertfox?style=for-the-badge&logo=github&colorA=3b2416&colorB=e0b97a" alt="Stars"/></a>
+  <a href="https://github.com/uhs-robert/desertfox/issues"><img src="https://img.shields.io/github/issues/uhs-robert/desertfox?style=for-the-badge&logo=github&colorA=3b2416&colorB=c8664a" alt="Issues"/></a>
+  <a href="https://github.com/uhs-robert/desertfox/graphs/contributors"><img src="https://img.shields.io/github/contributors/uhs-robert/desertfox?style=for-the-badge&logo=github&colorA=3b2416&colorB=d9822b" alt="Contributors"/></a>
+  <a href="https://github.com/uhs-robert/desertfox/forks"><img src="https://img.shields.io/github/forks/uhs-robert/desertfox?style=for-the-badge&logo=github&colorA=3b2416&colorB=8a6a9e" alt="Forks"/></a>
+</p>
 
 A keyboard-first Firefox extension with one command registry. Keys, the command line, completion, help and which-key all read the same command definitions. It works on its own, and integrates with Oasis Dots (Hyprland and Quickshell) through an optional native host.
 
+<p align="center"><img src="assets/promo/social-preview.png" alt="DesertFox social preview" width="640"/></p>
+
 Status: phase 1 is built. Release 0.1.1 adds the toolbar button, the status page and the keys below.
 
-## What 0.1.1 adds
+## 🌅 What 0.1.1 adds
 
 - A toolbar button titled "DesertFox". The `mode_indicator` setting (`always`, `not_normal`, `off`) controls the page badge. The `palette` setting names a theme for the badge colors: one of the 16 Oasis themes (`oasis_<name>`, default `oasis_moonlight`) or a theme file of your own in `~/.config/desertfox/themes/`. Light or dark follows the system theme, and `light_intensity` (1 to 5, default 3) picks the light set of an Oasis theme.
 - A read-only status page in the add-on options. It shows the config source, the settings in force, the keymap warnings and the rebuild steps.
@@ -16,7 +27,7 @@ Status: phase 1 is built. Release 0.1.1 adds the toolbar button, the status page
 - The plain keys `r`, `t` and `x` are now prefixes: `rr` reload, `rh` hard reload, `tt` open in a new tab, `tT tm td tn tp ta tf tl` for tabs, `xx` close tab, `xp` stop loading.
 - The default keymap binds the rows marked `bound` in [docs/keymap.md](docs/keymap.md), which also lists the later and dropped keys. The search engine and container keys come from your config.
 
-## Config
+## ⌨️ Config
 
 Write your keys in TOML in `~/.config/desertfox/`, then run `just build-config`. The tool checks the files and writes the merged config that Firefox reads from managed storage. A binding is one line of command text, the same words you type in the command line:
 
@@ -39,7 +50,7 @@ ww = { run = ":open -w @current_url", label = "New window, edit current URL" }  
 - [docs/firefox-behavior.md](docs/firefox-behavior.md): what Firefox allows, measured.
 - [docs/keymap.md](docs/keymap.md): every default key, and the keys that are planned or dropped.
 
-## Known limits
+## 🏜️ Known limits
 
 Plain keys such as `J` and `K` do nothing until the tab's page starts loading, so a press on an unloaded tab is lost. `Alt+j` and `Alt+k` use Firefox shortcuts and switch tabs at once. Plain keys never work on pages where Firefox blocks extensions: `about:` pages, the PDF viewer, reader view and addons.mozilla.org.
 
