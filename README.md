@@ -15,13 +15,11 @@
 
 ## 🦊 What it is
 
-DesertFox is a modern, keyboard-driven Firefox extension built for speed, discoverability, and complete control of the web browser.
+DesertFox is a modern, keyboard-driven Firefox extension built for speed, discoverability, and complete control of the web browser. It mixes the power of Tridactyl with the simplicity of Vimium.
 
-Inspired by the Vim text editor, DesertFox uses mnemonic keys, chorded key sequences, and modal systems for full browser navigation and control from the keyboard alone. We also take inspiration from other keyboard-driven browser extensions (Tridactyl and Vimium) and web browsers (qutebrowser). We're not a clone of these other solutions. We build upon their ideas while also taking our own approach to usability, discoverability, customization, and command registration.
+You learn it as you go, with no manual to memorize. Pause after any key and a popup shows what comes next. Type `:` and commands complete as you type. Press `g?` to see every key.
 
-Our goal is to provide a powerful keyboard-driven workflow that is easy to learn as you go without having to memorize a bunch of commands. We accomplish this with key popups that appear when you press any key, intelligent command completion when typing commands, and built-in help so you can discover features naturally as you use them.
-
-The keys follow Vim habits: modes, `hjkl` to scroll, `gg` and `G` to jump, `yy` to copy, `/` to search, and counts for repeated actions. You do not need to know Vim, simply type `g?` to see every key or `:` to see/type any command manually.
+The keys follow Vim habits: modes, `hjkl` to scroll, `gg` and `G` to jump, `yy` to copy, `/` to search, and counts. You do not need to know Vim.
 
 ## ✨ Features
 
@@ -57,8 +55,6 @@ This is how we compare to the rest of the competition. These facts come from eac
 | Config file | yes | no | yes | yes |
 | Works with other Firefox add-ons | yes | yes | yes | no |
 | Script loaded on every page | 15 KB | 254 KB | 1.1 MB | n/a |
-
-In short, we mix the power of Tridactyl with the simplicity of Vimium. Our key popup and autocompletion systems teach you how to use it while you're behind the wheel so you don't need to read the manual while you're driving.
 
 > [!NOTE]
 > The table shows size, not page speed. The sizes are as shipped.
