@@ -640,7 +640,7 @@ test("double_click sends two presses with click counts 1 and 2, a click after ea
   assert.deepEqual(sent.map((event) => event.type), ["pointerover", "pointerenter", "mouseover", "pointerdown", "mousedown", "pointerup", "mouseup", "click", "pointerdown", "mousedown", "pointerup", "mouseup", "click", "dblclick"]);
   assert.deepEqual(sent.filter((event) => /^(mouse(down|up)|click|dblclick)$/.test(event.type)).map((event) => event.detail), [1, 1, 1, 2, 2, 2, 2]);
   assert.deepEqual(sent.filter((event) => event.type.startsWith("pointer")).map((event) => event.detail), Array(6).fill(undefined));
-  assert.deepEqual(sent.slice(0, 3).map((event) => event.detail), [0, 0, 0]);
+  assert.deepEqual(sent.slice(0, 3).map((event) => event.detail), [undefined, undefined, 0]);
 });
 
 test("double_click gives the focus on each press and calls click() never", () => {
