@@ -14,6 +14,7 @@ import { list_keys } from "./list_keys.ts";
 import { create_bundle_loader } from "./bundle_loader.ts";
 import { track_window_focus } from "./window_focus.ts";
 import { repair_tabs_after_reload } from "./reload.ts";
+import { browser_tab_model_deps, create_tab_model } from "./tab_model.ts";
 import { create_router } from "./router.ts";
 import { create_repeat_memory, page_record } from "./repeat_memory.ts";
 import { wire_repeat } from "../commands/command.ts";
@@ -172,3 +173,5 @@ browser.tabs.onRemoved.addListener((tab_id, { windowId, isWindowClosing }) => {
 });
 
 void get_config().then(() => repair_tabs_after_reload(reinject_deps));
+
+void create_tab_model(browser_tab_model_deps()).start();

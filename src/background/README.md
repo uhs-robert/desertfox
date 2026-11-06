@@ -25,6 +25,7 @@ The background page. It loads the config, compiles the keymap, assigns the Firef
 - `tab_actions.ts`: the one place that mutes, pins, moves and reopens tabs in a container, each over a list of ids. `tab.pin`, `tab.mute`, `tab.move` and `tab.reopen_in_container` call it with one id. Reopen handles one tab at a time in tab bar order, opening the new tab where the old one was and then closing the old one, so a failed open leaves no duplicate. It leaves a tab with no address open.
 - `reload.ts`: the marker and the tab repair behind `config.reload`.
 - `browser_deps.ts`: the only file that wires the router to Firefox calls.
+- `tab_model.ts`: the live tab model. One map of tab rows (with the `site_key` of each URL) built from one `tabs.query` and kept current from tab events, nothing stored. Changes batch on a 30 ms flush and go out on the port `desertfox_tab_model` as a snapshot, then patches (`rev` counts per port, `resync` asks for a new snapshot). A port sees only tabs of its own privacy (the sender tab's, else the `:normal` or `:private` suffix of the port name, else no rows) and only an extension page may connect. A detach reads as a removal until the attach. Events during the startup query force a second query.
 - `command_modules.ts`: one import per command group. The commands.json build tool imports it, so it is the only list.
 
 Everything except `browser_deps.ts` and `startup.ts` takes its browser access as arguments, so tests run without a browser.
