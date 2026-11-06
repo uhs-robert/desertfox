@@ -106,9 +106,11 @@ test("a key whose required param comes from a prompt still gets variants", () =>
 test("the default modifiers give the owner's keys and no stacked or refused ones", () => {
   const { compiled, warnings } = compile(DEFAULT_KEYMAP);
   assert.deepEqual(warnings, []);
-  for (const keys of [["r", "l"], ["b", "l"], ["w", "l"], ["y", "l"], ["Y", "p"], ["h", "a"], ["x", "a"], ["b", "I"], ["y", "l"]]) assert.ok(node_at(compiled, ";", ...keys), keys.join(""));
+  for (const keys of [["r", "l"], ["b", "l"], ["w", "l"], ["y", "l"], ["Y", "p"], ["h", "a"], ["x", "a"], ["2", "a"], ["b", "I"], ["y", "l"]]) assert.ok(node_at(compiled, ";", ...keys), keys.join(""));
   assert.equal(args_at(compiled, ";", "h", "a")?.action, "hover");
   assert.equal(args_at(compiled, ";", "Y", "p")?.action, "copy_text");
+  assert.equal(args_at(compiled, ";", "2", "a")?.action, "double_click");
+  assert.equal(node_at(compiled, ";", "2", "l"), undefined);
   // Keys that set their own action, the cmdline keys and stacked modifiers do not exist.
   for (const keys of [["b", "B"], ["y", "i"], ["Y", "I"], ["b", "t"], ["h", "s"], ["y", "v"], ["r", "v"], ["r", "V"], ["b", ";"], ["r", "b"], ["t"], ["R"]]) assert.equal(node_at(compiled, ";", ...keys), undefined, keys.join(""));
 });

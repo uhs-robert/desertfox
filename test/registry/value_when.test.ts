@@ -22,6 +22,11 @@ test("an explicit or default value is refused when its sibling does not allow it
   assert.equal(result.ok ? "" : result.error, "action copy needs filter all, clickable, links, images, frames, media or custom");
 });
 
+test("double_click is refused for the links filter", () => {
+  assert.equal(check_args(hint, { action: "double_click", filter: "links" }).ok, false);
+  assert.equal(check_args(hint, { action: "double_click", filter: "buttons" }).ok, true);
+});
+
 test("a value with no rule is allowed with any sibling value", () => {
   for (const name of ["here", "delete", "focus", "hover", "caret"]) assert.equal(check_args(hint, { action: name, filter: "buttons" }).ok, true, name);
 });
