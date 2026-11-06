@@ -167,7 +167,8 @@ function check_default_arms(input: CommandInput, param: ParamDef, at: string, fa
   if (param.when) fail(`${at}.default`, "a default list cannot be combined with `when` on the same param");
   list.forEach((item, index) => {
     const here = `${at}.default[${index}]`;
-    if (typeof item !== "object" || item === null) {
+    if (item === null || item === undefined) return fail(here, "an arm must be a { value, when } object or a plain value");
+    if (typeof item !== "object") {
       if (index !== list.length - 1) fail(here, "a plain value must be the last item, because it matches whatever comes before it");
       return;
     }
@@ -208,6 +209,7 @@ function check_param_shape(param: ParamDef, at: string, fail: Fail): void {
   check_description(param, at, fail);
   if (is_default_list(param.default)) {
     param.default.forEach((item, index) => {
+      if (item === null || item === undefined) return;
       const problem = value_problem(param, typeof item === "object" ? item.value : item);
       if (problem) fail(`${at}.default[${index}]${typeof item === "object" ? ".value" : ""}`, problem);
     });

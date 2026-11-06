@@ -104,7 +104,11 @@ export function cursor_context(text: string, caret: number, find: CommandLookup[
     } else if (flags_open && is_flag_token(earlier)) {
       if (earlier.text.startsWith("--engine=")) engine_settled = true;
       const read = read_flag(command.name ?? command.id, command.params ?? [], earlier);
-      if (!("error" in read)) typed[read.param.name] = read.value;
+      if (!("error" in read)) {
+        // An arm names a number as a number, and the flag arrives as text.
+        const is_number = (read.param.type === "int" || read.param.type === "float") && typeof read.value === "string" && read.value.trim() !== "" && Number.isFinite(Number(read.value));
+        typed[read.param.name] = is_number ? Number(read.value) : read.value;
+      }
     } else {
       flags_open = false;
       position += 1;

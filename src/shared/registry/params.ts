@@ -24,9 +24,9 @@ export function declared_default(param: ParamDef): ParamDef["default"] {
 
 // The arms of a default list in order, and the plain value last (undefined when the list ends on an arm).
 export function split_default(list: DefaultList): { arms: DefaultArm[]; fallback: ParamValue | undefined } {
-  const arms = list.filter((item): item is DefaultArm => typeof item === "object");
+  const is_arm = (item: unknown): item is DefaultArm => typeof item === "object" && item !== null;
   const last = list[list.length - 1];
-  return { arms, fallback: typeof last === "object" ? undefined : last };
+  return { arms: list.filter(is_arm), fallback: is_arm(last) ? undefined : last };
 }
 
 // The name of the one sibling an arm reads, and the values that make it hold.
