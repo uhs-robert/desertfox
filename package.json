@@ -15,8 +15,10 @@
     "themes:check": "node --no-warnings tools/build_themes.ts --check",
     "defaults:write": "node --no-warnings tools/build_default_settings.ts --write",
     "defaults:check": "node --no-warnings tools/build_default_settings.ts --check",
+    "completion:write": "node --no-warnings tools/build_setting_completion.ts --write",
+    "completion:check": "node --no-warnings tools/build_setting_completion.ts --check",
     "rename:check": "node --no-warnings tools/rename_to_desertfox.mjs --check",
-    "test": "npm run --silent rename:check && npm run --silent docs:check && npm run --silent themes:check && npm run --silent defaults:check && node --test --test-timeout=30000 --no-warnings \"test/**/*.test.ts\""
+    "test": "npm run --silent rename:check && npm run --silent docs:check && npm run --silent themes:check && npm run --silent defaults:check && npm run --silent completion:check && node --test --test-timeout=30000 --no-warnings \"test/**/*.test.ts\""
   },
   "devDependencies": {
     "@types/firefox-webext-browser": "^143.0.1",
