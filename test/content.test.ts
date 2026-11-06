@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { takes_typing } from "../src/content/editable.ts";
 import { args_for_count } from "../src/content/invocation_args.ts";
 import { create_cancelled_keys } from "../src/content/cancelled_keys.ts";
-import { create_key_flow } from "../src/content/key_flow.ts";
+import { blocks_quick_find, create_key_flow } from "../src/content/key_flow.ts";
 import { ignore_regex_source, ignores_any_address, matches_pattern } from "../src/shared/match_pattern.ts";
 import { mode_label } from "../src/content/mode_label.ts";
 import { wire_mode_reports } from "../src/content/mode_report.ts";
@@ -207,6 +207,39 @@ test("startup replay uses the mode set before the keymap", () => {
   state.set_mode("ignore");
   flow.set_matcher(create_matcher(keymap));
   assert.deepEqual(ran, []);
+});
+
+test("Quick Find keys are blocked in normal, caret, visual and any new mode, outside fields", () => {
+  for (const mode of ["normal", "caret", "visual", "visual_line"] as const) {
+    assert.equal(blocks_quick_find(mode, "/", false), true, mode);
+    assert.equal(blocks_quick_find(mode, "'", false), true, mode);
+    assert.equal(blocks_quick_find(mode, "'", true), false, mode);
+  }
+  for (const mode of ["insert", "ignore", "hint", "cmdline"] as const) assert.equal(blocks_quick_find(mode, "/", false), false, mode);
+  for (const token of ["<C-/>", "<A-'>", "x", "?"]) assert.equal(blocks_quick_find("normal", token, false), false, token);
+});
+
+test("key flow cancels an unbound Quick Find key and drops the sequence or count before it", () => {
+  const { state, ran, flow } = make_flow();
+  flow.set_matcher(create_matcher(keymap));
+  assert.equal(flow.handle_token("'"), "cancel");
+  assert.equal(flow.handle_token("g"), "cancel");
+  assert.equal(flow.handle_token("'"), "cancel");
+  assert.equal(flow.handle_token("3"), "cancel");
+  assert.equal(flow.handle_token("/"), "cancel");
+  assert.equal(flow.handle_token("j"), "cancel");
+  state.set_mode("insert");
+  assert.equal(flow.handle_token("/"), "pass");
+  assert.deepEqual(ran, ["down"]);
+});
+
+test("a bound Quick Find key runs its command", () => {
+  const bound: CompiledKeymap = { ...keymap, modes: { ...keymap.modes, normal: { kind: "branch", children: { "/": leaf("find") } } } };
+  const { ran, flow } = make_flow();
+  flow.set_matcher(create_matcher(bound));
+  assert.equal(flow.handle_token("2"), "cancel");
+  assert.equal(flow.handle_token("/"), "cancel");
+  assert.deepEqual(ran, ["find2"]);
 });
 
 test("a stale cancelled code does not eat a later typed letter", () => {

@@ -30,6 +30,13 @@ const MAX_HELD_KEYS = 32;
 // Chords carry Ctrl, Alt or Meta. Shift alone is a plain key (`J`, `<S-Escape>`).
 const is_chord = (token: string) => /^<(?:[SCAM]-)*[CAM]-/.test(token);
 
+// Insert and ignore mode give keys to the page, and hint and cmdline mode own theirs. Every other mode blocks Quick Find, so a new mode does too.
+const MODES_WITHOUT_QUICK_FIND_BLOCK: readonly Mode[] = ["insert", "ignore", "hint", "cmdline"];
+
+// Firefox starts Quick Find on `/` and `'` in page content, beside DesertFox's own page search. In a field these keys are typing.
+export const blocks_quick_find = (mode: Mode, token: string, in_field: boolean): boolean =>
+  (token === "/" || token === "'") && !in_field && !MODES_WITHOUT_QUICK_FIND_BLOCK.includes(mode);
+
 export function create_key_flow(deps: KeyFlowDeps) {
   let matcher: Matcher | undefined;
   let browser_chords: TreeBranch | undefined;
@@ -87,7 +94,7 @@ export function create_key_flow(deps: KeyFlowDeps) {
     if (result.kind === "pending") return "cancel";
     // The page sees this Escape too, so it can close its own dialog.
     if (mode === "insert" && token === "<Escape>") deps.leave_insert();
-    return "pass";
+    return blocks_quick_find(mode, token, deps.in_editable_field()) ? "cancel" : "pass";
   };
 
   const decide = (active: Matcher, token: string): KeyDecision => {

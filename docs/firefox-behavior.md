@@ -75,3 +75,9 @@ Question: does Firefox paint a caret for a collapsed selection in page text?
 Setup: Firefox 159 headless, one page, a screenshot after a script set the selection with `Selection.addRange`.
 
 Result: no. A collapsed range in plain text paints nothing. A one-character range paints as a highlighted block. So caret mode draws the caret as a one-character selection, which also makes `@selection` return that character. A caret on an empty line has no character and is not drawn.
+
+## Firefox defaults (not measured)
+
+These are Firefox defaults that the design relies on. Nobody has measured them in this project yet.
+
+- When focus is in page content and not in a field, `/` starts Quick Find and `'` starts links-only Quick Find. DesertFox cancels both keys outside insert, ignore, hint and cmdline mode, see [Keys and modes](design.md#keys-and-modes).
