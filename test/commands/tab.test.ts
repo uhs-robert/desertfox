@@ -267,7 +267,7 @@ function make_unload(tabs: TabInfo[], listed_tabs: ListedTab[] = []) {
   };
   return { handlers: make_tab_handlers(deps), log, states, toast_tabs };
 }
-const unload_args = (over: Partial<{ tab: string; side: "none" | "all_before" | "all_after"; count: number }> = {}) => ({ tab: "", side: "none" as const, count: 1, ...over });
+const unload_args = (over: Partial<{ tab: string; side: "none" | "all_before" | "all_after" | "site"; count: number }> = {}) => ({ tab: "", side: "none" as const, count: 1, ...over });
 
 test("tab.unload on the current tab switches to a loaded tab first, then discards, and reports", async () => {
   const { handlers, log } = make_unload(make_tabs(3));
@@ -351,4 +351,56 @@ test("the schema refuses a count below 1 before any handler runs", () => {
     }
     assert.equal(check_args(registry.get(id)!, { count: 1 }, {}).ok, true);
   }
+});
+
+// Tabs 0 and 1 are on github.com (one with www), 2 is pinned on github.com, 3 is docs.github.com, 4 is elsewhere.
+const SITE_TABS = () =>
+  make_tabs(5, [
+    { url: "https://github.com/a" },
+    { url: "https://www.github.com/b" },
+    { url: "https://github.com/c", pinned: true },
+    { url: "https://docs.github.com/" },
+    { url: "https://example.org/" },
+  ]);
+
+test("tab.close with site focuses the nearest tab outside the site, then closes the unpinned tabs of the site", async () => {
+  const { handlers, log } = make_fake(SITE_TABS());
+  await handlers.close(ctx_at(101), { side: "site" });
+  assert.deepEqual(log, ["activate 102", "remove 100,101"]);
+});
+
+test("tab.close with site on a pinned tab still closes that tab and keeps its pinned neighbors", async () => {
+  const { handlers, log } = make_fake(SITE_TABS());
+  await handlers.close(ctx_at(102), { side: "site" });
+  assert.deepEqual(log, ["activate 103", "remove 100,101,102"]);
+});
+
+test("tab.close with site on a lone tab behaves like closing one tab", async () => {
+  const { handlers, log } = make_fake(SITE_TABS());
+  await handlers.close(ctx_at(104), { side: "site" });
+  assert.deepEqual(log, ["activate 103", "remove 104"]);
+});
+
+test("tab.unload with site unloads the tab and the unpinned tabs of its site, skipping audible ones", async () => {
+  const tabs = SITE_TABS();
+  tabs[1] = { ...tabs[1]!, audible: true };
+  const { handlers, log } = make_unload(tabs);
+  await handlers.unload(ctx_at(100), unload_args({ side: "site" }));
+  assert.deepEqual(log, ["activate 101", "discard 100", "toast warning unloaded 1 tab, skipped 1 (audible)"]);
+});
+
+test("tab.load with site loads every unloaded tab of the site", async () => {
+  const { handlers, log, states } = make_unload(SITE_TABS());
+  states.get(100)!.discarded = true;
+  states.get(101)!.discarded = true;
+  await handlers.load(ctx_at(100), unload_args({ side: "site" }));
+  assert.deepEqual(log, ["reload 100", "reload 101", "toast success loaded 2 tabs"]);
+});
+
+test("a count is invalid with side=site for tab.unload and tab.load, and site is a valid side everywhere", () => {
+  for (const id of ["tab.unload", "tab.load"]) {
+    assert.equal(check_args(registry.get(id)!, { side: "site", count: 2 }, {}).ok, false);
+    assert.equal(check_args(registry.get(id)!, { side: "site" }, {}).ok, true);
+  }
+  assert.equal(check_args(registry.get("tab.close")!, { side: "site" }, {}).ok, true);
 });
