@@ -243,7 +243,7 @@ Which-key group names:
 | --- | --- | --- | --- | --- |
 | `0` | bound | `caret.move --line-start` | Move caret |  |
 | `v` | bound | `mode visual` | Set mode |  |
-| `V` | bound | `mode visual_line` | Set mode |  |
+| `V` | bound | `mode visual_line` | Start line visual mode |  |
 | `<Escape>` | bound | `mode.escape` | Escape |  |
 | `<C-[>` | bound | `mode.escape` | Escape |  |
 | `/` | bound | `find` | Find forward |  |
@@ -317,7 +317,7 @@ Which-key group names:
 | `s` | bound | `visual.act search` | Act on selection |  |
 | `<Escape>` | bound | `mode.escape` | Escape |  |
 | `<C-[>` | bound | `mode.escape` | Escape |  |
-| `V` | bound | `mode visual_line` | Set mode |  |
+| `V` | bound | `mode visual_line` | Switch to line visual mode |  |
 
 ### visual_line
 
@@ -359,8 +359,8 @@ Which-key group names:
 | `s` | bound | `visual.act search` | Act on selection |  |
 | `<Escape>` | bound | `mode.escape` | Escape |  |
 | `<C-[>` | bound | `mode.escape` | Escape |  |
-| `v` | bound | `mode visual` | Set mode |  |
-| `V` | bound | `mode caret` | Set mode |  |
+| `v` | bound | `mode visual` | Switch to character visual mode |  |
+| `V` | bound | `mode caret` | Return to caret mode |  |
 
 ### insert
 

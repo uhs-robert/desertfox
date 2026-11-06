@@ -261,7 +261,7 @@ export const DEFAULT_KEYMAP: KeymapConfig = {
   },
   caret: {
     v: { id: "mode.set", args: { mode: "visual" } },
-    V: { id: "mode.set", args: { mode: "visual_line" } },
+    V: { id: "mode.set", args: { mode: "visual_line" }, label: "Start line visual mode" },
     "<Escape>": { id: "mode.escape" },
     "<C-[>": { id: "mode.escape" },
     "/": { id: "find.open", label: "Find forward" },
@@ -274,12 +274,12 @@ export const DEFAULT_KEYMAP: KeymapConfig = {
   },
   visual: {
     ...VISUAL_KEYS,
-    V: { id: "mode.set", args: { mode: "visual_line" } },
+    V: { id: "mode.set", args: { mode: "visual_line" }, label: "Switch to line visual mode" },
   },
   visual_line: {
     ...VISUAL_KEYS,
-    v: { id: "mode.set", args: { mode: "visual" } },
-    V: { id: "mode.set", args: { mode: "caret" } },
+    v: { id: "mode.set", args: { mode: "visual" }, label: "Switch to character visual mode" },
+    V: { id: "mode.set", args: { mode: "caret" }, label: "Return to caret mode" },
   },
   insert: {
     "<Escape>": { id: "mode.escape" },
