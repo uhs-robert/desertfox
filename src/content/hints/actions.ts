@@ -108,8 +108,8 @@ export function center_of(target: Target): { x: number; y: number } {
 export function dispatch_mouse_event(target: Target, type: MouseEventName, related_target: EventTarget | null = null, at = center_of(target), detail = 0): boolean {
   if (!target.dispatchEvent) return true;
   const stays_inside = /(enter|leave)$/.test(type);
-  const init = { bubbles: !stays_inside, cancelable: true, composed: !stays_inside, button: 0, buttons: type.endsWith("down") ? 1 : 0, relatedTarget: related_target, clientX: at.x, clientY: at.y, detail };
-  return target.dispatchEvent(type.startsWith("pointer") ? new PointerEvent(type, { ...init, pointerType: "mouse", isPrimary: true }) : new MouseEvent(type, init));
+  const init = { bubbles: !stays_inside, cancelable: true, composed: !stays_inside, button: 0, buttons: type.endsWith("down") ? 1 : 0, relatedTarget: related_target, clientX: at.x, clientY: at.y };
+  return target.dispatchEvent(type.startsWith("pointer") ? new PointerEvent(type, { ...init, pointerType: "mouse", isPrimary: true }) : new MouseEvent(type, { ...init, detail }));
 }
 
 // The pointer and mouse events of one press and release. A browser skips the mouse events after a cancelled pointerdown and the focus after a cancelled mousedown, and a widget such as Chosen relies on that to keep its own focus.
@@ -131,19 +131,36 @@ function click_like_a_mouse(target: Target): void {
   target.click();
 }
 
-// A link is no target: its first click would navigate away before the second press. A link's own children count, because their click bubbles to it.
-export const is_inside_link = (element: Element): boolean => element.closest("a[href]") !== null;
+// A link is no target: its first click would navigate away before the second press. The climb covers the children of a link, across shadow roots, because their click bubbles to it.
+export function is_inside_link(element: Element): boolean {
+  for (let up: Element | null = element; up; up = parent_across_shadow(up)) if (up.matches("a[href]")) return true;
+  return false;
+}
 
-// The word under the point, for a text node only. Firefox selects nothing for a synthetic double-click. A field keeps its own selection rules and is left alone, and a point on a box with no text changes nothing.
+// The word segment that holds the offset, or the one that starts there. A space or punctuation holds none.
+export function word_range_at(text: string, offset: number): [number, number] | undefined {
+  for (const part of new Intl.Segmenter(undefined, { granularity: "word" }).segment(text)) {
+    if (offset >= part.index && offset < part.index + part.segment.length) return part.isWordLike ? [part.index, part.index + part.segment.length] : undefined;
+  }
+  return undefined;
+}
+
+// The word under the point, for a text node only. Firefox selects nothing for a synthetic double-click. A field keeps its own selection rules and is left alone, and a point on a box with no text changes nothing. The range is set directly, because the move and extend by word depend on the platform at a word start.
 function select_word_at(target: Target, at: { x: number; y: number }): void {
   const doc = target.ownerDocument;
-  const position = doc?.caretPositionFromPoint?.(at.x, at.y);
-  const text = position?.offsetNode;
+  const root = (target as unknown as Node).getRootNode?.() as ShadowRoot | undefined;
+  const shadow_roots = root?.host ? [root] : [];
+  const position = doc?.caretPositionFromPoint?.(at.x, at.y, { shadowRoots: shadow_roots });
+  const text = position?.offsetNode as Text | undefined;
   if (!position || text?.nodeType !== Node.TEXT_NODE || takes_typing(target) || !(target as unknown as Node).contains(text)) return;
+  const word = word_range_at(text.data, position.offset);
+  if (!word) return;
+  const range = doc!.createRange();
+  range.setStart(text, word[0]);
+  range.setEnd(text, word[1]);
   const selection = doc!.defaultView?.getSelection();
-  selection?.collapse(text, position.offset);
-  selection?.modify("move", "backward", "word");
-  selection?.modify("extend", "forward", "word");
+  selection?.removeAllRanges();
+  selection?.addRange(range);
 }
 
 // Two presses with click counts 1 and 2, a click after each, then dblclick, as a mouse sends them. The clicks are events and not click(), because click() carries no count. A link would act on the first, so links are not offered as targets.

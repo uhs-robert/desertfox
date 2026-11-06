@@ -71,8 +71,8 @@ function find_candidates(filter: HintFilter, custom_selector: string | undefined
   const opens_elsewhere = OPEN_PLACES.includes(action);
   const with_background = filter === "images";
   const found = collect(document, query_for(filter, custom_selector), weak_test_for(filter));
-  if (action === "double_click") return found.filter((item) => !is_inside_link(item.element));
-  return found.filter((item) => (!opens_elsewhere && !with_background) || has_usable_address(item.element as HTMLElement, with_background, opens_elsewhere));
+  const outside_links = action === "double_click" ? found.filter((item) => !is_inside_link(item.element)) : found;
+  return outside_links.filter((item) => (!opens_elsewhere && !with_background) || has_usable_address(item.element as HTMLElement, with_background, opens_elsewhere));
 }
 
 const none_message = (text: string | undefined): string => (text === undefined ? "No hints on this page" : `No link matches ${text}`);
