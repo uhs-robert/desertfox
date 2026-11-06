@@ -1,7 +1,7 @@
 // What the command line page asks of the background: the history to walk, the commands and the lists that bare words read from.
 
 import type { CmdlineOpened } from "../shared/messages.ts";
-import { CMDLINE_HISTORY_STORAGE_KEY, CMDLINE_OPENER_STORAGE_PREFIX, CMDLINE_TICKET_STORAGE_PREFIX } from "./storage_keys.ts";
+import { CMDLINE_HISTORY_STORAGE_KEY, CMDLINE_LATEST_TICKET_STORAGE_PREFIX, CMDLINE_OPENER_STORAGE_PREFIX, CMDLINE_TICKET_STORAGE_PREFIX } from "./storage_keys.ts";
 
 export const HISTORY_LIMIT = 100;
 
@@ -45,29 +45,34 @@ export function create_cmdline_service(deps: CmdlineServiceDeps) {
     issue_ticket: async (tab_id: number | undefined): Promise<string | undefined> => {
       if (tab_id === undefined) return undefined;
       const ticket = deps.new_ticket();
-      await deps.tickets.set({ [CMDLINE_TICKET_STORAGE_PREFIX + ticket]: tab_id });
+      await deps.tickets.set({ [CMDLINE_TICKET_STORAGE_PREFIX + ticket]: tab_id, [CMDLINE_LATEST_TICKET_STORAGE_PREFIX + tab_id]: ticket });
       return ticket;
     },
     // Used up on the first try, so a frame reloaded with an old ticket gets nothing either.
-    open: async (ticket: unknown, tab_id: number | undefined): Promise<CmdlineOpened | undefined> => {
-      if (typeof ticket !== "string" || tab_id === undefined) return undefined;
+    open: async (ticket: unknown, tab_id: number | undefined, frame_id: number | undefined): Promise<CmdlineOpened | undefined> => {
+      if (typeof ticket !== "string" || tab_id === undefined || frame_id === undefined) return undefined;
       const redeemed = (redemptions.get(ticket) ?? Promise.resolve()).then(() => redeem(ticket));
       const settled = redeemed.catch(() => undefined);
       redemptions.set(ticket, settled);
       void settled.then(() => redemptions.get(ticket) === settled && redemptions.delete(ticket));
       if ((await redeemed) !== tab_id) return undefined;
-      await deps.tickets.set({ [CMDLINE_OPENER_STORAGE_PREFIX + tab_id]: true });
+      // A line that closed while its redemption was slow must not take the mark from the line that replaced it.
+      const latest_key = CMDLINE_LATEST_TICKET_STORAGE_PREFIX + tab_id;
+      if ((await deps.tickets.get(latest_key))[latest_key] !== ticket) return undefined;
+      // The frame, not just the tab: any frame of the page can embed another `cmdline.html`, and that copy redeemed nothing.
+      // Each line mounts a new frame and Firefox never reuses a frame id inside a tab, so the next line replaces the mark and a closed line's mark matches no live frame.
+      await deps.tickets.set({ [CMDLINE_OPENER_STORAGE_PREFIX + tab_id]: frame_id });
       // After the pending writes, so a line reopened at once already has the last command.
       await last_write;
       return { history: await read(), sources: await deps.sources(), ...(await deps.page_config()) };
     },
-    // Whether the tab redeemed a ticket and has not closed or navigated since.
-    is_opener: async (tab_id: number | undefined): Promise<boolean> => {
-      if (tab_id === undefined) return false;
+    // Whether this frame of the tab redeemed the tab's latest ticket, and the tab has not closed or navigated since.
+    is_opener: async (tab_id: number | undefined, frame_id: number | undefined): Promise<boolean> => {
+      if (tab_id === undefined || frame_id === undefined) return false;
       const key = CMDLINE_OPENER_STORAGE_PREFIX + tab_id;
-      return (await deps.tickets.get(key))[key] === true;
+      return (await deps.tickets.get(key))[key] === frame_id;
     },
-    forget_opener: (tab_id: number): Promise<void> => deps.tickets.remove(CMDLINE_OPENER_STORAGE_PREFIX + tab_id),
+    forget_opener: (tab_id: number): Promise<void> => deps.tickets.remove([CMDLINE_OPENER_STORAGE_PREFIX + tab_id, CMDLINE_LATEST_TICKET_STORAGE_PREFIX + tab_id]),
     // A new page in the tab is not the page that opened the line, and its own embedded copy of the line page must get nothing.
     forget_opener_on_navigation: async (tab_id: number, change: { status?: string | undefined }): Promise<void> => {
       if (change.status === "loading") await deps.tickets.remove(CMDLINE_OPENER_STORAGE_PREFIX + tab_id);

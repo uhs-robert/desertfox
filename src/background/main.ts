@@ -8,6 +8,7 @@ import { create_cmdline_service } from "./cmdline_service.ts";
 import { create_previous_tabs } from "./previous_tab.ts";
 import { browser_discard_deps } from "./tab_discard.ts";
 import { browser_complete_items_deps, create_complete_items } from "./complete_items.ts";
+import type { Asker } from "./complete_items.ts";
 import { create_open_help } from "./open_help.ts";
 import { requirement_lookup, site_engine_for, with_site_engines } from "./availability.ts";
 import { list_keys } from "./list_keys.ts";
@@ -80,6 +81,10 @@ const complete_items = create_complete_items({
 
 track_window_focus(browser.storage.session, browser.windows);
 
+const asker_of = (sender: browser.runtime.MessageSender): Asker | undefined => {
+  const { id, windowId, incognito } = sender.tab ?? {};
+  return id === undefined || windowId === undefined || sender.frameId === undefined ? undefined : { tab_id: id, frame_id: sender.frameId, window_id: windowId, incognito: incognito === true };
+};
 const find_scan = create_find_scan(browser_find_scan_deps());
 
 // Listeners register in the first turn, so no event is missed while the config loads.
@@ -92,16 +97,10 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
   if (request?.type === "load_bundle") return bundle_loader.answer(sender, request.name);
   if (request?.type === "find_scan" && is_scan_request(request)) return find_scan.answer(request, `${sender.tab?.id}:${sender.frameId}`);
   if (request?.type === "issue_cmdline_ticket") return cmdline.issue_ticket(sender.tab?.id);
-  if (request?.type === "open_cmdline") return get_config().then(() => cmdline.open(request.ticket, sender.tab?.id));
-  if (request?.type === "complete_items") {
-    const { id, windowId, incognito } = sender.tab ?? {};
-    return complete_items.answer(request.kind, id === undefined || windowId === undefined ? undefined : { tab_id: id, window_id: windowId, incognito: incognito === true });
-  }
-  if (request?.type === "set_tab_unloaded") {
-    const { id, windowId, incognito } = sender.tab ?? {};
-    return complete_items.set_unloaded(request.tab_id, request.unloaded, id === undefined || windowId === undefined ? undefined : { tab_id: id, window_id: windowId, incognito: incognito === true });
-  }
-  if (request?.type === "open_help") return open_help.open(request.command_id, sender.tab?.id);
+  if (request?.type === "open_cmdline") return get_config().then(() => cmdline.open(request.ticket, sender.tab?.id, sender.frameId));
+  if (request?.type === "complete_items") return complete_items.answer(request.kind, asker_of(sender));
+  if (request?.type === "set_tab_unloaded") return complete_items.set_unloaded(request.tab_id, request.unloaded, asker_of(sender));
+  if (request?.type === "open_help") return open_help.open(request.command_id, sender.tab?.id, sender.frameId);
   if (request?.type === "record_cmdline") return cmdline.record(request.text, sender.tab?.incognito === true);
   if (request?.type === "record_repeat") {
     return get_config().then(async () => {
@@ -178,4 +177,4 @@ browser.tabs.onRemoved.addListener((tab_id, { windowId, isWindowClosing }) => {
 
 void get_config().then(() => repair_tabs_after_reload(reinject_deps));
 
-void create_tab_model(browser_tab_model_deps()).start();
+void create_tab_model(browser_tab_model_deps({ previous_of: previous_tabs.previous_of, is_opener: cmdline.is_opener })).start();
