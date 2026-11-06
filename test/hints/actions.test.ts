@@ -469,6 +469,15 @@ test("a refused play() or requestFullscreen() comes back as a failed outcome wit
   assert.deepEqual(await box.run("fullscreen"), { ok: false, message: "Fullscreen request denied" });
 });
 
+test("the media actions refuse an element that is not media and do nothing else", () => {
+  for (const action of ["play_pause", "mute", "fullscreen"] as const) {
+    const link = fixture("a", { href: "https://example.com/", paused: true, play: () => assert.fail("played a link") });
+    assert.deepEqual(link.run(action), { ok: false, message: "Not a media element" });
+    assert.deepEqual(link.calls, []);
+    assert.equal((link.element as { muted?: boolean }).muted, undefined);
+  }
+});
+
 test("is_media knows video and audio", () => {
   assert.equal(is_media({ localName: "video" }), true);
   assert.equal(is_media({ localName: "audio" }), true);

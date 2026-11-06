@@ -107,10 +107,14 @@ export function player_box(media: Element): Element {
 }
 
 // play() and requestFullscreen() need the user activation of the pick keydown. A refusal becomes a failed outcome, because a rejected promise from an action reads as a page that went away and cancels silently.
+type Refusal = { ok: false; message: string };
+
 const refusal_as_outcome = (pending: Promise<unknown>): Promise<unknown> =>
   pending.then(() => undefined, (error: unknown) => ({ ok: false, message: String((error as Error)?.message ?? error) }));
 
-function act_on_media(action: "play_pause" | "mute" | "fullscreen", target: Target): void | Promise<unknown> {
+function act_on_media(action: "play_pause" | "mute" | "fullscreen", target: Target): void | Refusal | Promise<unknown> {
+  // The schema cannot tie these actions to the media filter, so `--links` or `--all` can pick any element.
+  if (!is_media(target)) return { ok: false, message: "Not a media element" };
   const media = target as unknown as HTMLMediaElement;
   if (action === "mute") {
     media.muted = !media.muted;
@@ -121,7 +125,7 @@ function act_on_media(action: "play_pause" | "mute" | "fullscreen", target: Targ
   return refusal_as_outcome(doc.fullscreenElement ? doc.exitFullscreen() : player_box(media).requestFullscreen());
 }
 
-export function perform(action: HintAction, target: Target, deps: ActionDeps): void | Promise<unknown> {
+export function perform(action: HintAction, target: Target, deps: ActionDeps): void | Refusal | Promise<unknown> {
   if (action !== "hover") leave_toward(target);
   if (action === "delete") return target.remove();
   if (action === "focus") return focus_target(target);
