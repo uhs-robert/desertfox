@@ -11,47 +11,64 @@
   <a href="https://github.com/uhs-robert/desertfox/forks"><img src="https://img.shields.io/github/forks/uhs-robert/desertfox?style=for-the-badge&logo=github&colorA=3b2416&colorB=8a6a9e" alt="Forks"/></a>
 </p>
 
-A keyboard-first Firefox extension with one command registry. Keys, the command line, completion, help and which-key all read the same command definitions. It works on its own, and integrates with Oasis Dots (Hyprland and Quickshell) through an optional native host.
+## 🦊 What it is
 
-<p align="center"><img src="assets/promo/social-preview.png" alt="DesertFox social preview" width="640"/></p>
+DesertFox is a keyboard-first Firefox add-on. Every command is defined once in a registry. Keys, the command line, completion, help and which-key (the hint popup that lists the keys after a prefix) all read that one definition. It works on its own.
 
-Status: phase 1 is built. Release 0.1.1 adds the toolbar button, the status page and the keys below.
+Status: under construction. DesertFox has no release yet, so there is nothing to install today.
 
-## 🌅 What 0.1.1 adds
+## ✨ Features
 
-- A toolbar button titled "DesertFox". The `mode_indicator` setting (`always`, `not_normal`, `off`) controls the page badge. The `palette` setting names a theme for the badge colors: one of the 16 Oasis themes (`oasis_<name>`, default `oasis_moonlight`) or a theme file of your own in `~/.config/desertfox/themes/`. Light or dark follows the system theme, and `light_intensity` (1 to 5, default 3) picks the light set of an Oasis theme.
-- A Preferences button in the add-on options that opens the help page. Its Home page shows the config source, the keymap warnings, the settings in force and the rebuild steps.
-- The help page takes keys, so `j`, `k` and `gg` scroll it.
-- `zt`, `zz` and `zb` scroll the focused field to the top, center or bottom of the view. After `gi` and `Escape` they align the field you just left. Zoom reset moved from `zz` to `z=`.
-- `page.blur` moved from `zb` to `qb`. The `q` group holds DesertFox's own commands: `qr` reload config, `qh` help, `qi` ignore mode, `qb` blur.
-- The plain keys `r`, `t` and `x` are now prefixes: `rr` reload, `rh` hard reload, `tt` open in a new tab, `tT tm td tn tp ta tf tl` for tabs, `xx` close tab, `xp` stop loading.
-- The default keymap binds the rows marked `bound` in [docs/keymap.md](docs/keymap.md), which also lists the later and dropped keys. The search engine and container keys come from your config.
+- Hints: press `f` to label every clickable element, then type a label to click it. `F` opens it in a background tab.
+- Hint filters: other keys under `;` pick links, inputs, images, media, scroll boxes or frames. Hints reach into shadow roots (isolated parts of a page).
+- Command line: `:` opens a line with fuzzy completion for commands, flags, tabs, bookmarks, history, search engines, containers and headings.
+- Tabs: keys and commands to switch, move, pin, mute, unload, close and reopen tabs, and to open them in a container.
+- Page search: `/` finds text with regular expressions and smartcase, across shadow roots and same-origin frames.
+- Search engines: bind a key to any engine, with groups for site search.
+- Caret and visual mode: `v` and `V` move and select text from the keyboard, with counts and character find.
+- Which-key: after a prefix, a popup lists the keys that can follow, with their labels.
+- Help and Quick Start: a help page built from the live keymap, with a guided Quick Start.
+- Themes and new tab page: colors for every DesertFox surface, a clock, links, recent tabs and bookmarks on the new tab page.
 
-## ⌨️ Config
+## 📦 Install
 
-Write your keys in TOML in `~/.config/desertfox/`, then run `just build-config`. The tool checks the files and writes the merged config that Firefox reads from managed storage. A binding is one line of command text, the same words you type in the command line:
+When DesertFox is released, you will install it from a Firefox add-on file that Mozilla has signed. Firefox asks you to confirm the permissions, then adds the add-on. No public listing on addons.mozilla.org exists or is planned soon.
+
+Until then, only contributors can run it. See [AGENTS.md](AGENTS.md) for the build and install commands.
+
+## 🚀 Try it
+
+After you install DesertFox, press `g?`, `qh` or `<F1>` on a normal page. The help page opens. Start with the Quick Start page, which teaches the first keys. A short pause after a prefix key shows which-key.
+
+## ⚙️ Config
+
+You write the config in TOML in `~/.config/desertfox/`, then run `just build-config`. The tool checks the files and writes the merged config that Firefox reads. A binding is one line of the same command text that you type in the command line.
 
 ```toml
 # ~/.config/desertfox/keymap.toml
 [normal]
 J = "tab.next"                  # a command name or id
-o = "open"                      # asks for the URL
-O = "open -t"                   # -t opens in a new tab, -b a background tab, -w a window
-sa = "search arch"              # the first bare word picks the engine (`search arch -t` for a new tab)
-gt = "tab.goto 1"               # a bare number sets a command's only number param
-gO = ":open -t @current_url"    # a leading ":" types it into the command line and waits
+O = "open -t"                   # -t opens in a new tab
+gt = "tab.goto 1"               # a bare number sets the command's number
 y = ""                          # "" removes a default binding
-ww = { run = ":open -w @current_url", label = "New window, edit current URL" }  # names the key in which-key
 ```
 
-`@current_url`, `@selection` and `@clipboard` are filled in when you press the key. Flags come first. `--tab` or `-t` sets a value, `--rapid` or `-r` turns a switch on, and `--name=value` sets any param (`-c=Work` for the container). The first word that is not a flag starts the main value (the URL, the query) and the rest of the line joins into it, so `search arch pacman mirrors` searches for "pacman mirrors". Write `--` to end the flags early: `search -- arch maps` searches for "arch maps", and `open -- -b` opens the text `-b`. Quote other text that has spaces or `=`. Type the dotted id for most commands (`tab.pin`, `window.new`). `open`, `search`, `paste`, `copy`, `hint`, `tab`, `bookmark`, `zoom`, `scroll`, `mode` and `help` are the short words. Files `search_engines.toml`, `command_aliases.toml` and `settings.toml` sit beside the keymap, and each can have a `.d/` directory of later files. See [docs/design.md](docs/design.md#config) for the full format. Search engines have their own guide: [docs/search_engines.md](docs/search_engines.md).
-
-- [docs/design.md](docs/design.md): architecture, scope and roadmap.
-- [docs/firefox-behavior.md](docs/firefox-behavior.md): what Firefox allows, measured.
-- [docs/keymap.md](docs/keymap.md): every default key, and the keys that are planned or dropped.
+Files beside the keymap set search engines, command aliases, settings, styles and themes. Each can have a `.d/` directory of later files. The full format is in [docs/design.md](docs/design.md#config).
 
 ## 🏜️ Known limits
 
-Plain keys such as `J` and `K` do nothing until the tab's page starts loading, so a press on an unloaded tab is lost. `Alt+j` and `Alt+k` use Firefox shortcuts and switch tabs at once. Plain keys never work on pages where Firefox blocks extensions: `about:` pages, the PDF viewer, reader view and addons.mozilla.org.
+- Plain keys never work on pages where Firefox blocks extensions: `about:` pages, the PDF viewer, reader view and addons.mozilla.org.
+- A plain key such as `J` is lost when it lands on a tab that has not started loading. `Alt+j` and `Alt+k` switch tabs at once. Details are in [docs/firefox-behavior.md](docs/firefox-behavior.md).
+- Planned and not built: a native host (a helper program outside Firefox) for optional desktop integration.
 
-License: [MPL 2.0](LICENSE).
+## 🧭 Docs
+
+- [docs/design.md](docs/design.md): architecture, config format, scope and roadmap.
+- [docs/keymap.md](docs/keymap.md): every default key, and the keys that are planned or dropped.
+- [docs/search_engines.md](docs/search_engines.md): the search engine config.
+- [docs/firefox-behavior.md](docs/firefox-behavior.md): what Firefox allows, measured.
+- [src/README.md](src/README.md): a code map for contributors.
+
+## License
+
+[MPL 2.0](LICENSE).
