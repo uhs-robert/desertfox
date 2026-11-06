@@ -24,8 +24,9 @@ export async function move_tabs(deps: Pick<TabActionDeps, "move">, tab_ids: numb
   if (tab_ids.length > 0) await deps.move(tab_ids, index);
 }
 
-// Each tab reopens where it was, in the new container, and the old tabs close after all the new ones open. A tab with
-// no address cannot reopen and stays. Returns the ids that reopened.
+// Each tab is its own unit, in tab bar order: the new tab opens at the old tab's place, then the old one closes, so
+// places stay put and a failed open leaves no duplicate. The failure stops the run and reaches the caller, as for one
+// tab. A tab with no address cannot reopen and stays. Returns the ids that reopened.
 export async function reopen_in_container(
   deps: Pick<TabActionDeps, "open_tab" | "remove">,
   window_id: number,
@@ -33,13 +34,12 @@ export async function reopen_in_container(
   cookie_store_id: string,
 ): Promise<number[]> {
   const reopened: number[] = [];
-  for (const tab of tabs) {
+  for (const tab of tabs.toSorted((a, b) => a.index - b.index)) {
     if (tab.url === undefined) continue;
-    // Each earlier new tab pushed this one right by one place.
-    await deps.open_tab({ window_id, url: tab.url, index: tab.index + reopened.length, pinned: tab.pinned, cookie_store_id });
+    await deps.open_tab({ window_id, url: tab.url, index: tab.index, pinned: tab.pinned, cookie_store_id });
+    await deps.remove([tab.id]);
     reopened.push(tab.id);
   }
-  if (reopened.length > 0) await deps.remove(reopened);
   return reopened;
 }
 

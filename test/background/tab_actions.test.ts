@@ -31,7 +31,7 @@ test("an empty list calls nothing", async () => {
   assert.deepEqual(log, []);
 });
 
-test("reopen opens every tab where it was, then closes the old ones together", async () => {
+test("reopen opens every tab where it was, then closes its old one", async () => {
   const { deps, log } = make_deps();
   const reopened = await reopen_in_container(
     deps,
@@ -43,7 +43,7 @@ test("reopen opens every tab where it was, then closes the old ones together", a
     "firefox-container-1",
   );
   assert.deepEqual(reopened, [10, 11]);
-  assert.deepEqual(log, ["open https://a.test/ 2 firefox-container-1 false", "open https://b.test/ 6 firefox-container-1 true", "remove 10,11"]);
+  assert.deepEqual(log, ["open https://a.test/ 2 firefox-container-1 false", "remove 10", "open https://b.test/ 5 firefox-container-1 true", "remove 11"]);
 });
 
 test("a tab with no address stays open", async () => {
@@ -65,4 +65,37 @@ test("nothing reopens and nothing closes when no tab has an address", async () =
   const { deps, log } = make_deps();
   assert.deepEqual(await reopen_in_container(deps, 1, [{ id: 10, index: 0, pinned: false, url: undefined }], "c"), []);
   assert.deepEqual(log, []);
+});
+
+test("tabs given out of order reopen in tab bar order at their own places", async () => {
+  const { deps, log } = make_deps();
+  const reopened = await reopen_in_container(
+    deps,
+    1,
+    [
+      { id: 11, index: 5, pinned: false, url: "https://b.test/" },
+      { id: 10, index: 2, pinned: false, url: "https://a.test/" },
+    ],
+    "c",
+  );
+  assert.deepEqual(reopened, [10, 11]);
+  assert.deepEqual(log, ["open https://a.test/ 2 c false", "remove 10", "open https://b.test/ 5 c false", "remove 11"]);
+});
+
+test("a failed open stops the run and leaves no duplicate", async () => {
+  const { deps, log } = make_deps();
+  const failing: TabActionDeps = {
+    ...deps,
+    open_tab: async (open) => {
+      if (open.url.startsWith("data:")) throw new Error("illegal url");
+      await deps.open_tab(open);
+    },
+  };
+  const tabs = [
+    { id: 10, index: 0, pinned: false, url: "https://a.test/" },
+    { id: 11, index: 1, pinned: false, url: "data:text/html,x" },
+    { id: 12, index: 2, pinned: false, url: "https://c.test/" },
+  ];
+  await assert.rejects(reopen_in_container(failing, 1, tabs, "c"), /illegal url/);
+  assert.deepEqual(log, ["open https://a.test/ 0 c false", "remove 10"]);
 });
