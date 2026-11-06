@@ -380,6 +380,63 @@ function sidebar(current: PageId, model: HelpModel, guide: Block[]): HTMLElement
   return el("nav", "desertfox-help-sidebar", brand(), ...entries, support_card());
 }
 
+function menu_icon(): Element {
+  const svg_ns = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(svg_ns, "svg");
+  svg.setAttribute("viewBox", "0 0 16 16");
+  svg.setAttribute("aria-hidden", "true");
+  const path = document.createElementNS(svg_ns, "path");
+  path.setAttribute("d", "M2 4h12M2 8h12M2 12h12");
+  svg.append(path);
+  return svg;
+}
+
+const DRAWER_OPEN_CLASS = "desertfox-help-drawer-open";
+const SIDEBAR_ID = "desertfox-help-sidebar";
+
+function set_drawer_open(help: HTMLElement, open: boolean): void {
+  help.classList.toggle(DRAWER_OPEN_CLASS, open);
+  help.querySelector(".desertfox-help-menu-toggle")?.setAttribute("aria-expanded", String(open));
+}
+
+// Below the narrow breakpoint the sidebar is a drawer behind the menu button. Above it CSS hides the bar and the backdrop and ignores the open class.
+// The drawer starts closed on every render, because each render follows a pick or a hash change. It lives in the DOM only, like the group toggles.
+function wire_drawer(help: HTMLElement, menu_toggle: HTMLElement, sidebar_node: HTMLElement, backdrop: HTMLElement, page_heading: HTMLElement): void {
+  const close = (focus_target: HTMLElement | null) => {
+    set_drawer_open(help, false);
+    focus_target?.focus({ preventScroll: true });
+  };
+  menu_toggle.addEventListener("click", () => {
+    const open = !help.classList.contains(DRAWER_OPEN_CLASS);
+    set_drawer_open(help, open);
+    if (open) (sidebar_node.querySelector<HTMLElement>('a[aria-current="page"]') ?? sidebar_node.querySelector("a"))?.focus();
+  });
+  backdrop.addEventListener("click", () => close(menu_toggle));
+  // A section link on the same hash already focused its heading. Any other pick leaves focus on a link that is about to hide, and a hash change moves it on again.
+  sidebar_node.addEventListener("click", (event) => {
+    if (!help.classList.contains(DRAWER_OPEN_CLASS) || !(event.target as Element).closest("a")) return;
+    close(sidebar_node.contains(document.activeElement) ? page_heading : null);
+  });
+  // Tab past either end of the drawer closes it, so focus never sits under the backdrop.
+  help.addEventListener("focusin", (event) => {
+    if (help.classList.contains(DRAWER_OPEN_CLASS) && !sidebar_node.contains(event.target as Node)) close(null);
+  });
+}
+
+// main.ts listens in the capture phase before the content script loads, so Escape closes the drawer instead of reaching the key flow.
+export function close_drawer_on_escape(event: KeyboardEvent): void {
+  if (event.key !== "Escape") return;
+  const help = document.querySelector<HTMLElement>(`.${DRAWER_OPEN_CLASS}`);
+  const menu_toggle = help?.querySelector<HTMLElement>(".desertfox-help-menu-toggle");
+  if (!help || !menu_toggle) return;
+  set_drawer_open(help, false);
+  // A window widened past the breakpoint hides the button and shows no drawer, so Escape keeps its usual meaning there.
+  if (menu_toggle.getClientRects().length === 0) return;
+  event.preventDefault();
+  event.stopImmediatePropagation();
+  menu_toggle.focus();
+}
+
 export function render_help(root: HTMLElement, model: HelpModel, route: Route, guide: Block[]): void {
   const title = PAGES.find((page) => page.id === route.page)?.title ?? "Home";
   const heading = el("h1", undefined, title);
@@ -390,6 +447,16 @@ export function render_help(root: HTMLElement, model: HelpModel, route: Route, g
   // The sidebar scrolls on its own, so a fresh one starts at the top. Scroll is set after it is in the tree because a detached element ignores it.
   const old_scroll_top = root.querySelector(".desertfox-help-sidebar")?.scrollTop ?? 0;
   const sidebar_node = sidebar(route.page, model, guide);
-  root.replaceChildren(el("div", "desertfox-help", sidebar_node, page));
+  sidebar_node.id = SIDEBAR_ID;
+  const menu_toggle = el("button", "desertfox-help-menu-toggle", menu_icon());
+  menu_toggle.setAttribute("type", "button");
+  menu_toggle.setAttribute("aria-label", "Menu");
+  menu_toggle.setAttribute("aria-controls", SIDEBAR_ID);
+  menu_toggle.setAttribute("aria-expanded", "false");
+  const backdrop = el("div", "desertfox-help-backdrop");
+  const top_bar = el("header", "desertfox-help-topbar", menu_toggle, el("div", "desertfox-help-brand", "DesertFox"));
+  const help = el("div", "desertfox-help", top_bar, backdrop, sidebar_node, page);
+  wire_drawer(help, menu_toggle, sidebar_node, backdrop, heading);
+  root.replaceChildren(help);
   sidebar_node.scrollTop = old_scroll_top;
 }
