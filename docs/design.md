@@ -1,6 +1,6 @@
-# OasisFox design
+# DesertFox design
 
-OasisFox is a keyboard-first Firefox extension. It has a small scope and one command registry. Every command is defined once. Keys, the command line, completion, help, the palette and which-key all read that definition.
+DesertFox is a keyboard-first Firefox extension. It has a small scope and one command registry. Every command is defined once. Keys, the command line, completion, help, the palette and which-key all read that definition.
 
 The extension works on its own. Oasis Dots adds an optional native host. Through it, Hyprland, Quickshell and the shell list and run the same commands, and which-key can show in the Quickshell HUD.
 
@@ -136,7 +136,7 @@ One grammar covers the command line and every binding in the config. The text is
 - A param whose `when` condition does not hold is an error with a message, for example "container needs where tab, background or window".
 - The printer writes the shortest text that reads back as the same args, with short flags: the engine, then flags in param order, then the subject. It leaves out args equal to the default and adds `--` when the subject would read as a flag. `gO` prefills `open -t `. Docs and the help page use the long form.
 - Wording says before, after, previous and next, never left or right, because vertical tab layouts exist.
-- The `oasisfox run` script uses the same parser.
+- The `desertfox run` script uses the same parser.
 
 Completion reads the same definition:
 
@@ -178,7 +178,7 @@ The user config is a directory of files, one file per kind of setting. `tools/bu
 
 ### Source files
 
-The tool reads `~/.config/oasisfox/` by default. Every data file is TOML. A leftover `.jsonc` file is an error that names the `.toml` file to write.
+The tool reads `~/.config/desertfox/` by default. Every data file is TOML. A leftover `.jsonc` file is an error that names the `.toml` file to write.
 
 | File | Holds |
 | --- | --- |
@@ -188,7 +188,7 @@ The tool reads `~/.config/oasisfox/` by default. Every data file is TOML. A left
 | `settings.toml` | Settings such as the which-key delay and the new tab page. |
 | `snippets/*.js` | One custom command per file. See [Snippets](#snippets). |
 | `themes/<name>.toml` | A local theme that `palette = "<name>"` picks. See [Themes](#themes). |
-| `style.css` | Custom CSS for the OasisFox surfaces. See [Styles](#styles). |
+| `style.css` | Custom CSS for the DesertFox surfaces. See [Styles](#styles). |
 
 Each data file can also have a matching directory, for example `keymap.d/`. The tool merges the main file first, then the files in the directory in name order. A later entry wins for the same key. This is how private config joins without editing public files: a private repo links `keymap.d/50-private.toml` and `snippets/` files into place.
 
@@ -226,9 +226,9 @@ ww = { run = ":open -w @current_url", label = "New window, edit current URL" }
 
 #### Starting engines
 
-OasisFox has one built-in engine, `duck` (DuckDuckGo), and the `default_engine` setting defaults to it. So clipboard search works with no config. It is added when the config loads and when `tools/build-config` checks names, so the merged file stays as written. An entry named `duck` in `search_engines.toml` replaces the built-in whole. Nothing hides or removes it.
+DesertFox has one built-in engine, `duck` (DuckDuckGo), and the `default_engine` setting defaults to it. So clipboard search works with no config. It is added when the config loads and when `tools/build-config` checks names, so the merged file stays as written. An entry named `duck` in `search_engines.toml` replaces the built-in whole. Nothing hides or removes it.
 
-[`examples/engines.toml`](../examples/engines.toml) resolves to 69 engines, `duck` among them, and teaches the tree rules in two worked trees (GitHub and YouTube). Copy it to `~/.config/oasisfox/search_engines.toml` and edit it. A TOML file cannot include another file. A `search_engines.d/` file also works, and a later file replaces the table at the same dotted path (a later `[github.repo]` replaces only that node and leaves `github` alone).
+[`examples/engines.toml`](../examples/engines.toml) resolves to 69 engines, `duck` among them, and teaches the tree rules in two worked trees (GitHub and YouTube). Copy it to `~/.config/desertfox/search_engines.toml` and edit it. A TOML file cannot include another file. A `search_engines.d/` file also works, and a later file replaces the table at the same dotted path (a later `[github.repo]` replaces only that node and leaves `github` alone).
 
 #### Engines
 
@@ -241,7 +241,7 @@ An engine is a named URL template. It replaces the former site commands. No prov
 - Availability. An engine is available on a page only when every page slot in its URL can be filled. Which-key hides the keys of an unavailable engine, and a group left empty. A key still works when typed, and shows the slot message. An engine with `fallback = "<engine>"` never hides and runs the fallback when its slots cannot fill. Snippets can require slots with a `// requires: repo` header. The background filters the key list, so the content script is unchanged.
 - Resolution. `tools/build-config` resolves the tree into a flat map keyed by the dotted name and stores it, so the extension only fills page slots and the query. It also writes `<out>.engines.jsonl`, one sorted engine per line, so a config change shows as a diff. It rejects an unknown slot, a param no URL uses, a field that is neither a known field nor a var some URL reads, a value outside the declared list, a fallback to a missing engine, a fallback loop and a default engine that needs a page slot.
 - Help. `help` lists the resolved tree with each engine's URL, slots and the file and level that set each field. `engine.show <name>` opens it at that engine.
-- Which tool. A result that is a URL is an engine. Page DOM or several steps is a snippet. Browser APIs (tabs, windows, bookmarks, containers) is a built-in command. A fuller real example: [https://github.com/uhs-robert/oasis-dots/blob/main/home/oasisfox/.config/oasisfox/search_engines.toml](https://github.com/uhs-robert/oasis-dots/blob/main/home/oasisfox/.config/oasisfox/search_engines.toml).
+- Which tool. A result that is a URL is an engine. Page DOM or several steps is a snippet. Browser APIs (tabs, windows, bookmarks, containers) is a built-in command. A fuller real example: [https://github.com/uhs-robert/oasis-dots/blob/main/home/desertfox/.config/desertfox/search_engines.toml](https://github.com/uhs-robert/oasis-dots/blob/main/home/desertfox/.config/desertfox/search_engines.toml).
 
 ### Merge and checks
 
@@ -262,40 +262,40 @@ Firefox reads the file only when the extension loads. The spike confirmed this: 
 
 - A `config.reload` command reloads the extension. The new config applies in about 1 s. The reload resets the mode and any open hints.
 - After a reload, the key listeners in open tabs are cut off. Firefox loads the content script into open tabs by itself after `runtime.reload`, so the reinjection step stays only as a fallback (see [spike.md](spike.md), "Phase 1 measurements").
-- In Oasis Dots, a `just oasisfox-config` recipe runs the tool, and a key can run the recipe and then `config.reload`.
-- Users without a shell can import the merged file through the options page. OasisFox stores it in `storage.local`. Managed storage wins when both exist.
+- In Oasis Dots, a `just desertfox-config` recipe runs the tool, and a key can run the recipe and then `config.reload`.
+- Users without a shell can import the merged file through the options page. DesertFox stores it in `storage.local`. Managed storage wins when both exist.
 - Since 0.1.1 the options page is a read-only status page: the config source, the settings in force, the warnings and the rebuild steps. It has no inputs. The import above stays in phase 3.
-- `set`, `toggle` and `unset` change a setting live, with no file edit. A change is an override in `storage.session` (`oasisfox_setting_overrides`), over the config value and under nothing else. It is global, private windows included, and a browser restart clears it. `config.reload` clears it too, because Firefox clears `storage.session` when an extension reloads. A live change never survives a reload. `set name value` sets it, `set name` shows it, `toggle name` flips a true or false setting and `unset name` or `unset all` drops a change. `name` is a `strict` param of the known setting names, and `value` carries `value_of: "name"`, so `check_args` checks the value with that setting's entry in `SETTING_SPECS`. The two prefix settings are refused, because a live change could collide with other keys. The options page tags every value that differs from the default as from `settings.toml` or from a live `set`. Saving a live change back to `settings.toml` is not built.
+- `set`, `toggle` and `unset` change a setting live, with no file edit. A change is an override in `storage.session` (`desertfox_setting_overrides`), over the config value and under nothing else. It is global, private windows included, and a browser restart clears it. `config.reload` clears it too, because Firefox clears `storage.session` when an extension reloads. A live change never survives a reload. `set name value` sets it, `set name` shows it, `toggle name` flips a true or false setting and `unset name` or `unset all` drops a change. `name` is a `strict` param of the known setting names, and `value` carries `value_of: "name"`, so `check_args` checks the value with that setting's entry in `SETTING_SPECS`. The two prefix settings are refused, because a live change could collide with other keys. The options page tags every value that differs from the default as from `settings.toml` or from a live `set`. Saving a live change back to `settings.toml` is not built.
 
 The background compiles the keymap into a prefix tree and writes it to `storage.local` for the content scripts.
 
 ### Styles
 
-Every surface (which-key, the command line, hints and the mode indicator) draws from CSS custom properties, for example `--oasisfox-bg-core`, `--oasisfox-fg-core`, `--oasisfox-primary` (titles and groups), `--oasisfox-secondary` (keys), `--oasisfox-font` and `--oasisfox-radius`. The variables are the stable way to restyle OasisFox. Documented class names use the same `oasisfox-` prefix.
+Every surface (which-key, the command line, hints and the mode indicator) draws from CSS custom properties, for example `--desertfox-bg-core`, `--desertfox-fg-core`, `--desertfox-primary` (titles and groups), `--desertfox-secondary` (keys), `--desertfox-font` and `--desertfox-radius`. The variables are the stable way to restyle DesertFox. Documented class names use the same `desertfox-` prefix.
 
 - The defaults are declared on an inner element of each surface, not on the shadow host. The host sits in the page, so page CSS can match the host, but a variable set on the host or on `:root` does not reach the inner element, which sets every role token itself. The long prefix and the inner element together keep page CSS out.
-- User CSS must name the inner class of a surface to change a variable there, for example `.oasisfox-whichkey { --oasisfox-primary: #ff6ec7; }`. Variables on `:root` or `:host` alone do not reach inside a surface. The help page lists the classes.
+- User CSS must name the inner class of a surface to change a variable there, for example `.desertfox-whichkey { --desertfox-primary: #ff6ec7; }`. Variables on `:root` or `:host` alone do not reach inside a surface. The help page lists the classes.
 - `style.css` and `style.d/*.css` load after the built-in styles in the shadow roots (hints, which-key, toast, badge) and in the command line page. The help, options and new tab pages do not load them yet.
-- The background resolves the theme at startup and at every `set`, and stores it as `oasisfox_theme` (`{ dark, light }`, the light set already picked by `light_intensity`) in `storage.local`. Each surface turns it into one style block on its inner element, after the built-in styles and before user CSS, and follows `storage.onChanged`, so a `set palette` reaches open pages at once. The first hint or which-key panel on a page can show one frame in the default colors, because the read is async. Light or dark is a `prefers-color-scheme` block.
+- The background resolves the theme at startup and at every `set`, and stores it as `desertfox_theme` (`{ dark, light }`, the light set already picked by `light_intensity`) in `storage.local`. Each surface turns it into one style block on its inner element, after the built-in styles and before user CSS, and follows `storage.onChanged`, so a `set palette` reaches open pages at once. The first hint or which-key panel on a page can show one frame in the default colors, because the read is async. Light or dark is a `prefers-color-scheme` block.
 - Setting variables covers colors, fonts and sizes. Full selectors can change layout. The documented class names on each surface are part of the public format, and the help page lists them.
 - In Oasis Dots, the theme switcher writes `style.d/00-oasis-theme.css` with the variables for the current Oasis theme, then runs the reload. Without Oasis, the built-in defaults apply.
 - CSS cannot run code. A `url()` in user CSS makes the page load that address, so the CSS stays in the user's own files like the snippets.
 
 ### Themes
 
-A theme file maps colors onto a fixed public list of roles. The theme's own color names never reach OasisFox. A file is TOML with a `[dark]` table, a `[light]` table or both, and a file with one table serves both system settings. Each table maps a role to a `#rgb` or `#rrggbb` color.
+A theme file maps colors onto a fixed public list of roles. The theme's own color names never reach DesertFox. A file is TOML with a `[dark]` table, a `[light]` table or both, and a file with one table serves both system settings. Each table maps a role to a `#rgb` or `#rrggbb` color.
 
-The 21 roles: `bg_core`, `bg_mantle`, `bg_crust`, `selection`, `fg_core`, `fg_comment`, `fg_dim`, `fg_muted`, `primary`, `secondary`, `accent`, `border`, `error`, `warn`, `ok`, `info`, `mode_normal`, `mode_insert`, `mode_ignore`, `mode_caret` and `mode_visual`. `fg_core` is the text, `fg_comment` is secondary text, `fg_dim` is hints such as the command line usage line, and `fg_muted` is disabled text, which has no contrast floor. `error`, `warn`, `ok` and `info` color the toast kinds. `bg_core`, `fg_core`, `primary` and `accent` are required. Every other role derives from them when missing, by the one table in `src/shared/theme/derive.ts`. A role's CSS variable is `--oasisfox-` plus the role with hyphens, for example `--oasisfox-bg-mantle`. The list is a contract: a later rename breaks contributed themes, an addition does not. An old name such as `bg`, `fg` or `muted` in a theme file is an unknown role, and the error lists the valid ones.
+The 21 roles: `bg_core`, `bg_mantle`, `bg_crust`, `selection`, `fg_core`, `fg_comment`, `fg_dim`, `fg_muted`, `primary`, `secondary`, `accent`, `border`, `error`, `warn`, `ok`, `info`, `mode_normal`, `mode_insert`, `mode_ignore`, `mode_caret` and `mode_visual`. `fg_core` is the text, `fg_comment` is secondary text, `fg_dim` is hints such as the command line usage line, and `fg_muted` is disabled text, which has no contrast floor. `error`, `warn`, `ok` and `info` color the toast kinds. `bg_core`, `fg_core`, `primary` and `accent` are required. Every other role derives from them when missing, by the one table in `src/shared/theme/derive.ts`. A role's CSS variable is `--desertfox-` plus the role with hyphens, for example `--desertfox-bg-mantle`. The list is a contract: a later rename breaks contributed themes, an addition does not. An old name such as `bg`, `fg` or `muted` in a theme file is an unknown role, and the error lists the valid ones.
 
 `palette = "<name>"` looks in `<config dir>/themes/<name>.toml` first, then in the built-in themes. The default is `oasis_moonlight`, and a bare name such as `moonlight` is a config error that lists the known names. A local file wins over a built-in theme of the same name.
 
 The 16 Oasis themes are not TOML. `themes/oasis/` holds byte copies of the oasis.nvim CSS files, one dark file and five light files per theme (`just oasis-themes <oasis.nvim dir>` copies them). `tools/build_themes.ts` reads each role from one named `--oasis-*` variable, with no mixing, and the table of which variable fills which role is at the top of that file. The `light_intensity` setting (1 to 5, default 3) picks the light set of an Oasis theme. Other themes have one light set. `tools/build-config` checks every local theme file and rejects an unknown role (the error lists the valid ones), a missing required role and a bad color, each with the file, table and key. `just themes` compiles `themes/oasis/*.css` and the contributed `themes/*.toml` into `src/shared/themes.ts`, and `just test` fails when that module is stale. The stored theme sets every role token on every surface. The mode badge still reads its colors from the compiled keymap: the `mode_*` role with `bg_core` as the text.
 
-`primary` is the brand color: links, titles, groups, the hint labels (a filled label with `bg_core` text and a 1px primary border). `accent` marks highlights, such as the new tab clock second hand. A `style.css` that sets or reads `--oasisfox-accent` for the brand color moves to `--oasisfox-primary`.
+`primary` is the brand color: links, titles, groups, the hint labels (a filled label with `bg_core` text and a 1px primary border). `accent` marks highlights, such as the new tab clock second hand. A `style.css` that sets or reads `--desertfox-accent` for the brand color moves to `--desertfox-primary`.
 
 ## Snippets
 
-A snippet is a user command written as page code. It is how users add behavior that OasisFox does not ship, for example helpers for one private web app. OasisFox has no plugin system: snippets are the only extension point.
+A snippet is a user command written as page code. It is how users add behavior that DesertFox does not ship, for example helpers for one private web app. DesertFox has no plugin system: snippets are the only extension point.
 
 A snippet file has a header with the command fields, then the code:
 
@@ -318,9 +318,9 @@ window.wrappedJSObject.my_app.toggle_ids(args.query);
 - `matches` limits where the command runs. On other pages the router refuses with a message.
 - Errors from the code are caught and shown as a message, with the snippet id.
 - Snippets have no storage of their own. The code runs in the content script world, so the body's scope hides `browser` and `chrome`. That guards against accidents and is not a sandbox: `globalThis.browser` still reaches the extension APIs, and the code is the user's own.
-- A snippet runs other commands with `oasisfox.run(command_text)`, which takes the same text as the command line, for example `await oasisfox.run("open -t https://example.com")`. It rejects when the command fails. Snippets can call snippets up to 5 levels deep.
+- A snippet runs other commands with `desertfox.run(command_text)`, which takes the same text as the command line, for example `await desertfox.run("open -t https://example.com")`. It rejects when the command fails. Snippets can call snippets up to 5 levels deep.
 - A relative URL in `fetch` resolves against the extension, not the page. Build the address from `location.origin`, for example `fetch(location.origin + "/api/items")`.
-- Snippet ids cannot use a group name that OasisFox uses.
+- Snippet ids cannot use a group name that DesertFox uses.
 
 The config file is code, so whoever can write it can run code on pages. The file lives in the user's home directory and only the user's own tools write it, so this adds no new access. An import through the options page shows the snippet ids and asks before it stores them.
 
@@ -412,7 +412,7 @@ Caret mode puts a text cursor in the page, so the user can move through text wit
 - Enter keeps the highlights and the match, Escape clears the highlights. Both keep the search and the match as the place `n`, `N` and a new caret or visual session go on from.
 - In visual mode `/` and `?` move the caret end to the match and keep the anchor. Escape on the line leaves the selection as it was. `n` and `N` do the same with the next and previous match: the caret end goes to the start of the match, so a match before the anchor flips the selection.
 - `*` and `#` are `find.open --word` and `find.open --word --backward`. They search the word under the caret, whole and case-sensitive, with no line. In visual mode with a selection they search the selected text. In normal mode the start of the visible text stands in for the caret. They set register `/` like a typed search.
-- A `MutationObserver` marks the text model stale when nodes or text change in the page, its shadow roots or its same-origin frames, ignoring the elements OasisFox adds itself. A class or style change that only shows or hides text is not seen, and a new `/` always reads the model again. The next keystroke or `n` reads the model again. The observer starts with the first search.
+- A `MutationObserver` marks the text model stale when nodes or text change in the page, its shadow roots or its same-origin frames, ignoring the elements DesertFox adds itself. A class or style change that only shows or hides text is not seen, and a new `/` always reads the model again. The next keystroke or `n` reads the model again. The observer starts with the first search.
 - A page with more than 4 million characters of text is searched only up to that point, and the line and toast say so.
 
 ### Help and palette
@@ -430,7 +430,7 @@ The verbs are fixed:
 - `run`: one invocation from outside, for example from Hyprland, voice or the shell.
 - `whichkey_show`, `whichkey_hide`: drive the Quickshell HUD.
 
-Outside callers reach the host through a Unix socket that it opens, because a desktop program cannot open a channel into the extension. An `oasisfox list` and `oasisfox run <id> [args]` script wraps the socket, the same as `hypr-act`. Oasis can then expose browser commands in its own palette and keymaps.
+Outside callers reach the host through a Unix socket that it opens, because a desktop program cannot open a channel into the extension. A `desertfox list` and `desertfox run <id> [args]` script wraps the socket, the same as `hypr-act`. Oasis can then expose browser commands in its own palette and keymaps.
 
 Firefox keeps the background awake while the port is open, which also helps a later move to MV3.
 
@@ -447,7 +447,7 @@ Firefox keeps the background awake while the port is open, which also helps a la
 | Choice | Picked | Cost |
 | --- | --- | --- |
 | MV2 persistent vs MV3 event page | MV2 | Mozilla can remove MV2 some day. The migration is small because state lives in storage. |
-| Keymap as data vs as code | Data | None for rebinding. New behavior comes from snippets or a new OasisFox build. |
+| Keymap as data vs as code | Data | None for rebinding. New behavior comes from snippets or a new DesertFox build. |
 | Snippets vs plugin extensions | Snippets | Page code only, no extension APIs. A move to MV3 means a rewrite to the `userScripts` API, which shows the user an extra permission warning. |
 | Config as JSONC vs Lua | JSONC | No loops or helpers. The `search_keys` and `container_keys` sections remove most repetition, and tools can still edit the files. |
 | Config through managed storage vs the native host | Managed storage | Each edit needs the merge tool and a reload key, about 2 s. No helper program and no permission warning. |
@@ -459,30 +459,30 @@ Firefox keeps the background awake while the port is open, which also helps a la
 
 - Keys are lost on a page with no committed document, for example a new tab before its first byte. No extension can fix that. The chords cover it.
 - A page that cancels a chord before Firefox sees it blocks the Firefox shortcut. The content script catches the chord first on pages where it runs, so only pages without a content script are exposed.
-- Release Firefox needs a signed build for each change in code. The voxcmd extension already has an AMO signing recipe and a policy install, which OasisFox reuses.
-- Snippets run code from a config string through `tabs.executeScript`. AMO review of OasisFox can question that. The code comes only from the user's own file, which other extensions with this feature also do.
+- Release Firefox needs a signed build for each change in code. The voxcmd extension already has an AMO signing recipe and a policy install, which DesertFox reuses.
+- Snippets run code from a config string through `tabs.executeScript`. AMO review of DesertFox can question that. The code comes only from the user's own file, which other extensions with this feature also do.
 - Scope creep. The binding map is the scope: a feature not in it needs a reason.
 
 ## Roadmap
 
 1. Phase 0, spike. Done. See [spike.md](spike.md).
 2. Phase 1, core. It covers the registry, `commands.json`, the managed storage config, `tools/build-config`, `config.reload`, keymap validation, the prefix tree, modes, scroll and page commands, tab commands, the shortcut slots and the help page. Exit: every v1 row of the binding map that needs no hints or command line works, and the content script stays under its size target.
-3. Phase 2, interfaces. Command line, completion, explicit prompts, hints, which-key, snippets, and caret and visual modes. Exit: the whole v1 column of the binding map works, and OasisFox replaces the current extension in daily use.
+3. Phase 2, interfaces. Command line, completion, explicit prompts, hints, which-key, snippets, and caret and visual modes. Exit: the whole v1 column of the binding map works, and DesertFox replaces the current extension in daily use.
 4. Command line status area. A `statusbar_widgets` list setting, default `url, scroll, tabs`, on the right of the open command line. `url` is colored by security state from the theme's ok, warn and error tokens. `scroll` shows Top, N%, Bot or All. `tabs` shows [n/m]. Each value is a snapshot taken when the line opens. `history` is a later widget. `keypress`, `progress`, `scroll_raw`, `text` and `clock` are not planned. `search_match` waits for a page search built on Firefox's find API, because Firefox's find bar hides its count.
 5. Phase 3, browser data. History completion, marks, the remaining later rows, and the options page import for users without a shell.
 6. Per-site key pass-through. The need: keep some keys off on chosen sites and the rest on, where `ignore_sites` turns off every key. The design is open.
 7. Registers, before macros. `"` holds the last yank, `a` to `z` are named, `+` is the clipboard, `_` is the black hole and `/` is the last search. `"ay` yanks into a register, `"ap` pastes from it and `:registers` lists them.
 8. Macros, with `.` repeat first. `.` repeats the last command or inserted text. Recording and replay follow: `q<reg>` records into a register, `@<reg>` replays it, a count (`5@q`) or `@@` repeats it. A macro records commands and the text typed in insert mode. Replay inserts text like a paste, not as key events, and stops at the first failed step.
 9. Base16 theme importer, after macros.
-10. Toolbar click menu and icon. The menu turns OasisFox on and off and opens help. The icon greys out when it is off. The design is open: it does not yet say whether off applies to all sites or one, or how it differs from `ignore_sites`. The icon is a placeholder until a real one with an off state exists.
-11. Phase 4, Oasis. The native host merged with voxcmd's, `oasisfox list` and `run`, the Quickshell which-key, and the Oasis theme file written on theme change.
+10. Toolbar click menu and icon. The menu turns DesertFox on and off and opens help. The icon greys out when it is off. The design is open: it does not yet say whether off applies to all sites or one, or how it differs from `ignore_sites`. The icon is a placeholder until a real one with an off state exists.
+11. Phase 4, Oasis. The native host merged with voxcmd's, `desertfox list` and `run`, the Quickshell which-key, and the Oasis theme file written on theme change.
 12. Phase 4, write-back of `:set`. `:set` and `:unset` change settings for the session only. Phase 4 writes them to the TOML config through the native host. Add-on storage never holds them, so nothing drifts from the user's config.
 13. Release path. The maintainer installs through `just release` (signed, unlisted) now. A listed addons.mozilla.org release is a later piece: the listing, a source upload, Mozilla review, permission justifications and a privacy note.
 
 ## Open questions
 
 - Moving a tab to another window by prompt (old key `wa`) is assumed unused.
-- Answered: OasisFox owns the new tab page through `chrome_url_overrides`. `new_tab_page` is a web URL, which the page redirects to, or `oasisfox` for the built-in page, and unset means the built-in page. `home_page = "oasisfox"` opens the built-in page, even when `new_tab_page` redirects. After Firefox's one-time "Your new tab has changed" notice, its hidden Keep Changes button keeps access key K for that browser session, so Alt+K (previous tab) does nothing on about: pages until a restart. Accepting the notice once avoids it. Firefox still gives the address bar focus on Ctrl+T, so the user presses Esc or clicks the page before keys work. The page loads `content.js`, `ui.js`, `hints.js`, `whichkey.js` and `cmdline.js` by script tag, because `executeScript` cannot reach extension pages. See [`src/newtab/README.md`](../src/newtab/README.md).
+- Answered: DesertFox owns the new tab page through `chrome_url_overrides`. `new_tab_page` is a web URL, which the page redirects to, or `desertfox` for the built-in page, and unset means the built-in page. `home_page = "desertfox"` opens the built-in page, even when `new_tab_page` redirects. After Firefox's one-time "Your new tab has changed" notice, its hidden Keep Changes button keeps access key K for that browser session, so Alt+K (previous tab) does nothing on about: pages until a restart. Accepting the notice once avoids it. Firefox still gives the address bar focus on Ctrl+T, so the user presses Esc or clicks the page before keys work. The page loads `content.js`, `ui.js`, `hints.js`, `whichkey.js` and `cmdline.js` by script tag, because `executeScript` cannot reach extension pages. See [`src/newtab/README.md`](../src/newtab/README.md).
 - Answered: the built-in new tab page shows a clock and the date. `newtab_clock` is `false` (off), `true` or `"analog"` (a 12 hour analog face with no tick marks, the default) or `"digital"` (seven-segment `HH:mm` in the DSEG7 Classic font, shipped with its OFL text and declared only on this page). `newtab_clock_format` is 12 (default, with an AM or PM suffix) or 24 and applies to the digital clock only. `newtab_date` switches the date off. The page makes no network request. The page colors are var() fallbacks over the theme roles (`bg_core`, `fg_core`, `primary`, `accent`, `bg_mantle`, `border`), so a bare install shows a dark blue page and a theme restyles it once the role variables reach the page.
 - Answered: the help page has a Quick Start page (`#/quick-start`) of plain text, with no interactive walkthrough. It teaches scrolling, hints, the command line, which-key, page search, caret and visual mode and `g?`, and it reads every key name from the compiled keymap, so a rebind changes the page. The help page loads `hints.js`, `whichkey.js`, `cmdline.js` and `caret.js` by script tag, for the same reason as the new tab page. `runtime.onInstalled` with reason `install` opens the page once, never on an update. The `open_quick_start_on_install` setting (default on) turns that off. A first install has no config, so the setting helps managed setups, where the config is there from the start. A user who builds a config after the first install sees the page once regardless.
 - Answered: the `storage.local` read takes 6-10 ms (median 8), so buffering stays and inline registration is not needed. See [spike.md](spike.md), "Phase 1 measurements".

@@ -160,8 +160,8 @@ test("the route parser maps hashes to pages and keeps engine links", () => {
 test("the styling page lists every theme role as a variable", () => {
   const names = STYLE_VARIABLES.map((variable) => variable.name);
   for (const role of ROLES) assert.ok(names.includes(token_name(role)), role);
-  assert.ok(names.includes("--oasisfox-secondary"));
-  assert.ok(names.includes("--oasisfox-font") && names.includes("--oasisfox-radius"));
+  assert.ok(names.includes("--desertfox-secondary"));
+  assert.ok(names.includes("--desertfox-font") && names.includes("--desertfox-radius"));
 });
 
 test("the model carries the settings and config source for the home page", () => {
@@ -193,7 +193,7 @@ test("the help page scrolls to and highlights the command card the way it does a
   const main = readFileSync(new URL("../src/help/main.ts", import.meta.url), "utf8");
   assert.match(render, /card\.id = command_anchor\(command\.id\)/);
   assert.match(main, /route\.command !== undefined \? command_anchor\(route\.command\)/);
-  assert.match(main, /row\.classList\.add\("oasisfox-help-current"\)/);
+  assert.match(main, /row\.classList\.add\("desertfox-help-current"\)/);
 });
 
 test("the tip names :help and takes the command line key from the keymap", () => {

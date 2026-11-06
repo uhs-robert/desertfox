@@ -9,19 +9,19 @@ const MESSAGE_MS = 1500;
 // A filled label in the brand color. The 1px border keeps the box size of the older outlined label. Typed letters fade to half the text color.
 // Defaults are var() fallbacks, never declarations: a declaration here would shadow a value the page or host sets.
 export const STYLE = `
-.oasisfox-hints {
-  --primary: var(--oasisfox-primary, #7fa3c9);
-  --label-text: var(--oasisfox-bg-core, #0c0e13);
+.desertfox-hints {
+  --primary: var(--desertfox-primary, #7fa3c9);
+  --label-text: var(--desertfox-bg-core, #0c0e13);
   font: bold 12px/1 ui-monospace, monospace;
 }
-.oasisfox-hint {
+.desertfox-hint {
   position: fixed; padding: 2px 4px; border-radius: 3px; text-transform: uppercase;
   background: var(--primary); color: var(--label-text); border: 1px solid var(--primary); box-shadow: 0 1px 3px #0008;
 }
-.oasisfox-hint b { opacity: .6; font-weight: inherit; }
-.oasisfox-hint-message {
+.desertfox-hint b { opacity: .6; font-weight: inherit; }
+.desertfox-hint-message {
   position: fixed; left: 50%; bottom: 48px; transform: translateX(-50%); padding: 8px 12px;
-  background: var(--oasisfox-bg-core, #0c0e13); color: var(--oasisfox-fg-core, #f5f5dc); font: var(--oasisfox-font, 14px system-ui, sans-serif); border-radius: var(--oasisfox-radius, 6px);
+  background: var(--desertfox-bg-core, #0c0e13); color: var(--desertfox-fg-core, #f5f5dc); font: var(--desertfox-font, 14px system-ui, sans-serif); border-radius: var(--desertfox-radius, 6px);
 }`;
 
 // Where the element sits on the top page: its own box plus the box of every frame around it.
@@ -40,7 +40,7 @@ export function top_page_position(found: Found): { left: number; top: number } {
 type DrawnLabel = { found: Found; text: string; node: HTMLElement; typed_part: HTMLElement; rest_part: HTMLElement };
 
 export function create_view() {
-  const surface = create_surface("oasisfox-hints", STYLE, LAYERS.hints);
+  const surface = create_surface("desertfox-hints", STYLE, LAYERS.hints);
   let drawn: DrawnLabel[] = [];
   let message_timer: ReturnType<typeof setTimeout> | undefined;
 
@@ -60,7 +60,7 @@ export function create_view() {
     show: (items: { found: Found; text: string }[]): void => {
       drawn = items.map(({ found, text }) => {
         const node = document.createElement("div");
-        node.className = "oasisfox-hint";
+        node.className = "desertfox-hint";
         const typed_part = document.createElement("b");
         const rest_part = document.createElement("span");
         rest_part.textContent = text;
@@ -82,7 +82,7 @@ export function create_view() {
     },
     show_message: (message: string): void => {
       const note = document.createElement("div");
-      note.className = "oasisfox-hint-message";
+      note.className = "desertfox-hint-message";
       note.textContent = message;
       surface.text.replaceChildren(note);
       mount();

@@ -12,7 +12,7 @@ import { ConfigErrors } from "../tools/build-config/errors.ts";
 const commands = read_commands_file(join(import.meta.dirname, "fixtures", "build-config", "commands.json"));
 
 function config_dir_with(files: Record<string, string>): string {
-  const dir = mkdtempSync(join(tmpdir(), "oasisfox-fallback-"));
+  const dir = mkdtempSync(join(tmpdir(), "desertfox-fallback-"));
   for (const [name, text] of Object.entries(files)) writeFileSync(join(dir, name), text);
   return dir;
 }

@@ -14,7 +14,7 @@ test("the hints bundle registers a hint sink and hint.run, and registers once", 
     },
     set_mode: (mode: string) => void modes.push(mode),
   };
-  (globalThis as Record<string, unknown>).window = { oasisfox_host: host };
+  (globalThis as Record<string, unknown>).window = { desertfox_host: host };
   const bundle_url = new URL("../../src/content/hints/main.ts", import.meta.url).href;
   await import(`${bundle_url}?first`);
   await import(`${bundle_url}?second`);

@@ -312,17 +312,17 @@ test("a step from a caret goes on from the caret and not from the last match", a
   assert.equal(page.toasts.at(-1), "1 of 3");
 });
 
-test("nodes that OasisFox adds are not a page change, wherever they sit and whatever their style says", () => {
+test("nodes that DesertFox adds are not a page change, wherever they sit and whatever their style says", () => {
   const page_target = { nodeType: 1, closest: () => null };
   const own = (name: string) => ({ nodeType: 1, hasAttribute: (asked: string) => asked === name });
   const page_node = { nodeType: 1, hasAttribute: () => false };
   const record = (added: unknown[], removed: unknown[] = []) => ({ type: "childList", target: page_target, addedNodes: added, removedNodes: removed }) as unknown as MutationRecord;
-  assert.equal(is_page_change(record([own("data-oasisfox-layer")], [own("data-oasisfox")])), false);
-  assert.equal(is_page_change(record([own("data-oasisfox-layer"), page_node])), true);
+  assert.equal(is_page_change(record([own("data-desertfox-layer")], [own("data-desertfox")])), false);
+  assert.equal(is_page_change(record([own("data-desertfox-layer"), page_node])), true);
   assert.equal(is_page_change({ type: "characterData", target: page_target, addedNodes: [], removedNodes: [] } as unknown as MutationRecord), true);
 });
 
-test("a text change inside an element of OasisFox is not a page change", () => {
+test("a text change inside an element of DesertFox is not a page change", () => {
   const own_style = { nodeType: 1, closest: () => ({}) };
   const text = { nodeType: 3, parentElement: own_style };
   const style_rewrite = { type: "childList", target: own_style, addedNodes: [text], removedNodes: [text] } as unknown as MutationRecord;

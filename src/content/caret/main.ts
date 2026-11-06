@@ -23,10 +23,10 @@ import { page_selection_cursor, selection_span } from "./page_selection.ts";
 import { first_visible_index, visible_index_range } from "./start_point.ts";
 import { indexes_in_range, pad_range } from "./visible_range.ts";
 
-// `oasisfox_caret_target` is the element a hint picked. The hints bundle sets it just before it enters the mode.
-type CaretWindow = { oasisfox_host: BundleHostApi; oasisfox_caret_ready?: true; oasisfox_caret_target?: Element };
+// `desertfox_caret_target` is the element a hint picked. The hints bundle sets it just before it enters the mode.
+type CaretWindow = { desertfox_host: BundleHostApi; desertfox_caret_ready?: true; desertfox_caret_target?: Element };
 const page = window as unknown as CaretWindow;
-const find = create_find(page.oasisfox_host);
+const find = create_find(page.desertfox_host);
 
 // `painted` holds the ends of each selection as the last paint left it, so a later change by the page shows.
 type Session = { model: TextModel; cursor: Cursor; mode: "caret" | "visual"; goal_x: number | undefined; painted: SelectionEnds[] };
@@ -116,8 +116,8 @@ function paint(open: Session): void {
 // Where a new session starts: the text of the picked element or the next text after it, else the match a search stands on while no later selection took the place, else the page's own drag (whole in visual mode, its release end in caret mode), else the caret's place in the page's own selection if it is on screen, else the first visible text.
 // A string is the reason no session could start.
 function start_session(mode: "caret" | "visual"): Session | string {
-  const target = page.oasisfox_caret_target;
-  delete page.oasisfox_caret_target;
+  const target = page.desertfox_caret_target;
+  delete page.desertfox_caret_target;
   const is_other_site_frame = target !== undefined && (target.localName === "iframe" || target.localName === "frame") && !frame_document(target);
   if (is_other_site_frame) {
     return "Caret cannot reach a frame from another site";
@@ -192,7 +192,7 @@ function ensure_session(mode: "caret" | "visual"): Session | string {
   if (!session) {
     const started = start_session(mode);
     if (typeof started === "string") {
-      page.oasisfox_host.set_mode("normal");
+      page.desertfox_host.set_mode("normal");
       return started;
     }
     session = started;
@@ -238,7 +238,7 @@ const sink_for = (mode: "caret" | "visual") => ({
     pending_find = undefined;
     find_mode.end();
     const started = ensure_session(mode);
-    if (typeof started === "string") page.oasisfox_host.show_toast(started);
+    if (typeof started === "string") page.desertfox_host.show_toast(started);
   },
   on_token: (token: string): "handled" | "pass" => {
     if (pending_find) return take_find_target(token);
@@ -248,7 +248,7 @@ const sink_for = (mode: "caret" | "visual") => ({
     }
     if (mode === "caret" || !is_escape(token)) return "pass";
     // Escape in visual mode goes back to caret mode, and the keymap never sees it.
-    page.oasisfox_host.set_mode("caret");
+    page.desertfox_host.set_mode("caret");
     return "handled";
   },
   // Between caret and visual the highlight stays. Every other way out clears it.
@@ -262,7 +262,7 @@ const sink_for = (mode: "caret" | "visual") => ({
 
 const handle_move = (args: Record<string, unknown>): Outcome | undefined => {
   // From the command line the mode is normal, so no sink would take the target key.
-  if (args.unit === "char_find" && !["caret", "visual"].includes(page.oasisfox_host.get_mode())) return;
+  if (args.unit === "char_find" && !["caret", "visual"].includes(page.desertfox_host.get_mode())) return;
   const open = ensure_session(session?.mode ?? "caret");
   if (typeof open === "string") return { ok: false, message: open };
   if (args.unit === "char_find") {
@@ -318,15 +318,15 @@ const handle_act = (args: Record<string, unknown>): Outcome | Promise<Outcome> |
   if (action === "search") {
     // The router shows a refusal of its own, so the answer only decides whether a sequence goes on.
     const searched = browser.runtime.sendMessage({ type: "run", invocations: [{ id: "open.search", args: { query: text } }], mode: "visual" }) as Promise<RunResponse>;
-    page.oasisfox_host.set_mode("caret");
-    return searched.then((answer): Outcome => (answer.ok ? answer : { ok: true, cancelled: true }), (): Outcome => ({ ok: false, message: "OasisFox background did not answer" }));
+    page.desertfox_host.set_mode("caret");
+    return searched.then((answer): Outcome => (answer.ok ? answer : { ok: true, cancelled: true }), (): Outcome => ({ ok: false, message: "DesertFox background did not answer" }));
   }
   const run = visual_runs;
   // Visual mode stays until the copy is done, so a refused copy leaves the selection to retry.
   return yank_text(navigator.clipboard, text, {
     is_same_session: () => visual_runs === run && session === open && open.mode === "visual",
-    toast: page.oasisfox_host.show_toast,
-    leave_visual: () => page.oasisfox_host.set_mode("caret"),
+    toast: page.desertfox_host.show_toast,
+    leave_visual: () => page.desertfox_host.set_mode("caret"),
   });
 };
 
@@ -404,35 +404,35 @@ async function end_visual_search(from: Session, keep: boolean): Promise<void> {
     from.cursor = with_caret(from.cursor, landed, true);
     from.goal_x = undefined;
   }
-  page.oasisfox_host.set_mode("visual");
+  page.desertfox_host.set_mode("visual");
 }
 
 // A bundle may run twice, and a second run would hold fresh state next to the first.
-if (!page.oasisfox_caret_ready) {
-  page.oasisfox_caret_ready = true;
-  page.oasisfox_host.register_sink("caret", sink_for("caret"));
-  page.oasisfox_host.register_sink("visual", sink_for("visual"));
-  page.oasisfox_host.register_handler("caret.move", handle_move);
-  page.oasisfox_host.register_handler("visual.act", handle_act);
-  page.oasisfox_host.register_handler("find.open", (args) => {
+if (!page.desertfox_caret_ready) {
+  page.desertfox_caret_ready = true;
+  page.desertfox_host.register_sink("caret", sink_for("caret"));
+  page.desertfox_host.register_sink("visual", sink_for("visual"));
+  page.desertfox_host.register_handler("caret.move", handle_move);
+  page.desertfox_host.register_handler("visual.act", handle_act);
+  page.desertfox_host.register_handler("find.open", (args) => {
     const direction = args.direction === "backward" ? "backward" : "forward";
     if (args.source === "word") return find_word(direction);
     const started = visual_session_now();
     if (typeof started === "string") return { ok: false, message: started };
     searching_from = started;
     find.begin(direction, started?.model.point_at(started.cursor.caret));
-    return page.oasisfox_host.run_command("cmdline.open", "cmdline", { search: direction });
+    return page.desertfox_host.run_command("cmdline.open", "cmdline", { search: direction });
   });
-  page.oasisfox_host.register_handler("find.next", () => find_step(false));
-  page.oasisfox_host.register_handler("find.prev", () => find_step(true));
+  page.desertfox_host.register_handler("find.next", () => find_step(false));
+  page.desertfox_host.register_handler("find.prev", () => find_step(true));
   // Called by the command line while it is open, and not by any key.
-  page.oasisfox_host.register_handler("find.live", (args) => find.update(args.text as string, args.report as (status: string) => void));
-  page.oasisfox_host.register_handler("find.end", async (args) => {
+  page.desertfox_host.register_handler("find.live", (args) => find.update(args.text as string, args.report as (status: string) => void));
+  page.desertfox_host.register_handler("find.end", async (args) => {
     const keep = args.keep === true;
     await find.end(keep);
     const from = searching_from;
     searching_from = undefined;
     if (from) await end_visual_search(from, keep);
   });
-  page.oasisfox_host.register_handler("find.clear", () => find.clear());
+  page.desertfox_host.register_handler("find.clear", () => find.clear());
 }

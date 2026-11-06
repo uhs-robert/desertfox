@@ -11,8 +11,8 @@ const FIXTURES = join(import.meta.dirname, "fixtures", "build-config");
 
 // HOME is a tmp dir so no case can touch the real live config.
 function run_cli(args: string[]) {
-  const home = mkdtempSync(join(tmpdir(), "oasisfox-home-"));
-  const config_dir = mkdtempSync(join(tmpdir(), "oasisfox-cfg-"));
+  const home = mkdtempSync(join(tmpdir(), "desertfox-home-"));
+  const config_dir = mkdtempSync(join(tmpdir(), "desertfox-cfg-"));
   const result = spawnSync(
     process.execPath,
     [CLI, config_dir, "--commands", join(FIXTURES, "commands.json"), ...args],
@@ -29,13 +29,13 @@ test("no output flag exits 2 and writes nothing", () => {
 });
 
 test("--out and --live together exit 2 and write nothing", () => {
-  const { result, home } = run_cli(["--live", "--out", join(tmpdir(), "oasisfox-never.json")]);
+  const { result, home } = run_cli(["--live", "--out", join(tmpdir(), "desertfox-never.json")]);
   assert.equal(result.status, 2);
   assert.deepEqual(readdirSync(home), []);
 });
 
 test("--out writes only the given path and its engines file", () => {
-  const out_dir = mkdtempSync(join(tmpdir(), "oasisfox-out-"));
+  const out_dir = mkdtempSync(join(tmpdir(), "desertfox-out-"));
   const { result, home } = run_cli(["--out", join(out_dir, "x.json")]);
   assert.equal(result.status, 0, result.stderr);
   assert.deepEqual(readdirSync(out_dir).sort(), ["x.engines.jsonl", "x.json"]);

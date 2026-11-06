@@ -17,7 +17,7 @@ const run_execfile = promisify(execFile);
 const key_test_dir = dirname(fileURLToPath(import.meta.url));
 const repo_dir = resolve(key_test_dir, "../..");
 const dist_dir = join(repo_dir, "dist");
-const EXTENSION_ID = "oasisfox@uhs-robert";
+const EXTENSION_ID = "desertfox@uhs-robert";
 // shadow.sh caps names at 8 characters. "ok" plus a base-36 pid is at most 8 and unique among live runs.
 const SHADOW_NAME = `ok${process.pid.toString(36)}`;
 if (SHADOW_NAME.length > 8) throw new Error(`shadow name ${SHADOW_NAME} is longer than 8 characters`);
@@ -53,7 +53,7 @@ function process_is_alive(pid) {
 }
 
 // shadow.sh keeps a session's runtime dir here (a literal /tmp, not TMPDIR), and `down` removes the dir with the marker in it.
-const OWNER_MARKER = "oasisfox-key-owner";
+const OWNER_MARKER = "desertfox-key-owner";
 const marker_path = (name) => join("/tmp", `shadow-${process.getuid()}-${name}`, OWNER_MARKER);
 
 function read_owner_pid(name) {
@@ -134,7 +134,7 @@ function expect(condition, message) {
 }
 
 async function main() {
-  const work_dir = mkdtempSync(join(tmpdir(), "oasisfox-key-"));
+  const work_dir = mkdtempSync(join(tmpdir(), "desertfox-key-"));
   const profile_dir = join(work_dir, "profile");
   const managed_dir = join(work_dir, "managed");
   const config_dir = join(work_dir, "config");
@@ -274,7 +274,7 @@ async function main() {
     if (notice_confirmation?.error) throw new Error(`confirming the new tab notice failed: ${notice_confirmation.error}`);
     await sleep(1500);
     const read_injections = async (file) => {
-      const all = await evaluate_in_background(rdp, EXTENSION_ID, `(async () => (await browser.storage.local.get("oasisfox_bundle_loads")).oasisfox_bundle_loads ?? [])()`);
+      const all = await evaluate_in_background(rdp, EXTENSION_ID, `(async () => (await browser.storage.local.get("desertfox_bundle_loads")).desertfox_bundle_loads ?? [])()`);
       if (!Array.isArray(all)) throw new Error(`injection log unreadable: ${JSON.stringify(all)}`);
       return all.filter((entry) => entry.file === file);
     };
@@ -445,14 +445,14 @@ async function main() {
 
       await send_keys("gg");
       await sleep(500);
-      await evaluate_in_background(rdp, EXTENSION_ID, `browser.storage.local.remove("oasisfox_reinject_report")`);
+      await evaluate_in_background(rdp, EXTENSION_ID, `browser.storage.local.remove("desertfox_reinject_report")`);
       await send_keys("qr");
       let report;
       for (let attempt = 0; attempt < 60 && !report; attempt++) {
         await sleep(500);
-        report = await evaluate_in_background(rdp, EXTENSION_ID, `(await browser.storage.local.get("oasisfox_reinject_report")).oasisfox_reinject_report`).catch(() => undefined);
+        report = await evaluate_in_background(rdp, EXTENSION_ID, `(await browser.storage.local.get("desertfox_reinject_report")).desertfox_reinject_report`).catch(() => undefined);
       }
-      expect(report, "no oasisfox_reinject_report after 30 s");
+      expect(report, "no desertfox_reinject_report after 30 s");
       measurements.reinject_report = report;
       console.log(`reinject report ${JSON.stringify(report)}`);
       await sleep(1000);
@@ -600,7 +600,7 @@ async function main() {
       // Home is too short to scroll, so move to the long Commands page.
       await evaluate_in_background(rdp, EXTENSION_ID, `(() => { ${extension_view("help.html")}.location.hash = "#/commands"; })()`);
       await sleep(800);
-      const probe = () => evaluate_in_background(rdp, EXTENSION_ID, `(() => { const view = ${extension_view("help.html")}; return { y: view.scrollY, badge: view.document.querySelector("[data-oasisfox-mode]")?.getAttribute("data-oasisfox-mode") ?? null }; })()`);
+      const probe = () => evaluate_in_background(rdp, EXTENSION_ID, `(() => { const view = ${extension_view("help.html")}; return { y: view.scrollY, badge: view.document.querySelector("[data-desertfox-mode]")?.getAttribute("data-desertfox-mode") ?? null }; })()`);
       await send_keys("j", "j", "j");
       await sleep(600);
       const scrolled = await probe();
@@ -618,7 +618,7 @@ async function main() {
 
     // caret.js loads on the help page by script tag, so the caret keys work there. Escape must still leave the page in normal mode.
     await run_case("V on the help page enters caret mode and Escape returns to normal", async () => {
-      const badge = () => evaluate_in_background(rdp, EXTENSION_ID, `${extension_view("help.html")}?.document.querySelector("[data-oasisfox-mode]")?.getAttribute("data-oasisfox-mode") ?? null`);
+      const badge = () => evaluate_in_background(rdp, EXTENSION_ID, `${extension_view("help.html")}?.document.querySelector("[data-desertfox-mode]")?.getAttribute("data-desertfox-mode") ?? null`);
       const loads_before = await settled_injection_count("caret.js");
       await send_keys("gV");
       await sleep(1500);
@@ -641,11 +641,11 @@ async function main() {
       let ready = false;
       for (let attempt = 0; attempt < 40 && !ready; attempt++) {
         await sleep(250);
-        ready = await evaluate_in_background(rdp, EXTENSION_ID, `!!${extension_view("newtab.html")}?.document.querySelector(".oasisfox-newtab")`).catch(() => false);
+        ready = await evaluate_in_background(rdp, EXTENSION_ID, `!!${extension_view("newtab.html")}?.document.querySelector(".desertfox-newtab")`).catch(() => false);
       }
       expect(ready, "the new tab page never rendered");
       await sleep(800);
-      const mode = () => evaluate_in_background(rdp, EXTENSION_ID, `${extension_view("newtab.html")}?.oasisfox_host?.get_mode() ?? null`);
+      const mode = () => evaluate_in_background(rdp, EXTENSION_ID, `${extension_view("newtab.html")}?.desertfox_host?.get_mode() ?? null`);
       await send_keys(":");
       await sleep(800);
       expect(await mode() === "cmdline", `the mode after : was ${await mode()}`);
@@ -668,7 +668,7 @@ async function main() {
     await run_case("the options page opens and shows the config source", async () => {
       const status = { source: "managed", settings: {}, managed_file_hint: "" };
       const text = await evaluate_in_background(rdp, EXTENSION_ID, `(async () => {
-        await browser.storage.local.set({ oasisfox_config_status: ${JSON.stringify(status)} });
+        await browser.storage.local.set({ desertfox_config_status: ${JSON.stringify(status)} });
         await browser.runtime.openOptionsPage();
         for (let attempt = 0; attempt < 40; attempt++) {
           await new Promise((resolve) => setTimeout(resolve, 250));
@@ -764,14 +764,14 @@ async function main() {
       build_test_config(dir, managed_file);
       const session_home = readFileSync(join(work_dir, "session_home"), "utf8").trim();
       cpSync(managed_file, join(session_home, ".mozilla", "managed-storage", `${EXTENSION_ID}.json`));
-      await evaluate_in_background(rdp, EXTENSION_ID, `browser.storage.local.remove("oasisfox_reinject_report")`);
+      await evaluate_in_background(rdp, EXTENSION_ID, `browser.storage.local.remove("desertfox_reinject_report")`);
       await send_keys("qr");
       let report;
       for (let attempt = 0; attempt < 60 && !report; attempt++) {
         await sleep(500);
-        report = await evaluate_in_background(rdp, EXTENSION_ID, `(await browser.storage.local.get("oasisfox_reinject_report")).oasisfox_reinject_report`).catch(() => undefined);
+        report = await evaluate_in_background(rdp, EXTENSION_ID, `(await browser.storage.local.get("desertfox_reinject_report")).desertfox_reinject_report`).catch(() => undefined);
       }
-      expect(report, "no oasisfox_reinject_report after 30 s");
+      expect(report, "no desertfox_reinject_report after 30 s");
       await sleep(1000);
     };
 

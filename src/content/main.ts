@@ -48,7 +48,7 @@ async function send_to_background(message: ContentToBackground): Promise<RunResp
   try {
     return (await browser.runtime.sendMessage(message)) as RunResponse;
   } catch (error) {
-    return { ok: false, refusal: { id: "oasisfox", message: `OasisFox background did not answer: ${message_of(error)}` } };
+    return { ok: false, refusal: { id: "desertfox", message: `DesertFox background did not answer: ${message_of(error)}` } };
   }
 }
 
@@ -194,12 +194,12 @@ async function read_keymap(): Promise<CompiledKeymap | undefined> {
 // The key test reads these two attributes. Times are milliseconds.
 function publish_timing(): void {
   const root = document.documentElement;
-  root?.setAttribute("data-oasisfox-tree-read-ms", (performance.now() - script_started_ms).toFixed(2));
-  root?.setAttribute("data-oasisfox-tree-ready-at-ms", performance.now().toFixed(2));
+  root?.setAttribute("data-desertfox-tree-read-ms", (performance.now() - script_started_ms).toFixed(2));
+  root?.setAttribute("data-desertfox-tree-ready-at-ms", performance.now().toFixed(2));
 }
 
 function start(): void {
-  (window as unknown as { oasisfox_host: BundleHostApi }).oasisfox_host = bundles.api;
+  (window as unknown as { desertfox_host: BundleHostApi }).desertfox_host = bundles.api;
   window.addEventListener("keydown", on_keydown, true);
   window.addEventListener("keypress", on_keypress, true);
   window.addEventListener("keyup", on_keyup, true);
@@ -247,7 +247,7 @@ function start(): void {
 }
 
 // A second injection into the same page must not add a second set of listeners.
-const LOADED_FLAG = "oasisfox_content_loaded";
+const LOADED_FLAG = "desertfox_content_loaded";
 const loaded_flags = window as unknown as Record<string, boolean>;
 if (can_reach_top_document() && !loaded_flags[LOADED_FLAG]) {
   loaded_flags[LOADED_FLAG] = true;

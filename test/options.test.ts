@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { DEFAULT_SETTINGS } from "../src/shared/config.ts";
 import { build_options_model } from "../src/options/model.ts";
 
-const hint = "~/.mozilla/managed-storage/oasisfox@uhs-robert.json";
+const hint = "~/.mozilla/managed-storage/desertfox@uhs-robert.json";
 
 test("each source has its own text", () => {
   const texts = (["managed", "imported", "defaults"] as const).map(
@@ -40,7 +40,7 @@ test("the rebuild steps name the command, the managed file and config.reload", (
   assert.equal(steps[0], "just build-config");
   assert.match(steps[1]!, /\/x\/y\.json/);
   assert.match(steps[2]!, /config\.reload.*qr/);
-  assert.match(build_options_model(undefined, []).rebuild_steps[1]!, /oasisfox@uhs-robert\.json/);
+  assert.match(build_options_model(undefined, []).rebuild_steps[1]!, /desertfox@uhs-robert\.json/);
 });
 
 test("the status page lists every command with its id, label and intent, sorted by id", () => {

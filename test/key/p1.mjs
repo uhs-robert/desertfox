@@ -68,7 +68,7 @@ export async function p1_cases(t) {
   });
 
   await run_case("the history on disk holds the run commands and no failed one", async () => {
-    const stored = await evaluate_in_background(rdp, EXTENSION_ID, `(async () => (await browser.storage.local.get("oasisfox_cmdline_history")).oasisfox_cmdline_history ?? [])()`);
+    const stored = await evaluate_in_background(rdp, EXTENSION_ID, `(async () => (await browser.storage.local.get("desertfox_cmdline_history")).desertfox_cmdline_history ?? [])()`);
     expect(Array.isArray(stored) && stored.includes("scroll.pixels --dy=300") && stored.includes("scroll.pixels --dy=-100000"), `history was ${JSON.stringify(stored)}`);
     expect(!stored.includes("nosuchcommand"), "a failed parse was stored");
   });
@@ -84,7 +84,7 @@ export async function p1_cases(t) {
       await sleep(250);
       notices = await evaluate_in_background(rdp, EXTENSION_ID, `browser.notifications.getAll()`);
     }
-    expect(Object.values(notices).some((notice) => /needs a page OasisFox runs on/.test(notice.message)), `notices: ${JSON.stringify(notices)}`);
+    expect(Object.values(notices).some((notice) => /needs a page DesertFox runs on/.test(notice.message)), `notices: ${JSON.stringify(notices)}`);
     await send_keys(...CTRL("w"));
     await sleep(500);
   });

@@ -44,8 +44,8 @@ function fake_root(): FakeRoot {
     },
     querySelectorAll: (selector: string) => {
       // The surface mount also looks up layered hosts to restack them, and the fake page has none.
-      if (selector !== ":scope > [data-oasisfox-badge]") return [];
-      return root.children.filter((node) => node.attributes.has("data-oasisfox-badge"));
+      if (selector !== ":scope > [data-desertfox-badge]") return [];
+      return root.children.filter((node) => node.attributes.has("data-desertfox-badge"));
     },
   };
   return root;
@@ -57,8 +57,8 @@ function page_with_orphan_badge() {
   window_stub.top = window_stub;
   Object.assign(globalThis, { window: window_stub, document: { documentElement: root, createElement: fake_node } });
   const orphan = fake_node();
-  orphan.setAttribute("data-oasisfox-badge", "");
-  orphan.setAttribute("data-oasisfox-mode", "visual");
+  orphan.setAttribute("data-desertfox-badge", "");
+  orphan.setAttribute("data-desertfox-mode", "visual");
   root.append(orphan);
   return { root, orphan };
 }
@@ -76,7 +76,7 @@ test("a badge left by an earlier instance is removed when a new instance shows i
 test("a page element that carries the mode attribute survives the cleanup", async () => {
   const { root } = page_with_orphan_badge();
   const page_owned = fake_node();
-  page_owned.setAttribute("data-oasisfox-mode", "mine");
+  page_owned.setAttribute("data-desertfox-mode", "mine");
   root.append(page_owned);
   const { show_mode_label } = await import("../../src/content/mode_indicator.ts");
   show_mode_label("normal");

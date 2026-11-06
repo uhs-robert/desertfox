@@ -61,7 +61,7 @@ test("the approved keys are all bound", () => {
   assert.deepEqual(DEFAULT_KEYMAP.ignore?.["<S-Escape>"], { id: "mode.set", args: { mode: "normal" } });
 });
 
-test("the q group holds the OasisFox commands", () => {
+test("the q group holds the DesertFox commands", () => {
   const { warnings, compiled } = compile(DEFAULT_KEYMAP);
   assert.deepEqual(warnings, []);
   assert.deepEqual(DEFAULT_KEYMAP.normal?.qr, { id: "config.reload" });

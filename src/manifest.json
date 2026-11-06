@@ -1,11 +1,11 @@
 {
   "manifest_version": 2,
-  "name": "OasisFox",
+  "name": "DesertFox",
   "version": "0.1.3",
   "description": "Keyboard-first Firefox extension built around one command registry.",
   "browser_specific_settings": {
     "gecko": {
-      "id": "oasisfox@uhs-robert",
+      "id": "desertfox@uhs-robert",
       "strict_min_version": "140.0",
       "data_collection_permissions": {
         "required": [
@@ -50,8 +50,8 @@
     "<all_urls>"
   ],
   "browser_action": {
-    "default_title": "OasisFox",
-    "default_icon": "icons/oasisfox.svg"
+    "default_title": "DesertFox",
+    "default_icon": "icons/desertfox.svg"
   },
   "options_ui": {
     "page": "options.html",
@@ -65,34 +65,34 @@
   },
   "commands": {
     "slot_1": {
-      "description": "OasisFox shortcut slot 1. The background assigns the chord."
+      "description": "DesertFox shortcut slot 1. The background assigns the chord."
     },
     "slot_2": {
-      "description": "OasisFox shortcut slot 2. The background assigns the chord."
+      "description": "DesertFox shortcut slot 2. The background assigns the chord."
     },
     "slot_3": {
-      "description": "OasisFox shortcut slot 3. The background assigns the chord."
+      "description": "DesertFox shortcut slot 3. The background assigns the chord."
     },
     "slot_4": {
-      "description": "OasisFox shortcut slot 4. The background assigns the chord."
+      "description": "DesertFox shortcut slot 4. The background assigns the chord."
     },
     "slot_5": {
-      "description": "OasisFox shortcut slot 5. The background assigns the chord."
+      "description": "DesertFox shortcut slot 5. The background assigns the chord."
     },
     "slot_6": {
-      "description": "OasisFox shortcut slot 6. The background assigns the chord."
+      "description": "DesertFox shortcut slot 6. The background assigns the chord."
     },
     "slot_7": {
-      "description": "OasisFox shortcut slot 7. The background assigns the chord."
+      "description": "DesertFox shortcut slot 7. The background assigns the chord."
     },
     "slot_8": {
-      "description": "OasisFox shortcut slot 8. The background assigns the chord."
+      "description": "DesertFox shortcut slot 8. The background assigns the chord."
     },
     "slot_9": {
-      "description": "OasisFox shortcut slot 9. The background assigns the chord."
+      "description": "DesertFox shortcut slot 9. The background assigns the chord."
     },
     "slot_10": {
-      "description": "OasisFox shortcut slot 10. The background assigns the chord."
+      "description": "DesertFox shortcut slot 10. The background assigns the chord."
     }
   }
 }

@@ -26,14 +26,14 @@ function fake_browser(values: Record<string, unknown>) {
 
 test("theme_css sets every role token on the selector, dark first and light under the system light scheme", () => {
   const css = theme_css(stored, ".x");
-  assert.match(css, new RegExp(`^\\.x \\{ --oasisfox-bg-core: ${stored.dark.bg_core};`));
-  assert.match(css, new RegExp(`@media \\(prefers-color-scheme: light\\) \\{ \\.x \\{ --oasisfox-bg-core: ${stored.light.bg_core};`));
-  assert.equal(css.match(/--oasisfox-mode-visual/g)?.length, 2);
+  assert.match(css, new RegExp(`^\\.x \\{ --desertfox-bg-core: ${stored.dark.bg_core};`));
+  assert.match(css, new RegExp(`@media \\(prefers-color-scheme: light\\) \\{ \\.x \\{ --desertfox-bg-core: ${stored.light.bg_core};`));
+  assert.equal(css.match(/--desertfox-mode-visual/g)?.length, 2);
 });
 
 test("theme_css skips a role that is not a string", () => {
   const broken = { dark: { ...stored.dark, accent: undefined }, light: stored.light } as unknown as StoredTheme;
-  assert.doesNotMatch(theme_css(broken, ".x").split("@media")[0]!, /--oasisfox-accent/);
+  assert.doesNotMatch(theme_css(broken, ".x").split("@media")[0]!, /--desertfox-accent/);
 });
 
 test("watch_stored reports the stored value, then each change of its key in local storage only", async () => {
@@ -58,14 +58,14 @@ function fake_surface_dom() {
 test("a surface holds its built-in style, then the theme sheet, then user CSS, and both follow storage changes", async () => {
   const fire = fake_browser({ [THEME_STORAGE_KEY]: stored, [USER_CSS_STORAGE_KEY]: "a { color: red }" });
   const children = fake_surface_dom();
-  create_surface("oasisfox-test", "built-in", 1);
+  create_surface("desertfox-test", "built-in", 1);
   const [built_in, theme_sheet, user_sheet] = children;
   assert.equal(built_in!.textContent, "built-in");
   await new Promise((resolve) => setTimeout(resolve, 0));
-  assert.match(theme_sheet!.textContent, /^\.oasisfox-test \{ --oasisfox-bg-core:/);
+  assert.match(theme_sheet!.textContent, /^\.desertfox-test \{ --desertfox-bg-core:/);
   assert.equal(user_sheet!.textContent, "a { color: red }");
   fire({ [THEME_STORAGE_KEY]: { newValue: { dark: { ...stored.dark, primary: "#123456" }, light: stored.light } } });
-  assert.match(theme_sheet!.textContent, /--oasisfox-primary: #123456;/);
+  assert.match(theme_sheet!.textContent, /--desertfox-primary: #123456;/);
   fire({ [USER_CSS_STORAGE_KEY]: { newValue: "b {}" } });
   assert.equal(user_sheet!.textContent, "b {}");
 });

@@ -1,5 +1,5 @@
-# Sample search engines for OasisFox. Copy this file to ~/.config/oasisfox/search_engines.toml and edit it.
-# OasisFox has one built-in engine, duck. An entry named duck here replaces it.
+# Sample search engines for DesertFox. Copy this file to ~/.config/desertfox/search_engines.toml and edit it.
+# DesertFox has one built-in engine, duck. An entry named duck here replaces it.
 #
 # An engine is a named URL template. Slots fill it in:
 #   {query}       the typed or selected text. "%s" means the same.

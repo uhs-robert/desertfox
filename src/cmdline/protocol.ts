@@ -43,7 +43,7 @@ export type PageToHost =
   | { kind: "list_headings" }
   | { kind: "submit"; invocation: Invocation };
 
-export const MESSAGE_MARK = "oasisfox_cmdline";
+export const MESSAGE_MARK = "desertfox_cmdline";
 
 export type Envelope<Message> = { [MESSAGE_MARK]: Message };
 

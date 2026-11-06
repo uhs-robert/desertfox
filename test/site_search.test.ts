@@ -50,7 +50,7 @@ r = ["github.repos"]
 `;
 
 function config_dir(files: Record<string, string>): string {
-  const dir = mkdtempSync(join(tmpdir(), "oasisfox-site-"));
+  const dir = mkdtempSync(join(tmpdir(), "desertfox-site-"));
   for (const [name, text] of Object.entries(files)) writeFileSync(join(dir, name), text);
   return dir;
 }
@@ -70,7 +70,7 @@ const built = () => {
   return pick_config(stored, undefined).config;
 };
 
-const REPO_PAGE = { url: "https://github.com/uhs-robert/oasisfox/issues" };
+const REPO_PAGE = { url: "https://github.com/uhs-robert/desertfox/issues" };
 const USER_PAGE = { url: "https://github.com/uhs-robert" };
 const OTHER_PAGE = { url: "https://example.com/wiki" };
 const ABOUT_PAGE = { url: "about:blank" };

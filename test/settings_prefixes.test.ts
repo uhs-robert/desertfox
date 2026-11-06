@@ -14,7 +14,7 @@ import { make_fake } from "./background/fakes.ts";
 const commands = read_commands_file(join(import.meta.dirname, "fixtures", "build-config", "commands.json"));
 
 function settings_problems(text: string): string[] {
-  const dir = mkdtempSync(join(tmpdir(), "oasisfox-settings-"));
+  const dir = mkdtempSync(join(tmpdir(), "desertfox-settings-"));
   writeFileSync(join(dir, "settings.toml"), text);
   try {
     build_config(dir, commands);

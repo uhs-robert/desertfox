@@ -10,8 +10,8 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, open_p
   const in_active_tab = (code) => evaluate_in_background(rdp, extension_id, `(async () => { const [tab] = await browser.tabs.query({ active: true, currentWindow: true }); return browser.tabs.executeScript(tab.id, { code: ${JSON.stringify(code)} }); })()`);
   const hit_test_with_step = (step, before = "", right_width = Infinity) => `(() => {
     ${before}
-    const layer = (element) => Number(element.getAttribute("data-oasisfox-layer"));
-    const own = (element) => element && element.hasAttribute("data-oasisfox-layer");
+    const layer = (element) => Number(element.getAttribute("data-desertfox-layer"));
+    const own = (element) => element && element.hasAttribute("data-desertfox-layer");
     const overlaps = [];
     let hosts = 0;
     for (const child of document.documentElement.children) if (own(child)) hosts++;
@@ -57,7 +57,7 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, open_p
   // The toast sits just above the line, so the probe first moves it down over the line in one style write. A translate on
   // the host makes it the containing block of the fixed toast inside, and the 0x0 host at the viewport's bottom right corner
   // keeps the toast where it was, 24px lower. The surface is reused, so a second toast keeps the move. LAYERS.toast, as in server.mjs.
-  const move_toast_over_line = `for (const child of document.documentElement.children) if (child.getAttribute("data-oasisfox-layer") === "2147483645") child.style.cssText += "left:100vw;top:calc(100vh + 24px);translate:0 0;";`;
+  const move_toast_over_line = `for (const child of document.documentElement.children) if (child.getAttribute("data-desertfox-layer") === "2147483645") child.style.cssText += "left:100vw;top:calc(100vh + 24px);translate:0 0;";`;
   // Escape closes the line, so a failed case does not leave it open for the next one.
   const close_line = async () => {
     await send_keys("-k", "Escape");

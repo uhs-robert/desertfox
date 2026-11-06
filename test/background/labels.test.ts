@@ -380,11 +380,11 @@ test("keys that run the same binding may share a label, keys that run different 
 });
 
 // The user config is read from a copy with the symlinks resolved. The live config and the dotfiles behind it are never touched.
-// OASISFOX_USER_CONFIG points the test at another folder, for trying a config before it goes into the dotfiles.
-const USER_CONFIG = process.env.OASISFOX_USER_CONFIG ?? join(homedir(), ".config", "oasisfox");
+// DESERTFOX_USER_CONFIG points the test at another folder, for trying a config before it goes into the dotfiles.
+const USER_CONFIG = process.env.DESERTFOX_USER_CONFIG ?? join(homedir(), ".config", "desertfox");
 
 test("no which-key group of the user config has two different bindings with one label", { skip: !existsSync(USER_CONFIG) && "no user config folder on this machine" }, (t: TestContext) => {
-  const copy = mkdtempSync(join(tmpdir(), "oasisfox-user-config-"));
+  const copy = mkdtempSync(join(tmpdir(), "desertfox-user-config-"));
   try {
     cpSync(USER_CONFIG, copy, { recursive: true, dereference: true });
     const config = build_config(copy, real_commands);

@@ -32,7 +32,7 @@ function keymap_schema(commands: CommandMeta[]): Schema {
   const string_map: Schema = { type: "object", additionalProperties: { type: "string", minLength: 1 } };
   return {
     $schema: DRAFT,
-    title: "OasisFox keymap",
+    title: "DesertFox keymap",
     type: "object",
     properties: {
       ...Object.fromEntries(KEYMAP_MODES.map((mode) => [mode, mode_bindings])),
@@ -60,12 +60,12 @@ const listed = (name: keyof typeof SETTING_SPECS): string[] => [...(SETTING_SPEC
 export function settings_schema(): Schema {
   return {
     $schema: DRAFT,
-    title: "OasisFox settings",
+    title: "DesertFox settings",
     type: "object",
     properties: {
       which_key_delay_ms: { type: "number", minimum: 0, default: DEFAULT_SETTINGS.which_key_delay_ms },
       hint_letters: { type: "string", minLength: 2, default: DEFAULT_SETTINGS.hint_letters },
-      ignore_sites: { type: "array", items: { type: "string" }, description: "Match patterns where OasisFox starts in ignore mode" },
+      ignore_sites: { type: "array", items: { type: "string" }, description: "Match patterns where DesertFox starts in ignore mode" },
       which_key_border: { enum: listed("which_key_border"), default: DEFAULT_SETTINGS.which_key_border, description: "Corner style of the which-key panel border" },
       mode_indicator: { enum: listed("mode_indicator"), default: DEFAULT_SETTINGS.mode_indicator, description: "When the mode badge shows: always (NORMAL too), not_normal, or off" },
       palette: { type: "string", minLength: 1, examples: listed("palette"), default: DEFAULT_SETTINGS.palette, description: "Theme name: themes/<name>.toml in the config directory first, then a built-in theme. Light or dark follows the system theme" },
@@ -106,7 +106,7 @@ function search_engines_schema(): Schema {
     },
     additionalProperties: true,
   };
-  return { $schema: DRAFT, title: "OasisFox search engines", type: "object", additionalProperties: engine };
+  return { $schema: DRAFT, title: "DesertFox search engines", type: "object", additionalProperties: engine };
 }
 
 export function build_schemas(commands: CommandMeta[]): Record<DataKind, Schema> {
@@ -115,7 +115,7 @@ export function build_schemas(commands: CommandMeta[]): Record<DataKind, Schema>
     search_engines: search_engines_schema(),
     command_aliases: {
       $schema: DRAFT,
-      title: "OasisFox command aliases",
+      title: "DesertFox command aliases",
       type: "object",
       additionalProperties: { type: "string", examples: commands.map((command) => command.id) },
     },
