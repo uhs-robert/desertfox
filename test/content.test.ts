@@ -219,8 +219,8 @@ test("normal mode keeps only the unbound Quick Find keys from the page, outside 
 
 test("caret and both visual modes keep every unbound plain key from the page, outside fields", () => {
   for (const mode of ["caret", "visual", "visual_line"] as const) {
-    for (const token of ["/", "'", "e", "E", "5", "<Space>", "<Enter>", "<S-Enter>", "<PageDown>", "<Backspace>"]) assert.equal(cancels_unbound_key(mode, token, false), true, `${mode} ${token}`);
-    for (const token of ["<Tab>", "<S-Tab>", "<F5>", "<S-F12>", "<Escape>", "<S-Escape>", "<C-c>", "<A-x>", "<M-v>", "<CS-c>"]) assert.equal(cancels_unbound_key(mode, token, false), false, `${mode} ${token}`);
+    for (const token of ["/", "'", "e", "E", "5", "<Space>", "<Enter>", "<S-Enter>", "<Backspace>"]) assert.equal(cancels_unbound_key(mode, token, false), true, `${mode} ${token}`);
+    for (const token of ["<Tab>", "<S-Tab>", "<F5>", "<PageUp>", "<PageDown>", "<Home>", "<End>", "<S-End>", "<S-F12>", "<Escape>", "<S-Escape>", "<C-c>", "<A-x>", "<M-v>", "<CS-c>"]) assert.equal(cancels_unbound_key(mode, token, false), false, `${mode} ${token}`);
     assert.equal(cancels_unbound_key(mode, "e", true), false, mode);
   }
 });
