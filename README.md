@@ -33,7 +33,7 @@ The keys follow Vim habits: modes, `hjkl` to scroll, `gg` and `G` to jump, `yy` 
 - Open a link in a background tab without touching the mouse: press `F`.
 - Copy a link or the text of any element: `;yl` copies the link and `;Yp` copies the text.
 - Run commands by name: `:` opens a line that completes commands, tabs, bookmarks, history and search engines as you type.
-- Manage tabs: switch, move, pin, mute, close and reopen them, or open one in a container from `t`.
+- Manage tabs: switch, move, pin, mute, close and reopen them, or reopen one in a container with the `c` keys.
 - Search the page: `/` finds text, including with regular expressions.
 - Search the web: bind a key to any search engine you use.
 - Select and copy text without the mouse: `v` and `V` move and select by keyboard.
