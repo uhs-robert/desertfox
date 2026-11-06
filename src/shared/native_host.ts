@@ -7,6 +7,10 @@ export const NATIVE_PERMISSION = "nativeMessaging";
 // The hash `:native.install` opens on the Help page. Help's router shows Home for it, and the install panel reads it.
 export const NATIVE_INSTALL_HASH = "#native-install";
 
+// Each `:native.install` adds a fresh suffix, so a tab already on the page sees a hash change and shows the panel again.
+export const native_install_hash = (nonce: number): string => `${NATIVE_INSTALL_HASH}?${nonce}`;
+export const is_native_install_hash = (hash: string): boolean => hash === NATIVE_INSTALL_HASH || hash.startsWith(`${NATIVE_INSTALL_HASH}?`);
+
 const REPO = "uhs-robert/desertfox";
 
 // "main" fetches the host from the main branch. A version fetches it from the GitHub release of that version, checked by checksum.

@@ -21,3 +21,10 @@ test("nativeMessaging is optional, never required", () => {
   assert.deepEqual(manifest.optional_permissions, ["nativeMessaging"]);
   assert.ok(!manifest.permissions.includes("nativeMessaging"));
 });
+
+test("every :native.install changes the hash, and the panel route accepts each form", async () => {
+  const { is_native_install_hash, native_install_hash } = await import("../src/shared/native_host.ts");
+  assert.notEqual(native_install_hash(1), native_install_hash(2));
+  for (const hash of ["#native-install", native_install_hash(5)]) assert.ok(is_native_install_hash(hash), hash);
+  for (const hash of ["", "#/", "#native-installer"]) assert.ok(!is_native_install_hash(hash), hash);
+});
