@@ -3,6 +3,8 @@ import type { CommandContext } from "../shared/command.ts";
 import type { ToastKind } from "../shared/messages.ts";
 import type { ListedTab } from "../background/complete_items.ts";
 import { show_toast_on_tab } from "../background/browser_deps.ts";
+import { browser_tab_action_deps, move_tabs, reopen_in_container, set_muted, set_pinned } from "../background/tab_actions.ts";
+import type { TabActionDeps } from "../background/tab_actions.ts";
 import { browser_discard_deps, describe_result, set_unloaded } from "../background/tab_discard.ts";
 import type { DiscardDeps, SetUnloadedResult } from "../background/tab_discard.ts";
 import { browser_complete_items_deps, read_tabs } from "../background/complete_items.ts";
@@ -23,16 +25,11 @@ export type TabInfo = {
   cookie_store_id: string | undefined;
 };
 
-export type TabDeps = {
+export type TabDeps = TabActionDeps & {
   tabs_in_window: (window_id: number) => Promise<TabInfo[]>;
   activate: (tab_id: number) => Promise<void>;
-  set_pinned: (tab_id: number, pinned: boolean) => Promise<void>;
-  set_muted: (tab_id: number, muted: boolean) => Promise<void>;
-  move: (tab_id: number, index: number) => Promise<void>;
   duplicate: (tab_id: number) => Promise<void>;
-  remove: (tab_ids: number[]) => Promise<void>;
   detach_to_new_window: (tab_id: number) => Promise<void>;
-  open_tab: (open: { window_id: number; url: string; index: number; pinned: boolean; cookie_store_id: string }) => Promise<void>;
   // False when the closed-tab list is empty.
   restore_last_closed_tab: () => Promise<boolean>;
   // Undefined when no container has the name.
@@ -113,7 +110,7 @@ export function make_tab_handlers(deps: TabDeps) {
     },
     move: async (ctx: CommandContext, args: { offset: number }) => {
       const { tabs, current } = await position_of(ctx);
-      await deps.move(current.id, clamp_index(current.index + args.offset, tabs.length));
+      await move_tabs(deps, [current.id], clamp_index(current.index + args.offset, tabs.length));
     },
     duplicate: async (ctx: CommandContext) => {
       const { current } = await position_of(ctx);
@@ -132,11 +129,11 @@ export function make_tab_handlers(deps: TabDeps) {
     },
     pin: async (ctx: CommandContext) => {
       const { current } = await position_of(ctx);
-      await deps.set_pinned(current.id, !current.pinned);
+      await set_pinned(deps, [current.id], !current.pinned);
     },
     mute: async (ctx: CommandContext) => {
       const { current } = await position_of(ctx);
-      await deps.set_muted(current.id, !current.muted);
+      await set_muted(deps, [current.id], !current.muted);
     },
     close: async (ctx: CommandContext, args: { side: CloseSide }) => {
       const { tabs, current } = await position_of(ctx);
@@ -173,8 +170,7 @@ export function make_tab_handlers(deps: TabDeps) {
       const { current } = await position_of(ctx);
       if (current.url === undefined || ctx.window_id === undefined) throw new RuntimeRefusal("this tab has no address to reopen");
       const cookie_store_id = await resolve_container_store_id(args.container, deps.find_container_store_id);
-      await deps.open_tab({ window_id: ctx.window_id, url: current.url, index: current.index, pinned: current.pinned, cookie_store_id });
-      await deps.remove([current.id]);
+      await reopen_in_container(deps, ctx.window_id, [current], cookie_store_id);
     },
   };
 }
@@ -275,15 +271,9 @@ function to_tab_info(tab: browser.tabs.Tab): TabInfo {
 export const browser_tab_deps: TabDeps = {
   tabs_in_window: async (window_id) => (await browser.tabs.query({ windowId: window_id })).map(to_tab_info).sort((a, b) => a.index - b.index),
   activate: async (tab_id) => void (await browser.tabs.update(tab_id, { active: true })),
-  set_pinned: async (tab_id, pinned) => void (await browser.tabs.update(tab_id, { pinned })),
-  set_muted: async (tab_id, muted) => void (await browser.tabs.update(tab_id, { muted })),
-  move: async (tab_id, index) => void (await browser.tabs.move(tab_id, { index })),
+  ...browser_tab_action_deps,
   duplicate: async (tab_id) => void (await browser.tabs.duplicate(tab_id)),
-  remove: (tab_ids) => browser.tabs.remove(tab_ids),
   detach_to_new_window: async (tab_id) => void (await browser.windows.create({ tabId: tab_id })),
-  open_tab: async ({ window_id, url, index, pinned, cookie_store_id }) => {
-    await browser.tabs.create({ windowId: window_id, url, index, pinned, cookieStoreId: cookie_store_id, active: true });
-  },
   restore_last_closed_tab: async () => {
     const [closed] = (await browser.sessions.getRecentlyClosed()).filter((item) => item.tab);
     if (!closed?.tab?.sessionId) return false;
