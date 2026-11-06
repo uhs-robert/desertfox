@@ -13,22 +13,22 @@
 
 ## 🦊 What it is
 
-DesertFox is a keyboard-first Firefox add-on. Every command is defined once in a registry. Keys, the command line, completion, help and which-key (the hint popup that lists the keys after a prefix) all read that one definition. It works on its own.
+DesertFox lets you browse the web without the mouse. Click any link, button or image with a few keystrokes. Switch tabs, search the page and copy links from the keyboard. Press `g?` to see every key.
 
 Status: under construction. DesertFox has no release yet, so there is nothing to install today.
 
 ## ✨ Features
 
-- Hints: press `f` to label every clickable element, then type a label to click it. `F` opens it in a background tab.
-- Hint filters: other keys under `;` pick links, inputs, images, media, scroll boxes or frames. Hints reach into shadow roots (isolated parts of a page).
-- Command line: `:` opens a line with fuzzy completion for commands, flags, tabs, bookmarks, history, search engines, containers and headings.
-- Tabs: keys and commands to switch, move, pin, mute, unload, close and reopen tabs, and to open them in a container.
-- Page search: `/` finds text with regular expressions and smartcase, across shadow roots and same-origin frames.
-- Search engines: bind a key to any engine, with groups for site search.
-- Caret and visual mode: `v` and `V` move and select text from the keyboard, with counts and character find.
-- Which-key: after a prefix, a popup lists the keys that can follow, with their labels.
-- Help and Quick Start: a help page built from the live keymap, with a guided Quick Start.
-- Themes and new tab page: colors for every DesertFox surface, a clock, links, recent tabs and bookmarks on the new tab page.
+- Click anything: press `f`, then type the short label next to a link, button, input or image.
+- Open a link in a background tab without touching the mouse: press `F`.
+- Run commands by name: `:` opens a line that completes commands, tabs, bookmarks, history and search engines as you type.
+- Manage tabs: switch, move, pin, mute, close and reopen them, or open one in a container.
+- Search the page: `/` finds text, including with regular expressions.
+- Search the web: bind a key to any search engine you use.
+- Select and copy text without the mouse: `v` and `V` move and select by keyboard.
+- Learn as you go: pause after a key and a popup lists what can follow.
+- Get help: a help page lists every key, and a Quick Start page teaches the first ones.
+- Make it yours: pick a color theme, and use the new tab page for a clock, links, recent tabs and bookmarks.
 
 ## 📦 Install
 
@@ -38,7 +38,7 @@ Until then, only contributors can run it. See [AGENTS.md](AGENTS.md) for the bui
 
 ## 🚀 Try it
 
-After you install DesertFox, press `g?`, `qh` or `<F1>` on a normal page. The help page opens. Start with the Quick Start page, which teaches the first keys. A short pause after a prefix key shows which-key.
+After you install DesertFox, press `g?`, `qh` or `<F1>` on a normal page. The help page opens. Start with the Quick Start page, which teaches the first keys. A short pause after a key shows the keys that can follow.
 
 ## ⚙️ Config
 
