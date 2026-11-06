@@ -58,7 +58,7 @@ const BINDINGS = {
   bottom: { mode: "normal", id: "scroll.to", args: { percent: 100 }, test: all(arg_is("percent", 100), no_axis) },
   half_page: { mode: "normal", id: "scroll.pages", args: { fraction: 0.5 }, test: arg_is("fraction", 0.5) },
   hint: { mode: "normal", id: "hint.run", args: { action: "here" }, test: arg_is("action", "here") },
-  hint_copy: { mode: "normal", id: "hint.run", args: { action: "copy", filter: "links" }, test: arg_is("action", "copy") },
+  hint_copy: { mode: "normal", id: "hint.run", args: { action: "copy", filter: "links" }, test: all(arg_is("action", "copy"), arg_is("filter", "links")) },
   cmdline: { mode: "normal", id: "cmdline.open", args: {}, test: (args) => args.text === "" || args.text === undefined },
   find: { mode: "normal", id: "find.open", args: {}, test: all(arg_is("direction", "forward"), arg_is("source", "typed")) },
   find_back: { mode: "normal", id: "find.open", args: { direction: "backward" }, test: all(arg_is("direction", "backward"), arg_is("source", "typed")) },

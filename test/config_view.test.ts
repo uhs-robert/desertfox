@@ -4,10 +4,11 @@ import { DEFAULT_SETTINGS } from "../src/shared/config.ts";
 import { build_config_view } from "../src/help/config_view.ts";
 
 const hint = "~/.mozilla/managed-storage/desertfox@uhs-robert.json";
+const NO_LAYERS = { saved: [], temp: [], configured: [] };
 
 test("each source has its own text", () => {
   const texts = (["managed", "imported", "defaults"] as const).map(
-    (source) => build_config_view({ source, settings: DEFAULT_SETTINGS, managed_file_hint: hint }).source_text,
+    (source) => build_config_view({ source, settings: DEFAULT_SETTINGS, managed_file_hint: hint, ...NO_LAYERS }).source_text,
   );
   assert.equal(new Set(texts).size, 3);
   assert.match(texts[0]!, /Managed/);
@@ -21,7 +22,7 @@ test("a missing status shows defaults and says the source is unknown", () => {
 
 test("settings rows render any setting, including one the model does not know", () => {
   const settings = { ...DEFAULT_SETTINGS, mode_palette: "moonlight", flag: true } as typeof DEFAULT_SETTINGS;
-  const rows = build_config_view({ source: "managed", settings, managed_file_hint: hint }).settings;
+  const rows = build_config_view({ source: "managed", settings, managed_file_hint: hint, ...NO_LAYERS }).settings;
   assert.deepEqual(rows.find((row) => row.name === "mode_palette"), { name: "mode_palette", value: "\"moonlight\"" });
   assert.deepEqual(rows.find((row) => row.name === "flag"), { name: "flag", value: "true" });
   assert.deepEqual(rows.find((row) => row.name === "which_key_delay_ms"), { name: "which_key_delay_ms", value: "300" });
@@ -29,7 +30,7 @@ test("settings rows render any setting, including one the model does not know", 
 });
 
 test("the rebuild steps name the command, the managed file and config.reload", () => {
-  const steps = build_config_view({ source: "managed", settings: DEFAULT_SETTINGS, managed_file_hint: "/x/y.json" }).rebuild_steps;
+  const steps = build_config_view({ source: "managed", settings: DEFAULT_SETTINGS, managed_file_hint: "/x/y.json", ...NO_LAYERS }).rebuild_steps;
   assert.equal(steps[0], "just build-config");
   assert.match(steps[1]!, /\/x\/y\.json/);
   assert.match(steps[2]!, /config\.reload.*qr/);
@@ -38,10 +39,12 @@ test("the rebuild steps name the command, the managed file and config.reload", (
 
 test("a value that differs from the default is tagged with where it came from", () => {
   const settings = { ...DEFAULT_SETTINGS, which_key_delay_ms: 500, hint_letters: "ab", palette: DEFAULT_SETTINGS.palette };
-  const status = { source: "managed" as const, settings, managed_file_hint: hint, overrides: ["which_key_delay_ms", "palette"], configured: ["which_key_delay_ms", "hint_letters", "palette"] };
+  const status = { source: "managed" as const, settings: { ...settings, light_intensity: 2 as const }, managed_file_hint: hint, saved: ["light_intensity", "which_key_delay_ms"], temp: ["which_key_delay_ms", "palette"], configured: ["which_key_delay_ms", "hint_letters", "palette", "light_intensity"] };
   const rows = build_config_view(status).settings;
   const tag = (name: string) => rows.find((row) => row.name === name)?.tag;
-  assert.equal(tag("which_key_delay_ms"), "set");
+  // The top layer that sets a value names it: temp, then saved, then the file.
+  assert.equal(tag("which_key_delay_ms"), "temp");
+  assert.equal(tag("light_intensity"), "saved");
   assert.equal(tag("hint_letters"), "settings.toml");
   // Equal to the default, so no tag even though both sources name it.
   assert.equal(tag("palette"), undefined);
@@ -50,8 +53,8 @@ test("a value that differs from the default is tagged with where it came from", 
 
 test("an optional true or false setting equal to what an absent one reads as is not tagged", () => {
   const settings = { ...DEFAULT_SETTINGS, newtab_date: true, completion_all_windows: true };
-  const status = { source: "managed" as const, settings, managed_file_hint: hint, overrides: ["newtab_date", "completion_all_windows"], configured: ["newtab_date"] };
+  const status = { source: "managed" as const, settings, managed_file_hint: hint, saved: [], temp: ["newtab_date", "completion_all_windows"], configured: ["newtab_date"] };
   const rows = build_config_view(status).settings;
   assert.equal(rows.find((row) => row.name === "newtab_date")?.tag, undefined);
-  assert.equal(rows.find((row) => row.name === "completion_all_windows")?.tag, "set");
+  assert.equal(rows.find((row) => row.name === "completion_all_windows")?.tag, "temp");
 });

@@ -49,7 +49,7 @@ function merge_map_layers(
 
 function merge_keymap(layers: DataLayer[], origins: Origins, problems: string[]): KeymapConfig {
   const merged: Record<string, Record<string, unknown>> = {};
-  const generator_sections = ["search_keys", "container_keys", "site_keys", "group_names"];
+  const generator_sections = ["search_keys", "container_keys", "site_keys", "modifiers", "group_names"];
 
   for (const layer of layers) {
     for (const [section, value] of Object.entries(layer.data)) {
@@ -73,6 +73,15 @@ function merge_keymap(layers: DataLayer[], origins: Origins, problems: string[])
         if (section === "site_keys") {
           if (!Array.isArray(entry) || entry.length === 0 || !entry.every((name) => typeof name === "string" && name !== "")) {
             problems.push(`${layer.file}: site_keys["${key}"] must be a non-empty list of engine names`);
+            continue;
+          }
+          target[key] = entry;
+          origins.set(origin_key(`keymap.${section}`, key), layer.file);
+          continue;
+        }
+        if (section === "modifiers") {
+          if (!is_plain_object(entry) || Object.keys(entry).length === 0 || !Object.values(entry).every((arg) => ["string", "number", "boolean"].includes(typeof arg))) {
+            problems.push(`${layer.file}: modifiers["${key}"] must be a table of args, for example { rapid = true, label = "Rapid" }`);
             continue;
           }
           target[key] = entry;
