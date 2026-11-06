@@ -10,6 +10,7 @@ type FakeNode = {
   parent: FakeRoot | undefined;
   attachShadow: () => { append: () => void };
   setAttribute: (name: string, value: string) => void;
+  removeAttribute: (name: string) => void;
   remove: () => void;
 };
 type FakeRoot = {
@@ -28,6 +29,7 @@ function fake_node(): FakeNode {
     attachShadow: () => ({ append: () => {} }),
     setAttribute: (name: string, value: string) =>
       void node.attributes.set(name, value),
+    removeAttribute: (name: string) => void node.attributes.delete(name),
     remove: () =>
       void node.parent?.children.splice(node.parent.children.indexOf(node), 1),
   };
@@ -91,4 +93,11 @@ test("a new instance with no label to show still removes the orphan, without loa
   show_mode_label(undefined);
 
   assert.equal(root.children.length, 0);
+});
+
+test("the badge style reads the mode tokens and the bg_core text token", async () => {
+  page_with_orphan_badge();
+  const { STYLE } = await import("../../src/content/mode_indicator.ts");
+  for (const mode of ["normal", "insert", "ignore", "caret", "visual"]) assert.match(STYLE, new RegExp(`\\:where\\(\\[data-mode="${mode}"\\]\\) \\{ background: var\\(--desertfox-mode-${mode},`));
+  assert.match(STYLE, /:where\(\[data-mode\]\) \{ color: var\(--desertfox-bg-core,/);
 });

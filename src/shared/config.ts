@@ -4,12 +4,11 @@
 
 import type { CommandMeta } from "./command.ts";
 import type { KeymapConfig } from "./keymap.ts";
-import type { LocalTheme } from "./mode_colors.ts";
-import type { LightIntensity } from "./theme/roles.ts";
+import type { LightIntensity, LocalTheme } from "./theme/roles.ts";
 
 export const CONFIG_FORMAT_VERSION = 2;
 
-// Declared here, not in mode_colors.ts: that module holds the theme tables, which stay out of the content script.
+// Declared here, not in theme/load.ts: that module holds the theme tables, which stay out of the content script.
 export const DEFAULT_PALETTE = "oasis_moonlight";
 export const DEFAULT_LIGHT_INTENSITY: LightIntensity = 3;
 

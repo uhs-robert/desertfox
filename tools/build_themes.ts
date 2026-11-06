@@ -33,8 +33,12 @@ const ROLE_VARIABLES: Record<Role, string[]> = {
   mode_normal: ["theme-status", "theme-primary"],
   mode_insert: ["syntax-string"],
   mode_ignore: ["fg-dim"],
-  mode_caret: ["syntax-parameter"],
+  mode_caret: ["theme-cursor"],
   mode_visual: ["syntax-special"],
+  search_bg: ["ui-search-bg"],
+  search_fg: ["ui-search-fg"],
+  search_current_bg: ["ui-match-bg"],
+  search_current_fg: ["ui-match-fg"],
 };
 
 const root = new URL("../", import.meta.url);

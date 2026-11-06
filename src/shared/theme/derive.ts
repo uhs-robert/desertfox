@@ -38,6 +38,10 @@ const DERIVATIONS: [Exclude<Role, RequiredRole>, (colors: RoleColors, variant: V
   ["mode_ignore", (colors) => colors.fg_dim],
   ["mode_caret", (colors) => colors.ok],
   ["mode_visual", (colors) => colors.warn],
+  ["search_bg", (colors) => mix(colors.bg_core, colors.fg_core, 0.3)],
+  ["search_fg", (colors) => colors.fg_core],
+  ["search_current_bg", (colors) => colors.warn],
+  ["search_current_fg", (colors) => colors.bg_core],
 ];
 
 export function derive_roles(given: GivenColors, variant: Variant): RoleColors {

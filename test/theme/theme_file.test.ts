@@ -18,6 +18,7 @@ test("the role list is the public contract, in this order", () => {
   assert.deepEqual(ROLES, [
     "bg_core", "bg_mantle", "bg_crust", "selection", "fg_core", "fg_comment", "fg_dim", "fg_muted", "primary", "secondary", "accent",
     "border", "error", "warn", "ok", "info", "mode_normal", "mode_insert", "mode_ignore", "mode_caret", "mode_visual",
+    "search_bg", "search_fg", "search_current_bg", "search_current_fg",
   ]);
 });
 
@@ -45,6 +46,7 @@ test("each missing role derives by the table", () => {
   assert.equal(dark.border, dark.fg_muted);
   assert.deepEqual([dark.error, dark.warn, dark.ok, dark.info], ["#ffa0a0", "#ffba75", "#7fcf78", "#81c0ff"]);
   assert.deepEqual([dark.mode_normal, dark.mode_insert, dark.mode_ignore, dark.mode_caret, dark.mode_visual], [dark.primary, dark.error, dark.fg_dim, dark.ok, dark.warn]);
+  assert.deepEqual([dark.search_bg, dark.search_fg, dark.search_current_bg, dark.search_current_fg], [mix("#202020", "#e0e0e0", 0.3), "#e0e0e0", dark.warn, "#202020"]);
   const light = derive_roles(REQUIRED, "light");
   assert.deepEqual([light.error, light.warn, light.ok, light.info], ["#8e0f14", "#793f0d", "#315e2d", "#184571"]);
   assert.equal(light.bg_mantle, mix("#202020", "#000000", 0.15));
@@ -132,4 +134,12 @@ test("the command line page declares its colors as role tokens, bg_mantle and se
   for (const name of declared) assert.ok(role_token_names.includes(name!), `${name} is not a role token`);
   assert.ok(declared.includes(token_name("bg_mantle")));
   assert.ok(declared.includes(token_name("secondary")));
+});
+
+test("a theme file with only the required roles still gets the four search roles", () => {
+  const { theme, problems } = checked({ dark: REQUIRED, light: REQUIRED });
+  assert.deepEqual(problems, []);
+  for (const variant of [theme!.dark, theme!.light]) {
+    for (const role of ["search_bg", "search_fg", "search_current_bg", "search_current_fg"] as const) assert.match(variant[role], /^#[0-9a-f]{6}$/, role);
+  }
 });

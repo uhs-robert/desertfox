@@ -7,8 +7,8 @@ import { LIGHT_INTENSITIES, ROLES } from "../../src/shared/theme/roles.ts";
 
 const css_files = readdirSync(new URL("../../themes/oasis/", import.meta.url)).filter((name) => name.endsWith(".css"));
 
-test("themes/oasis holds one dark and five light CSS files per theme, and each yields all 21 roles", () => {
-  assert.equal(ROLES.length, 21);
+test("themes/oasis holds one dark and five light CSS files per theme, and each yields every role", () => {
+  assert.equal(ROLES.length, 25);
   const names = Object.keys(OASIS_THEMES);
   assert.equal(names.length, 16);
   assert.equal(css_files.length, 16 * (1 + LIGHT_INTENSITIES.length));

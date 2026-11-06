@@ -5,7 +5,6 @@ import { empty_config } from "../../src/background/config_load.ts";
 import { make_fake } from "./fakes.ts";
 import type { TreeLeaf } from "../../src/shared/prefix_tree.ts";
 import { load_theme } from "../../src/shared/theme/load.ts";
-import { palette_mode_colors } from "../../src/shared/mode_colors.ts";
 import { derive_roles } from "../../src/shared/theme/derive.ts";
 
 const commands = {
@@ -108,28 +107,24 @@ test("a binding in a mode the command does not allow is warned about and skipped
   assert.equal(warnings.filter((w) => w.includes("ignore") && w.includes("tab.close")).length, 1);
 });
 
-test("the palette picks the badge colors: local theme, Oasis theme with its light intensity, or oasis_moonlight with a warning", () => {
+test("the palette picks the stored theme: local theme, Oasis theme with its light intensity, or oasis_moonlight with a warning", () => {
   const { registry } = make_fake(commands);
   const compile = (config: ReturnType<typeof empty_config>) =>
     compile_config({ config, default_keymap: {}, get_command: (id) => registry.get(id), enum_sources: { search_engines: [], containers: [] } });
   const colors = derive_roles({ bg_core: "#101010", fg_core: "#eeeeee", primary: "#88aaff", accent: "#ffcc66" }, "dark");
   const local = compile({ ...empty_config(), settings: { palette: "mine" }, local_theme: { name: "mine", colors: { dark: colors, light: colors } } });
-  assert.deepEqual(local.compiled.mode_colors?.normal.dark, ["#88aaff", "#101010"]);
+  assert.equal(local.theme.dark.mode_normal, "#88aaff");
   assert.deepEqual(local.warnings, []);
-  assert.deepEqual(compile({ ...empty_config(), settings: { palette: "oasis_cactus" } }).compiled.mode_colors, palette_mode_colors("oasis_cactus", 3));
-  const intense = compile({ ...empty_config(), settings: { palette: "oasis_moonlight", light_intensity: 5 } }).compiled.mode_colors;
-  assert.deepEqual(intense, palette_mode_colors("oasis_moonlight", 5));
-  assert.notDeepEqual(intense?.normal.light, palette_mode_colors("oasis_moonlight", 3)?.normal.light);
+  assert.equal("mode_colors" in local.compiled, false);
   // A hand-edited managed config can hold any light_intensity. The keymap must still compile.
   for (const bad of [0, 6, 2.5, "3"]) {
     const edited = compile({ ...empty_config(), settings: { light_intensity: bad as never } });
-    assert.deepEqual(edited.compiled.mode_colors, palette_mode_colors("oasis_moonlight", 3));
+    assert.deepEqual(edited.theme.light, load_theme("oasis_moonlight", 3)!.light);
     assert.deepEqual(edited.warnings, [`settings: light_intensity ${JSON.stringify(bad)} is not 1 to 5, using 3`]);
   }
   const moonlight = load_theme("oasis_moonlight", 5)!;
   assert.deepEqual(compile({ ...empty_config(), settings: { palette: "oasis_moonlight", light_intensity: 5 } }).theme, { dark: moonlight.dark, light: moonlight.light });
   const unknown = compile({ ...empty_config(), settings: { palette: "moonlight" } });
   assert.deepEqual(unknown.theme.dark, load_theme("oasis_moonlight", 3)!.dark);
-  assert.deepEqual(unknown.compiled.mode_colors, palette_mode_colors("oasis_moonlight", 3));
   assert.deepEqual(unknown.warnings, ['settings: palette "moonlight" names no theme, using oasis_moonlight']);
 });

@@ -3,7 +3,7 @@ import { change_overrides } from "../background/startup.ts";
 import type { CommandContext } from "../shared/command.ts";
 import { effective_settings } from "../shared/config.ts";
 import type { MergedConfig, SettingOverrides, Settings } from "../shared/config.ts";
-import { built_in_theme_names } from "../shared/mode_colors.ts";
+import { built_in_theme_names } from "../shared/theme/load.ts";
 import { define } from "../shared/registry/index.ts";
 import { parse_setting_text, SETTING_NAMES, SETTING_SPECS } from "../shared/settings_schema.ts";
 import type { ToastKind } from "../shared/messages.ts";
