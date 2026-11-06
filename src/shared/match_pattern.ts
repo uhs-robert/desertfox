@@ -58,3 +58,14 @@ export function ignore_regex_source(patterns: readonly string[]): string | undef
   }
   return alternatives.length > 0 ? `^(?:${alternatives.join("|")})$` : undefined;
 }
+
+// A frame passes its own address and the tab's, so an embed on an ignored page stays ignored too. A stored regex that does not compile ignores nothing, so keys keep working.
+export function ignores_any_address(source: string | undefined, addresses: readonly (string | undefined)[]): boolean {
+  if (source === undefined) return false;
+  try {
+    const ignored = new RegExp(source);
+    return addresses.some((address) => address !== undefined && ignored.test(address));
+  } catch {
+    return false;
+  }
+}

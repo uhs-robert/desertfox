@@ -11,7 +11,7 @@ define("hint.run", {
       name: "action",
       type: "enum",
       values: [...WHERE, "caret", "visual", "copy", "copy_text", "delete", "focus", "hover", "play_pause", "mute", "fullscreen"],
-      default: [{ value: "play_pause", when: { filter: ["media"] } }, { value: "tab", when: { filter: ["images"] } }, "here"],
+      default: [{ value: "play_pause", when: { filter: ["media"] } }, { value: "tab", when: { filter: ["images"] } }, { value: "focus", when: { filter: ["frames"] } }, "here"],
       short: { ...WHERE_SHORT, caret: "c", visual: "v", copy: "y", copy_text: "Y", delete: "d", focus: "f", play_pause: "P", mute: "M", fullscreen: "F" },
       value_labels: {
         here: "to click",
@@ -49,10 +49,10 @@ define("hint.run", {
     {
       name: "filter",
       type: "enum",
-      values: ["all", "clickable", "buttons", "inputs", "links", "prose", "scrollable", "media", "images", "custom"],
+      values: ["all", "clickable", "buttons", "inputs", "links", "prose", "scrollable", "media", "images", "frames", "custom"],
       default: "clickable",
-      short: { all: "a", buttons: "B", inputs: "i", links: "l", prose: "p", scrollable: "s", media: "m", images: "I", custom: "u" },
-      value_labels: { all: "for all elements", buttons: "for buttons", inputs: "for inputs", links: "for links", prose: "for text", scrollable: "for scroll boxes", media: "for video and audio", images: "for images", custom: "for a selector" },
+      short: { all: "a", buttons: "B", inputs: "i", links: "l", prose: "p", scrollable: "s", media: "m", images: "I", frames: "E", custom: "u" },
+      value_labels: { all: "for all elements", buttons: "for buttons", inputs: "for inputs", links: "for links", prose: "for text", scrollable: "for scroll boxes", media: "for video and audio", images: "for images", frames: "for frames", custom: "for a selector" },
       description: {
         all: "Label every element.",
         buttons: "Label only the buttons.",
@@ -62,6 +62,7 @@ define("hint.run", {
         scrollable: "Label the boxes that scroll, to focus one.",
         media: "Label the video and audio, even under site controls.",
         images: "Label the pictures of at least 24 px, even as backgrounds.",
+        frames: "Label the frames of at least 24 px, to focus one.",
         custom: "Label the elements that match a selector.",
       },
     },

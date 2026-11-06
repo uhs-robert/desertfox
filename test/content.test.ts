@@ -4,7 +4,7 @@ import { takes_typing } from "../src/content/editable.ts";
 import { args_for_count } from "../src/content/invocation_args.ts";
 import { create_cancelled_keys } from "../src/content/cancelled_keys.ts";
 import { create_key_flow } from "../src/content/key_flow.ts";
-import { ignore_regex_source, matches_pattern } from "../src/shared/match_pattern.ts";
+import { ignore_regex_source, ignores_any_address, matches_pattern } from "../src/shared/match_pattern.ts";
 import { mode_label } from "../src/content/mode_label.ts";
 import { wire_mode_reports } from "../src/content/mode_report.ts";
 import { create_mode_state } from "../src/content/mode_state.ts";
@@ -261,6 +261,15 @@ test("the precompiled ignore regex agrees with matches_pattern on every pattern 
   }
   assert.equal(ignore_regex_source([]), undefined);
   assert.equal(ignore_regex_source(["not a pattern"]), undefined);
+});
+
+test("a frame on an ignored page is ignored by the tab address, and a broken regex ignores nothing", () => {
+  const source = ignore_regex_source(["https://ignored.test/*"]);
+  assert.equal(ignores_any_address(source, ["https://embed.test/video", "https://ignored.test/page"]), true);
+  assert.equal(ignores_any_address(source, ["https://ignored.test/frame", undefined]), true);
+  assert.equal(ignores_any_address(source, ["https://embed.test/video", "https://other.test/"]), false);
+  assert.equal(ignores_any_address(undefined, ["https://ignored.test/page"]), false);
+  assert.equal(ignores_any_address("(", ["https://ignored.test/page"]), false);
 });
 
 test("a keymap stored in the old format is treated as absent until the background recompiles it", () => {

@@ -47,7 +47,7 @@ test("prefills use the short flags", () => {
 
 test("only these commands opt out of `.`, so a new command repeats unless someone decides otherwise", () => {
   const opted_out = registry.list().filter((command) => command.repeatable === false).map((command) => command.id);
-  assert.deepEqual(opted_out.sort(), ["browser.close_all", "browser.focus_page", "command.repeat", "config.reload", "engine.show", "help.open", "settings.set", "settings.toggle", "settings.unset"]);
+  assert.deepEqual(opted_out.sort(), ["browser.close_all", "browser.focus_page", "command.repeat", "config.reload", "engine.show", "frame.exit", "help.open", "settings.set", "settings.toggle", "settings.unset"]);
 });
 
 test("the search keys run in visual mode too, and the registry lets them", async () => {

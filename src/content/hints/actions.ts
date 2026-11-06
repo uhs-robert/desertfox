@@ -52,7 +52,25 @@ function image_source(target: Target): string | undefined {
 
 export const is_image_element = (target: Target): boolean => target.localName === "img" || (target.localName === "input" && target.type === "image");
 
+export const is_frame_element = (target: { localName: string }): boolean => target.localName === "iframe" || target.localName === "frame";
+
+const is_web_address = (address: string | undefined): address is string => address !== undefined && address !== "" && !/^about:/i.test(address);
+
+// A frame from another site throws on `contentDocument`, and a same-site frame that still loads shows `about:blank`. Its `src` stands in for both, which can differ from the page after a redirect. A frame with no address of its own (`about:blank`, `srcdoc`) has none to give.
+function frame_address(target: Target): string | undefined {
+  if (target.getAttribute?.("srcdoc") != null) return undefined;
+  let shown: string | undefined;
+  try {
+    shown = (target as unknown as HTMLIFrameElement).contentDocument?.URL;
+  } catch {
+    // Another site: `src` stands in.
+  }
+  if (is_web_address(shown)) return shown;
+  return is_web_address(target.src) ? target.src : undefined;
+}
+
 const own_source = (target: Target, with_background: boolean): string | undefined => {
+  if (is_frame_element(target)) return frame_address(target);
   if (target.localName === "img") return image_source(target);
   if (target.localName === "input" && target.type === "image") return target.src;
   if (is_media(target)) return target.currentSrc || target.src;
@@ -111,6 +129,8 @@ const flashes = new WeakMap<object, { previous: readonly [string, string]; timer
 function focus_target(target: Target): void {
   if (!takes_typing(target) && (target.tabIndex ?? 0) < 0) target.setAttribute?.("tabindex", "-1");
   target.focus();
+  // Gecko leaves the focus outside a frame of another site on the element's focus(). Its window's focus() is one of the few calls another site allows, and it enters the frame.
+  if (is_frame_element(target)) (target as unknown as HTMLIFrameElement).contentWindow?.focus();
   if (takes_typing(target) || !target.style) return;
   // Shows which element took the focus. The old inline outline comes back after a moment.
   const { style } = target;
@@ -174,12 +194,14 @@ export function perform(action: HintAction, target: Target, deps: ActionDeps, wi
   if (starts_caret(action)) return deps.start_caret(target as unknown as Element, action);
   const address = element_address(target, with_background);
   // A copy of the address falls back to the text for an element that has none, except a picture, whose text is empty.
-  if (action === "copy") return address === undefined && (is_image_element(target) || is_media(target)) ? NO_WEB_ADDRESS : deps.copy(address ?? (target.textContent ?? "").trim());
-  if (action === "copy_text") return deps.copy((target.textContent ?? "").trim());
+  if (action === "copy") return address === undefined && (is_image_element(target) || is_media(target) || is_frame_element(target)) ? NO_WEB_ADDRESS : deps.copy(address ?? (target.textContent ?? "").trim());
+  if (action === "copy_text") return is_frame_element(target) ? { ok: false, message: "A frame has no text" } : deps.copy((target.textContent ?? "").trim());
   if (action === "tab" || action === "background" || action === "window") {
-    if (address === undefined) return click_like_a_mouse(target);
+    // A click on a frame does nothing, so it must not stand in for an open.
+    if (address === undefined) return is_frame_element(target) ? NO_WEB_ADDRESS : click_like_a_mouse(target);
     return deps.open_link(address, action);
   }
   if (takes_typing(target)) return target.focus();
+  if (is_frame_element(target)) return focus_target(target);
   click_like_a_mouse(target);
 }

@@ -547,3 +547,63 @@ test("is_media knows video and audio", () => {
   assert.equal(is_media({ localName: "audio" }), true);
   assert.equal(is_media({ localName: "div" }), false);
 });
+
+const frame = (extra: Record<string, unknown> = {}) => fixture("iframe", { src: "https://embed.test/video", ...extra });
+const NO_ADDRESS = { ok: false, message: "This element has no web address" };
+
+test("the address of a same-site frame is the page it shows now", () => {
+  const page = frame({ contentDocument: { URL: "https://embed.test/moved" } });
+  assert.equal(element_address(page.element as never), "https://embed.test/moved");
+});
+
+test("the address of a frame from another site is its src, because reading the document throws", () => {
+  const page = frame();
+  Object.defineProperty(page.element, "contentDocument", { get: () => { throw new Error("cross origin"); } });
+  assert.equal(element_address(page.element as never), "https://embed.test/video");
+});
+
+test("a srcdoc frame, an about:blank frame and a frame with no src have no address", () => {
+  assert.equal(element_address(frame({ getAttribute: () => "<p>x</p>" }).element as never), undefined);
+  assert.equal(element_address(frame({ src: "about:blank", contentDocument: { URL: "about:blank" } }).element as never), undefined);
+  assert.equal(element_address(frame({ src: "" }).element as never), undefined);
+});
+
+test("a same-site frame that still loads shows about:blank, so its src stands in", () => {
+  const page = frame({ contentDocument: { URL: "about:blank" } });
+  assert.equal(element_address(page.element as never), "https://embed.test/video");
+});
+
+test("a frame opens and copies its address, and refuses when it has none", () => {
+  const page = frame();
+  page.run("tab");
+  page.run("copy");
+  assert.deepEqual(page.opened, [["https://embed.test/video", "tab"]]);
+  assert.deepEqual(page.copied, ["https://embed.test/video"]);
+  const blank = frame({ src: "" });
+  assert.deepEqual(blank.run("window"), NO_ADDRESS);
+  assert.deepEqual(blank.run("copy"), NO_ADDRESS);
+  assert.deepEqual(blank.calls, []);
+});
+
+test("a frame has no text to copy", () => {
+  const page = frame();
+  assert.deepEqual(page.run("copy_text"), { ok: false, message: "A frame has no text" });
+  assert.deepEqual(page.copied, []);
+});
+
+test("focus, hover and delete reach a frame, and here focuses it instead of clicking", () => {
+  const page = frame({ tabIndex: 0 });
+  page.run("focus");
+  page.run("here");
+  assert.deepEqual(page.calls, ["focus", "focus"]);
+  page.run("delete");
+  assert.equal(page.calls.at(-1), "remove");
+});
+
+test("focus on a frame also focuses the frame's window, the call that enters a frame of another site", () => {
+  const window_focus_calls: string[] = [];
+  const page = frame({ tabIndex: 0, contentWindow: { focus: () => window_focus_calls.push("window") } });
+  page.run("focus");
+  assert.deepEqual(page.calls, ["focus"]);
+  assert.deepEqual(window_focus_calls, ["window"]);
+});

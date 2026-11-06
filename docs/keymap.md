@@ -8,7 +8,7 @@ Status values:
 - `later`: planned for phase 3. The key is not bound yet.
 - `dropped`: not built. The note gives the reason.
 
-Search engine keys (`s`, `S`, `,`) and container keys (`c`, `C`) come from the user's config, so no row lists them. The config generates them from `search_keys` and `container_keys`. Two defaults are left unbound on purpose. `;f` needs the command line prompt to ask for the link text, and `hint.run --text=...` already filters. `ZZ` closes every window with no undo, so users bind it in their config.
+Search engine keys (`s`, `S`, `,`) and container keys (`c`, `C`) come from the user's config, so no row lists them. The config generates them from `search_keys` and `container_keys`. One default is left unbound on purpose. `ZZ` closes every window with no undo, so users bind it in their config.
 
 Which-key shows a group as `+Name`, for example `g` as `+Go`. A `group_names` section in `keymap.toml` maps a key sequence to its name. A group without one shows its prefix key.
 
@@ -20,7 +20,7 @@ A note "(prompts)" means the binding sets a `prompt` for a param, so the command
 
 <!-- BEGIN generated -->
 
-bound: 219 (normal 141, hint 2, cmdline 13, caret 26, visual 32, insert 1, ignore 1, browser 3) | later: 14 | dropped: 6
+bound: 221 (normal 143, hint 2, cmdline 13, caret 26, visual 32, insert 1, ignore 1, browser 3) | later: 14 | dropped: 6
 
 ### normal
 
@@ -52,6 +52,7 @@ bound: 219 (normal 141, hint 2, cmdline 13, caret 26, visual 32, insert 1, ignor
 | `gt` | bound | `tab.goto` | Next tab |  |
 | `gT` | bound | `tab.prev` | Previous tab |  |
 | `ga` | bound | `tab.goto_audible` | Go to audible tab |  |
+| `gF` | bound | `frame.exit` | Focus top page |  |
 | `g0` | bound | `tab.goto 1` | First tab |  |
 | `g^` | bound | `tab.goto 1` | First tab |  |
 | `g$` | bound | `tab.goto -1` | Last tab |  |
@@ -157,6 +158,7 @@ bound: 219 (normal 141, hint 2, cmdline 13, caret 26, visual 32, insert 1, ignor
 | `;h` | bound | `hint --hover --all` | Hover element |  |
 | `;l` | bound | `hint --links` | Click link |  |
 | `;I` | bound | `hint --images` | Open image in new tab |  |
+| `;f` | bound | `hint --frames` | Focus frame |  |
 | `;m` | bound | `hint --media` | Play or pause media |  |
 | `:` | bound | `cmdline.open` | Command line |  |
 | `/` | bound | `find` | Find forward |  |

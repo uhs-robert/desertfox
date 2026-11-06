@@ -100,6 +100,7 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
   if (request?.type === "open_cmdline") return get_config().then(() => cmdline.open(request.ticket, sender.tab?.id, sender.frameId));
   if (request?.type === "complete_items") return complete_items.answer(request.kind, asker_of(sender));
   if (request?.type === "set_tab_unloaded") return complete_items.set_unloaded(request.tab_id, request.unloaded, asker_of(sender));
+  if (request?.type === "read_tab_address") return Promise.resolve(sender.tab?.url);
   if (request?.type === "open_help") return open_help.open(request.command_id, sender.tab?.id, sender.frameId);
   if (request?.type === "record_cmdline") return cmdline.record(request.text, sender.tab?.incognito === true);
   if (request?.type === "record_repeat") {

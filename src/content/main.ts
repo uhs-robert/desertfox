@@ -1,9 +1,10 @@
 // Content script entry: a capture listener on keydown, the compiled keymap from
-// storage, and the modes. Runs in the top frame and in same-origin frames.
+// storage, and the modes. Runs in every frame. A frame of another site starts on its first focus.
 
-import type { BackgroundToContent, CompiledKeymap, ContentToBackground, Mode, ModeIndicator, RunResponse, TreeLeaf } from "../shared/index.ts";
+import type { BackgroundToContent, CompiledKeymap, ContentToBackground, Mode, ModeIndicator, ReadTabAddress, RunResponse, TreeLeaf } from "../shared/index.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY, COMPILED_KEYMAP_VERSION, DEFAULT_MODE_INDICATOR, current_keymap } from "../shared/index.ts";
 import { create_matcher, event_to_token } from "../shared/keys/index.ts";
+import { ignores_any_address } from "../shared/match_pattern.ts";
 import { message_of } from "./bundle_host.ts";
 import type { BundleHostApi } from "./bundle_host.ts";
 import { bundles } from "./bundles.ts";
@@ -17,7 +18,7 @@ import { wire_mode_reports } from "./mode_report.ts";
 import { page_mode } from "./page_mode.ts";
 import { counted_invocations, run_content_steps, run_in_order } from "./run_content.ts";
 import { read_context_source } from "./context.ts";
-import { focus_page_content } from "./handlers/focus.ts";
+import { focus_page_content, start_content_once } from "./handlers/focus.ts";
 import { blur_focused_element } from "./handlers/page.ts";
 
 // Until the tree is read the setting is unknown, and the default applies.
@@ -31,7 +32,7 @@ function refresh_mode_indicator(): void {
 
 const script_started_ms = performance.now();
 
-// A cross-origin frame cannot reach the top document. The manifest injects into all frames.
+// A cross-origin frame cannot reach the top document. The manifest injects into all frames, and such a frame starts on its first focus.
 function can_reach_top_document(): boolean {
   try {
     return Boolean(window.top?.document);
@@ -157,16 +158,13 @@ let matcher_installed = false;
 // The first usable tree decides ignore mode, whether it came at load or later through `tree_updated` (after an upgrade).
 let ignore_checked = false;
 
-// A stored regex that does not compile ignores nothing, so keys keep working.
-function is_ignored_site(source: string | undefined): boolean {
-  try {
-    return source !== undefined && new RegExp(source).test(location.href);
-  } catch {
-    return false;
-  }
+// A frame of another site cannot read the tab's address, so it asks the background.
+function read_tab_address(): Promise<string | undefined> {
+  if (can_reach_top_document()) return Promise.resolve(window.top?.location.href);
+  return browser.runtime.sendMessage({ type: "read_tab_address" } satisfies ReadTabAddress).then((address) => address as string | undefined, () => undefined);
 }
 
-function install_matcher(keymap: CompiledKeymap | undefined): void {
+function install_matcher(keymap: CompiledKeymap | undefined, tab_address: string | undefined): void {
   const usable = current_keymap(keymap);
   // A tree stored before the setting existed has no value, which means the default.
   mode_indicator = usable?.mode_indicator ?? DEFAULT_MODE_INDICATOR;
@@ -176,7 +174,7 @@ function install_matcher(keymap: CompiledKeymap | undefined): void {
   matcher_installed = true;
   const first_usable = usable !== undefined && !ignore_checked;
   if (usable) ignore_checked = true;
-  if (first_usable && is_ignored_site(usable.ignore_regex)) page_mode.set_mode("ignore");
+  if (first_usable && ignores_any_address(usable.ignore_regex, [location.href, tab_address])) page_mode.set_mode("ignore");
   else if (first_install && is_editable_element(document.activeElement)) page_mode.focus_entered_editable();
   refresh_mode_indicator();
   key_flow.set_matcher(create_matcher(usable ?? { format_version: COMPILED_KEYMAP_VERSION, modes: {}, mode_indicator: DEFAULT_MODE_INDICATOR, which_key_delay_ms: 0 }), usable?.modes.browser);
@@ -218,6 +216,11 @@ function start(): void {
 
   page_mode.listen_display(refresh_mode_indicator);
 
+  // Both installs wait for the one tab address read, so a `tree_updated` that comes first cannot decide ignore mode on the frame address alone.
+  const tab_address_read = read_tab_address();
+  const install_after_tab_address = (keymap_read: Promise<CompiledKeymap | undefined>) =>
+    Promise.all([keymap_read, tab_address_read]).then(([keymap, tab_address]) => install_matcher(keymap, tab_address));
+
   browser.runtime.onMessage.addListener((raw: unknown) => {
     const message = raw as BackgroundToContent;
     if (message.type === "ping") return Promise.resolve(true);
@@ -231,21 +234,10 @@ function start(): void {
       return run_in_order(message.invocations);
     } else if (message.type === "refusal") show_toast(message.refusal.message, message.kind);
     else if (message.type === "set_mode") page_mode.set_mode(message.mode);
-    else if (message.type === "tree_updated") void read_keymap().then((keymap) => install_matcher(keymap));
+    else if (message.type === "tree_updated") void install_after_tab_address(read_keymap());
   });
 
-  void read_keymap()
-    .catch(() => undefined)
-    .then((keymap) => {
-      install_matcher(keymap);
-      publish_timing();
-    });
+  void install_after_tab_address(read_keymap().catch(() => undefined)).then(publish_timing);
 }
 
-// A second injection into the same page must not add a second set of listeners.
-const LOADED_FLAG = "desertfox_content_loaded";
-const loaded_flags = window as unknown as Record<string, boolean>;
-if (can_reach_top_document() && !loaded_flags[LOADED_FLAG]) {
-  loaded_flags[LOADED_FLAG] = true;
-  start();
-}
+start_content_once(start, window, can_reach_top_document() || document.hasFocus());

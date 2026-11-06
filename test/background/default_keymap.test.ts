@@ -197,3 +197,15 @@ test("the generated search and container keys compile against the full registry 
   assert.deepEqual(warnings, []);
   for (const prefix of ["s", "S", "c", "C"]) assert.ok((compiled.modes.normal!.children[prefix] as TreeBranch).children.a, `${prefix}a is bound`);
 });
+
+test("the frames filter defaults to the focus action, and ;f and gF are bound", () => {
+  const hint = registry.get("hint.run")!;
+  const action_of = (args: Record<string, unknown>) => (check_args(hint, args) as { args: Record<string, unknown> }).args.action;
+  assert.equal(action_of({ filter: "frames" }), "focus");
+  assert.equal(action_of({ filter: "frames", action: "tab" }), "tab");
+  assert.equal(action_of({ filter: "links" }), "here");
+  const normal = DEFAULT_KEYMAP.normal as Record<string, { id: string; args?: unknown; label?: string }>;
+  assert.deepEqual(normal[";f"], { id: "hint.run", args: { filter: "frames" }, label: "Focus frame" });
+  assert.equal(normal.gF!.id, "frame.exit");
+  assert.equal(registry.get("frame.exit")!.label, "Focus top page");
+});
