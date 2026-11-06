@@ -187,6 +187,43 @@ class MainChannelTest(InstallCase):
         self.assert_nothing_installed()
 
 
+class DataFolderTest(InstallCase):
+    def run_with_xdg(self, value):
+        self.serve(f"{MAIN_BASE}/desertfox-host", self.host_bytes)
+        env = {"PATH": self.bin, "HOME": self.home, "STUB_LOG": self.log, "STUB_ROUTES": self.routes, "TMPDIR": self.tmp.name, "XDG_DATA_HOME": value}
+        return subprocess.run([os.path.join(self.bin, "sh"), INSTALL, "main"], env=env, capture_output=True, text=True, timeout=60)
+
+    def test_relative_xdg_data_home_is_ignored(self):
+        done = self.run_with_xdg("relative/data")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertTrue(os.path.isfile(self.host_path))
+        self.assertFalse(os.path.exists(os.path.join(self.home, "relative")))
+
+    def test_absolute_xdg_data_home_is_used(self):
+        data_home = os.path.join(self.tmp.name, "xdg_data")
+        done = self.run_with_xdg(data_home)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertTrue(os.path.isfile(os.path.join(data_home, "desertfox", "desertfox-host")))
+        with open(self.manifest_path) as file:
+            self.assertEqual(json.load(file)["path"], os.path.join(data_home, "desertfox", "desertfox-host"))
+
+
+class TruncatedScriptTest(InstallCase):
+    def test_a_script_cut_before_the_last_line_installs_nothing(self):
+        with open(INSTALL) as file:
+            lines = file.read().splitlines()
+        self.assertEqual(lines[-1], 'main "$@"')
+        cut = os.path.join(self.tmp.name, "cut.sh")
+        with open(cut, "w") as file:
+            file.write("\n".join(lines[:-1]))
+        self.serve(f"{MAIN_BASE}/desertfox-host", self.host_bytes)
+        env = {"PATH": self.bin, "HOME": self.home, "STUB_LOG": self.log, "STUB_ROUTES": self.routes, "TMPDIR": self.tmp.name}
+        done = subprocess.run([os.path.join(self.bin, "sh"), cut, "main"], env=env, capture_output=True, text=True, timeout=60)
+        self.assertEqual(done.returncode, 0)
+        self.assertEqual(self.curl_urls(), [])
+        self.assert_nothing_installed()
+
+
 class ArgumentAndPythonTest(InstallCase):
     def test_bad_arguments_stop_before_any_fetch(self):
         for args in ((), ("1.2",), ("0.1.5; rm -rf",), ("--bogus", "main"), ("--channel", "beta", "0.1.5"), ("0.1.5", "0.1.6")):
@@ -263,6 +300,43 @@ class ReleaseStepTest(InstallCase):
                 self.serve(f"{base}/{name}", file.read())
         done = self.run_install("0.1.5")
         self.assertEqual(done.returncode, 0, done.stderr)
+
+    def test_release_targets_the_head_commit(self):
+        done = self.publish()
+        self.assertEqual(done.returncode, 0, done.stderr)
+        head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=os.path.dirname(HOST_DIR), capture_output=True, text=True).stdout.strip()
+        with open(self.gh_log) as file:
+            self.assertIn(f"--target {head}", file.read())
+
+    def test_bump_is_committed_and_pushed_before_the_tag(self):
+        """Runs the commit and push step in a throwaway repo with a local bare remote."""
+        repo_root = os.path.dirname(HOST_DIR)
+        work = os.path.join(self.tmp.name, "work")
+        remote = os.path.join(self.tmp.name, "remote.git")
+        os.makedirs(os.path.join(work, "src"))
+        shutil.copy(os.path.join(repo_root, "justfile"), work)
+        git_env = dict(os.environ, GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@e", GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@e")
+
+        def git(*args, cwd=work):
+            return subprocess.run(["git", *args], cwd=cwd, env=git_env, capture_output=True, text=True, check=True).stdout.strip()
+
+        git("init", "-q", "--bare", remote, cwd=self.tmp.name)
+        git("init", "-q", "-b", "release-branch")
+        git("remote", "add", "origin", remote)
+        for name, text in (("package.json", '{"version": "0.0.1"}'), ("package-lock.json", "{}"), ("src/manifest.json", "{}"), ("other.txt", "keep")):
+            with open(os.path.join(work, name), "w") as file:
+                file.write(text)
+        git("add", "-A")
+        git("commit", "-q", "-m", "base")
+        with open(os.path.join(work, "package.json"), "w") as file:
+            file.write('{"version": "0.0.2"}')
+        with open(os.path.join(work, "other.txt"), "w") as file:
+            file.write("unrelated edit")
+        done = subprocess.run(["just", "release_commit_push"], cwd=work, env=git_env, capture_output=True, text=True, timeout=60)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual(git("log", "-1", "--format=%s"), "chore(release): bump version to 0.0.2")
+        self.assertEqual(git("rev-parse", "HEAD"), git("rev-parse", "release-branch", cwd=remote))
+        self.assertEqual(git("status", "--porcelain"), "M other.txt")
 
     def test_dry_run_creates_nothing(self):
         done = self.publish(RELEASE_DRY_RUN="1")

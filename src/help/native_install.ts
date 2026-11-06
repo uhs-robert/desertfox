@@ -80,19 +80,43 @@ async function build_panel(): Promise<HTMLElement> {
   return panel;
 }
 
+export type PanelControllerDeps<Panel> = {
+  is_wanted: () => boolean;
+  build: () => Promise<Panel>;
+  show: (panel: Panel) => void;
+  hide: (panel: Panel) => void;
+};
+
+// `sync` is called on every route change. A build that finishes after a newer `sync` started, or after the route left, is dropped,
+// so two quick changes never leave two panels.
+export function create_panel_controller<Panel>(deps: PanelControllerDeps<Panel>): { sync: () => Promise<void> } {
+  let shown: Panel | undefined;
+  let latest_sync = 0;
+  return {
+    sync: async () => {
+      const this_sync = ++latest_sync;
+      if (!deps.is_wanted()) {
+        if (shown !== undefined) deps.hide(shown);
+        shown = undefined;
+        return;
+      }
+      if (shown !== undefined) return;
+      const built = await deps.build();
+      if (this_sync !== latest_sync || shown !== undefined || !deps.is_wanted()) return;
+      shown = built;
+      deps.show(built);
+    },
+  };
+}
+
 // The panel sits outside the body because the help router rebuilds the body on every route change.
 export function mount_native_install(): void {
-  let panel: HTMLElement | undefined;
-  const sync = async (): Promise<void> => {
-    const wanted = location.hash === NATIVE_INSTALL_HASH;
-    if (wanted && panel === undefined) {
-      panel = await build_panel();
-      document.documentElement.append(panel);
-    } else if (!wanted && panel !== undefined) {
-      panel.remove();
-      panel = undefined;
-    }
-  };
-  window.addEventListener("hashchange", () => void sync());
-  void sync();
+  const controller = create_panel_controller<HTMLElement>({
+    is_wanted: () => location.hash === NATIVE_INSTALL_HASH,
+    build: build_panel,
+    show: (panel) => document.documentElement.append(panel),
+    hide: (panel) => panel.remove(),
+  });
+  window.addEventListener("hashchange", () => void controller.sync());
+  void controller.sync();
 }

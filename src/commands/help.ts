@@ -1,6 +1,7 @@
 import { help_whichkey } from "../content/handlers/lazy_bundle.ts";
-import { help_name_choices, help_name_url, plan_help_tab } from "../background/open_help.ts";
+import { help_name_choices, help_name_url } from "../background/open_help.ts";
 import { HELP_PAGE_FILE } from "../help/route.ts";
+import { open_help_url } from "./help_tab.ts";
 import { define, registry } from "../shared/registry/index.ts";
 
 define("help.whichkey", {
@@ -25,13 +26,6 @@ define("help.open", {
     const name = args.name as string;
     const help_page_url = browser.runtime.getURL(HELP_PAGE_FILE);
     const url = help_name_url(help_page_url, name, command_ids) as string; // `strict` limits name to the choices that resolve
-    const asking_tab = ctx.tab_id === undefined ? undefined : await browser.tabs.get(ctx.tab_id);
-    const plan = plan_help_tab(help_page_url, url, { id: ctx.tab_id, window_id: ctx.window_id, url: asking_tab?.url });
-    if (plan.kind === "update") {
-      await browser.tabs.update(plan.tab_id, { url: plan.url });
-      return;
-    }
-    // Firefox rejects an openerTabId from another window, so the window goes with it.
-    await browser.tabs.create({ url: plan.url, active: true, ...plan.opener });
+    await open_help_url(ctx, help_page_url, url);
   },
 });
