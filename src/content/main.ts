@@ -158,15 +158,13 @@ let matcher_installed = false;
 // The first usable tree decides ignore mode, whether it came at load or later through `tree_updated` (after an upgrade).
 let ignore_checked = false;
 
-let tab_address: string | undefined;
-
 // A frame of another site cannot read the tab's address, so it asks the background.
 function read_tab_address(): Promise<string | undefined> {
   if (can_reach_top_document()) return Promise.resolve(window.top?.location.href);
   return browser.runtime.sendMessage({ type: "read_tab_address" } satisfies ReadTabAddress).then((address) => address as string | undefined, () => undefined);
 }
 
-function install_matcher(keymap: CompiledKeymap | undefined): void {
+function install_matcher(keymap: CompiledKeymap | undefined, tab_address: string | undefined): void {
   const usable = current_keymap(keymap);
   // A tree stored before the setting existed has no value, which means the default.
   mode_indicator = usable?.mode_indicator ?? DEFAULT_MODE_INDICATOR;
@@ -218,6 +216,11 @@ function start(): void {
 
   page_mode.listen_display(refresh_mode_indicator);
 
+  // Both installs wait for the one tab address read, so a `tree_updated` that comes first cannot decide ignore mode on the frame address alone.
+  const tab_address_read = read_tab_address();
+  const install_after_tab_address = (keymap_read: Promise<CompiledKeymap | undefined>) =>
+    Promise.all([keymap_read, tab_address_read]).then(([keymap, tab_address]) => install_matcher(keymap, tab_address));
+
   browser.runtime.onMessage.addListener((raw: unknown) => {
     const message = raw as BackgroundToContent;
     if (message.type === "ping") return Promise.resolve(true);
@@ -231,15 +234,10 @@ function start(): void {
       return run_in_order(message.invocations);
     } else if (message.type === "refusal") show_toast(message.refusal.message, message.kind);
     else if (message.type === "set_mode") page_mode.set_mode(message.mode);
-    else if (message.type === "tree_updated") void read_keymap().then((keymap) => install_matcher(keymap));
+    else if (message.type === "tree_updated") void install_after_tab_address(read_keymap());
   });
 
-  void Promise.all([read_keymap().catch(() => undefined), read_tab_address()])
-    .then(([keymap, address]) => {
-      tab_address = address;
-      install_matcher(keymap);
-      publish_timing();
-    });
+  void install_after_tab_address(read_keymap().catch(() => undefined)).then(publish_timing);
 }
 
 start_content_once(start, window, can_reach_top_document() || document.hasFocus());
