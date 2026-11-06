@@ -212,7 +212,7 @@ test("a conditional default reads as the value and its condition", () => {
     intent: "Open.",
     runs_in: "background",
     params: [
-      { name: "url", type: "string", main: true, default: { value: "", when: { where: ["tab", "background", "window"] } } },
+      { name: "url", type: "string", main: true, default: [{ value: "", when: { where: ["tab", "background", "window"] } }] },
       { name: "where", type: "enum", values: ["here", "tab", "background", "window"], default: "here" },
     ],
     run: () => {},

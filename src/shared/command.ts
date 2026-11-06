@@ -20,10 +20,11 @@ export type ParamValue = string | number | boolean;
 // The param is valid only if the named sibling param has one of these values.
 export type ParamWhen = Record<string, readonly ParamValue[]>;
 
-// A default that applies only while the named sibling param has one of the listed values. Otherwise the param has no default and is required.
-export type ConditionalDefault = { value: ParamValue; when: ParamWhen };
+// One arm of a default list: its value is the default while the named sibling param has one of the listed values.
+export type DefaultArm = { value: ParamValue; when: ParamWhen };
 
-export type ParamDefault = ParamValue | ContextSource | ConditionalDefault;
+// A plain value, a context source, or an ordered list of arms with an optional plain value last. The first arm that holds wins, else the last value applies, else the param has no default and is required.
+export type ParamDefault = ParamValue | ContextSource | readonly (DefaultArm | ParamValue)[];
 
 // Value lists filled at run time from the user's config or from Firefox. `tabs`, `bookmarks`, `windows` and `headings` go on a string param and
 // only feed the completion list. The page asks the background for the first three (`complete_items`) and the host script for the headings, nobody checks a typed value against them.

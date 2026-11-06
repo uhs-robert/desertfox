@@ -1,7 +1,7 @@
 // Small readers over a command's params, shared by the define checks, the
 // validator, the parser and the usage line.
 
-import type { CommandDef, ConditionalDefault, ContextSource, DynamicValues, ParamDef, ParamValue } from "../command.ts";
+import type { CommandDef, ContextSource, DefaultArm, DynamicValues, ParamDef, ParamValue } from "../command.ts";
 
 export const CONTEXT_SOURCE_NAMES = ["current_url", "selection", "clipboard"] as const;
 
@@ -11,8 +11,10 @@ export function is_context_source(value: unknown): value is ContextSource {
   return CONTEXT_SOURCE_NAMES.some((name) => name === from);
 }
 
-export function is_conditional_default(value: unknown): value is ConditionalDefault {
-  return typeof value === "object" && value !== null && "value" in value && "when" in value;
+export type DefaultList = Extract<NonNullable<ParamDef["default"]>, readonly unknown[]>;
+
+export function is_default_list(value: unknown): value is DefaultList {
+  return Array.isArray(value);
 }
 
 // What the param declares as its default: "" for an optional param, else its `default` field.
@@ -20,45 +22,74 @@ export function declared_default(param: ParamDef): ParamDef["default"] {
   return param.optional ? "" : param.default;
 }
 
-// The default that applies once the sibling values are known, or undefined when the param has none and is required. `sibling` reads a sibling's value.
-export function applicable_default(param: ParamDef, sibling: (name: string) => unknown): Exclude<ParamDef["default"], ConditionalDefault> | undefined {
-  const declared = declared_default(param);
-  if (!is_conditional_default(declared)) return declared;
-  const [name, allowed] = Object.entries(declared.when)[0] as [string, readonly ParamValue[]];
-  return allowed.includes(sibling(name) as ParamValue) ? declared.value : undefined;
+// The arms of a default list in order, and the plain value last (undefined when the list ends on an arm).
+export function split_default(list: DefaultList): { arms: DefaultArm[]; fallback: ParamValue | undefined } {
+  const is_arm = (item: unknown): item is DefaultArm => typeof item === "object" && item !== null;
+  const last = list[list.length - 1];
+  return { arms: list.filter(is_arm), fallback: is_arm(last) ? undefined : last };
 }
 
-// `applicable_default` for a param of `command`, reading siblings from `values` (a sibling not in `values` counts by its own plain default).
+// The name of the one sibling an arm reads, and the values that make it hold.
+export function arm_condition(arm: DefaultArm): [string, readonly ParamValue[]] {
+  return Object.entries(arm.when)[0] as [string, readonly ParamValue[]];
+}
+
+// The default of a param of `command` once `values` are known, or undefined when it has none and is required.
+// A sibling missing from `values` counts by its own resolved default, so defaults may chain. `visiting` stops a cycle that define refuses anyway.
 // Every consumer that asks "does this param have a default" or "is it required" goes through here.
-export function default_of(command: Pick<CommandDef, "params">, param: ParamDef, values: Record<string, unknown>): ReturnType<typeof applicable_default> {
-  return applicable_default(param, (name) => {
+export function default_of(command: Pick<CommandDef, "params">, param: ParamDef, values: Record<string, unknown>, visiting: readonly string[] = []): ParamValue | ContextSource | undefined {
+  const declared = declared_default(param);
+  if (!is_default_list(declared)) return declared;
+  const { arms, fallback } = split_default(declared);
+  const sibling_value = (name: string): unknown => {
     if (values[name] !== undefined) return values[name];
     const sibling = find_param(command, name);
-    const declared = sibling && declared_default(sibling);
-    return sibling && !is_conditional_default(declared) ? declared : undefined;
+    return sibling && !visiting.includes(name) ? default_of(command, sibling, values, [...visiting, param.name]) : undefined;
+  };
+  const arm = arms.find((candidate) => {
+    const [name, allowed] = arm_condition(candidate);
+    return allowed.includes(sibling_value(name) as ParamValue);
   });
+  return arm ? arm.value : fallback;
 }
 
-// The default value to compare a given value against, whichever form the default has.
-export function default_value(param: ParamDef): ParamValue | ContextSource | undefined {
+// Every value the default can take in some context.
+export function possible_defaults(param: ParamDef): (ParamValue | ContextSource)[] {
   const declared = declared_default(param);
-  return is_conditional_default(declared) ? declared.value : declared;
+  if (declared === undefined) return [];
+  if (!is_default_list(declared)) return [declared];
+  const { arms, fallback } = split_default(declared);
+  return [...arms.map((arm) => arm.value), ...(fallback === undefined ? [] : [fallback])];
 }
 
-// A default that is a plain value: not a context source, not conditional.
+// Whether `value` is the default in every context, so it needs no flag, short, phrase or description: the state without the flag.
+// A value that is the default only under some arms is also a choice elsewhere and keeps all four.
+export function always_default(param: ParamDef, value: unknown): boolean {
+  const declared = declared_default(param);
+  if (!is_default_list(declared)) return value === declared;
+  return split_default(declared).fallback !== undefined && possible_defaults(param).every((possible) => possible === value);
+}
+
+// A default that is a plain value: not a context source, and for a list its plain last value.
 export function literal_default(param: ParamDef): ParamValue | undefined {
-  const value = declared_default(param);
-  return value === undefined || is_context_source(value) || is_conditional_default(value) ? undefined : value;
+  const declared = declared_default(param);
+  const value = is_default_list(declared) ? split_default(declared).fallback : declared;
+  return value === undefined || is_context_source(value) ? undefined : value;
 }
 
-// A default as the help page prints it.
+// A default as the help page prints it: the plain value first, then each arm in order.
 export function describe_default(param: ParamDef): string {
-  const value = declared_default(param);
-  if (value === undefined) return "";
-  if (is_context_source(value)) return `from ${value.from}`;
-  if (!is_conditional_default(value)) return String(value);
-  const [name, allowed] = Object.entries(value.when)[0] as [string, readonly ParamValue[]];
-  return `${JSON.stringify(value.value)} when ${name} is ${join_alternatives(allowed)}`;
+  const declared = declared_default(param);
+  if (declared === undefined) return "";
+  if (is_context_source(declared)) return `from ${declared.from}`;
+  if (!is_default_list(declared)) return String(declared);
+  const { arms, fallback } = split_default(declared);
+  const shown = (value: ParamValue) => (value === "" ? '""' : String(value));
+  const described = arms.map((arm) => {
+    const [name, allowed] = arm_condition(arm);
+    return `${shown(arm.value)} when ${name} is ${join_alternatives(allowed)}`;
+  });
+  return [...(fallback === undefined ? [] : [shown(fallback)]), ...described].join("; ");
 }
 
 export function is_dynamic_values(values: ParamDef["values"]): values is DynamicValues {

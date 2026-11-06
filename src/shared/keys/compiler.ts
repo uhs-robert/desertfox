@@ -9,7 +9,7 @@ import { DEFAULT_SETTINGS } from "../config.ts";
 import type { Settings } from "../config.ts";
 import type { BoundInvocation, KeyBinding } from "../invocation.ts";
 import type { KeymapConfig, KeymapMode } from "../keymap.ts";
-import { default_value, is_dynamic_values } from "../registry/params.ts";
+import { default_of, is_dynamic_values } from "../registry/params.ts";
 import { parse_sequence } from "./notation.ts";
 
 export type CommandInfo = { runs_in: RunsIn; label: string; count: CountBehavior; params?: readonly ParamDef[] };
@@ -88,9 +88,9 @@ function derived_label(invocation: BoundInvocation, info: CommandInfo, settings:
         const engine = typeof value === "string" && value !== "" ? value : (settings.default_engine ?? DEFAULT_SETTINGS.default_engine);
         label = sources.engine_labels[engine] ?? label;
       }
-    } else if (param.type === "enum" && typeof value === "string" && value !== default_value(param)) {
+    } else if (param.type === "enum" && typeof value === "string" && value !== default_of(info, param, invocation.args ?? {})) {
       phrases.push(param.value_labels?.[value] ?? value.replaceAll("_", " "));
-    } else if (param.type === "bool" && value === true && value !== default_value(param)) {
+    } else if (param.type === "bool" && value === true && value !== default_of(info, param, invocation.args ?? {})) {
       phrases.push(param.name.replaceAll("_", " "));
     }
   }

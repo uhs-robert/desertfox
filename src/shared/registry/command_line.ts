@@ -178,7 +178,7 @@ function looks_like_flag(word: Token): boolean {
 
 type FlagResult = { param: ParamDef; value: unknown } | { error: string };
 
-function read_flag(command_word: string, params: readonly ParamDef[], word: Token): FlagResult {
+export function read_flag(command_word: string, params: readonly ParamDef[], word: Token): FlagResult {
   const equals = word.text.indexOf("=");
   const head = equals < 0 ? word.text : word.text.slice(0, equals);
   const value_text = equals < 0 ? undefined : word.text.slice(equals + 1);

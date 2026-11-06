@@ -1,7 +1,7 @@
 // The one-sentence text that lists show: the first sentence of a command intent, and the description of a flag.
 
 import type { CommandDef, ParamDef } from "../command.ts";
-import { default_value, flag_params, static_values } from "./params.ts";
+import { always_default, flag_params, static_values } from "./params.ts";
 
 export const SUMMARY_MAX_LENGTH = 60;
 
@@ -60,5 +60,5 @@ function described_flags(param: ParamDef): [string | undefined, string | undefin
   const values = static_values(param);
   if (param.type !== "enum" || !values) return [[undefined, typeof param.description === "string" ? param.description : undefined]];
   const map = typeof param.description === "object" ? param.description : {};
-  return values.filter((value) => value !== default_value(param)).map((value) => [value, map[value]]);
+  return values.filter((value) => !always_default(param, value)).map((value) => [value, map[value]]);
 }

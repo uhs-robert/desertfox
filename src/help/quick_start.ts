@@ -3,7 +3,7 @@
 
 import type { KeymapMode } from "../shared/keymap.ts";
 import type { CommandMeta } from "../shared/command.ts";
-import { literal_default } from "../shared/registry/params.ts";
+import { default_of } from "../shared/registry/params.ts";
 import { print_command } from "../shared/registry/print_command.ts";
 import type { CompiledKeymap, TreeNode } from "../shared/prefix_tree.ts";
 import type { Block, Inline } from "./blocks.ts";
@@ -15,12 +15,12 @@ type Binding = { mode: KeymapMode; id: string; args: Args; test: (args: Args) =>
 
 // A user binding that spells out a default (`direction = "forward"`) and one that leaves it out mean the same, so both sides read the defaults.
 function with_defaults(commands: CommandMeta[], id: string, args: Args | undefined): Args {
-  const filled: Args = {};
-  for (const param of commands.find((command) => command.id === id)?.params ?? []) {
-    const literal = literal_default(param);
-    if (literal !== undefined) filled[param.name] = literal;
+  const command = commands.find((candidate) => candidate.id === id);
+  const filled: Args = { ...args };
+  for (const param of command?.params ?? []) {
+    const resolved = default_of(command!, param, filled);
+    if (filled[param.name] === undefined && resolved !== undefined && typeof resolved !== "object") filled[param.name] = resolved;
   }
-  for (const [name, value] of Object.entries(args ?? {})) filled[name] = value;
   return filled;
 }
 
