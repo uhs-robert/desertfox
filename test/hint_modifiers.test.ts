@@ -27,7 +27,7 @@ const hint = (args: Record<string, unknown>, label?: string) => ({ id: "hint.run
 
 // A small group with one modifier of each kind, so each test reads one rule.
 function keymap_with(normal: Record<string, unknown>, modifiers: NonNullable<KeymapConfig["modifiers"]>): KeymapConfig {
-  return { group_names: {}, modifiers, normal: { ";l": hint({ filter: "links" }, "Click link"), ";i": hint({ filter: "inputs" }, "Click input"), ...normal } as never };
+  return { group_names: {}, modifiers, normal: { ";l": { ...hint({ filter: "links" }, "Click link"), variant_label: "Link" }, ";i": hint({ filter: "inputs" }, "Click input"), ...normal } as never };
 }
 
 test("a modifier derives a variant of each key in its group, with its args added and the sibling label kept", () => {
@@ -36,7 +36,7 @@ test("a modifier derives a variant of each key in its group, with its args added
   assert.deepEqual(args_at(compiled, ";", "b", "l"), { action: "background", filter: "links", text: "", rapid: false });
   assert.deepEqual(args_at(compiled, ";", "b", "i")?.action, "background");
   const variant = node_at(compiled, ";", "b", "l");
-  assert.equal(variant?.kind === "leaf" && variant.label, "Click link");
+  assert.equal(variant?.kind === "leaf" && variant.label, "Link");
   assert.equal((node_at(compiled, ";", "b") as TreeBranch).label, "Background tab");
 });
 
@@ -78,6 +78,13 @@ test("a user key under the modifier wins over the variant, with no warning", () 
   assert.deepEqual(warnings, []);
   assert.equal(args_at(compiled, ";", "b", "l")?.filter, "images");
   assert.equal(args_at(compiled, ";", "b", "i")?.action, "background");
+});
+
+test("a null under a modifier removes that variant and leaves its siblings", () => {
+  const { compiled, warnings } = compile(keymap_with({ ";bl": null }, { ";b": { action: "background" } }));
+  assert.deepEqual(warnings, []);
+  assert.equal(node_at(compiled, ";", "b", "l"), undefined);
+  assert.ok(node_at(compiled, ";", "b", "i"));
 });
 
 test("the default modifiers give the owner's keys and no stacked or refused ones", () => {
