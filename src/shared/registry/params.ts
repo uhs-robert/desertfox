@@ -29,9 +29,9 @@ export function split_default(list: DefaultList): { arms: DefaultArm[]; fallback
   return { arms: list.filter(is_arm), fallback: is_arm(last) ? undefined : last };
 }
 
-// The name of the one sibling an arm reads, and the values that make it hold.
-export function arm_condition(arm: DefaultArm): [string, readonly ParamValue[]] {
-  return Object.entries(arm.when)[0] as [string, readonly ParamValue[]];
+// The siblings an arm reads, each with the values that make it hold. The arm holds when every one does.
+export function arm_conditions(arm: DefaultArm): [string, readonly ParamValue[]][] {
+  return Object.entries(arm.when);
 }
 
 // The default of a param of `command` once `values` are known, or undefined when it has none and is required.
@@ -46,10 +46,7 @@ export function default_of(command: Pick<CommandDef, "params">, param: ParamDef,
     const sibling = find_param(command, name);
     return sibling && !visiting.includes(name) ? default_of(command, sibling, values, [...visiting, param.name]) : undefined;
   };
-  const arm = arms.find((candidate) => {
-    const [name, allowed] = arm_condition(candidate);
-    return allowed.includes(sibling_value(name) as ParamValue);
-  });
+  const arm = arms.find((candidate) => arm_conditions(candidate).every(([name, allowed]) => allowed.includes(sibling_value(name) as ParamValue)));
   return arm ? arm.value : fallback;
 }
 
@@ -77,7 +74,7 @@ export function literal_default(param: ParamDef): ParamValue | undefined {
   return value === undefined || is_context_source(value) ? undefined : value;
 }
 
-// A default as the help page prints it: the plain value first, then each arm in order.
+// A default as the help page prints it: the plain value first, then each arm in order, an arm with several conditions joined by "and".
 export function describe_default(param: ParamDef): string {
   const declared = declared_default(param);
   if (declared === undefined) return "";
@@ -86,8 +83,8 @@ export function describe_default(param: ParamDef): string {
   const { arms, fallback } = split_default(declared);
   const shown = (value: ParamValue) => (value === "" ? '""' : String(value));
   const described = arms.map((arm) => {
-    const [name, allowed] = arm_condition(arm);
-    return `${shown(arm.value)} when ${name} is ${join_alternatives(allowed)}`;
+    const conditions = arm_conditions(arm).map(([name, allowed]) => `${name} is ${join_alternatives(allowed)}`);
+    return `${shown(arm.value)} when ${conditions.join(" and ")}`;
   });
   return [...(fallback === undefined ? [] : [shown(fallback)]), ...described].join("; ");
 }

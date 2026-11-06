@@ -3,7 +3,7 @@
 
 import type { CommandDef, DefaultArm, ParamDef, ParamValue } from "../command.ts";
 import { MODES } from "../command.ts";
-import { always_default, arm_condition, declared_default, find_param, is_context_source, is_default_list, is_dynamic_values, split_default, static_values } from "./params.ts";
+import { always_default, arm_conditions, declared_default, find_param, is_context_source, is_default_list, is_dynamic_values, split_default, static_values } from "./params.ts";
 import { is_setting_name } from "../settings_schema.ts";
 import { description_problem } from "./summary.ts";
 
@@ -160,7 +160,7 @@ function check_params(input: CommandInput, fail: Fail): void {
   if (main && main.type !== "string") fail(`params.${main.name}.main`, "only a string param can be main");
 }
 
-// Each arm reads one sibling like a `when`. Only the last item may be a plain value, and a param with `when` takes a plain default only.
+// Each arm reads one or more siblings like a `when`, all of which must hold. Only the last item may be a plain value, and a param with `when` takes a plain default only.
 function check_default_arms(input: CommandInput, param: ParamDef, at: string, fail: Fail): void {
   const list = param.default as readonly unknown[];
   if (list.length === 0) fail(`${at}.default`, "a default list must not be empty");
@@ -172,15 +172,15 @@ function check_default_arms(input: CommandInput, param: ParamDef, at: string, fa
       if (index !== list.length - 1) fail(here, "a plain value must be the last item, because it matches whatever comes before it");
       return;
     }
-    check_when(input, { ...param, when: (item as DefaultArm).when }, here, fail);
+    check_when(input, { ...param, when: (item as DefaultArm).when }, here, fail, true);
   });
 }
 
-// An arm names the sibling it reads, so the arms of all params form a graph that must have no cycle.
+// An arm names the siblings it reads, so the arms of all params form a graph that must have no cycle.
 function check_default_cycles(input: CommandInput, fail: Fail): void {
   const reads = (name: string): string[] => {
     const declared = find_param(input, name) && declared_default(find_param(input, name) as ParamDef);
-    return is_default_list(declared) ? split_default(declared).arms.map((arm) => arm_condition(arm)[0]) : [];
+    return is_default_list(declared) ? split_default(declared).arms.flatMap((arm) => arm_conditions(arm).map(([name]) => name)) : [];
   };
   const visit = (name: string, path: string[]): void => {
     const loop_at = path.indexOf(name);
@@ -296,18 +296,26 @@ function value_problem(param: ParamDef, value: unknown): string | null {
   return null;
 }
 
-function check_when(input: CommandInput, param: ParamDef, at: string, fail: Fail): void {
-  const keys = Object.keys(param.when ?? {});
-  if (keys.length !== 1) fail(`${at}.when`, "must name exactly one other param");
-  const sibling_name = keys[0] as string;
-  if (sibling_name === param.name) fail(`${at}.when`, "must not name the param itself");
-  const sibling = find_param(input, sibling_name);
-  if (!sibling) return fail(`${at}.when`, `names "${sibling_name}", which is not a param`);
-  const allowed: readonly ParamValue[] = param.when?.[sibling_name] ?? [];
-  if (allowed.length === 0) fail(`${at}.when.${sibling_name}`, "must list at least one value");
-  for (const value of allowed) {
-    const problem = value_problem(sibling, value);
-    if (problem) fail(`${at}.when.${sibling_name}`, problem);
+// A param's own `when` names exactly one sibling. An arm of a default list may name several, which must all hold.
+function check_when(input: CommandInput, param: ParamDef, at: string, fail: Fail, many = false): void {
+  const entries = Object.entries(param.when ?? {});
+  if (entries.length === 0) fail(`${at}.when`, many ? "must name at least one other param" : "must name exactly one other param");
+  if (entries.length > 1 && !many) fail(`${at}.when`, "must name exactly one other param");
+  for (const [sibling_name, allowed] of entries) {
+    if (sibling_name === param.name) {
+      fail(`${at}.when`, "must not name the param itself");
+      continue;
+    }
+    const sibling = find_param(input, sibling_name);
+    if (!sibling) {
+      fail(`${at}.when`, `names "${sibling_name}", which is not a param`);
+      continue;
+    }
+    if (allowed.length === 0) fail(`${at}.when.${sibling_name}`, "must list at least one value");
+    for (const value of allowed) {
+      const problem = value_problem(sibling, value);
+      if (problem) fail(`${at}.when.${sibling_name}`, problem);
+    }
   }
 }
 
