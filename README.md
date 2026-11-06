@@ -35,7 +35,7 @@ DesertFox lets you browse the web without the mouse. Click any link, button or i
 
 ## 🔍 How it compares
 
-DesertFox is for Firefox users who want keyboard browsing and keep their other add-ons. These facts come from each project's source and its Mozilla download in November 2026.
+DesertFox is for Firefox users who want keyboard browsing and keep their other add-ons. These facts come from each project's source and, for add-ons, its Mozilla download in November 2026.
 
 | Feature | DesertFox | Vimium | Tridactyl | qutebrowser |
 | --- | --- | --- | --- | --- |
@@ -50,9 +50,9 @@ DesertFox is for Firefox users who want keyboard browsing and keep their other a
 | Containers | yes | no | yes | no |
 | Config file | yes | no | yes | yes |
 | Works with other Firefox add-ons | yes | yes | yes | no |
-| Script loaded on every page | 15 KB | 254 KB | 1.1 MB | none |
+| Script loaded on every page | 15 KB | 254 KB | 1.1 MB | n/a |
 
-Vimium hints do more than click, but each action is a separate key and there are no hint filters. Tridactyl has `:help` and `:tutor` but no key popup. qutebrowser is a separate browser, so it runs no Firefox add-ons such as uBlock Origin, Dark Reader or password managers. It has its own ad blocking, dark mode and password scripts.
+Vimium hints do more than click, but each action is a separate key and it has only an optional text filter. Tridactyl has `:help` and `:tutor` but no key popup. qutebrowser is a separate browser, so it runs no Firefox add-ons such as uBlock Origin, Dark Reader or password managers. It has its own ad blocking, dark mode and password scripts.
 
 The sizes are as shipped. DesertFox is minified and the other two are not, and DesertFox loads hint and caret code on first use. The table shows size, not page speed.
 
