@@ -200,7 +200,7 @@ export const DEFAULT_KEYMAP: KeymapConfig = {
     ";h": { id: "hint.run", args: { action: "hover", filter: "all" }, label: "Hover element" },
     ";l": { id: "hint.run", args: { filter: "links" }, label: "Click link" },
     ";I": { id: "hint.run", args: { filter: "images" }, label: "Open image in new tab" },
-    ";f": { id: "hint.run", args: { action: "focus", filter: "frames" }, label: "Focus frame" },
+    ";f": { id: "hint.run", args: { filter: "frames" }, label: "Focus frame" },
     ";m": { id: "hint.run", args: { filter: "media" }, label: "Play or pause media" },
     ":": { id: "cmdline.open" },
     "/": { id: "find.open", label: "Find forward" },

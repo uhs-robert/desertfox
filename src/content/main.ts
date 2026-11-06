@@ -1,9 +1,10 @@
 // Content script entry: a capture listener on keydown, the compiled keymap from
-// storage, and the modes. Runs in the top frame and in same-origin frames.
+// storage, and the modes. Runs in every frame. A frame of another site starts on its first focus.
 
-import type { BackgroundToContent, CompiledKeymap, ContentToBackground, Mode, ModeIndicator, RunResponse, TreeLeaf } from "../shared/index.ts";
+import type { BackgroundToContent, CompiledKeymap, ContentToBackground, Mode, ModeIndicator, ReadTabAddress, RunResponse, TreeLeaf } from "../shared/index.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY, COMPILED_KEYMAP_VERSION, DEFAULT_MODE_INDICATOR, current_keymap } from "../shared/index.ts";
 import { create_matcher, event_to_token } from "../shared/keys/index.ts";
+import { ignores_any_address } from "../shared/match_pattern.ts";
 import { message_of } from "./bundle_host.ts";
 import type { BundleHostApi } from "./bundle_host.ts";
 import { bundles } from "./bundles.ts";
@@ -17,7 +18,7 @@ import { wire_mode_reports } from "./mode_report.ts";
 import { page_mode } from "./page_mode.ts";
 import { counted_invocations, run_content_steps, run_in_order } from "./run_content.ts";
 import { read_context_source } from "./context.ts";
-import { focus_page_content, start_on_first_focus } from "./handlers/focus.ts";
+import { focus_page_content, start_content_once } from "./handlers/focus.ts";
 import { blur_focused_element } from "./handlers/page.ts";
 
 // Until the tree is read the setting is unknown, and the default applies.
@@ -157,13 +158,12 @@ let matcher_installed = false;
 // The first usable tree decides ignore mode, whether it came at load or later through `tree_updated` (after an upgrade).
 let ignore_checked = false;
 
-// A stored regex that does not compile ignores nothing, so keys keep working.
-function is_ignored_site(source: string | undefined): boolean {
-  try {
-    return source !== undefined && new RegExp(source).test(location.href);
-  } catch {
-    return false;
-  }
+let tab_address: string | undefined;
+
+// A frame of another site cannot read the tab's address, so it asks the background.
+function read_tab_address(): Promise<string | undefined> {
+  if (can_reach_top_document()) return Promise.resolve(window.top?.location.href);
+  return browser.runtime.sendMessage({ type: "read_tab_address" } satisfies ReadTabAddress).then((address) => address as string | undefined, () => undefined);
 }
 
 function install_matcher(keymap: CompiledKeymap | undefined): void {
@@ -176,7 +176,7 @@ function install_matcher(keymap: CompiledKeymap | undefined): void {
   matcher_installed = true;
   const first_usable = usable !== undefined && !ignore_checked;
   if (usable) ignore_checked = true;
-  if (first_usable && is_ignored_site(usable.ignore_regex)) page_mode.set_mode("ignore");
+  if (first_usable && ignores_any_address(usable.ignore_regex, [location.href, tab_address])) page_mode.set_mode("ignore");
   else if (first_install && is_editable_element(document.activeElement)) page_mode.focus_entered_editable();
   refresh_mode_indicator();
   key_flow.set_matcher(create_matcher(usable ?? { format_version: COMPILED_KEYMAP_VERSION, modes: {}, mode_indicator: DEFAULT_MODE_INDICATOR, which_key_delay_ms: 0 }), usable?.modes.browser);
@@ -234,20 +234,12 @@ function start(): void {
     else if (message.type === "tree_updated") void read_keymap().then((keymap) => install_matcher(keymap));
   });
 
-  void read_keymap()
-    .catch(() => undefined)
-    .then((keymap) => {
+  void Promise.all([read_keymap().catch(() => undefined), read_tab_address()])
+    .then(([keymap, address]) => {
+      tab_address = address;
       install_matcher(keymap);
       publish_timing();
     });
 }
 
-// A second injection into the same page must not add a second set of listeners.
-const LOADED_FLAG = "desertfox_content_loaded";
-const loaded_flags = window as unknown as Record<string, boolean>;
-function start_once(): void {
-  if (loaded_flags[LOADED_FLAG]) return;
-  loaded_flags[LOADED_FLAG] = true;
-  start();
-}
-if (!loaded_flags[LOADED_FLAG]) start_on_first_focus(start_once, window, can_reach_top_document() || document.hasFocus());
+start_content_once(start, window, can_reach_top_document() || document.hasFocus());

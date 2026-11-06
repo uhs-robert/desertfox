@@ -97,6 +97,7 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
     const { id, windowId, incognito } = sender.tab ?? {};
     return complete_items.set_unloaded(request.tab_id, request.unloaded, id === undefined || windowId === undefined ? undefined : { tab_id: id, window_id: windowId, incognito: incognito === true });
   }
+  if (request?.type === "read_tab_address") return Promise.resolve(sender.tab?.url);
   if (request?.type === "open_help") return open_help.open(request.command_id, sender.tab?.id);
   if (request?.type === "record_cmdline") return cmdline.record(request.text, sender.tab?.incognito === true);
   if (request?.type === "record_repeat") {

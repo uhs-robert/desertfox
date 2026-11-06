@@ -564,8 +564,13 @@ test("the address of a frame from another site is its src, because reading the d
 
 test("a srcdoc frame, an about:blank frame and a frame with no src have no address", () => {
   assert.equal(element_address(frame({ getAttribute: () => "<p>x</p>" }).element as never), undefined);
-  assert.equal(element_address(frame({ contentDocument: { URL: "about:blank" } }).element as never), undefined);
+  assert.equal(element_address(frame({ src: "about:blank", contentDocument: { URL: "about:blank" } }).element as never), undefined);
   assert.equal(element_address(frame({ src: "" }).element as never), undefined);
+});
+
+test("a same-site frame that still loads shows about:blank, so its src stands in", () => {
+  const page = frame({ contentDocument: { URL: "about:blank" } });
+  assert.equal(element_address(page.element as never), "https://embed.test/video");
 });
 
 test("a frame opens and copies its address, and refuses when it has none", () => {

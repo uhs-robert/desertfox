@@ -3,9 +3,9 @@ import { test } from "node:test";
 import type { Found } from "../../src/content/hints/candidates.ts";
 import { keep_text_matches, collect, drop_redundant_weak, keep_visible_deduplicated, has_click_sign, has_own_text, NO_OWN_TEXT, has_text, is_image, is_pickable_frame, make_weak_test, query_for } from "../../src/content/hints/candidates.ts";
 
-type Fake = { name: string; local: string; shadow?: Fake[]; frame?: Fake[] | "cross_origin"; href?: boolean };
+type Fake = { name: string; local: string; shadow?: Fake[]; frame?: Fake[] | "cross_origin"; href?: boolean; side?: number };
 
-// A page of fake elements. `matches` answers for the one selector the test passes in: "links" means a[href].
+// A page of fake elements. `matches` answers for the selector the test passes in: "links" means a[href], and the frames filter's selector means iframe and frame.
 function root_of(elements: Fake[]): ParentNode {
   const wrap = (fake: Fake) => ({
     name: fake.name,
@@ -16,7 +16,9 @@ function root_of(elements: Fake[]): ParentNode {
       if (fake.frame === "cross_origin") throw new Error("blocked");
       return fake.frame ? root_of(fake.frame) : null;
     },
-    matches: (selector: string) => selector === "links" && fake.local === "a" && fake.href === true,
+    matches: (selector: string) => (selector === "links" && fake.local === "a" && fake.href === true) || (selector === query_for("frames", undefined).selector && (fake.local === "iframe" || fake.local === "frame")),
+    getBoundingClientRect: () => ({ width: fake.side ?? 300, height: fake.side ?? 300 }),
+    getRootNode: () => ({}),
   });
   return { querySelectorAll: () => elements.map(wrap) } as unknown as ParentNode;
 }
@@ -302,7 +304,11 @@ test("is_pickable_frame skips the frame of the command line layer", () => {
   assert.equal(is_pickable_frame(sized(300, { localName: "iframe", ...holder(false) })), true);
 });
 
-test("collect lists a frame of another site as a candidate and does not enter it", () => {
-  const page = root_of([{ name: "embed", local: "a", href: true, frame: "cross_origin" }, { name: "inner", local: "a", href: true }]);
-  assert.deepEqual(names(collect(page, { selector: "links" })), ["embed", "inner"]);
+test("the frames filter lists a frame of another site without entering it, a frame inside a same-origin frame, and no 10 px frame", () => {
+  const page = root_of([
+    { name: "embed", local: "iframe", frame: "cross_origin" },
+    { name: "pixel", local: "iframe", side: 10, frame: "cross_origin" },
+    { name: "same", local: "iframe", frame: [{ name: "nested", local: "frame" }] },
+  ]);
+  assert.deepEqual(names(collect(page, query_for("frames", undefined))), ["embed", "same", "nested"]);
 });

@@ -160,7 +160,12 @@ export type OpenHelp = {
   command_id: string;
 };
 
-export type ContentToBackground = RunRequest | ModeChanged | LoadBundle | ListKeys | IssueCmdlineTicket | OpenCmdline | RecordCmdline | CompleteItems | SetTabUnloaded | OpenHelp | RecordRepeat;
+// The tab's address, for the ignore sites check in a frame of another site. The answer is a string, or undefined when the sender has no tab.
+export type ReadTabAddress = {
+  type: "read_tab_address";
+};
+
+export type ContentToBackground = RunRequest | ModeChanged | LoadBundle | ListKeys | IssueCmdlineTicket | OpenCmdline | RecordCmdline | CompleteItems | SetTabUnloaded | OpenHelp | RecordRepeat | ReadTabAddress;
 
 // How a command ended. Done is `{ ok: true }`. A handler that returns nothing is done, and one that throws is failed.
 // Cancelled means the user left a waiting step (Escape, an unrelated key, a page change), so the rest of a sequence does not run and nothing is shown.

@@ -54,16 +54,19 @@ export const is_image_element = (target: Target): boolean => target.localName ==
 
 export const is_frame_element = (target: { localName: string }): boolean => target.localName === "iframe" || target.localName === "frame";
 
-// A frame from another site throws on `contentDocument`, so its `src` stands in, which can differ from the page after a redirect. A frame with no address of its own (`about:blank`, `srcdoc`) has none to give.
+const is_web_address = (address: string | undefined): address is string => address !== undefined && address !== "" && !/^about:/i.test(address);
+
+// A frame from another site throws on `contentDocument`, and a same-site frame that still loads shows `about:blank`. Its `src` stands in for both, which can differ from the page after a redirect. A frame with no address of its own (`about:blank`, `srcdoc`) has none to give.
 function frame_address(target: Target): string | undefined {
   if (target.getAttribute?.("srcdoc") != null) return undefined;
-  let address = target.src ?? "";
+  let shown: string | undefined;
   try {
-    address = (target as unknown as HTMLIFrameElement).contentDocument?.URL ?? address;
+    shown = (target as unknown as HTMLIFrameElement).contentDocument?.URL;
   } catch {
-    // Another site: keep `src`.
+    // Another site: `src` stands in.
   }
-  return address === "" || /^about:/i.test(address) ? undefined : address;
+  if (is_web_address(shown)) return shown;
+  return is_web_address(target.src) ? target.src : undefined;
 }
 
 const own_source = (target: Target, with_background: boolean): string | undefined => {

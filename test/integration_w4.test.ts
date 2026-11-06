@@ -5,7 +5,7 @@ import { dirname, join } from "node:path";
 import { test } from "node:test";
 import { make_browser_handlers } from "../src/commands/browser.ts";
 import { url_target, home_page_url } from "../src/commands/url_build.ts";
-import { focus_page_content, start_on_first_focus } from "../src/content/handlers/focus.ts";
+import { focus_page_content, start_content_once, start_on_first_focus } from "../src/content/handlers/focus.ts";
 import { build_config, read_commands_file } from "../tools/build-config/build_config.ts";
 import { ConfigErrors } from "../tools/build-config/errors.ts";
 import { build_schemas } from "../tools/build-config/schemas.ts";
@@ -168,6 +168,18 @@ test("start_on_first_focus waits for the focus of a frame, and starts once", () 
   assert.equal(listeners.length, 1);
   assert.equal(listeners[0]!.once, true);
   listeners[0]!.run();
+  assert.equal(started, 1);
+});
+
+test("start_content_once starts one script per window, across a second injection and a later focus", () => {
+  const focus_listeners: (() => void)[] = [];
+  const win = { addEventListener: (type: string, run: () => void) => type === "focus" && focus_listeners.push(run) };
+  let started = 0;
+  start_content_once(() => started++, win as never, false);
+  start_content_once(() => started++, win as never, false);
+  for (const run of focus_listeners) run();
+  assert.equal(started, 1);
+  start_content_once(() => started++, win as never, true);
   assert.equal(started, 1);
 });
 
