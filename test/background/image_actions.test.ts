@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { file_name_for, MAX_IMAGE_BYTES, run_image_action, sniff_kind, type ImageDeps } from "../../src/background/image_actions.ts";
+import { FETCH_TIMEOUT_MS, MAX_IMAGE_BYTES, run_image_action, sniff_kind, type ImageDeps, type TabContext } from "../../src/background/image_actions.ts";
 
 const bytes_of = (...values: number[]): ArrayBuffer => new Uint8Array(values).buffer;
 const ascii = (text: string): ArrayBuffer => new TextEncoder().encode(text).buffer as ArrayBuffer;
@@ -10,14 +10,26 @@ const GIF = ascii("GIF89a....");
 const WEBP = ascii("RIFF\0\0\0\0WEBPVP8 ");
 const SVG = ascii('<svg xmlns="http://www.w3.org/2000/svg"></svg>');
 
-function fake(body: ArrayBuffer | Error, extra: { ok?: boolean; declared?: number; set_fails?: boolean; render_fails?: boolean; fetch_fails?: boolean } = {}) {
+const TAB: TabContext = { incognito: false, cookie_store_id: undefined };
+
+function fake(body: ArrayBuffer | Error, extra: { ok?: boolean; declared?: number; set_fails?: boolean; render_fails?: boolean; fetch_fails?: boolean | "timeout"; read_fails?: "timeout"; download_fails?: boolean } = {}) {
   const calls: string[] = [];
-  const log = { set: [] as Array<[ArrayBuffer, string]>, rendered: [] as string[], saved: [] as Array<[string, string]> };
+  const log = { set: [] as Array<[ArrayBuffer, string]>, rendered: [] as string[], downloads: [] as Array<[string, TabContext]>, timeouts: [] as number[] };
   const deps: ImageDeps = {
-    fetch_image: async (address) => {
+    fetch_image: async (address, timeout_ms) => {
       calls.push(`fetch ${address}`);
+      log.timeouts.push(timeout_ms);
+      if (extra.fetch_fails === "timeout") throw Object.assign(new Error("timed out"), { name: "TimeoutError" });
       if (extra.fetch_fails) throw new Error("network");
-      return { ok: extra.ok ?? true, declared_bytes: extra.declared, read: async () => (body instanceof Error ? Promise.reject(body) : body) };
+      return {
+        ok: extra.ok ?? true,
+        declared_bytes: extra.declared,
+        read: async (limit) => {
+          if (extra.read_fails) throw Object.assign(new Error("timed out"), { name: "TimeoutError" });
+          if (body instanceof Error) throw body;
+          return body.byteLength > limit ? undefined : body;
+        },
+      };
     },
     render_png: async (_bytes, kind) => {
       if (extra.render_fails) throw new Error("decode");
@@ -28,13 +40,16 @@ function fake(body: ArrayBuffer | Error, extra: { ok?: boolean; declared?: numbe
       if (extra.set_fails) throw new Error("clipboard");
       log.set.push([bytes, type]);
     },
-    save_file: async (bytes, mime, filename) => void log.saved.push([`${mime} ${bytes.byteLength}`, filename]),
+    start_download: async (address, context) => {
+      if (extra.download_fails) throw new Error("denied");
+      log.downloads.push([address, context]);
+    },
   };
   return { deps, log, calls };
 }
 
-const copy = (deps: ImageDeps, address = "https://example.com/a.bin") => run_image_action(deps, { type: "image_action", action: "copy_image", address });
-const download = (deps: ImageDeps, address: string) => run_image_action(deps, { type: "image_action", action: "download", address });
+const copy = (deps: ImageDeps, address = "https://example.com/a.bin") => run_image_action(deps, { type: "image_action", action: "copy_image", address }, TAB);
+const download = (deps: ImageDeps, address: string, context = TAB) => run_image_action(deps, { type: "image_action", action: "download", address }, context);
 
 test("PNG and JPEG reach the clipboard unchanged, with their type from the first bytes", async () => {
   for (const [body, type] of [[PNG, "png"], [JPEG, "jpeg"]] as const) {
@@ -60,7 +75,7 @@ test("sniff_kind reads the bytes, not a header", () => {
   assert.equal(sniff_kind(ascii("<html>")), "unknown");
 });
 
-test("a picture over 20 MB refuses, by header and by size, and never touches the clipboard", async () => {
+test("a picture over 20 MB refuses, by header and by the bounded read when no length is sent, and never touches the clipboard", async () => {
   const by_header = fake(PNG, { declared: MAX_IMAGE_BYTES + 1 });
   assert.deepEqual(await copy(by_header.deps), { ok: false, message: "Image is over 20 MB" });
   const by_size = fake(new ArrayBuffer(MAX_IMAGE_BYTES + 1));
@@ -89,26 +104,35 @@ test("a failed conversion and a failed clipboard write refuse, each naming its s
 
 test("a message from a page with a bad action or address refuses", async () => {
   const { deps } = fake(PNG);
-  assert.equal((await run_image_action(deps, { type: "image_action", action: "wipe" as never, address: "https://example.com/a.png" })).ok, false);
-  assert.equal((await run_image_action(deps, { type: "image_action", action: "download", address: 5 as never })).ok, false);
+  assert.equal((await run_image_action(deps, { type: "image_action", action: "wipe" as never, address: "https://example.com/a.png" }, TAB)).ok, false);
+  assert.equal((await run_image_action(deps, { type: "image_action", action: "download", address: 5 as never }, TAB)).ok, false);
 });
 
-test("download saves the fetched bytes under the last path segment, with no size cap", async () => {
-  const { deps, log } = fake(new ArrayBuffer(MAX_IMAGE_BYTES + 5), {});
-  assert.deepEqual(await download(deps, "https://example.com/pics/cat%20one.png?size=2"), { ok: true });
-  assert.deepEqual(log.saved, [[`application/octet-stream ${MAX_IMAGE_BYTES + 5}`, "cat one.png"]]);
+test("a fetch or a body read that times out refuses with a message and leaves the clipboard", async () => {
+  for (const extra of [{ fetch_fails: "timeout" }, { read_fails: "timeout" }] as const) {
+    const { deps, log } = fake(PNG, extra);
+    assert.deepEqual(await copy(deps), { ok: false, message: "The image took too long to fetch" });
+    assert.deepEqual([log.set, log.timeouts], [[], [FETCH_TIMEOUT_MS]]);
+  }
 });
 
-test("download names a file with no usable segment image plus the sniffed extension", async () => {
-  assert.equal(file_name_for("https://example.com/", "webp"), "image.webp");
-  assert.equal(file_name_for("data:image/png;base64,AAAA", "png"), "image.png");
-  assert.equal(file_name_for("https://example.com/a/%2Fb", "unknown"), "download");
-  assert.equal(file_name_for("https://example.com/..", "jpeg"), "image.jpg");
+test("sniff_kind finds an SVG behind a long prolog, comment and DOCTYPE", () => {
+  const long = `<?xml version="1.0"?>\n<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "x">\n<!-- ${"c".repeat(5000)} -->\n<svg xmlns="http://www.w3.org/2000/svg"/>`;
+  assert.equal(sniff_kind(ascii(long)), "svg");
 });
 
-test("a failed fetch or save refuses a download", async () => {
-  assert.deepEqual(await download(fake(PNG, { ok: false }).deps, "https://example.com/a.png"), { ok: false, message: "Could not fetch the image" });
-  const { deps } = fake(PNG);
-  deps.save_file = async () => Promise.reject(new Error("disk"));
-  assert.deepEqual(await download(deps, "https://example.com/a.png"), { ok: false, message: "Could not save the file" });
+test("download hands the address to the browser with the tab context and no buffering", async () => {
+  const { deps, log, calls } = fake(new ArrayBuffer(MAX_IMAGE_BYTES + 5));
+  const context: TabContext = { incognito: true, cookie_store_id: "firefox-container-2" };
+  assert.deepEqual(await download(deps, "https://example.com/download?id=3", context), { ok: true });
+  assert.deepEqual(log.downloads, [["https://example.com/download?id=3", context]]);
+  assert.deepEqual(calls, []);
+  assert.deepEqual(await download(deps, "data:image/png;base64,AAAA"), { ok: true });
+});
+
+test("download refuses a foreign scheme and a failed start, and starts nothing", async () => {
+  const { deps, log } = fake(PNG);
+  assert.deepEqual(await download(deps, "file:///etc/passwd"), { ok: false, message: "Could not fetch the image" });
+  assert.deepEqual(log.downloads, []);
+  assert.deepEqual(await download(fake(PNG, { download_fails: true }).deps, "https://example.com/a.png"), { ok: false, message: "Could not save the file" });
 });

@@ -143,34 +143,39 @@ async function decode_to_canvas(bytes: ArrayBuffer, kind: ImageKind): Promise<Of
   }
 }
 
-// Resolves when the download finishes or fails, then frees the temporary address.
-async function download_blob(blob: Blob, filename: string): Promise<void> {
-  const address = URL.createObjectURL(blob);
-  try {
-    const id = await browser.downloads.download({ url: address, filename, saveAs: false });
-    await new Promise<void>((resolve, reject) => {
-      const on_changed = (delta: browser.downloads._OnChangedDownloadDelta) => {
-        if (delta.id !== id) return;
-        const state = delta.state?.current;
-        if (state !== "complete" && state !== "interrupted") return;
-        browser.downloads.onChanged.removeListener(on_changed);
-        if (state === "complete") resolve();
-        else reject(new Error("download interrupted"));
-      };
-      browser.downloads.onChanged.addListener(on_changed);
-    });
-  } finally {
-    URL.revokeObjectURL(address);
+// Reads at most `limit` bytes, and gives up (undefined) as soon as the body is longer.
+async function read_limited(response: Response, limit: number): Promise<ArrayBuffer | undefined> {
+  const reader = response.body?.getReader();
+  if (!reader) return response.arrayBuffer();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (let part = await reader.read(); !part.done; part = await reader.read()) {
+    total += part.value.byteLength;
+    if (total > limit) {
+      void reader.cancel();
+      return undefined;
+    }
+    chunks.push(part.value);
   }
+  const joined = new Uint8Array(total);
+  let at = 0;
+  for (const chunk of chunks) {
+    joined.set(chunk, at);
+    at += chunk.byteLength;
+  }
+  return joined.buffer;
 }
 
 export const image_deps: ImageDeps = {
-  fetch_image: async (address) => {
-    const response = await fetch(address, { credentials: "include" });
+  fetch_image: async (address, timeout_ms) => {
+    // The signal also covers the body read.
+    const response = await fetch(address, { credentials: "include", signal: AbortSignal.timeout(timeout_ms) });
     const declared = Number(response.headers.get("content-length"));
-    return { ok: response.ok, declared_bytes: Number.isFinite(declared) && declared > 0 ? declared : undefined, read: () => response.arrayBuffer() };
+    return { ok: response.ok, declared_bytes: Number.isFinite(declared) && declared > 0 ? declared : undefined, read: (limit) => read_limited(response, limit) };
   },
   render_png: async (bytes, kind) => (await (await decode_to_canvas(bytes, kind)).convertToBlob({ type: "image/png" })).arrayBuffer(),
   set_image_data: (bytes, type) => browser.clipboard.setImageData(bytes, type),
-  save_file: (bytes, mime, filename) => download_blob(new Blob([bytes], { type: mime }), filename),
+  start_download: async (address, context) => {
+    await browser.downloads.download({ url: address, saveAs: false, incognito: context.incognito, ...(context.cookie_store_id === undefined ? {} : { cookieStoreId: context.cookie_store_id }) });
+  },
 };

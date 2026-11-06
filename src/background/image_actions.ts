@@ -11,24 +11,34 @@ export type FetchedImage = {
   ok: boolean;
   // The `Content-Length` header, when the server sent one.
   declared_bytes: number | undefined;
-  read: () => Promise<ArrayBuffer>;
+  // Undefined when the body is longer than `limit`: the read stops there, so a server that sends no length cannot fill the memory.
+  read: (limit: number) => Promise<ArrayBuffer | undefined>;
 };
 
+// The tab the pick came from, so a download keeps its private window and container.
+export type TabContext = { incognito: boolean; cookie_store_id: string | undefined };
+
+export const FETCH_TIMEOUT_MS = 20_000;
+
 export type ImageDeps = {
-  fetch_image: (address: string) => Promise<FetchedImage>;
+  // Rejects with a `TimeoutError` when the fetch or the body read runs past `timeout_ms`.
+  fetch_image: (address: string, timeout_ms: number) => Promise<FetchedImage>;
   // Decodes any picture the browser can draw and returns it as PNG. A GIF gives its first frame.
   render_png: (bytes: ArrayBuffer, kind: ImageKind) => Promise<ArrayBuffer>;
   set_image_data: (bytes: ArrayBuffer, type: "png" | "jpeg") => Promise<void>;
-  // Resolves when the download ends and the temporary address is released.
-  save_file: (bytes: ArrayBuffer, mime: string, filename: string) => Promise<void>;
+  // Hands the address to the browser, which saves it with the server's file name. Resolves once the download has started.
+  start_download: (address: string, context: TabContext) => Promise<void>;
 };
 
 const starts_with = (head: Uint8Array, ...bytes: number[]): boolean => bytes.every((byte, index) => head[index] === byte);
 const text_at = (head: Uint8Array, from: number, length: number): string => String.fromCharCode(...head.subarray(from, from + length));
 
 // The type comes from the first bytes, because a server's `Content-Type` is often wrong or missing.
+// Long enough for an SVG whose prolog, comments or DOCTYPE come before the root element.
+const SNIFF_BYTES = 64 * 1024;
+
 export function sniff_kind(bytes: ArrayBuffer): ImageKind {
-  const head = new Uint8Array(bytes, 0, Math.min(bytes.byteLength, 512));
+  const head = new Uint8Array(bytes, 0, Math.min(bytes.byteLength, SNIFF_BYTES));
   if (starts_with(head, 0x89, 0x50, 0x4e, 0x47)) return "png";
   if (starts_with(head, 0xff, 0xd8, 0xff)) return "jpeg";
   if (text_at(head, 0, 4) === "GIF8") return "gif";
@@ -39,41 +49,29 @@ export function sniff_kind(bytes: ArrayBuffer): ImageKind {
   return "unknown";
 }
 
-const MIME: Record<ImageKind, string> = { png: "image/png", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp", bmp: "image/bmp", avif: "image/avif", svg: "image/svg+xml", unknown: "application/octet-stream" };
-const EXTENSION: Record<ImageKind, string> = { png: ".png", jpeg: ".jpg", gif: ".gif", webp: ".webp", bmp: ".bmp", avif: ".avif", svg: ".svg", unknown: "" };
-
-// The last path segment of the address. A `data:` address, an address that ends in a slash and a segment with a separator in it have none.
-export function file_name_for(address: string, kind: ImageKind): string {
-  const segment = URL.canParse(address) && !address.startsWith("data:") ? new URL(address).pathname.split("/").pop() ?? "" : "";
-  let decoded = segment;
-  try {
-    decoded = decodeURIComponent(segment);
-  } catch {
-    // Keeps the raw segment.
-  }
-  const usable = decoded !== "" && !/[\\/\0]/.test(decoded) && !/^\.+$/.test(decoded);
-  return usable ? decoded : `${kind === "unknown" ? "download" : "image"}${EXTENSION[kind]}`;
-}
-
 const FETCHABLE = /^(https?|data):/i;
 
-async function fetch_bytes(deps: ImageDeps, address: string, limit: number | undefined): Promise<ArrayBuffer> {
+const is_timeout = (error: unknown): boolean => (error as { name?: string } | null)?.name === "TimeoutError";
+
+const fetch_failure = (error: unknown): RuntimeRefusal => new RuntimeRefusal(is_timeout(error) ? "The image took too long to fetch" : "Could not fetch the image");
+
+async function fetch_bytes(deps: ImageDeps, address: string, limit: number): Promise<ArrayBuffer> {
   if (!FETCHABLE.test(address)) throw new RuntimeRefusal("Could not fetch the image");
   let fetched: FetchedImage;
   try {
-    fetched = await deps.fetch_image(address);
-  } catch {
-    throw new RuntimeRefusal("Could not fetch the image");
+    fetched = await deps.fetch_image(address, FETCH_TIMEOUT_MS);
+  } catch (error) {
+    throw fetch_failure(error);
   }
   if (!fetched.ok) throw new RuntimeRefusal("Could not fetch the image");
-  if (limit !== undefined && fetched.declared_bytes !== undefined && fetched.declared_bytes > limit) throw new RuntimeRefusal("Image is over 20 MB");
-  let bytes: ArrayBuffer;
+  if (fetched.declared_bytes !== undefined && fetched.declared_bytes > limit) throw new RuntimeRefusal("Image is over 20 MB");
+  let bytes: ArrayBuffer | undefined;
   try {
-    bytes = await fetched.read();
-  } catch {
-    throw new RuntimeRefusal("Could not fetch the image");
+    bytes = await fetched.read(limit);
+  } catch (error) {
+    throw fetch_failure(error);
   }
-  if (limit !== undefined && bytes.byteLength > limit) throw new RuntimeRefusal("Image is over 20 MB");
+  if (bytes === undefined || bytes.byteLength > limit) throw new RuntimeRefusal("Image is over 20 MB");
   return bytes;
 }
 
@@ -98,23 +96,22 @@ async function copy_image(deps: ImageDeps, address: string): Promise<void> {
   }
 }
 
-// No size cap: a download holds a video or a link target as well, and the cap guards the clipboard.
-async function download(deps: ImageDeps, address: string): Promise<void> {
-  const bytes = await fetch_bytes(deps, address, undefined);
-  const kind = sniff_kind(bytes);
+// The browser fetches and saves it, so nothing is buffered here and a `Content-Disposition` name is honored. The same scheme check applies as for a copy.
+async function download(deps: ImageDeps, address: string, context: TabContext): Promise<void> {
+  if (!FETCHABLE.test(address)) throw new RuntimeRefusal("Could not fetch the image");
   try {
-    await deps.save_file(bytes, MIME[kind], file_name_for(address, kind));
+    await deps.start_download(address, context);
   } catch {
     throw new RuntimeRefusal("Could not save the file");
   }
 }
 
 // The request comes from a page script, so its fields are checked here.
-export async function run_image_action(deps: ImageDeps, request: ImageAction): Promise<Outcome> {
+export async function run_image_action(deps: ImageDeps, request: ImageAction, context: TabContext): Promise<Outcome> {
   try {
     if (typeof request.address !== "string") throw new RuntimeRefusal("Could not fetch the image");
     if (request.action === "copy_image") await copy_image(deps, request.address);
-    else if (request.action === "download") await download(deps, request.address);
+    else if (request.action === "download") await download(deps, request.address, context);
     else throw new RuntimeRefusal("Unknown picture action");
     return { ok: true };
   } catch (error) {

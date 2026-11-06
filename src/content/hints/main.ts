@@ -109,8 +109,9 @@ function copy_to_clipboard(text: string): Promise<Outcome | undefined> {
 
 // The background answers an `Outcome`. A failed one carries the refusal to the caller, which shows it once.
 function image_action(action: "copy_image" | "download", address: string): Promise<Outcome> {
-  return browser.runtime.sendMessage({ type: "image_action", action, address }).then((outcome: Outcome) => {
-    if (outcome.ok) create_view().show_message(action === "copy_image" ? "Copied image" : "Downloaded");
+  return browser.runtime.sendMessage({ type: "image_action", action, address }).then((outcome: Outcome | undefined) => {
+    if (!outcome) return { ok: false, message: "The picture action got no answer" };
+    if (outcome.ok) create_view().show_message(action === "copy_image" ? "Copied image" : "Started the download");
     return outcome;
   });
 }
