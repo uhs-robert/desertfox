@@ -39,7 +39,13 @@ const UNLIMITED_OR_CHOICE = /[*+|]|\{\d+(?:,\d*)?\}/u;
 // An escape or a character class holds no group, so a `)` in one is not the end of a group.
 const ESCAPE_OR_CLASS = /\\.|\[(?:\\.|[^\]\\])*\]/gu;
 
+// The same atom with an unlimited repeat twice in a row, such as `a*a*b`, `\w*\w*x` or `.*.*=`. The two repeats split a run of that atom in every possible way, so the cost grows with each repeat. A different atom after the first (`a+b+`, `foo.*bar`) cannot split a run, so it stays allowed. A longer chain, such as `.*.*.*`, holds this pair too.
+const ATOM = String.raw`(\\.|\[(?:\\.|[^\]\\])*\]|[^\\*+?{}()|[\]])`;
+const UNLIMITED = String.raw`(?:[*+]|\{\d+,\})\??`;
+const STACKED_REPEATS = new RegExp(ATOM + UNLIMITED + "\\1" + UNLIMITED, "u");
+
 export function is_costly_pattern(source: string): boolean {
+  if (STACKED_REPEATS.test(source)) return true;
   // The innermost groups first: the contents of a group that holds no other group are checked, then that group is replaced by a plain letter and the search repeats.
   let rest = source.replace(ESCAPE_OR_CLASS, "x");
   for (let guard = 0; guard < 64; guard++) {
