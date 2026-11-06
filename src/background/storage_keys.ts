@@ -9,8 +9,11 @@ export const WARNINGS_STORAGE_KEY = "desertfox_warnings";
 // Where the config came from and the settings in force. Written at every startup. The hint script reads its letters from it.
 export const CONFIG_STATUS_STORAGE_KEY = "desertfox_config_status";
 
-// Setting name to the value `:set` gave it, in `storage.session`: a browser restart clears it. Global, private windows included.
-export const SETTING_OVERRIDES_STORAGE_KEY = "desertfox_setting_overrides";
+// Setting name to the value a saved browser edit gave it (`:set`). Global, private windows included.
+export const SAVED_SETTINGS_STORAGE_KEY = "desertfox_saved_settings";
+
+// Setting name to the value `:set --temp` gave it, in `storage.session`: a browser restart clears it. Global, private windows included.
+export const TEMP_SETTINGS_STORAGE_KEY = "desertfox_temp_settings";
 
 // Slot name to the invocations its chord runs. `commands.onCommand` reads it, because the background can restart.
 export const SLOT_TABLE_STORAGE_KEY = "desertfox_slot_table";

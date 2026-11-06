@@ -166,7 +166,7 @@ test("the styling page lists every theme role as a variable", () => {
 
 test("the model carries the settings and config source for the home page", () => {
   const { commands, compiled } = sample();
-  const status = { source: "managed" as const, settings: { ...DEFAULT_SETTINGS, palette: "x" }, managed_file_hint: "" };
+  const status = { source: "managed" as const, settings: { ...DEFAULT_SETTINGS, palette: "x" }, managed_file_hint: "", saved: [], temp: [], configured: [] };
   const model = build_help_model(commands, compiled, [], {}, {}, status);
   assert.equal(model.config_source, "Managed storage file");
   assert.deepEqual(model.settings.find((row) => row.name === "palette"), { name: "palette", value: '"x"' });
