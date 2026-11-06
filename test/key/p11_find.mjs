@@ -304,6 +304,57 @@ export async function run_cases({ rdp, extension_id, run_case, expect, open_page
     }
     throw new Error(`timed out waiting for ${what}, the toasts seen were ${JSON.stringify([...seen])}`);
   }
+  // The 300 ms limit in find_scan.ts also counts the Worker start and the copy of the page text into it. This measures both on a page at the 4 million character cap.
+  await run_case("the find worker starts and takes a 4 million character text well inside the time limit", async () => {
+    const timings = await evaluate_in_background(rdp, extension_id, `(async () => {
+      const answer_ms = (text) => new Promise((resolve, reject) => {
+        const started = performance.now();
+        const worker = new Worker(browser.runtime.getURL("find_worker.js"));
+        worker.onmessage = () => { worker.terminate(); resolve(performance.now() - started); };
+        worker.onerror = (event) => { worker.terminate(); reject(new Error(event.message)); };
+        // A sticky regex tries one place only, so the time is the start and the copy, not the scan.
+        worker.postMessage({ text, source: "b", flags: "gy" });
+      });
+      const large = "word ".repeat(800000);
+      const median = (runs) => runs.sort((left, right) => left - right)[runs.length >> 1];
+      const small_runs = [];
+      const large_runs = [];
+      for (let run = 0; run < 7; run++) {
+        small_runs.push(await answer_ms("x"));
+        large_runs.push(await answer_ms(large));
+      }
+      return { chars: large.length, small_ms: median(small_runs), large_ms: median(large_runs), large_max_ms: Math.max(...large_runs) };
+    })()`);
+    console.log(`find worker timings ${JSON.stringify(timings)}`);
+    expect(timings?.chars === 4000000 && timings.large_ms < 300, `timings ${JSON.stringify(timings)}`);
+  });
+
+  await run_case("a regex past the time limit is stopped, Enter searches it as text, and the next search works", async () => {
+    const page_id = "find_timeout";
+    await open_page("find_page", page_id, { new_tab: true });
+    // No match as a regex, and seconds of backtracking over the run of "a" without the limit. As text it finds its own characters at the end.
+    await in_active_tab(`document.body.textContent = ${JSON.stringify("a".repeat(60000) + " a.*b.*c(?=Q)")}; true`);
+    const started = Date.now();
+    await send_keys("/a.*b.*c(?=Q)");
+    const answered = await Promise.race([in_active_tab("document.title").then(() => true), sleep(5000).then(() => false)]);
+    expect(answered, "the tab did not answer within 5 seconds of a slow regex");
+    let mark = events.length;
+    await send_keys(...ENTER);
+    await wait_event(mark, badge_is(page_id, "NORMAL"), "normal mode after Enter");
+    await wait_highlights((read) => total_painted(read) === 1, "the pattern found as text");
+    expect(Date.now() - started < 15000, `the search took ${Date.now() - started} ms`);
+    await send_keys("n");
+    await wait_toast(/^1 of 1, wrapped \(too slow as a regex, searched as text\)$/, "the toast with the text fallback note");
+    await send_keys("/a{3}");
+    mark = events.length;
+    await send_keys(...ENTER);
+    await wait_event(mark, badge_is(page_id, "NORMAL"), "normal mode after the second Enter");
+    await send_keys("n");
+    await wait_toast(/ of 20000$/, "the toast of the regex search after the timeout");
+    await send_keys(...ESCAPE);
+    await wait_highlights((read) => total_painted(read) === 0, "the highlights cleared");
+  });
+
   const READ_SELECTION = `(() => { const s = getSelection(); return { text: String(s), anchor: s.anchorNode?.data?.slice(0, 20), anchor_offset: s.anchorOffset, focus: s.focusNode?.data?.slice(0, 20), focus_offset: s.focusOffset }; })()`;
   const mode_badge = (page_id) => events.filter((event) => event.type === "indicator" && event.page_id === page_id).at(-1)?.label;
 

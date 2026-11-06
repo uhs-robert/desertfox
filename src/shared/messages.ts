@@ -165,7 +165,18 @@ export type ReadTabAddress = {
   type: "read_tab_address";
 };
 
-export type ContentToBackground = RunRequest | ModeChanged | LoadBundle | ListKeys | IssueCmdlineTicket | OpenCmdline | RecordCmdline | CompleteItems | SetTabUnloaded | OpenHelp | RecordRepeat | ReadTabAddress;
+// From the `caret` bundle: one regex page search, run in the background where it can be stopped. `source` and `flags` are of a regex the page already compiled.
+export type FindScan = {
+  type: "find_scan";
+  text: string;
+  source: string;
+  flags: string;
+};
+
+// Timeout means the scan ran past the limit and was stopped. Superseded means a newer scan from the same frame replaced it.
+export type FindScanAnswer = { ok: true; from: Int32Array; to: Int32Array } | { ok: false; reason: "timeout" | "superseded" } | { ok: false; reason: "failed"; message: string };
+
+export type ContentToBackground = RunRequest | ModeChanged | LoadBundle | ListKeys | IssueCmdlineTicket | OpenCmdline | RecordCmdline | CompleteItems | SetTabUnloaded | OpenHelp | RecordRepeat | ReadTabAddress | FindScan;
 
 // How a command ended. Done is `{ ok: true }`. A handler that returns nothing is done, and one that throws is failed.
 // Cancelled means the user left a waiting step (Escape, an unrelated key, a page change), so the rest of a sequence does not run and nothing is shown.

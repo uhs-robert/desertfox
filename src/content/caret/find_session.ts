@@ -1,10 +1,10 @@
 // Page search: the live search while the line is open, the match that stays after Enter or Escape, and n and N.
 // The line (the cmdline bundle) reaches it through `begin`, `update` and `end`. The keys reach it through `step` and `clear`.
 
-import type { Outcome } from "../../shared/messages.ts";
+import type { FindScan, FindScanAnswer, Outcome } from "../../shared/messages.ts";
 import type { BundleHostApi } from "../bundle_host.ts";
-import { collect_matches, compile_query, describe_match, nearest_match, opposite, step_match } from "./find_match.ts";
-import type { Direction, Fallback, Matches, Slicing } from "./find_match.ts";
+import { collect_matches, compile_query, describe_match, describe_timeout, nearest_match, opposite, step_match } from "./find_match.ts";
+import type { Direction, Fallback, Matches, ScanRegex, Search, Slicing } from "./find_match.ts";
 import { create_painter } from "./find_paint.ts";
 import type { FindColors, Painter } from "./find_paint.ts";
 import { get_register, set_register } from "./registers.ts";
@@ -30,6 +30,8 @@ type Live = {
   generation: number;
   // The text of the line as of the last keystroke.
   text: string;
+  // The text of the latest run when its regex ran past the time limit, so Enter searches it as text. Each run clears it as it starts.
+  timed_out: string | undefined;
   found: Found | undefined;
   pending: Promise<void>;
   colors: Promise<FindColors>;
@@ -47,6 +49,7 @@ export type FindDeps = {
   get_register: (name: string) => Promise<string | undefined>;
   set_register: (name: string, text: string) => Promise<void>;
   slicing: (is_stale: () => boolean) => Slicing;
+  scan_regex: ScanRegex;
   // Where each document's own selection sits, both ends: a drag from the same anchor to a new point moves it too. A click moves it, which makes a later position win over an older match.
   selection_key: (model: TextModel) => unknown[];
   // Calls `on_change` when text changes in the page or in any of the trees the model read. The returned function points the watcher at the trees of a new model.
@@ -92,6 +95,7 @@ const browser_deps = (): FindDeps => ({
   get_register,
   set_register,
   slicing: (is_stale) => ({ is_stale, yield_to_page: () => new Promise<void>((resume) => setTimeout(resume, 0)), now: () => performance.now(), slice_ms: SLICE_MS }),
+  scan_regex: (text, { source, flags }) => browser.runtime.sendMessage({ type: "find_scan", text, source, flags } satisfies FindScan) as Promise<FindScanAnswer>,
   selection_key: (model) => documents_of(model).flatMap((owner) => [owner.getSelection()?.anchorNode, owner.getSelection()?.anchorOffset, owner.getSelection()?.focusNode, owner.getSelection()?.focusOffset]),
   watch_page: (on_change) => {
     const observer = new MutationObserver((records) => records.some(is_page_change) && on_change());
@@ -130,6 +134,9 @@ export function create_find(host: Host, deps: FindDeps = browser_deps()) {
   // The page changed its text since the search read its model, so the model is read again before it is used.
   let page_changed = false;
   let observe_trees: ((trees: TextTree[]) => void) | undefined;
+  // The last query whose regex ran past the time limit. `n` and `N` search it as text at once, so a page whose text keeps changing does not cost each press the full limit.
+  // Typing it on the line runs the regex again, and an answer clears it.
+  let timed_out_query: string | undefined;
   // Where a jump to a word starts, as a point in the page. `step_once` consumes it.
   let origin: DomPoint | undefined;
 
@@ -177,7 +184,8 @@ export function create_find(host: Host, deps: FindDeps = browser_deps()) {
   const is_current = (model: TextModel) => trees_alive(model) && !page_changed;
   const fresh_model = (model: TextModel): TextModel => (is_current(model) ? model : read_model());
 
-  async function run_update(open: Live, text: string, run: number, report: (status: string) => void, scan_costly = false): Promise<void> {
+  // `as_text` is for Enter: it searches the text fallback that a costly or timed-out pattern skipped while typing.
+  async function run_update(open: Live, text: string, run: number, report: (status: string) => void, as_text = false): Promise<void> {
     const is_stale = () => live !== open || open.generation !== run;
     const query = compile_query(text);
     if (!query) {
@@ -190,24 +198,32 @@ export function create_find(host: Host, deps: FindDeps = browser_deps()) {
       open.start = locate(open.model, open.start_point) ?? deps.start_index(open.model);
     }
     // A pattern typed one key at a time passes through costly shapes such as `(a+)+`. It is not searched, and the results of the last keystroke stay on the page.
-    if (query.fallback === "costly" && !scan_costly) return report(`Pattern too slow as a regex: ${text}`);
-    const matches = await collect_matches(open.model.text, query.search, deps.slicing(is_stale));
+    if (query.fallback === "costly" && !as_text) return report(`Pattern too slow as a regex: ${text}`);
+    const [search, fallback] = as_text ? [query.as_text, "costly" as const] : [query.search, query.fallback];
+    open.timed_out = undefined;
+    const matches = await collect_matches(open.model.text, search, deps.slicing(is_stale), deps.scan_regex);
     if (!matches || is_stale()) return;
+    // As with a costly shape, the results of the last keystroke stay on the page.
+    if (matches === "timeout") {
+      open.timed_out = timed_out_query = text;
+      return report(describe_timeout(text));
+    }
+    if (search.kind === "regex" && timed_out_query === text) timed_out_query = undefined;
     const colors = await open.colors;
     if (is_stale()) return;
     // The page can lose a frame while the scan runs. Then the match positions no longer fit the text, so the scan starts over.
-    if (!trees_alive(open.model)) return run_update(open, text, run, report, scan_costly);
+    if (!trees_alive(open.model)) return run_update(open, text, run, report, as_text);
     const first = nearest_match(matches.from, open.start, open.direction);
     if (!first) {
       open.found = undefined;
       drop_highlights();
-      return report(cut_note(open.model, describe_match(text, 0, 0, query.fallback)));
+      return report(cut_note(open.model, describe_match(text, 0, 0, fallback)));
     }
-    const found: Found = { model: open.model, query: text, fallback: query.fallback, direction: open.direction, matches, current: first.index };
+    const found: Found = { model: open.model, query: text, fallback, direction: open.direction, matches, current: first.index };
     open.found = found;
     paint(found, colors);
     scroll_to(found, LINE_HEIGHT_PX);
-    report(cut_note(open.model, describe_match(text, matches.from.length, first.index, query.fallback, first.wrapped)));
+    report(cut_note(open.model, describe_match(text, matches.from.length, first.index, fallback, first.wrapped)));
   }
 
   const locate = (model: TextModel, point: DomPoint | undefined): number | undefined => {
@@ -257,9 +273,17 @@ export function create_find(host: Host, deps: FindDeps = browser_deps()) {
       const query = found ? undefined : compile_query(previous.query);
       if (!found && !query) return { ok: false, message: "No previous search" };
       const model = found?.model ?? (kept ? fresh_model(kept.model) : read_model());
-      const matches = found?.matches ?? (await collect_matches(model.text, query!.search, deps.slicing(() => run !== step_generation)));
-      if (!matches || run !== step_generation) return taken_over;
-      const fallback = found ? found.fallback : query!.fallback;
+      const scan = (search: Search) => collect_matches(model.text, search, deps.slicing(() => run !== step_generation), deps.scan_regex);
+      let fallback = found ? found.fallback : query!.fallback;
+      const known_too_slow = !found && timed_out_query === previous.query;
+      let matches = found?.matches ?? (known_too_slow ? "timeout" : await scan(query!.search));
+      // n and N commit the pattern as Enter does, so a regex past the time limit is searched as text.
+      if (matches === "timeout") {
+        timed_out_query = previous.query;
+        fallback = "costly";
+        matches = await scan(query!.as_text);
+      }
+      if (!matches || matches === "timeout" || run !== step_generation) return taken_over;
       // After a rebuild the step goes on from the match the user was on, when its text is still on the page.
       const carried = kept && carry_index(kept, model);
       const start = from_origin(model, direction) ?? (carried === undefined ? deps.start_index(model) : direction === "forward" ? carried + 1 : carried);
@@ -287,7 +311,7 @@ export function create_find(host: Host, deps: FindDeps = browser_deps()) {
       origin = from;
       const start = from_origin(model, direction) ?? deps.start_index(model);
       origin = undefined;
-      live = { model, direction, start, start_point: point_of(model, start), generation: 0, text: "", found: undefined, pending: Promise.resolve(), colors: deps.read_colors(), finished: undefined };
+      live = { model, direction, start, start_point: point_of(model, start), generation: 0, text: "", timed_out: undefined, found: undefined, pending: Promise.resolve(), colors: deps.read_colors(), finished: undefined };
     },
 
     // The text of the line changed. `report` gets the line to show under it.
@@ -309,7 +333,10 @@ export function create_find(host: Host, deps: FindDeps = browser_deps()) {
       open.finished = (async () => {
         if (keep) await open.pending;
         // Enter commits the pattern, so the text fallback that was skipped while typing runs now.
-        if (keep && live === open && open.found?.query !== open.text && compile_query(open.text)?.fallback === "costly") await run_update(open, open.text, ++open.generation, () => {}, true);
+        const text_fallback_skipped = open.timed_out === open.text || compile_query(open.text)?.fallback === "costly";
+        // A timeout of the last run wins over older results of the same text, which stay on the page only while typing.
+        const found_is_current = open.found?.query === open.text && open.timed_out !== open.text;
+        if (keep && live === open && !found_is_current && text_fallback_skipped) await run_update(open, open.text, ++open.generation, () => {}, true);
         // A new search may have begun while the scan finished, and it owns the page now.
         if (live !== open) return;
         live = undefined;

@@ -44,6 +44,14 @@ export async function run_cases({ run_case, send_keys, rdp, extension_id, take_s
 
     await click(entry("Quick Start"));
     await sleep(600);
+    // A short window makes the sidebar overflow. The rule sits in a style element because a rebuild drops inline styles.
+    const scrolled = await in_help(`const style = view.document.createElement("style"); style.id = "scroll-case"; style.textContent = ".desertfox-help-sidebar { height: 200px !important; }"; view.document.head.append(style); const bar = view.document.querySelector(".desertfox-help-sidebar"); bar.scrollTop = 60; return bar.scrollTop;`);
+    expect(scrolled > 0, `the sidebar did not scroll: ${scrolled}`);
+    await click(`view.document.querySelector(".desertfox-help-sections:not([hidden]) a")`);
+    await sleep(600);
+    const kept = await in_help(`return view.document.querySelector(".desertfox-help-sidebar").scrollTop;`);
+    expect(kept === scrolled, `the sidebar scroll went from ${scrolled} to ${kept} after a section link`);
+    await in_help(`view.document.getElementById("scroll-case").remove();`);
     const quick_start = await group_state("Quick Start");
     expect(quick_start.open && quick_start.expanded === "true" && quick_start.links > 0, `the Quick Start group after the click was ${JSON.stringify(quick_start)}`);
     expect(!(await group_state("Commands")).open, "the Commands group stayed open on the Quick Start page");
