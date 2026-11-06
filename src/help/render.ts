@@ -177,7 +177,7 @@ function home_page(model: HelpModel): HTMLElement[] {
   const warnings = model.warnings.length === 0
     ? el("p", "desertfox-help-muted", "No warnings.")
     : el("ul", "desertfox-help-warnings", ...model.warnings.map((warning) => el("li", undefined, warning)));
-  const settings = el("table", undefined, ...model.settings.map((row) => el("tr", undefined, el("td", undefined, el("code", undefined, row.name)), el("td", undefined, el("code", undefined, row.value)), el("td", "desertfox-help-muted", row.tag ?? ""))));
+  const settings = el("table", "desertfox-help-settings", ...model.settings.map((row) => el("tr", undefined, el("td", undefined, el("code", undefined, row.name)), el("td", undefined, el("code", undefined, row.value)), el("td", "desertfox-help-muted", row.tag ?? ""))));
   return [
     block_node(model.tip),
     section_heading("home", warnings_section),
