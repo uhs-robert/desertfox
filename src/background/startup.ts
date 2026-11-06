@@ -63,7 +63,7 @@ async function publish(step: LoadStep, overrides: SettingOverrides): Promise<Mer
     step.slots = { table: slot_table({ ...plan, assignments: applied.applied }), warnings: [...plan.warnings, ...applied.warnings] };
   }
   const all_warnings = [...step.load_warnings, ...warnings, ...step.slots.warnings];
-  for (const warning of all_warnings) console.warn(`oasisfox: ${warning}`);
+  for (const warning of all_warnings) console.warn(`desertfox: ${warning}`);
 
   await browser.storage.local.set({
     [COMPILED_KEYMAP_STORAGE_KEY]: compiled,

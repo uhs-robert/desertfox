@@ -17,26 +17,26 @@ function el(tag: string, class_name: string | undefined, ...children: Child[]): 
 }
 
 function key_list(rows: KeyRow[]): HTMLElement {
-  const cell = el("div", "oasisfox-help-keys");
+  const cell = el("div", "desertfox-help-keys");
   if (rows.length === 0) {
-    cell.append(el("span", "oasisfox-help-muted", "no keys"));
+    cell.append(el("span", "desertfox-help-muted", "no keys"));
     return cell;
   }
   for (const row of rows) {
-    const line = el("div", undefined, el("span", "oasisfox-help-mode", row.mode), el("kbd", undefined, row.keys));
-    if (row.args) line.append(" ", el("span", "oasisfox-help-muted", row.args));
+    const line = el("div", undefined, el("span", "desertfox-help-mode", row.mode), el("kbd", undefined, row.keys));
+    if (row.args) line.append(" ", el("span", "desertfox-help-muted", row.args));
     cell.append(line);
   }
   return cell;
 }
 
 function params_table(command: CommandRow): HTMLElement | string {
-  if (command.params.length === 0) return el("span", "oasisfox-help-muted", "no params");
+  if (command.params.length === 0) return el("span", "desertfox-help-muted", "no params");
   const head = el("tr", undefined, ...["param", "type", "default", "values", "flags"].map((name) => el("th", undefined, name)));
   const body = command.params.map((param) =>
     el("tr", undefined, ...[param.name, param.type, param.default, param.values, param.flags].map((text) => el("td", undefined, text))),
   );
-  return el("table", "oasisfox-help-params", head, ...body);
+  return el("table", "desertfox-help-params", head, ...body);
 }
 
 export const command_anchor = (id: string): string => `command-${id}`;
@@ -44,10 +44,10 @@ export const command_anchor = (id: string): string => `command-${id}`;
 function command_card(command: CommandRow): HTMLElement {
   const card = el(
     "section",
-    "oasisfox-help-command",
-    el("h3", undefined, command.label, " ", el("code", "oasisfox-help-muted", command.id)),
+    "desertfox-help-command",
+    el("h3", undefined, command.label, " ", el("code", "desertfox-help-muted", command.id)),
     el("p", undefined, command.intent),
-    el("pre", "oasisfox-help-usage", command.usage),
+    el("pre", "desertfox-help-usage", command.usage),
     params_table(command),
     key_list(command.keys),
   );
@@ -61,11 +61,11 @@ const file_name = (path: string): string => path.split("/").pop() ?? path;
 
 function engine_row(engine: EngineRow, show_files: boolean): HTMLElement {
   const name = el("td", undefined, engine.name);
-  if (engine.needs) name.append(" ", el("span", "oasisfox-help-badge", `needs ${engine.needs}`));
-  if (engine.fallback) name.append(" ", el("span", "oasisfox-help-badge", `falls back to ${engine.fallback}`));
+  if (engine.needs) name.append(" ", el("span", "desertfox-help-badge", `needs ${engine.needs}`));
+  if (engine.fallback) name.append(" ", el("span", "desertfox-help-badge", `falls back to ${engine.fallback}`));
   if (show_files) {
     for (const file of engine.files) {
-      const badge = el("span", "oasisfox-help-badge", file_name(file));
+      const badge = el("span", "desertfox-help-badge", file_name(file));
       badge.title = file;
       name.append(" ", badge);
     }
@@ -73,26 +73,26 @@ function engine_row(engine: EngineRow, show_files: boolean): HTMLElement {
   const keys = el("td", undefined, ...engine.keys.flatMap((sequence) => [el("kbd", undefined, sequence), " "]));
   const host = el("summary", undefined, engine.host);
   host.title = engine.url;
-  const full = el("div", "oasisfox-help-muted", engine.url, ...engine.origins.map((line) => el("div", undefined, line)));
+  const full = el("div", "desertfox-help-muted", engine.url, ...engine.origins.map((line) => el("div", undefined, line)));
   const row = el("tr", undefined, name, el("td", undefined, engine.label), keys, el("td", undefined, el("details", undefined, host, full)));
   row.id = engine_anchor(engine.name);
   return row;
 }
 
 function engine_table(engines: EngineRow[]): HTMLElement {
-  if (engines.length === 0) return el("span", "oasisfox-help-muted", "No engines.");
+  if (engines.length === 0) return el("span", "desertfox-help-muted", "No engines.");
   const first_file = engines[0]!.files[0];
   const one_file = first_file !== undefined && engines.every((engine) => engine.files.length === 1 && engine.files[0] === first_file);
   const head = el("tr", undefined, ...["engine", "label", "keys", "url"].map((name) => el("th", undefined, name)));
-  const table = el("table", "oasisfox-help-engines", head, ...engines.map((engine) => engine_row(engine, !one_file)));
+  const table = el("table", "desertfox-help-engines", head, ...engines.map((engine) => engine_row(engine, !one_file)));
   if (!one_file) return table;
-  return el("div", undefined, el("p", "oasisfox-help-muted", `Set by ${first_file}`), table);
+  return el("div", undefined, el("p", "desertfox-help-muted", `Set by ${first_file}`), table);
 }
 
 function inline_node(inline: Inline): Child {
   switch (inline.kind) {
     case "text": return inline.text;
-    case "code": return el("code", "oasisfox-help-inline-code", inline.text);
+    case "code": return el("code", "desertfox-help-inline-code", inline.text);
     case "link": {
       const link = el("a", undefined, inline.text);
       link.setAttribute("href", inline.href);
@@ -121,18 +121,18 @@ export async function copy_code_and_confirm(
 }
 
 function code_block_node(text: string, language: string | undefined): HTMLElement {
-  const button = el("button", "oasisfox-help-code-copy", "Copy");
+  const button = el("button", "desertfox-help-code-copy", "Copy");
   button.setAttribute("type", "button");
   button.addEventListener("click", () => void copy_code_and_confirm(navigator.clipboard, text, button));
-  const head = el("div", "oasisfox-help-code-head", ...(language ? [el("span", "oasisfox-help-code-lang", language)] : []), button);
-  return el("div", "oasisfox-help-code", head, el("pre", "oasisfox-help-code-body", text));
+  const head = el("div", "desertfox-help-code-head", ...(language ? [el("span", "desertfox-help-code-lang", language)] : []), button);
+  return el("div", "desertfox-help-code", head, el("pre", "desertfox-help-code-body", text));
 }
 
 function block_node(block: Block): HTMLElement {
   switch (block.kind) {
     case "heading": return el(`h${block.level}`, undefined, block.text);
     case "paragraph": return el("p", undefined, ...block.inlines.map(inline_node));
-    case "tip": return el("div", "oasisfox-help-tip", el("strong", "oasisfox-help-tip-label", "Tip"), ": ", ...block.inlines.map(inline_node));
+    case "tip": return el("div", "desertfox-help-tip", el("strong", "desertfox-help-tip-label", "Tip"), ": ", ...block.inlines.map(inline_node));
     case "list": return el("ul", undefined, ...block.items.map((item) => el("li", undefined, ...item.map(inline_node))));
     case "code_block": return code_block_node(block.text, block.language);
   }
@@ -167,8 +167,8 @@ function definition_table(rows: { name: string; meaning: string }[]): HTMLElemen
 function home_page(model: HelpModel): HTMLElement[] {
   const [warnings_section, settings_section] = HOME_SECTIONS as [Section, Section];
   const warnings = model.warnings.length === 0
-    ? el("p", "oasisfox-help-muted", "No warnings.")
-    : el("ul", "oasisfox-help-warnings", ...model.warnings.map((warning) => el("li", undefined, warning)));
+    ? el("p", "desertfox-help-muted", "No warnings.")
+    : el("ul", "desertfox-help-warnings", ...model.warnings.map((warning) => el("li", undefined, warning)));
   const settings = el("table", undefined, ...model.settings.map((row) => el("tr", undefined, el("td", undefined, el("code", undefined, row.name)), el("td", undefined, el("code", undefined, row.value)))));
   return [
     block_node(model.tip),
@@ -191,7 +191,7 @@ function commands_page(model: HelpModel): HTMLElement[] {
 function styling_page(): HTMLElement[] {
   const [variables_section, classes_section] = STYLING_SECTIONS as [Section, Section];
   return [
-    el("p", undefined, "Set these CSS variables in style.css to restyle OasisFox, on the class of the surface (for example .oasisfox-whichkey { --oasisfox-primary: red; }): a variable on :root or :host alone does not reach inside a surface. A surface reads the roles it needs, so a role no surface reads yet has no visible effect. The class names below are stable."),
+    el("p", undefined, "Set these CSS variables in style.css to restyle DesertFox, on the class of the surface (for example .desertfox-whichkey { --desertfox-primary: red; }): a variable on :root or :host alone does not reach inside a surface. A surface reads the roles it needs, so a role no surface reads yet has no visible effect. The class names below are stable."),
     section_heading("styling", variables_section),
     definition_table(STYLE_VARIABLES),
     section_heading("styling", classes_section),
@@ -210,7 +210,7 @@ function page_body(route: Route, model: HelpModel, guide: Block[]): HTMLElement[
 }
 
 function support_link(title: string, url: string): HTMLElement {
-  const link = el("a", "oasisfox-help-support-link", title);
+  const link = el("a", "desertfox-help-support-link", title);
   link.setAttribute("href", url);
   link.setAttribute("target", "_blank");
   link.setAttribute("rel", "noopener noreferrer");
@@ -222,7 +222,7 @@ function heart_icon(): SVGElement {
   const svg = document.createElementNS(svg_ns, "svg");
   svg.setAttribute("viewBox", "0 0 16 16");
   svg.setAttribute("aria-hidden", "true");
-  svg.setAttribute("class", "oasisfox-help-support-heart");
+  svg.setAttribute("class", "desertfox-help-support-heart");
   const path = document.createElementNS(svg_ns, "path");
   path.setAttribute("d", "M8 14 C2 9.8 1 7.4 1 5.5 C1 3.5 2.5 2 4.3 2 C5.8 2 7.1 2.8 8 4.1 C8.9 2.8 10.2 2 11.7 2 C13.5 2 15 3.5 15 5.5 C15 7.4 14 9.8 8 14 Z");
   svg.append(path);
@@ -230,12 +230,12 @@ function heart_icon(): SVGElement {
 }
 
 function support_card(): HTMLElement {
-  const heading = el("div", "oasisfox-help-support-heading", heart_icon(), "Enjoying OasisFox?");
+  const heading = el("div", "desertfox-help-support-heading", heart_icon(), "Enjoying DesertFox?");
   return el(
     "div",
-    "oasisfox-help-support",
+    "desertfox-help-support",
     heading,
-    el("div", "oasisfox-help-support-note", "Support its work"),
+    el("div", "desertfox-help-support-note", "Support its work"),
     support_link("GitHub Sponsors", "https://github.com/sponsors/uhs-robert"),
     support_link("Ko-fi", "https://ko-fi.com/uphillsolutions"),
   );
@@ -282,8 +282,8 @@ function section_heading(page: PageId, section: Section, level = 2): HTMLElement
 export const section_hash = (page: PageId, slug: string): string => `#section=${page}/${encodeURIComponent(slug)}`;
 
 function section_list(page: PageId, sections: Section[], expanded: boolean): HTMLElement {
-  const list = el("div", "oasisfox-help-sections");
-  list.id = `oasisfox-help-sections-${page}`;
+  const list = el("div", "desertfox-help-sections");
+  list.id = `desertfox-help-sections-${page}`;
   list.hidden = !expanded;
   for (const { title, slug } of sections) {
     const link = el("a", undefined, title);
@@ -324,7 +324,7 @@ function chevron_icon(): Element {
 
 // A real button, so keys and hints reach it.
 function section_toggle(page: PageId, title: string, list: HTMLElement): HTMLElement {
-  const button = el("button", "oasisfox-help-sections-toggle", chevron_icon());
+  const button = el("button", "desertfox-help-sections-toggle", chevron_icon());
   button.setAttribute("type", "button");
   button.setAttribute("aria-label", `${title} sections`);
   button.setAttribute("aria-controls", list.id);
@@ -355,15 +355,15 @@ function sidebar(current: PageId, model: HelpModel, guide: Block[]): HTMLElement
       list.hidden = false;
       toggle.setAttribute("aria-expanded", "true");
     });
-    return el("div", "oasisfox-help-nav-group", el("div", "oasisfox-help-nav-row", link, toggle), list);
+    return el("div", "desertfox-help-nav-group", el("div", "desertfox-help-nav-row", link, toggle), list);
   });
-  return el("nav", "oasisfox-help-sidebar", el("div", "oasisfox-help-brand", "OasisFox"), ...entries, support_card());
+  return el("nav", "desertfox-help-sidebar", el("div", "desertfox-help-brand", "DesertFox"), ...entries, support_card());
 }
 
 export function render_help(root: HTMLElement, model: HelpModel, route: Route, guide: Block[]): void {
   const title = PAGES.find((page) => page.id === route.page)?.title ?? "Home";
   const heading = el("h1", undefined, title);
   heading.tabIndex = -1;
-  const page = el("main", "oasisfox-help-page", heading, ...page_body(route, model, guide));
-  root.replaceChildren(el("div", "oasisfox-help", sidebar(route.page, model, guide), page));
+  const page = el("main", "desertfox-help-page", heading, ...page_body(route, model, guide));
+  root.replaceChildren(el("div", "desertfox-help", sidebar(route.page, model, guide), page));
 }

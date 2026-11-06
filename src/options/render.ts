@@ -15,16 +15,16 @@ export function render_options(root: HTMLElement, model: OptionsModel): void {
   const warning_heading = model.keymap_warning_count > 0 ? `Warnings (${model.keymap_warning_count} keymap)` : "Warnings";
   const page = el(
     "main",
-    "oasisfox-options-page",
-    el("h1", undefined, "OasisFox status"),
+    "desertfox-options-page",
+    el("h1", undefined, "DesertFox status"),
     el("h2", undefined, "Config source"),
     el("p", undefined, model.source_text),
     el("h2", undefined, "Settings"),
-    el("table", undefined, ...model.settings.map((row) => el("tr", undefined, el("td", undefined, el("code", undefined, row.name)), el("td", undefined, el("code", undefined, row.value)), el("td", "oasisfox-options-muted", row.tag ?? "")))),
+    el("table", undefined, ...model.settings.map((row) => el("tr", undefined, el("td", undefined, el("code", undefined, row.name)), el("td", undefined, el("code", undefined, row.value)), el("td", "desertfox-options-muted", row.tag ?? "")))),
     el("h2", undefined, warning_heading),
   );
-  if (model.warnings.length === 0) page.append(el("p", "oasisfox-options-muted", "No warnings."));
-  else page.append(el("ul", "oasisfox-options-warnings", ...model.warnings.map((warning) => el("li", undefined, warning))));
+  if (model.warnings.length === 0) page.append(el("p", "desertfox-options-muted", "No warnings."));
+  else page.append(el("ul", "desertfox-options-warnings", ...model.warnings.map((warning) => el("li", undefined, warning))));
   page.append(
     el("h2", undefined, "Commands"),
     el("table", undefined, ...model.commands.map((row) => el("tr", undefined, el("td", undefined, el("code", undefined, row.id)), el("td", undefined, row.label), el("td", undefined, row.intent)))),
@@ -32,5 +32,5 @@ export function render_options(root: HTMLElement, model: OptionsModel): void {
     el("p", undefined, "This page is read-only. Edit the config files, then:"),
     el("ol", undefined, ...model.rebuild_steps.map((step) => el("li", undefined, el("code", undefined, step)))),
   );
-  root.replaceChildren(el("div", "oasisfox-options", page));
+  root.replaceChildren(el("div", "desertfox-options", page));
 }

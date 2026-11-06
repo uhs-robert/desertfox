@@ -1,10 +1,10 @@
 ## Set up your engines
 
-A search engine is a named URL template. You type `search arch pacman mirrors` or press a key bound to it, and OasisFox fills the template and opens the result. OasisFox has one built-in engine, `duck` (DuckDuckGo), so `search` works with no config. Every other engine comes from your own file.
+A search engine is a named URL template. You type `search arch pacman mirrors` or press a key bound to it, and DesertFox fills the template and opens the result. DesertFox has one built-in engine, `duck` (DuckDuckGo), so `search` works with no config. Every other engine comes from your own file.
 
 ### Start with the example
 
-- Copy `examples/engines.toml` from the OasisFox repository to `~/.config/oasisfox/search_engines.toml`. It holds 66 engines, including GitHub and YouTube trees.
+- Copy `examples/engines.toml` from the DesertFox repository to `~/.config/desertfox/search_engines.toml`. It holds 66 engines, including GitHub and YouTube trees.
 - Run `just build-config`. The tool checks the file and stores the resolved engines for Firefox.
 - Run `config.reload` (`qr` by default) in Firefox, or restart it.
 - Check the table below this guide. Your engines show there with the file that set each field.
@@ -23,7 +23,7 @@ Then `search arch pacman mirrors` searches the wiki. Bind it to a key in `keymap
 
 ### Slots
 
-A slot is a name in braces that OasisFox fills when it opens the URL.
+A slot is a name in braces that DesertFox fills when it opens the URL.
 
 - `{query}` is the typed or selected text. `%s` means the same.
 - `{url}`, `{host}` and `{title}` come from the current page.
@@ -82,4 +82,4 @@ scope = "repo:{repo} "
 - Run `just build-config` after each edit. It rejects an unknown slot, a param no URL uses, a fallback to a missing engine and a fallback loop.
 - Prefer an engine over a snippet when the result is a URL. Use a snippet when you need the page DOM or several steps.
 - Run `engine.show <name>` to open this page at one engine.
-- See [a fuller real example](https://github.com/uhs-robert/oasis-dots/blob/main/home/oasisfox/.config/oasisfox/search_engines.toml).
+- See [a fuller real example](https://github.com/uhs-robert/oasis-dots/blob/main/home/desertfox/.config/desertfox/search_engines.toml).

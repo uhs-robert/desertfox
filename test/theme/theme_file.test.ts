@@ -116,18 +116,18 @@ test("a file needs a [dark] or [light] table and nothing else at the top", () =>
   assert.deepEqual(checked({ dark: "#000" }).problems, ["t.toml: [dark]: expected a table of role = color"]);
 });
 
-test("a role's token is --oasisfox- plus the role with hyphens", () => {
-  assert.equal(token_name("bg_mantle"), "--oasisfox-bg-mantle");
-  assert.equal(token_name("mode_normal"), "--oasisfox-mode-normal");
+test("a role's token is --desertfox- plus the role with hyphens", () => {
+  assert.equal(token_name("bg_mantle"), "--desertfox-bg-mantle");
+  assert.equal(token_name("mode_normal"), "--desertfox-mode-normal");
   const tokens = role_tokens(derive_roles(REQUIRED, "dark"));
   assert.equal(Object.keys(tokens).length, ROLES.length);
-  assert.equal(tokens["--oasisfox-secondary"], "#f0e68c");
+  assert.equal(tokens["--desertfox-secondary"], "#f0e68c");
 });
 
 test("the command line page declares its colors as role tokens, bg_mantle and secondary included", () => {
   const html = readFileSync(new URL("../../src/cmdline/cmdline.html", import.meta.url), "utf8");
-  const block = /\.oasisfox-cmdline \{([^}]*)\}/.exec(html)![1]!;
-  const declared = [...block.matchAll(/(--oasisfox-[a-z-]+):\s*#[0-9a-f]{3,6};/g)].map((match) => match[1]);
+  const block = /\.desertfox-cmdline \{([^}]*)\}/.exec(html)![1]!;
+  const declared = [...block.matchAll(/(--desertfox-[a-z-]+):\s*#[0-9a-f]{3,6};/g)].map((match) => match[1]);
   const role_token_names = ROLES.map(token_name);
   for (const name of declared) assert.ok(role_token_names.includes(name!), `${name} is not a role token`);
   assert.ok(declared.includes(token_name("bg_mantle")));

@@ -1,13 +1,13 @@
 // Key test cases of piece P3 (command line completion). run.mjs calls run_cases with its helpers.
 // The line page sits in an iframe at the extension origin, which neither executeScript nor the debugger helper here
 // can read. The cases drive it with keys and check what the commands it runs did. The look is checked in screenshots:
-// set OASISFOX_SHOT_DIR to save the list on open, after a fuzzy match (tab.close shows its keys in the last column) and in a narrow window.
+// set DESERTFOX_SHOT_DIR to save the list on open, after a fuzzy match (tab.close shows its keys in the last column) and in a narrow window.
 import { evaluate_in_background } from "./rdp.mjs";
 
 const CTRL = (key) => ["-M", "ctrl", key, "-m", "ctrl"];
 
 export async function run_cases({ rdp, extension_id, run_case, send_keys, open_page, wait_event, take_shot, events, expect, sleep }) {
-  const shot_dir = process.env.OASISFOX_SHOT_DIR;
+  const shot_dir = process.env.DESERTFOX_SHOT_DIR;
   const set_zoom = (factor) => evaluate_in_background(rdp, extension_id, `(async () => { const [tab] = await browser.tabs.query({ active: true, currentWindow: true }); await browser.tabs.setZoom(tab.id, ${factor}); })()`);
   const tab_urls = () => evaluate_in_background(rdp, extension_id, `(async () => (await browser.tabs.query({ currentWindow: true })).map((tab) => tab.url))()`);
 

@@ -43,7 +43,7 @@ for (const file of ["manifest.json", "managed_schema.json", "help/help.html", "o
 for (const file of ["DSEG7Classic-Regular.ttf", "OFL-DSEG.txt"]) await copyFile(`src/newtab/fonts/${file}`, `dist/${file}`);
 
 await mkdir("dist/icons", { recursive: true });
-await copyFile("src/icons/oasisfox.svg", "dist/icons/oasisfox.svg");
+await copyFile("src/icons/desertfox.svg", "dist/icons/desertfox.svg");
 
 // A doc the renderer cannot read fails the build here, with the file and line.
 const { parse_markdown } = await import("./render_docs.ts");

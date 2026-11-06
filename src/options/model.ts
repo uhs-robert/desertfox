@@ -34,7 +34,7 @@ const SOURCE_TEXT: Record<ConfigSource, string> = {
   defaults: "Built-in defaults, no config found",
 };
 
-const FALLBACK_MANAGED_FILE = "~/.mozilla/managed-storage/oasisfox@uhs-robert.json";
+const FALLBACK_MANAGED_FILE = "~/.mozilla/managed-storage/desertfox@uhs-robert.json";
 
 // Keymap warnings start with the mode name, config warnings with "config".
 const KEYMAP_WARNING = new RegExp(`^(${[...MODES, "browser"].join("|")}): `);

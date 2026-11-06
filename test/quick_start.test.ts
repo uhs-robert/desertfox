@@ -87,7 +87,7 @@ test("the Quick Start page opens on a first install only, and the setting turns 
 });
 
 function problems_with_settings(settings_toml: string): string {
-  const dir = mkdtempSync(join(tmpdir(), "oasisfox-config-"));
+  const dir = mkdtempSync(join(tmpdir(), "desertfox-config-"));
   cpSync(join(FIXTURES, "full"), dir, { recursive: true });
   mkdirSync(dirname(join(dir, "settings.toml")), { recursive: true });
   writeFileSync(join(dir, "settings.toml"), settings_toml);

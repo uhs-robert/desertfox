@@ -124,7 +124,7 @@ test("a failed load shows an error, replays the held keys in the current mode an
   page.press("f", "x", "j");
   page.loads[0]!.finish(false);
   await page.settle();
-  assert.deepEqual(page.errors, ["OasisFox could not load hints"]);
+  assert.deepEqual(page.errors, ["DesertFox could not load hints"]);
   assert.deepEqual(page.events, ["run log_x", "run log_j"]);
   assert.equal(page.host.is_loading(), false);
   // The failure was forgotten: the next press asks again.
@@ -132,7 +132,7 @@ test("a failed load shows an error, replays the held keys in the current mode an
   assert.equal(page.loads.length, 2);
   page.loads[1]!.finish(true);
   await page.settle();
-  assert.deepEqual(page.errors, ["OasisFox could not load hints", "needs hints"]);
+  assert.deepEqual(page.errors, ["DesertFox could not load hints", "needs hints"]);
 });
 
 test("a bundle that registers no handler refuses with the reason and the held keys still replay", async () => {
@@ -264,7 +264,7 @@ test("when the ui bundle cannot load, the error is reported once and does not as
   page.host.run_command("ui.toast", "ui", { message: "lost" }, "ui missing", false);
   page.loads[0]!.finish(false);
   await page.settle();
-  assert.deepEqual(page.errors, ["OasisFox could not load ui"]);
+  assert.deepEqual(page.errors, ["DesertFox could not load ui"]);
   assert.equal(page.host.has_handler("ui.toast"), false);
   assert.equal(page.loads.length, 1);
 });
@@ -363,7 +363,7 @@ test("run_command answers failed for a failed load and for a bundle with no hand
   const page = make_page();
   const lost = page.host.api.run_command("hint.run", "hints", {});
   page.loads[0]!.finish(false);
-  assert.deepEqual(await lost, { ok: false, message: "OasisFox could not load hints" });
+  assert.deepEqual(await lost, { ok: false, message: "DesertFox could not load hints" });
   assert.equal(page.host.is_loading(), false);
   const empty = page.host.api.run_command("hint.run", "hints", {});
   page.loads[1]!.finish(true);

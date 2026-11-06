@@ -31,7 +31,7 @@ define("mode.escape", {
 define("mode.pass_next", {
   completion: "hidden",
   label: "Pass next key",
-  intent: "Give the next key to the page instead of OasisFox.",
+  intent: "Give the next key to the page instead of DesertFox.",
   runs_in: "content",
   run: mode_pass_next.run,
 });

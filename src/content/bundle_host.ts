@@ -1,6 +1,6 @@
 // Loads bundles on first use and holds what they register. A bundle is a script the background injects
 // into this frame. It registers through `register_sink` and `register_handler` and enters its mode with `set_mode`.
-// main.ts puts all three on `window.oasisfox_host`. The host counts every wait on a load, and key_flow holds keys until none is left.
+// main.ts puts all three on `window.desertfox_host`. The host counts every wait on a load, and key_flow holds keys until none is left.
 
 import { BUNDLE_FOR_MODE } from "../shared/bundles.ts";
 import type { BundleName } from "../shared/bundles.ts";
@@ -99,7 +99,7 @@ export function create_bundle_host() {
               resolve(
                 settle(() => {
                   const registered = handlers.get(command_id);
-                  if (!registered) throw new Error(loaded ? missing : `OasisFox could not load ${name}`);
+                  if (!registered) throw new Error(loaded ? missing : `DesertFox could not load ${name}`);
                   return registered(args);
                 }),
               ),

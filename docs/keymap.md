@@ -199,7 +199,7 @@ Which-key group names:
 - `y`: Copy
 - `a`: Bookmark
 - `z`: Zoom and scroll
-- `q`: OasisFox
+- `q`: DesertFox
 - `;`: Hints
 - `s`: Search here
 - `S`: Search in new tab

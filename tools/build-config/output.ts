@@ -6,7 +6,7 @@ import { dirname, join } from "node:path";
 import type { MergedConfig, SearchEngine } from "../../src/shared/config.ts";
 import type { DataKind } from "./source_files.ts";
 
-export const EXTENSION_ID = "oasisfox@uhs-robert";
+export const EXTENSION_ID = "desertfox@uhs-robert";
 
 // The file Firefox reads. Only the CLI's --live flag may target it.
 export function live_managed_storage_path(): string {
@@ -16,7 +16,7 @@ export function live_managed_storage_path(): string {
 export function managed_storage_document(config: MergedConfig) {
   return {
     name: EXTENSION_ID,
-    description: "OasisFox user config merged by tools/build-config",
+    description: "DesertFox user config merged by tools/build-config",
     type: "storage",
     data: config,
   };

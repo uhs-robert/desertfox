@@ -14,7 +14,7 @@ const FIXTURES = join(import.meta.dirname, "fixtures", "build-config");
 const commands = read_commands_file(join(FIXTURES, "commands.json"));
 
 function config_dir_with(files: Record<string, string>): string {
-  const dir = mkdtempSync(join(tmpdir(), "oasisfox-config-"));
+  const dir = mkdtempSync(join(tmpdir(), "desertfox-config-"));
   cpSync(join(FIXTURES, "full"), dir, { recursive: true });
   for (const [name, text] of Object.entries(files)) {
     mkdirSync(dirname(join(dir, name)), { recursive: true });
@@ -55,7 +55,7 @@ test("the content side focuses the window, then blurs the active element", () =>
 test("page.home opens the home_page setting or refuses", () => {
   const built_in = () => "moz-extension://x/newtab.html";
   assert.equal(home_page_url("https://home.example/", built_in), "https://home.example/");
-  assert.equal(home_page_url("oasisfox", built_in), `${built_in()}?builtin`);
+  assert.equal(home_page_url("desertfox", built_in), `${built_in()}?builtin`);
   assert.throws(() => home_page_url(undefined, built_in), /set home_page in settings\.toml/);
 });
 

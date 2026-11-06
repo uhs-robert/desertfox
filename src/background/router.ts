@@ -37,7 +37,7 @@ export type RouteRequest = {
   // The tab the caller says it came from. The active tab wins when there is one.
   sender_tab_id?: number;
   frame_id?: number;
-  // Set by keys and Firefox shortcuts: a missing value opens the command line. A snippet's `oasisfox.run` leaves it
+  // Set by keys and Firefox shortcuts: a missing value opens the command line. A snippet's `desertfox.run` leaves it
   // unset and gets the validation failure instead, because nobody is there to type.
   may_prompt?: boolean;
   // The request runs but does not replace what `.` repeats.
@@ -151,7 +151,7 @@ export function create_router(deps: RouterDeps): Router {
   async function first_unmet_need(command: CommandDef, tab_id: number | undefined): Promise<string | undefined> {
     for (const need of command.needs ?? []) {
       if (need === "content") {
-        if (tab_id === undefined || !(await deps.has_content_script(tab_id))) return "a page OasisFox runs on";
+        if (tab_id === undefined || !(await deps.has_content_script(tab_id))) return "a page DesertFox runs on";
       } else if (!(await deps.has_permission(need))) {
         return `the "${need}" permission`;
       }
@@ -166,7 +166,7 @@ export function create_router(deps: RouterDeps): Router {
     try {
       return outcome_of_reply(await deps.send_to_tab(tab_id, { type: "run_in_content", invocations }, frame_id));
     } catch {
-      return refuse(`${command.label} needs a page OasisFox runs on`);
+      return refuse(`${command.label} needs a page DesertFox runs on`);
     }
   }
 
@@ -194,7 +194,7 @@ export function create_router(deps: RouterDeps): Router {
     try {
       return outcome_of_reply(await deps.open_cmdline(tab_id, frame_id ?? 0, print_command(command, typed, { open_param, sources: await deps.get_enum_sources() })));
     } catch {
-      return had_page ? cancelled : refuse(`${command.label} needs a page OasisFox runs on`);
+      return had_page ? cancelled : refuse(`${command.label} needs a page DesertFox runs on`);
     }
   }
 

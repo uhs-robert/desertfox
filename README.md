@@ -1,4 +1,4 @@
-# OasisFox
+# DesertFox
 
 A keyboard-first Firefox extension with one command registry. Keys, the command line, completion, help and which-key all read the same command definitions. It works on its own, and integrates with Oasis Dots (Hyprland and Quickshell) through an optional native host.
 
@@ -6,20 +6,20 @@ Status: phase 1 is built. Release 0.1.1 adds the toolbar button, the status page
 
 ## What 0.1.1 adds
 
-- A toolbar button titled "OasisFox". The `mode_indicator` setting (`always`, `not_normal`, `off`) controls the page badge. The `palette` setting names a theme for the badge colors: one of the 16 Oasis themes (`oasis_<name>`, default `oasis_moonlight`) or a theme file of your own in `~/.config/oasisfox/themes/`. Light or dark follows the system theme, and `light_intensity` (1 to 5, default 3) picks the light set of an Oasis theme.
+- A toolbar button titled "DesertFox". The `mode_indicator` setting (`always`, `not_normal`, `off`) controls the page badge. The `palette` setting names a theme for the badge colors: one of the 16 Oasis themes (`oasis_<name>`, default `oasis_moonlight`) or a theme file of your own in `~/.config/desertfox/themes/`. Light or dark follows the system theme, and `light_intensity` (1 to 5, default 3) picks the light set of an Oasis theme.
 - A read-only status page in the add-on options. It shows the config source, the settings in force, the keymap warnings and the rebuild steps.
 - The help page takes keys, so `j`, `k` and `gg` scroll it.
 - `zt`, `zz` and `zb` scroll the focused field to the top, center or bottom of the view. After `gi` and `Escape` they align the field you just left. Zoom reset moved from `zz` to `z=`.
-- `page.blur` moved from `zb` to `qb`. The `q` group holds OasisFox's own commands: `qr` reload config, `qh` help, `qi` ignore mode, `qb` blur.
+- `page.blur` moved from `zb` to `qb`. The `q` group holds DesertFox's own commands: `qr` reload config, `qh` help, `qi` ignore mode, `qb` blur.
 - The plain keys `r`, `t` and `x` are now prefixes: `rr` reload, `rh` hard reload, `tt` open in a new tab, `tT tm td tn tp ta tf tl` for tabs, `xx` close tab, `xp` stop loading.
 - The default keymap binds the rows marked `bound` in [docs/keymap.md](docs/keymap.md), which also lists the later and dropped keys. The search engine and container keys come from your config.
 
 ## Config
 
-Write your keys in TOML in `~/.config/oasisfox/`, then run `just build-config`. The tool checks the files and writes the merged config that Firefox reads from managed storage. A binding is one line of command text, the same words you type in the command line:
+Write your keys in TOML in `~/.config/desertfox/`, then run `just build-config`. The tool checks the files and writes the merged config that Firefox reads from managed storage. A binding is one line of command text, the same words you type in the command line:
 
 ```toml
-# ~/.config/oasisfox/keymap.toml
+# ~/.config/desertfox/keymap.toml
 [normal]
 J = "tab.next"                  # a command name or id
 o = "open"                      # asks for the URL

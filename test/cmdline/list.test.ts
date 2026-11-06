@@ -65,9 +65,9 @@ test("a row has a name, a description and args with the collapsed form beside th
   const { element, list } = setup();
   list.render(rows(3), 1);
   const [first, second] = element.children as [Node, Node];
-  assert.deepEqual(first.children.map((cell) => cell.className), ["oasisfox-cmdline-name", "oasisfox-cmdline-description", "oasisfox-cmdline-args", "oasisfox-cmdline-keys"]);
+  assert.deepEqual(first.children.map((cell) => cell.className), ["desertfox-cmdline-name", "desertfox-cmdline-description", "desertfox-cmdline-args", "desertfox-cmdline-keys"]);
   const args = second.children[2]!;
-  assert.deepEqual(args.children.map((cell) => [cell.className, cell.textContent]), [["oasisfox-cmdline-args-full", "--x"], ["oasisfox-cmdline-args-short", "…"]]);
+  assert.deepEqual(args.children.map((cell) => [cell.className, cell.textContent]), [["desertfox-cmdline-args-full", "--x"], ["desertfox-cmdline-args-short", "…"]]);
   // A row with no args collapses to nothing, not to an ellipsis.
   assert.equal(first.children[2]!.children[1]!.textContent, "");
 });
@@ -83,9 +83,9 @@ test("only the selected row is marked, and only the matched letters of the name 
 test("the name column is as wide as the longest visible name, within a cap", () => {
   const { element, list } = setup();
   list.render(rows(3), -1);
-  assert.equal(element.style.vars["--oasisfox-name-width"], "4ch");
+  assert.equal(element.style.vars["--desertfox-name-width"], "4ch");
   list.render([{ ...rows(1)[0]!, name: "x".repeat(60) }], -1);
-  assert.equal(element.style.vars["--oasisfox-name-width"], "28ch");
+  assert.equal(element.style.vars["--desertfox-name-width"], "28ch");
 });
 
 test("a new ranking starts at the top, and the same ranking keeps its window while previewed", () => {
@@ -104,8 +104,8 @@ test("a row marked unavailable carries the dim class and the others do not", () 
   const [plain, dim] = rows(2);
   list.render([plain!, { ...dim!, unavailable: true, args: "unavailable" }], 0);
   const [first, second] = element.children;
-  assert.equal(first!.className, "oasisfox-cmdline-item oasisfox-cmdline-selected");
-  assert.equal(second!.className, "oasisfox-cmdline-item oasisfox-cmdline-unavailable");
+  assert.equal(first!.className, "desertfox-cmdline-item desertfox-cmdline-selected");
+  assert.equal(second!.className, "desertfox-cmdline-item desertfox-cmdline-unavailable");
   assert.equal(second!.children[2]!.children[0]!.textContent, "unavailable");
 });
 
@@ -114,8 +114,8 @@ test("a row with a tag gets a dim tag cell after the args and before the keys, a
   const [plain, tagged] = rows(2);
   list.render([plain!, { ...tagged!, tag: "hist" }], 0);
   const [first, second] = element.children as [Node, Node];
-  assert.deepEqual(first.children.map((cell) => cell.className).slice(3), ["oasisfox-cmdline-keys"]);
-  assert.deepEqual(second.children.map((cell) => cell.className).slice(3), ["oasisfox-cmdline-tag", "oasisfox-cmdline-keys"]);
+  assert.deepEqual(first.children.map((cell) => cell.className).slice(3), ["desertfox-cmdline-keys"]);
+  assert.deepEqual(second.children.map((cell) => cell.className).slice(3), ["desertfox-cmdline-tag", "desertfox-cmdline-keys"]);
   assert.equal(second.children[3]!.textContent, "hist");
 });
 
@@ -127,7 +127,7 @@ test("a command row shows its keys in the last cell and a row with no id shows n
   list.render([{ ...command!, id: "tab.close" }, flag!, { ...bare!, id: "tab.next" }], -1);
   const texts = (element.children as Node[]).map((row) => row.children[3]!.textContent);
   assert.deepEqual(texts, ["d dH +1", "", ""]);
-  assert.equal(element.style.vars["--oasisfox-keys-width"], "7ch");
+  assert.equal(element.style.vars["--desertfox-keys-width"], "7ch");
 });
 
 test("a tab row leads with the status, container and favicon cells, and a row without tab marks has none", () => {
@@ -136,13 +136,13 @@ test("a tab row leads with the status, container and favicon cells, and a row wi
   const tab = { ...plain!, tab: { id: 1, status: "%", flags: ["pinned", "muted"] as ("pinned" | "muted")[], favicon: "https://a.test/i.png", container: { color: "#37adff", icon: "resource://usercontext-content/fingerprint.svg" } } };
   list.render([plain!, tab], -1);
   const [first, second] = element.children as [Node, Node];
-  assert.equal(first.children[0]!.className, "oasisfox-cmdline-name");
-  assert.deepEqual(second.children.map((cell) => cell.className), ["oasisfox-cmdline-tab-status", "oasisfox-cmdline-container", "oasisfox-cmdline-favicon", "oasisfox-cmdline-name", "oasisfox-cmdline-description", "oasisfox-cmdline-args", "oasisfox-cmdline-keys"]);
+  assert.equal(first.children[0]!.className, "desertfox-cmdline-name");
+  assert.deepEqual(second.children.map((cell) => cell.className), ["desertfox-cmdline-tab-status", "desertfox-cmdline-container", "desertfox-cmdline-favicon", "desertfox-cmdline-name", "desertfox-cmdline-description", "desertfox-cmdline-args", "desertfox-cmdline-keys"]);
   const [status, container, favicon] = second.children as [Node, Node, Node];
-  assert.deepEqual(status.children.map((cell) => [cell.className, cell.textContent]), [["oasisfox-cmdline-tab-mark", "%"], ["oasisfox-cmdline-flag oasisfox-cmdline-flag-pinned", ""], ["oasisfox-cmdline-flag oasisfox-cmdline-flag-muted", ""]]);
-  assert.equal(container.style.vars["--oasisfox-container-color"], "#37adff");
+  assert.deepEqual(status.children.map((cell) => [cell.className, cell.textContent]), [["desertfox-cmdline-tab-mark", "%"], ["desertfox-cmdline-flag desertfox-cmdline-flag-pinned", ""], ["desertfox-cmdline-flag desertfox-cmdline-flag-muted", ""]]);
+  assert.equal(container.style.vars["--desertfox-container-color"], "#37adff");
   assert.equal((favicon.children[0] as unknown as { src: string }).src, "https://a.test/i.png");
-  assert.equal(element.style.vars["--oasisfox-flags-width"], "28px");
+  assert.equal(element.style.vars["--desertfox-flags-width"], "28px");
 });
 
 test("a tab with no container or favicon draws empty cells, and no flags take no width", () => {
@@ -150,7 +150,7 @@ test("a tab with no container or favicon draws empty cells, and no flags take no
   list.render([{ ...rows(1)[0]!, tab: { id: 1, status: "", flags: [] } }], -1);
   const [container, favicon] = (element.children[0] as Node).children.slice(1, 3) as [Node, Node];
   assert.deepEqual([container.children.length, favicon.children.length], [0, 0]);
-  assert.equal(element.style.vars["--oasisfox-flags-width"], "0px");
+  assert.equal(element.style.vars["--desertfox-flags-width"], "0px");
 });
 
 test("an image that fails to load is hidden, and a container icon that fails becomes a dot", () => {
@@ -162,8 +162,8 @@ test("an image that fails to load is hidden, and a container icon that fails bec
     image.onerror();
     assert.equal(image.hidden, true);
   }
-  assert.ok(container.className.includes("oasisfox-cmdline-container-dot"));
-  assert.equal(favicon.className, "oasisfox-cmdline-favicon");
+  assert.ok(container.className.includes("desertfox-cmdline-container-dot"));
+  assert.equal(favicon.className, "desertfox-cmdline-favicon");
 });
 
 test("a redraw reuses the image node of a favicon, so a keystroke fetches nothing again", () => {
@@ -181,7 +181,7 @@ test("a container icon that failed once is a dot again after a redraw", () => {
   list.render([tab], -1);
   ((element.children[0] as Node).children[1]!.children[0] as unknown as { onerror: () => void }).onerror();
   list.render([{ ...tab }], 0);
-  assert.ok((element.children[0] as Node).children[1]!.className.includes("oasisfox-cmdline-container-dot"));
+  assert.ok((element.children[0] as Node).children[1]!.className.includes("desertfox-cmdline-container-dot"));
 });
 
 test("rows with the same favicon each keep their own image node across a redraw", () => {
@@ -228,10 +228,10 @@ test("only command rows get the help link, and each item carries its absolute in
   list.scroll(5);
   const items = element.children;
   assert.deepEqual(items.map((item) => item.dataset.index), Array.from({ length: MAX_ROWS }, (_, offset) => String(5 + offset)));
-  const name_of = (item: Node) => item.children.find((child) => child.className.startsWith("oasisfox-cmdline-name"))!;
+  const name_of = (item: Node) => item.children.find((child) => child.className.startsWith("desertfox-cmdline-name"))!;
   assert.deepEqual(items.map((item) => name_of(item).dataset.help), items.map((_, offset) => ((5 + offset) % 2 === 0 ? `cmd.${5 + offset}` : undefined)));
-  assert.ok(name_of(items[1]!).className.includes("oasisfox-cmdline-link"));
-  assert.ok(!name_of(items[0]!).className.includes("oasisfox-cmdline-link"));
+  assert.ok(name_of(items[1]!).className.includes("desertfox-cmdline-link"));
+  assert.ok(!name_of(items[0]!).className.includes("desertfox-cmdline-link"));
 });
 
 test("a command row without a help card gets no link", () => {
@@ -239,7 +239,7 @@ test("a command row without a help card gets no link", () => {
   const element = fake_node("div");
   const list = create_list(element as unknown as HTMLElement, () => "", (id) => id !== "snippet.one");
   list.render([{ ...rows(2)[0]!, id: "snippet.one" }, { ...rows(2)[1]!, id: "tab.next" }], -1);
-  const name_of = (item: Node) => item.children.find((child) => child.className.startsWith("oasisfox-cmdline-name"))!;
+  const name_of = (item: Node) => item.children.find((child) => child.className.startsWith("desertfox-cmdline-name"))!;
   assert.deepEqual(element.children.map((item) => name_of(item).dataset.help), [undefined, "tab.next"]);
 });
 
@@ -249,9 +249,9 @@ test("an unloaded tab row gets the dim class, a selected one keeps only its sele
   const row = (flags: ("discarded")[]) => ({ ...plain!, tab: { id: 1, status: "", flags } });
   list.render([row([]), row(["discarded"]), row(["discarded"])], 2);
   assert.deepEqual((element.children as Node[]).map((item) => item.className), [
-    "oasisfox-cmdline-item",
-    "oasisfox-cmdline-item oasisfox-cmdline-item-discarded",
-    "oasisfox-cmdline-item oasisfox-cmdline-selected oasisfox-cmdline-item-discarded",
+    "desertfox-cmdline-item",
+    "desertfox-cmdline-item desertfox-cmdline-item-discarded",
+    "desertfox-cmdline-item desertfox-cmdline-selected desertfox-cmdline-item-discarded",
   ]);
 });
 
@@ -264,7 +264,7 @@ test("a heading row pads its name by its indent, and the name column counts the 
   assert.equal(second.children[0]!.style.paddingLeft, "2.4ch");
   // The padding moves the drawing, not the letters: the matched run still starts at the first letter of the name.
   assert.deepEqual(second.children[0]!.children.map((part) => [part.tag, part.textContent]), [["b", "Ne"], ["span", "sted"]]);
-  assert.equal(element.style.vars["--oasisfox-name-width"], `${"Nested".length + 2.4}ch`);
+  assert.equal(element.style.vars["--desertfox-name-width"], `${"Nested".length + 2.4}ch`);
   list.render([{ ...flat!, name: "x".repeat(150), indent: 0 }], -1);
-  assert.equal(element.style.vars["--oasisfox-name-width"], "100ch");
+  assert.equal(element.style.vars["--desertfox-name-width"], "100ch");
 });

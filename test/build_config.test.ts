@@ -15,7 +15,7 @@ const FIXTURES = join(import.meta.dirname, "fixtures", "build-config");
 const commands = read_commands_file(join(FIXTURES, "commands.json"));
 
 function config_dir_with(files: Record<string, string>, base?: string): string {
-  const dir = mkdtempSync(join(tmpdir(), "oasisfox-config-"));
+  const dir = mkdtempSync(join(tmpdir(), "desertfox-config-"));
   if (base) cpSync(base, dir, { recursive: true });
   for (const [name, text] of Object.entries(files)) {
     mkdirSync(dirname(join(dir, name)), { recursive: true });
@@ -155,7 +155,7 @@ test("settings, aliases, css and the format version come through", () => {
   assert.equal(config.format_version, 2);
   assert.deepEqual(config.settings, { which_key_delay_ms: 150, hint_letters: "abcdef" });
   assert.deepEqual(config.command_aliases, { nt: "tab.next" });
-  assert.equal(config.css, "body { color: red; }\n\n:root { --oasisfox-bg-core: black; }\n");
+  assert.equal(config.css, "body { color: red; }\n\n:root { --desertfox-bg-core: black; }\n");
 });
 
 test("an unknown file is rejected with its path", () => {
@@ -289,7 +289,7 @@ test("snippet enum values and literal defaults parse", () => {
   ]);
 });
 
-test("a snippet cannot use a group OasisFox uses", () => {
+test("a snippet cannot use a group DesertFox uses", () => {
   const dir = config_dir_with({
     "snippets/a.js": "// id: tab.mine\n// label: L\n// intent: I\n// matches: *://*/*\n",
   });
@@ -331,20 +331,20 @@ test("a snippet modes header rejects an unknown mode name", () => {
 });
 
 test("output is the managed storage document", () => {
-  const out = join(mkdtempSync(join(tmpdir(), "oasisfox-out-")), "managed", "oasisfox@uhs-robert.json");
+  const out = join(mkdtempSync(join(tmpdir(), "desertfox-out-")), "managed", "desertfox@uhs-robert.json");
   write_managed_storage(out, full());
   const document = JSON.parse(readFileSync(out, "utf8"));
   assert.deepEqual(Object.keys(document), ["name", "description", "type", "data"]);
-  assert.equal(document.name, "oasisfox@uhs-robert");
+  assert.equal(document.name, "desertfox@uhs-robert");
   assert.equal(document.type, "storage");
   assert.deepEqual(Object.keys(document.data).sort(), [
     "command_aliases", "css", "format_version", "keymap", "search_engines", "settings", "snippets",
   ]);
-  assert.deepEqual(readdirSync(dirname(out)), ["oasisfox@uhs-robert.json"]);
+  assert.deepEqual(readdirSync(dirname(out)), ["desertfox@uhs-robert.json"]);
 });
 
 test("one schema per data file offers command names", () => {
-  const dir = mkdtempSync(join(tmpdir(), "oasisfox-schemas-"));
+  const dir = mkdtempSync(join(tmpdir(), "desertfox-schemas-"));
   write_schemas(dir, build_schemas(commands));
   assert.deepEqual(readdirSync(dir).sort(), [
     "command_aliases.schema.json", "keymap.schema.json", "search_engines.schema.json", "settings.schema.json",
@@ -545,7 +545,7 @@ test("contract: build_commands_file output feeds build-config", () => {
     runs_in: "background",
     run: () => {},
   });
-  const dir = mkdtempSync(join(tmpdir(), "oasisfox-contract-"));
+  const dir = mkdtempSync(join(tmpdir(), "desertfox-contract-"));
   const commands_path = join(dir, "commands.json");
   writeFileSync(commands_path, JSON.stringify(build_commands_file(registry)));
   const config_dir = config_dir_with({ "keymap.toml": '[normal]\nD = "tab.close --left"' });
