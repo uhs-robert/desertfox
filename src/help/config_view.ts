@@ -19,12 +19,13 @@ export type ConfigView = {
 };
 
 const SOURCE_TEXT: Record<ConfigSource, string> = {
-  managed: "Managed storage file",
-  imported: "Imported config",
+  files: "Config files, read by config.reload through the native host",
+  managed: "Managed storage file, until config.reload reads the files",
   defaults: "Built-in defaults, no config found",
 };
 
-const FALLBACK_MANAGED_FILE = "~/.mozilla/managed-storage/desertfox@uhs-robert.json";
+// The same for every source: `config.reload` reads the files even when managed storage gave the config at startup.
+const RELOAD_STEPS = ["native.install (once, to set up the native host)", "config.reload (key qr)"];
 
 function show_value(value: unknown): string {
   return typeof value === "string" ? JSON.stringify(value) : (JSON.stringify(value) ?? "unset");
@@ -47,10 +48,9 @@ function setting_rows(settings: Settings, status: ConfigStatus | undefined): Set
 }
 
 export function build_config_view(status: ConfigStatus | undefined): ConfigView {
-  const managed_file = status?.managed_file_hint || FALLBACK_MANAGED_FILE;
   return {
     source_text: status ? SOURCE_TEXT[status.source] : "Unknown, the background has not written a status yet",
     settings: setting_rows(status?.settings ?? DEFAULT_SETTINGS, status),
-    rebuild_steps: ["just build-config", `writes ${managed_file}`, "then run config.reload (key qr)"],
+    rebuild_steps: RELOAD_STEPS,
   };
 }

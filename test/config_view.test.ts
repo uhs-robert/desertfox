@@ -7,11 +7,12 @@ const hint = "~/.mozilla/managed-storage/desertfox@uhs-robert.json";
 const NO_LAYERS = { saved: [], temp: [], configured: [] };
 
 test("each source has its own text", () => {
-  const texts = (["managed", "imported", "defaults"] as const).map(
+  const texts = (["files", "managed", "defaults"] as const).map(
     (source) => build_config_view({ source, settings: DEFAULT_SETTINGS, managed_file_hint: hint, ...NO_LAYERS }).source_text,
   );
   assert.equal(new Set(texts).size, 3);
-  assert.match(texts[0]!, /Managed/);
+  assert.match(texts[0]!, /files/);
+  assert.match(texts[1]!, /Managed/);
 });
 
 test("a missing status shows defaults and says the source is unknown", () => {
@@ -29,12 +30,12 @@ test("settings rows render any setting, including one the model does not know", 
   assert.deepEqual(rows.find((row) => row.name === "ignore_sites"), { name: "ignore_sites", value: "[]" });
 });
 
-test("the rebuild steps name the command, the managed file and config.reload", () => {
-  const steps = build_config_view({ source: "managed", settings: DEFAULT_SETTINGS, managed_file_hint: "/x/y.json", ...NO_LAYERS }).rebuild_steps;
-  assert.equal(steps[0], "just build-config");
-  assert.match(steps[1]!, /\/x\/y\.json/);
-  assert.match(steps[2]!, /config\.reload.*qr/);
-  assert.match(build_config_view(undefined).rebuild_steps[1]!, /desertfox@uhs-robert\.json/);
+test("the steps to apply an edit name the host install and config.reload, whatever the source", () => {
+  for (const source of ["files", "managed", "defaults"] as const) {
+    const steps = build_config_view({ source, settings: DEFAULT_SETTINGS, managed_file_hint: hint, ...NO_LAYERS }).rebuild_steps;
+    assert.match(steps[0]!, /native\.install/);
+    assert.match(steps[1]!, /config\.reload.*qr/);
+  }
 });
 
 test("a value that differs from the default is tagged with where it came from", () => {

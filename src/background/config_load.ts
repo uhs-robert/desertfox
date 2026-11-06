@@ -1,12 +1,12 @@
-// Picks the config the extension runs on: managed storage, then an imported
-// file in `storage.local`, then defaults.
+// Picks the config the extension runs on: the files `config.reload` last built, kept in `storage.local`,
+// then managed storage, then defaults.
 
 import { apply_edits, CONFIG_FORMAT_VERSION, effective_settings, NO_EDITS, with_fallback_engines } from "../shared/config.ts";
 import type { MergedConfig, SettingEdits, SettingOverrides, Settings, SnippetEntry } from "../shared/config.ts";
 import { is_setting_name, SETTING_SPECS } from "../shared/settings_schema.ts";
-import { IMPORTED_CONFIG_STORAGE_KEY, SAVED_SETTINGS_STORAGE_KEY, TEMP_SETTINGS_STORAGE_KEY } from "./storage_keys.ts";
+import { FILES_CONFIG_STORAGE_KEY, SAVED_SETTINGS_STORAGE_KEY, TEMP_SETTINGS_STORAGE_KEY } from "./storage_keys.ts";
 
-export type ConfigSource = "managed" | "imported" | "defaults";
+export type ConfigSource = "files" | "managed" | "defaults";
 
 // The value the background stores under CONFIG_STATUS_STORAGE_KEY.
 // `saved` and `temp` name the settings each layer of browser edits sets. `configured` names the ones the config file sets.
@@ -84,11 +84,12 @@ function with_all_sections(raw: Record<string, unknown>, source: ConfigSource, w
   return merged;
 }
 
-export function pick_config(managed: unknown, imported: unknown): LoadedConfig {
+// The files win: a `config.reload` cannot clear the managed file, and Firefox serves it until the extension restarts.
+export function pick_config(files: unknown, managed: unknown): LoadedConfig {
   const warnings: string[] = [];
   const candidates: [ConfigSource, unknown][] = [
+    ["files", files],
     ["managed", managed],
-    ["imported", imported],
   ];
   for (const [source, candidate] of candidates) {
     if (!is_config_object(candidate)) continue;
@@ -104,8 +105,8 @@ export function pick_config(managed: unknown, imported: unknown): LoadedConfig {
 export async function load_config(): Promise<LoadedConfig> {
   // Firefox rejects the read when no managed file exists, which is the normal case without a config.
   const managed = await browser.storage.managed.get().catch(() => undefined);
-  const stored = await browser.storage.local.get(IMPORTED_CONFIG_STORAGE_KEY);
-  return pick_config(managed, stored[IMPORTED_CONFIG_STORAGE_KEY]);
+  const stored = await browser.storage.local.get(FILES_CONFIG_STORAGE_KEY);
+  return pick_config(stored[FILES_CONFIG_STORAGE_KEY], managed);
 }
 
 // Keeps what the schema accepts. A stored value that no longer passes, from an older version, is dropped rather than trusted.

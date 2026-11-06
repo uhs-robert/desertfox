@@ -1,9 +1,31 @@
-import { define } from "../shared/registry/builtin.ts";
+import { show_toast_on_tab } from "../background/browser_deps.ts";
+import { ConfigReloadError } from "../background/config_reload.ts";
 import { mark_reload_pending } from "../background/reload.ts";
+import { reload_config } from "../background/startup.ts";
+import { RuntimeRefusal } from "../shared/command.ts";
+import { define } from "../shared/registry/builtin.ts";
 
 define("config.reload", {
   label: "Reload config",
-  intent: "Reload the extension and its config. It reads the managed config file again.",
+  intent: "Read the config files again and apply them in place. The native host reads them. Browser edits and modes stay. On a problem the current config stays.",
+  runs_in: "background",
+  repeatable: false,
+  run: async (ctx) => {
+    let reloaded: Awaited<ReturnType<typeof reload_config>>;
+    try {
+      reloaded = await reload_config();
+    } catch (error) {
+      if (error instanceof ConfigReloadError) throw new RuntimeRefusal(error.message);
+      throw error;
+    }
+    const warned = reloaded.warnings === 0 ? "" : `, with ${reloaded.warnings} warning(s) on the Help page`;
+    await show_toast_on_tab(ctx, "config", `Config reloaded from ${reloaded.config_dir}${warned}`, reloaded.warnings === 0 ? "success" : "warning");
+  },
+});
+
+define("debug.restart", {
+  label: "Restart extension",
+  intent: "Restart the whole extension. Temp edits and modes are lost. For debugging only: config.reload applies config changes without a restart.",
   runs_in: "background",
   repeatable: false,
   run: async () => {

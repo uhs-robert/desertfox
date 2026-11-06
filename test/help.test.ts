@@ -168,7 +168,7 @@ test("the model carries the settings and config source for the home page", () =>
   const { commands, compiled } = sample();
   const status = { source: "managed" as const, settings: { ...DEFAULT_SETTINGS, palette: "x" }, managed_file_hint: "", saved: [], temp: [], configured: [] };
   const model = build_help_model(commands, compiled, [], {}, {}, status);
-  assert.equal(model.config_source, "Managed storage file");
+  assert.equal(model.config_source, "Managed storage file, until config.reload reads the files");
   assert.deepEqual(model.settings.find((row) => row.name === "palette"), { name: "palette", value: '"x"' });
   assert.equal(build_help_model(commands, compiled, []).config_source, "Unknown, the background has not written a status yet");
 });

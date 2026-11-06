@@ -43,13 +43,14 @@ A second test checked whether Firefox reads `~/.mozilla/managed-storage/<extensi
 - Edits made while the extension ran were not visible, 12 s later or ever. Firefox sent no `storage.onChanged` event.
 - After the extension reloaded, it read the current file within about 1 s.
 - So the file is read once per extension load. A reload applies an edit. A Firefox restart is not needed.
+- This is why `config.reload` reads the files through the native host and does not restart the extension. Managed storage now only gives the config at startup, until the first `config.reload`.
 
 ## Phase 1 measurements
 
 `just key-test` (`test/key/`) ran the built extension as a temporary add-on in the same kind of nested session, with a managed storage config written before the install. Test pages report to a local server. Two measurements came out of that run, and two behaviors.
 
 - The content script reads the compiled keymap from `storage.local` and sets `data-desertfox-tree-read-ms` on the document element. Over 24 fresh loads the read took a minimum of 6 ms, a median of 8 ms and a maximum of 10 ms, counted from the start of the content script. Firefox rounds these times to whole milliseconds.
-- After `config.reload`, Firefox loaded the content script again into every open `http` tab. The background stored `already_loaded: 5, injected: 0, failed: 0`, so its own injection had nothing to do. A `j` after the reload scrolled by the same distance as before the reload, in the tab that took the reload key and in a tab that did not. So the old script does not act a second time. This is one run with a temporary add-on. A signed add-on has not been checked.
+- After an extension reload (then `config.reload`, now `debug.restart`), Firefox loaded the content script again into every open `http` tab. The background stored `already_loaded: 5, injected: 0, failed: 0`, so its own injection had nothing to do. A `j` after the reload scrolled by the same distance as before the reload, in the tab that took the reload key and in a tab that did not. So the old script does not act a second time. This is one run with a temporary add-on. A signed add-on has not been checked.
 - `browser.focus_page` works. With the address bar focused, the `<A-,>` chord ran it, and the next `j` scrolled the page.
 - A chord that the content script cancels does not also fire the Firefox shortcut. On a page that cancels every key in its own capture listener, and on a normal page, `<A-j>` and `<A-k>` switched tabs exactly once. Tab counts cannot show which side ran the action. The count shows no double action.
 - `<A-j>` and `<A-k>` also switch tabs from an `about:support` page, where no content script runs.
