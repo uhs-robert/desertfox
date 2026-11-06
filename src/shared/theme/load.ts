@@ -26,6 +26,8 @@ export function local_theme_problem(colors: unknown): string | undefined {
 
 const has_all_roles = (colors: unknown): colors is Theme => local_theme_problem(colors) === undefined;
 
+const as_hex = (colors: RoleColors) => Object.fromEntries(ROLES.map((role) => [role, parse_color(colors[role])])) as RoleColors;
+
 const unpack = (colors: readonly string[]) => Object.fromEntries(ROLES.map((role, at) => [role, colors[at]])) as RoleColors;
 
 // The Oasis theme of a name, every set filled. Undefined when the name is not one.
@@ -43,7 +45,7 @@ export function built_in_theme_names(): string[] {
 // A local theme wins over a built-in one of the same name. Only an Oasis theme has light intensities.
 // Undefined when the name finds nothing.
 export function load_theme(name: string, light_intensity: LightIntensity, local_theme?: LocalTheme): Theme | undefined {
-  if (local_theme?.name === name && has_all_roles(local_theme.colors)) return local_theme.colors;
+  if (local_theme?.name === name && has_all_roles(local_theme.colors)) return { dark: as_hex(local_theme.colors.dark), light: as_hex(local_theme.colors.light) };
   if (Object.hasOwn(REPO_THEMES, name)) return REPO_THEMES[name]!;
   const oasis = oasis_theme(name);
   // A light_intensity outside 1 to 5 can come from a hand-edited managed config, so it falls back to the middle set instead of throwing.

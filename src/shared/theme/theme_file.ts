@@ -10,7 +10,8 @@ export const COLOR_FORMATS = "#rgb, #rrggbb, rgb(), rgba() with alpha 1, or hsl(
 
 const hex_pair = (channel: number) => Math.round(Math.min(255, Math.max(0, channel))).toString(16).padStart(2, "0");
 const NUMBER = "(-?\\d*\\.?\\d+)";
-const FUNCTION_COLOR = new RegExp(`^(rgba?|hsla?)\\(\\s*${NUMBER}(%?)(?:deg)?\\s*[,\\s]\\s*${NUMBER}(%?)\\s*[,\\s]\\s*${NUMBER}(%?)\\s*(?:[,/]\\s*${NUMBER}(%?)\\s*)?\\)$`, "i");
+const ANGLE_TURNS: Record<string, number> = { "": 1 / 360, deg: 1 / 360, grad: 1 / 400, rad: 1 / (2 * Math.PI), turn: 1 };
+const FUNCTION_COLOR = new RegExp(`^(rgba?|hsla?)\\(\\s*${NUMBER}(%?)(deg|grad|rad|turn)?\\s*[,\\s]\\s*${NUMBER}(%?)\\s*[,\\s]\\s*${NUMBER}(%?)\\s*(?:[,/]\\s*${NUMBER}(%?)\\s*)?\\)$`, "i");
 
 // A color as #rrggbb. Hex, rgb(), rgba() and hsl() are accepted, because derivation does color math on the value. An alpha other than 1 is refused,
 // since the roles are opaque. Named colors are not accepted.
@@ -21,20 +22,20 @@ export function parse_color(value: unknown): string | undefined {
   if (/^#[0-9a-f]{6}$/i.test(value)) return value.toLowerCase();
   const match = FUNCTION_COLOR.exec(value.trim());
   if (!match) return undefined;
-  const [, name, first, , second, second_percent, third, third_percent, alpha, alpha_percent] = match;
+  const [, name, first, , angle_unit, second, second_percent, third, third_percent, alpha, alpha_percent] = match;
   if (alpha !== undefined && Number(alpha) / (alpha_percent ? 100 : 1) !== 1) return undefined;
   const [one, two, three] = [Number(first), Number(second), Number(third)];
   if (name!.toLowerCase().startsWith("rgb")) {
-    if (match[3] !== match[5] || match[5] !== match[7]) return undefined;
-    const scale = match[3] ? 2.55 : 1;
-    return `#${hex_pair(one * scale)}${hex_pair(two * scale)}${hex_pair(three * scale)}`;
+    if (angle_unit || match[3] !== match[6] || match[6] !== match[8]) return undefined;
+    const channel = (value: number) => hex_pair(match[3] ? (value * 255) / 100 : value);
+    return `#${channel(one)}${channel(two)}${channel(three)}`;
   }
   if (!second_percent || !third_percent || match[3]) return undefined;
   const saturation = Math.min(100, Math.max(0, two)) / 100;
   const lightness = Math.min(100, Math.max(0, three)) / 100;
   const chroma = saturation * Math.min(lightness, 1 - lightness);
   const channel = (offset: number) => {
-    const position = (offset + (((one % 360) + 360) % 360) / 30) % 12;
+    const position = (offset + (((one * 360 * ANGLE_TURNS[(angle_unit ?? "").toLowerCase()]!) % 360 + 360) % 360) / 30) % 12;
     return (lightness - chroma * Math.max(-1, Math.min(position - 3, 9 - position, 1))) * 255;
   };
   return `#${hex_pair(channel(0))}${hex_pair(channel(8))}${hex_pair(channel(4))}`;

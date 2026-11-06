@@ -116,6 +116,8 @@ test("the palette picks the stored theme: local theme, Oasis theme with its ligh
   assert.equal(local.theme.dark.mode_normal, "#88aaff");
   assert.deepEqual(local.warnings, []);
   assert.equal("mode_colors" in local.compiled, false);
+  const functional = compile({ ...empty_config(), settings: { palette: "mine" }, local_theme: { name: "mine", colors: { dark: { ...colors, accent: "rgb(255, 0, 0)" }, light: colors } } });
+  assert.equal(functional.theme.dark.accent, "#ff0000");
   // A hand-edited managed config can hold any light_intensity. The keymap must still compile.
   for (const bad of [0, 6, 2.5, "3"]) {
     const edited = compile({ ...empty_config(), settings: { light_intensity: bad as never } });

@@ -20,10 +20,11 @@ import type { Wheel_state } from "./wheel.ts";
 import { create_session } from "./session.ts";
 import type { Effect, Session } from "./session.ts";
 import { create_word_lookup } from "./word_lookup.ts";
-import { follow_theme } from "../shared/theme/apply.ts";
+import { follow_theme, follow_user_css } from "../shared/theme/apply.ts";
 
 // Starts with the page, not after the round trips of `open_line`, and after the built-in styles, so the theme beats the hex defaults.
 follow_theme(".desertfox-cmdline");
+follow_user_css();
 
 // The port from the host's `start`. Until it arrives there is nobody to tell.
 let host_port: MessagePort | undefined;
@@ -62,9 +63,6 @@ async function open_line(start: Start, port: MessagePort): Promise<void> {
   if (!opened || host_port) return;
   host_port = port;
   const lookup = create_word_lookup(opened.commands, opened.command_aliases);
-  const user_style = document.createElement("style");
-  user_style.textContent = opened.css;
-  document.head.append(user_style);
   if (start.search) show_prompt(document.querySelector<HTMLElement>(".desertfox-cmdline-prompt")!, start.search === "forward" ? "/ " : "? ");
   else if (opened.prompt) show_prompt(document.querySelector<HTMLElement>(".desertfox-cmdline-prompt")!, opened.prompt);
   const keymap = stored[COMPILED_KEYMAP_STORAGE_KEY] as CompiledKeymap | undefined;

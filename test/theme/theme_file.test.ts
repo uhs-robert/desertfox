@@ -150,7 +150,8 @@ test("parse_color turns rgb, rgba with alpha 1 and hsl into hex, and refuses the
     ["rgb(255, 0, 128)", "#ff0080"], ["rgb(255 0 128)", "#ff0080"], ["rgba(10, 20, 30, 1)", "#0a141e"], ["rgb(1 2 3 / 100%)", "#010203"],
     ["rgb(100%, 0%, 100%)", "#ff00ff"], ["hsl(0, 100%, 50%)", "#ff0000"], ["hsl(120deg 100% 25%)", "#008000"], ["hsla(240, 100%, 50%, 1)", "#0000ff"],
     ["hsl(-120, 100%, 50%)", "#0000ff"], ["rgba(10, 20, 30, 0.5)", undefined], ["rgb(100%, 0, 0)", undefined], ["hsl(0, 100, 50)", undefined],
-    ["red", undefined], ["rgb(1, 2)", undefined],
+    ["red", undefined], ["rgb(1, 2)", undefined], ["rgb(50%, 50%, 50%)", "#808080"], ["rgb(20%, 40%, 60%)", "#336699"],
+    ["hsl(0.5turn 100% 50%)", "#00ffff"], ["hsl(200grad 100% 50%)", "#00ffff"], ["hsl(3.14159rad 100% 50%)", "#00ffff"], ["rgb(1deg, 2, 3)", undefined],
   ];
   for (const [input, expected] of cases) assert.equal(parse_color(input), expected, input);
 });

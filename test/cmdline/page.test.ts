@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import type { TestContext } from "node:test";
+import { USER_CSS_STORAGE_KEY } from "../../src/shared/theme/apply.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY, COMPILED_KEYMAP_VERSION } from "../../src/shared/prefix_tree.ts";
 
 // The ticket the host got from the background and sends in `start`.
@@ -115,7 +116,7 @@ async function load_page(t: TestContext, tag: string, { keymap = KEYMAP, with_ta
           return message.type === "open_cmdline" && message.ticket === TICKET ? opened_answer : undefined;
         },
       },
-      storage: { local: { get: async () => ({ [COMPILED_KEYMAP_STORAGE_KEY]: keymap }) }, onChanged: { addListener: () => {} } },
+      storage: { local: { get: async () => ({ [COMPILED_KEYMAP_STORAGE_KEY]: keymap, [USER_CSS_STORAGE_KEY]: OPENED.css }) }, onChanged: { addListener: () => {} } },
     },
     // `commands.json` holds only the built-in commands.
     fetch: async () => ({ json: async () => ({ format_version: 1, commands: [] }) }),
