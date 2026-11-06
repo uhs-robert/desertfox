@@ -10,6 +10,7 @@ import { create_previous_tabs } from "./previous_tab.ts";
 import { browser_discard_deps } from "./tab_discard.ts";
 import { browser_complete_items_deps, create_complete_items } from "./complete_items.ts";
 import type { Asker } from "./complete_items.ts";
+import { browser_tab_action_deps } from "./tab_actions.ts";
 import { create_open_help } from "./open_help.ts";
 import { requirement_lookup, site_engine_for, with_site_engines } from "./availability.ts";
 import { list_keys } from "./list_keys.ts";
@@ -75,6 +76,7 @@ const complete_items = create_complete_items({
   page_of,
   read_tab: (tab_id) => browser.tabs.get(tab_id).catch(() => undefined),
   discard: { ...browser_discard_deps, alternate_of: previous_tabs.previous_of },
+  tab_actions: browser_tab_action_deps,
   open_settings: async () => {
     const { open_completion, history_completion_max } = effective_settings((await get_config()).settings);
     return { sources: open_completion, history_max: history_completion_max };
@@ -107,7 +109,7 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
   if (request?.type === "issue_cmdline_ticket") return cmdline.issue_ticket(sender.tab?.id);
   if (request?.type === "open_cmdline") return get_config().then(() => cmdline.open(request.ticket, sender.tab?.id, sender.frameId, sender.tab?.windowId));
   if (request?.type === "complete_items") return complete_items.answer(request.kind, asker_of(sender));
-  if (request?.type === "set_tab_unloaded") return complete_items.set_unloaded(request.tab_id, request.unloaded, asker_of(sender));
+  if (request?.type === "tab_rows_action") return complete_items.tab_rows_action(request.action, request.tab_ids, asker_of(sender));
   if (request?.type === "image_action") return run_image_action(image_deps, request, { incognito: sender.tab?.incognito === true, cookie_store_id: sender.tab?.cookieStoreId });
   if (request?.type === "read_tab_address") return Promise.resolve(sender.tab?.url);
   if (request?.type === "open_help") return open_help.open(request.command_id, sender.tab?.id, sender.frameId);

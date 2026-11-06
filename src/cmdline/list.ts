@@ -119,9 +119,10 @@ export function create_list(element: HTMLElement, keys_of: (id: string) => strin
   let drawn: readonly Ranked<Row>[] | undefined;
   let drawn_selected = -1;
   let drawn_loading = false;
+  let drawn_marked: ReadonlySet<number> = new Set();
   const images = create_image_pool();
   // `scroll_rows` moves the window for a wheel scroll, which leaves the selection where it is.
-  const draw = (rows: readonly Ranked<Row>[], selected: number, loading: boolean, scroll_rows: number) => {
+  const draw = (rows: readonly Ranked<Row>[], selected: number, loading: boolean, marked: ReadonlySet<number>, scroll_rows: number) => {
     const held_height = element.offsetHeight;
     const holding = loading && rows.length === 0;
     element.style.minHeight = holding ? `${held_height}px` : "";
@@ -134,6 +135,7 @@ export function create_list(element: HTMLElement, keys_of: (id: string) => strin
     drawn = rows;
     drawn_selected = selected;
     drawn_loading = loading;
+    drawn_marked = marked;
     const visible = rows.slice(top, top + MAX_ROWS);
     const name_columns = visible.map((row) => row.name.length + (row.indent ?? 0) * INDENT_COLUMNS);
     const name_cap = visible.some((row) => row.indent !== undefined) ? MAX_HEADING_COLUMNS : MAX_NAME_COLUMNS;
@@ -145,7 +147,7 @@ export function create_list(element: HTMLElement, keys_of: (id: string) => strin
     images.start_draw();
     element.replaceChildren(
       ...visible.map((row, offset) => {
-        const item = cell(`item${top + offset === selected ? " desertfox-cmdline-selected" : ""}${row.unavailable ? " desertfox-cmdline-unavailable" : ""}${row.tab?.flags.includes("discarded") ? " desertfox-cmdline-item-discarded" : ""}`);
+        const item = cell(`item${top + offset === selected ? " desertfox-cmdline-selected" : ""}${row.unavailable ? " desertfox-cmdline-unavailable" : ""}${row.tab?.flags.includes("discarded") ? " desertfox-cmdline-item-discarded" : ""}${row.tab && marked.has(row.tab.id) ? " desertfox-cmdline-item-marked" : ""}`);
         // The absolute index, because a click picks by it and the window may be scrolled.
         item.dataset.index = String(top + offset);
         const args = cell("args");
@@ -159,10 +161,10 @@ export function create_list(element: HTMLElement, keys_of: (id: string) => strin
   return {
     // While a live source loads there are no rows. The area keeps its last height, empty, so the frame does not shrink
     // and show the page behind it for a few frames.
-    render: (rows: readonly Ranked<Row>[], selected: number, loading = false) => draw(rows, selected, loading, 0),
+    render: (rows: readonly Ranked<Row>[], selected: number, loading = false, marked: ReadonlySet<number> = new Set()) => draw(rows, selected, loading, marked, 0),
     // Scrolls the view by whole rows, negative up. The selection stays.
     scroll: (row_count: number) => {
-      if (drawn) draw(drawn, drawn_selected, drawn_loading, row_count);
+      if (drawn) draw(drawn, drawn_selected, drawn_loading, drawn_marked, row_count);
     },
   };
 }

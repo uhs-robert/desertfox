@@ -1,4 +1,4 @@
-import { cmdline_clear, cmdline_help, cmdline_history, cmdline_next_completion, cmdline_open, cmdline_prev_completion, cmdline_submit, list_act } from "../content/handlers/lazy_bundle.ts";
+import { cmdline_clear, cmdline_help, cmdline_history, cmdline_next_completion, cmdline_open, cmdline_prev_completion, cmdline_submit, list_act, list_select } from "../content/handlers/lazy_bundle.ts";
 import { define } from "../shared/registry/index.ts";
 
 define("cmdline.open", {
@@ -67,10 +67,32 @@ define("cmdline.help", {
 
 define("list.act", {
   completion: "hidden",
-  label: "Act on row",
-  intent: "Act on the highlighted row of the command line list. A tab row unloads, or loads when it is unloaded.",
-  params: [{ name: "action", type: "enum", values: ["unload"], description: { unload: "Unload the highlighted tab, or load it when it is unloaded." } }],
+  label: "Act on rows",
+  intent: "Act on the selected tabs. Without a selection, act on the highlighted row.",
+  params: [
+    {
+      name: "action",
+      type: "enum",
+      values: ["unload", "close", "mute", "pin"],
+      description: {
+        unload: "Unload the loaded tabs, or load all when none is loaded.",
+        close: "Close the tabs and move the highlight to the next row.",
+        mute: "Mute all when any is not muted, else unmute all.",
+        pin: "Pin all when any is not pinned, else unpin all.",
+      },
+    },
+  ],
   runs_in: "content",
   modes: ["cmdline"],
   run: list_act.run,
+});
+
+define("list.select", {
+  completion: "hidden",
+  label: "Select tabs",
+  intent: "Mark or unmark the highlighted tab. Or clear every mark.",
+  params: [{ name: "action", type: "enum", values: ["toggle", "clear"], description: { toggle: "Mark or unmark the highlighted tab, then move down.", clear: "Unmark every tab." } }],
+  runs_in: "content",
+  modes: ["cmdline"],
+  run: list_select.run,
 });

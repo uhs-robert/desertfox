@@ -22,7 +22,7 @@ A note "(prompts)" means the binding sets a `prompt` for a param, so the command
 
 <!-- BEGIN generated -->
 
-bound: 220 (normal 142, hint 2, cmdline 13, caret 26, visual 32, insert 1, ignore 1, browser 3) | later: 14 | dropped: 6
+bound: 224 (normal 142, hint 2, cmdline 17, caret 26, visual 32, insert 1, ignore 1, browser 3) | later: 14 | dropped: 6
 
 ### normal
 
@@ -237,6 +237,10 @@ Which-key group names:
 | `<C-u>` | bound | `cmdline.clear` | Clear line |  |
 | `<C-h>` | bound | `cmdline.help` | Command help |  |
 | `<A-u>` | bound | `list.act unload` | Unload or load the tab |  |
+| `<C-Space>` | bound | `list.select toggle` | Mark or unmark the tab |  |
+| `<A-x>` | bound | `list.act close` | Close the tab |  |
+| `<A-m>` | bound | `list.act mute` | Mute or unmute the tab |  |
+| `<A-p>` | bound | `list.act pin` | Pin or unpin the tab |  |
 
 ### caret
 

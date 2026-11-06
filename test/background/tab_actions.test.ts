@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { move_tabs, reopen_in_container, set_muted, set_pinned } from "../../src/background/tab_actions.ts";
+import { close_tabs, move_tabs, reopen_in_container, set_muted, set_pinned } from "../../src/background/tab_actions.ts";
 import type { TabActionDeps } from "../../src/background/tab_actions.ts";
 
 function make_deps() {
@@ -98,4 +98,16 @@ test("a failed open stops the run and leaves no duplicate", async () => {
   ];
   await assert.rejects(reopen_in_container(failing, 1, tabs, "c"), /illegal url/);
   assert.deepEqual(log, ["open https://a.test/ 0 c false", "remove 10"]);
+});
+
+test("close_tabs closes each tab on its own, so a tab that closed already does not stop the rest", async () => {
+  const closed: number[] = [];
+  const deps = {
+    remove: async ([id]: number[]) => {
+      if (id === 2) throw new Error("Invalid tab ID");
+      closed.push(id!);
+    },
+  };
+  assert.equal(await close_tabs(deps, [1, 2, 3]), 2);
+  assert.deepEqual(closed, [1, 3]);
 });
