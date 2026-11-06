@@ -1,5 +1,7 @@
 # DesertFox
 
+<img src="src/icons/desertfox.svg" alt="DesertFox logo" width="96" height="96">
+
 A keyboard-first Firefox extension with one command registry. Keys, the command line, completion, help and which-key all read the same command definitions. It works on its own, and integrates with Oasis Dots (Hyprland and Quickshell) through an optional native host.
 
 Status: phase 1 is built. Release 0.1.1 adds the toolbar button, the status page and the keys below.

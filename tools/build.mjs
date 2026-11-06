@@ -47,6 +47,8 @@ for (const file of ["DSEG7Classic-Regular.ttf", "OFL-DSEG.txt"]) await copyFile(
 
 await mkdir("dist/icons", { recursive: true });
 await copyFile("src/icons/desertfox.svg", "dist/icons/desertfox.svg");
+// The keycap mark lives with the docs images; the help welcome page shows it, so it ships from there.
+await copyFile("docs/images/desertfox-keycap.svg", "dist/icons/desertfox-keycap.svg");
 
 // A doc the renderer cannot read fails the build here, with the file and line.
 const { parse_markdown } = await import("./render_docs.ts");

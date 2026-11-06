@@ -170,7 +170,12 @@ function home_page(model: HelpModel): HTMLElement[] {
     ? el("p", "desertfox-help-muted", "No warnings.")
     : el("ul", "desertfox-help-warnings", ...model.warnings.map((warning) => el("li", undefined, warning)));
   const settings = el("table", undefined, ...model.settings.map((row) => el("tr", undefined, el("td", undefined, el("code", undefined, row.name)), el("td", undefined, el("code", undefined, row.value)))));
+  const keycap = document.createElement("img");
+  keycap.className = "desertfox-help-keycap";
+  keycap.setAttribute("src", "icons/desertfox-keycap.svg");
+  keycap.setAttribute("alt", "");
   return [
+    keycap,
     block_node(model.tip),
     section_heading("home", warnings_section),
     warnings,
@@ -338,6 +343,15 @@ function section_toggle(page: PageId, title: string, list: HTMLElement): HTMLEle
 }
 
 // The current page's group is open unless the reader toggled it on this page. Going to a page drops its stored toggle, so a menu click always opens it. Other groups keep what the reader set, closed at first. Each toggle works alone.
+// The logo is the packaged icon, reached by a path relative to help.html, which the build copies to the package root.
+function brand(): HTMLElement {
+  const logo = document.createElement("img");
+  logo.className = "desertfox-help-logo";
+  logo.setAttribute("src", "icons/desertfox.svg");
+  logo.setAttribute("alt", "");
+  return el("div", "desertfox-help-brand", logo, "DesertFox");
+}
+
 function sidebar(current: PageId, model: HelpModel, guide: Block[]): HTMLElement {
   if (current !== last_page) group_open.delete(current);
   last_page = current;
@@ -357,7 +371,7 @@ function sidebar(current: PageId, model: HelpModel, guide: Block[]): HTMLElement
     });
     return el("div", "desertfox-help-nav-group", el("div", "desertfox-help-nav-row", link, toggle), list);
   });
-  return el("nav", "desertfox-help-sidebar", el("div", "desertfox-help-brand", "DesertFox"), ...entries, support_card());
+  return el("nav", "desertfox-help-sidebar", brand(), ...entries, support_card());
 }
 
 export function render_help(root: HTMLElement, model: HelpModel, route: Route, guide: Block[]): void {
