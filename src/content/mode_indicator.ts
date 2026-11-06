@@ -17,7 +17,7 @@ export const STYLE = `
 .desertfox-mode:where([data-mode="normal"]) { background: var(--desertfox-mode-normal, #7fa3c9); }
 .desertfox-mode:where([data-mode="insert"]) { background: var(--desertfox-mode-insert, #ffa0a0); }
 .desertfox-mode:where([data-mode="ignore"]) { background: var(--desertfox-mode-ignore, #717a84); }
-.desertfox-mode:where([data-mode="caret"]) { background: var(--desertfox-mode-caret, #7fcf78); }
+.desertfox-mode:where([data-mode="caret"]) { background: var(--desertfox-mode-caret, #d8cf7f); }
 .desertfox-mode:where([data-mode="visual"]) { background: var(--desertfox-mode-visual, #ffba75); }`;
 
 let surface: ReturnType<typeof create_surface> | undefined;

@@ -234,7 +234,7 @@ const ROLE_MEANINGS: Record<Role, string> = {
   mode_normal: "Mode badge in normal mode",
   mode_insert: "Mode badge in insert mode",
   mode_ignore: "Mode badge in ignore mode",
-  mode_caret: "Mode badge in caret mode",
+  mode_caret: "Mode badge in caret mode and the caret cell, the Neovim Statement color",
   mode_visual: "Mode badge in visual mode",
   search_bg: "Background of every match of a / search and of the f and t targets",
   search_fg: "Text on those matches",

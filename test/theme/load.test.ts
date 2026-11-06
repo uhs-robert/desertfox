@@ -53,10 +53,10 @@ test("every built-in theme gives caret, visual and normal their own mode colors 
   }
 });
 
-test("moonlight keeps its lualine mode colors and its Search and CurSearch colors", () => {
+test("moonlight keeps its mode colors, caret from the Statement group, and its Search and CurSearch colors", () => {
   const { dark, light } = load_theme("oasis_moonlight", 3)!;
-  assert.deepEqual([dark.mode_normal, dark.mode_insert, dark.mode_caret, dark.mode_visual, dark.mode_ignore], ["#7fa3c9", "#ffa0a0", "#7fcf78", "#ffba75", "#717a84"]);
-  assert.deepEqual([light.mode_caret, light.mode_visual], ["#356731", "#85460e"]);
+  assert.deepEqual([dark.mode_normal, dark.mode_insert, dark.mode_caret, dark.mode_visual, dark.mode_ignore], ["#7fa3c9", "#ffa0a0", "#d8cf7f", "#ffba75", "#717a84"]);
+  assert.deepEqual([light.mode_caret, light.mode_visual], ["#6b632b", "#85460e"]);
   assert.deepEqual([dark.search_bg, dark.search_fg, dark.search_current_bg, dark.search_current_fg], ["#666666", "#f5f5dc", "#cdc673", "#0c0e13"]);
   assert.deepEqual([light.search_bg, light.search_fg, light.search_current_bg, light.search_current_fg], ["#e1b69d", "#4e260e", "#dd6f6f", "#350808"]);
 });
