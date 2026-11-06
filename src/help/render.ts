@@ -342,7 +342,6 @@ function section_toggle(page: PageId, title: string, list: HTMLElement): HTMLEle
   return button;
 }
 
-// The current page's group is open unless the reader toggled it on this page. Going to a page drops its stored toggle, so a menu click always opens it. Other groups keep what the reader set, closed at first. Each toggle works alone.
 // The logo is the packaged icon, reached by a path relative to help.html, which the build copies to the package root.
 function brand(): HTMLElement {
   const logo = document.createElement("img");
@@ -352,6 +351,7 @@ function brand(): HTMLElement {
   return el("div", "desertfox-help-brand", logo, "DesertFox");
 }
 
+// The current page's group is open unless the reader toggled it on this page. Going to a page drops its stored toggle, so a menu click always opens it. Other groups keep what the reader set, closed at first. Each toggle works alone.
 function sidebar(current: PageId, model: HelpModel, guide: Block[]): HTMLElement {
   if (current !== last_page) group_open.delete(current);
   last_page = current;
