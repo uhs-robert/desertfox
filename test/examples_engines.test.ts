@@ -23,8 +23,8 @@ test("copied as search_engines.toml the sample builds with no problems and no wa
   assert.deepEqual(warnings, []);
 });
 
-test("the sample resolves to 66 engines, with the four left to personal configs absent", () => {
-  assert.equal(Object.keys(engines).length, 66);
+test("the sample resolves to 69 engines, with the four left to personal configs absent", () => {
+  assert.equal(Object.keys(engines).length, 69);
   for (const name of ["1337", "calendar", "drive", "gmail"]) assert.ok(!(name in engines), name);
 });
 
@@ -60,4 +60,12 @@ test("archive, isdown and translate.page take a typed address and default to the
   assert.deepEqual(fill("isdown", ""), { ok: true, url: "https://www.isitdownrightnow.com/example.com.html" });
   assert.deepEqual(fill("translate.page", ""), { ok: true, url: "https://translate.google.com/translate?sl=auto&tl=en&u=https%3A%2F%2Fexample.com%2Fa%3Fb%3D1" });
   assert.deepEqual(engines["archive"]?.slots, undefined);
+});
+
+test("the GitHub, GitLab, Reddit and YouTube trees carry hosts, the children inherit them, and flat engines have none", () => {
+  assert.deepEqual(engines["github.repo.issues"]?.hosts, ["github.com", "www.github.com"]);
+  assert.deepEqual(engines["gitlab.issues"]?.hosts, ["gitlab.com"]);
+  assert.ok(engines["reddit.sub"]?.hosts?.includes("old.reddit.com"));
+  assert.ok(engines["youtube.channel"]?.hosts?.includes("m.youtube.com"));
+  assert.equal(engines["google"]?.hosts, undefined);
 });

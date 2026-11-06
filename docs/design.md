@@ -182,8 +182,8 @@ The tool reads `~/.config/oasisfox/` by default. Every data file is TOML. A left
 
 | File | Holds |
 | --- | --- |
-| `keymap.toml` | Every key: bindings per mode, plus the `search_keys` and `container_keys` shortcuts. `""` removes a default binding. |
-| `search_engines.toml` | Search engines: a tree of named URL templates with slots (`{query}`, `{repo}`, and others). `%s` still reads as `{query}`. Data only, no keys. The built-in `duck` needs no entry, and an entry named `duck` replaces it. See [Starting engines](#starting-engines). |
+| `keymap.toml` | Every key: bindings per mode, plus the `search_keys`, `container_keys` and `site_keys` shortcuts. `""` removes a default binding. |
+| `search_engines.toml` | Search engines: a tree of named URL templates with slots (`{query}`, `{repo}`, and others). `%s` still reads as `{query}`. Data only, no keys: the letters of the `s/` group live in `[site_keys]` in `keymap.toml`. The built-in `duck` and `site` need no entry, and an entry with their name replaces them. See [Starting engines](#starting-engines). |
 | `command_aliases.toml` | Extra command line names, for example `g = "open.search"`. |
 | `settings.toml` | Settings such as the which-key delay and the new tab page. |
 | `snippets/*.js` | One custom command per file. See [Snippets](#snippets). |
@@ -200,6 +200,10 @@ Every key lives in `keymap.toml`. The other files hold only data. A binding is o
 a = "arch"
 b = "brave"
 
+[site_keys]                     # s/i, S/i: the engine of the page's site
+i = ["github.issues", "gitlab.issues"]
+I = ["github.repo.issues"]
+
 [container_keys]                # ca/Ca, cc/Cc, cp/Cp
 a = "Family"
 c = "Client"
@@ -215,6 +219,8 @@ ww = { run = ":open -w @current_url", label = "New window, edit current URL" }
 
 - `sa` searches with the `arch` engine in this tab, and `Sa` in a new tab.
 - `ca` reopens the current page in the Family container, and `Ca` opens a prompt, set by an explicit `prompt` on the generated key, prefilled with the current URL in a new Family tab.
+- `s/` is the group for the page you are on. Each `[site_keys]` letter lists engines of different sites. On a page the first listed engine whose `hosts` include the page host and whose page slots the page fills runs. Which-key shows a letter only when such an engine exists, so on a GitHub repo page `s/` offers GitHub-wide search and search in this repo, on a user page the GitHub-wide ones, and on an unrelated site nothing. `S/` does the same in a new tab. A member key behaves like `sa`: it searches the selection at once, or opens the command line with the engine typed in. A letter is one key, not `/`, and lists only engines whose `hosts` do not overlap (an engine with no `hosts` overlaps all). `tools/build-config` refuses the rest. A typed key on a site that fits none still runs the first engine and shows its slot message.
+- `s//` and `S//` search the current site with the built-in `site` engine: the default engine's URL with `site:{host}` added to the query. They show on every page that has a host. The shipped keymap sets the letter `/`, which the build refuses in a user file. `site` is built when the config loads, so a live `:set default_engine` does not change it.
 - Containers themselves need no file. Firefox lists their names, colors and icons through `contextualIdentities.query()`, and completion and the `container` param use that list. A name in `container_keys` that does not exist gets a warning at load and is skipped.
 - The prefixes for generated bindings (`s` and `S`, `c` and `C`) are settings. An explicit binding in the keymap wins over a generated one.
 
@@ -222,15 +228,16 @@ ww = { run = ":open -w @current_url", label = "New window, edit current URL" }
 
 OasisFox has one built-in engine, `duck` (DuckDuckGo), and the `default_engine` setting defaults to it. So clipboard search works with no config. It is added when the config loads and when `tools/build-config` checks names, so the merged file stays as written. An entry named `duck` in `search_engines.toml` replaces the built-in whole. Nothing hides or removes it.
 
-[`examples/engines.toml`](../examples/engines.toml) resolves to 66 engines, `duck` among them, and teaches the tree rules in two worked trees (GitHub and YouTube). Copy it to `~/.config/oasisfox/search_engines.toml` and edit it. A TOML file cannot include another file. A `search_engines.d/` file also works, and a later file replaces the table at the same dotted path (a later `[github.repo]` replaces only that node and leaves `github` alone).
+[`examples/engines.toml`](../examples/engines.toml) resolves to 69 engines, `duck` among them, and teaches the tree rules in two worked trees (GitHub and YouTube). Copy it to `~/.config/oasisfox/search_engines.toml` and edit it. A TOML file cannot include another file. A `search_engines.d/` file also works, and a later file replaces the table at the same dotted path (a later `[github.repo]` replaces only that node and leaves `github` alone).
 
 #### Engines
 
 An engine is a named URL template. It replaces the former site commands. No provider is built in except `duck`.
 
 - Slots. `{query}` is the typed or selected text, and `%s` means the same. Page slots read the current tab: `{url}`, `{host}`, `{title}`, `{repo}` (GitHub), `{subreddit}` and `{channel}` (YouTube). Each page slot is a small pure function in `src/shared/engines/slots.ts` with its own message for a page that cannot fill it. `{a|b}` takes the first slot that has a value, so `{query|url}` is the typed address, else this page. `{name:raw}` skips escaping, for a path such as `/web/{url:raw}`. Every other value takes `encodeURIComponent`.
-- Tree. A table inside an engine is a child, named with a dot (`github.repo.issues`). A child inherits every field and overrides by name. `label` does not inherit: the label is the chain of labels on the path ("GitHub: this repo: issues"), and a `label` field sets one link. A child cannot be named `url`, `label`, `params` or `fallback`, or like a field or param of its parent. A later file replaces the table at one dotted path.
+- Tree. A table inside an engine is a child, named with a dot (`github.repo.issues`). A child inherits every field and overrides by name. `label` does not inherit: the label is the chain of labels on the path ("GitHub: this repo: issues"), and a `label` field sets one link. A child cannot be named `url`, `label`, `params`, `fallback` or `hosts`, or like a field or param of its parent. A later file replaces the table at one dotted path.
 - Params. `[github.params.type]` declares `default`, `values` (name to URL text) and `children = true`, which generates one child per value. A field set to a value name picks it, and `type = { only = [...] }` narrows the values below that level. A hand-written child beats a generated one. A query pair whose whole value is one empty param (`&type=`) is left out.
+- Hosts. `hosts = ["github.com"]` lists the host names of the sites an engine belongs to, and children inherit it. A host matches only itself, so `gist.github.com` needs its own entry. It gates only the generated `s/` and `S/` keys: explicit keys and completion ignore it. The build refuses a `hosts` that is not a list of lower-case host names, and one on a node with no url on it or above it.
 - Availability. An engine is available on a page only when every page slot in its URL can be filled. Which-key hides the keys of an unavailable engine, and a group left empty. A key still works when typed, and shows the slot message. An engine with `fallback = "<engine>"` never hides and runs the fallback when its slots cannot fill. Snippets can require slots with a `// requires: repo` header. The background filters the key list, so the content script is unchanged.
 - Resolution. `tools/build-config` resolves the tree into a flat map keyed by the dotted name and stores it, so the extension only fills page slots and the query. It also writes `<out>.engines.jsonl`, one sorted engine per line, so a config change shows as a diff. It rejects an unknown slot, a param no URL uses, a field that is neither a known field nor a var some URL reads, a value outside the declared list, a fallback to a missing engine, a fallback loop and a default engine that needs a page slot.
 - Help. `help` lists the resolved tree with each engine's URL, slots and the file and level that set each field. `engine.show <name>` opens it at that engine.

@@ -55,7 +55,11 @@ export function panel_after_prefix(root: TreeBranch | undefined, prefix: string[
 }
 
 // What the active page can run. Keys whose command needs slots the page cannot fill are left out, and so are groups left empty.
-export type PageAvailability = { page: PageInfo | undefined; requirement_of: (invocation: BoundInvocation) => string[] };
+// `has_site_engine` answers for a `site_keys` key: whether one of its engines fits the page. Without it such a key stays.
+export type PageAvailability = { page: PageInfo | undefined; requirement_of: (invocation: BoundInvocation) => string[]; has_site_engine?: (invocation: BoundInvocation) => boolean };
+
+const fits_page = (invocation: BoundInvocation, availability: PageAvailability): boolean =>
+  is_available(availability.requirement_of(invocation), availability.page) && (invocation.site_engines === undefined || availability.has_site_engine?.(invocation) !== false);
 
 export function without_unavailable(node: TreeBranch, availability: PageAvailability): TreeBranch | undefined {
   const children: Record<string, TreeNode> = {};
@@ -63,7 +67,7 @@ export function without_unavailable(node: TreeBranch, availability: PageAvailabi
     if (child.kind === "branch") {
       const kept = without_unavailable(child, availability);
       if (kept) children[token] = kept;
-    } else if (child.steps.every((step) => is_available(availability.requirement_of(step.invocation), availability.page))) {
+    } else if (child.steps.every((step) => fits_page(step.invocation, availability))) {
       children[token] = child;
     }
   }

@@ -50,7 +50,7 @@ function is_usable_snippet(candidate: unknown): candidate is SnippetEntry {
 // Fills sections the file left out, so later code never checks for undefined.
 function with_all_sections(raw: Record<string, unknown>, source: ConfigSource, warnings: string[]): MergedConfig {
   const merged = { ...empty_config(), ...raw, format_version: CONFIG_FORMAT_VERSION } as MergedConfig;
-  merged.search_engines = with_fallback_engines(merged.search_engines ?? {});
+  merged.search_engines = with_fallback_engines(merged.search_engines ?? {}, merged.settings?.default_engine);
   const listed: unknown[] = Array.isArray(merged.snippets) ? merged.snippets : [];
   merged.snippets = listed.filter((candidate, index) => {
     const usable = is_usable_snippet(candidate);

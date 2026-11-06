@@ -8,7 +8,7 @@ import type { TreeBranch } from "../../src/shared/prefix_tree.ts";
 import type { KeymapConfig } from "../../src/shared/keymap.ts";
 import { check_args, registry } from "../../src/shared/registry/index.ts";
 
-const bindings_of = (keymap: KeymapConfig) => Object.entries(keymap).filter(([name]) => name !== "group_names");
+const bindings_of = (keymap: KeymapConfig) => Object.entries(keymap).filter(([name]) => name !== "group_names" && name !== "site_keys");
 
 const ids_in = (keymap: KeymapConfig) =>
   bindings_of(keymap).flatMap(([, section]) => [section]).flatMap((section) =>
@@ -23,7 +23,7 @@ function compile(keymap: KeymapConfig) {
     config: empty_config(),
     default_keymap: keymap,
     get_command: (id) => registry.get(id),
-    enum_sources: { search_engines: [], containers: [] },
+    enum_sources: { search_engines: ["site"], containers: [] },
   });
 }
 
@@ -37,7 +37,7 @@ test("the default keymap compiles against the full registry with no warnings", (
 test("the default bindings of commands that exist compile with no warnings", () => {
   const present = (section: Record<string, unknown>) =>
     Object.fromEntries(Object.entries(section).filter(([, binding]) => [binding].flat().every((step) => registry.get((step as { id: string }).id))));
-  const partial = Object.fromEntries([...bindings_of(DEFAULT_KEYMAP).map(([mode, section]) => [mode, present(section)]), ["group_names", DEFAULT_KEYMAP.group_names]]) as KeymapConfig;
+  const partial = Object.fromEntries([...bindings_of(DEFAULT_KEYMAP).map(([mode, section]) => [mode, present(section)]), ["group_names", DEFAULT_KEYMAP.group_names], ["site_keys", DEFAULT_KEYMAP.site_keys]]) as KeymapConfig;
   assert.deepEqual(compile(partial).warnings, []);
 });
 
@@ -192,7 +192,7 @@ test("the generated search and container keys compile against the full registry 
     config,
     default_keymap: DEFAULT_KEYMAP,
     get_command: (id) => registry.get(id),
-    enum_sources: { search_engines: ["arch"], containers: ["Family"] },
+    enum_sources: { search_engines: ["arch", "site"], containers: ["Family"] },
   });
   assert.deepEqual(warnings, []);
   for (const prefix of ["s", "S", "c", "C"]) assert.ok((compiled.modes.normal!.children[prefix] as TreeBranch).children.a, `${prefix}a is bound`);

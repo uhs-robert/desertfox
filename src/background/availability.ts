@@ -3,7 +3,7 @@
 
 import { DEFAULT_SETTINGS } from "../shared/config.ts";
 import type { MergedConfig, SearchEngine } from "../shared/config.ts";
-import { slot_of } from "../shared/engines/index.ts";
+import { parse_http_url, slot_of } from "../shared/engines/index.ts";
 import { engine_url, search_engine_name } from "../commands/url_build.ts";
 import type { PageInfo } from "../shared/engines/index.ts";
 import type { CheckedArgs } from "../shared/command.ts";
@@ -30,10 +30,35 @@ export function available_engine_names(engines: Record<string, SearchEngine>, pa
 const search_engine_name_of = (config: Pick<MergedConfig, "settings">, named: unknown): string =>
   search_engine_name(named, config.settings.default_engine ?? DEFAULT_SETTINGS.default_engine);
 
+// Whether the engine belongs to the page's site. An engine with no `hosts` belongs to every site.
+const on_site = (engine: SearchEngine, page: PageInfo | undefined): boolean => {
+  const host = page && parse_http_url(page.url)?.hostname;
+  return engine.hosts === undefined || (host !== undefined && engine.hosts.includes(host));
+};
+
+// The engine a `site_keys` key runs on this page: the first candidate on the page's site whose slots the page fills.
+export function site_engine_for(engines: Record<string, SearchEngine>, candidates: readonly string[], page: PageInfo | undefined): string | undefined {
+  return candidates.find((name) => {
+    const engine = engines[name];
+    return engine !== undefined && on_site(engine, page) && is_available(engine_requirement(engine), page);
+  });
+}
+
+// Settles the engine of each `site_keys` invocation for the page. With no fit the first candidate stays, so a typed key shows that engine's slot message.
+export function with_site_engines(invocations: BoundInvocation[], engines: Record<string, SearchEngine>, page: PageInfo | undefined): BoundInvocation[] {
+  return invocations.map((invocation) => {
+    const { site_engines, ...plain } = invocation;
+    if (site_engines === undefined) return invocation;
+    return { ...plain, args: { ...plain.args, engine: site_engine_for(engines, site_engines, page) ?? site_engines[0] } };
+  });
+}
+
 // What one invocation asks of the page: the slots of the engine a search names, the `requires` of a snippet.
+// A `site_keys` key asks nothing here: `site_engine_for` decides it.
 export function requirement_lookup(config: Pick<MergedConfig, "search_engines" | "snippets" | "settings">): (invocation: BoundInvocation) => string[] {
   const snippets = new Map(config.snippets.map((snippet) => [snippet.id, snippet]));
   return (invocation) => {
+    if (invocation.site_engines) return [];
     if (invocation.id === "open.search") {
       const engine = config.search_engines[search_engine_name_of(config, invocation.args?.engine)];
       return engine ? engine_requirement(engine) : [];

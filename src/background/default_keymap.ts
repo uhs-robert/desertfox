@@ -29,6 +29,8 @@ const MOTIONS: Record<string, { id: string; args: Record<string, unknown>; label
 };
 
 export const DEFAULT_KEYMAP: KeymapConfig = {
+  // `s//` and `S//`: search the current site with the built-in `site` engine. Only the shipped keymap may use the letter `/`: the build refuses it in a user file.
+  site_keys: { "/": ["site"] },
   // What which-key calls each group. `s S c C` name the groups that the search and container keys of a user config fill.
   group_names: {
     g: "Go",
@@ -46,6 +48,8 @@ export const DEFAULT_KEYMAP: KeymapConfig = {
     ";": "Hints",
     s: "Search here",
     S: "Search in new tab",
+    "s/": "Site search",
+    "S/": "Site search in new tab",
     c: "Reopen in container",
     C: "Open in container",
   },

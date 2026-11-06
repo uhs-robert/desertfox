@@ -8,7 +8,7 @@ import { create_previous_tabs } from "./previous_tab.ts";
 import { browser_discard_deps } from "./tab_discard.ts";
 import { browser_complete_items_deps, create_complete_items } from "./complete_items.ts";
 import { create_open_help } from "./open_help.ts";
-import { requirement_lookup } from "./availability.ts";
+import { requirement_lookup, site_engine_for, with_site_engines } from "./availability.ts";
 import { list_keys } from "./list_keys.ts";
 import { create_bundle_loader } from "./bundle_loader.ts";
 import { track_window_focus } from "./window_focus.ts";
@@ -105,15 +105,19 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
   if (request?.type === "list_keys") {
     const tab = sender.tab;
     const page = tab?.url ? { url: tab.url, ...(tab.title ? { title: tab.title } : {}) } : undefined;
-    return get_config().then((config) => list_keys(browser.storage.local, (id) => registry.get(id), request, { page, requirement_of: requirement_lookup(config) }));
+    return get_config().then((config) => list_keys(browser.storage.local, (id) => registry.get(id), request, {
+      page,
+      requirement_of: requirement_lookup(config),
+      has_site_engine: (invocation) => site_engine_for(config.search_engines, invocation.site_engines ?? [], page) !== undefined,
+    }));
   }
   if ((message as SnippetCall)?.type === "snippet_run") {
     return get_config().then(() => snippets.handle_call(message as SnippetCall, { tab_id: sender.tab?.id, frame_id: sender.frameId }));
   }
   if (request?.type !== "run") return undefined;
-  return get_config().then(() =>
+  return get_config().then((config) =>
     router.run({
-      invocations: request.invocations,
+      invocations: with_site_engines(request.invocations, config.search_engines, sender.tab?.url ? { url: sender.tab.url, ...(sender.tab.title ? { title: sender.tab.title } : {}) } : undefined),
       mode: request.mode,
       may_prompt: true,
       ...(request.from_hints === true && request.invocations.length === 1 && request.invocations[0]?.id === "open.url" ? { skip_repeat: true } : {}),

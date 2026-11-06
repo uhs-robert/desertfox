@@ -106,7 +106,7 @@ export function resolve_bindings(merged: MergedData, registry: Registry, problem
     return parsed.every((binding) => binding !== undefined) ? parsed : undefined;
   };
   for (const [mode, entries] of Object.entries(merged.keymap)) {
-    if (mode === "search_keys" || mode === "container_keys" || mode === "group_names") continue;
+    if (mode === "search_keys" || mode === "container_keys" || mode === "site_keys" || mode === "group_names") continue;
     const bindings = entries as Record<string, unknown>;
     for (const [sequence, entry] of Object.entries(bindings)) {
       const where = location(mode, sequence);
@@ -150,6 +150,34 @@ function check_engine_fallbacks(merged: MergedData, where: (section: string, key
   }
 }
 
+const hosts_overlap = (left: string[] | undefined, right: string[] | undefined): boolean =>
+  left === undefined || right === undefined || left.some((host) => right.includes(host));
+
+// One letter means one search on any site, so the engines of a letter must never both fit one page.
+// An engine with no hosts fits every site. Slots do not prove two engines exclusive, so only the hosts count.
+function check_site_keys(site_keys: Record<string, string[]>, merged: MergedData, where: (section: string, key: string) => string, problems: string[]) {
+  const engines = with_fallback_engines(merged.search_engines);
+  for (const [letter, names] of Object.entries(site_keys)) {
+    const location = where("keymap.site_keys", letter);
+    const parsed = parse_sequence(letter);
+    if (parsed.error !== undefined) problems.push(`${location}: ${parsed.error}`);
+    else if (parsed.tokens.length !== 1) problems.push(`${location}: must be one key, not a sequence`);
+    else if (letter === "/") problems.push(`${location}: "/" is reserved for the search of the current site (s//)`);
+    const known = names.filter((name) => {
+      const exists = Object.hasOwn(engines, name);
+      if (!exists) problems.push(`${location}: unknown search engine "${name}"`);
+      return exists;
+    });
+    for (const [index, name] of known.entries()) {
+      for (const other of known.slice(index + 1)) {
+        if (hosts_overlap(engines[name]!.hosts, engines[other]!.hosts)) {
+          problems.push(`${location}: "${name}" and "${other}" fit the same site, so one key cannot tell them apart. Give them different hosts or different keys`);
+        }
+      }
+    }
+  }
+}
+
 export function check_config(merged: MergedData, registry: Registry, problems: string[], warnings: string[]) {
   const engine_names = Object.keys(with_fallback_engines(merged.search_engines));
   const where = (section: string, key: string) => location_of(merged, section, key);
@@ -179,6 +207,10 @@ export function check_config(merged: MergedData, registry: Registry, problems: s
         const parsed = parse_sequence(sequence);
         if (parsed.error !== undefined) problems.push(`${where("keymap.group_names", sequence)}: ${parsed.error}`);
       }
+      continue;
+    }
+    if (mode === "site_keys") {
+      check_site_keys(entries as Record<string, string[]>, merged, where, problems);
       continue;
     }
     if (mode === "search_keys" || mode === "container_keys") {

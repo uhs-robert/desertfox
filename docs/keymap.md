@@ -203,6 +203,8 @@ Which-key group names:
 - `;`: Hints
 - `s`: Search here
 - `S`: Search in new tab
+- `s/`: Site search
+- `S/`: Site search in new tab
 - `c`: Reopen in container
 - `C`: Open in container
 

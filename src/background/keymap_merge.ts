@@ -1,6 +1,6 @@
 import type { Keymap, KeymapConfig, KeymapMode, ModeBindings } from "../shared/keymap.ts";
 
-const GENERATOR_KEYS = ["search_keys", "container_keys", "group_names"] as const;
+const GENERATOR_KEYS = ["search_keys", "container_keys", "site_keys", "group_names"] as const;
 
 function merge_mode(defaults: ModeBindings | undefined, user: ModeBindings | undefined): ModeBindings {
   // A `null` stays: the compiler also uses it to drop a binding generated from search_keys or container_keys.
@@ -18,7 +18,7 @@ export function merge_keymaps(defaults: KeymapConfig, user: KeymapConfig): Keyma
   }
   for (const key of GENERATOR_KEYS) {
     const generated = { ...defaults[key], ...user[key] };
-    if (Object.keys(generated).length > 0) merged[key] = generated;
+    if (Object.keys(generated).length > 0) (merged as Record<string, unknown>)[key] = generated;
   }
   return merged;
 }

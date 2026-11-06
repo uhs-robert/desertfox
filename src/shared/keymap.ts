@@ -18,6 +18,8 @@ export type KeymapConfig = Keymap & {
   search_keys?: Record<string, string>;
   // Last key of the sequence to container name.
   container_keys?: Record<string, string>;
+  // Last key of the sequence to the engines that key searches with, one per site. On a page, `s/<key>` runs the first engine whose `hosts` list the page and whose slots the page fills.
+  site_keys?: Record<string, string[]>;
   // Key sequence of a group to its name in which-key, for example `g` to `Go`. Applies to every mode that has the group.
   group_names?: Record<string, string>;
 };

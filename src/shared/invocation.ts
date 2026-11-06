@@ -20,7 +20,8 @@ export type Prompt = {
 
 // An invocation as a key binding writes it.
 // `label` replaces the which-key label derived from the command. On a binding of several invocations only the first one's label counts.
-export type BoundInvocation = Invocation & { prompt?: Prompt; label?: string };
+// `site_engines` is set by the key compiler for a `site_keys` key: the engines to pick from by page, in order. `args.engine` holds the first one, so the compile-time check has an engine to check.
+export type BoundInvocation = Invocation & { prompt?: Prompt; label?: string; site_engines?: string[] };
 
 // One invocation, or an array that runs in order.
 export type KeyBinding = BoundInvocation | BoundInvocation[];

@@ -1,0 +1,4 @@
+# The s/ group for p8_engines.mjs: h picks keyhere on the test host, n has an engine for another host only.
+[site_keys]
+h = ["keyother", "keyhere"]
+n = ["keyother"]
