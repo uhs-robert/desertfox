@@ -6,9 +6,9 @@ import { evaluate_in_background } from "./rdp.mjs";
 
 export async function run_cases({ rdp, extension_id, take_shot, run_case, expect, open_page, send_keys, sleep, events, wait_event }) {
   const paste_ctrl_v = ["-M", "ctrl", "v", "-m", "ctrl"];
-  // Moonlight, the default palette, dark: the caret takes the command color and visual mode the visual color.
-  const CARET_BACKGROUND = "#7fcf78";
-  const VISUAL_BACKGROUND = "#ffba75";
+  // oasis_moonlight, the default palette, dark: the caret takes the `mode_caret` role and visual mode the `selection` role (src/content/caret/selection_colors.ts).
+  const CARET_BACKGROUND = "#f0e68c";
+  const VISUAL_BACKGROUND = "#24364d";
 
   const selection_is = (page_id, text) => (event) => event.type === "selection" && event.page_id === page_id && event.text === text;
   const style_is = (page_id, has) => (event) => event.type === "selection_style" && event.page_id === page_id && has(event.css);
