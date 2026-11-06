@@ -6,7 +6,8 @@ import type { SearchEngine } from "../shared/config.ts";
 import type { PageInfo } from "../shared/engines/index.ts";
 import type { BookmarkItem, CompleteItemsAnswer, EngineItem, HistoryItem, OpenRow, TabContainer, TabItem, TabRowsAction, TabRowsActionAnswer, WindowItem } from "../shared/messages.ts";
 import { available_engine_names } from "./availability.ts";
-import { close_tabs, set_muted, set_pinned } from "./tab_actions.ts";
+import { DEFAULT_COOKIE_STORE_ID } from "../shared/container_store.ts";
+import { close_tabs, reopen_tabs_in_container, set_muted, set_pinned } from "./tab_actions.ts";
 import type { TabActionDeps } from "./tab_actions.ts";
 import { describe_result, set_unloaded } from "./tab_discard.ts";
 import type { DiscardDeps } from "./tab_discard.ts";
@@ -202,10 +203,10 @@ export type CompleteItemsDeps = typeof browser_complete_items_deps & {
   open_settings: () => Promise<OpenSettings>;
   read_tab: (tab_id: number) => Promise<TabLike | undefined>;
   discard: DiscardDeps;
-  tab_actions: Pick<TabActionDeps, "set_muted" | "set_pinned" | "remove">;
+  tab_actions: Pick<TabActionDeps, "set_muted" | "set_pinned" | "remove" | "open_tab">;
 };
 
-const TAB_ROWS_ACTIONS: readonly string[] = ["close", "unload", "load", "mute", "unmute", "pin", "unpin"] satisfies TabRowsAction[];
+const TAB_ROWS_ACTIONS: readonly string[] = ["close", "unload", "load", "mute", "unmute", "pin", "unpin", "reopen"] satisfies TabRowsAction[];
 const is_tab_rows_action = (action: unknown): action is TabRowsAction => typeof action === "string" && TAB_ROWS_ACTIONS.includes(action);
 // A bound on one message, far above any real tab count.
 const MAX_ACTION_TABS = 5000;
@@ -232,13 +233,23 @@ export function create_complete_items(deps: CompleteItemsDeps) {
   return {
     // Runs a row key on the tab ids the page captured at the key press. Undefined for a sender that is not an opener, for a bad argument and when
     // any id names a tab of the other privacy: nothing runs then. An id with no tab is skipped, also one that closes while the action runs.
-    tab_rows_action: async (action: unknown, tab_ids: unknown, asker: Asker | undefined): Promise<TabRowsActionAnswer | undefined> => {
+    // `reopen` also needs `cookie_store_id`, a container the browser lists or the default store. A private line, a tab id of the other privacy and an unknown store give nothing.
+    // It leaves out the line's own tab, because closing it ends the line, and tabs already in the container. The answer counts the tabs that moved when some stayed.
+    tab_rows_action: async (action: unknown, tab_ids: unknown, asker: Asker | undefined, cookie_store_id?: unknown): Promise<TabRowsActionAnswer | undefined> => {
       if (!is_tab_rows_action(action) || !Array.isArray(tab_ids) || tab_ids.length > MAX_ACTION_TABS || !tab_ids.every(Number.isInteger) || !asker || !(await deps.is_opener(asker.tab_id, asker.frame_id))) return undefined;
       const unique_ids = [...new Set(tab_ids as number[])];
       const found = await Promise.all(unique_ids.map(async (id) => ({ id, tab: await deps.read_tab(id) })));
       // The reads take time: the line may have lost its ticket meanwhile.
       if (found.some(({ tab }) => tab && tab.incognito !== asker.incognito) || !(await deps.is_opener(asker.tab_id, asker.frame_id))) return undefined;
       const ids = found.filter(({ tab }) => tab).map(({ id }) => id);
+      if (action === "reopen") {
+        if (asker.incognito || typeof cookie_store_id !== "string" || !(cookie_store_id === DEFAULT_COOKIE_STORE_ID || (await deps.containers()).has(cookie_store_id))) return undefined;
+        const movable = found.flatMap(({ id, tab }) =>
+          tab && id !== asker.tab_id && tab.windowId !== undefined ? [{ id, window_id: tab.windowId, index: tab.index, pinned: tab.pinned === true, url: tab.url, cookie_store_id: tab.cookieStoreId }] : [],
+        );
+        const reopened = await reopen_tabs_in_container(deps.tab_actions, movable, cookie_store_id);
+        return reopened.length === ids.length ? {} : { refusal: `reopened ${reopened.length} of ${ids.length} tabs` };
+      }
       try {
         if (action === "close") await close_tabs(deps.tab_actions, ids);
         else if (action === "mute" || action === "unmute") await set_muted(deps.tab_actions, ids, action === "mute");

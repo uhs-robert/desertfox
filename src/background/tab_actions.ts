@@ -6,11 +6,12 @@ export type TabActionDeps = {
   set_pinned: (tab_ids: number[], pinned: boolean) => Promise<void>;
   // The tabs keep their given order and end side by side, the first at `index`.
   move: (tab_ids: number[], index: number) => Promise<void>;
-  open_tab: (open: { window_id: number; url: string; index: number; pinned: boolean; cookie_store_id: string }) => Promise<void>;
+  // `active` is true when left out.
+  open_tab: (open: { window_id: number; url: string; index: number; pinned: boolean; cookie_store_id: string; active?: boolean }) => Promise<void>;
   remove: (tab_ids: number[]) => Promise<void>;
 };
 
-export type ReopenTab = { id: number; index: number; pinned: boolean; url: string | undefined };
+export type ReopenTab = { id: number; index: number; pinned: boolean; url: string | undefined; cookie_store_id?: string | undefined };
 
 export async function set_muted(deps: Pick<TabActionDeps, "set_muted">, tab_ids: number[], muted: boolean): Promise<void> {
   if (tab_ids.length > 0) await deps.set_muted(tab_ids, muted);
@@ -49,12 +50,32 @@ export async function reopen_in_container(
   return reopened;
 }
 
+// The tab list's many-tab reopen, each tab in its own window. Unlike `reopen_in_container`, a tab that fails to reopen is skipped and the
+// rest go on, and a tab already in the container stays. Only the first tab that reopens becomes active, so the focus moves once.
+// Returns the ids that reopened.
+export async function reopen_tabs_in_container(
+  deps: Pick<TabActionDeps, "open_tab" | "remove">,
+  tabs: (ReopenTab & { window_id: number })[],
+  cookie_store_id: string,
+): Promise<number[]> {
+  let active = true;
+  const open_tab: TabActionDeps["open_tab"] = async (open) => {
+    await deps.open_tab({ ...open, active });
+    active = false;
+  };
+  const reopened: number[] = [];
+  for (const tab of tabs.filter((candidate) => candidate.cookie_store_id !== cookie_store_id).toSorted((a, b) => a.index - b.index)) {
+    reopened.push(...(await reopen_in_container({ open_tab, remove: deps.remove }, tab.window_id, [tab], cookie_store_id).catch((): number[] => [])));
+  }
+  return reopened;
+}
+
 export const browser_tab_action_deps: TabActionDeps = {
   set_muted: async (tab_ids, muted) => void (await Promise.all(tab_ids.map((id) => browser.tabs.update(id, { muted })))),
   set_pinned: async (tab_ids, pinned) => void (await Promise.all(tab_ids.map((id) => browser.tabs.update(id, { pinned })))),
   move: async (tab_ids, index) => void (await browser.tabs.move(tab_ids, { index })),
-  open_tab: async ({ window_id, url, index, pinned, cookie_store_id }) => {
-    await browser.tabs.create({ windowId: window_id, url, index, pinned, cookieStoreId: cookie_store_id, active: true });
+  open_tab: async ({ window_id, url, index, pinned, cookie_store_id, active = true }) => {
+    await browser.tabs.create({ windowId: window_id, url, index, pinned, cookieStoreId: cookie_store_id, active });
   },
   remove: (tab_ids) => browser.tabs.remove(tab_ids),
 };

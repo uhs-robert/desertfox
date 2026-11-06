@@ -2,7 +2,8 @@
 
 import type { MergedConfig } from "../shared/config.ts";
 import type { PageInfo } from "../shared/engines/index.ts";
-import type { BackgroundToContent, Refusal, ToastKind } from "../shared/messages.ts";
+import { DEFAULT_CONTAINER_NAME, DEFAULT_COOKIE_STORE_ID } from "../shared/container_store.ts";
+import type { BackgroundToContent, ContainerStore, Refusal, ToastKind } from "../shared/messages.ts";
 import type { EnumSources } from "../shared/registry/check_args.ts";
 import { registry } from "../shared/registry/index.ts";
 import { runs_with_empty } from "./availability.ts";
@@ -51,6 +52,13 @@ export async function container_names(): Promise<string[]> {
   // Returns false or rejects when containers are off.
   const identities = await browser.contextualIdentities.query({}).catch(() => undefined);
   return Array.isArray(identities) ? identities.map((identity) => identity.name) : [];
+}
+
+// `default` first, then the containers. Empty with containers off, where a reopen has nowhere to go.
+export async function container_stores(): Promise<ContainerStore[]> {
+  const identities = await browser.contextualIdentities.query({}).catch(() => undefined);
+  if (!Array.isArray(identities) || identities.length === 0) return [];
+  return [{ name: DEFAULT_CONTAINER_NAME, cookie_store_id: DEFAULT_COOKIE_STORE_ID }, ...identities.map((identity) => ({ name: identity.name, cookie_store_id: identity.cookieStoreId }))];
 }
 
 export function make_router_deps(get_config: () => Promise<MergedConfig>, repeat_memory: RepeatMemory): RouterDeps {

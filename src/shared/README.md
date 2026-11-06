@@ -7,6 +7,7 @@ Types and constants that fix the hand-off formats between the background page, t
 - `keymap.ts`: keymap data as written by the user.
 - `prefix_tree.ts`: the compiled keymap stored in `storage.local` for the content script. Its `format_version` is bumped when the shape changes, and `current_keymap` hides an older one until the background recompiles at its next start.
 - `messages.ts`: messages between content script and background.
+- `container_store.ts`: the name and cookie store id of the container-less store, shared by the background and the `open` commands.
 - `tab_model_port.ts`: the port names of the live tab model, the plain one and its `:normal` and `:private` forms.
 - `bundles.ts`: the names of the scripts loaded on first use, and which mode loads which.
 - `registry/`: the command registry, the one validator and the command line parser. See its README.

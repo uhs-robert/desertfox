@@ -1,4 +1,5 @@
 import { RuntimeRefusal } from "../shared/command.ts";
+import { DEFAULT_CONTAINER_NAME, DEFAULT_COOKIE_STORE_ID } from "../shared/container_store.ts";
 // Opens a URL where the command asks. Shared by open, page.home and the other commands that open pages.
 
 import { get_config } from "../background/startup.ts";
@@ -33,8 +34,6 @@ export const CONTAINER_PARAM: ParamDef = {
   description: "Open in a container.",
 };
 
-export const DEFAULT_CONTAINER_NAME = "default";
-export const DEFAULT_COOKIE_STORE_ID = "firefox-default";
 
 export type FindContainerStoreId = (container_name: string) => Promise<string | undefined>;
 

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { close_tabs, move_tabs, reopen_in_container, set_muted, set_pinned } from "../../src/background/tab_actions.ts";
+import { close_tabs, move_tabs, reopen_in_container, reopen_tabs_in_container, set_muted, set_pinned } from "../../src/background/tab_actions.ts";
 import type { TabActionDeps } from "../../src/background/tab_actions.ts";
 
 function make_deps() {
@@ -9,7 +9,7 @@ function make_deps() {
     set_muted: async (ids, muted) => void log.push(`mute ${ids.join(",")} ${muted}`),
     set_pinned: async (ids, pinned) => void log.push(`pin ${ids.join(",")} ${pinned}`),
     move: async (ids, index) => void log.push(`move ${ids.join(",")} ${index}`),
-    open_tab: async (open) => void log.push(`open ${open.url} ${open.index} ${open.cookie_store_id} ${open.pinned}`),
+    open_tab: async (open) => void log.push(`open ${open.url} ${open.index} ${open.cookie_store_id} ${open.pinned}${open.active === undefined ? "" : ` active=${open.active}`}`),
     remove: async (ids) => void log.push(`remove ${ids.join(",")}`),
   };
   return { deps, log };
@@ -110,4 +110,49 @@ test("close_tabs closes each tab on its own, so a tab that closed already does n
   };
   assert.equal(await close_tabs(deps, [1, 2, 3]), 2);
   assert.deepEqual(closed, [1, 3]);
+});
+
+test("many-tab reopen skips tabs already in the container and gives the first reopened tab the focus", async () => {
+  const { deps, log } = make_deps();
+  const reopened = await reopen_tabs_in_container(
+    deps,
+    [
+      { id: 12, index: 7, pinned: false, url: "https://c.test/", window_id: 1, cookie_store_id: "work" },
+      { id: 11, index: 5, pinned: true, url: "https://b.test/", window_id: 1, cookie_store_id: undefined },
+      { id: 10, index: 2, pinned: false, url: "https://a.test/", window_id: 2, cookie_store_id: "firefox-default" },
+    ],
+    "work",
+  );
+  assert.deepEqual(reopened, [10, 11]);
+  assert.deepEqual(log, ["open https://a.test/ 2 work false active=true", "remove 10", "open https://b.test/ 5 work true active=false", "remove 11"]);
+});
+
+test("many-tab reopen skips a tab that fails and goes on, and the focus waits for a tab that opened", async () => {
+  const log: string[] = [];
+  const deps: Pick<TabActionDeps, "open_tab" | "remove"> = {
+    open_tab: async (open) => {
+      if (open.url.startsWith("about:")) throw new Error("not allowed");
+      log.push(`open ${open.url} active=${open.active}`);
+    },
+    remove: async (ids) => void log.push(`remove ${ids.join(",")}`),
+  };
+  const reopened = await reopen_tabs_in_container(
+    deps,
+    [
+      { id: 1, index: 0, pinned: false, url: "about:config", window_id: 1 },
+      { id: 2, index: 1, pinned: false, url: undefined, window_id: 1 },
+      { id: 3, index: 2, pinned: false, url: "https://b.test/", window_id: 1 },
+      { id: 4, index: 3, pinned: false, url: "https://c.test/", window_id: 1 },
+    ],
+    "work",
+  );
+  assert.deepEqual(reopened, [3, 4]);
+  assert.deepEqual(log, ["open https://b.test/ active=true", "remove 3", "open https://c.test/ active=false", "remove 4"]);
+});
+
+test("many-tab reopen skips a tab whose old copy fails to close and counts it as not moved", async () => {
+  const { deps, log } = make_deps();
+  const failing = { ...deps, remove: async (ids: number[]) => { if (ids[0] === 10) throw new Error("gone"); log.push(`remove ${ids.join(",")}`); } };
+  const reopened = await reopen_tabs_in_container(failing, [{ id: 10, index: 0, pinned: false, url: "https://a.test/", window_id: 1 }, { id: 11, index: 1, pinned: false, url: "https://b.test/", window_id: 1 }], "work");
+  assert.deepEqual(reopened, [11]);
 });

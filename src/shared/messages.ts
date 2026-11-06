@@ -68,10 +68,15 @@ export type OpenCmdline = {
   ticket: string;
 };
 
+// A container by name and cookie store id. The page lists the names and sends the id, because names can repeat.
+export type ContainerStore = { name: string; cookie_store_id: string };
+
 export type CmdlineOpened = {
   // Oldest first.
   history: string[];
   sources: { search_engines: string[]; containers: string[] };
+  // The containers the tab list can reopen tabs in, `default` first. Empty on a private line and with containers off.
+  container_stores: ContainerStore[];
   // The runtime registry, snippets included, which `commands.json` lacks.
   commands: CommandMeta[];
   command_aliases: Record<string, string>;
@@ -99,12 +104,15 @@ export type CompleteItems = {
 
 // From the command line page when a row key acts on tabs of the list. `tab_ids` were captured at the key press, so a later change of the list does not change them. The answer is undefined unless the sender is a tab whose line
 // redeemed a ticket and every id that still names a tab is of the sender's own privacy. An id with no tab is skipped. `refusal` says why some tabs did not change.
-export type TabRowsAction = "close" | "unload" | "load" | "mute" | "unmute" | "pin" | "unpin";
+// `reopen` also carries `cookie_store_id`, the container to reopen the tabs in. The background also leaves out the line's own tab and tabs already in that container, and refuses a private line and a store id it does not know.
+// Its answer counts the tabs that moved when some did not.
+export type TabRowsAction = "close" | "unload" | "load" | "mute" | "unmute" | "pin" | "unpin" | "reopen";
 
 export type TabRowsActionRequest = {
   type: "tab_rows_action";
   action: TabRowsAction;
   tab_ids: number[];
+  cookie_store_id?: string;
 };
 
 export type TabRowsActionAnswer = { refusal?: string };

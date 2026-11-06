@@ -245,6 +245,7 @@ export const DEFAULT_KEYMAP: KeymapConfig = {
     "<A-x>": { id: "list.act", args: { action: "close" }, label: "Close the tab" },
     "<A-m>": { id: "list.act", args: { action: "mute" }, label: "Mute or unmute the tab" },
     "<A-p>": { id: "list.act", args: { action: "pin" }, label: "Pin or unpin the tab" },
+    "<A-c>": { id: "list.act", args: { action: "reopen" }, label: "Reopen the tab in a container" },
   },
   caret: {
     v: { id: "mode.set", args: { mode: "visual" } },

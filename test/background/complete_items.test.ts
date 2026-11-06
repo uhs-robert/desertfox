@@ -3,10 +3,10 @@ import { test } from "node:test";
 import { bookmark_items, create_complete_items, engine_items, flatten_bookmarks, history_items, listed_favicon, listed_tabs, listed_windows, read_container_identities, read_containers } from "../../src/background/complete_items.ts";
 import type { TabActionDeps } from "../../src/background/tab_actions.ts";
 import type { DiscardDeps } from "../../src/background/tab_discard.ts";
-import type { BookmarkNode, HistoryNode, LineScope, OpenSettings, TabLike, WindowLike } from "../../src/background/complete_items.ts";
+import type { BookmarkNode, ContainerMarks, HistoryNode, LineScope, OpenSettings, TabLike, WindowLike } from "../../src/background/complete_items.ts";
 
-type TabActions = Pick<TabActionDeps, "set_muted" | "set_pinned" | "remove">;
-const NO_ACTIONS: TabActions = { set_muted: async () => {}, set_pinned: async () => {}, remove: async () => {} };
+type TabActions = Pick<TabActionDeps, "set_muted" | "set_pinned" | "remove" | "open_tab">;
+const NO_ACTIONS: TabActions = { set_muted: async () => {}, set_pinned: async () => {}, remove: async () => {}, open_tab: async () => {} };
 
 const tab = (id: number, index: number, window_id: number, incognito: boolean, title = `Tab ${id}`): TabLike => ({ id, index, windowId: window_id, title, url: `https://site${id}.test/`, incognito });
 const NORMAL_LINE: LineScope & { tab_id: number; frame_id: number } = { tab_id: 1, frame_id: 3, window_id: 10, incognito: false };
@@ -31,7 +31,7 @@ const window_of = (id: number, incognito: boolean, title: string, type = "normal
 // Two normal windows and one private window, in `windows.getAll` order.
 const WINDOWS = [window_of(10, false, "Mail"), window_of(20, true, "Secret"), window_of(11, false, "Docs\n tab")];
 
-function make({ openers = [1, 2], tabs = ALL_TABS, bookmarks = [] as BookmarkNode[], fail = false, page = undefined as { url: string } | undefined, history = [] as HistoryNode[], open = { sources: ["bookmarks", "history"], history_max: 10 } as OpenSettings, read_tab = (async () => undefined) as (id: number) => Promise<TabLike | undefined>, discard = {} as DiscardDeps, tab_actions = NO_ACTIONS as TabActions } = {}) {
+function make({ openers = [1, 2], tabs = ALL_TABS, bookmarks = [] as BookmarkNode[], fail = false, page = undefined as { url: string } | undefined, history = [] as HistoryNode[], open = { sources: ["bookmarks", "history"], history_max: 10 } as OpenSettings, read_tab = (async () => undefined) as (id: number) => Promise<TabLike | undefined>, discard = {} as DiscardDeps, tab_actions = NO_ACTIONS as TabActions, containers = new Map() as ContainerMarks } = {}) {
   const history_reads: number[] = [];
   const asked: (number | undefined)[] = [];
   const opened = new Set(openers);
@@ -50,7 +50,7 @@ function make({ openers = [1, 2], tabs = ALL_TABS, bookmarks = [] as BookmarkNod
       return bookmarks;
     },
     is_opener: async (tab_id) => opened.has(tab_id),
-    containers: async () => new Map(),
+    containers: async () => containers,
     previous_tab: async () => undefined,
     read_tab,
     discard,
@@ -433,7 +433,7 @@ function fake_tab_actions(existing: Set<number>) {
     log.push(`${name} ${ids.join(",")}${rest.length ? ` ${rest.join(",")}` : ""}`);
     if (ids.some((id) => !existing.has(id))) throw new Error("Invalid tab ID");
   };
-  const actions: TabActions = { set_muted: act("mute"), set_pinned: act("pin"), remove: async (ids) => void (await act("close")(ids)) };
+  const actions: TabActions = { set_muted: act("mute"), set_pinned: act("pin"), remove: async (ids) => void (await act("close")(ids)), open_tab: async (open) => void log.push(`open ${open.url} ${open.cookie_store_id} ${open.active}`) };
   return { actions, log };
 }
 
@@ -540,5 +540,68 @@ test("tab_rows_action refuses when the line loses its ticket while the tabs are 
   });
   service = made.service;
   assert.equal(await service.tab_rows_action("close", [2], NORMAL_LINE), undefined);
+  assert.deepEqual(fake.log, []);
+});
+
+// Tabs 2 to 5 sit in window 10 with their own addresses. Tab 1 is the line's own.
+const in_store = (id: number, store: string | undefined): TabLike => ({ ...tab(id, id, 10, false), cookieStoreId: store });
+const READING_STORES = (stores: Record<number, string | undefined>) => async (id: number) => (id in stores ? in_store(id, stores[id]) : undefined);
+const WORK = new Map([["firefox-container-1", { color: "blue", icon: "briefcase" }]]);
+
+test("tab_rows_action reopens the tabs in a container, leaving out the line's own tab and the tabs already there", async () => {
+  const fake = fake_tab_actions(new Set([1, 2, 3, 4]));
+  const { service } = make({ read_tab: READING_STORES({ 1: undefined, 2: undefined, 3: "firefox-container-1", 4: "firefox-default" }), tab_actions: fake.actions, containers: WORK });
+  assert.deepEqual(await service.tab_rows_action("reopen", [1, 2, 3, 4], NORMAL_LINE, "firefox-container-1"), { refusal: "reopened 2 of 4 tabs" });
+  assert.deepEqual(fake.log, ["open https://site2.test/ firefox-container-1 true", "close 2", "open https://site4.test/ firefox-container-1 false", "close 4"]);
+});
+
+test("tab_rows_action reopens with no note when every tab moves, into the default store too", async () => {
+  const fake = fake_tab_actions(new Set([2, 3]));
+  const { service } = make({ read_tab: READING_STORES({ 2: "firefox-container-1", 3: "firefox-container-1" }), tab_actions: fake.actions, containers: WORK });
+  assert.deepEqual(await service.tab_rows_action("reopen", [2, 3], NORMAL_LINE, "firefox-default"), {});
+  assert.deepEqual(fake.log, ["open https://site2.test/ firefox-default true", "close 2", "open https://site3.test/ firefox-default false", "close 3"]);
+});
+
+test("tab_rows_action goes on past a tab that fails to reopen and counts the rest", async () => {
+  const log: string[] = [];
+  const actions: TabActions = {
+    ...NO_ACTIONS,
+    open_tab: async (open) => {
+      if (open.url.includes("site3")) throw new Error("privileged page");
+      log.push(`open ${open.url} ${open.active}`);
+    },
+    remove: async (ids) => void log.push(`close ${ids.join(",")}`),
+  };
+  const { service } = make({ read_tab: READING_STORES({ 2: undefined, 3: undefined, 4: undefined }), tab_actions: actions, containers: WORK });
+  assert.deepEqual(await service.tab_rows_action("reopen", [2, 3, 4], NORMAL_LINE, "firefox-container-1"), { refusal: "reopened 2 of 3 tabs" });
+  assert.deepEqual(log, ["open https://site2.test/ true", "close 2", "open https://site4.test/ false", "close 4"]);
+});
+
+test("tab_rows_action does not reopen a tab that closed before the message arrived", async () => {
+  const fake = fake_tab_actions(new Set([2]));
+  const { service } = make({ read_tab: READING_STORES({ 2: undefined }), tab_actions: fake.actions, containers: WORK });
+  assert.deepEqual(await service.tab_rows_action("reopen", [2, 99], NORMAL_LINE, "firefox-container-1"), {});
+  assert.deepEqual(fake.log, ["open https://site2.test/ firefox-container-1 true", "close 2"]);
+});
+
+test("tab_rows_action refuses a reopen with an unknown or missing store id, and runs nothing", async () => {
+  const fake = fake_tab_actions(new Set([2]));
+  const { service } = make({ read_tab: READING_STORES({ 2: undefined }), tab_actions: fake.actions, containers: WORK });
+  assert.equal(await service.tab_rows_action("reopen", [2], NORMAL_LINE, "firefox-container-99"), undefined);
+  assert.equal(await service.tab_rows_action("reopen", [2], NORMAL_LINE, undefined), undefined);
+  assert.equal(await service.tab_rows_action("reopen", [2], NORMAL_LINE, 7), undefined);
+  assert.deepEqual(fake.log, []);
+});
+
+test("tab_rows_action refuses a reopen from a ticketless sender, with foreign ids, and from a private line", async () => {
+  const fake = fake_tab_actions(new Set([2, 4]));
+  const stores = { 2: undefined, 4: undefined };
+  const read_tab = async (id: number) => (id === 4 ? { ...tab(4, 0, 20, true) } : id in stores ? in_store(id, undefined) : undefined);
+  const { service } = make({ read_tab, tab_actions: fake.actions, containers: WORK });
+  assert.equal(await service.tab_rows_action("reopen", [2, 4], NORMAL_LINE, "firefox-container-1"), undefined);
+  assert.equal(await service.tab_rows_action("reopen", [4], PRIVATE_LINE, "firefox-default"), undefined);
+  const { service: ticketless } = make({ openers: [], read_tab, tab_actions: fake.actions, containers: WORK });
+  assert.equal(await ticketless.tab_rows_action("reopen", [2], NORMAL_LINE, "firefox-container-1"), undefined);
+  assert.equal(await ticketless.tab_rows_action("reopen", [2], undefined, "firefox-container-1"), undefined);
   assert.deepEqual(fake.log, []);
 });

@@ -116,6 +116,7 @@ test("the keys of the new modes compile and resolve to their commands", () => {
   assert.equal(leaf_id("cmdline", "<A-x>"), 'list.act {"action":"close"}');
   assert.equal(leaf_id("cmdline", "<A-m>"), 'list.act {"action":"mute"}');
   assert.equal(leaf_id("cmdline", "<A-p>"), 'list.act {"action":"pin"}');
+  assert.equal(leaf_id("cmdline", "<A-c>"), 'list.act {"action":"reopen"}');
 });
 
 test("no default binds a command that does not exist", () => {
@@ -231,7 +232,7 @@ test("hint modifier variants whose action needs another filter are not bound", (
 test("the cmdline keys are single tokens and the selection keys each have one binding, so none shadows another", () => {
   const cmdline = DEFAULT_KEYMAP.cmdline ?? {};
   for (const key of Object.keys(cmdline)) assert.match(key, /^<[^<>]+>$/, key);
-  const selection_keys = ["<C-Space>", "<A-u>", "<A-x>", "<A-m>", "<A-p>"];
+  const selection_keys = ["<C-Space>", "<A-u>", "<A-x>", "<A-m>", "<A-p>", "<A-c>"];
   for (const key of selection_keys) assert.ok(!Array.isArray(cmdline[key]), key);
   assert.equal(new Set(selection_keys.map((key) => JSON.stringify(cmdline[key]))).size, selection_keys.length);
 });
