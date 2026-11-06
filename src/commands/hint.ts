@@ -2,6 +2,9 @@ import { hint_run } from "../content/handlers/lazy_bundle.ts";
 import { define } from "../shared/registry/index.ts";
 import { WHERE, WHERE_SHORT } from "./open_target.ts";
 
+// Filters whose elements have an address to open or copy. The mixed filters stay because some of their elements have one.
+const HAS_ADDRESS = ["all", "clickable", "links", "images", "frames", "media", "custom"];
+
 define("hint.run", {
   name: "hint",
   label: "Hint",
@@ -12,6 +15,16 @@ define("hint.run", {
       type: "enum",
       values: [...WHERE, "caret", "visual", "copy", "copy_text", "delete", "focus", "hover", "play_pause", "mute", "fullscreen"],
       default: [{ value: "play_pause", when: { filter: ["media"] } }, { value: "background", when: { filter: ["links"], rapid: [true] } }, { value: "tab", when: { filter: ["images"] } }, { value: "focus", when: { filter: ["frames"] } }, "here"],
+      value_when: {
+        tab: { filter: HAS_ADDRESS },
+        background: { filter: HAS_ADDRESS },
+        window: { filter: HAS_ADDRESS },
+        copy: { filter: HAS_ADDRESS },
+        copy_text: { filter: ["all", "clickable", "links", "buttons", "prose", "scrollable", "custom"] },
+        play_pause: { filter: ["media"] },
+        mute: { filter: ["media"] },
+        fullscreen: { filter: ["media"] },
+      },
       short: { ...WHERE_SHORT, caret: "c", visual: "v", copy: "y", copy_text: "Y", delete: "d", focus: "f", play_pause: "P", mute: "M", fullscreen: "F" },
       value_labels: {
         here: "to click",

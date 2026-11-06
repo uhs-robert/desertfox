@@ -27,14 +27,14 @@ const hint = (args: Record<string, unknown>, label?: string) => ({ id: "hint.run
 
 // A small group with one modifier of each kind, so each test reads one rule.
 function keymap_with(normal: Record<string, unknown>, modifiers: NonNullable<KeymapConfig["modifiers"]>): KeymapConfig {
-  return { group_names: {}, modifiers, normal: { ";l": { ...hint({ filter: "links" }, "Click link"), variant_label: "Link" }, ";i": hint({ filter: "inputs" }, "Click input"), ...normal } as never };
+  return { group_names: {}, modifiers, normal: { ";l": { ...hint({ filter: "links" }, "Click link"), variant_label: "Link" }, ";i": hint({ filter: "inputs" }, "Click input"), ";I": hint({ filter: "images" }, "Open image"), ...normal } as never };
 }
 
 test("a modifier derives a variant of each key in its group, with its args added and the sibling label kept", () => {
   const { compiled, warnings } = compile(keymap_with({}, { ";b": { action: "background", label: "Background tab" } }));
   assert.deepEqual(warnings, []);
   assert.deepEqual(args_at(compiled, ";", "b", "l"), { action: "background", filter: "links", text: "", rapid: false });
-  assert.deepEqual(args_at(compiled, ";", "b", "i")?.action, "background");
+  assert.deepEqual(args_at(compiled, ";", "b", "I")?.action, "background");
   const variant = node_at(compiled, ";", "b", "l");
   assert.equal(variant?.kind === "leaf" && variant.label, "Link");
   assert.equal((node_at(compiled, ";", "b") as TreeBranch).label, "Background tab");
@@ -77,14 +77,14 @@ test("a user key under the modifier wins over the variant, with no warning", () 
   const { compiled, warnings } = compile(keymap_with({ ";bl": hint({ filter: "images" }) }, { ";b": { action: "background" } }));
   assert.deepEqual(warnings, []);
   assert.equal(args_at(compiled, ";", "b", "l")?.filter, "images");
-  assert.equal(args_at(compiled, ";", "b", "i")?.action, "background");
+  assert.equal(args_at(compiled, ";", "b", "I")?.action, "background");
 });
 
 test("a null under a modifier removes that variant and leaves its siblings", () => {
   const { compiled, warnings } = compile(keymap_with({ ";bl": null }, { ";b": { action: "background" } }));
   assert.deepEqual(warnings, []);
   assert.equal(node_at(compiled, ";", "b", "l"), undefined);
-  assert.ok(node_at(compiled, ";", "b", "i"));
+  assert.ok(node_at(compiled, ";", "b", "I"));
 });
 
 test("a null on a modifier key drops that modifier and all its variants", () => {
@@ -106,9 +106,9 @@ test("a key whose required param comes from a prompt still gets variants", () =>
 test("the default modifiers give the owner's keys and no stacked or refused ones", () => {
   const { compiled, warnings } = compile(DEFAULT_KEYMAP);
   assert.deepEqual(warnings, []);
-  for (const keys of [["r", "l"], ["b", "l"], ["w", "l"], ["y", "l"], ["Y", "p"], ["h", "a"], ["x", "a"], ["b", "B"]]) assert.ok(node_at(compiled, ";", ...keys), keys.join(""));
+  for (const keys of [["r", "l"], ["b", "l"], ["w", "l"], ["y", "l"], ["Y", "p"], ["h", "a"], ["x", "a"], ["b", "I"], ["y", "l"]]) assert.ok(node_at(compiled, ";", ...keys), keys.join(""));
   assert.equal(args_at(compiled, ";", "h", "a")?.action, "hover");
   assert.equal(args_at(compiled, ";", "Y", "p")?.action, "copy_text");
   // Keys that set their own action, the cmdline keys and stacked modifiers do not exist.
-  for (const keys of [["b", "t"], ["h", "s"], ["y", "v"], ["r", "v"], ["r", "V"], ["b", ";"], ["r", "b"], ["t"], ["R"]]) assert.equal(node_at(compiled, ";", ...keys), undefined, keys.join(""));
+  for (const keys of [["b", "B"], ["y", "i"], ["Y", "I"], ["b", "t"], ["h", "s"], ["y", "v"], ["r", "v"], ["r", "V"], ["b", ";"], ["r", "b"], ["t"], ["R"]]) assert.equal(node_at(compiled, ";", ...keys), undefined, keys.join(""));
 });
