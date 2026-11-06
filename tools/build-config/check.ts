@@ -185,7 +185,7 @@ function check_modifiers(modifiers: Record<string, Modifier>, where: (section: s
     const parsed = parse_sequence(sequence);
     if (parsed.error !== undefined) problems.push(`${location}: ${parsed.error}`);
     else if (parsed.tokens.length < 2) problems.push(`${location}: a modifier must sit inside a group, for example ";r"`);
-    const label_error = label === undefined ? null : label_problem(label);
+    const label_error = label === undefined ? null : typeof label === "string" ? label_problem(label) : "a label must be a string";
     if (label_error) problems.push(`${location}: ${label_error}`);
   }
 }
