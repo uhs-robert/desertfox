@@ -43,7 +43,7 @@ test("a hand-edited local theme with a missing variant falls back instead of cra
   }
 });
 
-// Statement is also the normal color in five dark themes (abyss, canyon, desert, lagoon, midnight), so only visual has to stand apart.
+// The cursor color is also the normal color in oasis_desert dark, so only visual has to stand apart.
 test("every built-in theme gives visual mode its own color in both variants", () => {
   for (const name of built_in_theme_names()) {
     const theme = load_theme(name, 3)!;
@@ -55,10 +55,10 @@ test("every built-in theme gives visual mode its own color in both variants", ()
   }
 });
 
-test("moonlight keeps its mode colors, caret from the Statement group, and its Search and CurSearch colors", () => {
+test("moonlight keeps its mode colors, caret from the cursor color, and its Search and CurSearch colors", () => {
   const { dark, light } = load_theme("oasis_moonlight", 3)!;
-  assert.deepEqual([dark.mode_normal, dark.mode_insert, dark.mode_caret, dark.mode_visual, dark.mode_ignore], ["#7fa3c9", "#ffa0a0", "#d8cf7f", "#ffba75", "#717a84"]);
-  assert.deepEqual([light.mode_caret, light.mode_visual], ["#6b632b", "#85460e"]);
+  assert.deepEqual([dark.mode_normal, dark.mode_insert, dark.mode_caret, dark.mode_visual, dark.mode_ignore], ["#7fa3c9", "#ffa0a0", "#f0e68c", "#ffba75", "#717a84"]);
+  assert.deepEqual([light.mode_caret, light.mode_visual], ["#817613", "#85460e"]);
   assert.deepEqual([dark.search_bg, dark.search_fg, dark.search_current_bg, dark.search_current_fg], ["#666666", "#f5f5dc", "#cdc673", "#0c0e13"]);
   assert.deepEqual([light.search_bg, light.search_fg, light.search_current_bg, light.search_current_fg], ["#e1b69d", "#4e260e", "#dd6f6f", "#350808"]);
 });
