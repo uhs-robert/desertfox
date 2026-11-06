@@ -1,4 +1,4 @@
-// Merges the layers of each data kind. `search_keys` and `container_keys` stay
+// Merges the layers of each data kind. `search_keys`, `container_keys` and `site_keys` stay
 // as written: the background's keymap compiler expands them.
 // A later layer wins per key. Nothing here knows the command list, so binding
 // strings stay strings until `resolve_bindings` in check.ts parses them.
@@ -49,7 +49,7 @@ function merge_map_layers(
 
 function merge_keymap(layers: DataLayer[], origins: Origins, problems: string[]): KeymapConfig {
   const merged: Record<string, Record<string, unknown>> = {};
-  const generator_sections = ["search_keys", "container_keys", "group_names"];
+  const generator_sections = ["search_keys", "container_keys", "site_keys", "group_names"];
 
   for (const layer of layers) {
     for (const [section, value] of Object.entries(layer.data)) {
@@ -68,6 +68,15 @@ function merge_keymap(layers: DataLayer[], origins: Origins, problems: string[])
       for (const [key, entry] of Object.entries(value)) {
         if (key === "") {
           problems.push(`${layer.file}: keymap.${section} has an empty key`);
+          continue;
+        }
+        if (section === "site_keys") {
+          if (!Array.isArray(entry) || entry.length === 0 || !entry.every((name) => typeof name === "string" && name !== "")) {
+            problems.push(`${layer.file}: site_keys["${key}"] must be a non-empty list of engine names`);
+            continue;
+          }
+          target[key] = entry;
+          origins.set(origin_key(`keymap.${section}`, key), layer.file);
           continue;
         }
         if (generator_sections.includes(section) && (typeof entry !== "string" || entry === "")) {

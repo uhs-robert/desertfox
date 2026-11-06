@@ -230,6 +230,10 @@ test("collect keeps only the elements that pass the test", () => {
   assert.deepEqual(names(found), ["kept"]);
 });
 
+test("the media filter takes video and audio", () => {
+  assert.equal(query_for("media", undefined).selector, "video, audio");
+});
+
 test("the scrollable filter keeps only the scroll boxes", () => {
   const query = query_for("scrollable", undefined);
   assert.equal(query.selector, "*");

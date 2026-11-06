@@ -17,29 +17,31 @@ function config_dir_with(files: Record<string, string>): string {
   return dir;
 }
 
+const SITE_OVER_DUCK = { url: "https://duckduckgo.com/?q=site:{host}+{query}", label: "This site", slots: ["host"] };
+
 test("default_engine names the fallback engine", () => {
   assert.equal(DEFAULT_SETTINGS.default_engine, FALLBACK_ENGINE_NAME);
   assert.equal(FALLBACK_ENGINE_NAME, "duck");
 });
 
 test("with no config the fallback is the only engine", () => {
-  assert.deepEqual(pick_config(undefined, undefined).config.search_engines, { duck: FALLBACK_ENGINE });
-  assert.deepEqual(empty_config().search_engines, { duck: FALLBACK_ENGINE });
+  assert.deepEqual(pick_config(undefined, undefined).config.search_engines, { duck: FALLBACK_ENGINE, site: SITE_OVER_DUCK });
+  assert.deepEqual(empty_config().search_engines, { duck: FALLBACK_ENGINE, site: SITE_OVER_DUCK });
 });
 
 test("a config with engines keeps the fallback beside them", () => {
   const raw = { format_version: CONFIG_FORMAT_VERSION, search_engines: { arch: { url: "https://a.example/?q=%s", label: "Arch" } } };
   const engines = pick_config(raw, undefined).config.search_engines;
-  assert.deepEqual(Object.keys(engines).sort(), ["arch", "duck"]);
+  assert.deepEqual(Object.keys(engines).sort(), ["arch", "duck", "site"]);
 });
 
 test("a config without a search_engines section still gets the fallback", () => {
-  assert.deepEqual(pick_config({ format_version: CONFIG_FORMAT_VERSION, keymap: {} }, undefined).config.search_engines, { duck: FALLBACK_ENGINE });
+  assert.deepEqual(pick_config({ format_version: CONFIG_FORMAT_VERSION, keymap: {} }, undefined).config.search_engines, { duck: FALLBACK_ENGINE, site: SITE_OVER_DUCK });
 });
 
 test("a user duck replaces the fallback whole", () => {
   const mine = { url: "https://mine.example/?q=%s", label: "Mine" };
-  assert.deepEqual(with_fallback_engines({ duck: mine }), { duck: mine });
+  assert.deepEqual(with_fallback_engines({ duck: mine }), { duck: mine, site: { url: "https://mine.example/?q=site:{host}+{query}", label: "This site", slots: ["host"] } });
 });
 
 test("clipboard text searches DuckDuckGo with the default setting and the fallback map", () => {

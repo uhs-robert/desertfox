@@ -5,7 +5,7 @@ import { link_address, takes_typing } from "./actions.ts";
 import { keep_visible, scroll_clips_of } from "./visible.ts";
 import type { PageProbe, Rect } from "./visible.ts";
 
-export type HintFilter = "all" | "clickable" | "buttons" | "inputs" | "links" | "prose" | "scrollable" | "custom";
+export type HintFilter = "all" | "clickable" | "buttons" | "inputs" | "links" | "prose" | "scrollable" | "media" | "custom";
 
 const TEXT_FIELDS = 'input:not([type=hidden]):not([disabled]), textarea:not([disabled]), select:not([disabled]), [contenteditable=""], [contenteditable="true"]';
 const LINKS = "a[href]";
@@ -41,6 +41,7 @@ const QUERIES: Record<Exclude<HintFilter, "custom">, Query> = {
   inputs: { selector: TEXT_FIELDS },
   links: { selector: LINKS },
   prose: { selector: "*", test: has_own_text },
+  media: { selector: "video, audio" },
   scrollable: { selector: "*", test: (element) => !takes_typing(element as HTMLElement) && is_scroll_box(element) },
 };
 

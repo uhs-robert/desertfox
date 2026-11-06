@@ -212,7 +212,7 @@ test("bad bindings name the file and the key", () => {
   assert.match(text, /keymap\.toml: keymap normal "a": unknown command "tab\.nope"/);
   assert.match(text, /keymap normal "b": unknown flag "--up" for tab\.close/);
   assert.match(text, /keymap normal "c": unknown param "depth" for tab\.close/);
-  assert.match(text, /keymap normal "d": engine expects one of duck, alpha/);
+  assert.match(text, /keymap normal "d": engine expects one of duck, site, alpha/);
   assert.match(text, /keymap normal "f": depth expects a whole number/);
   assert.match(text, /keymap\.normal\["g"\] must be a command string/);
   assert.match(text, /keymap normal "h": "now" is not a flag or subject/);

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { link_address, perform, takes_typing } from "../../src/content/hints/actions.ts";
+import { is_media, link_address, perform, player_box, takes_typing } from "../../src/content/hints/actions.ts";
 import type { HintAction } from "../../src/content/hints/actions.ts";
 
 // Node has no DOM events. The fakes only need the type and the position.
@@ -396,4 +396,90 @@ test("enter and leave events stay inside their shadow tree, the others cross it"
   unhover();
   for (const event of sent) assert.equal(event.composed, !/(enter|leave)$/.test(event.type), event.type);
   assert.ok(sent.some((event) => event.type === "mouseover" && event.composed));
+});
+
+test("play_pause plays a paused media element and pauses a playing one", () => {
+  const calls: string[] = [];
+  const media = { paused: true, play: () => { calls.push("play"); f.element.paused = false; return Promise.resolve(); }, pause: () => { calls.push("pause"); f.element.paused = true; } };
+  const f = fixture("video", media) as ReturnType<typeof fixture> & { element: { paused: boolean } };
+  void f.run("play_pause");
+  f.run("play_pause");
+  assert.deepEqual(calls, ["play", "pause"]);
+  assert.deepEqual(f.calls, []);
+});
+
+test("mute toggles muted and does not click", () => {
+  const f = fixture("audio", { muted: false });
+  f.run("mute");
+  assert.equal((f.element as unknown as { muted: boolean }).muted, true);
+  f.run("mute");
+  assert.equal((f.element as unknown as { muted: boolean }).muted, false);
+  assert.deepEqual(f.calls, []);
+});
+
+test("fullscreen leaves fullscreen when a document element is fullscreen, else shows the player box", () => {
+  const entered: string[] = [];
+  const box = { id: "box", requestFullscreen: () => { entered.push("box"); return Promise.resolve(); } };
+  const doc = { fullscreenElement: null as unknown, exitFullscreen: () => { entered.push("exit"); return Promise.resolve(); } };
+  const parent = { ...box, getBoundingClientRect: () => ({ width: 100, height: 40 }), parentElement: null, ownerDocument: { body: {}, documentElement: {} } };
+  const f = fixture("video", { ownerDocument: doc, parentElement: parent, getBoundingClientRect: () => ({ left: 0, top: 0, width: 100, height: 40 }) });
+  void f.run("fullscreen");
+  doc.fullscreenElement = parent;
+  void f.run("fullscreen");
+  assert.deepEqual(entered, ["box", "exit"]);
+});
+
+test("player_box climbs to the outermost ancestor of the same size and stops at a bigger one", () => {
+  const body = {};
+  const doc = { body, documentElement: {} };
+  const sized = (width: number, height: number, parentElement: unknown, parentNode: unknown = parentElement) => ({ getBoundingClientRect: () => ({ width, height }), parentElement, parentNode, ownerDocument: doc });
+  const page = sized(900, 700, null);
+  const outer = sized(320, 180, page);
+  const inner = sized(320.5, 180, outer);
+  const video = sized(320, 180, inner);
+  assert.equal(player_box(video as never), outer);
+  assert.equal(player_box(sized(320, 180, page) as never) !== page, true);
+});
+
+test("player_box never takes the body, even when it has the size of the video", () => {
+  const body = {};
+  const doc = { body, documentElement: {} };
+  const video = { getBoundingClientRect: () => ({ width: 320, height: 180 }), parentElement: body, parentNode: body, ownerDocument: doc };
+  Object.assign(body, { getBoundingClientRect: () => ({ width: 320, height: 180 }), parentElement: null, parentNode: null, ownerDocument: doc });
+  assert.equal(player_box(video as never), video);
+});
+
+test("player_box steps from a shadow root to its host and keeps checking the size", () => {
+  const doc = { body: {}, documentElement: {} };
+  const host = { getBoundingClientRect: () => ({ width: 320, height: 180 }), parentElement: null, parentNode: null, ownerDocument: doc };
+  const root = { host, parentNode: null };
+  const video = { getBoundingClientRect: () => ({ width: 320, height: 180 }), parentElement: null, parentNode: root, ownerDocument: doc };
+  assert.equal(player_box(video as never), host);
+  const big_host = { ...host, getBoundingClientRect: () => ({ width: 640, height: 360 }) };
+  const in_big = { ...video, parentNode: { host: big_host, parentNode: null } };
+  assert.equal(player_box(in_big as never), in_big);
+});
+
+test("a refused play() or requestFullscreen() comes back as a failed outcome with the browser's message", async () => {
+  const refused = () => Promise.reject(new Error("The play method is not allowed"));
+  const play = fixture("video", { paused: true, play: refused });
+  assert.deepEqual(await play.run("play_pause"), { ok: false, message: "The play method is not allowed" });
+  const doc = { fullscreenElement: null, exitFullscreen: refused };
+  const box = fixture("video", { ownerDocument: doc, parentElement: null, requestFullscreen: () => Promise.reject(new Error("Fullscreen request denied")), getBoundingClientRect: () => ({ left: 0, top: 0, width: 1, height: 1 }) });
+  assert.deepEqual(await box.run("fullscreen"), { ok: false, message: "Fullscreen request denied" });
+});
+
+test("the media actions refuse an element that is not media and do nothing else", () => {
+  for (const action of ["play_pause", "mute", "fullscreen"] as const) {
+    const link = fixture("a", { href: "https://example.com/", paused: true, play: () => assert.fail("played a link") });
+    assert.deepEqual(link.run(action), { ok: false, message: "Not a media element" });
+    assert.deepEqual(link.calls, []);
+    assert.equal((link.element as { muted?: boolean }).muted, undefined);
+  }
+});
+
+test("is_media knows video and audio", () => {
+  assert.equal(is_media({ localName: "video" }), true);
+  assert.equal(is_media({ localName: "audio" }), true);
+  assert.equal(is_media({ localName: "div" }), false);
 });

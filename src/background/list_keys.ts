@@ -6,7 +6,7 @@ import type { BoundInvocation } from "../shared/invocation.ts";
 import type { WhichKeyBorder } from "../shared/config.ts";
 import type { ListKeys, WhichKeyPanel, WhichKeyRow } from "../shared/messages.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY } from "../shared/prefix_tree.ts";
-import type { CompiledKeymap, TreeBranch, TreeNode } from "../shared/prefix_tree.ts";
+import type { CompiledKeymap, TreeBranch, TreeLeaf, TreeNode } from "../shared/prefix_tree.ts";
 
 import { is_available } from "./availability.ts";
 
@@ -55,7 +55,18 @@ export function panel_after_prefix(root: TreeBranch | undefined, prefix: string[
 }
 
 // What the active page can run. Keys whose command needs slots the page cannot fill are left out, and so are groups left empty.
-export type PageAvailability = { page: PageInfo | undefined; requirement_of: (invocation: BoundInvocation) => string[] };
+// `site_engine_label_of` answers for a `site_keys` key: the label of the engine the page selects, or undefined when none fits. Without it such a key is hidden.
+export type PageAvailability = { page: PageInfo | undefined; requirement_of: (invocation: BoundInvocation) => string[]; site_engine_label_of?: (invocation: BoundInvocation) => string | undefined };
+
+const fits_page = (invocation: BoundInvocation, availability: PageAvailability): boolean =>
+  is_available(availability.requirement_of(invocation), availability.page) && (invocation.site_search === undefined || availability.site_engine_label_of?.(invocation) !== undefined);
+
+// A `site_keys` leaf is labeled at compile time from its first engine, so on a page it reads the label of the engine the page selects.
+function labeled_for_page(leaf: TreeLeaf, availability: PageAvailability): TreeLeaf {
+  const invocation = leaf.steps[0]?.invocation;
+  const label = invocation?.site_search ? availability.site_engine_label_of?.(invocation) : undefined;
+  return label ? { ...leaf, label } : leaf;
+}
 
 export function without_unavailable(node: TreeBranch, availability: PageAvailability): TreeBranch | undefined {
   const children: Record<string, TreeNode> = {};
@@ -63,8 +74,8 @@ export function without_unavailable(node: TreeBranch, availability: PageAvailabi
     if (child.kind === "branch") {
       const kept = without_unavailable(child, availability);
       if (kept) children[token] = kept;
-    } else if (child.steps.every((step) => is_available(availability.requirement_of(step.invocation), availability.page))) {
-      children[token] = child;
+    } else if (child.steps.every((step) => fits_page(step.invocation, availability))) {
+      children[token] = labeled_for_page(child, availability);
     }
   }
   return Object.keys(children).length === 0 ? undefined : { ...node, children };

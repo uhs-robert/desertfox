@@ -51,7 +51,7 @@ test("quick start: a binding that spells out a default still matches", () => {
 
 test("quick start: a command with no command line form says it has no key, and a keymap with no group names none", () => {
   const texts = (blocks: Block[]) => blocks.flatMap((block) => (block.kind === "paragraph" ? block.inlines.map((inline) => inline.text) : []));
-  const bare = compile({ ...DEFAULT_KEYMAP, normal: { j: { id: "scroll.lines", args: { count: 10 } } } });
+  const bare = compile({ ...DEFAULT_KEYMAP, site_keys: {}, normal: { j: { id: "scroll.lines", args: { count: 10 } } } });
   const shown = texts(quick_start_blocks(bare, all_commands));
   assert.ok(shown.includes("(no key bound)"));
   assert.ok(shown.some((text) => text.includes("no such key")));

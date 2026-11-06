@@ -4,7 +4,7 @@
 // that leaves out a required param needs a `prompt`, as it does at load.
 
 import type { CommandMeta, Mode } from "../../src/shared/command.ts";
-import { with_fallback_engines, type SnippetEntry } from "../../src/shared/config.ts";
+import { DEFAULT_SETTINGS, with_fallback_engines, type SnippetEntry } from "../../src/shared/config.ts";
 import { label_problem, to_firefox_shortcut, parse_sequence } from "../../src/shared/keys/index.ts";
 import { find_param } from "../../src/shared/registry/params.ts";
 import { check_args, create_registry, DefineError, type Registry } from "../../src/shared/registry/index.ts";
@@ -106,7 +106,7 @@ export function resolve_bindings(merged: MergedData, registry: Registry, problem
     return parsed.every((binding) => binding !== undefined) ? parsed : undefined;
   };
   for (const [mode, entries] of Object.entries(merged.keymap)) {
-    if (mode === "search_keys" || mode === "container_keys" || mode === "group_names") continue;
+    if (mode === "search_keys" || mode === "container_keys" || mode === "site_keys" || mode === "group_names") continue;
     const bindings = entries as Record<string, unknown>;
     for (const [sequence, entry] of Object.entries(bindings)) {
       const where = location(mode, sequence);
@@ -150,6 +150,41 @@ function check_engine_fallbacks(merged: MergedData, where: (section: string, key
   }
 }
 
+const hosts_overlap = (left: string[] | undefined, right: string[] | undefined): boolean =>
+  left === undefined || right === undefined || left.some((host) => right.includes(host));
+
+// One letter means one search on any site, so the engines of a letter must never both fit one page.
+// An engine with no hosts fits every site. Slots do not prove two engines exclusive, so only the hosts count.
+function check_site_keys(site_keys: Record<string, string[]>, merged: MergedData, where: (section: string, key: string) => string, problems: string[]) {
+  const engines = with_fallback_engines(merged.search_engines);
+  for (const [letter, names] of Object.entries(site_keys)) {
+    const location = where("keymap.site_keys", letter);
+    const parsed = parse_sequence(letter);
+    if (parsed.error !== undefined) problems.push(`${location}: ${parsed.error}`);
+    else if (parsed.tokens.length !== 1) problems.push(`${location}: must be one key, not a sequence`);
+    else if (letter === "/") problems.push(`${location}: "/" is reserved for the search of the current site (s//)`);
+    const known = names.filter((name) => {
+      const exists = Object.hasOwn(engines, name);
+      if (!exists) problems.push(`${location}: unknown search engine "${name}"`);
+      return exists;
+    });
+    for (const [index, name] of known.entries()) {
+      for (const other of known.slice(index + 1)) {
+        if (hosts_overlap(engines[name]!.hosts, engines[other]!.hosts)) {
+          problems.push(`${location}: "${name}" and "${other}" fit the same site, so one key cannot tell them apart. Give them different hosts or different keys`);
+        }
+      }
+    }
+  }
+}
+
+// The user dropped both generated site search keys, so a `search_keys` letter `/` takes their place.
+function site_search_keys_unbound(merged: MergedData): boolean {
+  const prefixes = { ...DEFAULT_SETTINGS.search_prefixes, ...merged.settings.search_prefixes };
+  const normal = (merged.keymap.normal ?? {}) as Record<string, unknown>;
+  return [prefixes.here, prefixes.tab].every((prefix) => normal[`${prefix}//`] === null);
+}
+
 export function check_config(merged: MergedData, registry: Registry, problems: string[], warnings: string[]) {
   const engine_names = Object.keys(with_fallback_engines(merged.search_engines));
   const where = (section: string, key: string) => location_of(merged, section, key);
@@ -181,8 +216,15 @@ export function check_config(merged: MergedData, registry: Registry, problems: s
       }
       continue;
     }
+    if (mode === "site_keys") {
+      check_site_keys(entries as Record<string, string[]>, merged, where, problems);
+      continue;
+    }
     if (mode === "search_keys" || mode === "container_keys") {
       for (const [key, name] of Object.entries(entries as Record<string, string>)) {
+        if (mode === "search_keys" && key === "/" && !site_search_keys_unbound(merged)) {
+          problems.push(`${where("keymap.search_keys", key)}: "/" is the key of the current site search (s// and S//), which would win over "${name}". Use another letter for "${name}", or unbind both with "s//" = "" and "S//" = "" under [normal]`);
+        }
         const parsed = parse_sequence(key);
         if (parsed.error !== undefined) problems.push(`${where(`keymap.${mode}`, key)}: ${parsed.error}`);
         else if (parsed.tokens.length !== 1) problems.push(`${where(`keymap.${mode}`, key)}: must be one key, not a sequence`);

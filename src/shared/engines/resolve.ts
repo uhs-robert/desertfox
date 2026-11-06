@@ -2,7 +2,7 @@
 // so the extension stores and reads finished engines.
 //
 // An engine is a TOML table. A table inside it is a child, unless it is `params` or holds only `only` (a narrowing).
-// A child inherits every field of its parent and overrides by name. `label` is the one field that does not inherit:
+// A child inherits every field of its parent and overrides by name. `hosts` is a list of host names, the sites the engine belongs to. `label` is the one field that does not inherit:
 // the label of an engine is the chain of the labels on its path.
 
 import type { SearchEngine } from "../config.ts";
@@ -13,9 +13,10 @@ import { is_slot_name, SLOT_NAMES } from "./slots.ts";
 export type EngineNode = { path: string; file: string; fields: Record<string, unknown> };
 
 // A child table cannot take these names. Slot names are free for children (github.repo) but not for vars and params.
-const RESERVED_CHILD_NAMES = new Set(["url", "label", "params", "fallback"]);
+const RESERVED_CHILD_NAMES = new Set(["url", "label", "params", "fallback", "hosts"]);
 const RESERVED_NAMES = new Set([...RESERVED_CHILD_NAMES, ...SLOT_NAMES]);
 const PARAM_KEYS = new Set(["default", "values", "children"]);
+const HOST_NAME = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$/;
 const QUERY_PAIR_WITH_ONE_NAME = /^[^=]*=\{([a-z_][a-z0-9_]*)\}$/;
 
 const is_table = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
@@ -54,6 +55,7 @@ type ParamDecl = { values: Record<string, string>; default?: string; children: b
 type Level = {
   url?: Origined;
   fallback?: Origined;
+  hosts?: { value: string[]; origin: string };
   vars: Record<string, Origined>;
   params: Record<string, ParamDecl>;
   allowed: Record<string, string[]>;
@@ -120,7 +122,11 @@ export function resolve_engines(nodes: EngineNode[]): Resolved {
     read_params(node, level, where);
     for (const [key, value] of Object.entries(node.fields)) {
       if (key === "params") continue;
-      if (is_table(value)) {
+      if (key === "hosts") {
+        const is_host_list = Array.isArray(value) && value.length > 0 && value.every((host) => typeof host === "string" && HOST_NAME.test(host));
+        if (is_host_list) level.hosts = { value: value as string[], origin };
+        else problems.push(`${where}: hosts must be a non-empty list of host names such as "github.com", lower case, with no scheme, path or wildcard`);
+      } else if (is_table(value)) {
         narrow(key, value, level, where);
       } else if (typeof value !== "string") {
         problems.push(`${where}: ${key} must be a string`);
@@ -199,7 +205,7 @@ export function resolve_engines(nodes: EngineNode[]): Resolved {
   const emit = (path: string, level: Level, used: Set<string>) => {
     const where = `${level.url?.origin ?? path}`;
     if (!level.url) {
-      problems.push(`${path}: no url, set one here or on a parent`);
+      problems.push(level.hosts ? `${level.hosts.origin}: hosts on "${path}" belong to no engine: no url on it or above it` : `${path}: no url, set one here or on a parent`);
       return;
     }
     const url = expand_url(level.url.value, level, used, where);
@@ -215,6 +221,7 @@ export function resolve_engines(nodes: EngineNode[]): Resolved {
     const slots = page_requirements(url);
     const origins: Record<string, string> = { url: level.url.origin, label: level.label_origin ?? `${path} (labels on the path)` };
     if (level.fallback) origins.fallback = level.fallback.origin;
+    if (level.hosts) origins.hosts = level.hosts.origin;
     for (const [name, found] of Object.entries(level.vars)) origins[name] = found.origin;
     for (const [name, found] of Object.entries(level.assigned)) origins[name] = found.origin;
     engines[path] = {
@@ -223,6 +230,7 @@ export function resolve_engines(nodes: EngineNode[]): Resolved {
       origins,
       ...(slots.length === 0 ? {} : { slots }),
       ...(level.fallback ? { fallback: level.fallback.value } : {}),
+      ...(level.hosts ? { hosts: level.hosts.value } : {}),
     };
   };
 
