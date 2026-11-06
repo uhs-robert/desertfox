@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { box_owners, scroll_clips_of, boxes_with_fallback, clip_to, clipping_boxes, contains_composed, keep_visible, points_to_probe, viewport_size, uncovered_through_frames, visible_point } from "../../src/content/hints/visible.ts";
+import { anchor_box, box_owners, scroll_clips_of, boxes_with_fallback, clip_to, clipping_boxes, contains_composed, keep_visible, points_to_probe, viewport_size, uncovered_through_frames, visible_point } from "../../src/content/hints/visible.ts";
 import type { PageProbe, Rect } from "../../src/content/hints/visible.ts";
 
 type Box = { name: string; rect: Rect; rects?: Rect[]; reachable_at?: (x: number, y: number) => boolean; intersecting?: boolean; hidden?: boolean; covered_by?: string; clips?: Rect[] };
@@ -203,4 +203,22 @@ test("box_owners names the element, or for one with no box the children that own
   assert.deepEqual(box_owners(contents, rects, kids).map((n) => n.name), ["a"]);
   const nested = { name: "outer", own: [], kids: [contents] };
   assert.deepEqual(box_owners(nested, rects, kids).map((n) => n.name), ["a"]);
+});
+
+type Parent = Box & { kids?: Box[] };
+const kids_of = (box: Parent): Box[] => box.kids ?? [];
+
+test("anchor_box keeps the own box of a normal element", () => {
+  const link: Parent = { name: "link", rect: at(30, 40), rects: [at(500, 500)] };
+  assert.deepEqual(anchor_box(link, (b) => b.rect, probe.rects_of, kids_of), at(30, 40));
+});
+
+test("anchor_box of a contents element is the box of the child that owns one", () => {
+  const contents: Parent = { name: "contents", rect: at(0, 0, 0, 0), rects: [], kids: [{ name: "child", rect: at(70, 90) }] };
+  assert.deepEqual(anchor_box(contents, (b) => b.rect, probe.rects_of, kids_of), at(70, 90));
+});
+
+test("anchor_box is undefined when no box has an area", () => {
+  const contents: Parent = { name: "contents", rect: at(0, 0, 0, 0), rects: [], kids: [{ name: "empty", rect: at(5, 5, 0, 0) }] };
+  assert.equal(anchor_box(contents, (b) => b.rect, probe.rects_of, kids_of), undefined);
 });

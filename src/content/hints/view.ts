@@ -3,6 +3,7 @@
 import { LAYERS } from "../../shared/layers.ts";
 import { create_surface, mount_surface } from "../surface.ts";
 import type { Found } from "./candidates.ts";
+import { anchor_box } from "./visible.ts";
 
 const MESSAGE_MS = 1500;
 
@@ -24,9 +25,15 @@ export const STYLE = `
   background: var(--desertfox-bg-core, #0c0e13); color: var(--desertfox-fg-core, #f5f5dc); font: var(--desertfox-font, 14px system-ui, sans-serif); border-radius: var(--desertfox-radius, 6px);
 }`;
 
-// Where the element sits on the top page: its own box plus the box of every frame around it.
-export function top_page_position(found: Found): { left: number; top: number } {
-  const own = found.element.getBoundingClientRect();
+// Where the element sits on the top page: its anchor box plus the box of every frame around it. Undefined when the element has no box to anchor to.
+export function top_page_position(found: Found): { left: number; top: number } | undefined {
+  const own = anchor_box(
+    found.element,
+    (element) => element.getBoundingClientRect(),
+    (element) => Array.from(element.getClientRects()),
+    (element) => Array.from(element.children),
+  );
+  if (own === undefined) return undefined;
   let left = own.left;
   let top = own.top;
   for (const frame of found.frames) {
@@ -50,7 +57,10 @@ export function create_view() {
   function reposition(): void {
     const positions = drawn.map((label) => top_page_position(label.found));
     drawn.forEach((label, index) => {
-      const { left, top } = positions[index]!;
+      const position = positions[index];
+      label.node.style.display = position === undefined ? "none" : "";
+      if (position === undefined) return;
+      const { left, top } = position;
       label.node.style.left = `${Math.max(left, 0)}px`;
       label.node.style.top = `${Math.max(top, 0)}px`;
     });
