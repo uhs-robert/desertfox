@@ -5,7 +5,7 @@ import type { Outcome } from "../../shared/messages.ts";
 import { CONFIG_STATUS_STORAGE_KEY } from "../../background/storage_keys.ts";
 import type { BundleHostApi } from "../bundle_host.ts";
 import { unhover } from "./hover.ts";
-import { element_address, is_inline, is_media, OPEN_PLACES, perform, starts_caret } from "./actions.ts";
+import { has_usable_address, is_media, OPEN_PLACES, perform, starts_caret } from "./actions.ts";
 import type { CaretMode, HintAction, Place } from "./actions.ts";
 import { copy_text } from "../caret/copy_text.ts";
 import { collect, keep_text_matches, keep_visible_deduplicated, query_for, scroll_clips_in_page, weak_test_for, window_of } from "./candidates.ts";
@@ -70,11 +70,7 @@ function windows_of(found: Found[]): Window[] {
 function find_candidates(filter: HintFilter, custom_selector: string | undefined, action: HintAction): Found[] {
   const opens_elsewhere = OPEN_PLACES.includes(action);
   const with_background = filter === "images";
-  return collect(document, query_for(filter, custom_selector), weak_test_for(filter)).filter((found) => {
-    if (!opens_elsewhere && !with_background) return true;
-    const address = element_address(found.element as HTMLElement, with_background);
-    return address !== undefined && !(opens_elsewhere && is_inline(address));
-  });
+  return collect(document, query_for(filter, custom_selector), weak_test_for(filter)).filter((found) => (!opens_elsewhere && !with_background) || has_usable_address(found.element as HTMLElement, with_background, opens_elsewhere));
 }
 
 const none_message = (text: string | undefined): string => (text === undefined ? "No hints on this page" : `No link matches ${text}`);

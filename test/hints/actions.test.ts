@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { element_address, is_media, perform, player_box, takes_typing } from "../../src/content/hints/actions.ts";
+import { element_address, has_usable_address, is_media, perform, player_box, takes_typing } from "../../src/content/hints/actions.ts";
 import type { HintAction } from "../../src/content/hints/actions.ts";
 
 // Node has no DOM events. The fakes only need the type and the position.
@@ -146,6 +146,12 @@ test("under the images filter a background image wins over the href of its link"
   const link = { localName: "a", href: "https://a.test/post", ownerDocument: { defaultView: { getComputedStyle: () => ({ backgroundImage: 'url("https://a.test/h.jpg")' }) } } } as never;
   assert.equal(element_address(link, true), "https://a.test/h.jpg");
   assert.equal(element_address(link), "https://a.test/post");
+});
+
+test("a short data image can be copied but not opened", () => {
+  const inline = img({ currentSrc: "data:image/png;base64,AAAA" });
+  assert.equal(has_usable_address(inline, true, true), false);
+  assert.equal(has_usable_address(inline, true, false), true);
 });
 
 test("an image inside a link gives its own address, never the link's", () => {

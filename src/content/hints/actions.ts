@@ -31,7 +31,7 @@ export function takes_typing(target: Target): boolean {
 
 const MAX_INLINE_ADDRESS = 8 * 1024;
 
-// An inline address copies but does not open: the open path reads its text as a search.
+// Firefox refuses a `data:` URL in `tabs.create` ("Illegal URL"), so an inline address copies but does not open.
 export const is_inline = (address: string): boolean => /^data:/i.test(address);
 
 // The first url("...") of a computed `background-image`. Firefox computes it absolute and quoted, so a `)` inside the quotes stays.
@@ -65,6 +65,12 @@ export function element_address(target: Target, with_background = false): string
   const source = own_source(target, with_background);
   if (!source || /^(javascript|blob):/i.test(source)) return undefined;
   return is_inline(source) && source.length > MAX_INLINE_ADDRESS ? undefined : source;
+}
+
+// Whether an element can take the action by its address: an open needs one that can open, and the images filter needs any.
+export function has_usable_address(target: Target, with_background: boolean, opens_elsewhere: boolean): boolean {
+  const address = element_address(target, with_background);
+  return address !== undefined && !(opens_elsewhere && is_inline(address));
 }
 
 export const is_media = (target: { localName: string }): boolean => target.localName === "video" || target.localName === "audio";
