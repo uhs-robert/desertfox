@@ -36,6 +36,8 @@ export type ParamDef = {
   // Allowed values. Required for `enum`. A `string` param uses it for completion, and for membership when `strict`.
   values?: readonly string[] | DynamicValues;
   // Which-key phrase per enum value, added to the command label when a binding sets that value. The default value has none. A value missing here reads as the raw value with spaces for underscores.
+  // Per enum value, the sibling values under which that value is allowed, in the syntax of `when` but with several siblings (all must hold). A value with no entry is allowed everywhere. `check_args` checks the final value, explicit or default.
+  value_when?: Readonly<Record<string, ParamWhen>>;
   value_labels?: Readonly<Record<string, string>>;
   // One-letter flag. A string for a bool or valued param (`-r`, `-c=Work`), a value-to-letter map for a static enum (`{ tab: "t" }` gives `-t`). Never on main, rest or a dynamic enum.
   short?: string | Readonly<Record<string, string>>;

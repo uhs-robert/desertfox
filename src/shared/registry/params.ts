@@ -140,3 +140,11 @@ export function join_alternatives(values: readonly ParamValue[]): string {
   if (words.length <= 1) return words.join("");
   return `${words.slice(0, -1).join(", ")} or ${words[words.length - 1]}`;
 }
+
+// Why `value` of `param` is not allowed next to the sibling values in `known`, or null when it is. A sibling that is a context source or unset counts as not matching.
+export function value_rule_error(param: ParamDef, value: ParamValue, known: Record<string, unknown>): string | null {
+  const rule = param.value_when?.[String(value)];
+  if (!rule) return null;
+  const failing = Object.entries(rule).find(([name, allowed]) => !allowed.includes(known[name] as ParamValue));
+  return failing ? `${param.name} ${value} needs ${failing[0]} ${join_alternatives(failing[1])}` : null;
+}

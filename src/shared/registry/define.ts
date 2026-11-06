@@ -151,6 +151,7 @@ function check_params(input: CommandInput, fail: Fail): void {
     }
     if (param.when) check_when(input, param, at, fail);
     if (is_default_list(param.default)) check_default_arms(input, param, at, fail);
+    if (param.value_when) check_value_when(input, param, at, fail);
   });
   check_default_cycles(input, fail);
 
@@ -173,6 +174,31 @@ function check_default_arms(input: CommandInput, param: ParamDef, at: string, fa
       return;
     }
     check_when(input, { ...param, when: (item as DefaultArm).when }, here, fail, { allow_several: true });
+  });
+}
+
+// A rule per enum value. Each default arm must satisfy the rule of its own value, so no default is refused at run time.
+function check_value_when(input: CommandInput, param: ParamDef, at: string, fail: Fail): void {
+  const values = static_values(param) ?? [];
+  if (param.type !== "enum") fail(`${at}.value_when`, "only an enum param can have value_when");
+  for (const [value, rule] of Object.entries(param.value_when ?? {})) {
+    const here = `${at}.value_when.${value}`;
+    if (!values.includes(value)) fail(here, `"${value}" is not one of the param's values`);
+    check_when(input, { ...param, when: rule }, here, fail, { allow_several: true });
+  }
+  const list = param.default;
+  if (!is_default_list(list)) return;
+  list.forEach((item, index) => {
+    if (typeof item !== "object" || item === null) return;
+    const arm = item as DefaultArm;
+    // An arm holds for every combination of its listed values, so each must be allowed, and the arm must name every sibling the rule names.
+    const rule = param.value_when?.[String(arm.value)];
+    if (!rule) return;
+    const outside = Object.entries(rule).flatMap(([name, allowed]) => {
+      const listed = arm.when[name];
+      return listed === undefined ? [`${name} (the arm does not name it)`] : listed.filter((value) => !allowed.includes(value)).map((value) => `${name} ${value}`);
+    });
+    if (outside.length > 0) fail(`${at}.default[${index}]`, `value "${arm.value}" is refused by value_when under ${outside.join(", ")}`);
   });
 }
 
