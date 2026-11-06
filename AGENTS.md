@@ -37,7 +37,7 @@ If code and the design disagree, stop and ask the maintainer. Do not change the 
 
 This repository is public.
 
-- Do not name other vim-style browser extensions in code, docs, commits or PRs. The one exception is a sourced, factual comparison in `README.md`. Do not copy their code, because copied code brings its license with it.
+- Do not name other vim-style browser extensions in code, docs, commits or PRs. The one exception is `README.md`, which can name them in a sourced, factual comparison and in its intro. Do not copy their code, because copied code brings its license with it.
 - Never commit private config or personal data, for example personal site helpers or snippets.
 - Never assume a personal toolset (Oasis, Hyprland, a particular terminal). Oasis features stay optional behind the native host.
 

@@ -15,31 +15,37 @@
 
 ## 🦊 What it is
 
-DesertFox brings Vim-style keys to Firefox, so you can browse the web without the mouse. Click any link, button or image with a few keystrokes. Switch tabs, search the page and copy links from the keyboard.
-
-The keys follow Vim habits: modes, `hjkl` to scroll, `gg` and `G` to jump, `yy` to copy, `/` to search and counts. If you do not know Vim, press `g?` to see every key. A short pause after a key lists the keys that can follow.
+DesertFox is a modern, keyboard-driven Firefox extension built for speed, discoverability, and complete control of the web browser. Browse the web without the mouse.
 
 > [!WARNING]
 > DesertFox is under construction.
 > It has no release yet, so there is nothing to install today.
 
+Inspired by the Vim text editor, DesertFox uses mnemonic keys, chorded key sequences, and modal systems for full browser navigation and control from the keyboard alone. We also take inspiration from other keyboard-driven browser extensions (Tridactyl and Vimium) and web browsers (qutebrowser). We're not a clone of these other solutions. We build upon their ideas while also taking our own approach to usability, discoverability, customization, and command registration.
+
+Our goal is to provide a powerful keyboard-driven workflow that is easy to learn as you go without having to memorize a bunch of commands. We accomplish this with key popups that appear when you press any key, intelligent command completion when typing commands, and built-in help so you can discover features naturally as you use them.
+
+The keys follow Vim habits: modes, `hjkl` to scroll, `gg` and `G` to jump, `yy` to copy, `/` to search, and counts for repeated actions. You do not need to know Vim, simply type `g?` to see every key or `:` to see/type any command manually.
+
 ## ✨ Features
 
 - Click anything: press `f`, then type the short label next to a link, button, input or image.
-- Open a link in a background tab without touching the mouse: press `F` or `;bl`.
+- Open a link in a background tab without touching the mouse: press `F`.
 - Copy a link or the text of any element: `;yl` copies the link and `;Yp` copies the text.
 - Run commands by name: `:` opens a line that completes commands, tabs, bookmarks, history and search engines as you type.
-- Manage tabs: switch, move, pin, mute, close and reopen them, or open one in a container.
+- Manage tabs: switch, move, pin, mute, close and reopen them, or open one in a container from `t`.
 - Search the page: `/` finds text, including with regular expressions.
 - Search the web: bind a key to any search engine you use.
 - Select and copy text without the mouse: `v` and `V` move and select by keyboard.
-- Learn as you go: pause after a key and a popup lists what can follow.
+- Learn as you go: pause after pressing nearly any key and a popup lists what can follow.
 - Get help: a help page lists every key, and a Quick Start page teaches the first ones.
 - Make it yours: pick a color theme, and use the new tab page for a clock, links, recent tabs and bookmarks.
 
 ## 🔍 How it compares
 
-DesertFox is for Firefox users who want keyboard browsing and keep their other add-ons. These facts come from each project's source and, for add-ons, its Mozilla download in November 2026.
+DesertFox is for Firefox users who want a powerful keyboard browsing experience without memorizing a manual first. It needs no hours of customization, no new web browser and no loss of your Firefox add-ons.
+
+This is how we compare to the rest of the competition. These facts come from each project's source and, for add-ons, its Mozilla download in November 2026.
 
 | Feature | DesertFox | Vimium | Tridactyl | qutebrowser |
 | --- | --- | --- | --- | --- |
@@ -56,9 +62,11 @@ DesertFox is for Firefox users who want keyboard browsing and keep their other a
 | Works with other Firefox add-ons | yes | yes | yes | no |
 | Script loaded on every page | 15 KB | 254 KB | 1.1 MB | n/a |
 
-Vimium hints do more than click, but each action is a separate key and it has only an optional text filter. Tridactyl has `:help` and `:tutor` but no key popup. qutebrowser is a separate browser, so it runs no Firefox add-ons such as uBlock Origin, Dark Reader or password managers. It has its own ad blocking, dark mode and password scripts.
+In short, we mix the power of Tridactyl with the simplicity of Vimium. Our key popup and autocompletion systems teach you how to use it while you're behind the wheel so you don't need to read the manual while you're driving.
 
-The sizes are as shipped. DesertFox is minified and the other two are not, and DesertFox loads hint and caret code on first use. The table shows size, not page speed.
+> [!NOTE]
+> The table shows size, not page speed. The sizes are as shipped.
+> DesertFox is minified and the other two are not, and we defer loading hint and caret code to first use.
 
 ## 📦 Install
 
