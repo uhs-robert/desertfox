@@ -11,15 +11,11 @@
   <a href="https://github.com/uhs-robert/desertfox/forks"><img src="https://img.shields.io/github/forks/uhs-robert/desertfox?style=for-the-badge&logo=github&colorA=3b2416&colorB=8a6a9e" alt="Forks"/></a>
 </p>
 
-<p align="center"><sub>Desert the mouse, navigate the web with only your keyboard</sub></p>
+<p align="center"><i>Desert the mouse, navigate the web with only your keyboard</i></p>
 
 ## 🦊 What it is
 
-DesertFox is a modern, keyboard-driven Firefox extension built for speed, discoverability, and complete control of the web browser. Browse the web without the mouse.
-
-> [!WARNING]
-> DesertFox is under construction.
-> It has no release yet, so there is nothing to install today.
+DesertFox is a modern, keyboard-driven Firefox extension built for speed, discoverability, and complete control of the web browser.
 
 Inspired by the Vim text editor, DesertFox uses mnemonic keys, chorded key sequences, and modal systems for full browser navigation and control from the keyboard alone. We also take inspiration from other keyboard-driven browser extensions (Tridactyl and Vimium) and web browsers (qutebrowser). We're not a clone of these other solutions. We build upon their ideas while also taking our own approach to usability, discoverability, customization, and command registration.
 
@@ -69,6 +65,10 @@ In short, we mix the power of Tridactyl with the simplicity of Vimium. Our key p
 > DesertFox is minified and the other two are not, and we defer loading hint and caret code to first use.
 
 ## 📦 Install
+
+> [!WARNING]
+> DesertFox is under construction.
+> It has no release yet, so there is nothing to install today.
 
 When DesertFox is released, you will install it from a Firefox add-on file that Mozilla has signed. Firefox asks you to confirm the permissions, then adds the add-on. No public listing exists.
 
