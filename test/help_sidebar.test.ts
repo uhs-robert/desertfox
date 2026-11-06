@@ -1,37 +1,72 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { render_help, reset_group_state, section_hash } from "../src/help/render.ts";
+import { close_drawer_on_escape, render_help, reset_group_state, section_hash } from "../src/help/render.ts";
 import { parse_route } from "../src/help/route.ts";
 import type { Route } from "../src/help/route.ts";
 import type { Block } from "../src/help/blocks.ts";
 
-// Just enough DOM for render_help: elements with a class, an id, children, attributes and listeners.
+type FakeListener = (event?: unknown) => void;
+
+// Just enough DOM for render_help: elements with a class, an id, children, attributes, listeners and focus.
 class FakeNode {
   className = "";
   tabIndex = 0;
   hidden = false;
   id = "";
   children: (FakeNode | string)[] = [];
+  parent: FakeNode | null = null;
   attributes: Record<string, string> = {};
-  listeners: Record<string, () => void> = {};
+  listeners: Record<string, FakeListener> = {};
   tag: string;
   textContent = "";
   scrollTop = 0;
+  shown = true;
   constructor(tag: string) { this.tag = tag; }
-  append(...nodes: (FakeNode | string)[]) { this.children.push(...nodes); }
-  replaceChildren(...nodes: (FakeNode | string)[]) { this.children = nodes; }
-  setAttribute(name: string, value: string) { this.attributes[name] = value; }
-  addEventListener(name: string, listener: () => void) { this.listeners[name] = listener; }
-  querySelector(selector: string): FakeNode | null {
-    return this.find_all(by_class(selector.slice(1)))[0] ?? null;
+  classList = {
+    contains: (name: string) => this.className.split(" ").includes(name),
+    toggle: (name: string, force: boolean) => {
+      const names = this.className.split(" ").filter((each) => each && each !== name);
+      this.className = (force ? [...names, name] : names).join(" ");
+    },
+  };
+  append(...nodes: (FakeNode | string)[]) {
+    for (const node of nodes) if (typeof node !== "string") node.parent = this;
+    this.children.push(...nodes);
   }
+  replaceChildren(...nodes: (FakeNode | string)[]) { this.children = []; this.append(...nodes); }
+  setAttribute(name: string, value: string) { this.attributes[name] = value; }
+  addEventListener(name: string, listener: FakeListener) { this.listeners[name] = listener; }
+  matches(selector: string): boolean {
+    if (selector.startsWith(".")) return this.classList.contains(selector.slice(1));
+    const [, tag, name, value] = /^(\w+)(?:\[([\w-]+)="([^"]*)"\])?$/.exec(selector)!;
+    return this.tag === tag && (name === undefined || this.attributes[name] === value);
+  }
+  querySelector(selector: string): FakeNode | null {
+    return this.find_all((node) => node.matches(selector))[0] ?? null;
+  }
+  closest(selector: string): FakeNode | null {
+    return this.matches(selector) ? this : this.parent?.closest(selector) ?? null;
+  }
+  contains(node: FakeNode | null): boolean {
+    return node === this || (node?.parent ? this.contains(node.parent) : false);
+  }
+  focus() { fake_document.activeElement = this; }
+  getClientRects() { return this.shown ? [{}] : []; }
   find_all(test: (node: FakeNode) => boolean): FakeNode[] {
     const below = this.children.flatMap((child) => (typeof child === "string" ? [] : child.find_all(test)));
     return test(this) ? [this, ...below] : below;
   }
 }
 
-const by_class = (name: string) => (node: FakeNode): boolean => node.className === name;
+const fake_document = {
+  activeElement: null as FakeNode | null,
+  body: new FakeNode("body"),
+  createElement: (tag: string) => new FakeNode(tag),
+  createElementNS: (_ns: string, tag: string) => new FakeNode(tag),
+  querySelector: (selector: string) => fake_document.body.querySelector(selector),
+};
+
+const by_class = (name: string) => (node: FakeNode): boolean => node.classList.contains(name);
 
 const QUICK_START: Block[] = [
   { kind: "paragraph", inlines: [{ kind: "text", text: "intro" }] },
@@ -49,7 +84,9 @@ const GUIDE: Block[] = [
 ];
 
 function render(route: Route, keep_state = false, guide: Block[] = [], root = new FakeNode("body")): FakeNode {
-  (globalThis as { document?: unknown }).document = { createElement: (tag: string) => new FakeNode(tag), createElementNS: (_ns: string, tag: string) => new FakeNode(tag) };
+  (globalThis as { document?: unknown }).document = fake_document;
+  fake_document.body = root;
+  fake_document.activeElement = null;
   if (!keep_state) reset_group_state();
   render_help(root as never, { quick_start: QUICK_START, groups: GROUPS, warnings: [], settings: [], rebuild_steps: [], engines: [], tip: { kind: "tip", inlines: [] } } as never, route, guide);
   return root;
@@ -193,7 +230,7 @@ test("a rebuild keeps the sidebar's scroll position, on the same page and across
 });
 
 test("the sidebar brand shows the packaged logo above the name", () => {
-  const brand = render(parse_route("")).querySelector(".desertfox-help-brand");
+  const brand = render(parse_route("")).querySelector(".desertfox-help-sidebar")?.querySelector(".desertfox-help-brand");
   const logo = brand?.children[0] as FakeNode;
   assert.equal(logo.className, "desertfox-help-logo");
   assert.equal(logo.attributes.src, "icons/desertfox.svg");
@@ -212,4 +249,90 @@ test("the home header holds the keycap above the title, ahead of the tip", () =>
   assert.equal((header.children[0] as FakeNode).className, "desertfox-help-keycap");
   assert.equal((header.children[1] as FakeNode).tag, "h1");
   assert.equal((page?.children[1] as FakeNode).className, "desertfox-help-tip");
+});
+
+function drawer(route: Route = { page: "commands" }) {
+  const root = render(route);
+  const help = root.querySelector(".desertfox-help")!;
+  const sidebar = root.querySelector(".desertfox-help-sidebar")!;
+  const menu = root.querySelector(".desertfox-help-menu-toggle")!;
+  const is_open = () => help.classList.contains("desertfox-help-drawer-open");
+  const escape = () => {
+    const event = { key: "Escape", stopped: false, preventDefault() {}, stopImmediatePropagation() { this.stopped = true; } };
+    close_drawer_on_escape(event as never);
+    return event.stopped;
+  };
+  return { root, help, sidebar, menu, is_open, escape, backdrop: root.querySelector(".desertfox-help-backdrop")! };
+}
+
+test("the menu button names and controls the sidebar and starts closed", () => {
+  const { sidebar, menu, is_open } = drawer();
+  assert.equal(menu.tag, "button");
+  assert.equal(menu.attributes["aria-label"], "Menu");
+  assert.equal(menu.attributes["aria-controls"], sidebar.id);
+  assert.equal(menu.attributes["aria-expanded"], "false");
+  assert.equal((menu.children[0] as FakeNode).tag, "svg");
+  assert.equal(is_open(), false);
+});
+
+test("opening the drawer flips aria-expanded and focuses the current page's link", () => {
+  const { menu, is_open } = drawer();
+  menu.listeners["click"]!();
+  assert.equal(is_open(), true);
+  assert.equal(menu.attributes["aria-expanded"], "true");
+  assert.equal(fake_document.activeElement?.attributes["aria-current"], "page");
+  assert.equal(fake_document.activeElement?.children[0], "Commands");
+});
+
+test("Escape closes the open drawer, takes the key and returns focus to the menu button", () => {
+  const { menu, is_open, escape } = drawer();
+  assert.equal(escape(), false, "Escape with the drawer closed reaches the page");
+  menu.listeners["click"]!();
+  assert.equal(escape(), true);
+  assert.equal(is_open(), false);
+  assert.equal(menu.attributes["aria-expanded"], "false");
+  assert.equal(fake_document.activeElement, menu);
+});
+
+test("Escape leaves the key alone once the window is wide again", () => {
+  const { menu, is_open, escape } = drawer();
+  menu.listeners["click"]!();
+  menu.shown = false;
+  assert.equal(escape(), false);
+  assert.equal(is_open(), false);
+});
+
+test("a click on the backdrop closes the drawer and focuses the menu button", () => {
+  const { menu, backdrop, is_open } = drawer();
+  menu.listeners["click"]!();
+  backdrop.listeners["click"]!();
+  assert.equal(is_open(), false);
+  assert.equal(fake_document.activeElement, menu);
+});
+
+test("picking a link closes the drawer and moves focus out of it", () => {
+  const { root, menu, sidebar, is_open } = drawer();
+  menu.listeners["click"]!();
+  const link = fake_document.activeElement!;
+  sidebar.listeners["click"]!({ target: link });
+  assert.equal(is_open(), false);
+  assert.equal(fake_document.activeElement, root.querySelector("h1"));
+});
+
+test("a chevron click inside the drawer keeps it open", () => {
+  const { menu, sidebar, is_open } = drawer();
+  menu.listeners["click"]!();
+  const chevron = sidebar.querySelector(".desertfox-help-sections-toggle")!;
+  chevron.listeners["click"]!();
+  sidebar.listeners["click"]!({ target: chevron });
+  assert.equal(is_open(), true);
+});
+
+test("focus leaving the drawer closes it", () => {
+  const { root, help, menu, sidebar, is_open } = drawer();
+  menu.listeners["click"]!();
+  help.listeners["focusin"]!({ target: sidebar.querySelector("a") });
+  assert.equal(is_open(), true);
+  help.listeners["focusin"]!({ target: root.querySelector("h1") });
+  assert.equal(is_open(), false);
 });

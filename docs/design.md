@@ -430,6 +430,8 @@ Caret mode puts a text cursor in the page, so the user can move through text wit
 
 The help page is generated from `commands.json` and the live keymap: every command, its params, its keys and the keymap warnings. The palette is the command line with an empty prompt.
 
+The help page has a sidebar of page links on the left. In a window 40rem wide or less, the sidebar is a drawer and never a bar across the page. A bar that stays on top holds a menu button, which opens the drawer over the page. Escape, a picked link, a click outside the drawer or focus leaving it closes the drawer. Opening it focuses the current page's link, and Escape or a click outside returns focus to the menu button. The drawer starts closed on each render and is not stored.
+
 ## Native host (optional)
 
 One long-lived port from the background to a host program. The host merges the existing voxcmd Firefox host (`extras/voxcmd-firefox` in the dotfiles), so there is one extension and one host.
