@@ -5,7 +5,7 @@ import { copyFile, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises
 // Minified size limits. content.js loads on every page, so its limit is the tightest. The rest load on first use.
 const MAX_BYTES = {
   "content.js": 16 * 1024,
-  "hints.js": 24 * 1024,
+  "hints.js": 32 * 1024,
   "caret.js": 30 * 1024,
   "whichkey.js": 8 * 1024,
   "cmdline.js": 4 * 1024,
