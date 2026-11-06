@@ -1,5 +1,5 @@
 import "./command_modules.ts";
-import type { ContentToBackground } from "../shared/messages.ts";
+import type { ContentToBackground, PageToBackground } from "../shared/messages.ts";
 import type { BoundInvocation } from "../shared/invocation.ts";
 import { DEFAULT_SETTINGS, effective_settings } from "../shared/config.ts";
 import { bundle_loader_deps, container_names, image_deps, make_router_deps, page_of, reinject_deps } from "./browser_deps.ts";
@@ -22,7 +22,9 @@ import { create_router } from "./router.ts";
 import { create_repeat_memory, page_record } from "./repeat_memory.ts";
 import { wire_repeat } from "../commands/command.ts";
 import { SLOT_TABLE_STORAGE_KEY } from "./storage_keys.ts";
-import { get_config, get_search_engine_names, snippets } from "./startup.ts";
+import { change_edits, get_config, get_search_engine_names, snippets } from "./startup.ts";
+import { load_effective_config } from "./config_load.ts";
+import { create_settings_messages, is_extension_page } from "./settings_message.ts";
 import { command_meta, registry } from "../shared/registry/index.ts";
 import { forget_all_tab_modes, forget_mode_on_navigation, forget_tab_mode, recall_tab_mode, remember_reported_mode, shortcut_allowed } from "./tab_modes.ts";
 import type { SlotTable } from "./slots.ts";
@@ -86,10 +88,16 @@ const asker_of = (sender: browser.runtime.MessageSender): Asker | undefined => {
   return id === undefined || windowId === undefined || sender.frameId === undefined ? undefined : { tab_id: id, frame_id: sender.frameId, window_id: windowId, incognito: incognito === true };
 };
 const find_scan = create_find_scan(browser_find_scan_deps());
+const settings_messages = create_settings_messages({ change_edits, read_layers: load_effective_config });
 
 // Listeners register in the first turn, so no event is missed while the config loads.
 browser.runtime.onMessage.addListener((message: unknown, sender) => {
   const request = message as ContentToBackground;
+  const page_request = message as PageToBackground | undefined;
+  if (page_request?.type === "change_setting" || page_request?.type === "list_settings") {
+    if (!is_extension_page(sender, browser.runtime.id, browser.runtime.getURL(""))) return Promise.resolve({ ok: false, message: "only the extension's own pages may change settings" });
+    return get_config().then((): Promise<unknown> => (page_request.type === "list_settings" ? settings_messages.list() : settings_messages.change(page_request)));
+  }
   if (request?.type === "mode_changed" && sender.tab?.id !== undefined) {
     const tab_id = sender.tab.id;
     return modes_cleared.then(() => remember_reported_mode(browser.storage.local, tab_id, sender.frameId, request.mode));
