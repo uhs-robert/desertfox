@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { close_drawer_on_escape, render_help, reset_group_state, section_hash } from "../src/help/render.ts";
+import { close_drawer_on_escape, close_drawer_on_window_blur, render_help, reset_group_state, section_hash } from "../src/help/render.ts";
 import { parse_route } from "../src/help/route.ts";
 import type { Route } from "../src/help/route.ts";
 import type { Block } from "../src/help/blocks.ts";
@@ -335,4 +335,14 @@ test("focus leaving the drawer closes it", () => {
   assert.equal(is_open(), true);
   help.listeners["focusin"]!({ target: root.querySelector("h1") });
   assert.equal(is_open(), false);
+});
+
+test("the window losing focus to the browser UI closes the drawer without taking focus back", () => {
+  const { menu, is_open } = drawer();
+  menu.listeners["click"]!();
+  fake_document.activeElement = null;
+  close_drawer_on_window_blur();
+  assert.equal(is_open(), false);
+  assert.equal(menu.attributes["aria-expanded"], "false");
+  assert.equal(fake_document.activeElement, null);
 });
