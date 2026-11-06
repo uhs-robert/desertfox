@@ -40,6 +40,24 @@ export function create_model_client(deps: ModelClientDeps) {
   };
 
 
+  // Undefined until the first snapshot. The line's window first, then by window and place, as `listed_tabs` orders them.
+  const listed_items = (): TabItem[] | undefined =>
+    rev < 0
+      ? undefined
+      : [...rows.values()]
+          .filter((row) => deps.all_windows || row.window_id === deps.line_window_id)
+          .sort((a, b) => Number(b.window_id === deps.line_window_id) - Number(a.window_id === deps.line_window_id) || a.window_id - b.window_id || a.index - b.index)
+          .map(item_of);
+
+  // A patch for a tab the list does not show, or one that changes nothing shown, must not rank the list again: that would reset its scroll position.
+  let reported: string | undefined;
+  const report_change = () => {
+    const key = JSON.stringify(listed_items());
+    if (key === reported) return;
+    reported = key;
+    deps.on_change();
+  };
+
   return {
     receive: (message: TabModelMessage) => {
       if (message.type === "snapshot") {
@@ -47,7 +65,7 @@ export function create_model_client(deps: ModelClientDeps) {
         for (const row of message.tabs) rows.set(row.id, row);
         rev = message.rev;
         waiting_for_snapshot = false;
-        deps.on_change();
+        report_change();
         return;
       }
       if (waiting_for_snapshot) return;
@@ -59,16 +77,9 @@ export function create_model_client(deps: ModelClientDeps) {
       rev = message.rev;
       for (const id of message.removed) rows.delete(id);
       for (const row of message.upserts) rows.set(row.id, row);
-      deps.on_change();
+      report_change();
     },
-    // Undefined until the first snapshot. The line's window first, then by window and place, as `listed_tabs` orders them.
-    items: (): TabItem[] | undefined =>
-      rev < 0
-        ? undefined
-        : [...rows.values()]
-            .filter((row) => deps.all_windows || row.window_id === deps.line_window_id)
-            .sort((a, b) => Number(b.window_id === deps.line_window_id) - Number(a.window_id === deps.line_window_id) || a.window_id - b.window_id || a.index - b.index)
-            .map(item_of),
+    items: listed_items,
   };
 }
 

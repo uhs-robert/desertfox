@@ -108,6 +108,18 @@ test("a row carries the flags, the container and the window number as the list r
   ]);
 });
 
+test("a patch that leaves the shown items unchanged does not report a change, and one that changes them does", () => {
+  const { client, changes } = make({ all_windows: false });
+  client.receive({ type: "snapshot", rev: 0, tabs: [row(1, 10, 0), row(2, 11, 0)] });
+  assert.equal(changes(), 1);
+  client.receive({ type: "patch", rev: 1, upserts: [row(2, 11, 0, { title: "Other window" })], removed: [] });
+  assert.equal(changes(), 1);
+  client.receive({ type: "patch", rev: 2, upserts: [row(1, 10, 0, { title: "Shown" })], removed: [] });
+  assert.equal(changes(), 2);
+  client.receive({ type: "patch", rev: 3, upserts: [row(1, 10, 0, { title: "Shown" })], removed: [] });
+  assert.equal(changes(), 2);
+});
+
 test("a row with no title shows its address", () => {
   const { client } = make();
   client.receive({ type: "snapshot", rev: 0, tabs: [row(1, 10, 0, { title: "" })] });

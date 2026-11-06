@@ -177,6 +177,17 @@ test("an update that changes nothing sends nothing", async () => {
   assert.equal(f.pending_timers(), 0);
 });
 
+test("an unload of a still-loading tab keeps the row's title and address, though the update reads about:blank", async () => {
+  const f = make([tab(1, 1, 0, { title: "Mail", url: "https://mail.test/" })]);
+  await f.model.start();
+  const p = await f.connect_port();
+  f.fire("onUpdated", 1, { discarded: true }, tab(1, 1, 0, { title: "", url: "about:blank", discarded: true }));
+  f.run_timers();
+  const patch = p.messages[1];
+  const row = patch?.type === "patch" ? patch.upserts[0] : undefined;
+  assert.deepEqual([row?.discarded, row?.title, row?.url, row?.site], [true, "Mail", "https://mail.test/", "mail.test"]);
+});
+
 test("create then remove in one batch sends nothing", async () => {
   const f = make([tab(1, 1, 0)]);
   await f.model.start();
