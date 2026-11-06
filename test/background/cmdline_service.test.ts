@@ -22,7 +22,7 @@ function make({ slow_set = false, stuck_ticket = "" } = {}) {
     get: (key: string) =>
       key.endsWith(stuck_ticket) && stuck_ticket !== "" ? new Promise(() => {}) : Promise.resolve(key in session_data ? { [key]: session_data[key] } : {}),
     set: async (items: Record<string, unknown>) => void Object.assign(session_data, items),
-    remove: async (key: string) => void delete session_data[key],
+    remove: async (keys: string | string[]) => void [keys].flat().forEach((key) => delete session_data[key]),
   } as unknown as Parameters<typeof create_cmdline_service>[0]["tickets"];
   let issued = 0;
   const service = create_cmdline_service({
@@ -143,6 +143,15 @@ test("only the frame that redeemed the ticket is an opener, and the next line re
   // Each line mounts a new frame, so after the next line the old frame (closed, or a copy that kept its id) is no opener.
   assert.ok(await service.open(await service.issue_ticket(7), 7, 9));
   assert.deepEqual([await service.is_opener(7, 3), await service.is_opener(7, 9)], [false, true]);
+});
+
+test("an older line whose redemption lands late does not take the mark from the newer line", async () => {
+  const { service } = make();
+  const old_ticket = await service.issue_ticket(7);
+  const new_ticket = await service.issue_ticket(7);
+  assert.ok(await service.open(new_ticket, 7, 4));
+  assert.equal(await service.open(old_ticket, 7, 3), undefined);
+  assert.deepEqual([await service.is_opener(7, 4), await service.is_opener(7, 3)], [true, false]);
 });
 
 test("closing the tab removes the opener marker", async () => {

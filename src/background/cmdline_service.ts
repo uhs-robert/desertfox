@@ -1,7 +1,7 @@
 // What the command line page asks of the background: the history to walk, the commands and the lists that bare words read from.
 
 import type { CmdlineOpened } from "../shared/messages.ts";
-import { CMDLINE_HISTORY_STORAGE_KEY, CMDLINE_OPENER_STORAGE_PREFIX, CMDLINE_TICKET_STORAGE_PREFIX } from "./storage_keys.ts";
+import { CMDLINE_HISTORY_STORAGE_KEY, CMDLINE_LATEST_TICKET_STORAGE_PREFIX, CMDLINE_OPENER_STORAGE_PREFIX, CMDLINE_TICKET_STORAGE_PREFIX } from "./storage_keys.ts";
 
 export const HISTORY_LIMIT = 100;
 
@@ -45,7 +45,7 @@ export function create_cmdline_service(deps: CmdlineServiceDeps) {
     issue_ticket: async (tab_id: number | undefined): Promise<string | undefined> => {
       if (tab_id === undefined) return undefined;
       const ticket = deps.new_ticket();
-      await deps.tickets.set({ [CMDLINE_TICKET_STORAGE_PREFIX + ticket]: tab_id });
+      await deps.tickets.set({ [CMDLINE_TICKET_STORAGE_PREFIX + ticket]: tab_id, [CMDLINE_LATEST_TICKET_STORAGE_PREFIX + tab_id]: ticket });
       return ticket;
     },
     // Used up on the first try, so a frame reloaded with an old ticket gets nothing either.
@@ -56,6 +56,9 @@ export function create_cmdline_service(deps: CmdlineServiceDeps) {
       redemptions.set(ticket, settled);
       void settled.then(() => redemptions.get(ticket) === settled && redemptions.delete(ticket));
       if ((await redeemed) !== tab_id) return undefined;
+      // A line that closed while its redemption was slow must not take the mark from the line that replaced it.
+      const latest_key = CMDLINE_LATEST_TICKET_STORAGE_PREFIX + tab_id;
+      if ((await deps.tickets.get(latest_key))[latest_key] !== ticket) return undefined;
       // The frame, not just the tab: any frame of the page can embed another `cmdline.html`, and that copy redeemed nothing.
       // Each line mounts a new frame and Firefox never reuses a frame id inside a tab, so the next line replaces the mark and a closed line's mark matches no live frame.
       await deps.tickets.set({ [CMDLINE_OPENER_STORAGE_PREFIX + tab_id]: frame_id });
@@ -69,7 +72,7 @@ export function create_cmdline_service(deps: CmdlineServiceDeps) {
       const key = CMDLINE_OPENER_STORAGE_PREFIX + tab_id;
       return (await deps.tickets.get(key))[key] === frame_id;
     },
-    forget_opener: (tab_id: number): Promise<void> => deps.tickets.remove(CMDLINE_OPENER_STORAGE_PREFIX + tab_id),
+    forget_opener: (tab_id: number): Promise<void> => deps.tickets.remove([CMDLINE_OPENER_STORAGE_PREFIX + tab_id, CMDLINE_LATEST_TICKET_STORAGE_PREFIX + tab_id]),
     // A new page in the tab is not the page that opened the line, and its own embedded copy of the line page must get nothing.
     forget_opener_on_navigation: async (tab_id: number, change: { status?: string | undefined }): Promise<void> => {
       if (change.status === "loading") await deps.tickets.remove(CMDLINE_OPENER_STORAGE_PREFIX + tab_id);

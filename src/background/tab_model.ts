@@ -188,8 +188,9 @@ export function create_tab_model(deps: TabModelDeps) {
       if (entry.row.window_id === window_id) set_field(entry, "previous", entry.row.id === previous_id && !entry.row.active);
     }
   };
+  // Detached rows too, or an attach after a re-read would send stale marks.
   const relabel_rows = () => {
-    for (const entry of entries.values()) {
+    for (const entry of [...entries.values(), ...detached.values()]) {
       set_field(entry, "window_number", window_numbers.get(entry.row.window_id) ?? 0);
       const container = containers.get(entry.row.container);
       set_field(entry, "container_name", container?.name ?? "");

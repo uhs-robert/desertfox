@@ -605,7 +605,7 @@ test("with the real ticket service, only the tab that redeemed its own ticket re
   const storage = {
     get: async (key: string) => (store.has(key) ? { [key]: store.get(key) } : {}),
     set: async (items: Record<string, unknown>) => void Object.entries(items).forEach(([key, value]) => store.set(key, value)),
-    remove: async (key: string) => void store.delete(key),
+    remove: async (keys: string | string[]) => void [keys].flat().forEach((key) => store.delete(key)),
   };
   let next = 0;
   const cmdline = create_cmdline_service({
@@ -817,6 +817,19 @@ test("a renamed container patches its rows only, and a deleted one leaves its ta
   f.fire("onUpdated", 1, { title: "t" }, tab(1, 1, 0, { cookieStoreId: "firefox-container-1", title: "t" }));
   f.run_timers();
   assert.deepEqual(pick(p.messages[3], "container_name"), [[1, ""]]);
+});
+
+test("a container re-read while a tab is detached reaches the row when it attaches", async () => {
+  const f = make([tab(1, 1, 0, { cookieStoreId: "firefox-container-1" }), tab(2, 2, 0)], { containers: new Map([["firefox-container-1", WORK]]) });
+  await f.model.start();
+  const p = await f.connect_port();
+  f.fire("onDetached", 1, { oldWindowId: 1, oldPosition: 0 });
+  f.set_containers(new Map([["firefox-container-1", { ...WORK, name: "Job" }]]));
+  f.fire("containers.onUpdated", {});
+  await tick();
+  f.fire("onAttached", 1, { newWindowId: 2, newPosition: 1 });
+  f.run_timers();
+  assert.deepEqual(pick(p.messages[1], "container_name"), [[1, "Job"]]);
 });
 
 test("with containers off every row has empty container marks", async () => {
