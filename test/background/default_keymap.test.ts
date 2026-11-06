@@ -8,7 +8,7 @@ import type { TreeBranch } from "../../src/shared/prefix_tree.ts";
 import type { KeymapConfig } from "../../src/shared/keymap.ts";
 import { check_args, registry } from "../../src/shared/registry/index.ts";
 
-const bindings_of = (keymap: KeymapConfig) => Object.entries(keymap).filter(([name]) => name !== "group_names" && name !== "site_keys");
+const bindings_of = (keymap: KeymapConfig) => Object.entries(keymap).filter(([name]) => name !== "group_names" && name !== "site_keys" && name !== "modifiers");
 
 const ids_in = (keymap: KeymapConfig) =>
   bindings_of(keymap).flatMap(([, section]) => [section]).flatMap((section) =>
@@ -37,7 +37,7 @@ test("the default keymap compiles against the full registry with no warnings", (
 test("the default bindings of commands that exist compile with no warnings", () => {
   const present = (section: Record<string, unknown>) =>
     Object.fromEntries(Object.entries(section).filter(([, binding]) => [binding].flat().every((step) => registry.get((step as { id: string }).id))));
-  const partial = Object.fromEntries([...bindings_of(DEFAULT_KEYMAP).map(([mode, section]) => [mode, present(section)]), ["group_names", DEFAULT_KEYMAP.group_names], ["site_keys", DEFAULT_KEYMAP.site_keys]]) as KeymapConfig;
+  const partial = Object.fromEntries([...bindings_of(DEFAULT_KEYMAP).map(([mode, section]) => [mode, present(section)]), ["group_names", DEFAULT_KEYMAP.group_names], ["site_keys", DEFAULT_KEYMAP.site_keys], ["modifiers", DEFAULT_KEYMAP.modifiers]]) as KeymapConfig;
   assert.deepEqual(compile(partial).warnings, []);
 });
 
@@ -96,7 +96,7 @@ test("the keys of the new modes compile and resolve to their commands", () => {
   assert.equal(leaf_id("normal", "v"), 'mode.set {"mode":"caret"}');
   assert.equal(leaf_id("normal", "V"), 'mode.set {"mode":"visual"}');
   assert.equal(leaf_id("normal", ";", "v"), 'hint.run {"action":"caret","filter":"prose","text":"","rapid":false}');
-  assert.equal(leaf_id("normal", ";", "b"), 'hint.run {"filter":"buttons","action":"here","text":"","rapid":false}');
+  assert.equal(leaf_id("normal", ";", "B"), 'hint.run {"filter":"buttons","action":"here","text":"","rapid":false}');
   assert.equal(leaf_id("normal", ";", "V"), 'hint.run {"action":"visual","filter":"prose","text":"","rapid":false}');
   assert.equal(leaf_id("normal", ";", "#"), 'cmdline.open {"text":"heading "}');
   assert.equal(leaf_id("normal", ";", ";"), 'cmdline.open {"text":"hint "}');

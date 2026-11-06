@@ -8,11 +8,12 @@ import type { CompiledKeymap, LeafStep, TreeBranch, TreeNode } from "../prefix_t
 import { DEFAULT_SETTINGS } from "../config.ts";
 import type { Settings } from "../config.ts";
 import type { BoundInvocation, KeyBinding } from "../invocation.ts";
-import type { KeymapConfig, KeymapMode } from "../keymap.ts";
+import type { KeymapConfig, KeymapMode, Modifier } from "../keymap.ts";
 import { default_of, is_dynamic_values } from "../registry/params.ts";
 import { parse_sequence } from "./notation.ts";
 
-export type CommandInfo = { runs_in: RunsIn; label: string; count: CountBehavior; params?: readonly ParamDef[] };
+// `accepts_args` is the registry validator, passed in because the content script also loads this file and must not pull the registry in. Without it a modifier variant is never judged and always inserted.
+export type CommandInfo = { runs_in: RunsIn; label: string; count: CountBehavior; params?: readonly ParamDef[]; accepts_args?: (args: Record<string, unknown>) => boolean };
 
 // Search engine name to the label the user gave it. A key that searches with an engine reads as that label.
 export type LabelSources = { engine_labels: Record<string, string> };
@@ -48,10 +49,50 @@ function generated_bindings(keymap: KeymapConfig, settings: Partial<Settings>): 
   return bindings;
 }
 
+// Each modifier derives, from every key of its group, a variant with the modifier args added. The group is the modifier key minus its last token.
+// A variant exists only when the registry validator accepts its args, so which-key and help never show a combination that would be refused.
+// A key that sets its own `action` gets no variants: the modifier would fight it.
+// Explicit keys win over variants without a warning, so a user can rebind or remove one variant.
+function modifier_variants(modifiers: Record<string, Modifier>, taken: Map<string, Entry>, resolve: ResolveCommand, warnings: string[]): Entry[] {
+  const parsed_modifiers = Object.entries(modifiers).flatMap(([sequence, { label: _label, ...args }]) => {
+    const parsed = parse_sequence(sequence);
+    if (parsed.error !== undefined) warnings.push(`modifiers: skipped "${sequence}": ${parsed.error}`);
+    else if (parsed.tokens.length < 2) warnings.push(`modifiers: skipped "${sequence}": a modifier must sit inside a group, for example ";r"`);
+    else if (taken.has(parsed.tokens.join(""))) warnings.push(`modifiers: skipped "${sequence}": the key has its own binding, which wins`);
+    else return [{ sequence, tokens: parsed.tokens, args }];
+    return [];
+  });
+  const modifier_keys = parsed_modifiers.map(({ tokens }) => tokens.join(""));
+  const sources = [...taken.values()].filter(({ tokens, binding }) => {
+    const joined = tokens.join("");
+    return !Array.isArray(binding) && binding.args?.action === undefined && !modifier_keys.some((key) => joined.startsWith(key));
+  });
+  const variants: Entry[] = [];
+  for (const { sequence, tokens, args } of parsed_modifiers) {
+    const group = tokens.slice(0, -1);
+    const in_group = sources.filter((source) => source.tokens.length > group.length && group.every((token, index) => source.tokens[index] === token));
+    let accepted = 0;
+    for (const source of in_group) {
+      const binding = source.binding as BoundInvocation;
+      const info = resolve(binding.id);
+      const variant_args = { ...binding.args, ...args };
+      if (!info || info.accepts_args?.(variant_args) === false) continue;
+      accepted++;
+      const variant_tokens = [...group, tokens[tokens.length - 1]!, ...source.tokens.slice(group.length)];
+      const variant_key = variant_tokens.join("");
+      if (taken.has(variant_key)) continue;
+      variants.push({ sequence: variant_key, tokens: variant_tokens, binding: { ...binding, args: variant_args }, source_index: -1 });
+    }
+    if (accepted === 0) warnings.push(`modifiers: "${sequence}" matches no key of its group, so it makes no variants`);
+  }
+  return variants;
+}
+
 function entries_for_mode(
   mode: KeymapMode,
   keymap: KeymapConfig,
   settings: Partial<Settings>,
+  resolve: ResolveCommand,
   warnings: string[],
 ): Entry[] {
   const sources = [mode === "normal" ? generated_bindings(keymap, settings) : {}, keymap[mode] ?? {}];
@@ -73,6 +114,11 @@ function entries_for_mode(
         }
         by_normalized_sequence.set(normalized, { sequence, tokens: parsed.tokens, binding, source_index });
       }
+    }
+  }
+  if (mode === "normal") {
+    for (const variant of modifier_variants(keymap.modifiers ?? {}, by_normalized_sequence, resolve, warnings)) {
+      by_normalized_sequence.set(variant.tokens.join(""), variant);
     }
   }
   // Shorter sequences first, so a prefix claims its place before the longer entries below it.
@@ -205,10 +251,11 @@ export function compile_keymap(keymap: KeymapConfig, settings: Partial<Settings>
   const warnings: string[] = [];
   const modes: CompiledKeymap["modes"] = {};
   const keymap_modes: readonly KeymapMode[] = [...RUNTIME_MODES, "browser"];
-  const group_names = parse_group_names(keymap.group_names ?? {}, warnings);
+  const modifier_names = Object.fromEntries(Object.entries(keymap.modifiers ?? {}).flatMap(([sequence, { label }]) => (typeof label === "string" ? [[sequence, label]] : [])));
+  const group_names = parse_group_names({ ...modifier_names, ...keymap.group_names }, warnings);
   for (const mode of keymap_modes) {
     const root: TreeBranch = { kind: "branch", children: {} };
-    for (const entry of entries_for_mode(mode, keymap, settings, warnings)) {
+    for (const entry of entries_for_mode(mode, keymap, settings, resolve, warnings)) {
       insert_entry(root, mode, entry, resolve, settings, label_sources, group_names, warnings);
     }
     name_groups(root, group_names);
