@@ -1,6 +1,6 @@
 import { HELP_PAGE_FILE } from "../help/route.ts";
 import { define } from "../shared/registry/index.ts";
-import { NATIVE_INSTALL_HASH } from "../shared/native_host.ts";
+import { native_install_hash } from "../shared/native_host.ts";
 import { open_help_url } from "./help_tab.ts";
 
 define("native.install", {
@@ -10,6 +10,6 @@ define("native.install", {
   repeatable: false,
   run: async (ctx) => {
     const help_page_url = browser.runtime.getURL(HELP_PAGE_FILE);
-    await open_help_url(ctx, help_page_url, help_page_url + NATIVE_INSTALL_HASH);
+    await open_help_url(ctx, help_page_url, help_page_url + native_install_hash(Date.now()));
   },
 });

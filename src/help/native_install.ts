@@ -3,7 +3,7 @@
 // which is why the request lives here and not in the command.
 
 import { copy_text } from "../content/caret/copy_text.ts";
-import { host_channel, install_command, NATIVE_INSTALL_HASH, NATIVE_PERMISSION } from "../shared/native_host.ts";
+import { host_channel, install_command, is_native_install_hash, NATIVE_PERMISSION } from "../shared/native_host.ts";
 
 export type PermissionDeps = {
   has: () => Promise<boolean>;
@@ -43,7 +43,7 @@ function element(tag: string, text?: string, style?: string): HTMLElement {
   return node;
 }
 
-async function build_panel(): Promise<HTMLElement> {
+async function build_panel(on_close: () => void): Promise<HTMLElement> {
   const install_type = (await browser.management.getSelf()).installType;
   const channel = host_channel(install_type, browser.runtime.getManifest().version);
   const command = install_command(channel);
@@ -67,7 +67,7 @@ async function build_panel(): Promise<HTMLElement> {
     });
   });
   const close = element("button", "Close", `${BUTTON_STYLE};float:right`);
-  close.addEventListener("click", () => panel.remove());
+  close.addEventListener("click", on_close);
   panel.append(
     close,
     element("h2", "Install the native host", "margin:0 0 .5rem;font-size:1.1rem"),
@@ -86,13 +86,19 @@ export type PanelControllerDeps<Panel> = {
   show: (panel: Panel) => void;
   hide: (panel: Panel) => void;
 };
+export type PanelController = { sync: () => Promise<void>; close: () => void };
 
 // `sync` is called on every route change. A build that finishes after a newer `sync` started, or after the route left, is dropped,
 // so two quick changes never leave two panels.
-export function create_panel_controller<Panel>(deps: PanelControllerDeps<Panel>): { sync: () => Promise<void> } {
+export function create_panel_controller<Panel>(deps: PanelControllerDeps<Panel>): PanelController {
   let shown: Panel | undefined;
   let latest_sync = 0;
   return {
+    // The user closed the panel. Forget it, so the next wanted sync builds a new one.
+    close: () => {
+      if (shown !== undefined) deps.hide(shown);
+      shown = undefined;
+    },
     sync: async () => {
       const this_sync = ++latest_sync;
       if (!deps.is_wanted()) {
@@ -111,9 +117,9 @@ export function create_panel_controller<Panel>(deps: PanelControllerDeps<Panel>)
 
 // The panel sits outside the body because the help router rebuilds the body on every route change.
 export function mount_native_install(): void {
-  const controller = create_panel_controller<HTMLElement>({
-    is_wanted: () => location.hash === NATIVE_INSTALL_HASH,
-    build: build_panel,
+  const controller: PanelController = create_panel_controller<HTMLElement>({
+    is_wanted: () => is_native_install_hash(location.hash),
+    build: () => build_panel(() => controller.close()),
     show: (panel) => document.documentElement.append(panel),
     hide: (panel) => panel.remove(),
   });

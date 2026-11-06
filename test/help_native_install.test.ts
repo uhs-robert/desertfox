@@ -76,3 +76,16 @@ test("leaving the route hides the shown panel and a return builds a new one", as
   await again;
   assert.deepEqual(shown, [1, 2]);
 });
+
+test("after Close, a repeated open shows the panel again", async () => {
+  const { controller, resolvers, shown, hidden } = deferred_builds();
+  const first = controller.sync();
+  resolvers[0]!();
+  await first;
+  controller.close();
+  assert.deepEqual(hidden, [1]);
+  const again = controller.sync();
+  resolvers[1]!();
+  await again;
+  assert.deepEqual(shown, [1, 2]);
+});
