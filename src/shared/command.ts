@@ -20,7 +20,7 @@ export type ParamValue = string | number | boolean;
 // The param is valid only if the named sibling param has one of these values.
 export type ParamWhen = Record<string, readonly ParamValue[]>;
 
-// One arm of a default list: its value is the default while the named sibling param has one of the listed values.
+// One arm of a default list: its value is the default while every named sibling param has one of its listed values.
 export type DefaultArm = { value: ParamValue; when: ParamWhen };
 
 // A plain value, a context source, or an ordered list of arms with an optional plain value last. The first arm that holds wins, else the last value applies, else the param has no default and is required.
