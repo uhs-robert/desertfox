@@ -62,6 +62,15 @@ test("a candidate in a frame is dropped when the parent document covers the fram
   assert.deepEqual(seen, [[106, 207]]);
 });
 
+test("ignore_own_cover skips the test on the element and keeps the test on the frame around it", () => {
+  const covering = { parentNode: null as unknown };
+  const video = { parentNode: null as unknown, ownerDocument: { elementFromPoint: () => covering as unknown } };
+  assert.equal(uncovered_through_frames({ element: video, frames: [] }, 5, 5), false);
+  assert.equal(uncovered_through_frames({ element: video, frames: [] }, 5, 5, true), true);
+  const frame = { parentNode: null as unknown, clientLeft: 0, clientTop: 0, getBoundingClientRect: () => at(0, 0), ownerDocument: { elementFromPoint: () => covering as unknown } };
+  assert.equal(uncovered_through_frames({ element: video, frames: [frame] }, 5, 5, true), false);
+});
+
 const viewport = { width: 800, height: 600 };
 
 test("points_to_probe lists each line box middle, then the inset corners of the first box", () => {

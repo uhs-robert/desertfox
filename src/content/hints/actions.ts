@@ -2,7 +2,7 @@
 
 import { hover, leave_toward } from "./hover.ts";
 
-export type HintAction = "here" | "tab" | "background" | "window" | "caret" | "visual" | "copy" | "copy_text" | "delete" | "focus" | "hover";
+export type HintAction = "here" | "tab" | "background" | "window" | "caret" | "visual" | "copy" | "copy_text" | "delete" | "focus" | "hover" | "play_pause" | "mute" | "fullscreen";
 
 export type Place = "here" | "tab" | "background" | "window";
 
@@ -34,6 +34,8 @@ export function link_address(target: Target): string | undefined {
   const href = target.href;
   return typeof href === "string" && href !== "" && !/^javascript:/i.test(href) ? href : undefined;
 }
+
+export const is_media = (target: { localName: string }): boolean => target.localName === "video" || target.localName === "audio";
 
 export type MouseEventName =
   | "pointerover" | "pointerenter" | "pointermove" | "pointerout" | "pointerleave" | "pointerdown" | "pointerup"
@@ -85,11 +87,50 @@ function focus_target(target: Target): void {
   flashes.set(target, { previous, timer });
 }
 
-export function perform(action: HintAction, target: Target, deps: ActionDeps): void | Promise<unknown> {
+const SAME_SIZE_PX = 1;
+
+type Climbable = { parentElement: Element | null; parentNode: unknown };
+
+// A custom player keeps its video in a shadow root, so the climb steps from the root to its host.
+const parent_across_shadow = (element: Climbable): Element | null => element.parentElement ?? (element.parentNode as { host?: Element } | null)?.host ?? null;
+
+// The outermost ancestor that is as big as the media element, so a site player keeps its controls and subtitles in fullscreen. The page body is never a player box.
+export function player_box(media: Element): Element {
+  const size = media.getBoundingClientRect();
+  let box = media;
+  for (let up = parent_across_shadow(media); up && up !== up.ownerDocument.body && up !== up.ownerDocument.documentElement; up = parent_across_shadow(up)) {
+    const outer = up.getBoundingClientRect();
+    if (Math.abs(outer.width - size.width) > SAME_SIZE_PX || Math.abs(outer.height - size.height) > SAME_SIZE_PX) break;
+    box = up;
+  }
+  return box;
+}
+
+// play() and requestFullscreen() need the user activation of the pick keydown. A refusal becomes a failed outcome, because a rejected promise from an action reads as a page that went away and cancels silently.
+type Refusal = { ok: false; message: string };
+
+const refusal_as_outcome = (pending: Promise<unknown>): Promise<unknown> =>
+  pending.then(() => undefined, (error: unknown) => ({ ok: false, message: String((error as Error)?.message ?? error) }));
+
+function act_on_media(action: "play_pause" | "mute" | "fullscreen", target: Target): void | Refusal | Promise<unknown> {
+  // The schema cannot tie these actions to the media filter, so `--links` or `--all` can pick any element.
+  if (!is_media(target)) return { ok: false, message: "Not a media element" };
+  const media = target as unknown as HTMLMediaElement;
+  if (action === "mute") {
+    media.muted = !media.muted;
+    return;
+  }
+  if (action === "play_pause") return media.paused ? refusal_as_outcome(media.play()) : media.pause();
+  const doc = media.ownerDocument;
+  return refusal_as_outcome(doc.fullscreenElement ? doc.exitFullscreen() : player_box(media).requestFullscreen());
+}
+
+export function perform(action: HintAction, target: Target, deps: ActionDeps): void | Refusal | Promise<unknown> {
   if (action !== "hover") leave_toward(target);
   if (action === "delete") return target.remove();
   if (action === "focus") return focus_target(target);
   if (action === "hover") return hover(target);
+  if (action === "play_pause" || action === "mute" || action === "fullscreen") return act_on_media(action, target);
   if (starts_caret(action)) return deps.start_caret(target as unknown as Element, action);
   // A copy of the address falls back to the text for an element that is no link.
   if (action === "copy") return deps.copy(link_address(target) ?? (target.textContent ?? "").trim());
