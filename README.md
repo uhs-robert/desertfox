@@ -76,7 +76,9 @@ Until then, only contributors can run it. See [AGENTS.md](AGENTS.md) for the bui
 
 ## 🚀 Try it
 
-After you install DesertFox, press `g?`, `qh` or `<F1>` on a normal page. The help page opens. Start with the Quick Start page, which teaches the first keys. A short pause after a key shows the keys that can follow.
+After you install DesertFox, press `g?`, `qh` or `<F1>` on a normal page. The help page opens. A short pause after a key shows the keys that can follow.
+
+The Quick Start page opens on first install and sits in the help sidebar. It teaches scrolling, hints, the command line, page search, caret and visual mode, with the keys read from your keymap. Its text is in [src/help/quick_start.ts](src/help/quick_start.ts).
 
 ## 🏜️ Known limits
 
