@@ -5,29 +5,15 @@
 // because a port sees only the tabs of its own privacy and a global count would show it gaps. A client that sees a gap sends `resync`.
 // A patch applies `removed` first, then `upserts`. Upserts carry every row whose index shifted, so a client never recomputes indexes.
 
+import type { TabModelMessage, TabModelRequest, TabRow } from "../shared/messages.ts";
 import { site_key } from "../shared/site_key.ts";
+import { listed_favicon } from "./complete_items.ts";
 
+// The plain name states no privacy, so a page with no sender tab (a sidebar) connects as `:normal` or `:private`.
+// The page knows its own context, and the background cannot read it from such a port.
 export const TAB_MODEL_PORT_NAME = "desertfox_tab_model";
+const PORT_PRIVACY: Record<string, boolean | undefined> = { [TAB_MODEL_PORT_NAME]: undefined, [`${TAB_MODEL_PORT_NAME}:normal`]: false, [`${TAB_MODEL_PORT_NAME}:private`]: true };
 export const FLUSH_DELAY_MS = 30;
-
-export type TabRow = {
-  id: number;
-  window_id: number;
-  index: number;
-  title: string;
-  url: string;
-  favicon_url: string;
-  site: string;
-  pinned: boolean;
-  muted: boolean;
-  audible: boolean;
-  discarded: boolean;
-  active: boolean;
-  container: string;
-};
-
-export type TabModelMessage = { type: "snapshot"; rev: number; tabs: TabRow[] } | { type: "patch"; rev: number; upserts: TabRow[]; removed: number[] };
-export type TabModelRequest = { type: "resync" };
 
 type Entry = { row: TabRow; incognito: boolean };
 type Tab = browser.tabs.Tab;
@@ -70,7 +56,7 @@ function entry_of(tab: Tab): Entry | undefined {
       index: tab.index,
       title: tab.title ?? "",
       url,
-      favicon_url: tab.favIconUrl ?? "",
+      favicon_url: listed_favicon(tab.favIconUrl) ?? "",
       site: site_key(url).key,
       pinned: tab.pinned === true,
       muted: tab.mutedInfo?.muted === true,
@@ -89,7 +75,8 @@ export function create_tab_model(deps: TabModelDeps) {
   const entries = new Map<number, Entry>();
   // A tab between `onDetached` and `onAttached`. Ports see it as removed until it attaches.
   const detached = new Map<number, Entry>();
-  type PortState = { port: TabModelPort; incognito: boolean; rev: number; ready: boolean };
+  // `incognito` is undefined when the port stated nothing and has no sender tab. Such a port matches no row.
+  type PortState = { port: TabModelPort; incognito: boolean | undefined; rev: number; ready: boolean };
   const ports = new Set<PortState>();
 
   // The batch waiting for the flush. `created` holds the ids no port has heard of yet, so create then remove sends nothing.
@@ -102,7 +89,7 @@ export function create_tab_model(deps: TabModelDeps) {
   let loading: Promise<void> | undefined;
   let raced = false;
 
-  const rows_for = (incognito: boolean) =>
+  const rows_for = (incognito: boolean | undefined) =>
     [...entries.values()]
       .filter((entry) => entry.incognito === incognito)
       .map((entry) => entry.row)
@@ -183,7 +170,14 @@ export function create_tab_model(deps: TabModelDeps) {
       try {
         for (;;) {
           raced = false;
-          const tabs = await deps.query();
+          let tabs: Tab[];
+          try {
+            tabs = await deps.query();
+          } catch (error) {
+            // An event that raced a failed query is the only trigger left to query again.
+            if (raced) continue;
+            throw error;
+          }
           if (raced) continue;
           entries.clear();
           detached.clear();
@@ -236,7 +230,7 @@ export function create_tab_model(deps: TabModelDeps) {
   );
   events.onUpdated.addListener(
     when_loaded((tab_id, _change, tab) => {
-      const current = entries.get(tab_id);
+      const current = entries.get(tab_id) ?? detached.get(tab_id);
       const fresh = entry_of(tab);
       if (!current || !fresh) return;
       let changed = false;
@@ -246,7 +240,7 @@ export function create_tab_model(deps: TabModelDeps) {
           changed = true;
         }
       }
-      if (changed) touch(tab_id);
+      if (changed && entries.has(tab_id)) touch(tab_id);
     }),
   );
   events.onMoved.addListener(
@@ -294,7 +288,7 @@ export function create_tab_model(deps: TabModelDeps) {
       shift_window(newWindowId, newPosition, 1, tab_id);
       entry.row.window_id = newWindowId;
       entry.row.index = newPosition;
-      entry.row.active = false;
+      entry.row.active = ![...entries.values()].some((other) => other.row.window_id === newWindowId && other.row.active);
       entries.set(tab_id, entry);
       removed.delete(tab_id);
       touch(tab_id);
@@ -307,9 +301,9 @@ export function create_tab_model(deps: TabModelDeps) {
   );
 
   deps.on_connect.addListener((port) => {
-    if (port.name !== TAB_MODEL_PORT_NAME || !deps.is_extension_page(port)) return;
-    // An unknown privacy counts as normal, which never shows a private tab.
-    const state: PortState = { port, incognito: port.sender?.tab?.incognito === true, rev: 0, ready: false };
+    if (!(port.name in PORT_PRIVACY) || !deps.is_extension_page(port)) return;
+    const sender_tab = port.sender?.tab;
+    const state: PortState = { port, incognito: sender_tab ? sender_tab.incognito === true : PORT_PRIVACY[port.name], rev: 0, ready: false };
     ports.add(state);
     port.onDisconnect.addListener(() => ports.delete(state));
     port.onMessage.addListener((message) => {
@@ -326,10 +320,13 @@ export function create_tab_model(deps: TabModelDeps) {
   });
 
   return {
-    start: load,
+    // A second call must not query again: a query after the load would wipe the live rows.
+    start: async () => {
+      if (!loaded) await load();
+    },
     // Waits for the load, then flushes now. For a reader that needs the current state.
     settled: async () => {
-      await load();
+      if (!loaded) await load();
       flush();
     },
   };

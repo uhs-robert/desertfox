@@ -210,3 +210,24 @@ export type Ping = {
 };
 
 export type BackgroundToContent = RunInContent | ShowRefusal | SetMode | TreeUpdated | GetSelection | FocusPage | Ping;
+
+// Background to tab-model clients, over the port `desertfox_tab_model`
+
+export type TabRow = {
+  id: number;
+  window_id: number;
+  index: number;
+  title: string;
+  url: string;
+  favicon_url: string;
+  site: string;
+  pinned: boolean;
+  muted: boolean;
+  audible: boolean;
+  discarded: boolean;
+  active: boolean;
+  container: string;
+};
+
+export type TabModelMessage = { type: "snapshot"; rev: number; tabs: TabRow[] } | { type: "patch"; rev: number; upserts: TabRow[]; removed: number[] };
+export type TabModelRequest = { type: "resync" };

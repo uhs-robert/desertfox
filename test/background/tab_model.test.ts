@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { create_tab_model, type TabModelDeps, type TabModelMessage, type TabModelPort } from "../../src/background/tab_model.ts";
+import { create_tab_model, type TabModelDeps, type TabModelPort } from "../../src/background/tab_model.ts";
+import type { TabModelMessage } from "../../src/shared/messages.ts";
 
 type Tab = Awaited<ReturnType<TabModelDeps["query"]>>[number];
 
@@ -20,12 +21,11 @@ function make(initial: Tab[] = []) {
   const model = create_tab_model({
     query: async () => {
       query_calls += 1;
-      if (fail_query) {
-        fail_query = false;
-        throw new Error("no tabs");
-      }
       const snapshot = tabs.map((t) => ({ ...t }));
+      const fails = fail_query;
+      fail_query = false;
       await query_gate;
+      if (fails) throw new Error("no tabs");
       return snapshot;
     },
     events: events as unknown as TabModelDeps["events"],
@@ -44,14 +44,14 @@ function make(initial: Tab[] = []) {
     timers = [];
     for (const t of due) t.fn();
   };
-  const connect_port = (options: { incognito?: boolean; url?: string; name?: string } = {}) => {
+  const connect_port = (options: { incognito?: boolean; url?: string; name?: string; no_sender_tab?: true } = {}) => {
     const sent: TabModelMessage[] = [];
     const messages = sent as unknown as Record<0 | 1 | 2 | 3, TabModelMessage> & { length: number };
     let on_message: (m: unknown) => void = () => {};
     let on_disconnect = () => {};
     const port: TabModelPort = {
       name: options.name ?? "desertfox_tab_model",
-      sender: { url: options.url ?? "moz-extension://me/sidebar.html", ...(options.incognito === undefined ? {} : { tab: { incognito: options.incognito } }) },
+      sender: { url: options.url ?? "moz-extension://me/sidebar.html", ...(options.no_sender_tab ? {} : { tab: { incognito: options.incognito ?? false } }) },
       postMessage: (m) => void sent.push(m),
       onMessage: { addListener: (fn) => void (on_message = fn as (m: unknown) => void) },
       onDisconnect: { addListener: (fn) => void (on_disconnect = fn) },
@@ -267,10 +267,8 @@ test("private ports see private tabs only and normal ports never see them", asyn
   await f.model.start();
   const normal = f.connect_port({ incognito: false });
   const priv = f.connect_port({ incognito: true });
-  const unknown = f.connect_port();
   assert.deepEqual(ids(normal.messages[0]), [1]);
   assert.deepEqual(ids(priv.messages[0]), [2]);
-  assert.deepEqual(ids(unknown.messages[0]), [1]);
   f.fire("onUpdated", 2, { title: "p" }, tab(2, 5, 0, { incognito: true, title: "p" }));
   f.fire("onRemoved", 2, { windowId: 5, isWindowClosing: false });
   f.run_timers();
@@ -315,13 +313,18 @@ test("resync sends a fresh snapshot at the port's current rev", async () => {
   assert.equal(p.messages.length, 3);
 });
 
-test("settled flushes pending changes now", async () => {
+test("settled flushes pending changes now and never re-queries", async () => {
   const f = make([tab(1, 1, 0)]);
   await f.model.start();
   const p = f.connect_port();
   f.fire("onCreated", tab(2, 1, 1));
   await f.model.settled();
+  await f.model.start();
+  assert.equal(f.query_calls(), 1);
   assert.equal(p.messages.length, 2);
+  const patch = p.messages[1];
+  assert.ok(patch.type === "patch");
+  assert.deepEqual(ids(patch), [2]);
   assert.equal(f.pending_timers(), 0);
 });
 
@@ -364,4 +367,81 @@ test("a failed startup query is retried on the next event", async () => {
   await f.model.settled();
   assert.equal(f.query_calls(), 2);
   assert.deepEqual(order(f.connect_port().messages[0]), ["1:0:1", "1:1:2"]);
+});
+
+test("an event during a startup query that then fails still leads to a fresh query", async () => {
+  const f = make([tab(1, 1, 0)]);
+  const release = f.hold_query();
+  f.fail_next_query();
+  const started = f.model.start();
+  const p = f.connect_port();
+  f.fire("onCreated", tab(2, 1, 1));
+  f.set_tabs([tab(1, 1, 0), tab(2, 1, 1)]);
+  release();
+  await started;
+  assert.equal(f.query_calls(), 2);
+  assert.deepEqual(order(p.messages[0]), ["1:0:1", "1:1:2"]);
+});
+
+test("a page without a sender tab states its privacy in the port name, and a port that states none gets no rows", async () => {
+  const f = make([tab(1, 1, 0), tab(2, 5, 0, { incognito: true })]);
+  await f.model.start();
+  const priv = f.connect_port({ name: "desertfox_tab_model:private", no_sender_tab: true });
+  const normal = f.connect_port({ name: "desertfox_tab_model:normal", no_sender_tab: true });
+  const silent = f.connect_port({ no_sender_tab: true });
+  assert.deepEqual(ids(priv.messages[0]), [2]);
+  assert.deepEqual(ids(normal.messages[0]), [1]);
+  assert.deepEqual(ids(silent.messages[0]), []);
+  f.fire("onUpdated", 1, { title: "n" }, tab(1, 1, 0, { title: "n" }));
+  f.fire("onUpdated", 2, { title: "p" }, tab(2, 5, 0, { incognito: true, title: "p" }));
+  f.run_timers();
+  assert.equal(silent.messages.length, 1);
+  assert.equal(priv.messages.length, 2);
+});
+
+test("the sender tab decides privacy over the port name", async () => {
+  const f = make([tab(1, 1, 0), tab(2, 5, 0, { incognito: true })]);
+  await f.model.start();
+  const p = f.connect_port({ name: "desertfox_tab_model:normal", incognito: true });
+  assert.deepEqual(ids(p.messages[0]), [2]);
+});
+
+test("rows carry only a favicon an extension page can load", async () => {
+  const f = make([tab(1, 1, 0, { favIconUrl: "chrome://branding/x.png" }), tab(2, 1, 1, { favIconUrl: "https://a.example/i.png" }), tab(3, 1, 2, { favIconUrl: `data:image/png;base64,${"A".repeat(3000)}` })]);
+  await f.model.start();
+  const p = f.connect_port();
+  const snap = p.messages[0];
+  assert.ok(snap.type === "snapshot");
+  assert.deepEqual(snap.tabs.map((r) => r.favicon_url), ["", "https://a.example/i.png", ""]);
+});
+
+test("an update between detach and attach is kept", async () => {
+  const f = make([tab(1, 1, 0), tab(2, 2, 0)]);
+  await f.model.start();
+  const p = f.connect_port();
+  f.fire("onDetached", 1, { oldWindowId: 1, oldPosition: 0 });
+  f.fire("onUpdated", 1, { title: "new" }, tab(1, 1, 0, { title: "new" }));
+  f.fire("onAttached", 1, { newWindowId: 2, newPosition: 1 });
+  f.run_timers();
+  const patch = p.messages[1];
+  assert.ok(patch.type === "patch");
+  assert.deepEqual(patch.upserts.map((r) => [r.id, r.title]), [[1, "new"]]);
+});
+
+test("a tab torn off into a new window is active there, one moved into a window with an active tab is not", async () => {
+  const f = make([tab(1, 1, 0, { active: true }), tab(2, 1, 1), tab(3, 2, 0, { active: true })]);
+  await f.model.start();
+  const p = f.connect_port();
+  f.fire("onDetached", 1, { oldWindowId: 1, oldPosition: 0 });
+  f.fire("onAttached", 1, { newWindowId: 9, newPosition: 0 });
+  f.run_timers();
+  const torn = p.messages[1];
+  assert.ok(torn.type === "patch");
+  assert.deepEqual(torn.upserts.filter((r) => r.id === 1).map((r) => r.active), [true]);
+  f.fire("onDetached", 2, { oldWindowId: 1, oldPosition: 0 });
+  f.fire("onAttached", 2, { newWindowId: 2, newPosition: 1 });
+  f.run_timers();
+  const joined = p.messages[2];
+  assert.ok(joined.type === "patch");
+  assert.deepEqual(joined.upserts.filter((r) => r.id === 2).map((r) => r.active), [false]);
 });
