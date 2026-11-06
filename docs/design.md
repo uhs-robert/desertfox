@@ -4,11 +4,11 @@ DesertFox is a keyboard-first Firefox extension. It has a small scope and one co
 
 The extension works on its own. Oasis Dots adds an optional native host. Through it, Hyprland, Quickshell and the shell list and run the same commands, and which-key can show in the Quickshell HUD.
 
-Status: phase 1 is built on the `feat/phase-1-core` branch. [spike.md](spike.md) holds the measurements this design rests on, and [keymap.md](keymap.md) maps every binding in the current browser config to a command here.
+Status: phase 1 is built on the `feat/phase-1-core` branch. [firefox-behavior.md](firefox-behavior.md) holds the measurements this design rests on, and [keymap.md](keymap.md) maps every binding in the current browser config to a command here.
 
 ## Constraints from Firefox
 
-The spike measured these on Firefox 159 with real key presses. They shape every choice below.
+Phase 0 measured these on Firefox 159 with real key presses. They shape every choice below.
 
 - A content script catches plain keys such as `Shift+J` on web pages only. It catches nothing on about: pages, addons.mozilla.org, view-source, reader view, the PDF viewer, or while the address bar has focus.
 - `moz-extension://` pages do not match `<all_urls>`, so no content script runs on them by itself. The help page loads `content.js` with a script tag, and `tabs.sendMessage` reaches it like any other tab.
@@ -170,7 +170,7 @@ The keymap is data, not code. It maps a mode and a key sequence to an invocation
 - The modes are normal, insert, ignore, hint and cmdline. Caret and visual modes arrive in phase 2, see [Caret and visual](#caret-and-visual). Insert mode follows `focusin` and `focusout` on editable elements instead of checking the focused element on every key.
 - A mode badge sits in the bottom right corner, 8 px above the bottom edge. The `mode_indicator` setting controls it: `always` (the default), `not_normal` or `off`. The `palette` setting names a theme (default `oasis_moonlight`), see [Themes](#themes). Light or dark follows the system theme.
 - The which-key panel is a floating frame with a 1 px tinted border and its title set into the top border. The `which_key_border` setting picks the corners: `square` (the default), `round` or `chamfer`. A footer names the exit keys.
-- `browser` mode holds the chords for the Firefox shortcuts. The manifest reserves a fixed number of shortcut slots, and the background assigns the chords to them with `commands.update`. The content script also catches these chords. If it cancels a chord, Firefox does not fire the shortcut as well, which the spike's key-blocking page showed.
+- `browser` mode holds the chords for the Firefox shortcuts. The manifest reserves a fixed number of shortcut slots, and the background assigns the chords to them with `commands.update`. The content script also catches these chords. If it cancels a chord, Firefox does not fire the shortcut as well, which the phase 0 key-blocking page showed.
 
 ## Config
 
@@ -262,10 +262,10 @@ Each setting is one row of data in `src/shared/settings_table.ts`: its kind (tru
 
 Firefox reads `~/.mozilla/managed-storage/<extension id>.json` and gives its `data` to the extension through `browser.storage.managed`. No helper program or extra permission is needed, and nothing in the browser can change the file.
 
-Firefox reads the file only when the extension loads. The spike confirmed this: an edit is invisible until the extension reloads, and Firefox sends no change event. So:
+Firefox reads the file only when the extension loads. The phase 0 measurements confirmed this: an edit is invisible until the extension reloads, and Firefox sends no change event. So:
 
 - A `config.reload` command reloads the extension. The new config applies in about 1 s. The reload resets the mode and any open hints.
-- After a reload, the key listeners in open tabs are cut off. Firefox loads the content script into open tabs by itself after `runtime.reload`, so the reinjection step stays only as a fallback (see [spike.md](spike.md), "Phase 1 measurements").
+- After a reload, the key listeners in open tabs are cut off. Firefox loads the content script into open tabs by itself after `runtime.reload`, so the reinjection step stays only as a fallback (see [firefox-behavior.md](firefox-behavior.md), "Phase 1 measurements").
 - In Oasis Dots, a `just desertfox-config` recipe runs the tool, and a key can run the recipe and then `config.reload`.
 - Users without a shell can import the merged file through the options page. DesertFox stores it in `storage.local`. Managed storage wins when both exist.
 - Since 0.1.1 the options page is a read-only status page: the config source, the settings in force, the warnings and the rebuild steps. It has no inputs. The import above stays in phase 3.
@@ -339,7 +339,7 @@ A Firefox shortcut enters at step 4 through `commands.onCommand`.
 
 `.` (`command.repeat`) replays the last request that ran to the end. The router stores it in `storage.session` after every step succeeded, with the count it had. A private window has a slot of its own. Only `background` commands are stored, so `j` then `.` does nothing, and a request that opens the command line stores nothing until the typed command runs. A hint start records itself from the `hints` bundle, so `.` after a hint pick shows hints again with the same action and filter. `3.` replaces the stored count and `.` keeps it. With nothing stored, `.` shows "Nothing to repeat". A pick that opens a link runs as `open.url` marked `from_hints`, which the router does not store, so `.` shows hints and does not reopen the address. A replay re-reads context sources such as the selection and the clipboard, so it uses their values at that time.
 
-The content script must have the keymap before the first key. It reads the compiled prefix tree from `storage.local` at start, buffers keys until the read returns, then replays them. Phase 1 measured that read at 6-10 ms (median 8), so buffering is enough and inline registration is not needed (see [spike.md](spike.md), "Phase 1 measurements").
+The content script must have the keymap before the first key. It reads the compiled prefix tree from `storage.local` at start, buffers keys until the read returns, then replays them. Phase 1 measured that read at 6-10 ms (median 8), so buffering is enough and inline registration is not needed (see [firefox-behavior.md](firefox-behavior.md), "Phase 1 measurements").
 
 ## Bundles and loading
 
@@ -473,7 +473,7 @@ Firefox keeps the background awake while the port is open, which also helps a la
 
 ## Roadmap
 
-1. Phase 0, spike. Done. See [spike.md](spike.md).
+1. Phase 0, measurements. Done. See [firefox-behavior.md](firefox-behavior.md).
 2. Phase 1, core. It covers the registry, `commands.json`, the managed storage config, `tools/build-config`, `config.reload`, keymap validation, the prefix tree, modes, scroll and page commands, tab commands, the shortcut slots and the help page. Exit: every v1 row of the binding map that needs no hints or command line works, and the content script stays under its size target.
 3. Phase 2, interfaces. Command line, completion, explicit prompts, hints, which-key, snippets, and caret and visual modes. Exit: the whole v1 column of the binding map works, and DesertFox replaces the current extension in daily use.
 4. Command line status area. A `statusbar_widgets` list setting, default `url, scroll, tabs`, on the right of the open command line. `url` is colored by security state from the theme's ok, warn and error tokens. `scroll` shows Top, N%, Bot or All. `tabs` shows [n/m]. Each value is a snapshot taken when the line opens. `history` is a later widget. `keypress`, `progress`, `scroll_raw`, `text` and `clock` are not planned. `search_match` waits for a page search built on Firefox's find API, because Firefox's find bar hides its count.
@@ -494,5 +494,5 @@ Firefox keeps the background awake while the port is open, which also helps a la
 - Answered: the built-in new tab page shows a clock and the date. `newtab_clock` is `false` (off), `true` or `"analog"` (a 12 hour analog face with no tick marks, the default) or `"digital"` (seven-segment `HH:mm` in the DSEG7 Classic font, shipped with its OFL text and declared only on this page). `newtab_clock_format` is 12 (default, with an AM or PM suffix) or 24 and applies to the digital clock only. `newtab_date` switches the date off. The page makes no network request. The page colors are var() fallbacks over the theme roles (`bg_core`, `fg_core`, `primary`, `accent`, `bg_mantle`, `border`), so a bare install shows a dark blue page and a theme restyles it once the role variables reach the page.
 - Answered: the built-in new tab page can list links, recent tabs and bookmarks. `[[newtab_links]]` in `settings.toml` takes tables of `label`, `url` (http or https only) and an optional `group`, and links with the same group share a list. `:set` refuses it. `newtab_recent_tabs` (open tabs, last used first) and `newtab_bookmarks` (newest added first) are off by default, with `newtab_recent_tabs_max` and `newtab_bookmarks_max` rows, 8 each. The page calls the tab and bookmark APIs itself and reuses the completion's pure readers by import, so it adds no background message. It skips private tabs and lists no tabs on a private page. Every row is an anchor, so hints reach it. Widgets that frame a user-hosted page are rejected, because `file://` cannot be framed and keys and hints do not reach inside frames.
 - Answered: the help page has a Quick Start page (`#/quick-start`) of plain text, with no interactive walkthrough. It teaches scrolling, hints, the command line, which-key, page search, caret and visual mode and `g?`, and it reads every key name from the compiled keymap, so a rebind changes the page. The help page loads `hints.js`, `whichkey.js`, `cmdline.js` and `caret.js` by script tag, for the same reason as the new tab page. `runtime.onInstalled` with reason `install` opens the page once, never on an update. The `open_quick_start_on_install` setting (default on) turns that off. A first install has no config, so the setting helps managed setups, where the config is there from the start. A user who builds a config after the first install sees the page once regardless.
-- Answered: the `storage.local` read takes 6-10 ms (median 8), so buffering stays and inline registration is not needed. See [spike.md](spike.md), "Phase 1 measurements".
-- Answered: Firefox reloads content scripts into open tabs after `runtime.reload` itself, and the reinjection step stays as a fallback. See [spike.md](spike.md), "Phase 1 measurements".
+- Answered: the `storage.local` read takes 6-10 ms (median 8), so buffering stays and inline registration is not needed. See [firefox-behavior.md](firefox-behavior.md), "Phase 1 measurements".
+- Answered: Firefox reloads content scripts into open tabs after `runtime.reload` itself, and the reinjection step stays as a fallback. See [firefox-behavior.md](firefox-behavior.md), "Phase 1 measurements".
