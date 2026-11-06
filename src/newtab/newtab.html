@@ -17,9 +17,9 @@
     font-family: -apple-system, system-ui, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
     line-height: 1.25;
   }
-  /* One column: the clock block centers in the room the lists leave, and the lists shrink to a scroll area, so they never cover the clock. The page scrolls when both cannot fit. */
+  /* One column: the clock area takes the room above the lists and centers the clock in it, and the lists shrink to a scroll area, so they never cover the clock. The page scrolls when both cannot fit. */
   .desertfox-newtab { display: flex; flex-direction: column; box-sizing: border-box; height: 100vh; overflow-y: auto; padding-bottom: 4.5rem; }
-  .desertfox-newtab .slot-middle-center { margin: auto; }
+  .desertfox-newtab .time-area { flex: 1 0 auto; display: flex; align-items: center; justify-content: center; }
   .desertfox-newtab .time { margin: 1rem; font-size: 24px; text-align: center; font-variant-numeric: tabular-nums; }
   .desertfox-newtab .clock { display: block; width: 100%; max-width: 10em; margin: 0 auto; }
   .desertfox-newtab .clock .bezel { fill: transparent; stroke: var(--desertfox-primary, #1670ad); stroke-width: 2; }
@@ -33,7 +33,9 @@
   .desertfox-newtab .digital-clock .digits { font-family: "DSEG7 Classic", monospace; font-size: min(84px, 22vw); }
   .desertfox-newtab .digital-clock .meridiem { font-size: 0.75em; }
   .desertfox-newtab .clock + .date, .desertfox-newtab .digital-clock + .date { margin-top: 1rem; padding-top: 1rem; border-top: 2px solid var(--desertfox-border, #4e6578); }
-  .desertfox-newtab .lists { flex: 0 1 auto; min-height: 6rem; overflow-y: auto; margin-top: auto; display: flex; flex-wrap: wrap; justify-content: center; align-items: flex-start; gap: 1rem 3rem; padding: 0 1.5rem; }
+  .desertfox-newtab .lists { flex: 0 1 auto; min-height: 6rem; overflow-y: auto; display: flex; flex-wrap: wrap; justify-content: center; align-items: flex-start; gap: 1rem 3rem; padding: 0 1.5rem; }
+  /* With no clock the lists are the first child and sit at the bottom. */
+  .desertfox-newtab .lists:first-child { margin-top: auto; }
   .desertfox-newtab .lists h4 { margin: 0 0 0.25rem; color: var(--desertfox-primary, #85a8cc); font-weight: 500; }
   .desertfox-newtab .lists ul { margin: 0; padding: 0; list-style: none; }
   .desertfox-newtab .lists a { display: block; max-width: 22rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0.125rem 0; color: var(--desertfox-fg-core, #b0c8de); text-decoration: none; }

@@ -67,7 +67,7 @@ export function render_new_tab(body: HTMLElement, settings: WidgetSettings = {},
   const time_block = document.createElement("div");
   time_block.className = "time";
   const slot = document.createElement("div");
-  slot.className = "slot-middle-center";
+  slot.className = "time-area";
   slot.append(time_block);
   page.append(slot);
 
