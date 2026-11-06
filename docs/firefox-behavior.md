@@ -81,3 +81,13 @@ Result: no. A collapsed range in plain text paints nothing. A one-character rang
 These are Firefox defaults that the design relies on. Nobody has measured them in this project yet.
 
 - When focus is in page content and not in a field, `/` starts Quick Find and `'` starts links-only Quick Find. DesertFox cancels both keys outside insert, ignore, hint and cmdline mode, see [Keys and modes](design.md#keys-and-modes).
+
+## Iframe color-scheme and the first paint (issue 243)
+
+Question: why did the command line show white frames on GitHub in dark mode?
+
+Setup: Firefox 159 in the shadow at 1280x720, recorded at 60 fps. GitHub's real CSS and HTML served locally with `data-color-mode="auto"`, a dark preference, 16 opens per run.
+
+Result: an iframe's `color-scheme: normal` resolves through the embedding page's `<meta name="color-scheme">`. GitHub declares `light dark`, so the iframe's used scheme was dark while cmdline.html, with no meta, was light. On that mismatch Firefox paints the frame's canvas opaque in the frame's own scheme, and the whole 80 px holder showed white until the frame reported `resize`. A CSS `color-scheme` on the page's root does not change what `normal` means, so such pages never flashed. A scheme set by script in the frame comes after the first paint and only cut the flashes. `light dark` on the iframe and in a meta in cmdline.html gave 0 white frames in 3 GitHub runs and 2 plain runs, with no added delay.
+
+`prefers-color-scheme` inside the frame follows the iframe's used scheme, and the DesertFox theme switches on that query. So `light` on both sides also stops the flash but shows the light theme in dark mode.
