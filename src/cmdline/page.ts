@@ -20,6 +20,7 @@ import type { Wheel_state } from "./wheel.ts";
 import { create_session } from "./session.ts";
 import type { Effect, Session } from "./session.ts";
 import { create_word_lookup } from "./word_lookup.ts";
+import { follow_theme } from "../shared/theme/apply.ts";
 
 // The port from the host's `start`. Until it arrives there is nobody to tell.
 let host_port: MessagePort | undefined;
@@ -58,7 +59,8 @@ async function open_line(start: Start, port: MessagePort): Promise<void> {
   if (!opened || host_port) return;
   host_port = port;
   const lookup = create_word_lookup(opened.commands, opened.command_aliases);
-  // After the built-in styles, so user CSS wins.
+  // After the built-in styles, so the theme beats the hex defaults and user CSS beats the theme.
+  follow_theme(".oasisfox-cmdline");
   const user_style = document.createElement("style");
   user_style.textContent = opened.css;
   document.head.append(user_style);

@@ -191,7 +191,7 @@ function commands_page(model: HelpModel): HTMLElement[] {
 function styling_page(): HTMLElement[] {
   const [variables_section, classes_section] = STYLING_SECTIONS as [Section, Section];
   return [
-    el("p", undefined, "Set these CSS variables in style.css to restyle OasisFox. A surface reads the roles it needs, so a role no surface reads yet has no visible effect. The class names below are stable."),
+    el("p", undefined, "Set these CSS variables in style.css to restyle OasisFox, on the class of the surface (for example .oasisfox-whichkey { --oasisfox-primary: red; }): a variable on :root or :host alone does not reach inside a surface. A surface reads the roles it needs, so a role no surface reads yet has no visible effect. The class names below are stable."),
     section_heading("styling", variables_section),
     definition_table(STYLE_VARIABLES),
     section_heading("styling", classes_section),

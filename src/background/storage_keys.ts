@@ -1,4 +1,4 @@
-// Every `storage.local` key the background owns. The compiled keymap key lives in `shared/prefix_tree.ts`.
+// Every `storage.local` key the background owns. The compiled keymap key lives in `shared/prefix_tree.ts`, the theme and user CSS keys in `shared/theme/apply.ts`.
 
 // Phase 3 writes the merged config file here when the user imports it.
 export const IMPORTED_CONFIG_STORAGE_KEY = "oasisfox_imported_config";

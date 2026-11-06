@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { oasis_theme } from "../../src/shared/mode_colors.ts";
+import { oasis_theme } from "../../src/shared/theme/load.ts";
 import { OASIS_THEMES } from "../../src/shared/themes.ts";
 import { LIGHT_INTENSITIES } from "../../src/shared/theme/roles.ts";
 import type { RoleColors } from "../../src/shared/theme/roles.ts";

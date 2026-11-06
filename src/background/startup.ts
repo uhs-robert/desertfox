@@ -8,6 +8,7 @@ import { compile_config } from "./compile.ts";
 import { build_config_status, load_config, load_overrides, with_overrides } from "./config_load.ts";
 import type { LoadedConfig } from "./config_load.ts";
 import { DEFAULT_KEYMAP } from "./default_keymap.ts";
+import { THEME_STORAGE_KEY, USER_CSS_STORAGE_KEY } from "../shared/theme/apply.ts";
 import { CONFIG_STATUS_STORAGE_KEY, SETTING_OVERRIDES_STORAGE_KEY, SLOT_TABLE_STORAGE_KEY, WARNINGS_STORAGE_KEY } from "./storage_keys.ts";
 import { apply_slot_plan, plan_slots, slot_table } from "./slots.ts";
 import { no_repeat_memory } from "./repeat_memory.ts";
@@ -49,7 +50,7 @@ async function start(): Promise<MergedConfig> {
 // Compiles the loaded config under the overrides, stores the result and tells the tabs.
 async function publish(step: LoadStep, overrides: SettingOverrides): Promise<MergedConfig> {
   const config = with_overrides(step.loaded.config, overrides);
-  const { compiled, warnings } = compile_config({
+  const { compiled, theme, warnings } = compile_config({
     config,
     default_keymap: DEFAULT_KEYMAP,
     get_command: (command_id) => registry.get(command_id),
@@ -69,6 +70,8 @@ async function publish(step: LoadStep, overrides: SettingOverrides): Promise<Mer
     [WARNINGS_STORAGE_KEY]: all_warnings,
     [CONFIG_STATUS_STORAGE_KEY]: build_config_status(step.loaded.source, step.loaded.config.settings, overrides, `~/.mozilla/managed-storage/${browser.runtime.id}.json`),
     [SLOT_TABLE_STORAGE_KEY]: step.slots.table,
+    [THEME_STORAGE_KEY]: theme,
+    [USER_CSS_STORAGE_KEY]: config.css,
   });
   await tell_tabs_tree_changed();
   return config;

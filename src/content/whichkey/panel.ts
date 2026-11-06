@@ -16,7 +16,7 @@ export const STYLE = `
 .oasisfox-whichkey {
   --bg: var(--oasisfox-bg-core, #0c0e13);
   --fg: var(--oasisfox-fg-core, #f5f5dc);
-  --primary: var(--oasisfox-accent, #7fa3c9);
+  --primary: var(--oasisfox-primary, #7fa3c9);
   --secondary: var(--oasisfox-secondary, #f0e68c);
   --border: color-mix(in srgb, var(--primary) 60%, var(--bg));
   --dim: color-mix(in srgb, var(--fg) 55%, var(--bg));

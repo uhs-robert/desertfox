@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readdirSync } from "node:fs";
 import { test } from "node:test";
-import { oasis_theme } from "../../src/shared/mode_colors.ts";
+import { oasis_theme } from "../../src/shared/theme/load.ts";
 import { OASIS_ROLE_ORDER, OASIS_THEMES } from "../../src/shared/themes.ts";
 import { LIGHT_INTENSITIES, ROLES } from "../../src/shared/theme/roles.ts";
 

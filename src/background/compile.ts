@@ -12,7 +12,9 @@ import { check_args } from "../shared/registry/check_args.ts";
 import type { EnumSources } from "../shared/registry/check_args.ts";
 import { DEFAULT_LIGHT_INTENSITY, DEFAULT_PALETTE } from "../shared/config.ts";
 import { LIGHT_INTENSITIES } from "../shared/theme/roles.ts";
-import { palette_mode_colors } from "../shared/mode_colors.ts";
+import { mode_colors_of_theme } from "../shared/mode_colors.ts";
+import { load_theme } from "../shared/theme/load.ts";
+import type { StoredTheme } from "../shared/theme/apply.ts";
 import { compile_keymap } from "../shared/keys/compiler.ts";
 import { merge_keymaps } from "./keymap_merge.ts";
 
@@ -23,7 +25,7 @@ export type CompileInput = {
   enum_sources: EnumSources;
 };
 
-export type CompileOutput = { compiled: CompiledKeymap; warnings: string[] };
+export type CompileOutput = { compiled: CompiledKeymap; theme: StoredTheme; warnings: string[] };
 
 export function compile_config(input: CompileInput): CompileOutput {
   const keymap = merge_keymaps(input.default_keymap, input.config.keymap);
@@ -38,15 +40,16 @@ export function compile_config(input: CompileInput): CompileOutput {
     warnings.push(`settings: light_intensity ${JSON.stringify(light_intensity)} is not 1 to 5, using ${DEFAULT_LIGHT_INTENSITY}`);
     light_intensity = DEFAULT_LIGHT_INTENSITY;
   }
-  const badge_colors = palette_mode_colors(String(requested_palette), light_intensity, input.config.local_theme);
-  if (!badge_colors) warnings.push(`settings: palette "${String(requested_palette)}" names no theme, using ${DEFAULT_PALETTE}`);
-  compiled.mode_colors = badge_colors ?? palette_mode_colors(DEFAULT_PALETTE, light_intensity)!;
+  const requested_theme = load_theme(String(requested_palette), light_intensity, input.config.local_theme);
+  if (!requested_theme) warnings.push(`settings: palette "${String(requested_palette)}" names no theme, using ${DEFAULT_PALETTE}`);
+  const theme = requested_theme ?? load_theme(DEFAULT_PALETTE, light_intensity)!;
+  compiled.mode_colors = mode_colors_of_theme(theme);
 
   for (const [mode, root] of Object.entries(compiled.modes) as [string, TreeBranch][]) {
     check_branch(root, [], mode, input, warnings);
     if (Object.keys(root.children).length === 0) delete compiled.modes[mode as keyof CompiledKeymap["modes"]];
   }
-  return { compiled, warnings };
+  return { compiled, theme: { dark: theme.dark, light: theme.light }, warnings };
 }
 
 // Checks and prunes in place.

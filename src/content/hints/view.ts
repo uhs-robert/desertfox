@@ -6,19 +6,19 @@ import type { Found } from "./candidates.ts";
 
 const MESSAGE_MS = 1500;
 
-// Same mapping as the which-key panel: yellow secondary for the keys, blue accent for the frame.
+// A filled label in the brand color. The 1px border keeps the box size of the older outlined label. Typed letters fade to half the text color.
 // Defaults are var() fallbacks, never declarations: a declaration here would shadow a value the page or host sets.
 export const STYLE = `
 .oasisfox-hints {
-  --primary: var(--oasisfox-accent, #7fa3c9);
-  --secondary: var(--oasisfox-secondary, #f0e68c);
+  --primary: var(--oasisfox-primary, #7fa3c9);
+  --label-text: var(--oasisfox-bg-core, #0c0e13);
   font: bold 12px/1 ui-monospace, monospace;
 }
 .oasisfox-hint {
   position: fixed; padding: 2px 4px; border-radius: 3px; text-transform: uppercase;
-  background: var(--oasisfox-bg-core, #0c0e13); color: var(--secondary); border: 1px solid var(--primary); box-shadow: 0 1px 3px #0008;
+  background: var(--primary); color: var(--label-text); border: 1px solid var(--primary); box-shadow: 0 1px 3px #0008;
 }
-.oasisfox-hint b { color: var(--oasisfox-fg-comment, #69809d); font-weight: inherit; }
+.oasisfox-hint b { opacity: .6; font-weight: inherit; }
 .oasisfox-hint-message {
   position: fixed; left: 50%; bottom: 48px; transform: translateX(-50%); padding: 8px 12px;
   background: var(--oasisfox-bg-core, #0c0e13); color: var(--oasisfox-fg-core, #f5f5dc); font: var(--oasisfox-font, 14px system-ui, sans-serif); border-radius: var(--oasisfox-radius, 6px);

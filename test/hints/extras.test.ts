@@ -139,7 +139,7 @@ async function page_with(texts: string[]) {
     };
     disconnect = () => {};
   };
-  globals.browser = { storage: { local: { get: async () => ({}) } }, runtime: { sendMessage: async (message: unknown) => {
+  globals.browser = { storage: { local: { get: async () => ({}) }, onChanged: { addListener: () => {} } }, runtime: { sendMessage: async (message: unknown) => {
     const is_record = (message as { type?: string }).type === "record_repeat";
     (is_record ? repeat_records : sent).push(message);
     return is_record ? undefined : sends_held?.();
