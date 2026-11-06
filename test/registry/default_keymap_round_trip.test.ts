@@ -15,7 +15,7 @@ function steps_of(binding: KeyBinding | null): { id: string; args?: Record<strin
 test("every default-keymap binding prints to text that parses back to the same checked args", () => {
   let count = 0;
   for (const [mode, bindings] of Object.entries(DEFAULT_KEYMAP)) {
-    if (typeof bindings !== "object" || mode === "group_names" || mode === "search_keys" || mode === "container_keys" || mode === "site_keys") continue;
+    if (typeof bindings !== "object" || mode === "group_names" || mode === "search_keys" || mode === "container_keys" || mode === "site_keys" || mode === "modifiers") continue;
     for (const [keys, binding] of Object.entries(bindings as Record<string, KeyBinding | null>)) {
       for (const step of steps_of(binding)) {
         const command = registry.get(step.id)!;

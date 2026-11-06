@@ -43,6 +43,16 @@ function keymap_schema(commands: CommandMeta[]): Schema {
         description: "Last key to the search engines it uses, one per site. s/<key> searches with the first engine whose hosts list the page",
         additionalProperties: { type: "array", minItems: 1, items: { type: "string", minLength: 1 } },
       },
+      modifiers: {
+        type: "object",
+        description: "Key sequence of a modifier to the args it adds to a variant of each key in its group, for example ;r = { rapid = true }. label names the group",
+        additionalProperties: {
+          type: "object",
+          properties: { label: { type: "string", minLength: 1 } },
+          additionalProperties: { type: ["string", "number", "boolean"] },
+          minProperties: 1,
+        },
+      },
       group_names: { ...string_map, description: "Key sequence of a group to the name which-key shows for it" },
     },
     additionalProperties: false,
