@@ -85,7 +85,6 @@ if (!page.desertfox_cmdline_ready) {
     holder.setAttribute("popover", "manual");
     holder.setAttribute(LAYER_ATTRIBUTE, String(LAYERS.command_line));
     holder.style.cssText = `all:initial;position:fixed;left:0;right:0;bottom:0;height:${BAR_HEIGHT};z-index:${LAYERS.command_line};`;
-    holder.setAttribute("data-desertfox-layer", String(LAYERS.command_line));
     const frame = document.createElement("iframe");
     frame.style.cssText = "all:initial;display:block;width:100%;height:100%;border:0;color-scheme:normal;";
     // Before the frame joins the page, so its only load is cmdline.html.
@@ -119,7 +118,7 @@ if (!page.desertfox_cmdline_ready) {
       if (open !== current || !current.port || !current.page_opened) return;
       clearTimeout(current.check_timer);
       current.check_timer = setTimeout(() => open === current && close(), CHECK_TIMEOUT_MS);
-      current.port.postMessage(wrap<HostToPage>({ kind: "check" }));
+      send(current.port, { kind: "check" });
     });
     holder.attachShadow({ mode: "closed" }).append(frame);
     // On the root, where `mount_surface` looks for hosts, and never moved again: moving the holder reloads the frame.
@@ -129,7 +128,7 @@ if (!page.desertfox_cmdline_ready) {
     holder.addEventListener(RESTACKED_EVENT, () => {
       if (open !== current || !current.page_opened) return;
       current.frame.focus();
-      current.port?.postMessage(wrap<HostToPage>({ kind: "refocus" }));
+      send(current.port, { kind: "refocus" });
     });
     current.removal_watch.observe(document, { childList: true, subtree: true });
     open = current;
@@ -147,8 +146,12 @@ if (!page.desertfox_cmdline_ready) {
     answered();
   }
 
+  const send = (port: MessagePort | undefined, message: HostToPage) => port?.postMessage(wrap<HostToPage>(message));
+
   const start = (current: Open, ticket: string) => {
     const channel = new MessageChannel();
+    // A late answer for a line that is gone goes nowhere.
+    const tell = (message: HostToPage) => open === current && send(current.port, message);
     channel.port1.onmessage = (event: MessageEvent) => {
       const message = unwrap<PageToHost>(event.data);
       if (open !== current || !message) return;
@@ -157,7 +160,7 @@ if (!page.desertfox_cmdline_ready) {
         clearTimeout(current.timer);
         current.page_opened = true;
         current.frame.focus();
-        channel.port1.postMessage(wrap<HostToPage>({ kind: "focused" }));
+        send(channel.port1, { kind: "focused" });
       } else if (message.kind === "here") clearTimeout(current.check_timer);
       else if (message.kind === "close") close();
       else if (message.kind === "resize" && Number.isFinite(message.height)) current.holder.style.height = `${Math.min(message.height, window.innerHeight)}px`;
@@ -165,10 +168,10 @@ if (!page.desertfox_cmdline_ready) {
       else if (message.kind === "list_headings") {
         current.asked_headings = true;
         // The hints bundle may still be loading, so the line can close first. Its `heading.clear` then runs after this handler, and the late answer goes nowhere.
-        const report = (items: HeadingItem[]) => open === current && current.port?.postMessage(wrap<HostToPage>({ kind: "headings", items }));
+        const report = (items: HeadingItem[]) => tell({ kind: "headings", items });
         void host.run_command("heading.list", "hints", { report }).then((outcome) => outcome.ok || report([]));
       } else if (message.kind === "find_text") {
-        const report = (status: string) => open === current && current.port?.postMessage(wrap<HostToPage>({ kind: "find_status", text: status }));
+        const report = (status: string) => tell({ kind: "find_status", text: status });
         host.run_command("find.live", "caret", { text: message.text, report });
       } else if (message.kind === "find_commit") {
         current.committed = true;
@@ -203,7 +206,7 @@ if (!page.desertfox_cmdline_ready) {
       if (!open) return "pass";
       // Here and not in the page, so Escape closes even when the page or its port is gone.
       if (token === "<Escape>") close();
-      else if (open.port) open.port.postMessage(wrap<HostToPage>({ kind: "token", token }));
+      else if (open.port) send(open.port, { kind: "token", token });
       else open.typed.push(token);
       return "handled";
     },
