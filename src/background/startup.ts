@@ -87,14 +87,16 @@ export function change_edits(decide: (current: SettingEdits, config: MergedConfi
     const before = await load_edits();
     const next = decide(before, config);
     if (next === undefined) return;
-    await store_edits(next);
     try {
+      // Inside the try: the saved and temp layers are two writes, and one can land while the other fails.
+      await store_edits(next);
       // Assigned after the publish succeeds, so a failed one leaves the readers the last good config.
       const published = await publish(await (load_step as Promise<LoadStep>), next);
       current_config = Promise.resolve(published);
     } catch (error) {
       // Pages read the stored edits themselves, so a failed publish must not leave them ahead of the config.
-      await store_edits(before);
+      // Best effort, so a failed rollback never hides the error that caused it.
+      await store_edits(before).catch(() => undefined);
       // Best effort: the failed publish may have written the keymap and status for `next` already.
       await publish(await (load_step as Promise<LoadStep>), before).catch(() => undefined);
       throw error;

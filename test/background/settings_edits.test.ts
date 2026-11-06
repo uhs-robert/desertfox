@@ -226,3 +226,21 @@ test("a bad setting in the config file is dropped with a warning, so the default
   assert.ok(warnings.some((warning) => /setting light_intensity skipped, expected a whole number from 1 to 5/.test(warning)));
   assert.ok(warnings.some((warning) => /setting nope skipped, no setting has that name/.test(warning)));
 });
+
+test("a failed write of one layer puts both layers back", async () => {
+  const file = { value: managed({}) };
+  const { local, session } = install_fake_browser(file);
+  const startup = await fresh_startup("half_write");
+  await change_temp(startup, () => ({ newtab_date: false }));
+  const local_area = (globalThis as unknown as { browser: { storage: { local: { set: (values: Record<string, unknown>) => Promise<void> } } } }).browser.storage.local;
+  const working = local_area.set;
+  local_area.set = async (values) => {
+    if (SAVED_SETTINGS_STORAGE_KEY in values && (values[SAVED_SETTINGS_STORAGE_KEY] as Record<string, unknown>).hint_letters === "xy") throw new Error("disk full");
+    return working(values);
+  };
+  await assert.rejects(startup.change_edits(() => ({ saved: { hint_letters: "xy" }, temp: { which_key_delay_ms: 7 } })), /disk full/);
+  local_area.set = working;
+  assert.deepEqual(session[TEMP_SETTINGS_STORAGE_KEY], { newtab_date: false });
+  assert.deepEqual(local[SAVED_SETTINGS_STORAGE_KEY], {});
+  assert.deepEqual((await startup.get_config()).settings, { newtab_date: false });
+});
