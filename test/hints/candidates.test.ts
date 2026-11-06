@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { Found } from "../../src/content/hints/candidates.ts";
-import { keep_text_matches, collect, drop_redundant_weak, keep_visible_deduplicated, has_click_sign, has_own_text, NO_OWN_TEXT, has_text, is_image, make_weak_test, query_for } from "../../src/content/hints/candidates.ts";
+import { keep_text_matches, collect, drop_redundant_weak, keep_visible_deduplicated, has_click_sign, has_own_text, NO_OWN_TEXT, has_text, is_image, is_pickable_frame, make_weak_test, query_for } from "../../src/content/hints/candidates.ts";
 
 type Fake = { name: string; local: string; shadow?: Fake[]; frame?: Fake[] | "cross_origin"; href?: boolean };
 
@@ -281,4 +281,28 @@ test("text keeps the links whose text holds it", () => {
   const item = (local: string, text: string, href?: string) => ({ element: { localName: local, innerText: text, href } as unknown as Element, frames: [] });
   const found = [item("h2", "Introduction"), item("a", "Intro link", "https://example.com/"), item("a", "Intro without address")];
   assert.deepEqual(keep_text_matches(found, "intro").map((entry) => (entry.element as unknown as { innerText: string }).innerText), ["Intro link"]);
+});
+
+test("the frames filter takes iframe and frame elements that pass the size test", () => {
+  const query = query_for("frames", undefined);
+  assert.equal(query.selector, "iframe, frame");
+  assert.equal(typeof query.test, "function");
+});
+
+test("is_pickable_frame drops a frame under 24 px, and keeps a frame of any site from 24 px", () => {
+  assert.equal(is_pickable_frame(sized(300, { localName: "iframe" })), true);
+  assert.equal(is_pickable_frame(sized(24, { localName: "frame" })), true);
+  assert.equal(is_pickable_frame(sized(1, { localName: "iframe" })), false);
+  assert.equal(is_pickable_frame(sized(23, { localName: "iframe" })), false);
+});
+
+test("is_pickable_frame skips the frame of the command line layer", () => {
+  const holder = (layer: boolean) => ({ getRootNode: () => ({ host: { hasAttribute: (name: string) => layer && name === "data-desertfox-layer" } }) });
+  assert.equal(is_pickable_frame(sized(300, { localName: "iframe", ...holder(true) })), false);
+  assert.equal(is_pickable_frame(sized(300, { localName: "iframe", ...holder(false) })), true);
+});
+
+test("collect lists a frame of another site as a candidate and does not enter it", () => {
+  const page = root_of([{ name: "embed", local: "a", href: true, frame: "cross_origin" }, { name: "inner", local: "a", href: true }]);
+  assert.deepEqual(names(collect(page, { selector: "links" })), ["embed", "inner"]);
 });

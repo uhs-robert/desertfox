@@ -111,6 +111,13 @@ export function start_server() {
       const frame = '<iframe id="inner" src="/page?id=inner" style="width:300px;height:200px"></iframe>';
       return response.end(page(`framed ${id}`, frame, "<script>addEventListener('load', () => document.getElementById('inner').contentWindow.focus())</script>"));
     }
+    if (url.pathname === "/frame_inner") return response.end(page(`frame_inner ${id}`, tall_filler));
+    if (url.pathname === "/frames") {
+      // A same-origin frame, a frame from another origin (localhost is not 127.0.0.1), and a 10 px tracking frame from another origin too. The top page is tall, so a scroll of it shows where the keys went.
+      const port = request.socket.localPort;
+      const frames = `<iframe id="same" src="/frame_inner?id=${id}_same" style="display:block;width:300px;height:200px"></iframe><iframe id="cross" src="http://localhost:${port}/frame_inner?id=${id}_cross" style="display:block;width:300px;height:200px"></iframe><iframe id="tiny" src="http://localhost:${port}/frame_inner?id=${id}_tiny" style="display:block;width:10px;height:10px"></iframe>`;
+      return response.end(page(`frames ${id}`, frames + tall_filler));
+    }
     if (url.pathname === "/hints") {
       const covered = '<div style="position:relative;width:200px"><a href="/page?id=hint_covered">covered</a><div style="position:absolute;inset:0;background:#fff"></div></div>';
       const links = `<a href="/page?id=hint_hidden" style="display:none">hidden</a>${covered}<p><a href="/page?id=hint_one">one</a></p><p><a href="/page?id=hint_two">two</a></p>`;

@@ -1,11 +1,12 @@
 // Finds the elements a hint filter can label. Visibility is decided later, in visible.ts.
 
+import { LAYER_ATTRIBUTE } from "../../shared/layers.ts";
 import { is_scroll_box } from "../scroll_box.ts";
 import { element_address, is_image_element, takes_typing } from "./actions.ts";
 import { keep_visible, scroll_clips_of } from "./visible.ts";
 import type { PageProbe, Rect } from "./visible.ts";
 
-export type HintFilter = "all" | "clickable" | "buttons" | "inputs" | "links" | "prose" | "scrollable" | "media" | "images" | "custom";
+export type HintFilter = "all" | "clickable" | "buttons" | "inputs" | "links" | "prose" | "scrollable" | "media" | "images" | "frames" | "custom";
 
 const TEXT_FIELDS = 'input:not([type=hidden]):not([disabled]), textarea:not([disabled]), select:not([disabled]), [contenteditable=""], [contenteditable="true"]';
 const LINKS = "a[href]";
@@ -49,6 +50,11 @@ export const is_image = (element: Element): boolean => {
   return window_of(element).getComputedStyle(element).backgroundImage.includes("url(");
 };
 
+const is_own_layer_frame = (element: Element): boolean => (element.getRootNode?.() as ShadowRoot | undefined)?.host?.hasAttribute?.(LAYER_ATTRIBUTE) === true;
+
+// A frame of the page that is big enough to hold something. A frame from another site gets its label too: the pick focuses it from the outside.
+export const is_pickable_frame = (element: Element): boolean => image_has_size(element) && !is_own_layer_frame(element);
+
 const QUERIES: Record<Exclude<HintFilter, "custom">, Query> = {
   all: { selector: ALL },
   clickable: { selector: CLICKABLE },
@@ -58,6 +64,7 @@ const QUERIES: Record<Exclude<HintFilter, "custom">, Query> = {
   prose: { selector: "*", test: has_own_text },
   media: { selector: "video, audio" },
   images: { selector: "*", test: is_image },
+  frames: { selector: "iframe, frame", test: is_pickable_frame },
   scrollable: { selector: "*", test: (element) => !takes_typing(element as HTMLElement) && is_scroll_box(element) },
 };
 
@@ -74,7 +81,7 @@ const MAX_FRAME_DEPTH = 4;
 const shadow_root_of = (element: Element): ShadowRoot | null =>
   (element as Element & { openOrClosedShadowRoot?: ShadowRoot | null }).openOrClosedShadowRoot ?? element.shadowRoot;
 
-// A frame from another origin throws, and the content script of that frame hints it by itself.
+// A frame from another origin throws. The walk stops there, so a frame inside it gets no label from this page: focus the outer frame, then pick again.
 function document_of_frame(frame: Element): Document | null {
   try {
     return (frame as HTMLIFrameElement).contentDocument;

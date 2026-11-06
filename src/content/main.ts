@@ -17,7 +17,7 @@ import { wire_mode_reports } from "./mode_report.ts";
 import { page_mode } from "./page_mode.ts";
 import { counted_invocations, run_content_steps, run_in_order } from "./run_content.ts";
 import { read_context_source } from "./context.ts";
-import { focus_page_content } from "./handlers/focus.ts";
+import { focus_page_content, start_on_first_focus } from "./handlers/focus.ts";
 import { blur_focused_element } from "./handlers/page.ts";
 
 // Until the tree is read the setting is unknown, and the default applies.
@@ -31,7 +31,7 @@ function refresh_mode_indicator(): void {
 
 const script_started_ms = performance.now();
 
-// A cross-origin frame cannot reach the top document. The manifest injects into all frames.
+// A cross-origin frame cannot reach the top document. The manifest injects into all frames, and such a frame starts on its first focus.
 function can_reach_top_document(): boolean {
   try {
     return Boolean(window.top?.document);
@@ -245,7 +245,9 @@ function start(): void {
 // A second injection into the same page must not add a second set of listeners.
 const LOADED_FLAG = "desertfox_content_loaded";
 const loaded_flags = window as unknown as Record<string, boolean>;
-if (can_reach_top_document() && !loaded_flags[LOADED_FLAG]) {
+function start_once(): void {
+  if (loaded_flags[LOADED_FLAG]) return;
   loaded_flags[LOADED_FLAG] = true;
   start();
 }
+if (!loaded_flags[LOADED_FLAG]) start_on_first_focus(start_once, window, can_reach_top_document() || document.hasFocus());

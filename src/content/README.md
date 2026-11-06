@@ -1,6 +1,6 @@
 # content
 
-The content script. It runs at `document_start` in the top frame and in same-origin frames.
+The content script. It runs at `document_start` in every frame. A frame that cannot reach the top document (another site) starts on its first focus (`start_on_first_focus` in `handlers/focus.ts`).
 
 - `main.ts`: the capture listener, the storage read, messages and mode wiring. Not unit tested, it needs a DOM.
 - `key_flow.ts`: decides per key token whether the page keeps the key, hands tokens to the sink of the current mode, runs `browser` chords, holds plain keys until the keymap is read or a bundle has loaded and replays them in order. Pure.
