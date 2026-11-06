@@ -75,11 +75,14 @@ export function make_tab_handlers(deps: TabDeps) {
     const subject = tabs.find((tab) => tab.id === (named?.id ?? require_tab_id(ctx)));
     if (!subject) throw new RuntimeRefusal("the tab is gone");
     const unpinned = tabs.filter((tab) => !tab.pinned);
+    // The site is read in the line's window, though a named subject may sit in another one.
+    const line_window_id = ctx.window_id ?? window_id;
+    const site_pool = line_window_id === window_id ? tabs : await deps.tabs_in_window(line_window_id);
     const ids = (
       args.side === "none"
         ? [subject, ...unpinned.filter((tab) => tab.index > subject.index && tab.index < subject.index + args.count)]
         : args.side === "site"
-          ? site_tabs(tabs, subject)
+          ? [subject, ...site_tabs(site_pool, subject).filter((tab) => tab.id !== subject.id)]
           : unpinned.filter((tab) => (args.side === "all_before" ? tab.index < subject.index : tab.index > subject.index))
     ).map((tab) => tab.id);
     const result = await set_unloaded(deps.discard, ids, unloaded, ctx.tab_id === undefined ? {} : { leave_active: ctx.tab_id });
@@ -139,7 +142,9 @@ export function make_tab_handlers(deps: TabDeps) {
       const { tabs, current } = await position_of(ctx);
       if (args.side === "site") {
         const closing = site_tabs(tabs, current).map((tab) => tab.id);
-        const outside = nearest_tab_outside(tabs, current.index, closing);
+        // A pinned tab of the site stays open but must not take focus: the focus leaves the site.
+        const site = site_key(current.url ?? "").key;
+        const outside = nearest_tab(tabs, current.index, (tab) => site_key(tab.url ?? "").key !== site);
         // Focus moves first, as for one tab, so Firefox does not pick its own tab after the close.
         if (outside) await deps.activate(outside.id);
         await deps.remove(closing);
@@ -228,10 +233,10 @@ export function site_tabs(tabs: TabInfo[], subject: TabInfo): TabInfo[] {
   return tabs.filter((tab) => tab.id === subject.id || (!tab.pinned && site_key(tab.url ?? "").key === key));
 }
 
-// The tab nearest to `index` that is not in `excluded`. A tie goes to the tab after.
-export function nearest_tab_outside(tabs: TabInfo[], index: number, excluded: readonly number[]): TabInfo | undefined {
+// The tab nearest to `index` among those `eligible` accepts. A tie goes to the tab after.
+export function nearest_tab(tabs: TabInfo[], index: number, eligible: (tab: TabInfo) => boolean): TabInfo | undefined {
   return tabs
-    .filter((tab) => !excluded.includes(tab.id))
+    .filter(eligible)
     .reduce<TabInfo | undefined>((best, tab) => {
       const distance = Math.abs(tab.index - index);
       const best_distance = best && Math.abs(best.index - index);

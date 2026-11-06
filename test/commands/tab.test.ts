@@ -265,7 +265,7 @@ function make_unload(tabs: TabInfo[], listed_tabs: ListedTab[] = []) {
       states.get(id)!.discarded = false;
     },
   };
-  return { handlers: make_tab_handlers(deps), log, states, toast_tabs };
+  return { handlers: make_tab_handlers(deps), log, states, toast_tabs, deps };
 }
 const unload_args = (over: Partial<{ tab: string; side: "none" | "all_before" | "all_after" | "site"; count: number }> = {}) => ({ tab: "", side: "none" as const, count: 1, ...over });
 
@@ -366,7 +366,7 @@ const SITE_TABS = () =>
 test("tab.close with site focuses the nearest tab outside the site, then closes the unpinned tabs of the site", async () => {
   const { handlers, log } = make_fake(SITE_TABS());
   await handlers.close(ctx_at(101), { side: "site" });
-  assert.deepEqual(log, ["activate 102", "remove 100,101"]);
+  assert.deepEqual(log, ["activate 103", "remove 100,101"]);
 });
 
 test("tab.close with site on a pinned tab still closes that tab and keeps its pinned neighbors", async () => {
@@ -403,4 +403,18 @@ test("a count is invalid with side=site for tab.unload and tab.load, and site is
     assert.equal(check_args(registry.get(id)!, { side: "site" }, {}).ok, true);
   }
   assert.equal(check_args(registry.get("tab.close")!, { side: "site" }, {}).ok, true);
+});
+
+test("tab.unload with site and a named tab in another window selects the site in the line's window", async () => {
+  const line_tabs = SITE_TABS();
+  const other_tab: TabInfo = { ...make_tabs(1)[0]!, id: 200, url: "https://github.com/z" };
+  const listed_tabs = [{ ...listed(200, 9, "Other"), window_id: 2 }];
+  const { handlers, log, deps } = make_unload(line_tabs, listed_tabs);
+  deps.tabs_in_window = async (window_id) => (window_id === 2 ? [other_tab] : line_tabs);
+  const read_tab = deps.discard.read_tab;
+  deps.discard.read_tab = async (id) => (id === 200 ? { id, window_id: 2, index: 0, active: false, audible: false, discarded: false } : read_tab(id));
+  const discard = deps.discard.discard;
+  deps.discard.discard = async (id) => (id === 200 ? void log.push("discard 200") : discard(id));
+  await handlers.unload(ctx_at(100), unload_args({ tab: "9", side: "site" }));
+  assert.deepEqual(log.filter((entry) => entry.startsWith("discard")).sort(), ["discard 100", "discard 101", "discard 200"].sort());
 });
