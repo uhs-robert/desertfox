@@ -11,14 +11,14 @@ function install_fake_browser(file_settings: Record<string, unknown>) {
   const local: Record<string, unknown> = {};
   const session: Record<string, unknown> = {};
   const state = { fail_session_writes: 0 };
-  const area = (store: Record<string, unknown>, before_set?: () => void) => ({
+  const area = (store: Record<string, unknown>, before_set?: () => void | Promise<void>) => ({
     get: async (key?: string | string[]) => {
       const keys = key === undefined ? Object.keys(store) : [key].flat();
       return Object.fromEntries(keys.filter((name) => name in store).map((name) => [name, structuredClone(store[name])]));
     },
     set: async (values: Record<string, unknown>) => {
       await new Promise((resolve) => setTimeout(resolve, 1));
-      before_set?.();
+      await before_set?.();
       Object.assign(store, structuredClone(values));
     },
   });
@@ -28,9 +28,11 @@ function install_fake_browser(file_settings: Record<string, unknown>) {
       storage: {
         local: area(local),
         managed: { get: async () => ({ format_version: CONFIG_FORMAT_VERSION, settings: file_settings }) },
-        session: area(session, () => {
+        session: area(session, async () => {
           if (state.fail_session_writes > 0) {
             state.fail_session_writes--;
+            // A window in which the saved layer holds the new value and the write has not failed yet.
+            await new Promise((resolve) => setTimeout(resolve, 20));
             throw new Error("session storage down");
           }
         }),
@@ -129,13 +131,14 @@ test("changes that arrive together all land, each on what the others wrote", asy
   assert.deepEqual(local[SAVED_SETTINGS_STORAGE_KEY], { hint_letters: "xy", newtab_date: false, which_key_delay_ms: 7 });
 });
 
-test("a failed write puts both layers back and the reply is a rejection", async () => {
+test("a failed write puts both layers back and the reply is a failure, not a rejection", async () => {
   const { messages, local, session, state } = await make();
   await messages.change({ type: "change_setting", name: "newtab_date", action: "set", value: false });
   await messages.change({ type: "change_setting", name: "hint_letters", action: "set", value: "qw", layer: "temp" });
   // The saved layer's write lands, then the temp layer's write fails. The rollback's writes work.
   state.fail_session_writes = 1;
-  await assert.rejects(messages.change({ type: "change_setting", name: "hint_letters", action: "set", value: "zx" }), /session storage down/);
+  const answer = await messages.change({ type: "change_setting", name: "hint_letters", action: "set", value: "zx" });
+  assert.deepEqual(answer, { ok: false, message: "session storage down" });
   assert.deepEqual(local[SAVED_SETTINGS_STORAGE_KEY], { newtab_date: false });
   assert.deepEqual(session[TEMP_SETTINGS_STORAGE_KEY], { hint_letters: "qw" });
 });
@@ -154,6 +157,40 @@ test("the list gives every setting with value, top layer, kind and allowed value
   assert.equal(row("newtab_clock").kind, "enum");
   assert.equal(row("newtab_links").settable, false);
   assert.equal(row("home_page").value, undefined);
+});
+
+test("an unknown action or layer is refused before anything is planned", async () => {
+  const { messages, local, session } = await make();
+  const bad_action = await messages.change({ type: "change_setting", name: "newtab_date", action: "toggle" as "set", value: false });
+  const bad_layer = await messages.change({ type: "change_setting", name: "newtab_date", action: "set", value: false, layer: "perm" as "temp" });
+  assert.deepEqual(bad_action, { ok: false, message: 'unknown action "toggle"' });
+  assert.deepEqual(bad_layer, { ok: false, message: 'unknown layer "perm"' });
+  assert.equal(local[SAVED_SETTINGS_STORAGE_KEY], undefined);
+  assert.equal(session[TEMP_SETTINGS_STORAGE_KEY], undefined);
+});
+
+test("an enum list keeps the order it was sent in", async () => {
+  const { messages, local } = await make();
+  const order = ["history", "bookmarks"];
+  const answer = await messages.change({ type: "change_setting", name: "open_completion", action: "set", value: order });
+  assert.ok(answer.ok);
+  assert.deepEqual(answer.setting.value, order);
+  assert.deepEqual((local[SAVED_SETTINGS_STORAGE_KEY] as Record<string, unknown>).open_completion, order);
+  const reversed = await messages.change({ type: "change_setting", name: "open_completion", action: "set", value: [...order].reverse() });
+  assert.ok(reversed.ok);
+  assert.deepEqual(reversed.setting.value, [...order].reverse());
+});
+
+test("a list during a change that then fails does not show the unpublished value", async () => {
+  const { messages, state } = await make();
+  state.fail_session_writes = 1;
+  const changing = messages.change({ type: "change_setting", name: "newtab_date", action: "set", value: false });
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  const listing = messages.list();
+  assert.equal((await changing).ok, false);
+  const answer = await listing;
+  assert.ok(answer.ok);
+  assert.equal(answer.settings.find((row) => row.name === "newtab_date")!.top_layer, "default");
 });
 
 const ORIGIN = "moz-extension://abc/";

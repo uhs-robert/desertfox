@@ -3,7 +3,7 @@
 import { plan_set_value, plan_unset } from "../commands/settings.ts";
 import type { ConfigSource } from "./config_load.ts";
 import { build_config_status } from "./config_load.ts";
-import { build_setting_list } from "../help/config_view.ts";
+import { build_setting_list } from "../shared/setting_list.ts";
 import type { MergedConfig, SettingEdits, Settings } from "../shared/config.ts";
 import type { ChangeSetting, ChangeSettingAnswer, ListSettingsAnswer } from "../shared/messages.ts";
 import { check_args } from "../shared/registry/check_args.ts";
@@ -28,33 +28,50 @@ function refusal_of(command_id: "settings.set" | "settings.unset", name: unknown
   return checked.ok ? undefined : checked.error;
 }
 
+const failure = (error: unknown): { ok: false; message: string } => ({ ok: false, message: error instanceof Error ? error.message : String(error) });
+
 export function create_settings_messages(deps: SettingsMessageDeps) {
+  // Reads the edits inside the change queue, so a change still writing or rolling back is not shown half done.
   async function list(): Promise<ListSettingsAnswer> {
-    const { source, config_settings, edits } = await deps.read_layers();
-    return { ok: true, settings: build_setting_list(build_config_status(source, config_settings, edits, "")) };
+    try {
+      let edits: SettingEdits | undefined;
+      await deps.change_edits((current) => {
+        edits = current;
+        return undefined;
+      });
+      const { source, config_settings } = await deps.read_layers();
+      return { ok: true, settings: build_setting_list(build_config_status(source, config_settings, edits!, "")) };
+    } catch (error) {
+      return failure(error);
+    }
   }
 
   async function change(request: ChangeSetting): Promise<ChangeSettingAnswer> {
-    const { name, action } = request;
+    const { name, action, layer = "saved" } = request;
+    if (action !== "set" && action !== "reset") return { ok: false, message: `unknown action ${JSON.stringify(action)}` };
+    if (layer !== "saved" && layer !== "temp") return { ok: false, message: `unknown layer ${JSON.stringify(layer)}` };
     const refusal = refusal_of(action === "reset" ? "settings.unset" : "settings.set", name);
     if (refusal !== undefined) return { ok: false, message: refusal };
     if (typeof name !== "string" || !is_setting_name(name)) return { ok: false, message: `unknown setting ${String(name)}` };
     const spec = SETTING_SPECS[name];
     if (action === "set" && !spec.check(request.value)) return { ok: false, message: `${name}: expected ${spec.expectation}` };
 
-    const layer = request.layer === "temp" ? "temp" : "saved";
     let message = "";
     let final_edits: SettingEdits | undefined;
-    await deps.change_edits((current, config) => {
-      const plan = action === "reset" ? plan_unset(name as keyof Settings, false, current) : plan_set_value(name as keyof Settings, request.value, layer, current, config);
-      message = plan.toast.message;
-      final_edits = plan.next ?? current;
-      return plan.next;
-    });
-    // The row comes from the edits this change left, so a later change in the queue does not alter this reply.
-    const { source, config_settings } = await deps.read_layers();
-    const status = build_config_status(source, config_settings, final_edits!, "");
-    return { ok: true, setting: build_setting_list(status).find((row) => row.name === name)!, message };
+    try {
+      await deps.change_edits((current, config) => {
+        const plan = action === "reset" ? plan_unset(name as keyof Settings, false, current) : plan_set_value(name as keyof Settings, request.value, layer, current, config);
+        message = plan.toast.message;
+        final_edits = plan.next ?? current;
+        return plan.next;
+      });
+      // The row comes from the edits this change left, so a later change in the queue does not alter this reply.
+      const { source, config_settings } = await deps.read_layers();
+      const status = build_config_status(source, config_settings, final_edits!, "");
+      return { ok: true, setting: build_setting_list(status).find((row) => row.name === name)!, message };
+    } catch (error) {
+      return failure(error);
+    }
   }
 
   return { list, change };

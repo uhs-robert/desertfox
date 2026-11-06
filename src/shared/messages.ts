@@ -4,6 +4,8 @@
 import type { BundleName } from "./bundles.ts";
 import type { CommandMeta, Mode } from "./command.ts";
 import type { WhichKeyBorder } from "./config.ts";
+import type { SettingTag } from "./setting_list.ts";
+import type { SettingRow } from "./settings_table.ts";
 import type { BoundInvocation, Invocation } from "./invocation.ts";
 
 // Why a command did not run. The content script shows `message` as a toast,
@@ -208,8 +210,8 @@ export type ListSettings = {
 export type SettingListRow = {
   name: string;
   value?: unknown;
-  top_layer: "settings.toml" | "saved" | "temp" | "default";
-  kind: string;
+  top_layer: SettingTag | "default";
+  kind: SettingRow["kind"];
   settable: boolean;
   expectation: string;
   allowed?: unknown[];
