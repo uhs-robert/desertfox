@@ -314,7 +314,10 @@ export function create_tab_model(deps: TabModelDeps) {
       const fresh = entry_of(tab, window_numbers, containers);
       if (!current || !fresh) return;
       let changed = false;
+      // A tab unloaded while it still loads reads about:blank with no title. The row keeps the address it had.
+      const unloaded_blank = fresh.row.discarded && fresh.row.url === "about:blank";
       for (const field of UPDATABLE) {
+        if (unloaded_blank && (field === "title" || field === "url" || field === "site")) continue;
         if (current.row[field] !== fresh.row[field]) {
           (current.row as Record<string, unknown>)[field] = fresh.row[field];
           changed = true;

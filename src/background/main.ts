@@ -51,7 +51,7 @@ const cmdline = create_cmdline_service({
   sources: async () => ({ search_engines: await get_search_engine_names(), containers: await container_names() }),
   page_config: async () => {
     const config = await get_config();
-    return { commands: registry.list().map(command_meta), help_ids: [...built_in_ids], command_aliases: config.command_aliases, prompt: effective_settings(config.settings).cmdline_prompt };
+    return { commands: registry.list().map(command_meta), help_ids: [...built_in_ids], command_aliases: config.command_aliases, prompt: effective_settings(config.settings).cmdline_prompt, all_windows: effective_settings(config.settings).completion_all_windows };
   },
 });
 
@@ -68,7 +68,6 @@ const complete_items = create_complete_items({
   ...browser_complete_items_deps,
   previous_tab: previous_tabs.previous_of,
   is_opener: cmdline.is_opener,
-  all_windows: async () => effective_settings((await get_config()).settings).completion_all_windows,
   search_engines: async () => (await get_config()).search_engines,
   page_of,
   read_tab: (tab_id) => browser.tabs.get(tab_id).catch(() => undefined),
@@ -97,7 +96,7 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
   if (request?.type === "load_bundle") return bundle_loader.answer(sender, request.name);
   if (request?.type === "find_scan" && is_scan_request(request)) return find_scan.answer(request, `${sender.tab?.id}:${sender.frameId}`);
   if (request?.type === "issue_cmdline_ticket") return cmdline.issue_ticket(sender.tab?.id);
-  if (request?.type === "open_cmdline") return get_config().then(() => cmdline.open(request.ticket, sender.tab?.id, sender.frameId));
+  if (request?.type === "open_cmdline") return get_config().then(() => cmdline.open(request.ticket, sender.tab?.id, sender.frameId, sender.tab?.windowId));
   if (request?.type === "complete_items") return complete_items.answer(request.kind, asker_of(sender));
   if (request?.type === "set_tab_unloaded") return complete_items.set_unloaded(request.tab_id, request.unloaded, asker_of(sender));
   if (request?.type === "read_tab_address") return Promise.resolve(sender.tab?.url);

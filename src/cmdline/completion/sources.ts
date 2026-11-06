@@ -16,7 +16,8 @@ import type { CursorContext } from "./tokenize.ts";
 export type TabFlag = "pinned" | "audible" | "muted" | "discarded";
 
 // What a tab row draws before its name. `status` is `%` for the current tab, `#` for the alternate one and empty otherwise.
-export type TabMarks = { id: number; status: string; flags: TabFlag[]; favicon?: string; container?: TabContainer };
+// `window_number` is present only when the list spans more than one window.
+export type TabMarks = { id: number; status: string; flags: TabFlag[]; favicon?: string; container?: TabContainer; window_number?: number };
 
 export type Row = {
   // The command id of a command row, which the keys column looks up. Flag, value and subject rows have none.
@@ -200,20 +201,24 @@ function open_ranked(word: string, rows: Row[], items: OpenItems): Ranked<Row>[]
 
 const FLAGS: TabFlag[] = ["pinned", "audible", "muted", "discarded"];
 
+const omit_window = ({ window_number, ...marks }: TabMarks): TabMarks => marks;
+
 export const marks_of = (tab: TabItem): TabMarks => ({
   id: tab.id,
   status: tab.active ? "%" : tab.alternate ? "#" : "",
   flags: FLAGS.filter((flag) => tab[flag]),
   ...(tab.favicon ? { favicon: tab.favicon } : {}),
   ...(tab.container ? { container: tab.container } : {}),
+  ...(tab.window_number === undefined ? {} : { window_number: tab.window_number }),
 });
 
 // The number first, so a typed `3` finds the tab at place 3 of the tab bar. The pick puts the number and title in the
 // line and the handler reads the leading number. A title with a quote is quoted whole, or the line would not parse.
 function tab_rows(tabs: readonly TabItem[], usage: string): Row[] {
+  const spans_windows = new Set(tabs.map((tab) => tab.window_number)).size > 1;
   return tabs.map((tab) => ({
     name: `${tab.number}: ${tab.title}`,
-    tab: marks_of(tab),
+    tab: spans_windows ? marks_of(tab) : omit_window(marks_of(tab)),
     insert: `${tab.number} ${/["'\\]/.test(tab.title) ? quote_word(tab.title) : tab.title} `,
     description: tab.url,
     args: "",

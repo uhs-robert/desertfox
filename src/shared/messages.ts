@@ -77,6 +77,9 @@ export type CmdlineOpened = {
   help_ids: string[];
   // The `cmdline_prompt` setting. Absent keeps the page's own default.
   prompt?: string;
+  // The window of the line's tab and the `completion_all_windows` setting, which the page needs to filter the tab model's rows.
+  window_id: number;
+  all_windows: boolean;
 };
 
 // From the command line page when typed text parsed. The background keeps it in the history unless the tab is private.
@@ -85,11 +88,11 @@ export type RecordCmdline = {
   text: string;
 };
 
-// From the command line page when the subject of `tab`, `bookmark` or `tab.attach`, or the engine word of `search`, needs its list. The answer is undefined unless the
+// From the command line page when the subject of `bookmark`, `open`, `tab.attach`, or the engine word of `search`, needs its list. The tab list reads the tab model port instead. The answer is undefined unless the
 // sender is a tab whose line redeemed a ticket, and it holds only tabs and windows of the sender's own privacy (private or not).
 export type CompleteItems = {
   type: "complete_items";
-  kind: "tabs" | "bookmarks" | "engines" | "open" | "windows";
+  kind: "bookmarks" | "engines" | "open" | "windows";
 };
 
 // From the command line page when the row key unloads or loads one tab of the list. The answer is undefined unless the sender is a tab whose line redeemed a ticket
@@ -110,6 +113,9 @@ export type TabContainer = { color: string; icon: string };
 export type TabItem = {
   id: number;
   number: number;
+  // The window's place in `windows.getAll`. The model client sets it, the one-tab answer of `set_tab_unloaded` does not.
+  window_number?: number;
+
   title: string;
   url: string;
   favicon?: string;
@@ -145,7 +151,7 @@ export type WindowItem = { number: number; title: string };
 // A heading of the page, from the host script. `level` is 1 to 6, `text` is the rendered text, trimmed.
 export type HeadingItem = { level: number; text: string };
 
-export type CompleteItemsAnswer = { items: TabItem[] | BookmarkItem[] | EngineItem[] | OpenItems | WindowItem[] | HeadingItem[] };
+export type CompleteItemsAnswer = { items: BookmarkItem[] | EngineItem[] | OpenItems | WindowItem[] | HeadingItem[] };
 
 // From the `hints` bundle at the start of a pick: what `.` shows again. The background checks it like any page message, because the sender is a page script.
 export type RecordRepeat = {

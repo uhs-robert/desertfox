@@ -177,6 +177,17 @@ test("an update that changes nothing sends nothing", async () => {
   assert.equal(f.pending_timers(), 0);
 });
 
+test("an unload of a still-loading tab keeps the row's title and address, though the update reads about:blank", async () => {
+  const f = make([tab(1, 1, 0, { title: "Mail", url: "https://mail.test/" })]);
+  await f.model.start();
+  const p = await f.connect_port();
+  f.fire("onUpdated", 1, { discarded: true }, tab(1, 1, 0, { title: "", url: "about:blank", discarded: true }));
+  f.run_timers();
+  const patch = p.messages[1];
+  const row = patch?.type === "patch" ? patch.upserts[0] : undefined;
+  assert.deepEqual([row?.discarded, row?.title, row?.url, row?.site], [true, "Mail", "https://mail.test/", "mail.test"]);
+});
+
 test("create then remove in one batch sends nothing", async () => {
   const f = make([tab(1, 1, 0)]);
   await f.model.start();
@@ -613,18 +624,18 @@ test("with the real ticket service, only the tab that redeemed its own ticket re
     tickets: storage as never,
     new_ticket: () => `ticket-${++next}`,
     sources: async () => ({ search_engines: [], containers: [] }),
-    page_config: async () => ({ commands: [], help_ids: [], command_aliases: {}, prompt: ":" }) as never,
+    page_config: async () => ({ commands: [], help_ids: [], command_aliases: {}, prompt: ":", all_windows: false }) as never,
   });
   const f = make([tab(1, 1, 0)], { is_opener: cmdline.is_opener });
   await f.model.start();
 
   assert.ok((await f.connect_port({ tab_id: 7 })).closed(), "no ticket");
-  assert.equal(await cmdline.open("guessed", 7, 3), undefined);
+  assert.equal(await cmdline.open("guessed", 7, 3, 10), undefined);
   assert.ok((await f.connect_port({ tab_id: 7 })).closed(), "a wrong ticket");
 
   const ticket = await cmdline.issue_ticket(8);
-  assert.ok(await cmdline.open(ticket, 8, 3));
-  assert.equal(await cmdline.open(ticket, 9, 3), undefined);
+  assert.ok(await cmdline.open(ticket, 8, 3, 10));
+  assert.equal(await cmdline.open(ticket, 9, 3, 10), undefined);
   const reused = await f.connect_port({ tab_id: 9 });
   assert.deepEqual([reused.closed(), reused.messages.length], [true, 0], "a reused ticket");
 
@@ -632,7 +643,7 @@ test("with the real ticket service, only the tab that redeemed its own ticket re
   assert.deepEqual([line.closed(), line.messages[0].type], [false, "snapshot"], "the real line");
   assert.ok((await f.connect_port({ tab_id: 8, frame_id: 12 })).closed(), "another frame of the line's tab");
   // The next line mounts a new frame, so the closed line's frame id no longer passes.
-  assert.ok(await cmdline.open(await cmdline.issue_ticket(8), 8, 4));
+  assert.ok(await cmdline.open(await cmdline.issue_ticket(8), 8, 4, 10));
   assert.ok((await f.connect_port({ tab_id: 8, frame_id: 3 })).closed(), "the closed line");
   assert.equal((await f.connect_port({ tab_id: 8, frame_id: 4 })).closed(), false, "the next line");
   await cmdline.forget_opener_on_navigation(8, { status: "loading" });

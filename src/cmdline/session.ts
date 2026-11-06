@@ -15,7 +15,7 @@ export type Effect =
   | { kind: "find_commit" }
   // Open the help page at this command.
   | { kind: "help"; command_id: string }
-  // `list.act --action=unload` on a tab row: the page asks the background to flip it, then calls `patch_tab`.
+  // `list.act --action=unload` on a tab row: the page asks the background to flip it. The row's marks change when the model patch arrives.
   | { kind: "set_tab_unloaded"; tab_id: number; unloaded: boolean };
 
 export type SessionDeps = {
@@ -66,6 +66,18 @@ export function create_session(deps: SessionDeps) {
     list_shown = true;
     selected = -1;
     saved = undefined;
+    accepted = undefined;
+  };
+
+  // The tab row the user accepted (a click, or Tab with one match) and the text before it. The line holds the tab's number, so a model change renumbers it.
+  let accepted: { tab_id: number; base: { text: string; caret: number } } | undefined;
+
+  // Takes the previewed row into the line for good and ranks the new text.
+  const accept = () => {
+    const tab_id = completion?.rows[selected]?.tab?.id;
+    const base = saved;
+    refresh();
+    if (tab_id !== undefined && base) accepted = { tab_id, base };
   };
 
   // The line shows the row in place of the span the list was ranked for.
@@ -73,9 +85,28 @@ export function create_session(deps: SessionDeps) {
     const row = completion?.rows[index];
     if (!completion || !row) return;
     const base = (saved ??= { text, caret });
+    // A new preview replaces the accepted row, so a model change follows the preview.
+    accepted = undefined;
     selected = index;
     replace_text(base.text.slice(0, completion.start) + row.insert + base.text.slice(completion.end));
     caret = completion.start + row.insert.length;
+  };
+
+  // The accepted tab's row, found again by id in the list ranked for the text before the accept. Its new number goes into the line, or the typed text returns when the tab is gone.
+  const follow_accepted = ({ tab_id, base }: NonNullable<typeof accepted>) => {
+    const kept_message = message;
+    const ranked = deps.complete?.(base.text, base.caret);
+    const row = ranked?.rows.find((candidate) => candidate.tab?.id === tab_id);
+    if (ranked && row) {
+      replace_text(base.text.slice(0, ranked.start) + row.insert + base.text.slice(ranked.end));
+      caret = ranked.start + row.insert.length;
+    } else {
+      replace_text(base.text);
+      caret = base.caret;
+    }
+    refresh();
+    if (row) accepted = { tab_id, base };
+    message = kept_message;
   };
 
   // Shown under a search line in place of the usage.
@@ -110,7 +141,7 @@ export function create_session(deps: SessionDeps) {
     const count = completion?.rows.length ?? 0;
     if (count === 1 && selected < 0) {
       preview(0);
-      refresh();
+      accept();
     } else if (count > 0) preview(selected < 0 ? (step === 1 ? 0 : count - 1) : (selected + step + count) % count);
     return { kind: "render" };
   };
@@ -184,14 +215,31 @@ export function create_session(deps: SessionDeps) {
       caret = initial.length;
       refresh();
     },
-    // Tabs or bookmarks arrived. The list ranks the typed text again. A closed list stays closed, and a previewed row stays.
+    // Tabs or bookmarks arrived or changed. The list ranks again. A closed list stays closed.
+    // A previewed tab row stays on the same tab by id: its number in the line follows the tab, and a tab that is gone ends the preview.
+    // Any other previewed row stays as it is.
     source_ready: () => {
-      if (selected >= 0 || !completion) return;
-      completion = deps.complete?.(text, caret);
-    },
-    // The background changed a tab: its row takes the new marks in place, so the selection and the window stay.
-    patch_tab: (marks: TabMarks) => {
-      for (const row of completion?.rows ?? []) if (row.tab?.id === marks.id) row.tab = marks;
+      if (!completion) return;
+      if (accepted) return follow_accepted(accepted);
+      if (selected < 0) {
+        completion = deps.complete?.(text, caret);
+        return;
+      }
+      const tab_id = completion.rows[selected]?.tab?.id;
+      if (tab_id === undefined || !saved) return;
+      const base = saved;
+      // The inline note belongs to the last action, not to the text, so the rebuild keeps it.
+      const kept_message = message;
+      completion = deps.complete?.(base.text, base.caret);
+      const index = completion?.rows.findIndex((row) => row.tab?.id === tab_id) ?? -1;
+      if (index >= 0) preview(index);
+      else {
+        selected = -1;
+        saved = undefined;
+        replace_text(base.text);
+        caret = base.caret;
+      }
+      message = kept_message;
     },
     set_message: (next: string | undefined) => {
       message = next;
@@ -205,7 +253,7 @@ export function create_session(deps: SessionDeps) {
       if (!completion?.rows[index] || !list_shown) return;
       fresh = false;
       preview(index);
-      refresh();
+      accept();
     },
     // The caret moved without a change to the text, for example by an arrow key or a click.
     set_caret: (next_caret: number) => {
