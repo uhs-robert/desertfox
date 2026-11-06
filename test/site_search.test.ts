@@ -81,7 +81,7 @@ function keys_on(page: { url: string } | undefined, prefix: "s" | "S"): string[]
   const shown = without_unavailable(compiled.modes.normal!, {
     page,
     requirement_of: requirement_lookup(config),
-    has_site_engine: (invocation) => site_engine_for(config.search_engines, invocation.site_search?.engines ?? [], page) !== undefined,
+    site_engine_label_of: (invocation) => config.search_engines[site_engine_for(config.search_engines, invocation.site_search?.engines ?? [], page) ?? ""]?.label,
   });
   const group = (shown?.children[prefix] as TreeBranch | undefined)?.children["/"] as TreeBranch | undefined;
   return Object.keys(group?.children ?? {}).sort();
@@ -178,7 +178,43 @@ test("which-key lists the stored tree through list_keys with the page fit", asyn
   const config = built();
   const { compiled } = compile_config({ config, default_keymap: DEFAULT_KEYMAP, get_command: (id) => registry.get(id), enum_sources: { search_engines: Object.keys(config.search_engines), containers: [] } });
   const storage = { get: async () => ({ [COMPILED_KEYMAP_STORAGE_KEY]: compiled }) } as never;
-  const availability = { page: OTHER_PAGE, requirement_of: requirement_lookup(config) };
+  const availability = { page: OTHER_PAGE, requirement_of: requirement_lookup(config), site_engine_label_of: () => "Site" };
   const panel = await list_keys(storage, (id) => registry.get(id), { mode: "normal", prefix: ["s", "/"] }, availability);
   assert.deepEqual(panel.title, ["+Search here", "+Site search"]);
+});
+
+const normal_children_on = (page: { url: string } | undefined, site_engine_label_of: boolean) => {
+  const config = built();
+  const { compiled } = compile_config({ config, default_keymap: DEFAULT_KEYMAP, get_command: (id) => registry.get(id), enum_sources: { search_engines: Object.keys(config.search_engines), containers: [] } });
+  const shown = without_unavailable(compiled.modes.normal!, {
+    page,
+    requirement_of: requirement_lookup(config),
+    ...(site_engine_label_of ? { site_engine_label_of: (invocation) => config.search_engines[site_engine_for(config.search_engines, invocation.site_search?.engines ?? [], page) ?? ""]?.label } : {}),
+  });
+  return ((shown?.children.s as TreeBranch | undefined)?.children["/"] as TreeBranch | undefined)?.children ?? {};
+};
+
+test("a letter shared by several sites reads the label of the engine the page selects", () => {
+  const label_on = (page: { url: string }) => (normal_children_on(page, true).i as TreeLeaf).label;
+  assert.equal(label_on({ url: "https://gitlab.com/a/b" }), "GitLab");
+  assert.equal(label_on(REPO_PAGE), "GitHub: issues");
+});
+
+test("a site key is hidden when nothing says which engine the page selects", () => {
+  assert.deepEqual(Object.keys(normal_children_on(REPO_PAGE, false)), []);
+});
+
+test("the build refuses a search_keys letter / that s// would shadow, unless both generated keys are unbound", () => {
+  const files = (normal: string) => ({ "search_engines.toml": ENGINES, "keymap.toml": `[search_keys]\n"/" = "gitlab"\n${normal}` });
+  assert.match(problems_of(files("")), /search_keys "\/": "\/" is the key of the current site search/);
+  assert.match(problems_of(files('[normal]\n"s//" = ""')), /search_keys "\/"/);
+  assert.doesNotThrow(() => build_config(config_dir(files('[normal]\n"s//" = ""\n"S//" = ""')), commands));
+});
+
+test("a default engine that needs a page slot makes the site engine use DuckDuckGo, and the load warns", () => {
+  const needs_page = { url: "https://x.example/?q={query}&r={repo}", label: "X", slots: ["repo"] };
+  const raw = { format_version: 2, settings: { default_engine: "x" }, search_engines: { x: needs_page } };
+  const loaded = pick_config(raw, undefined);
+  assert.equal(loaded.config.search_engines.site?.url, "https://duckduckgo.com/?q=site:{host}+{query}");
+  assert.ok(loaded.warnings.some((warning) => /default_engine "x" needs a page slot/.test(warning)));
 });

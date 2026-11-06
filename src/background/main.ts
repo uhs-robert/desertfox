@@ -109,7 +109,7 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
     return get_config().then((config) => list_keys(browser.storage.local, (id) => registry.get(id), request, {
       page,
       requirement_of: requirement_lookup(config),
-      has_site_engine: (invocation) => site_engine_for(config.search_engines, invocation.site_search?.engines ?? [], page) !== undefined,
+      site_engine_label_of: (invocation) => config.search_engines[site_engine_for(config.search_engines, invocation.site_search?.engines ?? [], page) ?? ""]?.label,
     }));
   }
   if ((message as SnippetCall)?.type === "snippet_run") {

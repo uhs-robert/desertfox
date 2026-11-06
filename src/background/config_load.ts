@@ -50,7 +50,10 @@ function is_usable_snippet(candidate: unknown): candidate is SnippetEntry {
 // Fills sections the file left out, so later code never checks for undefined.
 function with_all_sections(raw: Record<string, unknown>, source: ConfigSource, warnings: string[]): MergedConfig {
   const merged = { ...empty_config(), ...raw, format_version: CONFIG_FORMAT_VERSION } as MergedConfig;
-  merged.search_engines = with_fallback_engines(merged.search_engines ?? {}, merged.settings?.default_engine);
+  const default_engine = merged.settings?.default_engine;
+  merged.search_engines = with_fallback_engines(merged.search_engines ?? {}, default_engine);
+  const default_needs_page = default_engine !== undefined && (merged.search_engines[default_engine]?.slots ?? []).length > 0;
+  if (default_needs_page) warnings.push(`config (${source}): default_engine "${default_engine}" needs a page slot, so the built-in site engine searches with DuckDuckGo`);
   const listed: unknown[] = Array.isArray(merged.snippets) ? merged.snippets : [];
   merged.snippets = listed.filter((candidate, index) => {
     const usable = is_usable_snippet(candidate);

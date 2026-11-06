@@ -4,7 +4,7 @@
 // that leaves out a required param needs a `prompt`, as it does at load.
 
 import type { CommandMeta, Mode } from "../../src/shared/command.ts";
-import { with_fallback_engines, type SnippetEntry } from "../../src/shared/config.ts";
+import { DEFAULT_SETTINGS, with_fallback_engines, type SnippetEntry } from "../../src/shared/config.ts";
 import { label_problem, to_firefox_shortcut, parse_sequence } from "../../src/shared/keys/index.ts";
 import { find_param } from "../../src/shared/registry/params.ts";
 import { check_args, create_registry, DefineError, type Registry } from "../../src/shared/registry/index.ts";
@@ -178,6 +178,13 @@ function check_site_keys(site_keys: Record<string, string[]>, merged: MergedData
   }
 }
 
+// The user dropped both generated site search keys, so a `search_keys` letter `/` takes their place.
+function site_search_keys_unbound(merged: MergedData): boolean {
+  const prefixes = { ...DEFAULT_SETTINGS.search_prefixes, ...merged.settings.search_prefixes };
+  const normal = (merged.keymap.normal ?? {}) as Record<string, unknown>;
+  return [prefixes.here, prefixes.tab].every((prefix) => normal[`${prefix}//`] === null);
+}
+
 export function check_config(merged: MergedData, registry: Registry, problems: string[], warnings: string[]) {
   const engine_names = Object.keys(with_fallback_engines(merged.search_engines));
   const where = (section: string, key: string) => location_of(merged, section, key);
@@ -215,6 +222,9 @@ export function check_config(merged: MergedData, registry: Registry, problems: s
     }
     if (mode === "search_keys" || mode === "container_keys") {
       for (const [key, name] of Object.entries(entries as Record<string, string>)) {
+        if (mode === "search_keys" && key === "/" && !site_search_keys_unbound(merged)) {
+          problems.push(`${where("keymap.search_keys", key)}: "/" is the key of the current site search (s// and S//), which would win over "${name}". Use another letter for "${name}", or unbind both with "s//" = "" and "S//" = "" under [normal]`);
+        }
         const parsed = parse_sequence(key);
         if (parsed.error !== undefined) problems.push(`${where(`keymap.${mode}`, key)}: ${parsed.error}`);
         else if (parsed.tokens.length !== 1) problems.push(`${where(`keymap.${mode}`, key)}: must be one key, not a sequence`);

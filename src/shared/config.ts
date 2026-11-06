@@ -101,9 +101,11 @@ export const SITE_ENGINE_NAME = "site";
 
 const FIRST_QUERY_SLOT = /\{query\}|%s/;
 
-// A default engine whose URL has no plain query slot (only `{query|url}`, say) cannot take the `site:` term, so DuckDuckGo stands in.
+// A default engine whose URL has no plain query slot (only `{query|url}`, say), or that needs a page slot of its own, cannot take the `site:` term, so DuckDuckGo stands in.
+const can_take_site_term = (engine: SearchEngine | undefined): engine is SearchEngine => engine !== undefined && FIRST_QUERY_SLOT.test(engine.url) && (engine.slots ?? []).length === 0;
+
 function site_engine_over(default_engine: SearchEngine | undefined): SearchEngine {
-  const base = default_engine && FIRST_QUERY_SLOT.test(default_engine.url) ? default_engine : FALLBACK_ENGINE;
+  const base = can_take_site_term(default_engine) ? default_engine : FALLBACK_ENGINE;
   return { url: base.url.replace(FIRST_QUERY_SLOT, "site:{host}+{query}"), label: "This site", slots: ["host"] };
 }
 
