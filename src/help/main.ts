@@ -3,7 +3,7 @@ import { COMPILED_KEYMAP_STORAGE_KEY } from "../shared/prefix_tree.ts";
 import type { CompiledKeymap } from "../shared/prefix_tree.ts";
 import { build_config_status, load_effective_config } from "../background/config_load.ts";
 import { WARNINGS_STORAGE_KEY } from "../background/storage_keys.ts";
-import { follow_theme } from "../shared/theme/apply.ts";
+import { follow_theme, follow_user_css } from "../shared/theme/apply.ts";
 import type { Block } from "./blocks.ts";
 import { build_help_model } from "./model.ts";
 import type { HelpModel } from "./model.ts";
@@ -52,4 +52,5 @@ async function main(): Promise<void> {
 }
 
 follow_theme(":root, .desertfox-help");
+follow_user_css();
 void main();

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { create_surface } from "../../src/content/surface.ts";
-import { theme_css, THEME_STORAGE_KEY, USER_CSS_STORAGE_KEY, watch_stored } from "../../src/shared/theme/apply.ts";
+import { FIRST_READ_DEADLINE_MS, follow_theme, follow_user_css, theme_css, THEME_STORAGE_KEY, USER_CSS_STORAGE_KEY, watch_stored } from "../../src/shared/theme/apply.ts";
 import type { StoredTheme } from "../../src/shared/theme/apply.ts";
 import { load_theme } from "../../src/shared/theme/load.ts";
 
@@ -68,4 +68,91 @@ test("a surface holds its built-in style, then the theme sheet, then user CSS, a
   assert.match(theme_sheet!.textContent, /--desertfox-primary: #123456;/);
   fire({ [USER_CSS_STORAGE_KEY]: { newValue: "b {}" } });
   assert.equal(user_sheet!.textContent, "b {}");
+});
+
+// A document whose root records its inline visibility, and a storage whose first read the test settles by hand.
+function fake_page_with_storage(read: (key: string) => Promise<Record<string, unknown>>) {
+  const style = { visibility: "" };
+  Object.assign(globalThis, {
+    document: { createElement: () => ({ textContent: "" }), head: { append: () => {} }, documentElement: { style } },
+    browser: { storage: { local: { get: read }, onChanged: { addListener: () => {} } } },
+  });
+  return style;
+}
+
+test("follow_theme hides the page until the first read returns", async () => {
+  const style = fake_page_with_storage(async () => ({ [THEME_STORAGE_KEY]: stored }));
+  follow_theme(".x");
+  assert.equal(style.visibility, "hidden");
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(style.visibility, "");
+});
+
+test("follow_theme shows the page when the read returns nothing or fails", async () => {
+  const empty = fake_page_with_storage(async () => ({}));
+  follow_theme(".x");
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(empty.visibility, "");
+  const failed = fake_page_with_storage(() => Promise.reject(new Error("storage closed")));
+  follow_theme(".x");
+  assert.equal(failed.visibility, "hidden");
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(failed.visibility, "");
+});
+
+test("follow_theme hides nothing when storage is unavailable", () => {
+  const style = fake_page_with_storage(async () => ({}));
+  Object.assign(globalThis, { browser: undefined });
+  follow_theme(".x");
+  assert.equal(style.visibility, "");
+});
+
+test("a page with the theme and user CSS stays hidden until both reads return, and the user sheet follows the theme sheet and changes", async () => {
+  const settle: Record<string, () => void> = {};
+  const sheets: { textContent: string }[] = [];
+  const style = { visibility: "" };
+  const listeners: Listener[] = [];
+  Object.assign(globalThis, {
+    document: { createElement: () => { const sheet = { textContent: "" }; sheets.push(sheet); return sheet; }, head: { append: () => {} }, documentElement: { style } },
+    browser: { storage: { local: { get: (key: string) => new Promise((resolve) => (settle[key] = () => resolve({ [key]: key === USER_CSS_STORAGE_KEY ? ".x { color: red }" : stored }))) }, onChanged: { addListener: (listener: Listener) => void listeners.push(listener) } } },
+  });
+  follow_theme(".x");
+  follow_user_css();
+  settle[THEME_STORAGE_KEY]!();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(style.visibility, "hidden");
+  settle[USER_CSS_STORAGE_KEY]!();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(style.visibility, "");
+  assert.equal(sheets[1]!.textContent, ".x { color: red }");
+  listeners.forEach((listener) => listener({ [USER_CSS_STORAGE_KEY]: { newValue: "b {}" } }, "local"));
+  assert.equal(sheets[1]!.textContent, "b {}");
+});
+
+test("a failed or empty user CSS read still shows the page", async () => {
+  const style = fake_page_with_storage(() => Promise.reject(new Error("storage closed")));
+  follow_user_css();
+  assert.equal(style.visibility, "hidden");
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(style.visibility, "");
+});
+
+test("a hung read shows the page at the deadline, and a late read still applies and leaves the count at zero", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  let settle = () => {};
+  const style = fake_page_with_storage(() => new Promise((resolve) => (settle = () => resolve({ [THEME_STORAGE_KEY]: stored }))));
+  const sheet = follow_theme(".x");
+  assert.equal(style.visibility, "hidden");
+  t.mock.timers.tick(FIRST_READ_DEADLINE_MS);
+  assert.equal(style.visibility, "");
+  settle();
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.match(sheet.textContent, /--desertfox-bg-core/);
+  assert.equal(style.visibility, "");
+  const next = fake_page_with_storage(async () => ({}));
+  follow_theme(".x");
+  assert.equal(next.visibility, "hidden");
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(next.visibility, "");
 });

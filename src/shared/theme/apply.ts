@@ -20,21 +20,61 @@ export function theme_css(theme: StoredTheme, selector: string): string {
   return `${selector} { ${block(theme.dark)} }\n@media (prefers-color-scheme: light) { ${selector} { ${block(theme.light)} } }`;
 }
 
-// Calls `on_value` with the stored value now and again at every change. Nothing is called when storage is unavailable, so the fallbacks show.
+// Calls `on_value` with the stored value now and again at every change. A failed first read calls it with undefined, so a caller that waits
+// on the first read never waits forever. Nothing is called when storage is unavailable.
 export function watch_stored<T>(key: string, on_value: (value: T | undefined) => void): void {
   if (typeof browser === "undefined") return;
-  void browser.storage.local.get(key).then((stored) => on_value(stored[key] as T | undefined), () => {});
+  void browser.storage.local.get(key).then((stored) => on_value(stored[key] as T | undefined), () => on_value(undefined));
   browser.storage.onChanged.addListener((changes, area) => {
     if (area === "local" && key in changes) on_value(changes[key]!.newValue as T | undefined);
   });
+}
+
+// How long a surface or page stays hidden for its first reads. A hung read must not hide it for good. A read that returns later still applies.
+export const FIRST_READ_DEADLINE_MS = 1000;
+
+// A page stays hidden until every read its entry point started has returned or the deadline has passed, so no default color or missing user
+// rule shows first. Without storage nothing returns, so nothing is hidden. Each call returns that read's one-shot release.
+let page_reads_pending = 0;
+let page_deadline: ReturnType<typeof setTimeout> | undefined;
+function show_page(): void {
+  clearTimeout(page_deadline);
+  page_deadline = undefined;
+  document.documentElement.style.visibility = "";
+}
+function hold_page_for_first_read(): () => void {
+  if (typeof browser === "undefined") return () => {};
+  document.documentElement.style.visibility = "hidden";
+  page_deadline ??= setTimeout(show_page, FIRST_READ_DEADLINE_MS);
+  page_reads_pending++;
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    if (--page_reads_pending === 0) show_page();
+  };
 }
 
 // A page that is not a shadow root. The sheet goes at the end of the head, so it follows the built-in styles.
 export function follow_theme(selector: string): HTMLStyleElement {
   const sheet = document.createElement("style");
   document.head.append(sheet);
+  const release = hold_page_for_first_read();
   watch_stored<StoredTheme>(THEME_STORAGE_KEY, (theme) => {
     sheet.textContent = theme ? theme_css(theme, selector) : "";
+    release();
+  });
+  return sheet;
+}
+
+// The user's own CSS on a page that is not a shadow root. Call it after `follow_theme`, so the user rules follow the theme sheet and win.
+export function follow_user_css(): HTMLStyleElement {
+  const sheet = document.createElement("style");
+  document.head.append(sheet);
+  const release = hold_page_for_first_read();
+  watch_stored<string>(USER_CSS_STORAGE_KEY, (css) => {
+    sheet.textContent = css ?? "";
+    release();
   });
   return sheet;
 }
