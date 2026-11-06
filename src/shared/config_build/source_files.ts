@@ -19,13 +19,9 @@ export type SourceFiles = {
 // Raw file text by path relative to the config directory, "/" separated.
 export type ConfigFiles = Record<string, string>;
 
-export const KNOWN_TOP_LEVEL = new Set<string>([
-  ...DATA_KINDS.flatMap((kind) => [`${kind}.toml`, `${kind}.d`]),
-  "snippets",
-  "style.css",
-  "style.d",
-  "themes",
-]);
+export const KNOWN_FILES = new Set<string>([...DATA_KINDS.map((kind) => `${kind}.toml`), "style.css"]);
+export const KNOWN_DIRS = new Set<string>([...DATA_KINDS.map((kind) => `${kind}.d`), "snippets", "style.d", "themes"]);
+export const KNOWN_TOP_LEVEL = new Set<string>([...KNOWN_FILES, ...KNOWN_DIRS]);
 
 // `dir_label` is the config directory as the user knows it. It prefixes every path in a problem message.
 export function labeled_path(dir_label: string, relative_path: string): string {
@@ -103,8 +99,11 @@ function parse_text_dir(files: ConfigFiles, dir_label: string, dir: string, exte
 
 export function parse_source_files(files: ConfigFiles, dir_label: string, problems: string[]): SourceFiles {
   for (const name of entry_names(files, "")) {
-    if (KNOWN_TOP_LEVEL.has(name)) continue;
     const label = labeled_path(dir_label, name);
+    const is_file = is_file_entry(files, "", name);
+    if (KNOWN_FILES.has(name) && !is_file) problems.push(`${label}: expected a file, found a directory`);
+    if (KNOWN_DIRS.has(name) && is_file) problems.push(`${label}: expected a directory, found a file`);
+    if (KNOWN_TOP_LEVEL.has(name)) continue;
     if (DATA_KINDS.some((kind) => name === `${kind}.jsonc`)) problems.push(jsonc_problem(label));
     else problems.push(`${label}: unknown file or directory (known: ${[...KNOWN_TOP_LEVEL].join(", ")})`);
   }

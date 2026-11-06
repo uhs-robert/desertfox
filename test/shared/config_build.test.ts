@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { build_config as build_config_from_dir, read_commands_file } from "../../tools/build-config/build_config.ts";
@@ -65,9 +66,26 @@ test("commands_of_registry lists the registry's commands", () => {
   assert.deepEqual(commands_of_registry(registry), []);
 });
 
+test("a known name of the wrong type is a problem", () => {
+  assert.deepEqual(problems_of({ "settings.toml/": "" }), ["settings.toml: expected a file, found a directory"]);
+  assert.deepEqual(problems_of({ "style.css/": "" }), ["style.css: expected a file, found a directory"]);
+  assert.deepEqual(problems_of({ snippets: "" }), ["snippets: expected a directory, found a file"]);
+});
+
+test("the directory reader reports a known name of the wrong type", () => {
+  const dir = mkdtempSync(join(tmpdir(), "desertfox-types-"));
+  mkdirSync(join(dir, "settings.toml"));
+  writeFileSync(join(dir, "snippets"), "");
+  assert.throws(
+    () => build_config_from_dir(dir, commands),
+    (error) => error instanceof ConfigErrors && error.problems.length === 2,
+  );
+});
+
 test("the shared build code imports no Node API", () => {
   const dir = join(import.meta.dirname, "..", "..", "src", "shared", "config_build");
-  for (const name of readdirSync(dir)) {
-    assert.doesNotMatch(readFileSync(join(dir, name), "utf8"), /from "node:/, name);
+  const node_use = /(from\s+|import\s*\(\s*|require\s*\(\s*|import\s+)["'`](node:|fs|path|process|os|child_process)\b|\bprocess\./;
+  for (const name of readdirSync(dir).filter((entry) => entry.endsWith(".ts"))) {
+    assert.doesNotMatch(readFileSync(join(dir, name), "utf8"), node_use, name);
   }
 });

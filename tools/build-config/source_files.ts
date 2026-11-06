@@ -2,21 +2,21 @@
 
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { KNOWN_TOP_LEVEL, type ConfigFiles } from "../../src/shared/config_build/source_files.ts";
+import { KNOWN_DIRS, KNOWN_FILES, type ConfigFiles } from "../../src/shared/config_build/source_files.ts";
 
 function visible_entries(dir: string): string[] {
   return readdirSync(dir).filter((name) => !name.startsWith(".")).sort();
 }
 
 // A directory entry is recorded as `<path>/` with empty text, which the parser reports as unknown.
-// Only files in a known place are read. An unknown top-level file gets empty text, since only its name matters.
+// Only files in a known place are read. A known file name that is a directory gets the marker too. An unknown top-level file gets empty text, since only its name matters.
 export function read_config_files(config_dir: string): ConfigFiles {
   const files: ConfigFiles = {};
   for (const name of visible_entries(config_dir)) {
     const path = join(config_dir, name);
     if (!statSync(path).isDirectory()) {
-      files[name] = KNOWN_TOP_LEVEL.has(name) ? readFileSync(path, "utf8") : "";
-    } else if (!KNOWN_TOP_LEVEL.has(name)) {
+      files[name] = KNOWN_FILES.has(name) ? readFileSync(path, "utf8") : "";
+    } else if (!KNOWN_DIRS.has(name)) {
       files[`${name}/`] = "";
     } else {
       for (const entry of visible_entries(path)) {
