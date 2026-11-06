@@ -42,7 +42,7 @@ export const DEFAULT_KEYMAP: KeymapConfig = {
     y: "Copy",
     a: "Bookmark",
     z: "Zoom and scroll",
-    q: "OasisFox",
+    q: "DesertFox",
     ";": "Hints",
     s: "Search here",
     S: "Search in new tab",
@@ -168,7 +168,7 @@ export const DEFAULT_KEYMAP: KeymapConfig = {
     "<C-v>": { id: "mode.pass_next" },
     "<F1>": { id: "help.open" },
 
-    // The q group holds OasisFox's own commands. `,` stays free as a user leader.
+    // The q group holds DesertFox's own commands. `,` stays free as a user leader.
     qr: { id: "config.reload" },
     qh: { id: "help.open" },
     qi: { id: "mode.set", args: { mode: "ignore" } },

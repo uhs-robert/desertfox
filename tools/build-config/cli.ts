@@ -26,7 +26,7 @@ if (values.live === (values.out !== undefined)) {
 }
 const out_path = values.live ? live_managed_storage_path() : values.out!;
 
-const config_dir = resolve(positionals[0] ?? join(homedir(), ".config", "oasisfox"));
+const config_dir = resolve(positionals[0] ?? join(homedir(), ".config", "desertfox"));
 
 try {
   const commands = read_commands_file(values.commands);

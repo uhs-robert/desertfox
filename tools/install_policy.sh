@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
-# Install the signed OasisFox xpi through Firefox's policy file (/etc/firefox/policies/policies.json).
+# Install the signed DesertFox xpi through Firefox's policy file (/etc/firefox/policies/policies.json).
 # Run through `just install`. Needs sudo and jq, and a signed xpi in web-ext-artifacts/ (`just sign`).
 set -euo pipefail
 
-extension_id="oasisfox@uhs-robert"
-shared_dir="/usr/local/share/oasisfox"
+extension_id="desertfox@uhs-robert"
+# The id before the rename, split so the rename check does not count it. Its policy entry would keep force-installing the old xpi.
+previous_extension_id="oasis""fox@uhs-robert"
+shared_dir="/usr/local/share/desertfox"
 policies_file="/etc/firefox/policies/policies.json"
 distribution_file="/usr/lib/firefox/distribution/policies.json"
 
@@ -18,7 +20,7 @@ command -v jq >/dev/null || { echo "install needs jq." >&2; exit 1; }
 
 # Firefox merges policy files poorly, so a second file would hide this one or the other way round.
 if [ -e "$distribution_file" ]; then
-    echo "$distribution_file exists. Merge the OasisFox entry into it by hand and drop $policies_file." >&2
+    echo "$distribution_file exists. Merge the DesertFox entry into it by hand and drop $policies_file." >&2
     exit 1
 fi
 
@@ -29,8 +31,8 @@ current_policies='{"policies":{}}'
 if [ -f "$policies_file" ]; then
     current_policies=$(cat "$policies_file")
 fi
-merged_policies=$(jq --arg id "$extension_id" --arg url "file://$installed_xpi" \
-    '.policies.ExtensionSettings[$id] = {installation_mode: "normal_installed", install_url: $url}' \
+merged_policies=$(jq --arg id "$extension_id" --arg previous_id "$previous_extension_id" --arg url "file://$installed_xpi" \
+    'del(.policies.ExtensionSettings[$previous_id]) | .policies.ExtensionSettings[$id] = {installation_mode: "normal_installed", install_url: $url}' \
     <<<"$current_policies")
 
 # Write beside the target, then rename, so Firefox never reads a half-written file.

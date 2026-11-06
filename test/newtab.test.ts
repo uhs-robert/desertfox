@@ -12,7 +12,7 @@ const FIXTURES = join(import.meta.dirname, "fixtures", "build-config");
 const commands = read_commands_file(join(FIXTURES, "commands.json"));
 
 function problems_with_settings(settings_toml: string): string {
-  const dir = mkdtempSync(join(tmpdir(), "oasisfox-config-"));
+  const dir = mkdtempSync(join(tmpdir(), "desertfox-config-"));
   cpSync(join(FIXTURES, "full"), dir, { recursive: true });
   mkdirSync(dirname(join(dir, "settings.toml")), { recursive: true });
   writeFileSync(join(dir, "settings.toml"), settings_toml);
@@ -28,13 +28,13 @@ function problems_with_settings(settings_toml: string): string {
 test("new_tab_page: a web URL redirects, anything else shows the built-in page", () => {
   assert.deepEqual(resolve_new_tab_page("https://start.example/"), { kind: "redirect", url: "https://start.example/" });
   assert.deepEqual(resolve_new_tab_page("http://localhost:8080/"), { kind: "redirect", url: "http://localhost:8080/" });
-  for (const value of [undefined, "oasisfox", "", "javascript:alert(1)", "data:text/html,hi", "about:blank", "start.example", "https://%", "https://example.com:99999", "https://example.com:abc"]) {
+  for (const value of [undefined, "desertfox", "", "javascript:alert(1)", "data:text/html,hi", "about:blank", "start.example", "https://%", "https://example.com:99999", "https://example.com:abc"]) {
     assert.deepEqual(resolve_new_tab_page(value), { kind: "built_in" }, String(value));
   }
 });
 
-test("build-config: new_tab_page takes oasisfox or a web URL and rejects the rest", () => {
-  assert.equal(problems_with_settings('new_tab_page = "oasisfox"'), "");
+test("build-config: new_tab_page takes desertfox or a web URL and rejects the rest", () => {
+  assert.equal(problems_with_settings('new_tab_page = "desertfox"'), "");
   assert.equal(problems_with_settings('new_tab_page = "https://start.example/"'), "");
   for (const value of ['"javascript:alert(1)"', '"start.example"', '""', "3", '"https://%"', '"https://example.com:99999"', '"https://example.com:abc"']) {
     assert.match(problems_with_settings(`new_tab_page = ${value}`), /new_tab_page: expected/, value);
@@ -44,7 +44,7 @@ test("build-config: new_tab_page takes oasisfox or a web URL and rejects the res
 test("the settings schema pins new_tab_page to the same two forms", () => {
   const properties = (build_schemas(commands).settings as { properties: Record<string, { pattern?: string }> }).properties;
   const pattern = new RegExp(properties.new_tab_page?.pattern ?? "$^");
-  assert.ok(pattern.test("oasisfox") && pattern.test("https://a.example/"));
+  assert.ok(pattern.test("desertfox") && pattern.test("https://a.example/"));
   assert.ok(!pattern.test("javascript:alert(1)") && !pattern.test("start.example"));
 });
 

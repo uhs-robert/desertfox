@@ -36,7 +36,7 @@ export type Settings = {
   // Corner style of the which-key panel border.
   which_key_border: WhichKeyBorder;
   hint_letters: string;
-  // Match patterns for pages where OasisFox starts in ignore mode.
+  // Match patterns for pages where DesertFox starts in ignore mode.
   ignore_sites: string[];
   // The mode badge: always (NORMAL too), only outside normal mode, or never.
   mode_indicator: ModeIndicator;
@@ -48,11 +48,11 @@ export type Settings = {
   search_prefixes: { here: string; tab: string };
   // Prefixes of keys generated from `container_keys`: reopen, prompt in new tab.
   container_prefixes: { reopen: string; tab: string };
-  // Page that `page.home` opens: a URL, or `oasisfox` for the built-in new tab page. Without it the command refuses.
+  // Page that `page.home` opens: a URL, or `desertfox` for the built-in new tab page. Without it the command refuses.
   home_page?: string;
   // Search engine name that `open.clipboard` uses when the clipboard text is not a URL. The default names the built-in fallback engine.
   default_engine: string;
-  // What a new tab shows: an http or https URL, or `oasisfox` for the built-in page. Absent means the built-in page.
+  // What a new tab shows: an http or https URL, or `desertfox` for the built-in page. Absent means the built-in page.
   new_tab_page?: string;
   // The `tab` completion list: absent or false lists the tabs of the line's window, true lists the tabs of every window.
   // Kept out of DEFAULT_SETTINGS because the content script bundles that object and has no use for this one.
@@ -73,9 +73,9 @@ export type Settings = {
 };
 
 // The reserved value of `new_tab_page` and `home_page` that names the built-in new tab page.
-export const BUILT_IN_PAGE = "oasisfox";
+export const BUILT_IN_PAGE = "desertfox";
 export const NEW_TAB_PAGE_FILE = "newtab.html";
-// `newtab.html?builtin` draws the built-in page even when `new_tab_page` redirects, so `home_page = "oasisfox"` still reaches it.
+// `newtab.html?builtin` draws the built-in page even when `new_tab_page` redirects, so `home_page = "desertfox"` still reaches it.
 export const BUILT_IN_QUERY = "builtin";
 
 // A URL value is opened by redirect, so only web schemes are accepted: `javascript:` or `data:` would run in the extension page.

@@ -36,7 +36,7 @@ export async function has_content_script(tab_id: number): Promise<boolean> {
 }
 
 export async function notify(refusal: Refusal): Promise<void> {
-  await browser.notifications.create({ type: "basic", title: "OasisFox", message: refusal.message });
+  await browser.notifications.create({ type: "basic", title: "DesertFox", message: refusal.message });
 }
 
 // What the page slots read. `current_page` in commands/open_target.ts reads the same, but importing it here loops

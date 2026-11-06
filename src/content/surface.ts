@@ -1,4 +1,4 @@
-// A closed shadow root on the page for one small surface. A surface style must not declare --oasisfox-bg-core, -fg-core,
+// A closed shadow root on the page for one small surface. A surface style must not declare --desertfox-bg-core, -fg-core,
 // -font or -radius: a declaration shadows a value the page or host sets. Write each default as a var() fallback.
 
 import { LAYER_ATTRIBUTE, RESTACKED_EVENT } from "../shared/layers.ts";

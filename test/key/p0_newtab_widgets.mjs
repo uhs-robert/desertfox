@@ -1,5 +1,5 @@
 // The new tab page widgets: the analog clock and the date.
-// It swaps the config and reloads. The reload once hung when this file ran last; that did not reproduce in one filtered run with this file last. Shots go to OASISFOX_SHOT_DIR when it is set.
+// It swaps the config and reloads. The reload once hung when this file ran last; that did not reproduce in one filtered run with this file last. Shots go to DESERTFOX_SHOT_DIR when it is set.
 import { cpSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -10,7 +10,7 @@ const test_config_dir = join(dirname(fileURLToPath(import.meta.url)), "config");
 const NEWTAB_VIEW = `(browser.extension.getViews({ type: "tab" }).find((view) => view.location.pathname === "/newtab.html"))`;
 
 export async function run_cases({ config_dir, load_config_dir, take_shot, run_case, expect, sleep, open_page, rdp, extension_id }) {
-  const shot_dir = process.env.OASISFOX_SHOT_DIR;
+  const shot_dir = process.env.DESERTFOX_SHOT_DIR;
   const in_background = (script) => evaluate_in_background(rdp, extension_id, script);
 
   const open_new_tab = async (selector) => {
@@ -36,7 +36,7 @@ export async function run_cases({ config_dir, load_config_dir, take_shot, run_ca
       if (shot_dir) await take_shot(`${shot_dir}/newtab-clock.png`);
     });
 
-    const hidden_config = mkdtempSync(join(tmpdir(), "oasisfox-widgets-"));
+    const hidden_config = mkdtempSync(join(tmpdir(), "desertfox-widgets-"));
     cpSync(test_config_dir, hidden_config, { recursive: true });
     writeFileSync(join(hidden_config, "settings.toml"), "newtab_clock = false\n");
     await close_new_tabs();

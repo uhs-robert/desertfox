@@ -6,7 +6,7 @@ import { bundles } from "./bundles.ts";
 import type { ToastKind } from "../shared/messages.ts";
 import type { BadgeColors } from "./mode_indicator.ts";
 
-const MISSING = "OasisFox could not load ui";
+const MISSING = "DesertFox could not load ui";
 
 export const show_toast = (message: string, kind?: ToastKind): void => void bundles.run_command("ui.toast", "ui", { message, kind }, MISSING, false);
 

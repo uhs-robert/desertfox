@@ -33,15 +33,15 @@ let last_whichkey = "";
 let last_whichkey_shape = "";
 let toast_shown = false;
 new MutationObserver(() => {
-  const label = root.querySelector("[data-oasisfox-mode]")?.getAttribute("data-oasisfox-mode") ?? "";
+  const label = root.querySelector("[data-desertfox-mode]")?.getAttribute("data-desertfox-mode") ?? "";
   if (label !== last_indicator) send("indicator", { label: (last_indicator = label) });
-  const whichkey = root.querySelector("[data-oasisfox-whichkey]")?.getAttribute("data-oasisfox-whichkey") ?? "";
+  const whichkey = root.querySelector("[data-desertfox-whichkey]")?.getAttribute("data-desertfox-whichkey") ?? "";
   if (whichkey !== last_whichkey) send("whichkey", { value: (last_whichkey = whichkey) });
-  const panel_host = root.querySelector("[data-oasisfox-whichkey]");
-  const panel_shape = panel_host ? panel_host.getAttribute("data-oasisfox-whichkey-dropped") + ":" + panel_host.getAttribute("data-oasisfox-whichkey-width") : "";
+  const panel_host = root.querySelector("[data-desertfox-whichkey]");
+  const panel_shape = panel_host ? panel_host.getAttribute("data-desertfox-whichkey-dropped") + ":" + panel_host.getAttribute("data-desertfox-whichkey-width") : "";
   if (panel_shape !== last_whichkey_shape) {
     last_whichkey_shape = panel_shape;
-    send("whichkey_shape", { dropped: Number(panel_host?.getAttribute("data-oasisfox-whichkey-dropped")), width: Number(panel_host?.getAttribute("data-oasisfox-whichkey-width") ?? 0), viewport: window.innerWidth });
+    send("whichkey_shape", { dropped: Number(panel_host?.getAttribute("data-desertfox-whichkey-dropped")), width: Number(panel_host?.getAttribute("data-desertfox-whichkey-width") ?? 0), viewport: window.innerWidth });
   }
   const css = root.querySelector(":scope > style")?.textContent ?? "";
   if (css !== last_css) send("selection_style", { css: (last_css = css) });
@@ -50,7 +50,7 @@ new MutationObserver(() => {
   toast_shown = toast_now;
 }).observe(root, { childList: true });
 const report_tree_read = () => {
-  const ms = root.getAttribute("data-oasisfox-tree-read-ms");
+  const ms = root.getAttribute("data-desertfox-tree-read-ms");
   if (ms === null) return false;
   send("tree_read", { ms: Number(ms), search: location.search });
   return true;

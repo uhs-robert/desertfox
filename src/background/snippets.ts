@@ -19,7 +19,7 @@ export type SnippetDeps = {
   execute_in_top_frame: (tab_id: number, code: string) => Promise<unknown>;
 };
 
-// Sent by `oasisfox.run` inside a snippet. `depth` is the level of the calling snippet.
+// Sent by `desertfox.run` inside a snippet. `depth` is the level of the calling snippet.
 export type SnippetCall = { type: "snippet_run"; command_text: string; depth: number };
 
 export type SnippetSender = { tab_id: number | undefined; frame_id: number | undefined };
@@ -44,7 +44,7 @@ const message_of = (error: unknown) => (error instanceof Error ? error.message :
 export function wrap_snippet_code(code: string, args: CheckedArgs, depth: number, checked_url: string): string {
   return `(async (send, expected_url) => {
 if (location.href !== expected_url) return "the page changed before the snippet ran";
-return await (async (args, oasisfox, browser, chrome, send, expected_url) => {
+return await (async (args, desertfox, browser, chrome, send, expected_url) => {
 try {
 ${code}
   return null;
@@ -53,7 +53,7 @@ ${code}
 }
 })(${JSON.stringify(args)}, { run: async (command_text) => {
   const answer = await send({ type: "snippet_run", command_text, depth: ${depth} });
-  if (!answer || !answer.ok) throw new Error(answer ? answer.message : "OasisFox did not answer");
+  if (!answer || !answer.ok) throw new Error(answer ? answer.message : "DesertFox did not answer");
 } });
 })(browser.runtime.sendMessage.bind(browser.runtime), ${JSON.stringify(checked_url)})`;
 }
@@ -91,7 +91,7 @@ export function create_snippets(registry: Registry, deps: SnippetDeps, router_de
     const built_in_groups = new Set(registry.list().map((command) => command.id.split(".")[0]));
     for (const entry of entries) {
       if (built_in_groups.has(entry.id.split(".")[0])) {
-        warnings.push(`snippet ${entry.id} skipped: the group "${entry.id.split(".")[0]}" is used by OasisFox commands`);
+        warnings.push(`snippet ${entry.id} skipped: the group "${entry.id.split(".")[0]}" is used by DesertFox commands`);
         continue;
       }
       try {
@@ -115,16 +115,16 @@ export function create_snippets(registry: Registry, deps: SnippetDeps, router_de
 
   async function handle_call(call: SnippetCall, sender: SnippetSender): Promise<SnippetAnswer> {
     // Snippets run in the top frame, so a call from another frame cannot be one of theirs.
-    if (sender.frame_id !== 0) return { ok: false, message: "oasisfox.run works from the top frame only" };
+    if (sender.frame_id !== 0) return { ok: false, message: "desertfox.run works from the top frame only" };
     if (!Number.isInteger(call.depth) || call.depth < 1 || typeof call.command_text !== "string") {
-      return { ok: false, message: "oasisfox.run needs a command text" };
+      return { ok: false, message: "desertfox.run needs a command text" };
     }
     if (call.depth >= MAX_SNIPPET_DEPTH) {
       return { ok: false, message: `snippets can call snippets ${MAX_SNIPPET_DEPTH} levels deep at most` };
     }
     const parsed = parse_command_line(registry, call.command_text, await router_deps.get_enum_sources());
     if (parsed.kind === "error") return { ok: false, message: parsed.error };
-    if (parsed.kind === "help") return { ok: false, message: "oasisfox.run does not show help" };
+    if (parsed.kind === "help") return { ok: false, message: "desertfox.run does not show help" };
 
     // The caller gets the failure as a rejection, so no toast here: the snippet at the top shows one.
     const nested_router = create_router({

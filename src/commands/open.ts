@@ -8,7 +8,7 @@ import { engine_url, home_page_url, search_engine_name } from "./url_build.ts";
 
 const container_of = (args: Record<string, unknown>) => (typeof args.container === "string" ? args.container : undefined);
 
-// A blank url opens the built-in new tab page, the same page `page.home` opens for `oasisfox`.
+// A blank url opens the built-in new tab page, the same page `page.home` opens for `desertfox`.
 // The param schema decides where a blank url is allowed, so this takes whatever the check let through.
 async function open_url_target(text: string): Promise<string> {
   if (text.trim() !== "") return typed_url_target(text);

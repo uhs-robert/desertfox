@@ -34,7 +34,7 @@ export async function run_cases({ rdp, extension_id, run_case, expect, open_page
   }
   const badge_is = (page_id, label) => (event) => event.type === "indicator" && event.page_id === page_id && event.label === label;
   const last_scroll_y = (page_id) => events.filter((event) => event.type === "scroll" && event.page_id === page_id).at(-1)?.y ?? 0;
-  const shot_dir = process.env.OASISFOX_SHOT_DIR;
+  const shot_dir = process.env.DESERTFOX_SHOT_DIR;
   if (shot_dir) mkdirSync(shot_dir, { recursive: true });
   const ENTER = ["-k", "Return"];
   const ESCAPE = ["-k", "Escape"];
@@ -292,7 +292,7 @@ export async function run_cases({ rdp, extension_id, run_case, expect, open_page
   // The toast text sits in a closed shadow root. The extension's own world reads it with openOrClosedShadowRoot.
   const READ_TOAST = `(() => {
     const host = [...document.documentElement.children].find((child) => child.style.zIndex === "2147483645");
-    return host ? host.openOrClosedShadowRoot.querySelector(".oasisfox-toast")?.textContent ?? "" : "";
+    return host ? host.openOrClosedShadowRoot.querySelector(".desertfox-toast")?.textContent ?? "" : "";
   })()`;
   async function wait_toast(pattern, what) {
     const seen = new Set();

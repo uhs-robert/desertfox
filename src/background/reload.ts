@@ -50,6 +50,6 @@ export async function repair_tabs_after_reload(deps: ReinjectDeps): Promise<Rein
   await browser.storage.local.remove(RELOAD_PENDING_STORAGE_KEY);
   const report = await reinject_missing_content_scripts(deps);
   await browser.storage.local.set({ [REINJECT_REPORT_STORAGE_KEY]: report });
-  console.info("oasisfox: tabs after reload", report);
+  console.info("desertfox: tabs after reload", report);
   return report;
 }

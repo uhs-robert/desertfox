@@ -46,7 +46,7 @@ function install_fake_browser(config_file: { value: unknown }) {
   const session_area = area(session, 2);
   Object.assign(globalThis, {
     browser: {
-      runtime: { id: "test@oasisfox" },
+      runtime: { id: "test@desertfox" },
       storage: {
         local: area(local),
         managed: { get: async () => config_file.value },

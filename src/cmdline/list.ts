@@ -20,7 +20,7 @@ export function window_top(top: number, selected: number, count: number): number
 
 function cell(class_name: string, text = ""): HTMLElement {
   const element = document.createElement("span");
-  element.className = `oasisfox-cmdline-${class_name}`;
+  element.className = `desertfox-cmdline-${class_name}`;
   element.textContent = text;
   return element;
 }
@@ -30,7 +30,7 @@ function name_cell(row: Ranked<Row>, has_help: (id: string) => boolean): HTMLEle
   const name = cell("name");
   // Only a command row has help. The page reads `data-help` on click.
   if (row.id !== undefined && has_help(row.id)) {
-    name.className += " oasisfox-cmdline-link";
+    name.className += " desertfox-cmdline-link";
     name.dataset.help = row.id;
   }
   if (row.indent) name.style.paddingLeft = `${row.indent * INDENT_COLUMNS}ch`;
@@ -96,7 +96,7 @@ function image_cell(class_name: string, url: string, images: Images, on_error: (
 
 function status_cell(marks: TabMarks): HTMLElement {
   const status = cell("tab-status");
-  status.append(cell("tab-mark", marks.status), ...marks.flags.map((flag) => cell(`flag oasisfox-cmdline-flag-${flag}`)));
+  status.append(cell("tab-mark", marks.status), ...marks.flags.map((flag) => cell(`flag desertfox-cmdline-flag-${flag}`)));
   return status;
 }
 
@@ -104,9 +104,9 @@ function status_cell(marks: TabMarks): HTMLElement {
 // The <img> stays, hidden, only to learn whether the icon loads. A container without a loadable icon keeps its color as a dot.
 function container_cell(marks: TabMarks, images: Images): HTMLElement {
   if (!marks.container) return cell("container");
-  const holder = image_cell("container", marks.container.icon, images, (failed) => void (failed.className += " oasisfox-cmdline-container-dot"));
-  holder.style.setProperty("--oasisfox-container-color", marks.container.color);
-  holder.style.setProperty("--oasisfox-container-icon", `url(${JSON.stringify(marks.container.icon)})`);
+  const holder = image_cell("container", marks.container.icon, images, (failed) => void (failed.className += " desertfox-cmdline-container-dot"));
+  holder.style.setProperty("--desertfox-container-color", marks.container.color);
+  holder.style.setProperty("--desertfox-container-icon", `url(${JSON.stringify(marks.container.icon)})`);
   return holder;
 }
 
@@ -137,15 +137,15 @@ export function create_list(element: HTMLElement, keys_of: (id: string) => strin
     const visible = rows.slice(top, top + MAX_ROWS);
     const name_columns = visible.map((row) => row.name.length + (row.indent ?? 0) * INDENT_COLUMNS);
     const name_cap = visible.some((row) => row.indent !== undefined) ? MAX_HEADING_COLUMNS : MAX_NAME_COLUMNS;
-    element.style.setProperty("--oasisfox-name-width", `${Math.min(name_cap, Math.max(...name_columns, 0))}ch`);
+    element.style.setProperty("--desertfox-name-width", `${Math.min(name_cap, Math.max(...name_columns, 0))}ch`);
     const keys = visible.map((row) => (row.id === undefined ? "" : keys_of(row.id)));
-    element.style.setProperty("--oasisfox-keys-width", `${Math.max(...keys.map((text) => text.length), 0)}ch`);
+    element.style.setProperty("--desertfox-keys-width", `${Math.max(...keys.map((text) => text.length), 0)}ch`);
     const flag_count = Math.max(...visible.map((row) => row.tab?.flags.length ?? 0), 0);
-    element.style.setProperty("--oasisfox-flags-width", `${flag_count * FLAG_WIDTH_PX}px`);
+    element.style.setProperty("--desertfox-flags-width", `${flag_count * FLAG_WIDTH_PX}px`);
     images.start_draw();
     element.replaceChildren(
       ...visible.map((row, offset) => {
-        const item = cell(`item${top + offset === selected ? " oasisfox-cmdline-selected" : ""}${row.unavailable ? " oasisfox-cmdline-unavailable" : ""}${row.tab?.flags.includes("discarded") ? " oasisfox-cmdline-item-discarded" : ""}`);
+        const item = cell(`item${top + offset === selected ? " desertfox-cmdline-selected" : ""}${row.unavailable ? " desertfox-cmdline-unavailable" : ""}${row.tab?.flags.includes("discarded") ? " desertfox-cmdline-item-discarded" : ""}`);
         // The absolute index, because a click picks by it and the window may be scrolled.
         item.dataset.index = String(top + offset);
         const args = cell("args");

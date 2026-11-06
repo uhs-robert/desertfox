@@ -33,7 +33,7 @@ export function build_registry(commands: CommandMeta[], snippets: SnippetEntry[]
     const file = snippet_files[index] ?? "snippet";
     const group = snippet.id.split(".")[0] ?? "";
     if (built_in_groups.has(group)) {
-      problems.push(`${file}: id "${snippet.id}" uses the group "${group}", which OasisFox commands use`);
+      problems.push(`${file}: id "${snippet.id}" uses the group "${group}", which DesertFox commands use`);
       continue;
     }
     const { matches: _matches, requires: _requires, code: _code, ...meta } = snippet;

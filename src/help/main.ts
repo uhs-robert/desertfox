@@ -20,12 +20,12 @@ function show_route(model: HelpModel, guide: Block[], moved_by_user: boolean): v
     section_heading.focus({ preventScroll: true });
     return;
   }
-  if (moved_by_user) document.querySelector<HTMLElement>(".oasisfox-help-page h1")?.focus({ preventScroll: true });
+  if (moved_by_user) document.querySelector<HTMLElement>(".desertfox-help-page h1")?.focus({ preventScroll: true });
   // A new page starts at the top. An engine or command link scrolls to its row or card.
   const anchor = route.engine !== undefined ? engine_anchor(route.engine) : route.command !== undefined ? command_anchor(route.command) : undefined;
   const row = anchor === undefined ? null : document.getElementById(anchor);
   if (row) {
-    row.classList.add("oasisfox-help-current");
+    row.classList.add("desertfox-help-current");
     row.scrollIntoView();
   } else {
     window.scrollTo(0, 0);
@@ -51,5 +51,5 @@ async function main(): Promise<void> {
   window.addEventListener("hashchange", () => show_route(model, guide, true));
 }
 
-follow_theme(":root, .oasisfox-help");
+follow_theme(":root, .desertfox-help");
 void main();

@@ -8,7 +8,7 @@ const CTRL = (key) => ["-M", "ctrl", key, "-m", "ctrl"];
 export async function run_cases({ rdp, extension_id, run_case, send_keys, open_page, wait_event, find_event, events, expect, sleep, url_of }) {
   const scrolled = (page_id) => (event) => event.type === "scroll" && event.page_id === page_id;
   const loaded = (page_id) => (event) => event.type === "tree_read" && event.page_id === page_id;
-  const history = () => evaluate_in_background(rdp, extension_id, `(async () => (await browser.storage.local.get("oasisfox_cmdline_history")).oasisfox_cmdline_history ?? [])()`);
+  const history = () => evaluate_in_background(rdp, extension_id, `(async () => (await browser.storage.local.get("desertfox_cmdline_history")).desertfox_cmdline_history ?? [])()`);
 
   await open_page("page", "p2_start", { new_tab: true });
 
@@ -54,14 +54,14 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, open_p
 
   await run_case("a scheme-less address typed into the command line opens on https, not on the extension", async () => {
     await open_page("page", "p2_bare", { new_tab: false });
-    await send_keys(":open www.example.com/oasisfox_bare", "-k", "Return");
+    await send_keys(":open www.example.com/desertfox_bare", "-k", "Return");
     const active_url = () => evaluate_in_background(rdp, extension_id, `(async () => (await browser.tabs.query({ active: true, currentWindow: true }))[0].url)()`);
     let url = "";
-    for (let attempt = 0; attempt < 30 && !url.includes("oasisfox_bare"); attempt++) {
+    for (let attempt = 0; attempt < 30 && !url.includes("desertfox_bare"); attempt++) {
       await sleep(300);
       url = await active_url();
     }
-    expect(url.startsWith("https://www.example.com/oasisfox_bare"), `the tab is at ${url}`);
+    expect(url.startsWith("https://www.example.com/desertfox_bare"), `the tab is at ${url}`);
     // Leave the pending external load behind before the next cases.
     await open_page("page", "p2_after_bare", { new_tab: false });
   });

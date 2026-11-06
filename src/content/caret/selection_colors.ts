@@ -28,7 +28,7 @@ export async function apply_selection_colors(mode: "caret" | "visual", trees: Te
     try {
       const in_document = tree.nodeType === Node.DOCUMENT_NODE;
       const style = styles.get(tree) ?? (in_document ? (tree as Document) : (tree as ShadowRoot).ownerDocument).createElement("style");
-      style.setAttribute("data-oasisfox", "");
+      style.setAttribute("data-desertfox", "");
       style.textContent = `${rule(colors.dark)}@media(prefers-color-scheme:light){${rule(colors.light)}}`;
       (in_document ? (tree as Document).documentElement : tree).append(style);
       styles.set(tree, style);

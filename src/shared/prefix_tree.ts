@@ -7,7 +7,7 @@ import type { ModeIndicator, WhichKeyBorder } from "./config.ts";
 import type { KeymapMode } from "./keymap.ts";
 import type { ModeColors } from "./mode_colors.ts";
 
-export const COMPILED_KEYMAP_STORAGE_KEY = "oasisfox_compiled_keymap";
+export const COMPILED_KEYMAP_STORAGE_KEY = "desertfox_compiled_keymap";
 
 export const COMPILED_KEYMAP_VERSION = 2;
 

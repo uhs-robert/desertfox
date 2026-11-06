@@ -3,9 +3,9 @@
 // this order. The numbers double as the z-index each host carries as a fallback. Constants only, so content.js stays small.
 
 // Marks a surface host with its layer, so a bundle finds the hosts of the others.
-export const LAYER_ATTRIBUTE = "data-oasisfox-layer";
+export const LAYER_ATTRIBUTE = "data-desertfox-layer";
 // Sent to a host that `mount_surface` showed again, which hid it and so took the focus out of it.
-export const RESTACKED_EVENT = "oasisfox-restacked";
+export const RESTACKED_EVENT = "desertfox-restacked";
 
 const BROWSER_MAX_Z_INDEX = 2147483647;
 

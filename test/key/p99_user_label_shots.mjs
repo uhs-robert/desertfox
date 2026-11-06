@@ -1,5 +1,5 @@
 // Screenshots of the which-key panels for the root, s, ; and g groups, under a copy of the user config.
-// Runs only with OASISFOX_SHOT_DIR (where the shots go) and OASISFOX_USER_COPY (a copy of ~/.config/oasisfox with the symlinks resolved).
+// Runs only with DESERTFOX_SHOT_DIR (where the shots go) and DESERTFOX_USER_COPY (a copy of ~/.config/desertfox with the symlinks resolved).
 // It runs last in the piece order because it swaps the config. The test config is loaded again at the end.
 import { cpSync, mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -8,8 +8,8 @@ import { fileURLToPath } from "node:url";
 const test_config_dir = join(dirname(fileURLToPath(import.meta.url)), "config");
 
 export async function run_cases({ config_dir, load_config_dir, take_shot, run_case, send_keys, open_page, wait_event, events, sleep }) {
-  const shot_dir = process.env.OASISFOX_SHOT_DIR;
-  const user_copy = process.env.OASISFOX_USER_COPY;
+  const shot_dir = process.env.DESERTFOX_SHOT_DIR;
+  const user_copy = process.env.DESERTFOX_USER_COPY;
   if (!shot_dir || !user_copy) return;
 
   // The user config has no key for the manual panel, so the test one comes along.

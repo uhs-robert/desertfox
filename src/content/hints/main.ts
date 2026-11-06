@@ -20,7 +20,7 @@ import type { PageProbe } from "./visible.ts";
 import { clear_snapshot, go_to_heading, take_snapshot } from "./headings.ts";
 import type { HeadingItem } from "../../shared/messages.ts";
 
-type HintsWindow = { oasisfox_host: BundleHostApi; oasisfox_hints_ready?: true; oasisfox_caret_target?: Element };
+type HintsWindow = { desertfox_host: BundleHostApi; desertfox_hints_ready?: true; desertfox_caret_target?: Element };
 const page = window as unknown as HintsWindow;
 
 const done: Outcome = { ok: true };
@@ -110,8 +110,8 @@ function open_link(url: string, place: Place): Promise<unknown> {
 
 // The caret bundle reads the element in `start_session` when the mode starts, and loads on that first entry.
 function start_caret(target: Element, mode: CaretMode): void {
-  page.oasisfox_caret_target = target;
-  page.oasisfox_host.set_mode(mode);
+  page.desertfox_caret_target = target;
+  page.desertfox_host.set_mode(mode);
 }
 
 const deps = { open_link, copy: copy_to_clipboard, start_caret };
@@ -259,7 +259,7 @@ function register(host: BundleHostApi): void {
 }
 
 // A second run would register a second copy and orphan the first copy's labels.
-if (!page.oasisfox_hints_ready) {
-  page.oasisfox_hints_ready = true;
-  register(page.oasisfox_host);
+if (!page.desertfox_hints_ready) {
+  page.desertfox_hints_ready = true;
+  register(page.desertfox_host);
 }

@@ -34,7 +34,7 @@ test: install_deps
 install_deps:
     @test -d node_modules || npm install --no-audit --no-fund
 
-# Merge the config directory (default ~/.config/oasisfox) into the live managed storage file. Extra flags (such as --schemas) go to the CLI. For another output path run the CLI with --out.
+# Merge the config directory (default ~/.config/desertfox) into the live managed storage file. Extra flags (such as --schemas) go to the CLI. For another output path run the CLI with --out.
 build-config dir="" *flags="": build
     node tools/build-config/cli.ts {{ if dir == "" { "" } else { quote(dir) } }} --live {{flags}}
 
@@ -78,8 +78,8 @@ install-profile profile_dir:
         exit 1
     fi
     mkdir -p "{{profile_dir}}/extensions"
-    cp "${xpis[0]}" "{{profile_dir}}/extensions/oasisfox@uhs-robert.xpi"
-    echo "installed {{profile_dir}}/extensions/oasisfox@uhs-robert.xpi"
+    cp "${xpis[0]}" "{{profile_dir}}/extensions/desertfox@uhs-robert.xpi"
+    echo "installed {{profile_dir}}/extensions/desertfox@uhs-robert.xpi"
 
 # Install the signed add-on for every profile through Firefox's policy file. Needs sudo and jq.
 install:

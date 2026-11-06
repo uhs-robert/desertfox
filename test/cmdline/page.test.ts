@@ -22,7 +22,7 @@ const OPENED = {
   ],
   command_aliases: { j: "my.jira" },
   help_ids: ["my.jira"],
-  css: ".oasisfox-cmdline { --oasisfox-bg-core: red; }",
+  css: ".desertfox-cmdline { --desertfox-bg-core: red; }",
   prompt: ">> ",
 };
 
@@ -95,7 +95,7 @@ async function load_page(t: TestContext, tag: string, { keymap = KEYMAP, with_ta
   Object.assign(globalThis, {
     window: page_window,
     document: {
-      querySelector: (selector: string) => (selector === "#line" ? input : selector === "#list" ? list : selector === ".oasisfox-cmdline" ? panel : selector === ".oasisfox-cmdline-prompt" ? prompt : { textContent: "", hidden: true }),
+      querySelector: (selector: string) => (selector === "#line" ? input : selector === "#list" ? list : selector === ".desertfox-cmdline" ? panel : selector === ".desertfox-cmdline-prompt" ? prompt : { textContent: "", hidden: true }),
       // The page listens for keys on the document. The fake sends them through the input's table.
       addEventListener: (type: string, listener: (event: unknown) => void) => void (input_listeners[type] = listener),
       body: { classList: { toggle: () => {} } },
@@ -131,11 +131,11 @@ async function load_page(t: TestContext, tag: string, { keymap = KEYMAP, with_ta
     ports.push(channel.port1, channel.port2);
     const received: unknown[] = [];
     channel.port1.onmessage = (event) => void received.push(event.data);
-    const data = { oasisfox_cmdline: { kind: "start", ticket, text, tokens } };
+    const data = { desertfox_cmdline: { kind: "start", ticket, text, tokens } };
     for (const listener of window_listeners) listener({ data, source: page_window.parent, ports: [channel.port2] });
     // Resolves once the page took this start and said `opened`.
-    const opened = () => until(() => received.some((data) => (data as { oasisfox_cmdline: { kind: string } }).oasisfox_cmdline.kind === "opened"));
-    const submits = () => received.filter((data) => (data as { oasisfox_cmdline: { kind: string } }).oasisfox_cmdline.kind === "submit");
+    const opened = () => until(() => received.some((data) => (data as { desertfox_cmdline: { kind: string } }).desertfox_cmdline.kind === "opened"));
+    const submits = () => received.filter((data) => (data as { desertfox_cmdline: { kind: string } }).desertfox_cmdline.kind === "submit");
     return { port: channel.port1, received, opened, submits };
   };
   const press_enter = () => input_listeners.keydown!({ isTrusted: true, isComposing: false, key: "Enter", code: "Enter", preventDefault: () => {} });
@@ -149,7 +149,7 @@ async function until(condition: () => boolean): Promise<void> {
 }
 
 const settle = () => new Promise((resolve) => setTimeout(resolve, 50));
-const submit_of = (id: string) => [{ oasisfox_cmdline: { kind: "submit", invocation: { id } } }];
+const submit_of = (id: string) => [{ desertfox_cmdline: { kind: "submit", invocation: { id } } }];
 
 test("a start with a ticket the background refuses gets nothing, and the host's start still opens the line", async (t) => {
   const { input, post_start } = await load_page(t, "forged_start");
@@ -167,10 +167,10 @@ test("a submit goes over the host's port and never to the web page", async (t) =
   const { to_parent, post_start, press_enter } = await load_page(t, "no_leak");
   const host = post_start(TICKET, "jira");
   await host.opened();
-  host.port.postMessage({ oasisfox_cmdline: { kind: "focused" } });
+  host.port.postMessage({ desertfox_cmdline: { kind: "focused" } });
   press_enter();
   await until(() => host.submits().length === 1);
-  assert.deepEqual(to_parent, [{ oasisfox_cmdline: { kind: "ready" } }]);
+  assert.deepEqual(to_parent, [{ desertfox_cmdline: { kind: "ready" } }]);
   assert.deepEqual(host.submits(), submit_of("my.jira"));
 });
 
@@ -189,13 +189,13 @@ test("the caret preset keeps the page default text and style", async (t) => {
 test("the colon preset shows a colon with the colon class", async (t) => {
   const { prompt, post_start } = await load_page(t, "prompt_colon", { prompt: "colon" });
   await post_start(TICKET, "j").opened();
-  assert.deepEqual([prompt.textContent, prompt.className.trim()], [":", "oasisfox-cmdline-prompt-colon"]);
+  assert.deepEqual([prompt.textContent, prompt.className.trim()], [":", "desertfox-cmdline-prompt-colon"]);
 });
 
 test("the colon class styles the prompt in the primary color with the old gap", () => {
   const html = readFileSync(new URL("../../src/cmdline/cmdline.html", import.meta.url), "utf8");
-  const rule = html.match(/\.oasisfox-cmdline-prompt-colon \{([^}]*)\}/)![1]!;
-  assert.match(rule, /color: var\(--oasisfox-primary\)/);
+  const rule = html.match(/\.desertfox-cmdline-prompt-colon \{([^}]*)\}/)![1]!;
+  assert.match(rule, /color: var\(--desertfox-primary\)/);
   assert.match(rule, /margin-right: \.5rem/);
 });
 
@@ -209,7 +209,7 @@ test("a configured alias resolves, and the user CSS loads after the theme sheet"
   const { head, post_start, press_enter } = await load_page(t, "alias_css");
   const host = post_start(TICKET, "j");
   await host.opened();
-  host.port.postMessage({ oasisfox_cmdline: { kind: "focused" } });
+  host.port.postMessage({ desertfox_cmdline: { kind: "focused" } });
   press_enter();
   await until(() => host.submits().length === 1);
   assert.deepEqual(host.submits(), submit_of("my.jira"));
@@ -220,8 +220,8 @@ test("a copy that a site embedded itself, with a ticket it made up, sends no his
   // The site learned the extension origin from an earlier `ready`, embedded cmdline.html and sends its own start.
   const { post_start } = await load_page(t, "embedded_copy");
   const site = post_start("made-up", "", ["<ArrowUp>", "<Enter>"]);
-  site.port.postMessage({ oasisfox_cmdline: { kind: "token", token: "<ArrowUp>" } });
-  site.port.postMessage({ oasisfox_cmdline: { kind: "token", token: "<Enter>" } });
+  site.port.postMessage({ desertfox_cmdline: { kind: "token", token: "<ArrowUp>" } });
+  site.port.postMessage({ desertfox_cmdline: { kind: "token", token: "<Enter>" } });
   await settle();
   assert.deepEqual(site.received, []);
 });
@@ -229,8 +229,8 @@ test("a copy that a site embedded itself, with a ticket it made up, sends no his
 test("keys the host forwarded before the page opened are typed once it has", async (t) => {
   const { input, post_start } = await load_page(t, "queued_tokens");
   const host = post_start(TICKET, "open");
-  host.port.postMessage({ oasisfox_cmdline: { kind: "token", token: "<Space>" } });
-  host.port.postMessage({ oasisfox_cmdline: { kind: "token", token: "x" } });
+  host.port.postMessage({ desertfox_cmdline: { kind: "token", token: "<Space>" } });
+  host.port.postMessage({ desertfox_cmdline: { kind: "token", token: "x" } });
   await until(() => input.value === "open x");
   assert.equal(input.value, "open x");
 });
@@ -245,7 +245,7 @@ test("a stored keymap with no cmdline mode still lets Enter submit", async (t) =
   const { post_start, press_enter } = await load_page(t, "no_cmdline_mode", { keymap: { ...KEYMAP, modes: {} } });
   const host = post_start(TICKET, "jira");
   await host.opened();
-  host.port.postMessage({ oasisfox_cmdline: { kind: "focused" } });
+  host.port.postMessage({ desertfox_cmdline: { kind: "focused" } });
   press_enter();
   await until(() => host.submits().length === 1);
   assert.deepEqual(host.submits(), submit_of("my.jira"));
@@ -255,9 +255,9 @@ test("the page answers the host's check after a frame load", async (t) => {
   const { post_start } = await load_page(t, "check");
   const host = post_start(TICKET, "");
   await host.opened();
-  host.port.postMessage({ oasisfox_cmdline: { kind: "check" } });
+  host.port.postMessage({ desertfox_cmdline: { kind: "check" } });
   await until(() => host.received.length === 2);
-  assert.deepEqual(host.received.at(-1), { oasisfox_cmdline: { kind: "here" } });
+  assert.deepEqual(host.received.at(-1), { desertfox_cmdline: { kind: "here" } });
 });
 
 test("an Enter typed in the frame waits for the keys the host forwarded before it", async (t) => {
@@ -265,9 +265,9 @@ test("an Enter typed in the frame waits for the keys the host forwarded before i
   const host = post_start(TICKET, "jir");
   await host.opened();
   // The host forwarded "a", then moved focus, and the user's Enter reached the frame before "a" left the port.
-  host.port.postMessage({ oasisfox_cmdline: { kind: "token", token: "a" } });
+  host.port.postMessage({ desertfox_cmdline: { kind: "token", token: "a" } });
   press_enter();
-  host.port.postMessage({ oasisfox_cmdline: { kind: "focused" } });
+  host.port.postMessage({ desertfox_cmdline: { kind: "focused" } });
   await until(() => host.submits().length === 1);
   assert.deepEqual(host.submits(), submit_of("my.jira"));
 });
@@ -276,13 +276,13 @@ test("Enter on a command that lacks a value shows the error, keeps the line open
   const { input, to_background, post_start, press_enter } = await load_page(t, "precheck_missing");
   const host = post_start(TICKET, "fetch ");
   await host.opened();
-  host.port.postMessage({ oasisfox_cmdline: { kind: "focused" } });
+  host.port.postMessage({ desertfox_cmdline: { kind: "focused" } });
   press_enter();
   await settle();
   assert.deepEqual(host.submits(), []);
   // Nothing but the one ticket redemption: no history record, no run, no close.
   assert.deepEqual(to_background, ["open_cmdline"]);
-  assert.equal(host.received.filter((data) => (data as { oasisfox_cmdline: { kind: string } }).oasisfox_cmdline.kind === "close").length, 0);
+  assert.equal(host.received.filter((data) => (data as { desertfox_cmdline: { kind: string } }).desertfox_cmdline.kind === "close").length, 0);
   assert.equal(input.value, "fetch ");
 });
 
@@ -290,10 +290,10 @@ test("after the missing value is typed, the same open line submits once", async 
   const { input, to_background, post_start, press_enter } = await load_page(t, "precheck_then_valid");
   const host = post_start(TICKET, "fetch ");
   await host.opened();
-  host.port.postMessage({ oasisfox_cmdline: { kind: "focused" } });
+  host.port.postMessage({ desertfox_cmdline: { kind: "focused" } });
   press_enter();
   await settle();
-  host.port.postMessage({ oasisfox_cmdline: { kind: "token", token: "x" } });
+  host.port.postMessage({ desertfox_cmdline: { kind: "token", token: "x" } });
   await until(() => input.value === "fetch x");
   press_enter();
   await until(() => host.submits().length === 1);
@@ -306,7 +306,7 @@ test("an empty value on a required param without a default counts as missing", a
   const { to_background, post_start, press_enter } = await load_page(t, "precheck_empty");
   const host = post_start(TICKET, "move --offset=");
   await host.opened();
-  host.port.postMessage({ oasisfox_cmdline: { kind: "focused" } });
+  host.port.postMessage({ desertfox_cmdline: { kind: "focused" } });
   press_enter();
   await settle();
   assert.deepEqual(host.submits(), []);
@@ -320,15 +320,15 @@ test("the list shows every command when the line opens, and the host hears the h
   await host.opened();
   assert.equal(list.children.length, OPENED.commands.length);
   assert.equal(list.hidden, false);
-  const resizes = host.received.filter((data) => (data as { oasisfox_cmdline: { kind: string } }).oasisfox_cmdline.kind === "resize");
-  assert.deepEqual(resizes, [{ oasisfox_cmdline: { kind: "resize", height: 140 } }]);
+  const resizes = host.received.filter((data) => (data as { desertfox_cmdline: { kind: string } }).desertfox_cmdline.kind === "resize");
+  assert.deepEqual(resizes, [{ desertfox_cmdline: { kind: "resize", height: 140 } }]);
 });
 
 test("Tab previews a command in the line and Enter submits what the line shows", async (t) => {
   const { input, post_start, press, press_enter } = await load_page(t, "tab_then_enter");
   const host = post_start(TICKET, "");
   await host.opened();
-  host.port.postMessage({ oasisfox_cmdline: { kind: "focused" } });
+  host.port.postMessage({ desertfox_cmdline: { kind: "focused" } });
   await settle();
   press("Tab");
   assert.equal(input.value, "fetch ");
@@ -352,7 +352,7 @@ test("a redeemed line asks for tabs once and shows them when they arrive", async
   const { list, to_background, item_asks, post_start, press } = await load_page(t, "tabs_arrive", { with_tab_command: true });
   const host = post_start(TICKET, "tab ");
   await host.opened();
-  host.port.postMessage({ oasisfox_cmdline: { kind: "focused" } });
+  host.port.postMessage({ desertfox_cmdline: { kind: "focused" } });
   await until(() => item_asks.length === 1);
   press("a");
   assert.equal(to_background.filter((type) => type === "complete_items").length, 1);
@@ -366,7 +366,7 @@ test("a tab reply that lands after the line submitted draws nothing", async (t) 
   const { list, item_asks, post_start, press_enter } = await load_page(t, "tabs_after_close", { with_tab_command: true });
   const host = post_start(TICKET, "tab a");
   await host.opened();
-  host.port.postMessage({ oasisfox_cmdline: { kind: "focused" } });
+  host.port.postMessage({ desertfox_cmdline: { kind: "focused" } });
   await until(() => item_asks.length === 1);
   press_enter();
   await until(() => host.submits().length === 1);
@@ -382,13 +382,13 @@ test("a refocus from the host focuses the input and leaves the caret and selecti
   await host.opened();
   input.setSelectionRange(2, 6);
   const before = input.focus_count;
-  host.port.postMessage({ oasisfox_cmdline: { kind: "refocus" } });
+  host.port.postMessage({ desertfox_cmdline: { kind: "refocus" } });
   await until(() => input.focus_count === before + 1);
   assert.deepEqual([input.focus_count, input.value, input.selectionStart, input.selectionEnd], [before + 1, "open here", 2, 6]);
 });
 
 // A click target the way the page reads it: the name cell with a help id, or an item with its index.
-const click_on_name = (help: string) => ({ target: { closest: (selector: string) => (selector === ".oasisfox-cmdline-link" ? { dataset: { help } } : undefined) } });
+const click_on_name = (help: string) => ({ target: { closest: (selector: string) => (selector === ".desertfox-cmdline-link" ? { dataset: { help } } : undefined) } });
 const click_on_item = (index: number) => ({ target: { closest: (selector: string) => (selector === "[data-index]" ? { dataset: { index: String(index) } } : undefined) } });
 
 test("a click on a command name asks for its help and closes the line", async (t) => {
@@ -398,8 +398,8 @@ test("a click on a command name asks for its help and closes the line", async (t
   list.listeners.click!(click_on_name("my.jira"));
   await until(() => sent.some((message) => message.type === "open_help"));
   assert.deepEqual(sent.filter((message) => message.type === "open_help"), [{ type: "open_help", command_id: "my.jira" }]);
-  await until(() => host.received.some((data) => (data as { oasisfox_cmdline: { kind: string } }).oasisfox_cmdline.kind === "close"));
-  assert.ok(host.received.some((data) => (data as { oasisfox_cmdline: { kind: string } }).oasisfox_cmdline.kind === "close"));
+  await until(() => host.received.some((data) => (data as { desertfox_cmdline: { kind: string } }).desertfox_cmdline.kind === "close"));
+  assert.ok(host.received.some((data) => (data as { desertfox_cmdline: { kind: string } }).desertfox_cmdline.kind === "close"));
 });
 
 test("a click elsewhere on a row picks it by absolute index and sends no help request", async (t) => {

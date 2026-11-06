@@ -4,9 +4,9 @@ Guidance for coding agents in this repository. `CLAUDE.md` points here. Keep the
 
 ## Overview
 
-OasisFox is a keyboard-first Firefox extension built around one command registry. Every command is defined once, and keys, the command line, completion, help and which-key all read that definition. It works on its own. Oasis Dots integration is optional, through a native host.
+DesertFox is a keyboard-first Firefox extension built around one command registry. Every command is defined once, and keys, the command line, completion, help and which-key all read that definition. It works on its own. Oasis Dots integration is optional, through a native host.
 
-OasisFox has no official release and no users yet, so a breaking change costs nothing. Choose the best long-term design, not the cheap migration. This rule ends at the first official release.
+DesertFox has no official release and no users yet, so a breaking change costs nothing. Choose the best long-term design, not the cheap migration. This rule ends at the first official release.
 
 ## Where to look
 
