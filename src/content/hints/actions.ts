@@ -137,12 +137,15 @@ export function is_inside_link(element: Element): boolean {
   return false;
 }
 
-// The word segment that holds the offset, or the one that starts there. A space or punctuation holds none.
+// The word segment that holds the offset, or the one that ends there: the caret lands after the last letter when the point is on its right half. A point between two non-words holds none.
 export function word_range_at(text: string, offset: number): [number, number] | undefined {
+  let before: [number, number] | undefined;
   for (const part of new Intl.Segmenter(undefined, { granularity: "word" }).segment(text)) {
-    if (offset >= part.index && offset < part.index + part.segment.length) return part.isWordLike ? [part.index, part.index + part.segment.length] : undefined;
+    const span: [number, number] = [part.index, part.index + part.segment.length];
+    if (offset >= span[0] && offset < span[1]) return part.isWordLike ? span : before?.[1] === offset ? before : undefined;
+    before = part.isWordLike ? span : undefined;
   }
-  return undefined;
+  return before?.[1] === offset ? before : undefined;
 }
 
 // The word under the point, for a text node only. Firefox selects nothing for a synthetic double-click. A field keeps its own selection rules and is left alone, and a point on a box with no text changes nothing. The range is set directly, because the move and extend by word depend on the platform at a word start.

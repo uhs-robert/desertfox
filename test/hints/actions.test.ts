@@ -652,19 +652,21 @@ test("double_click gives the focus on each press and calls click() never", () =>
   assert.equal(page.calls.filter((call) => call === "native-click").length, 0);
 });
 
-test("word_range_at finds the word at its start, middle and end, and nothing on a space", () => {
+test("word_range_at finds the word at its start, middle and end, and nothing between non-words", () => {
   const text = "say hello, world";
   assert.deepEqual(word_range_at(text, 4), [4, 9]);
   assert.deepEqual(word_range_at(text, 6), [4, 9]);
   assert.deepEqual(word_range_at(text, 8), [4, 9]);
-  assert.equal(word_range_at(text, 3), undefined);
-  assert.equal(word_range_at(text, 9), undefined);
+  assert.deepEqual(word_range_at(text, 3), [0, 3]);
+  assert.deepEqual(word_range_at(text, 9), [4, 9]);
+  assert.deepEqual(word_range_at(text, 16), [11, 16]);
   assert.equal(word_range_at(text, 10), undefined);
+  assert.equal(word_range_at("a  b", 2), undefined);
 });
 
 test("double_click selects the word under the middle of a text target and nothing on others", () => {
   const steps: string[] = [];
-  const text = { nodeType: 3, data: "say hello there" };
+  const text = { nodeType: 3, data: "say hello  there" };
   const selection = { removeAllRanges: () => steps.push("clear"), addRange: (range: { start: number; end: number }) => steps.push(`add ${range.start} ${range.end}`) };
   Object.assign(globalThis, { Node: { TEXT_NODE: 3 } });
   const document_with = (node: unknown, offset = 4) => ({
@@ -678,7 +680,7 @@ test("double_click selects the word under the middle of a text target and nothin
   fixture("div", { ownerDocument: document_with({ nodeType: 1 }), contains: () => true }).run("double_click");
   fixture("input", { type: "text", ownerDocument: document_with(text), contains: () => true }).run("double_click");
   fixture("p", { ownerDocument: document_with(text), contains: () => false }).run("double_click");
-  fixture("p", { ownerDocument: document_with(text, 3), contains: () => true }).run("double_click");
+  fixture("p", { ownerDocument: document_with(text, 10), contains: () => true }).run("double_click");
   assert.deepEqual(steps.filter((step) => !step.startsWith("point")), []);
 });
 
