@@ -419,6 +419,25 @@ test("a tab row accepted by a click or a single-match Tab keeps its tab: a model
   assert.equal(single.session.get_text(), "tab 2 GitHub Gist x");
 });
 
+test("previewing another row after an accept ends the accept: a model change then follows the new preview", async () => {
+  const { session, asks, settle, change_tabs } = make();
+  const docs: TabItem[] = [
+    { id: 31, number: 1, title: "Doc", url: "https://a.test/" },
+    { id: 32, number: 11, title: "Doc", url: "https://b.test/" },
+  ];
+  session.edit("tab ");
+  asks[0]!.answer(docs);
+  await settle();
+  session.pick(0);
+  assert.equal(session.get_text(), "tab 1 Doc ");
+  assert.deepEqual(names(session), ["1: Doc", "11: Doc"]);
+  tab_key(session);
+  tab_key(session);
+  assert.equal(session.get_text(), "tab 11 Doc ");
+  change_tabs([docs[0]!, { ...docs[1]!, number: 12 }]);
+  assert.equal(session.get_text(), "tab 12 Doc ");
+});
+
 test("a model change under a previewed row that is no tab row leaves the preview alone", async () => {
   const { session, asks, settle, change_tabs } = make();
   session.edit("bookmark -t ");

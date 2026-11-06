@@ -85,6 +85,8 @@ export function create_session(deps: SessionDeps) {
     const row = completion?.rows[index];
     if (!completion || !row) return;
     const base = (saved ??= { text, caret });
+    // A new preview replaces the accepted row, so a model change follows the preview.
+    accepted = undefined;
     selected = index;
     replace_text(base.text.slice(0, completion.start) + row.insert + base.text.slice(completion.end));
     caret = completion.start + row.insert.length;
