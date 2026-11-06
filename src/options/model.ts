@@ -47,7 +47,7 @@ function default_of(name: string): unknown {
 }
 
 // Walks the stored settings, so a setting added later shows without a change here.
-// An unset optional setting is absent from the object and so absent from the rows.
+// Every setting except `home_page` has a default, so each shows a row. `home_page` has none and is absent until set.
 // A live `:set` tag wins over the config file tag, because it is the value in force.
 function setting_rows(settings: Settings, overrides: readonly string[] = [], configured: readonly string[] = []): SettingRow[] {
   return Object.entries(settings).map(([name, value]) => {
