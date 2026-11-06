@@ -2,7 +2,7 @@
 // -font or -radius: a declaration shadows a value the page or host sets. Write each default as a var() fallback.
 
 import { LAYER_ATTRIBUTE, RESTACKED_EVENT } from "../shared/layers.ts";
-import { theme_css, THEME_STORAGE_KEY, USER_CSS_STORAGE_KEY, watch_stored } from "../shared/theme/apply.ts";
+import { FIRST_READ_DEADLINE_MS, theme_css, THEME_STORAGE_KEY, USER_CSS_STORAGE_KEY, watch_stored } from "../shared/theme/apply.ts";
 import type { StoredTheme } from "../shared/theme/apply.ts";
 
 // Each surface holds, after its built-in style, a theme sheet and then a user CSS sheet, so user CSS wins. Every surface of the
@@ -15,13 +15,20 @@ const sheets_of_host = new WeakMap<HTMLElement, Sheets>();
 let theme: StoredTheme | undefined;
 let user_css = "";
 let watching = false;
-// Each surface is hidden until both first reads return, so the var() fallbacks never show. The content script has no synchronous storage.
+// Each surface is hidden until both first reads return or the deadline passes, so the var() fallbacks never show and a hung read cannot
+// hide a surface for good. The content script has no synchronous storage. A read that returns after the deadline still applies.
 let first_reads_pending = 2;
+let waiting_for_reads = true;
 
 const reveal = (host: HTMLElement) => { host.style.visibility = ""; };
 
+function stop_waiting(): void {
+  waiting_for_reads = false;
+  surfaces.forEach((sheets) => reveal(sheets.host));
+}
+
 function first_read_done(): void {
-  if (--first_reads_pending === 0) surfaces.forEach((sheets) => reveal(sheets.host));
+  if (--first_reads_pending === 0) stop_waiting();
 }
 
 const fill_theme = (sheets: Sheets) => { sheets.theme.textContent = theme ? theme_css(theme, sheets.selector) : ""; };
@@ -33,7 +40,8 @@ function drop_hidden_surfaces(): void {
 function watch_once(): void {
   if (watching) return;
   watching = true;
-  if (typeof browser === "undefined") first_reads_pending = 0;
+  if (typeof browser === "undefined") stop_waiting();
+  else setTimeout(stop_waiting, FIRST_READ_DEADLINE_MS);
   let theme_read = false;
   let user_css_read = false;
   watch_stored<StoredTheme>(THEME_STORAGE_KEY, (value) => {
@@ -67,7 +75,7 @@ export function create_surface(class_name: string, style: string, layer: number)
   surfaces.add(sheets);
   sheets_of_host.set(host, sheets);
   watch_once();
-  if (first_reads_pending > 0) host.style.visibility = "hidden";
+  if (waiting_for_reads) host.style.visibility = "hidden";
   root.append(style_element, sheets.theme, sheets.user, text);
   return { host, text };
 }
@@ -83,7 +91,7 @@ export function mount_surface(host: HTMLElement): void {
     surfaces.add(sheets);
     fill_theme(sheets);
     sheets.user.textContent = user_css;
-    if (first_reads_pending === 0) reveal(host);
+    if (!waiting_for_reads) reveal(host);
   }
   if (host.parentElement !== document.documentElement) document.documentElement.append(host);
   const layer_of = (element: Element) => Number(element.getAttribute(LAYER_ATTRIBUTE));

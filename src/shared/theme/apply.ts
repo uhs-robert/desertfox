@@ -30,18 +30,28 @@ export function watch_stored<T>(key: string, on_value: (value: T | undefined) =>
   });
 }
 
-// A page stays hidden until every read its entry point started has returned, so no default color or missing user rule shows first.
-// Without storage nothing returns, so nothing is hidden. Each call returns that read's one-shot release.
+// How long a surface or page stays hidden for its first reads. A hung read must not hide it for good. A read that returns later still applies.
+export const FIRST_READ_DEADLINE_MS = 1000;
+
+// A page stays hidden until every read its entry point started has returned or the deadline has passed, so no default color or missing user
+// rule shows first. Without storage nothing returns, so nothing is hidden. Each call returns that read's one-shot release.
 let page_reads_pending = 0;
+let page_deadline: ReturnType<typeof setTimeout> | undefined;
+function show_page(): void {
+  clearTimeout(page_deadline);
+  page_deadline = undefined;
+  document.documentElement.style.visibility = "";
+}
 function hold_page_for_first_read(): () => void {
   if (typeof browser === "undefined") return () => {};
   document.documentElement.style.visibility = "hidden";
+  page_deadline ??= setTimeout(show_page, FIRST_READ_DEADLINE_MS);
   page_reads_pending++;
   let released = false;
   return () => {
     if (released) return;
     released = true;
-    if (--page_reads_pending === 0) document.documentElement.style.visibility = "";
+    if (--page_reads_pending === 0) show_page();
   };
 }
 

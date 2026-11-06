@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { create_surface } from "../../src/content/surface.ts";
-import { follow_theme, follow_user_css, theme_css, THEME_STORAGE_KEY, USER_CSS_STORAGE_KEY, watch_stored } from "../../src/shared/theme/apply.ts";
+import { FIRST_READ_DEADLINE_MS, follow_theme, follow_user_css, theme_css, THEME_STORAGE_KEY, USER_CSS_STORAGE_KEY, watch_stored } from "../../src/shared/theme/apply.ts";
 import type { StoredTheme } from "../../src/shared/theme/apply.ts";
 import { load_theme } from "../../src/shared/theme/load.ts";
 
@@ -135,4 +135,24 @@ test("a failed or empty user CSS read still shows the page", async () => {
   assert.equal(style.visibility, "hidden");
   await new Promise((resolve) => setTimeout(resolve, 0));
   assert.equal(style.visibility, "");
+});
+
+test("a hung read shows the page at the deadline, and a late read still applies and leaves the count at zero", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  let settle = () => {};
+  const style = fake_page_with_storage(() => new Promise((resolve) => (settle = () => resolve({ [THEME_STORAGE_KEY]: stored }))));
+  const sheet = follow_theme(".x");
+  assert.equal(style.visibility, "hidden");
+  t.mock.timers.tick(FIRST_READ_DEADLINE_MS);
+  assert.equal(style.visibility, "");
+  settle();
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.match(sheet.textContent, /--desertfox-bg-core/);
+  assert.equal(style.visibility, "");
+  const next = fake_page_with_storage(async () => ({}));
+  follow_theme(".x");
+  assert.equal(next.visibility, "hidden");
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(next.visibility, "");
 });
