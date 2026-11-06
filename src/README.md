@@ -16,6 +16,7 @@ The code map. Read a folder's README before you change or research code in it.
 - `icons/`: the extension icon.
 - [`shared/`](shared/README.md): types and constants shared by all folders.
   - [`shared/keys/`](shared/keys/README.md): key notation, the prefix tree compiler and the matcher.
+  - [`shared/config_build/`](shared/config_build/README.md): the pure config build from raw file text.
   - [`shared/registry/`](shared/registry/README.md): the command registry, its args check and the command line parser.
 
 `manifest.json` and `managed_schema.json` sit at this level.

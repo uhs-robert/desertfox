@@ -57,8 +57,24 @@ const BOOKMARKS: BookmarkItem[] = Array.from({ length: 30 }, (_, index) => ({ ti
 // The background answers when the test says so.
 function make() {
   const asks: { kind: string; answer: (items: TabItem[] | BookmarkItem[] | EngineItem[] | OpenItems | WindowItem[] | HeadingItem[]) => void }[] = [];
+  // The tab model has no reply to await. The first read is its cue to connect, and `answer` is the snapshot arriving.
+  let tab_items: TabItem[] | undefined;
+  let tabs_asked = false;
   const live = create_live_source({
     ask: (kind) => new Promise((resolve) => void asks.push({ kind, answer: (items) => resolve({ items }) })),
+    tabs: () => {
+      if (!tabs_asked) {
+        tabs_asked = true;
+        asks.push({
+          kind: "tabs",
+          answer: (items) => {
+            tab_items = items as TabItem[];
+            session.source_ready();
+          },
+        });
+      }
+      return tab_items;
+    },
     on_ready: () => session.source_ready(),
   });
   const session = create_session({
@@ -67,7 +83,7 @@ function make() {
     complete: create_completer(lookup, COMMANDS, {}, SOURCES, "normal", live),
   });
   const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
-  return { session, live, asks, settle };
+  return { session, live, asks, settle, change_tabs: (items: TabItem[]) => { tab_items = items; session.source_ready(); } };
 }
 const tab_key = (session: ReturnType<typeof make>["session"]) => session.run("cmdline.next_completion", undefined);
 const names = (session: ReturnType<typeof make>["session"]) => session.get_rows().map((row) => row.name);
@@ -125,13 +141,13 @@ test("bookmarks show the 20 newest on an empty word, rank every bookmark for a t
 
 test("Escape while the fetch is pending closes the line, and the reply that lands after the close changes nothing", async () => {
   const { session, live, asks, settle } = make();
-  session.edit("tab ");
+  session.edit("bookmark -t ");
   assert.equal(session.run("mode.escape", undefined).kind, "close");
   live.close();
-  asks[0]!.answer(TABS);
+  asks[0]!.answer(BOOKMARKS);
   await settle();
   assert.deepEqual(names(session), []);
-  assert.equal(session.get_text(), "tab ");
+  assert.equal(session.get_text(), "bookmark -t ");
 });
 
 test("a reply that lands after Escape closed the list does not reopen it, and typing finds the cache", async () => {
@@ -318,6 +334,19 @@ test("a tab row carries its status, flags, favicon and container from the tab it
   ]);
 });
 
+test("the window number shows on tab rows only when the list spans more than one window", async () => {
+  const one = make();
+  one.session.edit("tab ");
+  one.asks[0]!.answer([{ ...TABS[0]!, window_number: 1 }, { ...TABS[1]!, window_number: 1 }]);
+  await one.settle();
+  assert.deepEqual(one.session.get_rows().map((row) => row.tab?.window_number), [undefined, undefined]);
+  const two = make();
+  two.session.edit("tab ");
+  two.asks[0]!.answer([{ ...TABS[0]!, window_number: 1 }, { ...TABS[1]!, window_number: 2 }]);
+  await two.settle();
+  assert.deepEqual(two.session.get_rows().map((row) => row.tab?.window_number), [1, 2]);
+});
+
 const unload_key = (session: ReturnType<typeof make>["session"]) => session.run("list.act", { action: "unload" });
 
 test("the row key on a loaded tab row asks to unload it, and on an unloaded row to load it, and the list and selection stay", async () => {
@@ -335,20 +364,89 @@ test("the row key on a loaded tab row asks to unload it, and on an unloaded row 
   assert.equal(live.read("tabs").loading, false);
 });
 
-test("patch_tab changes only that row's marks, in place, and later rankings show it", async () => {
-  const { session, live, asks, settle } = make();
+test("a model change under a previewed tab row rebuilds the rows and keeps the preview on the same tab, with its new number in the line", async () => {
+  const { session, asks, settle, change_tabs } = make();
   session.edit("tab ");
   asks[0]!.answer(TABS);
   await settle();
   session.run("cmdline.next_completion", undefined);
+  session.run("cmdline.next_completion", undefined);
+  assert.equal(session.get_text(), "tab 2 GitHub ");
+  change_tabs([{ ...TABS[1]!, number: 1, title: "GitHub renamed", discarded: true }, TABS[2]!, TABS[3]!]);
+  assert.deepEqual(names(session), ["1: GitHub renamed", "3: GitHub Gist", "4: Bob's \"page\""]);
+  assert.equal(session.get_selected(), 0);
+  assert.equal(session.get_text(), "tab 1 GitHub renamed ");
+  assert.deepEqual(session.get_rows()[0]!.tab?.flags, ["discarded"]);
+});
+
+test("a model change that removes the previewed tab clears the preview and puts the typed text back", async () => {
+  const { session, asks, settle, change_tabs } = make();
+  session.edit("tab ");
+  asks[0]!.answer(TABS);
+  await settle();
+  session.run("cmdline.next_completion", undefined);
+  session.run("cmdline.next_completion", undefined);
+  change_tabs([TABS[0]!, TABS[2]!, TABS[3]!]);
+  assert.equal(session.get_selected(), -1);
+  assert.equal(session.get_text(), "tab ");
+  assert.equal(names(session).length, 3);
+});
+
+test("a tab row accepted by a click or a single-match Tab keeps its tab: a model change renumbers it, and its removal restores the typed text", async () => {
+  const gist = { ...TABS[2]!, number: 2 };
+  const shifted = [TABS[1]!, gist, TABS[3]!].map((tab, index) => ({ ...tab, number: index + 1 }));
+  const clicked = make();
+  clicked.session.edit("tab ");
+  clicked.asks[0]!.answer(TABS);
+  await clicked.settle();
+  clicked.session.pick(2);
+  assert.equal(clicked.session.get_text(), "tab 3 GitHub Gist ");
+  clicked.change_tabs([TABS[1]!, TABS[2]!, TABS[3]!].map((tab, index) => ({ ...tab, number: index + 1 })));
+  assert.equal(clicked.session.get_text(), "tab 2 GitHub Gist ");
+  clicked.change_tabs([TABS[1]!, TABS[3]!]);
+  assert.equal(clicked.session.get_text(), "tab ");
+
+  const single = make();
+  single.session.edit("tab gist");
+  single.asks[0]!.answer(TABS);
+  await single.settle();
+  tab_key(single.session);
+  assert.equal(single.session.get_text(), "tab 3 GitHub Gist ");
+  single.change_tabs(shifted);
+  assert.equal(single.session.get_text(), "tab 2 GitHub Gist ");
+  single.session.edit("tab 2 GitHub Gist x");
+  single.change_tabs([TABS[0]!]);
+  assert.equal(single.session.get_text(), "tab 2 GitHub Gist x");
+});
+
+test("previewing another row after an accept ends the accept: a model change then follows the new preview", async () => {
+  const { session, asks, settle, change_tabs } = make();
+  const docs: TabItem[] = [
+    { id: 31, number: 1, title: "Doc", url: "https://a.test/" },
+    { id: 32, number: 11, title: "Doc", url: "https://b.test/" },
+  ];
+  session.edit("tab ");
+  asks[0]!.answer(docs);
+  await settle();
+  session.pick(0);
+  assert.equal(session.get_text(), "tab 1 Doc ");
+  assert.deepEqual(names(session), ["1: Doc", "11: Doc"]);
+  tab_key(session);
+  tab_key(session);
+  assert.equal(session.get_text(), "tab 11 Doc ");
+  change_tabs([docs[0]!, { ...docs[1]!, number: 12 }]);
+  assert.equal(session.get_text(), "tab 12 Doc ");
+});
+
+test("a model change under a previewed row that is no tab row leaves the preview alone", async () => {
+  const { session, asks, settle, change_tabs } = make();
+  session.edit("bookmark -t ");
+  asks[0]!.answer(BOOKMARKS);
+  await settle();
+  session.run("cmdline.next_completion", undefined);
   const before = session.get_rows();
-  const marks = { id: 12, status: "", flags: ["discarded" as const] };
-  session.patch_tab(marks);
-  live.patch_tab({ ...TABS[1]!, discarded: true });
+  change_tabs([]);
   assert.equal(session.get_rows(), before);
-  assert.deepEqual(session.get_rows().map((row) => row.tab?.flags), [[], ["discarded"], [], []]);
-  session.edit("tab git");
-  assert.deepEqual(session.get_rows().map((row) => row.tab?.flags), [["discarded"], []]);
 });
 
 test("the row key on a command row, an empty selection or a closed list does nothing but show a note", async () => {

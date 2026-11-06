@@ -27,7 +27,7 @@ const window_of = (id: number, incognito: boolean, title: string, type = "normal
 // Two normal windows and one private window, in `windows.getAll` order.
 const WINDOWS = [window_of(10, false, "Mail"), window_of(20, true, "Secret"), window_of(11, false, "Docs\n tab")];
 
-function make({ openers = [1, 2], all_windows = false, tabs = ALL_TABS, bookmarks = [] as BookmarkNode[], fail = false, page = undefined as { url: string } | undefined, history = [] as HistoryNode[], open = { sources: ["bookmarks", "history"], history_max: 10 } as OpenSettings, read_tab = (async () => undefined) as (id: number) => Promise<TabLike | undefined>, discard = {} as DiscardDeps } = {}) {
+function make({ openers = [1, 2], tabs = ALL_TABS, bookmarks = [] as BookmarkNode[], fail = false, page = undefined as { url: string } | undefined, history = [] as HistoryNode[], open = { sources: ["bookmarks", "history"], history_max: 10 } as OpenSettings, read_tab = (async () => undefined) as (id: number) => Promise<TabLike | undefined>, discard = {} as DiscardDeps } = {}) {
   const history_reads: number[] = [];
   const asked: (number | undefined)[] = [];
   const opened = new Set(openers);
@@ -46,7 +46,6 @@ function make({ openers = [1, 2], all_windows = false, tabs = ALL_TABS, bookmark
       return bookmarks;
     },
     is_opener: async (tab_id) => opened.has(tab_id),
-    all_windows: async () => all_windows,
     containers: async () => new Map(),
     previous_tab: async () => undefined,
     read_tab,
@@ -66,22 +65,21 @@ function make({ openers = [1, 2], all_windows = false, tabs = ALL_TABS, bookmark
 const titles = (answer: Awaited<ReturnType<ReturnType<typeof make>["service"]["answer"]>>) => (answer?.items as { title: string }[]).map((item) => item.title);
 
 test("a tab that redeemed no ticket gets nothing and the browser is not asked", async () => {
-  const { service, asked } = make({ openers: [] });
-  assert.equal(await service.answer("tabs", NORMAL_LINE), undefined);
+  const { service, history_reads } = make({ openers: [] });
   assert.equal(await service.answer("bookmarks", NORMAL_LINE), undefined);
-  assert.deepEqual(asked, []);
+  assert.equal(await service.answer("open", NORMAL_LINE), undefined);
+  assert.deepEqual(history_reads, []);
 });
 
 test("a sender that is not a tab, and an unknown kind, get nothing", async () => {
   const { service } = make();
-  assert.equal(await service.answer("tabs", undefined), undefined);
+  assert.equal(await service.answer("bookmarks", undefined), undefined);
   assert.equal(await service.answer("history", NORMAL_LINE), undefined);
 });
 
-test("a normal line lists only normal tabs and a private line only private tabs", async () => {
-  const { service } = make({ all_windows: true });
-  assert.deepEqual(titles(await service.answer("tabs", NORMAL_LINE)), ["Tab 1", "Tab 2", "Tab 3"]);
-  assert.deepEqual(titles(await service.answer("tabs", PRIVATE_LINE)), ["Tab 4", "Tab 5"]);
+test("the tab list is not a fetched kind any more: the tab model serves it", async () => {
+  const { service } = make();
+  assert.equal(await service.answer("tabs", NORMAL_LINE), undefined);
 });
 
 test("a private tab in the line's own window stays out of a normal line", () => {
@@ -90,23 +88,14 @@ test("a private tab in the line's own window stays out of a normal line", () => 
   assert.deepEqual(listed_tabs(mixed, { window_id: 10, incognito: true }).map((item) => item.id), [2]);
 });
 
-test("the current window by default, every window with the setting, and the line's window first", async () => {
-  const one = make();
-  assert.deepEqual(titles(await one.service.answer("tabs", NORMAL_LINE)), ["Tab 1", "Tab 2"]);
-  assert.deepEqual(one.asked, [10]);
-  const all = make({ all_windows: true });
-  const answer = await all.service.answer("tabs", { ...NORMAL_LINE, window_id: 11 });
-  assert.deepEqual(titles(answer), ["Tab 3", "Tab 1", "Tab 2"]);
-  assert.deepEqual(all.asked, [undefined]);
+test("the line's window lists first, then the other windows by id", () => {
+  const tabs = [tab(1, 0, 10, false), tab(2, 0, 11, false), tab(3, 1, 11, false)];
+  assert.deepEqual(listed_tabs(tabs, { window_id: 11, incognito: false }).map((item) => item.id), [2, 3, 1]);
 });
 
-test("the number is the place in the tab bar counted from 1, current tab included", async () => {
-  const { service } = make();
-  const answer = await service.answer("tabs", NORMAL_LINE);
-  assert.deepEqual(answer?.items, [
-    { id: 1, number: 1, title: "Tab 1", url: "https://site1.test/" },
-    { id: 2, number: 2, title: "Tab 2", url: "https://site2.test/" },
-  ]);
+test("the number is the place in the tab bar counted from 1, current tab included", () => {
+  const [first, second] = listed_tabs([tab(1, 0, 10, false), tab(2, 1, 10, false)], { window_id: 10, incognito: false });
+  assert.deepEqual([first!.number, second!.number], [1, 2]);
 });
 
 test("a tab with no title shows its address, and a title is cut to one line", () => {
@@ -132,24 +121,19 @@ test("bookmarks drop folders and separators, merge equal addresses and keep the 
 
 test("a failed browser call gives an empty list, not an error", async () => {
   const { service } = make({ fail: true });
-  assert.deepEqual(await service.answer("tabs", NORMAL_LINE), { items: [] });
   assert.deepEqual(await service.answer("bookmarks", NORMAL_LINE), { items: [] });
 });
 
 test("a tab that navigates or closes while the lookup runs gets nothing", async () => {
   const opened = new Set([1]);
   const service = create_complete_items({
-    query_tabs: async () => {
-      opened.delete(1);
-      return ALL_TABS;
-    },
+    query_tabs: async () => ALL_TABS,
     query_windows: async () => WINDOWS,
     all_bookmarks: async () => {
       opened.delete(1);
       return [];
     },
     is_opener: async (tab_id) => opened.has(tab_id),
-    all_windows: async () => false,
     containers: async () => new Map(),
     previous_tab: async () => undefined,
     read_tab: async () => undefined,
@@ -159,8 +143,6 @@ test("a tab that navigates or closes while the lookup runs gets nothing", async 
     search_history: async () => [],
     open_settings: async () => ({ sources: ["bookmarks", "history"], history_max: 10 }),
   });
-  assert.equal(await service.answer("tabs", NORMAL_LINE), undefined);
-  opened.add(1);
   assert.equal(await service.answer("bookmarks", NORMAL_LINE), undefined);
 });
 
@@ -284,7 +266,6 @@ test("the opener is checked before and after the history fetch", async () => {
     query_windows: async () => [],
     all_bookmarks: async () => [],
     is_opener: async (tab_id) => opened.has(tab_id),
-    all_windows: async () => false,
     containers: async () => new Map(),
     previous_tab: async () => undefined,
     read_tab: async () => undefined,
@@ -310,7 +291,6 @@ test("a failed history read leaves the bookmarks, and a failed bookmark read lea
         return MARKS;
       },
       is_opener: async () => true,
-      all_windows: async () => false,
       containers: async () => new Map(),
       previous_tab: async () => undefined,
     read_tab: async () => undefined,
@@ -392,53 +372,24 @@ test("the container lookup maps identities, and gives none when containers are o
   assert.equal((await read_containers(async () => false)).size, 0);
 });
 
-test("the answer keeps the tab id and drops the window id, keeps the new fields, and sends a long data: favicon nowhere", async () => {
+test("the row keeps the new fields and sends a long data: favicon nowhere", () => {
   const long = `data:image/png;base64,${"A".repeat(5000)}`;
   const tabs = [
     in_window(1, { active: true, favIconUrl: long, pinned: true }),
     in_window(2, { favIconUrl: "https://a.test/i.png", cookieStoreId: "firefox-container-1" }),
   ];
-  const service = create_complete_items({
-    query_tabs: async () => tabs,
-    all_bookmarks: async () => [],
-    is_opener: async () => true,
-    all_windows: async () => false,
-    containers: async () => new Map([["firefox-container-1", FOX]]),
-    previous_tab: async () => 2,
-    read_tab: async () => undefined,
-    discard: {} as DiscardDeps,
-    query_windows: async () => [],
-    search_engines: async () => ENGINES,
-    page_of: async () => undefined,
-    search_history: async () => [],
-    open_settings: async () => ({ sources: [], history_max: 0 }),
-  });
-  const answer = await service.answer("tabs", NORMAL_LINE);
-  assert.deepEqual(answer?.items, [
-    { id: 1, number: 1, title: "Tab 1", url: "https://site1.test/", active: true, pinned: true },
-    { id: 2, number: 2, title: "Tab 2", url: "https://site2.test/", favicon: "https://a.test/i.png", container: FOX, alternate: true },
+  const listed = listed_tabs(tabs, { window_id: 10, incognito: false }, new Map([["firefox-container-1", FOX]]), 2);
+  assert.deepEqual(listed, [
+    { id: 1, window_id: 10, number: 1, title: "Tab 1", url: "https://site1.test/", active: true, pinned: true },
+    { id: 2, window_id: 10, number: 2, title: "Tab 2", url: "https://site2.test/", favicon: "https://a.test/i.png", container: FOX, alternate: true },
   ]);
-  assert.ok(JSON.stringify(answer).length < 600);
 });
 
-test("a private line lists private tabs with their favicon and flags and no container", async () => {
+test("a private line lists private tabs with their favicon and flags and no container", () => {
   const private_tabs = [{ ...tab(4, 0, 20, true), active: true, favIconUrl: "https://p.test/i.png", cookieStoreId: "firefox-private" }];
-  const service = create_complete_items({
-    query_tabs: async () => private_tabs,
-    all_bookmarks: async () => [],
-    is_opener: async () => true,
-    all_windows: async () => false,
-    containers: async () => new Map([["firefox-container-1", FOX]]),
-    previous_tab: async () => undefined,
-    read_tab: async () => undefined,
-    discard: {} as DiscardDeps,
-    query_windows: async () => [],
-    search_engines: async () => ENGINES,
-    page_of: async () => undefined,
-    search_history: async () => [],
-    open_settings: async () => ({ sources: [], history_max: 0 }),
-  });
-  assert.deepEqual((await service.answer("tabs", PRIVATE_LINE))?.items, [{ id: 4, number: 1, title: "Tab 4", url: "https://site4.test/", favicon: "https://p.test/i.png", active: true }]);
+  assert.deepEqual(listed_tabs(private_tabs, { window_id: 20, incognito: true }, new Map([["firefox-container-1", FOX]])), [
+    { id: 4, window_id: 20, number: 1, title: "Tab 4", url: "https://site4.test/", favicon: "https://p.test/i.png", active: true },
+  ]);
 });
 
 test("a popup window is not listed, and it still counts a place so the numbers stay put", () => {

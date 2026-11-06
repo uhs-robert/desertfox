@@ -31,6 +31,33 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, open_p
     await wait_event(mark, became_visible("p9e_three"), `tab p9e_three after "tab ${place}"`);
   });
 
+  await run_case("the tabs list shows a tab created while the list is open, with no keypress", async () => {
+    let live_id;
+    let picked = false;
+    try {
+      await send_keys(":");
+      await sleep(700);
+      await send_keys("tab p9e_live");
+      await sleep(300);
+      // The list has no match yet. The model patch adds the row, and the pick below finds it.
+      live_id = await background(`browser.tabs.create({ url: ${JSON.stringify(url_of("page", "p9e_live"))}, active: false }).then((tab) => tab.id)`);
+      await sleep(1000);
+      const mark = events.length;
+      await send_keys("-k", "Tab", "-k", "Return");
+      picked = true;
+      await wait_event(mark, became_visible("p9e_live"), "the tab created under the open list");
+    } finally {
+      // A failed case must leave neither the tab nor the open line behind for the cases after it.
+      if (live_id !== undefined) await background(`browser.tabs.remove(${live_id}).catch(() => {})`);
+      if (!picked) {
+        await send_keys("-k", "Escape");
+        await sleep(200);
+        await send_keys("-k", "Escape");
+      }
+      await sleep(500);
+    }
+  });
+
   await run_case("bookmark -t lists the bookmarks, and a pick opens it in a new tab", async () => {
     await background(`browser.bookmarks.create({ title: "P9e Zeta bookmark", url: ${JSON.stringify(url_of("page", "p9e_mark"))} })`);
     await send_keys(":");

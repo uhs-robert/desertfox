@@ -3,14 +3,14 @@
 // parsed by the registry's grammar, then go through `check_args`. A binding
 // that leaves out a required param needs a `prompt`, as it does at load.
 
-import type { CommandMeta, Mode } from "../../src/shared/command.ts";
-import { DEFAULT_SETTINGS, with_fallback_engines, type SnippetEntry } from "../../src/shared/config.ts";
-import { label_problem, to_firefox_shortcut, parse_sequence } from "../../src/shared/keys/index.ts";
-import { find_param } from "../../src/shared/registry/params.ts";
-import { check_args, create_registry, DefineError, type Registry } from "../../src/shared/registry/index.ts";
-import { parse_binding } from "../../src/shared/registry/parse_binding.ts";
-import type { BoundInvocation, Prompt } from "../../src/shared/invocation.ts";
-import type { Modifier } from "../../src/shared/keymap.ts";
+import type { CommandMeta, Mode } from "../command.ts";
+import { DEFAULT_SETTINGS, with_fallback_engines, type SnippetEntry } from "../config.ts";
+import { label_problem, to_firefox_shortcut, parse_sequence } from "../keys/index.ts";
+import { find_param } from "../registry/params.ts";
+import { check_args, create_registry, DefineError, type Registry } from "../registry/index.ts";
+import { parse_binding } from "../registry/parse_binding.ts";
+import type { BoundInvocation, Prompt } from "../invocation.ts";
+import type { Modifier } from "../keymap.ts";
 import { origin_key, type MergedData } from "./merge.ts";
 
 const no_op = () => {};

@@ -11,6 +11,7 @@ import {
   is_dynamic_values,
   join_alternatives,
   static_values,
+  value_rule_error,
 } from "./params.ts";
 
 // Lists for enum params whose values come from a runtime source. The caller
@@ -76,6 +77,12 @@ export function check_args(
     const error = when_error(command, param, args);
     if (error && explicit) return fail(error);
     if (!error) args[param.name] = value;
+  }
+  for (const param of params) {
+    const value = args[param.name];
+    if (!param.value_when || typeof value !== "string") continue;
+    const error = value_rule_error(param, value, args);
+    if (error) return fail(error);
   }
   for (const param of params) {
     if (args[param.name] === undefined && !param.when && param.type !== "bool") {

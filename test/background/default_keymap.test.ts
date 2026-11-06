@@ -209,3 +209,16 @@ test("the frames filter defaults to the focus action, and ;f and gF are bound", 
   assert.equal(normal.gF!.id, "frame.exit");
   assert.equal(registry.get("frame.exit")!.label, "Focus top page");
 });
+
+test("hint modifier variants whose action needs another filter are not bound", () => {
+  const { compiled } = compile(DEFAULT_KEYMAP);
+  const is_bound = (keys: string) => {
+    let node: TreeBranch | undefined = compiled.modes.normal as unknown as TreeBranch;
+    for (const key of keys) node = node?.children?.[key] as TreeBranch | undefined;
+    return node !== undefined;
+  };
+  const hidden = [";bB", ";bp", ";bi", ";wB", ";wp", ";wi", ";yB", ";yp", ";yi", ";YI", ";Yf", ";Ym", ";Yi"];
+  const valid = [";bl", ";bI", ";bf", ";bm", ";wl", ";yl", ";yI", ";yf", ";ym", ";Yl", ";Yp", ";YB", ";Ya", ";rB", ";hB", ";xi"];
+  for (const keys of hidden) assert.equal(is_bound(keys), false, `${keys} is bound`);
+  for (const keys of valid) assert.equal(is_bound(keys), true, `${keys} is missing`);
+});

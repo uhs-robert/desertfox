@@ -192,7 +192,6 @@ export const browser_complete_items_deps = {
 export type CompleteItemsDeps = typeof browser_complete_items_deps & {
   // Whether the frame of the tab redeemed a ticket, and the tab has not closed or navigated since.
   is_opener: (tab_id: number, frame_id: number) => Promise<boolean>;
-  all_windows: () => Promise<boolean>;
   // The tab the line's window was on before its current one.
   previous_tab: (window_id: number) => Promise<number | undefined>;
   search_engines: () => Promise<Record<string, SearchEngine>>;
@@ -214,14 +213,12 @@ export function create_complete_items(deps: CompleteItemsDeps) {
     return { rows: open_rows(sources, bookmarks, history), history_max };
   };
 
-  const fetch_items = async (kind: "tabs" | "bookmarks" | "engines" | "open" | "windows", asker: Asker): Promise<CompleteItemsAnswer["items"]> => {
+  const fetch_items = async (kind: "bookmarks" | "engines" | "open" | "windows", asker: Asker): Promise<CompleteItemsAnswer["items"]> => {
     // The set is read once per line. The line is modal over one tab, so the page cannot change under it.
     if (kind === "engines") return engine_items(await deps.search_engines(), await deps.page_of(asker.tab_id));
     if (kind === "open") return open_items(asker);
     if (kind === "windows") return listed_windows(await deps.query_windows(), asker).map(({ number, title }) => ({ number, title }));
-    if (kind === "bookmarks") return bookmark_items(await deps.all_bookmarks());
-    const tabs = await read_tabs(deps.query_tabs, asker, await deps.all_windows(), await deps.containers(), await deps.previous_tab(asker.window_id));
-    return tabs.map(({ window_id, ...item }) => item);
+    return bookmark_items(await deps.all_bookmarks());
   };
 
   return {
@@ -243,7 +240,7 @@ export function create_complete_items(deps: CompleteItemsDeps) {
     // Undefined for a sender that is not a tab, for a tab that opened no line and for a tab that closed or navigated
     // while the lookup ran. A failed browser call gives an empty list.
     answer: async (kind: unknown, asker: Asker | undefined): Promise<CompleteItemsAnswer | undefined> => {
-      if ((kind !== "tabs" && kind !== "bookmarks" && kind !== "engines" && kind !== "open" && kind !== "windows") || !asker || !(await deps.is_opener(asker.tab_id, asker.frame_id))) return undefined;
+      if ((kind !== "bookmarks" && kind !== "engines" && kind !== "open" && kind !== "windows") || !asker || !(await deps.is_opener(asker.tab_id, asker.frame_id))) return undefined;
       const items = await fetch_items(kind, asker).catch(() => (kind === "open" ? { rows: [], history_max: 0 } : []));
       return (await deps.is_opener(asker.tab_id, asker.frame_id)) ? { items } : undefined;
     },

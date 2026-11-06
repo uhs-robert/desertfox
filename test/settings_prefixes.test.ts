@@ -7,8 +7,8 @@ import { compile_config } from "../src/background/compile.ts";
 import { empty_config } from "../src/background/config_load.ts";
 import { DEFAULT_SETTINGS } from "../src/shared/config.ts";
 import { build_config, read_commands_file } from "../tools/build-config/build_config.ts";
-import { ConfigErrors } from "../tools/build-config/errors.ts";
-import { build_schemas } from "../tools/build-config/schemas.ts";
+import { ConfigErrors } from "../src/shared/config_build/errors.ts";
+import { build_schemas } from "../src/shared/config_build/schemas.ts";
 import { make_fake } from "./background/fakes.ts";
 
 const commands = read_commands_file(join(import.meta.dirname, "fixtures", "build-config", "commands.json"));

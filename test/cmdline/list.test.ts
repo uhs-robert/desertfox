@@ -145,6 +145,15 @@ test("a tab row leads with the status, container and favicon cells, and a row wi
   assert.equal(element.style.vars["--desertfox-flags-width"], "28px");
 });
 
+test("a tab row with a window number draws one dim cell before the name, and 0 draws it empty", () => {
+  const { element, list } = setup();
+  const tab = (window_number: number) => ({ ...rows(1)[0]!, tab: { id: 1, status: "", flags: [], window_number } });
+  list.render([tab(2), tab(0)], -1);
+  const cells = (index: number) => (element.children[index] as Node).children;
+  assert.deepEqual(cells(0).map((cell) => cell.className).slice(3, 5), ["desertfox-cmdline-tab-window", "desertfox-cmdline-name"]);
+  assert.deepEqual([cells(0)[3]!.textContent, cells(1)[3]!.textContent], ["2", ""]);
+});
+
 test("a tab with no container or favicon draws empty cells, and no flags take no width", () => {
   const { element, list } = setup();
   list.render([{ ...rows(1)[0]!, tab: { id: 1, status: "", flags: [] } }], -1);

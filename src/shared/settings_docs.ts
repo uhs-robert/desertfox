@@ -1,4 +1,4 @@
-// The editor description of each setting, for `tools/build-config/schemas.ts` only. Kept out of `settings_table.ts`
+// The editor description of each setting, for `src/shared/config_build/schemas.ts` only. Kept out of `settings_table.ts`
 // because the command line page bundles that table and has no room for this prose. The record type makes a setting
 // without a description a compile error.
 

@@ -6,9 +6,12 @@ import { create_matcher, event_to_token } from "../shared/keys/index.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY } from "../shared/prefix_tree.ts";
 import type { CompiledKeymap } from "../shared/prefix_tree.ts";
 import { check_args, parse_command_line } from "../shared/registry/index.ts";
-import type { CmdlineOpened, CompleteItemsAnswer, ContentToBackground, HeadingItem, SetTabUnloadedAnswer } from "../shared/messages.ts";
+import type { CmdlineOpened, CompleteItemsAnswer, ContentToBackground, HeadingItem, SetTabUnloadedAnswer, TabModelMessage, TabModelRequest } from "../shared/messages.ts";
+import { TAB_MODEL_PORT_NAME } from "../shared/tab_model_port.ts";
 import { create_live_source } from "./completion/live.ts";
-import { create_completer, marks_of } from "./completion/sources.ts";
+import { create_model_client } from "./completion/model_client.ts";
+import type { ModelClient } from "./completion/model_client.ts";
+import { create_completer } from "./completion/sources.ts";
 import { edit_forwarded, run_token, run_token_without_keymap } from "./key_input.ts";
 import type { TokenMatcher } from "./key_input.ts";
 import type { HostToPage, PageToHost } from "./protocol.ts";
@@ -79,14 +82,45 @@ async function open_line(start: Start, port: MessagePort): Promise<void> {
       headings_reply = (items) => resolve({ items });
       tell_host({ kind: "list_headings" });
     });
-  // Asks the background for tabs and bookmarks only when a subject needs them, and only here, after the ticket redeemed.
+  // The tab model port opens on the first tab read, and only here, after the ticket redeemed: the background admits only the frame that redeemed it.
+  let model_port: browser.runtime.Port | undefined;
+  let model: ModelClient | undefined;
+  let model_lost = false;
+  const connect_model = (): ModelClient => {
+    const port = browser.runtime.connect({ name: TAB_MODEL_PORT_NAME });
+    const client = create_model_client({
+      line_window_id: opened.window_id,
+      all_windows: opened.all_windows,
+      request_resync: () => port.postMessage({ type: "resync" } satisfies TabModelRequest),
+      on_change: () => {
+        session.source_ready();
+        render();
+      },
+    });
+    port.onMessage.addListener((message) => client.receive(message as TabModelMessage));
+    // The background closes the port when the opener check fails, before any snapshot. A list that has rows keeps them.
+    port.onDisconnect.addListener(() => {
+      model_lost = true;
+      if (client.items() === undefined) session.set_message("could not read the tabs");
+      session.source_ready();
+      render();
+    });
+    model_port = port;
+    return client;
+  };
+  // Asks the background for bookmarks and the like only when a subject needs them, and only here, after the ticket redeemed.
   const live = create_live_source({
     ask: (kind) => (kind === "headings" ? ask_headings() : ask_background<CompleteItemsAnswer | undefined>({ type: "complete_items", kind })),
+    tabs: () => (model ??= connect_model()).items() ?? (model_lost ? [] : undefined),
     on_ready: () => {
       session.source_ready();
       render();
     },
   });
+  const close_sources = () => {
+    live.close();
+    model_port?.disconnect();
+  };
   const session: Session = create_session({
     search: start.search !== undefined,
     history: start.search ? [] : opened.history,
@@ -129,16 +163,15 @@ async function open_line(start: Start, port: MessagePort): Promise<void> {
   // The help opens in a new tab, which takes the focus, so the line on this tab closes.
   const show_help = (command_id: string) => {
     void ask_background({ type: "open_help", command_id });
-    live.close();
+    close_sources();
     tell_host({ kind: "close" });
   };
 
+  // The row's marks change only when the model's patch arrives, so the answer carries just the refusal.
   const flip_tab = (tab_id: number, unloaded: boolean) => {
     void ask_background<SetTabUnloadedAnswer | undefined>({ type: "set_tab_unloaded", tab_id, unloaded }).then(
       (answer) => {
         if (!answer) return session.set_message("could not change the tab");
-        live.patch_tab(answer.item);
-        session.patch_tab(marks_of(answer.item));
         session.set_message(answer.refusal ? `not ${unloaded ? "unloaded" : "loaded"}: ${answer.refusal}` : undefined);
       },
       () => session.set_message("could not change the tab"),
@@ -147,14 +180,14 @@ async function open_line(start: Start, port: MessagePort): Promise<void> {
 
   const carry_out = (effect: Effect) => {
     if (effect.kind === "close") {
-      live.close();
+      close_sources();
       tell_host({ kind: "close" });
     }
     else if (effect.kind === "find_commit") tell_host({ kind: "find_commit" });
     else if (effect.kind === "help") show_help(effect.command_id);
     else if (effect.kind === "set_tab_unloaded") flip_tab(effect.tab_id, effect.unloaded);
     else if (effect.kind === "submit") {
-      live.close();
+      close_sources();
       void ask_background({ type: "record_cmdline", text: effect.text });
       tell_host({ kind: "submit", invocation: effect.invocation });
     } else render();
