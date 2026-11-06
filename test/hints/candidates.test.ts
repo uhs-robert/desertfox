@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { Found } from "../../src/content/hints/candidates.ts";
-import { keep_text_matches, collect, drop_redundant_weak, keep_visible_deduplicated, has_click_sign, has_own_text, NO_OWN_TEXT, has_text, make_weak_test, query_for } from "../../src/content/hints/candidates.ts";
+import { keep_text_matches, collect, drop_redundant_weak, keep_visible_deduplicated, has_click_sign, has_own_text, NO_OWN_TEXT, has_text, is_image, make_weak_test, query_for } from "../../src/content/hints/candidates.ts";
 
 type Fake = { name: string; local: string; shadow?: Fake[]; frame?: Fake[] | "cross_origin"; href?: boolean };
 
@@ -232,6 +232,30 @@ test("collect keeps only the elements that pass the test", () => {
 
 test("the media filter takes video and audio", () => {
   assert.equal(query_for("media", undefined).selector, "video, audio");
+});
+
+test("the images filter tests every element for a picture", () => {
+  const query = query_for("images", undefined);
+  assert.equal(query.selector, "*");
+  assert.equal(typeof query.test, "function");
+});
+
+const sized = (side: number, extra: Record<string, unknown>) =>
+  ({ getBoundingClientRect: () => ({ width: side, height: side }), ownerDocument: { defaultView: { getComputedStyle: () => ({ backgroundImage: "none" }) } }, ...extra }) as never;
+
+test("is_image keeps an img and an image button from 24 px, and drops a tracking pixel and a small icon", () => {
+  assert.equal(is_image(sized(32, { localName: "img" })), true);
+  assert.equal(is_image(sized(24, { localName: "input", type: "image" })), true);
+  assert.equal(is_image(sized(1, { localName: "img" })), false);
+  assert.equal(is_image(sized(23, { localName: "img" })), false);
+});
+
+test("is_image keeps a sized box with a background url, and not inline svg or a plain box", () => {
+  const background = { ownerDocument: { defaultView: { getComputedStyle: () => ({ backgroundImage: 'url("https://a.test/h.jpg")' }) } } };
+  assert.equal(is_image(sized(200, { localName: "div", ...background })), true);
+  assert.equal(is_image(sized(200, { localName: "svg" })), false);
+  assert.equal(is_image(sized(200, { localName: "div" })), false);
+  assert.equal(is_image(sized(10, { localName: "div", ...background })), false);
 });
 
 test("the scrollable filter keeps only the scroll boxes", () => {

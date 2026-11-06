@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { is_media, link_address, perform, player_box, takes_typing } from "../../src/content/hints/actions.ts";
+import { element_address, has_usable_address, is_media, perform, player_box, takes_typing } from "../../src/content/hints/actions.ts";
 import type { HintAction } from "../../src/content/hints/actions.ts";
 
 // Node has no DOM events. The fakes only need the type and the position.
@@ -102,10 +102,74 @@ test("takes_typing knows fields from buttons", () => {
   assert.equal(takes_typing({ localName: "a" } as never), false);
 });
 
-test("link_address refuses script addresses", () => {
-  assert.equal(link_address({ href: "JavaScript:alert(1)" } as never), undefined);
-  assert.equal(link_address({ href: "" } as never), undefined);
-  assert.equal(link_address({ href: "https://a.test/" } as never), "https://a.test/");
+test("element_address takes a link's href and refuses script addresses", () => {
+  assert.equal(element_address({ localName: "a", href: "JavaScript:alert(1)" } as never), undefined);
+  assert.equal(element_address({ localName: "a", href: "" } as never), undefined);
+  assert.equal(element_address({ localName: "a", href: "https://a.test/" } as never), "https://a.test/");
+});
+
+const img = (extra: Record<string, unknown>) => ({ localName: "img", ...extra }) as never;
+
+test("element_address of an image prefers what the browser loaded, then src, then a lazy attribute", () => {
+  assert.equal(element_address(img({ currentSrc: "https://a.test/chosen.avif", src: "https://a.test/a.jpg" })), "https://a.test/chosen.avif");
+  assert.equal(element_address(img({ currentSrc: "", src: "https://a.test/a.jpg" })), "https://a.test/a.jpg");
+  const lazy = { currentSrc: "", src: "data:image/gif;base64,R0lG", getAttribute: (name: string) => (name === "data-src" ? "https://a.test/real.jpg" : null) };
+  assert.equal(element_address(img(lazy)), "https://a.test/real.jpg");
+  assert.equal(element_address(img({ currentSrc: "", src: "", getAttribute: () => null })), undefined);
+});
+
+test("element_address refuses blob addresses and long inline data, and keeps a short inline image", () => {
+  assert.equal(element_address(img({ currentSrc: "blob:https://a.test/1" })), undefined);
+  assert.equal(element_address(img({ currentSrc: `data:image/png;base64,${"A".repeat(9000)}` })), undefined);
+  assert.equal(element_address(img({ currentSrc: "data:image/png;base64,AAAA" })), "data:image/png;base64,AAAA");
+});
+
+test("element_address reads an image button, a media source and, on request, a background", () => {
+  assert.equal(element_address({ localName: "input", type: "image", src: "https://a.test/b.png" } as never), "https://a.test/b.png");
+  assert.equal(element_address({ localName: "video", currentSrc: "https://a.test/v.mp4" } as never), "https://a.test/v.mp4");
+  const box = { localName: "div", ownerDocument: { defaultView: { getComputedStyle: () => ({ backgroundImage: 'linear-gradient(red, blue), url("https://a.test/h.jpg")' }) } } } as never;
+  assert.equal(element_address(box), undefined);
+  assert.equal(element_address(box, true), "https://a.test/h.jpg");
+});
+
+test("a relative lazy attribute resolves against the base URL", () => {
+  const lazy = { currentSrc: "", src: "", baseURI: "https://a.test/page/", getAttribute: () => "/img/real.jpg" };
+  assert.equal(element_address(img(lazy)), "https://a.test/img/real.jpg");
+});
+
+test("a background url keeps a closing parenthesis inside its quotes", () => {
+  const box = { localName: "div", ownerDocument: { defaultView: { getComputedStyle: () => ({ backgroundImage: 'url("https://a.test/a_(1).jpg")' }) } } } as never;
+  assert.equal(element_address(box, true), "https://a.test/a_(1).jpg");
+});
+
+test("under the images filter a background image wins over the href of its link", () => {
+  const link = { localName: "a", href: "https://a.test/post", ownerDocument: { defaultView: { getComputedStyle: () => ({ backgroundImage: 'url("https://a.test/h.jpg")' }) } } } as never;
+  assert.equal(element_address(link, true), "https://a.test/h.jpg");
+  assert.equal(element_address(link), "https://a.test/post");
+});
+
+test("a short data image can be copied but not opened", () => {
+  const inline = img({ currentSrc: "data:image/png;base64,AAAA" });
+  assert.equal(has_usable_address(inline, true, true), false);
+  assert.equal(has_usable_address(inline, true, false), true);
+});
+
+test("an image inside a link gives its own address, never the link's", () => {
+  assert.equal(element_address(img({ currentSrc: "https://a.test/thumb.jpg", parentElement: { href: "https://a.test/post" } })), "https://a.test/thumb.jpg");
+});
+
+test("copy and the open actions use the image address", () => {
+  const page = fixture("img", { currentSrc: "https://a.test/a.jpg" });
+  page.run("copy");
+  page.run("tab");
+  assert.deepEqual(page.copied, ["https://a.test/a.jpg"]);
+  assert.deepEqual(page.opened, [["https://a.test/a.jpg", "tab"]]);
+});
+
+test("copy of an image with no web address refuses and copies nothing", () => {
+  const page = fixture("img", { currentSrc: "blob:https://a.test/1", textContent: "" });
+  assert.deepEqual(page.run("copy"), { ok: false, message: "This element has no web address" });
+  assert.deepEqual(page.copied, []);
 });
 
 test("copy writes the link address and copy_text writes the text", () => {
