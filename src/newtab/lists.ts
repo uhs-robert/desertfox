@@ -34,7 +34,7 @@ export function bookmark_rows(roots: readonly BookmarkNode[], max: number): List
     .map((item) => ({ label: item.title, url: item.url }));
 }
 
-// One list per group in first-seen order. Links with no group share the first list, which has no title.
+// One list per group, in the order each group first appears. Links with no group share one list with no title, placed where the first of them appears.
 export function link_sections(links: readonly NewTabLink[]): ListSection[] {
   const by_title = new Map<string, ListRow[]>();
   for (const link of links) {

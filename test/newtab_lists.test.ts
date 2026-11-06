@@ -43,7 +43,7 @@ test("a failing reader leaves its list out", async () => {
   assert.deepEqual(sections.map((section) => section.title), ["Bookmarks"]);
 });
 
-test("links group by name in first-seen order, ungrouped first", () => {
+test("links group by name in first-seen order, ungrouped links share one untitled list", () => {
   const sections = link_sections([{ label: "A", url: "https://a.example/", group: "Work" }, { label: "B", url: "https://b.example/" }, { label: "C", url: "https://c.example/", group: "Work" }]);
   assert.deepEqual(sections.map((section) => [section.title, section.rows.map((row) => row.label)]), [["Work", ["A", "C"]], ["", ["B"]]]);
 });

@@ -90,3 +90,10 @@ test("build-config: the list flags take booleans and the maxes take whole number
   assert.equal(problems_with_settings("newtab_bookmarks = true\nnewtab_recent_tabs = false\nnewtab_bookmarks_max = 0\nnewtab_recent_tabs_max = 12"), "");
   for (const line of ['newtab_bookmarks = "yes"', "newtab_recent_tabs = 1", "newtab_bookmarks_max = -1", "newtab_recent_tabs_max = 2.5"]) assert.match(problems_with_settings(line), /expected/, line);
 });
+
+test("build-config: a bad newtab_links item is named by index, label and field", () => {
+  const second_bad = '[[newtab_links]]\nlabel = "A"\nurl = "https://a.example/"\n[[newtab_links]]\nlabel = "Bad"\nurl = "javascript:1"';
+  assert.match(problems_with_settings(second_bad), /newtab_links: expected .*, but item 2 \("Bad"\) needs an http or https "url"/);
+  assert.match(problems_with_settings('[[newtab_links]]\nurl = "https://a.example/"'), /but item 1 needs a non-empty "label"/);
+  assert.match(problems_with_settings('[[newtab_links]]\nlabel = "A"\nurl = "https://a.example/"\nlink = 1'), /item 1 \("A"\) has the unknown field "link"/);
+});

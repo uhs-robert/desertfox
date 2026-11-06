@@ -76,7 +76,7 @@ export type Settings = {
   newtab_bookmarks_max?: number;
   newtab_recent_tabs?: boolean;
   newtab_recent_tabs_max?: number;
-  // Links the new tab page shows under their group name. A link with no group shows in a list of its own.
+  // Links the new tab page shows under their group name. Links with no group share one untitled list.
   newtab_links?: NewTabLink[];
 };
 
