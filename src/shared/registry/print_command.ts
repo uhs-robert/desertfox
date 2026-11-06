@@ -46,7 +46,7 @@ export function print_flag(param: ParamDef, value: unknown, style: FlagStyle = "
 }
 
 // A source stays in the text even when it is the default, so a binding keeps showing where its value comes from.
-// A conditional default counts only while its condition holds for the other args.
+// The default is the one the other args resolve to, so an arg equal to it is left out.
 function is_default(command: Printable, param: ParamDef, value: unknown, args: Record<string, unknown>): boolean {
   const applicable = default_of(command, param, args);
   return applicable !== undefined && !is_context_source(applicable) && !is_context_source(value) && String(applicable) === String(value);

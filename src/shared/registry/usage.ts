@@ -1,5 +1,5 @@
 import type { CommandDef, ParamDef } from "../command.ts";
-import { bare_word_param, default_value, literal_default, flag_params, is_dynamic_values, positional_params, static_values, subject_param } from "./params.ts";
+import { bare_word_param, always_default, literal_default, flag_params, is_dynamic_values, positional_params, static_values, subject_param } from "./params.ts";
 
 type Usable = Pick<CommandDef, "id" | "name" | "params">;
 
@@ -27,15 +27,14 @@ function flag_usage(param: ParamDef): string {
   return is_optional(param) ? `[${word}]` : word;
 }
 
-// Every way to type one param as a flag, short before long. The default enum value is the state without the flag, so it needs no mention.
+// Every way to type one param as a flag, short before long. A value that is the default in every context is the state without the flag, so it needs no mention.
 export function flag_alternatives(param: ParamDef): string[] {
   const dashed = (word: string) => word.replaceAll("_", "-");
   let alternatives: string[];
   if (param.type === "bool") {
     alternatives = [...(typeof param.short === "string" ? [`-${param.short}`] : []), `--${dashed(param.name)}`];
   } else if (param.type === "enum" && static_values(param)) {
-    // The default value is the state without the flag, so it needs no mention.
-    const values = (static_values(param) ?? []).filter((value) => value !== default_value(param));
+    const values = (static_values(param) ?? []).filter((value) => !always_default(param, value));
     alternatives = values.flatMap((value) => {
       const letter = typeof param.short === "object" ? param.short[value] : undefined;
       return [...(letter ? [`-${letter}`] : []), `--${dashed(value)}`];
