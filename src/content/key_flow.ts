@@ -4,6 +4,8 @@
 import type { Mode, TreeBranch, TreeLeaf } from "../shared/index.ts";
 import type { MatchResult } from "../shared/keys/index.ts";
 import type { Sink } from "./bundle_host.ts";
+import { is_caret_mode } from "../shared/command.ts";
+import { is_chord } from "../shared/keys/token.ts";
 
 export type KeyDecision = "cancel" | "pass";
 
@@ -27,15 +29,18 @@ export type KeyFlowDeps = {
 
 const MAX_HELD_KEYS = 32;
 
-// Chords carry Ctrl, Alt or Meta. Shift alone is a plain key (`J`, `<S-Escape>`).
-const is_chord = (token: string) => /^<(?:[SCAM]-)*[CAM]-/.test(token);
-
 // Insert and ignore mode give keys to the page, and hint and cmdline mode own theirs. Every other mode blocks Quick Find, so a new mode does too.
 const MODES_WITHOUT_QUICK_FIND_BLOCK: readonly Mode[] = ["insert", "ignore", "hint", "cmdline"];
 
-// Firefox starts Quick Find on `/` and `'` in page content, beside DesertFox's own page search. In a field these keys are typing.
-export const blocks_quick_find = (mode: Mode, token: string, in_field: boolean): boolean =>
-  (token === "/" || token === "'") && !in_field && !MODES_WITHOUT_QUICK_FIND_BLOCK.includes(mode);
+// What a caret mode still lets through: focus moves, Firefox's function keys and the way out of a page dialog.
+const KEYS_PAST_CARET_MODES = /^<(?:S-)?(?:Tab|F\d+|Escape)>$/;
+
+// Which unbound keys the page never sees. Firefox starts Quick Find on `/` and `'` in page content, beside DesertFox's own page search. A caret mode is for reading, so a site shortcut or page scroll there would move the user away from the caret. In a field every key is typing, and a chord stays with Firefox and the page (Ctrl+C copies a selection).
+export const cancels_unbound_key = (mode: Mode, token: string, in_field: boolean): boolean => {
+  if (in_field || is_chord(token)) return false;
+  if (is_caret_mode(mode)) return !KEYS_PAST_CARET_MODES.test(token);
+  return (token === "/" || token === "'") && !MODES_WITHOUT_QUICK_FIND_BLOCK.includes(mode);
+};
 
 export function create_key_flow(deps: KeyFlowDeps) {
   let matcher: Matcher | undefined;
@@ -94,7 +99,7 @@ export function create_key_flow(deps: KeyFlowDeps) {
     if (result.kind === "pending") return "cancel";
     // The page sees this Escape too, so it can close its own dialog.
     if (mode === "insert" && token === "<Escape>") deps.leave_insert();
-    return blocks_quick_find(mode, token, deps.in_editable_field()) ? "cancel" : "pass";
+    return cancels_unbound_key(mode, token, deps.in_editable_field()) ? "cancel" : "pass";
   };
 
   const decide = (active: Matcher, token: string): KeyDecision => {

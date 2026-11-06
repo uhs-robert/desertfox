@@ -22,7 +22,7 @@ A note "(prompts)" means the binding sets a `prompt` for a param, so the command
 
 <!-- BEGIN generated -->
 
-bound: 259 (normal 141, hint 2, cmdline 13, caret 31, visual 33, visual_line 34, insert 1, ignore 1, browser 3) | later: 14 | dropped: 6
+bound: 271 (normal 141, hint 2, cmdline 13, caret 35, visual 37, visual_line 38, insert 1, ignore 1, browser 3) | later: 14 | dropped: 6
 
 ### normal
 
@@ -256,6 +256,10 @@ Which-key group names:
 | `l` | bound | `caret.move --char` | Move caret |  |
 | `j` | bound | `caret.move --line` | Move caret |  |
 | `k` | bound | `caret.move --line --back` | Move caret |  |
+| `<ArrowLeft>` | bound | `caret.move --char --back` | Move caret |  |
+| `<ArrowRight>` | bound | `caret.move --char` | Move caret |  |
+| `<ArrowDown>` | bound | `caret.move --line` | Move caret |  |
+| `<ArrowUp>` | bound | `caret.move --line --back` | Move caret |  |
 | `w` | bound | `caret.move --word` | Move caret |  |
 | `b` | bound | `caret.move --word --back` | Move caret |  |
 | `e` | bound | `caret.move --word-end` | Move caret |  |
@@ -282,6 +286,10 @@ Which-key group names:
 | `l` | bound | `caret.move --char` | Move caret |  |
 | `j` | bound | `caret.move --line` | Move caret |  |
 | `k` | bound | `caret.move --line --back` | Move caret |  |
+| `<ArrowLeft>` | bound | `caret.move --char --back` | Move caret |  |
+| `<ArrowRight>` | bound | `caret.move --char` | Move caret |  |
+| `<ArrowDown>` | bound | `caret.move --line` | Move caret |  |
+| `<ArrowUp>` | bound | `caret.move --line --back` | Move caret |  |
 | `w` | bound | `caret.move --word` | Move caret |  |
 | `b` | bound | `caret.move --word --back` | Move caret |  |
 | `e` | bound | `caret.move --word-end` | Move caret |  |
@@ -320,6 +328,10 @@ Which-key group names:
 | `l` | bound | `caret.move --char` | Move caret |  |
 | `j` | bound | `caret.move --line` | Move caret |  |
 | `k` | bound | `caret.move --line --back` | Move caret |  |
+| `<ArrowLeft>` | bound | `caret.move --char --back` | Move caret |  |
+| `<ArrowRight>` | bound | `caret.move --char` | Move caret |  |
+| `<ArrowDown>` | bound | `caret.move --line` | Move caret |  |
+| `<ArrowUp>` | bound | `caret.move --line --back` | Move caret |  |
 | `w` | bound | `caret.move --word` | Move caret |  |
 | `b` | bound | `caret.move --word --back` | Move caret |  |
 | `e` | bound | `caret.move --word-end` | Move caret |  |

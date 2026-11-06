@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { takes_typing } from "../src/content/editable.ts";
 import { args_for_count } from "../src/content/invocation_args.ts";
 import { create_cancelled_keys } from "../src/content/cancelled_keys.ts";
-import { blocks_quick_find, create_key_flow } from "../src/content/key_flow.ts";
+import { cancels_unbound_key, create_key_flow } from "../src/content/key_flow.ts";
 import { ignore_regex_source, ignores_any_address, matches_pattern } from "../src/shared/match_pattern.ts";
 import { mode_label } from "../src/content/mode_label.ts";
 import { wire_mode_reports } from "../src/content/mode_report.ts";
@@ -209,14 +209,29 @@ test("startup replay uses the mode set before the keymap", () => {
   assert.deepEqual(ran, []);
 });
 
-test("Quick Find keys are blocked in normal, caret, visual and any new mode, outside fields", () => {
-  for (const mode of ["normal", "caret", "visual", "visual_line"] as const) {
-    assert.equal(blocks_quick_find(mode, "/", false), true, mode);
-    assert.equal(blocks_quick_find(mode, "'", false), true, mode);
-    assert.equal(blocks_quick_find(mode, "'", true), false, mode);
+test("normal mode keeps only the unbound Quick Find keys from the page, outside fields", () => {
+  assert.equal(cancels_unbound_key("normal", "/", false), true);
+  assert.equal(cancels_unbound_key("normal", "'", false), true);
+  assert.equal(cancels_unbound_key("normal", "'", true), false);
+  for (const mode of ["insert", "ignore", "hint", "cmdline"] as const) assert.equal(cancels_unbound_key(mode, "/", false), false, mode);
+  for (const token of ["<C-/>", "<A-'>", "x", "?", "<Space>"]) assert.equal(cancels_unbound_key("normal", token, false), false, token);
+});
+
+test("caret and both visual modes keep every unbound plain key from the page, outside fields", () => {
+  for (const mode of ["caret", "visual", "visual_line"] as const) {
+    for (const token of ["/", "'", "e", "E", "5", "<Space>", "<Enter>", "<S-Enter>", "<PageDown>", "<Backspace>"]) assert.equal(cancels_unbound_key(mode, token, false), true, `${mode} ${token}`);
+    for (const token of ["<Tab>", "<S-Tab>", "<F5>", "<S-F12>", "<Escape>", "<S-Escape>", "<C-c>", "<A-x>", "<M-v>", "<CS-c>"]) assert.equal(cancels_unbound_key(mode, token, false), false, `${mode} ${token}`);
+    assert.equal(cancels_unbound_key(mode, "e", true), false, mode);
   }
-  for (const mode of ["insert", "ignore", "hint", "cmdline"] as const) assert.equal(blocks_quick_find(mode, "/", false), false, mode);
-  for (const token of ["<C-/>", "<A-'>", "x", "?"]) assert.equal(blocks_quick_find("normal", token, false), false, token);
+});
+
+test("key flow in caret mode cancels an unbound letter and passes Tab and Ctrl+C", () => {
+  const { state, flow } = make_flow();
+  flow.set_matcher(create_matcher(keymap));
+  state.set_mode("caret");
+  assert.equal(flow.handle_token("e"), "cancel");
+  assert.equal(flow.handle_token("<Tab>"), "pass");
+  assert.equal(flow.handle_token("<C-c>"), "pass");
 });
 
 test("key flow cancels an unbound Quick Find key and drops the sequence or count before it", () => {

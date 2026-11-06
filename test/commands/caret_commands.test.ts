@@ -34,6 +34,13 @@ test("every default caret, visual and cmdline binding is the same command as its
   for (const key of ["<Enter>", "<ArrowUp>", "<ArrowDown>", "<C-u>"]) assert.ok(DEFAULT_KEYMAP.cmdline?.[key], key);
 });
 
+test("the arrow keys move like h, j, k and l in caret and both visual modes", () => {
+  const arrows = { "<ArrowLeft>": "h", "<ArrowDown>": "j", "<ArrowUp>": "k", "<ArrowRight>": "l" };
+  for (const mode of ["caret", "visual", "visual_line"] as const) {
+    for (const [arrow, letter] of Object.entries(arrows)) assert.deepEqual(DEFAULT_KEYMAP[mode]?.[arrow], DEFAULT_KEYMAP[mode]?.[letter], `${mode} ${arrow}`);
+  }
+});
+
 test("the placeholder commands are defined", () => {
   for (const id of ["caret.move", "visual.act", "cmdline.submit", "cmdline.history", "cmdline.clear"]) assert.ok(registry.get(id), id);
 });
