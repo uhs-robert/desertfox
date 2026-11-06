@@ -204,3 +204,12 @@ test("the home page opens with the keycap mark", () => {
   const keycap = render(parse_route("")).querySelector(".desertfox-help-keycap");
   assert.equal(keycap?.attributes.src, "icons/desertfox-keycap.svg");
 });
+
+test("the home header holds the keycap above the title, ahead of the tip", () => {
+  const page = render(parse_route("")).querySelector(".desertfox-help-page");
+  const header = page?.children[0] as FakeNode;
+  assert.equal(header.className, "desertfox-help-home-header");
+  assert.equal((header.children[0] as FakeNode).className, "desertfox-help-keycap");
+  assert.equal((header.children[1] as FakeNode).tag, "h1");
+  assert.equal((page?.children[1] as FakeNode).className, "desertfox-help-tip");
+});

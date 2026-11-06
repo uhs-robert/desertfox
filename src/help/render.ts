@@ -164,18 +164,21 @@ function definition_table(rows: { name: string; meaning: string }[]): HTMLElemen
   return el("table", undefined, ...rows.map((row) => el("tr", undefined, el("td", undefined, el("code", undefined, row.name)), el("td", undefined, row.meaning))));
 }
 
+function home_keycap(): HTMLElement {
+  const keycap = document.createElement("img");
+  keycap.className = "desertfox-help-keycap";
+  keycap.setAttribute("src", "icons/desertfox-keycap.svg");
+  keycap.setAttribute("alt", "");
+  return keycap;
+}
+
 function home_page(model: HelpModel): HTMLElement[] {
   const [warnings_section, settings_section] = HOME_SECTIONS as [Section, Section];
   const warnings = model.warnings.length === 0
     ? el("p", "desertfox-help-muted", "No warnings.")
     : el("ul", "desertfox-help-warnings", ...model.warnings.map((warning) => el("li", undefined, warning)));
   const settings = el("table", undefined, ...model.settings.map((row) => el("tr", undefined, el("td", undefined, el("code", undefined, row.name)), el("td", undefined, el("code", undefined, row.value)))));
-  const keycap = document.createElement("img");
-  keycap.className = "desertfox-help-keycap";
-  keycap.setAttribute("src", "icons/desertfox-keycap.svg");
-  keycap.setAttribute("alt", "");
   return [
-    keycap,
     block_node(model.tip),
     section_heading("home", warnings_section),
     warnings,
@@ -378,7 +381,9 @@ export function render_help(root: HTMLElement, model: HelpModel, route: Route, g
   const title = PAGES.find((page) => page.id === route.page)?.title ?? "Home";
   const heading = el("h1", undefined, title);
   heading.tabIndex = -1;
-  const page = el("main", "desertfox-help-page", heading, ...page_body(route, model, guide));
+  // The home header holds the keycap above the title, so the logo stays with the title and not with the tip below.
+  const header = route.page === "home" ? el("header", "desertfox-help-home-header", home_keycap(), heading) : heading;
+  const page = el("main", "desertfox-help-page", header, ...page_body(route, model, guide));
   // The sidebar scrolls on its own, so a fresh one starts at the top. Scroll is set after it is in the tree because a detached element ignores it.
   const old_scroll_top = root.querySelector(".desertfox-help-sidebar")?.scrollTop ?? 0;
   const sidebar_node = sidebar(route.page, model, guide);

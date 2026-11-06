@@ -1,8 +1,19 @@
 # DesertFox
 
-<img src="src/icons/desertfox.svg" alt="DesertFox logo" width="96" height="96">
+<p align="center"><img src="./src/icons/desertfox.svg" height="128" alt="DesertFox logo"/></p>
+
+<hr/>
+
+<p align="center">
+  <a href="https://github.com/uhs-robert/desertfox/stargazers"><img src="https://img.shields.io/github/stars/uhs-robert/desertfox?style=for-the-badge&logo=github&colorA=3b2416&colorB=e0b97a" alt="Stars"/></a>
+  <a href="https://github.com/uhs-robert/desertfox/issues"><img src="https://img.shields.io/github/issues/uhs-robert/desertfox?style=for-the-badge&logo=github&colorA=3b2416&colorB=c8664a" alt="Issues"/></a>
+  <a href="https://github.com/uhs-robert/desertfox/graphs/contributors"><img src="https://img.shields.io/github/contributors/uhs-robert/desertfox?style=for-the-badge&logo=github&colorA=3b2416&colorB=d9822b" alt="Contributors"/></a>
+  <a href="https://github.com/uhs-robert/desertfox/forks"><img src="https://img.shields.io/github/forks/uhs-robert/desertfox?style=for-the-badge&logo=github&colorA=3b2416&colorB=8a6a9e" alt="Forks"/></a>
+</p>
 
 A keyboard-first Firefox extension with one command registry. Keys, the command line, completion, help and which-key all read the same command definitions. It works on its own, and integrates with Oasis Dots (Hyprland and Quickshell) through an optional native host.
+
+<p align="center"><img src="assets/promo/social-preview.png" alt="DesertFox social preview" width="640"/></p>
 
 Status: phase 1 is built. Release 0.1.1 adds the toolbar button, the status page and the keys below.
 
