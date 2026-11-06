@@ -3,6 +3,8 @@ import { test } from "node:test";
 import { add_to_history, create_cmdline_service, HISTORY_LIMIT } from "../../src/background/cmdline_service.ts";
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 1));
+// The frame id of the line's own iframe.
+const LINE_FRAME = 3;
 
 // `slow_set` makes every write take a timer turn, as a real storage write does.
 // `stuck_ticket` is a ticket whose lookup never finishes, as a flood of guesses can hold up storage.
@@ -30,8 +32,8 @@ function make({ slow_set = false, stuck_ticket = "" } = {}) {
     sources: async () => ({ search_engines: ["arch"], containers: [] }),
     page_config: async () => ({ commands: [{ id: "my.snippet", label: "Mine", intent: "page" }], help_ids: ["tab.next"], command_aliases: { g: "open.search" }, prompt: ">> " }),
   });
-  // Opens the line the way the host and the page do: a ticket for tab 7, redeemed from tab 7.
-  const open = async () => (await service.open(await service.issue_ticket(7), 7))!;
+  // Opens the line the way the host and the page do: a ticket for tab 7, redeemed from the line's frame in tab 7.
+  const open = async () => (await service.open(await service.issue_ticket(7), 7, LINE_FRAME))!;
   return { service, open, session_data };
 }
 
@@ -88,56 +90,66 @@ test("a copy of the page that the host did not open gets nothing", async () => {
   const { service } = make();
   await service.record("open https://private.example", false);
   // A site that embeds its own copy picks the frame name, so the page sends whatever ticket the site chose.
-  assert.equal(await service.open("ticket-1", 7), undefined);
-  assert.equal(await service.open("", 7), undefined);
-  assert.equal(await service.open(undefined, 7), undefined);
+  assert.equal(await service.open("ticket-1", 7, LINE_FRAME), undefined);
+  assert.equal(await service.open("", 7, LINE_FRAME), undefined);
+  assert.equal(await service.open(undefined, 7, LINE_FRAME), undefined);
 });
 
 test("a ticket opens the line once, and only from the tab it was issued for", async () => {
   const { service } = make();
   const ticket = await service.issue_ticket(7);
-  assert.equal(await service.open(ticket, 8), undefined);
+  assert.equal(await service.open(ticket, 8, LINE_FRAME), undefined);
   const other = await service.issue_ticket(7);
-  assert.ok(await service.open(other, 7));
-  assert.equal(await service.open(other, 7), undefined);
+  assert.ok(await service.open(other, 7, LINE_FRAME));
+  assert.equal(await service.open(other, 7, LINE_FRAME), undefined);
   assert.equal(await service.issue_ticket(undefined), undefined);
 });
 
 test("two redemptions of one ticket at once give the data only once", async () => {
   const { service } = make();
   const ticket = await service.issue_ticket(7);
-  const answers = await Promise.all([service.open(ticket, 7), service.open(ticket, 7)]);
+  const answers = await Promise.all([service.open(ticket, 7, LINE_FRAME), service.open(ticket, 7, LINE_FRAME)]);
   assert.equal(answers.filter((answer) => answer !== undefined).length, 1);
 });
 
 test("a guessed ticket that is slow to look up does not hold up the real one", async () => {
   const { service } = make({ stuck_ticket: "guess" });
   const ticket = await service.issue_ticket(7);
-  void service.open("guess", 7);
-  const answer = await Promise.race([service.open(ticket, 7), new Promise((resolve) => setTimeout(() => resolve("held up"), 200))]);
+  void service.open("guess", 7, LINE_FRAME);
+  const answer = await Promise.race([service.open(ticket, 7, LINE_FRAME), new Promise((resolve) => setTimeout(() => resolve("held up"), 200))]);
   assert.notEqual(answer, "held up");
   assert.ok(answer);
 });
 
 test("a redeemed ticket marks its tab as an opener, and a refused one does not", async () => {
   const { service, open, session_data } = make();
-  assert.equal(await service.is_opener(7), false);
+  assert.equal(await service.is_opener(7, LINE_FRAME), false);
   const ticket = await service.issue_ticket(7);
-  assert.equal(await service.open(ticket, 8), undefined);
-  assert.equal(await service.open("guess", 7), undefined);
-  assert.equal(await service.is_opener(7), false);
-  assert.equal(await service.is_opener(8), false);
+  assert.equal(await service.open(ticket, 8, LINE_FRAME), undefined);
+  assert.equal(await service.open("guess", 7, LINE_FRAME), undefined);
+  assert.equal(await service.is_opener(7, LINE_FRAME), false);
+  assert.equal(await service.is_opener(8, LINE_FRAME), false);
   await open();
-  assert.equal(await service.is_opener(7), true);
-  assert.equal(await service.is_opener(undefined), false);
+  assert.equal(await service.is_opener(7, LINE_FRAME), true);
+  assert.equal(await service.is_opener(undefined, LINE_FRAME), false);
   assert.equal(Object.keys(session_data).filter((key) => key.includes("opener")).length, 1);
+});
+
+test("only the frame that redeemed the ticket is an opener, and the next line replaces it", async () => {
+  const { service } = make();
+  assert.equal(await service.open(await service.issue_ticket(7), 7, undefined), undefined);
+  assert.ok(await service.open(await service.issue_ticket(7), 7, 3));
+  assert.deepEqual([await service.is_opener(7, 3), await service.is_opener(7, 5), await service.is_opener(7, 0), await service.is_opener(7, undefined)], [true, false, false, false]);
+  // Each line mounts a new frame, so after the next line the old frame (closed, or a copy that kept its id) is no opener.
+  assert.ok(await service.open(await service.issue_ticket(7), 7, 9));
+  assert.deepEqual([await service.is_opener(7, 3), await service.is_opener(7, 9)], [false, true]);
 });
 
 test("closing the tab removes the opener marker", async () => {
   const { service, open } = make();
   await open();
   await service.forget_opener(7);
-  assert.equal(await service.is_opener(7), false);
+  assert.equal(await service.is_opener(7, LINE_FRAME), false);
 });
 
 test("a new page in the tab removes the marker, a finished load or a title change does not", async () => {
@@ -145,9 +157,9 @@ test("a new page in the tab removes the marker, a finished load or a title chang
   await open();
   await service.forget_opener_on_navigation(7, { status: "complete" });
   await service.forget_opener_on_navigation(7, {});
-  assert.equal(await service.is_opener(7), true);
+  assert.equal(await service.is_opener(7, LINE_FRAME), true);
   await service.forget_opener_on_navigation(8, { status: "loading" });
-  assert.equal(await service.is_opener(7), true);
+  assert.equal(await service.is_opener(7, LINE_FRAME), true);
   await service.forget_opener_on_navigation(7, { status: "loading" });
-  assert.equal(await service.is_opener(7), false);
+  assert.equal(await service.is_opener(7, LINE_FRAME), false);
 });

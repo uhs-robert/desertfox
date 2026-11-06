@@ -14,13 +14,16 @@ const gate = (): Gate => {
 };
 // Lets the model's own awaits (window and container reads, the ticket check) finish.
 const tick = () => new Promise<void>((resolve) => setImmediate(resolve));
+// The one web-accessible page, which a web page can frame.
+const LINE_URL = "moz-extension://me/cmdline.html";
+const SIDEBAR_URL = "moz-extension://me/sidebar.html";
 const win = (id: number, extra: Partial<WindowLike> = {}): WindowLike => ({ id, type: "normal", incognito: false, ...extra });
 
 type Options = {
   windows?: WindowLike[];
   containers?: Map<string, ContainerIdentity>;
   previous?: Record<number, number>;
-  is_opener?: (tab_id: number) => Promise<boolean>;
+  is_opener?: (tab_id: number, frame_id: number) => Promise<boolean>;
 };
 
 const tab = (id: number, window_id: number, index: number, extra: Partial<Tab> = {}): Tab =>
@@ -35,7 +38,7 @@ function make(initial: Tab[] = [], options: Options = {}) {
   let windows = options.windows ?? [...new Set(initial.map((t) => t.windowId as number))].sort((a, b) => a - b).map((id) => win(id));
   let containers: Map<string, ContainerIdentity> | "off" = options.containers ?? new Map();
   let window_gate: Gate | undefined;
-  const opener_asks: number[] = [];
+  const opener_asks: string[] = [];
   let connect: (port: TabModelPort) => void = () => {};
   let timers: Array<{ id: number; fn: () => void }> = [];
   let next_timer = 1;
@@ -70,9 +73,10 @@ function make(initial: Tab[] = [], options: Options = {}) {
     previous_of: async (window_id) => options.previous?.[window_id],
     on_connect: { addListener: (fn) => void (connect = fn) },
     is_extension_page: (port) => port.sender?.url?.startsWith("moz-extension://me/") === true,
-    is_opener: (tab_id) => {
-      opener_asks.push(tab_id);
-      return options.is_opener ? options.is_opener(tab_id) : Promise.resolve(true);
+    is_web_accessible_page: (port) => port.sender?.url === LINE_URL,
+    is_opener: (tab_id, frame_id) => {
+      opener_asks.push(`${tab_id}:${frame_id}`);
+      return options.is_opener ? options.is_opener(tab_id, frame_id) : Promise.resolve(true);
     },
     set_timer: (fn) => {
       const id = next_timer++;
@@ -87,7 +91,8 @@ function make(initial: Tab[] = [], options: Options = {}) {
     timers = [];
     for (const t of due) t.fn();
   };
-  const connect_port_now = (options: { incognito?: boolean; url?: string; name?: string; no_sender_tab?: true; tab_id?: number | "none" } = {}) => {
+  // By default a port is the command line page in tab 7, frame 3, so it goes through the ticket check.
+  const connect_port_now = (options: { incognito?: boolean; url?: string; name?: string; no_sender_tab?: true; tab_id?: number | "none"; frame_id?: number | "none" } = {}) => {
     const sent: TabModelMessage[] = [];
     const messages = sent as unknown as Record<0 | 1 | 2 | 3, TabModelMessage> & { length: number };
     let on_message: (m: unknown) => void = () => {};
@@ -96,7 +101,11 @@ function make(initial: Tab[] = [], options: Options = {}) {
     const tab_id = options.tab_id === "none" ? {} : { id: options.tab_id ?? 7 };
     const port: TabModelPort = {
       name: options.name ?? "desertfox_tab_model",
-      sender: { url: options.url ?? "moz-extension://me/sidebar.html", ...(options.no_sender_tab ? {} : { tab: { ...tab_id, incognito: options.incognito ?? false } }) },
+      sender: {
+        url: options.url ?? LINE_URL,
+        ...(options.frame_id === "none" ? {} : { frameId: options.frame_id ?? 3 }),
+        ...(options.no_sender_tab ? {} : { tab: { ...tab_id, incognito: options.incognito ?? false } }),
+      },
       postMessage: (m) => void sent.push(m),
       disconnect: () => void (closed = true),
       onMessage: { addListener: (fn) => void (on_message = fn as (m: unknown) => void) },
@@ -446,9 +455,9 @@ test("an event during a startup query that then fails still leads to a fresh que
 test("a page without a sender tab states its privacy in the port name, and a port that states none gets no rows", async () => {
   const f = make([tab(1, 1, 0), tab(2, 5, 0, { incognito: true })]);
   await f.model.start();
-  const priv = await f.connect_port({ name: "desertfox_tab_model:private", no_sender_tab: true });
-  const normal = await f.connect_port({ name: "desertfox_tab_model:normal", no_sender_tab: true });
-  const silent = await f.connect_port({ no_sender_tab: true });
+  const priv = await f.connect_port({ name: "desertfox_tab_model:private", no_sender_tab: true, url: SIDEBAR_URL });
+  const normal = await f.connect_port({ name: "desertfox_tab_model:normal", no_sender_tab: true, url: SIDEBAR_URL });
+  const silent = await f.connect_port({ no_sender_tab: true, url: SIDEBAR_URL });
   assert.deepEqual(ids(priv.messages[0]), [2]);
   assert.deepEqual(ids(normal.messages[0]), [1]);
   assert.deepEqual(ids(silent.messages[0]), []);
@@ -517,43 +526,50 @@ const pick = <Field extends keyof TabRow>(m: TabModelMessage | undefined, field:
 
 // The ticket gate
 
-test("a port from a tab with no ticket is closed and never gets a snapshot or a patch", async () => {
+test("a command line port from a tab with no ticket is closed and never gets a snapshot or a patch", async () => {
   const f = make([tab(1, 1, 0)], { is_opener: async () => false });
   await f.model.start();
   const p = await f.connect_port({ tab_id: 7 });
-  assert.deepEqual([p.messages.length, p.closed(), f.opener_asks], [0, true, [7]]);
+  assert.deepEqual([p.messages.length, p.closed(), f.opener_asks], [0, true, ["7:3"]]);
   f.fire("onUpdated", 1, { title: "z" }, tab(1, 1, 0, { title: "z" }));
   f.run_timers();
   p.send({ type: "resync" });
   assert.equal(p.messages.length, 0);
 });
 
-test("a framed command line page in a web page's tab cannot connect", async () => {
-  // The frame is an extension page, but its tab redeemed no ticket.
-  const f = make([tab(1, 1, 0)], { is_opener: async (tab_id) => tab_id === 7 });
+test("a second command line page framed in the line's own tab cannot connect, and the line itself can", async () => {
+  // A page frames its own copy of cmdline.html while the user's line (frame 3) is open in the same tab.
+  const f = make([tab(1, 1, 0)], { is_opener: async (tab_id, frame_id) => tab_id === 7 && frame_id === 3 });
   await f.model.start();
-  const framed = await f.connect_port({ url: "moz-extension://me/cmdline.html", tab_id: 3 });
+  const framed = await f.connect_port({ tab_id: 7, frame_id: 12 });
+  const line = await f.connect_port({ tab_id: 7, frame_id: 3 });
   assert.deepEqual([framed.messages.length, framed.closed()], [0, true]);
+  assert.deepEqual([line.closed(), line.messages[0].type], [false, "snapshot"]);
 });
 
-test("a sender tab without an id, or a ticket check that fails, is closed", async () => {
+test("a command line page with no sender tab or frame id, or whose ticket check fails, is closed", async () => {
+  // A web panel in the sidebar can frame cmdline.html too, and that frame has no sender tab.
   const f = make([tab(1, 1, 0)], { is_opener: async () => Promise.reject(new Error("storage gone")) });
   await f.model.start();
-  const no_id = await f.connect_port({ tab_id: "none" });
+  const no_tab = await f.connect_port({ no_sender_tab: true });
+  const no_tab_id = await f.connect_port({ tab_id: "none" });
+  const no_frame = await f.connect_port({ frame_id: "none" });
   const failed = await f.connect_port();
-  assert.deepEqual([no_id.messages.length, no_id.closed(), failed.messages.length, failed.closed()], [0, true, 0, true]);
+  for (const p of [no_tab, no_tab_id, no_frame, failed]) assert.deepEqual([p.messages.length, p.closed()], [0, true]);
+  assert.deepEqual(f.opener_asks, ["7:3"]);
 });
 
-test("a ticketed port gets its snapshot and then patches, and a port with no sender tab skips the check", async () => {
+test("a ticketed port gets its snapshot and then patches, and an extension page no web page can frame skips the check", async () => {
   const f = make([tab(1, 1, 0)], { is_opener: async (tab_id) => tab_id === 7 });
   await f.model.start();
   const p = await f.connect_port({ tab_id: 7 });
-  const sidebar = await f.connect_port({ name: "desertfox_tab_model:normal", no_sender_tab: true });
-  assert.deepEqual(f.opener_asks, [7]);
+  const sidebar = await f.connect_port({ name: "desertfox_tab_model:normal", no_sender_tab: true, url: SIDEBAR_URL });
+  const help_tab = await f.connect_port({ tab_id: 4, url: "moz-extension://me/help.html" });
+  assert.deepEqual(f.opener_asks, ["7:3"]);
   f.fire("onUpdated", 1, { title: "z" }, tab(1, 1, 0, { title: "z" }));
   f.run_timers();
   assert.deepEqual([p.closed(), p.messages[0].type, pick(p.messages[1], "title")], [false, "snapshot", [[1, "z"]]]);
-  assert.equal(sidebar.messages.length, 2);
+  assert.deepEqual([sidebar.messages.length, help_tab.messages.length], [2, 2]);
 });
 
 test("a slow ticket check holds back every message, and the snapshot then holds the change", async () => {
@@ -603,19 +619,24 @@ test("with the real ticket service, only the tab that redeemed its own ticket re
   await f.model.start();
 
   assert.ok((await f.connect_port({ tab_id: 7 })).closed(), "no ticket");
-  assert.equal(await cmdline.open("guessed", 7), undefined);
+  assert.equal(await cmdline.open("guessed", 7, 3), undefined);
   assert.ok((await f.connect_port({ tab_id: 7 })).closed(), "a wrong ticket");
 
   const ticket = await cmdline.issue_ticket(8);
-  assert.ok(await cmdline.open(ticket, 8));
-  assert.equal(await cmdline.open(ticket, 9), undefined);
+  assert.ok(await cmdline.open(ticket, 8, 3));
+  assert.equal(await cmdline.open(ticket, 9, 3), undefined);
   const reused = await f.connect_port({ tab_id: 9 });
   assert.deepEqual([reused.closed(), reused.messages.length], [true, 0], "a reused ticket");
 
-  const owner = await f.connect_port({ tab_id: 8 });
-  assert.deepEqual([owner.closed(), owner.messages[0].type], [false, "snapshot"]);
+  const line = await f.connect_port({ tab_id: 8 });
+  assert.deepEqual([line.closed(), line.messages[0].type], [false, "snapshot"], "the real line");
+  assert.ok((await f.connect_port({ tab_id: 8, frame_id: 12 })).closed(), "another frame of the line's tab");
+  // The next line mounts a new frame, so the closed line's frame id no longer passes.
+  assert.ok(await cmdline.open(await cmdline.issue_ticket(8), 8, 4));
+  assert.ok((await f.connect_port({ tab_id: 8, frame_id: 3 })).closed(), "the closed line");
+  assert.equal((await f.connect_port({ tab_id: 8, frame_id: 4 })).closed(), false, "the next line");
   await cmdline.forget_opener_on_navigation(8, { status: "loading" });
-  assert.ok((await f.connect_port({ tab_id: 8 })).closed(), "the tab navigated away");
+  assert.ok((await f.connect_port({ tab_id: 8, frame_id: 4 })).closed(), "the tab navigated away");
 });
 
 // Window numbers

@@ -5,8 +5,8 @@ import type { DiscardDeps } from "../../src/background/tab_discard.ts";
 import type { BookmarkNode, HistoryNode, LineScope, OpenSettings, TabLike, WindowLike } from "../../src/background/complete_items.ts";
 
 const tab = (id: number, index: number, window_id: number, incognito: boolean, title = `Tab ${id}`): TabLike => ({ id, index, windowId: window_id, title, url: `https://site${id}.test/`, incognito });
-const NORMAL_LINE: LineScope & { tab_id: number } = { tab_id: 1, window_id: 10, incognito: false };
-const PRIVATE_LINE = { tab_id: 2, window_id: 20, incognito: true };
+const NORMAL_LINE: LineScope & { tab_id: number; frame_id: number } = { tab_id: 1, frame_id: 3, window_id: 10, incognito: false };
+const PRIVATE_LINE = { tab_id: 2, frame_id: 3, window_id: 20, incognito: true };
 
 // Tabs of two normal windows and one private window.
 const ALL_TABS = [tab(1, 0, 10, false), tab(2, 1, 10, false), tab(3, 0, 11, false), tab(4, 0, 20, true), tab(5, 1, 20, true)];

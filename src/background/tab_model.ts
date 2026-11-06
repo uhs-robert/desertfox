@@ -23,7 +23,7 @@ type WindowNumbers = ReadonlyMap<number, number>;
 
 export type TabModelPort = {
   name: string;
-  sender?: { url?: string; tab?: { id?: number; incognito?: boolean } };
+  sender?: { url?: string; frameId?: number; tab?: { id?: number; incognito?: boolean } };
   postMessage: (message: TabModelMessage) => void;
   disconnect: () => void;
   onMessage: Listener<[unknown]>;
@@ -53,8 +53,9 @@ export type TabModelDeps = {
   on_connect: Listener<[TabModelPort]>;
   // Only an extension page may read the tab list. A content script reports the page's URL as its sender.
   is_extension_page: (port: TabModelPort) => boolean;
-  // Whether the tab redeemed a command line ticket. `cmdline.html` is web-accessible, so a page can frame it, and the frame is an extension page too.
-  is_opener: (tab_id: number) => Promise<boolean>;
+  // A web page can frame a web-accessible page (`cmdline.html`), and the frame is still an extension page, so such a port must be the line that redeemed its tab's ticket.
+  is_web_accessible_page: (port: TabModelPort) => boolean;
+  is_opener: (tab_id: number, frame_id: number) => Promise<boolean>;
   set_timer: (callback: () => void, delay_ms: number) => unknown;
   clear_timer: (handle: unknown) => void;
 };
@@ -412,11 +413,13 @@ export function create_tab_model(deps: TabModelDeps) {
         send_snapshot(state);
       } else void load();
     };
-    // A page with no sender tab (a sidebar) cannot be framed by a web page, so only a tab's page needs the ticket.
+    // A web page can frame only a web-accessible page, so only that page needs the ticket. Any other extension page is extension code.
     // The opener mark clears when the tab navigates, and that also ends the frame and its port, so one check at connect is enough.
-    if (!sender_tab) return admit();
-    const tab_id = sender_tab.id;
-    void (tab_id === undefined ? Promise.resolve(false) : deps.is_opener(tab_id).catch(() => false)).then((opener) => {
+    if (!deps.is_web_accessible_page(port)) return admit();
+    const tab_id = sender_tab?.id;
+    const frame_id = port.sender?.frameId;
+    const opener_check = tab_id === undefined || frame_id === undefined ? Promise.resolve(false) : deps.is_opener(tab_id, frame_id).catch(() => false);
+    void opener_check.then((opener) => {
       if (disconnected) return;
       if (opener) return admit();
       try {
@@ -448,6 +451,9 @@ export function create_tab_model(deps: TabModelDeps) {
 
 export function browser_tab_model_deps(from_services: Pick<TabModelDeps, "previous_of" | "is_opener">): TabModelDeps {
   const extension_root = browser.runtime.getURL("");
+  // Manifest V2 lists plain file names. A Manifest V3 entry is an object and needs reading here after a move.
+  const web_accessible_urls = new Set((browser.runtime.getManifest().web_accessible_resources ?? []).flatMap((resource) => (typeof resource === "string" ? [browser.runtime.getURL(resource)] : [])));
+  const page_url_of = (url: string) => url.replace(/[?#].*$/, "");
   return {
     ...from_services,
     query: () => browser.tabs.query({}),
@@ -458,6 +464,7 @@ export function browser_tab_model_deps(from_services: Pick<TabModelDeps, "previo
     container_events: browser.contextualIdentities as unknown as TabModelDeps["container_events"],
     on_connect: browser.runtime.onConnect as unknown as TabModelDeps["on_connect"],
     is_extension_page: (port) => port.sender?.url?.startsWith(extension_root) === true,
+    is_web_accessible_page: (port) => web_accessible_urls.has(page_url_of(port.sender?.url ?? "")),
     set_timer: (callback, delay_ms) => setTimeout(callback, delay_ms),
     clear_timer: (handle) => clearTimeout(handle as ReturnType<typeof setTimeout>),
   };

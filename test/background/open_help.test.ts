@@ -2,10 +2,13 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { create_open_help, help_name_choices, help_name_url, plan_help_tab } from "../../src/background/open_help.ts";
 
+// The line's frame in each opener tab.
+const LINE_FRAME = 3;
+
 function make(openers: number[] = [7]) {
   const opened: unknown[] = [];
   const open_help = create_open_help({
-    is_opener: async (tab_id) => openers.includes(tab_id),
+    is_opener: async (tab_id, frame_id) => openers.includes(tab_id) && frame_id === LINE_FRAME,
     is_command: (id) => id === "tab.next" || id === "my snippet",
     help_page_url: "moz-extension://x/help.html",
     open_tab: async (tab) => void opened.push(tab),
@@ -15,21 +18,23 @@ function make(openers: number[] = [7]) {
 
 test("a known command opens its card in the foreground next to the asking tab", async () => {
   const { open_help, opened } = make();
-  await open_help.open("my snippet", 7);
+  await open_help.open("my snippet", 7, LINE_FRAME);
   assert.deepEqual(opened, [{ url: "moz-extension://x/help.html#command=my%20snippet", openerTabId: 7, active: true }]);
 });
 
 test("an unknown id opens the Commands page at its top", async () => {
   const { open_help, opened } = make();
-  await open_help.open("nope", 7);
+  await open_help.open("nope", 7, LINE_FRAME);
   assert.deepEqual(opened, [{ url: "moz-extension://x/help.html#/commands", openerTabId: 7, active: true }]);
 });
 
-test("a sender with no ticket, no tab or a non-string id gets nothing", async () => {
+test("a sender with no ticket, no tab, another frame or a non-string id gets nothing", async () => {
   const { open_help, opened } = make();
-  await open_help.open("tab.next", 8);
-  await open_help.open("tab.next", undefined);
-  await open_help.open({}, 7);
+  await open_help.open("tab.next", 7, 5);
+  await open_help.open("tab.next", 7, undefined);
+  await open_help.open("tab.next", 8, LINE_FRAME);
+  await open_help.open("tab.next", undefined, LINE_FRAME);
+  await open_help.open({}, 7, LINE_FRAME);
   assert.deepEqual(opened, []);
 });
 
