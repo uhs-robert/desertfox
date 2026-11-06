@@ -38,10 +38,14 @@ install_deps:
 build-config dir="" *flags="": build
     node tools/build-config/cli.ts {{ if dir == "" { "" } else { quote(dir) } }} --live {{flags}}
 
-# Real key presses in a nested session, about a minute. Needs SHADOW_SH, the nested-session driver script.
+# Real key presses in a nested session, about a minute. Needs SHADOW_SH, or the shadow skill script in dotfiles, as the nested-session driver.
 key-test: build
     #!/usr/bin/env bash
     set -euo pipefail
+    fallback_driver="$HOME/dotfiles/.claude/skills/shadow/shadow.sh"
+    if [ -z "${SHADOW_SH:-}" ] && [ -x "$fallback_driver" ]; then
+        export SHADOW_SH="$fallback_driver"
+    fi
     if [ -z "${SHADOW_SH:-}" ]; then
         echo "key-test needs SHADOW_SH: a script that runs 'up|spawn|keys|down <name>' in a nested, invisible compositor (optional: 'status', one '<name>: up|down ...' line per session). Cleanup of killed runs works only for drivers that keep sessions in /tmp/shadow-<uid>-<name>." >&2
         exit 2

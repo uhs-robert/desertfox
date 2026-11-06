@@ -69,7 +69,7 @@ Reproduce a visual bug and record it, at 60 fps so flicker shows, before you ask
 
 `docs/keymap.md` is generated between its markers from `src/background/default_keymap.ts` and `docs/keymap_planned.toml` (keys that are `later` or `dropped`). Edit those two, then run `just docs-gen`. `just test` fails when the doc is stale.
 
-Run `just test` before every commit. Run `just key-test` after a change to keys, modes, the content script or config reload. It needs a nested Hyprland and runs on demand only. Read [`test/key/README.md`](test/key/README.md) before you run it.
+Run `just test` before every commit. Run `just key-test` after a change to keys, modes, the content script or config reload. It needs a nested Hyprland and a driver script: `SHADOW_SH`, or `~/dotfiles/.claude/skills/shadow/shadow.sh` when `SHADOW_SH` is unset. It runs on demand only. Read [`test/key/README.md`](test/key/README.md) before you run it.
 
 ## Planning
 
