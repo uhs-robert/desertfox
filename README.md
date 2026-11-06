@@ -56,8 +56,6 @@ Vimium hints do more than click, but each action is a separate key and it has on
 
 The sizes are as shipped. DesertFox is minified and the other two are not, and DesertFox loads hint and caret code on first use. The table shows size, not page speed.
 
-DesertFox is weaker in other ways. It is new, it has one author, it works only in Firefox and it is not released.
-
 ## 📦 Install
 
 When DesertFox is released, you will install it from a Firefox add-on file that Mozilla has signed. Firefox asks you to confirm the permissions, then adds the add-on. No public listing exists.
