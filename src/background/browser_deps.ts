@@ -167,9 +167,9 @@ async function read_limited(response: Response, limit: number): Promise<ArrayBuf
 }
 
 export const image_deps: ImageDeps = {
-  fetch_image: async (address, timeout_ms) => {
+  fetch_image: async (address, timeout_ms, credentials) => {
     // The signal also covers the body read.
-    const response = await fetch(address, { credentials: "include", signal: AbortSignal.timeout(timeout_ms) });
+    const response = await fetch(address, { credentials, signal: AbortSignal.timeout(timeout_ms) });
     const declared = Number(response.headers.get("content-length"));
     return { ok: response.ok, declared_bytes: Number.isFinite(declared) && declared > 0 ? declared : undefined, read: (limit) => read_limited(response, limit) };
   },

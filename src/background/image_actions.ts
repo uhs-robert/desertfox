@@ -18,11 +18,16 @@ export type FetchedImage = {
 // The tab the pick came from, so a download keeps its private window and container.
 export type TabContext = { incognito: boolean; cookie_store_id: string | undefined };
 
+const DEFAULT_COOKIE_STORE = "firefox-default";
+
+// The background fetch uses the default container's cookies. A private or container tab must not borrow them, so its copy goes without cookies.
+export const credentials_for = (context: TabContext): "include" | "omit" => (!context.incognito && (context.cookie_store_id === undefined || context.cookie_store_id === DEFAULT_COOKIE_STORE) ? "include" : "omit");
+
 export const FETCH_TIMEOUT_MS = 20_000;
 
 export type ImageDeps = {
   // Rejects with a `TimeoutError` when the fetch or the body read runs past `timeout_ms`.
-  fetch_image: (address: string, timeout_ms: number) => Promise<FetchedImage>;
+  fetch_image: (address: string, timeout_ms: number, credentials: "include" | "omit") => Promise<FetchedImage>;
   // Decodes any picture the browser can draw and returns it as PNG. A GIF gives its first frame.
   render_png: (bytes: ArrayBuffer, kind: ImageKind) => Promise<ArrayBuffer>;
   set_image_data: (bytes: ArrayBuffer, type: "png" | "jpeg") => Promise<void>;
@@ -55,11 +60,11 @@ const is_timeout = (error: unknown): boolean => (error as { name?: string } | nu
 
 const fetch_failure = (error: unknown): RuntimeRefusal => new RuntimeRefusal(is_timeout(error) ? "The image took too long to fetch" : "Could not fetch the image");
 
-async function fetch_bytes(deps: ImageDeps, address: string, limit: number): Promise<ArrayBuffer> {
+async function fetch_bytes(deps: ImageDeps, address: string, limit: number, credentials: "include" | "omit"): Promise<ArrayBuffer> {
   if (!FETCHABLE.test(address)) throw new RuntimeRefusal("Could not fetch the image");
   let fetched: FetchedImage;
   try {
-    fetched = await deps.fetch_image(address, FETCH_TIMEOUT_MS);
+    fetched = await deps.fetch_image(address, FETCH_TIMEOUT_MS, credentials);
   } catch (error) {
     throw fetch_failure(error);
   }
@@ -75,8 +80,8 @@ async function fetch_bytes(deps: ImageDeps, address: string, limit: number): Pro
   return bytes;
 }
 
-async function copy_image(deps: ImageDeps, address: string): Promise<void> {
-  const bytes = await fetch_bytes(deps, address, MAX_IMAGE_BYTES);
+async function copy_image(deps: ImageDeps, address: string, context: TabContext): Promise<void> {
+  const bytes = await fetch_bytes(deps, address, MAX_IMAGE_BYTES, credentials_for(context));
   const kind = sniff_kind(bytes);
   let ready: ArrayBuffer;
   if (kind === "png" || kind === "jpeg") {
@@ -110,7 +115,7 @@ async function download(deps: ImageDeps, address: string, context: TabContext): 
 export async function run_image_action(deps: ImageDeps, request: ImageAction, context: TabContext): Promise<Outcome> {
   try {
     if (typeof request.address !== "string") throw new RuntimeRefusal("Could not fetch the image");
-    if (request.action === "copy_image") await copy_image(deps, request.address);
+    if (request.action === "copy_image") await copy_image(deps, request.address, context);
     else if (request.action === "download") await download(deps, request.address, context);
     else throw new RuntimeRefusal("Unknown picture action");
     return { ok: true };

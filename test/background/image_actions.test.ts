@@ -14,11 +14,12 @@ const TAB: TabContext = { incognito: false, cookie_store_id: undefined };
 
 function fake(body: ArrayBuffer | Error, extra: { ok?: boolean; declared?: number; set_fails?: boolean; render_fails?: boolean; fetch_fails?: boolean | "timeout"; read_fails?: "timeout"; download_fails?: boolean } = {}) {
   const calls: string[] = [];
-  const log = { set: [] as Array<[ArrayBuffer, string]>, rendered: [] as string[], downloads: [] as Array<[string, TabContext]>, timeouts: [] as number[] };
+  const log = { set: [] as Array<[ArrayBuffer, string]>, rendered: [] as string[], downloads: [] as Array<[string, TabContext]>, timeouts: [] as number[], credentials: [] as string[] };
   const deps: ImageDeps = {
-    fetch_image: async (address, timeout_ms) => {
+    fetch_image: async (address, timeout_ms, credentials) => {
       calls.push(`fetch ${address}`);
       log.timeouts.push(timeout_ms);
+      log.credentials.push(credentials);
       if (extra.fetch_fails === "timeout") throw Object.assign(new Error("timed out"), { name: "TimeoutError" });
       if (extra.fetch_fails) throw new Error("network");
       return {
@@ -48,7 +49,7 @@ function fake(body: ArrayBuffer | Error, extra: { ok?: boolean; declared?: numbe
   return { deps, log, calls };
 }
 
-const copy = (deps: ImageDeps, address = "https://example.com/a.bin") => run_image_action(deps, { type: "image_action", action: "copy_image", address }, TAB);
+const copy = (deps: ImageDeps, address = "https://example.com/a.bin", context = TAB) => run_image_action(deps, { type: "image_action", action: "copy_image", address }, context);
 const download = (deps: ImageDeps, address: string, context = TAB) => run_image_action(deps, { type: "image_action", action: "download", address }, context);
 
 test("PNG and JPEG reach the clipboard unchanged, with their type from the first bytes", async () => {
@@ -135,4 +136,23 @@ test("download refuses a foreign scheme and a failed start, and starts nothing",
   assert.deepEqual(await download(deps, "file:///etc/passwd"), { ok: false, message: "Could not fetch the image" });
   assert.deepEqual(log.downloads, []);
   assert.deepEqual(await download(fake(PNG, { download_fails: true }).deps, "https://example.com/a.png"), { ok: false, message: "Could not save the file" });
+});
+
+test("a copy from a normal default-container tab fetches with cookies", async () => {
+  for (const context of [TAB, { incognito: false, cookie_store_id: "firefox-default" }]) {
+    const { deps, log } = fake(PNG);
+    await copy(deps, undefined, context);
+    assert.deepEqual(log.credentials, ["include"]);
+  }
+});
+
+test("a copy from a private or container tab fetches without cookies, and a login-only picture refuses", async () => {
+  for (const context of [{ incognito: true, cookie_store_id: "firefox-private" }, { incognito: false, cookie_store_id: "firefox-container-1" }]) {
+    const { deps, log } = fake(PNG);
+    await copy(deps, undefined, context);
+    assert.deepEqual(log.credentials, ["omit"]);
+  }
+  const login_only = fake(PNG, { ok: false });
+  assert.deepEqual(await copy(login_only.deps, undefined, { incognito: true, cookie_store_id: undefined }), { ok: false, message: "Could not fetch the image" });
+  assert.deepEqual(login_only.log.set, []);
 });
