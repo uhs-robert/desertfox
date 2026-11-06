@@ -3,9 +3,12 @@
 import type { ConfigSource, ConfigStatus } from "../background/config_load.ts";
 import type { Settings } from "../shared/config.ts";
 import { DEFAULT_SETTINGS } from "../shared/config.ts";
+import { top_layer_of } from "../shared/setting_list.ts";
+import type { SettingTag } from "../shared/setting_list.ts";
+
+export type { SettingTag };
 
 // `tag` is set on a value that differs from the default: where the difference came from.
-export type SettingTag = "settings.toml" | "saved" | "temp";
 
 export type SettingRow = { name: string; value: string; tag?: SettingTag };
 
@@ -35,8 +38,7 @@ function default_of(name: string): unknown {
 // Every setting except `home_page` has a default, so each shows a row. `home_page` has none and is absent until set.
 // The tag names the top layer that sets the value, because that value is in force: temp, then saved, then the config file.
 function setting_rows(settings: Settings, status: ConfigStatus | undefined): SettingRow[] {
-  const top_layer = (name: string): SettingTag | undefined =>
-    status?.temp.includes(name) ? "temp" : status?.saved.includes(name) ? "saved" : status?.configured.includes(name) ? "settings.toml" : undefined;
+  const top_layer = (name: string) => top_layer_of(status, name);
   return Object.entries(settings).map(([name, value]) => {
     const differs = JSON.stringify(value) !== JSON.stringify(default_of(name));
     const tag = differs ? top_layer(name) : undefined;

@@ -58,8 +58,10 @@ export const DEFAULT_KEYMAP: KeymapConfig = {
     ";w": { action: "window", label: "New window" },
     ";y": { action: "copy", label: "Copy address" },
     ";Y": { action: "copy_text", label: "Copy text" },
+    ";d": { action: "download", label: "Download" },
     ";h": { action: "hover", label: "Hover" },
     ";x": { action: "delete", label: "Delete" },
+    ";2": { action: "double_click", label: "Double-click" },
   },
   // What which-key calls each group. `s S c C` name the groups that the search and container keys of a user config fill.
   group_names: {
@@ -228,6 +230,7 @@ export const DEFAULT_KEYMAP: KeymapConfig = {
     ";i": { id: "hint.run", args: { filter: "inputs" }, label: "Click input", variant_label: "Input" },
     ";l": { id: "hint.run", args: { filter: "links" }, label: "Click link", variant_label: "Link" },
     ";I": { id: "hint.run", args: { filter: "images" }, label: "Open image in new tab", variant_label: "Image" },
+    ";yI": { id: "hint.run", args: { action: "copy_image", filter: "images" }, label: "Copy image" },
     ";f": { id: "hint.run", args: { filter: "frames" }, label: "Focus frame", variant_label: "Frame" },
     ";m": { id: "hint.run", args: { filter: "media" }, label: "Play or pause media", variant_label: "Media" },
     ":": { id: "cmdline.open" },
@@ -258,6 +261,10 @@ export const DEFAULT_KEYMAP: KeymapConfig = {
     "<C-u>": { id: "cmdline.clear" },
     "<C-h>": { id: "cmdline.help" },
     "<A-u>": { id: "list.act", args: { action: "unload" }, label: "Unload or load the tab" },
+    "<C-Space>": { id: "list.select", args: { action: "toggle" }, label: "Mark or unmark the tab" },
+    "<A-x>": { id: "list.act", args: { action: "close" }, label: "Close the tab" },
+    "<A-m>": { id: "list.act", args: { action: "mute" }, label: "Mute or unmute the tab" },
+    "<A-p>": { id: "list.act", args: { action: "pin" }, label: "Pin or unpin the tab" },
   },
   caret: {
     v: { id: "mode.set", args: { mode: "visual" } },

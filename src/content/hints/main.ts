@@ -5,7 +5,7 @@ import type { Outcome } from "../../shared/messages.ts";
 import { CONFIG_STATUS_STORAGE_KEY } from "../../background/storage_keys.ts";
 import type { BundleHostApi } from "../bundle_host.ts";
 import { unhover } from "./hover.ts";
-import { has_usable_address, is_media, OPEN_PLACES, perform, starts_caret } from "./actions.ts";
+import { has_usable_address, is_inside_link, is_media, OPEN_PLACES, perform, starts_caret } from "./actions.ts";
 import type { CaretMode, HintAction, Place } from "./actions.ts";
 import { copy_text } from "../caret/copy_text.ts";
 import { collect, keep_text_matches, keep_visible_deduplicated, query_for, scroll_clips_in_page, weak_test_for, window_of } from "./candidates.ts";
@@ -66,11 +66,13 @@ function windows_of(found: Found[]): Window[] {
   return [...new Set([window, ...frame_windows])].filter((win): win is Window => win !== null);
 }
 
-// Opening in another place needs an address, and an inline one cannot open. The images filter always needs one, so no label promises an image that a copy or an open cannot use.
+// A double-click skips links. Opening in another place needs an address, and an inline one cannot open. The images filter always needs one, so no label promises an image that a copy or an open cannot use.
 function find_candidates(filter: HintFilter, custom_selector: string | undefined, action: HintAction): Found[] {
   const opens_elsewhere = OPEN_PLACES.includes(action);
   const with_background = filter === "images";
-  return collect(document, query_for(filter, custom_selector), weak_test_for(filter)).filter((found) => (!opens_elsewhere && !with_background) || has_usable_address(found.element as HTMLElement, with_background, opens_elsewhere));
+  const found = collect(document, query_for(filter, custom_selector), weak_test_for(filter));
+  const outside_links = action === "double_click" ? found.filter((item) => !is_inside_link(item.element)) : found;
+  return outside_links.filter((item) => (!opens_elsewhere && !with_background) || has_usable_address(item.element as HTMLElement, with_background, opens_elsewhere));
 }
 
 const none_message = (text: string | undefined): string => (text === undefined ? "No hints on this page" : `No link matches ${text}`);
@@ -107,6 +109,15 @@ function copy_to_clipboard(text: string): Promise<Outcome | undefined> {
   });
 }
 
+// The background answers an `Outcome`. A failed one carries the refusal to the caller, which shows it once.
+function image_action(action: "copy_image" | "download", address: string): Promise<Outcome> {
+  return browser.runtime.sendMessage({ type: "image_action", action, address }).then((outcome: Outcome | undefined) => {
+    if (!outcome) return { ok: false, message: "The picture action got no answer" };
+    if (outcome.ok) create_view().show_message(action === "copy_image" ? "Copied image" : "Started the download");
+    return outcome;
+  });
+}
+
 // `from_hints` keeps the router from storing this `open.url`, so `.` shows hints again instead of reopening the address.
 function open_link(url: string, place: Place): Promise<unknown> {
   return browser.runtime.sendMessage({ type: "run", invocations: [{ id: "open.url", args: { url, where: place } }], mode: "normal", from_hints: true });
@@ -118,7 +129,7 @@ function start_caret(target: Element, mode: CaretMode): void {
   page.desertfox_host.set_mode(mode);
 }
 
-const deps = { open_link, copy: copy_to_clipboard, start_caret };
+const deps = { open_link, copy: copy_to_clipboard, image_action, start_caret };
 
 function register(host: BundleHostApi): void {
   let session: Session | undefined;

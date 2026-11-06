@@ -4,6 +4,8 @@
 import type { BundleName } from "./bundles.ts";
 import type { CommandMeta, Mode } from "./command.ts";
 import type { WhichKeyBorder } from "./config.ts";
+import type { SettingTag } from "./setting_list.ts";
+import type { SettingRow } from "./settings_table.ts";
 import type { BoundInvocation, Invocation } from "./invocation.ts";
 
 // Why a command did not run. The content script shows `message` as a toast,
@@ -95,25 +97,27 @@ export type CompleteItems = {
   kind: "bookmarks" | "engines" | "open" | "windows";
 };
 
-// From the command line page when the row key unloads or loads one tab of the list. The answer is undefined unless the sender is a tab whose line redeemed a ticket
-// and `tab_id` is a tab of the sender's own privacy. `item` is the tab as it is now, `refusal` says why it did not change.
-export type SetTabUnloaded = {
-  type: "set_tab_unloaded";
-  tab_id: number;
-  unloaded: boolean;
+// From the command line page when a row key acts on tabs of the list. `tab_ids` were captured at the key press, so a later change of the list does not change them. The answer is undefined unless the sender is a tab whose line
+// redeemed a ticket and every id that still names a tab is of the sender's own privacy. An id with no tab is skipped. `refusal` says why some tabs did not change.
+export type TabRowsAction = "close" | "unload" | "load" | "mute" | "unmute" | "pin" | "unpin";
+
+export type TabRowsActionRequest = {
+  type: "tab_rows_action";
+  action: TabRowsAction;
+  tab_ids: number[];
 };
 
-export type SetTabUnloadedAnswer = { item: TabItem; refusal?: string };
+export type TabRowsActionAnswer = { refusal?: string };
 
 // A tab's container, drawn as a mark in the container's color. Absent for the default container and for private tabs.
 export type TabContainer = { color: string; icon: string };
 
-// `id` is the browser's tab id, which the row key sends back in `set_tab_unloaded`. `number` is the tab's place in its window's tab bar, counted from 1. `favicon` is an http, https or short data: URL and is absent otherwise.
+// `id` is the browser's tab id, which the row keys send back in `tab_rows_action`. `number` is the tab's place in its window's tab bar, counted from 1. `favicon` is an http, https or short data: URL and is absent otherwise.
 // The flags are present only when true, which keeps the answer small.
 export type TabItem = {
   id: number;
   number: number;
-  // The window's place in `windows.getAll`. The model client sets it, the one-tab answer of `set_tab_unloaded` does not.
+  // The window's place in `windows.getAll`. The model client sets it.
   window_number?: number;
 
   title: string;
@@ -182,7 +186,47 @@ export type FindScan = {
 // Timeout means the scan ran past the limit and was stopped. Superseded means a newer scan from the same frame replaced it.
 export type FindScanAnswer = { ok: true; from: Int32Array; to: Int32Array } | { ok: false; reason: "timeout" | "superseded" } | { ok: false; reason: "failed"; message: string };
 
-export type ContentToBackground = RunRequest | ModeChanged | LoadBundle | ListKeys | IssueCmdlineTicket | OpenCmdline | RecordCmdline | CompleteItems | SetTabUnloaded | OpenHelp | RecordRepeat | ReadTabAddress | FindScan;
+// From the `hints` bundle on `copy_image` and `download`: the background fetches `address` and answers an `Outcome`.
+export type ImageAction = {
+  type: "image_action";
+  action: "copy_image" | "download";
+  address: string;
+};
+
+// From an extension page (the settings page): sets or resets one setting. `value` is the typed value, checked by the setting's own check. `layer` defaults to `saved`. A reset drops the saved and the temp edit.
+// The answer is a ChangeSettingAnswer. The background refuses any sender that is not an extension page.
+export type ChangeSetting = {
+  type: "change_setting";
+  name: string;
+  action: "set" | "reset";
+  value?: unknown;
+  layer?: "saved" | "temp";
+};
+
+// From an extension page: asks for every setting. The answer is a ListSettingsAnswer.
+export type ListSettings = {
+  type: "list_settings";
+};
+
+// `kind` is the row kind in `settings_table.ts`. `allowed` is the typed choice list of an enum or enum list, or the values the command line suggests. `value` is absent for a setting with no default that nothing sets.
+export type SettingListRow = {
+  name: string;
+  value?: unknown;
+  top_layer: SettingTag | "default";
+  kind: SettingRow["kind"];
+  settable: boolean;
+  expectation: string;
+  allowed?: unknown[];
+};
+
+// `message` is the line `:set` would toast, including a warning that a default engine or palette names nothing.
+export type ChangeSettingAnswer = { ok: true; setting: SettingListRow; message: string } | { ok: false; message: string };
+
+export type ListSettingsAnswer = { ok: true; settings: SettingListRow[] } | { ok: false; message: string };
+
+export type PageToBackground = ChangeSetting | ListSettings;
+
+export type ContentToBackground = RunRequest | ModeChanged | LoadBundle | ListKeys | IssueCmdlineTicket | OpenCmdline | RecordCmdline | CompleteItems | TabRowsActionRequest | OpenHelp | RecordRepeat | ReadTabAddress | FindScan | ImageAction;
 
 // How a command ended. Done is `{ ok: true }`. A handler that returns nothing is done, and one that throws is failed.
 // Cancelled means the user left a waiting step (Escape, an unrelated key, a page change), so the rest of a sequence does not run and nothing is shown.

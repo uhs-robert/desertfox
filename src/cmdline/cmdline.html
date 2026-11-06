@@ -41,6 +41,10 @@
       .desertfox-cmdline-item-discarded:not(.desertfox-cmdline-selected) .desertfox-cmdline-name { color: var(--desertfox-fg-dim); }
       /* Tab rows lead with fixed-width cells, so the names line up. The flag icons are masks, so they take the text color. */
       .desertfox-cmdline-tab-status { flex: 0 0 calc(1ch + var(--desertfox-flags-width, 0px)); display: flex; align-items: center; color: var(--desertfox-primary); }
+      .desertfox-cmdline-item-marked:not(.desertfox-cmdline-selected) { background: color-mix(in srgb, var(--desertfox-selection) 45%, transparent); }
+      /* The marker sits in the row's left padding, so marked and unmarked rows keep their columns. */
+      .desertfox-cmdline-item-marked { position: relative; }
+      .desertfox-cmdline-item-marked::before { content: "+"; position: absolute; left: .25rem; color: var(--desertfox-secondary); }
       .desertfox-cmdline-tab-window { flex: 0 0 2ch; text-align: right; color: var(--desertfox-fg-muted); }
       .desertfox-cmdline-tab-mark { flex: 0 0 1ch; text-align: center; }
       .desertfox-cmdline-flag { flex: 0 0 12px; height: 12px; margin-left: 2px; background: currentColor; mask: var(--desertfox-flag-mask) center / contain no-repeat; -webkit-mask: var(--desertfox-flag-mask) center / contain no-repeat; }

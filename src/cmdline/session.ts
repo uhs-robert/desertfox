@@ -2,7 +2,9 @@
 // history walk. A key from the keymap arrives as a command id and becomes an effect for the page to carry out.
 
 import type { Invocation } from "../shared/invocation.ts";
+import type { TabItem, TabRowsAction } from "../shared/messages.ts";
 import type { ParseResult } from "../shared/registry/index.ts";
+import { marks_of } from "./completion/sources.ts";
 import type { Completion, TabMarks } from "./completion/sources.ts";
 import { create_history_cursor } from "./history_cursor.ts";
 
@@ -15,8 +17,9 @@ export type Effect =
   | { kind: "find_commit" }
   // Open the help page at this command.
   | { kind: "help"; command_id: string }
-  // `list.act --action=unload` on a tab row: the page asks the background to flip it. The row's marks change when the model patch arrives.
-  | { kind: "set_tab_unloaded"; tab_id: number; unloaded: boolean };
+  // `list.act` on the selected tabs, or the highlighted one: the page asks the background to run the action on these ids, which the key press fixed.
+  // The rows change when the model patch arrives.
+  | { kind: "tab_rows_action"; action: TabRowsAction; tab_ids: number[] };
 
 export type SessionDeps = {
   history: readonly string[];
@@ -28,6 +31,8 @@ export type SessionDeps = {
   complete?: ((text: string, caret: number) => Completion) | undefined;
   // The line is a page search. Its text is a pattern and no command: Enter commits it, and the history and the list stay off.
   search?: boolean;
+  // The tab model's rows, undefined before its first snapshot. The selection is checked against them, hidden tabs included.
+  tabs?: () => readonly TabItem[] | undefined;
   // The id of the command a typed word names, for help when no row is selected.
   command_id_of?: (word: string) => string | undefined;
   // Whether the help page has a card for a command. Snippets have none. Without it every command has one.
@@ -50,6 +55,10 @@ export function create_session(deps: SessionDeps) {
   let selected = -1;
   // True until the user types, clears or uses a completion key. A fresh line keeps Up and Down for the history, so `:` then Up still recalls the last command.
   let fresh = true;
+  // The tabs marked with `list.select`, by id. Filtering does not touch them. A tab that leaves the model drops out.
+  const selection = new Set<number>();
+  // After a close, the tab the highlight moves to once the closed rows are gone from the list.
+  let cursor_after_close: number | undefined;
   // The text and caret the list was ranked for. While a row is previewed, `text` differs from it.
   let saved: { text: string; caret: number } | undefined;
 
@@ -67,6 +76,7 @@ export function create_session(deps: SessionDeps) {
     selected = -1;
     saved = undefined;
     accepted = undefined;
+    cursor_after_close = undefined;
   };
 
   // The tab row the user accepted (a click, or Tab with one match) and the text before it. The line holds the tab's number, so a model change renumbers it.
@@ -136,6 +146,7 @@ export function create_session(deps: SessionDeps) {
   // Tab and Shift-Tab wrap around. A single match goes into the line at once, and then the list ranks the new text.
   const cycle = (step: 1 | -1): Effect => {
     fresh = false;
+    cursor_after_close = undefined;
     if (!completion) refresh();
     list_shown = true;
     const count = completion?.rows.length ?? 0;
@@ -148,6 +159,7 @@ export function create_session(deps: SessionDeps) {
 
   // Up and Down stop at the ends. They never leave the list for the history.
   const step_selection = (direction: unknown): Effect => {
+    cursor_after_close = undefined;
     const count = rows().length;
     preview(direction === "next" ? Math.min(selected + 1, count - 1) : selected < 0 ? count - 1 : Math.max(selected - 1, 0));
     return { kind: "render" };
@@ -164,14 +176,56 @@ export function create_session(deps: SessionDeps) {
     return { kind: "render" };
   };
 
-  // The highlighted row decides. A history recall leaves `selected` set with no row behind it, so the row is read, not the index.
-  const act_on_row = (): Effect => {
+  // The selection, else the highlighted row. A history recall leaves `selected` set with no row behind it, so the row is read, not the index.
+  // The marks belong to a tab list. Any other list hides them, so they neither act nor clear there.
+  const on_tab_list = () => rows().some((row) => row.tab);
+
+  const acted_tabs = (): TabMarks[] => {
+    if (selection.size > 0 && on_tab_list()) return (deps.tabs?.() ?? []).filter((tab) => selection.has(tab.id)).map(marks_of);
     const marks = rows()[selected]?.tab;
-    if (!marks) {
+    return marks ? [marks] : [];
+  };
+
+  // The first row below the highlight that stays, else the first one above it.
+  const row_to_keep = (closing: ReadonlySet<number>): number | undefined => {
+    const stays = (index: number) => rows()[index]?.tab && !closing.has(rows()[index]!.tab!.id);
+    if (selected < 0) return undefined;
+    const indexes = rows().map((_, index) => index);
+    const kept = indexes.slice(selected).find(stays) ?? indexes.slice(0, selected).findLast(stays);
+    return kept === undefined ? undefined : rows()[kept]!.tab!.id;
+  };
+
+  // Mute and pin: any tab off turns all on, else all off. Unload: the loaded tabs unload, or all load when none is loaded.
+  const act_on_rows = (action: unknown): Effect => {
+    const tabs = acted_tabs();
+    if (tabs.length === 0) {
       message = "select a tab row first";
       return { kind: "render" };
     }
-    return { kind: "set_tab_unloaded", tab_id: marks.id, unloaded: !marks.flags.includes("discarded") };
+    const ids = (chosen: readonly TabMarks[]) => chosen.map((tab) => tab.id);
+    const without = (flag: "muted" | "pinned") => tabs.some((tab) => !tab.flags.includes(flag));
+    if (action === "close") {
+      const closing = new Set(ids(tabs));
+      const highlighted = rows()[selected]?.tab?.id;
+      cursor_after_close = highlighted !== undefined && closing.has(highlighted) ? row_to_keep(closing) : undefined;
+      return { kind: "tab_rows_action", action, tab_ids: ids(tabs) };
+    }
+    if (action === "mute") return { kind: "tab_rows_action", action: without("muted") ? "mute" : "unmute", tab_ids: ids(tabs) };
+    if (action === "pin") return { kind: "tab_rows_action", action: without("pinned") ? "pin" : "unpin", tab_ids: ids(tabs) };
+    // The active tab is the line's own and cannot unload, so it must not keep `<A-u>` from loading the others.
+    const loaded = tabs.filter((tab) => !tab.flags.includes("discarded") && tab.status !== "%");
+    return loaded.length > 0 ? { kind: "tab_rows_action", action: "unload", tab_ids: ids(loaded) } : { kind: "tab_rows_action", action: "load", tab_ids: ids(tabs) };
+  };
+
+  // Marks or unmarks the highlighted tab row, then moves down so a run of keys marks a run of rows.
+  const toggle_selected = (): Effect => {
+    const id = rows()[selected]?.tab?.id;
+    if (id === undefined) {
+      message = "select a tab row first";
+      return { kind: "render" };
+    }
+    if (!selection.delete(id)) selection.add(id);
+    return step_selection("next");
   };
 
   const walk_history = (direction: unknown): Effect => {
@@ -193,6 +247,8 @@ export function create_session(deps: SessionDeps) {
     // The rows to draw: none while the list is closed.
     get_rows: rows,
     get_selected: () => selected,
+    // The ids of the marked tabs, which the list draws on their rows.
+    get_marked: (): ReadonlySet<number> => selection,
     // For the note row: the selected row's usage, else "no match" for an empty list, else the typed command's usage.
     get_hint: (): string | undefined => {
       if (deps.search) return status;
@@ -219,6 +275,11 @@ export function create_session(deps: SessionDeps) {
     // A previewed tab row stays on the same tab by id: its number in the line follows the tab, and a tab that is gone ends the preview.
     // Any other previewed row stays as it is.
     source_ready: () => {
+      const present = deps.tabs?.();
+      if (present) {
+        const ids = new Set(present.map((tab) => tab.id));
+        for (const id of selection) if (!ids.has(id)) selection.delete(id);
+      }
       if (!completion) return;
       if (accepted) return follow_accepted(accepted);
       if (selected < 0) {
@@ -232,7 +293,9 @@ export function create_session(deps: SessionDeps) {
       const kept_message = message;
       completion = deps.complete?.(base.text, base.caret);
       const index = completion?.rows.findIndex((row) => row.tab?.id === tab_id) ?? -1;
-      if (index >= 0) preview(index);
+      const next = index < 0 && cursor_after_close !== undefined ? completion?.rows.findIndex((row) => row.tab?.id === cursor_after_close) ?? -1 : -1;
+      if (index < 0) cursor_after_close = undefined;
+      if (index >= 0 || next >= 0) preview(index >= 0 ? index : next);
       else {
         selected = -1;
         saved = undefined;
@@ -252,6 +315,7 @@ export function create_session(deps: SessionDeps) {
     pick: (index: number) => {
       if (!completion?.rows[index] || !list_shown) return;
       fresh = false;
+      cursor_after_close = undefined;
       preview(index);
       accept();
     },
@@ -273,7 +337,11 @@ export function create_session(deps: SessionDeps) {
         case "cmdline.prev_completion":
           return cycle(-1);
         case "list.act":
-          return act_on_row();
+          return act_on_rows(args?.action);
+        case "list.select":
+          if (args?.action !== "clear") return toggle_selected();
+          selection.clear();
+          return { kind: "render" };
         case "cmdline.help":
           return deps.search ? { kind: "render" } : help();
         case "cmdline.clear":
@@ -284,6 +352,10 @@ export function create_session(deps: SessionDeps) {
           refresh();
           return { kind: "render" };
         case "mode.escape":
+          if (selection.size > 0 && on_tab_list()) {
+            selection.clear();
+            return { kind: "render" };
+          }
           if (rows().length === 0) return { kind: "close" };
           list_shown = false;
           return { kind: "render" };

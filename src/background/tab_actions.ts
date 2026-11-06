@@ -20,6 +20,12 @@ export async function set_pinned(deps: Pick<TabActionDeps, "set_pinned">, tab_id
   if (tab_ids.length > 0) await deps.set_pinned(tab_ids, pinned);
 }
 
+// Each tab closes on its own, so one that closed since the caller chose its id does not stop the rest. Returns how many closed.
+export async function close_tabs(deps: Pick<TabActionDeps, "remove">, tab_ids: number[]): Promise<number> {
+  const results = await Promise.allSettled(tab_ids.map((id) => deps.remove([id])));
+  return results.filter((result) => result.status === "fulfilled").length;
+}
+
 export async function move_tabs(deps: Pick<TabActionDeps, "move">, tab_ids: number[], index: number): Promise<void> {
   if (tab_ids.length > 0) await deps.move(tab_ids, index);
 }

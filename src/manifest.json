@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "DesertFox",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Keyboard-first Firefox extension built around one command registry.",
   "browser_specific_settings": {
     "gecko": {
@@ -38,6 +38,7 @@
   ],
   "permissions": [
     "tabs",
+    "downloads",
     "storage",
     "notifications",
     "clipboardWrite",
@@ -48,6 +49,9 @@
     "cookies",
     "sessions",
     "<all_urls>"
+  ],
+  "optional_permissions": [
+    "nativeMessaging"
   ],
   "browser_action": {
     "default_title": "DesertFox",

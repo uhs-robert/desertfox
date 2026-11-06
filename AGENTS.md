@@ -51,14 +51,15 @@ This repository is public.
 
 ```bash
 just build       # bundle the extension
-just test        # old-name, docs, themes and settings defaults checks, then unit tests: registry, parser, prefix tree, config merge
+just test        # old-name, docs, themes and settings defaults checks, then unit tests: registry, parser, prefix tree, config merge, and the Python host tests
 just docs-gen    # regenerate the tables in docs/keymap.md
 just themes      # regenerate src/shared/themes.ts from themes/*.toml
 just settings-defaults  # regenerate src/shared/default_settings.ts from src/shared/settings_table.ts
+just host-test   # Python unit tests of the native host and install.sh, with a temporary HOME and a stubbed curl
 just key-test    # real key presses in a nested Hyprland, about a minute
 just sign        # sign as unlisted on addons.mozilla.org
 just install     # install through the Firefox policy file (needs sudo)
-just release     # from a clean non-main branch: bump the patch version, sign and install, reading the AMO key from rbw when unset
+just release     # from a clean non-main branch: bump the patch version, sign and install, commit and push the bump, create the GitHub release that carries the native host (needs a logged-in gh), reading the AMO key from rbw when unset
 just install-profile <dir>  # install into one Firefox profile directory
 just build-config [dir]     # compile the user config into the LIVE managed storage config (trial runs: the CLI with --out, see tools/build-config/README.md)
 ```

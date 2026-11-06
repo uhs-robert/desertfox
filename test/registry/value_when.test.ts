@@ -22,6 +22,11 @@ test("an explicit or default value is refused when its sibling does not allow it
   assert.equal(result.ok ? "" : result.error, "action copy needs filter all, clickable, links, images, frames, media or custom");
 });
 
+test("double_click is refused for the links filter", () => {
+  assert.equal(check_args(hint, { action: "double_click", filter: "links" }).ok, false);
+  assert.equal(check_args(hint, { action: "double_click", filter: "buttons" }).ok, true);
+});
+
 test("a value with no rule is allowed with any sibling value", () => {
   for (const name of ["here", "delete", "focus", "hover", "caret"]) assert.equal(check_args(hint, { action: name, filter: "buttons" }).ok, true, name);
 });
@@ -77,4 +82,11 @@ test("a context source in a rule sibling passes until the router expands it", ()
   assert.equal(check_args(demo, { action: "tab", query: { from: "selection" } }).ok, true);
   assert.equal(check_args(demo, { action: "tab", query: "b" }).ok, false);
   assert.equal(check_args(demo, { action: "tab", query: "a" }).ok, true);
+});
+
+test("copy_image exists only with the images filter, and download with images, links, media and all", () => {
+  for (const name of ["images"]) assert.equal(check_args(hint, { action: "copy_image", filter: name }).ok, true, name);
+  for (const name of ["all", "links", "media", "buttons", "frames", "clickable"]) assert.equal(check_args(hint, { action: "copy_image", filter: name }).ok, false, name);
+  for (const name of ["images", "links", "media", "all"]) assert.equal(check_args(hint, { action: "download", filter: name }).ok, true, name);
+  for (const name of ["buttons", "inputs", "prose", "frames", "clickable"]) assert.equal(check_args(hint, { action: "download", filter: name }).ok, false, name);
 });

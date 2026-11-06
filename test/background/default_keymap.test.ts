@@ -120,6 +120,11 @@ test("the keys of the new modes compile and resolve to their commands", () => {
   }
   for (const key of ["<Tab>", "<C-n>", "<A-ArrowDown>"]) assert.equal(leaf_id("cmdline", key), "cmdline.next_completion {}", key);
   for (const key of ["<S-Tab>", "<C-p>", "<A-ArrowUp>"]) assert.equal(leaf_id("cmdline", key), "cmdline.prev_completion {}", key);
+  assert.equal(leaf_id("cmdline", "<C-Space>"), 'list.select {"action":"toggle"}');
+  assert.equal(leaf_id("cmdline", "<A-u>"), 'list.act {"action":"unload"}');
+  assert.equal(leaf_id("cmdline", "<A-x>"), 'list.act {"action":"close"}');
+  assert.equal(leaf_id("cmdline", "<A-m>"), 'list.act {"action":"mute"}');
+  assert.equal(leaf_id("cmdline", "<A-p>"), 'list.act {"action":"pin"}');
 });
 
 test("no default binds a command that does not exist", () => {
@@ -230,4 +235,12 @@ test("hint modifier variants whose action needs another filter are not bound", (
   const valid = [";bl", ";bI", ";bf", ";bm", ";wl", ";yl", ";yI", ";yf", ";ym", ";Yl", ";Yp", ";YB", ";Ya", ";rB", ";hB", ";xi"];
   for (const keys of hidden) assert.equal(is_bound(keys), false, `${keys} is bound`);
   for (const keys of valid) assert.equal(is_bound(keys), true, `${keys} is missing`);
+});
+
+test("the cmdline keys are single tokens and the selection keys each have one binding, so none shadows another", () => {
+  const cmdline = DEFAULT_KEYMAP.cmdline ?? {};
+  for (const key of Object.keys(cmdline)) assert.match(key, /^<[^<>]+>$/, key);
+  const selection_keys = ["<C-Space>", "<A-u>", "<A-x>", "<A-m>", "<A-p>"];
+  for (const key of selection_keys) assert.ok(!Array.isArray(cmdline[key]), key);
+  assert.equal(new Set(selection_keys.map((key) => JSON.stringify(cmdline[key]))).size, selection_keys.length);
 });

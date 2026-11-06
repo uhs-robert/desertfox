@@ -30,6 +30,11 @@
   .desertfox-help-home-header { display: flex; flex-direction: column; align-items: center; margin-bottom: 2rem; text-align: center; }
   .desertfox-help-keycap { display: block; width: 7rem; height: 7rem; margin-bottom: 1rem; }
   .desertfox-help-logo { width: 1.75rem; height: 1.75rem; }
+  /* The menu bar and the backdrop exist only for the narrow drawer. */
+  .desertfox-help-topbar, .desertfox-help-backdrop { display: none; }
+  .desertfox-help-menu-toggle { padding: .4rem; border: 0; border-radius: var(--desertfox-radius); background: none; color: var(--desertfox-fg-core); cursor: pointer; }
+  .desertfox-help-menu-toggle:hover { background: color-mix(in srgb, var(--desertfox-fg-core) 12%, transparent); }
+  .desertfox-help-menu-toggle svg { display: block; width: 1.25rem; height: 1.25rem; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; }
   .desertfox-help-sidebar a { padding: .25rem .5rem; border-radius: var(--desertfox-radius); color: var(--desertfox-fg-core); text-decoration: none; }
   .desertfox-help-sidebar a:hover { background: color-mix(in srgb, var(--desertfox-fg-core) 12%, transparent); }
   .desertfox-help-sidebar a[aria-current="page"] { color: var(--desertfox-primary); background: color-mix(in srgb, var(--desertfox-primary) 15%, transparent); }
@@ -107,16 +112,27 @@
   /* overflow-wrap: anywhere lowers the cell's minimum width, so a long URL wraps and the tag column stays on screen. */
   .desertfox-help-settings { max-width: 100%; }
   .desertfox-help-settings td:nth-child(2) { overflow-wrap: anywhere; }
-  /* Narrow screens: five columns leave each one a few letters wide, so each param stacks as labelled lines. */
+  /* Narrow screens: the sidebar becomes a drawer that slides over the page from the left, opened by the menu button in a bar that stays on top. */
   @media (max-width: 40rem) {
+    html { scroll-padding-top: 3.5rem; }
+    html:has(.desertfox-help-drawer-open) { overflow: hidden; }
     .desertfox-help { flex-direction: column; }
-    .desertfox-help-sidebar { position: static; width: auto; height: auto; flex-direction: row; flex-wrap: wrap; align-items: center; }
-    .desertfox-help-sidebar .desertfox-help-support { margin-top: 0; }
-    /* The group dissolves so the list can take its own full-width line inside the wrapping row. */
-    .desertfox-help-nav-group { display: contents; }
-    .desertfox-help-sections { flex-basis: 100%; flex-direction: row; flex-wrap: wrap; margin-left: 0; }
-    .desertfox-help-brand { margin: 0 .5rem 0 0; }
+    .desertfox-help-topbar {
+      position: sticky; top: 0; z-index: 1; display: flex; align-items: center; gap: .5rem; padding: .4rem 1rem;
+      background: color-mix(in srgb, var(--desertfox-fg-core) 6%, var(--desertfox-bg-core));
+    }
+    .desertfox-help-topbar .desertfox-help-brand { margin: 0; }
+    /* Hidden by visibility, not display, so the slide can run. Hidden content stays out of the tab order and away from hints.
+       Visibility waits out the slide only on close. On open it turns at once, because the open click focuses a link inside. */
+    .desertfox-help-sidebar {
+      position: fixed; top: 0; bottom: 0; left: 0; z-index: 3; align-self: stretch; width: min(16rem, 85vw); height: auto;
+      visibility: hidden; transform: translateX(-100%); transition: transform 150ms ease-out, visibility 0s 150ms;
+      box-shadow: 0 0 1.5rem color-mix(in srgb, var(--desertfox-bg-core) 70%, transparent);
+    }
+    .desertfox-help-drawer-open .desertfox-help-sidebar { visibility: visible; transform: none; transition: transform 150ms ease-out; }
+    .desertfox-help-drawer-open .desertfox-help-backdrop { position: fixed; inset: 0; z-index: 2; display: block; background: color-mix(in srgb, var(--desertfox-bg-core) 60%, transparent); }
     .desertfox-help-page { padding: 1rem; }
+    /* Five param columns leave each one a few letters wide, so each param stacks as labelled lines. */
     .desertfox-help-params, .desertfox-help-params tr, .desertfox-help-params td { display: block; }
     .desertfox-help-params td { overflow-wrap: anywhere; }
     /* Visually hidden, not display:none, so screen readers keep the column headers. */
@@ -130,6 +146,7 @@
     .desertfox-help-params td:nth-child(4)::before { content: "values"; }
     .desertfox-help-params td:nth-child(5)::before { content: "flags"; }
   }
+  @media (max-width: 40rem) and (prefers-reduced-motion: reduce) { .desertfox-help-sidebar, .desertfox-help-drawer-open .desertfox-help-sidebar { transition: none; } }
 </style>
 </head>
 <body><script src="help.js"></script>

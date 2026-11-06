@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { element_address, has_usable_address, is_media, perform, player_box, takes_typing } from "../../src/content/hints/actions.ts";
+import { word_range_at, element_address, has_usable_address, is_inside_link, is_media, perform, player_box, takes_typing } from "../../src/content/hints/actions.ts";
 import type { HintAction } from "../../src/content/hints/actions.ts";
 
 // Node has no DOM events. The fakes only need the type and the position.
@@ -19,9 +19,10 @@ function fixture(local: string, extra: Record<string, unknown> = {}) {
   const opened: [string, string][] = [];
   const copied: string[] = [];
   const started: string[] = [];
-  const deps = { open_link: (url: string, place: string) => opened.push([url, place]), copy: (text: string) => copied.push(text), start_caret: (_target: unknown, mode: string) => started.push(mode) };
+  const images: [string, string][] = [];
+  const deps = { open_link: (url: string, place: string) => opened.push([url, place]), copy: (text: string) => copied.push(text), image_action: (action: string, address: string) => images.push([action, address]), start_caret: (_target: unknown, mode: string) => started.push(mode) };
   const run = (action: HintAction) => perform(action, element as never, deps as never);
-  return { calls, opened, copied, started, run, element };
+  return { calls, opened, copied, started, images, run, element };
 }
 
 const MOUSE_SEQUENCE = ["pointerover", "pointerenter", "mouseover", "pointerdown", "mousedown", "focus", "pointerup", "mouseup", "click"];
@@ -48,7 +49,7 @@ test("a cancelled pointerdown skips mousedown, mouseup and focus and still click
 test("here sends the mouse events from the middle of the element", () => {
   const sent: { type: string; clientX?: number; clientY?: number; button?: number }[] = [];
   const element = { localName: "div", click: () => {}, focus: () => {}, remove: () => {}, dispatchEvent: (event: never) => sent.push(event), getBoundingClientRect: () => ({ left: 10, top: 20, width: 100, height: 40 }) };
-  perform("here", element as never, { open_link: () => {}, copy: () => {}, start_caret: () => {} });
+  perform("here", element as never, { open_link: () => {}, copy: () => {}, image_action: () => Promise.resolve(), start_caret: () => {} });
   const down = sent.find((event) => event.type === "mousedown");
   assert.deepEqual([down?.clientX, down?.clientY, down?.button], [60, 40, 0]);
 });
@@ -223,7 +224,7 @@ function box_fixture(attributes: Record<string, string>) {
 test("focus gives a box without tabindex tabindex=-1 before it focuses, and flashes an outline that then goes away", async (context) => {
   context.mock.timers.enable({ apis: ["setTimeout"] });
   const page = box_fixture({});
-  perform("focus", page.element as never, { open_link: () => {}, copy: () => {}, start_caret: () => {} });
+  perform("focus", page.element as never, { open_link: () => {}, copy: () => {}, image_action: () => Promise.resolve(), start_caret: () => {} });
   assert.deepEqual(page.calls.slice(0, 3), ["set tabindex=-1", "focus", "outline 2px solid currentColor"]);
   assert.equal(page.outline.priority, "important");
   context.mock.timers.tick(5000);
@@ -234,7 +235,7 @@ test("focus keeps a tabindex the page set and restores an outline the page set",
   context.mock.timers.enable({ apis: ["setTimeout"] });
   const page = box_fixture({ tabindex: "0" });
   page.outline.value = "1px dotted red";
-  perform("focus", page.element as never, { open_link: () => {}, copy: () => {}, start_caret: () => {} });
+  perform("focus", page.element as never, { open_link: () => {}, copy: () => {}, image_action: () => Promise.resolve(), start_caret: () => {} });
   assert.equal(page.attributes.tabindex, "0");
   context.mock.timers.tick(5000);
   assert.equal(page.outline.value, "1px dotted red");
@@ -243,7 +244,7 @@ test("focus keeps a tabindex the page set and restores an outline the page set",
 test("focus on a box that is focusable already leaves its tabindex alone", () => {
   const link = box_fixture({});
   Object.assign(link.element, { localName: "a", tabIndex: 0 });
-  perform("focus", link.element as never, { open_link: () => {}, copy: () => {}, start_caret: () => {} });
+  perform("focus", link.element as never, { open_link: () => {}, copy: () => {}, image_action: () => Promise.resolve(), start_caret: () => {} });
   assert.equal("tabindex" in link.attributes, false);
 });
 
@@ -251,7 +252,7 @@ test("focus twice inside the flash still restores the original outline", (contex
   context.mock.timers.enable({ apis: ["setTimeout"] });
   const page = box_fixture({});
   page.outline.value = "1px dotted red";
-  const deps = { open_link: () => {}, copy: () => {}, start_caret: () => {} };
+  const deps = { open_link: () => {}, copy: () => {}, image_action: () => Promise.resolve(), start_caret: () => {} };
   perform("focus", page.element as never, deps);
   context.mock.timers.tick(300);
   perform("focus", page.element as never, deps);
@@ -606,4 +607,89 @@ test("focus on a frame also focuses the frame's window, the call that enters a f
   page.run("focus");
   assert.deepEqual(page.calls, ["focus"]);
   assert.deepEqual(window_focus_calls, ["window"]);
+});
+
+test("copy_image and download send the picture address to the background", () => {
+  const image = fixture("img", { currentSrc: "https://example.com/cat.png", src: "https://example.com/cat.png" });
+  image.run("copy_image");
+  image.run("download");
+  assert.deepEqual(image.images, [["copy_image", "https://example.com/cat.png"], ["download", "https://example.com/cat.png"]]);
+});
+
+test("download sends the href of a link", () => {
+  const link = fixture("a", { href: "https://example.com/file.zip" });
+  link.run("download");
+  assert.deepEqual(link.images, [["download", "https://example.com/file.zip"]]);
+});
+
+test("copy_image and download refuse an element with no address, and send nothing", () => {
+  for (const address of [{}, { currentSrc: "blob:https://example.com/1", src: "blob:https://example.com/1" }, { src: "data:image/png;base64," + "A".repeat(9000) }]) {
+    const image = fixture("img", address);
+    assert.deepEqual(image.run("copy_image"), { ok: false, message: "This element has no web address" });
+    assert.deepEqual(image.run("download"), { ok: false, message: "This element has no web address" });
+    assert.deepEqual(image.images, []);
+  }
+});
+
+const PRESS = ["pointerdown", "mousedown", "focus", "pointerup", "mouseup"];
+
+test("double_click sends two presses with click counts 1 and 2, a click after each, then dblclick", () => {
+  const sent: { type: string; detail?: number }[] = [];
+  const page = fixture("div", { dispatchEvent: (event: { type: string; detail?: number }) => { sent.push(event); return true; } });
+  page.run("double_click");
+  assert.deepEqual(sent.map((event) => event.type), ["pointerover", "pointerenter", "mouseover", "pointerdown", "mousedown", "pointerup", "mouseup", "click", "pointerdown", "mousedown", "pointerup", "mouseup", "click", "dblclick"]);
+  assert.deepEqual(sent.filter((event) => /^(mouse(down|up)|click|dblclick)$/.test(event.type)).map((event) => event.detail), [1, 1, 1, 2, 2, 2, 2]);
+  assert.deepEqual(sent.filter((event) => event.type.startsWith("pointer")).map((event) => event.detail), Array(6).fill(undefined));
+  assert.deepEqual(sent.slice(0, 3).map((event) => event.detail), [undefined, undefined, 0]);
+});
+
+test("double_click gives the focus on each press and calls click() never", () => {
+  const page = fixture("div", { click: () => page_calls.push("native-click") });
+  const page_calls = page.calls;
+  page.run("double_click");
+  assert.equal(page.calls.filter((call) => call === "focus").length, 2);
+  assert.equal(page.calls.filter((call) => call === "click").length, 2);
+  assert.equal(page.calls.filter((call) => call === "native-click").length, 0);
+});
+
+test("word_range_at finds the word at its start, middle and end, and nothing between non-words", () => {
+  const text = "say hello, world";
+  assert.deepEqual(word_range_at(text, 4), [4, 9]);
+  assert.deepEqual(word_range_at(text, 6), [4, 9]);
+  assert.deepEqual(word_range_at(text, 8), [4, 9]);
+  assert.deepEqual(word_range_at(text, 3), [0, 3]);
+  assert.deepEqual(word_range_at(text, 9), [4, 9]);
+  assert.deepEqual(word_range_at(text, 16), [11, 16]);
+  assert.equal(word_range_at(text, 10), undefined);
+  assert.equal(word_range_at("a  b", 2), undefined);
+});
+
+test("double_click selects the word under the middle of a text target and nothing on others", () => {
+  const steps: string[] = [];
+  const text = { nodeType: 3, data: "say hello  there" };
+  const selection = { removeAllRanges: () => steps.push("clear"), addRange: (range: { start: number; end: number }) => steps.push(`add ${range.start} ${range.end}`) };
+  Object.assign(globalThis, { Node: { TEXT_NODE: 3 } });
+  const document_with = (node: unknown, offset = 4) => ({
+    caretPositionFromPoint: (x: number, y: number) => (steps.push(`point ${x} ${y}`), { offsetNode: node, offset }),
+    createRange: () => { const range = { start: 0, end: 0, setStart: (_n: unknown, at: number) => { range.start = at; }, setEnd: (_n: unknown, at: number) => { range.end = at; } }; return range; },
+    defaultView: { getSelection: () => selection },
+  });
+  fixture("p", { ownerDocument: document_with(text), contains: (node: unknown) => node === text }).run("double_click");
+  assert.deepEqual(steps, ["point 60 40", "clear", "add 4 9"]);
+  steps.length = 0;
+  fixture("div", { ownerDocument: document_with({ nodeType: 1 }), contains: () => true }).run("double_click");
+  fixture("input", { type: "text", ownerDocument: document_with(text), contains: () => true }).run("double_click");
+  fixture("p", { ownerDocument: document_with(text), contains: () => false }).run("double_click");
+  const editable_text = { nodeType: 3, data: "say hello", parentElement: { isContentEditable: true } };
+  fixture("div", { ownerDocument: document_with(editable_text), contains: () => true }).run("double_click");
+  fixture("p", { ownerDocument: document_with(text, 10), contains: () => true }).run("double_click");
+  assert.deepEqual(steps.filter((step) => !step.startsWith("point")), []);
+});
+
+test("is_inside_link is true for a link and for its children", () => {
+  const node = (matches: boolean, parent: unknown = null, host: unknown = null) => ({ matches: () => matches, parentElement: parent, parentNode: host ? { host } : null });
+  assert.equal(is_inside_link(node(true) as never), true);
+  assert.equal(is_inside_link(node(false, node(true)) as never), true);
+  assert.equal(is_inside_link(node(false, null, node(true)) as never), true);
+  assert.equal(is_inside_link(node(false, node(false)) as never), false);
 });

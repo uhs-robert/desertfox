@@ -23,16 +23,17 @@ build: install_deps
     npm run --silent typecheck
     npm run --silent build
 
-# Check no old-name tokens remain, docs/keymap.md, src/shared/themes.ts and src/shared/default_settings.ts are current, then run the unit tests from TypeScript source by Node's type stripping.
+# Check no old-name tokens remain, docs/keymap.md, src/shared/themes.ts and src/shared/default_settings.ts are current, then run the unit tests from TypeScript source by Node's type stripping, and the Python host tests.
 test: install_deps
     #!/usr/bin/env bash
     set -euo pipefail
-    # A test that runs away dies with its scope, so nothing outlives the run.
+    # A test that runs away dies with its scope, so nothing outlives the run. The host tests share the scope and its time limit.
+    all_tests='just host-test && npm run --silent test'
     if command -v systemd-run >/dev/null 2>&1 && systemd-run --user --scope --quiet -p MemoryMax=8G -p MemorySwapMax=0 -p RuntimeMaxSec=900 true >/dev/null 2>&1; then
-        exec systemd-run --user --scope --quiet -p MemoryMax=8G -p MemorySwapMax=0 -p RuntimeMaxSec=900 npm run --silent test
+        exec systemd-run --user --scope --quiet -p MemoryMax=8G -p MemorySwapMax=0 -p RuntimeMaxSec=900 bash -c "$all_tests"
     fi
     echo "test: no systemd user session, so this run has no memory cap or time limit." >&2
-    exec npm run --silent test
+    exec bash -c "$all_tests"
 
 [private]
 install_deps:
@@ -41,6 +42,10 @@ install_deps:
 # Merge the config directory (default ~/.config/desertfox) into the live managed storage file. Extra flags (such as --schemas) go to the CLI. For another output path run the CLI with --out.
 build-config dir="" *flags="": build
     node tools/build-config/cli.ts {{ if dir == "" { "" } else { quote(dir) } }} --live {{flags}}
+
+# Python unit tests of the native host and its install script. The install tests use a temporary HOME and a stubbed curl.
+host-test:
+    python3 -m unittest discover -s host -p 'test_*.py'
 
 # Real key presses in a nested session, about a minute. Needs SHADOW_SH, or the shadow skill script in dotfiles, as the nested-session driver.
 key-test: build
@@ -114,7 +119,7 @@ release_guard:
     fi
     # A bump left behind by a failed sign or install looks like this.
     if [ -z "$(git status --porcelain -- . ':!package.json' ':!package-lock.json' ':!src/manifest.json')" ]; then
-        echo "release found changes only in package.json, package-lock.json and src/manifest.json. That may be a bump left by a failed sign or install. Run 'git diff HEAD -- package.json package-lock.json src/manifest.json'. If it shows only the version line, run 'git checkout -- package.json package-lock.json src/manifest.json' and rerun. Otherwise commit or keep your edits. If signing succeeded, commit the bump instead." >&2
+        echo "release found changes only in package.json, package-lock.json and src/manifest.json. That may be a bump left by a failed sign or install. Run 'git diff HEAD -- package.json package-lock.json src/manifest.json'. If it shows only the version line, run 'git checkout -- package.json package-lock.json src/manifest.json' and rerun. Otherwise commit or keep your edits. If signing succeeded, do not rerun: run 'just release_commit_push' and then 'just release_publish' instead." >&2
         exit 1
     fi
     echo "release refuses to run with uncommitted changes. Commit or stash them first." >&2
@@ -133,11 +138,46 @@ release_bump:
     mv "$manifest_tmp" src/manifest.json
     echo "bumped version to $new_version"
 
-# Bump the patch version, sign dist/ and install it for every profile. Fills the AMO key from rbw when either variable is empty. Needs a clean release branch.
+# Commit the version bump on the release branch and push the branch, so the release tag can point at a commit that exists on the remote and carries the released code.
+[private]
+release_commit_push:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    version=$(jq -r .version package.json)
+    git add package.json package-lock.json src/manifest.json
+    # A rerun after a failed push finds the bump already committed.
+    if ! git diff --cached --quiet; then
+        git commit -q -m "chore(release): bump version to $version" || { echo "The bump commit failed, so the bump is uncommitted. Fix git, then run 'just release_commit_push' and 'just release_publish'. Do not rerun 'just release': it signs a second version." >&2; exit 1; }
+    fi
+    git push -u origin "$(git branch --show-current)" || { echo "The push failed. The bump commit is local. Fix the push, then run 'just release_commit_push' and 'just release_publish'. Do not rerun 'just release': it signs a second version." >&2; exit 1; }
+
+# Create the GitHub release v<package.json version> with the host, its checksum and the install script, so a release build installs the host of its own version. The tag targets HEAD, so push it first (release does). RELEASE_DRY_RUN=1 prints the gh command and creates nothing.
+[private]
+release_publish:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    version=$(jq -r .version package.json)
+    assets=$(mktemp -d)
+    trap 'rm -rf "$assets"' EXIT
+    cp host/desertfox-host host/install.sh "$assets/"
+    (cd "$assets" && sha256sum desertfox-host > desertfox-host.sha256)
+    gh_command=(gh release create "v$version" "$assets/desertfox-host" "$assets/desertfox-host.sha256" "$assets/install.sh" --target "$(git rev-parse HEAD)" --title "v$version" --notes "Native host $version. The extension's :native.install page shows the command that installs it.")
+    if [ "${RELEASE_DRY_RUN:-}" = "1" ]; then
+        echo "dry run: ${gh_command[*]}"
+        cat "$assets/desertfox-host.sha256"
+        exit 0
+    fi
+    "${gh_command[@]}"
+    echo "created GitHub release v$version"
+
+# Bump the patch version, sign dist/, install it for every profile and create the GitHub release with the native host. Fills the AMO key from rbw when either variable is empty. Needs a clean release branch.
 release:
     #!/usr/bin/env bash
     set -euo pipefail
     just release_guard
+    # Fail before the bump and the signing, so a missing gh login does not leave a signed version with no host release.
+    command -v gh >/dev/null || { echo "release needs gh to create the GitHub release that carries the native host." >&2; exit 1; }
+    gh auth status >/dev/null 2>&1 || { echo "release needs a logged-in gh. Run 'gh auth login', then retry." >&2; exit 1; }
     if [ -z "${WEB_EXT_API_KEY:-}" ] || [ -z "${WEB_EXT_API_SECRET:-}" ]; then
         for tool in rbw jq; do
             command -v "$tool" >/dev/null || { echo "release needs $tool to read the AMO key from rbw. Install it, or set WEB_EXT_API_KEY and WEB_EXT_API_SECRET." >&2; exit 1; }
@@ -160,4 +200,6 @@ release:
     just release_bump
     just sign
     just install
-    echo "Released $(jq -r .version package.json). Commit the bump on this branch and open a PR."
+    just release_commit_push
+    just release_publish || { echo "The add-on is signed and installed and the bump is pushed, but the GitHub release failed. After fixing gh, run 'just release_publish'." >&2; exit 1; }
+    echo "Released $(jq -r .version package.json). The bump is committed and pushed on this branch. Open a PR."

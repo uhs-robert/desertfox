@@ -14,7 +14,7 @@ Which-key shows a group as `+Name`, for example `g` as `+Go`. A `group_names` se
 
 A key shows the command label plus a phrase for each arg its binding sets, for example `gO` as "Open URL in new tab". Keys that set numbers carry a `label` in the default keymap, such as `h` as "Scroll left". The Label column shows that `label` or the command label. The rule is in [design.md](design.md#which-key).
 
-The hint keys `;r ;b ;w ;y ;Y ;h ;x` are modifiers, so no row lists their variants. A `[modifiers]` section in `keymap.toml` holds them. Each adds its args to a variant of every key in the `;` group: `;bl` opens a link in a background tab, `;Yp` copies the text of an element, `;ha` hovers any element, `;rl` opens links in background tabs and keeps picking. A variant exists only when the `hint` param schema accepts the combination. Keys that set their own `action` (`;s`, `;v`, `;V`) get none, and modifiers do not stack.
+The hint keys `;r ;b ;w ;y ;Y ;h ;x ;2` are modifiers, so no row lists their variants. A `[modifiers]` section in `keymap.toml` holds them. Each adds its args to a variant of every key in the `;` group: `;bl` opens a link in a background tab, `;Yp` copies the text of an element, `;ha` hovers any element, `;2a` double-clicks any element but a link, `;rl` opens links in background tabs and keeps picking. A variant exists only when the `hint` param schema accepts the combination. Keys that set their own `action` (`;s`, `;v`, `;V`) get none, and modifiers do not stack.
 
 The `caret`, `visual` and `cmdline` rows bind placeholder commands that refuse until their piece builds them.
 
@@ -22,7 +22,7 @@ A note "(prompts)" means the binding sets a `prompt` for a param, so the command
 
 <!-- BEGIN generated -->
 
-bound: 271 (normal 141, hint 2, cmdline 13, caret 35, visual 37, visual_line 38, insert 1, ignore 1, browser 3) | later: 14 | dropped: 6
+bound: 276 (normal 142, hint 2, cmdline 17, caret 35, visual 37, visual_line 38, insert 1, ignore 1, browser 3) | later: 14 | dropped: 6
 
 ### normal
 
@@ -158,6 +158,7 @@ bound: 271 (normal 141, hint 2, cmdline 13, caret 35, visual 37, visual_line 38,
 | `;i` | bound | `hint --inputs` | Click input |  |
 | `;l` | bound | `hint --links` | Click link |  |
 | `;I` | bound | `hint --images` | Open image in new tab |  |
+| `;yI` | bound | `hint --copy-image --images` | Copy image |  |
 | `;f` | bound | `hint --frames` | Focus frame |  |
 | `;m` | bound | `hint --media` | Play or pause media |  |
 | `:` | bound | `cmdline.open` | Command line |  |
@@ -236,6 +237,10 @@ Which-key group names:
 | `<C-u>` | bound | `cmdline.clear` | Clear line |  |
 | `<C-h>` | bound | `cmdline.help` | Command help |  |
 | `<A-u>` | bound | `list.act unload` | Unload or load the tab |  |
+| `<C-Space>` | bound | `list.select toggle` | Mark or unmark the tab |  |
+| `<A-x>` | bound | `list.act close` | Close the tab |  |
+| `<A-m>` | bound | `list.act mute` | Mute or unmute the tab |  |
+| `<A-p>` | bound | `list.act pin` | Pin or unpin the tab |  |
 
 ### caret
 

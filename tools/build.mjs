@@ -10,7 +10,7 @@ const MAX_BYTES = {
   "whichkey.js": 8 * 1024,
   "cmdline.js": 4 * 1024,
   "ui.js": 8 * 1024,
-  "cmdline_page.js": 52 * 1024,
+  "cmdline_page.js": 56 * 1024,
   "find_worker.js": 2 * 1024,
 };
 

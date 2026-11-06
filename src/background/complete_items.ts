@@ -4,9 +4,11 @@
 
 import type { SearchEngine } from "../shared/config.ts";
 import type { PageInfo } from "../shared/engines/index.ts";
-import type { BookmarkItem, CompleteItemsAnswer, SetTabUnloadedAnswer, EngineItem, HistoryItem, OpenRow, TabContainer, TabItem, WindowItem } from "../shared/messages.ts";
+import type { BookmarkItem, CompleteItemsAnswer, EngineItem, HistoryItem, OpenRow, TabContainer, TabItem, TabRowsAction, TabRowsActionAnswer, WindowItem } from "../shared/messages.ts";
 import { available_engine_names } from "./availability.ts";
-import { set_unloaded } from "./tab_discard.ts";
+import { close_tabs, set_muted, set_pinned } from "./tab_actions.ts";
+import type { TabActionDeps } from "./tab_actions.ts";
+import { describe_result, set_unloaded } from "./tab_discard.ts";
 import type { DiscardDeps } from "./tab_discard.ts";
 
 export type TabLike = {
@@ -200,7 +202,13 @@ export type CompleteItemsDeps = typeof browser_complete_items_deps & {
   open_settings: () => Promise<OpenSettings>;
   read_tab: (tab_id: number) => Promise<TabLike | undefined>;
   discard: DiscardDeps;
+  tab_actions: Pick<TabActionDeps, "set_muted" | "set_pinned" | "remove">;
 };
+
+const TAB_ROWS_ACTIONS: readonly string[] = ["close", "unload", "load", "mute", "unmute", "pin", "unpin"] satisfies TabRowsAction[];
+const is_tab_rows_action = (action: unknown): action is TabRowsAction => typeof action === "string" && TAB_ROWS_ACTIONS.includes(action);
+// A bound on one message, far above any real tab count.
+const MAX_ACTION_TABS = 5000;
 
 export type Asker = LineScope & { tab_id: number; frame_id: number };
 
@@ -222,20 +230,27 @@ export function create_complete_items(deps: CompleteItemsDeps) {
   };
 
   return {
-    // Unloads or loads one tab of the list. Undefined for a sender that is not an opener and for a tab that is gone or of the other privacy.
-    // The address and title come from before the change: a tab still loading reads about:blank once unloaded.
-    set_unloaded: async (tab_id: unknown, unloaded: unknown, asker: Asker | undefined): Promise<SetTabUnloadedAnswer | undefined> => {
-      if (typeof tab_id !== "number" || typeof unloaded !== "boolean" || !asker || !(await deps.is_opener(asker.tab_id, asker.frame_id))) return undefined;
-      const before = await deps.read_tab(tab_id);
-      if (!before || before.incognito !== asker.incognito) return undefined;
-      const { skipped } = await set_unloaded(deps.discard, [tab_id], unloaded);
-      const after = await deps.read_tab(tab_id);
-      if (!after) return undefined;
-      const shown = unloaded ? { ...after, url: before.url, title: before.title } : after;
-      const [item] = listed_tabs([shown], asker, await deps.containers(), await deps.previous_tab(asker.window_id));
-      if (!item) return undefined;
-      const { window_id, ...row } = item;
-      return { item: row, ...(skipped[0] ? { refusal: skipped[0].reason } : {}) };
+    // Runs a row key on the tab ids the page captured at the key press. Undefined for a sender that is not an opener, for a bad argument and when
+    // any id names a tab of the other privacy: nothing runs then. An id with no tab is skipped, also one that closes while the action runs.
+    tab_rows_action: async (action: unknown, tab_ids: unknown, asker: Asker | undefined): Promise<TabRowsActionAnswer | undefined> => {
+      if (!is_tab_rows_action(action) || !Array.isArray(tab_ids) || tab_ids.length > MAX_ACTION_TABS || !tab_ids.every(Number.isInteger) || !asker || !(await deps.is_opener(asker.tab_id, asker.frame_id))) return undefined;
+      const unique_ids = [...new Set(tab_ids as number[])];
+      const found = await Promise.all(unique_ids.map(async (id) => ({ id, tab: await deps.read_tab(id) })));
+      // The reads take time: the line may have lost its ticket meanwhile.
+      if (found.some(({ tab }) => tab && tab.incognito !== asker.incognito) || !(await deps.is_opener(asker.tab_id, asker.frame_id))) return undefined;
+      const ids = found.filter(({ tab }) => tab).map(({ id }) => id);
+      try {
+        if (action === "close") await close_tabs(deps.tab_actions, ids);
+        else if (action === "mute" || action === "unmute") await set_muted(deps.tab_actions, ids, action === "mute");
+        else if (action === "pin" || action === "unpin") await set_pinned(deps.tab_actions, ids, action === "pin");
+        else {
+          const result = await set_unloaded(deps.discard, ids, action === "unload");
+          return result.skipped.length > 0 ? { refusal: describe_result(action === "unload" ? "unloaded" : "loaded", result) } : {};
+        }
+      } catch {
+        return { refusal: "a tab changed before the action ran" };
+      }
+      return {};
     },
     // Undefined for a sender that is not a tab, for a tab that opened no line and for a tab that closed or navigated
     // while the lookup ran. A failed browser call gives an empty list.

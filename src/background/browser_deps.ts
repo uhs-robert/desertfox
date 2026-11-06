@@ -7,6 +7,7 @@ import type { EnumSources } from "../shared/registry/check_args.ts";
 import { registry } from "../shared/registry/index.ts";
 import { runs_with_empty } from "./availability.ts";
 import type { BundleLoaderDeps } from "./bundle_loader.ts";
+import type { ImageDeps, ImageKind } from "./image_actions.ts";
 import { create_load_log } from "./load_log.ts";
 import type { RepeatMemory } from "./repeat_memory.ts";
 import type { ReinjectDeps } from "./reload.ts";
@@ -117,4 +118,64 @@ export const bundle_loader_deps: BundleLoaderDeps = {
     }
   },
   timeout_ms: 10_000,
+};
+
+// The decode runs in the background page, where the fetched bytes are same-origin, so no canvas is tainted. `createImageBitmap` rejects an SVG, which an `Image` element decodes.
+async function decode_to_canvas(bytes: ArrayBuffer, kind: ImageKind): Promise<OffscreenCanvas> {
+  const blob = new Blob([bytes], { type: kind === "svg" ? "image/svg+xml" : "" });
+  if (kind !== "svg") {
+    const bitmap = await createImageBitmap(blob);
+    const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
+    canvas.getContext("2d")!.drawImage(bitmap, 0, 0);
+    return canvas;
+  }
+  const address = URL.createObjectURL(blob);
+  try {
+    const image = new Image();
+    image.src = address;
+    await image.decode();
+    // An SVG without a size has no natural one.
+    const canvas = new OffscreenCanvas(image.naturalWidth || 512, image.naturalHeight || 512);
+    canvas.getContext("2d")!.drawImage(image, 0, 0, canvas.width, canvas.height);
+    return canvas;
+  } finally {
+    URL.revokeObjectURL(address);
+  }
+}
+
+// Reads at most `limit` bytes, and gives up (undefined) as soon as the body is longer.
+async function read_limited(response: Response, limit: number): Promise<ArrayBuffer | undefined> {
+  const reader = response.body?.getReader();
+  if (!reader) return response.arrayBuffer();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (let part = await reader.read(); !part.done; part = await reader.read()) {
+    total += part.value.byteLength;
+    if (total > limit) {
+      void reader.cancel();
+      return undefined;
+    }
+    chunks.push(part.value);
+  }
+  const joined = new Uint8Array(total);
+  let at = 0;
+  for (const chunk of chunks) {
+    joined.set(chunk, at);
+    at += chunk.byteLength;
+  }
+  return joined.buffer;
+}
+
+export const image_deps: ImageDeps = {
+  fetch_image: async (address, timeout_ms, credentials) => {
+    // The signal also covers the body read.
+    const response = await fetch(address, { credentials, signal: AbortSignal.timeout(timeout_ms) });
+    const declared = Number(response.headers.get("content-length"));
+    return { ok: response.ok, declared_bytes: Number.isFinite(declared) && declared > 0 ? declared : undefined, read: (limit) => read_limited(response, limit) };
+  },
+  render_png: async (bytes, kind) => (await (await decode_to_canvas(bytes, kind)).convertToBlob({ type: "image/png" })).arrayBuffer(),
+  set_image_data: (bytes, type) => browser.clipboard.setImageData(bytes, type),
+  start_download: async (address, context) => {
+    await browser.downloads.download({ url: address, saveAs: false, incognito: context.incognito, ...(context.cookie_store_id === undefined ? {} : { cookieStoreId: context.cookie_store_id }) });
+  },
 };

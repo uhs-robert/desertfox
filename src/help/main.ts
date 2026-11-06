@@ -7,7 +7,8 @@ import { follow_theme, follow_user_css } from "../shared/theme/apply.ts";
 import type { Block } from "./blocks.ts";
 import { build_help_model } from "./model.ts";
 import type { HelpModel } from "./model.ts";
-import { command_anchor, engine_anchor, render_help, section_anchor } from "./render.ts";
+import { close_drawer_on_escape, close_drawer_on_window_blur, command_anchor, engine_anchor, render_help, section_anchor } from "./render.ts";
+import { mount_native_install } from "./native_install.ts";
 import { parse_route } from "./route.ts";
 
 function show_route(model: HelpModel, guide: Block[], moved_by_user: boolean): void {
@@ -51,6 +52,9 @@ async function main(): Promise<void> {
   window.addEventListener("hashchange", () => show_route(model, guide, true));
 }
 
+window.addEventListener("keydown", close_drawer_on_escape, true);
+window.addEventListener("blur", close_drawer_on_window_blur);
 follow_theme(":root, .desertfox-help");
 follow_user_css();
 void main();
+mount_native_install();

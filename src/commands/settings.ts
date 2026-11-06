@@ -41,9 +41,13 @@ function naming_nothing(name: keyof Settings, value: unknown, config: MergedConf
 // The params already hold valid text: `name` is a known setting that `set` takes, and `value` passed that setting's check.
 // `config` is the config under the edits now in force.
 export function plan_set(name: keyof Settings, value_text: string, layer: EditLayer, current: SettingEdits, config: MergedConfig): SettingsPlan {
-  const in_force = effective_settings(config.settings)[name];
-  if (value_text.trim() === "") return { toast: { kind: "info", message: show(name, in_force) } };
+  if (value_text.trim() === "") return { toast: { kind: "info", message: show(name, effective_settings(config.settings)[name]) } };
   const { value } = parse_setting_text(name, value_text) as { value: unknown };
+  return plan_set_value(name, value, layer, current, config);
+}
+
+// The settings page sends a typed value, so it skips the text guess of `plan_set`. The caller has run `SETTING_SPECS[name].check` on it.
+export function plan_set_value(name: keyof Settings, value: unknown, layer: EditLayer, current: SettingEdits, config: MergedConfig): SettingsPlan {
   const unmatched = naming_nothing(name, value, config);
   const until = layer === "temp" ? UNTIL_RESTART : "";
   const message = unmatched === undefined ? `${show(name, value)}${until}` : `${show(name, value)}${until}, but ${unmatched}`;
