@@ -11,6 +11,8 @@
   <a href="https://github.com/uhs-robert/desertfox/forks"><img src="https://img.shields.io/github/forks/uhs-robert/desertfox?style=for-the-badge&logo=github&colorA=3b2416&colorB=8a6a9e" alt="Forks"/></a>
 </p>
 
+<p align="center"><sub>Desert the mouse, navigate the web with only your keyboard</sub></p>
+
 ## 🦊 What it is
 
 DesertFox brings Vim-style keys to Firefox, so you can browse the web without the mouse. Click any link, button or image with a few keystrokes. Switch tabs, search the page and copy links from the keyboard.
