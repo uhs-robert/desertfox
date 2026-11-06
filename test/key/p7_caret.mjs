@@ -10,6 +10,11 @@ export async function run_cases({ rdp, extension_id, take_shot, run_case, expect
   const CARET_BACKGROUND = "#f0e68c";
   const VISUAL_BACKGROUND = "#24364d";
 
+  // Runs in the content script's world of the active tab, where `desertfox_host` lives.
+  const in_active_tab = (code) => evaluate_in_background(rdp, extension_id, `(async () => { const [tab] = await browser.tabs.query({ active: true, currentWindow: true }); return (await browser.tabs.executeScript(tab.id, { code: ${JSON.stringify(code)} }))[0]; })()`).then((value) => {
+    if (value?.error) throw new Error(`in the tab: ${JSON.stringify(value)}`);
+    return value;
+  });
   const selection_is = (page_id, text) => (event) => event.type === "selection" && event.page_id === page_id && event.text === text;
   const style_is = (page_id, has) => (event) => event.type === "selection_style" && event.page_id === page_id && has(event.css);
   const no_style = (css) => css === "";
@@ -129,7 +134,12 @@ export async function run_cases({ rdp, extension_id, take_shot, run_case, expect
     await wait_event(mark, selection_is("caret_quick_find", "a"), "l moving the caret after '");
     const mark_search = events.length;
     await send_keys("/bar");
-    await sleep(400);
+    let mode;
+    for (let attempt = 0; attempt < 20 && mode !== "cmdline"; attempt++) {
+      mode = await in_active_tab("window.desertfox_host.get_mode()");
+      if (mode !== "cmdline") await sleep(150);
+    }
+    expect(mode === "cmdline", `the mode after /bar is ${mode}, expected cmdline for the DesertFox search line`);
     await send_keys("-k", "Return");
     await wait_event(mark_search, selection_is("caret_quick_find", "b"), "the caret on the match of /bar");
     await send_keys("-k", "Escape");
@@ -333,10 +343,6 @@ export async function run_cases({ rdp, extension_id, take_shot, run_case, expect
   });
 
   // /caret_ft holds forty rows "row N x", 100 pixels apart. The highlights are read from the page's own world, by the names of the character find and of a kept `/` search.
-  const in_active_tab = (code) => evaluate_in_background(rdp, extension_id, `(async () => { const [tab] = await browser.tabs.query({ active: true, currentWindow: true }); return (await browser.tabs.executeScript(tab.id, { code: ${JSON.stringify(code)} }))[0]; })()`).then((value) => {
-    if (value?.error) throw new Error(`in the tab: ${JSON.stringify(value)}`);
-    return value;
-  });
   const READ_FT = `JSON.parse(window.wrappedJSObject.eval(${JSON.stringify(`JSON.stringify((() => {
     const texts = (name) => { const found = []; CSS.highlights.get(name)?.forEach((range) => found.push(range.startContainer.data)); return found; };
     return { all: texts("oasis-ft"), current: texts("oasis-ft-current"), search: texts("oasis-find").length + texts("oasis-find-current").length, y: scrollY };
