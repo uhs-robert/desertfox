@@ -32,6 +32,15 @@ function is_prefix_pair(value: unknown, first_key: string): boolean {
   return Object.values(value).every(is_text);
 }
 
+const NEW_TAB_LINK_FIELDS = ["label", "url", "group"];
+
+// A link takes a label, an http or https url and an optional group. Any other field is a typo, so it fails.
+function is_new_tab_link(value: unknown): boolean {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+  const link = value as Record<string, unknown>;
+  return Object.keys(link).every((key) => NEW_TAB_LINK_FIELDS.includes(key)) && is_text(link.label) && is_text(link.url) && is_web_url(link.url) && (link.group === undefined || is_text(link.group));
+}
+
 const true_or_false = ["true", "false"] as const;
 
 export const SETTING_SPECS: Record<keyof Settings, SettingSpec> = {
@@ -54,6 +63,12 @@ export const SETTING_SPECS: Record<keyof Settings, SettingSpec> = {
   newtab_clock: { check: (value) => is_boolean(value) || value === "analog" || value === "digital", expectation: 'true, false, "analog" or "digital"', listed_values: () => ["true", "false", "analog", "digital"] },
   newtab_date: { check: is_boolean, expectation: "true or false", flips_from_absent: true, listed_values: () => true_or_false },
   newtab_clock_format: { check: (value) => value === 12 || value === 24, expectation: "12 or 24", listed_values: () => ["12", "24"] },
+  newtab_bookmarks: { check: is_boolean, expectation: "true or false", flips_from_absent: false, listed_values: () => true_or_false },
+  newtab_bookmarks_max: { check: (value) => is_whole(value) && value >= 0, expectation: "a whole number, 0 or more" },
+  newtab_recent_tabs: { check: is_boolean, expectation: "true or false", flips_from_absent: false, listed_values: () => true_or_false },
+  newtab_recent_tabs_max: { check: (value) => is_whole(value) && value >= 0, expectation: "a whole number, 0 or more" },
+  // A group, so `:set` refuses it: a list of tables has no typed form.
+  newtab_links: { check: (value) => Array.isArray(value) && value.every(is_new_tab_link), expectation: 'a list of tables with "label", an http or https "url" and an optional "group"', is_group: true },
   open_quick_start_on_install: { check: is_boolean, expectation: "true or false", flips_from_absent: true, listed_values: () => true_or_false },
 };
 

@@ -79,3 +79,14 @@ test("the settings schema pins the clock values and the format", () => {
   assert.deepEqual(properties.newtab_clock_format?.enum, [12, 24]);
   assert.equal(properties.newtab_clock_format?.default, 12);
 });
+
+test("build-config: [[newtab_links]] takes web links and names the bad one", () => {
+  assert.equal(problems_with_settings('[[newtab_links]]\nlabel = "A"\nurl = "https://a.example/"\ngroup = "Work"\n[[newtab_links]]\nlabel = "B"\nurl = "http://b.example/"'), "");
+  assert.match(problems_with_settings('[[newtab_links]]\nlabel = "A"\nurl = "javascript:alert(1)"'), /newtab_links: expected a list of tables/);
+  assert.match(problems_with_settings('[[newtab_links]]\nlabel = "A"\nurl = "https://a.example/"\ngroup = ""'), /newtab_links: expected/);
+});
+
+test("build-config: the list flags take booleans and the maxes take whole numbers", () => {
+  assert.equal(problems_with_settings("newtab_bookmarks = true\nnewtab_recent_tabs = false\nnewtab_bookmarks_max = 0\nnewtab_recent_tabs_max = 12"), "");
+  for (const line of ['newtab_bookmarks = "yes"', "newtab_recent_tabs = 1", "newtab_bookmarks_max = -1", "newtab_recent_tabs_max = 2.5"]) assert.match(problems_with_settings(line), /expected/, line);
+});

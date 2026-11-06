@@ -71,7 +71,16 @@ export type Settings = {
   newtab_clock_format?: 12 | 24;
   // Whether the first install opens the Quick Start page. On unless false. A first install has no config, so only a managed config can turn it off in time.
   open_quick_start_on_install?: boolean;
+  // The new tab page lists. Each is hidden unless true. The max is the rows shown, absent is 8.
+  newtab_bookmarks?: boolean;
+  newtab_bookmarks_max?: number;
+  newtab_recent_tabs?: boolean;
+  newtab_recent_tabs_max?: number;
+  // Links the new tab page shows under their group name. A link with no group shows in a list of its own.
+  newtab_links?: NewTabLink[];
 };
+
+export type NewTabLink = { label: string; url: string; group?: string };
 
 // The reserved value of `new_tab_page` and `home_page` that names the built-in new tab page.
 export const BUILT_IN_PAGE = "desertfox";
