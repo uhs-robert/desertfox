@@ -680,6 +680,8 @@ test("double_click selects the word under the middle of a text target and nothin
   fixture("div", { ownerDocument: document_with({ nodeType: 1 }), contains: () => true }).run("double_click");
   fixture("input", { type: "text", ownerDocument: document_with(text), contains: () => true }).run("double_click");
   fixture("p", { ownerDocument: document_with(text), contains: () => false }).run("double_click");
+  const editable_text = { nodeType: 3, data: "say hello", parentElement: { isContentEditable: true } };
+  fixture("div", { ownerDocument: document_with(editable_text), contains: () => true }).run("double_click");
   fixture("p", { ownerDocument: document_with(text, 10), contains: () => true }).run("double_click");
   assert.deepEqual(steps.filter((step) => !step.startsWith("point")), []);
 });

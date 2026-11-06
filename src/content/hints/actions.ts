@@ -148,14 +148,14 @@ export function word_range_at(text: string, offset: number): [number, number] | 
   return before?.[1] === offset ? before : undefined;
 }
 
-// The word under the point, for a text node only. Firefox selects nothing for a synthetic double-click. A field keeps its own selection rules and is left alone, and a point on a box with no text changes nothing. The range is set directly, because the move and extend by word depend on the platform at a word start.
+// The word under the point, for a text node only. Firefox selects nothing for a synthetic double-click. A field, or an editable child under the point, keeps its own selection rules and is left alone, and a point on a box with no text changes nothing. The range is set directly, because the move and extend by word depend on the platform at a word start.
 function select_word_at(target: Target, at: { x: number; y: number }): void {
   const doc = target.ownerDocument;
   const root = (target as unknown as Node).getRootNode?.() as ShadowRoot | undefined;
   const shadow_roots = root?.host ? [root] : [];
   const position = doc?.caretPositionFromPoint?.(at.x, at.y, { shadowRoots: shadow_roots });
   const text = position?.offsetNode as Text | undefined;
-  if (!position || text?.nodeType !== Node.TEXT_NODE || takes_typing(target) || !(target as unknown as Node).contains(text)) return;
+  if (!position || text?.nodeType !== Node.TEXT_NODE || takes_typing(target) || text.parentElement?.isContentEditable || !(target as unknown as Node).contains(text)) return;
   const word = word_range_at(text.data, position.offset);
   if (!word) return;
   const range = doc!.createRange();
