@@ -15,12 +15,15 @@
 
 DesertFox lets you browse the web without the mouse. Click any link, button or image with a few keystrokes. Switch tabs, search the page and copy links from the keyboard. Press `g?` to see every key.
 
-Status: under construction. DesertFox has no release yet, so there is nothing to install today.
+> [!WARNING]
+> DesertFox is under construction.
+> It has no release yet, so there is nothing to install today.
 
 ## ✨ Features
 
 - Click anything: press `f`, then type the short label next to a link, button, input or image.
-- Open a link in a background tab without touching the mouse: press `F`.
+- Open a link in a background tab without touching the mouse: press `F` or `;bl`.
+- Copy a link or the text of any element: `;yl` copies the link and `;Yp` copies the text.
 - Run commands by name: `:` opens a line that completes commands, tabs, bookmarks, history and search engines as you type.
 - Manage tabs: switch, move, pin, mute, close and reopen them, or open one in a container.
 - Search the page: `/` finds text, including with regular expressions.
@@ -29,6 +32,31 @@ Status: under construction. DesertFox has no release yet, so there is nothing to
 - Learn as you go: pause after a key and a popup lists what can follow.
 - Get help: a help page lists every key, and a Quick Start page teaches the first ones.
 - Make it yours: pick a color theme, and use the new tab page for a clock, links, recent tabs and bookmarks.
+
+## 🔍 How it compares
+
+DesertFox is for Firefox users who want keyboard browsing and keep their other add-ons. These facts come from each project's source and its Mozilla download in November 2026.
+
+| Feature | DesertFox | Vimium | Tridactyl | qutebrowser |
+| --- | --- | --- | --- | --- |
+| Hints with modifiers | yes | partial | yes | yes |
+| Hint filters | yes | partial | yes | yes |
+| Key popup (which-key) | yes | no | no | yes |
+| Generated help | yes | partial | yes | yes |
+| Command line with completion | yes | partial | yes | yes |
+| Caret mode | yes | partial | no | yes |
+| Visual mode | yes | yes | partial | yes |
+| Page search | yes | yes | yes | yes |
+| Containers | yes | no | yes | no |
+| Config file | yes | no | yes | yes |
+| Works with other Firefox add-ons | yes | yes | yes | no |
+| Script loaded on every page | 15 KB | 254 KB | 1.1 MB | none |
+
+Vimium hints do more than click, but each action is a separate key and there are no hint filters. Tridactyl has `:help` and `:tutor` but no key popup. qutebrowser is a separate browser, so it runs no Firefox add-ons such as uBlock Origin, Dark Reader or password managers. It has its own ad blocking, dark mode and password scripts.
+
+The sizes are as shipped. DesertFox is minified and the other two are not, and DesertFox loads hint and caret code on first use. The table shows size, not page speed.
+
+DesertFox is weaker in other ways. It is new, it has one author, it works only in Firefox and it is not released.
 
 ## 📦 Install
 
