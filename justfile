@@ -78,6 +78,8 @@ install-profile profile_dir:
         exit 1
     fi
     mkdir -p "{{profile_dir}}/extensions"
+    # The xpi of the id before the rename, split so the rename check does not count it. Firefox would load both add-ons otherwise.
+    rm -f "{{profile_dir}}/extensions/oasis""fox@uhs-robert.xpi"
     cp "${xpis[0]}" "{{profile_dir}}/extensions/desertfox@uhs-robert.xpi"
     echo "installed {{profile_dir}}/extensions/desertfox@uhs-robert.xpi"
 
