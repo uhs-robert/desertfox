@@ -302,15 +302,9 @@ function check_when(input: CommandInput, param: ParamDef, at: string, fail: Fail
   if (entries.length === 0) fail(`${at}.when`, allow_several ? "must name at least one other param" : "must name exactly one other param");
   if (entries.length > 1 && !allow_several) fail(`${at}.when`, "must name exactly one other param");
   for (const [sibling_name, allowed] of entries) {
-    if (sibling_name === param.name) {
-      fail(`${at}.when`, "must not name the param itself");
-      continue;
-    }
+    if (sibling_name === param.name) fail(`${at}.when`, "must not name the param itself");
     const sibling = find_param(input, sibling_name);
-    if (!sibling) {
-      fail(`${at}.when`, `names "${sibling_name}", which is not a param`);
-      continue;
-    }
+    if (!sibling) fail(`${at}.when`, `names "${sibling_name}", which is not a param`);
     if (allowed.length === 0) fail(`${at}.when.${sibling_name}`, "must list at least one value");
     for (const value of allowed) {
       const problem = value_problem(sibling, value);
