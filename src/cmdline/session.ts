@@ -66,6 +66,18 @@ export function create_session(deps: SessionDeps) {
     list_shown = true;
     selected = -1;
     saved = undefined;
+    accepted = undefined;
+  };
+
+  // The tab row the user accepted (a click, or Tab with one match) and the text before it. The line holds the tab's number, so a model change renumbers it.
+  let accepted: { tab_id: number; base: { text: string; caret: number } } | undefined;
+
+  // Takes the previewed row into the line for good and ranks the new text.
+  const accept = () => {
+    const tab_id = completion?.rows[selected]?.tab?.id;
+    const base = saved;
+    refresh();
+    if (tab_id !== undefined && base) accepted = { tab_id, base };
   };
 
   // The line shows the row in place of the span the list was ranked for.
@@ -76,6 +88,23 @@ export function create_session(deps: SessionDeps) {
     selected = index;
     replace_text(base.text.slice(0, completion.start) + row.insert + base.text.slice(completion.end));
     caret = completion.start + row.insert.length;
+  };
+
+  // The accepted tab's row, found again by id in the list ranked for the text before the accept. Its new number goes into the line, or the typed text returns when the tab is gone.
+  const follow_accepted = ({ tab_id, base }: NonNullable<typeof accepted>) => {
+    const kept_message = message;
+    const ranked = deps.complete?.(base.text, base.caret);
+    const row = ranked?.rows.find((candidate) => candidate.tab?.id === tab_id);
+    if (ranked && row) {
+      replace_text(base.text.slice(0, ranked.start) + row.insert + base.text.slice(ranked.end));
+      caret = ranked.start + row.insert.length;
+    } else {
+      replace_text(base.text);
+      caret = base.caret;
+    }
+    refresh();
+    if (row) accepted = { tab_id, base };
+    message = kept_message;
   };
 
   // Shown under a search line in place of the usage.
@@ -110,7 +139,7 @@ export function create_session(deps: SessionDeps) {
     const count = completion?.rows.length ?? 0;
     if (count === 1 && selected < 0) {
       preview(0);
-      refresh();
+      accept();
     } else if (count > 0) preview(selected < 0 ? (step === 1 ? 0 : count - 1) : (selected + step + count) % count);
     return { kind: "render" };
   };
@@ -189,6 +218,7 @@ export function create_session(deps: SessionDeps) {
     // Any other previewed row stays as it is.
     source_ready: () => {
       if (!completion) return;
+      if (accepted) return follow_accepted(accepted);
       if (selected < 0) {
         completion = deps.complete?.(text, caret);
         return;
@@ -221,7 +251,7 @@ export function create_session(deps: SessionDeps) {
       if (!completion?.rows[index] || !list_shown) return;
       fresh = false;
       preview(index);
-      refresh();
+      accept();
     },
     // The caret moved without a change to the text, for example by an arrow key or a click.
     set_caret: (next_caret: number) => {

@@ -392,6 +392,33 @@ test("a model change that removes the previewed tab clears the preview and puts 
   assert.equal(names(session).length, 3);
 });
 
+test("a tab row accepted by a click or a single-match Tab keeps its tab: a model change renumbers it, and its removal restores the typed text", async () => {
+  const gist = { ...TABS[2]!, number: 2 };
+  const shifted = [TABS[1]!, gist, TABS[3]!].map((tab, index) => ({ ...tab, number: index + 1 }));
+  const clicked = make();
+  clicked.session.edit("tab ");
+  clicked.asks[0]!.answer(TABS);
+  await clicked.settle();
+  clicked.session.pick(2);
+  assert.equal(clicked.session.get_text(), "tab 3 GitHub Gist ");
+  clicked.change_tabs([TABS[1]!, TABS[2]!, TABS[3]!].map((tab, index) => ({ ...tab, number: index + 1 })));
+  assert.equal(clicked.session.get_text(), "tab 2 GitHub Gist ");
+  clicked.change_tabs([TABS[1]!, TABS[3]!]);
+  assert.equal(clicked.session.get_text(), "tab ");
+
+  const single = make();
+  single.session.edit("tab gist");
+  single.asks[0]!.answer(TABS);
+  await single.settle();
+  tab_key(single.session);
+  assert.equal(single.session.get_text(), "tab 3 GitHub Gist ");
+  single.change_tabs(shifted);
+  assert.equal(single.session.get_text(), "tab 2 GitHub Gist ");
+  single.session.edit("tab 2 GitHub Gist x");
+  single.change_tabs([TABS[0]!]);
+  assert.equal(single.session.get_text(), "tab 2 GitHub Gist x");
+});
+
 test("a model change under a previewed row that is no tab row leaves the preview alone", async () => {
   const { session, asks, settle, change_tabs } = make();
   session.edit("bookmark -t ");
