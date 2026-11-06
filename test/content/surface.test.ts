@@ -49,8 +49,8 @@ test("mount_surface shows open hosts of higher layers again, lowest first, after
     `show ${LAYERS.mode_badge}`,
     `hide ${LAYERS.which_key}`,
     `show ${LAYERS.which_key}`,
-    `oasisfox-restacked ${LAYERS.mode_badge}`,
-    `oasisfox-restacked ${LAYERS.which_key}`,
+    `desertfox-restacked ${LAYERS.mode_badge}`,
+    `desertfox-restacked ${LAYERS.which_key}`,
   ]);
 });
 
@@ -81,8 +81,8 @@ test("a toast mounted while the line is open shows the line again last and tells
     `show ${LAYERS.which_key}`,
     `hide ${LAYERS.command_line}`,
     `show ${LAYERS.command_line}`,
-    `oasisfox-restacked ${LAYERS.which_key}`,
-    `oasisfox-restacked ${LAYERS.command_line}`,
+    `desertfox-restacked ${LAYERS.which_key}`,
+    `desertfox-restacked ${LAYERS.command_line}`,
   ]);
 });
 
@@ -91,13 +91,13 @@ test("hints mounted while the line is open end below it and the line hears the r
   hosts[0]!.is_open = true;
   mount_surface(hosts[1]!);
   assert.equal(calls.at(-2), `show ${LAYERS.command_line}`);
-  assert.deepEqual(calls.filter((call) => call.startsWith("oasisfox-restacked")), [`oasisfox-restacked ${LAYERS.command_line}`]);
+  assert.deepEqual(calls.filter((call) => call.startsWith("desertfox-restacked")), [`desertfox-restacked ${LAYERS.command_line}`]);
 });
 
 test("a closed higher host and the mounted host hear no restack", () => {
   const { hosts, calls } = fake_page([LAYERS.command_line, LAYERS.toast]);
   mount_surface(hosts[1]!);
-  assert.deepEqual(calls.filter((call) => call.startsWith("oasisfox-restacked")), []);
+  assert.deepEqual(calls.filter((call) => call.startsWith("desertfox-restacked")), []);
 });
 
 test("create_surface makes a manual popover host that carries its layer", () => {
@@ -112,5 +112,5 @@ test("create_surface makes a manual popover host that carries its layer", () => 
   });
   create_surface("x", "", LAYERS.toast);
   assert.equal(attributes.popover, "manual");
-  assert.equal(attributes["data-oasisfox-layer"], String(LAYERS.toast));
+  assert.equal(attributes["data-desertfox-layer"], String(LAYERS.toast));
 });

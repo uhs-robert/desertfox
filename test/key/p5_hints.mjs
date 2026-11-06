@@ -45,8 +45,8 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, open_p
     expect((await scroll_delta_after("h_cancel", ["j"])) > 0, "keys did not work again after Escape");
   });
 
-  // Set OASISFOX_SHOT_DIR to also save a screenshot of the labels.
-  const shot_dir = process.env.OASISFOX_SHOT_DIR;
+  // Set DESERTFOX_SHOT_DIR to also save a screenshot of the labels.
+  const shot_dir = process.env.DESERTFOX_SHOT_DIR;
   if (shot_dir) {
     await run_case("screenshot of the hint labels", async () => {
       await open_page("hints", "h_shot", { new_tab: true });

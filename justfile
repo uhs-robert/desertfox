@@ -19,7 +19,7 @@ build: install_deps
     npm run --silent typecheck
     npm run --silent build
 
-# Check docs/keymap.md and src/shared/themes.ts are current, then run the unit tests from TypeScript source by Node's type stripping.
+# Check no old-name tokens remain, docs/keymap.md and src/shared/themes.ts are current, then run the unit tests from TypeScript source by Node's type stripping.
 test: install_deps
     #!/usr/bin/env bash
     set -euo pipefail
@@ -34,7 +34,7 @@ test: install_deps
 install_deps:
     @test -d node_modules || npm install --no-audit --no-fund
 
-# Merge the config directory (default ~/.config/oasisfox) into the live managed storage file. Extra flags (such as --schemas) go to the CLI. For another output path run the CLI with --out.
+# Merge the config directory (default ~/.config/desertfox) into the live managed storage file. Extra flags (such as --schemas) go to the CLI. For another output path run the CLI with --out.
 build-config dir="" *flags="": build
     node tools/build-config/cli.ts {{ if dir == "" { "" } else { quote(dir) } }} --live {{flags}}
 
@@ -78,8 +78,10 @@ install-profile profile_dir:
         exit 1
     fi
     mkdir -p "{{profile_dir}}/extensions"
-    cp "${xpis[0]}" "{{profile_dir}}/extensions/oasisfox@uhs-robert.xpi"
-    echo "installed {{profile_dir}}/extensions/oasisfox@uhs-robert.xpi"
+    # The xpi of the id before the rename, split so the rename check does not count it. Firefox would load both add-ons otherwise.
+    rm -f "{{profile_dir}}/extensions/oasis""fox@uhs-robert.xpi"
+    cp "${xpis[0]}" "{{profile_dir}}/extensions/desertfox@uhs-robert.xpi"
+    echo "installed {{profile_dir}}/extensions/desertfox@uhs-robert.xpi"
 
 # Install the signed add-on for every profile through Firefox's policy file. Needs sudo and jq.
 install:

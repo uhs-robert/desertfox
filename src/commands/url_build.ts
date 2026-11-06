@@ -58,7 +58,7 @@ export function engine_url(engines: Record<string, SearchEngine>, name: string, 
 }
 
 // Refusals are thrown: the router shows the message to the user.
-// `oasisfox` names the built-in new tab page, whose address only the browser knows. It is asked for only then.
+// `desertfox` names the built-in new tab page, whose address only the browser knows. It is asked for only then.
 export function home_page_url(home_page: string | undefined, built_in_url: () => string): string {
   if (!home_page) throw new RuntimeRefusal("set home_page in settings.toml");
   return home_page === BUILT_IN_PAGE ? `${built_in_url()}?${BUILT_IN_QUERY}` : home_page;

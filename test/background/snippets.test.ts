@@ -59,9 +59,9 @@ test("a snippet runs on a matching page and receives its args", async () => {
   assert.deepEqual(fake.log, ["got abc true"]);
 });
 
-test("the body sees neither browser nor chrome, but oasisfox.run still works", async () => {
+test("the body sees neither browser nor chrome, but desertfox.run still works", async () => {
   const { press, fake } = setup([
-    snippet("app.peek", "log(typeof browser + ' ' + typeof chrome + ' ' + typeof send + ' ' + typeof expected_url); await oasisfox.run('other.note hi')"),
+    snippet("app.peek", "log(typeof browser + ' ' + typeof chrome + ' ' + typeof send + ' ' + typeof expected_url); await desertfox.run('other.note hi')"),
   ]);
   assert.deepEqual(await press("app.peek"), { ok: true });
   assert.ok(fake.log.includes("undefined undefined undefined undefined"));
@@ -117,22 +117,22 @@ test("a rejected promise and a syntax error both reach the toast", async () => {
   assert.ok(fake.log.some((line) => line.startsWith("refuse 7 app.syntax: ")));
 });
 
-test("a snippet can run another command through oasisfox.run", async () => {
-  const { press, fake } = setup([snippet("app.caller", "await oasisfox.run('other.note hello world')")]);
+test("a snippet can run another command through desertfox.run", async () => {
+  const { press, fake } = setup([snippet("app.caller", "await desertfox.run('other.note hello world')")]);
   assert.deepEqual(await press("app.caller"), { ok: true });
   assert.ok(fake.log.includes("note hello world"));
 });
 
-test("oasisfox.run rejects on a bad command, and the snippet can catch it", async () => {
+test("desertfox.run rejects on a bad command, and the snippet can catch it", async () => {
   const { press, fake } = setup([
-    snippet("app.caller", "try { await oasisfox.run('nothing_like_it') } catch (error) { log('caught ' + error.message) }"),
+    snippet("app.caller", "try { await desertfox.run('nothing_like_it') } catch (error) { log('caught ' + error.message) }"),
   ]);
   assert.deepEqual(await press("app.caller"), { ok: true });
   assert.ok(fake.log.some((line) => line.startsWith("caught unknown command")));
 });
 
 test("a snippet that calls itself stops at the depth limit", async () => {
-  const { press, fake, executions } = setup([snippet("app.loop", "log('level'); await oasisfox.run('app.loop')")]);
+  const { press, fake, executions } = setup([snippet("app.loop", "log('level'); await desertfox.run('app.loop')")]);
   const response = await press("app.loop");
   assert.equal(response.ok, false);
   assert.equal(executions.length, MAX_SNIPPET_DEPTH);
@@ -142,7 +142,7 @@ test("a snippet that calls itself stops at the depth limit", async () => {
 
 test("a nested call keeps the match gate", async () => {
   const { press, fake } = setup([
-    snippet("app.outer", "await oasisfox.run('site.inner')"),
+    snippet("app.outer", "await desertfox.run('site.inner')"),
     snippet("site.inner", "log('inner ran')", { matches: ["https://nowhere.test/*"] }),
   ]);
   const response = await press("app.outer");

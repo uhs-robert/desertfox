@@ -6,12 +6,12 @@ import type { BadgeColors } from "../mode_indicator.ts";
 import type { ToastKind } from "../../shared/messages.ts";
 import { show_toast } from "../toast.ts";
 
-type UiWindow = { oasisfox_host: BundleHostApi; oasisfox_ui_ready?: true };
+type UiWindow = { desertfox_host: BundleHostApi; desertfox_ui_ready?: true };
 const page = window as unknown as UiWindow;
 
 // A second run would hold fresh badge and toast state and leave the first copy's surfaces on the page.
-if (!page.oasisfox_ui_ready) {
-  page.oasisfox_ui_ready = true;
-  page.oasisfox_host.register_handler("ui.toast", (args) => show_toast(args.message as string, args.kind as ToastKind | undefined));
-  page.oasisfox_host.register_handler("ui.badge", (args) => show_mode_label(args.label as string | undefined, args.colors as BadgeColors | undefined));
+if (!page.desertfox_ui_ready) {
+  page.desertfox_ui_ready = true;
+  page.desertfox_host.register_handler("ui.toast", (args) => show_toast(args.message as string, args.kind as ToastKind | undefined));
+  page.desertfox_host.register_handler("ui.badge", (args) => show_mode_label(args.label as string | undefined, args.colors as BadgeColors | undefined));
 }

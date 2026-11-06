@@ -120,7 +120,7 @@ test("opening the line on a tab with no content script refuses", async () => {
   );
   const response = await create_router(deps).run({ invocations: [{ id: "open.url", prompt: { param: "url" } }], mode: "normal", may_prompt: true });
   assert.equal(response.ok, false);
-  assert.deepEqual(log, ["refuse 7 Open needs a page OasisFox runs on"]);
+  assert.deepEqual(log, ["refuse 7 Open needs a page DesertFox runs on"]);
 });
 
 test("a bad arg, an unknown id and an unmet need refuse", async () => {
@@ -133,7 +133,7 @@ test("a bad arg, an unknown id and an unmet need refuse", async () => {
   const router = create_router(deps);
   await router.run({ invocations: [{ id: "a.b" }], mode: "normal", may_prompt: true });
   await router.run({ invocations: [{ id: "nope.nope" }], mode: "normal", may_prompt: true });
-  assert.match(log[0]!, /needs a page OasisFox runs on/);
+  assert.match(log[0]!, /needs a page DesertFox runs on/);
   assert.match(log[1]!, /unknown command/);
 });
 
@@ -326,7 +326,7 @@ test("a content step whose reply is lost refuses with the page message and stops
   const response = await create_router(deps).run({ invocations: [{ id: "page.look" }, { id: "tab.close" }], mode: "normal" });
   assert.equal(response.ok, false);
   assert.deepEqual(ran, []);
-  assert.deepEqual(log, ["refuse 7 Look needs a page OasisFox runs on"]);
+  assert.deepEqual(log, ["refuse 7 Look needs a page DesertFox runs on"]);
 });
 
 test("a prompt that was filled in stores nothing, because the line stores the command it runs", async () => {

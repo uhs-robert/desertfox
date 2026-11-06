@@ -20,7 +20,7 @@ export function date_text(time: Date): string {
 
 export function render_new_tab(body: HTMLElement, settings: WidgetSettings = {}): void {
   const page = document.createElement("main");
-  page.className = "oasisfox-newtab";
+  page.className = "desertfox-newtab";
   body.prepend(page);
 
   const enabled = enabled_widgets(settings);

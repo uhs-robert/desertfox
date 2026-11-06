@@ -322,8 +322,8 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, open_p
     await wait_event(mark, (event) => event.type === "hover_out" && event.box === "menu" && event.page_id === "p6_hover_pick", "mouseleave on the menu after Escape");
   });
 
-  // Set OASISFOX_SHOT_DIR to also save the two screenshots.
-  const shot_dir = process.env.OASISFOX_SHOT_DIR;
+  // Set DESERTFOX_SHOT_DIR to also save the two screenshots.
+  const shot_dir = process.env.DESERTFOX_SHOT_DIR;
   if (shot_dir) {
     await run_case("screenshot of rapid mode after a pick", async () => {
       await open_page("hints", "p6_shot_rapid", { new_tab: true });

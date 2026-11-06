@@ -3,7 +3,7 @@ import { test } from "node:test";
 import type { TestContext } from "node:test";
 
 type Sink = { on_token: (token: string) => "handled" | "pass"; exit: () => void };
-type Posted = { message: { oasisfox_cmdline: Record<string, unknown> }; origin: string; transfer: MessagePort[] };
+type Posted = { message: { desertfox_cmdline: Record<string, unknown> }; origin: string; transfer: MessagePort[] };
 
 // Just enough DOM for the host script: elements that record what is done to them.
 function fake_element() {
@@ -81,7 +81,7 @@ async function load_host(t: TestContext, tag: string, { ticket_fails = false, ru
     document: { documentElement: { append: (child: { isConnected: boolean }) => void (child.isConnected = true) }, createElement: () => { const element = fake_element(); elements.push(element); return element; } },
     window: {
       innerHeight: 600,
-      oasisfox_host: {
+      desertfox_host: {
         set_mode: (mode: string) => void modes.push(mode),
         get_mode: () => "normal",
         // find.end and the heading commands are called here. Their answers are the test's to give.
@@ -104,14 +104,14 @@ async function load_host(t: TestContext, tag: string, { ticket_fails = false, ru
   const [holder, frame] = elements as [ReturnType<typeof fake_element>, ReturnType<typeof fake_element>];
   // An open port keeps Node running, so a failed test would hang.
   t.after(() => frame.posted.forEach((posted) => posted.transfer.forEach((port) => port.close())));
-  const on_window = (message: unknown, source: unknown) => window_listeners.message!({ data: { oasisfox_cmdline: message }, source });
+  const on_window = (message: unknown, source: unknown) => window_listeners.message!({ data: { desertfox_cmdline: message }, source });
   // The page answers `start` once the background took its ticket.
   const ready = async () => {
     on_window({ kind: "ready" }, frame.contentWindow);
     await until(() => frame.posted.length > 0);
   };
   const page_opened = async () => {
-    frame.posted[0]!.transfer[0]!.postMessage({ oasisfox_cmdline: { kind: "opened" } });
+    frame.posted[0]!.transfer[0]!.postMessage({ desertfox_cmdline: { kind: "opened" } });
     await until(() => frame.focused);
   };
   const page_mutated = () => observers.forEach((callback) => callback());
@@ -127,13 +127,13 @@ test("opening mounts the line, hands over the kept keys with a port, and a close
   assert.equal(sink.on_token("c"), "handled");
   await ready();
   const [start] = frame.posted;
-  const { kind, ticket, text, tokens } = start!.message.oasisfox_cmdline;
+  const { kind, ticket, text, tokens } = start!.message.desertfox_cmdline;
   assert.deepEqual([kind, text, tokens, ticket], ["start", "open ", ["s", "c"], "issued-ticket"]);
   // Only to the extension origin, so a frame a page script sent elsewhere never sees the ticket or the port.
   assert.equal(start!.origin, "https://extension.test");
 
   const page_port = start!.transfer[0]!;
-  page_port.postMessage({ oasisfox_cmdline: { kind: "close" } });
+  page_port.postMessage({ desertfox_cmdline: { kind: "close" } });
   await until(() => modes.length === 2);
   assert.deepEqual(modes, ["cmdline", "normal"]);
   assert.equal(holder.removed, true);
@@ -159,10 +159,10 @@ test("a submit over the port runs, and later keys travel over the port, not the 
   page_port.onmessage = (event) => void tokens.push(event.data);
   sink.on_token("x");
   await until(() => tokens.length === 1);
-  assert.deepEqual(tokens, [{ oasisfox_cmdline: { kind: "token", token: "x" } }]);
+  assert.deepEqual(tokens, [{ desertfox_cmdline: { kind: "token", token: "x" } }]);
   assert.equal(frame.posted.length, 1);
 
-  page_port.postMessage({ oasisfox_cmdline: { kind: "submit", invocation: { id: "scroll.down" } } });
+  page_port.postMessage({ desertfox_cmdline: { kind: "submit", invocation: { id: "scroll.down" } } });
   await until(() => sent.length === 1);
   assert.deepEqual(modes, ["cmdline", "normal"]);
   assert.deepEqual(sent, [{ type: "run", invocations: [{ id: "scroll.down" }], mode: "normal" }]);
@@ -202,16 +202,16 @@ test("a page that sends the frame to another address closes the line", async (t)
   const page_port = frame.posted[0]!.transfer[0]!;
   const checks: unknown[] = [];
   page_port.onmessage = (event) => {
-    if (event.data.oasisfox_cmdline.kind !== "check") return;
+    if (event.data.desertfox_cmdline.kind !== "check") return;
     checks.push(event.data);
-    page_port.postMessage({ oasisfox_cmdline: { kind: "here" } });
+    page_port.postMessage({ desertfox_cmdline: { kind: "here" } });
   };
   await page_opened();
   // Our page answers the check, so the line stays.
   frame.listeners.load!();
   await until(() => checks.length === 1);
   await new Promise((resolve) => setTimeout(resolve, 1100));
-  assert.deepEqual([checks, modes], [[{ oasisfox_cmdline: { kind: "check" } }], ["cmdline"]]);
+  assert.deepEqual([checks, modes], [[{ desertfox_cmdline: { kind: "check" } }], ["cmdline"]]);
   // A page somewhere else holds no port and never answers.
   page_port.onmessage = null;
   frame.listeners.load!();
@@ -242,9 +242,9 @@ test("once the page opened, the host moves focus into the frame and says so afte
   await ready();
   const page_port = frame.posted[0]!.transfer[0]!;
   const received: string[] = [];
-  page_port.onmessage = (event) => void received.push(event.data.oasisfox_cmdline.token ?? event.data.oasisfox_cmdline.kind);
+  page_port.onmessage = (event) => void received.push(event.data.desertfox_cmdline.token ?? event.data.desertfox_cmdline.kind);
   sink.on_token("a");
-  page_port.postMessage({ oasisfox_cmdline: { kind: "opened" } });
+  page_port.postMessage({ desertfox_cmdline: { kind: "opened" } });
   await until(() => received.length === 2);
   assert.deepEqual([received, frame.focused], [["a", "focused"], true]);
 });
@@ -280,13 +280,13 @@ test("a resize over the port sets the frame holder's height, capped at the windo
   assert.equal(holder.style.cssText, start_height);
 
   const page_port = frame.posted[0]!.transfer[0]!;
-  page_port.postMessage({ oasisfox_cmdline: { kind: "resize", height: 320 } });
+  page_port.postMessage({ desertfox_cmdline: { kind: "resize", height: 320 } });
   await until(() => holder.style.height === "320px");
   assert.equal(holder.style.height, "320px");
-  page_port.postMessage({ oasisfox_cmdline: { kind: "resize", height: 5000 } });
+  page_port.postMessage({ desertfox_cmdline: { kind: "resize", height: 5000 } });
   await until(() => holder.style.height === "600px");
   assert.equal(holder.style.height, "600px");
-  page_port.postMessage({ oasisfox_cmdline: { kind: "resize", height: "tall" } });
+  page_port.postMessage({ desertfox_cmdline: { kind: "resize", height: "tall" } });
   await settle();
   assert.equal(holder.style.height, "600px");
 });
@@ -306,7 +306,7 @@ test("cmdline.open stays pending while the line is open and answers done once th
   const { modes, frame, ready, answer } = await load_host(t, "answer_submit", { run_answer: () => new Promise((resolve) => (finish_run = resolve)) });
   await ready();
   assert.equal(await pending(answer), "pending");
-  frame.posted[0]!.transfer[0]!.postMessage({ oasisfox_cmdline: { kind: "submit", invocation: { id: "scroll.down" } } });
+  frame.posted[0]!.transfer[0]!.postMessage({ desertfox_cmdline: { kind: "submit", invocation: { id: "scroll.down" } } });
   await until(() => modes.length === 2);
   // The line is closed, but the submitted command has not answered yet, so the sequence does not go on.
   assert.equal(await pending(answer), "pending");
@@ -318,7 +318,7 @@ test("a submitted command that fails does not fail the sequence that opened the 
   const refusal = { ok: false, refusal: { id: "open.url", message: "No such tab" } };
   const { modes, frame, ready, answer } = await load_host(t, "answer_failed_run", { run_answer: async () => refusal });
   await ready();
-  frame.posted[0]!.transfer[0]!.postMessage({ oasisfox_cmdline: { kind: "submit", invocation: { id: "open.url" } } });
+  frame.posted[0]!.transfer[0]!.postMessage({ desertfox_cmdline: { kind: "submit", invocation: { id: "open.url" } } });
   await until(() => modes.length === 2);
   assert.deepEqual(await answer, { ok: true });
 });
@@ -326,7 +326,7 @@ test("a submitted command that fails does not fail the sequence that opened the 
 test("a submitted command whose request is lost still ends the wait as done", async (t) => {
   const { modes, frame, ready, answer } = await load_host(t, "answer_lost_run", { run_answer: () => Promise.reject(new Error("The background is gone")) });
   await ready();
-  frame.posted[0]!.transfer[0]!.postMessage({ oasisfox_cmdline: { kind: "submit", invocation: { id: "open.url" } } });
+  frame.posted[0]!.transfer[0]!.postMessage({ desertfox_cmdline: { kind: "submit", invocation: { id: "open.url" } } });
   await until(() => modes.length === 2);
   assert.deepEqual(await answer, { ok: true });
 });
@@ -338,7 +338,7 @@ test("Escape, a close from the page and an empty-line close answer cancelled", a
 
   const closed = await load_host(t, "answer_close");
   await closed.ready();
-  closed.frame.posted[0]!.transfer[0]!.postMessage({ oasisfox_cmdline: { kind: "close" } });
+  closed.frame.posted[0]!.transfer[0]!.postMessage({ desertfox_cmdline: { kind: "close" } });
   assert.deepEqual(await closed.answer, { ok: true, cancelled: true });
 });
 
@@ -352,7 +352,7 @@ test("the page leaving the mode (a navigation, or an unrelated key that changes 
 test("committing a search answers done, and the close that follows does not turn it into cancelled", async (t) => {
   const { modes, frame, ready, answer, sink } = await load_host(t, "answer_commit");
   await ready();
-  frame.posted[0]!.transfer[0]!.postMessage({ oasisfox_cmdline: { kind: "find_commit" } });
+  frame.posted[0]!.transfer[0]!.postMessage({ desertfox_cmdline: { kind: "find_commit" } });
   await until(() => modes.length === 2);
   sink.exit();
   assert.deepEqual(await answer, { ok: true });
@@ -377,7 +377,7 @@ test("committing a search answers done only after find.end has finished, and a f
   for (const [end, expected] of [[{ ok: true }, { ok: true }], [{ ok: false, message: "scan failed" }, { ok: false, message: "scan failed" }]] as const) {
     const page = await load_search(t, `search_end_${expected.ok}`);
     await page.ready();
-    page.frame.posted[0]!.transfer[0]!.postMessage({ oasisfox_cmdline: { kind: "find_commit" } });
+    page.frame.posted[0]!.transfer[0]!.postMessage({ desertfox_cmdline: { kind: "find_commit" } });
     await until(() => page.modes.length === 2);
     assert.equal(await pending(page.answer), "pending");
     page.finish_search(end);
@@ -387,17 +387,17 @@ test("committing a search answers done only after find.end has finished, and a f
 
 test("the line is a top-layer popover on the root with the top layer number, shown once", async (t) => {
   const { holder } = await load_host(t, "popover");
-  assert.deepEqual([holder.attributes.popover, holder.attributes["data-oasisfox-layer"], holder.shown, holder.isConnected], ["manual", "2147483647", true, true]);
+  assert.deepEqual([holder.attributes.popover, holder.attributes["data-desertfox-layer"], holder.shown, holder.isConnected], ["manual", "2147483647", true, true]);
 });
 
 // What `mount_surface` does to the holder when a lower surface mounts: it hides it, shows it again and sends this event.
-const restacked = (holder: ReturnType<typeof fake_element>) => holder.listeners["oasisfox-restacked"]!();
+const restacked = (holder: ReturnType<typeof fake_element>) => holder.listeners["desertfox-restacked"]!();
 
 test("a surface mounted over the open line sends the focus back to the frame and the input, once per mount", async (t) => {
   const { holder, frame, ready, page_opened } = await load_host(t, "restacked");
   await ready();
   const received: string[] = [];
-  frame.posted[0]!.transfer[0]!.onmessage = (event) => void received.push(event.data.oasisfox_cmdline.kind);
+  frame.posted[0]!.transfer[0]!.onmessage = (event) => void received.push(event.data.desertfox_cmdline.kind);
   await page_opened();
   restacked(holder);
   await until(() => received.includes("refocus"));
@@ -411,7 +411,7 @@ test("two surfaces mounted in one tick send two refocus messages and nothing mor
   const { holder, frame, ready, page_opened } = await load_host(t, "two_mounts");
   await ready();
   const received: string[] = [];
-  frame.posted[0]!.transfer[0]!.onmessage = (event) => void received.push(event.data.oasisfox_cmdline.kind);
+  frame.posted[0]!.transfer[0]!.onmessage = (event) => void received.push(event.data.desertfox_cmdline.kind);
   await page_opened();
   restacked(holder);
   restacked(holder);
@@ -425,11 +425,11 @@ test("a restack before the page opened, or after the line closed, moves no focus
   await ready();
   restacked(holder);
   const received: string[] = [];
-  frame.posted[0]!.transfer[0]!.onmessage = (event) => void received.push(event.data.oasisfox_cmdline.kind);
+  frame.posted[0]!.transfer[0]!.onmessage = (event) => void received.push(event.data.desertfox_cmdline.kind);
   await settle();
   assert.deepEqual([received, frame.focus_count], [[], 0]);
   await page_opened();
-  frame.posted[0]!.transfer[0]!.postMessage({ oasisfox_cmdline: { kind: "close" } });
+  frame.posted[0]!.transfer[0]!.postMessage({ desertfox_cmdline: { kind: "close" } });
   await until(() => modes.length === 2);
   // A refocus that was in flight when the line closed.
   assert.doesNotThrow(() => restacked(holder));
@@ -439,10 +439,10 @@ test("a restack before the page opened, or after the line closed, moves no focus
 
 // The headings list: the page asks over the port, the host script answers from the hints bundle and drops the snapshot when the line is done.
 const HEADINGS = [{ level: 1, text: "Title" }, { level: 2, text: "Usage" }];
-const ask_for_headings = (frame: ReturnType<typeof fake_element>) => frame.posted[0]!.transfer[0]!.postMessage({ oasisfox_cmdline: { kind: "list_headings" } });
+const ask_for_headings = (frame: ReturnType<typeof fake_element>) => frame.posted[0]!.transfer[0]!.postMessage({ desertfox_cmdline: { kind: "list_headings" } });
 const collect_messages = (frame: ReturnType<typeof fake_element>) => {
   const received: Record<string, unknown>[] = [];
-  frame.posted[0]!.transfer[0]!.onmessage = (event) => void received.push(event.data.oasisfox_cmdline);
+  frame.posted[0]!.transfer[0]!.onmessage = (event) => void received.push(event.data.desertfox_cmdline);
   return received;
 };
 
@@ -462,7 +462,7 @@ test("list_headings runs heading.list and the report goes back over the port", a
 });
 
 test("a failed heading.list answers an empty list, so the line does not wait for ever", async (t) => {
-  const { frame, ready } = await load_host(t, "headings_failed", { command: async () => ({ ok: false, message: "OasisFox could not load hints" }) });
+  const { frame, ready } = await load_host(t, "headings_failed", { command: async () => ({ ok: false, message: "DesertFox could not load hints" }) });
   await ready();
   const received = collect_messages(frame);
   ask_for_headings(frame);
@@ -486,7 +486,7 @@ test("a list_headings answer that arrives after the line closed is ignored, also
   // A second line opens before the first line's answer lands: the answer must not reach the second line's port.
   handlers.get("cmdline.open")!({ text: "heading " });
   const second_frame = elements[3]!;
-  window_listeners.message!({ data: { oasisfox_cmdline: { kind: "ready" } }, source: second_frame.contentWindow });
+  window_listeners.message!({ data: { desertfox_cmdline: { kind: "ready" } }, source: second_frame.contentWindow });
   await until(() => second_frame.posted.length > 0);
   const received = collect_messages(second_frame);
   late_report(HEADINGS);
@@ -518,7 +518,7 @@ test("a submit keeps the snapshot until the submitted command has run, then drop
   await ready();
   ask_for_headings(frame);
   await until(() => calls.length === 1);
-  frame.posted[0]!.transfer[0]!.postMessage({ oasisfox_cmdline: { kind: "submit", invocation: { id: "heading.go", args: { heading: "1 Title" } } } });
+  frame.posted[0]!.transfer[0]!.postMessage({ desertfox_cmdline: { kind: "submit", invocation: { id: "heading.go", args: { heading: "1 Title" } } } });
   await until(() => modes.length === 2);
   assert.deepEqual(calls.map((call) => call.id), ["heading.list"]);
   finish_run({ ok: true });

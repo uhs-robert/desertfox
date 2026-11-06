@@ -52,11 +52,11 @@ function render(route: Route, keep_state = false, guide: Block[] = []): FakeNode
   return root;
 }
 
-const group_nodes = (root: FakeNode) => root.find_all(by_class("oasisfox-help-nav-group")).map((group) => ({
+const group_nodes = (root: FakeNode) => root.find_all(by_class("desertfox-help-nav-group")).map((group) => ({
   page: (group.find_all((node) => node.tag === "a")[0]!.children[0]) as string,
   page_link: group.find_all((node) => node.tag === "a")[0]!,
-  toggle: group.find_all(by_class("oasisfox-help-sections-toggle"))[0]!,
-  list: group.find_all(by_class("oasisfox-help-sections"))[0]!,
+  toggle: group.find_all(by_class("desertfox-help-sections-toggle"))[0]!,
+  list: group.find_all(by_class("desertfox-help-sections"))[0]!,
 }));
 
 const links = (list: FakeNode) => (list.children as FakeNode[]).map((link) => link.attributes["href"]);

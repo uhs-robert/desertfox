@@ -7,7 +7,7 @@ test("help.whichkey asks for the keys of the mode the host reports", async () =>
   const asked: unknown[] = [];
   let mode = "caret";
   Object.assign(globalThis, {
-    window: { oasisfox_host: { register_handler: (id: string, run: BundleHandler) => handlers.set(id, run), get_mode: () => mode } },
+    window: { desertfox_host: { register_handler: (id: string, run: BundleHandler) => handlers.set(id, run), get_mode: () => mode } },
     browser: { runtime: { sendMessage: (message: unknown) => (asked.push(message), new Promise(() => {})) } },
   });
   await import("../../src/content/whichkey/main.ts");

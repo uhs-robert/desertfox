@@ -34,18 +34,18 @@ function render_guide(guide: Block[]): FakeNode {
 
 test("a block with a language gets a label, a Copy button and the code text", () => {
   const root = render_guide([{ kind: "code_block", text: "a = 1\n  b = 2", language: "toml" }]);
-  assert.equal(root.find_all("oasisfox-help-code-lang")[0]!.text, "toml");
-  const [button] = root.find_all("oasisfox-help-code-copy");
+  assert.equal(root.find_all("desertfox-help-code-lang")[0]!.text, "toml");
+  const [button] = root.find_all("desertfox-help-code-copy");
   assert.equal(button!.tag, "button");
   assert.equal(button!.attributes["type"], "button");
   assert.equal(button!.text, "Copy");
-  assert.equal(root.find_all("oasisfox-help-code-body")[0]!.text, "a = 1\n  b = 2");
+  assert.equal(root.find_all("desertfox-help-code-body")[0]!.text, "a = 1\n  b = 2");
 });
 
 test("a block without a language shows no label but still has the button", () => {
   const root = render_guide([{ kind: "code_block", text: "x" }]);
-  assert.equal(root.find_all("oasisfox-help-code-lang").length, 0);
-  assert.equal(root.find_all("oasisfox-help-code-copy").length, 1);
+  assert.equal(root.find_all("desertfox-help-code-lang").length, 0);
+  assert.equal(root.find_all("desertfox-help-code-copy").length, 1);
 });
 
 test("the copy handler copies the exact text, shows Copied, then restores Copy", async () => {
@@ -83,8 +83,8 @@ test("inline code runs render as code elements with the inline class, other text
     { kind: "paragraph", inlines: [{ kind: "text", text: "Run " }, { kind: "code", text: "just build-config" }, { kind: "text", text: " now" }] },
     { kind: "list", items: [[{ kind: "code", text: "<b>x</b>" }]] },
   ]);
-  const [first, second] = root.find_all("oasisfox-help-inline-code");
-  assert.equal(root.find_all("oasisfox-help-inline-code").length, 2);
+  const [first, second] = root.find_all("desertfox-help-inline-code");
+  assert.equal(root.find_all("desertfox-help-inline-code").length, 2);
   assert.equal(first!.tag, "code");
   assert.equal(first!.text, "just build-config");
   assert.equal(second!.text, "<b>x</b>");

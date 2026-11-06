@@ -42,8 +42,8 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, open_p
     await sleep(500);
   });
 
-  // Set OASISFOX_SHOT_DIR to also save a screenshot of the tab list: a pinned tab with a favicon, a container tab, a muted tab and a discarded tab.
-  const shot_dir = process.env.OASISFOX_SHOT_DIR;
+  // Set DESERTFOX_SHOT_DIR to also save a screenshot of the tab list: a pinned tab with a favicon, a container tab, a muted tab and a discarded tab.
+  const shot_dir = process.env.DESERTFOX_SHOT_DIR;
   if (shot_dir) {
     await run_case("screenshot of the tab list with status marks, a container and a favicon", async () => {
       let made;

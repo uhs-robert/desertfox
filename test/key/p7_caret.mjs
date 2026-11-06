@@ -308,7 +308,7 @@ export async function run_cases({ rdp, extension_id, take_shot, run_case, expect
     throw new Error(`timed out waiting for ${what}, last state ${JSON.stringify(state)}`);
   }
   const current_row = (state) => (state.current.length === 1 ? row_of(state.current[0]) : -1);
-  const shot_dir = process.env.OASISFOX_SHOT_DIR;
+  const shot_dir = process.env.DESERTFOX_SHOT_DIR;
   if (shot_dir) mkdirSync(shot_dir, { recursive: true });
 
   await run_case("fx lights the visible matches, f and F repeat across the page and scroll it, 3f counts", async () => {

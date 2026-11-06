@@ -16,5 +16,5 @@ async function main(): Promise<void> {
   render_options(document.body, model);
 }
 
-follow_theme(":root, .oasisfox-options");
+follow_theme(":root, .desertfox-options");
 void main();

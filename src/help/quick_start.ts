@@ -133,7 +133,7 @@ export function quick_start_blocks(compiled: CompiledKeymap | undefined, command
   const prefix = prefix_key(compiled, commands);
   const heading = (text: string): Block => ({ kind: "heading", level: 2, text });
   return [
-    say("OasisFox puts the browser on the keyboard. The keys on this page work as they do on any page, so try each one as you read. The key names come from your own keymap."),
+    say("DesertFox puts the browser on the keyboard. The keys on this page work as they do on any page, so try each one as you read. The key names come from your own keymap."),
     heading("Scroll"),
     say("Press {down} to scroll down and {up} to scroll up. {top} jumps to the top of the page and {bottom} to the bottom. {half_page} moves half a page."),
     heading("Click with hints"),

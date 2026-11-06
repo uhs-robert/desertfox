@@ -42,8 +42,8 @@ export async function run_cases({ rdp, extension_id, take_shot, run_case, send_k
     const mark = events.length;
     await send_keys(...keys);
     const shown = await wait_event(mark, (event) => event.type === "whichkey_shape" && event.width > 0, "the panel shape");
-    // Set OASISFOX_SHOT_DIR to also save a screenshot of the panel.
-    if (process.env.OASISFOX_SHOT_DIR) { await sleep(300); await take_shot(`${process.env.OASISFOX_SHOT_DIR}/${keys[0]}-title.png`); }
+    // Set DESERTFOX_SHOT_DIR to also save a screenshot of the panel.
+    if (process.env.DESERTFOX_SHOT_DIR) { await sleep(300); await take_shot(`${process.env.DESERTFOX_SHOT_DIR}/${keys[0]}-title.png`); }
     await send_keys("-k", "Escape");
     return shown;
   };
@@ -127,8 +127,8 @@ export async function run_cases({ rdp, extension_id, take_shot, run_case, send_k
     expect(visual_rows !== normal_rows, `visual mode listed ${visual_rows} rows, the same as normal mode`);
   });
 
-  // Set OASISFOX_SHOT_DIR to also save screenshots of the panel. A raised page zoom shrinks the viewport, which forces the columns.
-  const shot_dir = process.env.OASISFOX_SHOT_DIR;
+  // Set DESERTFOX_SHOT_DIR to also save screenshots of the panel. A raised page zoom shrinks the viewport, which forces the columns.
+  const shot_dir = process.env.DESERTFOX_SHOT_DIR;
   if (shot_dir) {
     const set_zoom = (factor) => evaluate_in_background(rdp, extension_id, `(async () => { const [tab] = await browser.tabs.query({ active: true, lastFocusedWindow: true }); await browser.tabs.setZoom(tab.id, ${factor}); })()`);
     for (const [name, zoom] of [["g", 1], ["g-tall", 2.5]]) {

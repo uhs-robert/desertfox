@@ -52,7 +52,7 @@ fallback = "duck"
 
 // The resolved engines come from the real config build, so the test drives what a user would store.
 function stored_engines() {
-  const dir = mkdtempSync(join(tmpdir(), "oasisfox-engines-"));
+  const dir = mkdtempSync(join(tmpdir(), "desertfox-engines-"));
   writeFileSync(join(dir, "search_engines.toml"), ENGINES);
   const commands = read_commands_file(join(import.meta.dirname, "..", "fixtures", "build-config", "commands.json"));
   return build_config(dir, commands).search_engines;

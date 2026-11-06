@@ -44,12 +44,12 @@ test("the list survives a restart because it is read back from storage", async (
   const first = make();
   first.listeners.focus(4);
   await first.tracker.settled();
-  const restarted = make({ oasisfox_window_focus: await read_recent_window_ids(first.storage) });
+  const restarted = make({ desertfox_window_focus: await read_recent_window_ids(first.storage) });
   restarted.listeners.focus(9);
   await restarted.tracker.settled();
   assert.deepEqual(await read_recent_window_ids(restarted.storage), [9, 4]);
 });
 
 test("a stored value of the wrong shape reads as empty", async () => {
-  assert.deepEqual(await read_recent_window_ids(make({ oasisfox_window_focus: "x" }).storage), []);
+  assert.deepEqual(await read_recent_window_ids(make({ desertfox_window_focus: "x" }).storage), []);
 });

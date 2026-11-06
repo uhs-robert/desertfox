@@ -17,7 +17,7 @@ export type BundleLoaderDeps = {
 // The sender of a runtime message. Firefox sets `documentId`, and the bundled types do not list it.
 export type LoadSender = { tab?: { id?: number | undefined } | undefined; frameId?: number | undefined; documentId?: string | undefined };
 
-const failure = (message: string): RunResponse => ({ ok: false, refusal: { id: "oasisfox", message } });
+const failure = (message: string): RunResponse => ({ ok: false, refusal: { id: "desertfox", message } });
 
 export function create_bundle_loader(deps: BundleLoaderDeps) {
   const in_flight = new Map<string, Promise<RunResponse>>();
@@ -25,12 +25,12 @@ export function create_bundle_loader(deps: BundleLoaderDeps) {
   async function inject_with_deadline(target: BundleTarget, name: BundleName): Promise<RunResponse> {
     let timer: ReturnType<typeof setTimeout> | undefined;
     const deadline = new Promise<RunResponse>((resolve) => {
-      timer = setTimeout(() => resolve(failure(`OasisFox could not load ${name}: no answer in ${deps.timeout_ms} ms`)), deps.timeout_ms);
+      timer = setTimeout(() => resolve(failure(`DesertFox could not load ${name}: no answer in ${deps.timeout_ms} ms`)), deps.timeout_ms);
     });
     const injected = deps
       .inject(target, `${name}.js`)
       .then((): RunResponse => ({ ok: true }))
-      .catch((error: unknown) => failure(`OasisFox could not load ${name}: ${error instanceof Error ? error.message : String(error)}`));
+      .catch((error: unknown) => failure(`DesertFox could not load ${name}: ${error instanceof Error ? error.message : String(error)}`));
     try {
       return await Promise.race([injected, deadline]);
     } finally {
@@ -53,7 +53,7 @@ export function create_bundle_loader(deps: BundleLoaderDeps) {
     load,
     // The entry for a `load_bundle` message. The name is checked here because the sender is a page script.
     answer: (sender: LoadSender, name: unknown): Promise<RunResponse> => {
-      if (sender.tab?.id === undefined || !is_bundle_name(name)) return Promise.resolve(failure("OasisFox: unknown bundle request"));
+      if (sender.tab?.id === undefined || !is_bundle_name(name)) return Promise.resolve(failure("DesertFox: unknown bundle request"));
       return load({ tab_id: sender.tab.id, frame_id: sender.frameId ?? 0, document_id: sender.documentId ?? "" }, name);
     },
   };

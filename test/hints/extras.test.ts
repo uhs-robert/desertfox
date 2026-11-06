@@ -81,7 +81,7 @@ async function page_with(texts: string[]) {
     getComputedStyle: () => ({ visibility: "visible" }),
     addEventListener: (type: string) => void active_listeners.add(type),
     removeEventListener: (type: string) => void active_listeners.delete(type),
-    oasisfox_host: {
+    desertfox_host: {
       register_sink: (_mode: string, registered: typeof sink) => void (sink = registered),
       register_handler: (id: string, handler: (args: Record<string, unknown>) => unknown) => void handlers.set(id, handler),
       // The real host calls the sink's exit when the mode leaves hint.
@@ -171,13 +171,13 @@ async function page_with(texts: string[]) {
     // What the handler answers: an Outcome now, or a promise that stays pending while hints wait for the user.
     run: (args: Record<string, unknown>) => handlers.get("hint.run")!({ action: "here", filter: "links", rapid: false, ...args }) as Outcome | Promise<Outcome>,
     type: (token: string) => sink!.on_token(token),
-    escape: () => win.oasisfox_host.set_mode("normal"),
+    escape: () => win.desertfox_host.set_mode("normal"),
     // The label text of each label that is not hidden by typing.
-    labels: () => nodes_with_class("oasisfox-hint").filter((node) => node.style.display !== "none").map((node) => node.children.map((part) => part.textContent).join("")),
-    label_tops: () => nodes_with_class("oasisfox-hint").map((node) => node.style.top),
-    messages: () => nodes_with_class("oasisfox-hint-message").map((node) => node.textContent),
+    labels: () => nodes_with_class("desertfox-hint").filter((node) => node.style.display !== "none").map((node) => node.children.map((part) => part.textContent).join("")),
+    label_tops: () => nodes_with_class("desertfox-hint").map((node) => node.style.top),
+    messages: () => nodes_with_class("desertfox-hint-message").map((node) => node.textContent),
     host_count: () => document_root.children.length,
-    caret_target: () => win as unknown as { oasisfox_caret_target?: unknown },
+    caret_target: () => win as unknown as { desertfox_caret_target?: unknown },
   };
 }
 
@@ -386,7 +386,7 @@ test("caret and visual hand the picked element to the caret bundle and enter tha
     await settle();
     page.type(page.labels()[1]!.toLowerCase());
     await settle();
-    assert.equal(page.caret_target().oasisfox_caret_target, page.links[1]);
+    assert.equal(page.caret_target().desertfox_caret_target, page.links[1]);
     assert.equal(page.mode(), action);
     assert.equal(page.labels().length, 0);
   }
@@ -396,7 +396,7 @@ test("caret with one text match starts at once at that link", async () => {
   const page = await page_with(["one", "two"]);
   page.run({ action: "caret", text: "two" });
   await settle();
-  assert.equal(page.caret_target().oasisfox_caret_target, page.links[1]);
+  assert.equal(page.caret_target().desertfox_caret_target, page.links[1]);
   assert.equal(page.mode(), "caret");
 });
 

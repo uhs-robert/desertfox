@@ -10,7 +10,7 @@ const SAMPLE = join(import.meta.dirname, "..", "examples", "engines.toml");
 const commands = read_commands_file(join(import.meta.dirname, "fixtures", "build-config", "commands.json"));
 
 function build_sample(warnings: string[] = []) {
-  const dir = mkdtempSync(join(tmpdir(), "oasisfox-sample-"));
+  const dir = mkdtempSync(join(tmpdir(), "desertfox-sample-"));
   copyFileSync(SAMPLE, join(dir, "search_engines.toml"));
   return build_config(dir, commands, warnings).search_engines;
 }

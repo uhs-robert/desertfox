@@ -2,83 +2,83 @@
 <html>
   <head>
     <meta charset="utf-8" />
-    <title>OasisFox command line</title>
+    <title>DesertFox command line</title>
     <style>
       html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; }
       body { display: flex; flex-direction: column; justify-content: flex-end; }
-      /* The defaults sit on an inner element, like every OasisFox surface. */
-      .oasisfox-cmdline {
-        --oasisfox-bg-core: #0c0e13;
-        --oasisfox-fg-core: #f5f5dc;
-        --oasisfox-primary: #7fa3c9;
-        --oasisfox-error: #ffa0a0;
-        --oasisfox-fg-comment: #69809d;
-        --oasisfox-fg-dim: #717a84;
-        --oasisfox-fg-muted: #4e6578;
-        --oasisfox-selection: #24364d;
-        --oasisfox-bg-mantle: #141c24;
-        --oasisfox-secondary: #f0e68c;
-        --oasisfox-font: 12px/1.4 ui-monospace, monospace;
+      /* The defaults sit on an inner element, like every DesertFox surface. */
+      .desertfox-cmdline {
+        --desertfox-bg-core: #0c0e13;
+        --desertfox-fg-core: #f5f5dc;
+        --desertfox-primary: #7fa3c9;
+        --desertfox-error: #ffa0a0;
+        --desertfox-fg-comment: #69809d;
+        --desertfox-fg-dim: #717a84;
+        --desertfox-fg-muted: #4e6578;
+        --desertfox-selection: #24364d;
+        --desertfox-bg-mantle: #141c24;
+        --desertfox-secondary: #f0e68c;
+        --desertfox-font: 12px/1.4 ui-monospace, monospace;
         box-sizing: border-box;
         flex: none;
-        background: var(--oasisfox-bg-core);
-        color: var(--oasisfox-fg-core);
-        font: var(--oasisfox-font);
-        border-top: 2px solid var(--oasisfox-primary);
+        background: var(--desertfox-bg-core);
+        color: var(--desertfox-fg-core);
+        font: var(--desertfox-font);
+        border-top: 2px solid var(--desertfox-primary);
         container-type: inline-size;
       }
-      .oasisfox-cmdline-note { padding: 0 .75rem; color: var(--oasisfox-fg-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-      .oasisfox-cmdline-error .oasisfox-cmdline-note { color: var(--oasisfox-error); }
-      .oasisfox-cmdline-row { display: flex; align-items: center; padding: .25rem .75rem; background: var(--oasisfox-bg-mantle, #141c24); }
-      .oasisfox-cmdline-prompt { color: var(--oasisfox-secondary); font-weight: bold; white-space: pre; }
-      .oasisfox-cmdline-prompt-colon { color: var(--oasisfox-primary); font-weight: normal; margin-right: .5rem; }
-      .oasisfox-cmdline-input { flex: 1; background: transparent; color: inherit; border: 0; outline: 0; font: inherit; }
-      /* Each row is 20px. The keys column is last and never shrinks: --oasisfox-keys-width is its widest text. */
-      .oasisfox-cmdline-list { overflow: hidden; }
-      .oasisfox-cmdline-item { display: flex; align-items: center; gap: .75rem; height: 20px; padding: 0 .75rem; white-space: nowrap; }
-      .oasisfox-cmdline-selected { background: var(--oasisfox-selection); color: var(--oasisfox-secondary, #f0e68c); }
-      .oasisfox-cmdline-unavailable { opacity: .5; }
-      .oasisfox-cmdline-item-discarded:not(.oasisfox-cmdline-selected) .oasisfox-cmdline-name { color: var(--oasisfox-fg-dim); }
+      .desertfox-cmdline-note { padding: 0 .75rem; color: var(--desertfox-fg-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .desertfox-cmdline-error .desertfox-cmdline-note { color: var(--desertfox-error); }
+      .desertfox-cmdline-row { display: flex; align-items: center; padding: .25rem .75rem; background: var(--desertfox-bg-mantle, #141c24); }
+      .desertfox-cmdline-prompt { color: var(--desertfox-secondary); font-weight: bold; white-space: pre; }
+      .desertfox-cmdline-prompt-colon { color: var(--desertfox-primary); font-weight: normal; margin-right: .5rem; }
+      .desertfox-cmdline-input { flex: 1; background: transparent; color: inherit; border: 0; outline: 0; font: inherit; }
+      /* Each row is 20px. The keys column is last and never shrinks: --desertfox-keys-width is its widest text. */
+      .desertfox-cmdline-list { overflow: hidden; }
+      .desertfox-cmdline-item { display: flex; align-items: center; gap: .75rem; height: 20px; padding: 0 .75rem; white-space: nowrap; }
+      .desertfox-cmdline-selected { background: var(--desertfox-selection); color: var(--desertfox-secondary, #f0e68c); }
+      .desertfox-cmdline-unavailable { opacity: .5; }
+      .desertfox-cmdline-item-discarded:not(.desertfox-cmdline-selected) .desertfox-cmdline-name { color: var(--desertfox-fg-dim); }
       /* Tab rows lead with fixed-width cells, so the names line up. The flag icons are masks, so they take the text color. */
-      .oasisfox-cmdline-tab-status { flex: 0 0 calc(1ch + var(--oasisfox-flags-width, 0px)); display: flex; align-items: center; color: var(--oasisfox-primary); }
-      .oasisfox-cmdline-tab-mark { flex: 0 0 1ch; text-align: center; }
-      .oasisfox-cmdline-flag { flex: 0 0 12px; height: 12px; margin-left: 2px; background: currentColor; mask: var(--oasisfox-flag-mask) center / contain no-repeat; -webkit-mask: var(--oasisfox-flag-mask) center / contain no-repeat; }
-      .oasisfox-cmdline-flag-pinned { --oasisfox-flag-mask: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><path d='M5 1h6v1.5l-1 1V7l2.5 2.5V11H8.8v4L8 16l-.8-1v-4H3.5V9.5L6 7V3.5l-1-1z'/></svg>"); }
-      .oasisfox-cmdline-flag-audible { --oasisfox-flag-mask: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><path d='M1 6h3l4-3.5v11L4 10H1z'/><path d='M10.5 5.5a3.5 3.5 0 0 1 0 5M12.5 3.5a6.5 6.5 0 0 1 0 9' fill='none' stroke='black' stroke-width='1.4'/></svg>"); }
-      .oasisfox-cmdline-flag-muted { --oasisfox-flag-mask: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><path d='M1 6h3l4-3.5v11L4 10H1z'/><path d='M10.5 6l4 4M14.5 6l-4 4' fill='none' stroke='black' stroke-width='1.4'/></svg>"); }
-      .oasisfox-cmdline-flag-discarded { --oasisfox-flag-mask: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><circle cx='8' cy='8' r='6.3' fill='none' stroke='black' stroke-width='1.5'/><path d='M4.8 8h6.4' stroke='black' stroke-width='1.5'/></svg>"); }
-      .oasisfox-cmdline-container, .oasisfox-cmdline-favicon { position: relative; flex: 0 0 14px; height: 14px; }
-      .oasisfox-cmdline-container img, .oasisfox-cmdline-favicon img { position: absolute; inset: 0; width: 14px; height: 14px; }
-      .oasisfox-cmdline-container:has(img) { background: var(--oasisfox-container-color); mask: var(--oasisfox-container-icon) center / contain no-repeat; -webkit-mask: var(--oasisfox-container-icon) center / contain no-repeat; }
-      .oasisfox-cmdline-container img { opacity: 0; }
-      .oasisfox-cmdline-container.oasisfox-cmdline-container-dot { mask: none; -webkit-mask: none; background: none; }
-      .oasisfox-cmdline-container-dot::before { content: ""; position: absolute; inset: 3px; border-radius: 50%; background: var(--oasisfox-container-color); }
-      .oasisfox-cmdline-favicon::before { content: ""; position: absolute; inset: 2px; border: 1px solid var(--oasisfox-fg-muted); border-radius: 3px; box-sizing: border-box; }
-      .oasisfox-cmdline-favicon:has(img:not([hidden]))::before { display: none; }
-      .oasisfox-cmdline-name { flex: 0 0 var(--oasisfox-name-width); box-sizing: border-box; max-width: 85%; overflow: hidden; text-overflow: ellipsis; }
-      .oasisfox-cmdline-link:hover { text-decoration: underline; color: var(--oasisfox-primary); cursor: pointer; }
-      .oasisfox-cmdline-name b { color: var(--oasisfox-secondary, #f0e68c); }
+      .desertfox-cmdline-tab-status { flex: 0 0 calc(1ch + var(--desertfox-flags-width, 0px)); display: flex; align-items: center; color: var(--desertfox-primary); }
+      .desertfox-cmdline-tab-mark { flex: 0 0 1ch; text-align: center; }
+      .desertfox-cmdline-flag { flex: 0 0 12px; height: 12px; margin-left: 2px; background: currentColor; mask: var(--desertfox-flag-mask) center / contain no-repeat; -webkit-mask: var(--desertfox-flag-mask) center / contain no-repeat; }
+      .desertfox-cmdline-flag-pinned { --desertfox-flag-mask: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><path d='M5 1h6v1.5l-1 1V7l2.5 2.5V11H8.8v4L8 16l-.8-1v-4H3.5V9.5L6 7V3.5l-1-1z'/></svg>"); }
+      .desertfox-cmdline-flag-audible { --desertfox-flag-mask: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><path d='M1 6h3l4-3.5v11L4 10H1z'/><path d='M10.5 5.5a3.5 3.5 0 0 1 0 5M12.5 3.5a6.5 6.5 0 0 1 0 9' fill='none' stroke='black' stroke-width='1.4'/></svg>"); }
+      .desertfox-cmdline-flag-muted { --desertfox-flag-mask: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><path d='M1 6h3l4-3.5v11L4 10H1z'/><path d='M10.5 6l4 4M14.5 6l-4 4' fill='none' stroke='black' stroke-width='1.4'/></svg>"); }
+      .desertfox-cmdline-flag-discarded { --desertfox-flag-mask: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><circle cx='8' cy='8' r='6.3' fill='none' stroke='black' stroke-width='1.5'/><path d='M4.8 8h6.4' stroke='black' stroke-width='1.5'/></svg>"); }
+      .desertfox-cmdline-container, .desertfox-cmdline-favicon { position: relative; flex: 0 0 14px; height: 14px; }
+      .desertfox-cmdline-container img, .desertfox-cmdline-favicon img { position: absolute; inset: 0; width: 14px; height: 14px; }
+      .desertfox-cmdline-container:has(img) { background: var(--desertfox-container-color); mask: var(--desertfox-container-icon) center / contain no-repeat; -webkit-mask: var(--desertfox-container-icon) center / contain no-repeat; }
+      .desertfox-cmdline-container img { opacity: 0; }
+      .desertfox-cmdline-container.desertfox-cmdline-container-dot { mask: none; -webkit-mask: none; background: none; }
+      .desertfox-cmdline-container-dot::before { content: ""; position: absolute; inset: 3px; border-radius: 50%; background: var(--desertfox-container-color); }
+      .desertfox-cmdline-favicon::before { content: ""; position: absolute; inset: 2px; border: 1px solid var(--desertfox-fg-muted); border-radius: 3px; box-sizing: border-box; }
+      .desertfox-cmdline-favicon:has(img:not([hidden]))::before { display: none; }
+      .desertfox-cmdline-name { flex: 0 0 var(--desertfox-name-width); box-sizing: border-box; max-width: 85%; overflow: hidden; text-overflow: ellipsis; }
+      .desertfox-cmdline-link:hover { text-decoration: underline; color: var(--desertfox-primary); cursor: pointer; }
+      .desertfox-cmdline-name b { color: var(--desertfox-secondary, #f0e68c); }
       /* The description takes the space that is left, so it is the first to shrink. */
-      .oasisfox-cmdline-description { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--oasisfox-fg-comment); }
+      .desertfox-cmdline-description { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--desertfox-fg-comment); }
       /* The comment color is too faint on the selection color, so a selected row reads its description in the core text color. */
-      .oasisfox-cmdline-selected .oasisfox-cmdline-description { color: var(--oasisfox-fg-core); }
-      .oasisfox-cmdline-args { flex: 0 1 auto; max-width: 45%; overflow: hidden; text-overflow: ellipsis; color: var(--oasisfox-fg-comment); }
-      .oasisfox-cmdline-tag { flex: 0 0 auto; color: var(--oasisfox-fg-comment); }
-      .oasisfox-cmdline-args-short { display: none; }
-      .oasisfox-cmdline-keys { flex: 0 0 var(--oasisfox-keys-width); text-align: right; color: var(--oasisfox-primary); }
+      .desertfox-cmdline-selected .desertfox-cmdline-description { color: var(--desertfox-fg-core); }
+      .desertfox-cmdline-args { flex: 0 1 auto; max-width: 45%; overflow: hidden; text-overflow: ellipsis; color: var(--desertfox-fg-comment); }
+      .desertfox-cmdline-tag { flex: 0 0 auto; color: var(--desertfox-fg-comment); }
+      .desertfox-cmdline-args-short { display: none; }
+      .desertfox-cmdline-keys { flex: 0 0 var(--desertfox-keys-width); text-align: right; color: var(--desertfox-primary); }
       @container (max-width: 40rem) {
-        .oasisfox-cmdline-args-full { display: none; }
-        .oasisfox-cmdline-args-short { display: inline; }
+        .desertfox-cmdline-args-full { display: none; }
+        .desertfox-cmdline-args-short { display: inline; }
       }
     </style>
   </head>
   <body>
-    <div class="oasisfox-cmdline">
-      <div id="list" class="oasisfox-cmdline-list" hidden></div>
-      <div id="note" class="oasisfox-cmdline-note" hidden></div>
-      <div class="oasisfox-cmdline-row">
-        <span class="oasisfox-cmdline-prompt">&gt; </span>
-        <input id="line" class="oasisfox-cmdline-input" type="text" autocomplete="off" spellcheck="false" />
+    <div class="desertfox-cmdline">
+      <div id="list" class="desertfox-cmdline-list" hidden></div>
+      <div id="note" class="desertfox-cmdline-note" hidden></div>
+      <div class="desertfox-cmdline-row">
+        <span class="desertfox-cmdline-prompt">&gt; </span>
+        <input id="line" class="desertfox-cmdline-input" type="text" autocomplete="off" spellcheck="false" />
       </div>
     </div>
     <script src="cmdline_page.js"></script>

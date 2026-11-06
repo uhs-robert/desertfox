@@ -37,7 +37,7 @@ type Start = Extract<HostToPage, { kind: "start" }>;
 function show_prompt(prompt: HTMLElement, setting: string): void {
   if (setting === "colon") {
     prompt.textContent = ":";
-    prompt.className += " oasisfox-cmdline-prompt-colon";
+    prompt.className += " desertfox-cmdline-prompt-colon";
   } else if (setting !== "caret") {
     prompt.textContent = setting;
   }
@@ -50,7 +50,7 @@ const FALLBACK_ROW_HEIGHT_PX = 24;
 async function open_line(start: Start, port: MessagePort): Promise<void> {
   const input = document.querySelector<HTMLInputElement>("#line")!;
   const note = document.querySelector<HTMLElement>("#note")!;
-  const panel = document.querySelector<HTMLElement>(".oasisfox-cmdline")!;
+  const panel = document.querySelector<HTMLElement>(".desertfox-cmdline")!;
 
   const [stored, opened] = await Promise.all([
     browser.storage.local.get(COMPILED_KEYMAP_STORAGE_KEY),
@@ -60,12 +60,12 @@ async function open_line(start: Start, port: MessagePort): Promise<void> {
   host_port = port;
   const lookup = create_word_lookup(opened.commands, opened.command_aliases);
   // After the built-in styles, so the theme beats the hex defaults and user CSS beats the theme.
-  follow_theme(".oasisfox-cmdline");
+  follow_theme(".desertfox-cmdline");
   const user_style = document.createElement("style");
   user_style.textContent = opened.css;
   document.head.append(user_style);
-  if (start.search) show_prompt(document.querySelector<HTMLElement>(".oasisfox-cmdline-prompt")!, start.search === "forward" ? "/ " : "? ");
-  else if (opened.prompt) show_prompt(document.querySelector<HTMLElement>(".oasisfox-cmdline-prompt")!, opened.prompt);
+  if (start.search) show_prompt(document.querySelector<HTMLElement>(".desertfox-cmdline-prompt")!, start.search === "forward" ? "/ " : "? ");
+  else if (opened.prompt) show_prompt(document.querySelector<HTMLElement>(".desertfox-cmdline-prompt")!, opened.prompt);
   const keymap = stored[COMPILED_KEYMAP_STORAGE_KEY] as CompiledKeymap | undefined;
   const opened_from = typeof start.mode === "string" ? start.mode : "normal";
   const key_text = key_labels(keymap, opened.commands, opened_from);
@@ -118,7 +118,7 @@ async function open_line(start: Start, port: MessagePort): Promise<void> {
     const shown = message ?? session.get_hint() ?? "";
     note.textContent = shown;
     note.hidden = shown === "";
-    document.body.classList.toggle("oasisfox-cmdline-error", message !== undefined);
+    document.body.classList.toggle("desertfox-cmdline-error", message !== undefined);
     // A new ranking starts at the top, so leftover wheel pixels belong to the old one.
     if (session.get_rows() !== wheel_rows_drawn) wheel.remainder_px = 0;
     wheel_rows_drawn = session.get_rows();
@@ -210,7 +210,7 @@ async function open_line(start: Start, port: MessagePort): Promise<void> {
   list_element.addEventListener("mousedown", (event) => event.preventDefault());
   list_element.addEventListener("click", (event) => {
     const target = event.target as HTMLElement | null;
-    const help_id = target?.closest<HTMLElement>(".oasisfox-cmdline-link")?.dataset.help;
+    const help_id = target?.closest<HTMLElement>(".desertfox-cmdline-link")?.dataset.help;
     if (help_id !== undefined) return show_help(help_id);
     const index = target?.closest<HTMLElement>("[data-index]")?.dataset.index;
     if (index === undefined) return;
