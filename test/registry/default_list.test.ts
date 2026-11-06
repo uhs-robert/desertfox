@@ -153,3 +153,31 @@ test("the key compiler stores the resolved default and labels only a value that 
   assert.equal(leaf("m").label, "Hint for media");
   assert.equal(leaf("h").label, "Hint here for media");
 });
+
+test("completion reads a typed number flag as a number, so an arm on that number holds", () => {
+  const registry = create_registry();
+  registry.define("x.rep", {
+    name: "rep",
+    label: "R",
+    intent: "R.",
+    runs_in: "background",
+    run: () => {},
+    params: [
+      { name: "count", type: "int", default: 1 },
+      { name: "mode", type: "enum", values: ["slow", "fast"], default: [{ value: "fast", when: { count: [2] } }, "slow"], short: { slow: "s", fast: "f" }, description: { slow: "Run slowly.", fast: "Run fast." } },
+    ] as never,
+  });
+  const meta = [command_meta(registry.get("x.rep")!)];
+  const complete = create_completer(create_word_lookup(meta), meta, {}, {});
+  const text = "rep --count=2 --";
+  const names = complete(text, text.length).rows.map((row) => row.name.split(" ")[0]);
+  assert.ok(!names.includes("--fast") && names.includes("--slow"), names.join(","));
+});
+
+test("define refuses a null or non-object arm with a DefineError", () => {
+  const with_default = (type: string, values: unknown[]): CommandInput => ({ label: "L", intent: "I.", runs_in: "background", run: () => {}, params: [{ name: "a", type, ...(type === "enum" ? { values: ["here", "tab"] } : {}), default: values }] as never });
+  for (const type of ["string", "enum"]) {
+    rejects(with_default(type, [null, "here"]), /default\[0\]: an arm must be a \{ value, when \} object or a plain value/);
+    rejects(with_default(type, [undefined]), /default\[0\]: an arm must be a \{ value, when \} object or a plain value/);
+  }
+});

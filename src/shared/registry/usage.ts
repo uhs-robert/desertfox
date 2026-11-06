@@ -34,7 +34,6 @@ export function flag_alternatives(param: ParamDef): string[] {
   if (param.type === "bool") {
     alternatives = [...(typeof param.short === "string" ? [`-${param.short}`] : []), `--${dashed(param.name)}`];
   } else if (param.type === "enum" && static_values(param)) {
-    // The default value is the state without the flag, so it needs no mention.
     const values = (static_values(param) ?? []).filter((value) => !always_default(param, value));
     alternatives = values.flatMap((value) => {
       const letter = typeof param.short === "object" ? param.short[value] : undefined;
