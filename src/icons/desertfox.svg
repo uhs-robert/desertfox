@@ -1,7 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96">
-  <circle cx="48" cy="48" r="46" fill="#1d2021"/>
-  <path d="M20 22 L40 36 L56 36 L76 22 L72 54 L48 78 L24 54 Z" fill="#e69a4c"/>
-  <path d="M34 54 L48 66 L62 54 L48 58 Z" fill="#1d2021"/>
-  <circle cx="38" cy="46" r="3.5" fill="#1d2021"/>
-  <circle cx="58" cy="46" r="3.5" fill="#1d2021"/>
-</svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96"><defs><clipPath id="t"><path d="M70 55 L101 36 L93 58 L101 80 L74 78 Z"/></clipPath></defs><g transform="translate(96 0) scale(-1 1) translate(-5 0)">
+<path d="M70 55 L101 36 L93 58 L101 80 L74 78 Z" fill="#c8553a"/><path d="M87 30 L93 30 L93 90 L87 90 Z" fill="#e8c88f" clip-path="url(#t)"/>
+<path d="M9 58 L9 31 L12 2 L38 30 L58 30 L84 2 L87 31 L87 58 Z" fill="#d9792b"/><path d="M6 54 Q48 60 90 54 L86 74 L48 92 L10 74 Z" fill="#c8553a"/>
+<g id="e"><g transform="translate(-1.5 0)"><path d="M22 40 L44 46 Q40 55 32 54 Q25 51 22 40 Z" fill="#e8c88f"/><path d="M19 36 L46 43 L45 48 L20 42 Z" fill="#3b2417"/></g></g><use href="#e" transform="translate(96 0) scale(-1 1)"/>
+</g></svg>
