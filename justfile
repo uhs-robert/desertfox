@@ -23,10 +23,11 @@ build: install_deps
     npm run --silent typecheck
     npm run --silent build
 
-# Check no old-name tokens remain, docs/keymap.md, src/shared/themes.ts and src/shared/default_settings.ts are current, then run the unit tests from TypeScript source by Node's type stripping.
+# Check no old-name tokens remain, docs/keymap.md, src/shared/themes.ts and src/shared/default_settings.ts are current, then run the unit tests from TypeScript source by Node's type stripping, and the Python host tests.
 test: install_deps
     #!/usr/bin/env bash
     set -euo pipefail
+    just host-test
     # A test that runs away dies with its scope, so nothing outlives the run.
     if command -v systemd-run >/dev/null 2>&1 && systemd-run --user --scope --quiet -p MemoryMax=8G -p MemorySwapMax=0 -p RuntimeMaxSec=900 true >/dev/null 2>&1; then
         exec systemd-run --user --scope --quiet -p MemoryMax=8G -p MemorySwapMax=0 -p RuntimeMaxSec=900 npm run --silent test
@@ -137,7 +138,17 @@ release_bump:
     mv "$manifest_tmp" src/manifest.json
     echo "bumped version to $new_version"
 
-# Create the GitHub release v<package.json version> with the host, its checksum and the install script, so a release build installs the host of its own version. RELEASE_DRY_RUN=1 prints the gh command and creates nothing. The tag lands on the default branch head.
+# Commit the version bump on the release branch and push the branch, so the release tag can point at a commit that exists on the remote and carries the released code.
+[private]
+release_commit_push:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    version=$(jq -r .version package.json)
+    git add package.json package-lock.json src/manifest.json
+    git commit -q -m "chore(release): bump version to $version"
+    git push -u origin "$(git branch --show-current)"
+
+# Create the GitHub release v<package.json version> with the host, its checksum and the install script, so a release build installs the host of its own version. The tag targets HEAD, so push it first (release does). RELEASE_DRY_RUN=1 prints the gh command and creates nothing.
 [private]
 release_publish:
     #!/usr/bin/env bash
@@ -147,7 +158,7 @@ release_publish:
     trap 'rm -rf "$assets"' EXIT
     cp host/desertfox-host host/install.sh "$assets/"
     (cd "$assets" && sha256sum desertfox-host > desertfox-host.sha256)
-    gh_command=(gh release create "v$version" "$assets/desertfox-host" "$assets/desertfox-host.sha256" "$assets/install.sh" --title "v$version" --notes "Native host $version. The extension's :native.install page shows the command that installs it.")
+    gh_command=(gh release create "v$version" "$assets/desertfox-host" "$assets/desertfox-host.sha256" "$assets/install.sh" --target "$(git rev-parse HEAD)" --title "v$version" --notes "Native host $version. The extension's :native.install page shows the command that installs it.")
     if [ "${RELEASE_DRY_RUN:-}" = "1" ]; then
         echo "dry run: ${gh_command[*]}"
         cat "$assets/desertfox-host.sha256"
@@ -186,5 +197,6 @@ release:
     just release_bump
     just sign
     just install
-    just release_publish || { echo "The add-on is signed and installed, but the GitHub release failed. After fixing gh, run 'just release_publish'." >&2; exit 1; }
-    echo "Released $(jq -r .version package.json). Commit the bump on this branch and open a PR."
+    just release_commit_push
+    just release_publish || { echo "The add-on is signed and installed and the bump is pushed, but the GitHub release failed. After fixing gh, run 'just release_publish'." >&2; exit 1; }
+    echo "Released $(jq -r .version package.json). The bump is committed and pushed on this branch. Open a PR."

@@ -11,6 +11,7 @@ The command definitions. Each file is a command module: it calls `define` from `
 
 Helpers:
 
+- `help_tab.ts`: `open_help_url`, which opens a help page URL beside the asking tab or navigates in place. `help.open` and `native.install` share it.
 - `open_target.ts`: the `where` and `container` params, `open_in` (opens a URL here, in a tab or in a window), the container lookup, `current_tab_url` and `current_page` (the page that engine slots read), and `typed_url_target` for text a person typed.
 - `url_build.ts`: pure URL math. `parent_url` and `root_url`, `url_target` (text to a URL), and the two engine fillers: `engine_search_url` for typed text and `engine_url`, which follows `fallback` when the page cannot fill the slots. The slot table and the template filler are in `src/shared/engines/`.
 
