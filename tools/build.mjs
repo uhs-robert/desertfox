@@ -37,7 +37,7 @@ for (const [name, entry] of Object.entries(minified_entries)) {
   await build({ ...common, entryPoints: { [name]: entry }, outdir: "dist", minify: true });
 }
 
-for (const file of ["manifest.json", "managed_schema.json", "help/help.html", "newtab/newtab.html", "cmdline/cmdline.html"]) {
+for (const file of ["manifest.json", "managed_schema.json", "help/home.html", "newtab/newtab.html", "cmdline/cmdline.html"]) {
   await copyFile(`src/${file}`, `dist/${file.split("/").pop()}`);
 }
 

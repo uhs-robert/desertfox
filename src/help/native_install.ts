@@ -1,4 +1,4 @@
-// The panel that `:native.install` opens (help.html#native-install): a button that asks for the nativeMessaging permission
+// The panel that `:native.install` opens (home.html#native-install): a button that asks for the nativeMessaging permission
 // and the one-line command that installs the host. Firefox grants an optional permission only from a click on a page of the add-on,
 // which is why the request lives here and not in the command.
 

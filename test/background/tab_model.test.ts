@@ -575,7 +575,7 @@ test("a ticketed port gets its snapshot and then patches, and an extension page 
   await f.model.start();
   const p = await f.connect_port({ tab_id: 7 });
   const sidebar = await f.connect_port({ name: "desertfox_tab_model:normal", no_sender_tab: true, url: SIDEBAR_URL });
-  const help_tab = await f.connect_port({ tab_id: 4, url: "moz-extension://me/help.html" });
+  const help_tab = await f.connect_port({ tab_id: 4, url: "moz-extension://me/home.html" });
   assert.deepEqual(f.opener_asks, ["7:3"]);
   f.fire("onUpdated", 1, { title: "z" }, tab(1, 1, 0, { title: "z" }));
   f.run_timers();

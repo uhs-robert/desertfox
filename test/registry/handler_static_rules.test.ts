@@ -71,7 +71,7 @@ const STUB_ANSWERS: Record<string, unknown> = {
   "storage.session.get": {},
   "storage.local.get": {},
   "storage.managed.get": {},
-  "runtime.getURL": "moz-extension://stub/help.html",
+  "runtime.getURL": "moz-extension://stub/home.html",
 };
 
 // A `browser` whose calls answer from STUB_ANSWERS, so a handler runs past its first browser call into its own checks.

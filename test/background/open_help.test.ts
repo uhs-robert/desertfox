@@ -10,7 +10,7 @@ function make(openers: number[] = [7]) {
   const open_help = create_open_help({
     is_opener: async (tab_id, frame_id) => openers.includes(tab_id) && frame_id === LINE_FRAME,
     is_command: (id) => id === "tab.next" || id === "my snippet",
-    help_page_url: "moz-extension://x/help.html",
+    help_page_url: "moz-extension://x/home.html",
     open_tab: async (tab) => void opened.push(tab),
   });
   return { open_help, opened };
@@ -19,13 +19,13 @@ function make(openers: number[] = [7]) {
 test("a known command opens its card in the foreground next to the asking tab", async () => {
   const { open_help, opened } = make();
   await open_help.open("my snippet", 7, LINE_FRAME);
-  assert.deepEqual(opened, [{ url: "moz-extension://x/help.html#command=my%20snippet", openerTabId: 7, active: true }]);
+  assert.deepEqual(opened, [{ url: "moz-extension://x/home.html#command=my%20snippet", openerTabId: 7, active: true }]);
 });
 
 test("an unknown id opens the Commands page at its top", async () => {
   const { open_help, opened } = make();
   await open_help.open("nope", 7, LINE_FRAME);
-  assert.deepEqual(opened, [{ url: "moz-extension://x/help.html#/commands", openerTabId: 7, active: true }]);
+  assert.deepEqual(opened, [{ url: "moz-extension://x/home.html#/commands", openerTabId: 7, active: true }]);
 });
 
 test("a sender with no ticket, no tab, another frame or a non-string id gets nothing", async () => {
@@ -39,7 +39,7 @@ test("a sender with no ticket, no tab, another frame or a non-string id gets not
 });
 
 const ids = new Set(["scroll.top", "my snippet"]);
-const base = "moz-extension://x/help.html";
+const base = "moz-extension://x/home.html";
 
 test("help_name_url maps a command id to its card and a page name to its page", () => {
   assert.equal(help_name_url(base, "scroll.top", ids), `${base}#command=scroll.top`);
@@ -53,7 +53,7 @@ test("help_name_choices lists the pages, then the commands, and no Quick Start s
   assert.deepEqual(help_name_choices(["scroll.top"]), ["home", "quick_start", "commands", "search_engines", "styling", "scroll.top"]);
 });
 
-const HELP = "moz-extension://x/help.html";
+const HELP = "moz-extension://x/home.html";
 
 test("the help tab asking for a target updates itself", () => {
   const plan = plan_help_tab(HELP, HELP + "#command=tab.next", { id: 3, window_id: 1, url: HELP + "#/commands" });

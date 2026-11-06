@@ -27,13 +27,13 @@ export async function run_cases({ rdp, extension_id, take_shot, run_case, send_k
   });
 
   await run_case("g? opens the help page", async () => {
-    const help_tab_count = `(async () => (await browser.tabs.query({})).filter((tab) => tab.url.includes("/help.html")).length)()`;
+    const help_tab_count = `(async () => (await browser.tabs.query({})).filter((tab) => tab.url.includes("/home.html")).length)()`;
     const before = await evaluate_in_background(rdp, extension_id, help_tab_count);
     await send_keys("g?");
     await sleep(1000);
     const after = await evaluate_in_background(rdp, extension_id, help_tab_count);
     expect(after === before + 1, `help tabs went from ${before} to ${after}`);
-    await evaluate_in_background(rdp, extension_id, `(async () => { for (const tab of await browser.tabs.query({})) if (tab.url.includes("/help.html")) await browser.tabs.remove(tab.id); })()`);
+    await evaluate_in_background(rdp, extension_id, `(async () => { for (const tab of await browser.tabs.query({})) if (tab.url.includes("/home.html")) await browser.tabs.remove(tab.id); })()`);
     await sleep(500);
   });
 

@@ -58,7 +58,7 @@ A second test checked whether Firefox reads `~/.mozilla/managed-storage/<extensi
 
 Question: does `tabs.sendMessage` reach a page of the extension itself, so the help page can run `content.js` as a plain script tag? Manifest `content_scripts` never match `moz-extension://` pages.
 
-Setup: Firefox 159, temporary add-on, the nested session. A scratch build added `<script src="content.js">` to `help.html`, plus a probe script that reported `scrollY` to the background. The background opened the help page in a tab and sent messages to it. Real `j`, `G`, `gg` and `<S-Escape>` presses came from `wtype`.
+Setup: Firefox 159, temporary add-on, the nested session. A scratch build added `<script src="content.js">` to `home.html`, plus a probe script that reported `scrollY` to the background. The background opened the help page in a tab and sent messages to it. Real `j`, `G`, `gg` and `<S-Escape>` presses came from `wtype`.
 
 Result: delivery works. No fallback is needed.
 
