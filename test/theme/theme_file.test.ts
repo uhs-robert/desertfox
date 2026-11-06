@@ -22,10 +22,10 @@ test("the role list is the public contract, in this order", () => {
   ]);
 });
 
-test("colors parse as #rgb or #rrggbb and come out lowercase #rrggbb", () => {
+test("hex colors parse as #rgb or #rrggbb and come out lowercase #rrggbb", () => {
   assert.equal(parse_color("#ABC"), "#aabbcc");
   assert.equal(parse_color("#A0b1C2"), "#a0b1c2");
-  for (const bad of ["red", "#abcd", "abc", "#ggg", 12, "rgb(0,0,0)"]) assert.equal(parse_color(bad), undefined, String(bad));
+  for (const bad of ["red", "#abcd", "abc", "#ggg", 12]) assert.equal(parse_color(bad), undefined, String(bad));
 });
 
 test("mix moves each channel toward the target and rounds", () => {
@@ -109,7 +109,7 @@ test("a missing required role is an error", () => {
 });
 
 test("a bad color is one error, even on a required role", () => {
-  assert.deepEqual(checked({ dark: { ...REQUIRED, fg_core: "white" } }).problems, ['t.toml: [dark] fg_core: expected a color as #rgb or #rrggbb, got "white"']);
+  assert.deepEqual(checked({ dark: { ...REQUIRED, fg_core: "white" } }).problems, ['t.toml: [dark] fg_core: expected a color as #rgb, #rrggbb, rgb(), rgba() with alpha 1, or hsl(), got "white"']);
 });
 
 test("a file needs a [dark] or [light] table and nothing else at the top", () => {
@@ -143,4 +143,20 @@ test("a theme file with only the required roles still gets the four search roles
   for (const variant of [theme!.dark, theme!.light]) {
     for (const role of ["search_bg", "search_fg", "search_current_bg", "search_current_fg"] as const) assert.match(variant[role], /^#[0-9a-f]{6}$/, role);
   }
+});
+
+test("parse_color turns rgb, rgba with alpha 1 and hsl into hex, and refuses the rest", () => {
+  const cases: [string, string | undefined][] = [
+    ["rgb(255, 0, 128)", "#ff0080"], ["rgb(255 0 128)", "#ff0080"], ["rgba(10, 20, 30, 1)", "#0a141e"], ["rgb(1 2 3 / 100%)", "#010203"],
+    ["rgb(100%, 0%, 100%)", "#ff00ff"], ["hsl(0, 100%, 50%)", "#ff0000"], ["hsl(120deg 100% 25%)", "#008000"], ["hsla(240, 100%, 50%, 1)", "#0000ff"],
+    ["hsl(-120, 100%, 50%)", "#0000ff"], ["rgba(10, 20, 30, 0.5)", undefined], ["rgb(100%, 0, 0)", undefined], ["hsl(0, 100, 50)", undefined],
+    ["red", undefined], ["rgb(1, 2)", undefined],
+  ];
+  for (const [input, expected] of cases) assert.equal(parse_color(input), expected, input);
+});
+
+test("a theme file error names the bad color and the formats", () => {
+  const problems: string[] = [];
+  check_theme_file("t.toml", { dark: { bg_core: "red", fg_core: "#fff", primary: "#fff", accent: "#fff" } }, problems);
+  assert.match(problems[0]!, /bg_core: expected a color as #rgb, #rrggbb, rgb\(\), rgba\(\) with alpha 1, or hsl\(\), got "red"/);
 });

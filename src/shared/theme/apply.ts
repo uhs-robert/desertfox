@@ -30,15 +30,41 @@ export function watch_stored<T>(key: string, on_value: (value: T | undefined) =>
   });
 }
 
-// A page that is not a shadow root. The sheet goes at the end of the head, so it follows the built-in styles. The page stays hidden until
-// the first read returns, so the hex defaults never show. Without storage nothing returns, so nothing is hidden.
+// A page stays hidden until every read its entry point started has returned, so no default color or missing user rule shows first.
+// Without storage nothing returns, so nothing is hidden. Each call returns that read's one-shot release.
+let page_reads_pending = 0;
+function hold_page_for_first_read(): () => void {
+  if (typeof browser === "undefined") return () => {};
+  document.documentElement.style.visibility = "hidden";
+  page_reads_pending++;
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    if (--page_reads_pending === 0) document.documentElement.style.visibility = "";
+  };
+}
+
+// A page that is not a shadow root. The sheet goes at the end of the head, so it follows the built-in styles.
 export function follow_theme(selector: string): HTMLStyleElement {
   const sheet = document.createElement("style");
   document.head.append(sheet);
-  if (typeof browser !== "undefined") document.documentElement.style.visibility = "hidden";
+  const release = hold_page_for_first_read();
   watch_stored<StoredTheme>(THEME_STORAGE_KEY, (theme) => {
-    document.documentElement.style.visibility = "";
     sheet.textContent = theme ? theme_css(theme, selector) : "";
+    release();
+  });
+  return sheet;
+}
+
+// The user's own CSS on a page that is not a shadow root. Call it after `follow_theme`, so the user rules follow the theme sheet and win.
+export function follow_user_css(): HTMLStyleElement {
+  const sheet = document.createElement("style");
+  document.head.append(sheet);
+  const release = hold_page_for_first_read();
+  watch_stored<string>(USER_CSS_STORAGE_KEY, (css) => {
+    sheet.textContent = css ?? "";
+    release();
   });
   return sheet;
 }

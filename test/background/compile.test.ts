@@ -127,4 +127,7 @@ test("the palette picks the stored theme: local theme, Oasis theme with its ligh
   const unknown = compile({ ...empty_config(), settings: { palette: "moonlight" } });
   assert.deepEqual(unknown.theme.dark, load_theme("oasis_moonlight", 3)!.dark);
   assert.deepEqual(unknown.warnings, ['settings: palette "moonlight" names no theme, using oasis_moonlight']);
+  const broken = compile({ ...empty_config(), settings: { palette: "mine" }, local_theme: { name: "mine", colors: { dark: { ...moonlight.dark, accent: "red" }, light: moonlight.light } } });
+  assert.deepEqual(broken.theme.dark, load_theme("oasis_moonlight", 3)!.dark);
+  assert.deepEqual(broken.warnings, ['settings: palette "mine" is a local theme with a problem: [dark] accent is "red", not a color as #rgb, #rrggbb, rgb(), rgba() with alpha 1, or hsl(), using oasis_moonlight']);
 });

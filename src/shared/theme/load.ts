@@ -5,15 +5,26 @@ import { OASIS_THEMES, REPO_THEMES } from "../themes.ts";
 import { BUILT_IN_THEME_NAMES } from "../theme_names.ts";
 import { LIGHT_INTENSITIES, ROLES } from "./roles.ts";
 import type { LightIntensity, LocalTheme, OasisTheme, RoleColors, Theme } from "./roles.ts";
-import { parse_color } from "./theme_file.ts";
+import { COLOR_FORMATS, parse_color } from "./theme_file.ts";
 
 // Managed storage can be edited by hand, so a local theme's shape is not taken on trust. Every role is needed, because the
-// stored theme sets every token and a missing one would leave a surface on its fallback. A value that is not a hex color
-// would be published as an invalid CSS declaration, so it fails the same check the theme files pass.
-function has_all_roles(colors: unknown): colors is Theme {
-  const variant_usable = (variant: unknown) => typeof variant === "object" && variant !== null && ROLES.every((role) => parse_color((variant as Record<string, unknown>)[role]) !== undefined);
-  return typeof colors === "object" && colors !== null && variant_usable((colors as Theme).dark) && variant_usable((colors as Theme).light);
+// stored theme sets every token and a missing one would leave a surface on its fallback. A value that is not a color
+// would be published as an invalid CSS declaration, so it fails the same check the theme files pass. Returns the first
+// problem as text, or undefined when the theme is usable.
+export function local_theme_problem(colors: unknown): string | undefined {
+  for (const variant of ["dark", "light"] as const) {
+    const table = (colors as Record<string, unknown> | null | undefined)?.[variant];
+    if (typeof table !== "object" || table === null) return `[${variant}] is not a table`;
+    for (const role of ROLES) {
+      const value = (table as Record<string, unknown>)[role];
+      if (value === undefined) return `[${variant}] is missing ${role}`;
+      if (parse_color(value) === undefined) return `[${variant}] ${role} is ${JSON.stringify(value)}, not a color as ${COLOR_FORMATS}`;
+    }
+  }
+  return undefined;
 }
+
+const has_all_roles = (colors: unknown): colors is Theme => local_theme_problem(colors) === undefined;
 
 const unpack = (colors: readonly string[]) => Object.fromEntries(ROLES.map((role, at) => [role, colors[at]])) as RoleColors;
 
