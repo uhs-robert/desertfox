@@ -89,6 +89,16 @@ export function start_server() {
       response.writeHead(200, { "content-type": "image/svg+xml" });
       return response.end('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><circle cx="8" cy="8" r="7" fill="#e8a33d"/><path d="M5 8l2 2 4-4" fill="none" stroke="#fff" stroke-width="2"/></svg>');
     }
+    if (url.pathname === "/tone.wav") {
+      // Thirty seconds of silence at 8 kHz, 8 bit mono, so a media element has a source that plays with no network.
+      const samples = 8000 * 30;
+      const header = Buffer.alloc(44);
+      header.write("RIFF", 0); header.writeUInt32LE(36 + samples, 4); header.write("WAVEfmt ", 8); header.writeUInt32LE(16, 16);
+      header.writeUInt16LE(1, 20); header.writeUInt16LE(1, 22); header.writeUInt32LE(8000, 24); header.writeUInt32LE(8000, 28);
+      header.writeUInt16LE(1, 32); header.writeUInt16LE(8, 34); header.write("data", 36); header.writeUInt32LE(samples, 40);
+      response.writeHead(200, { "content-type": "audio/wav" });
+      return response.end(Buffer.concat([header, Buffer.alloc(samples, 0x80)]));
+    }
     response.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" });
     const id = url.searchParams.get("id") ?? "none";
     if (url.pathname === "/field") {
@@ -105,6 +115,17 @@ export function start_server() {
       const covered = '<div style="position:relative;width:200px"><a href="/page?id=hint_covered">covered</a><div style="position:absolute;inset:0;background:#fff"></div></div>';
       const links = `<a href="/page?id=hint_hidden" style="display:none">hidden</a>${covered}<p><a href="/page?id=hint_one">one</a></p><p><a href="/page?id=hint_two">two</a></p>`;
       return response.end(page(`hints ${id}`, links + tall_filler));
+    }
+    if (url.pathname === "/media") {
+      // A video in a player box of its own size, under an overlay that catches the pointer as a site's controls do, and a hidden audio.
+      const player = '<div id="player" style="position:relative;width:320px;height:180px;background:#222"><video id="video" src="/tone.wav" loop style="width:320px;height:180px"></video><div style="position:absolute;inset:0"></div></div>';
+      const hidden_audio = '<audio id="hidden_audio" src="/tone.wav"></audio>';
+      const script = `<script>const video = document.getElementById("video");
+video.addEventListener("play", () => send("media_play"));
+video.addEventListener("pause", () => send("media_pause"));
+video.addEventListener("volumechange", () => send("media_volume", { muted: video.muted }));
+document.addEventListener("fullscreenchange", () => send("media_fullscreen", { element: document.fullscreenElement ? document.fullscreenElement.id : "" }));</script>`;
+      return response.end(page(`media ${id}`, player + hidden_audio + script));
     }
     if (url.pathname === "/hoverbox") {
       // Plain divs with a mouseenter listener only, no click role and no CSS :hover rule. The page reports each enter and leave.

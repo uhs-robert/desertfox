@@ -194,6 +194,7 @@ export const DEFAULT_KEYMAP: KeymapConfig = {
     ";i": { id: "hint.run", args: { filter: "inputs" }, label: "Click input" },
     ";h": { id: "hint.run", args: { action: "hover", filter: "all" }, label: "Hover element" },
     ";l": { id: "hint.run", args: { filter: "links" }, label: "Click link" },
+    ";m": { id: "hint.run", args: { filter: "media" }, label: "Play or pause media" },
     ":": { id: "cmdline.open" },
     "/": { id: "find.open", label: "Find forward" },
     "?": { id: "find.open", args: { direction: "backward" }, label: "Find backward" },

@@ -20,7 +20,7 @@ A note "(prompts)" means the binding sets a `prompt` for a param, so the command
 
 <!-- BEGIN generated -->
 
-bound: 217 (normal 139, hint 2, cmdline 13, caret 26, visual 32, insert 1, ignore 1, browser 3) | later: 14 | dropped: 6
+bound: 218 (normal 140, hint 2, cmdline 13, caret 26, visual 32, insert 1, ignore 1, browser 3) | later: 14 | dropped: 6
 
 ### normal
 
@@ -156,6 +156,7 @@ bound: 217 (normal 139, hint 2, cmdline 13, caret 26, visual 32, insert 1, ignor
 | `;i` | bound | `hint --inputs` | Click input |  |
 | `;h` | bound | `hint --hover --all` | Hover element |  |
 | `;l` | bound | `hint --links` | Click link |  |
+| `;m` | bound | `hint --media` | Play or pause media |  |
 | `:` | bound | `cmdline.open` | Command line |  |
 | `/` | bound | `find` | Find forward |  |
 | `?` | bound | `find --backward` | Find backward |  |

@@ -5,7 +5,7 @@ import type { Outcome } from "../../shared/messages.ts";
 import { CONFIG_STATUS_STORAGE_KEY } from "../../background/storage_keys.ts";
 import type { BundleHostApi } from "../bundle_host.ts";
 import { unhover } from "./hover.ts";
-import { link_address, OPEN_PLACES, perform, starts_caret } from "./actions.ts";
+import { is_media, link_address, OPEN_PLACES, perform, starts_caret } from "./actions.ts";
 import type { CaretMode, HintAction, Place } from "./actions.ts";
 import { copy_text } from "../caret/copy_text.ts";
 import { collect, keep_text_matches, keep_visible_deduplicated, query_for, scroll_clips_in_page, weak_test_for, window_of } from "./candidates.ts";
@@ -83,7 +83,7 @@ async function keep_visible_ones(candidates: Found[]): Promise<Found[]> {
     clips_of: (found) => scroll_clips_in_page(found.element),
     viewport_of: (found) => viewport_size(found.element.ownerDocument, window_of(found.element)),
     is_hidden_by_style: (found) => window_of(found.element).getComputedStyle(found.element).visibility === "hidden",
-    is_reachable_at: (found, x, y) => uncovered_through_frames(found, x, y),
+    is_reachable_at: (found, x, y) => is_media(found.element) || uncovered_through_frames(found, x, y),
   };
   return keep_visible_deduplicated(candidates, probe);
 }
