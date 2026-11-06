@@ -173,11 +173,11 @@ function home_keycap(): HTMLElement {
 }
 
 function home_page(model: HelpModel): HTMLElement[] {
-  const [warnings_section, settings_section] = HOME_SECTIONS as [Section, Section];
+  const [warnings_section, settings_section, change_config_section] = HOME_SECTIONS as [Section, Section, Section];
   const warnings = model.warnings.length === 0
     ? el("p", "desertfox-help-muted", "No warnings.")
     : el("ul", "desertfox-help-warnings", ...model.warnings.map((warning) => el("li", undefined, warning)));
-  const settings = el("table", undefined, ...model.settings.map((row) => el("tr", undefined, el("td", undefined, el("code", undefined, row.name)), el("td", undefined, el("code", undefined, row.value)))));
+  const settings = el("table", undefined, ...model.settings.map((row) => el("tr", undefined, el("td", undefined, el("code", undefined, row.name)), el("td", undefined, el("code", undefined, row.value)), el("td", "desertfox-help-muted", row.tag ?? ""))));
   return [
     block_node(model.tip),
     section_heading("home", warnings_section),
@@ -185,6 +185,9 @@ function home_page(model: HelpModel): HTMLElement[] {
     section_heading("home", settings_section),
     el("p", undefined, `Config source: ${model.config_source}. This list is read-only.`),
     settings,
+    section_heading("home", change_config_section),
+    el("p", undefined, "Edit the config files, then:"),
+    el("ol", undefined, ...model.rebuild_steps.map((step) => el("li", undefined, el("code", undefined, step)))),
   ];
 }
 
@@ -265,7 +268,7 @@ export function sections_from_titles(titles: string[]): Section[] {
   });
 }
 
-const HOME_SECTIONS = sections_from_titles(["Warnings", "Settings"]);
+const HOME_SECTIONS = sections_from_titles(["Warnings", "Settings", "Change the config"]);
 const STYLING_SECTIONS = sections_from_titles(["Variables", "Classes"]);
 
 // The sections a page lists in the sidebar. Only Search Engines reads the guide.

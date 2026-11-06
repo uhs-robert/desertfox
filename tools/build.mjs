@@ -22,7 +22,6 @@ const common = { bundle: true, format: "iife", target: "firefox140", logLevel: "
 await build({ ...common, entryPoints: { background: "src/background/main.ts" }, outdir: "dist", sourcemap: true });
 await build({ ...common, entryPoints: { help: "src/help/main.ts" }, outdir: "dist", sourcemap: true });
 await build({ ...common, entryPoints: { newtab: "src/newtab/main.ts" }, outdir: "dist", sourcemap: true });
-await build({ ...common, entryPoints: { options: "src/options/main.ts" }, outdir: "dist", sourcemap: true });
 const minified_entries = {
   content: "src/content/main.ts",
   hints: "src/content/hints/main.ts",
@@ -38,7 +37,7 @@ for (const [name, entry] of Object.entries(minified_entries)) {
   await build({ ...common, entryPoints: { [name]: entry }, outdir: "dist", minify: true });
 }
 
-for (const file of ["manifest.json", "managed_schema.json", "help/help.html", "options/options.html", "newtab/newtab.html", "cmdline/cmdline.html"]) {
+for (const file of ["manifest.json", "managed_schema.json", "help/help.html", "newtab/newtab.html", "cmdline/cmdline.html"]) {
   await copyFile(`src/${file}`, `dist/${file.split("/").pop()}`);
 }
 
