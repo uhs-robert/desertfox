@@ -44,6 +44,20 @@ export function top_page_position(found: Found): { left: number; top: number } |
   return { left, top };
 }
 
+type LabelStyle = Pick<CSSStyleDeclaration, "display" | "visibility" | "left" | "top">;
+
+// Two writers hide a label, each with its own property so neither undoes the other: typing a prefix owns `display`, a missing anchor box owns `visibility`.
+export function filter_label(style: LabelStyle, matches: boolean): void {
+  style.display = matches ? "" : "none";
+}
+
+export function place_label(style: LabelStyle, position: { left: number; top: number } | undefined): void {
+  style.visibility = position === undefined ? "hidden" : "";
+  if (position === undefined) return;
+  style.left = `${Math.max(position.left, 0)}px`;
+  style.top = `${Math.max(position.top, 0)}px`;
+}
+
 type DrawnLabel = { found: Found; text: string; node: HTMLElement; typed_part: HTMLElement; rest_part: HTMLElement };
 
 export function create_view() {
@@ -56,14 +70,7 @@ export function create_view() {
   // All reads first, then all writes, so the page lays out once.
   function reposition(): void {
     const positions = drawn.map((label) => top_page_position(label.found));
-    drawn.forEach((label, index) => {
-      const position = positions[index];
-      label.node.style.display = position === undefined ? "none" : "";
-      if (position === undefined) return;
-      const { left, top } = position;
-      label.node.style.left = `${Math.max(left, 0)}px`;
-      label.node.style.top = `${Math.max(top, 0)}px`;
-    });
+    drawn.forEach((label, index) => place_label(label.node.style, positions[index]));
   }
 
   return {
@@ -85,7 +92,7 @@ export function create_view() {
     // Labels that no longer start with the typed text hide. The typed part of the others dims.
     show_progress: (typed: string, still_possible: ReadonlySet<number>): void => {
       drawn.forEach((label, index) => {
-        label.node.style.display = still_possible.has(index) ? "" : "none";
+        filter_label(label.node.style, still_possible.has(index));
         label.typed_part.textContent = typed;
         label.rest_part.textContent = label.text.slice(typed.length);
       });
