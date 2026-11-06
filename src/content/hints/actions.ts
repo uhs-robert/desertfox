@@ -101,7 +101,7 @@ export function player_box(media: Element): Element {
   return box;
 }
 
-// The refusal of play() or requestFullscreen() comes back as the promise, so the pick shows it.
+// play() and requestFullscreen() need the user activation of the pick keydown. Their refusal comes back as the promise, so the pick shows it.
 function act_on_media(action: "play_pause" | "mute" | "fullscreen", target: Target): void | Promise<unknown> {
   const media = target as unknown as HTMLMediaElement;
   if (action === "mute") {

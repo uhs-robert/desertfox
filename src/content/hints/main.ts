@@ -83,6 +83,7 @@ async function keep_visible_ones(candidates: Found[]): Promise<Found[]> {
     clips_of: (found) => scroll_clips_in_page(found.element),
     viewport_of: (found) => viewport_size(found.element.ownerDocument, window_of(found.element)),
     is_hidden_by_style: (found) => window_of(found.element).getComputedStyle(found.element).visibility === "hidden",
+    // Site players lay click-catching controls over the video, so a cover test would drop every one of them.
     is_reachable_at: (found, x, y) => is_media(found.element) || uncovered_through_frames(found, x, y),
   };
   return keep_visible_deduplicated(candidates, probe);
