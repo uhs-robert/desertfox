@@ -46,7 +46,7 @@ function groups_list(group_names: Record<string, string>): string {
   return Object.entries(group_names).map(([prefix, name]) => `- ${code(prefix)}: ${name}`).join("\n");
 }
 
-const NOT_MODES = ["group_names", "search_keys", "container_keys"];
+const NOT_MODES = ["group_names", "search_keys", "container_keys", "site_keys"];
 
 export function render(keymap: KeymapConfig, registry: Lookup, planned: readonly PlannedRow[]): string {
   const missing = [...MODES, "browser", ...Object.keys(keymap).filter((name) => !NOT_MODES.includes(name))].filter((mode) => !MODE_ORDER.includes(mode as KeymapMode));

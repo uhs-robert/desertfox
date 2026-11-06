@@ -33,6 +33,14 @@ function generated_bindings(keymap: KeymapConfig, settings: Partial<Settings>): 
     bindings[search_prefixes.here + last_key] = { id: "open.search", args: { engine, where: "here" } };
     bindings[search_prefixes.tab + last_key] = { id: "open.search", args: { engine, where: "tab" } };
   }
+  const site_prefix = (where: "here" | "tab") => search_prefixes[where] + "/";
+  for (const [last_key, engines] of Object.entries(keymap.site_keys ?? {})) {
+    const first = engines[0];
+    if (first === undefined) continue;
+    for (const where of ["here", "tab"] as const) {
+      bindings[site_prefix(where) + last_key] = { id: "open.search", args: { engine: first, where }, site_search: { letter: last_key, engines } };
+    }
+  }
   for (const [last_key, container] of Object.entries(keymap.container_keys ?? {})) {
     bindings[container_prefixes.reopen + last_key] = { id: "tab.reopen_in_container", args: { container } };
     bindings[container_prefixes.tab + last_key] = { id: "open.url", args: { where: "tab", container }, prompt: { param: "url", prefill: { from: "current_url" } } };

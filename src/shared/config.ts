@@ -21,6 +21,8 @@ export type SearchEngine = {
   slots?: string[];
   // Name of the engine to use when the page cannot fill the slots.
   fallback?: string;
+  // Host names of the sites the engine belongs to. Only the generated `s/` and `S/` keys read it: they offer the engine on these sites alone. Absent means every site.
+  hosts?: string[];
   // Where each field came from, for `engine.show`: field name to "file [level]".
   origins?: Record<string, string>;
 };
@@ -94,9 +96,24 @@ export const FALLBACK_ENGINE_NAME = "duck";
 
 export const FALLBACK_ENGINE: SearchEngine = { url: "https://duckduckgo.com/?q=%s", label: "DuckDuckGo" };
 
-// A user engine with the fallback's name replaces it whole. Nothing removes the fallback, so the default engine always resolves.
-export function with_fallback_engines(user_engines: Record<string, SearchEngine>): Record<string, SearchEngine> {
-  return { [FALLBACK_ENGINE_NAME]: FALLBACK_ENGINE, ...user_engines };
+// The built-in engine behind `s//`: the default engine, limited to the site of the page.
+export const SITE_ENGINE_NAME = "site";
+
+const FIRST_QUERY_SLOT = /\{query\}|%s/;
+
+// A default engine whose URL has no plain query slot (only `{query|url}`, say), or that needs a page slot of its own, cannot take the `site:` term, so DuckDuckGo stands in.
+const can_take_site_term = (engine: SearchEngine | undefined): engine is SearchEngine => engine !== undefined && FIRST_QUERY_SLOT.test(engine.url) && (engine.slots ?? []).length === 0;
+
+function site_engine_over(default_engine: SearchEngine | undefined): SearchEngine {
+  const base = can_take_site_term(default_engine) ? default_engine : FALLBACK_ENGINE;
+  return { url: base.url.replace(FIRST_QUERY_SLOT, "site:{host}+{query}"), label: "This site", slots: ["host"] };
+}
+
+// A user engine with a built-in's name replaces it whole. Nothing removes the built-ins, so the default engine always resolves.
+// `site` is built from the default engine at this call, so it follows the config and not a later `:set default_engine`.
+export function with_fallback_engines(user_engines: Record<string, SearchEngine>, default_engine: string = FALLBACK_ENGINE_NAME): Record<string, SearchEngine> {
+  const named: Record<string, SearchEngine> = { [FALLBACK_ENGINE_NAME]: FALLBACK_ENGINE, ...user_engines };
+  return { [FALLBACK_ENGINE_NAME]: FALLBACK_ENGINE, [SITE_ENGINE_NAME]: site_engine_over(named[default_engine]), ...user_engines };
 }
 
 export const DEFAULT_SETTINGS: Settings = {

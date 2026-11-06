@@ -12,7 +12,15 @@
 # A table inside an engine is a child, named with a dot: `search github.repo.issues foo`. A child inherits every field
 # and overrides by name. A param is declared on the parent with its values, and children = true makes one child per
 # value. A value names a slot with `{name}`, so a scope can say "repo:{repo} ".
-# A child cannot be named url, label, params or fallback, or like a field or param of its parent.
+# A child cannot be named url, label, params, fallback or hosts, or like a field or param of its parent.
+#
+# hosts = ["github.com"] ties an engine, and the children that inherit it, to a site. It gates only the generated s/ and S/ keys,
+# which list the engines of the page you are on. A host matches itself only: list www. and other subdomains you want.
+# The letters come from a [site_keys] table in keymap.toml. A letter lists engines of different sites, and the page picks one:
+#   [site_keys]
+#   i = ["github.issues", "gitlab.issues"]     # s/i searches issues on GitHub or GitLab
+#   I = ["github.repo.issues"]                 # s/I searches the issues of this repo
+# s// searches the current site with the built-in "site" engine (the default engine plus site:<host>). It needs no entry.
 
 # Flat engines: one line each, "%s" stands for the query.
 arch = { url = "https://wiki.archlinux.org/index.php?search=%s", label = "Arch Linux wiki" }
@@ -59,6 +67,7 @@ wolframalpha = { url = "https://www.wolframalpha.com/input?i=%s", label = "Wolfr
 # github.users, then github.repo and the five repo-scoped children below it.
 [github]
 label = "GitHub"
+hosts = ["github.com", "www.github.com"]
 url = "https://github.com/search?q={scope}{query}&type={type}"
 scope = ""
 
@@ -72,9 +81,21 @@ label = "this repo"
 scope = "repo:{repo} "
 type = { only = ["code", "issues", "prs", "commits", "discussions"] }
 
+# A second site for the same letters: GitLab's global search by type.
+[gitlab]
+label = "GitLab"
+hosts = ["gitlab.com"]
+url = "https://gitlab.com/search?search={query}&scope={type}"
+
+[gitlab.params.type]
+default = "projects"
+children = true
+values = { projects = "projects", issues = "issues", merge_requests = "merge_requests" }
+
 # A tree with filters: one param whose values are YouTube's own filter codes. An empty value leaves "&sp=" out.
 [youtube]
 label = "YouTube"
+hosts = ["youtube.com", "www.youtube.com", "m.youtube.com"]
 url = "https://www.youtube.com/results?search_query={query}&sp={filter}"
 
 [youtube.params.filter]
@@ -91,17 +112,13 @@ filter = { only = [] }
 # Reddit: this subreddit when the page is in one, else all of Reddit.
 [reddit]
 label = "Reddit"
+hosts = ["reddit.com", "www.reddit.com", "old.reddit.com"]
 url = "https://www.reddit.com/search/?q={query}"
 
 [reddit.sub]
 label = "this subreddit"
 url = "https://www.reddit.com/r/{subreddit}/search/?q={query}&restrict_sr=1"
 fallback = "reddit"
-
-# Search the site of the current page. Hidden on pages with no site.
-[site]
-label = "This site"
-url = "https://duckduckgo.com/?q=site:{host}+{query}"
 
 # These three take a typed address and default to the current page.
 [archive]

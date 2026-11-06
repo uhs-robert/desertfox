@@ -8,7 +8,7 @@ import { create_previous_tabs } from "./previous_tab.ts";
 import { browser_discard_deps } from "./tab_discard.ts";
 import { browser_complete_items_deps, create_complete_items } from "./complete_items.ts";
 import { create_open_help } from "./open_help.ts";
-import { requirement_lookup } from "./availability.ts";
+import { requirement_lookup, site_engine_for, with_site_engines } from "./availability.ts";
 import { list_keys } from "./list_keys.ts";
 import { create_bundle_loader } from "./bundle_loader.ts";
 import { track_window_focus } from "./window_focus.ts";
@@ -30,7 +30,8 @@ const modes_cleared = forget_all_tab_modes(browser.storage.local);
 const built_in_ids = new Set(registry.list().map((command) => command.id));
 
 const repeat_memory = create_repeat_memory(browser.storage.session);
-const router = create_router(make_router_deps(get_config, repeat_memory));
+const router_deps = make_router_deps(get_config, repeat_memory);
+const router = create_router(router_deps);
 const is_private_tab = async (tab_id: number | undefined) => tab_id !== undefined && (await browser.tabs.get(tab_id).catch(() => undefined))?.incognito === true;
 // A replay is a request like any other: it stores itself again, so `3.` keeps its count for the next `.`.
 wire_repeat({
@@ -105,22 +106,33 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
   if (request?.type === "list_keys") {
     const tab = sender.tab;
     const page = tab?.url ? { url: tab.url, ...(tab.title ? { title: tab.title } : {}) } : undefined;
-    return get_config().then((config) => list_keys(browser.storage.local, (id) => registry.get(id), request, { page, requirement_of: requirement_lookup(config) }));
+    return get_config().then((config) => list_keys(browser.storage.local, (id) => registry.get(id), request, {
+      page,
+      requirement_of: requirement_lookup(config),
+      site_engine_label_of: (invocation) => config.search_engines[site_engine_for(config.search_engines, invocation.site_search?.engines ?? [], page) ?? ""]?.label,
+    }));
   }
   if ((message as SnippetCall)?.type === "snippet_run") {
     return get_config().then(() => snippets.handle_call(message as SnippetCall, { tab_id: sender.tab?.id, frame_id: sender.frameId }));
   }
   if (request?.type !== "run") return undefined;
-  return get_config().then(() =>
-    router.run({
-      invocations: request.invocations,
+  return get_config().then(async (config) => {
+    const page = sender.tab?.url ? { url: sender.tab.url, ...(sender.tab.title ? { title: sender.tab.title } : {}) } : undefined;
+    const settled = with_site_engines(request.invocations, config.search_engines, page);
+    if ("unfit_letter" in settled) {
+      const refusal = { id: "open.search", message: `No ${settled.unfit_letter} search for this site` };
+      await router_deps.show_refusal(sender.tab?.id, refusal, sender.frameId);
+      return { ok: false, refusal };
+    }
+    return router.run({
+      invocations: settled.invocations,
       mode: request.mode,
       may_prompt: true,
       ...(request.from_hints === true && request.invocations.length === 1 && request.invocations[0]?.id === "open.url" ? { skip_repeat: true } : {}),
       ...(sender.tab?.id === undefined ? {} : { sender_tab_id: sender.tab.id }),
       ...(sender.frameId === undefined ? {} : { frame_id: sender.frameId }),
-    }),
-  );
+    });
+  });
 });
 
 // The config may fail to load, and a failed load must not stop the page: the default is to open it.

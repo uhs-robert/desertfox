@@ -144,7 +144,7 @@ async function main() {
   const managed_file = join(managed_dir, `${EXTENSION_ID}.json`);
   const server = await start_server();
   // The built-in duck engine is replaced by this server, so a search from the keys lands on a page the test can read.
-  // The keyfam.site engine is for p9_completion.mjs. The keysite, keyrepo, keysub and keypage engines are for p8_engines.mjs: the test page has a host but is no GitHub repo or subreddit.
+  // The keyfam.site engine is for p9_completion.mjs. The keysite, keyrepo, keysub, keypage, keyhere and keyother engines are for p8_engines.mjs (keyhere belongs to the test host, keyother to a host no test page has): the test page has a host but is no GitHub repo or subreddit.
   const engine_url = (id, slot) => `http://127.0.0.1:${server.port}/page?id=${id}&q=${slot}+{query}`;
   writeFileSync(
     join(config_dir, "search_engines.toml"),
@@ -154,11 +154,15 @@ async function main() {
       `[keyrepo]\nlabel = "Key repo"\nurl = "${engine_url("engine_repo", "{repo}")}"`,
       `[keysub]\nlabel = "Key sub"\nurl = "${engine_url("engine_sub", "{subreddit}")}"\nfallback = "duck"`,
       `[keypage]\nlabel = "Key page"\nurl = "http://127.0.0.1:${server.port}/page?id=engine_page&q={query|url}"`,
+      `[keyhere]\nlabel = "Key here"\nhosts = ["127.0.0.1"]\nurl = "${engine_url("engine_here", "{host}")}"`,
+      `[keyother]\nlabel = "Key other"\nhosts = ["other.invalid"]\nurl = "${engine_url("engine_other", "{host}")}"`,
       `[keyfam]\nlabel = "Key family"\nurl = "${engine_url("engine_family", "{host}")}"`,
       `[keyfam.site]\nlabel = "Key family: site"\nurl = "${engine_url("engine_family", "{host}")}"`,
       "",
     ].join("\n"),
   );
+  // Written here, not kept in config/, because a copy of config/ has no engines and a site key must name real ones. h picks keyhere on the test host, n has an engine for another host only.
+  writeFileSync(join(config_dir, "keymap.d", "80-site.toml"), '[site_keys]\nh = ["keyother", "keyhere"]\nn = ["keyother"]\n');
   build_test_config(config_dir, managed_file);
   const events = server.events;
   const debug_port = await free_port();

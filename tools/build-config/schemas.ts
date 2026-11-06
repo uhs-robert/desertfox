@@ -38,6 +38,11 @@ function keymap_schema(commands: CommandMeta[]): Schema {
       ...Object.fromEntries(KEYMAP_MODES.map((mode) => [mode, mode_bindings])),
       search_keys: { ...string_map, description: "Last key to search engine name" },
       container_keys: { ...string_map, description: "Last key to container name" },
+      site_keys: {
+        type: "object",
+        description: "Last key to the search engines it uses, one per site. s/<key> searches with the first engine whose hosts list the page",
+        additionalProperties: { type: "array", minItems: 1, items: { type: "string", minLength: 1 } },
+      },
       group_names: { ...string_map, description: "Key sequence of a group to the name which-key shows for it" },
     },
     additionalProperties: false,
