@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
-import { readdirSync, readFileSync, statSync } from "node:fs";
-import { join } from "node:path";
 import { test } from "node:test";
+import { build } from "esbuild";
 import { completion_of, is_setting_name, SETTING_COMPLETION } from "../../src/shared/setting_completion.ts";
 import { SETTING_NAMES, SETTING_SPECS } from "../../src/shared/settings_schema.ts";
 
@@ -24,20 +23,9 @@ test("is_setting_name and completion_of agree with the rules", () => {
   assert.ok(!is_setting_name("constructor"));
 });
 
-// The page bundle must not carry the setting rules, the table or the theme names. A value import of any of them, or of a module that reaches them, puts them back.
-const BANNED = /\b(settings_schema|settings_table|theme_names|registry\/index|registry\/check_args)(\.ts)?["']/;
-const VALUE_IMPORT = /^import\s+(?!type\b)[^;]*?from\s+["'][^"']+["'];?$/gm;
-
-function sources_under(dir: string): string[] {
-  return readdirSync(dir).flatMap((name) => {
-    const path = join(dir, name);
-    if (statSync(path).isDirectory()) return sources_under(path);
-    return name.endsWith(".ts") ? [path] : [];
-  });
-}
-
-test("the command line page and its registry files import no setting rules at runtime", () => {
-  const registry = ["check_shape", "command_line", "params", "summary", "usage", "define"].map((name) => `src/shared/registry/${name}.ts`);
-  const offenders = [...sources_under("src/cmdline"), ...registry].filter((path) => (readFileSync(path, "utf8").match(VALUE_IMPORT) ?? []).some((line) => BANNED.test(line.replace(/\s+/g, " "))));
+// The page bundle must not carry the setting rules, the table, the theme names or the registry definer. Bundling the real entry catches every import path, static or not.
+test("the command line page bundle has no setting rules in its inputs", async () => {
+  const result = await build({ bundle: true, format: "iife", target: "firefox140", logLevel: "silent", entryPoints: { cmdline_page: "src/cmdline/page.ts" }, write: false, metafile: true, minify: true, outdir: "dist" });
+  const offenders = Object.keys(result.metafile.inputs).filter((path) => /settings_schema|settings_table|theme_names|registry\/define/.test(path));
   assert.deepEqual(offenders, []);
 });

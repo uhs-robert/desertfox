@@ -5,19 +5,21 @@ default:
 docs-gen: install_deps
     npm run --silent docs:gen
 
-# Regenerate src/shared/themes.ts from themes/oasis/*.css and themes/*.toml.
+# Regenerate src/shared/themes.ts from themes/oasis/*.css and themes/*.toml, and the palette names in src/shared/setting_completion.ts.
 themes: install_deps
     npm run --silent themes:write
+    npm run --silent completion:write
 
 # Regenerate src/shared/default_settings.ts from the defaults in src/shared/settings_table.ts, and src/shared/setting_completion.ts from the setting rules.
 settings-defaults: install_deps
     npm run --silent defaults:write
     npm run --silent completion:write
 
-# Copy the Oasis theme CSS files from an oasis.nvim checkout into themes/oasis/, then regenerate src/shared/themes.ts.
+# Copy the Oasis theme CSS files from an oasis.nvim checkout into themes/oasis/, then regenerate src/shared/themes.ts and src/shared/setting_completion.ts.
 oasis-themes oasis_nvim_dir: install_deps
     npm run --silent themes:copy -- {{quote(oasis_nvim_dir)}}
     npm run --silent themes:write
+    npm run --silent completion:write
 
 # Typecheck, then bundle the extension into dist/.
 build: install_deps

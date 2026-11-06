@@ -53,7 +53,7 @@ This repository is public.
 just build       # bundle the extension
 just test        # old-name, docs, themes, settings defaults and setting completion checks, then unit tests: registry, parser, prefix tree, config merge, and the Python host tests
 just docs-gen    # regenerate the tables in docs/keymap.md
-just themes      # regenerate src/shared/themes.ts from themes/*.toml
+just themes      # regenerate src/shared/themes.ts from themes/*.toml, then src/shared/setting_completion.ts
 just settings-defaults  # regenerate src/shared/default_settings.ts from src/shared/settings_table.ts and src/shared/setting_completion.ts from src/shared/settings_schema.ts
 just host-test   # Python unit tests of the native host and install.sh, with a temporary HOME and a stubbed curl
 just key-test    # real key presses in a nested Hyprland, about a minute
