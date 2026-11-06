@@ -2,7 +2,7 @@
 
 import { hover, leave_toward } from "./hover.ts";
 
-export type HintAction = "here" | "tab" | "background" | "window" | "caret" | "visual" | "copy" | "copy_text" | "copy_image" | "download" | "delete" | "focus" | "hover" | "play_pause" | "mute" | "fullscreen";
+export type HintAction = "here" | "tab" | "background" | "window" | "caret" | "visual" | "copy" | "copy_text" | "copy_image" | "download" | "delete" | "focus" | "hover" | "double_click" | "play_pause" | "mute" | "fullscreen";
 
 export type Place = "here" | "tab" | "background" | "window";
 
@@ -97,29 +97,64 @@ export const is_media = (target: { localName: string }): boolean => target.local
 
 export type MouseEventName =
   | "pointerover" | "pointerenter" | "pointermove" | "pointerout" | "pointerleave" | "pointerdown" | "pointerup"
-  | "mouseover" | "mouseenter" | "mousemove" | "mouseout" | "mouseleave" | "mousedown" | "mouseup";
+  | "mouseover" | "mouseenter" | "mousemove" | "mouseout" | "mouseleave" | "mousedown" | "mouseup" | "click" | "dblclick";
 
 export function center_of(target: Target): { x: number; y: number } {
   const box = target.getBoundingClientRect?.();
   return { x: box ? box.left + box.width / 2 : 0, y: box ? box.top + box.height / 2 : 0 };
 }
 
-// One mouse-side event as the left button sends it. Returns false when the page cancelled it. The enter and leave events do not bubble. The point defaults to the middle of the target. A move across several elements passes one point, so every event of it agrees.
-export function dispatch_mouse_event(target: Target, type: MouseEventName, related_target: EventTarget | null = null, at = center_of(target)): boolean {
+// One mouse-side event as the left button sends it. Returns false when the page cancelled it. The enter and leave events do not bubble. The point defaults to the middle of the target. A move across several elements passes one point, so every event of it agrees. `detail` is the click count.
+export function dispatch_mouse_event(target: Target, type: MouseEventName, related_target: EventTarget | null = null, at = center_of(target), detail = 0): boolean {
   if (!target.dispatchEvent) return true;
   const stays_inside = /(enter|leave)$/.test(type);
-  const init = { bubbles: !stays_inside, cancelable: true, composed: !stays_inside, button: 0, buttons: type.endsWith("down") ? 1 : 0, relatedTarget: related_target, clientX: at.x, clientY: at.y };
+  const init = { bubbles: !stays_inside, cancelable: true, composed: !stays_inside, button: 0, buttons: type.endsWith("down") ? 1 : 0, relatedTarget: related_target, clientX: at.x, clientY: at.y, detail };
   return target.dispatchEvent(type.startsWith("pointer") ? new PointerEvent(type, { ...init, pointerType: "mouse", isPrimary: true }) : new MouseEvent(type, init));
 }
 
-// The events a real click gives, so a widget that opens on mousedown or pointerdown opens. A browser skips the mouse events after a cancelled pointerdown and the focus after a cancelled mousedown, and a widget such as Chosen relies on that to keep its own focus. The click comes last, from click(), so a link or button acts once.
-function click_like_a_mouse(target: Target): void {
+// The pointer and mouse events of one press and release. A browser skips the mouse events after a cancelled pointerdown and the focus after a cancelled mousedown, and a widget such as Chosen relies on that to keep its own focus.
+function press_and_release(target: Target, detail: number): void {
+  const pointer_pressed = dispatch_mouse_event(target, "pointerdown", null, undefined, detail);
+  if (pointer_pressed && dispatch_mouse_event(target, "mousedown", null, undefined, detail)) target.focus();
+  dispatch_mouse_event(target, "pointerup", null, undefined, detail);
+  if (pointer_pressed) dispatch_mouse_event(target, "mouseup", null, undefined, detail);
+}
+
+const enter_like_a_mouse = (target: Target): void => {
   for (const type of ["pointerover", "pointerenter", "mouseover"] as const) dispatch_mouse_event(target, type);
-  const pointer_pressed = dispatch_mouse_event(target, "pointerdown");
-  if (pointer_pressed && dispatch_mouse_event(target, "mousedown")) target.focus();
-  dispatch_mouse_event(target, "pointerup");
-  if (pointer_pressed) dispatch_mouse_event(target, "mouseup");
+};
+
+// The events a real click gives, so a widget that opens on mousedown or pointerdown opens. The click comes last, from click(), so a link or button acts once.
+function click_like_a_mouse(target: Target): void {
+  enter_like_a_mouse(target);
+  press_and_release(target, 1);
   target.click();
+}
+
+// A link is no target: its first click would navigate away before the second press. A link's own children count, because their click bubbles to it.
+export const is_inside_link = (element: Element): boolean => element.closest("a[href]") !== null;
+
+// The word under the point, for a text node only. Firefox selects nothing for a synthetic double-click. A field keeps its own selection rules and is left alone, and a point on a box with no text changes nothing.
+function select_word_at(target: Target, at: { x: number; y: number }): void {
+  const doc = target.ownerDocument;
+  const position = doc?.caretPositionFromPoint?.(at.x, at.y);
+  const text = position?.offsetNode;
+  if (!position || text?.nodeType !== Node.TEXT_NODE || takes_typing(target) || !(target as unknown as Node).contains(text)) return;
+  const selection = doc!.defaultView?.getSelection();
+  selection?.collapse(text, position.offset);
+  selection?.modify("move", "backward", "word");
+  selection?.modify("extend", "forward", "word");
+}
+
+// Two presses with click counts 1 and 2, a click after each, then dblclick, as a mouse sends them. The clicks are events and not click(), because click() carries no count. A link would act on the first, so links are not offered as targets.
+function double_click_like_a_mouse(target: Target): void {
+  enter_like_a_mouse(target);
+  for (const detail of [1, 2]) {
+    press_and_release(target, detail);
+    dispatch_mouse_event(target, "click", null, undefined, detail);
+  }
+  dispatch_mouse_event(target, "dblclick", null, undefined, 2);
+  select_word_at(target, center_of(target));
 }
 
 const FLASH_MS = 700;
@@ -192,6 +227,7 @@ export function perform(action: HintAction, target: Target, deps: ActionDeps, wi
   if (action === "delete") return target.remove();
   if (action === "focus") return focus_target(target);
   if (action === "hover") return hover(target);
+  if (action === "double_click") return double_click_like_a_mouse(target);
   if (action === "play_pause" || action === "mute" || action === "fullscreen") return act_on_media(action, target);
   if (starts_caret(action)) return deps.start_caret(target as unknown as Element, action);
   const address = element_address(target, with_background);

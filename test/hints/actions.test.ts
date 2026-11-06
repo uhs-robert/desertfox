@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { element_address, has_usable_address, is_media, perform, player_box, takes_typing } from "../../src/content/hints/actions.ts";
+import { element_address, has_usable_address, is_inside_link, is_media, perform, player_box, takes_typing } from "../../src/content/hints/actions.ts";
 import type { HintAction } from "../../src/content/hints/actions.ts";
 
 // Node has no DOM events. The fakes only need the type and the position.
@@ -629,4 +629,44 @@ test("copy_image and download refuse an element with no address, and send nothin
     assert.deepEqual(image.run("download"), { ok: false, message: "This element has no web address" });
     assert.deepEqual(image.images, []);
   }
+});
+
+const PRESS = ["pointerdown", "mousedown", "focus", "pointerup", "mouseup"];
+
+test("double_click sends two presses with click counts 1 and 2, a click after each, then dblclick", () => {
+  const sent: { type: string; detail?: number }[] = [];
+  const page = fixture("div", { dispatchEvent: (event: { type: string; detail?: number }) => { sent.push(event); return true; } });
+  page.run("double_click");
+  assert.deepEqual(sent.map((event) => event.type), ["pointerover", "pointerenter", "mouseover", "pointerdown", "mousedown", "pointerup", "mouseup", "click", "pointerdown", "mousedown", "pointerup", "mouseup", "click", "dblclick"]);
+  assert.deepEqual(sent.filter((event) => /down$|up$|click$/.test(event.type)).map((event) => event.detail), [1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2]);
+  assert.deepEqual(sent.slice(0, 3).map((event) => event.detail), [0, 0, 0]);
+});
+
+test("double_click gives the focus on each press and never calls click()", () => {
+  const page = fixture("div");
+  page.run("double_click");
+  assert.equal(page.calls.filter((call) => call === "focus").length, 2);
+  assert.equal(page.calls.filter((call) => call === "click").length, 2);
+  assert.deepEqual(page.calls.slice(3, 8), PRESS.map((type) => type));
+});
+
+test("double_click selects the word under the middle of a text target and nothing on others", () => {
+  const steps: string[] = [];
+  const text = { nodeType: 3 };
+  const selection = { collapse: (node: unknown, offset: number) => steps.push(`collapse ${node === text} ${offset}`), modify: (...args: string[]) => steps.push(args.join(" ")) };
+  Object.assign(globalThis, { Node: { TEXT_NODE: 3 } });
+  const document_with = (node: unknown) => ({ caretPositionFromPoint: (x: number, y: number) => (steps.push(`point ${x} ${y}`), { offsetNode: node, offset: 4 }), defaultView: { getSelection: () => selection } });
+  const on_text = fixture("p", { ownerDocument: document_with(text), contains: (node: unknown) => node === text });
+  on_text.run("double_click");
+  assert.deepEqual(steps, ["point 60 40", "collapse true 4", "move backward word", "extend forward word"]);
+  steps.length = 0;
+  fixture("div", { ownerDocument: document_with({ nodeType: 1 }), contains: () => true }).run("double_click");
+  fixture("input", { type: "text", ownerDocument: document_with(text), contains: () => true }).run("double_click");
+  fixture("p", { ownerDocument: document_with(text), contains: () => false }).run("double_click");
+  assert.deepEqual(steps.filter((step) => !step.startsWith("point")), []);
+});
+
+test("is_inside_link is true for a link and for its children", () => {
+  assert.equal(is_inside_link({ closest: () => ({}) } as never), true);
+  assert.equal(is_inside_link({ closest: (selector: string) => (selector === "a[href]" ? null : {}) } as never), false);
 });

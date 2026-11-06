@@ -14,7 +14,7 @@ Which-key shows a group as `+Name`, for example `g` as `+Go`. A `group_names` se
 
 A key shows the command label plus a phrase for each arg its binding sets, for example `gO` as "Open URL in new tab". Keys that set numbers carry a `label` in the default keymap, such as `h` as "Scroll left". The Label column shows that `label` or the command label. The rule is in [design.md](design.md#which-key).
 
-The hint keys `;r ;b ;w ;y ;Y ;h ;x` are modifiers, so no row lists their variants. A `[modifiers]` section in `keymap.toml` holds them. Each adds its args to a variant of every key in the `;` group: `;bl` opens a link in a background tab, `;Yp` copies the text of an element, `;ha` hovers any element, `;rl` opens links in background tabs and keeps picking. A variant exists only when the `hint` param schema accepts the combination. Keys that set their own `action` (`;s`, `;v`, `;V`) get none, and modifiers do not stack.
+The hint keys `;r ;b ;w ;y ;Y ;h ;x ;2` are modifiers, so no row lists their variants. A `[modifiers]` section in `keymap.toml` holds them. Each adds its args to a variant of every key in the `;` group: `;bl` opens a link in a background tab, `;Yp` copies the text of an element, `;ha` hovers any element, `;2a` double-clicks any element but a link, `;rl` opens links in background tabs and keeps picking. A variant exists only when the `hint` param schema accepts the combination. Keys that set their own `action` (`;s`, `;v`, `;V`) get none, and modifiers do not stack.
 
 The `caret`, `visual` and `cmdline` rows bind placeholder commands that refuse until their piece builds them.
 

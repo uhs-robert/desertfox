@@ -41,6 +41,7 @@ export const DEFAULT_KEYMAP: KeymapConfig = {
     ";d": { action: "download", label: "Download" },
     ";h": { action: "hover", label: "Hover" },
     ";x": { action: "delete", label: "Delete" },
+    ";2": { action: "double_click", label: "Double-click" },
   },
   // What which-key calls each group. `s S c C` name the groups that the search and container keys of a user config fill.
   group_names: {
