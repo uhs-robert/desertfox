@@ -80,6 +80,7 @@ function make() {
   const session = create_session({
     history: [],
     parse: (text) => parse_command_line(lookup, text, SOURCES),
+    tabs: () => tab_items,
     complete: create_completer(lookup, COMMANDS, {}, SOURCES, "normal", live),
   });
   const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
@@ -347,7 +348,11 @@ test("the window number shows on tab rows only when the list spans more than one
   assert.deepEqual(two.session.get_rows().map((row) => row.tab?.window_number), [1, 2]);
 });
 
-const unload_key = (session: ReturnType<typeof make>["session"]) => session.run("list.act", { action: "unload" });
+type Session = ReturnType<typeof make>["session"];
+const unload_key = (session: Session) => session.run("list.act", { action: "unload" });
+const act = (session: Session, action: string) => session.run("list.act", { action });
+const select_key = (session: Session, action = "toggle") => session.run("list.select", { action });
+const marked = (session: Session) => [...session.get_marked()];
 
 test("the row key on a loaded tab row asks to unload it, and on an unloaded row to load it, and the list and selection stay", async () => {
   const { session, live, asks, settle } = make();
@@ -355,10 +360,10 @@ test("the row key on a loaded tab row asks to unload it, and on an unloaded row 
   asks[0]!.answer([...TABS.slice(0, 2), { id: 23, number: 3, title: "Old", url: "https://o.test/", discarded: true }]);
   await settle();
   session.run("cmdline.next_completion", undefined);
-  assert.deepEqual(unload_key(session), { kind: "set_tab_unloaded", tab_id: 11, unloaded: true });
+  assert.deepEqual(unload_key(session), { kind: "tab_rows_action", action: "unload", tab_ids: [11] });
   session.run("cmdline.next_completion", undefined);
   session.run("cmdline.next_completion", undefined);
-  assert.deepEqual(unload_key(session), { kind: "set_tab_unloaded", tab_id: 23, unloaded: false });
+  assert.deepEqual(unload_key(session), { kind: "tab_rows_action", action: "load", tab_ids: [23] });
   assert.equal(session.get_selected(), 2);
   assert.equal(session.get_rows().length, 3);
   assert.equal(live.read("tabs").loading, false);
@@ -528,4 +533,175 @@ test("a page with no headings lists nothing and says no match", async () => {
   await settle();
   assert.deepEqual(session.get_rows(), []);
   assert.equal(session.get_hint(), "no match");
+});
+
+async function listed(tabs: TabItem[] = TABS) {
+  const made = make();
+  made.session.edit("tab ");
+  made.asks[0]!.answer(tabs);
+  await made.settle();
+  return made;
+}
+
+test("select toggles the highlighted tab row and moves the highlight down", async () => {
+  const { session } = await listed();
+  session.run("cmdline.next_completion", undefined);
+  select_key(session);
+  assert.deepEqual(marked(session), [11]);
+  assert.equal(session.get_selected(), 1);
+  select_key(session);
+  assert.deepEqual(marked(session), [11, 12]);
+  session.run("cmdline.history", { direction: "prev" });
+  session.run("cmdline.history", { direction: "prev" });
+  select_key(session);
+  assert.deepEqual(marked(session), [12]);
+});
+
+test("select on the last row marks it and stays there, and with no highlight it marks nothing", async () => {
+  const { session } = await listed();
+  assert.equal(select_key(session).kind, "render");
+  assert.deepEqual(marked(session), []);
+  assert.equal(session.get_message(), "select a tab row first");
+  session.run("cmdline.prev_completion", undefined);
+  select_key(session);
+  assert.deepEqual(marked(session), [14]);
+  assert.equal(session.get_selected(), 3);
+});
+
+test("select on a row that is not a tab marks nothing", () => {
+  const { session } = make();
+  session.edit("ta");
+  session.run("cmdline.next_completion", undefined);
+  select_key(session);
+  assert.deepEqual(marked(session), []);
+  assert.equal(session.get_message(), "select a tab row first");
+});
+
+test("the selection survives a filter, and an action takes the hidden marked tabs too", async () => {
+  const { session } = await listed();
+  session.run("cmdline.next_completion", undefined);
+  select_key(session);
+  select_key(session);
+  session.edit("tab git");
+  assert.deepEqual(names(session), ["2: GitHub", "3: GitHub Gist"]);
+  assert.deepEqual(marked(session), [11, 12]);
+  session.run("cmdline.next_completion", undefined);
+  session.run("cmdline.next_completion", undefined);
+  select_key(session);
+  assert.deepEqual(act(session, "close"), { kind: "tab_rows_action", action: "close", tab_ids: [11, 12, 13] });
+});
+
+test("with a selection the actions ignore the highlighted row, and without one they act on it", async () => {
+  const { session } = await listed();
+  session.run("cmdline.next_completion", undefined);
+  assert.deepEqual(act(session, "pin"), { kind: "tab_rows_action", action: "pin", tab_ids: [11] });
+  session.run("cmdline.next_completion", undefined);
+  select_key(session);
+  session.run("cmdline.next_completion", undefined);
+  assert.deepEqual(act(session, "pin"), { kind: "tab_rows_action", action: "pin", tab_ids: [12] });
+});
+
+test("the ids of an action are fixed at the key press: a model patch after it changes nothing in it", async () => {
+  const { session, change_tabs } = await listed();
+  session.run("cmdline.next_completion", undefined);
+  select_key(session);
+  select_key(session);
+  const effect = act(session, "close");
+  change_tabs([TABS[2]!, TABS[3]!]);
+  assert.deepEqual(effect, { kind: "tab_rows_action", action: "close", tab_ids: [11, 12] });
+  assert.deepEqual(marked(session), []);
+  assert.deepEqual(act(session, "close"), { kind: "tab_rows_action", action: "close", tab_ids: [13] });
+});
+
+test("a patch before the key press decides the ids: a marked tab that closed is not in the action", async () => {
+  const { session, change_tabs } = await listed();
+  session.run("cmdline.next_completion", undefined);
+  select_key(session);
+  select_key(session);
+  select_key(session);
+  change_tabs([TABS[0]!, TABS[2]!, TABS[3]!]);
+  assert.deepEqual(marked(session), [11, 13]);
+  assert.deepEqual(act(session, "mute"), { kind: "tab_rows_action", action: "mute", tab_ids: [11, 13] });
+});
+
+test("a marked tab that leaves the model drops out of the selection, also while it is filtered out", async () => {
+  const { session, change_tabs } = await listed();
+  session.run("cmdline.next_completion", undefined);
+  select_key(session);
+  select_key(session);
+  session.edit("tab gist");
+  change_tabs([TABS[0]!, TABS[2]!, TABS[3]!]);
+  assert.deepEqual(marked(session), [11]);
+});
+
+test("mute and pin turn all on when any is off, else all off, and unload unloads the loaded tabs or loads all", async () => {
+  const tabs: TabItem[] = [TABS[0]!, { ...TABS[1]!, muted: true, pinned: true }, { ...TABS[2]!, discarded: true }, { ...TABS[3]!, discarded: true }];
+  const { session } = await listed(tabs);
+  session.run("cmdline.next_completion", undefined);
+  select_key(session);
+  select_key(session);
+  assert.deepEqual(act(session, "mute"), { kind: "tab_rows_action", action: "mute", tab_ids: [11, 12] });
+  assert.deepEqual(act(session, "pin"), { kind: "tab_rows_action", action: "pin", tab_ids: [11, 12] });
+  assert.deepEqual(unload_key(session), { kind: "tab_rows_action", action: "unload", tab_ids: [11, 12] });
+  select_key(session);
+  select_key(session);
+  select_key(session, "clear");
+  session.edit("tab ");
+  session.run("cmdline.next_completion", undefined);
+  session.run("cmdline.next_completion", undefined);
+  assert.deepEqual(act(session, "mute"), { kind: "tab_rows_action", action: "unmute", tab_ids: [12] });
+  assert.deepEqual(act(session, "pin"), { kind: "tab_rows_action", action: "unpin", tab_ids: [12] });
+  session.run("cmdline.next_completion", undefined);
+  select_key(session);
+  select_key(session, "toggle");
+  assert.deepEqual(unload_key(session), { kind: "tab_rows_action", action: "load", tab_ids: [13, 14] });
+});
+
+test("escape clears a non-empty selection first, and a second escape does what it does without one", async () => {
+  const { session } = await listed();
+  session.run("cmdline.next_completion", undefined);
+  select_key(session);
+  assert.equal(session.run("mode.escape", undefined).kind, "render");
+  assert.deepEqual(marked(session), []);
+  assert.equal(session.get_rows().length, 4);
+  session.run("mode.escape", undefined);
+  assert.equal(session.get_rows().length, 0);
+  assert.equal(session.run("mode.escape", undefined).kind, "close");
+});
+
+test("list.select clear drops every mark", async () => {
+  const { session } = await listed();
+  session.run("cmdline.next_completion", undefined);
+  select_key(session);
+  select_key(session);
+  select_key(session, "clear");
+  assert.deepEqual(marked(session), []);
+});
+
+test("after a close the highlight goes to the first row below the closed rows, else to the row above", async () => {
+  const below = await listed();
+  below.session.run("cmdline.next_completion", undefined);
+  below.session.run("cmdline.next_completion", undefined);
+  select_key(below.session);
+  select_key(below.session);
+  below.session.run("cmdline.history", { direction: "prev" });
+  below.session.run("cmdline.history", { direction: "prev" });
+  assert.deepEqual(act(below.session, "close"), { kind: "tab_rows_action", action: "close", tab_ids: [12, 13] });
+  below.change_tabs([TABS[0]!, TABS[3]!]);
+  assert.equal(below.session.get_rows()[below.session.get_selected()]?.tab?.id, 14);
+
+  const above = await listed();
+  above.session.run("cmdline.prev_completion", undefined);
+  select_key(above.session);
+  assert.equal(above.session.get_selected(), 3);
+  assert.deepEqual(act(above.session, "close"), { kind: "tab_rows_action", action: "close", tab_ids: [14] });
+  above.change_tabs([TABS[0]!, TABS[1]!, TABS[2]!]);
+  assert.equal(above.session.get_rows()[above.session.get_selected()]?.tab?.id, 13);
+
+  const single = await listed();
+  single.session.run("cmdline.next_completion", undefined);
+  single.session.run("cmdline.next_completion", undefined);
+  assert.deepEqual(act(single.session, "close"), { kind: "tab_rows_action", action: "close", tab_ids: [12] });
+  single.change_tabs([TABS[0]!, TABS[2]!, TABS[3]!]);
+  assert.equal(single.session.get_rows()[single.session.get_selected()]?.tab?.id, 13);
 });

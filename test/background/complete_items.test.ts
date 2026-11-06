@@ -1,8 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { bookmark_items, create_complete_items, engine_items, flatten_bookmarks, history_items, listed_favicon, listed_tabs, listed_windows, read_container_identities, read_containers } from "../../src/background/complete_items.ts";
+import type { TabActionDeps } from "../../src/background/tab_actions.ts";
 import type { DiscardDeps } from "../../src/background/tab_discard.ts";
 import type { BookmarkNode, HistoryNode, LineScope, OpenSettings, TabLike, WindowLike } from "../../src/background/complete_items.ts";
+
+type TabActions = Pick<TabActionDeps, "set_muted" | "set_pinned" | "remove">;
+const NO_ACTIONS: TabActions = { set_muted: async () => {}, set_pinned: async () => {}, remove: async () => {} };
 
 const tab = (id: number, index: number, window_id: number, incognito: boolean, title = `Tab ${id}`): TabLike => ({ id, index, windowId: window_id, title, url: `https://site${id}.test/`, incognito });
 const NORMAL_LINE: LineScope & { tab_id: number; frame_id: number } = { tab_id: 1, frame_id: 3, window_id: 10, incognito: false };
@@ -27,7 +31,7 @@ const window_of = (id: number, incognito: boolean, title: string, type = "normal
 // Two normal windows and one private window, in `windows.getAll` order.
 const WINDOWS = [window_of(10, false, "Mail"), window_of(20, true, "Secret"), window_of(11, false, "Docs\n tab")];
 
-function make({ openers = [1, 2], tabs = ALL_TABS, bookmarks = [] as BookmarkNode[], fail = false, page = undefined as { url: string } | undefined, history = [] as HistoryNode[], open = { sources: ["bookmarks", "history"], history_max: 10 } as OpenSettings, read_tab = (async () => undefined) as (id: number) => Promise<TabLike | undefined>, discard = {} as DiscardDeps } = {}) {
+function make({ openers = [1, 2], tabs = ALL_TABS, bookmarks = [] as BookmarkNode[], fail = false, page = undefined as { url: string } | undefined, history = [] as HistoryNode[], open = { sources: ["bookmarks", "history"], history_max: 10 } as OpenSettings, read_tab = (async () => undefined) as (id: number) => Promise<TabLike | undefined>, discard = {} as DiscardDeps, tab_actions = NO_ACTIONS as TabActions } = {}) {
   const history_reads: number[] = [];
   const asked: (number | undefined)[] = [];
   const opened = new Set(openers);
@@ -50,6 +54,7 @@ function make({ openers = [1, 2], tabs = ALL_TABS, bookmarks = [] as BookmarkNod
     previous_tab: async () => undefined,
     read_tab,
     discard,
+    tab_actions,
     search_engines: async () => ENGINES,
     page_of: async () => page,
     search_history: async () => {
@@ -138,6 +143,7 @@ test("a tab that navigates or closes while the lookup runs gets nothing", async 
     previous_tab: async () => undefined,
     read_tab: async () => undefined,
     discard: {} as DiscardDeps,
+    tab_actions: NO_ACTIONS,
     search_engines: async () => ENGINES,
     page_of: async () => undefined,
     search_history: async () => [],
@@ -270,6 +276,7 @@ test("the opener is checked before and after the history fetch", async () => {
     previous_tab: async () => undefined,
     read_tab: async () => undefined,
     discard: {} as DiscardDeps,
+    tab_actions: NO_ACTIONS,
     search_engines: async () => ENGINES,
     page_of: async () => undefined,
     search_history: async () => {
@@ -295,6 +302,7 @@ test("a failed history read leaves the bookmarks, and a failed bookmark read lea
       previous_tab: async () => undefined,
     read_tab: async () => undefined,
     discard: {} as DiscardDeps,
+    tab_actions: NO_ACTIONS,
       search_engines: async () => ENGINES,
       page_of: async () => undefined,
       search_history: async () => {
@@ -418,32 +426,103 @@ function discardable(initial: TabLike) {
   return { deps, log, read_tab: async (id: number) => (id === 1 ? current : id === 4 ? { ...tab(4, 0, 20, true) } : undefined) };
 }
 
-test("set_unloaded answers the row as it is now, with the address read before a still loading tab went blank", async () => {
-  const tab_1 = discardable({ ...tab(1, 0, 10, false), title: "Loading", url: "https://slow.test/" });
-  const { service } = make({ read_tab: tab_1.read_tab, discard: tab_1.deps });
-  const answer = await service.set_unloaded(1, true, { ...NORMAL_LINE, tab_id: 2 });
-  assert.deepEqual(answer, { item: { id: 1, number: 1, title: "Loading", url: "https://slow.test/", discarded: true } });
-  const loaded = await service.set_unloaded(1, false, { ...NORMAL_LINE, tab_id: 2 });
-  assert.deepEqual(loaded, { item: { id: 1, number: 1, title: "Tab 1", url: "https://site1.test/" } });
-  assert.deepEqual(tab_1.log, ["discard", "reload"]);
+// Tabs that exist, as the browser knows them. A call that names a closed tab rejects, after it acted on the others of a list.
+function fake_tab_actions(existing: Set<number>) {
+  const log: string[] = [];
+  const act = (name: string) => async (ids: number[], ...rest: unknown[]) => {
+    log.push(`${name} ${ids.join(",")}${rest.length ? ` ${rest.join(",")}` : ""}`);
+    if (ids.some((id) => !existing.has(id))) throw new Error("Invalid tab ID");
+  };
+  const actions: TabActions = { set_muted: act("mute"), set_pinned: act("pin"), remove: async (ids) => void (await act("close")(ids)) };
+  return { actions, log };
+}
+
+const reading = (existing: Set<number>) => async (id: number) => (existing.has(id) ? (id >= 4 ? tab(id, 0, 20, true) : tab(id, 0, 10, false)) : undefined);
+
+test("tab_rows_action closes, mutes and pins the ids it is given, and answers with no refusal", async () => {
+  const existing = new Set([1, 2, 3]);
+  const fake = fake_tab_actions(existing);
+  const { service } = make({ read_tab: reading(existing), tab_actions: fake.actions });
+  assert.deepEqual(await service.tab_rows_action("close", [2, 3], NORMAL_LINE), {});
+  assert.deepEqual(await service.tab_rows_action("mute", [2, 3], NORMAL_LINE), {});
+  assert.deepEqual(await service.tab_rows_action("unmute", [2], NORMAL_LINE), {});
+  assert.deepEqual(await service.tab_rows_action("pin", [3], NORMAL_LINE), {});
+  assert.deepEqual(await service.tab_rows_action("unpin", [3, 3], NORMAL_LINE), {});
+  assert.deepEqual(fake.log, ["close 2", "close 3", "mute 2,3 true", "mute 2 false", "pin 3 true", "pin 3 false"]);
 });
 
-test("set_unloaded reports the reason when the tab did not change, and keeps the row", async () => {
+test("tab_rows_action skips a selected tab that is already gone and acts on the rest", async () => {
+  const existing = new Set([2, 3]);
+  const fake = fake_tab_actions(existing);
+  const { service } = make({ read_tab: reading(existing), tab_actions: fake.actions });
+  assert.deepEqual(await service.tab_rows_action("close", [99, 2, 3], NORMAL_LINE), {});
+  assert.deepEqual(fake.log, ["close 2", "close 3"]);
+});
+
+test("tab_rows_action closes the rest when one tab closes during the action", async () => {
+  const existing = new Set([2, 3]);
+  const fake = fake_tab_actions(new Set([3]));
+  const { service } = make({ read_tab: reading(existing), tab_actions: fake.actions });
+  assert.deepEqual(await service.tab_rows_action("close", [2, 3], NORMAL_LINE), {});
+  assert.deepEqual(fake.log, ["close 2", "close 3"]);
+});
+
+test("tab_rows_action reports a mute that failed because a tab closed during it", async () => {
+  const existing = new Set([2, 3]);
+  const fake = fake_tab_actions(new Set([3]));
+  const { service } = make({ read_tab: reading(existing), tab_actions: fake.actions });
+  assert.deepEqual(await service.tab_rows_action("mute", [2, 3], NORMAL_LINE), { refusal: "a tab changed before the action ran" });
+  assert.deepEqual(fake.log, ["mute 2,3 true"]);
+});
+
+test("tab_rows_action unloads and loads, and names what Firefox refused", async () => {
+  const tab_1 = discardable(tab(1, 0, 10, false));
+  const { service } = make({ read_tab: tab_1.read_tab, discard: tab_1.deps });
+  assert.deepEqual(await service.tab_rows_action("unload", [1], { ...NORMAL_LINE, tab_id: 2 }), {});
+  assert.deepEqual(await service.tab_rows_action("load", [1], { ...NORMAL_LINE, tab_id: 2 }), {});
+  assert.deepEqual(tab_1.log, ["discard", "reload"]);
   const playing = discardable({ ...tab(1, 0, 10, false), audible: true });
-  const { service } = make({ read_tab: playing.read_tab, discard: playing.deps });
-  assert.deepEqual(await service.set_unloaded(1, true, NORMAL_LINE), { item: { id: 1, number: 1, title: "Tab 1", url: "https://site1.test/", audible: true }, refusal: "audible" });
+  const { service: refusing } = make({ read_tab: playing.read_tab, discard: playing.deps });
+  assert.deepEqual(await refusing.tab_rows_action("unload", [1], NORMAL_LINE), { refusal: "unloaded 0 tabs, skipped 1 (audible)" });
   assert.deepEqual(playing.log, []);
 });
 
-test("set_unloaded answers nothing for a line without a ticket, a tab of the other privacy, a gone tab or a bad argument", async () => {
-  const tab_1 = discardable(tab(1, 0, 10, false));
-  const { service } = make({ openers: [], read_tab: tab_1.read_tab, discard: tab_1.deps });
-  assert.equal(await service.set_unloaded(1, true, NORMAL_LINE), undefined);
-  const { service: opened } = make({ read_tab: tab_1.read_tab, discard: tab_1.deps });
-  assert.equal(await opened.set_unloaded(4, true, NORMAL_LINE), undefined);
-  assert.equal(await opened.set_unloaded(99, true, NORMAL_LINE), undefined);
-  assert.equal(await opened.set_unloaded("1", true, NORMAL_LINE), undefined);
-  assert.equal(await opened.set_unloaded(1, "yes", NORMAL_LINE), undefined);
-  assert.equal(await opened.set_unloaded(1, true, undefined), undefined);
-  assert.deepEqual(tab_1.log, []);
+test("tab_rows_action answers nothing for a line without a ticket, and runs nothing", async () => {
+  const existing = new Set([2]);
+  const fake = fake_tab_actions(existing);
+  const { service } = make({ openers: [], read_tab: reading(existing), tab_actions: fake.actions });
+  assert.equal(await service.tab_rows_action("close", [2], NORMAL_LINE), undefined);
+  assert.equal(await service.tab_rows_action("close", [2], undefined), undefined);
+  assert.deepEqual(fake.log, []);
+});
+
+test("tab_rows_action refuses a ticket that was used after the line closed", async () => {
+  const existing = new Set([2, 3]);
+  const fake = fake_tab_actions(existing);
+  const { service, opened } = make({ read_tab: reading(existing), tab_actions: fake.actions });
+  assert.deepEqual(await service.tab_rows_action("close", [2], NORMAL_LINE), {});
+  opened.delete(NORMAL_LINE.tab_id);
+  assert.equal(await service.tab_rows_action("close", [3], NORMAL_LINE), undefined);
+  assert.deepEqual(fake.log, ["close 2"]);
+});
+
+test("tab_rows_action refuses the whole message when one id is a tab of the other privacy", async () => {
+  const existing = new Set([2, 4]);
+  const fake = fake_tab_actions(existing);
+  const { service } = make({ read_tab: reading(existing), tab_actions: fake.actions });
+  assert.equal(await service.tab_rows_action("close", [2, 4], NORMAL_LINE), undefined);
+  assert.equal(await service.tab_rows_action("mute", [4], NORMAL_LINE), undefined);
+  assert.deepEqual(fake.log, []);
+  assert.deepEqual(await service.tab_rows_action("close", [4], PRIVATE_LINE), {});
+  assert.deepEqual(fake.log, ["close 4"]);
+});
+
+test("tab_rows_action refuses a bad action or id list", async () => {
+  const existing = new Set([2]);
+  const fake = fake_tab_actions(existing);
+  const { service } = make({ read_tab: reading(existing), tab_actions: fake.actions });
+  for (const [action, ids] of [["bury", [2]], [undefined, [2]], ["close", "2"], ["close", ["2"]], ["close", [1.5]], ["close", Array.from({ length: 5001 }, (_, id) => id)]] as const) {
+    assert.equal(await service.tab_rows_action(action, ids, NORMAL_LINE), undefined);
+  }
+  assert.deepEqual(fake.log, []);
 });

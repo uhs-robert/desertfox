@@ -277,3 +277,14 @@ test("a heading row pads its name by its indent, and the name column counts the 
   list.render([{ ...flat!, name: "x".repeat(150), indent: 0 }], -1);
   assert.equal(element.style.vars["--desertfox-name-width"], "100ch");
 });
+
+test("a marked tab row gets the marked class, and a row not marked does not", () => {
+  const { element, list } = setup();
+  const tab_row = (id: number): Row & { positions: number[] } => ({ ...rows(1)[0]!, name: `${id}: tab`, tab: { id, status: "", flags: [] } });
+  list.render([tab_row(5), tab_row(6)], -1, false, new Set([6]));
+  const [first, second] = element.children;
+  assert.equal(first!.className.includes("desertfox-cmdline-item-marked"), false);
+  assert.equal(second!.className.includes("desertfox-cmdline-item-marked"), true);
+  list.scroll(0);
+  assert.equal(element.children[1]!.className.includes("desertfox-cmdline-item-marked"), true);
+});

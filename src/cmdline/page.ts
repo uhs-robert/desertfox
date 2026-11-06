@@ -6,7 +6,7 @@ import { create_matcher, event_to_token } from "../shared/keys/index.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY } from "../shared/prefix_tree.ts";
 import type { CompiledKeymap } from "../shared/prefix_tree.ts";
 import { check_args, parse_command_line } from "../shared/registry/index.ts";
-import type { CmdlineOpened, CompleteItemsAnswer, ContentToBackground, HeadingItem, SetTabUnloadedAnswer, TabModelMessage, TabModelRequest } from "../shared/messages.ts";
+import type { CmdlineOpened, CompleteItemsAnswer, ContentToBackground, HeadingItem, TabRowsActionAnswer, TabModelMessage, TabModelRequest } from "../shared/messages.ts";
 import { TAB_MODEL_PORT_NAME } from "../shared/tab_model_port.ts";
 import { create_live_source } from "./completion/live.ts";
 import { create_model_client } from "./completion/model_client.ts";
@@ -127,6 +127,7 @@ async function open_line(start: Start, port: MessagePort): Promise<void> {
     parse: (text) => parse_command_line(lookup, text, opened.sources),
     has_help,
     command_id_of: (word) => lookup.find(word)?.id,
+    tabs: () => model?.items(),
     complete: start.search ? undefined : create_completer(lookup, opened.commands, opened.command_aliases, opened.sources, opened_from, live),
     // Only a missing value is caught here. The router still checks everything else when it runs the command.
     precheck: (invocation) => {
@@ -155,7 +156,7 @@ async function open_line(start: Start, port: MessagePort): Promise<void> {
     // A new ranking starts at the top, so leftover wheel pixels belong to the old one.
     if (session.get_rows() !== wheel_rows_drawn) wheel.remainder_px = 0;
     wheel_rows_drawn = session.get_rows();
-    list.render(session.get_rows(), session.get_selected(), session.get_hint() === "loading");
+    list.render(session.get_rows(), session.get_selected(), session.get_hint() === "loading", session.get_marked());
     // The host holds the frame at the height the panel needs, so the list grows upward and the line stays put.
     if (panel.offsetHeight !== told_height) tell_host({ kind: "resize", height: (told_height = panel.offsetHeight) });
   };
@@ -167,15 +168,14 @@ async function open_line(start: Start, port: MessagePort): Promise<void> {
     tell_host({ kind: "close" });
   };
 
-  // The row's marks change only when the model's patch arrives, so the answer carries just the refusal.
-  const flip_tab = (tab_id: number, unloaded: boolean) => {
-    void ask_background<SetTabUnloadedAnswer | undefined>({ type: "set_tab_unloaded", tab_id, unloaded }).then(
-      (answer) => {
-        if (!answer) return session.set_message("could not change the tab");
-        session.set_message(answer.refusal ? `not ${unloaded ? "unloaded" : "loaded"}: ${answer.refusal}` : undefined);
-      },
-      () => session.set_message("could not change the tab"),
-    ).finally(render);
+  // The rows change only when the model's patch arrives, so the answer carries just the refusal.
+  const run_tab_rows_action = (effect: Extract<Effect, { kind: "tab_rows_action" }>) => {
+    void ask_background<TabRowsActionAnswer | undefined>({ type: "tab_rows_action", action: effect.action, tab_ids: effect.tab_ids })
+      .then(
+        (answer) => session.set_message(answer ? answer.refusal : "could not change the tabs"),
+        () => session.set_message("could not change the tabs"),
+      )
+      .finally(render);
   };
 
   const carry_out = (effect: Effect) => {
@@ -185,7 +185,7 @@ async function open_line(start: Start, port: MessagePort): Promise<void> {
     }
     else if (effect.kind === "find_commit") tell_host({ kind: "find_commit" });
     else if (effect.kind === "help") show_help(effect.command_id);
-    else if (effect.kind === "set_tab_unloaded") flip_tab(effect.tab_id, effect.unloaded);
+    else if (effect.kind === "tab_rows_action") run_tab_rows_action(effect);
     else if (effect.kind === "submit") {
       close_sources();
       void ask_background({ type: "record_cmdline", text: effect.text });

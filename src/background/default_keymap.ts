@@ -240,6 +240,10 @@ export const DEFAULT_KEYMAP: KeymapConfig = {
     "<C-u>": { id: "cmdline.clear" },
     "<C-h>": { id: "cmdline.help" },
     "<A-u>": { id: "list.act", args: { action: "unload" }, label: "Unload or load the tab" },
+    "<C-Space>": { id: "list.select", args: { action: "toggle" }, label: "Mark or unmark the tab" },
+    "<A-x>": { id: "list.act", args: { action: "close" }, label: "Close the tab" },
+    "<A-m>": { id: "list.act", args: { action: "mute" }, label: "Mute or unmute the tab" },
+    "<A-p>": { id: "list.act", args: { action: "pin" }, label: "Pin or unpin the tab" },
   },
   caret: {
     v: { id: "mode.set", args: { mode: "visual" } },

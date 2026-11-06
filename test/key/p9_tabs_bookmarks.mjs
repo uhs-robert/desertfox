@@ -134,6 +134,66 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, open_p
     }
   });
 
+  await run_case("tab list: C-Space marks two tabs, A-m mutes them both, and the filter keeps the marks", async () => {
+    const ids = await background(`(async () => [
+      (await browser.tabs.create({ url: ${JSON.stringify(url_of("page", "p9s_one"))}, active: false })).id,
+      (await browser.tabs.create({ url: ${JSON.stringify(url_of("page", "p9s_two"))}, active: false })).id,
+    ])()`);
+    const muted = () => background(`Promise.all(${JSON.stringify(ids)}.map((id) => browser.tabs.get(id).then((tab) => tab.mutedInfo.muted)))`);
+    try {
+      await sleep(1200);
+      await send_keys(":");
+      await sleep(700);
+      await send_keys("tab p9s_one", "-k", "Down");
+      await send_keys(...CTRL("space"));
+      await send_keys(...CTRL("u"));
+      await send_keys("tab p9s_two", "-k", "Down");
+      await send_keys(...CTRL("space"));
+      await sleep(300);
+      await send_keys(...ALT("m"));
+      await sleep(800);
+      expect((await muted()).every(Boolean), "A-m did not mute both marked tabs");
+      await send_keys(...ALT("m"));
+      await sleep(800);
+      expect((await muted()).every((value) => !value), "the second A-m did not unmute both marked tabs");
+    } finally {
+      await send_keys("-k", "Escape");
+      await sleep(300);
+      await send_keys("-k", "Escape");
+      await sleep(300);
+      await send_keys("-k", "Escape");
+      await sleep(400);
+      await background(`browser.tabs.remove(${JSON.stringify(ids)})`);
+    }
+  });
+
+  await run_case("tab list: the first Escape clears the marks and the line stays, A-x closes the marked tabs", async () => {
+    const ids = await background(`(async () => [
+      (await browser.tabs.create({ url: ${JSON.stringify(url_of("page", "p9x_one"))}, active: false })).id,
+      (await browser.tabs.create({ url: ${JSON.stringify(url_of("page", "p9x_two"))}, active: false })).id,
+    ])()`);
+    const open_count = () => background(`browser.tabs.query({}).then((tabs) => tabs.filter((tab) => ${JSON.stringify(ids)}.includes(tab.id)).length)`);
+    try {
+      await sleep(1200);
+      await send_keys(":");
+      await sleep(700);
+      await send_keys("tab p9x_", "-k", "Down");
+      await send_keys(...CTRL("space"));
+      await send_keys(...CTRL("space"));
+      await send_keys("-k", "Escape");
+      await sleep(300);
+      await send_keys(...ALT("x"));
+      await sleep(800);
+      expect(await open_count() === 1, "A-x after Escape closed more than the highlighted tab, so Escape did not clear the marks");
+    } finally {
+      await send_keys("-k", "Escape");
+      await sleep(300);
+      await send_keys("-k", "Escape");
+      await sleep(400);
+      await background(`browser.tabs.remove(${JSON.stringify(ids)}).catch(() => {})`);
+    }
+  });
+
   await run_case("tu unloads the current tab after switching to a loaded one", async () => {
     await open_page("page", "p9u_current", { new_tab: true });
     const tab_id = await background(`(async () => (await browser.tabs.query({ active: true, currentWindow: true }))[0].id)()`);
