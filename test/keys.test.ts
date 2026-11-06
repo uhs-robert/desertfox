@@ -4,6 +4,7 @@ import {
   compile_keymap,
   create_matcher,
   event_to_token,
+  is_chord,
   parse_sequence,
   to_firefox_shortcut,
 } from "../src/shared/keys/index.ts";
@@ -239,4 +240,9 @@ test("two notations for the same keys warn and the last one wins", () => {
   assert.equal(warnings.length, 1);
   assert.ok(warnings[0]!.includes('"<S-j>"') && warnings[0]!.includes('"J"'));
   assert.equal((compiled.modes.normal!.children["J"] as { steps: { invocation: { id: string } }[] }).steps[0]!.invocation.id, "c.d");
+});
+
+test("a chord is any token with Ctrl, Alt or Meta, alone or with other modifiers", () => {
+  for (const token of ["<C-c>", "<A-j>", "<M-v>", "<CS-c>", "<AC-x>", "<ACMS-F5>"]) assert.equal(is_chord(token), true, token);
+  for (const token of ["j", "J", "<S-Escape>", "<S-Tab>", "<Escape>", "<ArrowUp>", "<Space>"]) assert.equal(is_chord(token), false, token);
 });

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { find_char, find_char_hit, find_char_matches, move_once } from "../src/content/caret/motion.ts";
 import type { Motion, MotionUnit } from "../src/content/caret/motion.ts";
-import { selected_text, swap_ends, with_caret } from "../src/content/caret/selection_state.ts";
+import { selected_span, selected_text, swap_ends, with_caret } from "../src/content/caret/selection_state.ts";
 
 // Indexes: "foo bar.baz" is 0-10, its "\n" is 11, the empty line is 12, "  qux quux" is 13-22, "\n" is 23, "last" is 24-27.
 const TEXT = "foo bar.baz\n\n  qux quux\nlast";
@@ -57,10 +57,10 @@ test("visual mode keeps the anchor and includes both ends", () => {
   let cursor = { anchor: 8, caret: 8 };
   cursor = with_caret(cursor, move_once(TEXT, cursor.caret, motion("word_end")), true);
   assert.deepEqual(cursor, { anchor: 8, caret: 10 });
-  assert.equal(selected_text(TEXT, cursor), "baz");
+  assert.equal(selected_text(TEXT, selected_span(cursor)), "baz");
   const swapped = swap_ends(cursor);
   assert.deepEqual(swapped, { anchor: 10, caret: 8 });
-  assert.equal(selected_text(TEXT, swapped), "baz");
+  assert.equal(selected_text(TEXT, selected_span(swapped)), "baz");
 });
 
 test("V, 3w, v, e yields the word the key test copies", () => {
@@ -69,7 +69,7 @@ test("V, 3w, v, e yields the word the key test copies", () => {
   for (let count = 0; count < 3; count++) cursor = with_caret(cursor, move_once(text, cursor.caret, motion("word")), false);
   cursor = { anchor: cursor.caret, caret: cursor.caret };
   cursor = with_caret(cursor, move_once(text, cursor.caret, motion("word_end")), true);
-  assert.equal(selected_text(text, cursor), "bar");
+  assert.equal(selected_text(text, selected_span(cursor)), "bar");
 });
 
 test("word motions keep accented and non-Latin letters inside the word", () => {

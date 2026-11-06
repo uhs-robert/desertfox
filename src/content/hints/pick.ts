@@ -1,5 +1,6 @@
 // The typing side of hints: which keys count, what has been typed, when a label is complete. Pure, so it needs no page.
 
+import { is_chord } from "../../shared/keys/token.ts";
 import { narrow } from "./labels.ts";
 
 export type Typed = { typed: string; still_possible: number[] };
@@ -8,9 +9,6 @@ export type KeyOutcome =
   | { kind: "pass" }
   // The key was taken. `picked` is the index of a completed label.
   | { kind: "handled"; typed: string; still_possible: number[]; picked?: number };
-
-// Ctrl, Alt or Meta make a chord such as `<C-c>`, which the page and the browser keep.
-const is_chord = (token: string) => /^<(?:[SCAM]-)*[CAM]-/.test(token);
 
 export function create_picker(labels: readonly string[]) {
   let typed = "";

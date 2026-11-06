@@ -28,6 +28,9 @@ const MODIFIER_KEY_NAMES = new Set(["Shift", "Control", "Alt", "Meta", "AltGraph
 
 const is_letter = (char: string) => char.toLowerCase() !== char.toUpperCase();
 
+// A chord carries Ctrl, Alt or Meta. Shift alone is a plain key (`J`, `<S-Escape>`). The modifiers come in alphabetical order, so Shift is never first in a chord.
+export const is_chord = (token: string): boolean => /^<[ACM][ACMS]*-/.test(token);
+
 export function format_token(mods: string, name: string): string {
   return mods === "" && name.length > 1 ? `<${name}>` : mods === "" ? name : `<${mods}-${name}>`;
 }

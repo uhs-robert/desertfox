@@ -50,10 +50,12 @@ test("only these commands opt out of `.`, so a new command repeats unless someon
   assert.deepEqual(opted_out.sort(), ["browser.close_all", "browser.focus_page", "command.repeat", "config.reload", "engine.show", "frame.exit", "help.open", "native.install", "settings.set", "settings.toggle", "settings.unset"]);
 });
 
-test("the search keys run in visual mode too, and the registry lets them", async () => {
+test("the search keys run in caret and visual mode too, and the registry lets them", async () => {
   const { DEFAULT_KEYMAP } = await import("../../src/background/default_keymap.ts");
-  for (const [key, id] of [["/", "find.open"], ["?", "find.open"], ["*", "find.open"], ["#", "find.open"], ["n", "find.next"], ["N", "find.prev"]] as const) {
-    assert.equal((DEFAULT_KEYMAP.visual![key] as { id: string }).id, id, key);
-    assert.ok(registry.get(id)!.modes?.includes("visual"), id);
+  for (const mode of ["caret", "visual"] as const) {
+    for (const [key, id] of [["/", "find.open"], ["?", "find.open"], ["*", "find.open"], ["#", "find.open"], ["n", "find.next"], ["N", "find.prev"]] as const) {
+      assert.equal((DEFAULT_KEYMAP[mode]![key] as { id: string }).id, id, `${mode} ${key}`);
+      assert.ok(registry.get(id)!.modes?.includes(mode), `${mode} ${id}`);
+    }
   }
 });

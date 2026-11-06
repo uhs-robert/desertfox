@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { takes_typing } from "../src/content/editable.ts";
 import { args_for_count } from "../src/content/invocation_args.ts";
 import { create_cancelled_keys } from "../src/content/cancelled_keys.ts";
-import { create_key_flow } from "../src/content/key_flow.ts";
+import { cancels_unbound_key, create_key_flow } from "../src/content/key_flow.ts";
 import { ignore_regex_source, ignores_any_address, matches_pattern } from "../src/shared/match_pattern.ts";
 import { mode_label } from "../src/content/mode_label.ts";
 import { wire_mode_reports } from "../src/content/mode_report.ts";
@@ -209,6 +209,54 @@ test("startup replay uses the mode set before the keymap", () => {
   assert.deepEqual(ran, []);
 });
 
+test("normal mode keeps only the unbound Quick Find keys from the page, outside fields", () => {
+  assert.equal(cancels_unbound_key("normal", "/", false), true);
+  assert.equal(cancels_unbound_key("normal", "'", false), true);
+  assert.equal(cancels_unbound_key("normal", "'", true), false);
+  for (const mode of ["insert", "ignore", "hint", "cmdline"] as const) assert.equal(cancels_unbound_key(mode, "/", false), false, mode);
+  for (const token of ["<C-/>", "<A-'>", "x", "?", "<Space>"]) assert.equal(cancels_unbound_key("normal", token, false), false, token);
+});
+
+test("caret and both visual modes keep every unbound plain key from the page, outside fields", () => {
+  for (const mode of ["caret", "visual", "visual_line"] as const) {
+    for (const token of ["/", "'", "e", "E", "5", "<Space>", "<Enter>", "<S-Enter>", "<Backspace>"]) assert.equal(cancels_unbound_key(mode, token, false), true, `${mode} ${token}`);
+    for (const token of ["<Tab>", "<S-Tab>", "<F5>", "<PageUp>", "<PageDown>", "<Home>", "<End>", "<S-End>", "<S-F12>", "<Escape>", "<S-Escape>", "<C-c>", "<A-x>", "<M-v>", "<CS-c>"]) assert.equal(cancels_unbound_key(mode, token, false), false, `${mode} ${token}`);
+    assert.equal(cancels_unbound_key(mode, "e", true), false, mode);
+  }
+});
+
+test("key flow in caret mode cancels an unbound letter and passes Tab and Ctrl+C", () => {
+  const { state, flow } = make_flow();
+  flow.set_matcher(create_matcher(keymap));
+  state.set_mode("caret");
+  assert.equal(flow.handle_token("e"), "cancel");
+  assert.equal(flow.handle_token("<Tab>"), "pass");
+  assert.equal(flow.handle_token("<C-c>"), "pass");
+});
+
+test("key flow cancels an unbound Quick Find key and drops the sequence or count before it", () => {
+  const { state, ran, flow } = make_flow();
+  flow.set_matcher(create_matcher(keymap));
+  assert.equal(flow.handle_token("'"), "cancel");
+  assert.equal(flow.handle_token("g"), "cancel");
+  assert.equal(flow.handle_token("'"), "cancel");
+  assert.equal(flow.handle_token("3"), "cancel");
+  assert.equal(flow.handle_token("/"), "cancel");
+  assert.equal(flow.handle_token("j"), "cancel");
+  state.set_mode("insert");
+  assert.equal(flow.handle_token("/"), "pass");
+  assert.deepEqual(ran, ["down"]);
+});
+
+test("a bound Quick Find key runs its command", () => {
+  const bound: CompiledKeymap = { ...keymap, modes: { ...keymap.modes, normal: { kind: "branch", children: { "/": leaf("find") } } } };
+  const { ran, flow } = make_flow();
+  flow.set_matcher(create_matcher(bound));
+  assert.equal(flow.handle_token("2"), "cancel");
+  assert.equal(flow.handle_token("/"), "cancel");
+  assert.deepEqual(ran, ["find2"]);
+});
+
 test("a stale cancelled code does not eat a later typed letter", () => {
   const keys = create_cancelled_keys();
   keys.record_keydown("KeyJ", "cancel");
@@ -332,6 +380,7 @@ test("mode label follows the mode_indicator setting", () => {
   assert.equal(mode_label("cmdline", false, "always"), undefined);
   assert.equal(mode_label("caret", false, "always"), "CARET");
   assert.equal(mode_label("visual", false, "not_normal"), "VISUAL");
+  assert.equal(mode_label("visual_line", false, "not_normal"), "V-LINE");
   assert.equal(mode_label("insert", false, "off"), undefined);
   assert.equal(mode_label("normal", true, "off"), undefined);
 });

@@ -16,7 +16,7 @@ const PARAM_TYPES: readonly string[] = ["int", "float", "string", "bool", "enum"
 const CONTEXT_SOURCES: readonly string[] = ["current_url", "selection", "clipboard"];
 const SINGLE_KEYS = ["id", "label", "intent", "name", "modes", "requires"] as const;
 // Only the modes where a key press reaches a page command. Insert, ignore, hint and cmdline take typed text.
-const SNIPPET_MODES: readonly string[] = ["normal", "caret", "visual"];
+const SNIPPET_MODES: readonly string[] = ["normal", "caret", "visual", "visual_line"];
 const REPEAT_KEYS = ["matches", "param"] as const;
 const HEADER_LINE = /^\/\/\s*([a-z_]+)\s*:\s*(.*?)\s*$/;
 
