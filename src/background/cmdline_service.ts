@@ -14,7 +14,7 @@ export type CmdlineServiceDeps = {
   new_ticket: () => string;
   sources: () => Promise<CmdlineOpened["sources"]>;
   // Read on every open, after the config has loaded.
-  page_config: () => Promise<Pick<CmdlineOpened, "commands" | "help_ids" | "command_aliases" | "css" | "prompt">>;
+  page_config: () => Promise<Pick<CmdlineOpened, "commands" | "help_ids" | "command_aliases" | "prompt">>;
 };
 
 // A repeated command moves to the newest place instead of filling the cap with copies.
