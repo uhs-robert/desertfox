@@ -4,7 +4,6 @@ import { MODES } from "../shared/command.ts";
 import type { CommandMeta } from "../shared/command.ts";
 import type { Settings } from "../shared/config.ts";
 import { DEFAULT_SETTINGS } from "../shared/config.ts";
-import { is_setting_name, SETTING_SPECS } from "../shared/settings_schema.ts";
 
 export type ConfigSource = "managed" | "imported" | "defaults";
 
@@ -43,13 +42,12 @@ function show_value(value: unknown): string {
   return typeof value === "string" ? JSON.stringify(value) : (JSON.stringify(value) ?? "unset");
 }
 
-// An optional setting has no entry in DEFAULT_SETTINGS. A true or false one still has a default: what an absent setting reads as.
 function default_of(name: string): unknown {
-  return DEFAULT_SETTINGS[name as keyof Settings] ?? (is_setting_name(name) ? SETTING_SPECS[name].flips_from_absent : undefined);
+  return DEFAULT_SETTINGS[name as keyof Settings];
 }
 
 // Walks the stored settings, so a setting added later shows without a change here.
-// An unset optional setting is absent from the object and so absent from the rows.
+// Every setting except `home_page` has a default, so each shows a row. `home_page` has none and is absent until set.
 // A live `:set` tag wins over the config file tag, because it is the value in force.
 function setting_rows(settings: Settings, overrides: readonly string[] = [], configured: readonly string[] = []): SettingRow[] {
   return Object.entries(settings).map(([name, value]) => {

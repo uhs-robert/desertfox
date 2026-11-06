@@ -5,6 +5,7 @@ import { test } from "node:test";
 import { advance_hands, clock_angles, time_label, unwrap_angle } from "../src/newtab/clock.ts";
 import { digital_parts } from "../src/newtab/digital_clock.ts";
 import { date_text, enabled_widgets } from "../src/newtab/render.ts";
+import { effective_settings } from "../src/shared/config.ts";
 
 test("clock angles: the hour hand turns once per 12 hours", () => {
   const at = (hours: number, minutes: number, seconds: number) => clock_angles(new Date(2026, 0, 1, hours, minutes, seconds));
@@ -39,14 +40,14 @@ test("the date text changes across midnight", () => {
 });
 
 test("each widget shows unless its setting is false", () => {
-  assert.deepEqual(enabled_widgets({}), { clock: true, clock_style: "analog", date: true });
-  assert.deepEqual(enabled_widgets({ newtab_clock: false, newtab_date: false }), { clock: false, clock_style: "analog", date: false });
+  assert.deepEqual(enabled_widgets(effective_settings({})), { clock: true, clock_style: "analog", date: true });
+  assert.deepEqual(enabled_widgets(effective_settings({ newtab_clock: false, newtab_date: false })), { clock: false, clock_style: "analog", date: false });
 });
 
 test("the clock is analog for true and analog, and digital only for digital", () => {
-  assert.equal(enabled_widgets({ newtab_clock: true }).clock_style, "analog");
-  assert.equal(enabled_widgets({ newtab_clock: "analog" }).clock_style, "analog");
-  assert.deepEqual(enabled_widgets({ newtab_clock: "digital" }), { clock: true, clock_style: "digital", date: true });
+  assert.equal(enabled_widgets(effective_settings({ newtab_clock: true })).clock_style, "analog");
+  assert.equal(enabled_widgets(effective_settings({ newtab_clock: "analog" })).clock_style, "analog");
+  assert.deepEqual(enabled_widgets(effective_settings({ newtab_clock: "digital" })), { clock: true, clock_style: "digital", date: true });
 });
 
 test("digital clock, 12 hour: zero-padded hours, midnight and noon read 12, AM and PM follow", () => {

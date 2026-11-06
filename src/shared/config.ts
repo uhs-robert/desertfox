@@ -4,13 +4,15 @@
 
 import type { CommandMeta } from "./command.ts";
 import type { KeymapConfig } from "./keymap.ts";
-import type { LightIntensity, LocalTheme } from "./theme/roles.ts";
+import type { Settings } from "./settings_table.ts";
+import type { LocalTheme } from "./theme/roles.ts";
+import { DEFAULT_SETTINGS } from "./default_settings.ts";
+import { BUILT_IN_PAGE, FALLBACK_ENGINE_NAME } from "./table_constants.ts";
+
+export type { Settings } from "./settings_table.ts";
+export { DEFAULT_LIGHT_INTENSITY, DEFAULT_MODE_INDICATOR, DEFAULT_PALETTE, DEFAULT_SETTINGS } from "./default_settings.ts";
 
 export const CONFIG_FORMAT_VERSION = 2;
-
-// Declared here, not in theme/load.ts: that module holds the theme tables, which stay out of the content script.
-export const DEFAULT_PALETTE = "oasis_moonlight";
-export const DEFAULT_LIGHT_INTENSITY: LightIntensity = 3;
 
 export type SearchEngine = {
   // URL template. It holds the query slot and page slots; `%s` is the older spelling of the query slot.
@@ -26,64 +28,11 @@ export type SearchEngine = {
   origins?: Record<string, string>;
 };
 
-export const MODE_INDICATOR_VALUES = ["always", "not_normal", "off"] as const;
-export const WHICH_KEY_BORDER_VALUES = ["square", "round", "chamfer"] as const;
-export type WhichKeyBorder = (typeof WHICH_KEY_BORDER_VALUES)[number];
+export type WhichKeyBorder = Settings["which_key_border"];
+export type ModeIndicator = Settings["mode_indicator"];
+export type NewTabLink = Settings["newtab_links"][number];
 
-export type ModeIndicator = (typeof MODE_INDICATOR_VALUES)[number];
-
-export type Settings = {
-  which_key_delay_ms: number;
-  // Corner style of the which-key panel border.
-  which_key_border: WhichKeyBorder;
-  hint_letters: string;
-  // Match patterns for pages where DesertFox starts in ignore mode.
-  ignore_sites: string[];
-  // The mode badge: always (NORMAL too), only outside normal mode, or never.
-  mode_indicator: ModeIndicator;
-  // Theme name: `<config dir>/themes/<name>.toml` first, then a built-in theme such as `oasis_moonlight`. Light or dark follows the system theme.
-  palette: string;
-  // Which of the five light sets of an Oasis theme the light variant uses, 1 to 5. Other themes have one light set.
-  light_intensity: LightIntensity;
-  // Prefixes of keys generated from `search_keys`: this tab, new tab.
-  search_prefixes: { here: string; tab: string };
-  // Prefixes of keys generated from `container_keys`: reopen, prompt in new tab.
-  container_prefixes: { reopen: string; tab: string };
-  // Page that `page.home` opens: a URL, or `desertfox` for the built-in new tab page. Without it the command refuses.
-  home_page?: string;
-  // Search engine name that `open.clipboard` uses when the clipboard text is not a URL. The default names the built-in fallback engine.
-  default_engine: string;
-  // What a new tab shows: an http or https URL, or `desertfox` for the built-in page. Absent means the built-in page.
-  new_tab_page?: string;
-  // The `tab` completion list: absent or false lists the tabs of the line's window, true lists the tabs of every window.
-  // Kept out of DEFAULT_SETTINGS because the content script bundles that object and has no use for this one.
-  completion_all_windows?: boolean;
-  // Before the command line input: "caret" (`> `), "colon", or custom text with its own trailing space. Absent is "caret".
-  cmdline_prompt?: string;
-  // The groups `open` completes from, in the order they list. A source left out is not read. Absent lists both.
-  open_completion?: ("bookmarks" | "history")[];
-  // History rows `open` shows for an empty word. Absent is 10.
-  history_completion_max?: number;
-  // The new tab page widgets. Each is on unless false. `true` on the clock means analog, as it did before the digital face.
-  newtab_clock?: boolean | "analog" | "digital";
-  newtab_date?: boolean;
-  // The hours of the digital clock. Absent is 12. The analog face has no 12 or 24 form.
-  newtab_clock_format?: 12 | 24;
-  // Whether the first install opens the Quick Start page. On unless false. A first install has no config, so only a managed config can turn it off in time.
-  open_quick_start_on_install?: boolean;
-  // The new tab page lists. Each is hidden unless true. The max is the rows shown, absent is 8.
-  newtab_bookmarks?: boolean;
-  newtab_bookmarks_max?: number;
-  newtab_recent_tabs?: boolean;
-  newtab_recent_tabs_max?: number;
-  // Links the new tab page shows under their group name. Links with no group share one untitled list.
-  newtab_links?: NewTabLink[];
-};
-
-export type NewTabLink = { label: string; url: string; group?: string };
-
-// The reserved value of `new_tab_page` and `home_page` that names the built-in new tab page.
-export const BUILT_IN_PAGE = "desertfox";
+export { BUILT_IN_PAGE, FALLBACK_ENGINE_NAME };
 export const NEW_TAB_PAGE_FILE = "newtab.html";
 // `newtab.html?builtin` draws the built-in page even when `new_tab_page` redirects, so `home_page = "desertfox"` still reaches it.
 export const BUILT_IN_QUERY = "builtin";
@@ -99,8 +48,6 @@ export function resolve_new_tab_page(new_tab_page: string | undefined, page_quer
   if (new URLSearchParams(page_query).has(BUILT_IN_QUERY)) return { kind: "built_in" };
   return new_tab_page !== undefined && is_web_url(new_tab_page) ? { kind: "redirect", url: new_tab_page } : { kind: "built_in" };
 }
-
-export const FALLBACK_ENGINE_NAME = "duck";
 
 export const FALLBACK_ENGINE: SearchEngine = { url: "https://duckduckgo.com/?q=%s", label: "DuckDuckGo" };
 
@@ -123,19 +70,6 @@ export function with_fallback_engines(user_engines: Record<string, SearchEngine>
   const named: Record<string, SearchEngine> = { [FALLBACK_ENGINE_NAME]: FALLBACK_ENGINE, ...user_engines };
   return { [FALLBACK_ENGINE_NAME]: FALLBACK_ENGINE, [SITE_ENGINE_NAME]: site_engine_over(named[default_engine]), ...user_engines };
 }
-
-export const DEFAULT_SETTINGS: Settings = {
-  which_key_delay_ms: 300,
-  which_key_border: "square",
-  hint_letters: "asdfghjkl",
-  ignore_sites: [],
-  mode_indicator: "always",
-  palette: DEFAULT_PALETTE,
-  light_intensity: DEFAULT_LIGHT_INTENSITY,
-  search_prefixes: { here: "s", tab: "S" },
-  container_prefixes: { reopen: "c", tab: "C" },
-  default_engine: FALLBACK_ENGINE_NAME,
-};
 
 // A snippet becomes a registry entry. The header fills the metadata, the body is the code.
 export type SnippetEntry = Omit<CommandMeta, "count"> & {

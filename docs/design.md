@@ -254,6 +254,10 @@ The merged file has one section per kind: `keymap`, `search_engines`, `command_a
 
 The TOML parser (`smol-toml`) is a dev dependency of the tool only. None of it reaches the extension bundles.
 
+### The settings table
+
+Each setting is one row of data in `src/shared/settings_table.ts`: its kind (true or false, a word from a list, a number, text, a list, a table), the values the kind takes and its default. The check, the expectation text in a problem message, the values the command line offers, the editor JSON Schema, the `Settings` type and the defaults all follow from the row, so a new setting takes one row and one description. A row of kind `custom` (`hint_letters`, `palette`, `new_tab_page`) has its check and expectation written in `settings_schema.ts`. `settable: false` marks a setting that `:set` refuses. Every setting has a default except `home_page`, because `page.home` refuses without one. The editor descriptions live in `settings_docs.ts`, which only the tool imports: the command line page bundles the table and has no room for the prose. The content script reads `src/shared/default_settings.ts`, which `just settings-defaults` writes from the table with one constant per setting, so the content script carries only the defaults it reads. `just test` fails when that file is stale.
+
 ### Delivery
 
 Firefox reads `~/.mozilla/managed-storage/<extension id>.json` and gives its `data` to the extension through `browser.storage.managed`. No helper program or extra permission is needed, and nothing in the browser can change the file.
