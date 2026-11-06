@@ -205,7 +205,7 @@ test("the frames filter defaults to the focus action, and ;f and gF are bound", 
   assert.equal(action_of({ filter: "frames", action: "tab" }), "tab");
   assert.equal(action_of({ filter: "links" }), "here");
   const normal = DEFAULT_KEYMAP.normal as Record<string, { id: string; args?: unknown; label?: string }>;
-  assert.deepEqual(normal[";f"], { id: "hint.run", args: { filter: "frames" }, label: "Focus frame" });
+  assert.deepEqual(normal[";f"], { id: "hint.run", args: { filter: "frames" }, label: "Focus frame", variant_label: "Frame" });
   assert.equal(normal.gF!.id, "frame.exit");
   assert.equal(registry.get("frame.exit")!.label, "Focus top page");
 });

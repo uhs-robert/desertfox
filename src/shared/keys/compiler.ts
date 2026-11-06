@@ -12,7 +12,7 @@ import type { KeymapConfig, KeymapMode, Modifier } from "../keymap.ts";
 import { default_of, is_dynamic_values } from "../registry/params.ts";
 import { parse_sequence } from "./notation.ts";
 
-// `accepts_args` is the registry validator, passed in because the content script also loads this file and must not pull the registry in. Without it a modifier variant is never judged and always inserted.
+// `accepts_args` is the registry validator, passed in because the content bundle includes the keys index: importing the validator here grew content.js from 15.7 KB to 21 KB, over its 16 KB limit. Without it a modifier variant is never judged and always inserted.
 export type CommandInfo = { runs_in: RunsIn; label: string; count: CountBehavior; params?: readonly ParamDef[]; accepts_args?: (args: Record<string, unknown>) => boolean };
 
 // Search engine name to the label the user gave it. A key that searches with an engine reads as that label.
@@ -52,8 +52,8 @@ function generated_bindings(keymap: KeymapConfig, settings: Partial<Settings>): 
 // Each modifier derives, from every key of its group, a variant with the modifier args added. The group is the modifier key minus its last token.
 // A variant exists only when the registry validator accepts its args, so which-key and help never show a combination that would be refused.
 // A key that sets its own `action` gets no variants: the modifier would fight it.
-// Explicit keys win over variants without a warning, so a user can rebind or remove one variant.
-function modifier_variants(modifiers: Record<string, Modifier>, taken: Map<string, Entry>, resolve: ResolveCommand, warnings: string[]): Entry[] {
+// Explicit keys win over variants without a warning, so a user can rebind one variant, or remove it with a null.
+function modifier_variants(modifiers: Record<string, Modifier>, taken: Map<string, Entry>, removed: Set<string>, resolve: ResolveCommand, warnings: string[]): Entry[] {
   const parsed_modifiers = Object.entries(modifiers).flatMap(([sequence, { label: _label, ...args }]) => {
     const parsed = parse_sequence(sequence);
     if (parsed.error !== undefined) warnings.push(`modifiers: skipped "${sequence}": ${parsed.error}`);
@@ -80,8 +80,8 @@ function modifier_variants(modifiers: Record<string, Modifier>, taken: Map<strin
       accepted++;
       const variant_tokens = [...group, tokens[tokens.length - 1]!, ...source.tokens.slice(group.length)];
       const variant_key = variant_tokens.join("");
-      if (taken.has(variant_key)) continue;
-      variants.push({ sequence: variant_key, tokens: variant_tokens, binding: { ...binding, args: variant_args }, source_index: -1 });
+      if (taken.has(variant_key) || removed.has(variant_key)) continue;
+      variants.push({ sequence: variant_key, tokens: variant_tokens, binding: { ...binding, args: variant_args, ...(binding.variant_label === undefined ? {} : { label: binding.variant_label }) }, source_index: -1 });
     }
     if (accepted === 0) warnings.push(`modifiers: "${sequence}" matches no key of its group, so it makes no variants`);
   }
@@ -97,6 +97,7 @@ function entries_for_mode(
 ): Entry[] {
   const sources = [mode === "normal" ? generated_bindings(keymap, settings) : {}, keymap[mode] ?? {}];
   const by_normalized_sequence = new Map<string, Entry>();
+  const removed = new Set<string>();
   for (const [source_index, source] of sources.entries()) {
     for (const [sequence, binding] of Object.entries(source)) {
       const parsed = parse_sequence(sequence);
@@ -107,6 +108,7 @@ function entries_for_mode(
       const normalized = parsed.tokens.join("");
       if (binding === null) {
         by_normalized_sequence.delete(normalized);
+        removed.add(normalized);
       } else {
         const earlier = by_normalized_sequence.get(normalized);
         if (earlier && earlier.source_index === source_index) {
@@ -117,7 +119,7 @@ function entries_for_mode(
     }
   }
   if (mode === "normal") {
-    for (const variant of modifier_variants(keymap.modifiers ?? {}, by_normalized_sequence, resolve, warnings)) {
+    for (const variant of modifier_variants(keymap.modifiers ?? {}, by_normalized_sequence, removed, resolve, warnings)) {
       by_normalized_sequence.set(variant.tokens.join(""), variant);
     }
   }
@@ -188,7 +190,7 @@ function to_steps(mode: KeymapMode, entry: Entry, resolve: ResolveCommand, setti
       }
     }
     // The label is for the leaf. The steps stay the plain invocations the router runs.
-    const { label: _label, ...plain } = invocation;
+    const { label: _label, variant_label: _variant_label, ...plain } = invocation;
     steps.push({ invocation: plain, runs_in: info.runs_in, count_rule: info.count });
   }
   if (steps.length === 0) {
