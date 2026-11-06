@@ -7,6 +7,7 @@ import type { EnumSources } from "../shared/registry/check_args.ts";
 import { registry } from "../shared/registry/index.ts";
 import { runs_with_empty } from "./availability.ts";
 import type { BundleLoaderDeps } from "./bundle_loader.ts";
+import type { ImageDeps, ImageKind } from "./image_actions.ts";
 import { create_load_log } from "./load_log.ts";
 import type { RepeatMemory } from "./repeat_memory.ts";
 import type { ReinjectDeps } from "./reload.ts";
@@ -117,4 +118,59 @@ export const bundle_loader_deps: BundleLoaderDeps = {
     }
   },
   timeout_ms: 10_000,
+};
+
+// The decode runs in the background page, where the fetched bytes are same-origin, so no canvas is tainted. `createImageBitmap` rejects an SVG, which an `Image` element decodes.
+async function decode_to_canvas(bytes: ArrayBuffer, kind: ImageKind): Promise<OffscreenCanvas> {
+  const blob = new Blob([bytes], { type: kind === "svg" ? "image/svg+xml" : "" });
+  if (kind !== "svg") {
+    const bitmap = await createImageBitmap(blob);
+    const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
+    canvas.getContext("2d")!.drawImage(bitmap, 0, 0);
+    return canvas;
+  }
+  const address = URL.createObjectURL(blob);
+  try {
+    const image = new Image();
+    image.src = address;
+    await image.decode();
+    // An SVG without a size has no natural one.
+    const canvas = new OffscreenCanvas(image.naturalWidth || 512, image.naturalHeight || 512);
+    canvas.getContext("2d")!.drawImage(image, 0, 0, canvas.width, canvas.height);
+    return canvas;
+  } finally {
+    URL.revokeObjectURL(address);
+  }
+}
+
+// Resolves when the download finishes or fails, then frees the temporary address.
+async function download_blob(blob: Blob, filename: string): Promise<void> {
+  const address = URL.createObjectURL(blob);
+  try {
+    const id = await browser.downloads.download({ url: address, filename, saveAs: false });
+    await new Promise<void>((resolve, reject) => {
+      const on_changed = (delta: browser.downloads._OnChangedDownloadDelta) => {
+        if (delta.id !== id) return;
+        const state = delta.state?.current;
+        if (state !== "complete" && state !== "interrupted") return;
+        browser.downloads.onChanged.removeListener(on_changed);
+        if (state === "complete") resolve();
+        else reject(new Error("download interrupted"));
+      };
+      browser.downloads.onChanged.addListener(on_changed);
+    });
+  } finally {
+    URL.revokeObjectURL(address);
+  }
+}
+
+export const image_deps: ImageDeps = {
+  fetch_image: async (address) => {
+    const response = await fetch(address, { credentials: "include" });
+    const declared = Number(response.headers.get("content-length"));
+    return { ok: response.ok, declared_bytes: Number.isFinite(declared) && declared > 0 ? declared : undefined, read: () => response.arrayBuffer() };
+  },
+  render_png: async (bytes, kind) => (await (await decode_to_canvas(bytes, kind)).convertToBlob({ type: "image/png" })).arrayBuffer(),
+  set_image_data: (bytes, type) => browser.clipboard.setImageData(bytes, type),
+  save_file: (bytes, mime, filename) => download_blob(new Blob([bytes], { type: mime }), filename),
 };

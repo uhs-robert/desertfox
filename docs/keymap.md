@@ -22,7 +22,7 @@ A note "(prompts)" means the binding sets a `prompt` for a param, so the command
 
 <!-- BEGIN generated -->
 
-bound: 219 (normal 141, hint 2, cmdline 13, caret 26, visual 32, insert 1, ignore 1, browser 3) | later: 14 | dropped: 6
+bound: 220 (normal 142, hint 2, cmdline 13, caret 26, visual 32, insert 1, ignore 1, browser 3) | later: 14 | dropped: 6
 
 ### normal
 
@@ -158,6 +158,7 @@ bound: 219 (normal 141, hint 2, cmdline 13, caret 26, visual 32, insert 1, ignor
 | `;i` | bound | `hint --inputs` | Click input |  |
 | `;l` | bound | `hint --links` | Click link |  |
 | `;I` | bound | `hint --images` | Open image in new tab |  |
+| `;yI` | bound | `hint --copy-image --images` | Copy image |  |
 | `;f` | bound | `hint --frames` | Focus frame |  |
 | `;m` | bound | `hint --media` | Play or pause media |  |
 | `:` | bound | `cmdline.open` | Command line |  |

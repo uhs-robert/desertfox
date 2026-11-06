@@ -107,6 +107,14 @@ function copy_to_clipboard(text: string): Promise<Outcome | undefined> {
   });
 }
 
+// The background answers an `Outcome`. A failed one carries the refusal to the caller, which shows it once.
+function image_action(action: "copy_image" | "download", address: string): Promise<Outcome> {
+  return browser.runtime.sendMessage({ type: "image_action", action, address }).then((outcome: Outcome) => {
+    if (outcome.ok) create_view().show_message(action === "copy_image" ? "Copied image" : "Downloaded");
+    return outcome;
+  });
+}
+
 // `from_hints` keeps the router from storing this `open.url`, so `.` shows hints again instead of reopening the address.
 function open_link(url: string, place: Place): Promise<unknown> {
   return browser.runtime.sendMessage({ type: "run", invocations: [{ id: "open.url", args: { url, where: place } }], mode: "normal", from_hints: true });
@@ -118,7 +126,7 @@ function start_caret(target: Element, mode: CaretMode): void {
   page.desertfox_host.set_mode(mode);
 }
 
-const deps = { open_link, copy: copy_to_clipboard, start_caret };
+const deps = { open_link, copy: copy_to_clipboard, image_action, start_caret };
 
 function register(host: BundleHostApi): void {
   let session: Session | undefined;

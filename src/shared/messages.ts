@@ -176,7 +176,14 @@ export type FindScan = {
 // Timeout means the scan ran past the limit and was stopped. Superseded means a newer scan from the same frame replaced it.
 export type FindScanAnswer = { ok: true; from: Int32Array; to: Int32Array } | { ok: false; reason: "timeout" | "superseded" } | { ok: false; reason: "failed"; message: string };
 
-export type ContentToBackground = RunRequest | ModeChanged | LoadBundle | ListKeys | IssueCmdlineTicket | OpenCmdline | RecordCmdline | CompleteItems | SetTabUnloaded | OpenHelp | RecordRepeat | ReadTabAddress | FindScan;
+// From the `hints` bundle on `copy_image` and `download`: the background fetches `address` and answers an `Outcome`.
+export type ImageAction = {
+  type: "image_action";
+  action: "copy_image" | "download";
+  address: string;
+};
+
+export type ContentToBackground = RunRequest | ModeChanged | LoadBundle | ListKeys | IssueCmdlineTicket | OpenCmdline | RecordCmdline | CompleteItems | SetTabUnloaded | OpenHelp | RecordRepeat | ReadTabAddress | FindScan | ImageAction;
 
 // How a command ended. Done is `{ ok: true }`. A handler that returns nothing is done, and one that throws is failed.
 // Cancelled means the user left a waiting step (Escape, an unrelated key, a page change), so the rest of a sequence does not run and nothing is shown.

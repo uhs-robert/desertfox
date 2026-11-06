@@ -2,7 +2,8 @@ import "./command_modules.ts";
 import type { ContentToBackground } from "../shared/messages.ts";
 import type { BoundInvocation } from "../shared/invocation.ts";
 import { DEFAULT_SETTINGS, effective_settings } from "../shared/config.ts";
-import { bundle_loader_deps, container_names, make_router_deps, page_of, reinject_deps } from "./browser_deps.ts";
+import { bundle_loader_deps, container_names, image_deps, make_router_deps, page_of, reinject_deps } from "./browser_deps.ts";
+import { run_image_action } from "./image_actions.ts";
 import { open_quick_start_on_install } from "./first_install.ts";
 import { create_cmdline_service } from "./cmdline_service.ts";
 import { create_previous_tabs } from "./previous_tab.ts";
@@ -100,6 +101,7 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
   if (request?.type === "open_cmdline") return get_config().then(() => cmdline.open(request.ticket, sender.tab?.id, sender.frameId));
   if (request?.type === "complete_items") return complete_items.answer(request.kind, asker_of(sender));
   if (request?.type === "set_tab_unloaded") return complete_items.set_unloaded(request.tab_id, request.unloaded, asker_of(sender));
+  if (request?.type === "image_action") return run_image_action(image_deps, request);
   if (request?.type === "read_tab_address") return Promise.resolve(sender.tab?.url);
   if (request?.type === "open_help") return open_help.open(request.command_id, sender.tab?.id, sender.frameId);
   if (request?.type === "record_cmdline") return cmdline.record(request.text, sender.tab?.incognito === true);

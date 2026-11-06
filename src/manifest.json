@@ -38,6 +38,7 @@
   ],
   "permissions": [
     "tabs",
+    "downloads",
     "storage",
     "notifications",
     "clipboardWrite",
