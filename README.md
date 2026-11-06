@@ -68,21 +68,6 @@ Until then, only contributors can run it. See [AGENTS.md](AGENTS.md) for the bui
 
 After you install DesertFox, press `g?`, `qh` or `<F1>` on a normal page. The help page opens. Start with the Quick Start page, which teaches the first keys. A short pause after a key shows the keys that can follow.
 
-## ⚙️ Config
-
-You write the config in TOML in `~/.config/desertfox/`, then run `just build-config`. The tool checks the files and writes the merged config that Firefox reads. A binding is one line of the same command text that you type in the command line.
-
-```toml
-# ~/.config/desertfox/keymap.toml
-[normal]
-H = "tab.prev"                  # H goes to the previous tab, not back in history
-L = "tab.next"                  # L goes to the next tab, not forward in history
-zi = "zoom.by 0.25"             # a bare number sets the zoom step (default 0.1)
-y = ""                          # "" removes a default binding
-```
-
-Files beside the keymap set search engines, command aliases, settings, styles and themes. Each can have a `.d/` directory of later files. The full format is in [docs/design.md](docs/design.md#config).
-
 ## 🏜️ Known limits
 
 - Plain keys never work on pages where Firefox blocks extensions: `about:` pages, the PDF viewer, reader view and addons.mozilla.org.
@@ -91,9 +76,8 @@ Files beside the keymap set search engines, command aliases, settings, styles an
 
 ## 🧭 Docs
 
-- [docs/design.md](docs/design.md): architecture, config format, scope and roadmap.
+- [docs/design.md](docs/design.md): architecture, scope and roadmap.
 - [docs/keymap.md](docs/keymap.md): every default key, and the keys that are planned or dropped.
-- [docs/search_engines.md](docs/search_engines.md): the search engine config.
 - [docs/firefox-behavior.md](docs/firefox-behavior.md): what Firefox allows, measured.
 - [src/README.md](src/README.md): a code map for contributors.
 
