@@ -15,9 +15,9 @@
 
 ## 🦊 What it is
 
-DesertFox is a modern, keyboard-driven Firefox extension built for speed, discoverability, and complete control of the web browser. It mixes the power of Tridactyl with the simplicity of Vimium.
+DesertFox is a modern, keyboard-driven Firefox extension built for speed, discoverability, and complete control of the web browser. It mixes the power of Tridactyl with the simplicity of Vimium. A which-key popup teaches every key as you press it.
 
-You learn it as you go, with no manual to memorize. Pause after any key and a popup shows what comes next. Type `:` and commands complete as you type. Press `g?` to see every key.
+You learn it as you go, with no manual to memorize. Press any key and the popup lists every key that can follow and what it does. Type `:` and commands complete as you type. Press `g?` to see every key.
 
 The keys follow Vim habits: modes, `hjkl` to scroll, `gg` and `G` to jump, `yy` to copy, `/` to search, and counts. You do not need to know Vim.
 
