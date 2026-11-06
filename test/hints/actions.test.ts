@@ -411,9 +411,9 @@ test("play_pause plays a paused media element and pauses a playing one", () => {
 test("mute toggles muted and does not click", () => {
   const f = fixture("audio", { muted: false });
   f.run("mute");
-  assert.equal((f.element as { muted: boolean }).muted, true);
+  assert.equal((f.element as unknown as { muted: boolean }).muted, true);
   f.run("mute");
-  assert.equal((f.element as { muted: boolean }).muted, false);
+  assert.equal((f.element as unknown as { muted: boolean }).muted, false);
   assert.deepEqual(f.calls, []);
 });
 
