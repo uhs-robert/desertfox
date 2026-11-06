@@ -90,6 +90,51 @@ export async function run_cases({ rdp, extension_id, take_shot, run_case, expect
     await send_keys("-k", "Escape");
   });
 
+  await run_case("V selects whole screen lines of a wrapped paragraph, j grows it, o swaps the ends and y copies the lines", async () => {
+    await open_page("caret_wrap", "caret_wrap_lines", { new_tab: true });
+    const lines_are = (text) => (event) => event.type === "selection" && event.page_id === "caret_wrap_lines" && event.text.replace(/\s+/g, " ").trim() === text;
+    const mark = events.length;
+    await send_keys("gV");
+    await send_keys("jj");
+    await wait_event(mark, selection_is("caret_wrap_lines", "d"), "the caret on the second screen line");
+    await send_keys("V");
+    await wait_event(mark, lines_are("def"), "V selecting the whole second screen line");
+    await send_keys("j");
+    await wait_event(mark, lines_are("def ghi"), "j growing the selection by a screen line");
+    // After o the caret end is the top line, so k grows the selection upward instead of shrinking it.
+    await send_keys("o");
+    await send_keys("k");
+    await wait_event(mark, lines_are("abc def ghi"), "o then k growing the selection upward");
+    const mark_yank = events.length;
+    await send_keys("y");
+    await wait_event(mark_yank, (event) => event.type === "toast" && event.page_id === "caret_wrap_lines", "the copied toast");
+    await sleep(300);
+    await send_keys("-k", "Escape");
+    await send_keys("-k", "Escape");
+    const mark_paste = events.length;
+    await send_keys("gi");
+    await send_keys(...paste_ctrl_v);
+    const pasted = await wait_event(mark_paste, (event) => event.type === "input" && event.page_id === "caret_wrap_lines", "the pasted text");
+    expect(pasted.value.replace(/\s+/g, " ").trim() === "abc def ghi", `y copied "${pasted.value}", expected the lines abc, def and ghi`);
+  });
+
+  await run_case("in caret mode / opens the DesertFox search line, not Firefox Quick Find, and ' does nothing", async () => {
+    await open_page("caret", "caret_quick_find", { new_tab: true });
+    const mark = events.length;
+    await send_keys("gV");
+    await wait_event(mark, selection_is("caret_quick_find", "c"), "the caret on the first character");
+    // Quick Find would take the keys after it, so a caret that still moves shows that it did not open.
+    await send_keys("'");
+    await send_keys("l");
+    await wait_event(mark, selection_is("caret_quick_find", "a"), "l moving the caret after '");
+    const mark_search = events.length;
+    await send_keys("/bar");
+    await sleep(400);
+    await send_keys("-k", "Return");
+    await wait_event(mark_search, selection_is("caret_quick_find", "b"), "the caret on the match of /bar");
+    await send_keys("-k", "Escape");
+  });
+
   await run_case("j and k keep the column over a shorter line", async () => {
     await open_page("caret_columns", "caret_columns", { new_tab: true });
     const mark = events.length;

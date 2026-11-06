@@ -249,7 +249,7 @@ shadow.getElementById("panel").addEventListener("scroll", () => send("panel_scro
     }
     if (url.pathname === "/caret_wrap") {
       // Each word fills a screen line: the column is 6 characters wide and the words are 3.
-      return response.end(page(`caret_wrap ${id}`, '<p style="width:6ch;font-family:monospace">abc def ghi jkl</p>'));
+      return response.end(page(`caret_wrap ${id}`, '<p style="width:6ch;font-family:monospace">abc def ghi jkl</p><input id="paste_target">'));
     }
     if (url.pathname === "/caret_inline_host") {
       // An inline host in the middle of a wrapped paragraph: "aaa mid bbb " fills the first screen line and "ccc ddd eee" the second.
