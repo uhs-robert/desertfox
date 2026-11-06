@@ -57,8 +57,24 @@ const BOOKMARKS: BookmarkItem[] = Array.from({ length: 30 }, (_, index) => ({ ti
 // The background answers when the test says so.
 function make() {
   const asks: { kind: string; answer: (items: TabItem[] | BookmarkItem[] | EngineItem[] | OpenItems | WindowItem[] | HeadingItem[]) => void }[] = [];
+  // The tab model has no reply to await. The first read is its cue to connect, and `answer` is the snapshot arriving.
+  let tab_items: TabItem[] | undefined;
+  let tabs_asked = false;
   const live = create_live_source({
     ask: (kind) => new Promise((resolve) => void asks.push({ kind, answer: (items) => resolve({ items }) })),
+    tabs: () => {
+      if (!tabs_asked) {
+        tabs_asked = true;
+        asks.push({
+          kind: "tabs",
+          answer: (items) => {
+            tab_items = items as TabItem[];
+            session.source_ready();
+          },
+        });
+      }
+      return tab_items;
+    },
     on_ready: () => session.source_ready(),
   });
   const session = create_session({
@@ -125,13 +141,13 @@ test("bookmarks show the 20 newest on an empty word, rank every bookmark for a t
 
 test("Escape while the fetch is pending closes the line, and the reply that lands after the close changes nothing", async () => {
   const { session, live, asks, settle } = make();
-  session.edit("tab ");
+  session.edit("bookmark -t ");
   assert.equal(session.run("mode.escape", undefined).kind, "close");
   live.close();
-  asks[0]!.answer(TABS);
+  asks[0]!.answer(BOOKMARKS);
   await settle();
   assert.deepEqual(names(session), []);
-  assert.equal(session.get_text(), "tab ");
+  assert.equal(session.get_text(), "bookmark -t ");
 });
 
 test("a reply that lands after Escape closed the list does not reopen it, and typing finds the cache", async () => {
@@ -318,6 +334,21 @@ test("a tab row carries its status, flags, favicon and container from the tab it
   ]);
 });
 
+test("the window number shows on tab rows only when the list spans more than one window", async () => {
+  const one = make();
+  one.session.edit("tab ");
+  one.asks[0]!.answer([{ ...TABS[0]!, window_number: 1 }, { ...TABS[1]!, window_number: 1 }]);
+  await one.settle();
+  assert.deepEqual(one.session.get_rows().map((row) => row.tab?.window_number), [undefined, undefined]);
+  const two = make();
+  two.session.edit("tab ");
+  two.asks[0]!.answer([{ ...TABS[0]!, window_number: 1 }, { ...TABS[1]!, window_number: 2 }]);
+  await two.settle();
+  assert.deepEqual(two.session.get_rows().map((row) => row.tab?.window_number), [1, 2]);
+  two.session.patch_tab({ id: 11, status: "", flags: [], window_number: 1 });
+  assert.equal(two.session.get_rows()[0]!.tab?.window_number, 1);
+});
+
 const unload_key = (session: ReturnType<typeof make>["session"]) => session.run("list.act", { action: "unload" });
 
 test("the row key on a loaded tab row asks to unload it, and on an unloaded row to load it, and the list and selection stay", async () => {
@@ -335,20 +366,17 @@ test("the row key on a loaded tab row asks to unload it, and on an unloaded row 
   assert.equal(live.read("tabs").loading, false);
 });
 
-test("patch_tab changes only that row's marks, in place, and later rankings show it", async () => {
-  const { session, live, asks, settle } = make();
+test("patch_tab changes only that row's marks, in place, and the window cell stays only where the row had it", async () => {
+  const { session, asks, settle } = make();
   session.edit("tab ");
   asks[0]!.answer(TABS);
   await settle();
   session.run("cmdline.next_completion", undefined);
   const before = session.get_rows();
-  const marks = { id: 12, status: "", flags: ["discarded" as const] };
-  session.patch_tab(marks);
-  live.patch_tab({ ...TABS[1]!, discarded: true });
+  session.patch_tab({ id: 12, status: "", flags: ["discarded" as const], window_number: 2 });
   assert.equal(session.get_rows(), before);
   assert.deepEqual(session.get_rows().map((row) => row.tab?.flags), [[], ["discarded"], [], []]);
-  session.edit("tab git");
-  assert.deepEqual(session.get_rows().map((row) => row.tab?.flags), [["discarded"], []]);
+  assert.equal(session.get_rows()[1]!.tab?.window_number, undefined);
 });
 
 test("the row key on a command row, an empty selection or a closed list does nothing but show a note", async () => {

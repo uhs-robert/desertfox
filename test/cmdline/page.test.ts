@@ -24,6 +24,8 @@ const OPENED = {
   command_aliases: { j: "my.jira" },
   help_ids: ["my.jira"],
   prompt: ">> ",
+  window_id: 10,
+  all_windows: false,
 };
 
 const USER_CSS = ".desertfox-cmdline { --desertfox-bg-core: red; }";
@@ -64,6 +66,8 @@ async function load_page(t: TestContext, tag: string, { keymap = KEYMAP, with_ta
   const sent: { type: string; command_id?: string }[] = [];
   // The `complete_items` asks that wait for the test to answer them.
   const item_asks: ((items: unknown[]) => void)[] = [];
+  // The tab model ports the page opened. `deliver` plays a message from the background.
+  const model_ports: { name: string; disconnected: boolean; posted: unknown[]; deliver: (message: unknown) => void }[] = [];
   // Setting the value puts the caret at the end, as Firefox does.
   let value = "";
   const input = {
@@ -109,6 +113,18 @@ async function load_page(t: TestContext, tag: string, { keymap = KEYMAP, with_ta
     },
     browser: {
       runtime: {
+        connect: ({ name }: { name: string }) => {
+          const listeners: ((message: unknown) => void)[] = [];
+          const model_port = {
+            name,
+            disconnected: false,
+            posted: [] as unknown[],
+            // A disconnected port delivers nothing, as in Firefox.
+            deliver: (message: unknown) => !model_port.disconnected && listeners.forEach((listener) => listener(message)),
+          };
+          model_ports.push(model_port);
+          return { postMessage: (message: unknown) => void model_port.posted.push(message), disconnect: () => void (model_port.disconnected = true), onMessage: { addListener: (listener: (message: unknown) => void) => void listeners.push(listener) } };
+        },
         getURL: (path: string) => `https://extension.test/${path}`,
         // The background answers only the ticket it issued.
         sendMessage: async (message: { type: string; ticket?: string }) => {
@@ -145,7 +161,7 @@ async function load_page(t: TestContext, tag: string, { keymap = KEYMAP, with_ta
   };
   const press_enter = () => input_listeners.keydown!({ isTrusted: true, isComposing: false, key: "Enter", code: "Enter", preventDefault: () => {} });
   const press = (key: string) => input_listeners.keydown!({ isTrusted: true, isComposing: false, key, code: key, preventDefault: () => {} });
-  return { input, list, panel, prompt, to_parent, to_background, sent, item_asks, head, storage_listeners, post_start, press_enter, press };
+  return { input, list, panel, prompt, to_parent, to_background, sent, item_asks, model_ports, head, storage_listeners, post_start, press_enter, press };
 }
 
 // Port messages arrive on a later turn, and later still on a busy machine.
@@ -351,39 +367,79 @@ test("Tab previews a command in the line and Enter submits what the line shows",
   assert.deepEqual(host.submits(), submit_of("my.jira"));
 });
 
-test("a page that never redeemed a ticket asks the background for no tabs, even with a tab line prefilled", async (t) => {
-  const { to_background, item_asks, post_start } = await load_page(t, "unredeemed_asks_nothing", { with_tab_command: true });
+test("a page that never redeemed a ticket asks the background for no tabs and opens no model port, even with a tab line prefilled", async (t) => {
+  const { to_background, item_asks, model_ports, post_start } = await load_page(t, "unredeemed_asks_nothing", { with_tab_command: true });
   const forged = [post_start(undefined, "tab "), post_start("guess", "tab ")];
   await settle();
   assert.deepEqual(to_background, ["open_cmdline", "open_cmdline"]);
   assert.deepEqual(item_asks, []);
+  assert.deepEqual(model_ports, []);
   assert.deepEqual(forged.map((site) => site.received), [[], []]);
 });
 
-test("a redeemed line asks for tabs once and shows them when they arrive", async (t) => {
-  const { list, to_background, item_asks, post_start, press } = await load_page(t, "tabs_arrive", { with_tab_command: true });
+test("a line with no tab subject opens no model port", async (t) => {
+  const { model_ports, post_start } = await load_page(t, "plain_line_no_port", { with_tab_command: true });
+  const host = post_start(TICKET, "open ");
+  await host.opened();
+  host.port.postMessage({ desertfox_cmdline: { kind: "focused" } });
+  await settle();
+  assert.deepEqual(model_ports, []);
+});
+
+const ROW = { id: 1, window_id: 10, index: 0, title: "Alpha", url: "https://alpha.test/", favicon_url: "", site: "alpha.test", pinned: false, muted: false, audible: false, discarded: false, active: false, previous: false, window_number: 1, container: "", container_name: "", container_color: "", container_icon: "" };
+
+test("the first tab read opens one model port, the list shows the snapshot, and a patch redraws without a keypress", async (t) => {
+  const { list, to_background, model_ports, post_start, press } = await load_page(t, "tabs_arrive", { with_tab_command: true });
   const host = post_start(TICKET, "tab ");
   await host.opened();
   host.port.postMessage({ desertfox_cmdline: { kind: "focused" } });
-  await until(() => item_asks.length === 1);
+  await until(() => model_ports.length === 1);
   press("a");
-  assert.equal(to_background.filter((type) => type === "complete_items").length, 1);
+  assert.deepEqual(model_ports.map((port) => port.name), ["desertfox_tab_model"]);
+  assert.equal(to_background.filter((type) => type === "complete_items").length, 0);
   assert.equal(list.children.length, 0);
-  item_asks[0]!([{ number: 1, title: "Alpha", url: "https://alpha.test/" }]);
+  model_ports[0]!.deliver({ type: "snapshot", rev: 0, tabs: [ROW] });
   await until(() => list.children.length === 1);
   assert.equal(list.children.length, 1);
+  model_ports[0]!.deliver({ type: "patch", rev: 1, upserts: [{ ...ROW, id: 2, index: 1, title: "Alpine" }], removed: [] });
+  await until(() => list.children.length === 2);
+  assert.equal(list.children.length, 2);
+  assert.equal(model_ports.length, 1);
 });
 
-test("a tab reply that lands after the line submitted draws nothing", async (t) => {
-  const { list, item_asks, post_start, press_enter } = await load_page(t, "tabs_after_close", { with_tab_command: true });
+test("a patch that skips a number asks for a snapshot once", async (t) => {
+  const { model_ports, post_start } = await load_page(t, "tabs_gap", { with_tab_command: true });
+  const host = post_start(TICKET, "tab ");
+  await host.opened();
+  host.port.postMessage({ desertfox_cmdline: { kind: "focused" } });
+  await until(() => model_ports.length === 1);
+  model_ports[0]!.deliver({ type: "snapshot", rev: 0, tabs: [ROW] });
+  model_ports[0]!.deliver({ type: "patch", rev: 3, upserts: [], removed: [] });
+  model_ports[0]!.deliver({ type: "patch", rev: 4, upserts: [], removed: [] });
+  assert.deepEqual(model_ports[0]!.posted, [{ type: "resync" }]);
+});
+
+test("the model port closes with the line", async (t) => {
+  const { model_ports, post_start, press_enter } = await load_page(t, "tabs_port_closes", { with_tab_command: true });
   const host = post_start(TICKET, "tab a");
   await host.opened();
   host.port.postMessage({ desertfox_cmdline: { kind: "focused" } });
-  await until(() => item_asks.length === 1);
+  await until(() => model_ports.length === 1);
+  press_enter();
+  await until(() => host.submits().length === 1);
+  assert.equal(model_ports[0]!.disconnected, true);
+});
+
+test("a snapshot sent after the line submitted never arrives", async (t) => {
+  const { list, model_ports, post_start, press_enter } = await load_page(t, "tabs_after_close", { with_tab_command: true });
+  const host = post_start(TICKET, "tab a");
+  await host.opened();
+  host.port.postMessage({ desertfox_cmdline: { kind: "focused" } });
+  await until(() => model_ports.length === 1);
   press_enter();
   await until(() => host.submits().length === 1);
   const drawn = list.children.length;
-  item_asks[0]!([{ number: 1, title: "Alpha", url: "https://alpha.test/" }]);
+  model_ports[0]!.deliver({ type: "snapshot", rev: 0, tabs: [ROW] });
   await settle();
   assert.equal(list.children.length, drawn);
 });

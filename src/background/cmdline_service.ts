@@ -14,7 +14,7 @@ export type CmdlineServiceDeps = {
   new_ticket: () => string;
   sources: () => Promise<CmdlineOpened["sources"]>;
   // Read on every open, after the config has loaded.
-  page_config: () => Promise<Pick<CmdlineOpened, "commands" | "help_ids" | "command_aliases" | "prompt">>;
+  page_config: () => Promise<Pick<CmdlineOpened, "commands" | "help_ids" | "command_aliases" | "prompt" | "all_windows">>;
 };
 
 // A repeated command moves to the newest place instead of filling the cap with copies.
@@ -49,8 +49,8 @@ export function create_cmdline_service(deps: CmdlineServiceDeps) {
       return ticket;
     },
     // Used up on the first try, so a frame reloaded with an old ticket gets nothing either.
-    open: async (ticket: unknown, tab_id: number | undefined, frame_id: number | undefined): Promise<CmdlineOpened | undefined> => {
-      if (typeof ticket !== "string" || tab_id === undefined || frame_id === undefined) return undefined;
+    open: async (ticket: unknown, tab_id: number | undefined, frame_id: number | undefined, window_id: number | undefined): Promise<CmdlineOpened | undefined> => {
+      if (typeof ticket !== "string" || tab_id === undefined || frame_id === undefined || window_id === undefined) return undefined;
       const redeemed = (redemptions.get(ticket) ?? Promise.resolve()).then(() => redeem(ticket));
       const settled = redeemed.catch(() => undefined);
       redemptions.set(ticket, settled);
@@ -64,7 +64,7 @@ export function create_cmdline_service(deps: CmdlineServiceDeps) {
       await deps.tickets.set({ [CMDLINE_OPENER_STORAGE_PREFIX + tab_id]: frame_id });
       // After the pending writes, so a line reopened at once already has the last command.
       await last_write;
-      return { history: await read(), sources: await deps.sources(), ...(await deps.page_config()) };
+      return { history: await read(), sources: await deps.sources(), window_id, ...(await deps.page_config()) };
     },
     // Whether this frame of the tab redeemed the tab's latest ticket, and the tab has not closed or navigated since.
     is_opener: async (tab_id: number | undefined, frame_id: number | undefined): Promise<boolean> => {

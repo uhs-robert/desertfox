@@ -189,9 +189,14 @@ export function create_session(deps: SessionDeps) {
       if (selected >= 0 || !completion) return;
       completion = deps.complete?.(text, caret);
     },
-    // The background changed a tab: its row takes the new marks in place, so the selection and the window stay.
+    // The tab model changed a tab: its row takes the new marks in place, so the selection and the window stay.
     patch_tab: (marks: TabMarks) => {
-      for (const row of completion?.rows ?? []) if (row.tab?.id === marks.id) row.tab = marks;
+      for (const row of completion?.rows ?? []) {
+        if (row.tab?.id !== marks.id) continue;
+        // The window cell shows only when the whole list spans windows, which a single patch cannot tell.
+        const { window_number, ...rest } = marks;
+        row.tab = row.tab.window_number === undefined || window_number === undefined ? rest : marks;
+      }
     },
     set_message: (next: string | undefined) => {
       message = next;

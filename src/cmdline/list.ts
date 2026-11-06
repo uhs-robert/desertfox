@@ -150,7 +150,7 @@ export function create_list(element: HTMLElement, keys_of: (id: string) => strin
         item.dataset.index = String(top + offset);
         const args = cell("args");
         args.append(cell("args-full", row.args), cell("args-short", row.args ? "…" : ""));
-        if (row.tab) item.append(status_cell(row.tab), container_cell(row.tab, images), favicon_cell(row.tab, images));
+        if (row.tab) item.append(status_cell(row.tab), container_cell(row.tab, images), favicon_cell(row.tab, images), ...(row.tab.window_number === undefined ? [] : [cell("tab-window", String(row.tab.window_number || ""))]));
         item.append(name_cell(row, has_help), cell("description", row.description), args, ...(row.tag ? [cell("tag", row.tag)] : []), cell("keys", keys[offset]));
         return item;
       }),
