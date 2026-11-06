@@ -174,4 +174,4 @@ browser.tabs.onRemoved.addListener((tab_id, { windowId, isWindowClosing }) => {
 
 void get_config().then(() => repair_tabs_after_reload(reinject_deps));
 
-void create_tab_model(browser_tab_model_deps()).start();
+void create_tab_model(browser_tab_model_deps({ previous_of: previous_tabs.previous_of, is_opener: cmdline.is_opener })).start();

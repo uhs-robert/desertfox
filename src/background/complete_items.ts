@@ -164,12 +164,20 @@ export type TabQuery = (window_id: number | undefined) => Promise<TabLike[]>;
 export const read_tabs = async (query: TabQuery, scope: LineScope, all_windows: boolean, containers?: ContainerMarks, previous_tab_id?: number): Promise<ListedTab[]> =>
   listed_tabs(await query(all_windows ? undefined : scope.window_id), scope, containers, previous_tab_id);
 
-type IdentityLike = { cookieStoreId: string; colorCode: string; iconUrl: string };
+type IdentityLike = { cookieStoreId: string; name: string; colorCode: string; iconUrl: string };
+type IdentityQuery = () => Promise<readonly IdentityLike[] | false>;
+
+export type ContainerIdentity = TabContainer & { name: string };
 
 // With containers off the query rejects or answers false, and no tab gets a mark. The default container never appears in the answer.
-export async function read_containers(query: () => Promise<readonly IdentityLike[] | false>): Promise<ContainerMarks> {
+export async function read_container_identities(query: IdentityQuery): Promise<ReadonlyMap<string, ContainerIdentity>> {
   const identities = await Promise.resolve().then(query).catch(() => false as const);
-  return new Map(Array.isArray(identities) ? identities.map((identity) => [identity.cookieStoreId, { color: identity.colorCode, icon: identity.iconUrl }]) : []);
+  return new Map(Array.isArray(identities) ? identities.map((identity) => [identity.cookieStoreId, { name: identity.name, color: identity.colorCode, icon: identity.iconUrl }]) : []);
+}
+
+// The marks without the name, which the line's rows do not show.
+export async function read_containers(query: IdentityQuery): Promise<ContainerMarks> {
+  return new Map([...(await read_container_identities(query))].map(([id, { color, icon }]) => [id, { color, icon }]));
 }
 
 export const browser_complete_items_deps = {

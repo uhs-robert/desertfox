@@ -226,7 +226,15 @@ export type TabRow = {
   audible: boolean;
   discarded: boolean;
   active: boolean;
+  // The tab the window was on before its current one, the tab list's `#`. Never the active tab.
+  previous: boolean;
+  // The window's place in `windows.getAll`, from 1, as `tab.attach` and the `windows` list count. 0 for a popup.
+  window_number: number;
+  // The cookie store id, which a reopen needs. The name, color and icon are "" for the default container, for a private tab, for a deleted container and with containers off.
   container: string;
+  container_name: string;
+  container_color: string;
+  container_icon: string;
 };
 
 export type TabModelMessage = { type: "snapshot"; rev: number; tabs: TabRow[] } | { type: "patch"; rev: number; upserts: TabRow[]; removed: number[] };

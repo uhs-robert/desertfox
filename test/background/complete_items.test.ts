@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { bookmark_items, create_complete_items, engine_items, flatten_bookmarks, history_items, listed_favicon, listed_tabs, listed_windows, read_containers } from "../../src/background/complete_items.ts";
+import { bookmark_items, create_complete_items, engine_items, flatten_bookmarks, history_items, listed_favicon, listed_tabs, listed_windows, read_container_identities, read_containers } from "../../src/background/complete_items.ts";
 import type { DiscardDeps } from "../../src/background/tab_discard.ts";
 import type { BookmarkNode, HistoryNode, LineScope, OpenSettings, TabLike, WindowLike } from "../../src/background/complete_items.ts";
 
@@ -383,8 +383,10 @@ test("a container tab carries the container, and the default container, a privat
 });
 
 test("the container lookup maps identities, and gives none when containers are off", async () => {
-  const identity = { cookieStoreId: "firefox-container-1", colorCode: FOX.color, iconUrl: FOX.icon };
+  const identity = { cookieStoreId: "firefox-container-1", name: "Work", colorCode: FOX.color, iconUrl: FOX.icon };
   assert.deepEqual([...(await read_containers(async () => [identity]))], [["firefox-container-1", FOX]]);
+  assert.deepEqual([...(await read_container_identities(async () => [identity]))], [["firefox-container-1", { name: "Work", ...FOX }]]);
+  assert.equal((await read_container_identities(async () => false)).size, 0);
   assert.equal((await read_containers(async () => { throw new Error("containers are off"); })).size, 0);
   assert.equal((await read_containers(() => { throw new Error("no api"); })).size, 0);
   assert.equal((await read_containers(async () => false)).size, 0);
