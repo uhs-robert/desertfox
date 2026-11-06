@@ -145,6 +145,20 @@ export async function run_cases({ rdp, extension_id, take_shot, run_case, expect
     await send_keys("-k", "Escape");
   });
 
+  await run_case("Enter on a search lands the caret on text the page added after caret mode started", async () => {
+    await open_page("caret_added", "caret_added", { new_tab: true });
+    const mark = events.length;
+    await send_keys("gV");
+    await wait_event(mark, selection_is("caret_added", "c"), "the caret on the first character");
+    await wait_event(mark, (event) => event.type === "text_added" && event.page_id === "caret_added", "the text the page adds");
+    const mark_search = events.length;
+    await send_keys("/zebra");
+    await sleep(400);
+    await send_keys("-k", "Return");
+    await wait_event(mark_search, selection_is("caret_added", "z"), "the caret on the added match");
+    await send_keys("-k", "Escape");
+  });
+
   await run_case("j and k keep the column over a shorter line", async () => {
     await open_page("caret_columns", "caret_columns", { new_tab: true });
     const mark = events.length;

@@ -247,6 +247,11 @@ shadow.getElementById("panel").addEventListener("scroll", () => send("panel_scro
       const deep = `<iframe id="deep" srcdoc="<p id=deep_text>deep words</p>" style="width:300px;height:50px"></iframe>`;
       return response.end(page(`inner ${id}`, `<p id="inner_text">inner words here</p>${deep}${remove}`));
     }
+    if (url.pathname === "/caret_added") {
+      // The text arrives after the caret session has read the page, so it is newer than the session's model.
+      const added = `<script>document.addEventListener("selectionchange", () => setTimeout(() => { if (document.getElementById("added")) return; document.body.insertAdjacentHTML("beforeend", "<p id=added>zebra words</p>"); send("text_added"); }, 500), { once: true });</script>`;
+      return response.end(page(`caret_added ${id}`, `<p>foo bar</p>${added}`));
+    }
     if (url.pathname === "/caret_wrap") {
       // Each word fills a screen line: the column is 6 characters wide and the words are 3.
       return response.end(page(`caret_wrap ${id}`, '<p style="width:6ch;font-family:monospace">abc def ghi jkl</p><input id="paste_target">'));

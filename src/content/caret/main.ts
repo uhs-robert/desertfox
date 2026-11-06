@@ -147,10 +147,15 @@ function start_session(mode: CaretMode): Session | string {
   return { model, cursor, mode, goal_x: undefined, painted: [], painted_span: selected_span(cursor) };
 }
 
-// A frame or a shadow host left the page while the session was open. The caret keeps its character if that is still on the page.
+// A frame or a shadow host left the page while the session was open.
 function rebuild_if_stale(open: Session): Session | undefined {
   if (trees_alive(open.model)) return open;
   for (const selection of selections_of(open.model)) selection.removeAllRanges();
+  return rebuild_model(open);
+}
+
+// Reads the page text again. The caret keeps its character if that is still on the page.
+function rebuild_model(open: Session): Session | undefined {
   const model = build_text_model(document.body);
   if (model.text === "") return undefined;
   // A node of a removed frame throws on any read.
@@ -379,18 +384,25 @@ function word_target(): { pattern: string; from: DomPoint } | string {
 // A session searches from its caret, so it first catches up with the page. Normal mode has no session.
 const open_session_now = () => (session ? ensure_session(session.mode) : undefined);
 
+// Moves the caret to the current match. True when the session changed and needs a paint.
+// The session model holds only the text it was built from, so a match in text the page added since takes a rebuild.
+function land_on_match(open: Session): boolean {
+  let landed = find.position(open.model);
+  const rebuilt = landed === undefined && rebuild_model(open) !== undefined;
+  if (rebuilt) landed = find.position(open.model);
+  if (landed === undefined) return rebuilt;
+  open.cursor = with_caret(open.cursor, landed, is_visual(open.mode));
+  open.goal_x = undefined;
+  return true;
+}
+
 // `n` and `N`: step to the match, and an open session takes its caret there.
 async function find_step(reverse: boolean): Promise<Outcome> {
   const started = open_session_now();
   if (typeof started === "string") return { ok: false, message: started };
   const outcome = await find.step(reverse, started && started.model.point_at(started.cursor.caret));
   const open = session;
-  const landed = open && outcome.ok && !("cancelled" in outcome && outcome.cancelled) ? find.position(open.model) : undefined;
-  if (open && landed !== undefined) {
-    open.cursor = with_caret(open.cursor, landed, is_visual(open.mode));
-    open.goal_x = undefined;
-    paint(open);
-  }
+  if (open && outcome.ok && !("cancelled" in outcome && outcome.cancelled) && land_on_match(open)) paint(open);
   return outcome;
 }
 
@@ -402,23 +414,15 @@ async function find_word(direction: "forward" | "backward"): Promise<Outcome> {
   if (typeof target === "string") return { ok: false, message: target };
   const outcome = await find.jump(target.pattern, direction, target.from);
   const open = session;
-  const landed = open && outcome.ok && !("cancelled" in outcome && outcome.cancelled) ? find.position(open.model) : undefined;
-  if (open && landed !== undefined) {
-    open.cursor = with_caret(open.cursor, landed, is_visual(open.mode));
-    open.goal_x = undefined;
-    paint(open);
-  }
+  if (open && outcome.ok && !("cancelled" in outcome && outcome.cancelled) && land_on_match(open)) paint(open);
   return outcome;
 }
 
 // The search line closed on a session. Enter takes the caret to the match, and either way the mode goes back to the session's.
 async function end_session_search(from: Session, keep: boolean): Promise<void> {
   if (session !== from) return;
-  const landed = keep ? find.position(from.model) : undefined;
-  if (landed !== undefined) {
-    from.cursor = with_caret(from.cursor, landed, is_visual(from.mode));
-    from.goal_x = undefined;
-  }
+  // Painted before the mode change, because entering the mode adopts any page selection that differs from the last paint.
+  if (keep && land_on_match(from)) paint(from);
   page.desertfox_host.set_mode(from.mode);
 }
 
