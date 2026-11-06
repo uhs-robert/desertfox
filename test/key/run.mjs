@@ -161,6 +161,8 @@ async function main() {
       "",
     ].join("\n"),
   );
+  // Written here, not kept in config/, because a copy of config/ has no engines and a site key must name real ones. h picks keyhere on the test host, n has an engine for another host only.
+  writeFileSync(join(config_dir, "keymap.d", "80-site.toml"), '[site_keys]\nh = ["keyother", "keyhere"]\nn = ["keyother"]\n');
   build_test_config(config_dir, managed_file);
   const events = server.events;
   const debug_port = await free_port();

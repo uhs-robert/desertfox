@@ -1,6 +1,6 @@
 // Key test cases of the engines piece. run.mjs calls run_cases with its helpers.
 // The test page has a host but is not a GitHub repo or a subreddit, so `{host}` engines are available there and `{repo}` ones are not.
-// The engines and the sd, sh, sr, sf, sp keys come from run.mjs and config/keymap.d/70-engines.toml. The s/ keys come from config/keymap.d/80-site.toml.
+// The engines and the sd, sh, sr, sf, sp keys come from run.mjs and config/keymap.d/70-engines.toml. The s/ keys come from the 80-site.toml that run.mjs writes.
 
 import { evaluate_in_background } from "./rdp.mjs";
 
