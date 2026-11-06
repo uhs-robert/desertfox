@@ -33,6 +33,14 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, open_p
     await sleep(400);
   });
 
+  await run_case("a typed s/n on a host its engine does not serve refuses with a toast and opens nothing", async () => {
+    await open_page("page", "eng_site_refuse", { new_tab: false });
+    const mark = events.length;
+    await send_keys("s/n");
+    await wait_event(mark, (event) => event.type === "toast", "the refusal toast");
+    expect(!find_event(mark, loaded("engine_other")), "the engine of another host opened a page");
+  });
+
   await run_case("s// searches the current site with the selection", async () => {
     await open_page("page", "eng_site_sel", { new_tab: false });
     await select_all();

@@ -44,13 +44,20 @@ export function site_engine_for(engines: Record<string, SearchEngine>, candidate
   });
 }
 
-// Settles the engine of each `site_keys` invocation for the page. With no fit the first candidate stays, so a typed key shows that engine's slot message.
-export function with_site_engines(invocations: BoundInvocation[], engines: Record<string, SearchEngine>, page: PageInfo | undefined): BoundInvocation[] {
-  return invocations.map((invocation) => {
-    const { site_engines, ...plain } = invocation;
-    if (site_engines === undefined) return invocation;
-    return { ...plain, args: { ...plain.args, engine: site_engine_for(engines, site_engines, page) ?? site_engines[0] } };
-  });
+// Settles the engine of each `site_keys` invocation for the page. A key typed on a page that fits none of its engines is not run: the result names its letter, for the refusal.
+export function with_site_engines(invocations: BoundInvocation[], engines: Record<string, SearchEngine>, page: PageInfo | undefined): { invocations: BoundInvocation[] } | { unfit_letter: string } {
+  const settled: BoundInvocation[] = [];
+  for (const invocation of invocations) {
+    const { site_search, ...plain } = invocation;
+    if (site_search === undefined) {
+      settled.push(invocation);
+      continue;
+    }
+    const engine = site_engine_for(engines, site_search.engines, page);
+    if (engine === undefined) return { unfit_letter: site_search.letter };
+    settled.push({ ...plain, args: { ...plain.args, engine } });
+  }
+  return { invocations: settled };
 }
 
 // What one invocation asks of the page: the slots of the engine a search names, the `requires` of a snippet.
@@ -58,7 +65,7 @@ export function with_site_engines(invocations: BoundInvocation[], engines: Recor
 export function requirement_lookup(config: Pick<MergedConfig, "search_engines" | "snippets" | "settings">): (invocation: BoundInvocation) => string[] {
   const snippets = new Map(config.snippets.map((snippet) => [snippet.id, snippet]));
   return (invocation) => {
-    if (invocation.site_engines) return [];
+    if (invocation.site_search) return [];
     if (invocation.id === "open.search") {
       const engine = config.search_engines[search_engine_name_of(config, invocation.args?.engine)];
       return engine ? engine_requirement(engine) : [];

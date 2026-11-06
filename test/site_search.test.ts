@@ -81,7 +81,7 @@ function keys_on(page: { url: string } | undefined, prefix: "s" | "S"): string[]
   const shown = without_unavailable(compiled.modes.normal!, {
     page,
     requirement_of: requirement_lookup(config),
-    has_site_engine: (invocation) => site_engine_for(config.search_engines, invocation.site_engines ?? [], page) !== undefined,
+    has_site_engine: (invocation) => site_engine_for(config.search_engines, invocation.site_search?.engines ?? [], page) !== undefined,
   });
   const group = (shown?.children[prefix] as TreeBranch | undefined)?.children["/"] as TreeBranch | undefined;
   return Object.keys(group?.children ?? {}).sort();
@@ -149,16 +149,21 @@ test("a letter runs the engine of the page's site", () => {
     const config = built();
     const { compiled } = compile_config({ config, default_keymap: DEFAULT_KEYMAP, get_command: (id) => registry.get(id), enum_sources: { search_engines: Object.keys(config.search_engines), containers: [] } });
     const leaf = ((compiled.modes.normal!.children[prefix] as TreeBranch).children["/"] as TreeBranch).children[letter] as TreeLeaf;
-    return with_site_engines([leaf.steps[0]!.invocation], engines, page)[0]!;
+    return with_site_engines([leaf.steps[0]!.invocation], engines, page);
   };
-  assert.equal(run(REPO_PAGE, "i", "s").args?.engine, "github.issues");
-  assert.equal(run({ url: "https://gitlab.com/a/b" }, "i", "s").args?.engine, "gitlab");
-  assert.equal(run(REPO_PAGE, "I", "s").args?.engine, "github.repo.issues");
-  assert.equal(run(OTHER_PAGE, "i", "s").args?.engine, "github.issues", "no fit keeps the first engine");
-  const tab = run(REPO_PAGE, "i", "S");
+  const invocation = (page: { url: string } | undefined, letter: string, prefix: "s" | "S") => {
+    const settled = run(page, letter, prefix);
+    assert.ok("invocations" in settled, `${letter} on ${page?.url} refused`);
+    return settled.invocations[0]!;
+  };
+  assert.equal(invocation(REPO_PAGE, "i", "s").args?.engine, "github.issues");
+  assert.equal(invocation({ url: "https://gitlab.com/a/b" }, "i", "s").args?.engine, "gitlab");
+  assert.equal(invocation(REPO_PAGE, "I", "s").args?.engine, "github.repo.issues");
+  assert.deepEqual(run(OTHER_PAGE, "i", "s"), { unfit_letter: "i" }, "a page that fits none refuses");
+  const tab = invocation(REPO_PAGE, "i", "S");
   assert.equal(tab.args?.where, "tab");
-  assert.equal("site_engines" in tab, false);
-  assert.equal(run(OTHER_PAGE, "/", "s").args?.engine, "site");
+  assert.equal("site_search" in tab, false);
+  assert.equal(invocation(OTHER_PAGE, "/", "s").args?.engine, "site");
 });
 
 test("the site engine is the default engine with the site term, and a user entry replaces it", () => {

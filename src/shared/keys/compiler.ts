@@ -38,7 +38,7 @@ function generated_bindings(keymap: KeymapConfig, settings: Partial<Settings>): 
     const first = engines[0];
     if (first === undefined) continue;
     for (const where of ["here", "tab"] as const) {
-      bindings[site_prefix(where) + last_key] = { id: "open.search", args: { engine: first, where }, site_engines: engines };
+      bindings[site_prefix(where) + last_key] = { id: "open.search", args: { engine: first, where }, site_search: { letter: last_key, engines } };
     }
   }
   for (const [last_key, container] of Object.entries(keymap.container_keys ?? {})) {

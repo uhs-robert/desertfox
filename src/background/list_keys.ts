@@ -59,7 +59,7 @@ export function panel_after_prefix(root: TreeBranch | undefined, prefix: string[
 export type PageAvailability = { page: PageInfo | undefined; requirement_of: (invocation: BoundInvocation) => string[]; has_site_engine?: (invocation: BoundInvocation) => boolean };
 
 const fits_page = (invocation: BoundInvocation, availability: PageAvailability): boolean =>
-  is_available(availability.requirement_of(invocation), availability.page) && (invocation.site_engines === undefined || availability.has_site_engine?.(invocation) !== false);
+  is_available(availability.requirement_of(invocation), availability.page) && (invocation.site_search === undefined || availability.has_site_engine?.(invocation) !== false);
 
 export function without_unavailable(node: TreeBranch, availability: PageAvailability): TreeBranch | undefined {
   const children: Record<string, TreeNode> = {};
