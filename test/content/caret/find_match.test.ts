@@ -204,3 +204,12 @@ test("the timeout line names the background's limit", async () => {
   const { FIND_SCAN_LIMIT_MS } = await import("../../../src/background/find_scan.ts");
   assert.equal(describe_timeout("a.*b"), `Pattern too slow, stopped after ${FIND_SCAN_LIMIT_MS / 1000} s: a.*b`);
 });
+
+test("a background scan that fails to send is dropped when stale and thrown when current", async () => {
+  const regex = compile_query("a.*b")!.search;
+  const rejected: ScanRegex = async () => {
+    throw new Error("Could not establish connection");
+  };
+  assert.equal(await collect_matches("ab", regex, { ...never_stale, is_stale: () => true }, rejected), undefined);
+  await assert.rejects(collect_matches("ab", regex, never_stale, rejected), /Could not establish connection/);
+});

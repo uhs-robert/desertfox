@@ -113,8 +113,12 @@ export const describe_timeout = (query: string) => `Pattern too slow, stopped af
 // A slice ends between two matches. Only a `literal` or `folded` search runs here, and neither can backtrack, so one step is short.
 export async function collect_matches(text: string, search: Search, slicing: Slicing, scan_regex: ScanRegex): Promise<Matches | "timeout" | undefined> {
   if (search.kind === "regex") {
-    const answer = await scan_regex(text, search.regex);
-    if (slicing.is_stale()) return undefined;
+    // A frame torn down or a background reload rejects the send. That says nothing to a search that is already stale.
+    const answer = await scan_regex(text, search.regex).catch((error: unknown) => {
+      if (slicing.is_stale()) return undefined;
+      throw error;
+    });
+    if (!answer || slicing.is_stale()) return undefined;
     if (answer.ok) return { from: Array.from(answer.from), to: Array.from(answer.to) };
     if (answer.reason === "failed") throw new Error(answer.message);
     return answer.reason === "timeout" ? "timeout" : undefined;

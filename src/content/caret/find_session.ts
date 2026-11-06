@@ -30,7 +30,7 @@ type Live = {
   generation: number;
   // The text of the line as of the last keystroke.
   text: string;
-  // The last text whose regex ran past the time limit, so Enter searches it as text.
+  // The text of the latest run when its regex ran past the time limit, so Enter searches it as text. Each run clears it as it starts.
   timed_out: string | undefined;
   found: Found | undefined;
   pending: Promise<void>;
@@ -134,6 +134,9 @@ export function create_find(host: Host, deps: FindDeps = browser_deps()) {
   // The page changed its text since the search read its model, so the model is read again before it is used.
   let page_changed = false;
   let observe_trees: ((trees: TextTree[]) => void) | undefined;
+  // The last query whose regex ran past the time limit. `n` and `N` search it as text at once, so a page whose text keeps changing does not cost each press the full limit.
+  // Typing it on the line runs the regex again, and an answer clears it.
+  let timed_out_query: string | undefined;
   // Where a jump to a word starts, as a point in the page. `step_once` consumes it.
   let origin: DomPoint | undefined;
 
@@ -197,13 +200,15 @@ export function create_find(host: Host, deps: FindDeps = browser_deps()) {
     // A pattern typed one key at a time passes through costly shapes such as `(a+)+`. It is not searched, and the results of the last keystroke stay on the page.
     if (query.fallback === "costly" && !as_text) return report(`Pattern too slow as a regex: ${text}`);
     const [search, fallback] = as_text ? [query.as_text, "costly" as const] : [query.search, query.fallback];
+    open.timed_out = undefined;
     const matches = await collect_matches(open.model.text, search, deps.slicing(is_stale), deps.scan_regex);
     if (!matches || is_stale()) return;
     // As with a costly shape, the results of the last keystroke stay on the page.
     if (matches === "timeout") {
-      open.timed_out = text;
+      open.timed_out = timed_out_query = text;
       return report(describe_timeout(text));
     }
+    if (search.kind === "regex" && timed_out_query === text) timed_out_query = undefined;
     const colors = await open.colors;
     if (is_stale()) return;
     // The page can lose a frame while the scan runs. Then the match positions no longer fit the text, so the scan starts over.
@@ -270,9 +275,11 @@ export function create_find(host: Host, deps: FindDeps = browser_deps()) {
       const model = found?.model ?? (kept ? fresh_model(kept.model) : read_model());
       const scan = (search: Search) => collect_matches(model.text, search, deps.slicing(() => run !== step_generation), deps.scan_regex);
       let fallback = found ? found.fallback : query!.fallback;
-      let matches = found?.matches ?? (await scan(query!.search));
+      const known_too_slow = !found && timed_out_query === previous.query;
+      let matches = found?.matches ?? (known_too_slow ? "timeout" : await scan(query!.search));
       // n and N commit the pattern as Enter does, so a regex past the time limit is searched as text.
       if (matches === "timeout") {
+        timed_out_query = previous.query;
         fallback = "costly";
         matches = await scan(query!.as_text);
       }
@@ -327,7 +334,9 @@ export function create_find(host: Host, deps: FindDeps = browser_deps()) {
         if (keep) await open.pending;
         // Enter commits the pattern, so the text fallback that was skipped while typing runs now.
         const text_fallback_skipped = open.timed_out === open.text || compile_query(open.text)?.fallback === "costly";
-        if (keep && live === open && open.found?.query !== open.text && text_fallback_skipped) await run_update(open, open.text, ++open.generation, () => {}, true);
+        // A timeout of the last run wins over older results of the same text, which stay on the page only while typing.
+        const found_is_current = open.found?.query === open.text && open.timed_out !== open.text;
+        if (keep && live === open && !found_is_current && text_fallback_skipped) await run_update(open, open.text, ++open.generation, () => {}, true);
         // A new search may have begun while the scan finished, and it owns the page now.
         if (live !== open) return;
         live = undefined;

@@ -437,3 +437,81 @@ test("a failed background scan shows a toast and the next keystroke searches aga
   await page.settle();
   assert.deepEqual(lines, ["1 of 1"]);
 });
+
+const in_place: ScanRegex = async (text, { source, flags }) => ({ ok: true, ...scan_regex({ text, source, flags }) });
+
+test("Enter after a timeout searches as text even when older results of the same query stay on the page", async () => {
+  // As a regex "a.c" finds "abc" at 5. As text it finds nothing.
+  const page = fake_page("a.*c abc");
+  const find = create_find(page.host, page.deps);
+  find.begin("forward");
+  find.update("a.c", () => {});
+  await page.settle();
+  page.set_background(TIMES_OUT);
+  find.update("a.cd", () => {});
+  await page.settle();
+  find.update("a.c", () => {});
+  await page.settle();
+  const ending = find.end(true);
+  await page.settle();
+  await ending;
+  assert.equal(find.position(page.deps.build_model()), undefined, "Enter kept the matches of the older regex run");
+});
+
+test("a timeout stops counting once a later regex run of the same text answers", async () => {
+  // As a regex the pattern finds nothing: the "c" is followed by "(", not "q". As text it finds itself at 0.
+  const page = fake_page("a.*c(?=q) z");
+  page.set_background(TIMES_OUT);
+  const find = create_find(page.host, page.deps);
+  find.begin("forward");
+  find.update("a.*c(?=q)", () => {});
+  await page.settle();
+  page.set_background(in_place);
+  find.update("a.*c(?=", () => {});
+  await page.settle();
+  const lines: string[] = [];
+  find.update("a.*c(?=q)", (status) => lines.push(status));
+  await page.settle();
+  assert.deepEqual(lines, ["Not found: a.*c(?=q)"]);
+  const ending = find.end(true);
+  await page.settle();
+  await ending;
+  assert.equal(find.position(page.deps.build_model()), undefined, "Enter searched the pattern as text after the regex answered");
+});
+
+test("n on a pattern that timed out searches as text at once on each later press, even after the page changed", async () => {
+  const page = fake_page("x a.*c abc");
+  let scans = 0;
+  page.set_background(async () => (scans++, { ok: false, reason: "timeout" }));
+  page.registers.set("/", "a.*c");
+  page.registers.set("/:direction", "forward");
+  const find = create_find(page.host, page.deps);
+  const first = find.step(false);
+  await page.settle();
+  await first;
+  page.change_page();
+  const second = find.step(false);
+  await page.settle();
+  await second;
+  assert.equal(scans, 1, "the second n waited for the regex again");
+  assert.deepEqual(page.toasts, ["1 of 1 (too slow as a regex, searched as text)", "1 of 1, wrapped (too slow as a regex, searched as text)"]);
+});
+
+test("n after Enter on a pattern that timed out does not run the regex again", async () => {
+  const page = fake_page("a.*c abc a.*c");
+  let scans = 0;
+  page.set_background(async () => (scans++, { ok: false, reason: "timeout" }));
+  const find = create_find(page.host, page.deps);
+  find.begin("forward");
+  find.update("a.*c", () => {});
+  await page.settle();
+  const ending = find.end(true);
+  await page.settle();
+  await ending;
+  page.change_page();
+  const stepping = find.step(false);
+  await page.settle();
+  await stepping;
+  assert.equal(scans, 1);
+  assert.deepEqual(page.toasts, ["2 of 2 (too slow as a regex, searched as text)"]);
+});

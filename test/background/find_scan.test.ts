@@ -120,7 +120,8 @@ const real_deps: FindScanDeps = {
 };
 
 test("the real worker: a runaway regex is stopped near the limit, and the next search answers", async () => {
-  const scan = create_find_scan(real_deps);
+  const deps = { ...real_deps };
+  const scan = create_find_scan(deps);
   const started = performance.now();
   // No "b" in the text, so `a.*b.*c` tries every split of the run of "a" from every start.
   const slow = await scan.answer({ text: "a".repeat(60_000), source: "a.*b.*c", flags: "giu" }, "1:0");
@@ -128,6 +129,8 @@ test("the real worker: a runaway regex is stopped near the limit, and the next s
   assert.deepEqual(slow, { ok: false, reason: "timeout" });
   // Loose, so a busy machine does not fail it. Without the limit the scan runs for seconds.
   assert.ok(slow_ms < 1500, `the timeout took ${slow_ms} ms`);
+  // The limit counts the start of a Node worker thread, which a busy machine can push past 300 ms, so the fast scan gets room.
+  deps.limit_ms = 5000;
   const fast = await scan.answer({ text: "xaxa😀a", source: "a", flags: "giu" }, "1:0");
   assert.deepEqual(fast, { ok: true, from: Int32Array.of(1, 3, 6), to: Int32Array.of(2, 4, 7) });
 });
