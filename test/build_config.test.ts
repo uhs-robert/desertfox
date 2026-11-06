@@ -71,6 +71,17 @@ test("an empty generator key is rejected", () => {
   assert.match(problems_of(dir).join("\n"), /keymap\.container_keys has an empty key/);
 });
 
+test("modifiers come through as written, and a modifier outside a group or with a bad shape is rejected", () => {
+  const good = build_config(config_dir_with({ "keymap.toml": '[modifiers]\n";z" = { rapid = true, label = "Zippy" }' }), commands);
+  assert.deepEqual(good.keymap.modifiers, { ";z": { rapid: true, label: "Zippy" } });
+  const outside = problems_of(config_dir_with({ "keymap.toml": '[modifiers]\n"r" = { rapid = true }' })).join("\n");
+  assert.match(outside, /must sit inside a group/);
+  const shape = problems_of(config_dir_with({ "keymap.toml": '[modifiers]\n";r" = "rapid"' })).join("\n");
+  assert.match(shape, /modifiers\[";r"\] must be a table of args/);
+  const label = problems_of(config_dir_with({ "keymap.toml": '[modifiers]\n";r" = { rapid = true, label = 5 }' })).join("\n");
+  assert.match(label, /a label must be a string/);
+});
+
 test("an empty string in the keymap is stored as null to remove a default binding", () => {
   assert.equal(full().keymap.normal?.["K"], null);
   assert.deepEqual(full().keymap.normal?.["gz"], [{ id: "tab.next" }, { id: "tab.next" }]);

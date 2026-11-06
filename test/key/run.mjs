@@ -585,7 +585,7 @@ async function main() {
       expect(in_frame.length === 0, "the snippet ran inside the iframe");
     });
 
-    // part C: help and options pages
+    // part C: help page
     // The pages are extension pages, so the test reads them through the background's view list.
     const extension_view = (name) => `(browser.extension.getViews({ type: "tab" }).find((view) => view.location.pathname === "/${name}"))`;
 
@@ -665,20 +665,20 @@ async function main() {
       await evaluate_in_background(rdp, EXTENSION_ID, `(async () => { for (const tab of await browser.tabs.query({})) if (tab.url.endsWith("/newtab.html")) await browser.tabs.remove(tab.id); })()`);
     });
 
-    await run_case("the options page opens and shows the config source", async () => {
-      const status = { source: "managed", settings: {}, managed_file_hint: "" };
-      const text = await evaluate_in_background(rdp, EXTENSION_ID, `(async () => {
-        await browser.storage.local.set({ desertfox_config_status: ${JSON.stringify(status)} });
+    await run_case("the add-on preferences open the help page with the config source", async () => {
+      // Firefox focuses an open help tab instead of opening Home, so the earlier help case's tab goes first.
+      // The answer is a short summary: a whole page of text is too long to come back over RDP.
+      const home = await evaluate_in_background(rdp, EXTENSION_ID, `(async () => {
+        for (const tab of await browser.tabs.query({})) if (new URL(tab.url).pathname === "/help.html") await browser.tabs.remove(tab.id);
         await browser.runtime.openOptionsPage();
-        for (let attempt = 0; attempt < 40; attempt++) {
+        for (let attempt = 0; attempt < 30; attempt++) {
           await new Promise((resolve) => setTimeout(resolve, 250));
-          const view = ${extension_view("options.html")};
-          const heading = view?.document.querySelector("h2");
-          if (heading) return view.document.body.textContent;
+          const text = ${extension_view("help.html")}?.document.body.textContent ?? "";
+          if (text.includes("Config source")) return { config_source: true, change_the_config: text.includes("Change the config") };
         }
-        return "";
+        return { config_source: false, change_the_config: false };
       })()`);
-      expect(text.includes("Config source") && text.includes("Managed storage file"), `options page text: ${String(text).slice(0, 120)}`);
+      expect(home?.config_source && home?.change_the_config, `help Home after openOptionsPage: ${JSON.stringify(home)}`);
     });
 
     // part A: scroll align

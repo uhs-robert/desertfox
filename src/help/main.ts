@@ -35,7 +35,7 @@ function show_route(model: HelpModel, guide: Block[], moved_by_user: boolean): v
 async function main(): Promise<void> {
   const commands_file = await load_commands_file();
   const stored = await browser.storage.local.get([COMPILED_KEYMAP_STORAGE_KEY, WARNINGS_STORAGE_KEY]);
-  const { config, source, overrides, config_settings } = await load_effective_config();
+  const { config, source, edits, config_settings } = await load_effective_config();
   const model = build_help_model(
     commands_file.commands,
     stored[COMPILED_KEYMAP_STORAGE_KEY] as CompiledKeymap | undefined,
@@ -43,7 +43,7 @@ async function main(): Promise<void> {
     { search_engines: Object.keys(config.search_engines) },
     config.search_engines,
     // The same shape the background stores, built from the fresh load so a config.reload shows at once.
-    build_config_status(source, config_settings, overrides, `~/.mozilla/managed-storage/${browser.runtime.id}.json`),
+    build_config_status(source, config_settings, edits, `~/.mozilla/managed-storage/${browser.runtime.id}.json`),
   );
   // A missing guide must not blank the other pages.
   const guide = await fetch(browser.runtime.getURL("search_engines_guide.json")).then((response) => response.json() as Promise<Block[]>).catch(() => []);

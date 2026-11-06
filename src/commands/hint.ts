@@ -5,13 +5,13 @@ import { WHERE, WHERE_SHORT } from "./open_target.ts";
 define("hint.run", {
   name: "hint",
   label: "Hint",
-  intent: "Pick a page element by key and act on it. It labels the elements on the page with keys, then acts on the one you pick: open it here, in a tab, in a background tab or in a window, copy its address or its text, delete it, focus it or hover it. Hover sends the pointer events a mouse sends on entering, so menus, tooltips and previews that a script opens appear. A menu that only a CSS :hover rule opens does not. Escape or the next hover ends it. Caret and visual start caret mode or visual mode at the element. Rapid keeps hint mode open for more picks. Text keeps only the links whose text holds it.",
+  intent: "Pick a page element by key and act on it. It labels the elements on the page with keys, then acts on the one you pick: open it here, in a tab, in a background tab or in a window, copy its address or its text, delete it, focus it or hover it. Hover sends the pointer events a mouse sends on entering, so menus, tooltips and previews that a script opens appear. A menu that only a CSS :hover rule opens does not. Escape or the next hover ends it. Caret and visual start caret mode or visual mode at the element. Rapid keeps hint mode open for more picks, and opens links in background tabs unless the action says otherwise. Text keeps only the links whose text holds it.",
   params: [
     {
       name: "action",
       type: "enum",
       values: [...WHERE, "caret", "visual", "copy", "copy_text", "delete", "focus", "hover", "play_pause", "mute", "fullscreen"],
-      default: [{ value: "play_pause", when: { filter: ["media"] } }, { value: "tab", when: { filter: ["images"] } }, { value: "focus", when: { filter: ["frames"] } }, "here"],
+      default: [{ value: "play_pause", when: { filter: ["media"] } }, { value: "background", when: { filter: ["links"], rapid: [true] } }, { value: "tab", when: { filter: ["images"] } }, { value: "focus", when: { filter: ["frames"] } }, "here"],
       short: { ...WHERE_SHORT, caret: "c", visual: "v", copy: "y", copy_text: "Y", delete: "d", focus: "f", play_pause: "P", mute: "M", fullscreen: "F" },
       value_labels: {
         here: "to click",

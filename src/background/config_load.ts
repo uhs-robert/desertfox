@@ -1,13 +1,16 @@
 // Picks the config the extension runs on: managed storage, then an imported
 // file in `storage.local`, then defaults.
 
-import { apply_overrides, CONFIG_FORMAT_VERSION, effective_settings, with_fallback_engines } from "../shared/config.ts";
-import type { MergedConfig, SettingOverrides, SnippetEntry } from "../shared/config.ts";
-import type { ConfigStatus } from "../options/model.ts";
+import { apply_edits, CONFIG_FORMAT_VERSION, effective_settings, NO_EDITS, with_fallback_engines } from "../shared/config.ts";
+import type { MergedConfig, SettingEdits, SettingOverrides, Settings, SnippetEntry } from "../shared/config.ts";
 import { is_setting_name, SETTING_SPECS } from "../shared/settings_schema.ts";
-import { IMPORTED_CONFIG_STORAGE_KEY, SETTING_OVERRIDES_STORAGE_KEY } from "./storage_keys.ts";
+import { IMPORTED_CONFIG_STORAGE_KEY, SAVED_SETTINGS_STORAGE_KEY, TEMP_SETTINGS_STORAGE_KEY } from "./storage_keys.ts";
 
 export type ConfigSource = "managed" | "imported" | "defaults";
+
+// The value the background stores under CONFIG_STATUS_STORAGE_KEY.
+// `saved` and `temp` name the settings each layer of browser edits sets. `configured` names the ones the config file sets.
+export type ConfigStatus = { source: ConfigSource; settings: Settings; managed_file_hint: string; saved: string[]; temp: string[]; configured: string[] };
 
 export type LoadedConfig = {
   config: MergedConfig;
@@ -47,9 +50,27 @@ function is_usable_snippet(candidate: unknown): candidate is SnippetEntry {
   );
 }
 
+// `build-config` refuses a bad setting, but a hand-edited or older managed file can still hold one. Dropping it lets the default apply.
+function checked_file_settings(stored: unknown, source: ConfigSource, warnings: string[]): Partial<Settings> {
+  if (typeof stored !== "object" || stored === null || Array.isArray(stored)) return {};
+  const kept = Object.entries(stored).filter(([name, value]) => {
+    if (!is_setting_name(name)) {
+      warnings.push(`config (${source}): setting ${name} skipped, no setting has that name`);
+      return false;
+    }
+    if (!SETTING_SPECS[name].check(value)) {
+      warnings.push(`config (${source}): setting ${name} skipped, expected ${SETTING_SPECS[name].expectation}`);
+      return false;
+    }
+    return true;
+  });
+  return Object.fromEntries(kept) as Partial<Settings>;
+}
+
 // Fills sections the file left out, so later code never checks for undefined.
 function with_all_sections(raw: Record<string, unknown>, source: ConfigSource, warnings: string[]): MergedConfig {
   const merged = { ...empty_config(), ...raw, format_version: CONFIG_FORMAT_VERSION } as MergedConfig;
+  merged.settings = checked_file_settings(raw.settings, source, warnings);
   const default_engine = merged.settings?.default_engine;
   merged.search_engines = with_fallback_engines(merged.search_engines ?? {}, default_engine);
   const default_needs_page = default_engine !== undefined && (merged.search_engines[default_engine]?.slots ?? []).length > 0;
@@ -88,32 +109,37 @@ export async function load_config(): Promise<LoadedConfig> {
 }
 
 // Keeps what the schema accepts. A stored value that no longer passes, from an older version, is dropped rather than trusted.
-export function checked_overrides(stored: unknown): SettingOverrides {
+export function checked_edit_layer(stored: unknown): SettingOverrides {
   if (typeof stored !== "object" || stored === null || Array.isArray(stored)) return {};
   const kept = Object.entries(stored).filter(([name, value]) => is_setting_name(name) && SETTING_SPECS[name].settable && SETTING_SPECS[name].check(value));
   return Object.fromEntries(kept) as SettingOverrides;
 }
 
-export async function load_overrides(): Promise<SettingOverrides> {
-  const stored = await browser.storage.session.get(SETTING_OVERRIDES_STORAGE_KEY);
-  return checked_overrides(stored[SETTING_OVERRIDES_STORAGE_KEY]);
+export async function load_edits(): Promise<SettingEdits> {
+  const [saved, temp] = await Promise.all([browser.storage.local.get(SAVED_SETTINGS_STORAGE_KEY), browser.storage.session.get(TEMP_SETTINGS_STORAGE_KEY)]);
+  return { saved: checked_edit_layer(saved[SAVED_SETTINGS_STORAGE_KEY]), temp: checked_edit_layer(temp[TEMP_SETTINGS_STORAGE_KEY]) };
 }
 
-export const with_overrides = (config: MergedConfig, overrides: SettingOverrides): MergedConfig => ({ ...config, settings: apply_overrides(config.settings, overrides) });
-
-// The config the extension runs on: the loaded one with the live `:set` values over its settings. Pages that read the config themselves use this.
-export async function load_effective_config(): Promise<{ config: MergedConfig; source: ConfigSource; overrides: SettingOverrides; config_settings: MergedConfig["settings"] }> {
-  const [loaded, overrides] = await Promise.all([load_config(), load_overrides()]);
-  return { config: with_overrides(loaded.config, overrides), source: loaded.source, overrides, config_settings: loaded.config.settings };
+export async function store_edits(edits: SettingEdits): Promise<void> {
+  await Promise.all([browser.storage.local.set({ [SAVED_SETTINGS_STORAGE_KEY]: edits.saved }), browser.storage.session.set({ [TEMP_SETTINGS_STORAGE_KEY]: edits.temp })]);
 }
 
-// `config_settings` is the config before the overrides, so the status can tell which differing value came from where.
-export function build_config_status(source: ConfigSource, config_settings: MergedConfig["settings"], overrides: SettingOverrides, managed_file_hint: string): ConfigStatus {
+export const with_edits = (config: MergedConfig, edits: SettingEdits = NO_EDITS): MergedConfig => ({ ...config, settings: apply_edits(config.settings, edits) });
+
+// The config the extension runs on: the loaded one with the browser edits over its settings. Pages that read the config themselves use this.
+export async function load_effective_config(): Promise<{ config: MergedConfig; source: ConfigSource; edits: SettingEdits; config_settings: MergedConfig["settings"] }> {
+  const [loaded, edits] = await Promise.all([load_config(), load_edits()]);
+  return { config: with_edits(loaded.config, edits), source: loaded.source, edits, config_settings: loaded.config.settings };
+}
+
+// `config_settings` is the config before the edits, so the status can tell which differing value came from where.
+export function build_config_status(source: ConfigSource, config_settings: MergedConfig["settings"], edits: SettingEdits, managed_file_hint: string): ConfigStatus {
   return {
     source,
-    settings: effective_settings(apply_overrides(config_settings, overrides)),
+    settings: effective_settings(apply_edits(config_settings, edits)),
     managed_file_hint,
-    overrides: Object.keys(overrides),
+    saved: Object.keys(edits.saved),
+    temp: Object.keys(edits.temp),
     configured: Object.keys(config_settings),
   };
 }

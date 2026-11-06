@@ -15,9 +15,9 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, open_p
   const run_hint = (args) => in_active_tab(`browser.runtime.sendMessage({ type: "run", invocations: [{ id: "hint.run", args: ${JSON.stringify(args)} }], mode: "normal" }); 0`);
   const link_count = async () => (await in_active_tab(`document.querySelectorAll("a[href]").length`))[0];
 
-  await run_case(";y a copies the link address", async () => {
+  await run_case(";yl a copies the link address", async () => {
     await open_page("hints", "p6_copy", { new_tab: true });
-    await send_keys(";y");
+    await send_keys(";yl");
     await send_keys("a");
     await sleep(500);
     await open_page("field", "p6_paste", { new_tab: true });
@@ -25,13 +25,13 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, open_p
     const mark = events.length;
     await send_keys(...paste_ctrl_v);
     const pasted = await wait_event(mark, (event) => event.type === "input" && event.page_id === "p6_paste", "the pasted address");
-    expect(pasted.value.endsWith("/page?id=hint_one"), `;y copied "${pasted.value}"`);
+    expect(pasted.value.endsWith("/page?id=hint_one"), `;yl copied "${pasted.value}"`);
   });
 
-  await run_case(";t labels the elements with text of their own and copies the picked text", async () => {
+  await run_case(";Yp labels the elements with text of their own and copies the picked text", async () => {
     // Labels run in page order: the heading "a", "alpha text" "s", "beta text" "d". A labelled wrapper div would take "s".
     await open_page("prose", "p6_prose", { new_tab: true });
-    await send_keys(";t");
+    await send_keys(";Yp");
     await send_keys("d");
     await sleep(500);
     await open_page("field", "p6_prose_paste", { new_tab: true });
@@ -39,7 +39,7 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, open_p
     const mark = events.length;
     await send_keys(...paste_ctrl_v);
     const pasted = await wait_event(mark, (event) => event.type === "input" && event.page_id === "p6_prose_paste", "the pasted text");
-    expect(pasted.value === "beta text", `;t d copied "${pasted.value}"`);
+    expect(pasted.value === "beta text", `;Yp d copied "${pasted.value}"`);
   });
 
   await run_case("f opens a dropdown that opens on mousedown, with one click after the mouse events", async () => {
@@ -88,11 +88,11 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, open_p
     expect(!find_event(mark, (event) => event.type === "scroll" && event.page_id === "p6_shadowbox"), "the page scrolled with the shadow panel");
   });
 
-  await run_case(";r opens each pick in a background tab and keeps picking until Escape", async () => {
+  await run_case(";rl opens each pick in a background tab and keeps picking until Escape", async () => {
     await open_page("hints", "p6_rapid", { new_tab: true });
     const tabs_before = await tab_count();
     const mark = events.length;
-    await send_keys(";r");
+    await send_keys(";rl");
     await send_keys("a");
     await send_keys("s");
     await wait_event(mark, loaded("hint_two"), "the second link to load after two picks");
@@ -327,7 +327,7 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, open_p
   if (shot_dir) {
     await run_case("screenshot of rapid mode after a pick", async () => {
       await open_page("hints", "p6_shot_rapid", { new_tab: true });
-      await send_keys(";r");
+      await send_keys(";rl");
       await send_keys("a");
       await sleep(800);
       await take_shot(`${shot_dir}/p6_rapid_after_pick.png`);

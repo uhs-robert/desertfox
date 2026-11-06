@@ -5,8 +5,9 @@ import type { CommandMeta, ParamDef, ParamValue } from "../shared/command.ts";
 import { DEFAULT_SETTINGS } from "../shared/config.ts";
 import type { SearchEngine } from "../shared/config.ts";
 import { search_engine_name } from "../commands/url_build.ts";
-import { build_options_model } from "../options/model.ts";
-import type { ConfigStatus, SettingRow } from "../options/model.ts";
+import type { ConfigStatus } from "../background/config_load.ts";
+import { build_config_view } from "./config_view.ts";
+import type { SettingRow } from "./config_view.ts";
 import { ROLES } from "../shared/theme/roles.ts";
 import type { Role } from "../shared/theme/roles.ts";
 import { token_name } from "../shared/theme/tokens.ts";
@@ -68,6 +69,8 @@ export type HelpModel = {
   // Where the settings came from, and the settings in force. Read-only: the page has no inputs.
   config_source: string;
   settings: SettingRow[];
+  // The commands to run after editing the config files.
+  rebuild_steps: string[];
   groups: HelpGroup[];
   engines: EngineRow[];
   quick_start: Block[];
@@ -186,7 +189,7 @@ function engine_rows(engines: Record<string, SearchEngine>, compiled: CompiledKe
 
 // `sources` are the configured engine names, so a query that starts with one prints with its `--` guard.
 export function build_help_model(commands: CommandMeta[], compiled: CompiledKeymap | undefined, warnings: string[], sources: EnumSources = {}, engines: Record<string, SearchEngine> = {}, status?: ConfigStatus): HelpModel {
-  const options = build_options_model(status, warnings);
+  const config_view = build_config_view(status);
   const keys = keys_by_command(compiled, { commands: new Map(commands.map((command) => [command.id, command])), sources });
   const groups = new Map<string, CommandRow[]>();
   for (const command of commands) {
@@ -204,8 +207,9 @@ export function build_help_model(commands: CommandMeta[], compiled: CompiledKeym
   }
   return {
     warnings,
-    config_source: options.source_text,
-    settings: options.settings,
+    config_source: config_view.source_text,
+    settings: config_view.settings,
+    rebuild_steps: config_view.rebuild_steps,
     engines: engine_rows(engines, compiled, status?.settings.default_engine ?? DEFAULT_SETTINGS.default_engine),
     quick_start: quick_start_blocks(compiled, commands),
     tip: tip_block(compiled, commands),
