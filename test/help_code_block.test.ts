@@ -11,11 +11,13 @@ class FakeNode {
   attributes: Record<string, string> = {};
   listeners: Record<string, () => void> = {};
   tag: string;
+  scrollTop = 0;
   constructor(tag: string) { this.tag = tag; }
   append(...nodes: (FakeNode | string)[]) { this.children.push(...nodes); }
   replaceChildren(...nodes: (FakeNode | string)[]) { this.children = nodes; }
   setAttribute(name: string, value: string) { this.attributes[name] = value; }
   addEventListener(name: string, listener: () => void) { this.listeners[name] = listener; }
+  querySelector(selector: string): FakeNode | null { return this.find_all(selector.slice(1))[0] ?? null; }
   get text(): string { return this.children.map((child) => (typeof child === "string" ? child : child.text)).join(""); }
   find_all(class_name: string): FakeNode[] {
     const own: FakeNode[] = this.className === class_name ? [this] : [];

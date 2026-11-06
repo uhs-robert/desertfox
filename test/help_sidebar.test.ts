@@ -16,11 +16,15 @@ class FakeNode {
   listeners: Record<string, () => void> = {};
   tag: string;
   textContent = "";
+  scrollTop = 0;
   constructor(tag: string) { this.tag = tag; }
   append(...nodes: (FakeNode | string)[]) { this.children.push(...nodes); }
   replaceChildren(...nodes: (FakeNode | string)[]) { this.children = nodes; }
   setAttribute(name: string, value: string) { this.attributes[name] = value; }
   addEventListener(name: string, listener: () => void) { this.listeners[name] = listener; }
+  querySelector(selector: string): FakeNode | null {
+    return this.find_all(by_class(selector.slice(1)))[0] ?? null;
+  }
   find_all(test: (node: FakeNode) => boolean): FakeNode[] {
     const below = this.children.flatMap((child) => (typeof child === "string" ? [] : child.find_all(test)));
     return test(this) ? [this, ...below] : below;
@@ -44,10 +48,9 @@ const GUIDE: Block[] = [
   { kind: "heading", level: 3, text: "Trees" },
 ];
 
-function render(route: Route, keep_state = false, guide: Block[] = []): FakeNode {
+function render(route: Route, keep_state = false, guide: Block[] = [], root = new FakeNode("body")): FakeNode {
   (globalThis as { document?: unknown }).document = { createElement: (tag: string) => new FakeNode(tag), createElementNS: (_ns: string, tag: string) => new FakeNode(tag) };
   if (!keep_state) reset_group_state();
-  const root = new FakeNode("body");
   render_help(root as never, { quick_start: QUICK_START, groups: GROUPS, warnings: [], settings: [], engines: [], tip: { kind: "tip", inlines: [] } } as never, route, guide);
   return root;
 }
@@ -176,4 +179,15 @@ test("Search Engines lists the guide's level-3 headings and Your engines, with m
 
 test("without the guide, Search Engines lists only Your engines", () => {
   assert.deepEqual(links(group_nodes(render({ page: "search-engines" }))[3]!.list), ["#section=search-engines/your-engines"]);
+});
+
+test("a rebuild keeps the sidebar's scroll position, on the same page and across pages", () => {
+  const root = render({ page: "quick-start" });
+  const sidebar_of = () => root.querySelector(".desertfox-help-sidebar")!;
+  assert.equal(sidebar_of().scrollTop, 0);
+  sidebar_of().scrollTop = 120;
+  render({ page: "quick-start", section: "which-key" }, true, [], root);
+  assert.equal(sidebar_of().scrollTop, 120);
+  render({ page: "commands" }, true, [], root);
+  assert.equal(sidebar_of().scrollTop, 120);
 });
