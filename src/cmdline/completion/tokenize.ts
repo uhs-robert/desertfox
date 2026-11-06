@@ -2,8 +2,8 @@
 // or the subject. Pure: it reads the text and a lookup, never the DOM.
 
 import type { ParamDef } from "../../shared/command.ts";
-import { read_flag, tokenize } from "../../shared/registry/index.ts";
-import type { CommandLookup } from "../../shared/registry/index.ts";
+import { read_flag, tokenize } from "../../shared/registry/command_line.ts";
+import type { CommandLookup } from "../../shared/registry/command_line.ts";
 import { bare_word_param, find_param, is_dynamic_values, subject_param } from "../../shared/registry/params.ts";
 
 type Command = NonNullable<ReturnType<CommandLookup["find"]>>;

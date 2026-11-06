@@ -1,7 +1,7 @@
 // What each setting accepts, derived from its row in `settings_table.ts`: the build tool checks settings.toml with
-// it, `:set` checks a typed value with it and the command line completes names and values from it. Background,
-// extension pages and build tools import this module. The content script must not: it has a 16 KB budget and needs
-// none of this.
+// it, `:set` checks a typed value with it and the generator of `setting_completion.ts` reads names and values from it. Background
+// and build tools import this module. The content script and the command line page must not: the first has a
+// 16 KB budget and neither needs it.
 
 import { BUILT_IN_PAGE, is_web_url } from "./config.ts";
 import { SETTINGS_TABLE, type SettingName, type SettingRow } from "./settings_table.ts";
@@ -19,7 +19,7 @@ export type SettingSpec = {
   is_toggle: boolean;
   // Names what failed in a value that `check` refused, for a value with parts such as a list of tables. Appended to the expectation in the build problem.
   explain?: (value: unknown) => string | undefined;
-  // Values the command line offers for the second word. A function, and short lists only: the command line page bundles this module, so it must not import the theme color tables (25 KB). The theme names come from the names-only `theme_names.ts`.
+  // Values the command line offers for the second word. A function, and short lists only: `tools/build_setting_completion.ts` calls it once and stores the result, so the command line page does not bundle this module. Keep it off the theme color tables (25 KB): the theme names come from the names-only `theme_names.ts`.
   listed_values?: () => readonly string[];
 };
 

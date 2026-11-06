@@ -2,11 +2,14 @@
 // the text to put in the line, the three list columns and the usage the note row shows.
 
 import type { CommandMeta, Mode, ParamDef } from "../../shared/command.ts";
-import { first_sentence, flag_alternatives, tokenize, usage_line } from "../../shared/registry/index.ts";
-import type { CommandLookup, EnumSources } from "../../shared/registry/index.ts";
+import type { EnumSources } from "../../shared/registry/check_shape.ts";
+import { tokenize } from "../../shared/registry/command_line.ts";
+import type { CommandLookup } from "../../shared/registry/command_line.ts";
+import { first_sentence } from "../../shared/registry/summary.ts";
+import { flag_alternatives, usage_line } from "../../shared/registry/usage.ts";
 import { always_default, bare_word_param, default_of, flag_params, is_dynamic_values, positional_params, static_values, subject_param } from "../../shared/registry/params.ts";
 import { rank } from "../../shared/score.ts";
-import { is_setting_name, SETTING_NAMES, SETTING_SPECS } from "../../shared/settings_schema.ts";
+import { completion_of, is_setting_name, SETTING_COMPLETION, type SettingCompletion } from "../../shared/setting_completion.ts";
 import type { Ranked } from "../../shared/score.ts";
 import type { BookmarkItem, EngineItem, HeadingItem, OpenItems, OpenRow, TabContainer, TabItem, WindowItem } from "../../shared/messages.ts";
 import type { LiveKind, LiveSource } from "./live.ts";
@@ -170,16 +173,16 @@ function setting_rows(context: Extract<CursorContext, { kind: "subject" }>, text
   if (command_id !== "settings.set" && command_id !== "settings.unset" && command_id !== "settings.toggle") return undefined;
   const row = (name: string, insert: string, description: string): Row => ({ name, insert, description, args: "", also_named: [], keywords: [], usage });
   if (context.position === 0) {
-    const wanted = (name: keyof typeof SETTING_SPECS) => SETTING_SPECS[name].settable && (command_id !== "settings.toggle" || SETTING_SPECS[name].is_toggle);
-    const names = SETTING_NAMES.filter(wanted).map((name) => row(name, `${name} `, SETTING_SPECS[name].expectation));
+    const wanted = (setting: SettingCompletion) => setting.settable && (command_id !== "settings.toggle" || setting.is_toggle);
+    const names = SETTING_COMPLETION.filter(wanted).map((setting) => row(setting.name, `${setting.name} `, setting.expectation));
     return command_id === "settings.unset" ? [row("all", "all ", "Drop every live change."), ...names] : names;
   }
   const typed = tokenize(text.slice(0, context.start));
   const setting = Array.isArray(typed) ? typed[1]?.text : undefined;
   if (command_id !== "settings.set" || setting === undefined || !is_setting_name(setting)) return [];
-  const spec = SETTING_SPECS[setting];
+  const spec = completion_of(setting);
   if (context.position > 1 && !spec.is_list) return [];
-  return (spec.listed_values?.() ?? []).map((value) => row(value, `${quote_word(value)} `, ""));
+  return spec.values.map((value) => row(value, `${quote_word(value)} `, ""));
 }
 
 // With no word typed, the bookmark list shows this many of the newest.

@@ -9,9 +9,10 @@ docs-gen: install_deps
 themes: install_deps
     npm run --silent themes:write
 
-# Regenerate src/shared/default_settings.ts from the defaults in src/shared/settings_table.ts.
+# Regenerate src/shared/default_settings.ts from the defaults in src/shared/settings_table.ts, and src/shared/setting_completion.ts from the setting rules.
 settings-defaults: install_deps
     npm run --silent defaults:write
+    npm run --silent completion:write
 
 # Copy the Oasis theme CSS files from an oasis.nvim checkout into themes/oasis/, then regenerate src/shared/themes.ts.
 oasis-themes oasis_nvim_dir: install_deps
@@ -23,7 +24,7 @@ build: install_deps
     npm run --silent typecheck
     npm run --silent build
 
-# Check no old-name tokens remain, docs/keymap.md, src/shared/themes.ts and src/shared/default_settings.ts are current, then run the unit tests from TypeScript source by Node's type stripping, and the Python host tests.
+# Check no old-name tokens remain, docs/keymap.md, src/shared/themes.ts, src/shared/default_settings.ts and src/shared/setting_completion.ts are current, then run the unit tests from TypeScript source by Node's type stripping, and the Python host tests.
 test: install_deps
     #!/usr/bin/env bash
     set -euo pipefail

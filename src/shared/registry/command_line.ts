@@ -4,7 +4,7 @@
 
 import type { CommandDef, ContextSourceName, ParamDef } from "../command.ts";
 import type { Invocation } from "../invocation.ts";
-import type { EnumSources } from "./check_args.ts";
+import type { EnumSources } from "./check_shape.ts";
 import { bare_word_param, CONTEXT_SOURCE_NAMES, is_dynamic_values, positional_params, static_values } from "./params.ts";
 import { usage_line } from "./usage.ts";
 

@@ -4,7 +4,7 @@
 import type { CommandDef, DefaultArm, ParamDef, ParamValue } from "../command.ts";
 import { MODES } from "../command.ts";
 import { always_default, arm_conditions, declared_default, find_param, is_context_source, is_default_list, is_dynamic_values, split_default, static_values } from "./params.ts";
-import { is_setting_name } from "../settings_schema.ts";
+import { is_setting_name } from "../setting_completion.ts";
 import { description_problem } from "./summary.ts";
 
 export type CommandInput = Omit<CommandDef, "id">;
