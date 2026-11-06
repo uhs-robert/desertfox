@@ -126,6 +126,8 @@ const flashes = new WeakMap<object, { previous: readonly [string, string]; timer
 function focus_target(target: Target): void {
   if (!takes_typing(target) && (target.tabIndex ?? 0) < 0) target.setAttribute?.("tabindex", "-1");
   target.focus();
+  // Gecko leaves the focus outside a frame of another site on the element's focus(). Its window's focus() is one of the few calls another site allows, and it enters the frame.
+  if (is_frame_element(target)) (target as unknown as HTMLIFrameElement).contentWindow?.focus();
   if (takes_typing(target) || !target.style) return;
   // Shows which element took the focus. The old inline outline comes back after a moment.
   const { style } = target;

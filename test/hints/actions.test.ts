@@ -594,3 +594,11 @@ test("focus, hover and delete reach a frame, and here focuses it instead of clic
   page.run("delete");
   assert.equal(page.calls.at(-1), "remove");
 });
+
+test("focus on a frame also focuses the frame's window, the call that enters a frame of another site", () => {
+  const window_focus_calls: string[] = [];
+  const page = frame({ tabIndex: 0, contentWindow: { focus: () => window_focus_calls.push("window") } });
+  page.run("focus");
+  assert.deepEqual(page.calls, ["focus"]);
+  assert.deepEqual(window_focus_calls, ["window"]);
+});
