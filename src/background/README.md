@@ -3,8 +3,8 @@
 The background page. It loads the config, compiles the keymap, assigns the Firefox shortcut slots and routes run requests.
 
 - `main.ts`: registers the listeners, then waits for the config.
-- `startup.ts`: load, compile, publish to `storage.local`, tell open tabs. The load runs once. `publish` runs again for each `set`, `toggle` and `unset` (`change_overrides`, one at a time) and replaces the config `get_config` returns.
-- `config_load.ts` also holds the live setting overrides in `storage.session` (`load_overrides`, `load_effective_config` for pages that read the config themselves) and `build_config_status`.
+- `startup.ts`: load, compile, publish to `storage.local`, tell open tabs. The load runs once. `publish` runs again for each `set`, `toggle` and `unset` (`change_edits`, one at a time) and replaces the config `get_config` returns.
+- `config_load.ts` also checks the file's settings against `SETTING_SPECS` and holds the browser edits: saved in `storage.local`, temp in `storage.session` (`load_edits`, `store_edits`, `load_effective_config` for pages that read the config themselves). It also holds `build_config_status`.
 - `config_load.ts`, `keymap_merge.ts`, `compile.ts`: managed config over imported config, default keymap under user keymap, and the args check per binding.
 - `default_keymap.ts`: the shipped keys. `docs/keymap.md` is generated from this file. Keys that need the user's engines or containers are left to the config. A binding asks for input only through `prompt`, and one that leaves out a required param without it is skipped with a warning. A binding with `prompt` compiles to a background step, and the router opens the command line with it typed in.
 - `slots.ts`: `browser` chords to the 10 manifest slots.

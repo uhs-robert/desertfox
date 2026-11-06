@@ -10,6 +10,7 @@ import { find_param } from "../../src/shared/registry/params.ts";
 import { check_args, create_registry, DefineError, type Registry } from "../../src/shared/registry/index.ts";
 import { parse_binding } from "../../src/shared/registry/parse_binding.ts";
 import type { BoundInvocation, Prompt } from "../../src/shared/invocation.ts";
+import type { Modifier } from "../../src/shared/keymap.ts";
 import { origin_key, type MergedData } from "./merge.ts";
 
 const no_op = () => {};
@@ -106,7 +107,7 @@ export function resolve_bindings(merged: MergedData, registry: Registry, problem
     return parsed.every((binding) => binding !== undefined) ? parsed : undefined;
   };
   for (const [mode, entries] of Object.entries(merged.keymap)) {
-    if (mode === "search_keys" || mode === "container_keys" || mode === "site_keys" || mode === "group_names") continue;
+    if (mode === "search_keys" || mode === "container_keys" || mode === "site_keys" || mode === "modifiers" || mode === "group_names") continue;
     const bindings = entries as Record<string, unknown>;
     for (const [sequence, entry] of Object.entries(bindings)) {
       const where = location(mode, sequence);
@@ -178,6 +179,17 @@ function check_site_keys(site_keys: Record<string, string[]>, merged: MergedData
   }
 }
 
+function check_modifiers(modifiers: Record<string, Modifier>, where: (section: string, key: string) => string, problems: string[]) {
+  for (const [sequence, { label }] of Object.entries(modifiers)) {
+    const location = where("keymap.modifiers", sequence);
+    const parsed = parse_sequence(sequence);
+    if (parsed.error !== undefined) problems.push(`${location}: ${parsed.error}`);
+    else if (parsed.tokens.length < 2) problems.push(`${location}: a modifier must sit inside a group, for example ";r"`);
+    const label_error = label === undefined ? null : typeof label === "string" ? label_problem(label) : "a label must be a string";
+    if (label_error) problems.push(`${location}: ${label_error}`);
+  }
+}
+
 // The user dropped both generated site search keys, so a `search_keys` letter `/` takes their place.
 function site_search_keys_unbound(merged: MergedData): boolean {
   const prefixes = { ...DEFAULT_SETTINGS.search_prefixes, ...merged.settings.search_prefixes };
@@ -214,6 +226,10 @@ export function check_config(merged: MergedData, registry: Registry, problems: s
         const parsed = parse_sequence(sequence);
         if (parsed.error !== undefined) problems.push(`${where("keymap.group_names", sequence)}: ${parsed.error}`);
       }
+      continue;
+    }
+    if (mode === "modifiers") {
+      check_modifiers(entries as Record<string, Modifier>, where, problems);
       continue;
     }
     if (mode === "site_keys") {
