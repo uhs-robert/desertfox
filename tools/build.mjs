@@ -4,7 +4,7 @@ import { copyFile, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises
 
 // Minified size limits. content.js loads on every page, so its limit is the tightest. The rest load on first use.
 const MAX_BYTES = {
-  "content.js": 16 * 1024,
+  "content.js": 17 * 1024, // Temporary. Theme 2b moves the theme color derivation to the background and restores 16 KB.
   "hints.js": 24 * 1024,
   "caret.js": 30 * 1024,
   "whichkey.js": 8 * 1024,
