@@ -33,7 +33,7 @@ define("caret.move", {
         line_end: "Move to the end of the line.",
         start: "Move to the start of the text.",
         end: "Move to the end of the text.",
-        char_find: "Move to the next typed character in the paragraph.",
+        char_find: "Move to the next typed character anywhere on the page.",
         find_repeat: "Repeat the last character find.",
       },
     },

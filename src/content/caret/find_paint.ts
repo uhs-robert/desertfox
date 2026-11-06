@@ -3,7 +3,6 @@
 // So each tree with text, each shadow root and each frame document, adopts a sheet of its own.
 
 import type { ColorPair } from "../../shared/mode_colors.ts";
-import type { Matches } from "./find_match.ts";
 import type { TextModel, TextTree } from "./text_model.ts";
 
 // Painting a hundred thousand ranges would stall the page, so only a window of matches around the current one is painted.
@@ -16,9 +15,15 @@ export function paint_indexes(current: number, count: number, cap = PAINT_CAP): 
   return Array.from({ length: shown }, (_, at) => (((current - before + at) % count) + count) % count);
 }
 
-const ALL_NAME = "oasis-find";
-const CURRENT_NAME = "oasis-find-current";
+export type HighlightNames = { all: string; current: string };
+// One painter owns one pair of names, so a find by character never clears the matches a kept `/` search stands on.
+export const SEARCH_NAMES: HighlightNames = { all: "oasis-find", current: "oasis-find-current" };
+export const CHAR_FIND_NAMES: HighlightNames = { all: "oasis-ft", current: "oasis-ft-current" };
 const DOCUMENT_NODE = 9;
+
+// Where matches start, and where each ends: one end per match, or one width for all.
+export type Spans = { from: number[] } & ({ to: number[] } | { width: number });
+const end_of = (spans: Spans, index: number): number => ("to" in spans ? spans.to[index]! : spans.from[index]! + spans.width);
 
 export type FindColors = { all: { dark: ColorPair; light: ColorPair }; current: { dark: ColorPair; light: ColorPair } };
 
@@ -38,8 +43,8 @@ const page_view = (owner: Document): { Highlight: typeof Highlight; CSS: typeof 
 
 const rule = (name: string, [background, text]: ColorPair) => `::highlight(${name}){background-color:${background};color:${text}}`;
 
-const sheet_text = ({ all, current }: FindColors) =>
-  `${rule(ALL_NAME, all.dark)}${rule(CURRENT_NAME, current.dark)}@media(prefers-color-scheme:light){${rule(ALL_NAME, all.light)}${rule(CURRENT_NAME, current.light)}}`;
+const sheet_text = (names: HighlightNames, { all, current }: FindColors) =>
+  `${rule(names.all, all.dark)}${rule(names.current, current.dark)}@media(prefers-color-scheme:light){${rule(names.all, all.light)}${rule(names.current, current.light)}}`;
 
 // One Range per tree the match passes through. A line break at the end of a run has no character to cover.
 function ranges_of(model: TextModel, from: number, to: number): Range[] {
@@ -60,7 +65,7 @@ function ranges_of(model: TextModel, from: number, to: number): Range[] {
   return ranges;
 }
 
-export function create_painter() {
+export function create_painter(names: HighlightNames = SEARCH_NAMES) {
   const sheets = new Map<TextTree, CSSStyleSheet>();
   const painted_documents = new Set<Document>();
 
@@ -71,7 +76,7 @@ export function create_painter() {
     const owner = owner_of(tree);
     // A sheet works only in the document that made it, so a frame's tree takes the frame's own constructor.
     const sheet = new (owner.defaultView as unknown as { CSSStyleSheet: typeof CSSStyleSheet }).CSSStyleSheet();
-    sheet.replaceSync(sheet_text(colors));
+    sheet.replaceSync(sheet_text(names, colors));
     (tree as Adopting).adoptedStyleSheets.push(sheet);
     sheets.set(tree, sheet);
   };
@@ -81,8 +86,8 @@ export function create_painter() {
     for (const owner of painted_documents) {
       try {
         const registry = page_view(owner).CSS.highlights as unknown as Registry;
-        registry.delete(ALL_NAME);
-        registry.delete(CURRENT_NAME);
+        registry.delete(names.all);
+        registry.delete(names.current);
       } catch {}
     }
     painted_documents.clear();
@@ -102,14 +107,13 @@ export function create_painter() {
     sheets.clear();
   };
 
-  // The match at `current` takes the strong color. Returns how many matches were drawn.
-  const paint = (model: TextModel, matches: Matches, current: number, colors: FindColors): number => {
+  // The match at `current` takes the strong color. `indexes` are the matches to draw, by default a window around the current one. Returns how many matches were drawn.
+  const paint = (model: TextModel, matches: Spans, current: number, colors: FindColors, indexes = paint_indexes(current, matches.from.length)): number => {
     clear_highlights();
-    const indexes = paint_indexes(current, matches.from.length);
     const by_document = new Map<Document, { all: Range[]; current: Range[] }>();
     for (const index of indexes) {
       try {
-        for (const range of ranges_of(model, matches.from[index]!, matches.to[index]!)) {
+        for (const range of ranges_of(model, matches.from[index]!, end_of(matches, index))) {
           const group = by_document.get(range.startContainer.ownerDocument!) ?? { all: [], current: [] };
           group[index === current ? "current" : "all"].push(range);
           by_document.set(range.startContainer.ownerDocument!, group);
@@ -125,8 +129,8 @@ export function create_painter() {
       try {
         const view = page_view(owner);
         const registry = view.CSS.highlights as unknown as Registry;
-        registry.set(ALL_NAME, new view.Highlight(...group.all));
-        registry.set(CURRENT_NAME, new view.Highlight(...group.current));
+        registry.set(names.all, new view.Highlight(...group.all));
+        registry.set(names.current, new view.Highlight(...group.current));
         painted_documents.add(owner);
       } catch {}
     }

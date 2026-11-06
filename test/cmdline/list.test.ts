@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { create_list, MAX_ROWS, window_top } from "../../src/cmdline/list.ts";
 import type { Row } from "../../src/cmdline/completion/sources.ts";
 
-type Node = { tag: string; className: string; textContent: string; dataset: Record<string, string>; children: Node[]; hidden: boolean; offsetHeight: number; style: { minHeight: string; setProperty: (name: string, value: string) => void; vars: Record<string, string> }; append: (...nodes: Node[]) => void; replaceChildren: (...nodes: Node[]) => void };
+type Node = { tag: string; className: string; textContent: string; dataset: Record<string, string>; children: Node[]; hidden: boolean; offsetHeight: number; style: { minHeight: string; paddingLeft?: string; setProperty: (name: string, value: string) => void; vars: Record<string, string> }; append: (...nodes: Node[]) => void; replaceChildren: (...nodes: Node[]) => void };
 
 function fake_node(tag = "span"): Node {
   const vars: Record<string, string> = {};
@@ -253,4 +253,18 @@ test("an unloaded tab row gets the dim class, a selected one keeps only its sele
     "oasisfox-cmdline-item oasisfox-cmdline-item-discarded",
     "oasisfox-cmdline-item oasisfox-cmdline-selected oasisfox-cmdline-item-discarded",
   ]);
+});
+
+test("a heading row pads its name by its indent, and the name column counts the padding and lifts the cap", () => {
+  const { element, list } = setup();
+  const [flat, nested] = rows(2);
+  list.render([{ ...flat!, name: "Top", indent: 0 }, { ...nested!, name: "Nested", indent: 2, positions: [0, 1] }], -1);
+  const [first, second] = element.children as [Node, Node];
+  assert.equal(first.children[0]!.style.paddingLeft, undefined);
+  assert.equal(second.children[0]!.style.paddingLeft, "2.4ch");
+  // The padding moves the drawing, not the letters: the matched run still starts at the first letter of the name.
+  assert.deepEqual(second.children[0]!.children.map((part) => [part.tag, part.textContent]), [["b", "Ne"], ["span", "sted"]]);
+  assert.equal(element.style.vars["--oasisfox-name-width"], `${"Nested".length + 2.4}ch`);
+  list.render([{ ...flat!, name: "x".repeat(150), indent: 0 }], -1);
+  assert.equal(element.style.vars["--oasisfox-name-width"], "100ch");
 });

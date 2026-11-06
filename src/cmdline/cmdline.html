@@ -55,7 +55,7 @@
       .oasisfox-cmdline-container-dot::before { content: ""; position: absolute; inset: 3px; border-radius: 50%; background: var(--oasisfox-container-color); }
       .oasisfox-cmdline-favicon::before { content: ""; position: absolute; inset: 2px; border: 1px solid var(--oasisfox-fg-muted); border-radius: 3px; box-sizing: border-box; }
       .oasisfox-cmdline-favicon:has(img:not([hidden]))::before { display: none; }
-      .oasisfox-cmdline-name { flex: 0 0 var(--oasisfox-name-width); overflow: hidden; text-overflow: ellipsis; }
+      .oasisfox-cmdline-name { flex: 0 0 var(--oasisfox-name-width); box-sizing: border-box; max-width: 85%; overflow: hidden; text-overflow: ellipsis; }
       .oasisfox-cmdline-link:hover { text-decoration: underline; color: var(--oasisfox-primary); cursor: pointer; }
       .oasisfox-cmdline-name b { color: var(--oasisfox-secondary, #f0e68c); }
       /* The description takes the space that is left, so it is the first to shrink. */

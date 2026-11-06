@@ -10,6 +10,7 @@ const from_bundle = (command_id: string, bundle: BundleName): ContentHandler => 
 });
 
 export const hint_run = from_bundle("hint.run", "hints");
+export const heading_go = from_bundle("heading.go", "hints");
 export const cmdline_open = from_bundle("cmdline.open", "cmdline");
 export const cmdline_next_completion = from_bundle("cmdline.next_completion", "cmdline");
 export const cmdline_prev_completion = from_bundle("cmdline.prev_completion", "cmdline");

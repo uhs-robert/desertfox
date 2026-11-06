@@ -77,15 +77,18 @@ export const is_page_change = (record: MutationRecord) =>
   !in_own_element(record.target) &&
   (record.type === "characterData" || [...Array.from(record.addedNodes), ...Array.from(record.removedNodes)].some((node) => !is_own_element(node)));
 
+// The visual pair for all matches and the caret pair for the current one.
+export async function read_find_colors(): Promise<FindColors> {
+  const [all, current] = await Promise.all([stored_mode_colors("visual"), stored_mode_colors("caret")]);
+  return all && current ? { all, current } : FALLBACK_COLORS;
+}
+
 const browser_deps = (): FindDeps => ({
   build_model: () => build_text_model(document.body),
   start_index: (model) => (model.text === "" ? 0 : first_visible_index(model)),
   painter: create_painter(),
   scroll_to: (model, first_index, last_index, bottom_inset) => scroll_to_index(model, first_index, { bottom_inset, last_index }),
-  read_colors: async () => {
-    const [all, current] = await Promise.all([stored_mode_colors("visual"), stored_mode_colors("caret")]);
-    return all && current ? { all, current } : FALLBACK_COLORS;
-  },
+  read_colors: read_find_colors,
   get_register,
   set_register,
   slicing: (is_stale) => ({ is_stale, yield_to_page: () => new Promise<void>((resume) => setTimeout(resume, 0)), now: () => performance.now(), slice_ms: SLICE_MS }),

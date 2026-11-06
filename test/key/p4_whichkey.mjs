@@ -102,7 +102,7 @@ export async function run_cases({ rdp, extension_id, take_shot, run_case, send_k
     expect(whichkey_events(mark, "wk").every((event) => event.value === ""), "the panel came back after Escape");
   });
 
-  // keymap.d binds ,w to help.whichkey in normal, caret and visual mode. It sits there so the keymap that config.reload writes keeps it. Each mode lists its own keys.
+  // keymap.d binds ,w to help.whichkey in normal mode and _w in caret and visual mode, because caret and visual mode already use , to repeat a character find. It sits there so the keymap that config.reload writes keeps it. Each mode lists its own keys.
   const rows_after = async (keys, mode) => {
     const mark = events.length;
     await send_keys(...keys);
@@ -115,12 +115,12 @@ export async function run_cases({ rdp, extension_id, take_shot, run_case, send_k
     const normal_rows = await rows_after([",w"], "normal");
     await send_keys("-k", "Escape");
     await send_keys("gV");
-    const caret_rows = await rows_after([",w"], "caret");
+    const caret_rows = await rows_after(["_w"], "caret");
     // Escape closes the panel and also leaves caret mode, so V starts caret mode again before v.
     await send_keys("-k", "Escape");
     await send_keys("gV");
     await send_keys("v");
-    const visual_rows = await rows_after([",w"], "visual");
+    const visual_rows = await rows_after(["_w"], "visual");
     await send_keys("-k", "Escape");
     await send_keys("-k", "Escape");
     expect(caret_rows !== normal_rows, `caret mode listed ${caret_rows} rows, the same as normal mode`);

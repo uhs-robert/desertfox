@@ -102,15 +102,32 @@ export function move_once(text: string, from: number, motion: Motion): number {
 
 export type CharFind = { char: string; direction: "forward" | "back"; till: boolean };
 
-// `f`, `t`, `F` and `T`: the position of the count-th match within the paragraph (the text between two newlines), or `from` when fewer remain.
-// `again` is `;` and `,`: a till find then steps over an adjacent match, as vim does, so repeating it advances.
-export function find_char(text: string, from: number, find: CharFind, count: number, again = false): number {
-  const step = find.direction === "forward" ? 1 : -1;
-  let at = from + step * (find.till && again ? 2 : 1);
-  let remaining = count;
-  while (at >= 0 && at < text.length && text[at] !== "\n") {
-    if (text.startsWith(find.char, at) && --remaining === 0) return find.till ? at - step : at;
-    at += step;
-  }
-  return from;
+// Every start of `char` in the text, ascending and exact case. A find reaches the whole page, and these are what it highlights.
+export function find_char_matches(text: string, char: string): number[] {
+  const matches: number[] = [];
+  for (let at = text.indexOf(char); at >= 0; at = text.indexOf(char, at + 1)) matches.push(at);
+  return matches;
 }
+
+// Where `t` leaves the caret for a match at `match`: next to it. A match that opens or closes a line would leave the caret on the line break, where no motion can move, so the caret takes the last character of the line instead.
+function till_stop(text: string, match: number, step: number): number {
+  const stop = match - step;
+  if (text[stop] !== "\n") return stop;
+  return step > 0 ? Math.max(stop - 1, 0) : match;
+}
+
+// `f`, `t`, `F` and `T`: the caret and the match of the count-th match anywhere in the text, or undefined when fewer remain.
+// `again` is `;` and `,`: a till find then skips a match that would leave the caret where it is, as vim does, so repeating it advances.
+export function find_char_hit(text: string, from: number, find: CharFind, count: number, again = false): { caret: number; match: number } | undefined {
+  const step = find.direction === "forward" ? 1 : -1;
+  let remaining = count;
+  for (let at = from + step; at >= 0 && at < text.length; at += step) {
+    if (!text.startsWith(find.char, at)) continue;
+    const caret = find.till ? till_stop(text, at, step) : at;
+    if (again && caret === from) continue;
+    if (--remaining === 0) return { caret, match: at };
+  }
+  return undefined;
+}
+
+export const find_char = (text: string, from: number, find: CharFind, count: number, again = false): number => find_char_hit(text, from, find, count, again)?.caret ?? from;

@@ -8,7 +8,7 @@ import { bare_word_param, default_value, flag_params, is_dynamic_values, positio
 import { rank } from "../../shared/score.ts";
 import { is_setting_name, SETTING_NAMES, SETTING_SPECS } from "../../shared/settings_schema.ts";
 import type { Ranked } from "../../shared/score.ts";
-import type { BookmarkItem, EngineItem, OpenItems, OpenRow, TabContainer, TabItem, WindowItem } from "../../shared/messages.ts";
+import type { BookmarkItem, EngineItem, HeadingItem, OpenItems, OpenRow, TabContainer, TabItem, WindowItem } from "../../shared/messages.ts";
 import type { LiveKind, LiveSource } from "./live.ts";
 import { cursor_context } from "./tokenize.ts";
 import type { CursorContext } from "./tokenize.ts";
@@ -39,6 +39,8 @@ export type Row = {
   tag?: string;
   // Set on a tab row only. The list draws the cells before the name from it.
   tab?: TabMarks;
+  // Set on a heading row only: how many levels it sits below the shallowest heading of the page. The list pads the name by it.
+  indent?: number;
 };
 
 export type Completion = {
@@ -224,6 +226,22 @@ function window_rows(windows: readonly WindowItem[], usage: string): Row[] {
   }));
 }
 
+// The place first, as in a tab row, so the handler reads the leading number and the pick still finds the heading after the page changed its text.
+// The name is the plain text, because the highlight positions count its letters. Indent counts from the shallowest level on the page, so a page without an h1 loses no width.
+function heading_rows(headings: readonly HeadingItem[], usage: string): Row[] {
+  const top_level = Math.min(...headings.map((heading) => heading.level));
+  return headings.map((heading, index) => ({
+    name: heading.text,
+    insert: `${index + 1} ${/["'\\]/.test(heading.text) ? quote_word(heading.text) : heading.text} `,
+    description: `h${heading.level}`,
+    args: "",
+    also_named: [],
+    keywords: [],
+    usage,
+    indent: heading.level - top_level,
+  }));
+}
+
 function bookmark_rows(bookmarks: readonly BookmarkItem[], usage: string): Row[] {
   return bookmarks.map((bookmark) => ({ name: bookmark.title, insert: `${quote_word(bookmark.url)} `, description: bookmark.url, args: "", also_named: [], keywords: [], usage }));
 }
@@ -250,7 +268,7 @@ function engine_rows(engines: readonly EngineItem[], usage: string, marks_unavai
 const live_kind_of = (param: ParamDef | undefined): LiveKind | undefined => {
   if (!param || !is_dynamic_values(param.values)) return undefined;
   const from = param.values.from;
-  return from === "tabs" || from === "bookmarks" || from === "open" || from === "windows" ? from : from === "search_engines" ? "engines" : undefined;
+  return from === "tabs" || from === "bookmarks" || from === "open" || from === "windows" || from === "headings" ? from : from === "search_engines" ? "engines" : undefined;
 };
 
 // The engine takes the first word of `search`, ahead of the query that follows it.
@@ -295,7 +313,9 @@ export function create_completer(
             ? engine_rows(read.items as EngineItem[], usage, context.command.id !== "engine.show", context.word)
             : kind === "windows"
               ? window_rows(read.items as WindowItem[], usage)
-              : bookmark_rows(read.items as BookmarkItem[], usage);
+              : kind === "headings"
+                ? heading_rows(read.items as HeadingItem[], usage)
+                : bookmark_rows(read.items as BookmarkItem[], usage);
       const ranked = rank(context.word, rows);
       return { ...span, usage, rows: kind === "bookmarks" && context.word.trim() === "" ? ranked.slice(0, RECENT_BOOKMARKS) : ranked, listing: true };
     }
