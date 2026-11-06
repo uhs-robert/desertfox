@@ -172,7 +172,7 @@ function check_default_arms(input: CommandInput, param: ParamDef, at: string, fa
       if (index !== list.length - 1) fail(here, "a plain value must be the last item, because it matches whatever comes before it");
       return;
     }
-    check_when(input, { ...param, when: (item as DefaultArm).when }, here, fail, true);
+    check_when(input, { ...param, when: (item as DefaultArm).when }, here, fail, { allow_several: true });
   });
 }
 
@@ -297,10 +297,10 @@ function value_problem(param: ParamDef, value: unknown): string | null {
 }
 
 // A param's own `when` names exactly one sibling. An arm of a default list may name several, which must all hold.
-function check_when(input: CommandInput, param: ParamDef, at: string, fail: Fail, many = false): void {
+function check_when(input: CommandInput, param: ParamDef, at: string, fail: Fail, { allow_several = false } = {}): void {
   const entries = Object.entries(param.when ?? {});
-  if (entries.length === 0) fail(`${at}.when`, many ? "must name at least one other param" : "must name exactly one other param");
-  if (entries.length > 1 && !many) fail(`${at}.when`, "must name exactly one other param");
+  if (entries.length === 0) fail(`${at}.when`, allow_several ? "must name at least one other param" : "must name exactly one other param");
+  if (entries.length > 1 && !allow_several) fail(`${at}.when`, "must name exactly one other param");
   for (const [sibling_name, allowed] of entries) {
     if (sibling_name === param.name) {
       fail(`${at}.when`, "must not name the param itself");
