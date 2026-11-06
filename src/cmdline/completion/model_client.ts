@@ -8,8 +8,8 @@ export type ModelClientDeps = {
   line_window_id: number;
   all_windows: boolean;
   request_resync: () => void;
-  // Rows changed: `upserted` holds the ids a patch touched, empty for a snapshot.
-  on_change: (upserted: readonly number[]) => void;
+  // A snapshot or a patch changed the rows.
+  on_change: () => void;
 };
 
 const one_line = (text: string) => text.replace(/\s+/g, " ").trim();
@@ -39,7 +39,6 @@ export function create_model_client(deps: ModelClientDeps) {
     };
   };
 
-  const shown = (row: TabRow) => deps.all_windows || row.window_id === deps.line_window_id;
 
   return {
     receive: (message: TabModelMessage) => {
@@ -48,7 +47,7 @@ export function create_model_client(deps: ModelClientDeps) {
         for (const row of message.tabs) rows.set(row.id, row);
         rev = message.rev;
         waiting_for_snapshot = false;
-        deps.on_change([]);
+        deps.on_change();
         return;
       }
       if (waiting_for_snapshot) return;
@@ -60,20 +59,16 @@ export function create_model_client(deps: ModelClientDeps) {
       rev = message.rev;
       for (const id of message.removed) rows.delete(id);
       for (const row of message.upserts) rows.set(row.id, row);
-      deps.on_change(message.upserts.map((row) => row.id));
+      deps.on_change();
     },
     // Undefined until the first snapshot. The line's window first, then by window and place, as `listed_tabs` orders them.
     items: (): TabItem[] | undefined =>
       rev < 0
         ? undefined
         : [...rows.values()]
-            .filter(shown)
+            .filter((row) => deps.all_windows || row.window_id === deps.line_window_id)
             .sort((a, b) => Number(b.window_id === deps.line_window_id) - Number(a.window_id === deps.line_window_id) || a.window_id - b.window_id || a.index - b.index)
             .map(item_of),
-    item_of_id: (id: number): TabItem | undefined => {
-      const row = rows.get(id);
-      return row && shown(row) ? item_of(row) : undefined;
-    },
   };
 }
 

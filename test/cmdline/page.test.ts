@@ -67,7 +67,7 @@ async function load_page(t: TestContext, tag: string, { keymap = KEYMAP, with_ta
   // The `complete_items` asks that wait for the test to answer them.
   const item_asks: ((items: unknown[]) => void)[] = [];
   // The tab model ports the page opened. `deliver` plays a message from the background.
-  const model_ports: { name: string; disconnected: boolean; posted: unknown[]; deliver: (message: unknown) => void }[] = [];
+  const model_ports: { name: string; disconnected: boolean; posted: unknown[]; deliver: (message: unknown) => void; drop: () => void }[] = [];
   // Setting the value puts the caret at the end, as Firefox does.
   let value = "";
   const input = {
@@ -94,6 +94,7 @@ async function load_page(t: TestContext, tag: string, { keymap = KEYMAP, with_ta
   };
   const list = fake_element();
   const panel = fake_element();
+  const note = fake_element();
   // Starts with the default that cmdline.html holds.
   const prompt = Object.assign(fake_element(), { textContent: "> " });
   const page_window = {
@@ -103,7 +104,7 @@ async function load_page(t: TestContext, tag: string, { keymap = KEYMAP, with_ta
   Object.assign(globalThis, {
     window: page_window,
     document: {
-      querySelector: (selector: string) => (selector === "#line" ? input : selector === "#list" ? list : selector === ".desertfox-cmdline" ? panel : selector === ".desertfox-cmdline-prompt" ? prompt : { textContent: "", hidden: true }),
+      querySelector: (selector: string) => (selector === "#line" ? input : selector === "#list" ? list : selector === "#note" ? note : selector === ".desertfox-cmdline" ? panel : selector === ".desertfox-cmdline-prompt" ? prompt : { textContent: "", hidden: true }),
       // The page listens for keys on the document. The fake sends them through the input's table.
       addEventListener: (type: string, listener: (event: unknown) => void) => void (input_listeners[type] = listener),
       body: { classList: { toggle: () => {} } },
@@ -115,15 +116,18 @@ async function load_page(t: TestContext, tag: string, { keymap = KEYMAP, with_ta
       runtime: {
         connect: ({ name }: { name: string }) => {
           const listeners: ((message: unknown) => void)[] = [];
+          const drop_listeners: (() => void)[] = [];
           const model_port = {
             name,
             disconnected: false,
             posted: [] as unknown[],
+            // The background closes the port, for example when the opener check fails.
+            drop: () => drop_listeners.forEach((listener) => listener()),
             // A disconnected port delivers nothing, as in Firefox.
             deliver: (message: unknown) => !model_port.disconnected && listeners.forEach((listener) => listener(message)),
           };
           model_ports.push(model_port);
-          return { postMessage: (message: unknown) => void model_port.posted.push(message), disconnect: () => void (model_port.disconnected = true), onMessage: { addListener: (listener: (message: unknown) => void) => void listeners.push(listener) } };
+          return { postMessage: (message: unknown) => void model_port.posted.push(message), disconnect: () => void (model_port.disconnected = true), onMessage: { addListener: (listener: (message: unknown) => void) => void listeners.push(listener) }, onDisconnect: { addListener: (listener: () => void) => void drop_listeners.push(listener) } };
         },
         getURL: (path: string) => `https://extension.test/${path}`,
         // The background answers only the ticket it issued.
@@ -161,7 +165,7 @@ async function load_page(t: TestContext, tag: string, { keymap = KEYMAP, with_ta
   };
   const press_enter = () => input_listeners.keydown!({ isTrusted: true, isComposing: false, key: "Enter", code: "Enter", preventDefault: () => {} });
   const press = (key: string) => input_listeners.keydown!({ isTrusted: true, isComposing: false, key, code: key, preventDefault: () => {} });
-  return { input, list, panel, prompt, to_parent, to_background, sent, item_asks, model_ports, head, storage_listeners, post_start, press_enter, press };
+  return { input, list, panel, note, prompt, to_parent, to_background, sent, item_asks, model_ports, head, storage_listeners, post_start, press_enter, press };
 }
 
 // Port messages arrive on a later turn, and later still on a busy machine.
@@ -417,6 +421,18 @@ test("a patch that skips a number asks for a snapshot once", async (t) => {
   model_ports[0]!.deliver({ type: "patch", rev: 3, upserts: [], removed: [] });
   model_ports[0]!.deliver({ type: "patch", rev: 4, upserts: [], removed: [] });
   assert.deepEqual(model_ports[0]!.posted, [{ type: "resync" }]);
+});
+
+test("a port the background closes before any snapshot leaves the loading state with a note", async (t) => {
+  const { model_ports, post_start, note } = await load_page(t, "tabs_port_dropped", { with_tab_command: true });
+  const host = post_start(TICKET, "tab ");
+  await host.opened();
+  host.port.postMessage({ desertfox_cmdline: { kind: "focused" } });
+  await until(() => model_ports.length === 1);
+  model_ports[0]!.drop();
+  await settle();
+  assert.equal(model_ports.length, 1);
+  assert.equal(note.textContent, "could not read the tabs");
 });
 
 test("the model port closes with the line", async (t) => {

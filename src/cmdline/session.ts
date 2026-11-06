@@ -15,7 +15,7 @@ export type Effect =
   | { kind: "find_commit" }
   // Open the help page at this command.
   | { kind: "help"; command_id: string }
-  // `list.act --action=unload` on a tab row: the page asks the background to flip it, then calls `patch_tab`.
+  // `list.act --action=unload` on a tab row: the page asks the background to flip it. The row's marks change when the model patch arrives.
   | { kind: "set_tab_unloaded"; tab_id: number; unloaded: boolean };
 
 export type SessionDeps = {
@@ -184,19 +184,30 @@ export function create_session(deps: SessionDeps) {
       caret = initial.length;
       refresh();
     },
-    // Tabs or bookmarks arrived. The list ranks the typed text again. A closed list stays closed, and a previewed row stays.
+    // Tabs or bookmarks arrived or changed. The list ranks again. A closed list stays closed.
+    // A previewed tab row stays on the same tab by id: its number in the line follows the tab, and a tab that is gone ends the preview.
+    // Any other previewed row stays as it is.
     source_ready: () => {
-      if (selected >= 0 || !completion) return;
-      completion = deps.complete?.(text, caret);
-    },
-    // The tab model changed a tab: its row takes the new marks in place, so the selection and the window stay.
-    patch_tab: (marks: TabMarks) => {
-      for (const row of completion?.rows ?? []) {
-        if (row.tab?.id !== marks.id) continue;
-        // The window cell shows only when the whole list spans windows, which a single patch cannot tell.
-        const { window_number, ...rest } = marks;
-        row.tab = row.tab.window_number === undefined || window_number === undefined ? rest : marks;
+      if (!completion) return;
+      if (selected < 0) {
+        completion = deps.complete?.(text, caret);
+        return;
       }
+      const tab_id = completion.rows[selected]?.tab?.id;
+      if (tab_id === undefined || !saved) return;
+      const base = saved;
+      // The inline note belongs to the last action, not to the text, so the rebuild keeps it.
+      const kept_message = message;
+      completion = deps.complete?.(base.text, base.caret);
+      const index = completion?.rows.findIndex((row) => row.tab?.id === tab_id) ?? -1;
+      if (index >= 0) preview(index);
+      else {
+        selected = -1;
+        saved = undefined;
+        replace_text(base.text);
+        caret = base.caret;
+      }
+      message = kept_message;
     },
     set_message: (next: string | undefined) => {
       message = next;

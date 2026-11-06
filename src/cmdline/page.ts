@@ -11,7 +11,7 @@ import { TAB_MODEL_PORT_NAME } from "../shared/tab_model_port.ts";
 import { create_live_source } from "./completion/live.ts";
 import { create_model_client } from "./completion/model_client.ts";
 import type { ModelClient } from "./completion/model_client.ts";
-import { create_completer, marks_of } from "./completion/sources.ts";
+import { create_completer } from "./completion/sources.ts";
 import { edit_forwarded, run_token, run_token_without_keymap } from "./key_input.ts";
 import type { TokenMatcher } from "./key_input.ts";
 import type { HostToPage, PageToHost } from "./protocol.ts";
@@ -85,30 +85,33 @@ async function open_line(start: Start, port: MessagePort): Promise<void> {
   // The tab model port opens on the first tab read, and only here, after the ticket redeemed: the background admits only the frame that redeemed it.
   let model_port: browser.runtime.Port | undefined;
   let model: ModelClient | undefined;
+  let model_lost = false;
   const connect_model = (): ModelClient => {
     const port = browser.runtime.connect({ name: TAB_MODEL_PORT_NAME });
     const client = create_model_client({
       line_window_id: opened.window_id,
       all_windows: opened.all_windows,
       request_resync: () => port.postMessage({ type: "resync" } satisfies TabModelRequest),
-      on_change: (upserted) => {
-        // A previewed row keeps its place, so its marks change in place and the list is not ranked again.
-        for (const id of upserted) {
-          const item = client.item_of_id(id);
-          if (item) session.patch_tab(marks_of(item));
-        }
+      on_change: () => {
         session.source_ready();
         render();
       },
     });
     port.onMessage.addListener((message) => client.receive(message as TabModelMessage));
+    // The background closes the port when the opener check fails, before any snapshot. A list that has rows keeps them.
+    port.onDisconnect.addListener(() => {
+      model_lost = true;
+      if (client.items() === undefined) session.set_message("could not read the tabs");
+      session.source_ready();
+      render();
+    });
     model_port = port;
     return client;
   };
   // Asks the background for bookmarks and the like only when a subject needs them, and only here, after the ticket redeemed.
   const live = create_live_source({
     ask: (kind) => (kind === "headings" ? ask_headings() : ask_background<CompleteItemsAnswer | undefined>({ type: "complete_items", kind })),
-    tabs: () => (model ??= connect_model()).items(),
+    tabs: () => (model ??= connect_model()).items() ?? (model_lost ? [] : undefined),
     on_ready: () => {
       session.source_ready();
       render();

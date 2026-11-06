@@ -83,7 +83,7 @@ function make() {
     complete: create_completer(lookup, COMMANDS, {}, SOURCES, "normal", live),
   });
   const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
-  return { session, live, asks, settle };
+  return { session, live, asks, settle, change_tabs: (items: TabItem[]) => { tab_items = items; session.source_ready(); } };
 }
 const tab_key = (session: ReturnType<typeof make>["session"]) => session.run("cmdline.next_completion", undefined);
 const names = (session: ReturnType<typeof make>["session"]) => session.get_rows().map((row) => row.name);
@@ -345,8 +345,6 @@ test("the window number shows on tab rows only when the list spans more than one
   two.asks[0]!.answer([{ ...TABS[0]!, window_number: 1 }, { ...TABS[1]!, window_number: 2 }]);
   await two.settle();
   assert.deepEqual(two.session.get_rows().map((row) => row.tab?.window_number), [1, 2]);
-  two.session.patch_tab({ id: 11, status: "", flags: [], window_number: 1 });
-  assert.equal(two.session.get_rows()[0]!.tab?.window_number, 1);
 });
 
 const unload_key = (session: ReturnType<typeof make>["session"]) => session.run("list.act", { action: "unload" });
@@ -366,17 +364,43 @@ test("the row key on a loaded tab row asks to unload it, and on an unloaded row 
   assert.equal(live.read("tabs").loading, false);
 });
 
-test("patch_tab changes only that row's marks, in place, and the window cell stays only where the row had it", async () => {
-  const { session, asks, settle } = make();
+test("a model change under a previewed tab row rebuilds the rows and keeps the preview on the same tab, with its new number in the line", async () => {
+  const { session, asks, settle, change_tabs } = make();
   session.edit("tab ");
   asks[0]!.answer(TABS);
   await settle();
   session.run("cmdline.next_completion", undefined);
+  session.run("cmdline.next_completion", undefined);
+  assert.equal(session.get_text(), "tab 2 GitHub ");
+  change_tabs([{ ...TABS[1]!, number: 1, title: "GitHub renamed", discarded: true }, TABS[2]!, TABS[3]!]);
+  assert.deepEqual(names(session), ["1: GitHub renamed", "3: GitHub Gist", "4: Bob's \"page\""]);
+  assert.equal(session.get_selected(), 0);
+  assert.equal(session.get_text(), "tab 1 GitHub renamed ");
+  assert.deepEqual(session.get_rows()[0]!.tab?.flags, ["discarded"]);
+});
+
+test("a model change that removes the previewed tab clears the preview and puts the typed text back", async () => {
+  const { session, asks, settle, change_tabs } = make();
+  session.edit("tab ");
+  asks[0]!.answer(TABS);
+  await settle();
+  session.run("cmdline.next_completion", undefined);
+  session.run("cmdline.next_completion", undefined);
+  change_tabs([TABS[0]!, TABS[2]!, TABS[3]!]);
+  assert.equal(session.get_selected(), -1);
+  assert.equal(session.get_text(), "tab ");
+  assert.equal(names(session).length, 3);
+});
+
+test("a model change under a previewed row that is no tab row leaves the preview alone", async () => {
+  const { session, asks, settle, change_tabs } = make();
+  session.edit("bookmark -t ");
+  asks[0]!.answer(BOOKMARKS);
+  await settle();
+  session.run("cmdline.next_completion", undefined);
   const before = session.get_rows();
-  session.patch_tab({ id: 12, status: "", flags: ["discarded" as const], window_number: 2 });
+  change_tabs([]);
   assert.equal(session.get_rows(), before);
-  assert.deepEqual(session.get_rows().map((row) => row.tab?.flags), [[], ["discarded"], [], []]);
-  assert.equal(session.get_rows()[1]!.tab?.window_number, undefined);
 });
 
 test("the row key on a command row, an empty selection or a closed list does nothing but show a note", async () => {

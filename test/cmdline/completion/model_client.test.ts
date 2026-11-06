@@ -27,9 +27,9 @@ const row = (id: number, window_id: number, index: number, extra: Partial<TabRow
 
 function make({ all_windows = true, line_window_id = 10 } = {}) {
   const resyncs: number[] = [];
-  const changes: (readonly number[])[] = [];
-  const client = create_model_client({ line_window_id, all_windows, request_resync: () => void resyncs.push(1), on_change: (upserted) => void changes.push(upserted) });
-  return { client, resyncs, changes };
+  let changes = 0;
+  const client = create_model_client({ line_window_id, all_windows, request_resync: () => void resyncs.push(1), on_change: () => void changes++ });
+  return { client, resyncs, changes: () => changes };
 }
 const ids = (client: ReturnType<typeof make>["client"]) => client.items()?.map((item) => item.id);
 
@@ -38,7 +38,7 @@ test("nothing is listed before the snapshot, then the snapshot lists", () => {
   assert.equal(client.items(), undefined);
   client.receive({ type: "snapshot", rev: 0, tabs: [row(1, 10, 0), row(2, 10, 1)] });
   assert.deepEqual(ids(client), [1, 2]);
-  assert.deepEqual(changes, [[]]);
+  assert.equal(changes(), 1);
 });
 
 test("a patch applies removals first, so an upsert of a removed id stays", () => {
@@ -46,7 +46,7 @@ test("a patch applies removals first, so an upsert of a removed id stays", () =>
   client.receive({ type: "snapshot", rev: 0, tabs: [row(1, 10, 0), row(2, 10, 1)] });
   client.receive({ type: "patch", rev: 1, upserts: [row(2, 10, 0, { title: "Again" }), row(3, 10, 1)], removed: [1, 2] });
   assert.deepEqual(client.items()?.map((item) => [item.id, item.number, item.title]), [[2, 1, "Again"], [3, 2, "Tab 3"]]);
-  assert.deepEqual(changes[1], [2, 3]);
+  assert.equal(changes(), 2);
 });
 
 test("a rev gap asks one resync, drops patches until the snapshot lands, and then patches apply again", () => {
@@ -108,9 +108,8 @@ test("a row carries the flags, the container and the window number as the list r
   ]);
 });
 
-test("a row with no title shows its address, and a row hidden by the window setting has no item", () => {
-  const { client } = make({ all_windows: false });
-  client.receive({ type: "snapshot", rev: 0, tabs: [row(1, 10, 0, { title: "" }), row(2, 11, 0)] });
+test("a row with no title shows its address", () => {
+  const { client } = make();
+  client.receive({ type: "snapshot", rev: 0, tabs: [row(1, 10, 0, { title: "" })] });
   assert.equal(client.items()?.[0]?.title, "https://site1.test/");
-  assert.equal(client.item_of_id(2), undefined);
 });
