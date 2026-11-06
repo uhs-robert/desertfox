@@ -365,5 +365,9 @@ export function render_help(root: HTMLElement, model: HelpModel, route: Route, g
   const heading = el("h1", undefined, title);
   heading.tabIndex = -1;
   const page = el("main", "desertfox-help-page", heading, ...page_body(route, model, guide));
-  root.replaceChildren(el("div", "desertfox-help", sidebar(route.page, model, guide), page));
+  // The sidebar scrolls on its own, so a fresh one starts at the top. Scroll is set after it is in the tree because a detached element ignores it.
+  const old_scroll_top = root.querySelector(".desertfox-help-sidebar")?.scrollTop ?? 0;
+  const sidebar_node = sidebar(route.page, model, guide);
+  root.replaceChildren(el("div", "desertfox-help", sidebar_node, page));
+  sidebar_node.scrollTop = old_scroll_top;
 }
