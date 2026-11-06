@@ -39,13 +39,24 @@ const UNLIMITED_OR_CHOICE = /[*+|]|\{\d+(?:,\d*)?\}/u;
 // An escape or a character class holds no group, so a `)` in one is not the end of a group.
 const ESCAPE_OR_CLASS = /\\.|\[(?:\\.|[^\]\\])*\]/gu;
 
-// The same atom with an unlimited repeat twice in a row, such as `a*a*b`, `\w*\w*x` or `.*.*=`. The two repeats split a run of that atom in every possible way, so the cost grows with each repeat. A different atom after the first (`a+b+`, `foo.*bar`) cannot split a run, so it stays allowed. A longer chain, such as `.*.*.*`, holds this pair too.
-const ATOM = String.raw`(\\.|\[(?:\\.|[^\]\\])*\]|[^\\*+?{}()|[\]])`;
-const UNLIMITED = String.raw`(?:[*+]|\{\d+,\})\??`;
-const STACKED_REPEATS = new RegExp(ATOM + UNLIMITED + "\\1" + UNLIMITED, "u");
+// The same atom with an unlimited repeat twice in a row, such as `a*a*b`, `\w*\w*x` or `.*.*=`. The two repeats split a run of that atom in every possible way, so the cost grows with each repeat. A longer chain, such as `.*.*.*`, holds this pair too.
+// Only identical atoms count. A different atom next (`a+b+`, `foo.*bar`) is allowed, and so are overlapping ones such as `.*a*b` or `\w*a*b`: a static check cannot tell them from ordinary searches, and the time limit in #193 is meant for them.
+// The pattern is walked one atom at a time (an escape, a class or one character), so a match never starts inside a class or after an escape.
+const ATOM = /\\.|\[(?:\\.|[^\]\\])*\]|[^]/uy;
+const UNLIMITED = /(?:[*+]|\{\d+,\})\??/uy;
+
+function has_stacked_repeats(source: string): boolean {
+  const atom_at = (at: number) => (ATOM.lastIndex = at, ATOM.exec(source)?.[0]);
+  const repeat_end = (at: number) => (UNLIMITED.lastIndex = at, UNLIMITED.test(source) ? UNLIMITED.lastIndex : -1);
+  for (let at = 0, atom = atom_at(0); atom; at += atom.length, atom = atom_at(at)) {
+    const first_end = repeat_end(at + atom.length);
+    if (first_end >= 0 && atom_at(first_end) === atom && repeat_end(first_end + atom.length) >= 0) return true;
+  }
+  return false;
+}
 
 export function is_costly_pattern(source: string): boolean {
-  if (STACKED_REPEATS.test(source)) return true;
+  if (has_stacked_repeats(source)) return true;
   // The innermost groups first: the contents of a group that holds no other group are checked, then that group is replaced by a plain letter and the search repeats.
   let rest = source.replace(ESCAPE_OR_CLASS, "x");
   for (let guard = 0; guard < 64; guard++) {
