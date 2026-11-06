@@ -177,8 +177,11 @@ export function create_session(deps: SessionDeps) {
   };
 
   // The selection, else the highlighted row. A history recall leaves `selected` set with no row behind it, so the row is read, not the index.
+  // The marks belong to a tab list. Any other list hides them, so they neither act nor clear there.
+  const on_tab_list = () => rows().some((row) => row.tab);
+
   const acted_tabs = (): TabMarks[] => {
-    if (selection.size > 0) return (deps.tabs?.() ?? []).filter((tab) => selection.has(tab.id)).map(marks_of);
+    if (selection.size > 0 && on_tab_list()) return (deps.tabs?.() ?? []).filter((tab) => selection.has(tab.id)).map(marks_of);
     const marks = rows()[selected]?.tab;
     return marks ? [marks] : [];
   };
@@ -202,12 +205,15 @@ export function create_session(deps: SessionDeps) {
     const ids = (chosen: readonly TabMarks[]) => chosen.map((tab) => tab.id);
     const without = (flag: "muted" | "pinned") => tabs.some((tab) => !tab.flags.includes(flag));
     if (action === "close") {
-      cursor_after_close = row_to_keep(new Set(ids(tabs)));
+      const closing = new Set(ids(tabs));
+      const highlighted = rows()[selected]?.tab?.id;
+      cursor_after_close = highlighted !== undefined && closing.has(highlighted) ? row_to_keep(closing) : undefined;
       return { kind: "tab_rows_action", action, tab_ids: ids(tabs) };
     }
     if (action === "mute") return { kind: "tab_rows_action", action: without("muted") ? "mute" : "unmute", tab_ids: ids(tabs) };
     if (action === "pin") return { kind: "tab_rows_action", action: without("pinned") ? "pin" : "unpin", tab_ids: ids(tabs) };
-    const loaded = tabs.filter((tab) => !tab.flags.includes("discarded"));
+    // The active tab is the line's own and cannot unload, so it must not keep `<A-u>` from loading the others.
+    const loaded = tabs.filter((tab) => !tab.flags.includes("discarded") && tab.status !== "%");
     return loaded.length > 0 ? { kind: "tab_rows_action", action: "unload", tab_ids: ids(loaded) } : { kind: "tab_rows_action", action: "load", tab_ids: ids(tabs) };
   };
 
@@ -346,7 +352,7 @@ export function create_session(deps: SessionDeps) {
           refresh();
           return { kind: "render" };
         case "mode.escape":
-          if (selection.size > 0) {
+          if (selection.size > 0 && on_tab_list()) {
             selection.clear();
             return { kind: "render" };
           }

@@ -236,7 +236,8 @@ export function create_complete_items(deps: CompleteItemsDeps) {
       if (!is_tab_rows_action(action) || !Array.isArray(tab_ids) || tab_ids.length > MAX_ACTION_TABS || !tab_ids.every(Number.isInteger) || !asker || !(await deps.is_opener(asker.tab_id, asker.frame_id))) return undefined;
       const unique_ids = [...new Set(tab_ids as number[])];
       const found = await Promise.all(unique_ids.map(async (id) => ({ id, tab: await deps.read_tab(id) })));
-      if (found.some(({ tab }) => tab && tab.incognito !== asker.incognito)) return undefined;
+      // The reads take time: the line may have lost its ticket meanwhile.
+      if (found.some(({ tab }) => tab && tab.incognito !== asker.incognito) || !(await deps.is_opener(asker.tab_id, asker.frame_id))) return undefined;
       const ids = found.filter(({ tab }) => tab).map(({ id }) => id);
       try {
         if (action === "close") await close_tabs(deps.tab_actions, ids);

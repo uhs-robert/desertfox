@@ -145,10 +145,10 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, open_p
       await send_keys(":");
       await sleep(700);
       await send_keys("tab p9s_one", "-k", "Down");
-      await send_keys(...CTRL("space"));
+      await send_keys(...CTRL(" "));
       await send_keys(...CTRL("u"));
       await send_keys("tab p9s_two", "-k", "Down");
-      await send_keys(...CTRL("space"));
+      await send_keys(...CTRL(" "));
       await sleep(300);
       await send_keys(...ALT("m"));
       await sleep(800);
@@ -178,8 +178,8 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, open_p
       await send_keys(":");
       await sleep(700);
       await send_keys("tab p9x_", "-k", "Down");
-      await send_keys(...CTRL("space"));
-      await send_keys(...CTRL("space"));
+      await send_keys(...CTRL(" "));
+      await send_keys(...CTRL(" "));
       await send_keys("-k", "Escape");
       await sleep(300);
       await send_keys(...ALT("x"));

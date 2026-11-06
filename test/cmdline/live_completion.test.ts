@@ -705,3 +705,43 @@ test("after a close the highlight goes to the first row below the closed rows, e
   single.change_tabs([TABS[0]!, TABS[2]!, TABS[3]!]);
   assert.equal(single.session.get_rows()[single.session.get_selected()]?.tab?.id, 13);
 });
+
+test("marks act and clear on a tab list only: another list hides them", async () => {
+  const { session } = await listed();
+  session.run("cmdline.next_completion", undefined);
+  select_key(session);
+  session.edit("ta");
+  assert.ok(session.get_rows().every((row) => !row.tab));
+  session.run("cmdline.next_completion", undefined);
+  assert.deepEqual(act(session, "close"), { kind: "render" });
+  assert.equal(session.get_message(), "select a tab row first");
+  assert.equal(session.run("mode.escape", undefined).kind, "render");
+  assert.deepEqual(marked(session), [11]);
+  session.edit("tab ");
+  assert.equal(act(session, "close").kind, "tab_rows_action");
+});
+
+test("unload leaves the active tab out of the loaded count, so it can still load the others", async () => {
+  const tabs: TabItem[] = [{ ...TABS[0]!, active: true }, { ...TABS[1]!, discarded: true }, { ...TABS[2]!, discarded: true }, TABS[3]!];
+  const { session } = await listed(tabs);
+  session.run("cmdline.next_completion", undefined);
+  select_key(session);
+  select_key(session);
+  select_key(session);
+  assert.deepEqual(unload_key(session), { kind: "tab_rows_action", action: "load", tab_ids: [11, 12, 13] });
+});
+
+test("a close of other tabs leaves no target behind for a later close of the highlighted tab", async () => {
+  const { session, change_tabs } = await listed();
+  session.run("cmdline.next_completion", undefined);
+  select_key(session);
+  session.run("cmdline.history", { direction: "next" });
+  session.run("cmdline.history", { direction: "next" });
+  session.run("cmdline.history", { direction: "next" });
+  assert.equal(session.get_rows()[session.get_selected()]?.tab?.id, 14);
+  act(session, "close");
+  change_tabs([TABS[1]!, TABS[2]!, TABS[3]!]);
+  assert.equal(session.get_rows()[session.get_selected()]?.tab?.id, 14);
+  change_tabs([TABS[1]!, TABS[2]!]);
+  assert.equal(session.get_selected(), -1);
+});

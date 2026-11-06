@@ -526,3 +526,19 @@ test("tab_rows_action refuses a bad action or id list", async () => {
   }
   assert.deepEqual(fake.log, []);
 });
+
+test("tab_rows_action refuses when the line loses its ticket while the tabs are read", async () => {
+  const existing = new Set([2]);
+  const fake = fake_tab_actions(existing);
+  let service: ReturnType<typeof make>["service"] | undefined;
+  const made = make({
+    read_tab: async (id) => {
+      made.opened.delete(NORMAL_LINE.tab_id);
+      return reading(existing)(id);
+    },
+    tab_actions: fake.actions,
+  });
+  service = made.service;
+  assert.equal(await service.tab_rows_action("close", [2], NORMAL_LINE), undefined);
+  assert.deepEqual(fake.log, []);
+});

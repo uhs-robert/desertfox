@@ -68,7 +68,7 @@ define("cmdline.help", {
 define("list.act", {
   completion: "hidden",
   label: "Act on rows",
-  intent: "Act on the selected tabs of the command line list, or on the highlighted row when none is selected.",
+  intent: "Act on the selected tabs. Without a selection, act on the highlighted row.",
   params: [
     {
       name: "action",
@@ -90,7 +90,7 @@ define("list.act", {
 define("list.select", {
   completion: "hidden",
   label: "Select tabs",
-  intent: "Mark or unmark the highlighted tab row of the command line list, or clear every mark.",
+  intent: "Mark or unmark the highlighted tab. Or clear every mark.",
   params: [{ name: "action", type: "enum", values: ["toggle", "clear"], description: { toggle: "Mark or unmark the highlighted tab, then move down.", clear: "Unmark every tab." } }],
   runs_in: "content",
   modes: ["cmdline"],
