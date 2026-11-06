@@ -51,18 +51,14 @@ export async function reopen_in_container(
 }
 
 // The tab list's many-tab reopen, each tab in its own window. Unlike `reopen_in_container`, a tab that fails to reopen is skipped and the
-// rest go on, and a tab already in the container stays. Only the first tab that reopens becomes active, so the focus moves once.
-// Returns the ids that reopened.
+// rest go on, and a tab already in the container stays. No new tab becomes active: the line lives in the active tab, and hiding that tab
+// ends the line. Returns the ids that reopened.
 export async function reopen_tabs_in_container(
   deps: Pick<TabActionDeps, "open_tab" | "remove">,
   tabs: (ReopenTab & { window_id: number })[],
   cookie_store_id: string,
 ): Promise<number[]> {
-  let active = true;
-  const open_tab: TabActionDeps["open_tab"] = async (open) => {
-    await deps.open_tab({ ...open, active });
-    active = false;
-  };
+  const open_tab: TabActionDeps["open_tab"] = (open) => deps.open_tab({ ...open, active: false });
   const reopened: number[] = [];
   for (const tab of tabs.filter((candidate) => candidate.cookie_store_id !== cookie_store_id).toSorted((a, b) => a.index - b.index)) {
     reopened.push(...(await reopen_in_container({ open_tab, remove: deps.remove }, tab.window_id, [tab], cookie_store_id).catch((): number[] => [])));

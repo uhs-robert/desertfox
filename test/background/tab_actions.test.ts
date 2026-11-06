@@ -112,7 +112,7 @@ test("close_tabs closes each tab on its own, so a tab that closed already does n
   assert.deepEqual(closed, [1, 3]);
 });
 
-test("many-tab reopen skips tabs already in the container and gives the first reopened tab the focus", async () => {
+test("many-tab reopen skips tabs already in the container and activates none of the new tabs", async () => {
   const { deps, log } = make_deps();
   const reopened = await reopen_tabs_in_container(
     deps,
@@ -124,10 +124,10 @@ test("many-tab reopen skips tabs already in the container and gives the first re
     "work",
   );
   assert.deepEqual(reopened, [10, 11]);
-  assert.deepEqual(log, ["open https://a.test/ 2 work false active=true", "remove 10", "open https://b.test/ 5 work true active=false", "remove 11"]);
+  assert.deepEqual(log, ["open https://a.test/ 2 work false active=false", "remove 10", "open https://b.test/ 5 work true active=false", "remove 11"]);
 });
 
-test("many-tab reopen skips a tab that fails and goes on, and the focus waits for a tab that opened", async () => {
+test("many-tab reopen skips a tab that fails and goes on, and every new tab opens inactive", async () => {
   const log: string[] = [];
   const deps: Pick<TabActionDeps, "open_tab" | "remove"> = {
     open_tab: async (open) => {
@@ -147,7 +147,7 @@ test("many-tab reopen skips a tab that fails and goes on, and the focus waits fo
     "work",
   );
   assert.deepEqual(reopened, [3, 4]);
-  assert.deepEqual(log, ["open https://b.test/ active=true", "remove 3", "open https://c.test/ active=false", "remove 4"]);
+  assert.deepEqual(log, ["open https://b.test/ active=false", "remove 3", "open https://c.test/ active=false", "remove 4"]);
 });
 
 test("many-tab reopen skips a tab whose old copy fails to close and counts it as not moved", async () => {

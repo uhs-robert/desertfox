@@ -866,3 +866,40 @@ test("while the container prompt is open the tab keys do nothing to tabs", async
   assert.deepEqual(select_key(session), { kind: "render" });
   assert.deepEqual(marked(session), [11]);
 });
+
+test("a click on a container row keeps that row's store id when two containers share a name", async () => {
+  const { session } = await listed();
+  session.run("cmdline.next_completion", undefined);
+  reopen_key(session);
+  session.edit("work");
+  assert.equal(session.get_rows().length, 2);
+  session.pick(1);
+  assert.deepEqual(enter(session), { kind: "tab_rows_action", action: "reopen", tab_ids: [11], cookie_store_id: "firefox-container-3" });
+  reopen_key(session);
+  session.edit("work");
+  session.pick(0);
+  assert.deepEqual(enter(session), { kind: "tab_rows_action", action: "reopen", tab_ids: [11], cookie_store_id: "firefox-container-1" });
+});
+
+test("a typed name that two containers share is refused until a row is chosen", async () => {
+  const { session } = await listed();
+  session.run("cmdline.next_completion", undefined);
+  reopen_key(session);
+  session.edit("Work");
+  assert.deepEqual(enter(session), { kind: "render" });
+  assert.equal(session.get_message(), "several containers have that name, pick a row");
+  assert.equal(session.get_prompt(), "container: ");
+});
+
+test("when every marked tab closes during the prompt, Enter reopens nothing, not the highlighted tab", async () => {
+  const { session, change_tabs } = await listed();
+  session.run("cmdline.next_completion", undefined);
+  select_key(session);
+  session.run("cmdline.prev_completion", undefined);
+  assert.deepEqual(marked(session), [11]);
+  reopen_key(session);
+  change_tabs([TABS[1]!, TABS[2]!, TABS[3]!]);
+  session.edit("default");
+  assert.deepEqual(enter(session), { kind: "render" });
+  assert.equal(session.get_message(), "no tab to reopen");
+});

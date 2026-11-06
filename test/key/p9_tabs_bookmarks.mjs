@@ -205,6 +205,7 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, open_p
     })()`);
     const in_container = () => background(`browser.tabs.query({ cookieStoreId: ${JSON.stringify(made.container)} }).then((tabs) => tabs.filter((tab) => /p9c_/.test(tab.url)).length)`);
     const old_open = () => background(`browser.tabs.query({}).then((tabs) => tabs.filter((tab) => ${JSON.stringify(made.ids)}.includes(tab.id)).length)`);
+    const line_tab = await background(`browser.tabs.query({ active: true, currentWindow: true }).then(([tab]) => tab.id)`);
     try {
       await sleep(1200);
       await send_keys(":");
@@ -224,6 +225,7 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, open_p
       await sleep(1500);
       expect(await in_container() === 2, "Enter did not reopen both marked tabs in the container");
       expect(await old_open() === 0, "the old tabs stayed open after the reopen");
+      expect(await background(`browser.tabs.query({ active: true, currentWindow: true }).then(([tab]) => tab.id)`) === line_tab, "a reopened tab took the focus from the line's tab");
     } finally {
       await send_keys("-k", "Escape");
       await sleep(300);

@@ -234,7 +234,7 @@ export function create_complete_items(deps: CompleteItemsDeps) {
     // Runs a row key on the tab ids the page captured at the key press. Undefined for a sender that is not an opener, for a bad argument and when
     // any id names a tab of the other privacy: nothing runs then. An id with no tab is skipped, also one that closes while the action runs.
     // `reopen` also needs `cookie_store_id`, a container the browser lists or the default store. A private line, a tab id of the other privacy and an unknown store give nothing.
-    // It leaves out the line's own tab, because closing it ends the line, and tabs already in the container. The answer counts the tabs that moved when some stayed.
+    // It leaves out the line's own tab, because closing it ends the line, and tabs already in the container. The answer names what moved and what was skipped when some tabs stayed.
     tab_rows_action: async (action: unknown, tab_ids: unknown, asker: Asker | undefined, cookie_store_id?: unknown): Promise<TabRowsActionAnswer | undefined> => {
       if (!is_tab_rows_action(action) || !Array.isArray(tab_ids) || tab_ids.length > MAX_ACTION_TABS || !tab_ids.every(Number.isInteger) || !asker || !(await deps.is_opener(asker.tab_id, asker.frame_id))) return undefined;
       const unique_ids = [...new Set(tab_ids as number[])];
@@ -244,11 +244,16 @@ export function create_complete_items(deps: CompleteItemsDeps) {
       const ids = found.filter(({ tab }) => tab).map(({ id }) => id);
       if (action === "reopen") {
         if (asker.incognito || typeof cookie_store_id !== "string" || !(cookie_store_id === DEFAULT_COOKIE_STORE_ID || (await deps.containers()).has(cookie_store_id))) return undefined;
+        if (!(await deps.is_opener(asker.tab_id, asker.frame_id))) return undefined;
         const movable = found.flatMap(({ id, tab }) =>
           tab && id !== asker.tab_id && tab.windowId !== undefined ? [{ id, window_id: tab.windowId, index: tab.index, pinned: tab.pinned === true, url: tab.url, cookie_store_id: tab.cookieStoreId }] : [],
         );
         const reopened = await reopen_tabs_in_container(deps.tab_actions, movable, cookie_store_id);
-        return reopened.length === ids.length ? {} : { refusal: `reopened ${reopened.length} of ${ids.length} tabs` };
+        const left_out = ids.includes(asker.tab_id) ? 1 : 0;
+        const already_there = movable.filter((tab) => tab.cookie_store_id === cookie_store_id).length;
+        const failed = ids.length - reopened.length - left_out - already_there;
+        const skipped = [already_there > 0 ? `${already_there} already there` : "", left_out > 0 ? "line tab left out" : "", failed > 0 ? `${failed} failed` : ""].filter(Boolean);
+        return skipped.length === 0 ? {} : { refusal: [`reopened ${reopened.length}`, ...skipped].join(", ") };
       }
       try {
         if (action === "close") await close_tabs(deps.tab_actions, ids);

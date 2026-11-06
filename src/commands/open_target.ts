@@ -1,7 +1,7 @@
-import { RuntimeRefusal } from "../shared/command.ts";
-import { DEFAULT_CONTAINER_NAME, DEFAULT_COOKIE_STORE_ID } from "../shared/container_store.ts";
 // Opens a URL where the command asks. Shared by open, page.home and the other commands that open pages.
 
+import { RuntimeRefusal } from "../shared/command.ts";
+import { DEFAULT_CONTAINER_NAME, DEFAULT_COOKIE_STORE_ID } from "../shared/container_store.ts";
 import { get_config } from "../background/startup.ts";
 import { DEFAULT_SETTINGS } from "../shared/config.ts";
 import type { CommandContext, ParamDef } from "../shared/index.ts";
@@ -33,7 +33,6 @@ export const CONTAINER_PARAM: ParamDef = {
   short: "c",
   description: "Open in a container.",
 };
-
 
 export type FindContainerStoreId = (container_name: string) => Promise<string | undefined>;
 

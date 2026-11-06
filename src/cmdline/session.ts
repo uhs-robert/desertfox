@@ -63,7 +63,7 @@ export function create_session(deps: SessionDeps) {
   // After a close, the tab the highlight moves to once the closed rows are gone from the list.
   let cursor_after_close: number | undefined;
   // The container prompt, open over a tab list. It keeps what the list held, so Esc brings it back, and the tab that `<A-c>` found highlighted.
-  let picking: { back: { text: string; caret: number }; highlighted_tab: number | undefined } | undefined;
+  let picking: { back: { text: string; caret: number }; highlighted_tab: number | undefined; marked: boolean } | undefined;
   // The text and caret the list was ranked for. While a row is previewed, `text` differs from it.
   let saved: { text: string; caret: number } | undefined;
 
@@ -215,7 +215,7 @@ export function create_session(deps: SessionDeps) {
       message = "this line has no containers";
       return { kind: "render" };
     }
-    picking = { back: saved ?? { text, caret }, highlighted_tab: rows()[selected]?.tab?.id };
+    picking = { back: saved ?? { text, caret }, highlighted_tab: rows()[selected]?.tab?.id, marked: selection.size > 0 };
     fresh = false;
     replace_text("");
     caret = 0;
@@ -236,14 +236,20 @@ export function create_session(deps: SessionDeps) {
 
   // The previewed container, else the one named exactly. The tab ids are read now: the marks, else the highlighted tab if it is still there.
   const choose_container = (): Effect => {
-    const chosen = completion?.rows[selected] ?? completion?.rows.find((row) => row.name === text.trim());
+    const typed = completion?.rows.filter((row) => row.name === text.trim()) ?? [];
+    if (selected < 0 && typed.length > 1) {
+      message = "several containers have that name, pick a row";
+      return { kind: "render" };
+    }
+    const chosen = completion?.rows[selected] ?? typed[0];
     const cookie_store_id = (chosen as Partial<{ cookie_store_id: string }> | undefined)?.cookie_store_id;
     if (cookie_store_id === undefined) {
       message = "pick a container";
       return { kind: "render" };
     }
-    const { highlighted_tab } = picking!;
-    const highlighted_present = highlighted_tab !== undefined && (deps.tabs?.()?.some((tab) => tab.id === highlighted_tab) ?? true);
+    const { highlighted_tab, marked } = picking!;
+    // Marks that all closed leave nothing to reopen: the highlighted tab was never the choice.
+    const highlighted_present = !marked && highlighted_tab !== undefined && (deps.tabs?.()?.some((tab) => tab.id === highlighted_tab) ?? true);
     const tab_ids = selection.size > 0 ? [...selection] : highlighted_present ? [highlighted_tab] : [];
     leave_container_prompt();
     if (tab_ids.length === 0) message = "no tab to reopen";
@@ -372,6 +378,8 @@ export function create_session(deps: SessionDeps) {
     // `index` counts from the first ranked row, not the first drawn one.
     pick: (index: number) => {
       if (!completion?.rows[index] || !list_shown) return;
+      // A container row stays selected, so Enter reads its store id and not its name, which can repeat.
+      if (picking) return preview(index);
       fresh = false;
       cursor_after_close = undefined;
       preview(index);
