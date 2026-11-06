@@ -20,20 +20,24 @@ export function theme_css(theme: StoredTheme, selector: string): string {
   return `${selector} { ${block(theme.dark)} }\n@media (prefers-color-scheme: light) { ${selector} { ${block(theme.light)} } }`;
 }
 
-// Calls `on_value` with the stored value now and again at every change. Nothing is called when storage is unavailable, so the fallbacks show.
+// Calls `on_value` with the stored value now and again at every change. A failed first read calls it with undefined, so a caller that waits
+// on the first read never waits forever. Nothing is called when storage is unavailable.
 export function watch_stored<T>(key: string, on_value: (value: T | undefined) => void): void {
   if (typeof browser === "undefined") return;
-  void browser.storage.local.get(key).then((stored) => on_value(stored[key] as T | undefined), () => {});
+  void browser.storage.local.get(key).then((stored) => on_value(stored[key] as T | undefined), () => on_value(undefined));
   browser.storage.onChanged.addListener((changes, area) => {
     if (area === "local" && key in changes) on_value(changes[key]!.newValue as T | undefined);
   });
 }
 
-// A page that is not a shadow root. The sheet goes at the end of the head, so it follows the built-in styles.
+// A page that is not a shadow root. The sheet goes at the end of the head, so it follows the built-in styles. The page stays hidden until
+// the first read returns, so the hex defaults never show. Without storage nothing returns, so nothing is hidden.
 export function follow_theme(selector: string): HTMLStyleElement {
   const sheet = document.createElement("style");
   document.head.append(sheet);
+  if (typeof browser !== "undefined") document.documentElement.style.visibility = "hidden";
   watch_stored<StoredTheme>(THEME_STORAGE_KEY, (theme) => {
+    document.documentElement.style.visibility = "";
     sheet.textContent = theme ? theme_css(theme, selector) : "";
   });
   return sheet;

@@ -45,10 +45,11 @@ test("each missing role derives by the table", () => {
   assert.equal(dark.secondary, "#f0e68c");
   assert.equal(dark.border, dark.fg_muted);
   assert.deepEqual([dark.error, dark.warn, dark.ok, dark.info], ["#ffa0a0", "#ffba75", "#7fcf78", "#81c0ff"]);
-  assert.deepEqual([dark.mode_normal, dark.mode_insert, dark.mode_ignore, dark.mode_caret, dark.mode_visual], [dark.primary, dark.error, dark.fg_dim, dark.ok, dark.warn]);
+  assert.deepEqual([dark.mode_normal, dark.mode_insert, dark.mode_ignore, dark.mode_caret, dark.mode_visual], [dark.primary, dark.error, dark.fg_dim, "#f0e68c", dark.warn]);
   assert.deepEqual([dark.search_bg, dark.search_fg, dark.search_current_bg, dark.search_current_fg], [mix("#202020", "#e0e0e0", 0.3), "#e0e0e0", dark.warn, "#202020"]);
   const light = derive_roles(REQUIRED, "light");
   assert.deepEqual([light.error, light.warn, light.ok, light.info], ["#8e0f14", "#793f0d", "#315e2d", "#184571"]);
+  assert.equal(light.mode_caret, "#817613");
   assert.equal(light.bg_mantle, mix("#202020", "#000000", 0.15));
   assert.equal(light.bg_crust, mix("#202020", "#000000", 0.3));
   assert.deepEqual(Object.keys(dark), [...ROLES]);

@@ -15,6 +15,14 @@ const sheets_of_host = new WeakMap<HTMLElement, Sheets>();
 let theme: StoredTheme | undefined;
 let user_css = "";
 let watching = false;
+// Each surface is hidden until both first reads return, so the var() fallbacks never show. The content script has no synchronous storage.
+let first_reads_pending = 2;
+
+const reveal = (host: HTMLElement) => { host.style.visibility = ""; };
+
+function first_read_done(): void {
+  if (--first_reads_pending === 0) surfaces.forEach((sheets) => reveal(sheets.host));
+}
 
 const fill_theme = (sheets: Sheets) => { sheets.theme.textContent = theme ? theme_css(theme, sheets.selector) : ""; };
 
@@ -25,13 +33,18 @@ function drop_hidden_surfaces(): void {
 function watch_once(): void {
   if (watching) return;
   watching = true;
+  if (typeof browser === "undefined") first_reads_pending = 0;
+  let theme_read = false;
+  let user_css_read = false;
   watch_stored<StoredTheme>(THEME_STORAGE_KEY, (value) => {
     theme = value;
+    if (!theme_read) { theme_read = true; first_read_done(); }
     drop_hidden_surfaces();
     surfaces.forEach(fill_theme);
   });
   watch_stored<string>(USER_CSS_STORAGE_KEY, (value) => {
     user_css = value ?? "";
+    if (!user_css_read) { user_css_read = true; first_read_done(); }
     drop_hidden_surfaces();
     for (const sheets of surfaces) sheets.user.textContent = user_css;
   });
@@ -54,6 +67,7 @@ export function create_surface(class_name: string, style: string, layer: number)
   surfaces.add(sheets);
   sheets_of_host.set(host, sheets);
   watch_once();
+  if (first_reads_pending > 0) host.style.visibility = "hidden";
   root.append(style_element, sheets.theme, sheets.user, text);
   return { host, text };
 }
@@ -69,6 +83,7 @@ export function mount_surface(host: HTMLElement): void {
     surfaces.add(sheets);
     fill_theme(sheets);
     sheets.user.textContent = user_css;
+    if (first_reads_pending === 0) reveal(host);
   }
   if (host.parentElement !== document.documentElement) document.documentElement.append(host);
   const layer_of = (element: Element) => Number(element.getAttribute(LAYER_ATTRIBUTE));

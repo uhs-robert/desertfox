@@ -99,6 +99,7 @@ async function load_page(t: TestContext, tag: string, { keymap = KEYMAP, with_ta
       // The page listens for keys on the document. The fake sends them through the input's table.
       addEventListener: (type: string, listener: (event: unknown) => void) => void (input_listeners[type] = listener),
       body: { classList: { toggle: () => {} } },
+      documentElement: { style: { visibility: "" } },
       head: { append: (element: { textContent: string }) => void head.push(element) },
       createElement: fake_element,
     },
