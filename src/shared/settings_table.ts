@@ -4,7 +4,7 @@
 // Data only, so the bundles that check settings (the command line page among them) carry no prose: the editor
 // descriptions live in `settings_docs.ts`.
 
-import { BUILT_IN_PAGE, FALLBACK_ENGINE_NAME } from "./config.ts";
+import { BUILT_IN_PAGE, FALLBACK_ENGINE_NAME } from "./table_constants.ts";
 import { BUILT_IN_THEME_NAMES } from "./theme_names.ts";
 import { LIGHT_INTENSITIES } from "./theme/roles.ts";
 

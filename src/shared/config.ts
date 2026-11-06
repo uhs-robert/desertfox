@@ -7,6 +7,7 @@ import type { KeymapConfig } from "./keymap.ts";
 import type { Settings } from "./settings_table.ts";
 import type { LocalTheme } from "./theme/roles.ts";
 import { DEFAULT_SETTINGS } from "./default_settings.ts";
+import { BUILT_IN_PAGE, FALLBACK_ENGINE_NAME } from "./table_constants.ts";
 
 export type { Settings } from "./settings_table.ts";
 export { DEFAULT_LIGHT_INTENSITY, DEFAULT_MODE_INDICATOR, DEFAULT_PALETTE, DEFAULT_SETTINGS } from "./default_settings.ts";
@@ -31,8 +32,7 @@ export type WhichKeyBorder = Settings["which_key_border"];
 export type ModeIndicator = Settings["mode_indicator"];
 export type NewTabLink = Settings["newtab_links"][number];
 
-// The reserved value of `new_tab_page` and `home_page` that names the built-in new tab page.
-export const BUILT_IN_PAGE = "desertfox";
+export { BUILT_IN_PAGE, FALLBACK_ENGINE_NAME };
 export const NEW_TAB_PAGE_FILE = "newtab.html";
 // `newtab.html?builtin` draws the built-in page even when `new_tab_page` redirects, so `home_page = "desertfox"` still reaches it.
 export const BUILT_IN_QUERY = "builtin";
@@ -48,8 +48,6 @@ export function resolve_new_tab_page(new_tab_page: string | undefined, page_quer
   if (new URLSearchParams(page_query).has(BUILT_IN_QUERY)) return { kind: "built_in" };
   return new_tab_page !== undefined && is_web_url(new_tab_page) ? { kind: "redirect", url: new_tab_page } : { kind: "built_in" };
 }
-
-export const FALLBACK_ENGINE_NAME = "duck";
 
 export const FALLBACK_ENGINE: SearchEngine = { url: "https://duckduckgo.com/?q=%s", label: "DuckDuckGo" };
 
