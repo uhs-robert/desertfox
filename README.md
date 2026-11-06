@@ -32,7 +32,7 @@ Status: under construction. DesertFox has no release yet, so there is nothing to
 
 ## 📦 Install
 
-When DesertFox is released, you will install it from a Firefox add-on file that Mozilla has signed. Firefox asks you to confirm the permissions, then adds the add-on. No public listing on addons.mozilla.org exists or is planned soon.
+When DesertFox is released, you will install it from a Firefox add-on file that Mozilla has signed. Firefox asks you to confirm the permissions, then adds the add-on. No public listing exists.
 
 Until then, only contributors can run it. See [AGENTS.md](AGENTS.md) for the build and install commands.
 
@@ -47,9 +47,9 @@ You write the config in TOML in `~/.config/desertfox/`, then run `just build-con
 ```toml
 # ~/.config/desertfox/keymap.toml
 [normal]
-J = "tab.next"                  # a command name or id
-O = "open -t"                   # -t opens in a new tab
-gt = "tab.goto 1"               # a bare number sets the command's number
+H = "tab.prev"                  # H goes to the previous tab, not back in history
+L = "tab.next"                  # L goes to the next tab, not forward in history
+zi = "zoom.by 0.25"             # a bare number sets the zoom step (default 0.1)
 y = ""                          # "" removes a default binding
 ```
 
@@ -58,7 +58,7 @@ Files beside the keymap set search engines, command aliases, settings, styles an
 ## 🏜️ Known limits
 
 - Plain keys never work on pages where Firefox blocks extensions: `about:` pages, the PDF viewer, reader view and addons.mozilla.org.
-- A plain key such as `J` is lost when it lands on a tab that has not started loading. `Alt+j` and `Alt+k` switch tabs at once. Details are in [docs/firefox-behavior.md](docs/firefox-behavior.md).
+- A plain key such as `J` is lost when it lands on a tab that has not started loading. `Alt+j` and `Alt+k` switch tabs at once, but not on pages that cancel keys. Details are in [docs/firefox-behavior.md](docs/firefox-behavior.md).
 - Planned and not built: a native host (a helper program outside Firefox) for optional desktop integration.
 
 ## 🧭 Docs
