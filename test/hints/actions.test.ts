@@ -132,6 +132,22 @@ test("element_address reads an image button, a media source and, on request, a b
   assert.equal(element_address(box, true), "https://a.test/h.jpg");
 });
 
+test("a relative lazy attribute resolves against the base URL", () => {
+  const lazy = { currentSrc: "", src: "", baseURI: "https://a.test/page/", getAttribute: () => "/img/real.jpg" };
+  assert.equal(element_address(img(lazy)), "https://a.test/img/real.jpg");
+});
+
+test("a background url keeps a closing parenthesis inside its quotes", () => {
+  const box = { localName: "div", ownerDocument: { defaultView: { getComputedStyle: () => ({ backgroundImage: 'url("https://a.test/a_(1).jpg")' }) } } } as never;
+  assert.equal(element_address(box, true), "https://a.test/a_(1).jpg");
+});
+
+test("under the images filter a background image wins over the href of its link", () => {
+  const link = { localName: "a", href: "https://a.test/post", ownerDocument: { defaultView: { getComputedStyle: () => ({ backgroundImage: 'url("https://a.test/h.jpg")' }) } } } as never;
+  assert.equal(element_address(link, true), "https://a.test/h.jpg");
+  assert.equal(element_address(link), "https://a.test/post");
+});
+
 test("an image inside a link gives its own address, never the link's", () => {
   assert.equal(element_address(img({ currentSrc: "https://a.test/thumb.jpg", parentElement: { href: "https://a.test/post" } })), "https://a.test/thumb.jpg");
 });
@@ -146,7 +162,7 @@ test("copy and the open actions use the image address", () => {
 
 test("copy of an image with no web address refuses and copies nothing", () => {
   const page = fixture("img", { currentSrc: "blob:https://a.test/1", textContent: "" });
-  assert.deepEqual(page.run("copy"), { ok: false, message: "This image has no web address" });
+  assert.deepEqual(page.run("copy"), { ok: false, message: "This element has no web address" });
   assert.deepEqual(page.copied, []);
 });
 

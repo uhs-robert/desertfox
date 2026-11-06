@@ -1,7 +1,7 @@
 // Finds the elements a hint filter can label. Visibility is decided later, in visible.ts.
 
 import { is_scroll_box } from "../scroll_box.ts";
-import { element_address, takes_typing } from "./actions.ts";
+import { element_address, is_image_element, takes_typing } from "./actions.ts";
 import { keep_visible, scroll_clips_of } from "./visible.ts";
 import type { PageProbe, Rect } from "./visible.ts";
 
@@ -45,7 +45,7 @@ const image_has_size = (element: Element): boolean => {
 // An `img` (a `picture` always holds one), an image button, or a box with a CSS background image. Inline `svg` has no address, so it gets no label. The size check comes first, because it is cheaper than the style read every element would need.
 export const is_image = (element: Element): boolean => {
   if (!image_has_size(element)) return false;
-  if (element.localName === "img" || (element.localName === "input" && (element as HTMLInputElement).type === "image")) return true;
+  if (is_image_element(element as HTMLElement)) return true;
   return window_of(element).getComputedStyle(element).backgroundImage.includes("url(");
 };
 

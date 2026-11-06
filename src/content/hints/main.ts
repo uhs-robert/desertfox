@@ -5,7 +5,7 @@ import type { Outcome } from "../../shared/messages.ts";
 import { CONFIG_STATUS_STORAGE_KEY } from "../../background/storage_keys.ts";
 import type { BundleHostApi } from "../bundle_host.ts";
 import { unhover } from "./hover.ts";
-import { element_address, is_media, OPEN_PLACES, perform, starts_caret } from "./actions.ts";
+import { element_address, is_inline, is_media, OPEN_PLACES, perform, starts_caret } from "./actions.ts";
 import type { CaretMode, HintAction, Place } from "./actions.ts";
 import { copy_text } from "../caret/copy_text.ts";
 import { collect, keep_text_matches, keep_visible_deduplicated, query_for, scroll_clips_in_page, weak_test_for, window_of } from "./candidates.ts";
@@ -40,6 +40,8 @@ type Session = {
   // Rapid mode picks again after each pick.
   rapid: boolean;
   filter: HintFilter;
+  // Only the images filter takes a picture from a CSS background.
+  with_background: boolean;
   custom_selector: string | undefined;
   // The `text` param as typed, and lower-cased for the match. Both are undefined without it.
   text: string | undefined;
@@ -64,10 +66,15 @@ function windows_of(found: Found[]): Window[] {
   return [...new Set([window, ...frame_windows])].filter((win): win is Window => win !== null);
 }
 
-// Opening in another place needs an address, so only elements with one qualify. The images filter always does, so no label promises an image that a copy or an open cannot use.
+// Opening in another place needs an address, and an inline one cannot open. The images filter always needs one, so no label promises an image that a copy or an open cannot use.
 function find_candidates(filter: HintFilter, custom_selector: string | undefined, action: HintAction): Found[] {
-  const needs_address = OPEN_PLACES.includes(action) || filter === "images";
-  return collect(document, query_for(filter, custom_selector), weak_test_for(filter)).filter((found) => !needs_address || element_address(found.element as HTMLElement, filter === "images") !== undefined);
+  const opens_elsewhere = OPEN_PLACES.includes(action);
+  const with_background = filter === "images";
+  return collect(document, query_for(filter, custom_selector), weak_test_for(filter)).filter((found) => {
+    if (!opens_elsewhere && !with_background) return true;
+    const address = element_address(found.element as HTMLElement, with_background);
+    return address !== undefined && !(opens_elsewhere && is_inline(address));
+  });
 }
 
 const none_message = (text: string | undefined): string => (text === undefined ? "No hints on this page" : `No link matches ${text}`);
@@ -172,7 +179,7 @@ function register(host: BundleHostApi): void {
     if (first_build && current.lower_text !== undefined && found.length === 1) {
       const performed = begin_pick(current);
       host.set_mode("normal");
-      performed(() => perform(current.action, found[0]!.element as HTMLElement, deps, current.filter === "images"));
+      performed(() => perform(current.action, found[0]!.element as HTMLElement, deps, current.with_background));
       return;
     }
     const view = create_view();
@@ -203,14 +210,14 @@ function register(host: BundleHostApi): void {
       if (!current.rapid) {
         // Leave hint mode first: a picked field then raises insert mode through its own focus event.
         host.set_mode("normal");
-        performed(() => perform(current.action, picked, deps, current.filter === "images"));
+        performed(() => perform(current.action, picked, deps, current.with_background));
         return "handled";
       }
       // Rapid: the pick may delete or move elements, so drop these labels and label the page again.
       ready.stop_following();
       ready.view.clear_labels();
       delete current.ready;
-      performed(() => perform(current.action, picked, deps, current.filter === "images"));
+      performed(() => perform(current.action, picked, deps, current.with_background));
       if (!current.cancelled) void build(current, find_candidates(current.filter, current.custom_selector, current.action), false);
     }
     return "handled";
@@ -251,7 +258,7 @@ function register(host: BundleHostApi): void {
     // Pending until the user picks a label or leaves hint mode.
     return new Promise<Outcome>((finish) => {
       // A caret start ends hint mode on the first pick, so rapid has nothing to repeat.
-      const current: Session = { cancelled: false, args, finish, action, waiting_tokens: [], rapid: args.rapid === true && !starts_caret(action), filter, custom_selector, text, lower_text: text?.toLowerCase() };
+      const current: Session = { cancelled: false, args, finish, action, waiting_tokens: [], rapid: args.rapid === true && !starts_caret(action), filter, with_background: filter === "images", custom_selector, text, lower_text: text?.toLowerCase() };
       session = current;
       host.set_mode("hint");
       void build(current, candidates, true);
