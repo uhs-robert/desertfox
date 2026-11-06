@@ -3,7 +3,7 @@
 
 import type { CountBehavior, RunsIn } from "./command.ts";
 import type { BoundInvocation } from "./invocation.ts";
-import type { ModeIndicator } from "./config.ts";
+import type { ModeIndicator, WhichKeyBorder } from "./config.ts";
 import type { KeymapMode } from "./keymap.ts";
 
 export const COMPILED_KEYMAP_STORAGE_KEY = "desertfox_compiled_keymap";
@@ -44,6 +44,8 @@ export type CompiledKeymap = {
   ignore_regex?: string;
   mode_indicator: ModeIndicator;
   which_key_delay_ms: number;
+  // A tree stored before this setting has none, and the panel keeps square corners.
+  which_key_border?: WhichKeyBorder;
 };
 
 // A tree stored by an older build has another shape, and the content script then treats it as absent until the background recompiles.

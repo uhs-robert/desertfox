@@ -7,4 +7,4 @@ The which-key panel: a floating list of the keys that can follow what the user h
 - `panel.ts`: draws the panel in a closed shadow root: the title chip in the top border, a row per key, a footer. It also owns the styles.
 - `layout.ts`: how many columns the rows need for the viewport height, and how the title chain joins and shortens (`fit_title`: whole groups drop from the start and "…" stands for them).
 
-The data comes from `src/background/list_keys.ts`, through the `list_keys` message. It builds the `WhichKeyPanel`: the title (the chain of group names, `["+Go", "+Close tabs"]`, which the panel joins as `+Go » +Close tabs`) and the rows. See `src/background/README.md`.
+The data comes from `src/background/list_keys.ts`, through the `list_keys` message. It builds the `WhichKeyPanel`: the title (the chain of group names, `["+Go", "+Close tabs"]`, which the panel joins as `+Go » +Close tabs`), the rows and the border style. See `src/background/README.md`.

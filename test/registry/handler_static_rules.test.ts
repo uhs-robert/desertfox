@@ -14,7 +14,7 @@ import { is_dynamic_values, static_values } from "../../src/shared/registry/para
 const CANNOT_RUN_ON_STUB: Record<string, string> = {};
 
 // One text each setting accepts. A name missing here gets "x", which the validator may drop.
-const VALID_SETTING_TEXT: Record<string, string> = { which_key_delay_ms: "500", hint_letters: "asdf", ignore_sites: "a.com b.com", light_intensity: "4", home_page: "https://example.org", default_engine: "stub", palette: "stub", cmdline_prompt: ">", history_completion_max: "5", newtab_clock: "digital", newtab_clock_format: "24", open_completion: "bookmarks", mode_indicator: "off", new_tab_page: "desertfox" };
+const VALID_SETTING_TEXT: Record<string, string> = { which_key_delay_ms: "500", hint_letters: "asdf", ignore_sites: "a.com b.com", light_intensity: "4", home_page: "https://example.org", default_engine: "stub", palette: "stub", cmdline_prompt: ">", history_completion_max: "5", newtab_clock: "digital", newtab_clock_format: "24", open_completion: "bookmarks", which_key_border: "round", mode_indicator: "off", new_tab_page: "desertfox" };
 
 // Refusals a handler may give on the stub, from its state or the config and not from an argument value: no sound playing, no
 // container, bookmark or home page, a tab that cannot unload, nothing to repeat. A refusal that matches no entry fails, so a

@@ -3,6 +3,7 @@
 import type { CommandMeta } from "../shared/command.ts";
 import type { PageInfo } from "../shared/engines/index.ts";
 import type { BoundInvocation } from "../shared/invocation.ts";
+import type { WhichKeyBorder } from "../shared/config.ts";
 import type { ListKeys, WhichKeyPanel, WhichKeyRow } from "../shared/messages.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY } from "../shared/prefix_tree.ts";
 import type { CompiledKeymap, TreeBranch, TreeNode } from "../shared/prefix_tree.ts";
@@ -39,18 +40,18 @@ function compare_rows(left: WhichKeyRow, right: WhichKeyRow): number {
 
 // A prefix that no longer leads anywhere gives no rows. The title is the chain of groups, each part like the group's own row:
 // `["+Go", "+Close tabs"]`. A group without a name shows its key. The panel joins the chain.
-export function panel_after_prefix(root: TreeBranch | undefined, prefix: string[], find_command: (id: string) => CommandMeta | undefined): WhichKeyPanel {
+export function panel_after_prefix(root: TreeBranch | undefined, prefix: string[], find_command: (id: string) => CommandMeta | undefined, border: WhichKeyBorder = "square"): WhichKeyPanel {
   let node: TreeNode | undefined = root;
   const chain: string[] = [];
   for (const token of prefix) {
     node = node?.kind === "branch" ? node.children[token] : undefined;
     if (node?.kind === "branch") chain.push(`+${node.label ?? token}`);
   }
-  if (node?.kind !== "branch") return { title: [], rows: [] };
+  if (node?.kind !== "branch") return { title: [], rows: [], border };
   const rows = Object.entries(node.children)
     .map(([token, child]) => row_of(token, child, find_command))
     .sort(compare_rows);
-  return { title: chain.length === 0 ? ["keys"] : chain, rows };
+  return { title: chain.length === 0 ? ["keys"] : chain, rows, border };
 }
 
 // What the active page can run. Keys whose command needs slots the page cannot fill are left out, and so are groups left empty.
@@ -79,5 +80,5 @@ export async function list_keys(
   const keymap = stored[COMPILED_KEYMAP_STORAGE_KEY] as CompiledKeymap | undefined;
   const root = keymap?.modes[request.mode as keyof CompiledKeymap["modes"]];
   const shown = root && availability ? without_unavailable(root, availability) : root;
-  return panel_after_prefix(shown, request.prefix, find_command);
+  return panel_after_prefix(shown, request.prefix, find_command, keymap?.which_key_border);
 }

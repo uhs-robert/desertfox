@@ -135,3 +135,11 @@ test("the command line page declares its colors as role tokens, bg_mantle and se
   assert.ok(declared.includes(token_name("bg_mantle")));
   assert.ok(declared.includes(token_name("secondary")));
 });
+
+test("a theme file with only the required roles still gets the four search roles", () => {
+  const { theme, problems } = checked({ dark: REQUIRED, light: REQUIRED });
+  assert.deepEqual(problems, []);
+  for (const variant of [theme!.dark, theme!.light]) {
+    for (const role of ["search_bg", "search_fg", "search_current_bg", "search_current_fg"] as const) assert.match(variant[role], /^#[0-9a-f]{6}$/, role);
+  }
+});

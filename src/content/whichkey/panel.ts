@@ -6,6 +6,10 @@ import { LAYERS } from "../../shared/layers.ts";
 import { create_surface, mount_surface } from "../surface.ts";
 import { choose_columns, fit_title } from "./layout.ts";
 
+const CHAMFER_PX = 8;
+const chamfer = (cut: number) =>
+  `polygon(${cut}px 0, calc(100% - ${cut}px) 0, 100% ${cut}px, 100% calc(100% - ${cut}px), calc(100% - ${cut}px) 100%, ${cut}px 100%, 0 calc(100% - ${cut}px), 0 ${cut}px)`;
+
 // The look follows the Oasis editor float: a thin tinted border, a filled title chip, yellow keys, blue groups.
 // --bg and --fg alias the page-wide `--desertfox-*` settings, each with its default as a fallback.
 export const STYLE = `
@@ -21,6 +25,9 @@ export const STYLE = `
 }
 .frame { background: var(--border); padding: 1px; }
 .body { box-sizing: border-box; background: var(--bg); color: var(--fg); padding: 14px 14px 8px; overflow: auto; max-height: calc(100vh - 98px); }
+.round, .round .body { border-radius: var(--desertfox-radius, 6px); }
+.chamfer { clip-path: ${chamfer(CHAMFER_PX)}; }
+.chamfer .body { clip-path: ${chamfer(CHAMFER_PX - 1)}; }
 .title { position: relative; width: fit-content; height: 12px; margin: 0 12px -1px; padding: 0 4px; z-index: 1;
   background: linear-gradient(to bottom, transparent 11px, var(--bg) 11px, var(--bg) 12px, transparent 12px); }
 .chip { box-sizing: border-box; max-width: calc(100vw - 64px); overflow: hidden; text-overflow: ellipsis; background: var(--primary); color: var(--bg); font-weight: bold; padding: 2px 7px; border-radius: 3px; white-space: nowrap; }
@@ -42,7 +49,7 @@ function element<Tag extends keyof HTMLElementTagNameMap>(tag: Tag, class_name: 
 }
 
 // Rows fill left to right, then down.
-export function show_panel({ title, rows }: WhichKeyPanel): void {
+export function show_panel({ title, rows, border }: WhichKeyPanel): void {
   surface ??= create_surface("desertfox-whichkey", STYLE, LAYERS.which_key);
   const columns = choose_columns(rows.length, window.innerHeight);
   surface.text.className = "desertfox-whichkey";
@@ -58,7 +65,7 @@ export function show_panel({ title, rows }: WhichKeyPanel): void {
   );
   const footer = element("div", "footer");
   for (const [key, word] of FOOTER) footer.append(element("span", "", key), word);
-  const frame = element("div", "frame");
+  const frame = element("div", `frame ${border}`);
   const body = element("div", "body");
   body.append(list, footer);
   frame.append(body);

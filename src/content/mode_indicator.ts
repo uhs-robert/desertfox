@@ -5,6 +5,7 @@ import { LAYERS } from "../shared/layers.ts";
 import { BADGE_HOST_ATTRIBUTE, remove_badge_hosts } from "./badge_hosts.ts";
 import { create_surface, mount_surface } from "./surface.ts";
 
+// :where keeps each mode rule at the specificity of the public class, so a user's `.desertfox-mode` rule in style.css still wins.
 // The fallback after each mode token is the moonlight dark value, for a page where the stored theme has not arrived. The light variant comes from the theme sheet.
 export const STYLE = `
 .desertfox-mode {
@@ -12,12 +13,12 @@ export const STYLE = `
   background: var(--desertfox-bg-core, #0c0e13); color: var(--desertfox-fg-core, #f5f5dc);
   font: var(--desertfox-font, 14px system-ui, sans-serif); border-radius: var(--desertfox-radius, 6px);
 }
-.desertfox-mode[data-mode] { color: var(--desertfox-bg-core, #0c0e13); }
-.desertfox-mode[data-mode="normal"] { background: var(--desertfox-mode-normal, #7fa3c9); }
-.desertfox-mode[data-mode="insert"] { background: var(--desertfox-mode-insert, #ffa0a0); }
-.desertfox-mode[data-mode="ignore"] { background: var(--desertfox-mode-ignore, #717a84); }
-.desertfox-mode[data-mode="caret"] { background: var(--desertfox-mode-caret, #7fcf78); }
-.desertfox-mode[data-mode="visual"] { background: var(--desertfox-mode-visual, #ffba75); }`;
+.desertfox-mode:where([data-mode]) { color: var(--desertfox-bg-core, #0c0e13); }
+.desertfox-mode:where([data-mode="normal"]) { background: var(--desertfox-mode-normal, #7fa3c9); }
+.desertfox-mode:where([data-mode="insert"]) { background: var(--desertfox-mode-insert, #ffa0a0); }
+.desertfox-mode:where([data-mode="ignore"]) { background: var(--desertfox-mode-ignore, #717a84); }
+.desertfox-mode:where([data-mode="caret"]) { background: var(--desertfox-mode-caret, #7fcf78); }
+.desertfox-mode:where([data-mode="visual"]) { background: var(--desertfox-mode-visual, #ffba75); }`;
 
 let surface: ReturnType<typeof create_surface> | undefined;
 

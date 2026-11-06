@@ -5,8 +5,8 @@ import { create_word_lookup } from "../../../src/cmdline/word_lookup.ts";
 import type { CommandMeta } from "../../../src/shared/command.ts";
 import { COMMAND_ALIASES, COMMANDS, SOURCES, lookup } from "./fixtures.ts";
 
-const SET: CommandMeta = { id: "settings.set", name: "set", label: "Set a setting", intent: "Change a setting.", params: [{ name: "name", type: "string", strict: true, values: ["mode_indicator", "newtab_date"] }, { name: "value", type: "string", rest: true, main: true, optional: true, value_of: "name" }] };
-const UNSET: CommandMeta = { id: "settings.unset", name: "unset", label: "Unset a setting", intent: "Drop a change.", params: [{ name: "name", type: "string", main: true, strict: true, values: ["all", "mode_indicator"] }] };
+const SET: CommandMeta = { id: "settings.set", name: "set", label: "Set a setting", intent: "Change a setting.", params: [{ name: "name", type: "string", strict: true, values: ["which_key_border", "newtab_date"] }, { name: "value", type: "string", rest: true, main: true, optional: true, value_of: "name" }] };
+const UNSET: CommandMeta = { id: "settings.unset", name: "unset", label: "Unset a setting", intent: "Drop a change.", params: [{ name: "name", type: "string", main: true, strict: true, values: ["all", "which_key_border"] }] };
 
 const complete = create_completer(lookup, COMMANDS, COMMAND_ALIASES, SOURCES);
 const names = (text: string) => complete(text, text.length).rows.map((row) => row.name);
@@ -101,18 +101,18 @@ test("set offers the setting names, then the values the setting lists", () => {
     SOURCES,
   );
   const rows = (text: string) => complete_set(text, text.length).rows.map((row) => row.name);
-  assert.ok(rows("set ").includes("mode_indicator"));
-  assert.deepEqual(rows("set mode_ind"), ["mode_indicator"]);
-  assert.equal(complete_set("set mode_indicator ", 21).rows.length, 3);
-  assert.deepEqual(rows("set mode_indicator not"), ["not_normal"]);
+  assert.ok(rows("set ").includes("which_key_border"));
+  assert.deepEqual(rows("set which_key_b"), ["which_key_border"]);
+  assert.equal(complete_set("set which_key_border ", 21).rows.length, 3);
+  assert.deepEqual(rows("set which_key_border ro"), ["round"]);
   assert.deepEqual(rows("set newtab_date "), ["true", "false"]);
   assert.deepEqual(rows("set hint_letters "), []);
-  assert.deepEqual(rows("set mode_indicator off "), []);
+  assert.deepEqual(rows("set which_key_border round "), []);
   assert.deepEqual(rows("set open_completion history "), ["bookmarks", "history"]);
   assert.ok(rows("set palette ").includes("oasis_moonlight"));
   assert.ok(!rows("set ").includes("search_prefixes"));
   assert.ok(rows("unset ").includes("all"));
-  assert.deepEqual(rows("unset mode_indicator "), []);
+  assert.deepEqual(rows("unset which_key_border "), []);
 });
 
 const WHOLE_TEXT_COMMANDS: CommandMeta[] = [
@@ -160,7 +160,7 @@ test("a window title with several words completes on all of them", () => {
 
 test("search and set keep one word per position", () => {
   assert.deepEqual(picks("search duck two words"), []);
-  assert.deepEqual(picks("set mode_indicator off "), []);
+  assert.deepEqual(picks("set which_key_border round "), []);
   assert.deepEqual(picks("set open_completion history "), ["bookmarks ", "history "]);
 });
 

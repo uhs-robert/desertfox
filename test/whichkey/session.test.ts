@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { create_which_key_session } from "../../src/content/whichkey/session.ts";
 import type { WhichKeyPanel } from "../../src/shared/messages.ts";
 
-const panel: WhichKeyPanel = { title: ["keys"], rows: [{ keys: "j", command: "Down", description: "", more: false }] };
+const panel: WhichKeyPanel = { title: ["keys"], rows: [{ keys: "j", command: "Down", description: "", more: false }], border: "square" };
 
 // A fetch the test answers by hand, like the background answering late.
 function make_session() {
