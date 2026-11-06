@@ -2,12 +2,15 @@
 // file in `storage.local`, then defaults.
 
 import { apply_overrides, CONFIG_FORMAT_VERSION, effective_settings, with_fallback_engines } from "../shared/config.ts";
-import type { MergedConfig, SettingOverrides, SnippetEntry } from "../shared/config.ts";
-import type { ConfigStatus } from "../options/model.ts";
+import type { MergedConfig, Settings, SettingOverrides, SnippetEntry } from "../shared/config.ts";
 import { is_setting_name, SETTING_SPECS } from "../shared/settings_schema.ts";
 import { IMPORTED_CONFIG_STORAGE_KEY, SETTING_OVERRIDES_STORAGE_KEY } from "./storage_keys.ts";
 
 export type ConfigSource = "managed" | "imported" | "defaults";
+
+// The value the background stores under CONFIG_STATUS_STORAGE_KEY.
+// `overrides` names the settings `:set` changed live. `configured` names the ones the config file sets. Both are absent in a status stored by an older version.
+export type ConfigStatus = { source: ConfigSource; settings: Settings; managed_file_hint: string; overrides?: string[]; configured?: string[] };
 
 export type LoadedConfig = {
   config: MergedConfig;

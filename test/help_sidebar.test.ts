@@ -51,7 +51,7 @@ const GUIDE: Block[] = [
 function render(route: Route, keep_state = false, guide: Block[] = [], root = new FakeNode("body")): FakeNode {
   (globalThis as { document?: unknown }).document = { createElement: (tag: string) => new FakeNode(tag), createElementNS: (_ns: string, tag: string) => new FakeNode(tag) };
   if (!keep_state) reset_group_state();
-  render_help(root as never, { quick_start: QUICK_START, groups: GROUPS, warnings: [], settings: [], engines: [], tip: { kind: "tip", inlines: [] } } as never, route, guide);
+  render_help(root as never, { quick_start: QUICK_START, groups: GROUPS, warnings: [], settings: [], rebuild_steps: [], engines: [], tip: { kind: "tip", inlines: [] } } as never, route, guide);
   return root;
 }
 
@@ -97,7 +97,7 @@ test("each toggle works alone and flips aria-expanded", () => {
 
 test("each group lists its page's sections", () => {
   const by_page = Object.fromEntries(group_nodes(render({ page: "home" })).map((group) => [group.page, links(group.list)]));
-  assert.deepEqual(by_page["Home"], ["#section=home/warnings", "#section=home/settings"]);
+  assert.deepEqual(by_page["Home"], ["#section=home/warnings", "#section=home/settings", "#section=home/change-the-config"]);
   assert.deepEqual(by_page["Styling"], ["#section=styling/variables", "#section=styling/classes"]);
   assert.deepEqual(by_page["Commands"], ["#section=commands/scroll", "#section=commands/tab"]);
   assert.deepEqual(by_page["Quick Start"], ["#section=quick-start/click-with-hints", "#section=quick-start/which-key", "#section=quick-start/which-key-2"]);

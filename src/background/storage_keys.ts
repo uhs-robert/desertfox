@@ -6,7 +6,7 @@ export const IMPORTED_CONFIG_STORAGE_KEY = "desertfox_imported_config";
 // Strings for the help page: config, keymap and shortcut slot problems from the last load.
 export const WARNINGS_STORAGE_KEY = "desertfox_warnings";
 
-// Where the config came from and the settings in force, for the options page. Written at every startup.
+// Where the config came from and the settings in force. Written at every startup. The hint script reads its letters from it.
 export const CONFIG_STATUS_STORAGE_KEY = "desertfox_config_status";
 
 // Setting name to the value `:set` gave it, in `storage.session`: a browser restart clears it. Global, private windows included.
