@@ -7,22 +7,25 @@
 
 import type { TabModelMessage, TabModelRequest, TabRow } from "../shared/messages.ts";
 import { site_key } from "../shared/site_key.ts";
-import { listed_favicon } from "./complete_items.ts";
+import { TAB_MODEL_PORT_NAME, TAB_MODEL_PORT_NORMAL, TAB_MODEL_PORT_PRIVATE } from "../shared/tab_model_port.ts";
+import { listed_favicon, numbered_windows, read_container_identities } from "./complete_items.ts";
+import type { ContainerIdentity, WindowLike } from "./complete_items.ts";
 
-// The plain name states no privacy, so a page with no sender tab (a sidebar) connects as `:normal` or `:private`.
-// The page knows its own context, and the background cannot read it from such a port.
-export const TAB_MODEL_PORT_NAME = "desertfox_tab_model";
-const PORT_PRIVACY: Record<string, boolean | undefined> = { [TAB_MODEL_PORT_NAME]: undefined, [`${TAB_MODEL_PORT_NAME}:normal`]: false, [`${TAB_MODEL_PORT_NAME}:private`]: true };
+const PORT_PRIVACY: Record<string, boolean | undefined> = { [TAB_MODEL_PORT_NAME]: undefined, [TAB_MODEL_PORT_NORMAL]: false, [TAB_MODEL_PORT_PRIVATE]: true };
 export const FLUSH_DELAY_MS = 30;
 
 type Entry = { row: TabRow; incognito: boolean };
 type Tab = browser.tabs.Tab;
 type Listener<Args extends unknown[]> = { addListener: (listener: (...args: Args) => void) => void };
+type Containers = ReadonlyMap<string, ContainerIdentity>;
+// Window id to its number, as `numbered_windows` counts them.
+type WindowNumbers = ReadonlyMap<number, number>;
 
 export type TabModelPort = {
   name: string;
-  sender?: { url?: string; tab?: { incognito?: boolean } };
+  sender?: { url?: string; frameId?: number; tab?: { id?: number; incognito?: boolean } };
   postMessage: (message: TabModelMessage) => void;
+  disconnect: () => void;
   onMessage: Listener<[unknown]>;
   onDisconnect: Listener<[]>;
 };
@@ -36,18 +39,31 @@ export type TabModelDeps = {
     onMoved: Listener<[number, { windowId: number; fromIndex: number; toIndex: number }]>;
     onAttached: Listener<[number, { newWindowId: number; newPosition: number }]>;
     onDetached: Listener<[number, { oldWindowId: number; oldPosition: number }]>;
-    onActivated: Listener<[{ tabId: number; windowId: number }]>;
+    onActivated: Listener<[{ tabId: number; windowId: number; previousTabId?: number | undefined }]>;
   };
+  windows: () => Promise<WindowLike[]>;
+  window_events: { onCreated: Listener<[unknown]>; onRemoved: Listener<[number]> };
+  // Rejects or answers empty when containers are off.
+  containers: () => Promise<Containers>;
+  // Absent when the browser has no container API.
+  container_events?: { onCreated: Listener<[unknown]>; onUpdated: Listener<[unknown]>; onRemoved: Listener<[unknown]> } | undefined;
+  // The stored previous tab of a window (`previous_tab.ts`), read at load only. Afterwards the model follows `onActivated` itself,
+  // because tab events reach it in order and the stored value lags behind its write queue.
+  previous_of: (window_id: number) => Promise<number | undefined>;
   on_connect: Listener<[TabModelPort]>;
   // Only an extension page may read the tab list. A content script reports the page's URL as its sender.
   is_extension_page: (port: TabModelPort) => boolean;
+  // A web page can frame a web-accessible page (`cmdline.html`), and the frame is still an extension page, so such a port must be the line that redeemed its tab's ticket.
+  is_web_accessible_page: (port: TabModelPort) => boolean;
+  is_opener: (tab_id: number, frame_id: number) => Promise<boolean>;
   set_timer: (callback: () => void, delay_ms: number) => unknown;
   clear_timer: (handle: unknown) => void;
 };
 
-function entry_of(tab: Tab): Entry | undefined {
+function entry_of(tab: Tab, window_numbers: WindowNumbers, containers: Containers): Entry | undefined {
   if (tab.id === undefined || tab.windowId === undefined) return undefined;
   const url = tab.url ?? "";
+  const container = containers.get(tab.cookieStoreId ?? "");
   return {
     incognito: tab.incognito === true,
     row: {
@@ -63,13 +79,28 @@ function entry_of(tab: Tab): Entry | undefined {
       audible: tab.audible === true,
       discarded: tab.discarded === true,
       active: tab.active === true,
+      previous: false,
+      window_number: window_numbers.get(tab.windowId) ?? 0,
       container: tab.cookieStoreId ?? "",
+      container_name: container?.name ?? "",
+      container_color: container?.color ?? "",
+      container_icon: container?.icon ?? "",
     },
   };
 }
 
-// The fields an update may change. Position and `active` stay the model's own, because their events arrive in order and the tab object in an update can be stale.
-const UPDATABLE = ["title", "url", "favicon_url", "site", "pinned", "muted", "audible", "discarded", "container"] as const;
+// The fields an update may change. Position, `active`, `previous` and `window_number` stay the model's own, because their events arrive in order and the tab object in an update can be stale.
+const UPDATABLE = ["title", "url", "favicon_url", "site", "pinned", "muted", "audible", "discarded", "container", "container_name", "container_color", "container_icon"] as const;
+
+// Runs `read`, and applies its answer only when no later call started meanwhile, so an older answer never overwrites a newer one.
+function latest_only<T>(read: () => Promise<T>, apply: (value: T) => void) {
+  let calls = 0;
+  return async () => {
+    const call = ++calls;
+    const value = await read();
+    if (call === calls) apply(value);
+  };
+}
 
 export function create_tab_model(deps: TabModelDeps) {
   const entries = new Map<number, Entry>();
@@ -88,6 +119,8 @@ export function create_tab_model(deps: TabModelDeps) {
   let loaded = false;
   let loading: Promise<void> | undefined;
   let raced = false;
+  let window_numbers: WindowNumbers = new Map();
+  let containers: Containers = new Map();
 
   const rows_for = (incognito: boolean | undefined) =>
     [...entries.values()]
@@ -144,6 +177,44 @@ export function create_tab_model(deps: TabModelDeps) {
       }
     }
   };
+  const set_field = <Field extends keyof TabRow>(entry: Entry, field: Field, value: TabRow[Field]) => {
+    if (entry.row[field] === value) return;
+    entry.row[field] = value;
+    touch(entry.row.id);
+  };
+  // `previous_tab.ts` keeps the same rule: a window's first activation has none, and the active tab is never the previous one.
+  const mark_previous = (window_id: number, previous_id: number | undefined) => {
+    for (const entry of entries.values()) {
+      if (entry.row.window_id === window_id) set_field(entry, "previous", entry.row.id === previous_id && !entry.row.active);
+    }
+  };
+  // Detached rows too, or an attach after a re-read would send stale marks.
+  const relabel_rows = () => {
+    for (const entry of [...entries.values(), ...detached.values()]) {
+      set_field(entry, "window_number", window_numbers.get(entry.row.window_id) ?? 0);
+      const container = containers.get(entry.row.container);
+      set_field(entry, "container_name", container?.name ?? "");
+      set_field(entry, "container_color", container?.color ?? "");
+      set_field(entry, "container_icon", container?.icon ?? "");
+    }
+  };
+  const number_windows = (windows: readonly WindowLike[]): WindowNumbers => new Map(numbered_windows(windows).map((window) => [window.id, window.number]));
+  const reread_windows = latest_only(
+    () => deps.windows().then(number_windows, () => undefined),
+    (numbers) => {
+      if (!numbers) return;
+      window_numbers = numbers;
+      relabel_rows();
+    },
+  );
+  const reread_containers = latest_only(
+    () => deps.containers().catch((): Containers => new Map()),
+    (read) => {
+      containers = read;
+      relabel_rows();
+    },
+  );
+
   const activate = (window_id: number, tab_id: number) => {
     for (const entry of entries.values()) {
       if (entry.row.window_id !== window_id) continue;
@@ -171,19 +242,28 @@ export function create_tab_model(deps: TabModelDeps) {
         for (;;) {
           raced = false;
           let tabs: Tab[];
+          let windows: WindowLike[];
+          let loaded_containers: Containers;
+          let previous_by_window: Map<number, number | undefined>;
           try {
-            tabs = await deps.query();
+            [tabs, windows, loaded_containers] = await Promise.all([deps.query(), deps.windows(), deps.containers().catch((): Containers => new Map())]);
+            const window_ids = windows.flatMap((window) => (window.id === undefined ? [] : [window.id]));
+            previous_by_window = new Map(await Promise.all(window_ids.map(async (id) => [id, await deps.previous_of(id).catch(() => undefined)] as const)));
           } catch (error) {
             // An event that raced a failed query is the only trigger left to query again.
             if (raced) continue;
             throw error;
           }
           if (raced) continue;
+          window_numbers = number_windows(windows);
+          containers = loaded_containers;
           entries.clear();
           detached.clear();
           for (const tab of tabs) {
-            const entry = entry_of(tab);
-            if (entry) entries.set(entry.row.id, entry);
+            const entry = entry_of(tab, window_numbers, containers);
+            if (!entry) continue;
+            entry.row.previous = !entry.row.active && previous_by_window.get(entry.row.window_id) === entry.row.id;
+            entries.set(entry.row.id, entry);
           }
           upserts = new Set();
           removed = new Map();
@@ -207,7 +287,7 @@ export function create_tab_model(deps: TabModelDeps) {
   const { events } = deps;
   events.onCreated.addListener(
     when_loaded((tab) => {
-      const entry = entry_of(tab);
+      const entry = entry_of(tab, window_numbers, containers);
       if (!entry) return;
       if (!entries.has(entry.row.id)) {
         shift_window(entry.row.window_id, entry.row.index, 1);
@@ -231,7 +311,7 @@ export function create_tab_model(deps: TabModelDeps) {
   events.onUpdated.addListener(
     when_loaded((tab_id, _change, tab) => {
       const current = entries.get(tab_id) ?? detached.get(tab_id);
-      const fresh = entry_of(tab);
+      const fresh = entry_of(tab, window_numbers, containers);
       if (!current || !fresh) return;
       let changed = false;
       for (const field of UPDATABLE) {
@@ -272,6 +352,8 @@ export function create_tab_model(deps: TabModelDeps) {
       if (!entry) return;
       entries.delete(tab_id);
       detached.set(tab_id, entry);
+      // The old window's `previous_tab.ts` value may still name it, but the tab list marks `#` only inside that window.
+      entry.row.previous = false;
       shift_window(oldWindowId, entry.row.index + 1, -1);
       // Ports drop the row now and take it back at its new place on attach.
       upserts.delete(tab_id);
@@ -287,6 +369,7 @@ export function create_tab_model(deps: TabModelDeps) {
       if (entries.has(tab_id)) shift_window(entry.row.window_id, entry.row.index + 1, -1, tab_id);
       shift_window(newWindowId, newPosition, 1, tab_id);
       entry.row.window_id = newWindowId;
+      entry.row.window_number = window_numbers.get(newWindowId) ?? 0;
       entry.row.index = newPosition;
       entry.row.active = ![...entries.values()].some((other) => other.row.window_id === newWindowId && other.row.active);
       entries.set(tab_id, entry);
@@ -295,28 +378,57 @@ export function create_tab_model(deps: TabModelDeps) {
     }),
   );
   events.onActivated.addListener(
-    when_loaded(({ tabId, windowId }) => {
+    when_loaded(({ tabId, windowId, previousTabId }) => {
       if (entries.has(tabId)) activate(windowId, tabId);
+      mark_previous(windowId, previousTabId);
     }),
   );
+  // A window opening or closing shifts the numbers of the windows after it.
+  deps.window_events.onCreated.addListener(when_loaded(() => void reread_windows()));
+  deps.window_events.onRemoved.addListener(when_loaded(() => void reread_windows()));
+  for (const event of [deps.container_events?.onCreated, deps.container_events?.onUpdated, deps.container_events?.onRemoved]) {
+    event?.addListener(when_loaded(() => void reread_containers()));
+  }
 
   deps.on_connect.addListener((port) => {
     if (!Object.hasOwn(PORT_PRIVACY, port.name) || !deps.is_extension_page(port)) return;
     const sender_tab = port.sender?.tab;
     const state: PortState = { port, incognito: sender_tab ? sender_tab.incognito === true : PORT_PRIVACY[port.name], rev: 0, ready: false };
-    ports.add(state);
-    port.onDisconnect.addListener(() => ports.delete(state));
+    let disconnected = false;
+    port.onDisconnect.addListener(() => {
+      disconnected = true;
+      ports.delete(state);
+    });
     port.onMessage.addListener((message) => {
       if (!state.ready || (message as TabModelRequest | undefined)?.type !== "resync") return;
       flush();
       send_snapshot(state);
     });
-    if (loaded) {
-      // Pending changes go to the ports first, so the snapshot holds nothing a later patch repeats.
-      flush();
-      state.ready = true;
-      send_snapshot(state);
-    } else void load();
+    // The port joins `ports` only once admitted, so neither a load nor a flush reaches it before.
+    const admit = () => {
+      ports.add(state);
+      if (loaded) {
+        // Pending changes go to the ports first, so the snapshot holds nothing a later patch repeats.
+        flush();
+        state.ready = true;
+        send_snapshot(state);
+      } else void load();
+    };
+    // A web page can frame only a web-accessible page, so only that page needs the ticket. Any other extension page is extension code.
+    // The opener mark clears when the tab navigates, and that also ends the frame and its port, so one check at connect is enough.
+    if (!deps.is_web_accessible_page(port)) return admit();
+    const tab_id = sender_tab?.id;
+    const frame_id = port.sender?.frameId;
+    const opener_check = tab_id === undefined || frame_id === undefined ? Promise.resolve(false) : deps.is_opener(tab_id, frame_id).catch(() => false);
+    void opener_check.then((opener) => {
+      if (disconnected) return;
+      if (opener) return admit();
+      try {
+        port.disconnect();
+      } catch {
+        // Already gone.
+      }
+    });
   });
 
   return {
@@ -329,16 +441,31 @@ export function create_tab_model(deps: TabModelDeps) {
       if (!loaded) await load();
       flush();
     },
+    // For a ticketed action message that names tabs: a copy, so a caller cannot change the model.
+    row_of: (id: number): TabRow | undefined => {
+      const entry = entries.get(id);
+      return entry ? { ...entry.row } : undefined;
+    },
+    ids_of_privacy: (incognito: boolean): number[] => [...entries.values()].filter((entry) => entry.incognito === incognito).map((entry) => entry.row.id),
   };
 }
 
-export function browser_tab_model_deps(): TabModelDeps {
+export function browser_tab_model_deps(from_services: Pick<TabModelDeps, "previous_of" | "is_opener">): TabModelDeps {
   const extension_root = browser.runtime.getURL("");
+  // Manifest V2 lists plain file names. A Manifest V3 entry is an object and needs reading here after a move.
+  const web_accessible_urls = new Set((browser.runtime.getManifest().web_accessible_resources ?? []).flatMap((resource) => (typeof resource === "string" ? [browser.runtime.getURL(resource)] : [])));
+  const page_url_of = (url: string) => url.replace(/[?#].*$/, "");
   return {
+    ...from_services,
     query: () => browser.tabs.query({}),
     events: browser.tabs as unknown as TabModelDeps["events"],
+    windows: () => browser.windows.getAll(),
+    window_events: browser.windows as unknown as TabModelDeps["window_events"],
+    containers: () => read_container_identities(() => browser.contextualIdentities.query({})),
+    container_events: browser.contextualIdentities as unknown as TabModelDeps["container_events"],
     on_connect: browser.runtime.onConnect as unknown as TabModelDeps["on_connect"],
     is_extension_page: (port) => port.sender?.url?.startsWith(extension_root) === true,
+    is_web_accessible_page: (port) => web_accessible_urls.has(page_url_of(port.sender?.url ?? "")),
     set_timer: (callback, delay_ms) => setTimeout(callback, delay_ms),
     clear_timer: (handle) => clearTimeout(handle as ReturnType<typeof setTimeout>),
   };

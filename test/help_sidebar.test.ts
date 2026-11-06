@@ -191,3 +191,16 @@ test("a rebuild keeps the sidebar's scroll position, on the same page and across
   render({ page: "commands" }, true, [], root);
   assert.equal(sidebar_of().scrollTop, 120);
 });
+
+test("the sidebar brand shows the packaged logo above the name", () => {
+  const brand = render(parse_route("")).querySelector(".desertfox-help-brand");
+  const logo = brand?.children[0] as FakeNode;
+  assert.equal(logo.className, "desertfox-help-logo");
+  assert.equal(logo.attributes.src, "icons/desertfox.svg");
+  assert.equal(brand?.children[1], "DesertFox");
+});
+
+test("the home page opens with the keycap mark", () => {
+  const keycap = render(parse_route("")).querySelector(".desertfox-help-keycap");
+  assert.equal(keycap?.attributes.src, "icons/desertfox-keycap.svg");
+});

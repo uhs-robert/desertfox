@@ -33,7 +33,10 @@ export const CMDLINE_HISTORY_STORAGE_KEY = "desertfox_cmdline_history";
 // Prefix of one `storage.session` key per command line ticket, holding the tab it was issued for. Removed when used.
 export const CMDLINE_TICKET_STORAGE_PREFIX = "desertfox_cmdline_ticket_";
 
-// Prefix of one `storage.session` key per tab whose command line redeemed a ticket. `complete_items` answers only these tabs. Removed when the tab closes or navigates.
+// Prefix of one `storage.session` key per tab, holding the last ticket issued for it. Only that ticket may mark the tab's opener. Removed when the tab closes.
+export const CMDLINE_LATEST_TICKET_STORAGE_PREFIX = "desertfox_cmdline_latest_ticket_";
+
+// Prefix of one `storage.session` key per tab whose command line redeemed a ticket. The value is the frame id of the line that redeemed it, and only that frame is an opener. Removed when the tab closes or navigates.
 export const CMDLINE_OPENER_STORAGE_PREFIX = "desertfox_cmdline_opener_";
 
 // Prefix of one `storage.session` key per window, holding the id of the tab the user was on before the current one. The `#` of a tab row. Removed when that tab or the window closes.

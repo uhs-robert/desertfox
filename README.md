@@ -1,5 +1,7 @@
 # DesertFox
 
+<img src="src/icons/desertfox.svg" alt="DesertFox logo" width="96" height="96">
+
 A keyboard-first Firefox extension with one command registry. Keys, the command line, completion, help and which-key all read the same command definitions. It works on its own, and integrates with Oasis Dots (Hyprland and Quickshell) through an optional native host.
 
 Status: phase 1 is built. Release 0.1.1 adds the toolbar button, the status page and the keys below.
@@ -34,9 +36,8 @@ ww = { run = ":open -w @current_url", label = "New window, edit current URL" }  
 `@current_url`, `@selection` and `@clipboard` are filled in when you press the key. Flags come first. `--tab` or `-t` sets a value, `--rapid` or `-r` turns a switch on, and `--name=value` sets any param (`-c=Work` for the container). The first word that is not a flag starts the main value (the URL, the query) and the rest of the line joins into it, so `search arch pacman mirrors` searches for "pacman mirrors". Write `--` to end the flags early: `search -- arch maps` searches for "arch maps", and `open -- -b` opens the text `-b`. Quote other text that has spaces or `=`. Type the dotted id for most commands (`tab.pin`, `window.new`). `open`, `search`, `paste`, `copy`, `hint`, `tab`, `bookmark`, `zoom`, `scroll`, `mode` and `help` are the short words. Files `search_engines.toml`, `command_aliases.toml` and `settings.toml` sit beside the keymap, and each can have a `.d/` directory of later files. See [docs/design.md](docs/design.md#config) for the full format. Search engines have their own guide: [docs/search_engines.md](docs/search_engines.md).
 
 - [docs/design.md](docs/design.md): architecture, scope and roadmap.
-- [docs/spike.md](docs/spike.md): what Firefox allows, measured.
+- [docs/firefox-behavior.md](docs/firefox-behavior.md): what Firefox allows, measured.
 - [docs/keymap.md](docs/keymap.md): every default key, and the keys that are planned or dropped.
-- `spike/`: the throwaway test harness from phase 0.
 
 ## Known limits
 

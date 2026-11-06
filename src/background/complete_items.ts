@@ -164,12 +164,20 @@ export type TabQuery = (window_id: number | undefined) => Promise<TabLike[]>;
 export const read_tabs = async (query: TabQuery, scope: LineScope, all_windows: boolean, containers?: ContainerMarks, previous_tab_id?: number): Promise<ListedTab[]> =>
   listed_tabs(await query(all_windows ? undefined : scope.window_id), scope, containers, previous_tab_id);
 
-type IdentityLike = { cookieStoreId: string; colorCode: string; iconUrl: string };
+type IdentityLike = { cookieStoreId: string; name: string; colorCode: string; iconUrl: string };
+type IdentityQuery = () => Promise<readonly IdentityLike[] | false>;
+
+export type ContainerIdentity = TabContainer & { name: string };
 
 // With containers off the query rejects or answers false, and no tab gets a mark. The default container never appears in the answer.
-export async function read_containers(query: () => Promise<readonly IdentityLike[] | false>): Promise<ContainerMarks> {
+export async function read_container_identities(query: IdentityQuery): Promise<ReadonlyMap<string, ContainerIdentity>> {
   const identities = await Promise.resolve().then(query).catch(() => false as const);
-  return new Map(Array.isArray(identities) ? identities.map((identity) => [identity.cookieStoreId, { color: identity.colorCode, icon: identity.iconUrl }]) : []);
+  return new Map(Array.isArray(identities) ? identities.map((identity) => [identity.cookieStoreId, { name: identity.name, color: identity.colorCode, icon: identity.iconUrl }]) : []);
+}
+
+// The marks without the name, which the line's rows do not show.
+export async function read_containers(query: IdentityQuery): Promise<ContainerMarks> {
+  return new Map([...(await read_container_identities(query))].map(([id, { color, icon }]) => [id, { color, icon }]));
 }
 
 export const browser_complete_items_deps = {
@@ -182,8 +190,8 @@ export const browser_complete_items_deps = {
 };
 
 export type CompleteItemsDeps = typeof browser_complete_items_deps & {
-  // Whether the tab redeemed a ticket and has not closed or navigated since.
-  is_opener: (tab_id: number) => Promise<boolean>;
+  // Whether the frame of the tab redeemed a ticket, and the tab has not closed or navigated since.
+  is_opener: (tab_id: number, frame_id: number) => Promise<boolean>;
   all_windows: () => Promise<boolean>;
   // The tab the line's window was on before its current one.
   previous_tab: (window_id: number) => Promise<number | undefined>;
@@ -195,7 +203,7 @@ export type CompleteItemsDeps = typeof browser_complete_items_deps & {
   discard: DiscardDeps;
 };
 
-export type Asker = LineScope & { tab_id: number };
+export type Asker = LineScope & { tab_id: number; frame_id: number };
 
 export function create_complete_items(deps: CompleteItemsDeps) {
   const open_items = async (asker: Asker) => {
@@ -220,7 +228,7 @@ export function create_complete_items(deps: CompleteItemsDeps) {
     // Unloads or loads one tab of the list. Undefined for a sender that is not an opener and for a tab that is gone or of the other privacy.
     // The address and title come from before the change: a tab still loading reads about:blank once unloaded.
     set_unloaded: async (tab_id: unknown, unloaded: unknown, asker: Asker | undefined): Promise<SetTabUnloadedAnswer | undefined> => {
-      if (typeof tab_id !== "number" || typeof unloaded !== "boolean" || !asker || !(await deps.is_opener(asker.tab_id))) return undefined;
+      if (typeof tab_id !== "number" || typeof unloaded !== "boolean" || !asker || !(await deps.is_opener(asker.tab_id, asker.frame_id))) return undefined;
       const before = await deps.read_tab(tab_id);
       if (!before || before.incognito !== asker.incognito) return undefined;
       const { skipped } = await set_unloaded(deps.discard, [tab_id], unloaded);
@@ -235,9 +243,9 @@ export function create_complete_items(deps: CompleteItemsDeps) {
     // Undefined for a sender that is not a tab, for a tab that opened no line and for a tab that closed or navigated
     // while the lookup ran. A failed browser call gives an empty list.
     answer: async (kind: unknown, asker: Asker | undefined): Promise<CompleteItemsAnswer | undefined> => {
-      if ((kind !== "tabs" && kind !== "bookmarks" && kind !== "engines" && kind !== "open" && kind !== "windows") || !asker || !(await deps.is_opener(asker.tab_id))) return undefined;
+      if ((kind !== "tabs" && kind !== "bookmarks" && kind !== "engines" && kind !== "open" && kind !== "windows") || !asker || !(await deps.is_opener(asker.tab_id, asker.frame_id))) return undefined;
       const items = await fetch_items(kind, asker).catch(() => (kind === "open" ? { rows: [], history_max: 0 } : []));
-      return (await deps.is_opener(asker.tab_id)) ? { items } : undefined;
+      return (await deps.is_opener(asker.tab_id, asker.frame_id)) ? { items } : undefined;
     },
   };
 }
