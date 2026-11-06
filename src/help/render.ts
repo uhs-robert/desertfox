@@ -417,10 +417,15 @@ function wire_drawer(help: HTMLElement, menu_toggle: HTMLElement, sidebar_node: 
     if (!help.classList.contains(DRAWER_OPEN_CLASS) || !(event.target as Element).closest("a")) return;
     close(sidebar_node.contains(document.activeElement) ? page_heading : null);
   });
-  // Tab past either end of the drawer closes it, so focus never sits under the backdrop.
+  // Tab past either end of the drawer closes it, so focus never sits under the backdrop. Past the last link into the browser's own UI no focusin fires, so main.ts also calls close_drawer_on_window_blur.
   help.addEventListener("focusin", (event) => {
     if (help.classList.contains(DRAWER_OPEN_CLASS) && !sidebar_node.contains(event.target as Node)) close(null);
   });
+}
+
+export function close_drawer_on_window_blur(): void {
+  const help = document.querySelector<HTMLElement>(`.${DRAWER_OPEN_CLASS}`);
+  if (help) set_drawer_open(help, false);
 }
 
 // main.ts listens in the capture phase before the content script loads, so Escape closes the drawer instead of reaching the key flow.
