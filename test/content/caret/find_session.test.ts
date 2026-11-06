@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { create_find, is_page_change } from "../../../src/content/caret/find_session.ts";
 import type { FindDeps } from "../../../src/content/caret/find_session.ts";
+import type { ScanRegex } from "../../../src/content/caret/find_match.ts";
+import { scan_regex } from "../../../src/background/regex_scan.ts";
 import type { TextModel } from "../../../src/content/caret/text_model.ts";
 
 // A page of "ab ab ab": matches of "ab" start at 0, 3 and 6.
@@ -16,6 +18,8 @@ function fake_page(page_text = "ab ab ab") {
   const watchers: (() => void)[] = [];
   let retargets = 0;
   let builds = 0;
+  // The background scan, answered in place after one gate, so a newer keystroke can arrive while it runs.
+  let background: ScanRegex = async (text, { source, flags }) => ({ ok: true, ...scan_regex({ text, source, flags }) });
   const make_model = (): TextModel =>
     (builds++, { text: page_text, trees: [], point_at: (index: number) => ({ node: { index }, offset: 0 }), index_of: (node: { index: number }) => node.index }) as unknown as TextModel;
   const deps: FindDeps = {
@@ -31,6 +35,10 @@ function fake_page(page_text = "ab ab ab") {
     set_register: async (name, text) => void registers.set(name, text),
     // Each match ends a slice, and the page runs only when the test lets the scan go on.
     slicing: (is_stale) => ({ is_stale, now: () => (clock += 10), slice_ms: 8, yield_to_page: () => new Promise<void>((resume) => gates.push(resume)) }),
+    scan_regex: async (text, regex) => {
+      await new Promise<void>((resume) => gates.push(resume));
+      return background(text, regex);
+    },
     selection_key: () => selection,
     watch_page: (on_change) => (watchers.push(on_change), () => void retargets++),
   };
@@ -40,7 +48,7 @@ function fake_page(page_text = "ab ab ab") {
       await new Promise((resume) => setImmediate(resume));
     }
   };
-  return { deps, retargets: () => retargets, builds: () => builds, change_page: () => watchers.forEach((notify) => notify()), painted, toasts, registers, settle, clears: () => clears, set_selection: (next: string[]) => (selection = next), host: { show_toast: (message: string) => void toasts.push(message) } };
+  return { deps, retargets: () => retargets, builds: () => builds, change_page: () => watchers.forEach((notify) => notify()), painted, toasts, registers, settle, clears: () => clears, set_selection: (next: string[]) => (selection = next), set_background: (next: ScanRegex) => (background = next), host: { show_toast: (message: string) => void toasts.push(message) } };
 }
 
 test("a search begun while Enter waits for the old scan keeps its own state", async () => {
@@ -328,4 +336,104 @@ test("a text change inside an element of DesertFox is not a page change", () => 
   const style_rewrite = { type: "childList", target: own_style, addedNodes: [text], removedNodes: [text] } as unknown as MutationRecord;
   assert.equal(is_page_change(style_rewrite), false);
   assert.equal(is_page_change({ type: "characterData", target: text, addedNodes: [], removedNodes: [] } as unknown as MutationRecord), false);
+});
+
+// "a.*c" as a regex finds "abc" at 5. Searched as text it finds its own characters at 0.
+const TIMES_OUT: ScanRegex = async () => ({ ok: false, reason: "timeout" });
+
+test("a regex past the time limit says so while typing and leaves the older results in place", async () => {
+  const page = fake_page("a.*c abc");
+  page.set_background(TIMES_OUT);
+  const find = create_find(page.host, page.deps);
+  find.begin("forward");
+  const lines: string[] = [];
+  find.update("a", (status) => lines.push(status));
+  await page.settle();
+  const painted = page.painted.length;
+  const clears = page.clears();
+  find.update("a.*c", (status) => lines.push(status));
+  await page.settle();
+  assert.equal(page.painted.length, painted);
+  assert.equal(page.clears(), clears);
+  assert.equal(lines.at(-1), "Pattern too slow, stopped after 0.3 s: a.*c");
+});
+
+test("Enter on a regex past the time limit searches it as text, and n then carries the note", async () => {
+  const page = fake_page("a.*c abc a.*c");
+  page.set_background(TIMES_OUT);
+  const find = create_find(page.host, page.deps);
+  find.begin("forward");
+  find.update("a.*c", () => {});
+  await page.settle();
+  assert.equal(page.painted.length, 0);
+  const ending = find.end(true);
+  await page.settle();
+  await ending;
+  assert.equal(page.painted.length, 1);
+  assert.equal(find.position(page.deps.build_model()), 0);
+  const stepping = find.step(false);
+  await page.settle();
+  await stepping;
+  assert.deepEqual(page.toasts, ["2 of 2 (too slow as a regex, searched as text)"]);
+});
+
+test("n on a last search that runs past the time limit searches it as text with the note", async () => {
+  const page = fake_page("x a.*c abc");
+  page.set_background(TIMES_OUT);
+  page.registers.set("/", "a.*c");
+  page.registers.set("/:direction", "forward");
+  const find = create_find(page.host, page.deps);
+  const stepping = find.step(false);
+  await page.settle();
+  assert.deepEqual(await stepping, { ok: true });
+  assert.deepEqual(page.toasts, ["1 of 1 (too slow as a regex, searched as text)"]);
+});
+
+test("a search after a timeout runs as a regex again", async () => {
+  const page = fake_page("a.*c abc");
+  page.set_background(TIMES_OUT);
+  const find = create_find(page.host, page.deps);
+  find.begin("forward");
+  const lines: string[] = [];
+  find.update("a.*c", (status) => lines.push(status));
+  await page.settle();
+  page.set_background(async (text, { source, flags }) => ({ ok: true, ...scan_regex({ text, source, flags }) }));
+  find.update("a.c", (status) => lines.push(status));
+  await page.settle();
+  assert.equal(lines.at(-1), "1 of 1");
+  await find.end(true);
+  assert.equal(find.position(page.deps.build_model()), 5);
+});
+
+test("a regex answer that comes back after a newer keystroke is dropped", async () => {
+  const page = fake_page("a.*c abc");
+  const answers: (() => void)[] = [];
+  // The first scan answers only after the second keystroke has been searched.
+  page.set_background((text, { source, flags }) => new Promise((resolve) => answers.push(() => resolve({ ok: true, ...scan_regex({ text, source, flags }) }))));
+  const find = create_find(page.host, page.deps);
+  find.begin("forward");
+  const lines: string[] = [];
+  find.update("a.c", (status) => lines.push(`old:${status}`));
+  await page.settle();
+  find.update("abc", (status) => lines.push(`new:${status}`));
+  await page.settle();
+  answers.shift()!();
+  await page.settle();
+  assert.deepEqual(lines, ["new:1 of 1"]);
+  assert.equal(page.painted.length, 1);
+});
+
+test("a failed background scan shows a toast and the next keystroke searches again", async () => {
+  const page = fake_page("a.*c abc");
+  page.set_background(async () => ({ ok: false, reason: "failed", message: "worker broke" }));
+  const find = create_find(page.host, page.deps);
+  find.begin("forward");
+  find.update("a.c", () => {});
+  await page.settle();
+  assert.deepEqual(page.toasts, ["Search failed: worker broke"]);
+  page.set_background(async (text, { source, flags }) => ({ ok: true, ...scan_regex({ text, source, flags }) }));
+  const lines: string[] = [];
+  find.update("a.c", (status) => lines.push(status));
+  await page.settle();
+  assert.deepEqual(lines, ["1 of 1"]);
 });

@@ -304,6 +304,32 @@ export async function run_cases({ rdp, extension_id, run_case, expect, open_page
     }
     throw new Error(`timed out waiting for ${what}, the toasts seen were ${JSON.stringify([...seen])}`);
   }
+  await run_case("a regex past the time limit is stopped, Enter searches it as text, and the next search works", async () => {
+    const page_id = "find_timeout";
+    await open_page("find_page", page_id, { new_tab: true });
+    // No match as a regex, and seconds of backtracking over the run of "a" without the limit. As text it finds its own characters at the end.
+    await in_active_tab(`document.body.textContent = ${JSON.stringify("a".repeat(60000) + " a.*b.*c(?=Q)")}; true`);
+    const started = Date.now();
+    await send_keys("/a.*b.*c(?=Q)");
+    const answered = await Promise.race([in_active_tab("document.title").then(() => true), sleep(5000).then(() => false)]);
+    expect(answered, "the tab did not answer within 5 seconds of a slow regex");
+    let mark = events.length;
+    await send_keys(...ENTER);
+    await wait_event(mark, badge_is(page_id, "NORMAL"), "normal mode after Enter");
+    await wait_highlights((read) => total_painted(read) === 1, "the pattern found as text");
+    expect(Date.now() - started < 15000, `the search took ${Date.now() - started} ms`);
+    await send_keys("n");
+    await wait_toast(/^1 of 1, wrapped \(too slow as a regex, searched as text\)$/, "the toast with the text fallback note");
+    await send_keys("/a{3}");
+    mark = events.length;
+    await send_keys(...ENTER);
+    await wait_event(mark, badge_is(page_id, "NORMAL"), "normal mode after the second Enter");
+    await send_keys("n");
+    await wait_toast(/ of 20000$/, "the toast of the regex search after the timeout");
+    await send_keys(...ESCAPE);
+    await wait_highlights((read) => total_painted(read) === 0, "the highlights cleared");
+  });
+
   const READ_SELECTION = `(() => { const s = getSelection(); return { text: String(s), anchor: s.anchorNode?.data?.slice(0, 20), anchor_offset: s.anchorOffset, focus: s.focusNode?.data?.slice(0, 20), focus_offset: s.focusOffset }; })()`;
   const mode_badge = (page_id) => events.filter((event) => event.type === "indicator" && event.page_id === page_id).at(-1)?.label;
 

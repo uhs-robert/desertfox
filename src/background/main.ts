@@ -15,6 +15,7 @@ import { create_bundle_loader } from "./bundle_loader.ts";
 import { track_window_focus } from "./window_focus.ts";
 import { repair_tabs_after_reload } from "./reload.ts";
 import { browser_tab_model_deps, create_tab_model } from "./tab_model.ts";
+import { browser_find_scan_deps, create_find_scan, is_scan_request } from "./find_scan.ts";
 import { create_router } from "./router.ts";
 import { create_repeat_memory, page_record } from "./repeat_memory.ts";
 import { wire_repeat } from "../commands/command.ts";
@@ -79,6 +80,8 @@ const complete_items = create_complete_items({
 
 track_window_focus(browser.storage.session, browser.windows);
 
+const find_scan = create_find_scan(browser_find_scan_deps());
+
 // Listeners register in the first turn, so no event is missed while the config loads.
 browser.runtime.onMessage.addListener((message: unknown, sender) => {
   const request = message as ContentToBackground;
@@ -87,6 +90,7 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
     return modes_cleared.then(() => remember_reported_mode(browser.storage.local, tab_id, sender.frameId, request.mode));
   }
   if (request?.type === "load_bundle") return bundle_loader.answer(sender, request.name);
+  if (request?.type === "find_scan" && is_scan_request(request)) return find_scan.answer(request, `${sender.tab?.id}:${sender.frameId}`);
   if (request?.type === "issue_cmdline_ticket") return cmdline.issue_ticket(sender.tab?.id);
   if (request?.type === "open_cmdline") return get_config().then(() => cmdline.open(request.ticket, sender.tab?.id));
   if (request?.type === "complete_items") {
