@@ -4,6 +4,8 @@
 import type { BundleName } from "./bundles.ts";
 import type { CommandMeta, Mode } from "./command.ts";
 import type { WhichKeyBorder } from "./config.ts";
+import type { SettingTag } from "./setting_list.ts";
+import type { SettingRow } from "./settings_table.ts";
 import type { BoundInvocation, Invocation } from "./invocation.ts";
 
 // Why a command did not run. The content script shows `message` as a toast,
@@ -190,6 +192,39 @@ export type ImageAction = {
   action: "copy_image" | "download";
   address: string;
 };
+
+// From an extension page (the settings page): sets or resets one setting. `value` is the typed value, checked by the setting's own check. `layer` defaults to `saved`. A reset drops the saved and the temp edit.
+// The answer is a ChangeSettingAnswer. The background refuses any sender that is not an extension page.
+export type ChangeSetting = {
+  type: "change_setting";
+  name: string;
+  action: "set" | "reset";
+  value?: unknown;
+  layer?: "saved" | "temp";
+};
+
+// From an extension page: asks for every setting. The answer is a ListSettingsAnswer.
+export type ListSettings = {
+  type: "list_settings";
+};
+
+// `kind` is the row kind in `settings_table.ts`. `allowed` is the typed choice list of an enum or enum list, or the values the command line suggests. `value` is absent for a setting with no default that nothing sets.
+export type SettingListRow = {
+  name: string;
+  value?: unknown;
+  top_layer: SettingTag | "default";
+  kind: SettingRow["kind"];
+  settable: boolean;
+  expectation: string;
+  allowed?: unknown[];
+};
+
+// `message` is the line `:set` would toast, including a warning that a default engine or palette names nothing.
+export type ChangeSettingAnswer = { ok: true; setting: SettingListRow; message: string } | { ok: false; message: string };
+
+export type ListSettingsAnswer = { ok: true; settings: SettingListRow[] } | { ok: false; message: string };
+
+export type PageToBackground = ChangeSetting | ListSettings;
 
 export type ContentToBackground = RunRequest | ModeChanged | LoadBundle | ListKeys | IssueCmdlineTicket | OpenCmdline | RecordCmdline | CompleteItems | TabRowsActionRequest | OpenHelp | RecordRepeat | ReadTabAddress | FindScan | ImageAction;
 

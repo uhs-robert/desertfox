@@ -85,6 +85,12 @@ export function boxes_with_fallback<T>(element: T, rects: (e: T) => Rect[], chil
   return box_owners(element, rects, children).flatMap((owner) => rects(owner).filter(has_area));
 }
 
+// Where a label goes: the element's own box when it has an area, else the first box its children own (the same fallback the visibility check uses), or undefined when there is none.
+export function anchor_box<T>(element: T, own_box: (e: T) => Rect, rects: (e: T) => Rect[], children: (e: T) => T[]): Rect | undefined {
+  const own = own_box(element);
+  return has_area(own) ? own : boxes_with_fallback(element, rects, children)[0];
+}
+
 type Ancestor = { position: string; clips_x: boolean; clips_y: boolean; box: Rect };
 
 // The boxes that clip a target, from its chain of ancestors (nearest first, each with its computed position, the axes its overflow clips, and its visible box).
