@@ -125,8 +125,8 @@ test("the literal path follows the same space rule as the regex path, and a capi
   assert.deepEqual((await scan("Xa\nb", "Xa b"))!.from, [0]);
 });
 
-const COSTLY = ["(a|a){1,40}$", "([)a]+)+$", "(\\)a+)+$", "(a+)+$", "(a|a)*b", "(.*)*x", "((a+))+", "(a*)*", "(x+x+)+y", "(a|b){2,}"];
-const ORDINARY = ["foo.*bar", "\\d+", "colou?r", "(foo)bar", "(ab)?c", "(ab){2}", "a+b+", "(\\d+)-(\\d+)", "\\(a+\\)", "([)]a)+", "(\\)|b)"];
+const COSTLY = ["(a|a){1,40}$", "([)a]+)+$", "(\\)a+)+$", "(a+)+$", "(a|a)*b", "(.*)*x", "((a+))+", "(a*)*", "(x+x+)+y", "(a|b){2,}", "a*a*b", "a*a*a*a*a*a*a*b", "\\w*\\w*\\w*x", ".*.*.*=.*", "a+a+", "\\x61*\\x61*b", "\\u0061+\\u0061+", "\\p{L}*\\p{L}*x", "[ab]*[ab]{2,}c", "(a*a*)b"];
+const ORDINARY = ["foo.*bar", "\\d+", "colou?r", "(foo)bar", "(ab)?c", "(ab){2}", "a+b+", "(\\d+)-(\\d+)", "\\(a+\\)", "([)]a)+", "(\\)|b)", "foo", "a.*b", "foo bar", "foo.*bar.*baz", "\\d+\\w+", "a*b*a*c", "\\*a+\\*a+", "\\x61*1*", "\\p{L}*L*", "[a*a*]", "[x+x+]", "\\d*d*"];
 
 test("costly shapes are flagged and ordinary patterns are not", () => {
   for (const pattern of COSTLY) assert.equal(compile_query(pattern)!.fallback, "costly", pattern);

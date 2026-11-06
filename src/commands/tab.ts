@@ -8,6 +8,7 @@ import type { DiscardDeps, SetUnloadedResult } from "../background/tab_discard.t
 import { browser_complete_items_deps, read_tabs } from "../background/complete_items.ts";
 import { get_config } from "../background/startup.ts";
 import { best_match } from "../shared/score.ts";
+import { site_key } from "../shared/site_key.ts";
 import { define } from "../shared/registry/index.ts";
 import type { FindContainerStoreId } from "./open_target.ts";
 import { find_container_store_id, require_tab_id, resolve_container_store_id } from "./open_target.ts";
@@ -44,9 +45,9 @@ export type TabDeps = {
   toast: (ctx: CommandContext, kind: ToastKind, message: string) => Promise<void>;
 };
 
-type UnloadSide = "none" | "all_before" | "all_after";
+type UnloadSide = "none" | "all_before" | "all_after" | "site";
 
-type CloseSide = "none" | "all_before" | "all_after" | "focus_previous";
+type CloseSide = "none" | "all_before" | "all_after" | "focus_previous" | "site";
 
 type Position = { tabs: TabInfo[]; current: TabInfo };
 
@@ -65,7 +66,7 @@ export function make_tab_handlers(deps: TabDeps) {
     if (target) await deps.activate(target.id);
   }
 
-  // The subject is the tab named by `tab`, else the line's own tab. A side acts on the neighbors and leaves the subject. A count adds neighbors after the subject. Neighbors skip pinned tabs, the subject never does.
+  // The subject is the tab named by `tab`, else the line's own tab. A side acts on the neighbors and leaves the subject, except `site`, which acts on the subject too. A count adds neighbors after the subject. Neighbors skip pinned tabs, the subject never does.
   async function change_loaded(ctx: CommandContext, args: { tab: string; side: UnloadSide; count: number }, unloaded: boolean): Promise<void> {
     const named = args.tab.trim() === "" ? undefined : pick_tab(await deps.listed_tabs(ctx), args.tab, ctx.window_id);
     const window_id = named?.window_id ?? ctx.window_id;
@@ -74,10 +75,15 @@ export function make_tab_handlers(deps: TabDeps) {
     const subject = tabs.find((tab) => tab.id === (named?.id ?? require_tab_id(ctx)));
     if (!subject) throw new RuntimeRefusal("the tab is gone");
     const unpinned = tabs.filter((tab) => !tab.pinned);
+    // The site is read in the line's window, though a named subject may sit in another one.
+    const line_window_id = ctx.window_id ?? window_id;
+    const site_pool = line_window_id === window_id ? tabs : await deps.tabs_in_window(line_window_id);
     const ids = (
       args.side === "none"
         ? [subject, ...unpinned.filter((tab) => tab.index > subject.index && tab.index < subject.index + args.count)]
-        : unpinned.filter((tab) => (args.side === "all_before" ? tab.index < subject.index : tab.index > subject.index))
+        : args.side === "site"
+          ? [subject, ...site_tabs(site_pool, subject).filter((tab) => tab.id !== subject.id)]
+          : unpinned.filter((tab) => (args.side === "all_before" ? tab.index < subject.index : tab.index > subject.index))
     ).map((tab) => tab.id);
     const result = await set_unloaded(deps.discard, ids, unloaded, ctx.tab_id === undefined ? {} : { leave_active: ctx.tab_id });
     await report(ctx, window_id, unloaded ? "unloaded" : "loaded", result);
@@ -134,6 +140,16 @@ export function make_tab_handlers(deps: TabDeps) {
     },
     close: async (ctx: CommandContext, args: { side: CloseSide }) => {
       const { tabs, current } = await position_of(ctx);
+      if (args.side === "site") {
+        const closing = site_tabs(tabs, current).map((tab) => tab.id);
+        // A pinned tab of the site stays open but must not take focus: the focus leaves the site.
+        const site = site_key(current.url ?? "").key;
+        const outside = nearest_tab(tabs, current.index, (tab) => site_key(tab.url ?? "").key !== site);
+        // Focus moves first, as for one tab, so Firefox does not pick its own tab after the close.
+        if (outside) await deps.activate(outside.id);
+        await deps.remove(closing);
+        return;
+      }
       if (args.side === "all_before" || args.side === "all_after") {
         await deps.remove(side_tab_ids(tabs, current.index, args.side === "all_before" ? "before" : "after"));
         return;
@@ -211,6 +227,23 @@ export function focus_index_after_close(closing_index: number, length: number, f
   return preferred >= 0 && preferred < length ? preferred : focus === "previous" ? closing_index + 1 : closing_index - 1;
 }
 
+// Every tab of the window with the subject's site key, in tab bar order. Pinned tabs stay, the subject never does.
+export function site_tabs(tabs: TabInfo[], subject: TabInfo): TabInfo[] {
+  const key = site_key(subject.url ?? "").key;
+  return tabs.filter((tab) => tab.id === subject.id || (!tab.pinned && site_key(tab.url ?? "").key === key));
+}
+
+// The tab nearest to `index` among those `eligible` accepts. A tie goes to the tab after.
+export function nearest_tab(tabs: TabInfo[], index: number, eligible: (tab: TabInfo) => boolean): TabInfo | undefined {
+  return tabs
+    .filter(eligible)
+    .reduce<TabInfo | undefined>((best, tab) => {
+      const distance = Math.abs(tab.index - index);
+      const best_distance = best && Math.abs(best.index - index);
+      return best_distance === undefined || distance < best_distance || (distance === best_distance && tab.index > index) ? tab : best;
+    }, undefined);
+}
+
 // Pinned tabs stay, as in the Firefox "close tabs to the right/left" items.
 export function side_tab_ids(tabs: TabInfo[], current_index: number, side: "before" | "after"): number[] {
   return tabs
@@ -277,11 +310,15 @@ const side_param = (verb: "Unload" | "Load") =>
   ({
     name: "side",
     type: "enum",
-    values: ["none", "all_before", "all_after"],
+    values: ["none", "all_before", "all_after", "site"],
     default: "none",
-    short: { all_before: "B", all_after: "A" },
-    value_labels: { all_before: "for all before it", all_after: "for all after it" },
-    description: { all_before: `${verb} every unpinned tab before the tab.`, all_after: `${verb} every unpinned tab after the tab.` },
+    short: { all_before: "B", all_after: "A", site: "S" },
+    value_labels: { all_before: "for all before it", all_after: "for all after it", site: "for its whole site" },
+    description: {
+      all_before: `${verb} every unpinned tab before the tab.`,
+      all_after: `${verb} every unpinned tab after the tab.`,
+      site: `${verb} the tab and the unpinned tabs of its site.`,
+    },
   }) as const;
 
 const count_param = { name: "count", type: "int", min: 1, default: 1, when: { side: ["none"] }, description: "Act on this many tabs, the tab and the ones after it." } as const;
@@ -365,19 +402,20 @@ define("tab.mute", {
 
 define("tab.close", {
   label: "Close tab",
-  intent: "Close the tab, or the tabs around it. Without all_before or all_after, it focuses the next tab, or the previous tab with focus_previous. With all_before or all_after, it keeps this tab and closes every unpinned tab before or after it. A count prefix repeats it.",
+  intent: "Close the tab, or the tabs around it. Without all_before or all_after, it focuses the next tab, or the previous tab with focus_previous. With all_before or all_after, it keeps this tab and closes every unpinned tab before or after it. With site, it closes this tab and the unpinned tabs of its site in the window, after moving focus to the nearest tab outside the site. A count prefix repeats it.",
   params: [
     {
       name: "side",
       type: "enum",
-      values: ["none", "all_before", "all_after", "focus_previous"],
+      values: ["none", "all_before", "all_after", "focus_previous", "site"],
       default: "none",
-      short: { all_before: "B", all_after: "A", focus_previous: "P" },
-      value_labels: { all_before: "for all before it", all_after: "for all after it", focus_previous: "and focus previous" },
+      short: { all_before: "B", all_after: "A", focus_previous: "P", site: "S" },
+      value_labels: { all_before: "for all before it", all_after: "for all after it", focus_previous: "and focus previous", site: "for its whole site" },
       description: {
         all_before: "Close every unpinned tab before this one.",
         all_after: "Close every unpinned tab after this one.",
         focus_previous: "Focus the previous tab instead of the next.",
+        site: "Close this tab and the unpinned tabs of its site.",
       },
     },
   ],
@@ -405,7 +443,7 @@ define("tab.switch", {
 
 define("tab.unload", {
   label: "Unload tab",
-  intent: "Unload the tab to free its memory. It stays in the tab bar and loads again when opened. Audible tabs stay loaded. Without a tab it unloads this one and switches to a loaded tab first. With all_before or all_after it keeps the tab and unloads the unpinned tabs on that side. A count prefix unloads that many tabs from the tab on.",
+  intent: "Unload the tab to free its memory. It stays in the tab bar and loads again when opened. Audible tabs stay loaded. Without a tab it unloads this one and switches to a loaded tab first. With all_before or all_after it keeps the tab and unloads the unpinned tabs on that side. With site it unloads the tab and the unpinned tabs of its site in the window. A count prefix unloads that many tabs from the tab on.",
   params: [subject_param, side_param("Unload"), count_param],
   runs_in: "background",
   count: { param: "count" },
@@ -414,7 +452,7 @@ define("tab.unload", {
 
 define("tab.load", {
   label: "Load tab",
-  intent: "Load an unloaded tab in place, without switching to it. Without a tab it acts on this one. With all_before or all_after it keeps the tab and loads the unpinned tabs on that side. A count prefix loads that many tabs from the tab on.",
+  intent: "Load an unloaded tab in place, without switching to it. Without a tab it acts on this one. With all_before or all_after it keeps the tab and loads the unpinned tabs on that side. With site it loads the tab and the unpinned tabs of its site in the window. A count prefix loads that many tabs from the tab on.",
   params: [subject_param, side_param("Load"), count_param],
   runs_in: "background",
   count: { param: "count" },

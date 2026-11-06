@@ -48,7 +48,7 @@ const cmdline = create_cmdline_service({
   sources: async () => ({ search_engines: await get_search_engine_names(), containers: await container_names() }),
   page_config: async () => {
     const config = await get_config();
-    return { commands: registry.list().map(command_meta), help_ids: [...built_in_ids], command_aliases: config.command_aliases, css: config.css, prompt: effective_settings(config.settings).cmdline_prompt };
+    return { commands: registry.list().map(command_meta), help_ids: [...built_in_ids], command_aliases: config.command_aliases, prompt: effective_settings(config.settings).cmdline_prompt };
   },
 });
 
