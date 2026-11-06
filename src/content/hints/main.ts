@@ -5,7 +5,7 @@ import type { Outcome } from "../../shared/messages.ts";
 import { CONFIG_STATUS_STORAGE_KEY } from "../../background/storage_keys.ts";
 import type { BundleHostApi } from "../bundle_host.ts";
 import { unhover } from "./hover.ts";
-import { is_media, link_address, OPEN_PLACES, perform, starts_caret } from "./actions.ts";
+import { element_address, is_media, OPEN_PLACES, perform, starts_caret } from "./actions.ts";
 import type { CaretMode, HintAction, Place } from "./actions.ts";
 import { copy_text } from "../caret/copy_text.ts";
 import { collect, keep_text_matches, keep_visible_deduplicated, query_for, scroll_clips_in_page, weak_test_for, window_of } from "./candidates.ts";
@@ -64,10 +64,10 @@ function windows_of(found: Found[]): Window[] {
   return [...new Set([window, ...frame_windows])].filter((win): win is Window => win !== null);
 }
 
-// Opening in another place needs an address, so only links qualify.
+// Opening in another place needs an address, so only elements with one qualify. The images filter always does, so no label promises an image that a copy or an open cannot use.
 function find_candidates(filter: HintFilter, custom_selector: string | undefined, action: HintAction): Found[] {
-  const opens_elsewhere = OPEN_PLACES.includes(action);
-  return collect(document, query_for(filter, custom_selector), weak_test_for(filter)).filter((found) => !opens_elsewhere || link_address(found.element as HTMLAnchorElement) !== undefined);
+  const needs_address = OPEN_PLACES.includes(action) || filter === "images";
+  return collect(document, query_for(filter, custom_selector), weak_test_for(filter)).filter((found) => !needs_address || element_address(found.element as HTMLElement, filter === "images") !== undefined);
 }
 
 const none_message = (text: string | undefined): string => (text === undefined ? "No hints on this page" : `No link matches ${text}`);
@@ -83,8 +83,8 @@ async function keep_visible_ones(candidates: Found[], filter: HintFilter): Promi
     clips_of: (found) => scroll_clips_in_page(found.element),
     viewport_of: (found) => viewport_size(found.element.ownerDocument, window_of(found.element)),
     is_hidden_by_style: (found) => window_of(found.element).getComputedStyle(found.element).visibility === "hidden",
-    // Site players lay click-catching controls over the video, so a cover test would drop every one of them.
-    is_reachable_at: (found, x, y) => uncovered_through_frames(found, x, y, filter === "media" && is_media(found.element)),
+    // Site players lay click-catching controls over the video, and a card lays a stretched link over its picture, so a cover test would drop them.
+    is_reachable_at: (found, x, y) => uncovered_through_frames(found, x, y, filter === "images" || (filter === "media" && is_media(found.element))),
   };
   return keep_visible_deduplicated(candidates, probe);
 }
@@ -172,7 +172,7 @@ function register(host: BundleHostApi): void {
     if (first_build && current.lower_text !== undefined && found.length === 1) {
       const performed = begin_pick(current);
       host.set_mode("normal");
-      performed(() => perform(current.action, found[0]!.element as HTMLElement, deps));
+      performed(() => perform(current.action, found[0]!.element as HTMLElement, deps, current.filter === "images"));
       return;
     }
     const view = create_view();
@@ -203,14 +203,14 @@ function register(host: BundleHostApi): void {
       if (!current.rapid) {
         // Leave hint mode first: a picked field then raises insert mode through its own focus event.
         host.set_mode("normal");
-        performed(() => perform(current.action, picked, deps));
+        performed(() => perform(current.action, picked, deps, current.filter === "images"));
         return "handled";
       }
       // Rapid: the pick may delete or move elements, so drop these labels and label the page again.
       ready.stop_following();
       ready.view.clear_labels();
       delete current.ready;
-      performed(() => perform(current.action, picked, deps));
+      performed(() => perform(current.action, picked, deps, current.filter === "images"));
       if (!current.cancelled) void build(current, find_candidates(current.filter, current.custom_selector, current.action), false);
     }
     return "handled";
