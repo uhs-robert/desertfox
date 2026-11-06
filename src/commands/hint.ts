@@ -8,12 +8,12 @@ const HAS_ADDRESS = ["all", "clickable", "links", "images", "frames", "media", "
 define("hint.run", {
   name: "hint",
   label: "Hint",
-  intent: "Pick a page element by key and act on it. It labels the elements on the page with keys, then acts on the one you pick: open it here, in a tab, in a background tab or in a window, copy its address or its text, delete it, focus it or hover it. Hover sends the pointer events a mouse sends on entering, so menus, tooltips and previews that a script opens appear. A menu that only a CSS :hover rule opens does not. Escape or the next hover ends it. Caret and visual start caret mode or visual mode at the element. Rapid keeps hint mode open for more picks, and opens links in background tabs unless the action says otherwise. Text keeps only the links whose text holds it.",
+  intent: "Pick a page element by key and act on it. It labels the elements on the page with keys, then acts on the one you pick: open it here, in a tab, in a background tab or in a window, copy its address, its text or its picture, download it, delete it, focus it or hover it. Hover sends the pointer events a mouse sends on entering, so menus, tooltips and previews that a script opens appear. A menu that only a CSS :hover rule opens does not. Escape or the next hover ends it. Caret and visual start caret mode or visual mode at the element. Rapid keeps hint mode open for more picks, and opens links in background tabs unless the action says otherwise. Text keeps only the links whose text holds it.",
   params: [
     {
       name: "action",
       type: "enum",
-      values: [...WHERE, "caret", "visual", "copy", "copy_text", "delete", "focus", "hover", "play_pause", "mute", "fullscreen"],
+      values: [...WHERE, "caret", "visual", "copy", "copy_text", "copy_image", "download", "delete", "focus", "hover", "play_pause", "mute", "fullscreen"],
       default: [{ value: "play_pause", when: { filter: ["media"] } }, { value: "background", when: { filter: ["links"], rapid: [true] } }, { value: "tab", when: { filter: ["images"] } }, { value: "focus", when: { filter: ["frames"] } }, "here"],
       value_when: {
         tab: { filter: HAS_ADDRESS },
@@ -21,11 +21,13 @@ define("hint.run", {
         window: { filter: HAS_ADDRESS },
         copy: { filter: HAS_ADDRESS },
         copy_text: { filter: ["all", "clickable", "links", "buttons", "prose", "scrollable", "custom"] },
+        copy_image: { filter: ["images"] },
+        download: { filter: ["images", "links", "media", "all"] },
         play_pause: { filter: ["media"] },
         mute: { filter: ["media"] },
         fullscreen: { filter: ["media"] },
       },
-      short: { ...WHERE_SHORT, caret: "c", visual: "v", copy: "y", copy_text: "Y", delete: "d", focus: "f", play_pause: "P", mute: "M", fullscreen: "F" },
+      short: { ...WHERE_SHORT, caret: "c", visual: "v", copy: "y", copy_text: "Y", copy_image: "C", download: "D", delete: "d", focus: "f", play_pause: "P", mute: "M", fullscreen: "F" },
       value_labels: {
         here: "to click",
         tab: "in new tab",
@@ -35,6 +37,8 @@ define("hint.run", {
         visual: "to start visual mode",
         copy: "to copy",
         copy_text: "to copy text",
+        copy_image: "to copy the picture",
+        download: "to download",
         delete: "to delete",
         focus: "to focus",
         hover: "to hover",
@@ -51,6 +55,8 @@ define("hint.run", {
         visual: "Start visual mode at the element or the next text.",
         copy: "Copy the address of the element.",
         copy_text: "Copy the text of the element.",
+        copy_image: "Copy the picture itself to the clipboard, as PNG or JPEG.",
+        download: "Save the file at the address of the element.",
         delete: "Delete the element from the page.",
         focus: "Focus the element.",
         hover: "Hover the element, which a CSS :hover rule ignores.",

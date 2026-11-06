@@ -2,7 +2,7 @@
 
 import { hover, leave_toward } from "./hover.ts";
 
-export type HintAction = "here" | "tab" | "background" | "window" | "caret" | "visual" | "copy" | "copy_text" | "delete" | "focus" | "hover" | "play_pause" | "mute" | "fullscreen";
+export type HintAction = "here" | "tab" | "background" | "window" | "caret" | "visual" | "copy" | "copy_text" | "copy_image" | "download" | "delete" | "focus" | "hover" | "play_pause" | "mute" | "fullscreen";
 
 export type Place = "here" | "tab" | "background" | "window";
 
@@ -16,6 +16,8 @@ export type ActionDeps = {
   // A promise settles when the action is finished, so the sequence that started the hints goes on after it.
   open_link: (url: string, place: Place) => void | Promise<unknown>;
   copy: (text: string) => void | Promise<unknown>;
+  // The background fetches the address. The content script never does, because the page's rules would block a picture from another site.
+  image_action: (action: "copy_image" | "download", address: string) => Promise<unknown>;
   start_caret: (target: Element, mode: CaretMode) => void;
 };
 
@@ -195,6 +197,7 @@ export function perform(action: HintAction, target: Target, deps: ActionDeps, wi
   const address = element_address(target, with_background);
   // A copy of the address falls back to the text for an element that has none, except a picture, whose text is empty.
   if (action === "copy") return address === undefined && (is_image_element(target) || is_media(target) || is_frame_element(target)) ? NO_WEB_ADDRESS : deps.copy(address ?? (target.textContent ?? "").trim());
+  if (action === "copy_image" || action === "download") return address === undefined ? NO_WEB_ADDRESS : deps.image_action(action, address);
   if (action === "copy_text") return is_frame_element(target) ? { ok: false, message: "A frame has no text" } : deps.copy((target.textContent ?? "").trim());
   if (action === "tab" || action === "background" || action === "window") {
     // A click on a frame does nothing, so it must not stand in for an open.

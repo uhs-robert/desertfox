@@ -78,3 +78,10 @@ test("a context source in a rule sibling passes until the router expands it", ()
   assert.equal(check_args(demo, { action: "tab", query: "b" }).ok, false);
   assert.equal(check_args(demo, { action: "tab", query: "a" }).ok, true);
 });
+
+test("copy_image exists only with the images filter, and download with images, links, media and all", () => {
+  for (const name of ["images"]) assert.equal(check_args(hint, { action: "copy_image", filter: name }).ok, true, name);
+  for (const name of ["all", "links", "media", "buttons", "frames", "clickable"]) assert.equal(check_args(hint, { action: "copy_image", filter: name }).ok, false, name);
+  for (const name of ["images", "links", "media", "all"]) assert.equal(check_args(hint, { action: "download", filter: name }).ok, true, name);
+  for (const name of ["buttons", "inputs", "prose", "frames", "clickable"]) assert.equal(check_args(hint, { action: "download", filter: name }).ok, false, name);
+});
