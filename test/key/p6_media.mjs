@@ -26,7 +26,7 @@ export async function run_cases({ run_case, send_keys, open_page, wait_event, fi
     await send_keys(";m");
     await send_keys("s");
     await sleep(500);
-    expect(!find_event(mark, (event) => event.page_id === "p6_media_play" && event.type === "media_play"), "a second hint started the video");
+    expect(!find_event(mark, on_page("p6_media_play", "audio_play")), "the hidden audio got a hint and played");
     await send_keys("-k", "Escape");
   });
 

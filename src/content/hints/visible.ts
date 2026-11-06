@@ -159,12 +159,14 @@ type FrameBox = Topmost & { getBoundingClientRect: () => Rect; clientLeft: numbe
 
 // The page test at the point, repeated in each parent document: the element, then its innermost frame, out to the outermost.
 // Each frame is tested as a whole, since the parent cannot see inside it.
-export function uncovered_through_frames(found: { element: Topmost; frames: readonly FrameBox[] }, x: number, y: number): boolean {
+// `ignore_own_cover` skips the test on the element itself and keeps the one on each frame around it.
+export function uncovered_through_frames(found: { element: Topmost; frames: readonly FrameBox[] }, x: number, y: number, ignore_own_cover = false): boolean {
   let target: Topmost = found.element;
   let point = { x, y };
   for (let depth = found.frames.length; depth >= 0; depth--) {
     const top = target.ownerDocument.elementFromPoint(point.x, point.y);
-    if (top !== null && !contains_composed(target, top) && !contains_composed(top, target)) return false;
+    const skipped = ignore_own_cover && depth === found.frames.length;
+    if (!skipped && top !== null && !contains_composed(target, top) && !contains_composed(top, target)) return false;
     if (depth === 0) return true;
     const frame = found.frames[depth - 1]!;
     const box = frame.getBoundingClientRect();

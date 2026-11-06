@@ -430,13 +430,43 @@ test("fullscreen leaves fullscreen when a document element is fullscreen, else s
 });
 
 test("player_box climbs to the outermost ancestor of the same size and stops at a bigger one", () => {
-  const sized = (width: number, height: number, parentElement: unknown) => ({ getBoundingClientRect: () => ({ width, height }), parentElement, ownerDocument: { body: {}, documentElement: {} } });
+  const body = {};
+  const doc = { body, documentElement: {} };
+  const sized = (width: number, height: number, parentElement: unknown, parentNode: unknown = parentElement) => ({ getBoundingClientRect: () => ({ width, height }), parentElement, parentNode, ownerDocument: doc });
   const page = sized(900, 700, null);
   const outer = sized(320, 180, page);
   const inner = sized(320.5, 180, outer);
   const video = sized(320, 180, inner);
   assert.equal(player_box(video as never), outer);
   assert.equal(player_box(sized(320, 180, page) as never) !== page, true);
+});
+
+test("player_box never takes the body, even when it has the size of the video", () => {
+  const body = {};
+  const doc = { body, documentElement: {} };
+  const video = { getBoundingClientRect: () => ({ width: 320, height: 180 }), parentElement: body, parentNode: body, ownerDocument: doc };
+  Object.assign(body, { getBoundingClientRect: () => ({ width: 320, height: 180 }), parentElement: null, parentNode: null, ownerDocument: doc });
+  assert.equal(player_box(video as never), video);
+});
+
+test("player_box steps from a shadow root to its host and keeps checking the size", () => {
+  const doc = { body: {}, documentElement: {} };
+  const host = { getBoundingClientRect: () => ({ width: 320, height: 180 }), parentElement: null, parentNode: null, ownerDocument: doc };
+  const root = { host, parentNode: null };
+  const video = { getBoundingClientRect: () => ({ width: 320, height: 180 }), parentElement: null, parentNode: root, ownerDocument: doc };
+  assert.equal(player_box(video as never), host);
+  const big_host = { ...host, getBoundingClientRect: () => ({ width: 640, height: 360 }) };
+  const in_big = { ...video, parentNode: { host: big_host, parentNode: null } };
+  assert.equal(player_box(in_big as never), in_big);
+});
+
+test("a refused play() or requestFullscreen() comes back as a failed outcome with the browser's message", async () => {
+  const refused = () => Promise.reject(new Error("The play method is not allowed"));
+  const play = fixture("video", { paused: true, play: refused });
+  assert.deepEqual(await play.run("play_pause"), { ok: false, message: "The play method is not allowed" });
+  const doc = { fullscreenElement: null, exitFullscreen: refused };
+  const box = fixture("video", { ownerDocument: doc, parentElement: null, requestFullscreen: () => Promise.reject(new Error("Fullscreen request denied")), getBoundingClientRect: () => ({ left: 0, top: 0, width: 1, height: 1 }) });
+  assert.deepEqual(await box.run("fullscreen"), { ok: false, message: "Fullscreen request denied" });
 });
 
 test("is_media knows video and audio", () => {

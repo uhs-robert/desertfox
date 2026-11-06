@@ -122,6 +122,7 @@ export function start_server() {
       const hidden_audio = '<audio id="hidden_audio" src="/tone.wav"></audio>';
       const script = `<script>const video = document.getElementById("video");
 video.addEventListener("play", () => send("media_play"));
+document.getElementById("hidden_audio").addEventListener("play", () => send("audio_play"));
 video.addEventListener("pause", () => send("media_pause"));
 video.addEventListener("volumechange", () => send("media_volume", { muted: video.muted }));
 document.addEventListener("fullscreenchange", () => send("media_fullscreen", { element: document.fullscreenElement ? document.fullscreenElement.id : "" }));</script>`;

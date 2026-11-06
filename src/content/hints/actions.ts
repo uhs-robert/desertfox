@@ -89,11 +89,16 @@ function focus_target(target: Target): void {
 
 const SAME_SIZE_PX = 1;
 
+type Climbable = { parentElement: Element | null; parentNode: unknown };
+
+// A custom player keeps its video in a shadow root, so the climb steps from the root to its host.
+const parent_across_shadow = (element: Climbable): Element | null => element.parentElement ?? (element.parentNode as { host?: Element } | null)?.host ?? null;
+
 // The outermost ancestor that is as big as the media element, so a site player keeps its controls and subtitles in fullscreen. The page body is never a player box.
 export function player_box(media: Element): Element {
   const size = media.getBoundingClientRect();
   let box = media;
-  for (let up = media.parentElement; up && up !== up.ownerDocument.body && up !== up.ownerDocument.documentElement; up = up.parentElement) {
+  for (let up = parent_across_shadow(media); up && up !== up.ownerDocument.body && up !== up.ownerDocument.documentElement; up = parent_across_shadow(up)) {
     const outer = up.getBoundingClientRect();
     if (Math.abs(outer.width - size.width) > SAME_SIZE_PX || Math.abs(outer.height - size.height) > SAME_SIZE_PX) break;
     box = up;
@@ -101,16 +106,19 @@ export function player_box(media: Element): Element {
   return box;
 }
 
-// play() and requestFullscreen() need the user activation of the pick keydown. Their refusal comes back as the promise, so the pick shows it.
+// play() and requestFullscreen() need the user activation of the pick keydown. A refusal becomes a failed outcome, because a rejected promise from an action reads as a page that went away and cancels silently.
+const refusal_as_outcome = (pending: Promise<unknown>): Promise<unknown> =>
+  pending.then(() => undefined, (error: unknown) => ({ ok: false, message: String((error as Error)?.message ?? error) }));
+
 function act_on_media(action: "play_pause" | "mute" | "fullscreen", target: Target): void | Promise<unknown> {
   const media = target as unknown as HTMLMediaElement;
   if (action === "mute") {
     media.muted = !media.muted;
     return;
   }
-  if (action === "play_pause") return media.paused ? media.play() : media.pause();
+  if (action === "play_pause") return media.paused ? refusal_as_outcome(media.play()) : media.pause();
   const doc = media.ownerDocument;
-  return doc.fullscreenElement ? doc.exitFullscreen() : player_box(media).requestFullscreen();
+  return refusal_as_outcome(doc.fullscreenElement ? doc.exitFullscreen() : player_box(media).requestFullscreen());
 }
 
 export function perform(action: HintAction, target: Target, deps: ActionDeps): void | Promise<unknown> {

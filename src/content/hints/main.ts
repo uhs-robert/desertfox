@@ -72,7 +72,7 @@ function find_candidates(filter: HintFilter, custom_selector: string | undefined
 
 const none_message = (text: string | undefined): string => (text === undefined ? "No hints on this page" : `No link matches ${text}`);
 
-async function keep_visible_ones(candidates: Found[]): Promise<Found[]> {
+async function keep_visible_ones(candidates: Found[], filter: HintFilter): Promise<Found[]> {
   const own_rects = (element: Element) => Array.from(element.getClientRects());
   const children = (element: Element) => Array.from(element.children);
   const owners = new Map(candidates.map((found) => [found.element, box_owners(found.element, own_rects, children)]));
@@ -84,7 +84,7 @@ async function keep_visible_ones(candidates: Found[]): Promise<Found[]> {
     viewport_of: (found) => viewport_size(found.element.ownerDocument, window_of(found.element)),
     is_hidden_by_style: (found) => window_of(found.element).getComputedStyle(found.element).visibility === "hidden",
     // Site players lay click-catching controls over the video, so a cover test would drop every one of them.
-    is_reachable_at: (found, x, y) => is_media(found.element) || uncovered_through_frames(found, x, y),
+    is_reachable_at: (found, x, y) => uncovered_through_frames(found, x, y, filter === "media" && is_media(found.element)),
   };
   return keep_visible_deduplicated(candidates, probe);
 }
@@ -157,7 +157,7 @@ function register(host: BundleHostApi): void {
 
   // Finds, labels and shows the hints. Keys typed meanwhile wait and replay. Rapid mode calls it again after each pick.
   async function build(current: Session, candidates: Found[], first_build: boolean): Promise<void> {
-    const [letters, visible] = await Promise.all([read_letters(), keep_visible_ones(candidates)]);
+    const [letters, visible] = await Promise.all([read_letters(), keep_visible_ones(candidates, current.filter)]);
     if (current.cancelled) return;
     const found = current.lower_text === undefined ? visible : keep_text_matches(visible, current.lower_text);
     if (found.length === 0) {
