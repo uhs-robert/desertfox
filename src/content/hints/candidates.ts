@@ -1,11 +1,11 @@
 // Finds the elements a hint filter can label. Visibility is decided later, in visible.ts.
 
 import { is_scroll_box } from "../scroll_box.ts";
-import { link_address, takes_typing } from "./actions.ts";
+import { element_address, is_image_element, takes_typing } from "./actions.ts";
 import { keep_visible, scroll_clips_of } from "./visible.ts";
 import type { PageProbe, Rect } from "./visible.ts";
 
-export type HintFilter = "all" | "clickable" | "buttons" | "inputs" | "links" | "prose" | "scrollable" | "media" | "custom";
+export type HintFilter = "all" | "clickable" | "buttons" | "inputs" | "links" | "prose" | "scrollable" | "media" | "images" | "custom";
 
 const TEXT_FIELDS = 'input:not([type=hidden]):not([disabled]), textarea:not([disabled]), select:not([disabled]), [contenteditable=""], [contenteditable="true"]';
 const LINKS = "a[href]";
@@ -34,6 +34,21 @@ export const has_own_text = (element: Element): boolean => {
   return Array.from(element.childNodes).some((node) => node.nodeType === 3 && (node.nodeValue ?? "").trim() !== "");
 };
 
+// A picture with a side under this is an icon, a spacer or a tracking pixel. Rendered size counts, because a lazy image has no natural size before it loads.
+export const MIN_IMAGE_SIDE = 24;
+
+const image_has_size = (element: Element): boolean => {
+  const box = element.getBoundingClientRect();
+  return box.width >= MIN_IMAGE_SIDE && box.height >= MIN_IMAGE_SIDE;
+};
+
+// An `img` (a `picture` always holds one), an image button, or a box with a CSS background image. Inline `svg` has no address, so it gets no label. The size check comes first, because it is cheaper than the style read every element would need.
+export const is_image = (element: Element): boolean => {
+  if (!image_has_size(element)) return false;
+  if (is_image_element(element as HTMLElement)) return true;
+  return window_of(element).getComputedStyle(element).backgroundImage.includes("url(");
+};
+
 const QUERIES: Record<Exclude<HintFilter, "custom">, Query> = {
   all: { selector: ALL },
   clickable: { selector: CLICKABLE },
@@ -42,6 +57,7 @@ const QUERIES: Record<Exclude<HintFilter, "custom">, Query> = {
   links: { selector: LINKS },
   prose: { selector: "*", test: has_own_text },
   media: { selector: "video, audio" },
+  images: { selector: "*", test: is_image },
   scrollable: { selector: "*", test: (element) => !takes_typing(element as HTMLElement) && is_scroll_box(element) },
 };
 
@@ -140,7 +156,7 @@ export const keep_visible_deduplicated = (found: Found[], probe: PageProbe<Found
 
 // The `text` param keeps the links whose text holds it.
 export const keep_text_matches = (found: Found[], lower_needle: string): Found[] =>
-  found.filter((item) => link_address(item.element as HTMLAnchorElement) !== undefined && has_text(item.element, lower_needle));
+  found.filter((item) => element_address(item.element as HTMLAnchorElement) !== undefined && has_text(item.element, lower_needle));
 
 // The visible text holds the needle, ignoring case. The needle arrives already lower-cased.
 // An empty innerText means the text is hidden, so only a missing innerText falls back to textContent.

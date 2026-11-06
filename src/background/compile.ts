@@ -12,7 +12,7 @@ import { check_args } from "../shared/registry/check_args.ts";
 import type { EnumSources } from "../shared/registry/check_args.ts";
 import { DEFAULT_LIGHT_INTENSITY, DEFAULT_PALETTE } from "../shared/config.ts";
 import { LIGHT_INTENSITIES } from "../shared/theme/roles.ts";
-import { load_theme } from "../shared/theme/load.ts";
+import { load_theme, local_theme_problem } from "../shared/theme/load.ts";
 import type { StoredTheme } from "../shared/theme/apply.ts";
 import { compile_keymap } from "../shared/keys/compiler.ts";
 import { merge_keymaps } from "./keymap_merge.ts";
@@ -40,7 +40,10 @@ export function compile_config(input: CompileInput): CompileOutput {
     light_intensity = DEFAULT_LIGHT_INTENSITY;
   }
   const requested_theme = load_theme(String(requested_palette), light_intensity, input.config.local_theme);
-  if (!requested_theme) warnings.push(`settings: palette "${String(requested_palette)}" names no theme, using ${DEFAULT_PALETTE}`);
+  if (!requested_theme) {
+    const local_problem = input.config.local_theme?.name === requested_palette ? local_theme_problem(input.config.local_theme.colors) : undefined;
+    warnings.push(`settings: palette "${String(requested_palette)}" ${local_problem ? `is a local theme with a problem: ${local_problem}` : "names no theme"}, using ${DEFAULT_PALETTE}`);
+  }
   const theme = requested_theme ?? load_theme(DEFAULT_PALETTE, light_intensity)!;
 
   for (const [mode, root] of Object.entries(compiled.modes) as [string, TreeBranch][]) {

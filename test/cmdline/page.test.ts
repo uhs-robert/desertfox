@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import type { TestContext } from "node:test";
+import { USER_CSS_STORAGE_KEY } from "../../src/shared/theme/apply.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY, COMPILED_KEYMAP_VERSION } from "../../src/shared/prefix_tree.ts";
 
 // The ticket the host got from the background and sends in `start`.
@@ -22,9 +23,10 @@ const OPENED = {
   ],
   command_aliases: { j: "my.jira" },
   help_ids: ["my.jira"],
-  css: ".desertfox-cmdline { --desertfox-bg-core: red; }",
   prompt: ">> ",
 };
+
+const USER_CSS = ".desertfox-cmdline { --desertfox-bg-core: red; }";
 
 const TAB_COMMAND = { id: "tab.switch", name: "tab", label: "Switch tab", intent: "Switch tab.", params: [{ name: "tab", type: "string", rest: true, main: true, values: { from: "tabs" } }] };
 
@@ -47,6 +49,7 @@ function fake_element() {
 }
 
 // Just enough DOM for the command line page. `head` records what is appended, `parent` what is posted to the web page.
+type StorageListener = (changes: Record<string, { newValue?: unknown }>, area: string) => void;
 type PageSetup = { keymap?: unknown; with_tab_command?: boolean; without_prompt?: boolean; prompt?: string };
 
 async function load_page(t: TestContext, tag: string, { keymap = KEYMAP, with_tab_command = false, without_prompt = false, prompt: configured }: PageSetup = {}) {
@@ -55,6 +58,7 @@ async function load_page(t: TestContext, tag: string, { keymap = KEYMAP, with_ta
   const to_parent: unknown[] = [];
   const opened_answer = without_prompt ? { ...OPENED, prompt: undefined } : { ...OPENED, ...(configured !== undefined && { prompt: configured }) };
   const head: { textContent: string }[] = [];
+  const storage_listeners: StorageListener[] = [];
   // Every message the page sends to the background, in order.
   const to_background: string[] = [];
   const sent: { type: string; command_id?: string }[] = [];
@@ -99,6 +103,7 @@ async function load_page(t: TestContext, tag: string, { keymap = KEYMAP, with_ta
       // The page listens for keys on the document. The fake sends them through the input's table.
       addEventListener: (type: string, listener: (event: unknown) => void) => void (input_listeners[type] = listener),
       body: { classList: { toggle: () => {} } },
+      documentElement: { style: { visibility: "" } },
       head: { append: (element: { textContent: string }) => void head.push(element) },
       createElement: fake_element,
     },
@@ -114,7 +119,7 @@ async function load_page(t: TestContext, tag: string, { keymap = KEYMAP, with_ta
           return message.type === "open_cmdline" && message.ticket === TICKET ? opened_answer : undefined;
         },
       },
-      storage: { local: { get: async () => ({ [COMPILED_KEYMAP_STORAGE_KEY]: keymap }) }, onChanged: { addListener: () => {} } },
+      storage: { local: { get: async () => ({ [COMPILED_KEYMAP_STORAGE_KEY]: keymap, [USER_CSS_STORAGE_KEY]: USER_CSS }) }, onChanged: { addListener: (listener: StorageListener) => void storage_listeners.push(listener) } },
     },
     // `commands.json` holds only the built-in commands.
     fetch: async () => ({ json: async () => ({ format_version: 1, commands: [] }) }),
@@ -140,7 +145,7 @@ async function load_page(t: TestContext, tag: string, { keymap = KEYMAP, with_ta
   };
   const press_enter = () => input_listeners.keydown!({ isTrusted: true, isComposing: false, key: "Enter", code: "Enter", preventDefault: () => {} });
   const press = (key: string) => input_listeners.keydown!({ isTrusted: true, isComposing: false, key, code: key, preventDefault: () => {} });
-  return { input, list, panel, prompt, to_parent, to_background, sent, item_asks, head, post_start, press_enter, press };
+  return { input, list, panel, prompt, to_parent, to_background, sent, item_asks, head, storage_listeners, post_start, press_enter, press };
 }
 
 // Port messages arrive on a later turn, and later still on a busy machine.
@@ -213,7 +218,14 @@ test("a configured alias resolves, and the user CSS loads after the theme sheet"
   press_enter();
   await until(() => host.submits().length === 1);
   assert.deepEqual(host.submits(), submit_of("my.jira"));
-  assert.deepEqual(head.map((element) => element.textContent), ["", OPENED.css]);
+  assert.deepEqual(head.map((element) => element.textContent), ["", USER_CSS]);
+});
+
+test("a user CSS change while the line is open reaches the page", async (t) => {
+  const { head, storage_listeners, post_start } = await load_page(t, "css_change");
+  await post_start(TICKET, "j").opened();
+  storage_listeners.forEach((listener) => listener({ [USER_CSS_STORAGE_KEY]: { newValue: ".desertfox-cmdline { color: blue; }" } }, "local"));
+  assert.equal(head[1]!.textContent, ".desertfox-cmdline { color: blue; }");
 });
 
 test("a copy that a site embedded itself, with a ticket it made up, sends no history over the site's port", async (t) => {

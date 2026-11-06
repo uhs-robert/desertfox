@@ -17,6 +17,8 @@ export type SettingSpec = {
   is_group?: boolean;
   // A boolean `:toggle` flips. The value is what an absent setting reads as.
   flips_from_absent?: boolean;
+  // Names what failed in a value that `check` refused, for a value with parts such as a list of tables. Appended to the expectation in the build problem.
+  explain?: (value: unknown) => string | undefined;
   // Values the command line offers for the second word. A function, and short lists only: the command line page bundles this module, so it must not import the theme color tables (25 KB). The theme names come from the names-only `theme_names.ts`.
   listed_values?: () => readonly string[];
 };
@@ -30,6 +32,31 @@ function is_prefix_pair(value: unknown, first_key: string): boolean {
   const keys = Object.keys(value).sort();
   if (keys.join() !== [first_key, "tab"].sort().join()) return false;
   return Object.values(value).every(is_text);
+}
+
+const NEW_TAB_LINK_FIELDS = ["label", "url", "group"];
+
+// What is wrong with one link, or undefined when it is fine. A link takes a label, an http or https url and an optional group. Any other field is a typo.
+function new_tab_link_problem(value: unknown): string | undefined {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return "is not a table";
+  const link = value as Record<string, unknown>;
+  const unknown_field = Object.keys(link).find((key) => !NEW_TAB_LINK_FIELDS.includes(key));
+  if (unknown_field !== undefined) return `has the unknown field "${unknown_field}"`;
+  if (!is_text(link.label)) return 'needs a non-empty "label"';
+  if (!is_text(link.url) || !is_web_url(link.url)) return 'needs an http or https "url"';
+  if (link.group !== undefined && !is_text(link.group)) return 'has an empty or non-text "group"';
+  return undefined;
+}
+
+function explain_new_tab_links(value: unknown): string | undefined {
+  if (!Array.isArray(value)) return "it is not a list of tables";
+  for (const [index, link] of value.entries()) {
+    const problem = new_tab_link_problem(link);
+    if (problem === undefined) continue;
+    const label = typeof link?.label === "string" && link.label !== "" ? ` ("${link.label}")` : "";
+    return `item ${index + 1}${label} ${problem}`;
+  }
+  return undefined;
 }
 
 const true_or_false = ["true", "false"] as const;
@@ -54,6 +81,12 @@ export const SETTING_SPECS: Record<keyof Settings, SettingSpec> = {
   newtab_clock: { check: (value) => is_boolean(value) || value === "analog" || value === "digital", expectation: 'true, false, "analog" or "digital"', listed_values: () => ["true", "false", "analog", "digital"] },
   newtab_date: { check: is_boolean, expectation: "true or false", flips_from_absent: true, listed_values: () => true_or_false },
   newtab_clock_format: { check: (value) => value === 12 || value === 24, expectation: "12 or 24", listed_values: () => ["12", "24"] },
+  newtab_bookmarks: { check: is_boolean, expectation: "true or false", flips_from_absent: false, listed_values: () => true_or_false },
+  newtab_bookmarks_max: { check: (value) => is_whole(value) && value >= 0, expectation: "a whole number, 0 or more" },
+  newtab_recent_tabs: { check: is_boolean, expectation: "true or false", flips_from_absent: false, listed_values: () => true_or_false },
+  newtab_recent_tabs_max: { check: (value) => is_whole(value) && value >= 0, expectation: "a whole number, 0 or more" },
+  // A group, so `:set` refuses it: a list of tables has no typed form.
+  newtab_links: { check: (value) => explain_new_tab_links(value) === undefined, explain: explain_new_tab_links, expectation: 'a list of tables with "label", an http or https "url" and an optional "group"', is_group: true },
   open_quick_start_on_install: { check: is_boolean, expectation: "true or false", flips_from_absent: true, listed_values: () => true_or_false },
 };
 

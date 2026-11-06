@@ -143,7 +143,10 @@ function merge_settings(layers: DataLayer[], origins: Origins, problems: string[
       return false;
     }
     const valid = SETTING_SPECS[name].check(value);
-    if (!valid) problems.push(`${where}: expected ${SETTING_SPECS[name].expectation}`);
+    if (!valid) {
+      const detail = SETTING_SPECS[name].explain?.(value);
+      problems.push(`${where}: expected ${SETTING_SPECS[name].expectation}${detail ? `, but ${detail}` : ""}`);
+    }
     return valid;
   }) as Partial<Settings>;
 }

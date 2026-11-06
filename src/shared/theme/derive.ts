@@ -36,7 +36,7 @@ const DERIVATIONS: [Exclude<Role, RequiredRole>, (colors: RoleColors, variant: V
   ["mode_normal", (colors) => colors.primary],
   ["mode_insert", (colors) => colors.error],
   ["mode_ignore", (colors) => colors.fg_dim],
-  ["mode_caret", (colors) => colors.ok],
+  ["mode_caret", per_variant("#f0e68c", "#817613")],
   ["mode_visual", (colors) => colors.warn],
   ["search_bg", (colors) => mix(colors.bg_core, colors.fg_core, 0.3)],
   ["search_fg", (colors) => colors.fg_core],

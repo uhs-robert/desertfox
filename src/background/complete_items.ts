@@ -1,5 +1,6 @@
-// The tabs, bookmarks, engines and windows the command line page lists for `tab`, `bookmark`, `search` and `tab.attach`. The page cannot read them itself: only the
+// The tabs, bookmarks, engines and windows the command line page lists for `tab`, `bookmark`, `search` and `tab.attach`. That page cannot read them itself: only the
 // background knows which tab asked, so only it can keep private tabs out of a normal line and refuse a page that never opened a line.
+// The pure readers here (`listed_tabs`, `flatten_bookmarks`, `bookmark_items`) are also imported by the new tab page, which reads its own lists and filters private tabs itself (`newtab/lists.ts`).
 
 import type { SearchEngine } from "../shared/config.ts";
 import type { PageInfo } from "../shared/engines/index.ts";
