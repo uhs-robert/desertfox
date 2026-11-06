@@ -53,7 +53,7 @@ test("newtab_links validates the scheme, the group and the fields", () => {
   assert.equal(check([{ label: "A", url: "https://a.example/", group: "G" }, { label: "B", url: "http://b.example/" }]), true);
   assert.equal(check([]), true);
   for (const bad of [[{ label: "A", url: "javascript:alert(1)" }], [{ label: "A", url: "file:///etc/passwd" }], [{ label: "A", url: "https://a.example/", group: "" }], [{ label: "", url: "https://a.example/" }], [{ url: "https://a.example/" }], [{ label: "A", url: "https://a.example/", extra: 1 }], ["https://a.example/"], "x"]) assert.equal(check(bad), false, JSON.stringify(bad));
-  assert.equal(SETTING_SPECS.newtab_links.is_group, true, ":set refuses it");
+  assert.equal(SETTING_SPECS.newtab_links.settable, false, ":set refuses it");
 });
 
 test("the editor schema describes the new settings", () => {

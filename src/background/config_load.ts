@@ -90,7 +90,7 @@ export async function load_config(): Promise<LoadedConfig> {
 // Keeps what the schema accepts. A stored value that no longer passes, from an older version, is dropped rather than trusted.
 export function checked_overrides(stored: unknown): SettingOverrides {
   if (typeof stored !== "object" || stored === null || Array.isArray(stored)) return {};
-  const kept = Object.entries(stored).filter(([name, value]) => is_setting_name(name) && !SETTING_SPECS[name].is_group && SETTING_SPECS[name].check(value));
+  const kept = Object.entries(stored).filter(([name, value]) => is_setting_name(name) && SETTING_SPECS[name].settable && SETTING_SPECS[name].check(value));
   return Object.fromEntries(kept) as SettingOverrides;
 }
 

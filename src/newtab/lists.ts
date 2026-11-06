@@ -7,7 +7,7 @@ export const DEFAULT_ROWS = 8;
 export type ListRow = { label: string; url: string; tab?: { id: number; window_id: number } };
 export type ListSection = { title: string; rows: ListRow[] };
 
-export type ListSettings = Pick<Settings, "newtab_bookmarks" | "newtab_bookmarks_max" | "newtab_recent_tabs" | "newtab_recent_tabs_max" | "newtab_links">;
+export type ListSettings = Pick<Partial<Settings>, "newtab_bookmarks" | "newtab_bookmarks_max" | "newtab_recent_tabs" | "newtab_recent_tabs_max" | "newtab_links">;
 
 export type TabWithUse = TabLike & { lastAccessed?: number | undefined };
 

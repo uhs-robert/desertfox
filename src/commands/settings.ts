@@ -22,7 +22,7 @@ function naming_nothing(name: keyof Settings, value: unknown, config: MergedConf
   return undefined;
 }
 
-// The params already hold valid text: `name` is a known setting that is not a group, and `value` passed that setting's check.
+// The params already hold valid text: `name` is a known setting that `set` takes, and `value` passed that setting's check.
 // `config` is the config under the overrides now in force.
 export function plan_set(name: keyof Settings, value_text: string, current: SettingOverrides, config: MergedConfig): SettingsPlan {
   const in_force = effective_settings(config.settings)[name];
@@ -34,8 +34,7 @@ export function plan_set(name: keyof Settings, value_text: string, current: Sett
 }
 
 export function plan_toggle(name: keyof Settings, current: SettingOverrides, config: MergedConfig): SettingsPlan {
-  const flips_from_absent = SETTING_SPECS[name].flips_from_absent as boolean;
-  const flipped = !((effective_settings(config.settings)[name] as boolean | undefined) ?? flips_from_absent);
+  const flipped = !effective_settings(config.settings)[name];
   return { next: { ...current, [name]: flipped }, toast: { kind: "success", message: show(name, flipped) } };
 }
 
@@ -79,9 +78,8 @@ const handlers = make_settings_handlers({
   toast: (ctx, kind, message) => show_toast_on_tab(ctx, "settings", message, kind),
 });
 
-// A live change to a group could collide with other keys, so `set` does not take the group names.
-const SETTABLE = SETTING_NAMES.filter((name) => !SETTING_SPECS[name].is_group);
-const TOGGLEABLE = SETTING_NAMES.filter((name) => SETTING_SPECS[name].flips_from_absent !== undefined);
+const SETTABLE = SETTING_NAMES.filter((name) => SETTING_SPECS[name].settable);
+const TOGGLEABLE = SETTING_NAMES.filter((name) => SETTING_SPECS[name].is_toggle);
 
 define("settings.set", {
   name: "set",

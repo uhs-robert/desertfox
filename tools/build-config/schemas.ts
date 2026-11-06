@@ -2,8 +2,8 @@
 // (Taplo reads them for TOML) completes command names and setting names.
 
 import type { CommandMeta } from "../../src/shared/command.ts";
-import { BUILT_IN_PAGE, DEFAULT_SETTINGS } from "../../src/shared/config.ts";
-import { SETTING_SPECS } from "../../src/shared/settings_schema.ts";
+import { SETTING_DOCS } from "../../src/shared/settings_docs.ts";
+import { SETTINGS_TABLE, type SettingName, type SettingRow } from "../../src/shared/settings_table.ts";
 import { KEYMAP_MODES } from "./merge.ts";
 import type { DataKind } from "./source_files.ts";
 
@@ -49,60 +49,55 @@ function keymap_schema(commands: CommandMeta[]): Schema {
   };
 }
 
-function prefix_pair_schema(first_key: string): Schema {
-  const prefix = { type: "string", minLength: 1 };
-  return { type: "object", properties: { [first_key]: prefix, tab: prefix }, required: [first_key, "tab"], additionalProperties: false };
+const non_empty_text: Schema = { type: "string", minLength: 1 };
+
+function value_schema(row: SettingRow): Schema {
+  switch (row.kind) {
+    case "boolean":
+      return { type: "boolean" };
+    case "enum":
+      return { enum: [...row.values] };
+    case "number":
+      return { type: row.whole ? "integer" : "number", minimum: row.min };
+    case "text":
+      return non_empty_text;
+    case "line":
+      return { type: "string", minLength: row.min_length, maxLength: row.max_length, pattern: "^[^\\r\\n]+$" };
+    case "text_list":
+      return { type: "array", items: non_empty_text };
+    case "enum_list":
+      return { type: "array", items: { enum: [...row.values] }, uniqueItems: true };
+    case "text_table":
+      return { type: "object", properties: Object.fromEntries(row.keys.map((key) => [key, non_empty_text])), required: [...row.keys], additionalProperties: false };
+    case "table_list": {
+      // A JSON Schema `pattern` has no case flag, so it refuses an upper-case scheme that the check takes.
+      const field_schema = (value: "text" | "web_url"): Schema => (value === "web_url" ? { type: "string", pattern: "^https?://\\S+$" } : non_empty_text);
+      return {
+        type: "array",
+        items: {
+          type: "object",
+          properties: Object.fromEntries(Object.entries(row.fields).map(([field, rule]) => [field, field_schema(rule.value)])),
+          required: Object.entries(row.fields).filter(([, rule]) => !rule.optional).map(([field]) => field),
+          additionalProperties: false,
+        },
+      };
+    }
+    case "custom":
+      return row.schema;
+  }
 }
 
-// The values the schema module lists for a setting. Only the enums that use this follow the module: the other fragments below (defaults, limits, some enums) are written by hand and a test checks only the setting names (see #85).
-const listed = (name: keyof typeof SETTING_SPECS): string[] => [...(SETTING_SPECS[name].listed_values?.() ?? [])];
+function setting_schema(name: SettingName): Schema {
+  const row: SettingRow = SETTINGS_TABLE[name];
+  return { ...value_schema(row), ...("default" in row && { default: row.default }), description: SETTING_DOCS[name] };
+}
 
 export function settings_schema(): Schema {
   return {
     $schema: DRAFT,
     title: "DesertFox settings",
     type: "object",
-    properties: {
-      which_key_delay_ms: { type: "number", minimum: 0, default: DEFAULT_SETTINGS.which_key_delay_ms },
-      hint_letters: { type: "string", minLength: 2, default: DEFAULT_SETTINGS.hint_letters },
-      ignore_sites: { type: "array", items: { type: "string" }, description: "Match patterns where DesertFox starts in ignore mode" },
-      which_key_border: { enum: listed("which_key_border"), default: DEFAULT_SETTINGS.which_key_border, description: "Corner style of the which-key panel border" },
-      mode_indicator: { enum: listed("mode_indicator"), default: DEFAULT_SETTINGS.mode_indicator, description: "When the mode badge shows: always (NORMAL too), not_normal, or off" },
-      palette: { type: "string", minLength: 1, examples: listed("palette"), default: DEFAULT_SETTINGS.palette, description: "Theme name: themes/<name>.toml in the config directory first, then a built-in theme. Light or dark follows the system theme" },
-      light_intensity: { enum: listed("light_intensity").map(Number), default: DEFAULT_SETTINGS.light_intensity, description: "Which of the five light sets of an Oasis theme the light variant uses, 1 (lightest) to 5" },
-      search_prefixes: { ...prefix_pair_schema("here"), default: DEFAULT_SETTINGS.search_prefixes },
-      container_prefixes: { ...prefix_pair_schema("reopen"), default: DEFAULT_SETTINGS.container_prefixes },
-      home_page: { type: "string", minLength: 1, description: `URL that page.home opens, or "${BUILT_IN_PAGE}" for the built-in new tab page` },
-      default_engine: {
-        type: "string",
-        minLength: 1,
-        default: DEFAULT_SETTINGS.default_engine,
-        description: "Search engine that open.clipboard uses for text that is not a URL. Must name a defined engine",
-      },
-      new_tab_page: { type: "string", pattern: `^(${BUILT_IN_PAGE}|https?://\\S+)$`, description: `What a new tab shows: an http or https URL that the new tab redirects to, or "${BUILT_IN_PAGE}" for the built-in page. Unset means the built-in page` },
-      completion_all_windows: { type: "boolean", default: false, description: "Whether the tab completion lists the tabs of every window, not only the line's window" },
-      cmdline_prompt: { type: "string", minLength: 1, maxLength: 8, pattern: "^[^\\r\\n]+$", default: "caret", description: "Before the command line input: \"caret\" for a bold > , \"colon\" for a primary-colored :, or your own text (include the trailing space you want)" },
-      open_completion: { type: "array", items: { enum: ["bookmarks", "history"] }, uniqueItems: true, description: "Groups that open completes from, in list order. A source left out is not read. Default is both" },
-      history_completion_max: { type: "integer", minimum: 0, default: 10, description: "History rows that open completion shows for an empty word" },
-      newtab_clock: { oneOf: [{ type: "boolean" }, { enum: ["analog", "digital"] }], default: true, description: "The new tab page clock: false hides it, true or \"analog\" shows the analog face, \"digital\" shows the seven-segment digits" },
-      newtab_date: { type: "boolean", default: true, description: "Whether the new tab page shows the date under the clock" },
-      newtab_clock_format: { enum: [12, 24], default: 12, description: "Hours on the digital clock: 12 with an AM or PM suffix, or 24. The analog clock ignores it" },
-      newtab_bookmarks: { type: "boolean", default: false, description: "Whether the new tab page lists your bookmarks, newest added first" },
-      newtab_bookmarks_max: { type: "integer", minimum: 0, default: 8, description: "Bookmark rows on the new tab page" },
-      newtab_recent_tabs: { type: "boolean", default: false, description: "Whether the new tab page lists your open tabs, last used first. Private tabs never show" },
-      newtab_recent_tabs_max: { type: "integer", minimum: 0, default: 8, description: "Recent tab rows on the new tab page" },
-      newtab_links: {
-        type: "array",
-        description: "Links on the new tab page, one [[newtab_links]] table each. Links with the same group share a list",
-        items: {
-          type: "object",
-          properties: { label: { type: "string", minLength: 1 }, url: { type: "string", pattern: "^https?://\\S+$" }, group: { type: "string", minLength: 1 } },
-          required: ["label", "url"],
-          additionalProperties: false,
-        },
-      },
-      open_quick_start_on_install: { type: "boolean", default: true, description: "Whether the first install opens the Quick Start page. A first install has no config yet, so this helps managed setups, which carry the config from the start" },
-    },
+    properties: Object.fromEntries((Object.keys(SETTINGS_TABLE) as SettingName[]).map((name) => [name, setting_schema(name)])),
     additionalProperties: false,
   };
 }

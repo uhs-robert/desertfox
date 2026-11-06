@@ -4,7 +4,6 @@ import { MODES } from "../shared/command.ts";
 import type { CommandMeta } from "../shared/command.ts";
 import type { Settings } from "../shared/config.ts";
 import { DEFAULT_SETTINGS } from "../shared/config.ts";
-import { is_setting_name, SETTING_SPECS } from "../shared/settings_schema.ts";
 
 export type ConfigSource = "managed" | "imported" | "defaults";
 
@@ -43,9 +42,8 @@ function show_value(value: unknown): string {
   return typeof value === "string" ? JSON.stringify(value) : (JSON.stringify(value) ?? "unset");
 }
 
-// An optional setting has no entry in DEFAULT_SETTINGS. A true or false one still has a default: what an absent setting reads as.
 function default_of(name: string): unknown {
-  return DEFAULT_SETTINGS[name as keyof Settings] ?? (is_setting_name(name) ? SETTING_SPECS[name].flips_from_absent : undefined);
+  return DEFAULT_SETTINGS[name as keyof Settings];
 }
 
 // Walks the stored settings, so a setting added later shows without a change here.

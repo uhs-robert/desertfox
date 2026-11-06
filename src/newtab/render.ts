@@ -4,7 +4,7 @@ import { browser_page_readers, read_sections, type ListSection, type PageReaders
 import { draw_clock } from "./clock.ts";
 import { draw_digital_clock } from "./digital_clock.ts";
 
-type WidgetSettings = Pick<Settings, "newtab_clock" | "newtab_date" | "newtab_clock_format" | "newtab_bookmarks" | "newtab_bookmarks_max" | "newtab_recent_tabs" | "newtab_recent_tabs_max" | "newtab_links">;
+type WidgetSettings = Pick<Partial<Settings>, "newtab_clock" | "newtab_date" | "newtab_clock_format" | "newtab_bookmarks" | "newtab_bookmarks_max" | "newtab_recent_tabs" | "newtab_recent_tabs_max" | "newtab_links">;
 
 // Each widget needs only to be not `false`. The clock is analog unless set to "digital".
 export function enabled_widgets(settings: WidgetSettings) {

@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
-import { DEFAULT_SETTINGS } from "../src/shared/config.ts";
+import { DEFAULT_SETTINGS, effective_settings } from "../src/shared/config.ts";
 import { parse_setting_words, SETTING_NAMES, SETTING_SPECS } from "../src/shared/settings_schema.ts";
 import { enabled_widgets } from "../src/newtab/render.ts";
 import { read_sections } from "../src/newtab/lists.ts";
@@ -45,7 +45,7 @@ test("every setting keeps its expectation text, in the declared order", () => {
 test("every setting keeps its listed values", () => {
   const listed = Object.fromEntries(SETTING_NAMES.map((name) => [name, SETTING_SPECS[name].listed_values?.()]).filter(([, values]) => values !== undefined));
   const { palette, ...rest } = listed as Record<string, readonly string[]>;
-  assert.ok(palette.includes("oasis_moonlight"));
+  assert.ok(palette?.includes("oasis_moonlight"));
   assert.deepEqual(rest, {
     which_key_border: ["square", "round", "chamfer"],
     mode_indicator: ["always", "not_normal", "off"],
@@ -63,10 +63,11 @@ test("every setting keeps its listed values", () => {
   });
 });
 
-test("the list, group and toggle sets stay the same", () => {
+test("the list, unsettable and toggle sets stay the same", () => {
   assert.deepEqual(SETTING_NAMES.filter((name) => SETTING_SPECS[name].is_list), ["ignore_sites", "open_completion"]);
-  assert.deepEqual(SETTING_NAMES.filter((name) => SETTING_SPECS[name].is_group), ["search_prefixes", "container_prefixes", "newtab_links"]);
-  const toggles = Object.fromEntries(SETTING_NAMES.filter((name) => SETTING_SPECS[name].flips_from_absent !== undefined).map((name) => [name, SETTING_SPECS[name].flips_from_absent]));
+  assert.deepEqual(SETTING_NAMES.filter((name) => !SETTING_SPECS[name].settable), ["search_prefixes", "container_prefixes", "newtab_links"]);
+  // A toggle flips the value in force, so an absent one flips from its default.
+  const toggles = Object.fromEntries(SETTING_NAMES.filter((name) => SETTING_SPECS[name].is_toggle).map((name) => [name, DEFAULT_SETTINGS[name]]));
   assert.deepEqual(toggles, { completion_all_windows: false, newtab_date: true, newtab_bookmarks: false, newtab_recent_tabs: false, open_quick_start_on_install: true });
 });
 
@@ -131,8 +132,8 @@ test("every setting accepts and refuses the same values", () => {
   assert.deepEqual(Object.keys(ACCEPTS), SETTING_NAMES);
   assert.deepEqual(Object.keys(REFUSES), SETTING_NAMES);
   for (const name of SETTING_NAMES) {
-    for (const value of ACCEPTS[name]) assert.equal(SETTING_SPECS[name].check(value), true, `${name} accepts ${JSON.stringify(value)}`);
-    for (const value of REFUSES[name]) assert.equal(SETTING_SPECS[name].check(value), false, `${name} refuses ${String(JSON.stringify(value))}`);
+    for (const value of ACCEPTS[name]!) assert.equal(SETTING_SPECS[name].check(value), true, `${name} accepts ${JSON.stringify(value)}`);
+    for (const value of REFUSES[name]!) assert.equal(SETTING_SPECS[name].check(value), false, `${name} refuses ${String(JSON.stringify(value))}`);
   }
 });
 
@@ -164,6 +165,7 @@ test("a bad link names its item and its fault", () => {
   assert.equal(explain([{ label: "A", url: "https://a.example/", group: 2 }]), 'item 1 ("A") has an empty or non-text "group"');
 });
 
+// The first ten were the defaults before #85. The rest were written at each reader, or were what an absent value read as.
 test("the defaults stay the same", () => {
   assert.deepEqual(DEFAULT_SETTINGS, {
     which_key_delay_ms: 300,
@@ -176,20 +178,51 @@ test("the defaults stay the same", () => {
     search_prefixes: { here: "s", tab: "S" },
     container_prefixes: { reopen: "c", tab: "C" },
     default_engine: "duck",
+    new_tab_page: "desertfox",
+    completion_all_windows: false,
+    cmdline_prompt: "caret",
+    open_completion: ["bookmarks", "history"],
+    history_completion_max: 10,
+    newtab_clock: true,
+    newtab_date: true,
+    newtab_clock_format: 12,
+    newtab_bookmarks: false,
+    newtab_bookmarks_max: 8,
+    newtab_recent_tabs: false,
+    newtab_recent_tabs_max: 8,
+    newtab_links: [],
+    open_quick_start_on_install: true,
   });
+  assert.equal("home_page" in DEFAULT_SETTINGS, false, "page.home refuses without one");
 });
 
 test("the new tab page reads an absent setting as before", async () => {
-  assert.deepEqual(enabled_widgets({}), { clock: true, clock_style: "analog", date: true });
-  assert.deepEqual(enabled_widgets({ newtab_clock: true, newtab_date: false }), { clock: true, clock_style: "analog", date: false });
+  assert.deepEqual(enabled_widgets(effective_settings({})), { clock: true, clock_style: "analog", date: true });
+  assert.deepEqual(enabled_widgets(effective_settings({ newtab_clock: true, newtab_date: false })), { clock: true, clock_style: "analog", date: false });
   const tabs = Array.from({ length: 12 }, (_, index) => ({ id: index, url: `https://t${index}.example/`, title: `T${index}`, lastAccessed: index, windowId: 1, incognito: false }));
   const readers = { query_tabs: async () => tabs, bookmark_tree: async () => [], page_is_private: async () => false } as never;
-  assert.deepEqual(await read_sections({}, readers), []);
-  const sections = await read_sections({ newtab_recent_tabs: true }, readers);
-  assert.equal(sections[0].rows.length, 8);
+  assert.deepEqual(await read_sections(effective_settings({}), readers), []);
+  const sections = await read_sections(effective_settings({ newtab_recent_tabs: true }), readers);
+  assert.equal(sections[0]?.rows.length, 8);
 });
 
-test("the editor schema matches its output before #85", () => {
+test("the editor schema matches its output before #85, apart from the listed changes", () => {
   const before = JSON.parse(readFileSync(new URL("fixtures/settings/editor_schema_before_85.json", import.meta.url), "utf8"));
-  assert.deepEqual(JSON.parse(JSON.stringify(settings_schema())), before);
+  const properties = before.properties;
+  // One enum of the four values, the same values as the old boolean-or-word form.
+  properties.newtab_clock = { ...properties.newtab_clock, oneOf: undefined, enum: [true, false, "analog", "digital"] };
+  // The check refuses an empty pattern, and now the editor does too.
+  properties.ignore_sites.items.minLength = 1;
+  // Defaults that were written at the readers.
+  properties.ignore_sites.default = [];
+  properties.new_tab_page.default = "desertfox";
+  properties.open_completion.default = ["bookmarks", "history"];
+  properties.newtab_links.default = [];
+  // Settings that had no description.
+  const described_now = settings_schema().properties as Record<string, { description: string }>;
+  for (const name of ["which_key_delay_ms", "hint_letters", "search_prefixes", "container_prefixes"]) {
+    assert.equal(properties[name].description, undefined, name);
+    properties[name].description = described_now[name]!.description;
+  }
+  assert.deepEqual(JSON.parse(JSON.stringify(settings_schema())), JSON.parse(JSON.stringify(before)));
 });
