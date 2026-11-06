@@ -348,7 +348,7 @@ function section_toggle(page: PageId, title: string, list: HTMLElement): HTMLEle
   return button;
 }
 
-// The logo is the packaged icon, reached by a path relative to help.html, which the build copies to the package root.
+// The logo is the packaged icon, reached by a path relative to home.html, which the build copies to the package root.
 function brand(): HTMLElement {
   const logo = document.createElement("img");
   logo.className = "desertfox-help-logo";

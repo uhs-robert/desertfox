@@ -4,6 +4,7 @@ import type { BoundInvocation } from "../shared/invocation.ts";
 import { DEFAULT_SETTINGS, effective_settings } from "../shared/config.ts";
 import { bundle_loader_deps, container_names, image_deps, make_router_deps, page_of, reinject_deps } from "./browser_deps.ts";
 import { run_image_action } from "./image_actions.ts";
+import { HELP_PAGE_FILE } from "../help/route.ts";
 import { open_quick_start_on_install } from "./first_install.ts";
 import { create_cmdline_service } from "./cmdline_service.ts";
 import { create_previous_tabs } from "./previous_tab.ts";
@@ -64,7 +65,7 @@ const previous_tabs = create_previous_tabs(browser.storage.session);
 const open_help = create_open_help({
   is_opener: cmdline.is_opener,
   is_command: (command_id) => built_in_ids.has(command_id),
-  help_page_url: browser.runtime.getURL("help.html"),
+  help_page_url: browser.runtime.getURL(HELP_PAGE_FILE),
   open_tab: (tab) => browser.tabs.create(tab),
 });
 

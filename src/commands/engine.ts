@@ -1,3 +1,4 @@
+import { HELP_PAGE_FILE } from "../help/route.ts";
 import { define } from "../shared/registry/index.ts";
 
 // The help page lists every engine with its origins. The bare engine name opens it at that row.
@@ -8,7 +9,7 @@ define("engine.show", {
   runs_in: "background",
   repeatable: false,
   run: async (_ctx, args) => {
-    const url = `${browser.runtime.getURL("help.html")}#engine=${encodeURIComponent(args.engine as string)}`;
+    const url = `${browser.runtime.getURL(HELP_PAGE_FILE)}#engine=${encodeURIComponent(args.engine as string)}`;
     await browser.tabs.create({ url });
   },
 });

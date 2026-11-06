@@ -78,7 +78,7 @@ test("the Quick Start route and the install URL agree", async () => {
   const deps = (reason: string, on: boolean) => ({ reason, open_on_install: async () => on, open_tab: async (url: string) => void opened.push(url) });
   const url_of = (file: string) => `moz-extension://x/${file}`;
   assert.equal(await open_quick_start_on_install(deps("install", true), url_of), true);
-  assert.deepEqual(opened, ["moz-extension://x/help.html#/quick-start"]);
+  assert.deepEqual(opened, ["moz-extension://x/home.html#/quick-start"]);
 });
 
 test("the Quick Start page opens on a first install only, and the setting turns it off", async () => {

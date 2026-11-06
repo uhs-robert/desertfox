@@ -3,9 +3,9 @@
 import { evaluate_in_background } from "./rdp.mjs";
 
 export async function run_cases({ run_case, send_keys, rdp, extension_id, take_shot, expect, sleep }) {
-  const view = `(browser.extension.getViews({ type: "tab" }).find((candidate) => candidate.location.pathname === "/help.html"))`;
+  const view = `(browser.extension.getViews({ type: "tab" }).find((candidate) => candidate.location.pathname === "/home.html"))`;
   const in_help = (code) => evaluate_in_background(rdp, extension_id, `(() => { const view = ${view}; ${code} })()`);
-  const close_help_tabs = () => evaluate_in_background(rdp, extension_id, `(async () => { for (const tab of await browser.tabs.query({})) if (tab.url.includes("/help.html")) await browser.tabs.remove(tab.id); })()`);
+  const close_help_tabs = () => evaluate_in_background(rdp, extension_id, `(async () => { for (const tab of await browser.tabs.query({})) if (tab.url.includes("/home.html")) await browser.tabs.remove(tab.id); })()`);
   const group_state = (page_title) => in_help(`
     const row = [...view.document.querySelectorAll(".desertfox-help-nav-row")].find((candidate) => candidate.querySelector("a").textContent === ${JSON.stringify(page_title)});
     const list = row.nextElementSibling;

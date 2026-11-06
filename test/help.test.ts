@@ -100,8 +100,8 @@ test("a key row shows the binding prompt", () => {
   assert.deepEqual(open.keys, [{ mode: "normal", keys: "o", args: "prompts for url, prefilled from current_url" }]);
 });
 
-test("help.html loads the content script after help.js", () => {
-  const html = readFileSync(new URL("../src/help/help.html", import.meta.url), "utf8");
+test("home.html loads the content script after help.js", () => {
+  const html = readFileSync(new URL("../src/help/home.html", import.meta.url), "utf8");
   const help = html.indexOf('<script src="help.js"></script>');
   const content = html.indexOf('<script src="content.js"></script>');
   assert.ok(help >= 0 && content > help);
