@@ -4,12 +4,11 @@
 
 import type { CommandMeta } from "./command.ts";
 import type { KeymapConfig } from "./keymap.ts";
-import type { LocalTheme } from "./mode_colors.ts";
-import type { LightIntensity } from "./theme/roles.ts";
+import type { LightIntensity, LocalTheme } from "./theme/roles.ts";
 
 export const CONFIG_FORMAT_VERSION = 2;
 
-// Declared here, not in mode_colors.ts: that module holds the theme tables, which stay out of the content script.
+// Declared here, not in theme/load.ts: that module holds the theme tables, which stay out of the content script.
 export const DEFAULT_PALETTE = "oasis_moonlight";
 export const DEFAULT_LIGHT_INTENSITY: LightIntensity = 3;
 
@@ -26,15 +25,11 @@ export type SearchEngine = {
 };
 
 export const MODE_INDICATOR_VALUES = ["always", "not_normal", "off"] as const;
-export const WHICH_KEY_BORDER_VALUES = ["square", "round", "chamfer"] as const;
-export type WhichKeyBorder = (typeof WHICH_KEY_BORDER_VALUES)[number];
 
 export type ModeIndicator = (typeof MODE_INDICATOR_VALUES)[number];
 
 export type Settings = {
   which_key_delay_ms: number;
-  // Corner style of the which-key panel border.
-  which_key_border: WhichKeyBorder;
   hint_letters: string;
   // Match patterns for pages where DesertFox starts in ignore mode.
   ignore_sites: string[];
@@ -101,7 +96,6 @@ export function with_fallback_engines(user_engines: Record<string, SearchEngine>
 
 export const DEFAULT_SETTINGS: Settings = {
   which_key_delay_ms: 300,
-  which_key_border: "square",
   hint_letters: "asdfghjkl",
   ignore_sites: [],
   mode_indicator: "always",

@@ -2,7 +2,6 @@
 // A highlight registry belongs to one document, but a `::highlight()` rule only reaches the tree whose stylesheet holds it.
 // So each tree with text, each shadow root and each frame document, adopts a sheet of its own.
 
-import type { ColorPair } from "../../shared/mode_colors.ts";
 import type { TextModel, TextTree } from "./text_model.ts";
 
 // Painting a hundred thousand ranges would stall the page, so only a window of matches around the current one is painted.
@@ -25,6 +24,8 @@ const DOCUMENT_NODE = 9;
 export type Spans = { from: number[] } & ({ to: number[] } | { width: number });
 const end_of = (spans: Spans, index: number): number => ("to" in spans ? spans.to[index]! : spans.from[index]! + spans.width);
 
+// Background first, then text.
+export type ColorPair = [bg: string, fg: string];
 export type FindColors = { all: { dark: ColorPair; light: ColorPair }; current: { dark: ColorPair; light: ColorPair } };
 
 // The lib's type for the registry lacks the map methods.

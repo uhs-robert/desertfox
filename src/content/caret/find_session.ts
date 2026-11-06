@@ -9,7 +9,7 @@ import { create_painter } from "./find_paint.ts";
 import type { FindColors, Painter } from "./find_paint.ts";
 import { get_register, set_register } from "./registers.ts";
 import { scroll_to_index } from "./screen_line.ts";
-import { stored_mode_colors } from "./selection_colors.ts";
+import { find_colors_of, stored_theme } from "./selection_colors.ts";
 import { first_visible_index } from "./start_point.ts";
 import { build_text_model, documents_of, MAX_TEXT_CHARS, trees_alive } from "./text_model.ts";
 import type { DomPoint, TextModel, TextTree } from "./text_model.ts";
@@ -57,8 +57,8 @@ const SLICE_MS = 8;
 // The command line covers about this much of the bottom edge while it is open.
 const LINE_HEIGHT_PX = 56;
 const FALLBACK_COLORS: FindColors = {
-  all: { dark: ["#ffba75", "#0c0e13"], light: ["#85460e", "#e8e5d8"] },
-  current: { dark: ["#7fcf78", "#0c0e13"], light: ["#356731", "#e8e5d8"] },
+  all: { dark: ["#666666", "#f5f5dc"], light: ["#e1b69d", "#4e260e"] },
+  current: { dark: ["#cdc673", "#0c0e13"], light: ["#dd6f6f", "#350808"] },
 };
 // Register `/` holds the query. Its direction sits in a register of its own, since a register holds text only.
 const QUERY_REGISTER = "/";
@@ -77,10 +77,10 @@ export const is_page_change = (record: MutationRecord) =>
   !in_own_element(record.target) &&
   (record.type === "characterData" || [...Array.from(record.addedNodes), ...Array.from(record.removedNodes)].some((node) => !is_own_element(node)));
 
-// The visual pair for all matches and the caret pair for the current one.
+// The search pair for all matches and the current-match pair for the one the search stands on.
 export async function read_find_colors(): Promise<FindColors> {
-  const [all, current] = await Promise.all([stored_mode_colors("visual"), stored_mode_colors("caret")]);
-  return all && current ? { all, current } : FALLBACK_COLORS;
+  const theme = await stored_theme();
+  return theme ? find_colors_of(theme) : FALLBACK_COLORS;
 }
 
 const browser_deps = (): FindDeps => ({

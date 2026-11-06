@@ -12,7 +12,6 @@ import { create_cancelled_keys } from "./cancelled_keys.ts";
 import { create_key_flow } from "./key_flow.ts";
 import { create_which_key_timer } from "./which_key_timer.ts";
 import { mode_label } from "./mode_label.ts";
-import type { BadgeColors } from "./mode_indicator.ts";
 import { show_mode_label, show_toast } from "./ui_proxy.ts";
 import { wire_mode_reports } from "./mode_report.ts";
 import { page_mode } from "./page_mode.ts";
@@ -23,13 +22,11 @@ import { blur_focused_element } from "./handlers/page.ts";
 
 // Until the tree is read the setting is unknown, and the default applies.
 let mode_indicator: ModeIndicator = DEFAULT_SETTINGS.mode_indicator;
-// Absent until the tree is read, and the badge keeps its plain colors.
-let mode_colors: Partial<Record<Mode, BadgeColors>> | undefined;
 
 function refresh_mode_indicator(): void {
   const mode = page_mode.get_mode();
   const pass_next_armed = page_mode.is_pass_next_armed();
-  show_mode_label(mode_label(mode, pass_next_armed, mode_indicator), pass_next_armed ? undefined : mode_colors?.[mode]);
+  show_mode_label(mode_label(mode, pass_next_armed, mode_indicator), pass_next_armed ? undefined : mode);
 }
 
 const script_started_ms = performance.now();
@@ -173,7 +170,6 @@ function install_matcher(keymap: CompiledKeymap | undefined): void {
   const usable = current_keymap(keymap);
   // A tree stored before the setting existed has no value, which means the default.
   mode_indicator = usable?.mode_indicator ?? DEFAULT_SETTINGS.mode_indicator;
-  mode_colors = usable?.mode_colors;
   which_key_delay_ms = usable?.which_key_delay_ms;
   // The mode comes first, so keys held during the load replay in the right mode.
   const first_install = !matcher_installed;

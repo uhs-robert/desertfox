@@ -3,7 +3,6 @@
 
 import type { BundleName } from "./bundles.ts";
 import type { CommandMeta, Mode } from "./command.ts";
-import type { WhichKeyBorder } from "./config.ts";
 import type { BoundInvocation, Invocation } from "./invocation.ts";
 
 // Why a command did not run. The content script shows `message` as a toast,
@@ -43,7 +42,7 @@ export type ListKeys = {
 };
 
 // What the panel shows: the chain of group names that leads here (empty when there is no panel) and the keys that can follow.
-export type WhichKeyPanel = { title: string[]; rows: WhichKeyRow[]; border: WhichKeyBorder };
+export type WhichKeyPanel = { title: string[]; rows: WhichKeyRow[] };
 
 // One key that can follow a prefix. A key that starts a longer sequence has `more` and no description.
 export type WhichKeyRow = {

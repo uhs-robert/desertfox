@@ -61,7 +61,6 @@ export function settings_schema(): Schema {
       which_key_delay_ms: { type: "number", minimum: 0, default: DEFAULT_SETTINGS.which_key_delay_ms },
       hint_letters: { type: "string", minLength: 2, default: DEFAULT_SETTINGS.hint_letters },
       ignore_sites: { type: "array", items: { type: "string" }, description: "Match patterns where DesertFox starts in ignore mode" },
-      which_key_border: { enum: listed("which_key_border"), default: DEFAULT_SETTINGS.which_key_border, description: "Corner style of the which-key panel border" },
       mode_indicator: { enum: listed("mode_indicator"), default: DEFAULT_SETTINGS.mode_indicator, description: "When the mode badge shows: always (NORMAL too), not_normal, or off" },
       palette: { type: "string", minLength: 1, examples: listed("palette"), default: DEFAULT_SETTINGS.palette, description: "Theme name: themes/<name>.toml in the config directory first, then a built-in theme. Light or dark follows the system theme" },
       light_intensity: { enum: listed("light_intensity").map(Number), default: DEFAULT_SETTINGS.light_intensity, description: "Which of the five light sets of an Oasis theme the light variant uses, 1 (lightest) to 5" },

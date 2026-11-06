@@ -80,12 +80,6 @@ test("the title names the chain of groups, each part by its name or else its key
   assert.deepEqual(panel_after_prefix(root, [], find_command).title, ["keys"]);
 });
 
-test("the panel carries the border style, square when the keymap has none", async () => {
-  const stored = (which_key_border?: "round") => ({ get: async () => ({ [COMPILED_KEYMAP_STORAGE_KEY]: { format_version: COMPILED_KEYMAP_VERSION, modes: { normal: root }, mode_indicator: "always", which_key_delay_ms: 300, ...(which_key_border ? { which_key_border } : {}) } }) }) as never;
-  assert.equal((await list_keys(stored(), find_command, { mode: "normal", prefix: ["g"] })).border, "square");
-  assert.equal((await list_keys(stored("round"), find_command, { mode: "normal", prefix: ["g"] })).border, "round");
-});
-
 test("the title joins group names with the which-key.nvim breadcrumb", () => {
   assert.deepEqual(fit_title(["+Go", "+Close tabs"], () => false), { text: "+Go » +Close tabs", dropped: 0 });
   assert.deepEqual(fit_title(["keys"], () => false), { text: "keys", dropped: 0 });

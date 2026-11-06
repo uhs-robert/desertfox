@@ -2,7 +2,7 @@
 // with it and the command line completes names and values from it. Background, extension pages and build tools import
 // this module. The content script must not: it has a 15 KB budget and needs none of this.
 
-import { BUILT_IN_PAGE, is_web_url, MODE_INDICATOR_VALUES, WHICH_KEY_BORDER_VALUES } from "./config.ts";
+import { BUILT_IN_PAGE, is_web_url, MODE_INDICATOR_VALUES } from "./config.ts";
 import type { Settings } from "./config.ts";
 import { BUILT_IN_THEME_NAMES } from "./theme_names.ts";
 import { LIGHT_INTENSITIES } from "./theme/roles.ts";
@@ -36,7 +36,6 @@ const true_or_false = ["true", "false"] as const;
 
 export const SETTING_SPECS: Record<keyof Settings, SettingSpec> = {
   which_key_delay_ms: { check: (value) => typeof value === "number" && Number.isFinite(value) && value >= 0, expectation: "a number of milliseconds, 0 or more" },
-  which_key_border: { check: (value) => (WHICH_KEY_BORDER_VALUES as readonly unknown[]).includes(value), expectation: '"square", "round" or "chamfer"', listed_values: () => WHICH_KEY_BORDER_VALUES },
   hint_letters: { check: (value) => typeof value === "string" && new Set(value).size === value.length && value.length >= 2, expectation: "a string of 2 or more distinct letters" },
   ignore_sites: { check: (value) => Array.isArray(value) && value.every(is_text), expectation: "a list of match pattern strings", is_list: true },
   mode_indicator: { check: (value) => (MODE_INDICATOR_VALUES as readonly unknown[]).includes(value), expectation: '"always", "not_normal" or "off"', listed_values: () => MODE_INDICATOR_VALUES },

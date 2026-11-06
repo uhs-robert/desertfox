@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { derive_roles } from "../../src/shared/theme/derive.ts";
-import { load_theme } from "../../src/shared/theme/load.ts";
+import { built_in_theme_names, load_theme } from "../../src/shared/theme/load.ts";
 
 const colors = derive_roles({ bg_core: "#101010", fg_core: "#eeeeee", primary: "#88aaff", accent: "#ffcc66" }, "dark");
 
@@ -21,4 +21,42 @@ test("a local theme with an empty or non-hex role value is not used", () => {
     assert.equal(load_theme("mine", 3, { name: "mine", colors: { dark: broken, light: colors } }), undefined);
     assert.equal(load_theme("mine", 3, { name: "mine", colors: { dark: colors, light: broken } }), undefined);
   }
+});
+
+test("light_intensity picks the light set and leaves dark alone", () => {
+  const light_bg = (intensity: 1 | 2 | 3 | 4 | 5) => load_theme("oasis_moonlight", intensity)!.light.bg_core;
+  assert.equal(light_bg(1), "#f3f2eb");
+  assert.equal(light_bg(3), "#e8e5d8");
+  assert.notEqual(light_bg(5), light_bg(1));
+  assert.deepEqual(load_theme("oasis_moonlight", 5)!.dark, load_theme("oasis_moonlight", 1)!.dark);
+});
+
+test("a name no theme answers to finds nothing, the bare Oasis names included", () => {
+  assert.equal(load_theme("neon", 3), undefined);
+  assert.equal(load_theme("moonlight", 3), undefined);
+  assert.deepEqual(load_theme("oasis_moonlight", 3, { name: "other", colors: { dark: colors, light: colors } }), load_theme("oasis_moonlight", 3));
+});
+
+test("a hand-edited local theme with a missing variant falls back instead of crashing", () => {
+  for (const broken of [{ dark: null, light: colors }, { dark: { bg_core: "#000000" }, light: colors }]) {
+    assert.deepEqual(load_theme("oasis_moonlight", 3, { name: "oasis_moonlight", colors: broken } as never), load_theme("oasis_moonlight", 3));
+  }
+});
+
+test("every built-in theme gives caret, visual and normal their own mode colors in both variants", () => {
+  for (const name of built_in_theme_names()) {
+    const theme = load_theme(name, 3)!;
+    for (const variant of ["dark", "light"] as const) {
+      const colors_of = theme[variant];
+      assert.equal(new Set([colors_of.mode_caret, colors_of.mode_visual, colors_of.mode_normal]).size, 3, `${name} ${variant}`);
+    }
+  }
+});
+
+test("moonlight keeps its lualine mode colors and its Search and CurSearch colors", () => {
+  const { dark, light } = load_theme("oasis_moonlight", 3)!;
+  assert.deepEqual([dark.mode_normal, dark.mode_insert, dark.mode_caret, dark.mode_visual, dark.mode_ignore], ["#7fa3c9", "#ffa0a0", "#7fcf78", "#ffba75", "#717a84"]);
+  assert.deepEqual([light.mode_caret, light.mode_visual], ["#356731", "#85460e"]);
+  assert.deepEqual([dark.search_bg, dark.search_fg, dark.search_current_bg, dark.search_current_fg], ["#666666", "#f5f5dc", "#cdc673", "#0c0e13"]);
+  assert.deepEqual([light.search_bg, light.search_fg, light.search_current_bg, light.search_current_fg], ["#e1b69d", "#4e260e", "#dd6f6f", "#350808"]);
 });

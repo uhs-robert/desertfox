@@ -23,6 +23,10 @@ export const ROLES = [
   "mode_ignore",
   "mode_caret",
   "mode_visual",
+  "search_bg",
+  "search_fg",
+  "search_current_bg",
+  "search_current_fg",
 ] as const;
 export type Role = (typeof ROLES)[number];
 
@@ -35,6 +39,9 @@ export type Variant = (typeof VARIANTS)[number];
 // Every role filled, colors as lowercase #rrggbb.
 export type RoleColors = Record<Role, string>;
 export type Theme = Record<Variant, RoleColors>;
+
+// The theme a user's config directory holds under the palette's name, filled by tools/build-config.
+export type LocalTheme = { name: string; colors: Theme };
 
 // A built-in Oasis theme has one dark set and five light sets, one per light intensity. The `light_intensity` setting picks one.
 export const LIGHT_INTENSITIES = [1, 2, 3, 4, 5] as const;

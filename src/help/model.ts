@@ -218,7 +218,7 @@ const ROLE_MEANINGS: Record<Role, string> = {
   bg_core: "Background of a surface",
   bg_mantle: "A surface layered on bg_core, for panels and rows",
   bg_crust: "A second layer on bg_core, lighter than the mantle in a dark theme",
-  selection: "Background of the selected row",
+  selection: "Background of the selected row, and of the selection in visual mode",
   fg_core: "Text color",
   fg_comment: "Secondary text, such as descriptions",
   fg_dim: "Hints, such as the command line usage line",
@@ -236,6 +236,10 @@ const ROLE_MEANINGS: Record<Role, string> = {
   mode_ignore: "Mode badge in ignore mode",
   mode_caret: "Mode badge in caret mode",
   mode_visual: "Mode badge in visual mode",
+  search_bg: "Background of every match of a / search and of the f and t targets",
+  search_fg: "Text on those matches",
+  search_current_bg: "Background of the current match",
+  search_current_fg: "Text on the current match",
 };
 
 export const STYLE_VARIABLES: { name: string; meaning: string }[] = [

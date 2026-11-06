@@ -12,7 +12,6 @@ import { check_args } from "../shared/registry/check_args.ts";
 import type { EnumSources } from "../shared/registry/check_args.ts";
 import { DEFAULT_LIGHT_INTENSITY, DEFAULT_PALETTE } from "../shared/config.ts";
 import { LIGHT_INTENSITIES } from "../shared/theme/roles.ts";
-import { mode_colors_of_theme } from "../shared/mode_colors.ts";
 import { load_theme } from "../shared/theme/load.ts";
 import type { StoredTheme } from "../shared/theme/apply.ts";
 import { compile_keymap } from "../shared/keys/compiler.ts";
@@ -43,7 +42,6 @@ export function compile_config(input: CompileInput): CompileOutput {
   const requested_theme = load_theme(String(requested_palette), light_intensity, input.config.local_theme);
   if (!requested_theme) warnings.push(`settings: palette "${String(requested_palette)}" names no theme, using ${DEFAULT_PALETTE}`);
   const theme = requested_theme ?? load_theme(DEFAULT_PALETTE, light_intensity)!;
-  compiled.mode_colors = mode_colors_of_theme(theme);
 
   for (const [mode, root] of Object.entries(compiled.modes) as [string, TreeBranch][]) {
     check_branch(root, [], mode, input, warnings);

@@ -76,11 +76,6 @@ test("an empty string in the keymap is stored as null to remove a default bindin
   assert.deepEqual(full().keymap.normal?.["gz"], [{ id: "tab.next" }, { id: "tab.next" }]);
 });
 
-test("which_key_border must be square, round or chamfer", () => {
-  const dir = config_dir_with({ "settings.toml": 'which_key_border = "wavy"' });
-  assert.match(problems_of(dir).join("\n"), /settings\.toml: which_key_border: .*chamfer/);
-});
-
 test("mode_indicator must be always, not_normal or off", () => {
   const dir = config_dir_with({ "settings.toml": 'mode_indicator = "yes"' });
   assert.match(problems_of(dir).join("\n"), /settings\.toml: mode_indicator: .*not_normal/);

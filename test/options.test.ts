@@ -61,7 +61,6 @@ test("a value that differs from the default is tagged with where it came from", 
   assert.equal(tag("hint_letters"), "settings.toml");
   // Equal to the default, so no tag even though both sources name it.
   assert.equal(tag("palette"), undefined);
-  assert.equal(tag("which_key_border"), undefined);
 });
 
 test("an optional true or false setting equal to what an absent one reads as is not tagged", () => {
