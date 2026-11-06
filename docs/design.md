@@ -434,6 +434,17 @@ The help page has a sidebar of page links on the left. In a window 40rem wide or
 
 ## Native host (optional)
 
+### Config host (built)
+
+A Python 3.9 stdlib-only host in `host/` (see `host/README.md`), separate from the voxcmd host for now. The extension calls it with one-shot `runtime.sendNativeMessage`, and the host exits after its reply. It has two verbs:
+
+- `read_config`: the raw text of every config file under `~/.config/desertfox/`, keyed by relative path. One reply carries all files, and the host returns a clear error above Firefox's 1 MB reply cap. Nothing is parsed host-side.
+- `write_autoconfig`: writes the saved browser edits to `~/.config/desertfox/autoconfig.toml`, atomically. Nothing loads that file back. Browser storage stays the only source of saved edits.
+
+The host writes no other file. `nativeMessaging` is an optional permission, requested from a button on the Help page that `:native.install` opens (Firefox grants it only from a click). The page also shows `curl ... | sh` for `host/install.sh`. A release build installs the host of its own version from the GitHub release, checked by SHA-256. A development install takes the host from `main` with no checksum, and `--channel main` forces that. `just release` uploads the host, its checksum and the script. Loading config does not use the host yet.
+
+### Oasis host (planned)
+
 One long-lived port from the background to a host program. The host merges the existing voxcmd Firefox host (`extras/voxcmd-firefox` in the dotfiles), so there is one extension and one host.
 
 The verbs are fixed:

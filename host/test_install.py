@@ -1,0 +1,275 @@
+"""Runs install.sh against a temporary HOME with a stubbed curl. Nothing touches the real home folder or the network."""
+import hashlib
+import json
+import os
+import shutil
+import stat
+import subprocess
+import tempfile
+import unittest
+
+from host_under_test import HOST_DIR, HOST_PATH
+
+INSTALL = os.path.join(HOST_DIR, "install.sh")
+RELEASE_BASE = "https://github.com/uhs-robert/desertfox/releases/download/v0.1.5"
+MAIN_BASE = "https://raw.githubusercontent.com/uhs-robert/desertfox/main/host"
+
+# The stub answers each URL from a route file ("url<TAB>path" per line), logs every URL, and fails like `curl -f` for the rest.
+CURL_STUB = """#!/bin/sh
+url=""; out=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -o) out="$2"; shift 2 ;;
+    -*) shift ;;
+    *) url="$1"; shift ;;
+  esac
+done
+echo "$url" >> "$STUB_LOG"
+path=$(awk -F'\\t' -v u="$url" '$1 == u { print $2 }' "$STUB_ROUTES")
+[ -n "$path" ] || exit 22
+cp "$path" "$out"
+"""
+
+TOOLS = ["sh", "mktemp", "head", "grep", "cp", "chmod", "mv", "rm", "mkdir", "awk", "cat", "env", "dirname", "tr", "sed"]
+
+
+def real_tool(name):
+    path = shutil.which(name)
+    if path is None:
+        raise unittest.SkipTest(f"{name} not found")
+    return path
+
+
+class InstallCase(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        root = self.tmp.name
+        self.home = os.path.join(root, "home")
+        self.bin = os.path.join(root, "bin")
+        self.served = os.path.join(root, "served")
+        for directory in (self.home, self.bin, self.served):
+            os.makedirs(directory)
+        self.log = os.path.join(root, "curl.log")
+        self.routes = os.path.join(root, "routes")
+        open(self.log, "w").close()
+        open(self.routes, "w").close()
+        for name in TOOLS:
+            os.symlink(real_tool(name), os.path.join(self.bin, name))
+        os.symlink(real_tool("python3"), os.path.join(self.bin, "python3"))
+        self.write_stub("curl", CURL_STUB)
+        with open(HOST_PATH, "rb") as file:
+            self.host_bytes = file.read()
+
+    def write_stub(self, name, text):
+        path = os.path.join(self.bin, name)
+        if os.path.lexists(path):
+            os.unlink(path)
+        with open(path, "w") as file:
+            file.write(text)
+        os.chmod(path, 0o755)
+
+    def serve(self, url, content):
+        path = os.path.join(self.served, hashlib.sha256(url.encode()).hexdigest())
+        with open(path, "wb") as file:
+            file.write(content)
+        with open(self.routes, "a") as file:
+            file.write(f"{url}\t{path}\n")
+
+    def serve_release(self, host_bytes=None, checksum=None):
+        host_bytes = self.host_bytes if host_bytes is None else host_bytes
+        self.serve(f"{RELEASE_BASE}/desertfox-host", host_bytes)
+        digest = hashlib.sha256(self.host_bytes).hexdigest() if checksum is None else checksum
+        self.serve(f"{RELEASE_BASE}/desertfox-host.sha256", f"{digest}  desertfox-host\n".encode())
+
+    def run_install(self, *args):
+        env = {"PATH": self.bin, "HOME": self.home, "STUB_LOG": self.log, "STUB_ROUTES": self.routes, "TMPDIR": self.tmp.name}
+        return subprocess.run([os.path.join(self.bin, "sh"), INSTALL, *args], env=env, capture_output=True, text=True, timeout=60)
+
+    def curl_urls(self):
+        with open(self.log) as file:
+            return file.read().split()
+
+    @property
+    def host_path(self):
+        return os.path.join(self.home, ".local", "share", "desertfox", "desertfox-host")
+
+    @property
+    def manifest_path(self):
+        return os.path.join(self.home, ".mozilla", "native-messaging-hosts", "desertfox_host.json")
+
+    def home_files(self):
+        found = []
+        for base, _, names in os.walk(self.home):
+            found.extend(os.path.join(base, name) for name in names)
+        return found
+
+    def assert_nothing_installed(self):
+        self.assertEqual(self.home_files(), [])
+
+
+class ReleaseChannelTest(InstallCase):
+    def test_version_installs_from_the_release_and_writes_the_manifest(self):
+        self.serve_release()
+        done = self.run_install("0.1.5")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual(self.curl_urls(), [f"{RELEASE_BASE}/desertfox-host", f"{RELEASE_BASE}/desertfox-host.sha256"])
+        with open(self.host_path, "rb") as file:
+            self.assertEqual(file.read(), self.host_bytes)
+        self.assertTrue(os.stat(self.host_path).st_mode & stat.S_IXUSR)
+        with open(self.manifest_path) as file:
+            manifest = json.load(file)
+        self.assertEqual(manifest["name"], "desertfox_host")
+        self.assertEqual(manifest["path"], self.host_path)
+        self.assertEqual(manifest["type"], "stdio")
+        self.assertEqual(manifest["allowed_extensions"], ["desertfox@uhs-robert"])
+
+    def test_checksum_mismatch_refuses_and_installs_nothing(self):
+        self.serve_release(checksum="0" * 64)
+        done = self.run_install("0.1.5")
+        self.assertNotEqual(done.returncode, 0)
+        self.assertIn("checksum mismatch", done.stderr)
+        self.assert_nothing_installed()
+
+    def test_tampered_host_with_the_real_checksum_file_is_refused(self):
+        self.serve_release(host_bytes=self.host_bytes + b"\nimport os\n")
+        done = self.run_install("0.1.5")
+        self.assertNotEqual(done.returncode, 0)
+        self.assertIn("checksum mismatch", done.stderr)
+        self.assert_nothing_installed()
+
+    def test_mismatch_leaves_an_earlier_install_untouched(self):
+        self.serve_release()
+        self.assertEqual(self.run_install("0.1.5").returncode, 0)
+        self.serve_release(checksum="f" * 64)
+        self.assertNotEqual(self.run_install("0.1.5").returncode, 0)
+        with open(self.host_path, "rb") as file:
+            self.assertEqual(file.read(), self.host_bytes)
+
+    def test_empty_checksum_file_refuses(self):
+        self.serve(f"{RELEASE_BASE}/desertfox-host", self.host_bytes)
+        self.serve(f"{RELEASE_BASE}/desertfox-host.sha256", b"")
+        done = self.run_install("0.1.5")
+        self.assertNotEqual(done.returncode, 0)
+        self.assert_nothing_installed()
+
+    def test_missing_release_asset_reports_the_url(self):
+        done = self.run_install("0.1.5")
+        self.assertNotEqual(done.returncode, 0)
+        self.assertIn(f"{RELEASE_BASE}/desertfox-host", done.stderr)
+        self.assert_nothing_installed()
+
+    def test_rerun_is_idempotent(self):
+        self.serve_release()
+        self.assertEqual(self.run_install("0.1.5").returncode, 0)
+        self.assertEqual(self.run_install("0.1.5").returncode, 0)
+        self.assertEqual(len(self.home_files()), 2)
+
+
+class MainChannelTest(InstallCase):
+    def test_main_fetches_from_the_main_branch_with_no_checksum(self):
+        self.serve(f"{MAIN_BASE}/desertfox-host", self.host_bytes)
+        done = self.run_install("main")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual(self.curl_urls(), [f"{MAIN_BASE}/desertfox-host"])
+        self.assertTrue(os.path.isfile(self.manifest_path))
+
+    def test_channel_flag_overrides_a_version(self):
+        self.serve(f"{MAIN_BASE}/desertfox-host", self.host_bytes)
+        done = self.run_install("0.1.5", "--channel", "main")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual(self.curl_urls(), [f"{MAIN_BASE}/desertfox-host"])
+
+    def test_a_page_that_is_not_the_host_is_refused(self):
+        self.serve(f"{MAIN_BASE}/desertfox-host", b"<html>404</html>\n")
+        done = self.run_install("main")
+        self.assertNotEqual(done.returncode, 0)
+        self.assert_nothing_installed()
+
+
+class ArgumentAndPythonTest(InstallCase):
+    def test_bad_arguments_stop_before_any_fetch(self):
+        for args in ((), ("1.2",), ("0.1.5; rm -rf",), ("--bogus", "main"), ("--channel", "beta", "0.1.5"), ("0.1.5", "0.1.6")):
+            done = self.run_install(*args)
+            self.assertNotEqual(done.returncode, 0, args)
+        self.assertEqual(self.curl_urls(), [])
+        self.assert_nothing_installed()
+
+    def test_without_python3_it_prints_an_error_and_stops(self):
+        os.unlink(os.path.join(self.bin, "python3"))
+        self.serve(f"{MAIN_BASE}/desertfox-host", self.host_bytes)
+        done = self.run_install("main")
+        self.assertNotEqual(done.returncode, 0)
+        self.assertIn("python3 3.9 or newer is required", done.stderr)
+        self.assertEqual(self.curl_urls(), [])
+        self.assert_nothing_installed()
+
+    def test_python_3_8_is_refused(self):
+        os.unlink(os.path.join(self.bin, "python3"))
+        self.write_stub("python3", "#!/bin/sh\ncase \"$*\" in *'sys.version_info >='*) exit 1 ;; *) echo 3.8 ;; esac\n")
+        self.serve(f"{MAIN_BASE}/desertfox-host", self.host_bytes)
+        done = self.run_install("main")
+        self.assertNotEqual(done.returncode, 0)
+        self.assertIn("3.8", done.stderr)
+        self.assert_nothing_installed()
+
+
+GH_STUB = """#!/bin/sh
+echo "$@" >> "$GH_LOG"
+for arg in "$@"; do
+  [ -f "$arg" ] && cp "$arg" "$GH_OUT/"
+done
+exit 0
+"""
+
+
+class ReleaseStepTest(InstallCase):
+    """`just release_publish` against a stubbed gh, then the install script against the assets it would upload."""
+
+    def setUp(self):
+        super().setUp()
+        for tool in ("just", "jq", "sha256sum", "bash", "cat", "cp", "mktemp", "rm"):
+            if shutil.which(tool) is None:
+                self.skipTest(f"{tool} not found")
+        self.gh_out = os.path.join(self.tmp.name, "gh_out")
+        os.makedirs(self.gh_out)
+        self.gh_log = os.path.join(self.tmp.name, "gh.log")
+        self.stub_bin = os.path.join(self.tmp.name, "stub_bin")
+        os.makedirs(self.stub_bin)
+        gh = os.path.join(self.stub_bin, "gh")
+        with open(gh, "w") as file:
+            file.write(GH_STUB)
+        os.chmod(gh, 0o755)
+
+    def publish(self, **extra_env):
+        env = dict(os.environ, PATH=self.stub_bin + os.pathsep + os.environ["PATH"], GH_LOG=self.gh_log, GH_OUT=self.gh_out, **extra_env)
+        return subprocess.run(["just", "release_publish"], cwd=os.path.dirname(HOST_DIR), env=env, capture_output=True, text=True, timeout=60)
+
+    def test_publish_uploads_host_checksum_and_script_for_the_package_version(self):
+        done = self.publish()
+        self.assertEqual(done.returncode, 0, done.stderr)
+        with open(os.path.join(os.path.dirname(HOST_DIR), "package.json")) as file:
+            version = json.load(file)["version"]
+        with open(self.gh_log) as file:
+            logged = file.read()
+        self.assertTrue(logged.startswith(f"release create v{version} "), logged)
+        self.assertEqual(sorted(os.listdir(self.gh_out)), ["desertfox-host", "desertfox-host.sha256", "install.sh"])
+
+    def test_uploaded_assets_install_through_the_script(self):
+        self.assertEqual(self.publish().returncode, 0)
+        base = RELEASE_BASE
+        for name in ("desertfox-host", "desertfox-host.sha256"):
+            with open(os.path.join(self.gh_out, name), "rb") as file:
+                self.serve(f"{base}/{name}", file.read())
+        done = self.run_install("0.1.5")
+        self.assertEqual(done.returncode, 0, done.stderr)
+
+    def test_dry_run_creates_nothing(self):
+        done = self.publish(RELEASE_DRY_RUN="1")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertIn("dry run: gh release create", done.stdout)
+        self.assertFalse(os.path.exists(self.gh_log))
+
+
+if __name__ == "__main__":
+    unittest.main()
