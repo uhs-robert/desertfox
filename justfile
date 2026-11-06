@@ -42,6 +42,10 @@ install_deps:
 build-config dir="" *flags="": build
     node tools/build-config/cli.ts {{ if dir == "" { "" } else { quote(dir) } }} --live {{flags}}
 
+# Python unit tests of the native host and its install script. The install tests use a temporary HOME and a stubbed curl.
+host-test:
+    python3 -m unittest discover -s host -p 'test_*.py'
+
 # Real key presses in a nested session, about a minute. Needs SHADOW_SH, or the shadow skill script in dotfiles, as the nested-session driver.
 key-test: build
     #!/usr/bin/env bash
@@ -133,11 +137,33 @@ release_bump:
     mv "$manifest_tmp" src/manifest.json
     echo "bumped version to $new_version"
 
-# Bump the patch version, sign dist/ and install it for every profile. Fills the AMO key from rbw when either variable is empty. Needs a clean release branch.
+# Create the GitHub release v<package.json version> with the host, its checksum and the install script, so a release build installs the host of its own version. RELEASE_DRY_RUN=1 prints the gh command and creates nothing. The tag lands on the default branch head.
+[private]
+release_publish:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    version=$(jq -r .version package.json)
+    assets=$(mktemp -d)
+    trap 'rm -rf "$assets"' EXIT
+    cp host/desertfox-host host/install.sh "$assets/"
+    (cd "$assets" && sha256sum desertfox-host > desertfox-host.sha256)
+    gh_command=(gh release create "v$version" "$assets/desertfox-host" "$assets/desertfox-host.sha256" "$assets/install.sh" --title "v$version" --notes "Native host $version. The extension's :native.install page shows the command that installs it.")
+    if [ "${RELEASE_DRY_RUN:-}" = "1" ]; then
+        echo "dry run: ${gh_command[*]}"
+        cat "$assets/desertfox-host.sha256"
+        exit 0
+    fi
+    "${gh_command[@]}"
+    echo "created GitHub release v$version"
+
+# Bump the patch version, sign dist/, install it for every profile and create the GitHub release with the native host. Fills the AMO key from rbw when either variable is empty. Needs a clean release branch.
 release:
     #!/usr/bin/env bash
     set -euo pipefail
     just release_guard
+    # Fail before the bump and the signing, so a missing gh login does not leave a signed version with no host release.
+    command -v gh >/dev/null || { echo "release needs gh to create the GitHub release that carries the native host." >&2; exit 1; }
+    gh auth status >/dev/null 2>&1 || { echo "release needs a logged-in gh. Run 'gh auth login', then retry." >&2; exit 1; }
     if [ -z "${WEB_EXT_API_KEY:-}" ] || [ -z "${WEB_EXT_API_SECRET:-}" ]; then
         for tool in rbw jq; do
             command -v "$tool" >/dev/null || { echo "release needs $tool to read the AMO key from rbw. Install it, or set WEB_EXT_API_KEY and WEB_EXT_API_SECRET." >&2; exit 1; }
@@ -160,4 +186,5 @@ release:
     just release_bump
     just sign
     just install
+    just release_publish || { echo "The add-on is signed and installed, but the GitHub release failed. After fixing gh, run 'just release_publish'." >&2; exit 1; }
     echo "Released $(jq -r .version package.json). Commit the bump on this branch and open a PR."

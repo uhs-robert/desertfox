@@ -20,5 +20,6 @@ import "../commands/visual.ts";
 import "../commands/find.ts";
 import "../commands/engine.ts";
 import "../commands/command.ts";
+import "../commands/native.ts";
 // Last, because help.open lists every command defined before it.
 import "../commands/help.ts";

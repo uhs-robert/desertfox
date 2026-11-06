@@ -1,0 +1,192 @@
+#!/usr/bin/env python3
+"""Native-messaging host for the DesertFox Firefox extension.
+
+Firefox starts it for one request: a 4-byte native-endian length, then UTF-8 JSON, on stdin. The host writes one reply
+in the same framing to stdout and exits. It has two verbs and no others:
+
+  {"cmd": "read_config"}
+      -> {"ok": true, "host_version": 1, "config_dir": "...", "config_dir_exists": true, "files": {"keymap.toml": "<text>", ...}}
+  {"cmd": "write_autoconfig", "toml": "<text>"}
+      -> {"ok": true, "host_version": 1, "path": "..."}
+  Any failure -> {"ok": false, "error": "..."}
+
+The host reads the config folder (default ~/.config/desertfox, DESERTFOX_CONFIG_DIR overrides it) and writes exactly one
+file there, autoconfig.toml. It never edits the user's own files, and it parses nothing: the extension owns the TOML.
+Stdout carries only protocol bytes.
+"""
+import json
+import os
+import struct
+import sys
+import tempfile
+import threading
+
+HOST_VERSION = 1
+# Firefox drops a host reply above 1 MiB, so the host refuses to send one and says why.
+MAX_REPLY_BYTES = 1024 * 1024
+# The request size is not limited by Firefox. The host stops reading a request this large, which only a bug would send.
+MAX_REQUEST_BYTES = 4 * 1024 * 1024
+AUTOCONFIG_NAME = "autoconfig.toml"
+AUTOCONFIG_HEADER = (
+    "# Written by DesertFox from the edits saved in the browser. DesertFox never reads this file back.\n"
+    "# Edits here are overwritten. Put your own settings in settings.toml.\n"
+)
+
+# The names the extension's config build knows (src/shared/config_build/source_files.ts). The reader below mirrors
+# tools/build-config/source_files.ts: a file outside these places is reported by name only, with empty text.
+KNOWN_FILES = {"keymap.toml", "search_engines.toml", "command_aliases.toml", "settings.toml", "style.css"}
+KNOWN_DIRS = {"keymap.d", "search_engines.d", "command_aliases.d", "settings.d", "snippets", "style.d", "themes"}
+
+
+class HostError(Exception):
+    """A failure the extension should see as a message."""
+
+
+def config_dir():
+    override = os.environ.get("DESERTFOX_CONFIG_DIR")
+    if override:
+        return override
+    # A relative XDG_CONFIG_HOME is invalid by the XDG spec and ignored.
+    config_home = os.environ.get("XDG_CONFIG_HOME", "")
+    if not os.path.isabs(config_home):
+        config_home = os.path.join(os.path.expanduser("~"), ".config")
+    return os.path.join(config_home, "desertfox")
+
+
+def visible_entries(directory):
+    return sorted(name for name in os.listdir(directory) if not name.startswith("."))
+
+
+def read_text(path):
+    try:
+        with open(path, "rb") as file:
+            return file.read().decode("utf-8", errors="replace")
+    except OSError as error:
+        raise HostError(f"cannot read {path}: {error.strerror or error}") from error
+
+
+def read_files(directory):
+    """Raw text by path relative to `directory`. A folder entry is `<path>/` with empty text, as the tool reader makes it."""
+    files = {}
+    for name in visible_entries(directory):
+        if name == AUTOCONFIG_NAME:
+            continue
+        path = os.path.join(directory, name)
+        if not os.path.isdir(path):
+            files[name] = read_text(path) if name in KNOWN_FILES else ""
+        elif name not in KNOWN_DIRS:
+            files[name + "/"] = ""
+        else:
+            for entry in visible_entries(path):
+                entry_path = os.path.join(path, entry)
+                if os.path.isdir(entry_path):
+                    files[f"{name}/{entry}/"] = ""
+                else:
+                    files[f"{name}/{entry}"] = read_text(entry_path)
+    return files
+
+
+def read_config():
+    directory = config_dir()
+    if not os.path.isdir(directory):
+        return {"config_dir": directory, "config_dir_exists": False, "files": {}}
+    try:
+        files = read_files(directory)
+    except OSError as error:
+        raise HostError(f"cannot list {directory}: {error.strerror or error}") from error
+    return {"config_dir": directory, "config_dir_exists": True, "files": files}
+
+
+def write_autoconfig(toml_text):
+    """Writes autoconfig.toml under a temporary name and renames it, so a reader never sees half a file."""
+    if not isinstance(toml_text, str):
+        raise HostError("write_autoconfig needs a string field toml")
+    directory = config_dir()
+    path = os.path.join(directory, AUTOCONFIG_NAME)
+    try:
+        os.makedirs(directory, exist_ok=True)
+        descriptor, temporary = tempfile.mkstemp(dir=directory, prefix=".autoconfig-", suffix=".tmp")
+    except OSError as error:
+        raise HostError(f"cannot write {path}: {error.strerror or error}") from error
+    try:
+        with os.fdopen(descriptor, "wb") as file:
+            file.write((AUTOCONFIG_HEADER + toml_text).encode("utf-8"))
+            file.flush()
+            os.fsync(file.fileno())
+        os.chmod(temporary, 0o644)
+        os.replace(temporary, path)
+    except BaseException as error:
+        try:
+            os.unlink(temporary)
+        except OSError:
+            pass
+        if isinstance(error, OSError):
+            raise HostError(f"cannot write {path}: {error.strerror or error}") from error
+        raise
+    return {"path": path}
+
+
+def handle(request):
+    if not isinstance(request, dict):
+        raise HostError("the request must be a JSON object")
+    cmd = request.get("cmd")
+    if cmd == "read_config":
+        return read_config()
+    if cmd == "write_autoconfig":
+        return write_autoconfig(request.get("toml"))
+    raise HostError(f"unknown cmd: {cmd!r}")
+
+
+class Channel:
+    """The extension's end of the pipe. The lock keeps a reply in one piece if a second writer is ever added."""
+
+    def __init__(self, stdin, stdout):
+        self.stdin = stdin
+        self.stdout = stdout
+        self.write_lock = threading.Lock()
+
+    def read_message(self):
+        header = self.stdin.read(4)
+        if len(header) < 4:
+            return None
+        length = struct.unpack("=I", header)[0]
+        if length > MAX_REQUEST_BYTES:
+            raise HostError(f"the request is {length} bytes, over the {MAX_REQUEST_BYTES} byte limit")
+        data = self.stdin.read(length)
+        if len(data) < length:
+            raise HostError("the request ended before its announced length")
+        try:
+            return json.loads(data)
+        except ValueError as error:
+            raise HostError(f"the request is not valid JSON: {error}") from error
+
+    def send(self, message):
+        data = json.dumps(message, ensure_ascii=False).encode("utf-8")
+        if len(data) > MAX_REPLY_BYTES:
+            data = json.dumps(
+                {"ok": False, "error": f"the reply is {len(data)} bytes, over Firefox's {MAX_REPLY_BYTES} byte limit for a host reply. Shrink the snippets or CSS in {config_dir()}."}
+            ).encode("utf-8")
+        with self.write_lock:
+            self.stdout.write(struct.pack("=I", len(data)) + data)
+            self.stdout.flush()
+
+
+def serve(channel):
+    """Answers one request. Returns 0 when it replied, 1 when stdin closed with no request."""
+    try:
+        request = channel.read_message()
+        if request is None:
+            return 1
+        reply = {"ok": True, "host_version": HOST_VERSION, **handle(request)}
+    except HostError as error:
+        reply = {"ok": False, "host_version": HOST_VERSION, "error": str(error)}
+    channel.send(reply)
+    return 0
+
+
+def main():
+    return serve(Channel(sys.stdin.buffer, sys.stdout.buffer))
+
+
+if __name__ == "__main__":
+    sys.exit(main())

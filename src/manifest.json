@@ -50,6 +50,9 @@
     "sessions",
     "<all_urls>"
   ],
+  "optional_permissions": [
+    "nativeMessaging"
+  ],
   "browser_action": {
     "default_title": "DesertFox",
     "default_icon": "icons/desertfox.svg"
