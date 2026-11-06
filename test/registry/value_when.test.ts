@@ -53,3 +53,28 @@ test("define refuses a default arm that its own value rule forbids", () => {
   assert.doesNotThrow(() => define(["images"]));
   assert.throws(() => define(["images", "buttons"]), /refused by value_when/);
 });
+
+test("define refuses a plain default that its own rule forbids", () => {
+  const define = (plain: string, allowed: string[]) => create_registry().define("demo.run", input_with([
+    action({ default: plain, value_when: { tab: { filter: allowed } } }),
+    filter,
+  ]));
+  assert.doesNotThrow(() => define("here", ["links"]));
+  assert.throws(() => define("tab", ["links", "images"]), /refused by value_when/);
+  assert.doesNotThrow(() => define("tab", ["links", "buttons", "images"]));
+  const list = (allowed: string[]) => create_registry().define("demo.run", input_with([
+    action({ default: [{ value: "copy", when: { filter: ["links"] } }, "tab"], value_when: { tab: { filter: allowed } } }),
+    filter,
+  ]));
+  assert.throws(() => list(["links"]), /refused by value_when/);
+});
+
+test("a context source in a rule sibling passes until the router expands it", () => {
+  const demo = create_registry().define("demo.run", input_with([
+    action({ default: "here", value_when: { tab: { query: ["a"] } } }),
+    { name: "query", type: "string", default: "a" },
+  ]));
+  assert.equal(check_args(demo, { action: "tab", query: { from: "selection" } }).ok, true);
+  assert.equal(check_args(demo, { action: "tab", query: "b" }).ok, false);
+  assert.equal(check_args(demo, { action: "tab", query: "a" }).ok, true);
+});

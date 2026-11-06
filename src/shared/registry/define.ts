@@ -187,6 +187,14 @@ function check_value_when(input: CommandInput, param: ParamDef, at: string, fail
     check_when(input, { ...param, when: rule }, here, fail, { allow_several: true });
   }
   const list = param.default;
+  // A plain default applies under any sibling value, so its rule must allow every value of each sibling it names.
+  const plain = is_default_list(list) ? list[list.length - 1] : list;
+  const plain_rule = typeof plain === "string" ? param.value_when?.[plain] : undefined;
+  for (const [name, allowed] of Object.entries(plain_rule ?? {})) {
+    const sibling_values = static_values(find_param(input, name) as ParamDef) ?? [];
+    const refused = sibling_values.filter((value) => !allowed.includes(value));
+    if (refused.length > 0 || sibling_values.length === 0) fail(`${at}.default`, `value "${plain}" is refused by value_when under ${name} ${refused.join(", ")}`);
+  }
   if (!is_default_list(list)) return;
   list.forEach((item, index) => {
     if (typeof item !== "object" || item === null) return;
