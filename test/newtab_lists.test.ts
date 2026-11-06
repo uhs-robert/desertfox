@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { bookmark_rows, link_sections, read_sections, recent_tab_rows, type PageReaders, type TabWithUse } from "../src/newtab/lists.ts";
 import { SETTING_SPECS } from "../src/shared/settings_schema.ts";
 import { effective_settings } from "../src/shared/config.ts";
-import { build_schemas } from "../tools/build-config/schemas.ts";
+import { build_schemas } from "../src/shared/config_build/schemas.ts";
 
 const tab = (id: number, url: string, last: number, extra: Partial<TabWithUse> = {}): TabWithUse => ({ id, windowId: 1, index: id, url, title: `T${id}`, incognito: false, lastAccessed: last, ...extra });
 const TABS = [tab(1, "https://a.example/", 10), tab(2, "https://b.example/", 30), tab(3, "https://c.example/", 20), tab(4, "https://p.example/", 99, { incognito: true }), tab(5, "about:newtab", 50)];

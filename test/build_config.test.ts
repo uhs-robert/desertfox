@@ -4,12 +4,12 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
 import { build_config, read_commands_file } from "../tools/build-config/build_config.ts";
-import { ConfigErrors } from "../tools/build-config/errors.ts";
+import { ConfigErrors } from "../src/shared/config_build/errors.ts";
 import { resolved_engines_text, write_managed_storage, write_schemas } from "../tools/build-config/output.ts";
 import { fill_template } from "../src/shared/engines/index.ts";
-import { build_schemas } from "../tools/build-config/schemas.ts";
+import { build_schemas } from "../src/shared/config_build/schemas.ts";
 import { build_commands_file, create_registry } from "../src/shared/registry/index.ts";
-import { parse_snippet } from "../tools/build-config/snippet.ts";
+import { parse_snippet } from "../src/shared/config_build/snippet.ts";
 
 const FIXTURES = join(import.meta.dirname, "fixtures", "build-config");
 const commands = read_commands_file(join(FIXTURES, "commands.json"));

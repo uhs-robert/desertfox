@@ -1,5 +1,5 @@
 // Every setting, written once: its kind, its values and its default. `settings_schema.ts` derives the check, the
-// expectation text and the listed values from a row, `tools/build-config/schemas.ts` derives the editor schema,
+// expectation text and the listed values from a row, `src/shared/config_build/schemas.ts` derives the editor schema,
 // `just settings-defaults` writes the defaults to `default_settings.ts`, and the `Settings` type follows below.
 // Data only, so the bundles that check settings (the command line page among them) carry no prose: the editor
 // descriptions live in `settings_docs.ts`.

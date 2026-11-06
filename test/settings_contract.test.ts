@@ -7,7 +7,7 @@ import { DEFAULT_SETTINGS, effective_settings } from "../src/shared/config.ts";
 import { parse_setting_words, SETTING_NAMES, SETTING_SPECS } from "../src/shared/settings_schema.ts";
 import { enabled_widgets } from "../src/newtab/render.ts";
 import { read_sections } from "../src/newtab/lists.ts";
-import { settings_schema } from "../tools/build-config/schemas.ts";
+import { settings_schema } from "../src/shared/config_build/schemas.ts";
 
 const EXPECTATIONS: Record<string, string> = {
   which_key_delay_ms: "a number of milliseconds, 0 or more",

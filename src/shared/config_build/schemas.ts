@@ -1,9 +1,9 @@
 // JSON Schemas for the data files, cut from `commands.json`, so an editor
 // (Taplo reads them for TOML) completes command names and setting names.
 
-import type { CommandMeta } from "../../src/shared/command.ts";
-import { SETTING_DOCS } from "../../src/shared/settings_docs.ts";
-import { SETTINGS_TABLE, type SettingName, type SettingRow } from "../../src/shared/settings_table.ts";
+import type { CommandMeta } from "../command.ts";
+import { SETTING_DOCS } from "../settings_docs.ts";
+import { SETTINGS_TABLE, type SettingName, type SettingRow } from "../settings_table.ts";
 import { KEYMAP_MODES } from "./merge.ts";
 import type { DataKind } from "./source_files.ts";
 

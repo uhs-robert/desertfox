@@ -15,7 +15,7 @@ import { COMPILED_KEYMAP_STORAGE_KEY } from "../src/shared/prefix_tree.ts";
 import type { TreeBranch, TreeLeaf } from "../src/shared/prefix_tree.ts";
 import { build_commands_file, registry } from "../src/shared/registry/index.ts";
 import { build_config } from "../tools/build-config/build_config.ts";
-import { ConfigErrors } from "../tools/build-config/errors.ts";
+import { ConfigErrors } from "../src/shared/config_build/errors.ts";
 
 const commands = build_commands_file(registry).commands;
 

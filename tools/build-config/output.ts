@@ -4,7 +4,7 @@ import { mkdirSync, renameSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import type { MergedConfig, SearchEngine } from "../../src/shared/config.ts";
-import type { DataKind } from "./source_files.ts";
+import type { DataKind } from "../../src/shared/config_build/source_files.ts";
 
 export const EXTENSION_ID = "desertfox@uhs-robert";
 
