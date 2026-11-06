@@ -5,11 +5,13 @@ import type { LocalTheme } from "../mode_colors.ts";
 import { OASIS_THEMES, REPO_THEMES } from "../themes.ts";
 import { LIGHT_INTENSITIES, ROLES } from "./roles.ts";
 import type { LightIntensity, OasisTheme, RoleColors, Theme } from "./roles.ts";
+import { parse_color } from "./theme_file.ts";
 
 // Managed storage can be edited by hand, so a local theme's shape is not taken on trust. Every role is needed, because the
-// stored theme sets every token and a missing one would leave a surface on its fallback.
+// stored theme sets every token and a missing one would leave a surface on its fallback. A value that is not a hex color
+// would be published as an invalid CSS declaration, so it fails the same check the theme files pass.
 function has_all_roles(colors: unknown): colors is Theme {
-  const variant_usable = (variant: unknown) => typeof variant === "object" && variant !== null && ROLES.every((role) => typeof (variant as Record<string, unknown>)[role] === "string");
+  const variant_usable = (variant: unknown) => typeof variant === "object" && variant !== null && ROLES.every((role) => parse_color((variant as Record<string, unknown>)[role]) !== undefined);
   return typeof colors === "object" && colors !== null && variant_usable((colors as Theme).dark) && variant_usable((colors as Theme).light);
 }
 

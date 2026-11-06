@@ -14,3 +14,11 @@ test("a local theme missing a role is not used, and the name falls back to the b
   assert.equal(load_theme("mine", 3, { name: "mine", colors: { dark: partial, light: colors } } as never), undefined);
   assert.notEqual(load_theme("oasis_moonlight", 3, { name: "oasis_moonlight", colors: { dark: partial, light: colors } } as never)?.dark.primary, "#88aaff");
 });
+
+test("a local theme with an empty or non-hex role value is not used", () => {
+  for (const bad of ["", "not-a-color"]) {
+    const broken = { ...colors, primary: bad };
+    assert.equal(load_theme("mine", 3, { name: "mine", colors: { dark: broken, light: colors } }), undefined);
+    assert.equal(load_theme("mine", 3, { name: "mine", colors: { dark: colors, light: broken } }), undefined);
+  }
+});
