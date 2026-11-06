@@ -73,7 +73,7 @@ Run `just test` before every commit. Run `just key-test` after a change to keys,
 
 ## Planning
 
-`.plans/<topic>/<topic>.md` holds the tracker for work in progress, with its plan drafts beside it. `.logs/<topic>/` holds evidence: check output, review notes, PR bodies. Git ignores both. At the end of a topic, move anything durable into the repo, then delete them. A status goes into the docs. A decision's reason goes beside the code it explains.
+`.plans/` holds the trackers for work in progress and `.logs/` holds evidence: check output, review notes, PR bodies. Git ignores both. At the end of a topic, move anything durable into the repo, then delete them. A status goes into the docs. A decision's reason goes beside the code it explains.
 
 ## Git
 
