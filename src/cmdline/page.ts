@@ -5,7 +5,8 @@
 import { create_matcher, event_to_token } from "../shared/keys/index.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY } from "../shared/prefix_tree.ts";
 import type { CompiledKeymap } from "../shared/prefix_tree.ts";
-import { check_args, parse_command_line } from "../shared/registry/index.ts";
+import { check_args_shape } from "../shared/registry/check_shape.ts";
+import { parse_command_line } from "../shared/registry/command_line.ts";
 import type { CmdlineOpened, CompleteItemsAnswer, ContentToBackground, HeadingItem, TabRowsActionAnswer, TabModelMessage, TabModelRequest } from "../shared/messages.ts";
 import { TAB_MODEL_PORT_NAME } from "../shared/tab_model_port.ts";
 import { create_live_source } from "./completion/live.ts";
@@ -135,7 +136,7 @@ async function open_line(start: Start, port: MessagePort): Promise<void> {
     // Only a missing value is caught here. The router still checks everything else when it runs the command.
     precheck: (invocation) => {
       const command = lookup.find(invocation.id);
-      const checked = command && check_args(command, invocation.args, opened.sources);
+      const checked = command && check_args_shape(command, invocation.args, opened.sources);
       return checked && !checked.ok && checked.missing_param !== undefined ? checked.error : undefined;
     },
   });
