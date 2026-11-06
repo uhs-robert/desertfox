@@ -22,7 +22,7 @@ A note "(prompts)" means the binding sets a `prompt` for a param, so the command
 
 <!-- BEGIN generated -->
 
-bound: 219 (normal 141, hint 2, cmdline 13, caret 26, visual 32, insert 1, ignore 1, browser 3) | later: 14 | dropped: 6
+bound: 223 (normal 141, hint 2, cmdline 13, caret 30, visual 32, insert 1, ignore 1, browser 3) | later: 14 | dropped: 6
 
 ### normal
 
@@ -245,8 +245,12 @@ Which-key group names:
 | `v` | bound | `mode visual` | Set mode |  |
 | `<Escape>` | bound | `mode.escape` | Escape |  |
 | `<C-[>` | bound | `mode.escape` | Escape |  |
+| `/` | bound | `find` | Find forward |  |
+| `?` | bound | `find --backward` | Find backward |  |
 | `*` | bound | `find --word` | Find word forward |  |
 | `#` | bound | `find --backward --word` | Find word backward |  |
+| `n` | bound | `find.next` | Next match |  |
+| `N` | bound | `find.prev` | Previous match |  |
 | `h` | bound | `caret.move --char --back` | Move caret |  |
 | `l` | bound | `caret.move --char` | Move caret |  |
 | `j` | bound | `caret.move --line` | Move caret |  |

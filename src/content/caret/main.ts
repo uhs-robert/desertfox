@@ -34,7 +34,7 @@ type SelectionEnds = { selection: Selection; ends: unknown[] };
 let session: Session | undefined;
 // Counts visual starts, so a copy can tell its own visual run from a later one in the same session.
 let visual_runs = 0;
-// The visual session a `/` or `?` started from. The command line takes the mode while it is open, and the session waits for the end of the search.
+// The caret or visual session a `/` or `?` started from. The command line takes the mode while it is open, and the session waits for the end of the search.
 let searching_from: Session | undefined;
 
 // `f` arms this and the next printable key is its target. A count arrives as repeated calls of the handler, which add to `count`.
@@ -361,18 +361,18 @@ function word_target(): { pattern: string; from: DomPoint } | string {
   return { pattern, from: model.point_at(first) };
 }
 
-// A visual session searches from its caret, so it first catches up with the page. Other modes have nothing to catch up.
-const visual_session_now = () => (session?.mode === "visual" ? ensure_session("visual") : undefined);
+// A session searches from its caret, so it first catches up with the page. Normal mode has no session.
+const open_session_now = () => (session ? ensure_session(session.mode) : undefined);
 
-// `n` and `N`: step to the match, and a visual session takes its caret end there.
+// `n` and `N`: step to the match, and an open session takes its caret there.
 async function find_step(reverse: boolean): Promise<Outcome> {
-  const started = visual_session_now();
+  const started = open_session_now();
   if (typeof started === "string") return { ok: false, message: started };
   const outcome = await find.step(reverse, started && started.model.point_at(started.cursor.caret));
   const open = session;
-  const landed = open?.mode === "visual" && outcome.ok && !("cancelled" in outcome && outcome.cancelled) ? find.position(open.model) : undefined;
+  const landed = open && outcome.ok && !("cancelled" in outcome && outcome.cancelled) ? find.position(open.model) : undefined;
   if (open && landed !== undefined) {
-    open.cursor = with_caret(open.cursor, landed, true);
+    open.cursor = with_caret(open.cursor, landed, open.mode === "visual");
     open.goal_x = undefined;
     paint(open);
   }
@@ -381,7 +381,7 @@ async function find_step(reverse: boolean): Promise<Outcome> {
 
 // `*` and `#`: search for the word or selection at once, and let an open session follow the match.
 async function find_word(direction: "forward" | "backward"): Promise<Outcome> {
-  const started = visual_session_now();
+  const started = open_session_now();
   if (typeof started === "string") return { ok: false, message: started };
   const target = word_target();
   if (typeof target === "string") return { ok: false, message: target };
@@ -396,15 +396,15 @@ async function find_word(direction: "forward" | "backward"): Promise<Outcome> {
   return outcome;
 }
 
-// The search line closed on a visual session. Enter takes the caret end to the match, and either way the mode goes back to visual.
-async function end_visual_search(from: Session, keep: boolean): Promise<void> {
+// The search line closed on a session. Enter takes the caret to the match, and either way the mode goes back to the session's.
+async function end_session_search(from: Session, keep: boolean): Promise<void> {
   if (session !== from) return;
   const landed = keep ? find.position(from.model) : undefined;
   if (landed !== undefined) {
-    from.cursor = with_caret(from.cursor, landed, true);
+    from.cursor = with_caret(from.cursor, landed, from.mode === "visual");
     from.goal_x = undefined;
   }
-  page.desertfox_host.set_mode("visual");
+  page.desertfox_host.set_mode(from.mode);
 }
 
 // A bundle may run twice, and a second run would hold fresh state next to the first.
@@ -417,7 +417,7 @@ if (!page.desertfox_caret_ready) {
   page.desertfox_host.register_handler("find.open", (args) => {
     const direction = args.direction === "backward" ? "backward" : "forward";
     if (args.source === "word") return find_word(direction);
-    const started = visual_session_now();
+    const started = open_session_now();
     if (typeof started === "string") return { ok: false, message: started };
     searching_from = started;
     find.begin(direction, started?.model.point_at(started.cursor.caret));
@@ -432,7 +432,7 @@ if (!page.desertfox_caret_ready) {
     await find.end(keep);
     const from = searching_from;
     searching_from = undefined;
-    if (from) await end_visual_search(from, keep);
+    if (from) await end_session_search(from, keep);
   });
   page.desertfox_host.register_handler("find.clear", () => find.clear());
 }

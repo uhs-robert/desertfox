@@ -243,8 +243,12 @@ export const DEFAULT_KEYMAP: KeymapConfig = {
     v: { id: "mode.set", args: { mode: "visual" } },
     "<Escape>": { id: "mode.escape" },
     "<C-[>": { id: "mode.escape" },
+    "/": { id: "find.open", label: "Find forward" },
+    "?": { id: "find.open", args: { direction: "backward" }, label: "Find backward" },
     "*": { id: "find.open", args: { source: "word" }, label: "Find word forward" },
     "#": { id: "find.open", args: { source: "word", direction: "backward" }, label: "Find word backward" },
+    n: { id: "find.next" },
+    N: { id: "find.prev" },
     ...MOTIONS,
   },
   visual: {
