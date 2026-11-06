@@ -13,7 +13,9 @@
 
 ## 🦊 What it is
 
-DesertFox lets you browse the web without the mouse. Click any link, button or image with a few keystrokes. Switch tabs, search the page and copy links from the keyboard. Press `g?` to see every key.
+DesertFox brings Vim-style keys to Firefox, so you can browse the web without the mouse. Click any link, button or image with a few keystrokes. Switch tabs, search the page and copy links from the keyboard.
+
+The keys follow Vim habits: modes, `hjkl` to scroll, `gg` and `G` to jump, `yy` to copy, `/` to search and counts. If you do not know Vim, press `g?` to see every key. A short pause after a key lists the keys that can follow.
 
 > [!WARNING]
 > DesertFox is under construction.
