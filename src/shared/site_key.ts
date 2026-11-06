@@ -11,6 +11,28 @@ const IPV4 = /^\d{1,3}(?:\.\d{1,3}){3}$/;
 const OTHER: SiteKey = { key: "other:", label: "Other pages", kind: "other" };
 
 export function site_key(url: string): SiteKey {
+  // The reader page is its own site only in name: it shows the page in `url`.
+  // A loop, not recursion: a deeply nested URL must not exhaust the call stack.
+  let target = url;
+  for (;;) {
+    const wrapped = reader_target(target);
+    if (wrapped === null) break;
+    target = wrapped;
+  }
+  return classify(target);
+}
+
+// The URL a reader page shows, or null when `url` is not a reader page.
+function reader_target(url: string): string | null {
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "about:" && parsed.pathname === "reader" ? parsed.searchParams.get("url") : null;
+  } catch {
+    return null;
+  }
+}
+
+function classify(url: string): SiteKey {
   let parsed: URL;
   try {
     parsed = new URL(url);
@@ -24,11 +46,7 @@ export function site_key(url: string): SiteKey {
     const uuid = parsed.hostname.toLowerCase();
     return uuid === "" ? OTHER : { key: `moz-extension:${uuid}`, label: `Extension ${uuid}`, kind: "extension" };
   }
-  if (protocol === "about:") {
-    // The reader page is its own site only in name: it shows the page in `url`.
-    const wrapped = parsed.pathname === "reader" ? parsed.searchParams.get("url") : null;
-    return wrapped === null ? { key: "about:", label: "Firefox pages", kind: "internal" } : site_key(wrapped);
-  }
+  if (protocol === "about:") return { key: "about:", label: "Firefox pages", kind: "internal" };
   if (protocol === "view-source:") return site_key(url.slice("view-source:".length));
   return OTHER;
 }

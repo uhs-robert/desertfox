@@ -42,3 +42,8 @@ test("tabs of one site share a key and a subdomain is another site", () => {
   assert.equal(site_key("https://www.github.com/a").key, site_key("http://github.com:81/b").key);
   assert.notEqual(site_key("https://docs.github.com").key, site_key("https://github.com").key);
 });
+
+test("site_key unwraps deeply nested reader pages without exhausting the stack", () => {
+  const nested = `${"about:reader?url=".repeat(12_000)}https://example.org/`;
+  assert.equal(site_key(nested).key, "example.org");
+});
