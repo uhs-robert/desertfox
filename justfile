@@ -19,7 +19,7 @@ build: install_deps
     npm run --silent typecheck
     npm run --silent build
 
-# Check docs/keymap.md and src/shared/themes.ts are current, then run the unit tests from TypeScript source by Node's type stripping.
+# Check no old-name tokens remain, docs/keymap.md and src/shared/themes.ts are current, then run the unit tests from TypeScript source by Node's type stripping.
 test: install_deps
     #!/usr/bin/env bash
     set -euo pipefail
