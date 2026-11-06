@@ -445,3 +445,9 @@ test("a tab torn off into a new window is active there, one moved into a window 
   assert.ok(joined.type === "patch");
   assert.deepEqual(joined.upserts.filter((r) => r.id === 2).map((r) => r.active), [false]);
 });
+
+test("a port named after an object prototype member is refused", async () => {
+  const f = make([tab(1, 1, 0)]);
+  await f.model.start();
+  assert.equal(f.connect_port({ name: "constructor" }).messages.length, 0);
+});

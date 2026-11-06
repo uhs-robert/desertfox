@@ -301,7 +301,7 @@ export function create_tab_model(deps: TabModelDeps) {
   );
 
   deps.on_connect.addListener((port) => {
-    if (!(port.name in PORT_PRIVACY) || !deps.is_extension_page(port)) return;
+    if (!Object.hasOwn(PORT_PRIVACY, port.name) || !deps.is_extension_page(port)) return;
     const sender_tab = port.sender?.tab;
     const state: PortState = { port, incognito: sender_tab ? sender_tab.incognito === true : PORT_PRIVACY[port.name], rev: 0, ready: false };
     ports.add(state);
