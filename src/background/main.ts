@@ -1,6 +1,7 @@
 import "./command_modules.ts";
 import type { ContentToBackground } from "../shared/messages.ts";
 import type { BoundInvocation } from "../shared/invocation.ts";
+import { DEFAULT_SETTINGS, effective_settings } from "../shared/config.ts";
 import { bundle_loader_deps, container_names, make_router_deps, page_of, reinject_deps } from "./browser_deps.ts";
 import { open_quick_start_on_install } from "./first_install.ts";
 import { create_cmdline_service } from "./cmdline_service.ts";
@@ -47,7 +48,7 @@ const cmdline = create_cmdline_service({
   sources: async () => ({ search_engines: await get_search_engine_names(), containers: await container_names() }),
   page_config: async () => {
     const config = await get_config();
-    return { commands: registry.list().map(command_meta), help_ids: [...built_in_ids], command_aliases: config.command_aliases, css: config.css, ...(config.settings.cmdline_prompt !== undefined && { prompt: config.settings.cmdline_prompt }) };
+    return { commands: registry.list().map(command_meta), help_ids: [...built_in_ids], command_aliases: config.command_aliases, css: config.css, prompt: effective_settings(config.settings).cmdline_prompt };
   },
 });
 
@@ -64,14 +65,14 @@ const complete_items = create_complete_items({
   ...browser_complete_items_deps,
   previous_tab: previous_tabs.previous_of,
   is_opener: cmdline.is_opener,
-  all_windows: async () => (await get_config()).settings.completion_all_windows === true,
+  all_windows: async () => effective_settings((await get_config()).settings).completion_all_windows,
   search_engines: async () => (await get_config()).search_engines,
   page_of,
   read_tab: (tab_id) => browser.tabs.get(tab_id).catch(() => undefined),
   discard: { ...browser_discard_deps, alternate_of: previous_tabs.previous_of },
   open_settings: async () => {
-    const { open_completion, history_completion_max } = (await get_config()).settings;
-    return { sources: open_completion ?? ["bookmarks", "history"], history_max: history_completion_max ?? 10 };
+    const { open_completion, history_completion_max } = effective_settings((await get_config()).settings);
+    return { sources: open_completion, history_max: history_completion_max };
   },
 });
 
@@ -140,7 +141,7 @@ browser.runtime.onInstalled.addListener(({ reason }) => {
   void open_quick_start_on_install(
     {
       reason,
-      open_on_install: () => get_config().then((config) => config.settings.open_quick_start_on_install !== false, () => true),
+      open_on_install: () => get_config().then((config) => effective_settings(config.settings).open_quick_start_on_install, () => DEFAULT_SETTINGS.open_quick_start_on_install),
       open_tab: (url) => browser.tabs.create({ url }),
     },
     (file) => browser.runtime.getURL(file),

@@ -1,4 +1,4 @@
-import { resolve_new_tab_page } from "../shared/config.ts";
+import { effective_settings, resolve_new_tab_page } from "../shared/config.ts";
 import { load_effective_config } from "../background/config_load.ts";
 import { render_new_tab } from "./render.ts";
 import { follow_theme } from "../shared/theme/apply.ts";
@@ -14,7 +14,7 @@ async function main(): Promise<void> {
       // A URL that passed the checks and still fails to load leaves the built-in page, not a blank tab.
     }
   }
-  render_new_tab(document.body, config.settings);
+  render_new_tab(document.body, effective_settings(config.settings));
 }
 
 follow_theme(":root");

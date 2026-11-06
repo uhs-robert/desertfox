@@ -4,7 +4,7 @@ import { browser_page_readers, read_sections, type ListSection, type PageReaders
 import { draw_clock } from "./clock.ts";
 import { draw_digital_clock } from "./digital_clock.ts";
 
-type WidgetSettings = Pick<Partial<Settings>, "newtab_clock" | "newtab_date" | "newtab_clock_format" | "newtab_bookmarks" | "newtab_bookmarks_max" | "newtab_recent_tabs" | "newtab_recent_tabs_max" | "newtab_links">;
+type WidgetSettings = Pick<Settings, "newtab_clock" | "newtab_date" | "newtab_clock_format" | "newtab_bookmarks" | "newtab_bookmarks_max" | "newtab_recent_tabs" | "newtab_recent_tabs_max" | "newtab_links">;
 
 // Each widget needs only to be not `false`. The clock is analog unless set to "digital".
 export function enabled_widgets(settings: WidgetSettings) {
@@ -53,7 +53,7 @@ export function draw_sections(sections: readonly ListSection[]): HTMLElement {
   return lists;
 }
 
-export function render_new_tab(body: HTMLElement, settings: WidgetSettings = {}, readers: PageReaders = browser_page_readers): void {
+export function render_new_tab(body: HTMLElement, settings: WidgetSettings, readers: PageReaders = browser_page_readers): void {
   const page = document.createElement("main");
   page.className = "desertfox-newtab";
   body.prepend(page);
@@ -71,7 +71,7 @@ export function render_new_tab(body: HTMLElement, settings: WidgetSettings = {},
   slot.append(time_block);
   page.append(slot);
 
-  const clock = !enabled.clock ? null : enabled.clock_style === "digital" ? draw_digital_clock(settings.newtab_clock_format ?? 12) : draw_clock();
+  const clock = !enabled.clock ? null : enabled.clock_style === "digital" ? draw_digital_clock(settings.newtab_clock_format) : draw_clock();
   if (clock) time_block.append(clock.element);
   const date = document.createElement("h3");
   date.className = "date";

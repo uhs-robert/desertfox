@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { bookmark_rows, link_sections, read_sections, recent_tab_rows, type PageReaders, type TabWithUse } from "../src/newtab/lists.ts";
 import { SETTING_SPECS } from "../src/shared/settings_schema.ts";
+import { effective_settings } from "../src/shared/config.ts";
 import { build_schemas } from "../tools/build-config/schemas.ts";
 
 const tab = (id: number, url: string, last: number, extra: Partial<TabWithUse> = {}): TabWithUse => ({ id, windowId: 1, index: id, url, title: `T${id}`, incognito: false, lastAccessed: last, ...extra });
@@ -28,18 +29,18 @@ test("bookmarks: newest added first, web addresses only, capped", () => {
 test("lists are empty when the flags are off, and the readers never run", async () => {
   let reads = 0;
   const counting = readers({ query_tabs: async () => (reads++, TABS), bookmark_tree: async () => (reads++, TREE) });
-  assert.deepEqual(await read_sections({}, counting), []);
-  assert.deepEqual(await read_sections({ newtab_bookmarks: false, newtab_recent_tabs: false }, counting), []);
+  assert.deepEqual(await read_sections(effective_settings({}), counting), []);
+  assert.deepEqual(await read_sections(effective_settings({ newtab_bookmarks: false, newtab_recent_tabs: false }), counting), []);
   assert.equal(reads, 0);
 });
 
 test("lists follow their flags and maxes", async () => {
-  const sections = await read_sections({ newtab_bookmarks: true, newtab_bookmarks_max: 1, newtab_recent_tabs: true }, readers());
+  const sections = await read_sections(effective_settings({ newtab_bookmarks: true, newtab_bookmarks_max: 1, newtab_recent_tabs: true }), readers());
   assert.deepEqual(sections.map((section) => [section.title, section.rows.length]), [["Recent tabs", 3], ["Bookmarks", 1]]);
 });
 
 test("a failing reader leaves its list out", async () => {
-  const sections = await read_sections({ newtab_bookmarks: true, newtab_recent_tabs: true }, readers({ query_tabs: async () => Promise.reject(new Error("no")) }));
+  const sections = await read_sections(effective_settings({ newtab_bookmarks: true, newtab_recent_tabs: true }), readers({ query_tabs: async () => Promise.reject(new Error("no")) }));
   assert.deepEqual(sections.map((section) => section.title), ["Bookmarks"]);
 });
 
