@@ -15,16 +15,16 @@ define("mode.set", {
     },
   ],
   runs_in: "content",
-  modes: ["normal", "insert", "ignore", "caret"],
+  modes: ["normal", "insert", "ignore", "caret", "visual", "visual_line"],
   run: mode_set.run,
 });
 
 define("mode.escape", {
   completion: "hidden",
   label: "Escape",
-  intent: "Return to normal mode. It works from insert, hint, command line, caret and visual mode, and drops the focus from the field.",
+  intent: "Return to normal mode. It works from insert, hint, command line, caret and both visual modes, and drops the focus from the field.",
   runs_in: "content",
-  modes: ["normal", "insert", "hint", "cmdline", "caret", "visual"],
+  modes: ["normal", "insert", "hint", "cmdline", "caret", "visual", "visual_line"],
   run: mode_escape.run,
 });
 

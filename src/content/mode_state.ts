@@ -26,9 +26,9 @@ export function create_mode_state(initial: Mode = "normal") {
       on_display_change = listener;
     },
     is_pass_next_armed: () => pass_next_armed,
-    // Normal, caret and visual follow focus, so a field never loses typing to motion keys. Ignore, hint and command line modes keep the keys.
+    // Normal, caret and both visual modes follow focus, so a field never loses typing to motion keys. Ignore, hint and command line modes keep the keys.
     focus_entered_editable: () => {
-      if (mode === "normal" || mode === "caret" || mode === "visual") set_mode("insert");
+      if (mode === "normal" || mode === "caret" || mode === "visual" || mode === "visual_line") set_mode("insert");
     },
     focus_left_editable: () => {
       if (mode === "insert") set_mode("normal");

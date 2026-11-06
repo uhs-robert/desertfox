@@ -1,4 +1,4 @@
-import type { KeymapConfig } from "../shared/keymap.ts";
+import type { KeymapConfig, ModeBindings } from "../shared/keymap.ts";
 
 // The source of docs/keymap.md: `just docs-gen` regenerates its tables from this file.
 // Search engine keys (`s`, `S`, `,`) and container keys (`c`) come from the user's config.
@@ -26,6 +26,22 @@ const MOTIONS: Record<string, { id: string; args: Record<string, unknown>; label
   T: { id: "caret.move", args: { unit: "char_find", direction: "back", till: true }, label: "Move back after a character" },
   ";": { id: "caret.move", args: { unit: "find_repeat" }, label: "Repeat the character find" },
   ",": { id: "caret.move", args: { unit: "find_repeat", direction: "back" }, label: "Repeat the character find backward" },
+};
+
+// The keys both visual modes share.
+const VISUAL_KEYS: ModeBindings = {
+  ...MOTIONS,
+  "/": { id: "find.open", label: "Find forward" },
+  "?": { id: "find.open", args: { direction: "backward" }, label: "Find backward" },
+  "*": { id: "find.open", args: { source: "word" }, label: "Find word forward" },
+  "#": { id: "find.open", args: { source: "word", direction: "backward" }, label: "Find word backward" },
+  n: { id: "find.next" },
+  N: { id: "find.prev" },
+  y: { id: "visual.act", args: { action: "yank" } },
+  o: { id: "visual.act", args: { action: "swap" } },
+  s: { id: "visual.act", args: { action: "search" } },
+  "<Escape>": { id: "mode.escape" },
+  "<C-[>": { id: "mode.escape" },
 };
 
 export const DEFAULT_KEYMAP: KeymapConfig = {
@@ -241,6 +257,7 @@ export const DEFAULT_KEYMAP: KeymapConfig = {
   },
   caret: {
     v: { id: "mode.set", args: { mode: "visual" } },
+    V: { id: "mode.set", args: { mode: "visual_line" } },
     "<Escape>": { id: "mode.escape" },
     "<C-[>": { id: "mode.escape" },
     "/": { id: "find.open", label: "Find forward" },
@@ -252,18 +269,13 @@ export const DEFAULT_KEYMAP: KeymapConfig = {
     ...MOTIONS,
   },
   visual: {
-    ...MOTIONS,
-    "/": { id: "find.open", label: "Find forward" },
-    "?": { id: "find.open", args: { direction: "backward" }, label: "Find backward" },
-    "*": { id: "find.open", args: { source: "word" }, label: "Find word forward" },
-    "#": { id: "find.open", args: { source: "word", direction: "backward" }, label: "Find word backward" },
-    n: { id: "find.next" },
-    N: { id: "find.prev" },
-    y: { id: "visual.act", args: { action: "yank" } },
-    o: { id: "visual.act", args: { action: "swap" } },
-    s: { id: "visual.act", args: { action: "search" } },
-    "<Escape>": { id: "mode.escape" },
-    "<C-[>": { id: "mode.escape" },
+    ...VISUAL_KEYS,
+    V: { id: "mode.set", args: { mode: "visual_line" } },
+  },
+  visual_line: {
+    ...VISUAL_KEYS,
+    v: { id: "mode.set", args: { mode: "visual" } },
+    V: { id: "mode.set", args: { mode: "caret" } },
   },
   insert: {
     "<Escape>": { id: "mode.escape" },

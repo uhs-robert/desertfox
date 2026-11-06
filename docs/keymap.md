@@ -22,7 +22,7 @@ A note "(prompts)" means the binding sets a `prompt` for a param, so the command
 
 <!-- BEGIN generated -->
 
-bound: 223 (normal 141, hint 2, cmdline 13, caret 30, visual 32, insert 1, ignore 1, browser 3) | later: 14 | dropped: 6
+bound: 259 (normal 141, hint 2, cmdline 13, caret 31, visual 33, visual_line 34, insert 1, ignore 1, browser 3) | later: 14 | dropped: 6
 
 ### normal
 
@@ -243,6 +243,7 @@ Which-key group names:
 | --- | --- | --- | --- | --- |
 | `0` | bound | `caret.move --line-start` | Move caret |  |
 | `v` | bound | `mode visual` | Set mode |  |
+| `V` | bound | `mode visual_line` | Set mode |  |
 | `<Escape>` | bound | `mode.escape` | Escape |  |
 | `<C-[>` | bound | `mode.escape` | Escape |  |
 | `/` | bound | `find` | Find forward |  |
@@ -308,6 +309,46 @@ Which-key group names:
 | `s` | bound | `visual.act search` | Act on selection |  |
 | `<Escape>` | bound | `mode.escape` | Escape |  |
 | `<C-[>` | bound | `mode.escape` | Escape |  |
+| `V` | bound | `mode visual_line` | Set mode |  |
+
+### visual_line
+
+| Key | Status | Command | Label | Note |
+| --- | --- | --- | --- | --- |
+| `0` | bound | `caret.move --line-start` | Move caret |  |
+| `h` | bound | `caret.move --char --back` | Move caret |  |
+| `l` | bound | `caret.move --char` | Move caret |  |
+| `j` | bound | `caret.move --line` | Move caret |  |
+| `k` | bound | `caret.move --line --back` | Move caret |  |
+| `w` | bound | `caret.move --word` | Move caret |  |
+| `b` | bound | `caret.move --word --back` | Move caret |  |
+| `e` | bound | `caret.move --word-end` | Move caret |  |
+| `W` | bound | `caret.move --word --big` | Move caret by WORD |  |
+| `B` | bound | `caret.move --word --back --big` | Move caret by WORD backward |  |
+| `E` | bound | `caret.move --word-end --big` | Move caret to WORD end |  |
+| `^` | bound | `caret.move --line-first` | Move caret |  |
+| `$` | bound | `caret.move --line-end` | Move caret |  |
+| `gg` | bound | `caret.move --start` | Move caret |  |
+| `G` | bound | `caret.move --end` | Move caret |  |
+| `f` | bound | `caret.move --char-find` | Move to a character |  |
+| `t` | bound | `caret.move --char-find --till` | Move before a character |  |
+| `F` | bound | `caret.move --char-find --back` | Move back to a character |  |
+| `T` | bound | `caret.move --char-find --back --till` | Move back after a character |  |
+| `;` | bound | `caret.move --find-repeat` | Repeat the character find |  |
+| `,` | bound | `caret.move --find-repeat --back` | Repeat the character find backward |  |
+| `/` | bound | `find` | Find forward |  |
+| `?` | bound | `find --backward` | Find backward |  |
+| `*` | bound | `find --word` | Find word forward |  |
+| `#` | bound | `find --backward --word` | Find word backward |  |
+| `n` | bound | `find.next` | Next match |  |
+| `N` | bound | `find.prev` | Previous match |  |
+| `y` | bound | `visual.act yank` | Act on selection |  |
+| `o` | bound | `visual.act swap` | Act on selection |  |
+| `s` | bound | `visual.act search` | Act on selection |  |
+| `<Escape>` | bound | `mode.escape` | Escape |  |
+| `<C-[>` | bound | `mode.escape` | Escape |  |
+| `v` | bound | `mode visual` | Set mode |  |
+| `V` | bound | `mode caret` | Set mode |  |
 
 ### insert
 

@@ -7,6 +7,7 @@ import type { StoredTheme } from "../../shared/theme/apply.ts";
 import type { RoleColors } from "../../shared/theme/roles.ts";
 import type { FindColors } from "./find_paint.ts";
 import type { TextTree } from "./text_model.ts";
+import type { CaretMode } from "./selection_state.ts";
 
 // A document rule does not reach into a shadow root or a frame, so each tree with text gets its own style.
 const styles = new Map<TextTree, HTMLStyleElement>();
@@ -26,13 +27,13 @@ export function find_colors_of({ dark, light }: StoredTheme): FindColors {
   };
 }
 
-// Visual mode tints the text and leaves its color. Caret mode keeps one visible cell, so the caret does not vanish into the page.
-const rule = (mode: "caret" | "visual", colors: RoleColors) =>
-  mode === "visual"
-    ? `::selection{background:${colors.selection} !important}`
-    : `::selection{background:${colors.mode_caret} !important;color:${colors.bg_core} !important}`;
+// Both visual modes tint the text and leave its color. Caret mode keeps one visible cell, so the caret does not vanish into the page.
+const rule = (mode: CaretMode, colors: RoleColors) =>
+  mode === "caret"
+    ? `::selection{background:${colors.mode_caret} !important;color:${colors.bg_core} !important}`
+    : `::selection{background:${colors.selection} !important}`;
 
-export async function apply_selection_colors(mode: "caret" | "visual", trees: TextTree[]): Promise<void> {
+export async function apply_selection_colors(mode: CaretMode, trees: TextTree[]): Promise<void> {
   const this_call = ++latest_call;
   const theme = await stored_theme();
   if (this_call !== latest_call || !theme) return;

@@ -168,7 +168,7 @@ The keymap is data, not code. It maps a mode and a key sequence to an invocation
 - The extension ships a default keymap. The user config overrides it, as described in [Config](#config).
 - The background checks each entry against the registry when it loads. A bad entry logs a warning and is skipped, so one typo does not break the rest. The help page lists the warnings.
 - Key notation is vim style: `<C-x>`, `<A-j>`, `<S-Escape>`. Sequences match through a prefix tree. A complete match runs at once, with no timeout.
-- The modes are normal, insert, ignore, hint and cmdline. Caret and visual modes arrive in phase 2, see [Caret and visual](#caret-and-visual). Insert mode follows `focusin` and `focusout` on editable elements instead of checking the focused element on every key.
+- The modes are normal, insert, ignore, hint and cmdline. Caret, visual and line visual modes arrive in phase 2, see [Caret and visual](#caret-and-visual). Insert mode follows `focusin` and `focusout` on editable elements instead of checking the focused element on every key.
 - A mode badge sits in the bottom right corner, 8 px above the bottom edge. The `mode_indicator` setting controls it: `always` (the default), `not_normal` or `off`. The `palette` setting names a theme (default `oasis_moonlight`), see [Themes](#themes). Light or dark follows the system theme.
 - The which-key panel is a floating frame with a 1 px tinted border and its title set into the top border. The `which_key_border` setting picks the corners: `square` (the default), `round` or `chamfer`. A footer names the exit keys.
 - `browser` mode holds the chords for the Firefox shortcuts. The manifest reserves a fixed number of shortcut slots, and the background assigns the chords to them with `commands.update`. The content script also catches these chords. If it cancels a chord, Firefox does not fire the shortcut as well, which the phase 0 key-blocking page showed.
@@ -319,7 +319,7 @@ window.wrappedJSObject.my_app.toggle_ids(args.query);
 ```
 
 - `short=` gives a bool or a valued param its flag letter (`short=a`). An enum maps values to letters: `short=tab:t,window:w`. The letter rules are the define-time checks above.
-- `modes` is optional. It lists the modes where a key can run the snippet, from `normal`, `caret` and `visual`. The default is `normal`. Any other name is a build-config error.
+- `modes` is optional. It lists the modes where a key can run the snippet, from `normal`, `caret`, `visual` and `visual_line`. The default is `normal`. Any other name is a build-config error.
 - `tools/build-config` turns the header into a normal registry entry. Snippet commands get keys, which-key rows, help, completion and prompts (through an explicit `prompt`) the same as built-in commands.
 - The router checks args, then runs the code in the tab's content script with `tabs.executeScript`, with `args` defined. `window.wrappedJSObject` reaches the page's own functions.
 - `matches` limits where the command runs. On other pages the router refuses with a message.
@@ -406,14 +406,15 @@ Two keys in one group may share a label only when they run the same binding (`zi
 
 ### Caret and visual
 
-Caret mode puts a text cursor in the page, so the user can move through text with vim motions. Visual mode extends a selection with the same motions.
+Caret mode puts a text cursor in the page, so the user can move through text with vim motions. Visual mode extends a selection with the same motions. Line visual mode (`visual_line`, badge `V-LINE`) selects whole screen lines.
 
-- Caret mode starts at the first visible text, or at a hinted element with `hint.run action=caret`, and visual mode at one with `action=visual`. `v` starts a character selection and `V` a line selection.
+- Caret mode starts at the first visible text, or at a hinted element with `hint.run action=caret`, and visual mode at one with `action=visual`. In normal mode `v` starts caret mode and `V` visual mode. In caret mode `v` starts visual mode and `V` line visual mode. In visual mode `V` switches to line visual mode, and in line visual mode `v` switches to visual mode and `V` returns to caret mode. A switch between the two visual modes keeps both ends of the selection.
 - The motions are `h`, `j`, `k`, `l`, `w`, `b`, `e`, `0`, `$`, `gg` and `G`, with count prefixes. The line motions (`j`, `k`, `0`, `^`, `$`) use Firefox's `Selection.modify`, so a wrapped paragraph moves per screen line, and `j` and `k` keep their column. The other motions run on a text model of the visible page, and word motions count letters and digits of any script.
 - `f`, `t`, `F` and `T` read the next key as a target character and move to its next match anywhere on the page, exact case. `t` stops before the match and `T` after it. At a line break `t` stops on the last character of the line, because no motion moves off a line break. A count picks the Nth match, and with fewer matches the caret stays. The target is any printable key, even a bound one. Escape cancels the find, and a chord cancels it and then runs. In visual mode the selection end moves. The handler arms a pending state in the caret bundle, and the sink takes the next key.
 - After a target, every match on the screen and about a screen around it is lit (the CSS Custom Highlight API, under names of their own so a kept `/` search stays), the match the caret stands at or next to in the stronger color. While they show, `f` and `F` (or `t` and `T`) repeat in their own direction, a count digit before the key repeats it that many times, and `;` and `,` repeat along the last find's direction. Scrolling or resizing lights the new screen. A key of the other family ends the find and starts its own. Escape only ends it. Any other key ends it and then runs as usual, and so does a mode change. `;` and `,` still repeat the last find after the end, without highlights. Which key counts as a find key is the keymap's: the sink ends the find in a microtask unless the `caret.move` handler for a find key ran first in the same key press.
+- A line is a screen line, the unit of `j`, `k`, `0` and `$`. Line visual mode keeps the anchor and caret of visual mode, and selects from the start of the screen line of the earlier end to the end of the screen line of the later end. The motions, `/`, `?`, `*`, `#`, `n`, `N`, `o`, `y` and `s` work as in visual mode on that wider selection. `y` adds no line break at the end, because a web page has no line-wise paste.
 - In visual mode, `o` swaps the ends of the selection, `y` copies it, and `s` searches it with `open.search` and the `default_engine` setting. Any command whose param defaults to `{ from: "selection" }` uses it. Escape returns to caret mode, then to normal mode.
-- The motions are registry commands in the `caret` and `visual` modes, so keys, which-key and help cover them like any other command.
+- The motions are registry commands in the `caret`, `visual` and `visual_line` modes, so keys, which-key and help cover them like any other command.
 - Page text inside inputs and text areas belongs to insert mode, not caret mode.
 
 ### Page search

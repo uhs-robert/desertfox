@@ -332,6 +332,7 @@ test("mode label follows the mode_indicator setting", () => {
   assert.equal(mode_label("cmdline", false, "always"), undefined);
   assert.equal(mode_label("caret", false, "always"), "CARET");
   assert.equal(mode_label("visual", false, "not_normal"), "VISUAL");
+  assert.equal(mode_label("visual_line", false, "not_normal"), "V-LINE");
   assert.equal(mode_label("insert", false, "off"), undefined);
   assert.equal(mode_label("normal", true, "off"), undefined);
 });

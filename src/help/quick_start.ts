@@ -69,6 +69,7 @@ const BINDINGS = {
   visual_at_element: { mode: "normal", id: "hint.run", args: { action: "visual", filter: "all" }, test: arg_is("action", "visual") },
   // Looked up in caret mode, because the sentence follows entering caret mode and `v` there starts visual mode.
   visual: { mode: "caret", id: "mode.set", args: { mode: "visual" }, test: arg_is("mode", "visual") },
+  visual_line: { mode: "caret", id: "mode.set", args: { mode: "visual_line" }, test: arg_is("mode", "visual_line") },
   caret_left: { mode: "caret", ...move("char", true) },
   caret_right: { mode: "caret", ...move("char", false) },
   caret_down: { mode: "caret", ...move("line", false) },
@@ -152,7 +153,7 @@ export function quick_start_blocks(compiled: CompiledKeymap | undefined, command
     say("Press {find} to search forward and {find_back} to search backward. Type the text and press Enter. {next} jumps to the next match and {previous} to the one before."),
     heading("Caret mode and visual mode"),
     say("Caret mode puts a cursor in the page text, so you can move over text with the keyboard and select it. It starts after a search at the match, and otherwise at the first visible text."),
-    say("Press {caret} to start caret mode. Move with {caret_left}, {caret_down}, {caret_up} and {caret_right}, or by word with {caret_word}. Press {visual} to start visual mode, which selects the text you move over. In visual mode, {yank} copies the selection and {swap} swaps its ends. {escape} steps back to the mode before."),
+    say("Press {caret} to start caret mode. Move with {caret_left}, {caret_down}, {caret_up} and {caret_right}, or by word with {caret_word}. Press {visual} to start visual mode, which selects the text you move over. Press {visual_line} instead to select whole lines. In visual mode, {yank} copies the selection and {swap} swaps its ends. {escape} steps back to the mode before."),
     say("To start at a link or another element, press {caret_at_element} for caret mode or {visual_at_element} for visual mode, then type the label of the element."),
     heading("Help"),
     say("Press {help} on any page to open this help. The Commands page lists every key, and the Home page shows your settings and any config warnings."),

@@ -5,7 +5,7 @@ import type { PendingPrefix } from "../key_flow.ts";
 import type { WhichKeyPanel } from "../../shared/messages.ts";
 
 // The modes whose keys are a keymap worth listing. The check sits here and not in content.js, which has no spare bytes.
-const MODES_WITH_PANEL: readonly string[] = ["normal", "caret", "visual"];
+const MODES_WITH_PANEL: readonly string[] = ["normal", "caret", "visual", "visual_line"];
 
 export function create_which_key_session(
   fetch_panel: (mode: Mode, typed: string[]) => Promise<WhichKeyPanel>,

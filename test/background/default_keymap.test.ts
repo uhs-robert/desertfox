@@ -87,7 +87,7 @@ test("zz, zt and zb align the focused field", () => {
 test("the keys of the new modes compile and resolve to their commands", () => {
   const { warnings, compiled } = compile(DEFAULT_KEYMAP);
   assert.deepEqual(warnings, []);
-  const leaf_id = (mode: "normal" | "hint" | "cmdline" | "caret" | "visual", ...tokens: string[]) => {
+  const leaf_id = (mode: "normal" | "hint" | "cmdline" | "caret" | "visual" | "visual_line", ...tokens: string[]) => {
     let node: { kind: string; children?: Record<string, unknown>; steps?: { invocation: { id: string; args?: Record<string, unknown> } }[] } | undefined = compiled.modes[mode];
     for (const token of tokens) node = node?.children?.[token] as typeof node;
     return node?.steps?.map((step) => `${step.invocation.id} ${JSON.stringify(step.invocation.args ?? {})}`).join(",");
@@ -101,12 +101,21 @@ test("the keys of the new modes compile and resolve to their commands", () => {
   assert.equal(leaf_id("normal", ";", "#"), 'cmdline.open {"text":"heading "}');
   assert.equal(leaf_id("normal", ";", ";"), 'cmdline.open {"text":"hint "}');
   assert.equal(leaf_id("caret", "v"), 'mode.set {"mode":"visual"}');
-  for (const mode of ["caret", "visual"] as const) {
+  assert.equal(leaf_id("caret", "V"), 'mode.set {"mode":"visual_line"}');
+  assert.equal(leaf_id("visual", "V"), 'mode.set {"mode":"visual_line"}');
+  assert.equal(leaf_id("visual_line", "v"), 'mode.set {"mode":"visual"}');
+  assert.equal(leaf_id("visual_line", "V"), 'mode.set {"mode":"caret"}');
+  assert.equal(leaf_id("visual_line", "y"), 'visual.act {"action":"yank"}');
+  assert.equal(leaf_id("visual_line", "o"), 'visual.act {"action":"swap"}');
+  assert.equal(leaf_id("visual_line", "/"), leaf_id("visual", "/"));
+  assert.equal(leaf_id("visual_line", "n"), "find.next {}");
+  assert.equal(leaf_id("visual_line", "j"), leaf_id("visual", "j"));
+  for (const mode of ["caret", "visual", "visual_line"] as const) {
     assert.equal(leaf_id(mode, "f"), 'caret.move {"unit":"char_find","direction":"forward","till":false,"big":false}', mode);
     assert.equal(leaf_id(mode, "T"), 'caret.move {"unit":"char_find","direction":"back","till":true,"big":false}', mode);
     assert.equal(leaf_id(mode, ","), 'caret.move {"unit":"find_repeat","direction":"back","till":false,"big":false}', mode);
   }
-  for (const mode of ["hint", "cmdline", "caret", "visual"] as const) {
+  for (const mode of ["hint", "cmdline", "caret", "visual", "visual_line"] as const) {
     assert.equal(leaf_id(mode, "<Escape>"), "mode.escape {}", mode);
   }
   for (const key of ["<Tab>", "<C-n>", "<A-ArrowDown>"]) assert.equal(leaf_id("cmdline", key), "cmdline.next_completion {}", key);

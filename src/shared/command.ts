@@ -6,7 +6,7 @@ import type { Outcome } from "./messages.ts";
 export type ParamType = "int" | "float" | "string" | "bool" | "enum";
 
 // Runtime modes. `browser` is not here: it is a keymap section, see KeymapMode.
-export const MODES = ["normal", "insert", "ignore", "hint", "cmdline", "caret", "visual"] as const;
+export const MODES = ["normal", "insert", "ignore", "hint", "cmdline", "caret", "visual", "visual_line"] as const;
 export type Mode = (typeof MODES)[number];
 
 export type RunsIn = "background" | "content";
