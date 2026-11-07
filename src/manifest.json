@@ -58,7 +58,7 @@
     "default_icon": "icons/desertfox.svg"
   },
   "options_ui": {
-    "page": "help.html",
+    "page": "home.html",
     "open_in_tab": true
   },
   "chrome_url_overrides": {

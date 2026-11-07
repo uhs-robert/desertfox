@@ -6,8 +6,12 @@ import type { Outcome } from "./messages.ts";
 export type ParamType = "int" | "float" | "string" | "bool" | "enum";
 
 // Runtime modes. `browser` is not here: it is a keymap section, see KeymapMode.
-export const MODES = ["normal", "insert", "ignore", "hint", "cmdline", "caret", "visual"] as const;
+export const MODES = ["normal", "insert", "ignore", "hint", "cmdline", "caret", "visual", "visual_line"] as const;
 export type Mode = (typeof MODES)[number];
+
+// The reading modes: a caret in the page text, with or without a selection.
+const CARET_MODES: readonly Mode[] = ["caret", "visual", "visual_line"];
+export const is_caret_mode = (mode: Mode): boolean => CARET_MODES.includes(mode);
 
 export type RunsIn = "background" | "content";
 

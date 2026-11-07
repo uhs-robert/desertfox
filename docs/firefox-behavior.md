@@ -58,7 +58,7 @@ A second test checked whether Firefox reads `~/.mozilla/managed-storage/<extensi
 
 Question: does `tabs.sendMessage` reach a page of the extension itself, so the help page can run `content.js` as a plain script tag? Manifest `content_scripts` never match `moz-extension://` pages.
 
-Setup: Firefox 159, temporary add-on, the nested session. A scratch build added `<script src="content.js">` to `help.html`, plus a probe script that reported `scrollY` to the background. The background opened the help page in a tab and sent messages to it. Real `j`, `G`, `gg` and `<S-Escape>` presses came from `wtype`.
+Setup: Firefox 159, temporary add-on, the nested session. A scratch build added `<script src="content.js">` to `home.html`, plus a probe script that reported `scrollY` to the background. The background opened the help page in a tab and sent messages to it. Real `j`, `G`, `gg` and `<S-Escape>` presses came from `wtype`.
 
 Result: delivery works. No fallback is needed.
 
@@ -75,3 +75,9 @@ Question: does Firefox paint a caret for a collapsed selection in page text?
 Setup: Firefox 159 headless, one page, a screenshot after a script set the selection with `Selection.addRange`.
 
 Result: no. A collapsed range in plain text paints nothing. A one-character range paints as a highlighted block. So caret mode draws the caret as a one-character selection, which also makes `@selection` return that character. A caret on an empty line has no character and is not drawn.
+
+## Firefox defaults (not measured)
+
+These are Firefox defaults that the design relies on. Nobody has measured them in this project yet.
+
+- When focus is in page content and not in a field, `/` starts Quick Find and `'` starts links-only Quick Find. DesertFox cancels both keys outside insert, ignore, hint and cmdline mode, see [Keys and modes](design.md#keys-and-modes).

@@ -2,6 +2,8 @@ import { mode_escape, mode_pass_next, mode_set, SETTABLE_MODES } from "../conten
 import { page_blur, page_focus_input } from "../content/handlers/page.ts";
 import { define } from "../shared/registry/index.ts";
 
+const mode_in_words = (mode: string) => (mode === "visual_line" ? "line visual" : mode);
+
 define("mode.set", {
   name: "mode",
   label: "Set mode",
@@ -11,20 +13,20 @@ define("mode.set", {
       name: "mode",
       type: "enum",
       values: SETTABLE_MODES,
-      value_labels: Object.fromEntries(SETTABLE_MODES.map((mode) => [mode, `to ${mode}`])),
+      value_labels: Object.fromEntries(SETTABLE_MODES.map((mode) => [mode, `to ${mode_in_words(mode)}`])),
     },
   ],
   runs_in: "content",
-  modes: ["normal", "insert", "ignore", "caret"],
+  modes: ["normal", "insert", "ignore", "caret", "visual", "visual_line"],
   run: mode_set.run,
 });
 
 define("mode.escape", {
   completion: "hidden",
   label: "Escape",
-  intent: "Return to normal mode. It works from insert, hint, command line, caret and visual mode, and drops the focus from the field.",
+  intent: "Return to normal mode. It works from insert, hint, command line, caret and both visual modes, and drops the focus from the field.",
   runs_in: "content",
-  modes: ["normal", "insert", "hint", "cmdline", "caret", "visual"],
+  modes: ["normal", "insert", "hint", "cmdline", "caret", "visual", "visual_line"],
   run: mode_escape.run,
 });
 

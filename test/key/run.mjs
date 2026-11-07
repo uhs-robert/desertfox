@@ -594,13 +594,13 @@ async function main() {
       let state;
       for (let attempt = 0; attempt < 40 && !state?.ready; attempt++) {
         await sleep(250);
-        state = await evaluate_in_background(rdp, EXTENSION_ID, `(() => { const view = ${extension_view("help.html")}; return { ready: !!view && !!view.document.querySelector("h1") }; })()`).catch(() => undefined);
+        state = await evaluate_in_background(rdp, EXTENSION_ID, `(() => { const view = ${extension_view("home.html")}; return { ready: !!view && !!view.document.querySelector("h1") }; })()`).catch(() => undefined);
       }
       expect(state?.ready, "the help page never rendered");
       // Home is too short to scroll, so move to the long Commands page.
-      await evaluate_in_background(rdp, EXTENSION_ID, `(() => { ${extension_view("help.html")}.location.hash = "#/commands"; })()`);
+      await evaluate_in_background(rdp, EXTENSION_ID, `(() => { ${extension_view("home.html")}.location.hash = "#/commands"; })()`);
       await sleep(800);
-      const probe = () => evaluate_in_background(rdp, EXTENSION_ID, `(() => { const view = ${extension_view("help.html")}; return { y: view.scrollY, badge: view.document.querySelector("[data-desertfox-mode]")?.getAttribute("data-desertfox-mode") ?? null }; })()`);
+      const probe = () => evaluate_in_background(rdp, EXTENSION_ID, `(() => { const view = ${extension_view("home.html")}; return { y: view.scrollY, badge: view.document.querySelector("[data-desertfox-mode]")?.getAttribute("data-desertfox-mode") ?? null }; })()`);
       await send_keys("j", "j", "j");
       await sleep(600);
       const scrolled = await probe();
@@ -618,7 +618,7 @@ async function main() {
 
     // caret.js loads on the help page by script tag, so the caret keys work there. Escape must still leave the page in normal mode.
     await run_case("V on the help page enters caret mode and Escape returns to normal", async () => {
-      const badge = () => evaluate_in_background(rdp, EXTENSION_ID, `${extension_view("help.html")}?.document.querySelector("[data-desertfox-mode]")?.getAttribute("data-desertfox-mode") ?? null`);
+      const badge = () => evaluate_in_background(rdp, EXTENSION_ID, `${extension_view("home.html")}?.document.querySelector("[data-desertfox-mode]")?.getAttribute("data-desertfox-mode") ?? null`);
       const loads_before = await settled_injection_count("caret.js");
       await send_keys("gV");
       await sleep(1500);
@@ -669,11 +669,11 @@ async function main() {
       // Firefox focuses an open help tab instead of opening Home, so the earlier help case's tab goes first.
       // The answer is a short summary: a whole page of text is too long to come back over RDP.
       const home = await evaluate_in_background(rdp, EXTENSION_ID, `(async () => {
-        for (const tab of await browser.tabs.query({})) if (new URL(tab.url).pathname === "/help.html") await browser.tabs.remove(tab.id);
+        for (const tab of await browser.tabs.query({})) if (new URL(tab.url).pathname === "/home.html") await browser.tabs.remove(tab.id);
         await browser.runtime.openOptionsPage();
         for (let attempt = 0; attempt < 30; attempt++) {
           await new Promise((resolve) => setTimeout(resolve, 250));
-          const text = ${extension_view("help.html")}?.document.body.textContent ?? "";
+          const text = ${extension_view("home.html")}?.document.body.textContent ?? "";
           if (text.includes("Config source")) return { config_source: true, change_the_config: text.includes("Change the config") };
         }
         return { config_source: false, change_the_config: false };

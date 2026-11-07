@@ -2,7 +2,7 @@
 
 import type { Mode, ModeIndicator } from "../shared/index.ts";
 
-const MODE_LABELS: Partial<Record<Mode, string>> = { normal: "NORMAL", insert: "INSERT", ignore: "IGNORE", caret: "CARET", visual: "VISUAL" };
+const MODE_LABELS: Partial<Record<Mode, string>> = { normal: "NORMAL", insert: "INSERT", ignore: "IGNORE", caret: "CARET", visual: "VISUAL", visual_line: "V-LINE" };
 
 // Hint and command line modes draw their own surface, so they get no label here.
 export function mode_label(mode: Mode, pass_next_armed: boolean, setting: ModeIndicator): string | undefined {

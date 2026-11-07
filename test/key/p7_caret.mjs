@@ -6,10 +6,15 @@ import { evaluate_in_background } from "./rdp.mjs";
 
 export async function run_cases({ rdp, extension_id, take_shot, run_case, expect, open_page, send_keys, sleep, events, wait_event }) {
   const paste_ctrl_v = ["-M", "ctrl", "v", "-m", "ctrl"];
-  // Moonlight, the default palette, dark: the caret takes the command color and visual mode the visual color.
-  const CARET_BACKGROUND = "#7fcf78";
-  const VISUAL_BACKGROUND = "#ffba75";
+  // oasis_moonlight, the default palette, dark: the caret takes the `mode_caret` role and visual mode the `selection` role (src/content/caret/selection_colors.ts).
+  const CARET_BACKGROUND = "#f0e68c";
+  const VISUAL_BACKGROUND = "#24364d";
 
+  // Runs in the content script's world of the active tab, where `desertfox_host` lives.
+  const in_active_tab = (code) => evaluate_in_background(rdp, extension_id, `(async () => { const [tab] = await browser.tabs.query({ active: true, currentWindow: true }); return (await browser.tabs.executeScript(tab.id, { code: ${JSON.stringify(code)} }))[0]; })()`).then((value) => {
+    if (value?.error) throw new Error(`in the tab: ${JSON.stringify(value)}`);
+    return value;
+  });
   const selection_is = (page_id, text) => (event) => event.type === "selection" && event.page_id === page_id && event.text === text;
   const style_is = (page_id, has) => (event) => event.type === "selection_style" && event.page_id === page_id && has(event.css);
   const no_style = (css) => css === "";
@@ -87,6 +92,70 @@ export async function run_cases({ rdp, extension_id, take_shot, run_case, expect
     await wait_event(mark, selection_is("caret_wrap", "d"), "0 to the start of the screen line");
     await send_keys("k");
     await wait_event(mark, selection_is("caret_wrap", "a"), "k to the first screen line");
+    await send_keys("-k", "Escape");
+  });
+
+  await run_case("V selects whole screen lines of a wrapped paragraph, j grows it, o swaps the ends and y copies the lines", async () => {
+    await open_page("caret_wrap", "caret_wrap_lines", { new_tab: true });
+    const lines_are = (text) => (event) => event.type === "selection" && event.page_id === "caret_wrap_lines" && event.text.replace(/\s+/g, " ").trim() === text;
+    const mark = events.length;
+    await send_keys("gV");
+    await send_keys("jj");
+    await wait_event(mark, selection_is("caret_wrap_lines", "d"), "the caret on the second screen line");
+    await send_keys("V");
+    await wait_event(mark, lines_are("def"), "V selecting the whole second screen line");
+    await send_keys("j");
+    await wait_event(mark, lines_are("def ghi"), "j growing the selection by a screen line");
+    // After o the caret end is the top line, so k grows the selection upward instead of shrinking it.
+    await send_keys("o");
+    await send_keys("k");
+    await wait_event(mark, lines_are("abc def ghi"), "o then k growing the selection upward");
+    const mark_yank = events.length;
+    await send_keys("y");
+    await wait_event(mark_yank, (event) => event.type === "toast" && event.page_id === "caret_wrap_lines", "the copied toast");
+    await sleep(300);
+    await send_keys("-k", "Escape");
+    await send_keys("-k", "Escape");
+    const mark_paste = events.length;
+    await send_keys("gi");
+    await send_keys(...paste_ctrl_v);
+    const pasted = await wait_event(mark_paste, (event) => event.type === "input" && event.page_id === "caret_wrap_lines", "the pasted text");
+    expect(pasted.value.replace(/\s+/g, " ").trim() === "abc def ghi", `y copied "${pasted.value}", expected the lines abc, def and ghi`);
+  });
+
+  await run_case("in caret mode / opens the DesertFox search line, not Firefox Quick Find, and ' does nothing", async () => {
+    await open_page("caret", "caret_quick_find", { new_tab: true });
+    const mark = events.length;
+    await send_keys("gV");
+    await wait_event(mark, selection_is("caret_quick_find", "c"), "the caret on the first character");
+    // Quick Find would take the keys after it, so a caret that still moves shows that it did not open.
+    await send_keys("'");
+    await send_keys("l");
+    await wait_event(mark, selection_is("caret_quick_find", "a"), "l moving the caret after '");
+    const mark_search = events.length;
+    await send_keys("/bar");
+    let mode;
+    for (let attempt = 0; attempt < 20 && mode !== "cmdline"; attempt++) {
+      mode = await in_active_tab("window.desertfox_host.get_mode()");
+      if (mode !== "cmdline") await sleep(150);
+    }
+    expect(mode === "cmdline", `the mode after /bar is ${mode}, expected cmdline for the DesertFox search line`);
+    await send_keys("-k", "Return");
+    await wait_event(mark_search, selection_is("caret_quick_find", "b"), "the caret on the match of /bar");
+    await send_keys("-k", "Escape");
+  });
+
+  await run_case("Enter on a search lands the caret on text the page added after caret mode started", async () => {
+    await open_page("caret_added", "caret_added", { new_tab: true });
+    const mark = events.length;
+    await send_keys("gV");
+    await wait_event(mark, selection_is("caret_added", "c"), "the caret on the first character");
+    await wait_event(mark, (event) => event.type === "text_added" && event.page_id === "caret_added", "the text the page adds");
+    const mark_search = events.length;
+    await send_keys("/zebra");
+    await sleep(400);
+    await send_keys("-k", "Return");
+    await wait_event(mark_search, selection_is("caret_added", "z"), "the caret on the added match");
     await send_keys("-k", "Escape");
   });
 
@@ -288,10 +357,6 @@ export async function run_cases({ rdp, extension_id, take_shot, run_case, expect
   });
 
   // /caret_ft holds forty rows "row N x", 100 pixels apart. The highlights are read from the page's own world, by the names of the character find and of a kept `/` search.
-  const in_active_tab = (code) => evaluate_in_background(rdp, extension_id, `(async () => { const [tab] = await browser.tabs.query({ active: true, currentWindow: true }); return (await browser.tabs.executeScript(tab.id, { code: ${JSON.stringify(code)} }))[0]; })()`).then((value) => {
-    if (value?.error) throw new Error(`in the tab: ${JSON.stringify(value)}`);
-    return value;
-  });
   const READ_FT = `JSON.parse(window.wrappedJSObject.eval(${JSON.stringify(`JSON.stringify((() => {
     const texts = (name) => { const found = []; CSS.highlights.get(name)?.forEach((range) => found.push(range.startContainer.data)); return found; };
     return { all: texts("oasis-ft"), current: texts("oasis-ft-current"), search: texts("oasis-find").length + texts("oasis-find-current").length, y: scrollY };

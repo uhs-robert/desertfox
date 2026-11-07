@@ -10,7 +10,7 @@ export type MatchResult =
 const MAX_COUNT_DIGITS = 6;
 
 // Only the modes that move through the page have counts. In the others a digit is just a key.
-const COUNT_MODES = ["normal", "caret", "visual"];
+const COUNT_MODES = ["normal", "caret", "visual", "visual_line"];
 
 export function create_matcher(keymap: CompiledKeymap) {
   let walk_mode = "";

@@ -109,7 +109,7 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, open_p
     await sleep(900);
     const urls = await tab_urls();
     expect(urls.length === before + 1, `expected one new tab, got ${urls.length - before}`);
-    expect(urls.some((url) => url.includes("help.html#command=tab.close")), "no help tab at the command card");
+    expect(urls.some((url) => url.includes("home.html#command=tab.close")), "no help tab at the command card");
     await send_keys(...CTRL("w"));
     await sleep(500);
   });
@@ -121,7 +121,7 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, open_p
     await send_keys("tab.close --right", ...CTRL("h"));
     await sleep(900);
     const urls = await tab_urls();
-    expect(urls.length === before + 1 && urls.some((url) => url.includes("help.html#command=tab.close")), "no help tab for the typed word");
+    expect(urls.length === before + 1 && urls.some((url) => url.includes("home.html#command=tab.close")), "no help tab for the typed word");
     await send_keys(...CTRL("w"));
     await sleep(500);
   });

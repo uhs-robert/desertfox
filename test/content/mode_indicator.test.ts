@@ -99,5 +99,6 @@ test("the badge style reads the mode tokens and the bg_core text token", async (
   page_with_orphan_badge();
   const { STYLE } = await import("../../src/content/mode_indicator.ts");
   for (const mode of ["normal", "insert", "ignore", "caret", "visual"]) assert.match(STYLE, new RegExp(`\\:where\\(\\[data-mode="${mode}"\\]\\) \\{ background: var\\(--desertfox-mode-${mode},`));
+  assert.match(STYLE, /:where\(\[data-mode="visual_line"\]\) \{ background: var\(--desertfox-mode-visual,/);
   assert.match(STYLE, /:where\(\[data-mode\]\) \{ color: var\(--desertfox-bg-core,/);
 });

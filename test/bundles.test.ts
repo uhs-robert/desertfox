@@ -22,6 +22,6 @@ test("the command line page can be framed by web pages", () => {
 
 test("each sink mode names a bundle and only real bundles load", () => {
   for (const name of Object.values(BUNDLE_FOR_MODE)) assert.ok(is_bundle_name(name));
-  assert.deepEqual(Object.keys(BUNDLE_FOR_MODE).sort(), ["caret", "cmdline", "hint", "visual"]);
+  assert.deepEqual(Object.keys(BUNDLE_FOR_MODE).sort(), ["caret", "cmdline", "hint", "visual", "visual_line"]);
   assert.equal(is_bundle_name("../background"), false);
 });

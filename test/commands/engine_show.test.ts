@@ -14,7 +14,7 @@ const sources = { search_engines: ["duck", "github.repo.issues"], containers: []
 
 test("engine.show opens the help page at the engine row", async () => {
   await (registry.get("engine.show")!.run as (ctx: unknown, args: Record<string, unknown>) => Promise<unknown>)({}, { engine: "github.repo.issues" });
-  assert.deepEqual(created, ["moz-extension://id/help.html#engine=github.repo.issues"]);
+  assert.deepEqual(created, ["moz-extension://id/home.html#engine=github.repo.issues"]);
 });
 
 test("engine.show names a dotted engine on the command line and refuses an unknown one", () => {

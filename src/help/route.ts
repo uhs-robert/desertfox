@@ -1,6 +1,6 @@
 // The help page is one document with hash routes: `#/commands`, `#/styling`, and so on.
 
-export const HELP_PAGE_FILE = "help.html";
+export const HELP_PAGE_FILE = "home.html";
 
 export const PAGES = [
   { id: "home", title: "Home", hash: "#/" },
