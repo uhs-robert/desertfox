@@ -41,11 +41,41 @@ test("quick start: a rebind changes the page and an unbound key falls back to th
   const { f: _hint, v: _caret, gV: _caret_too, ...rest } = DEFAULT_KEYMAP.normal!;
   const rebound = { ...DEFAULT_KEYMAP, normal: { ...rest, "<A-f>": { id: "hint.run", args: { action: "here" } } } };
   const codes = codes_of(quick_start_blocks(compile(rebound), all_commands));
-  // `;B` runs the same hint action as `f`, so it is the shortest key left.
-  assert.ok(codes.includes(";B"));
+  // `;B` clicks buttons only, so it does not stand in for `f`.
+  assert.ok(codes.includes("<A-f>"));
+  assert.ok(!codes.includes(";B"));
   assert.ok(!codes.includes("f"));
   assert.ok(codes.includes(":mode caret"));
   assert.ok(codes_of(quick_start_blocks(undefined, all_commands)).includes(":hint"));
+});
+
+function codes_with_normal(extra: Record<string, unknown>, drop: string[] = [], keymap = DEFAULT_KEYMAP): string[] {
+  const normal = Object.fromEntries(Object.entries(keymap.normal!).filter(([key]) => !drop.includes(key)));
+  return codes_of(quick_start_blocks(compile({ ...keymap, normal: { ...normal, ...extra } } as typeof DEFAULT_KEYMAP), all_commands));
+}
+
+test("quick start: a key that runs several steps is not picked", () => {
+  const codes = codes_with_normal({ "<A-j>": [{ id: "scroll.lines", args: { count: -10 } }, { id: "scroll.lines", args: { count: 10 } }] }, ["j"]);
+  assert.ok(!codes.includes("<A-j>"));
+  assert.ok(codes.includes(":scroll 10"));
+});
+
+test("quick start: a copy hint bound to inputs only is not picked", () => {
+  const { ";y": _copy, ...modifiers } = DEFAULT_KEYMAP.modifiers!;
+  const codes = codes_with_normal({ "<A-y>": { id: "hint.run", args: { action: "copy", filter: "inputs" } } }, [], { ...DEFAULT_KEYMAP, modifiers });
+  assert.ok(!codes.includes("<A-y>"));
+  assert.ok(codes.includes(":hint --copy --links"));
+});
+
+test("quick start: a hint on inputs only is not picked for clicking", () => {
+  const codes = codes_with_normal({ "<A-i>": { id: "hint.run", args: { action: "here", filter: "inputs" } } }, ["f"]);
+  assert.ok(!codes.includes("<A-i>"));
+  assert.ok(codes.includes(":hint"));
+});
+
+test("quick start: the default keymap gives the keys it always gave", () => {
+  const codes = codes_of(quick_start_blocks(compile(DEFAULT_KEYMAP), all_commands));
+  assert.deepEqual(codes, ["j", "k", "gg", "G", "<C-d>", "f", "<Escape>", ";yl", ":", "open", "<Escape>", "g", "which_key_delay_ms", "/", "?", "n", "N", "v", "h", "j", "k", "l", "w", "v", "V", "y", "o", "<Escape>", ";v", ";V", "g?"]);
 });
 
 test("quick start: a binding that spells out a default still matches", () => {
