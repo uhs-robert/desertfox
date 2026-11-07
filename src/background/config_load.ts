@@ -102,11 +102,17 @@ export function pick_config(files: unknown, managed: unknown): LoadedConfig {
   return { config: empty_config(), source: "defaults", warnings };
 }
 
+// What the files slot holds. The build warnings go with the config, because a later load has no files to build them again.
+export type FilesSlot = { config: MergedConfig; warnings: string[] };
+
 export async function load_config(): Promise<LoadedConfig> {
   // Firefox rejects the read when no managed file exists, which is the normal case without a config.
   const managed = await browser.storage.managed.get().catch(() => undefined);
   const stored = await browser.storage.local.get(FILES_CONFIG_STORAGE_KEY);
-  return pick_config(stored[FILES_CONFIG_STORAGE_KEY], managed);
+  const slot = stored[FILES_CONFIG_STORAGE_KEY] as Partial<FilesSlot> | undefined;
+  const loaded = pick_config(slot?.config, managed);
+  const build_warnings = Array.isArray(slot?.warnings) ? slot.warnings.filter((warning) => typeof warning === "string") : [];
+  return loaded.source === "files" ? { ...loaded, warnings: [...build_warnings, ...loaded.warnings] } : loaded;
 }
 
 // Keeps what the schema accepts. A stored value that no longer passes, from an older version, is dropped rather than trusted.

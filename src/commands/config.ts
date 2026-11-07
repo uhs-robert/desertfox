@@ -1,5 +1,5 @@
 import { show_toast_on_tab } from "../background/browser_deps.ts";
-import { ConfigReloadError } from "../background/config_reload.ts";
+import { ConfigReloadError, KEPT_CURRENT } from "../background/config_reload.ts";
 import { mark_reload_pending } from "../background/reload.ts";
 import { reload_config } from "../background/startup.ts";
 import { RuntimeRefusal } from "../shared/command.ts";
@@ -16,7 +16,9 @@ define("config.reload", {
       reloaded = await reload_config();
     } catch (error) {
       if (error instanceof ConfigReloadError) throw new RuntimeRefusal(error.message);
-      throw error;
+      // A storage or tab call failed mid-swap. The reload already put the old config back.
+      const reason = error instanceof Error ? error.message : String(error);
+      throw new RuntimeRefusal(`${KEPT_CURRENT} A browser call failed (${reason}). Run config.reload again, and debug.restart if it keeps failing.`);
     }
     const warned = reloaded.warnings === 0 ? "" : `, with ${reloaded.warnings} warning(s) on the Help page`;
     await show_toast_on_tab(ctx, "config", `Config reloaded from ${reloaded.config_dir}${warned}`, reloaded.warnings === 0 ? "success" : "warning");

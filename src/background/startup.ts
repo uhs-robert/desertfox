@@ -51,11 +51,12 @@ async function start(): Promise<MergedConfig> {
   const snippet_warnings = snippets.register(loaded.config.snippets);
   const step: LoadStep = { loaded, load_warnings: [...loaded.warnings, ...snippet_warnings] };
   load_step = Promise.resolve(step);
-  return publish(step, await load_edits());
+  return (await publish(step, await load_edits())).config;
 }
 
 // Compiles the loaded config under the browser edits, stores the result and tells the tabs.
-async function publish(step: LoadStep, edits: SettingEdits): Promise<MergedConfig> {
+// `warnings` is the whole list the help page shows: load, compile and shortcut slots.
+async function publish(step: LoadStep, edits: SettingEdits): Promise<{ config: MergedConfig; warnings: string[] }> {
   const config = with_edits(step.loaded.config, edits);
   const { compiled, theme, warnings } = compile_config({
     config,
@@ -81,7 +82,7 @@ async function publish(step: LoadStep, edits: SettingEdits): Promise<MergedConfi
     [USER_CSS_STORAGE_KEY]: config.css,
   });
   await tell_tabs_tree_changed();
-  return config;
+  return { config, warnings: all_warnings };
 }
 
 // `:set` and `:unset` change the edits one at a time, so two of them in a row never read the same stored value.
@@ -98,7 +99,7 @@ export function change_edits(decide: (current: SettingEdits, config: MergedConfi
       // Inside the try: the saved and temp layers are two writes, and one can land while the other fails.
       await store_edits(next);
       // Assigned after the publish succeeds, so a failed one leaves the readers the last good config.
-      const published = await publish(await (load_step as Promise<LoadStep>), next);
+      const { config: published } = await publish(await (load_step as Promise<LoadStep>), next);
       current_config = Promise.resolve(published);
       const saved_changed = JSON.stringify(next.saved) !== JSON.stringify(before.saved);
       if (saved_changed) void autoconfig.mirror(next.saved);
@@ -128,6 +129,11 @@ export function reload_config(): Promise<{ config_dir: string; warnings: number 
     const built_in_commands = commands_of_registry(registry).filter((command) => !snippets.is_snippet(command.id));
     const { stored, loaded } = build_files_config(reply, built_in_commands);
     const edits = await load_edits();
+    // From here the registry holds the new snippets while the tabs still run the old keymap.
+    // Readers wait on `get_config` until the swap commits, so no command runs against half of it.
+    const config_before = current_config as Promise<MergedConfig>;
+    let commit!: (config: MergedConfig | Promise<MergedConfig>) => void;
+    current_config = new Promise<MergedConfig>((resolve) => (commit = resolve));
     try {
       // Before the publish, so a key bound to a snippet resolves.
       const snippet_warnings = snippets.register(loaded.config.snippets);
@@ -136,12 +142,18 @@ export function reload_config(): Promise<{ config_dir: string; warnings: number 
       const published = await publish(step, edits);
       await browser.storage.local.set({ [FILES_CONFIG_STORAGE_KEY]: stored });
       load_step = Promise.resolve(step);
-      current_config = Promise.resolve(published);
-      return { config_dir: reply.config_dir, warnings: step.load_warnings.length };
+      commit(published.config);
+      return { config_dir: reply.config_dir, warnings: published.warnings.length };
     } catch (error) {
-      // The failed publish may have written the new keymap and status already. Best effort, so a failed rollback never hides the error that caused it.
-      snippets.register(current_step.loaded.config.snippets);
+      // The failed publish may have written the new keymap and status already.
+      // Each step is best effort, so a failed rollback never hides the error that caused it.
+      try {
+        snippets.register(current_step.loaded.config.snippets);
+      } catch {
+        // The publish below still puts the old keymap back.
+      }
       await publish({ loaded: current_step.loaded, load_warnings: current_step.load_warnings }, edits).catch(() => undefined);
+      commit(config_before);
       throw error;
     }
   });

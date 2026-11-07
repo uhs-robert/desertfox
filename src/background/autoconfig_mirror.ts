@@ -28,7 +28,14 @@ export function create_autoconfig_mirror(deps: AutoconfigMirrorDeps) {
   return {
     // Returns at once. The promise it gives back is for tests: it settles when this write has run, and never rejects.
     mirror(saved: SettingOverrides): Promise<void> {
-      const toml = stringify(saved);
+      // Serialized now, so a later edit cannot change what this write holds. A value TOML cannot hold (a sparse list) only warns.
+      let toml: string;
+      try {
+        toml = stringify(saved);
+      } catch (error) {
+        warn_once(error);
+        return Promise.resolve();
+      }
       const written = write_queue.then(() => deps.write_autoconfig(toml)).catch(warn_once);
       write_queue = written;
       return written;

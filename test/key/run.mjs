@@ -3,9 +3,9 @@
 // `status` is optional. The sweep reads its stdout for lines that start `<name>: ` and skips the sweep if the verb fails.
 // The cleanup of killed runs works only for drivers that keep sessions in /tmp/shadow-<uid>-<name>.
 import { execFile, spawnSync } from "node:child_process";
-import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import net from "node:net";
-import { homedir, tmpdir } from "node:os";
+import { homedir, tmpdir, userInfo } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
@@ -94,7 +94,9 @@ async function free_port() {
 
 // Runs the real install script into the session's throwaway HOME. A curl stand-in copies the host from this checkout, so the run needs no network and tests this branch's host.
 function install_native_host(work_dir, session_home) {
-  if (session_home === "" || resolve(session_home) === resolve(homedir())) throw new Error(`refusing a host install into the real HOME: "${session_home}"`);
+  // realpath and the passwd entry catch a HOME override on this runner and a session HOME that links to the real one.
+  const real_homes = new Set([homedir(), userInfo().homedir].map((home) => realpathSync(home)));
+  if (session_home === "" || real_homes.has(realpathSync(session_home))) throw new Error(`refusing a host install into the real HOME: "${session_home}"`);
   const stub_dir = join(work_dir, "install_stub");
   mkdirSync(stub_dir, { recursive: true });
   writeFileSync(join(stub_dir, "curl"), `#!/bin/sh\nout=""; url=""\nwhile [ $# -gt 0 ]; do case "$1" in -o) out=$2; shift 2;; http*) url=$1; shift;; *) shift;; esac; done\nexec cp "${join(repo_dir, "host")}/$(basename "$url")" "$out"\n`);

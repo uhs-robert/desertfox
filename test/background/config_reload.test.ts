@@ -4,10 +4,11 @@ import { test } from "node:test";
 import { registry } from "../../src/shared/registry/builtin.ts";
 import { CONFIG_FORMAT_VERSION } from "../../src/shared/config.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY } from "../../src/shared/prefix_tree.ts";
-import { CONFIG_STATUS_STORAGE_KEY, FILES_CONFIG_STORAGE_KEY, SAVED_SETTINGS_STORAGE_KEY, TEMP_SETTINGS_STORAGE_KEY } from "../../src/background/storage_keys.ts";
+import { CONFIG_STATUS_STORAGE_KEY, FILES_CONFIG_STORAGE_KEY, SAVED_SETTINGS_STORAGE_KEY, TEMP_SETTINGS_STORAGE_KEY, WARNINGS_STORAGE_KEY } from "../../src/background/storage_keys.ts";
 import { ConfigReloadError } from "../../src/background/config_reload.ts";
 import { create_autoconfig_mirror } from "../../src/background/autoconfig_mirror.ts";
 import { NativeHostError } from "../../src/background/native_client.ts";
+import { RuntimeRefusal } from "../../src/shared/command.ts";
 
 type Files = Record<string, string>;
 
@@ -334,4 +335,102 @@ test("the mirror writes in order, keeps quiet without the permission, and warns 
   fail_with = undefined;
   await mirror.mirror({ hint_letters: "back" });
   assert.equal(written.at(-1), 'hint_letters = "back"\n');
+});
+
+test("a reader during the swap waits for the commit and sees the config that matches the registry", async () => {
+  const host = { files: { "snippets/a.js": snippet_file("gap.old") } as Files };
+  const { fake } = install_fake_browser(host);
+  const startup = await fresh_startup("swap_gap");
+  await startup.get_config();
+  await startup.reload_config();
+  host.files = { "snippets/b.js": snippet_file("gap.new") };
+  const working = fake.tabs.query;
+  let slow_next = true;
+  fake.tabs.query = async () => {
+    if (slow_next) {
+      slow_next = false;
+      await new Promise((resolve) => setTimeout(resolve, 30));
+    }
+    return working();
+  };
+  const reload = startup.reload_config();
+  // The reload is now inside its slow publish: the registry already holds gap.new and not gap.old.
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  const read = await startup.get_config();
+  const snippet_ids = read.snippets.map((snippet) => snippet.id);
+  assert.deepEqual(snippet_ids, ["gap.new"]);
+  assert.ok(registry.get("gap.new"));
+  await reload;
+});
+
+test("a reader during a swap that fails gets the old config back", async () => {
+  const host = { files: settings_file('hint_letters = "ab"\n') };
+  const { fake } = install_fake_browser(host);
+  const startup = await fresh_startup("swap_gap_fails");
+  await startup.get_config();
+  await startup.reload_config();
+  host.files = settings_file('hint_letters = "cd"\n');
+  const working = fake.tabs.query;
+  let calls = 0;
+  fake.tabs.query = async () => {
+    if (calls++ === 0) {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      throw new Error("tabs down");
+    }
+    return working();
+  };
+  const reload = startup.reload_config().catch((error: Error) => error);
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  assert.equal((await startup.get_config()).settings.hint_letters, "ab");
+  assert.match(String(await reload), /tabs down/);
+});
+
+test("the reload counts every warning the help page shows, not only the load warnings", async () => {
+  // Eleven browser chords for ten shortcut slots: the slot plan warns, the build does not.
+  const chords = Array.from({ length: 11 }, (_, index) => `"<A-F${index + 1}>" = "tab.next"`).join("\n");
+  const host = { files: { "keymap.toml": `[browser]\n${chords}\n` } as Files };
+  const { local } = install_fake_browser(host);
+  const startup = await fresh_startup("all_warnings");
+  await startup.get_config();
+  const reloaded = await startup.reload_config();
+  const shown = local[WARNINGS_STORAGE_KEY] as string[];
+  assert.ok(shown.length > 0, "the case needs a warning from the publish");
+  assert.equal(reloaded.warnings, shown.length);
+});
+
+test("the build warnings of a reload survive a restart", async () => {
+  const host = { files: { "search_engines.toml": '[-dash]\nurl = "https://a.test/?q={query}"\n' } as Files };
+  const { local } = install_fake_browser(host);
+  const startup = await fresh_startup("warnings_restart");
+  await startup.get_config();
+  const reloaded = await startup.reload_config();
+  assert.ok(reloaded.warnings >= 1);
+  const after = await fresh_startup("warnings_restart_after");
+  await after.get_config();
+  const shown = local[WARNINGS_STORAGE_KEY] as string[];
+  assert.ok(shown.some((warning) => /starts with "-"/.test(warning)), shown.join("\n"));
+});
+
+test("a saved value TOML cannot hold only warns, and the edit stays", async () => {
+  const warned: string[] = [];
+  const mirror = create_autoconfig_mirror({ write_autoconfig: async () => undefined, warn: (message) => void warned.push(message) });
+  assert.doesNotThrow(() => mirror.mirror({ ignore_sites: [, "a.com"] as unknown as string[] }));
+  await mirror.mirror({ ignore_sites: [, "a.com"] as unknown as string[] });
+  assert.equal(warned.length, 1);
+});
+
+test("config.reload turns a failed browser call into a refusal that keeps the config and names the fix", async () => {
+  const host = { files: settings_file('hint_letters = "ab"\n') };
+  const { fake } = install_fake_browser(host);
+  const working = fake.storage.local.set;
+  fake.storage.local.set = async (values) => {
+    if (FILES_CONFIG_STORAGE_KEY in values) throw new Error("disk full");
+    return working(values);
+  };
+  const command = registry.get("config.reload")!;
+  await assert.rejects(Promise.resolve(command.run({ tab_id: undefined, window_id: 1, frame_id: 0, mode: "normal" }, {})), (error: Error) => {
+    assert.ok(error instanceof RuntimeRefusal, String(error));
+    assert.match(error.message, /^Config not reloaded, the current one stays\. A browser call failed \(disk full\)\. Run config\.reload again/);
+    return true;
+  });
 });
