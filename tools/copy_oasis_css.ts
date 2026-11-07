@@ -11,7 +11,7 @@ const args = process.argv.slice(2);
 const out_flag = args.indexOf("--out");
 const out_override = out_flag >= 0 ? args.splice(out_flag, 2)[1] : undefined;
 const source_dir = args[0];
-if (!source_dir || args.length !== 1 || out_override === "") {
+if (!source_dir || args.length !== 1 || (out_flag >= 0 && !out_override)) {
   console.error("usage: node tools/copy_oasis_css.ts <oasis.nvim dir> [--out <dir>]");
   process.exit(2);
 }
