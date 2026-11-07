@@ -22,7 +22,7 @@ A note "(prompts)" means the binding sets a `prompt` for a param, so the command
 
 <!-- BEGIN generated -->
 
-bound: 283 (normal 148, hint 2, cmdline 18, caret 35, visual 37, visual_line 38, insert 1, ignore 1, browser 3) | later: 8 | dropped: 6
+bound: 283 (normal 148, hint 2, cmdline 18, caret 35, visual 37, visual_line 38, insert 1, ignore 1, browser 3) | later: 6 | dropped: 8
 
 ### normal
 
@@ -182,8 +182,8 @@ bound: 283 (normal 148, hint 2, cmdline 18, caret 35, visual 37, visual_line 38,
 | `wi` | dropped |  |  | needs a shell |
 | `<C-o>` | later | `page.jump --step=-1` |  | phase 3 |
 | `<C-i>` | later | `page.jump --step=1` |  | phase 3 |
-| `yq` | later | `copy.qr` |  | phase 3 |
-| `gf` | later | `page.view_source` |  | phase 3 |
+| `yq` | dropped |  |  | no longer planned |
+| `gf` | dropped |  |  | no longer planned |
 | `g!` | dropped |  |  | joke binding |
 | `g;` | later | `page.change_jump` |  | phase 3 |
 | `;c` | dropped |  |  | needs a shell |
