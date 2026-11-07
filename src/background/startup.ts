@@ -2,7 +2,7 @@
 
 import type { MergedConfig, SettingEdits } from "../shared/config.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY } from "../shared/prefix_tree.ts";
-import { registry } from "../shared/registry/index.ts";
+import { registry } from "../shared/registry/builtin.ts";
 import { container_names, make_router_deps, snippet_deps } from "./browser_deps.ts";
 import { compile_config } from "./compile.ts";
 import { build_config_status, load_config, load_edits, store_edits, with_edits } from "./config_load.ts";

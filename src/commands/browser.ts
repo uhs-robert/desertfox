@@ -1,7 +1,7 @@
 import { RuntimeRefusal } from "../shared/command.ts";
 import type { CommandContext } from "../shared/command.ts";
 import type { FocusPage } from "../shared/messages.ts";
-import { define } from "../shared/registry/index.ts";
+import { define } from "../shared/registry/builtin.ts";
 import { require_tab_id } from "./open_target.ts";
 
 const TOP_FRAME_ID = 0;

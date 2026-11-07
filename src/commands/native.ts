@@ -1,5 +1,5 @@
 import { HELP_PAGE_FILE } from "../help/route.ts";
-import { define } from "../shared/registry/index.ts";
+import { define } from "../shared/registry/builtin.ts";
 import { native_install_hash } from "../shared/native_host.ts";
 import { open_help_url } from "./help_tab.ts";
 

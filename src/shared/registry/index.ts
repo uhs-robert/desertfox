@@ -1,9 +1,4 @@
-import { create_registry } from "./define.ts";
-
-// The registry the extension uses. Command modules call `define` on import.
-export const registry = create_registry();
-export const define = registry.define;
-
+// Types and helpers only. Nothing runs at import. The built-in `registry` and `define` live in builtin.ts.
 export { COMMAND_ID_PATTERN, create_registry, DefineError } from "./define.ts";
 export type { CommandInput, Registry } from "./define.ts";
 export { check_args } from "./check_args.ts";

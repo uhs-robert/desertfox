@@ -4,7 +4,7 @@ import { make_bookmark_handlers, pick_bookmark } from "../../src/commands/bookma
 import { make_browser_handlers } from "../../src/commands/browser.ts";
 import { clamp_zoom, make_zoom_handlers } from "../../src/commands/zoom.ts";
 import { check_args } from "../../src/shared/registry/check_args.ts";
-import { registry } from "../../src/shared/registry/index.ts";
+import { registry } from "../../src/shared/registry/builtin.ts";
 import { make_window_handlers } from "../../src/commands/window.ts";
 import type { WindowLike } from "../../src/background/complete_items.ts";
 import type { CommandContext } from "../../src/shared/command.ts";

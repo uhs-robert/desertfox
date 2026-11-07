@@ -1,6 +1,6 @@
 import { RuntimeRefusal } from "../shared/command.ts";
 import type { CommandContext } from "../shared/command.ts";
-import { define } from "../shared/registry/index.ts";
+import { define } from "../shared/registry/builtin.ts";
 import { numbered_windows } from "../background/complete_items.ts";
 import type { NumberedWindow, WindowLike } from "../background/complete_items.ts";
 import { read_recent_window_ids } from "../background/window_focus.ts";

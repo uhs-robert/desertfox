@@ -1,5 +1,5 @@
 import { RuntimeRefusal } from "../shared/command.ts";
-import { define } from "../shared/registry/index.ts";
+import { define } from "../shared/registry/builtin.ts";
 import { current_tab_url, open_in } from "./open_target.ts";
 import { parent_url, root_url } from "./url_build.ts";
 

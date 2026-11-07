@@ -4,7 +4,7 @@ import type { MergedConfig } from "../shared/config.ts";
 import type { PageInfo } from "../shared/engines/index.ts";
 import type { BackgroundToContent, Refusal, ToastKind } from "../shared/messages.ts";
 import type { EnumSources } from "../shared/registry/check_args.ts";
-import { registry } from "../shared/registry/index.ts";
+import { registry } from "../shared/registry/builtin.ts";
 import { runs_with_empty } from "./availability.ts";
 import type { BundleLoaderDeps } from "./bundle_loader.ts";
 import type { ImageDeps, ImageKind } from "./image_actions.ts";

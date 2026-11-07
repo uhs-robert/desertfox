@@ -5,7 +5,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import "../src/background/command_modules.ts";
 import { DEFAULT_KEYMAP } from "../src/background/default_keymap.ts";
-import { registry } from "../src/shared/registry/index.ts";
+import { registry } from "../src/shared/registry/builtin.ts";
 import { read_planned } from "./keymap_docs/planned.ts";
 import { render } from "./keymap_docs/render.ts";
 import { splice } from "./keymap_docs/splice.ts";
