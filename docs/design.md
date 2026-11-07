@@ -469,7 +469,7 @@ Firefox keeps the background awake while the port is open, which also helps a la
 | Phase | Contents |
 | --- | --- |
 | v1 | Snippets and `config.reload`, with the managed storage config and `tools/build-config`. Normal, insert and ignore modes. Scrolling, back and forward, reload, stop, home, parent and root URL. Tab and window commands, including containers and closed-tab undo. Search engines and explicit prompts. Bookmarks. Hints with every action above, rapid mode included. Copying the URL in 6 formats. Zoom. Search engines with slots and children replace the former site commands (site search, GitHub, subreddit, archive, isdown, translate), which now ship as examples. |
-| Later | Marks and quickmarks. Changing the number in a URL, following next and previous page links, the jump list, a QR code of the URL and view source. |
+| Later | Marks and quickmarks. Following next and previous page links, the jump list, a QR code of the URL and view source. |
 | Dropped | Shell access, string eval, command strings with chaining and pipes, a config language, userChrome editing, rewriting Firefox prefs, an external editor, page-event hooks, a key-grab mode, a theme engine, an update nag, an interactive tutorial and joke commands. |
 
 ## Trade-offs

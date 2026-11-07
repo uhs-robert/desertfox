@@ -25,23 +25,9 @@ note = "phase 3"
 
 [[row]]
 mode = "normal"
-key = "[c"
-status = "later"
-command = "url.increment --step=-1"
-note = "phase 3"
-
-[[row]]
-mode = "normal"
 key = "]]"
 status = "later"
 command = "page.follow --direction=next"
-note = "phase 3"
-
-[[row]]
-mode = "normal"
-key = "]c"
-status = "later"
-command = "url.increment --step=1"
 note = "phase 3"
 
 [[row]]
@@ -69,20 +55,6 @@ mode = "normal"
 key = "<C-i>"
 status = "later"
 command = "page.jump --step=1"
-note = "phase 3"
-
-[[row]]
-mode = "normal"
-key = "<C-x>"
-status = "later"
-command = "url.increment --step=-1"
-note = "phase 3"
-
-[[row]]
-mode = "normal"
-key = "<C-a>"
-status = "later"
-command = "url.increment --step=1"
 note = "phase 3"
 
 [[row]]

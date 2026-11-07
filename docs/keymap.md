@@ -22,7 +22,7 @@ A note "(prompts)" means the binding sets a `prompt` for a param, so the command
 
 <!-- BEGIN generated -->
 
-bound: 277 (normal 142, hint 2, cmdline 18, caret 35, visual 37, visual_line 38, insert 1, ignore 1, browser 3) | later: 14 | dropped: 6
+bound: 281 (normal 146, hint 2, cmdline 18, caret 35, visual 37, visual_line 38, insert 1, ignore 1, browser 3) | later: 10 | dropped: 6
 
 ### normal
 
@@ -104,6 +104,10 @@ bound: 277 (normal 142, hint 2, cmdline 18, caret 35, visual 37, visual_line 38,
 | `yt` | bound | `copy --title` | Copy URL |  |
 | `gu` | bound | `url.parent` | Parent URL |  |
 | `gU` | bound | `url.root` | Root URL |  |
+| `<C-a>` | bound | `url.increment --up` | Change URL number |  |
+| `<C-x>` | bound | `url.increment --down` | Change URL number |  |
+| `]c` | bound | `url.increment --up` | Change URL number |  |
+| `[c` | bound | `url.increment --down` | Change URL number |  |
 | `gi` | bound | `page.focus_input` | Focus input |  |
 | `p` | bound | `paste` | Open clipboard |  |
 | `P` | bound | `paste --tab` | Open clipboard |  |
@@ -173,15 +177,11 @@ bound: 277 (normal 142, hint 2, cmdline 18, caret 35, visual 37, visual_line 38,
 | `m` | later | `mark.add` |  | phase 3, key param |
 | `M` | later | `quickmark.add` |  | phase 3, key param |
 | `[[` | later | `page.follow --direction=prev` |  | phase 3 |
-| `[c` | later | `url.increment --step=-1` |  | phase 3 |
 | `]]` | later | `page.follow --direction=next` |  | phase 3 |
-| `]c` | later | `url.increment --step=1` |  | phase 3 |
 | `` ` `` | later | `mark.jump` |  | phase 3, key param |
 | `wi` | dropped |  |  | needs a shell |
 | `<C-o>` | later | `page.jump --step=-1` |  | phase 3 |
 | `<C-i>` | later | `page.jump --step=1` |  | phase 3 |
-| `<C-x>` | later | `url.increment --step=-1` |  | phase 3 |
-| `<C-a>` | later | `url.increment --step=1` |  | phase 3 |
 | `yq` | later | `copy.qr` |  | phase 3 |
 | `gf` | later | `page.view_source` |  | phase 3 |
 | `g!` | dropped |  |  | joke binding |
