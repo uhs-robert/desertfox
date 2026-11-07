@@ -1,13 +1,12 @@
 // The new tab page loads every key script by tag, since executeScript cannot reach an extension page.
 import { evaluate_in_background } from "./rdp.mjs";
 
-export async function run_cases({ run_case, expect, send_keys, sleep, rdp, extension_id, settled_injection_count, injections_of, extension_view }) {
+export async function run_cases({ run_case, expect, send_keys, sleep, rdp, extension_id, injections_of, extension_view }) {
   const evaluate = (code) => evaluate_in_background(rdp, extension_id, code);
 
   await run_case("the new tab page takes : and f without asking executeScript", async () => {
-    const hints_before = await settled_injection_count("hints.js");
-    const cmdline_before = await settled_injection_count("cmdline.js");
-    await evaluate(`browser.tabs.create({ url: browser.runtime.getURL("newtab.html") })`);
+    const tab_id = await evaluate(`browser.tabs.create({ url: browser.runtime.getURL("newtab.html") }).then((tab) => tab.id)`);
+    expect(Number.isInteger(tab_id), `no new tab id: ${tab_id}`);
     let ready = false;
     for (let attempt = 0; attempt < 40 && !ready; attempt++) {
       await sleep(250);
@@ -30,7 +29,9 @@ export async function run_cases({ run_case, expect, send_keys, sleep, rdp, exten
     expect(await mode() === "hint", `the mode after f was ${await mode()}`);
     await send_keys("-k", "Escape");
     await sleep(500);
-    expect((await injections_of("hints.js")).length === hints_before, "hints.js went through executeScript");
-    expect((await injections_of("cmdline.js")).length === cmdline_before, "cmdline.js went through executeScript");
+    // Only this tab's entries count, so an evicted entry in the bounded log cannot hide an injection.
+    for (const bundle of ["hints.js", "cmdline.js"]) {
+      expect((await injections_of(bundle)).every((entry) => entry.tab_id !== tab_id), `${bundle} went through executeScript`);
+    }
   });
 }
