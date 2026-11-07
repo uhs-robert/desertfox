@@ -7,18 +7,31 @@ import { create_session, shadow_down } from "./harness.mjs";
 import { create_timings } from "./timings.mjs";
 
 const key_test_dir = dirname(fileURLToPath(import.meta.url));
+// KEY_TEST_PIECES=p7_caret,p11_find runs only those pieces. KEY_TEST_ORDER=reverse runs them last to first.
+function chosen_piece_files() {
+  const all = readdirSync(key_test_dir).filter((name) => /^p\d+_.*\.mjs$/.test(name)).sort();
+  const wanted = (process.env.KEY_TEST_PIECES ?? "").split(",").map((name) => name.trim().replace(/\.mjs$/, "")).filter(Boolean);
+  const unknown = wanted.filter((name) => !all.includes(`${name}.mjs`));
+  if (unknown.length > 0) throw new Error(`KEY_TEST_PIECES names no piece: ${unknown.join(", ")}`);
+  const files = wanted.length === 0 ? all : all.filter((file) => wanted.includes(file.replace(/\.mjs$/, "")));
+  if (process.env.KEY_TEST_ORDER === "reverse") files.reverse();
+  else if (process.env.KEY_TEST_ORDER) throw new Error(`KEY_TEST_ORDER must be "reverse" or unset, got ${process.env.KEY_TEST_ORDER}`);
+  return files;
+}
+
 // shadow.sh caps names at 8 characters. "ok" plus a base-36 pid is at most 8 and unique among live runs.
 const SHADOW_NAME = `ok${process.pid.toString(36)}`;
 if (SHADOW_NAME.length > 8) throw new Error(`shadow name ${SHADOW_NAME} is longer than 8 characters`);
 
 async function main() {
+  const piece_files = chosen_piece_files();
   const timings = create_timings();
   const session = await create_session({ name: SHADOW_NAME, timings });
   const { results } = session;
 
   try {
     await session.sample_tabs("before pieces");
-    for (const file of readdirSync(key_test_dir).filter((name) => /^p\d+_.*\.mjs$/.test(name)).sort()) {
+    for (const file of piece_files) {
       await session.run_piece(file, await import(`./${file}`));
     }
     await session.sample_tabs("after pieces");

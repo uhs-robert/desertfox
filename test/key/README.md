@@ -7,11 +7,15 @@ Key tests. Each run builds the extension, starts Firefox in its own nested, invi
 ```bash
 just key-test
 KEY_TEST_ONLY=<regex> just key-test
+KEY_TEST_PIECES=p7_caret,p11_find just key-test
+KEY_TEST_ORDER=reverse just key-test
 ```
 
 A full run takes about 20 minutes (1143 s for 241 cases in the latest run) and needs a nested Hyprland. The key-test-speed work (#273) brings that down.
 
 - `KEY_TEST_ONLY` runs only the cases whose name matches. It also runs the cases marked `{ setup: true }` and every `h.setup` step of a piece, which leave state that later cases read. The output tags those as `SETUP`.
+- `KEY_TEST_PIECES` is a comma-separated list of piece names (the file name without `.mjs`). Only those pieces run, and an unknown name aborts the run. Each piece must pass alone.
+- `KEY_TEST_ORDER=reverse` runs the pieces from last to first. A piece that fails only in reverse order depends on state from another piece.
 - `SHADOW_SH` must name a script that runs `up|spawn|keys|down <name>` for a nested, invisible compositor session. It can also answer `status` with one `<name>: up|down ...` line per session, which the sweep reads.
   Cleanup of killed runs works only for drivers that keep a session's runtime dir in `/tmp/shadow-<uid>-<name>`.
   When `SHADOW_SH` is unset, the recipe uses `$HOME/dotfiles/.claude/skills/shadow/shadow.sh` if it is executable. With neither, it exits.
