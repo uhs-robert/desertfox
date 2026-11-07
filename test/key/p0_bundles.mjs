@@ -1,7 +1,7 @@
 // Bundles load on first use: once per tab, with no key lost during the load, plus the cost of a 20 KB executeScript.
 import { evaluate_in_background } from "./rdp.mjs";
 
-export async function run_cases({ run_case, expect, open_page, send_keys, sleep, events, wait_event, since, find_event, rdp, extension_id, scroll_delta_after, scroll_of, last_scroll_y, settled_injection_count, injections_of, record }) {
+export async function run_cases({ run_case, expect, open_page, send_keys, sleep, events, wait_event, since, find_event, rdp, extension_id, scroll_delta_after, scroll_of, last_scroll_y, in_background, settled_injection_count, injections_of, record }) {
   await run_case("a bundle loads on the first key, once, and no key typed during the load is lost", async () => {
     await open_page("page", "bundle_a", { new_tab: true });
     const loads_before = await settled_injection_count("hints.js");
@@ -35,12 +35,19 @@ export async function run_cases({ run_case, expect, open_page, send_keys, sleep,
 
   await run_case("V loads the padded caret bundle and enters caret mode, Escape leaves it", async () => {
     await open_page("page", "bundle_c", { new_tab: true });
+    const tab_id = await in_background(`browser.tabs.query({ active: true, currentWindow: true }).then((tabs) => tabs[0]?.id)`);
+    expect(Number.isInteger(tab_id), `no active tab id: ${tab_id}`);
     const is_label = (label) => (event) => event.type === "indicator" && event.page_id === "bundle_c" && event.label === label;
     const mark = events.length;
     await send_keys("gV");
     await wait_event(mark, is_label("CARET"), "the CARET badge");
-    const caret_loads = await injections_of("caret.js", 1);
-    expect(caret_loads.length >= 1 && caret_loads.at(-1).ok, "caret.js was not injected");
+    // Only this tab's entries count, so a caret load from another piece or an evicted log entry cannot decide the case.
+    let caret_loads = [];
+    for (let waited = 0; caret_loads.length === 0 && waited <= 1000; waited += 100) {
+      if (waited > 0) await sleep(100);
+      caret_loads = (await injections_of("caret.js")).filter((entry) => entry.tab_id === tab_id);
+    }
+    expect(caret_loads.length >= 1 && caret_loads.at(-1).ok, "caret.js was not injected into the new tab");
     record("padded_bundle_inject_ms", caret_loads.at(-1).ms);
     await send_keys("-k", "Escape");
     await wait_event(mark, is_label("NORMAL"), "the NORMAL badge after Escape");
