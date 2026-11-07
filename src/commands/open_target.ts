@@ -7,6 +7,7 @@ import { DEFAULT_SETTINGS } from "../shared/config.ts";
 import type { CommandContext, ParamDef } from "../shared/index.ts";
 import type { PageInfo } from "../shared/engines/slots.ts";
 import { url_target } from "./url_build.ts";
+import { best_match } from "../shared/score.ts";
 
 export const WHERE = ["here", "tab", "background", "window"] as const;
 export type Where = (typeof WHERE)[number];
@@ -106,4 +107,16 @@ async function open_in_unchecked(ctx: CommandContext, url: string, where: Where,
   }
   const opener = ctx.tab_id === undefined ? {} : { openerTabId: ctx.tab_id };
   await browser.tabs.create({ url, active: where === "tab", ...opener, ...store });
+}
+
+// An exact address wins, since a completion pick puts the address in the line. Other text is a fuzzy match on title and address, and an equal tie is refused.
+// `noun` names the list in the refusals ("bookmark", "history entry").
+export function pick_entry<Entry extends { title: string; url: string }>(entries: readonly Entry[], text: string, noun: string): Entry {
+  const typed = text.trim();
+  const exact = entries.find((entry) => entry.url === typed);
+  if (exact) return exact;
+  const match = best_match(typed, entries, (entry) => ({ name: entry.title, description: entry.url }));
+  if (match.found === "none") throw new RuntimeRefusal(`no ${noun} matches "${typed}"`);
+  if (match.found === "tie") throw new RuntimeRefusal(`"${typed}" matches "${match.first.title}" (${match.first.url}) and "${match.second.title}" (${match.second.url}) equally, use the address`);
+  return match.item;
 }
