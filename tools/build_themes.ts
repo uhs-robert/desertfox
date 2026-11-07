@@ -96,10 +96,13 @@ function clamp_fg_dim(colors: RoleColors): string {
   const enough = (color: string) => backgrounds.every((background) => contrast(color, background) >= FG_DIM_MIN_CONTRAST);
   if (enough(colors.fg_dim)) return colors.fg_dim;
   const [hue, saturation, lightness] = rgb_to_hsl(colors.fg_dim);
-  const step = backgrounds.every((background) => luminance(background) > luminance(colors.fg_dim)) ? -0.002 : 0.002;
-  for (let next = lightness; next >= 0 && next <= 1; next += step) {
-    const candidate = hsl_to_rgb(hue, saturation, next);
-    if (enough(candidate)) return candidate;
+  const lighter_first = !backgrounds.every((background) => luminance(background) > luminance(colors.fg_dim));
+  // Backgrounds on opposite sides of fg_dim leave no safe direction, so the second direction is the fallback.
+  for (const step of lighter_first ? [0.002, -0.002] : [-0.002, 0.002]) {
+    for (let next = lightness; next >= 0 && next <= 1; next += step) {
+      const candidate = hsl_to_rgb(hue, saturation, next);
+      if (enough(candidate)) return candidate;
+    }
   }
   problems.push(`${colors.fg_dim}: fg_dim cannot reach ${FG_DIM_MIN_CONTRAST}:1 on ${backgrounds.join(" and ")}`);
   return colors.fg_dim;
