@@ -23,7 +23,7 @@ export function scroll_label(top: number, max: number): string {
   if (!(max >= 1)) return "All";
   if (!(top > 0)) return "Top";
   if (top >= max - 1) return "Bot";
-  return `${Math.round((top / max) * 100)}%`;
+  return `${Math.min(99, Math.max(1, Math.round((top / max) * 100)))}%`;
 }
 
 // `index` is zero-based, as `tabs.Tab.index` is.

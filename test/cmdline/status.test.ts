@@ -32,6 +32,9 @@ test("the scroll label names the top, the bottom, a percent or a page that fits"
   assert.equal(scroll_label(999, 1000), "Bot");
   assert.equal(scroll_label(500, 1000), "50%");
   assert.equal(scroll_label(333.4, 1000), "33%");
+  // Rounding must not read 0% or 100% off the edges.
+  assert.equal(scroll_label(1, 10000), "1%");
+  assert.equal(scroll_label(9990, 10000), "99%");
   assert.equal(scroll_label(10, 0), "All");
   assert.equal(scroll_label(0, -3), "All");
   assert.equal(scroll_label(0, 0.4), "All");

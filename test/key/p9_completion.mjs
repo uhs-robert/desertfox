@@ -27,6 +27,10 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, open_p
       await set_zoom(3);
       await sleep(900);
       await take_shot(`${shot_dir}/narrow.png`);
+      // 3.75 times zoom makes the line 512px wide, 32rem: just above where the widgets hide.
+      await set_zoom(3.75);
+      await sleep(900);
+      await take_shot(`${shot_dir}/narrow-32rem.png`);
       await set_zoom(1);
       await send_keys("-k", "Escape");
       await sleep(300);
