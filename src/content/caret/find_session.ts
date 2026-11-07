@@ -12,7 +12,7 @@ import { scroll_to_index } from "./screen_line.ts";
 import { find_colors_of, stored_theme } from "./selection_colors.ts";
 import { first_visible_index } from "./start_point.ts";
 import { build_text_model, documents_of, MAX_TEXT_CHARS, trees_alive } from "./text_model.ts";
-import type { DomPoint, TextModel, TextTree } from "./text_model.ts";
+import type { DomPoint, TextModel } from "./text_model.ts";
 
 // What the engine needs of the host script. A bundle reaches it through `window.desertfox_host`.
 type Host = Pick<BundleHostApi, "show_toast">;
@@ -52,8 +52,8 @@ export type FindDeps = {
   scan_regex: ScanRegex;
   // Where each document's own selection sits, both ends: a drag from the same anchor to a new point moves it too. A click moves it, which makes a later position win over an older match.
   selection_key: (model: TextModel) => unknown[];
-  // Calls `on_change` when text changes in the page or in any of the trees the model read. The returned function points the watcher at the trees of a new model.
-  watch_page: (on_change: () => void) => (trees: TextTree[]) => void;
+  // Calls `on_change` when text changes in the page or in any of the trees the model read, or when a frame it met loads. The returned function points the watcher at a new model.
+  watch_page: (on_change: () => void) => (model: TextModel) => void;
 };
 
 const SLICE_MS = 8;
@@ -86,6 +86,19 @@ export async function read_find_colors(): Promise<FindColors> {
   return theme ? find_colors_of(theme) : FALLBACK_COLORS;
 }
 
+// One observer for the page and every tree of the model, the empty ones too: a shadow root or frame document that was empty at build time can fill later. A frame that navigates fires no mutation in its parent, so its `load` event stands in.
+export const page_watcher = (observer_class: typeof MutationObserver) => (on_change: () => void) => {
+  const observer = new observer_class((records) => records.some(is_page_change) && on_change());
+  let frame_listening = new AbortController();
+  return (model: TextModel) => {
+    observer.disconnect();
+    frame_listening.abort();
+    frame_listening = new AbortController();
+    for (const tree of [document, ...model.trees, ...model.empty_trees]) observer.observe(tree, { childList: true, characterData: true, subtree: true });
+    for (const frame of model.frames) frame.addEventListener("load", on_change, { signal: frame_listening.signal });
+  };
+};
+
 const browser_deps = (): FindDeps => ({
   build_model: () => build_text_model(document.body),
   start_index: (model) => (model.text === "" ? 0 : first_visible_index(model)),
@@ -97,13 +110,7 @@ const browser_deps = (): FindDeps => ({
   slicing: (is_stale) => ({ is_stale, yield_to_page: () => new Promise<void>((resume) => setTimeout(resume, 0)), now: () => performance.now(), slice_ms: SLICE_MS }),
   scan_regex: (text, { source, flags }) => browser.runtime.sendMessage({ type: "find_scan", text, source, flags } satisfies FindScan) as Promise<FindScanAnswer>,
   selection_key: (model) => documents_of(model).flatMap((owner) => [owner.getSelection()?.anchorNode, owner.getSelection()?.anchorOffset, owner.getSelection()?.focusNode, owner.getSelection()?.focusOffset]),
-  watch_page: (on_change) => {
-    const observer = new MutationObserver((records) => records.some(is_page_change) && on_change());
-    return (trees) => {
-      observer.disconnect();
-      for (const tree of [document, ...trees]) observer.observe(tree, { childList: true, characterData: true, subtree: true });
-    };
-  },
+  watch_page: (on_change) => page_watcher(MutationObserver)(on_change),
 });
 
 // Said under the line and in the toast when the model stopped at the size cap.
@@ -133,7 +140,7 @@ export function create_find(host: Host, deps: FindDeps = browser_deps()) {
   let steps: Promise<void> = Promise.resolve();
   // The page changed its text since the search read its model, so the model is read again before it is used.
   let page_changed = false;
-  let observe_trees: ((trees: TextTree[]) => void) | undefined;
+  let retarget_watcher: ((model: TextModel) => void) | undefined;
   // The last query whose regex ran past the time limit. `n` and `N` search it as text at once, so a page whose text keeps changing does not cost each press the full limit.
   // Typing it on the line runs the regex again, and an answer clears it.
   let timed_out_query: string | undefined;
@@ -171,7 +178,7 @@ export function create_find(host: Host, deps: FindDeps = browser_deps()) {
   const read_model = (): TextModel => {
     const model = deps.build_model();
     page_changed = false;
-    (observe_trees ??= deps.watch_page(() => (page_changed = true)))(model.trees);
+    (retarget_watcher ??= deps.watch_page(() => (page_changed = true)))(model);
     return model;
   };
 
