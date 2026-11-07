@@ -3,6 +3,8 @@
 // Text in fields, scripts, styles and hidden elements is left out: fields belong to insert mode.
 // The walk follows the rendered order into open and closed shadow roots and into same-origin frames.
 
+import { shadow_root_of } from "../shadow.ts";
+
 // A tree the text lives in. A Range and a style rule each reach into one tree only.
 export type TextTree = Document | ShadowRoot;
 
@@ -42,10 +44,6 @@ export const MAX_TEXT_CHARS = 4_000_000;
 const is_block = (style: CSSStyleDeclaration) => !style.display.startsWith("inline") && style.display !== "contents";
 
 const is_frame = (element: Element) => element.localName === "iframe" || element.localName === "frame";
-
-// Firefox gives content scripts closed shadow roots through this property.
-const shadow_root_of = (element: Element): ShadowRoot | null =>
-  (element as Element & { openOrClosedShadowRoot?: ShadowRoot | null }).openOrClosedShadowRoot ?? element.shadowRoot;
 
 // Null for a frame from another origin: reading it throws, and its own content script covers it.
 export function frame_document(element: Element): Document | null {
