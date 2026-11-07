@@ -6,7 +6,7 @@ import { evaluate_in_background } from "./rdp.mjs";
 
 const CTRL = (key) => ["-M", "ctrl", key, "-m", "ctrl"];
 
-export async function run_cases({ rdp, extension_id, run_case, send_keys, open_page, wait_event, take_shot, events, expect, sleep }) {
+export async function run_cases({ rdp, extension_id, run_case, send_keys, open_page, wait_event, take_shot, events, expect, sleep, scroll_of, last_scroll_y, scroll_delta_after }) {
   const shot_dir = process.env.DESERTFOX_SHOT_DIR;
   const set_zoom = (factor) => evaluate_in_background(rdp, extension_id, `(async () => { const [tab] = await browser.tabs.query({ active: true, currentWindow: true }); await browser.tabs.setZoom(tab.id, ${factor}); })()`);
   const tab_urls = () => evaluate_in_background(rdp, extension_id, `(async () => (await browser.tabs.query({ currentWindow: true })).map((tab) => tab.url))()`);
@@ -27,6 +27,10 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, open_p
       await set_zoom(3);
       await sleep(900);
       await take_shot(`${shot_dir}/narrow.png`);
+      // 3.75 times zoom makes the line 512px wide, 32rem: just above where the widgets hide.
+      await set_zoom(3.75);
+      await sleep(900);
+      await take_shot(`${shot_dir}/narrow-32rem.png`);
       await set_zoom(1);
       await send_keys("-k", "Escape");
       await sleep(300);
@@ -122,6 +126,35 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, open_p
     await sleep(900);
     const urls = await tab_urls();
     expect(urls.length === before + 1 && urls.some((url) => url.includes("home.html#command=tab.close")), "no help tab for the typed word");
+    await send_keys(...CTRL("w"));
+    await sleep(500);
+  });
+
+  // The widgets sit in the iframe, which no helper here can read. The case checks that they leave the line usable and the page where it was, and the shots show the text.
+  await run_case("the status widgets on a scrolled page leave the page in place and the line closable", async () => {
+    await open_page("aligned", "p9_status", { new_tab: true });
+    const mark = events.length;
+    await send_keys("G");
+    const at_bottom = await wait_event(mark, scroll_of("p9_status"), "scroll to the bottom");
+    await sleep(500);
+    await send_keys(":");
+    await sleep(900);
+    if (shot_dir) await take_shot(`${shot_dir}/status-bottom.png`);
+    // The first Escape closes the open list, the second the line.
+    await send_keys("-k", "Escape");
+    await sleep(300);
+    await send_keys("-k", "Escape");
+    await sleep(400);
+    expect(last_scroll_y("p9_status") === at_bottom.y, "the page scrolled while the line was open");
+    expect(await scroll_delta_after("p9_status", ["k"]) < 0, "k did not scroll up after the line closed");
+    await send_keys(":");
+    await sleep(900);
+    if (shot_dir) await take_shot(`${shot_dir}/status-above-bottom.png`);
+    // The first Escape closes the open list, the second the line.
+    await send_keys("-k", "Escape");
+    await sleep(300);
+    await send_keys("-k", "Escape");
+    await sleep(400);
     await send_keys(...CTRL("w"));
     await sleep(500);
   });

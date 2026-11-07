@@ -52,6 +52,8 @@ export const SETTINGS_TABLE = {
   completion_all_windows: { kind: "boolean", default: false },
   cmdline_prompt: { kind: "line", min_length: 1, max_length: 8, suggestions: ["caret", "colon"], default: "caret" },
   open_completion: { kind: "enum_list", values: ["bookmarks", "history"], default: ["bookmarks", "history"] },
+  // List order is display order. An empty list hides the status area.
+  statusbar_widgets: { kind: "enum_list", values: ["url", "scroll", "tabs"], default: ["url", "scroll", "tabs"] },
   history_completion_max: { kind: "number", whole: true, min: 0, default: 10 },
   history_list_max: { kind: "number", whole: true, min: 0, default: 20 },
   // `true` means analog, as it did before the digital face.

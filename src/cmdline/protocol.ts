@@ -13,7 +13,8 @@ export type HostToPage =
   // background for its data, so a forged `start` gets nothing. `tokens` are the keys typed while the page loaded, in order.
   // `mode` is the mode the line was opened from, which decides the commands the list offers.
   // `search` makes the line a page search: it types no command, and the host reads each edit.
-  | { kind: "start"; ticket: string; text: string; tokens: string[]; mode: string; search?: "forward" | "backward" | undefined }
+  // `scroll` is the page's scroll place when the line opened: `max` is scroll height minus client height. Null when the page has no scrolling element.
+  | { kind: "start"; ticket: string; text: string; tokens: string[]; mode: string; search?: "forward" | "backward" | undefined; scroll?: { top: number; max: number } | null | undefined }
   // A key that reached the host script instead of the page, for example after a click on the page.
   | { kind: "token"; token: string }
   // Sent once the host moved focus into the frame, after every key it forwarded. Later keys reach the page directly.

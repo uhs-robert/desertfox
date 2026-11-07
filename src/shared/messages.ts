@@ -5,7 +5,7 @@ import type { BundleName } from "./bundles.ts";
 import type { CommandMeta, Mode } from "./command.ts";
 import type { WhichKeyBorder } from "./config.ts";
 import type { SettingTag } from "./setting_list.ts";
-import type { SettingRow } from "./settings_table.ts";
+import type { SettingRow, Settings } from "./settings_table.ts";
 import type { BoundInvocation, Invocation } from "./invocation.ts";
 
 // Why a command did not run. The content script shows `message` as a toast,
@@ -87,6 +87,10 @@ export type CmdlineOpened = {
   // The window of the line's tab and the `completion_all_windows` setting, which the page needs to filter the tab model's rows.
   window_id: number;
   all_windows: boolean;
+  // The `statusbar_widgets` setting, in display order.
+  statusbar_widgets: Settings["statusbar_widgets"];
+  // What the widgets show, taken when the line opens. `tab_index` is zero-based and `tab_count` covers the line's window.
+  status: { url: string; tab_index: number; tab_count: number };
 };
 
 // From the command line page when typed text parsed. The background keeps it in the history unless the tab is private.

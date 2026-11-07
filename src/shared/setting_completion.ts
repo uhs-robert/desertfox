@@ -176,6 +176,18 @@ export const SETTING_COMPLETION: readonly SettingCompletion[] = [
     ]
   },
   {
+    "name": "statusbar_widgets",
+    "settable": true,
+    "is_toggle": false,
+    "is_list": true,
+    "expectation": "a list of \"url\", \"scroll\" and \"tabs\" with no repeat",
+    "values": [
+      "url",
+      "scroll",
+      "tabs"
+    ]
+  },
+  {
     "name": "history_completion_max",
     "settable": true,
     "is_toggle": false,
