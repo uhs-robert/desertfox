@@ -21,6 +21,8 @@ function make_tabs(count: number, overrides: Partial<TabInfo>[] = []): TabInfo[]
     id: 100 + index,
     index,
     pinned: false,
+    // Every fixture tab counts as active unless a test says otherwise, so the focus rules apply to whichever tab a test closes.
+    active: true,
     audible: false,
     muted: false,
     url: `https://site${index}.test/`,
@@ -109,6 +111,13 @@ test("tab.close side=focus_previous activates the previous tab, then closes", as
   const { handlers, log } = make_fake(make_tabs(3));
   await handlers.close(ctx_at(101), { side: "focus_previous" });
   assert.deepEqual(log, ["activate 100", "remove 101"]);
+});
+
+test("tab.close on a tab that is no longer active removes it without moving focus", async () => {
+  const { handlers, log } = make_fake(make_tabs(3, [{}, { active: false }]));
+  await handlers.close(ctx_at(101), { side: "focus_previous" });
+  await handlers.close(ctx_at(101), { side: "site" });
+  assert.deepEqual(log, ["remove 101", "remove 101"]);
 });
 
 test("tab.close on the last tab closes without activating", async () => {

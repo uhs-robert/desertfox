@@ -16,6 +16,8 @@ export type RouterDeps = {
   get_command: (command_id: string) => CommandDef | undefined;
   get_enum_sources: () => Promise<EnumSources>;
   active_tab: () => Promise<ActiveTab | undefined>;
+  // Undefined when the tab is gone.
+  get_tab: (tab_id: number) => Promise<ActiveTab | undefined>;
   has_content_script: (tab_id: number) => Promise<boolean>;
   // Undefined when the content script cannot answer.
   ask_selection: (tab_id: number, frame_id: number) => Promise<string | undefined>;
@@ -34,7 +36,7 @@ export type RouterDeps = {
 export type RouteRequest = {
   invocations: BoundInvocation[];
   mode: Mode;
-  // The tab the caller says it came from. The active tab wins when there is one.
+  // The tab the caller says it came from. The first step runs there while it exists. Later steps follow the active tab.
   sender_tab_id?: number;
   frame_id?: number;
   // Set by keys and Firefox shortcuts: a missing value opens the command line. A snippet's `desertfox.run` leaves it
@@ -60,9 +62,11 @@ function outcome_of_reply(reply: unknown): Outcome {
 }
 
 export function create_router(deps: RouterDeps): Router {
-  // Read at run time: an earlier step or repeat can change which tab is active.
-  async function read_now(request: RouteRequest): Promise<Now> {
-    const active = await deps.active_tab();
+  // Read at run time: an earlier step or repeat can change which tab is active. The first step is pinned to the sender, because
+  // the active tab can change between the key press and this read. A sender that is gone falls back to the active tab.
+  async function read_now(request: RouteRequest, pin_to_sender: boolean): Promise<Now> {
+    const sender = pin_to_sender && request.sender_tab_id !== undefined ? await deps.get_tab(request.sender_tab_id).catch(() => undefined) : undefined;
+    const active = sender ?? (await deps.active_tab());
     const tab_id = active?.tab_id ?? request.sender_tab_id;
     // The sender frame exists only in the sender tab. Another tab gets its top frame.
     const same_tab = tab_id !== undefined && tab_id === request.sender_tab_id;
@@ -73,15 +77,16 @@ export function create_router(deps: RouterDeps): Router {
 
   async function run(request: RouteRequest): Promise<RunResponse> {
     // Read before any step: window.new, window.close and tab.attach change which tab is active.
-    const is_private = (await read_now(request)).active?.incognito === true;
+    const is_private = (await read_now(request, true)).active?.incognito === true;
     const prompted = new Set<BoundInvocation>();
-    for (const invocation of request.invocations) {
-      const outcome = await run_one(invocation, request, prompted).catch((error: unknown) => refuse(error instanceof Error ? error.message : String(error)));
+    for (const [index, invocation] of request.invocations.entries()) {
+      const is_first = index === 0;
+      const outcome = await run_one(invocation, request, prompted, is_first).catch((error: unknown) => refuse(error instanceof Error ? error.message : String(error)));
       // The user left a waiting step: the rest of the sequence does not run, and nothing is repeated.
       if (outcome.ok && outcome.cancelled) return { ok: true, cancelled: true };
       if (outcome.ok) continue;
       const refusal: Refusal = { id: invocation.id, message: outcome.message };
-      const { context } = await read_now(request);
+      const { context } = await read_now(request, is_first);
       await deps.show_refusal(context.tab_id, refusal, context.frame_id);
       return { ok: false, refusal };
     }
@@ -101,8 +106,8 @@ export function create_router(deps: RouterDeps): Router {
     await deps.repeat_memory.save(repeatable.map(as_stored), is_private).catch(() => undefined);
   }
 
-  async function run_one(invocation: BoundInvocation, request: RouteRequest, prompted: Set<BoundInvocation>): Promise<Outcome> {
-    const { active, context } = await read_now(request);
+  async function run_one(invocation: BoundInvocation, request: RouteRequest, prompted: Set<BoundInvocation>, is_first: boolean): Promise<Outcome> {
+    const { active, context } = await read_now(request, is_first);
     const command = deps.get_command(invocation.id);
     if (!command) return refuse(`unknown command "${invocation.id}"`);
 
@@ -142,7 +147,7 @@ export function create_router(deps: RouterDeps): Router {
 
     if (command.runs_in === "content") return run_in_content(command, final_args, counted.times, context);
     for (let time = 0; time < counted.times; time++) {
-      const result = outcome_of_reply(await command.run(time === 0 ? context : (await read_now(request)).context, final_args));
+      const result = outcome_of_reply(await command.run(time === 0 ? context : (await read_now(request, false)).context, final_args));
       if (!result.ok) return result;
     }
     return done;

@@ -22,6 +22,7 @@ export const SETTING_DOCS: Record<SettingName, string> = {
   cmdline_prompt: 'Before the command line input: "caret" for a bold > , "colon" for a primary-colored :, or your own text (include the trailing space you want)',
   open_completion: "Groups that open completes from, in list order. A source left out is not read. Default is both",
   history_completion_max: "History rows that open completion shows for an empty word",
+  history_list_max: "History rows that the history command lists for an empty word",
   newtab_clock: 'The new tab page clock: false hides it, true or "analog" shows the analog face, "digital" shows the seven-segment digits',
   newtab_date: "Whether the new tab page shows the date under the clock",
   newtab_clock_format: "Hours on the digital clock: 12 with an AM or PM suffix, or 24. The analog clock ignores it",

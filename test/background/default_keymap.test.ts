@@ -176,6 +176,7 @@ test("a search binding on the selection opens the command line when nothing is s
     get_command: (id) => registry.get(id),
     get_enum_sources: async () => ({ search_engines: ["github.repo"] }),
     active_tab: async () => ({ tab_id: 3, window_id: 1, url: "https://github.com/a/b" }),
+    get_tab: async () => undefined,
     has_content_script: async () => true,
     ask_selection: async () => "",
     runs_with_empty: async () => false,

@@ -99,7 +99,7 @@ export type RecordCmdline = {
 // sender is a tab whose line redeemed a ticket, and it holds only tabs and windows of the sender's own privacy (private or not).
 export type CompleteItems = {
   type: "complete_items";
-  kind: "bookmarks" | "engines" | "open" | "windows";
+  kind: "bookmarks" | "engines" | "history" | "open" | "windows";
 };
 
 // From the command line page when a row key acts on tabs of the list. `tab_ids` were captured at the key press, so a later change of the list does not change them. The answer is undefined unless the sender is a tab whose line
@@ -157,13 +157,16 @@ export type OpenRow = { title: string; url: string; tag: OpenTag };
 // Every row, in the group order of the `open_completion` setting and without a duplicate address. The page caps an empty word: 20 bookmarks and `history_max` history rows.
 export type OpenItems = { rows: OpenRow[]; history_max: number };
 
+// The `history` command's rows, newest first and with no dedup against bookmarks. `max` is the `history_list_max` cap that the page applies to an empty word, so a typed word still ranks every row.
+export type HistoryItems = { rows: HistoryItem[]; max: number };
+
 // `number` is the window's place in `windows.getAll`, counted from 1, so it stays when other windows drop out of the list. `title` is its active tab's.
 export type WindowItem = { number: number; title: string };
 
 // A heading of the page, from the host script. `level` is 1 to 6, `text` is the rendered text, trimmed.
 export type HeadingItem = { level: number; text: string };
 
-export type CompleteItemsAnswer = { items: BookmarkItem[] | EngineItem[] | OpenItems | WindowItem[] | HeadingItem[] };
+export type CompleteItemsAnswer = { items: BookmarkItem[] | EngineItem[] | HistoryItems | OpenItems | WindowItem[] | HeadingItem[] };
 
 // From the `hints` bundle at the start of a pick: what `.` shows again. The background checks it like any page message, because the sender is a page script.
 export type RecordRepeat = {
