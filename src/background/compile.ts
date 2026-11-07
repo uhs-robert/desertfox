@@ -15,7 +15,7 @@ import { LIGHT_INTENSITIES } from "../shared/theme/roles.ts";
 import { load_theme, local_theme_problem } from "../shared/theme/load.ts";
 import type { StoredTheme } from "../shared/theme/apply.ts";
 import { compile_keymap } from "../shared/keys/compiler.ts";
-import { merge_keymaps } from "./keymap_merge.ts";
+import { default_layer_of, merge_keymaps } from "./keymap_merge.ts";
 
 export type CompileInput = {
   config: MergedConfig;
@@ -35,7 +35,7 @@ export function compile_config(input: CompileInput): CompileOutput {
       // The prompted param is filled when the key runs, as in keep_node.
       return result.ok || (prompt !== undefined && result.missing_param === prompt.param);
     } };
-  }, { engine_labels: Object.fromEntries(Object.entries(input.config.search_engines).flatMap(([name, engine]) => (typeof engine?.label === "string" ? [[name, engine.label]] : []))) });
+  }, { engine_labels: Object.fromEntries(Object.entries(input.config.search_engines).flatMap(([name, engine]) => (typeof engine?.label === "string" ? [[name, engine.label]] : []))) }, default_layer_of(input.default_keymap, input.config.keymap));
 
   const requested_palette = input.config.settings.palette ?? DEFAULT_PALETTE;
   let light_intensity = input.config.settings.light_intensity ?? DEFAULT_LIGHT_INTENSITY;

@@ -22,3 +22,15 @@ export function merge_keymaps(defaults: KeymapConfig, user: KeymapConfig): Keyma
   }
   return merged;
 }
+
+// The part of the defaults the user did not override or null: the keys the compiler may drop when a user key extends one.
+export function default_layer_of(defaults: KeymapConfig, user: KeymapConfig): KeymapConfig {
+  const kept = (own: Record<string, unknown> | undefined, over: Record<string, unknown> | undefined) =>
+    Object.fromEntries(Object.entries(own ?? {}).filter(([key]) => !(key in (over ?? {}))));
+  const layer: Record<string, unknown> = {};
+  for (const name of Object.keys(defaults)) {
+    if (name === "modifiers" || name === "group_names") continue;
+    layer[name] = kept(defaults[name as keyof KeymapConfig] as Record<string, unknown>, user[name as keyof KeymapConfig] as Record<string, unknown>);
+  }
+  return layer as KeymapConfig;
+}
