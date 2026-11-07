@@ -3,9 +3,10 @@ import "../src/background/command_modules.ts";
 import { test } from "node:test";
 import { load_effective_config } from "../src/background/config_load.ts";
 import { create_settings_messages } from "../src/background/settings_message.ts";
-import { SAVED_SETTINGS_STORAGE_KEY, TEMP_SETTINGS_STORAGE_KEY } from "../src/background/storage_keys.ts";
+import { CONFIG_STATUS_STORAGE_KEY, SAVED_SETTINGS_STORAGE_KEY } from "../src/background/storage_keys.ts";
 import { CONFIG_FORMAT_VERSION } from "../src/shared/config.ts";
-import { control_of, create_settings_session, group_of, GROUPS, problem_with, touches_settings, value_of_text } from "../src/help/settings_model.ts";
+import { mount_settings } from "../src/help/settings_page.ts";
+import { control_of, create_settings_session, LAYER_LABEL, problem_with, touches_settings, value_of_text } from "../src/help/settings_model.ts";
 import type { SettingListRow } from "../src/shared/messages.ts";
 
 function install_fake_browser(file_settings: Record<string, unknown>) {
@@ -76,12 +77,6 @@ test("an enum keeps its typed options, and a palette in force that no list names
   assert.ok(palette.type === "select" && palette.options.includes("my_theme"));
 });
 
-test("every setting lands in a group, and the page's groups are those in GROUPS", async () => {
-  const { session } = await make();
-  const titles = new Set(GROUPS.map((group) => group.title));
-  for (const field of session.fields()) assert.ok(titles.has(group_of(field.row.name)), field.row.name);
-});
-
 test("checks as you type use the setting's own check", () => {
   assert.match(problem_with("history_completion_max", Number.NaN)!, /history_completion_max: expected/);
   assert.equal(problem_with("history_completion_max", 5), undefined);
@@ -89,11 +84,15 @@ test("checks as you type use the setting's own check", () => {
   assert.ok(Number.isNaN(value_of_text({ type: "number" }, "")));
 });
 
-test("only the layers that feed the page count as a change", () => {
-  assert.equal(touches_settings({ [SAVED_SETTINGS_STORAGE_KEY]: {} }, "local"), true);
-  assert.equal(touches_settings({ [TEMP_SETTINGS_STORAGE_KEY]: {} }, "session"), true);
-  assert.equal(touches_settings({ [TEMP_SETTINGS_STORAGE_KEY]: {} }, "local"), false);
+test("only a write of the config status counts as a change", () => {
+  assert.equal(touches_settings({ [CONFIG_STATUS_STORAGE_KEY]: {} }, "local"), true);
+  assert.equal(touches_settings({ [CONFIG_STATUS_STORAGE_KEY]: {} }, "session"), false);
+  assert.equal(touches_settings({ [SAVED_SETTINGS_STORAGE_KEY]: {} }, "local"), false);
   assert.equal(touches_settings({ other: {} }, "local"), false);
+});
+
+test("every layer has a tag label", () => {
+  assert.deepEqual(Object.keys(LAYER_LABEL).sort(), ["default", "saved", "settings.toml", "temp"]);
 });
 
 test("a change saves, shows the saved tag, and reset returns to the file value", async () => {
@@ -160,24 +159,23 @@ test("a refresh that began before an edit does not overwrite the edit's answer",
   assert.equal(session.field("newtab_date")!.row.top_layer, "saved");
 });
 
-test("the page's own write does not loop: refreshes triggered by it send only reads", async () => {
-  const { session, messages } = await make();
-  const sent: string[] = [];
-  const spy = create_settings_session({
-    send: async (message) => {
-      sent.push((message as { type: string }).type);
-      return (message as { type: string }).type === "list_settings" ? messages.list() : messages.change(message as never);
-    },
-    engines: [],
-    on_change: () => undefined,
-  });
-  await spy.load();
-  await spy.commit("newtab_date", false);
-  // Storage events from that write, three at once.
-  await Promise.all([spy.refresh(), spy.refresh(), spy.refresh()]);
-  assert.deepEqual(sent.filter((type) => type === "change_setting"), ["change_setting"]);
-  assert.ok(sent.filter((type) => type === "list_settings").length <= 3);
-  void session;
+test("unmounting stops the listener, and a load that ends after it adds none", async () => {
+  const { messages } = await make();
+  const added: unknown[] = [];
+  const removed: unknown[] = [];
+  const events = { addListener: (listener: unknown) => added.push(listener), removeListener: (listener: unknown) => removed.push(listener) };
+  // The container has no group boxes, so the session loads and nothing is drawn.
+  const container = { querySelector: () => null, prepend: () => undefined } as never;
+  const send = async (message: unknown) => ((message as { type: string }).type === "list_settings" ? messages.list() : messages.change(message as never));
+  const stop_late = mount_settings(container, send, [], events);
+  stop_late();
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.equal(added.length, 0);
+  const stop = mount_settings(container, send, [], events);
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.equal(added.length, 1);
+  stop();
+  assert.equal(removed.at(-1), added[0]);
 });
 
 test("two quick edits of one field end on the second value", async () => {

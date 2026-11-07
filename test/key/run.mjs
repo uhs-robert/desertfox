@@ -665,20 +665,20 @@ async function main() {
       await evaluate_in_background(rdp, EXTENSION_ID, `(async () => { for (const tab of await browser.tabs.query({})) if (tab.url.endsWith("/newtab.html")) await browser.tabs.remove(tab.id); })()`);
     });
 
-    await run_case("the add-on preferences open the help page with the config source", async () => {
-      // Firefox focuses an open help tab instead of opening Home, so the earlier help case's tab goes first.
+    await run_case("the add-on preferences open the settings page", async () => {
+      // Firefox focuses an open help tab instead of opening Settings, so the earlier help case's tab goes first.
       // The answer is a short summary: a whole page of text is too long to come back over RDP.
-      const home = await evaluate_in_background(rdp, EXTENSION_ID, `(async () => {
+      const settings = await evaluate_in_background(rdp, EXTENSION_ID, `(async () => {
         for (const tab of await browser.tabs.query({})) if (new URL(tab.url).pathname === "/home.html") await browser.tabs.remove(tab.id);
         await browser.runtime.openOptionsPage();
         for (let attempt = 0; attempt < 30; attempt++) {
           await new Promise((resolve) => setTimeout(resolve, 250));
-          const text = ${extension_view("home.html")}?.document.body.textContent ?? "";
-          if (text.includes("Config source")) return { config_source: true, change_the_config: text.includes("Change the config") };
+          const view = ${extension_view("home.html")};
+          if (view?.document.querySelector("[data-setting]")) return { hash: view.location.hash, rows: view.document.querySelectorAll("[data-setting]").length };
         }
-        return { config_source: false, change_the_config: false };
+        return { hash: "", rows: 0 };
       })()`);
-      expect(home?.config_source && home?.change_the_config, `help Home after openOptionsPage: ${JSON.stringify(home)}`);
+      expect(settings?.hash === "#/settings" && settings?.rows > 20, `settings page after openOptionsPage: ${JSON.stringify(settings)}`);
     });
 
     // part A: scroll align

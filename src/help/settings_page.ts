@@ -1,7 +1,7 @@
 // Draws the settings page from a session and wires its controls. The session (`settings_model.ts`) holds the state, so this file only turns fields into nodes and events into session calls.
 
 import { el } from "./render.ts";
-import { create_settings_session, GROUPS, READ_ONLY_NOTE, text_of_value, touches_settings, value_of_text } from "./settings_model.ts";
+import { create_settings_session, GROUPS, LAYER_LABEL, READ_ONLY_NOTE, text_of_value, touches_settings, value_of_text } from "./settings_model.ts";
 import type { Control, Field, SessionDeps, SettingsSession } from "./settings_model.ts";
 
 // One control: how to read the value it shows and how to put a value in without recreating it, which would drop focus and a half-typed edit.
@@ -141,7 +141,7 @@ function build_row(field: Field, session: SettingsSession): Row {
 }
 
 function update_row(row: Row, field: Field): void {
-  row.tag.textContent = field.row.top_layer;
+  row.tag.textContent = LAYER_LABEL[field.row.top_layer];
   const edited = field.row.top_layer === "saved" || field.row.top_layer === "temp";
   row.reset.disabled = !edited && field.draft === undefined;
   row.message.textContent = field.error ?? field.note ?? "";
@@ -155,8 +155,8 @@ function update_row(row: Row, field: Field): void {
 
 type StorageChangedEvents = { addListener: (listener: (changes: Record<string, unknown>, area: string) => void) => void; removeListener: (listener: (changes: Record<string, unknown>, area: string) => void) => void };
 
-// Loads the settings into `container` and keeps them current: a change in another tab refreshes the rows the reader is not editing. Stops listening once the container leaves the page, because the router rebuilds the body on each route.
-export async function mount_settings(container: HTMLElement, send: SessionDeps["send"], engines: string[], storage_changed: StorageChangedEvents): Promise<void> {
+// Loads the settings into `container` and keeps them current: a change in another tab refreshes the rows the reader is not editing. The returned function stops the listening. The router calls it before it rebuilds the body.
+export function mount_settings(container: HTMLElement, send: SessionDeps["send"], engines: string[], storage_changed: StorageChangedEvents): () => void {
   const rows = new Map<string, Row>();
   // The headings and the group boxes come from the render, so a section link reaches a heading before the settings load.
   const build = (session: SettingsSession) => {
@@ -186,12 +186,17 @@ export async function mount_settings(container: HTMLElement, send: SessionDeps["
     },
   });
   const listener = (changes: Record<string, unknown>, area: string) => {
-    if (!container.isConnected) storage_changed.removeListener(listener);
-    else if (touches_settings(changes, area)) void session.refresh();
+    if (touches_settings(changes, area)) void session.refresh();
   };
-  if (!(await session.load())) {
-    container.prepend(el("p", "desertfox-settings-error", "The settings could not be loaded."));
-    return;
-  }
-  storage_changed.addListener(listener);
+  let stopped = false;
+  const stop = () => {
+    stopped = true;
+    storage_changed.removeListener(listener);
+  };
+  void session.load().then((loaded) => {
+    if (stopped) return;
+    if (loaded) storage_changed.addListener(listener);
+    else container.prepend(el("p", "desertfox-settings-error", "The settings could not be loaded."));
+  });
+  return stop;
 }

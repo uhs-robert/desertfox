@@ -32,11 +32,14 @@ export async function run_cases({ run_case, rdp, extension_id, take_shot, expect
     expect((await saved()).which_key_border === undefined, "reset left the saved edit");
     expect((await tag_of("which_key_border")) !== "saved", "the tag stayed saved after reset");
 
-    await in_background(`browser.storage.local.set({ desertfox_saved_settings: { newtab_date: false } })`);
+    // A second extension page sends the same message the page does, as a `:set` in another tab would. It ends with a write of the config status, which is what the page listens for.
+    await in_background(`browser.tabs.create({ url: browser.runtime.getURL("home.html#/quick-start") }).then(() => true)`);
+    await sleep(1000);
+    await in_background(`(() => { const other = browser.extension.getViews({ type: "tab" }).find((candidate) => candidate.location.hash === "#/quick-start"); return other.browser.runtime.sendMessage({ type: "change_setting", name: "newtab_date", action: "set", value: false }).then((answer) => answer.ok); })()`);
     await sleep(800);
     const shown = await in_page(row("newtab_date", `return { checked: row.querySelector("input").checked, tag: row.querySelector(".desertfox-help-badge").textContent };`));
     expect(shown.checked === false && shown.tag === "saved", `another write showed ${JSON.stringify(shown)}`);
-    await in_background(`browser.storage.local.remove("desertfox_saved_settings")`);
+    await in_background(`(() => { const other = browser.extension.getViews({ type: "tab" }).find((candidate) => candidate.location.hash === "#/quick-start"); return other.browser.runtime.sendMessage({ type: "change_setting", name: "newtab_date", action: "reset" }).then((answer) => answer.ok); })()`);
     await close_tabs();
   });
 }

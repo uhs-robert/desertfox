@@ -4,6 +4,7 @@ import { copy_text } from "../content/caret/copy_text.ts";
 import type { Block, Inline } from "./blocks.ts";
 import type { CommandRow, EngineRow, HelpModel, KeyRow } from "./model.ts";
 import { STYLE_CLASSES, STYLE_VARIABLES } from "./model.ts";
+import { native_install_hash } from "../shared/native_host.ts";
 import { GROUPS } from "./settings_model.ts";
 import { PAGES } from "./route.ts";
 import type { PageId, Route } from "./route.ts";
@@ -211,10 +212,21 @@ function styling_page(): HTMLElement[] {
   ];
 }
 
+// Opens the panel `:native.install` opens, by the same hash. The nonce makes a tab already on the panel show it again.
+function install_native_host_button(): HTMLElement {
+  const button = el("button", "desertfox-settings-install", "Install native host") as HTMLButtonElement;
+  button.type = "button";
+  button.addEventListener("click", () => {
+    location.hash = native_install_hash(Date.now());
+  });
+  return el("p", undefined, button);
+}
+
 // Settings go in after the render: `main.ts` fills `.desertfox-settings` from the background.
 function settings_page(): HTMLElement[] {
   return [
     el("p", undefined, "A change is saved at once, the same as ", el("code", undefined, ":set"), ". Each setting shows the layer that sets its value. Reset drops the saved and temp edit, so the config file value applies."),
+    install_native_host_button(),
     el("div", "desertfox-settings", ...page_sections("settings", []).flatMap((section, index) => {
       const group = el("div", "desertfox-settings-group");
       group.setAttribute("data-group", GROUPS[index]!.title);

@@ -12,11 +12,15 @@ import { mount_native_install } from "./native_install.ts";
 import { mount_settings } from "./settings_page.ts";
 import { parse_route } from "./route.ts";
 
+let stop_settings: (() => void) | undefined;
+
 function show_route(model: HelpModel, guide: Block[], engines: string[], moved_by_user: boolean): void {
   const route = parse_route(location.hash);
+  stop_settings?.();
+  stop_settings = undefined;
   render_help(document.body, model, route, guide);
   const settings_box = route.page === "settings" ? document.querySelector<HTMLElement>(".desertfox-settings") : null;
-  if (settings_box) void mount_settings(settings_box, (message) => browser.runtime.sendMessage(message), engines, browser.storage.onChanged as never);
+  if (settings_box) stop_settings = mount_settings(settings_box, (message) => browser.runtime.sendMessage(message), engines, browser.storage.onChanged as never);
   // The render removed the link that had focus. Not on first load, where focus belongs to the browser.
   const section_heading = route.section === undefined ? null : document.getElementById(section_anchor(route.page, route.section));
   if (section_heading) {
