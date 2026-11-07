@@ -61,7 +61,7 @@ const TABS: TabItem[] = [
 const BOOKMARKS: BookmarkItem[] = Array.from({ length: 30 }, (_, index) => ({ title: `Mark ${index}`, url: `https://m${index}.test/` }));
 
 // The background answers when the test says so.
-function make(containers: { name: string; cookie_store_id: string }[] = STORES) {
+function make(containers: { name: string; cookie_store_id: string }[] = STORES, history: string[] = []) {
   const asks: { kind: string; answer: (items: TabItem[] | BookmarkItem[] | EngineItem[] | OpenItems | WindowItem[] | HeadingItem[]) => void }[] = [];
   // The tab model has no reply to await. The first read is its cue to connect, and `answer` is the snapshot arriving.
   let tab_items: TabItem[] | undefined;
@@ -84,7 +84,7 @@ function make(containers: { name: string; cookie_store_id: string }[] = STORES) 
     on_ready: () => session.source_ready(),
   });
   const session = create_session({
-    history: [],
+    history,
     parse: (text) => parse_command_line(lookup, text, SOURCES),
     tabs: () => tab_items,
     containers,
@@ -542,8 +542,8 @@ test("a page with no headings lists nothing and says no match", async () => {
   assert.equal(session.get_hint(), "no match");
 });
 
-async function listed(tabs: TabItem[] = TABS, containers?: { name: string; cookie_store_id: string }[]) {
-  const made = make(containers);
+async function listed(tabs: TabItem[] = TABS, containers?: { name: string; cookie_store_id: string }[], history?: string[]) {
+  const made = make(containers, history);
   made.session.edit("tab ");
   made.asks[0]!.answer(tabs);
   await made.settle();
@@ -902,4 +902,18 @@ test("when every marked tab closes during the prompt, Enter reopens nothing, not
   session.edit("default");
   assert.deepEqual(enter(session), { kind: "render" });
   assert.equal(session.get_message(), "no tab to reopen");
+});
+
+test("Up and Down in the container prompt with no matching container leave the typed text alone", async () => {
+  const { session } = await listed(TABS, undefined, ["open a", "tab 2"]);
+  session.run("cmdline.next_completion", undefined);
+  reopen_key(session);
+  session.edit("zzz");
+  assert.equal(session.get_rows().length, 0);
+  session.run("cmdline.history", { direction: "prev" });
+  assert.equal(session.get_text(), "zzz");
+  session.run("cmdline.history", { direction: "next" });
+  assert.equal(session.get_text(), "zzz");
+  assert.deepEqual(enter(session), { kind: "render" });
+  assert.equal(session.get_message(), "pick a container");
 });

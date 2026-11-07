@@ -292,6 +292,8 @@ export function create_session(deps: SessionDeps) {
 
   const walk_history = (direction: unknown): Effect => {
     if (deps.search) return { kind: "render" };
+    // The container prompt has no history, so Up and Down with no row to step to must not replace the typed name.
+    if (picking && rows().length === 0) return { kind: "render" };
     if (!fresh && rows().length > 0) return step_selection(direction);
     const next = direction === "next" ? cursor.next() : cursor.prev(text);
     if (next !== undefined) {
