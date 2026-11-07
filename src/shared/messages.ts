@@ -26,9 +26,13 @@ export type RunRequest = {
   from_hints?: true;
 };
 
+// "gained" when the frame's own window holds focus, "lost" when it gives it up. A report without it changes no focus.
+export type FrameFocus = "gained" | "lost";
+
 export type ModeChanged = {
   type: "mode_changed";
   mode: Mode;
+  focus?: FrameFocus;
 };
 
 // Asks the background to inject a bundle into the sender's frame. The answer is a RunResponse: ok once the script has run.
@@ -266,6 +270,12 @@ export type SetMode = {
   mode: Mode;
 };
 
+// To the top frame: the mode of the child frame that holds focus, which the badge shows in place of the top frame's own. Absent when no child frame holds focus.
+export type FocusedFrameMode = {
+  type: "focused_frame_mode";
+  mode?: Mode;
+};
+
 // The compiled keymap in `storage.local` changed: read it again.
 export type TreeUpdated = {
   type: "tree_updated";
@@ -286,7 +296,7 @@ export type Ping = {
   type: "ping";
 };
 
-export type BackgroundToContent = RunInContent | ShowRefusal | SetMode | TreeUpdated | GetSelection | FocusPage | Ping;
+export type BackgroundToContent = RunInContent | ShowRefusal | SetMode | FocusedFrameMode | TreeUpdated | GetSelection | FocusPage | Ping;
 
 // Background to tab-model clients, over the port `desertfox_tab_model`
 

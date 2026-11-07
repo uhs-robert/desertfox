@@ -1,5 +1,5 @@
 import "./command_modules.ts";
-import type { ContentToBackground, PageToBackground } from "../shared/messages.ts";
+import type { ContentToBackground, FocusedFrameMode, PageToBackground } from "../shared/messages.ts";
 import type { BoundInvocation } from "../shared/invocation.ts";
 import { DEFAULT_SETTINGS, effective_settings } from "../shared/config.ts";
 import { bundle_loader_deps, container_names, container_stores, image_deps, make_router_deps, page_of, reinject_deps } from "./browser_deps.ts";
@@ -29,12 +29,13 @@ import { load_effective_config } from "./config_load.ts";
 import { create_settings_messages, is_extension_page } from "./settings_message.ts";
 import { command_meta } from "../shared/registry/index.ts";
 import { registry } from "../shared/registry/builtin.ts";
-import { forget_all_tab_modes, forget_mode_on_navigation, forget_tab_mode, recall_tab_mode, remember_reported_mode, shortcut_allowed } from "./tab_modes.ts";
+import { create_tab_modes, shortcut_allowed } from "./tab_modes.ts";
 import type { SlotTable } from "./slots.ts";
 import type { SnippetCall } from "./snippets.ts";
 
-// Mode reports wait for this, so the clear never removes a fresh report.
-const modes_cleared = forget_all_tab_modes(browser.storage.local);
+const tab_modes = create_tab_modes(browser.storage.local);
+// Queued first, so the clear never removes a fresh report.
+void tab_modes.forget_all();
 
 // Taken before the config loads, so it holds the built-in commands only, which are the ones the help page has cards for.
 const built_in_ids = new Set(registry.list().map((command) => command.id));
@@ -104,9 +105,11 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
     if (!is_extension_page(sender, browser.runtime.id, browser.runtime.getURL(""))) return Promise.resolve({ ok: false, message: "only the extension's own pages may change settings" });
     return get_config().then((): Promise<unknown> => (page_request.type === "list_settings" ? settings_messages.list() : settings_messages.change(page_request)));
   }
-  if (request?.type === "mode_changed" && sender.tab?.id !== undefined) {
+  if (request?.type === "mode_changed" && sender.tab?.id !== undefined && sender.frameId !== undefined) {
     const tab_id = sender.tab.id;
-    return modes_cleared.then(() => remember_reported_mode(browser.storage.local, tab_id, sender.frameId, request.mode));
+    const report = { frame_id: sender.frameId, mode: request.mode, ...(request.focus === undefined ? {} : { focus: request.focus }) };
+    // The top frame may still be loading and miss the message. Its own start report brings a fresh one.
+    return tab_modes.report(tab_id, report).then((mode) => void browser.tabs.sendMessage(tab_id, { type: "focused_frame_mode", ...(mode === undefined ? {} : { mode }) } satisfies FocusedFrameMode, { frameId: 0 }).catch(() => undefined));
   }
   if (request?.type === "load_bundle") return bundle_loader.answer(sender, request.name);
   if (request?.type === "find_scan" && is_scan_request(request)) return find_scan.answer(request, `${sender.tab?.id}:${sender.frameId}`);
@@ -174,13 +177,13 @@ browser.commands.onCommand.addListener(async (slot_name: string) => {
   const invocations: BoundInvocation[] | undefined = (stored[SLOT_TABLE_STORAGE_KEY] as SlotTable | undefined)?.[slot_name];
   if (!invocations) return;
   const [active] = await browser.tabs.query({ active: true, currentWindow: true });
-  const mode = active?.id === undefined ? "normal" : await recall_tab_mode(browser.storage.local, active.id);
+  const mode = active?.id === undefined ? "normal" : await tab_modes.recall(active.id);
   if (shortcut_allowed(mode, invocations, (id) => registry.get(id))) await router.run({ invocations, mode, may_prompt: true });
 });
 
 browser.tabs.onUpdated.addListener((tab_id, change) => {
   void cmdline.forget_opener_on_navigation(tab_id, change);
-  return forget_mode_on_navigation(browser.storage.local, tab_id, change);
+  return tab_modes.forget_on_navigation(tab_id, change);
 });
 
 browser.tabs.onActivated.addListener(({ windowId, previousTabId }) => previous_tabs.activated(windowId, previousTabId));
@@ -188,7 +191,7 @@ browser.tabs.onActivated.addListener(({ windowId, previousTabId }) => previous_t
 browser.tabs.onRemoved.addListener((tab_id, { windowId, isWindowClosing }) => {
   void previous_tabs.removed(tab_id, windowId, isWindowClosing);
   void cmdline.forget_opener(tab_id);
-  return forget_tab_mode(browser.storage.local, tab_id);
+  return tab_modes.forget(tab_id);
 });
 
 void get_config().then(() => repair_tabs_after_reload(reinject_deps));

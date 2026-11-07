@@ -118,6 +118,18 @@ export function start_server() {
       const frames = `<iframe id="same" src="/frame_inner?id=${id}_same" style="display:block;width:300px;height:200px"></iframe><iframe id="cross" src="http://localhost:${port}/frame_inner?id=${id}_cross" style="display:block;width:300px;height:200px"></iframe><iframe id="tiny" src="http://localhost:${port}/frame_inner?id=${id}_tiny" style="display:block;width:10px;height:10px"></iframe>`;
       return response.end(page(`frames ${id}`, frames + tall_filler));
     }
+    if (url.pathname === "/hidden_input_frame") {
+      // A stand-in for the Google Docs editor: on load the page writes a contenteditable into an offscreen, about:blank same-origin frame and focuses it.
+      const frame = '<iframe id="input_frame" tabindex="-1" style="position:absolute;top:-10000px;left:0;width:1px;height:1px;border:0"></iframe>';
+      const script = `<script>addEventListener("load", () => {
+        const inner = document.getElementById("input_frame").contentDocument;
+        inner.open();
+        inner.write('<!doctype html><body><div id="editor" contenteditable="true"></div></body>');
+        inner.close();
+        inner.getElementById("editor").focus();
+      })</script>`;
+      return response.end(page(`hidden_input_frame ${id}`, frame + tall_filler, script));
+    }
     if (url.pathname === "/hints") {
       const covered = '<div style="position:relative;width:200px"><a href="/page?id=hint_covered">covered</a><div style="position:absolute;inset:0;background:#fff"></div></div>';
       const links = `<a href="/page?id=hint_hidden" style="display:none">hidden</a>${covered}<p><a href="/page?id=hint_one">one</a></p><p><a href="/page?id=hint_two">two</a></p>`;

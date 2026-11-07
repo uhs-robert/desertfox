@@ -1,7 +1,7 @@
 // Content script entry: a capture listener on keydown, the compiled keymap from
 // storage, and the modes. Runs in every frame. A frame of another site starts on its first focus.
 
-import type { BackgroundToContent, CompiledKeymap, ContentToBackground, Mode, ModeIndicator, ReadTabAddress, RunResponse, TreeLeaf } from "../shared/index.ts";
+import type { BackgroundToContent, CompiledKeymap, ContentToBackground, FrameFocus, Mode, ModeIndicator, ReadTabAddress, RunResponse, TreeLeaf } from "../shared/index.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY, COMPILED_KEYMAP_VERSION, DEFAULT_MODE_INDICATOR, current_keymap } from "../shared/index.ts";
 import { create_matcher, event_to_token } from "../shared/keys/index.ts";
 import { ignores_any_address } from "../shared/match_pattern.ts";
@@ -14,7 +14,7 @@ import { create_key_flow } from "./key_flow.ts";
 import { create_which_key_timer } from "./which_key_timer.ts";
 import { mode_label } from "./mode_label.ts";
 import { show_mode_label, show_toast } from "./ui_proxy.ts";
-import { wire_mode_reports } from "./mode_report.ts";
+import { holds_own_focus, wire_focus_reports, wire_mode_reports } from "./mode_report.ts";
 import { page_mode } from "./page_mode.ts";
 import { counted_invocations, run_content_steps, run_in_order } from "./run_content.ts";
 import { read_context_source } from "./context.ts";
@@ -23,8 +23,11 @@ import { blur_focused_element } from "./handlers/page.ts";
 
 // Until the tree is read the setting is unknown, and the default applies.
 let mode_indicator: ModeIndicator = DEFAULT_MODE_INDICATOR;
+// Set in the top frame only, from the background, while a child frame holds focus.
+let focused_frame_mode: Mode | undefined;
 
 function refresh_mode_indicator(): void {
+  if (focused_frame_mode !== undefined) return show_mode_label(mode_label(focused_frame_mode, false, mode_indicator), focused_frame_mode);
   const mode = page_mode.get_mode();
   const pass_next_armed = page_mode.is_pass_next_armed();
   show_mode_label(mode_label(mode, pass_next_armed, mode_indicator), pass_next_armed ? undefined : mode);
@@ -202,16 +205,21 @@ function start(): void {
   addEventListener("pagehide", bundles.page_hidden);
   document.addEventListener("visibilitychange", on_visibility_change);
 
+  // A report without an explicit focus change still claims the focus when this frame holds it, so a missed focus event heals on the next report.
+  const report_mode = (focus: FrameFocus | undefined = holds_own_focus(document) ? "gained" : undefined) =>
+    void send_to_background({ type: "mode_changed", mode: page_mode.get_mode(), ...(focus === undefined ? {} : { focus }) });
+
   wire_mode_reports(page_mode, (mode) => {
     if (!extension_context_alive()) return stop_listening();
     key_flow.reset_sequence();
     bundles.enter_mode(mode);
-    void send_to_background({ type: "mode_changed", mode });
+    report_mode();
   });
+  wire_focus_reports(window, (focus) => extension_context_alive() && report_mode(focus));
 
   // Coming back from the back-forward cache runs no start-up, and the background's per-tab mode is stale.
   window.addEventListener("pageshow", (event) => {
-    if (event.persisted) void send_to_background({ type: "mode_changed", mode: page_mode.get_mode() });
+    if (event.persisted) report_mode();
   });
 
   page_mode.listen_display(refresh_mode_indicator);
@@ -234,6 +242,10 @@ function start(): void {
       return run_in_order(message.invocations);
     } else if (message.type === "refusal") show_toast(message.refusal.message, message.kind);
     else if (message.type === "set_mode") page_mode.set_mode(message.mode);
+    else if (message.type === "focused_frame_mode" && message.mode !== focused_frame_mode) {
+      focused_frame_mode = message.mode;
+      refresh_mode_indicator();
+    }
     else if (message.type === "tree_updated") void install_after_tab_address(read_keymap());
   });
 

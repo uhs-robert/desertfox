@@ -6,7 +6,7 @@ import { create_cancelled_keys } from "../src/content/cancelled_keys.ts";
 import { cancels_unbound_key, create_key_flow } from "../src/content/key_flow.ts";
 import { ignore_regex_source, ignores_any_address, matches_pattern } from "../src/shared/match_pattern.ts";
 import { mode_label } from "../src/content/mode_label.ts";
-import { wire_mode_reports } from "../src/content/mode_report.ts";
+import { holds_own_focus, wire_focus_reports, wire_mode_reports } from "../src/content/mode_report.ts";
 import { create_mode_state } from "../src/content/mode_state.ts";
 import { percent_to_offset, pick_scroll_target } from "../src/content/scroll_target.ts";
 import { create_matcher } from "../src/shared/keys/index.ts";
@@ -404,4 +404,43 @@ test("the mode is reported at start and on every change", () => {
   wire_mode_reports(state, (mode) => reports.push(mode));
   state.set_mode("ignore");
   assert.deepEqual(reports, ["normal", "ignore"]);
+});
+
+function fake_window() {
+  type FakeWindow = { addEventListener: (type: string, listener: (event: { target: unknown }) => void) => void; fire: (type: string, target?: unknown) => void };
+  const listeners = new Map<string, ((event: { target: unknown }) => void)[]>();
+  const win: FakeWindow = {
+    addEventListener: (type: string, listener: (event: { target: unknown }) => void) => void listeners.set(type, [...(listeners.get(type) ?? []), listener]),
+    fire: (type: string, target: unknown = win) => listeners.get(type)?.forEach((listener) => listener({ target })),
+  };
+  return win;
+}
+
+test("a frame reports when its window gains and loses focus, and when its page goes away", () => {
+  const win = fake_window();
+  const reports: string[] = [];
+  wire_focus_reports(win as unknown as Window, (focus) => reports.push(focus ?? "check own focus"));
+  win.fire("focus");
+  win.fire("blur");
+  win.fire("focus");
+  win.fire("pagehide");
+  assert.deepEqual(reports, ["check own focus", "lost", "check own focus", "lost"]);
+});
+
+test("focus and blur of an element inside the frame are not a frame focus change", () => {
+  const win = fake_window();
+  const reports: string[] = [];
+  wire_focus_reports(win as unknown as Window, (focus) => reports.push(focus ?? "check own focus"));
+  win.fire("focus", { localName: "input" });
+  win.fire("blur", { localName: "input" });
+  assert.deepEqual(reports, []);
+});
+
+test("a document holds its own focus unless a child frame has it", () => {
+  const doc = (has_focus: boolean, local_name: string) => ({ hasFocus: () => has_focus, activeElement: { localName: local_name } }) as unknown as Document;
+  assert.equal(holds_own_focus(doc(true, "body")), true);
+  assert.equal(holds_own_focus(doc(true, "div")), true);
+  assert.equal(holds_own_focus(doc(true, "iframe")), false);
+  assert.equal(holds_own_focus(doc(true, "frame")), false);
+  assert.equal(holds_own_focus(doc(false, "body")), false);
 });
