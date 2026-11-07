@@ -61,3 +61,21 @@ test("increment refuses an address with no number or no http page", () => {
   assert.throws(() => incremented_url("https://a2.com/about#3", "up", 1), /no number/);
   assert.throws(() => incremented_url("about:blank", "up", 1), /cannot change/);
 });
+
+test("increment keeps an empty query or fragment delimiter", () => {
+  assert.equal(incremented_url("https://a.com/p/1?", "up", 1), "https://a.com/p/2?");
+  assert.equal(incremented_url("https://a.com/p/1#", "up", 1), "https://a.com/p/2#");
+  assert.equal(incremented_url("https://a.com/p/1?#", "down", 1), "https://a.com/p/0?#");
+});
+
+test("increment skips digits inside percent escapes", () => {
+  assert.throws(() => incremented_url("https://a.com/about%20us", "up", 1), /no number/);
+  assert.equal(incremented_url("https://a.com/p/4?q=a%20b", "up", 1), "https://a.com/p/5?q=a%20b");
+  assert.equal(incremented_url("https://a.com/p/4?q=a%2021", "up", 1), "https://a.com/p/4?q=a%2022");
+});
+
+test("increment refuses an amount or a result that needs more than 15 digits", () => {
+  assert.throws(() => incremented_url("https://a.com/p/1", "up", 1e15), /amount/);
+  assert.throws(() => incremented_url("https://a.com/p/999999999999999", "up", 1), /past 15 digits/);
+  assert.equal(incremented_url("https://a.com/p/999999999999998", "up", 1), "https://a.com/p/999999999999999");
+});
