@@ -18,10 +18,11 @@ function fake_page(page_text = "ab ab ab") {
   const watchers: (() => void)[] = [];
   let retargets = 0;
   let builds = 0;
+  const pending_hosts: unknown[] = [];
   // The background scan, answered in place after one gate, so a newer keystroke can arrive while it runs.
   let background: ScanRegex = async (text, { source, flags }) => ({ ok: true, ...scan_regex({ text, source, flags }) });
   const make_model = (): TextModel =>
-    (builds++, { text: page_text, trees: [], empty_trees: [], frames: [], point_at: (index: number) => ({ node: { index }, offset: 0 }), index_of: (node: { index: number }) => node.index }) as unknown as TextModel;
+    (builds++, { text: page_text, trees: [], empty_trees: [], pending_hosts: [...pending_hosts], frames: [], point_at: (index: number) => ({ node: { index }, offset: 0 }), index_of: (node: { index: number }) => node.index }) as unknown as TextModel;
   const deps: FindDeps = {
     build_model: make_model,
     start_index: () => 0,
@@ -48,7 +49,7 @@ function fake_page(page_text = "ab ab ab") {
       await new Promise((resume) => setImmediate(resume));
     }
   };
-  return { deps, retargets: () => retargets, builds: () => builds, change_page: () => watchers.forEach((notify) => notify()), painted, toasts, registers, settle, clears: () => clears, set_selection: (next: string[]) => (selection = next), set_background: (next: ScanRegex) => (background = next), host: { show_toast: (message: string) => void toasts.push(message) } };
+  return { deps, pending_hosts, retargets: () => retargets, builds: () => builds, change_page: () => watchers.forEach((notify) => notify()), painted, toasts, registers, settle, clears: () => clears, set_selection: (next: string[]) => (selection = next), set_background: (next: ScanRegex) => (background = next), host: { show_toast: (message: string) => void toasts.push(message) } };
 }
 
 test("a search begun while Enter waits for the old scan keeps its own state", async () => {
@@ -580,4 +581,43 @@ test("a retarget drops the load listeners of the old model's frames", () => {
   retarget({ trees: [], empty_trees: [], frames: [] } as unknown as TextModel);
   load();
   assert.equal(changes, 0, "a frame the new model no longer lists still raised a change");
+});
+
+// A custom element that gains a shadow root fires no mutation, so the model lists it and `n` checks the list.
+async function step_after_host_change(host: Record<string, unknown>, change: () => void) {
+  const page = fake_page();
+  page.pending_hosts.push(host);
+  const find = create_find(page.host, page.deps);
+  find.begin("forward");
+  find.update("ab", () => {});
+  await page.settle();
+  await find.end(true);
+  const step = async () => {
+    const stepping = find.step(false);
+    await page.settle();
+    await stepping;
+  };
+  await step();
+  const before = page.builds();
+  await step();
+  assert.equal(page.builds(), before, "n read the page again with nothing changed");
+  change();
+  page.pending_hosts.length = 0;
+  await step();
+  const after_change = page.builds();
+  await step();
+  assert.equal(page.builds(), after_change, "n read the page again after the model took the new root");
+  return { before, after_change };
+}
+
+test("n reads the page once after a custom element gains a shadow root", async () => {
+  const host: Record<string, unknown> = { shadowRoot: null };
+  const { before, after_change } = await step_after_host_change(host, () => (host.shadowRoot = {}));
+  assert.equal(after_change, before + 1);
+});
+
+test("n reads the page once after a custom element gains a closed shadow root", async () => {
+  const host: Record<string, unknown> = { shadowRoot: null, openOrClosedShadowRoot: null };
+  const { before, after_change } = await step_after_host_change(host, () => (host.openOrClosedShadowRoot = {}));
+  assert.equal(after_change, before + 1);
 });

@@ -17,6 +17,8 @@ export type TextModel = {
   trees: TextTree[];
   // Shadow roots and frame documents the walk met that gave no text, so a later fill is not seen through `trees`. Never overlaps `trees`.
   empty_trees: TextTree[];
+  // Custom elements (a hyphen in the tag name) the walk met with no shadow root. One can attach a root later, and that fires no mutation. A plain element can too, and is left out: checking every element is the cost this list avoids.
+  pending_hosts: Element[];
   // Every frame element the walk met. A frame that loads or navigates later fires `load` on the element and no mutation in this tree.
   frames: Element[];
   // The characters from `from` up to `to`, cut where the text passes into another tree.
@@ -70,6 +72,7 @@ export function build_text_model(root: Element = document.body, start_node?: Nod
   const trees = new Set<TextTree>();
   const met_trees = new Set<TextTree>();
   const frames: Element[] = [];
+  const pending_hosts: Element[] = [];
   let text = "";
   let last_block: Element | undefined;
   let after_space = true;
@@ -159,6 +162,7 @@ export function build_text_model(root: Element = document.body, start_node?: Nod
     }
     const shadow = shadow_root_of(element);
     if (shadow) met_trees.add(shadow);
+    else if (element.localName.includes("-")) pending_hosts.push(element);
     const children = rendered_children(element);
     const inner_block = is_block(style) ? element : block;
     const inner_preformatted = style.whiteSpace.startsWith("pre");
@@ -172,6 +176,7 @@ export function build_text_model(root: Element = document.body, start_node?: Nod
     index_of: (node, offset) => index_of(segments, empty_lines, node, offset),
     trees: [...trees],
     empty_trees: [...met_trees].filter((tree) => !trees.has(tree)),
+    pending_hosts,
     frames,
     tree_runs: (from, to) => tree_runs(tree_starts, from, to),
     start_index,
@@ -201,6 +206,9 @@ function is_alive(tree: TextTree): boolean {
 }
 
 export const trees_alive = (model: TextModel): boolean => model.trees.every(is_alive);
+
+// True when a custom element that had no shadow root at build time has one now, so its text is not in the model.
+export const host_gained_root = (model: TextModel): boolean => model.pending_hosts.some((host) => shadow_root_of(host) !== null);
 
 // Each document holds one selection, for itself and for the shadow roots inside it. A dead one is left out.
 export const documents_of = (model: TextModel): Document[] => [...new Set(model.trees.filter(is_alive).map(document_of))];
