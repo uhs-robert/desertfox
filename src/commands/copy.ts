@@ -1,5 +1,5 @@
 import { COPY_FORMATS, copy_url } from "../content/handlers/copy.ts";
-import { define } from "../shared/registry/index.ts";
+import { define } from "../shared/registry/builtin.ts";
 
 define("copy.url", {
   name: "copy",

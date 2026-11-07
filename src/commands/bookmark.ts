@@ -3,7 +3,7 @@ import type { CommandContext } from "../shared/command.ts";
 import { bookmark_items, browser_complete_items_deps } from "../background/complete_items.ts";
 import { show_toast_on_tab } from "../background/browser_deps.ts";
 import type { BookmarkItem, ToastKind } from "../shared/messages.ts";
-import { define } from "../shared/registry/index.ts";
+import { define } from "../shared/registry/builtin.ts";
 import { best_match } from "../shared/score.ts";
 import { open_in, WHERE_PARAM } from "./open_target.ts";
 import type { Where } from "./open_target.ts";

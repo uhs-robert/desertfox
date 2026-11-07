@@ -14,7 +14,8 @@ import { get_config } from "../../src/background/startup.ts";
 import { current_page } from "../../src/commands/open_target.ts";
 import type { BoundInvocation } from "../../src/shared/invocation.ts";
 import type { TreeLeaf } from "../../src/shared/prefix_tree.ts";
-import { parse_command_line, registry } from "../../src/shared/registry/index.ts";
+import { parse_command_line } from "../../src/shared/registry/index.ts";
+import { registry } from "../../src/shared/registry/builtin.ts";
 import { parse_binding } from "../../src/shared/registry/parse_binding.ts";
 import { build_config, read_commands_file } from "../../tools/build-config/build_config.ts";
 

@@ -9,7 +9,7 @@ import { NO_EDITS } from "../../src/shared/config.ts";
 import type { MergedConfig, SettingEdits, SettingOverrides } from "../../src/shared/config.ts";
 import { check_args } from "../../src/shared/registry/check_args.ts";
 import { parse_command_line } from "../../src/shared/registry/command_line.ts";
-import { registry } from "../../src/shared/registry/index.ts";
+import { registry } from "../../src/shared/registry/builtin.ts";
 
 const config = (settings: MergedConfig["settings"] = {}): MergedConfig => ({ ...empty_config(), settings });
 const saved = (layer: SettingOverrides): SettingEdits => ({ saved: layer, temp: {} });

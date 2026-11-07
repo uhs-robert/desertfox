@@ -3,7 +3,7 @@ import { test } from "node:test";
 import "../../src/background/command_modules.ts";
 import { DEFAULT_KEYMAP } from "../../src/background/default_keymap.ts";
 import { parse_binding } from "../../src/shared/registry/parse_binding.ts";
-import { registry } from "../../src/shared/registry/index.ts";
+import { registry } from "../../src/shared/registry/builtin.ts";
 
 const args_of = (text: string) => {
   const result = parse_binding(registry, text);

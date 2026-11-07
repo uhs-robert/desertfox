@@ -1,7 +1,7 @@
 import { get_config } from "../background/startup.ts";
 import { stop_page } from "../content/handlers/stop.ts";
 import { NEW_TAB_PAGE_FILE } from "../shared/config.ts";
-import { define } from "../shared/registry/index.ts";
+import { define } from "../shared/registry/builtin.ts";
 import { open_in, require_tab_id, typed_url_target, WHERE_PARAM } from "./open_target.ts";
 import type { Where } from "./open_target.ts";
 import { home_page_url } from "./url_build.ts";

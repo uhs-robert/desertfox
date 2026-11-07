@@ -7,7 +7,7 @@ import "../../src/background/command_modules.ts";
 import type { CommandContext, ParamDef } from "../../src/shared/command.ts";
 import { check_args } from "../../src/shared/registry/check_args.ts";
 import type { EnumSources } from "../../src/shared/registry/check_args.ts";
-import { registry } from "../../src/shared/registry/index.ts";
+import { registry } from "../../src/shared/registry/builtin.ts";
 import { is_dynamic_values, static_values } from "../../src/shared/registry/params.ts";
 
 // Handlers that throw a TypeError on the stub whatever the args, each with the reason. Empty now: every background handler runs through. Nothing else may throw a TypeError.

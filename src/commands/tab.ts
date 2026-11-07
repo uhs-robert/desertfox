@@ -11,7 +11,7 @@ import { browser_complete_items_deps, read_tabs } from "../background/complete_i
 import { get_config } from "../background/startup.ts";
 import { best_match } from "../shared/score.ts";
 import { site_key } from "../shared/site_key.ts";
-import { define } from "../shared/registry/index.ts";
+import { define } from "../shared/registry/builtin.ts";
 import type { FindContainerStoreId } from "./open_target.ts";
 import { find_container_store_id, require_tab_id, resolve_container_store_id } from "./open_target.ts";
 

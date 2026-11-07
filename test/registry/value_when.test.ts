@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import "../../src/background/command_modules.ts";
 import { DEFAULT_KEYMAP } from "../../src/background/default_keymap.ts";
-import { check_args, create_registry, DefineError, registry } from "../../src/shared/registry/index.ts";
+import { check_args, create_registry, DefineError } from "../../src/shared/registry/index.ts";
+import { registry } from "../../src/shared/registry/builtin.ts";
 import type { CommandInput } from "../../src/shared/registry/index.ts";
 
 const hint = registry.get("hint.run")!;

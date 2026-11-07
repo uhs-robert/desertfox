@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { choose_align_target } from "../src/content/align_target.ts";
 import "../src/commands/scroll.ts";
-import { check_args, registry } from "../src/shared/registry/index.ts";
+import { check_args } from "../src/shared/registry/index.ts";
+import { registry } from "../src/shared/registry/builtin.ts";
 
 const focus = (ref: string) => ({ ref, is_page_root: false });
 const page_root = (ref: string) => ({ ref, is_page_root: true });

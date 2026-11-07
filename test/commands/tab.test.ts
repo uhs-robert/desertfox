@@ -12,7 +12,7 @@ import {
   type TabInfo,
 } from "../../src/commands/tab.ts";
 import { check_args } from "../../src/shared/registry/check_args.ts";
-import { registry } from "../../src/shared/registry/index.ts";
+import { registry } from "../../src/shared/registry/builtin.ts";
 import type { ListedTab } from "../../src/background/complete_items.ts";
 import type { CommandContext } from "../../src/shared/command.ts";
 

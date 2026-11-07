@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import "../../src/background/command_modules.ts";
 import { check_args } from "../../src/shared/registry/check_args.ts";
-import { parse_command_line, registry } from "../../src/shared/registry/index.ts";
+import { parse_command_line } from "../../src/shared/registry/index.ts";
+import { registry } from "../../src/shared/registry/builtin.ts";
 
 const created: string[] = [];
 (globalThis as unknown as { browser: unknown }).browser = {

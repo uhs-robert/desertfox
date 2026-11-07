@@ -1,7 +1,7 @@
 import { RuntimeRefusal } from "../shared/command.ts";
 import type { CommandContext } from "../shared/command.ts";
 import type { BoundInvocation } from "../shared/invocation.ts";
-import { define } from "../shared/registry/index.ts";
+import { define } from "../shared/registry/builtin.ts";
 
 export type RepeatDeps = {
   // The stored request for the window the key came from, or undefined when nothing is stored.

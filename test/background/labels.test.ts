@@ -14,7 +14,8 @@ import type { CommandMeta } from "../../src/shared/command.ts";
 import type { KeymapConfig, ModeBindings } from "../../src/shared/keymap.ts";
 import type { MergedConfig } from "../../src/shared/config.ts";
 import type { CompiledKeymap, TreeBranch, TreeLeaf } from "../../src/shared/prefix_tree.ts";
-import { build_commands_file, registry } from "../../src/shared/registry/index.ts";
+import { build_commands_file } from "../../src/shared/registry/index.ts";
+import { registry } from "../../src/shared/registry/builtin.ts";
 import { make_fake } from "./fakes.ts";
 
 const fake_commands = {

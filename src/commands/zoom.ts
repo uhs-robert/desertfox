@@ -1,5 +1,5 @@
 import type { CommandContext } from "../shared/command.ts";
-import { define } from "../shared/registry/index.ts";
+import { define } from "../shared/registry/builtin.ts";
 import { require_tab_id } from "./open_target.ts";
 
 export const ZOOM_MIN = 0.3;
