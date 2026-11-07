@@ -11,7 +11,7 @@ import { get_register, set_register } from "./registers.ts";
 import { scroll_to_index } from "./screen_line.ts";
 import { find_colors_of, stored_theme } from "./selection_colors.ts";
 import { first_visible_index } from "./start_point.ts";
-import { build_text_model, documents_of, MAX_TEXT_CHARS, trees_alive } from "./text_model.ts";
+import { build_text_model, documents_of, host_gained_root, MAX_TEXT_CHARS, trees_alive } from "./text_model.ts";
 import type { DomPoint, TextModel } from "./text_model.ts";
 
 // What the engine needs of the host script. A bundle reaches it through `window.desertfox_host`.
@@ -187,8 +187,8 @@ export function create_find(host: Host, deps: FindDeps = browser_deps()) {
     shown_selection = deps.selection_key(found.model);
   };
 
-  // A frame or shadow host that left the page takes its text with it, so the model is read again.
-  const is_current = (model: TextModel) => trees_alive(model) && !page_changed;
+  // A frame or shadow host that left the page takes its text with it, and a host that gained a root has text the model lacks. Either way the model is read again.
+  const is_current = (model: TextModel) => trees_alive(model) && !host_gained_root(model) && !page_changed;
   const fresh_model = (model: TextModel): TextModel => (is_current(model) ? model : read_model());
 
   // `as_text` is for Enter: it searches the text fallback that a costly or timed-out pattern skipped while typing.
