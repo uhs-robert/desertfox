@@ -391,8 +391,10 @@ export async function create_session({ name: shadow_name, timings }) {
   const load_config_dir = async (dir) => {
     rmSync(active_config);
     symlinkSync(dir, active_config);
-    linked_config_dir = dir;
+    // Moving away is recorded at once, so a failed reload still gets restored. Moving back counts only once the reload worked, so a lost qr is retried by the next reset.
+    if (dir !== config_dir) linked_config_dir = dir;
     await reload_in_place();
+    linked_config_dir = dir;
     await sleep(500);
   };
   // Pieces never write config_dir, so it stays the base config every piece starts from. A piece edits a copy and loads it with load_config_dir.
@@ -495,7 +497,7 @@ export async function create_session({ name: shadow_name, timings }) {
     return { tab_ids: [home.tab_id], window_ids: [home.window_id] };
   }
 
-  // Runs after the cases, pass or fail. A step that fails is reported and the next step still runs.
+  // Runs after the cases, pass or fail. The teardown callbacks each report their own failure. Close, focus, config restore and temp unset share one step, so the first failure among them skips the rest.
   async function clean_up_piece(file, state, snapshot) {
     const failed_step = (step, error) => {
       results.push({ name: `${file} ${step}`, pass: false, reason: error.message, setup: false });
