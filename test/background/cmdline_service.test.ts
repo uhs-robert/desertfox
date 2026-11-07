@@ -55,7 +55,7 @@ test("history keeps order, oldest first", async () => {
 test("a line offers the containers, and a private line offers none", async () => {
   const { service } = make();
   assert.deepEqual((await service.open(await service.issue_ticket(7), 7, LINE_FRAME, 10))?.container_stores, [{ name: "default", cookie_store_id: "firefox-default" }]);
-  assert.deepEqual((await service.open(await service.issue_ticket(7), 7, LINE_FRAME, 10, true))?.container_stores, []);
+  assert.deepEqual((await service.open(await service.issue_ticket(7), 7, LINE_FRAME, 10, {}, true))?.container_stores, []);
 });
 
 test("history keeps the last 100 and drops the oldest", async () => {
