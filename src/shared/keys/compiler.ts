@@ -199,19 +199,16 @@ function says_phrase(name: string, phrase: string): boolean {
   return new RegExp(`(?<![\\p{L}\\p{N}_])${escaped}(?![\\p{L}\\p{N}_])`, "iu").test(name);
 }
 
-// A label is one line of text. Null when `label` is fine.
-export function label_problem(label: string): string | null {
-  if (label.trim() === "") return "a label must not be empty";
-  if (/\p{Cc}/u.test(label)) return "a label must not hold control characters";
+// A label or an intent is one line of text. `noun` starts the message ("a label"). Null when the text is fine.
+function line_problem(noun: string, text: string): string | null {
+  if (text.trim() === "") return `${noun} must not be empty`;
+  if (/\p{Cc}/u.test(text)) return `${noun} must not hold control characters`;
   return null;
 }
 
-// An intent is a sentence of hover text, so only an empty one or one with control characters is refused.
-export function intent_problem(intent: string): string | null {
-  if (intent.trim() === "") return "an intent must not be empty";
-  if (/\p{Cc}/u.test(intent)) return "an intent must not hold control characters";
-  return null;
-}
+export const label_problem = (label: string) => line_problem("a label", label);
+
+export const intent_problem = (intent: string) => line_problem("an intent", intent);
 
 function to_steps(mode: KeymapMode, entry: Entry, resolve: ResolveCommand, settings: Partial<Settings>, sources: LabelSources, ancestor_names: string[], warnings: string[]) {
   const invocations = Array.isArray(entry.binding) ? entry.binding : [entry.binding];

@@ -675,6 +675,18 @@ test("a keymap table accepts an intent and rejects an empty or non-string one", 
   assert.match(problems_of(config_dir_with(toml("5"))).join("\n"), /must be a command string/);
 });
 
-test("the editor schema allows intent on a keymap table", () => {
-  assert.match(JSON.stringify(build_schemas(commands)), /"intent":\{"type":"string","minLength":1\}/);
+test("a keymap table with a list run puts the intent on the first command", () => {
+  const dir = config_dir_with({ "keymap.toml": '[normal]\nJ = { run = ["tab.next", "tab.next"], intent = "Skip a tab." }' });
+  const binding = build_config(dir, commands).keymap.normal?.["J"] as { id: string; intent?: string }[];
+  assert.deepEqual(binding.map((step) => step.intent), ["Skip a tab.", undefined]);
+});
+
+test("the editor schema rejects the same label and intent text as the build", () => {
+  const schema = build_schemas(commands)["keymap"] as { properties: { normal: { additionalProperties: { anyOf: { properties?: Record<string, { pattern: string }> }[] } } } };
+  const table = schema.properties.normal.additionalProperties.anyOf[2]!.properties!;
+  for (const field of ["label", "intent"]) {
+    const pattern = new RegExp(table[field]!.pattern, "u");
+    assert.equal(pattern.test("Fine text"), true);
+    for (const bad of [" ", "\t", "a\nb", "a\u007Fb", "a\u0085b"]) assert.equal(pattern.test(bad), false, `${field} ${JSON.stringify(bad)}`);
+  }
 });

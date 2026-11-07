@@ -452,3 +452,10 @@ test("W, B and E of the default keymap hover with WORD text", async () => {
   const rows = panel_after_prefix(compiled.modes.caret!, [], (id) => registry.get(id)).rows;
   for (const key of ["W", "B", "E"]) assert.match(rows.find((row) => row.keys === key)!.description, /WORD/);
 });
+
+test("on a multi-step binding the intent of the first command counts and none reaches a step", () => {
+  const { leaf_at, warnings } = labels_of({ normal: { a: [{ id: "page.reload", intent: "First" }, { id: "page.reload", intent: "Second" }] } });
+  assert.deepEqual(warnings, []);
+  assert.equal(leaf_at("a").intent, "First");
+  assert.deepEqual(leaf_at("a").steps.map((step) => step.invocation.intent), [undefined, undefined]);
+});
