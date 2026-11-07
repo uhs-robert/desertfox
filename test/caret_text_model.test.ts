@@ -165,3 +165,15 @@ test("one text node above the cap is cut at the cap", () => {
   assert.equal(model.truncated, true);
   assert.equal(model.text.length <= MAX_TEXT_CHARS, true);
 });
+
+test("a shadow root and a frame without text are listed for the watcher, and a root with text is not", () => {
+  const empty_host = element("div", [], { shadow: [] });
+  const full_host = element("div", [], { shadow: [text("in")] });
+  const empty_frame = element("iframe", [], { frame: element("body", []) });
+  const model = model_of(element("body", [element("p", [text("top")]), empty_host, full_host, empty_frame]));
+  assert.equal(model.trees.length, 2);
+  assert.equal(model.empty_trees.length, 2);
+  assert.equal(model.empty_trees.includes(empty_host.openOrClosedShadowRoot as never), true);
+  assert.equal(model.empty_trees.includes(full_host.openOrClosedShadowRoot as never), false);
+  assert.deepEqual(model.frames, [empty_frame as unknown as Element]);
+});

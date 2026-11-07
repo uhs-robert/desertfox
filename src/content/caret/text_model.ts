@@ -13,6 +13,10 @@ export type TextModel = {
   index_of: (node: Node, offset: number) => number | undefined;
   // Every tree with text in the model, in the order the text meets them.
   trees: TextTree[];
+  // Shadow roots and frame documents the walk met that gave no text, so a later fill is not seen through `trees`. Never overlaps `trees`.
+  empty_trees: TextTree[];
+  // Every frame element the walk met. A frame that loads or navigates later fires `load` on the element and no mutation in this tree.
+  frames: Element[];
   // The characters from `from` up to `to`, cut where the text passes into another tree.
   tree_runs: (from: number, to: number) => TreeRun[];
   // The first character of the `start_node` given to the build, or of the text after it. Undefined when no text follows it.
@@ -66,6 +70,8 @@ export function build_text_model(root: Element = document.body, start_node?: Nod
   const empty_lines = new Map<number, DomPoint>();
   const tree_starts: TreeStart[] = [];
   const trees = new Set<TextTree>();
+  const met_trees = new Set<TextTree>();
+  const frames: Element[] = [];
   let text = "";
   let last_block: Element | undefined;
   let after_space = true;
@@ -148,9 +154,13 @@ export function build_text_model(root: Element = document.body, start_node?: Nod
     if (is_frame(element)) {
       // The frame is the block around its body, so its text starts and ends a line.
       const inner = frame_document(element);
+      frames.push(element);
+      if (inner) met_trees.add(inner);
       if (inner?.body && frame_depth < MAX_FRAME_DEPTH) visit(inner.body, element, false, frame_depth + 1);
       return;
     }
+    const shadow = shadow_root_of(element);
+    if (shadow) met_trees.add(shadow);
     const children = rendered_children(element);
     const inner_block = is_block(style) ? element : block;
     const inner_preformatted = style.whiteSpace.startsWith("pre");
@@ -163,6 +173,8 @@ export function build_text_model(root: Element = document.body, start_node?: Nod
     point_at: (index) => empty_lines.get(index) ?? point_at(segments, index),
     index_of: (node, offset) => index_of(segments, empty_lines, node, offset),
     trees: [...trees],
+    empty_trees: [...met_trees].filter((tree) => !trees.has(tree)),
+    frames,
     tree_runs: (from, to) => tree_runs(tree_starts, from, to),
     start_index,
     truncated,
