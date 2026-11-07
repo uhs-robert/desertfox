@@ -208,7 +208,15 @@ function is_alive(tree: TextTree): boolean {
 export const trees_alive = (model: TextModel): boolean => model.trees.every(is_alive);
 
 // True when a custom element that had no shadow root at build time has one now, so its text is not in the model.
-export const host_gained_root = (model: TextModel): boolean => model.pending_hosts.some((host) => shadow_root_of(host) !== null);
+// A host of a removed or navigated frame is a dead wrapper in Firefox and throws on read. It counts as changed, so the model is read again.
+export const host_gained_root = (model: TextModel): boolean =>
+  model.pending_hosts.some((host) => {
+    try {
+      return shadow_root_of(host) !== null;
+    } catch {
+      return true;
+    }
+  });
 
 // Each document holds one selection, for itself and for the shadow roots inside it. A dead one is left out.
 export const documents_of = (model: TextModel): Document[] => [...new Set(model.trees.filter(is_alive).map(document_of))];

@@ -198,3 +198,10 @@ test("a custom element that gains a root, open or closed, is seen by host_gained
     assert.equal(host_gained_root(model), true, key);
   }
 });
+
+test("a pending host whose shadow root read throws counts as changed", () => {
+  const dead = element("my-widget", [], {});
+  const model = model_of(element("body", [element("p", [text("top")]), dead]));
+  Object.defineProperty(dead, "openOrClosedShadowRoot", { get: () => { throw new Error("dead object"); } });
+  assert.equal(host_gained_root(model), true);
+});
