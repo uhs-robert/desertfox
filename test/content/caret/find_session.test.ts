@@ -569,3 +569,15 @@ test("a frame that loads after the model was built makes n read the page again",
   await stepping_again;
   assert.equal(page.builds() > before, true, "n kept the old model after the frame loaded");
 });
+
+test("a retarget drops the load listeners of the old model's frames", () => {
+  (globalThis as { document?: unknown }).document = { name: "page" };
+  const { observer_class } = fake_observer();
+  const { frame, load } = fake_frame();
+  let changes = 0;
+  const retarget = page_watcher(observer_class)(() => void changes++);
+  retarget({ trees: [], empty_trees: [], frames: [frame] } as unknown as TextModel);
+  retarget({ trees: [], empty_trees: [], frames: [] } as unknown as TextModel);
+  load();
+  assert.equal(changes, 0, "a frame the new model no longer lists still raised a change");
+});
