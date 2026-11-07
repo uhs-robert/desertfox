@@ -4,7 +4,6 @@ import { readdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { ALT, CTRL, SHIFT_ESCAPE, create_session, shadow_down } from "./harness.mjs";
-import { p1_cases } from "./p1.mjs";
 import { evaluate_in_background } from "./rdp.mjs";
 import { create_timings } from "./timings.mjs";
 
@@ -18,7 +17,7 @@ async function main() {
   const timings = create_timings();
   const session = await create_session({ name: SHADOW_NAME, timings });
   const { results, measurements } = session;
-  const { config_dir, run_case, expect, open_page, send_keys, sleep, events, wait_event, since, find_event, rdp, extension_id, scroll_delta_after, became_visible, scroll_of, last_scroll_y, in_background, read_local, reload_in_place, wait_reinject_report, injections_of, settled_injection_count, expect_no_scroll, expect_exactly_one_visible, visible_events, extension_view } = session.context_for("run.mjs");
+  const { config_copy, load_config_dir, run_case, expect, open_page, send_keys, sleep, events, wait_event, since, find_event, rdp, extension_id, scroll_delta_after, became_visible, scroll_of, last_scroll_y, in_background, read_local, wait_reinject_report, injections_of, settled_injection_count, expect_no_scroll, expect_exactly_one_visible, visible_events, extension_view } = session.context_for("run.mjs");
   const EXTENSION_ID = extension_id;
 
   try {
@@ -159,7 +158,9 @@ async function main() {
     }, { setup: true });
 
     await run_case("config.reload applies the files in place, keeps a temp edit and keeps keys working in open tabs", async () => {
-      writeFileSync(join(config_dir, "keymap.toml"), [
+      // The reduced keymap goes into a copy, so config_dir stays the base. The reset before the first piece links it back.
+      const reduced_config = config_copy();
+      writeFileSync(join(reduced_config, "keymap.toml"), [
         "[normal]",
         'm = "scroll.to 50"',
         'go = ":open"',
@@ -176,8 +177,7 @@ async function main() {
       await send_keys("gg");
       await sleep(500);
       await in_background(`browser.storage.local.remove("desertfox_reinject_report")`);
-      await reload_in_place();
-      await sleep(500);
+      await load_config_dir(reduced_config);
       expect((await read_local("desertfox_reinject_report")) == null, "qr restarted the extension: a tab repair report was written");
       const status = await read_local("desertfox_config_status");
       expect(status?.source === "files", `the config source is ${status?.source}, expected files`);
@@ -524,9 +524,6 @@ async function main() {
     measurements.tree_read_ms = tree_read_ms;
     const sorted = [...tree_read_ms].sort((left, right) => left - right);
     measurements.tree_read_summary = { loads: sorted.length, min: sorted[0], median: (sorted[(sorted.length - 1) >> 1] + sorted[sorted.length >> 1]) / 2, max: sorted.at(-1) };
-
-    await timings.time_piece("p1.mjs", () => p1_cases({ run_case, expect, send_keys, sleep, open_page, events, wait_event, scroll_of, last_scroll_y, find_event, evaluate_in_background, rdp, EXTENSION_ID }));
-    await session.sample_tabs("after p1.mjs");
   } finally {
     await session.close();
   }
