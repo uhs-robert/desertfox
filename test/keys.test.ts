@@ -183,7 +183,7 @@ test("a dropped default slot is not refilled by a modifier variant", () => {
   const defaults: KeymapConfig = { normal: { ";I": { id: "a.b" }, ";yI": { id: "a.b" } }, modifiers: { ";y": { copy: true } } };
   const user: KeymapConfig = { normal: { ";yIx": { id: "c.d" } } };
   const { compiled, warnings } = compile_keymap(merge_keymaps(defaults, user), {}, resolve, undefined, default_layer_of(defaults, user));
-  assert.ok(!warnings.some((warning) => warning.includes("already a complete binding")));
+  assert.deepEqual(warnings, ['normal: dropped default keys that your keys extend: ";yI" by ;yIx']);
   const y = (compiled.modes.normal!.children[";"] as { children: Record<string, { children: Record<string, { kind: string }> }> }).children["y"]!;
   assert.equal(y.children["I"]!.kind, "branch");
 });
