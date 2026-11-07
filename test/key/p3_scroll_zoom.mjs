@@ -1,6 +1,6 @@
 // scroll.align (zt, zz, zb) on a field and on a page with nothing focused, and the zoom reset z=.
 
-export async function run_cases({ run_case, expect, open_page, send_keys, sleep, events, wait_event, scroll_of, expect_no_scroll, in_background, record }) {
+export async function run_cases({ run_case, on_teardown, expect, open_page, send_keys, sleep, events, wait_event, scroll_of, expect_no_scroll, in_background, record }) {
   await run_case("scroll.align puts the field just left at the top, center and bottom", async () => {
     await open_page("aligned", "align", { new_tab: true });
     const field_top_after = async (keys) => {
@@ -30,7 +30,11 @@ export async function run_cases({ run_case, expect, open_page, send_keys, sleep,
   });
 
   await run_case("z= resets the zoom to 100 percent", async () => {
-    const active_zoom = `(async () => { const [tab] = await browser.tabs.query({ active: true, currentWindow: true }); return browser.tabs.getZoom(tab.id); })()`;
+    const tab_id = await in_background(`browser.tabs.query({ active: true, currentWindow: true }).then((tabs) => tabs[0]?.id)`);
+    expect(Number.isInteger(tab_id), `no active tab id: ${tab_id}`);
+    // Zoom is kept per site, so a failure after zI must not leave 300 percent for later pieces.
+    on_teardown(() => in_background(`browser.tabs.setZoom(${tab_id}, 1)`));
+    const active_zoom = `browser.tabs.getZoom(${tab_id})`;
     await send_keys("zI");
     await sleep(500);
     expect(await in_background(active_zoom) === 3, "zI did not zoom to 300 percent");
