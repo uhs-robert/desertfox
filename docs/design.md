@@ -82,7 +82,7 @@ The fields follow the Oasis action library (`home/hypr/.config/hypr/lib/act/init
 - `runs_in`: `background` or `content`. The router sends the invocation to that side. A command never runs in both.
 - `needs`: what must be true to run it. `content` means a content script in the tab. A permission name means an optional permission. The router refuses with a message instead of failing silently.
 - `count`: what a numeric prefix does. `repeat` runs the command that many times. A param name fills that param, for example `tab.goto` takes the count as its `index`. `ignore` drops it.
-- `repeatable`: whether `.` can replay the command. The default is true. Ten commands opt out: `command.repeat`, `browser.close_all`, `browser.focus_page`, `config.reload`, `debug.restart`, `help.open`, `engine.show`, `settings.set`, `settings.toggle` and `settings.unset`.
+- `repeatable`: whether `.` can replay the command. The default is true. Twelve commands opt out: `command.repeat`, `browser.close_all`, `browser.focus_page`, `config.reload`, `debug.restart`, `frame.exit`, `help.open`, `native.install`, `engine.show`, `settings.set`, `settings.toggle` and `settings.unset`.
 - `modes`: the modes where a key can run the command. The default is normal.
 - `completion`: where the command line list offers the command. Absent means always. `hidden` means never, and a list of modes means only when the line was opened from one of them. Typing the name still runs the command.
 - `run`: the handler. It gets the context (tab, frame, mode) and the checked args.

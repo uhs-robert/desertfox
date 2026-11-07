@@ -16,9 +16,9 @@ define("config.reload", {
       reloaded = await reload_config();
     } catch (error) {
       if (error instanceof ConfigReloadError) throw new RuntimeRefusal(error.message);
-      // A storage or tab call failed mid-swap. The reload already put the old config back.
+      // Any other failure: a browser call, the host or the build. A failed swap already put the old config back.
       const reason = error instanceof Error ? error.message : String(error);
-      throw new RuntimeRefusal(`${KEPT_CURRENT} A browser call failed (${reason}). Run config.reload again, and debug.restart if it keeps failing.`);
+      throw new RuntimeRefusal(`${KEPT_CURRENT.replace(/\.$/, "")}: ${reason}. Run config.reload again, and debug.restart if it keeps failing.`);
     }
     const warned = reloaded.warnings === 0 ? "" : `, with ${reloaded.warnings} warning(s) on the Help page`;
     await show_toast_on_tab(ctx, "config", `Config reloaded from ${reloaded.config_dir}${warned}`, reloaded.warnings === 0 ? "success" : "warning");

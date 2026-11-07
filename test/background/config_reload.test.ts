@@ -419,7 +419,7 @@ test("a saved value TOML cannot hold only warns, and the edit stays", async () =
   assert.equal(warned.length, 1);
 });
 
-test("config.reload turns a failed browser call into a refusal that keeps the config and names the fix", async () => {
+test("config.reload turns any other failure into a refusal that keeps the config and names the fix", async () => {
   const host = { files: settings_file('hint_letters = "ab"\n') };
   const { fake } = install_fake_browser(host);
   const working = fake.storage.local.set;
@@ -430,7 +430,7 @@ test("config.reload turns a failed browser call into a refusal that keeps the co
   const command = registry.get("config.reload")!;
   await assert.rejects(Promise.resolve(command.run({ tab_id: undefined, window_id: 1, frame_id: 0, mode: "normal" }, {})), (error: Error) => {
     assert.ok(error instanceof RuntimeRefusal, String(error));
-    assert.match(error.message, /^Config not reloaded, the current one stays\. A browser call failed \(disk full\)\. Run config\.reload again/);
+    assert.match(error.message, /^Config not reloaded, the current one stays: disk full\. Run config\.reload again, and debug\.restart if it keeps failing\.$/);
     return true;
   });
 });
