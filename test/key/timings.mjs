@@ -55,7 +55,9 @@ export function create_timings() {
     if (!active_case) return;
     charge();
     const { name, meta, started_at } = active_case;
-    Object.assign(bucket_of(name), meta, { piece: current_piece, wall_ms: Date.now() - started_at });
+    // A name that repeats, such as "(setup)", adds up instead of keeping the last run.
+    const bucket = bucket_of(name);
+    Object.assign(bucket, meta, { piece: current_piece, wall_ms: bucket.wall_ms + Date.now() - started_at });
     open_categories.length = 0;
     current_case = OUTSIDE_CASES;
     active_case = undefined;

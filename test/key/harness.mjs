@@ -132,8 +132,9 @@ export async function create_session({ name: shadow_name, timings }) {
   // KEY_TEST_ONLY=<regex> runs only the cases whose name matches, for a quick repro.
   // A case passed { setup: true } leaves state that later cases read (a reloaded config, an open page,
   // the command history), so it runs under any filter and is reported as "SETUP".
+  const is_selected = (name) => !process.env.KEY_TEST_ONLY || new RegExp(process.env.KEY_TEST_ONLY).test(name);
   async function run_case(name, body, { setup = false } = {}) {
-    const selected = !process.env.KEY_TEST_ONLY || new RegExp(process.env.KEY_TEST_ONLY).test(name);
+    const selected = is_selected(name);
     if (!selected && !setup) return;
     const label = selected ? "" : "SETUP ";
     await timings.time_case(name, { setup: !selected }, async () => {
@@ -386,24 +387,193 @@ export async function create_session({ name: shadow_name, timings }) {
   const extension_view = (name) => `(browser.extension.getViews({ type: "tab" }).find((view) => view.location.pathname === "/${name}"))`;
 
   // Points the native host at a config folder and reloads it in place with qr. The which-key shots use it to show a copy of the user config.
+  let linked_config_dir = config_dir;
   const load_config_dir = async (dir) => {
     rmSync(active_config);
     symlinkSync(dir, active_config);
+    linked_config_dir = dir;
     await reload_in_place();
     await sleep(500);
   };
+  // Pieces never write config_dir, so it stays the base config every piece starts from. A piece edits a copy and loads it with load_config_dir.
+  let config_copy_count = 0;
+  const config_copy = () => {
+    const copy_dir = join(work_dir, `config_copy_${++config_copy_count}`);
+    cpSync(config_dir, copy_dir, { recursive: true });
+    return copy_dir;
+  };
 
-  // The cases of a piece file in test/key/p<number>_*.mjs get these helpers. Every piece gets the same ones for now.
-  const case_context = { config_dir, load_config_dir, take_shot: (path) => timed_shadow("shot", shadow_name, "--out", path), run_case, expect, open_page, send_keys, sleep, events, wait_event, since, find_event, url_of, rdp, extension_id: EXTENSION_ID, scroll_delta_after, became_visible, scroll_of, last_scroll_y,
-    // Moved out of the run.mjs cases. Pieces may use them too.
-    in_background, read_local, reload_in_place, wait_reinject_report, injections_of, settled_injection_count, expect_no_scroll, expect_exactly_one_visible, visible_events, extension_view };
+  const background_call = async (code) => {
+    const value = await evaluate_in_background(rdp, EXTENSION_ID, code);
+    if (value?.error) throw new Error(`background call failed: ${value.error}`);
+    return value;
+  };
+  const close_tabs_with = (text) => in_background(`(async () => { for (const tab of await browser.tabs.query({})) if (tab.url.includes(${JSON.stringify(text)})) await browser.tabs.remove(tab.id); })()`);
 
-  const context_for = (piece_file) => case_context;
+  // Polls until the check holds. `what` names the wait in the error.
+  async function poll_until(what, check, timeout_ms = 10000) {
+    const deadline = Date.now() + timeout_ms;
+    while (!(await check())) {
+      if (Date.now() > deadline) throw new Error(`timed out waiting for ${what}`);
+      await sleep(100);
+    }
+  }
+
+  const read_config_status = () => read_local("desertfox_config_status");
+
+  // The page itself says it holds focus, so a focus that landed in the address bar or another window is caught. document.hasFocus() is false for both.
+  const page_has_focus = (tab_id) => in_background(`browser.tabs.executeScript(${tab_id}, { code: "document.hasFocus()" }).then((answers) => answers[0] === true)`);
+  // Focus lands in browser chrome after tabs close, and a closed window can leave compositor focus on it. Ask for the window and tab, then use the focus_page chord, until the page reports focus.
+  async function confirm_page_focus(tab_id, window_id) {
+    const focused = (timeout_ms) => poll_until("page focus", () => page_has_focus(tab_id), timeout_ms).then(() => true, () => false);
+    if (await focused(300)) return;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      await in_background(`(async () => { await browser.windows.update(${window_id}, { focused: true }); await browser.tabs.update(${tab_id}, { active: true }); })()`);
+      if (await focused(1500)) return;
+      await send_keys(...ALT(","));
+      if (await focused(1500)) return;
+    }
+    throw new Error(`tab ${tab_id} never reported focus`);
+  }
+
+  // A bulk tabs.remove of 30 or more tabs outlasts one debugger call, so the close is started and then polled.
+  async function wait_for_tabs(what, count_expr, expected) {
+    await poll_until(what, async () => (await in_background(count_expr)) === expected, 30000);
+  }
+
+  async function close_tabs_outside(keep_tab_ids, keep_window_ids) {
+    const kept = await background_call(`(async () => {
+      const keep_tabs = new Set(${JSON.stringify(keep_tab_ids)});
+      const keep_windows = new Set(${JSON.stringify(keep_window_ids)});
+      for (const window of await browser.windows.getAll()) if (!keep_windows.has(window.id)) await browser.windows.remove(window.id);
+      const tabs = await browser.tabs.query({});
+      const extra = tabs.filter((tab) => !keep_tabs.has(tab.id)).map((tab) => tab.id);
+      // The last tab stays, because Firefox exits with its last window.
+      if (extra.length === tabs.length) extra.shift();
+      browser.tabs.remove(extra).catch(() => undefined);
+      return tabs.length - extra.length;
+    })()`);
+    await wait_for_tabs("the extra tabs to close", `browser.tabs.query({}).then((tabs) => tabs.length)`, kept);
+    const left = await background_call(`browser.tabs.query({}).then((tabs) => tabs.map((tab) => ({ id: tab.id, window_id: tab.windowId })))`);
+    return left;
+  }
+
+  // Unsets the temp edits through the command line, which rebuilds the effective config the way a user's :unset does.
+  async function clear_temp_settings() {
+    if (!((await read_config_status())?.temp?.length > 0)) return;
+    await send_keys(":unset -t all", "-k", "Return");
+    await poll_until("the temp settings to clear", async () => !((await read_config_status())?.temp?.length > 0), 6000);
+  }
+
+  // Puts the config link back on config_dir and reloads it in place. A debug.restart may still be starting the new background, and a qr sent to it is lost, so the status key comes first.
+  async function restore_config() {
+    if (linked_config_dir === config_dir) return;
+    await poll_until("the background to publish its config status", async () => (await read_config_status()) != null, 15000);
+    await load_config_dir(config_dir);
+    await poll_until("the files config to apply", async () => (await read_config_status())?.source === "files", 10000);
+  }
+
+  // Every piece starts from the same state: one window with one tab at home_<piece>, active and focused, on the base config with no temp edits.
+  async function reset_for_piece(home_id) {
+    const mark = events.length;
+    const home = await background_call(`(async () => {
+      const keep = await browser.windows.getLastFocused();
+      const tab = await browser.tabs.create({ windowId: keep.id, url: ${JSON.stringify(url_of("page", home_id))}, active: true });
+      for (const window of await browser.windows.getAll()) if (window.id !== keep.id) await browser.windows.remove(window.id);
+      const old = (await browser.tabs.query({})).filter((other) => other.id !== tab.id).map((other) => other.id);
+      browser.tabs.remove(old).catch(() => undefined);
+      return { tab_id: tab.id, window_id: keep.id };
+    })()`);
+    await wait_for_tabs("one tab to be left", `browser.tabs.query({}).then((tabs) => tabs.length)`, 1);
+    await wait_for_tabs("one window to be left", `browser.windows.getAll().then((windows) => windows.length)`, 1);
+    await wait_event(mark, (event) => event.type === "tree_read" && event.page_id === home_id, `content script ready on ${home_id}`, 10000);
+    await confirm_page_focus(home.tab_id, home.window_id);
+    await restore_config();
+    await clear_temp_settings();
+    // restore_config and clear_temp_settings type keys, so the page is asked once more.
+    await confirm_page_focus(home.tab_id, home.window_id);
+    return { tab_ids: [home.tab_id], window_ids: [home.window_id] };
+  }
+
+  // Runs after the cases, pass or fail. A step that fails is reported and the next step still runs.
+  async function clean_up_piece(file, state, snapshot) {
+    const failed_step = (step, error) => {
+      results.push({ name: `${file} ${step}`, pass: false, reason: error.message, setup: false });
+      console.log(`FAIL ${file} ${step}: ${error.message}`);
+    };
+    for (const teardown_step of state.teardowns.reverse()) {
+      try {
+        await teardown_step();
+      } catch (error) {
+        failed_step("teardown", error);
+      }
+    }
+    try {
+      const [left] = await close_tabs_outside(snapshot.tab_ids, snapshot.window_ids);
+      await confirm_page_focus(left.id, left.window_id);
+      await restore_config();
+      await clear_temp_settings();
+    } catch (error) {
+      failed_step("cleanup", error);
+    }
+  }
+
+  // One context per piece file: the shared helpers plus that piece's own setup steps and teardown list.
+  function make_piece(piece_file) {
+    const state = { setup_failure: undefined, teardowns: [], marked_failed: 0 };
+    async function run_piece_case(name, body, options) {
+      if (!state.setup_failure) return run_case(name, body, options);
+      if (!is_selected(name)) return;
+      state.marked_failed++;
+      results.push({ name, pass: false, reason: "setup failed", setup: false });
+      console.log(`FAIL ${name}: setup failed`);
+    }
+    // Runs under any KEY_TEST_ONLY filter, counts in no pass or fail total and is timed as "(setup)". A failure fails the cases behind it.
+    async function setup(name, body) {
+      if (state.setup_failure) return;
+      await timings.time_case("(setup)", { setup: true }, async () => {
+        try {
+          await body();
+          console.log(`SETUP ${name}`);
+        } catch (error) {
+          state.setup_failure = { name, reason: error.message };
+          console.log(`SETUP FAIL ${name}: ${error.message}`);
+        }
+      });
+    }
+    // Callbacks run in reverse order when the piece ends, pass or fail.
+    const on_teardown = (callback) => state.teardowns.push(callback);
+    // The cases of a piece file in test/key/p<number>_*.mjs get these helpers.
+    const context = { config_dir, config_copy, load_config_dir, take_shot: (path) => timed_shadow("shot", shadow_name, "--out", path), run_case: run_piece_case, setup, on_teardown, expect, open_page, send_keys, sleep, events, wait_event, since, find_event, url_of, rdp, extension_id: EXTENSION_ID, scroll_delta_after, became_visible, scroll_of, last_scroll_y,
+      // Moved out of the run.mjs cases. Pieces may use them too.
+      in_background, read_local, reload_in_place, wait_reinject_report, injections_of, settled_injection_count, expect_no_scroll, expect_exactly_one_visible, visible_events, extension_view, close_tabs_with };
+    return { context, state, piece_file };
+  }
+
+  const context_for = (piece_file) => make_piece(piece_file).context;
 
   async function run_piece(file, piece_module) {
+    const { context, state } = make_piece(file);
     await timings.time_piece(file, async () => {
       await sample_tabs(`before ${file}`);
-      await piece_module.run_cases(context_for(file));
+      let snapshot;
+      try {
+        snapshot = await reset_for_piece(`home_${file.replace(/\.mjs$/, "")}`);
+      } catch (error) {
+        results.push({ name: `${file} reset`, pass: false, reason: error.message, setup: false });
+        console.log(`FAIL ${file} reset: ${error.message}`);
+        return;
+      }
+      try {
+        await piece_module.run_cases(context);
+        // A setup step that fails behind no case would otherwise pass unseen.
+        if (state.setup_failure && state.marked_failed === 0) {
+          results.push({ name: `${file} setup ${state.setup_failure.name}`, pass: false, reason: state.setup_failure.reason, setup: false });
+        }
+      } finally {
+        await clean_up_piece(file, state, snapshot);
+        await sample_tabs(`after ${file}`);
+      }
     });
     write_timings({ print_summary: false });
   }

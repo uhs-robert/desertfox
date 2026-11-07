@@ -1,15 +1,8 @@
-// Key test cases of array bindings (awaitable commands, routing). run.mjs calls run_cases with its helpers.
+// Key test cases of array bindings (awaitable commands, routing). The harness calls run_cases with the piece context.
 // The bindings live in config/keymap.toml: ,n = [tab.next, scroll.to 0], ,h = [hint.run background, scroll 300],
 // ,f = [find.next, scroll 300], ,o = [cmdline.open, scroll 300], ,p = [:scroll.pixels, scroll 300], ,t = [hint.run background, tab.next].
-import { cpSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
-import { evaluate_in_background } from "./rdp.mjs";
 
-export async function run_cases({ config_dir, load_config_dir, rdp, extension_id, run_case, send_keys, open_page, wait_event, find_event, events, expect, sleep, became_visible, scroll_delta_after }) {
-  const close_tabs_with = (text) => evaluate_in_background(rdp, extension_id, `(async () => { for (const tab of await browser.tabs.query({})) if (tab.url.includes(${JSON.stringify(text)})) await browser.tabs.remove(tab.id); })()`);
-  const scroll_of = (page_id) => (event) => event.type === "scroll" && event.page_id === page_id;
-  const last_scroll_y = (page_id) => events.filter(scroll_of(page_id)).at(-1)?.y ?? 0;
+export async function run_cases({ close_tabs_with, run_case, send_keys, open_page, wait_event, find_event, events, expect, sleep, became_visible, scroll_delta_after, scroll_of, last_scroll_y }) {
   const ENTER = ["-k", "Return"];
   const ESCAPE = ["-k", "Escape"];
   // A second Escape closes the completion list if the first one only closed that. Then j must reach the page, which it cannot if the line is still open.
@@ -18,17 +11,6 @@ export async function run_cases({ config_dir, load_config_dir, rdp, extension_id
     await sleep(300);
     expect(await scroll_delta_after(page_id, ["j"]) > 0, "j did not scroll the page, so the command line is still open");
   };
-
-  let keymap_before;
-  // The config.reload case wrote a reduced keymap into config_dir, so put the test keymap back before the sequences run.
-  await run_case("the test keymap with the sequence bindings is loaded", async () => {
-    await open_page("page", "sq_config", { new_tab: true });
-    keymap_before = readFileSync(join(config_dir, "keymap.toml"), "utf8");
-    cpSync(join(dirname(fileURLToPath(import.meta.url)), "config", "keymap.toml"), join(config_dir, "keymap.toml"));
-    await load_config_dir(config_dir);
-    await close_tabs_with("sq_config");
-    await sleep(300);
-  }, { setup: true });
 
   await run_case("[tab.next, scroll.to] scrolls the tab that tab.next showed, and leaves the first tab alone", async () => {
     await open_page("page", "sq_one", { new_tab: true });
@@ -142,13 +124,4 @@ export async function run_cases({ config_dir, load_config_dir, rdp, extension_id
     await close_tabs_with("sq_tabhint2");
     await sleep(300);
   });
-
-  // Later pieces (p2_prompts) rely on the keymap config.reload left, where go has no prefill.
-  await run_case("the keymap from before the sequence cases is loaded again", async () => {
-    await open_page("page", "sq_restore", { new_tab: true });
-    writeFileSync(join(config_dir, "keymap.toml"), keymap_before);
-    await load_config_dir(config_dir);
-    await close_tabs_with("sq_restore");
-    await sleep(300);
-  }, { setup: true });
 }
