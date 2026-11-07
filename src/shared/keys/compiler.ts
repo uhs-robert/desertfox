@@ -23,7 +23,8 @@ export type ResolveCommand = (command_id: string) => CommandInfo | undefined;
 
 export type CompileResult = { compiled: CompiledKeymap; warnings: string[] };
 
-type Entry = { sequence: string; tokens: string[]; binding: KeyBinding; source_index: number };
+type Layer = "defaults" | "user";
+type Entry = { sequence: string; tokens: string[]; binding: KeyBinding; source_index: number; layer: Layer };
 
 // Explicit bindings win over generated ones, so generated entries go in first.
 function generated_bindings(keymap: KeymapConfig, settings: Partial<Settings>): Record<string, KeyBinding> {
@@ -82,11 +83,36 @@ function modifier_variants(modifiers: Record<string, Modifier>, taken: Map<strin
       const variant_tokens = [...group, tokens[tokens.length - 1]!, ...source.tokens.slice(group.length)];
       const variant_key = variant_tokens.join("");
       if (taken.has(variant_key) || removed.has(variant_key)) continue;
-      variants.push({ sequence: variant_key, tokens: variant_tokens, binding: { ...binding, args: variant_args, ...(binding.variant_label === undefined ? {} : { label: binding.variant_label }) }, source_index: -1 });
+      variants.push({ sequence: variant_key, tokens: variant_tokens, binding: { ...binding, args: variant_args, ...(binding.variant_label === undefined ? {} : { label: binding.variant_label }) }, source_index: -1, layer: "defaults" });
     }
     if (accepted === 0) warnings.push(`modifiers: "${sequence}" matches no key of its group, so it makes no variants`);
   }
   return variants;
+}
+
+type Drop = { default_sequence: string; extenders: string[] };
+
+// A default leaf that a user key extends (default `sg`, user `sgg`) would hide the user key, so the default goes.
+// Only an extender that can compile counts, so a user key the registry refuses never leaves both keys unbound.
+// A dropped key joins `removed`, so a modifier variant cannot refill its slot.
+// The reverse, a user leaf shorter than a default group, needs no rule: the leaf is inserted first and the default longer key is skipped.
+function drop_default_leaves_under_user_keys(entries: Map<string, Entry>, removed: Set<string>, resolve: ResolveCommand, drops: Drop[]) {
+  const user_entries = [...entries.values()].filter((entry) => entry.layer === "user" && can_compile(entry, resolve));
+  for (const [normalized, entry] of entries) {
+    if (entry.layer !== "defaults") continue;
+    const extenders = user_entries.filter(({ tokens }) => tokens.length > entry.tokens.length && entry.tokens.every((token, index) => tokens[index] === token));
+    if (extenders.length === 0) continue;
+    entries.delete(normalized);
+    removed.add(normalized);
+    drops.push({ default_sequence: entry.sequence, extenders: extenders.map(({ sequence }) => sequence) });
+  }
+}
+
+function can_compile({ binding }: Entry, resolve: ResolveCommand): boolean {
+  return (Array.isArray(binding) ? binding : [binding]).every((invocation) => {
+    const info = resolve(invocation.id);
+    return info !== undefined && info.accepts_args?.(invocation.args ?? {}, invocation.prompt) !== false;
+  });
 }
 
 function entries_for_mode(
@@ -95,8 +121,10 @@ function entries_for_mode(
   settings: Partial<Settings>,
   resolve: ResolveCommand,
   warnings: string[],
+  default_layer: KeymapConfig,
 ): Entry[] {
   const sources = [mode === "normal" ? generated_bindings(keymap, settings) : {}, keymap[mode] ?? {}];
+  const default_sequences = [mode === "normal" ? generated_bindings(default_layer, settings) : {}, default_layer[mode] ?? {}];
   const by_normalized_sequence = new Map<string, Entry>();
   const removed = new Set<string>();
   for (const [source_index, source] of sources.entries()) {
@@ -115,14 +143,22 @@ function entries_for_mode(
         if (earlier && earlier.source_index === source_index) {
           warnings.push(`${mode}: "${sequence}" and "${earlier.sequence}" are the same keys, kept "${sequence}"`);
         }
-        by_normalized_sequence.set(normalized, { sequence, tokens: parsed.tokens, binding, source_index });
+        const layer: Layer = sequence in default_sequences[source_index]! ? "defaults" : "user";
+        by_normalized_sequence.set(normalized, { sequence, tokens: parsed.tokens, binding, source_index, layer });
       }
     }
   }
+  const drops: Drop[] = [];
+  drop_default_leaves_under_user_keys(by_normalized_sequence, removed, resolve, drops);
   if (mode === "normal") {
     for (const variant of modifier_variants(keymap.modifiers ?? {}, by_normalized_sequence, removed, resolve, warnings)) {
       by_normalized_sequence.set(variant.tokens.join(""), variant);
     }
+    // A generated variant is a default key too: a user key may extend it.
+    drop_default_leaves_under_user_keys(by_normalized_sequence, removed, resolve, drops);
+  }
+  if (drops.length > 0) {
+    warnings.push(`${mode}: dropped default keys that your keys extend: ${drops.map(({ default_sequence, extenders }) => `"${default_sequence}" by ${extenders.join(", ")}`).join("; ")}`);
   }
   // Shorter sequences first, so a prefix claims its place before the longer entries below it.
   return [...by_normalized_sequence.values()].sort((a, b) => a.tokens.length - b.tokens.length);
@@ -250,7 +286,7 @@ function name_groups(root: TreeBranch, group_names: GroupName[]) {
   }
 }
 
-export function compile_keymap(keymap: KeymapConfig, settings: Partial<Settings>, resolve: ResolveCommand, label_sources: LabelSources = { engine_labels: {} }): CompileResult {
+export function compile_keymap(keymap: KeymapConfig, settings: Partial<Settings>, resolve: ResolveCommand, label_sources: LabelSources = { engine_labels: {} }, default_layer: KeymapConfig = {}): CompileResult {
   const warnings: string[] = [];
   const modes: CompiledKeymap["modes"] = {};
   const keymap_modes: readonly KeymapMode[] = [...RUNTIME_MODES, "browser"];
@@ -258,7 +294,7 @@ export function compile_keymap(keymap: KeymapConfig, settings: Partial<Settings>
   const group_names = parse_group_names({ ...modifier_names, ...keymap.group_names }, warnings);
   for (const mode of keymap_modes) {
     const root: TreeBranch = { kind: "branch", children: {} };
-    for (const entry of entries_for_mode(mode, keymap, settings, resolve, warnings)) {
+    for (const entry of entries_for_mode(mode, keymap, settings, resolve, warnings, default_layer)) {
       insert_entry(root, mode, entry, resolve, settings, label_sources, group_names, warnings);
     }
     name_groups(root, group_names);

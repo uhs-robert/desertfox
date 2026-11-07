@@ -34,6 +34,7 @@ const EXPECTED_REFUSALS: Record<string, RegExp[]> = {
   "open.search": [/No search engine named/],
   "open.clipboard": [/No container named/],
   "command.repeat": [/Nothing to repeat/],
+  "url.increment": [/has no number/],
 };
 
 const SOURCES: EnumSources = { search_engines: ["stub_engine"], containers: ["stub_container"] };

@@ -170,6 +170,10 @@ export const DEFAULT_KEYMAP: KeymapConfig = {
     yt: { id: "copy.url", args: { format: "title" } },
     gu: { id: "url.parent" },
     gU: { id: "url.root" },
+    "<C-a>": { id: "url.increment", args: { direction: "up" } },
+    "<C-x>": { id: "url.increment", args: { direction: "down" } },
+    "]c": { id: "url.increment", args: { direction: "up" } },
+    "[c": { id: "url.increment", args: { direction: "down" } },
     gi: { id: "page.focus_input" },
 
     p: { id: "open.clipboard", args: { where: "here" } },

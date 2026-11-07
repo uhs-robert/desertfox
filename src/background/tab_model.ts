@@ -13,6 +13,8 @@ import type { ContainerIdentity, WindowLike } from "./complete_items.ts";
 
 const PORT_PRIVACY: Record<string, boolean | undefined> = { [TAB_MODEL_PORT_NAME]: undefined, [TAB_MODEL_PORT_NORMAL]: false, [TAB_MODEL_PORT_PRIVATE]: true };
 export const FLUSH_DELAY_MS = 30;
+// A reconcile that keeps seeing events gives up, and the model stays as the events left it until the next one.
+const RECONCILE_ATTEMPTS = 3;
 
 type Entry = { row: TabRow; incognito: boolean };
 type Tab = browser.tabs.Tab;
@@ -91,6 +93,9 @@ function entry_of(tab: Tab, window_numbers: WindowNumbers, containers: Container
 
 // The fields an update may change. Position, `active`, `previous` and `window_number` stay the model's own, because their events arrive in order and the tab object in an update can be stale.
 const UPDATABLE = ["title", "url", "favicon_url", "site", "pinned", "muted", "audible", "discarded", "container", "container_name", "container_color", "container_icon"] as const;
+// A tab unloaded while it still loads reads about:blank with no title. The row keeps the address it had.
+const ADDRESS_FIELDS: ReadonlySet<keyof TabRow> = new Set(["title", "url", "site"]);
+const is_unloaded_blank = (row: TabRow) => row.discarded && row.url === "about:blank";
 
 // Runs `read`, and applies its answer only when no later call started meanwhile, so an older answer never overwrites a newer one.
 function latest_only<T>(read: () => Promise<T>, apply: (value: T) => void) {
@@ -119,6 +124,9 @@ export function create_tab_model(deps: TabModelDeps) {
   let loaded = false;
   let loading: Promise<void> | undefined;
   let raced = false;
+  let events_seen = 0;
+  let reconciles = 0;
+  let newest_reconcile: Promise<void> = Promise.resolve();
   let window_numbers: WindowNumbers = new Map();
   let containers: Containers = new Map();
 
@@ -228,6 +236,7 @@ export function create_tab_model(deps: TabModelDeps) {
 
   // Events that arrive while the model is loading are dropped: the load notices them and queries again.
   const when_loaded = <Args extends unknown[]>(handle: (...args: Args) => void) => (...args: Args) => {
+    events_seen += 1;
     if (!loaded) {
       raced = true;
       void load();
@@ -284,6 +293,59 @@ export function create_tab_model(deps: TabModelDeps) {
     return loading;
   };
 
+  const same_entry = (a: Entry, b: Entry) => a.incognito === b.incognito && (Object.keys(a.row) as (keyof TabRow)[]).every((field) => a.row[field] === b.row[field]);
+  // The event handlers shift indexes by hand, so one stale or missed event leaves rows wrong until Firefox is asked again.
+  // The diff goes through `touch` and `forget`, so ports get patches, not snapshots. `previous` stays the model's own, as in `UPDATABLE`.
+  const repair_from = (tabs: Tab[]) => {
+    const fresh = new Map<number, Entry>();
+    for (const tab of tabs) {
+      const entry = entry_of(tab, window_numbers, containers);
+      if (entry) fresh.set(entry.row.id, entry);
+    }
+    for (const [id, entry] of entries) {
+      if (fresh.has(id)) continue;
+      entries.delete(id);
+      forget(id, entry.incognito);
+    }
+    for (const [id, entry] of fresh) {
+      const current = entries.get(id);
+      if (current && is_unloaded_blank(entry.row)) for (const field of ADDRESS_FIELDS) (entry.row as Record<string, unknown>)[field] = current.row[field];
+      entry.row.previous = !entry.row.active && (current?.row.previous ?? false);
+      if (current && same_entry(current, entry)) continue;
+      // A listed tab is attached. A detach still in progress is safe to adopt, because `onAttached` also moves a tab that sits in `entries`.
+      // Without this, a missed `onAttached` would hide the tab until restart.
+      const was_detached = detached.delete(id);
+      if (!current && !was_detached) created.add(id);
+      entries.set(id, entry);
+      touch(id);
+    }
+  };
+  // Like the startup load, an event during the query makes the answer stale, so it queries again. An overlapped call waits for the newest one.
+  const reconcile = (): Promise<void> => {
+    const call = ++reconciles;
+    newest_reconcile = (async () => {
+      for (let attempt = 0; attempt < RECONCILE_ATTEMPTS; attempt += 1) {
+        const seen = events_seen;
+        // Windows and containers too, so a missed window or container event heals the labels as well.
+        const [tabs, numbers, read_containers] = await Promise.all([
+          deps.query().catch(() => undefined),
+          deps.windows().then(number_windows, () => undefined),
+          deps.containers().catch((): Containers => new Map()),
+        ]);
+        if (call !== reconciles) return newest_reconcile;
+        if (tabs === undefined) return;
+        if (events_seen !== seen) continue;
+        if (numbers) window_numbers = numbers;
+        containers = read_containers;
+        repair_from(tabs);
+        // `repair_from` labels the listed rows. This reaches the detached ones.
+        relabel_rows();
+        return;
+      }
+    })();
+    return newest_reconcile;
+  };
+
   const { events } = deps;
   events.onCreated.addListener(
     when_loaded((tab) => {
@@ -314,10 +376,9 @@ export function create_tab_model(deps: TabModelDeps) {
       const fresh = entry_of(tab, window_numbers, containers);
       if (!current || !fresh) return;
       let changed = false;
-      // A tab unloaded while it still loads reads about:blank with no title. The row keeps the address it had.
-      const unloaded_blank = fresh.row.discarded && fresh.row.url === "about:blank";
+      const unloaded_blank = is_unloaded_blank(fresh.row);
       for (const field of UPDATABLE) {
-        if (unloaded_blank && (field === "title" || field === "url" || field === "site")) continue;
+        if (unloaded_blank && ADDRESS_FIELDS.has(field)) continue;
         if (current.row[field] !== fresh.row[field]) {
           (current.row as Record<string, unknown>)[field] = fresh.row[field];
           changed = true;
@@ -374,7 +435,7 @@ export function create_tab_model(deps: TabModelDeps) {
       entry.row.window_id = newWindowId;
       entry.row.window_number = window_numbers.get(newWindowId) ?? 0;
       entry.row.index = newPosition;
-      entry.row.active = ![...entries.values()].some((other) => other.row.window_id === newWindowId && other.row.active);
+      entry.row.active = ![...entries.values()].some((other) => other.row.id !== tab_id && other.row.window_id === newWindowId && other.row.active);
       entries.set(tab_id, entry);
       removed.delete(tab_id);
       touch(tab_id);
@@ -404,17 +465,23 @@ export function create_tab_model(deps: TabModelDeps) {
     });
     port.onMessage.addListener((message) => {
       if (!state.ready || (message as TabModelRequest | undefined)?.type !== "resync") return;
-      flush();
-      send_snapshot(state);
+      void reconcile().then(() => {
+        if (!ports.has(state)) return;
+        flush();
+        send_snapshot(state);
+      });
     });
     // The port joins `ports` only once admitted, so neither a load nor a flush reaches it before.
     const admit = () => {
       ports.add(state);
       if (loaded) {
-        // Pending changes go to the ports first, so the snapshot holds nothing a later patch repeats.
-        flush();
-        state.ready = true;
-        send_snapshot(state);
+        void reconcile().then(() => {
+          if (!ports.has(state)) return;
+          // Pending changes go to the ports first, so the snapshot holds nothing a later patch repeats.
+          flush();
+          state.ready = true;
+          send_snapshot(state);
+        });
       } else void load();
     };
     // A web page can frame only a web-accessible page, so only that page needs the ticket. Any other extension page is extension code.

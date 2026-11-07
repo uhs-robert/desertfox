@@ -826,6 +826,16 @@ async function main() {
       expect(await scroll_delta_after(shown.page_id, ["j"]) > 0, "the tab left after xx does not take keys");
     });
 
+    await run_case("Ctrl+A adds one to the number in the address, and 3 then Ctrl+X takes three off", async () => {
+      await open_page("page", "num_5", { new_tab: true });
+      let mark = events.length;
+      await send_keys(...CTRL("a"));
+      await wait_event(mark, (event) => event.type === "tree_read" && event.page_id === "num_6", "the page num_6 after Ctrl+A");
+      mark = events.length;
+      await send_keys("3", ...CTRL("x"));
+      await wait_event(mark, (event) => event.type === "tree_read" && event.page_id === "num_3", "the page num_3 after 3 Ctrl+X");
+    });
+
     // Points the native host at a config folder and reloads it in place with qr. The which-key shots use it to show a copy of the user config.
     const load_config_dir = async (dir) => {
       rmSync(active_config);
