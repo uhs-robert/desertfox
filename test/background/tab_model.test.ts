@@ -260,7 +260,8 @@ test("a flush between detach and attach hides the tab, and the attach brings it 
   const first = p.messages[1];
   assert.ok(first.type === "patch");
   assert.deepEqual(first.removed, [1]);
-  f.set_tabs([tab(2, 1, 0), tab(1, 2, 0)]);
+  // Firefox leaves the moving tab out of this list, so the new port's reconcile keeps it detached.
+  f.set_tabs([tab(2, 1, 0)]);
   const late = await f.connect_port();
   assert.deepEqual(order(late.messages[0]), ["1:0:2"]);
   f.fire("onAttached", 1, { newWindowId: 2, newPosition: 0 });
@@ -1033,22 +1034,87 @@ describe("reconcile against Firefox", () => {
     assert.deepEqual(order(p.messages[0]), ["1:0:1", "1:1:2", "1:2:3"]);
   });
 
-  test("a tab detached during the query stays out until its attach, which places it", async () => {
-    const f = make([...abc(), tab(4, 2, 0)]);
+  test("a tab detached during the query is adopted at its listed place, and the attach keeps it there and active", async () => {
+    const f = make([...abc(), tab(4, 2, 0, { active: true })]);
     await f.model.start();
     const p = await f.connect_port();
     const release = f.hold_query();
     p.send({ type: "resync" });
     f.fire("onDetached", 2, { oldWindowId: 1, oldPosition: 1 });
-    // Firefox lists the tab mid-move. The model must not take that row over its detached one.
-    f.set_tabs([tab(1, 1, 0), tab(3, 1, 1), tab(2, 2, 1), tab(4, 2, 0)]);
+    f.set_tabs([tab(1, 1, 0), tab(3, 1, 1), tab(4, 2, 0), tab(2, 2, 1, { active: true })]);
     release();
     await tick();
-    assert.deepEqual(order(last(p.messages)), ["1:0:1", "1:1:3", "2:0:4"]);
+    assert.deepEqual(order(last(p.messages)), ["1:0:1", "1:1:3", "2:0:4", "2:1:2"]);
     f.fire("onAttached", 2, { newWindowId: 2, newPosition: 1 });
     f.run_timers();
     const patch = last(p.messages);
     assert.ok(patch.type === "patch");
-    assert.deepEqual(patch.upserts.map((r) => `${r.window_id}:${r.index}:${r.id}`), ["2:1:2"]);
+    assert.deepEqual(patch.upserts.map((r) => `${r.window_id}:${r.index}:${r.id}:${r.active}`), ["2:1:2:true"]);
+  });
+
+  test("a tab whose attach was missed comes back on the next resync", async () => {
+    const f = make([...abc(), tab(4, 2, 0)]);
+    await f.model.start();
+    const p = await f.connect_port();
+    f.fire("onDetached", 2, { oldWindowId: 1, oldPosition: 1 });
+    f.run_timers();
+    f.set_tabs([tab(1, 1, 0), tab(3, 1, 1), tab(4, 2, 0), tab(2, 2, 1)]);
+    await resync(p);
+    assert.deepEqual(order(last(p.messages)), ["1:0:1", "1:1:3", "2:0:4", "2:1:2"]);
+  });
+
+  test("a repair keeps the address of a tab unloaded while it still loads", async () => {
+    const f = make([tab(1, 1, 0, { title: "Mail", url: "https://mail.test/" })]);
+    await f.model.start();
+    const p = await f.connect_port();
+    f.set_tabs([tab(1, 1, 0, { title: "", url: "about:blank", discarded: true })]);
+    await resync(p);
+    const row = rows_of(last(p.messages))[0];
+    assert.deepEqual([row?.discarded, row?.title, row?.url, row?.site], [true, "Mail", "https://mail.test/", "mail.test"]);
+  });
+
+  test("a repair numbers a window whose creation event was missed", async () => {
+    const f = make([tab(1, 1, 0)]);
+    await f.model.start();
+    const p = await f.connect_port();
+    f.set_windows([win(1), win(2)]);
+    f.set_tabs([tab(1, 1, 0), tab(2, 2, 0)]);
+    await resync(p);
+    assert.deepEqual(pick(last(p.messages), "window_number"), [[1, 1], [2, 2]]);
+  });
+
+  test("a window event during the reconcile's window read discards the answer and reads again", async () => {
+    const f = make([tab(1, 1, 0)]);
+    await f.model.start();
+    const p = await f.connect_port();
+    const queries = f.query_calls();
+    const release = f.hold_windows();
+    p.send({ type: "resync" });
+    f.set_windows([win(1), win(2)]);
+    f.set_tabs([tab(1, 1, 0), tab(2, 2, 0)]);
+    f.fire("windows.onCreated", {});
+    release();
+    await tick();
+    assert.equal(f.query_calls(), queries + 2);
+    assert.deepEqual(pick(last(p.messages), "window_number"), [[1, 1], [2, 2]]);
+  });
+
+  test("a repair relabels a container whose rename event was missed", async () => {
+    const f = make([tab(1, 1, 0, { cookieStoreId: "firefox-container-1" })], { containers: new Map([["firefox-container-1", WORK]]) });
+    await f.model.start();
+    const p = await f.connect_port();
+    f.set_containers(new Map([["firefox-container-1", { ...WORK, name: "Job" }]]));
+    await resync(p);
+    assert.deepEqual(pick(last(p.messages), "container_name"), [[1, "Job"]]);
+  });
+
+  test("a repair that makes the previous tab active clears its previous mark", async () => {
+    const f = make([tab(1, 1, 0, { active: true }), tab(2, 1, 1)], { previous: { 1: 2 } });
+    await f.model.start();
+    const p = await f.connect_port();
+    f.set_tabs([tab(1, 1, 0), tab(2, 1, 1, { active: true })]);
+    await resync(p);
+    assert.deepEqual(pick(last(p.messages), "previous"), [[1, false], [2, false]]);
+    assert.deepEqual(pick(last(p.messages), "active"), [[1, false], [2, true]]);
   });
 });
