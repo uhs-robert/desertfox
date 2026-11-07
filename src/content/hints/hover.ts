@@ -11,7 +11,7 @@ type Hoverable = Parameters<typeof dispatch_mouse_event>[0] & { isConnected?: bo
 let hovered: { element: Hoverable; at: Point; entry_from?: Hoverable } | undefined;
 let watching_tab = false;
 
-// A hidden tab gets no mouseleave from the browser, so a preview would keep playing. The listener goes on at the first hover, so a page that never hovers carries none.
+// A hidden tab gets no mouseleave from the browser, so a preview would keep playing. The listener goes on at the first hover or click pick, so a page that never does either carries none.
 function watch_tab(): void {
   if (watching_tab || typeof document === "undefined") return;
   watching_tab = true;

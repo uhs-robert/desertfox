@@ -770,3 +770,20 @@ test("a double-click pick enters its target and names where the pointer came fro
   assert.deepEqual(related, [menu.element]);
   unhover();
 });
+
+test("after a click pick, Escape and the next pick each leave the clicked target once", async () => {
+  const { unhover } = await import("../../src/content/hints/hover.ts");
+  unhover();
+  const escaped = fixture("button");
+  escaped.run("here");
+  unhover();
+  unhover();
+  assert.deepEqual(escaped.calls.filter((type) => LEAVE.includes(type)), LEAVE);
+  const clicked = fixture("button");
+  const next = fixture("button");
+  clicked.run("here");
+  next.run("here");
+  next.run("copy");
+  assert.deepEqual(clicked.calls.filter((type) => LEAVE.includes(type)), LEAVE);
+  unhover();
+});
