@@ -447,7 +447,11 @@ export async function create_session({ name: shadow_name, timings }) {
     const kept = await background_call(`(async () => {
       const keep_tabs = new Set(${JSON.stringify(keep_tab_ids)});
       const keep_windows = new Set(${JSON.stringify(keep_window_ids)});
-      for (const window of await browser.windows.getAll()) if (!keep_windows.has(window.id)) await browser.windows.remove(window.id);
+      const windows = await browser.windows.getAll();
+      const doomed = windows.filter((window) => !keep_windows.has(window.id));
+      // Firefox exits with its last window, so one window survives even when a piece closed the snapshot window.
+      if (doomed.length === windows.length) doomed.shift();
+      for (const window of doomed) await browser.windows.remove(window.id);
       const tabs = await browser.tabs.query({});
       const extra = tabs.filter((tab) => !keep_tabs.has(tab.id)).map((tab) => tab.id);
       // The last tab stays, because Firefox exits with its last window.
@@ -456,8 +460,16 @@ export async function create_session({ name: shadow_name, timings }) {
       return tabs.length - extra.length;
     })()`);
     await wait_for_tabs("the extra tabs to close", `browser.tabs.query({}).then((tabs) => tabs.length)`, kept);
-    const left = await background_call(`browser.tabs.query({}).then((tabs) => tabs.map((tab) => ({ id: tab.id, window_id: tab.windowId })))`);
-    return left;
+  }
+
+  // Focuses the active tab of the last focused window, or any tab when none is active, so a step that types keys has a page to type into.
+  async function refocus_any_tab() {
+    const target = await background_call(`(async () => {
+      const [active] = await browser.tabs.query({ active: true, lastFocusedWindow: true });
+      const tab = active ?? (await browser.tabs.query({}))[0];
+      return { id: tab.id, window_id: tab.windowId };
+    })()`);
+    await confirm_page_focus(target.id, target.window_id);
   }
 
   // Unsets the temp edits through the command line, which rebuilds the effective config the way a user's :unset does.
@@ -497,7 +509,7 @@ export async function create_session({ name: shadow_name, timings }) {
     return { tab_ids: [home.tab_id], window_ids: [home.window_id] };
   }
 
-  // Runs after the cases, pass or fail. The teardown callbacks each report their own failure. Close, focus, config restore and temp unset share one step, so the first failure among them skips the rest.
+  // Runs after the cases, pass or fail. The teardown callbacks each report their own failure. Close, focus, config restore and temp unset each run in their own try, so a failed close does not skip the config restore.
   async function clean_up_piece(file, state, snapshot) {
     const failed_step = (step, error) => {
       results.push({ name: `${file} ${step}`, pass: false, reason: error.message, setup: false });
@@ -510,14 +522,23 @@ export async function create_session({ name: shadow_name, timings }) {
         failed_step("teardown", error);
       }
     }
-    try {
-      const [left] = await close_tabs_outside(snapshot.tab_ids, snapshot.window_ids);
-      await confirm_page_focus(left.id, left.window_id);
+    const attempt = async (step, action) => {
+      try {
+        await action();
+      } catch (error) {
+        failed_step(step, error);
+      }
+    };
+    await attempt("cleanup close", () => close_tabs_outside(snapshot.tab_ids, snapshot.window_ids));
+    await attempt("cleanup focus", refocus_any_tab);
+    await attempt("cleanup config restore", async () => {
+      await refocus_any_tab();
       await restore_config();
+    });
+    await attempt("cleanup temp unset", async () => {
+      await refocus_any_tab();
       await clear_temp_settings();
-    } catch (error) {
-      failed_step("cleanup", error);
-    }
+    });
   }
 
   // One context per piece file: the shared helpers plus that piece's own setup steps and teardown list.
