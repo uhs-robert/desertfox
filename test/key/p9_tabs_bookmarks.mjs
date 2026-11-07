@@ -194,6 +194,51 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, open_p
     }
   });
 
+  await run_case("tab list: C-Space marks two tabs, A-c opens the container prompt, and Enter reopens them in that container", async () => {
+    const made = await background(`(async () => {
+      const fox = await browser.contextualIdentities.create({ name: "P9cWork", color: "orange", icon: "briefcase" });
+      const ids = [
+        (await browser.tabs.create({ url: ${JSON.stringify(url_of("page", "p9c_one"))}, active: false })).id,
+        (await browser.tabs.create({ url: ${JSON.stringify(url_of("page", "p9c_two"))}, active: false })).id,
+      ];
+      return { ids, container: fox.cookieStoreId };
+    })()`);
+    const in_container = () => background(`browser.tabs.query({ cookieStoreId: ${JSON.stringify(made.container)} }).then((tabs) => tabs.filter((tab) => /p9c_/.test(tab.url)).length)`);
+    const old_open = () => background(`browser.tabs.query({}).then((tabs) => tabs.filter((tab) => ${JSON.stringify(made.ids)}.includes(tab.id)).length)`);
+    const line_tab = await background(`browser.tabs.query({ active: true, currentWindow: true }).then(([tab]) => tab.id)`);
+    try {
+      await sleep(1200);
+      await send_keys(":");
+      await sleep(700);
+      await send_keys("tab p9c_", "-k", "Down");
+      await send_keys(...CTRL(" "));
+      await send_keys(...CTRL(" "));
+      await send_keys(...ALT("c"));
+      await sleep(400);
+      await send_keys("-k", "Escape");
+      await sleep(300);
+      expect(await in_container() === 0 && await old_open() === 2, "Escape in the container prompt reopened tabs");
+      await send_keys(...ALT("c"));
+      await sleep(400);
+      await send_keys("p9cwork", "-k", "Tab");
+      await send_keys("-k", "Return");
+      await sleep(1500);
+      expect(await in_container() === 2, "Enter did not reopen both marked tabs in the container");
+      expect(await old_open() === 0, "the old tabs stayed open after the reopen");
+      expect(await background(`browser.tabs.query({ active: true, currentWindow: true }).then(([tab]) => tab.id)`) === line_tab, "a reopened tab took the focus from the line's tab");
+    } finally {
+      await send_keys("-k", "Escape");
+      await sleep(300);
+      await send_keys("-k", "Escape");
+      await sleep(400);
+      await background(`(async () => {
+        const tabs = await browser.tabs.query({ cookieStoreId: ${JSON.stringify(made.container)} });
+        await browser.tabs.remove([...tabs.map((tab) => tab.id), ...${JSON.stringify(made.ids)}]).catch(() => {});
+        await browser.contextualIdentities.remove(${JSON.stringify(made.container)});
+      })()`);
+    }
+  });
+
   await run_case("tu unloads the current tab after switching to a loaded one", async () => {
     await open_page("page", "p9u_current", { new_tab: true });
     const tab_id = await background(`(async () => (await browser.tabs.query({ active: true, currentWindow: true }))[0].id)()`);

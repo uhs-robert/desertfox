@@ -69,6 +69,8 @@ async function open_line(start: Start, port: MessagePort): Promise<void> {
   const lookup = create_word_lookup(opened.commands, opened.command_aliases);
   if (start.search) show_prompt(document.querySelector<HTMLElement>(".desertfox-cmdline-prompt")!, start.search === "forward" ? "/ " : "? ");
   else if (opened.prompt) show_prompt(document.querySelector<HTMLElement>(".desertfox-cmdline-prompt")!, opened.prompt);
+  const prompt = document.querySelector<HTMLElement>(".desertfox-cmdline-prompt")!;
+  const line_prompt = prompt.textContent;
   const keymap = stored[COMPILED_KEYMAP_STORAGE_KEY] as CompiledKeymap | undefined;
   const opened_from = typeof start.mode === "string" ? start.mode : "normal";
   const key_text = key_labels(keymap, opened.commands, opened_from);
@@ -129,6 +131,7 @@ async function open_line(start: Start, port: MessagePort): Promise<void> {
     has_help,
     command_id_of: (word) => lookup.find(word)?.id,
     tabs: () => model?.items(),
+    containers: opened.container_stores,
     complete: start.search ? undefined : create_completer(lookup, opened.commands, opened.command_aliases, opened.sources, opened_from, live),
     // Only a missing value is caught here. The router still checks everything else when it runs the command.
     precheck: (invocation) => {
@@ -148,6 +151,7 @@ async function open_line(start: Start, port: MessagePort): Promise<void> {
       input.value = session.get_text();
       input.setSelectionRange(session.get_caret(), session.get_caret());
     }
+    prompt.textContent = session.get_prompt() ?? line_prompt;
     const message = session.get_message();
     // The error colour is for errors only. Without one the note shows the usage or "no match".
     const shown = message ?? session.get_hint() ?? "";
@@ -171,7 +175,7 @@ async function open_line(start: Start, port: MessagePort): Promise<void> {
 
   // The rows change only when the model's patch arrives, so the answer carries just the refusal.
   const run_tab_rows_action = (effect: Extract<Effect, { kind: "tab_rows_action" }>) => {
-    void ask_background<TabRowsActionAnswer | undefined>({ type: "tab_rows_action", action: effect.action, tab_ids: effect.tab_ids })
+    void ask_background<TabRowsActionAnswer | undefined>({ type: "tab_rows_action", action: effect.action, tab_ids: effect.tab_ids, ...(effect.cookie_store_id === undefined ? {} : { cookie_store_id: effect.cookie_store_id }) })
       .then(
         (answer) => session.set_message(answer ? answer.refusal : "could not change the tabs"),
         () => session.set_message("could not change the tabs"),

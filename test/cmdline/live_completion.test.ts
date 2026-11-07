@@ -46,6 +46,12 @@ const ENGINES: EngineItem[] = [
 const SOURCES = { search_engines: ENGINES.map((engine) => engine.name), containers: [] };
 const lookup = create_word_lookup(COMMANDS, {});
 
+const STORES = [
+  { name: "default", cookie_store_id: "firefox-default" },
+  { name: "Work", cookie_store_id: "firefox-container-1" },
+  { name: "Shopping", cookie_store_id: "firefox-container-2" },
+  { name: "Work", cookie_store_id: "firefox-container-3" },
+];
 const TABS: TabItem[] = [
   { id: 11, number: 1, title: "Mail", url: "https://mail.test/" },
   { id: 12, number: 2, title: "GitHub", url: "https://github.com/" },
@@ -55,7 +61,7 @@ const TABS: TabItem[] = [
 const BOOKMARKS: BookmarkItem[] = Array.from({ length: 30 }, (_, index) => ({ title: `Mark ${index}`, url: `https://m${index}.test/` }));
 
 // The background answers when the test says so.
-function make() {
+function make(containers: { name: string; cookie_store_id: string }[] = STORES, history: string[] = []) {
   const asks: { kind: string; answer: (items: TabItem[] | BookmarkItem[] | EngineItem[] | OpenItems | WindowItem[] | HeadingItem[]) => void }[] = [];
   // The tab model has no reply to await. The first read is its cue to connect, and `answer` is the snapshot arriving.
   let tab_items: TabItem[] | undefined;
@@ -78,9 +84,10 @@ function make() {
     on_ready: () => session.source_ready(),
   });
   const session = create_session({
-    history: [],
+    history,
     parse: (text) => parse_command_line(lookup, text, SOURCES),
     tabs: () => tab_items,
+    containers,
     complete: create_completer(lookup, COMMANDS, {}, SOURCES, "normal", live),
   });
   const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
@@ -535,8 +542,8 @@ test("a page with no headings lists nothing and says no match", async () => {
   assert.equal(session.get_hint(), "no match");
 });
 
-async function listed(tabs: TabItem[] = TABS) {
-  const made = make();
+async function listed(tabs: TabItem[] = TABS, containers?: { name: string; cookie_store_id: string }[], history?: string[]) {
+  const made = make(containers, history);
   made.session.edit("tab ");
   made.asks[0]!.answer(tabs);
   await made.settle();
@@ -744,4 +751,169 @@ test("a close of other tabs leaves no target behind for a later close of the hig
   assert.equal(session.get_rows()[session.get_selected()]?.tab?.id, 14);
   change_tabs([TABS[1]!, TABS[2]!]);
   assert.equal(session.get_selected(), -1);
+});
+
+const reopen_key = (session: Session) => act(session, "reopen");
+const enter = (session: Session) => session.run("cmdline.submit", undefined);
+
+test("the container key opens a container prompt over the tab list, and Enter on a previewed container reopens the marked tabs in it", async () => {
+  const { session } = await listed();
+  session.run("cmdline.next_completion", undefined);
+  select_key(session);
+  select_key(session);
+  assert.equal(reopen_key(session).kind, "render");
+  assert.equal(session.get_prompt(), "container: ");
+  assert.equal(session.get_text(), "");
+  assert.deepEqual(names(session), ["default", "Work", "Shopping", "Work"]);
+  session.edit("shop");
+  assert.deepEqual(names(session), ["Shopping"]);
+  session.run("cmdline.next_completion", undefined);
+  assert.deepEqual(enter(session), { kind: "tab_rows_action", action: "reopen", tab_ids: [11, 12], cookie_store_id: "firefox-container-2" });
+  assert.equal(session.get_prompt(), undefined);
+});
+
+test("the container prompt sends the store id of the row, so two containers with one name stay apart", async () => {
+  const { session } = await listed();
+  session.run("cmdline.next_completion", undefined);
+  reopen_key(session);
+  session.edit("work");
+  session.run("cmdline.prev_completion", undefined);
+  assert.deepEqual(enter(session), { kind: "tab_rows_action", action: "reopen", tab_ids: [11], cookie_store_id: "firefox-container-3" });
+});
+
+test("with no marks the prompt reopens the tab that was highlighted, and a typed exact name picks the container", async () => {
+  const { session } = await listed();
+  session.run("cmdline.next_completion", undefined);
+  session.run("cmdline.next_completion", undefined);
+  reopen_key(session);
+  session.edit("default");
+  assert.deepEqual(enter(session), { kind: "tab_rows_action", action: "reopen", tab_ids: [12], cookie_store_id: "firefox-default" });
+});
+
+test("Enter in the prompt with no container chosen keeps the prompt and says so", async () => {
+  const { session } = await listed();
+  session.run("cmdline.next_completion", undefined);
+  reopen_key(session);
+  session.edit("zzz");
+  assert.deepEqual(enter(session), { kind: "render" });
+  assert.equal(session.get_message(), "pick a container");
+  assert.equal(session.get_prompt(), "container: ");
+});
+
+test("escape in the prompt returns to the tab list with the marks, the filter and the highlight kept, and the C1 escape order holds after it", async () => {
+  const { session } = await listed();
+  session.edit("tab git");
+  session.run("cmdline.next_completion", undefined);
+  select_key(session);
+  select_key(session);
+  assert.deepEqual(marked(session), [12, 13]);
+  session.run("cmdline.prev_completion", undefined);
+  const highlighted = session.get_rows()[session.get_selected()]?.tab?.id;
+  reopen_key(session);
+  assert.equal(session.run("mode.escape", undefined).kind, "render");
+  assert.equal(session.get_prompt(), undefined);
+  assert.deepEqual(marked(session), [12, 13]);
+  assert.deepEqual(names(session).length, 2);
+  assert.equal(session.get_rows()[session.get_selected()]?.tab?.id, highlighted);
+  assert.equal(session.get_text().startsWith("tab "), true);
+  assert.equal(session.run("mode.escape", undefined).kind, "render");
+  assert.deepEqual(marked(session), []);
+  assert.equal(session.get_rows().length, 2);
+  session.run("mode.escape", undefined);
+  assert.equal(session.get_rows().length, 0);
+  assert.equal(session.run("mode.escape", undefined).kind, "close");
+});
+
+test("the ids are read when Enter is pressed: a tab that closed during the prompt drops out, and a closed highlighted tab ends the reopen", async () => {
+  const marked_case = await listed();
+  marked_case.session.run("cmdline.next_completion", undefined);
+  select_key(marked_case.session);
+  select_key(marked_case.session);
+  reopen_key(marked_case.session);
+  marked_case.change_tabs([TABS[1]!, TABS[2]!, TABS[3]!]);
+  marked_case.session.run("cmdline.next_completion", undefined);
+  assert.deepEqual(enter(marked_case.session), { kind: "tab_rows_action", action: "reopen", tab_ids: [12], cookie_store_id: "firefox-default" });
+
+  const single = await listed();
+  single.session.run("cmdline.next_completion", undefined);
+  reopen_key(single.session);
+  single.change_tabs([TABS[1]!, TABS[2]!, TABS[3]!]);
+  single.session.run("cmdline.next_completion", undefined);
+  assert.deepEqual(enter(single.session), { kind: "render" });
+  assert.equal(single.session.get_message(), "no tab to reopen");
+  assert.equal(single.session.get_prompt(), undefined);
+});
+
+test("a line with no containers refuses the prompt, and so does a list with no tab row highlighted", async () => {
+  const none = await listed(TABS, []);
+  none.session.run("cmdline.next_completion", undefined);
+  assert.deepEqual(reopen_key(none.session), { kind: "render" });
+  assert.equal(none.session.get_message(), "this line has no containers");
+  assert.equal(none.session.get_prompt(), undefined);
+  const unselected = await listed();
+  assert.deepEqual(reopen_key(unselected.session), { kind: "render" });
+  assert.equal(unselected.session.get_message(), "select a tab row first");
+  assert.equal(unselected.session.get_prompt(), undefined);
+});
+
+test("while the container prompt is open the tab keys do nothing to tabs", async () => {
+  const { session } = await listed();
+  session.run("cmdline.next_completion", undefined);
+  select_key(session);
+  reopen_key(session);
+  session.run("cmdline.next_completion", undefined);
+  assert.deepEqual(act(session, "close"), { kind: "render" });
+  assert.deepEqual(select_key(session), { kind: "render" });
+  assert.deepEqual(marked(session), [11]);
+});
+
+test("a click on a container row keeps that row's store id when two containers share a name", async () => {
+  const { session } = await listed();
+  session.run("cmdline.next_completion", undefined);
+  reopen_key(session);
+  session.edit("work");
+  assert.equal(session.get_rows().length, 2);
+  session.pick(1);
+  assert.deepEqual(enter(session), { kind: "tab_rows_action", action: "reopen", tab_ids: [11], cookie_store_id: "firefox-container-3" });
+  reopen_key(session);
+  session.edit("work");
+  session.pick(0);
+  assert.deepEqual(enter(session), { kind: "tab_rows_action", action: "reopen", tab_ids: [11], cookie_store_id: "firefox-container-1" });
+});
+
+test("a typed name that two containers share is refused until a row is chosen", async () => {
+  const { session } = await listed();
+  session.run("cmdline.next_completion", undefined);
+  reopen_key(session);
+  session.edit("Work");
+  assert.deepEqual(enter(session), { kind: "render" });
+  assert.equal(session.get_message(), "several containers have that name, pick a row");
+  assert.equal(session.get_prompt(), "container: ");
+});
+
+test("when every marked tab closes during the prompt, Enter reopens nothing, not the highlighted tab", async () => {
+  const { session, change_tabs } = await listed();
+  session.run("cmdline.next_completion", undefined);
+  select_key(session);
+  session.run("cmdline.prev_completion", undefined);
+  assert.deepEqual(marked(session), [11]);
+  reopen_key(session);
+  change_tabs([TABS[1]!, TABS[2]!, TABS[3]!]);
+  session.edit("default");
+  assert.deepEqual(enter(session), { kind: "render" });
+  assert.equal(session.get_message(), "no tab to reopen");
+});
+
+test("Up and Down in the container prompt with no matching container leave the typed text alone", async () => {
+  const { session } = await listed(TABS, undefined, ["open a", "tab 2"]);
+  session.run("cmdline.next_completion", undefined);
+  reopen_key(session);
+  session.edit("zzz");
+  assert.equal(session.get_rows().length, 0);
+  session.run("cmdline.history", { direction: "prev" });
+  assert.equal(session.get_text(), "zzz");
+  session.run("cmdline.history", { direction: "next" });
+  assert.equal(session.get_text(), "zzz");
+  assert.deepEqual(enter(session), { kind: "render" });
+  assert.equal(session.get_message(), "pick a container");
 });

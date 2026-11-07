@@ -30,6 +30,7 @@ function make({ slow_set = false, stuck_ticket = "" } = {}) {
     tickets,
     new_ticket: () => `ticket-${++issued}`,
     sources: async () => ({ search_engines: ["arch"], containers: [] }),
+    container_stores: async () => [{ name: "default", cookie_store_id: "firefox-default" }],
     page_config: async () => ({ commands: [{ id: "my.snippet", label: "Mine", intent: "page" }], help_ids: ["tab.next"], command_aliases: { g: "open.search" }, prompt: ">> ", all_windows: false }),
   });
   // Opens the line the way the host and the page do: a ticket for tab 7, redeemed from the line's frame in tab 7.
@@ -41,6 +42,12 @@ test("history keeps order, oldest first", async () => {
   const { service, open } = make();
   for (const text of ["a", "b", "c"]) await service.record(text, false);
   assert.deepEqual((await open()).history, ["a", "b", "c"]);
+});
+
+test("a line offers the containers, and a private line offers none", async () => {
+  const { service } = make();
+  assert.deepEqual((await service.open(await service.issue_ticket(7), 7, LINE_FRAME, 10))?.container_stores, [{ name: "default", cookie_store_id: "firefox-default" }]);
+  assert.deepEqual((await service.open(await service.issue_ticket(7), 7, LINE_FRAME, 10, true))?.container_stores, []);
 });
 
 test("history keeps the last 100 and drops the oldest", async () => {
