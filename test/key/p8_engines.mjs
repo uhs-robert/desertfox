@@ -20,7 +20,11 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, open_p
     await sleep(400);
   });
 
-  const select_all = () => send_keys("-M", "ctrl", "a", "-m", "ctrl");
+  // Not Ctrl+A: that key is bound to url.increment, so it never selects the page text.
+  const select_all = () => evaluate_in_background(rdp, extension_id, `(async () => {
+    const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
+    await browser.tabs.executeScript(tab.id, { code: "getSelection().selectAllChildren(document.body)" });
+  })()`);
   const tab_count = `(async () => (await browser.tabs.query({})).length)()`;
 
   await run_case("s/ lists the site search and the member whose host fits, and hides the member of another host", async () => {

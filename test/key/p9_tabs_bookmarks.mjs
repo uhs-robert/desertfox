@@ -173,6 +173,17 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, open_p
       (await browser.tabs.create({ url: ${JSON.stringify(url_of("page", "p9x_two"))}, active: false })).id,
     ])()`);
     const open_count = () => background(`browser.tabs.query({}).then((tabs) => tabs.filter((tab) => ${JSON.stringify(ids)}.includes(tab.id)).length)`);
+    // Waits for the first close, then a moment more, so a close of the second tab that comes late still counts.
+    const wait_open_count = async (expected, what) => {
+      let count = 2;
+      for (let attempt = 0; attempt < 30 && count === 2; attempt++) {
+        await sleep(100);
+        count = await open_count();
+      }
+      await sleep(300);
+      count = await open_count();
+      expect(count === expected, `${what}: ${count} of the 2 tabs stayed open, expected ${expected}`);
+    };
     try {
       await sleep(1200);
       await send_keys(":");
@@ -183,8 +194,7 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, open_p
       await send_keys("-k", "Escape");
       await sleep(300);
       await send_keys(...ALT("x"));
-      await sleep(800);
-      expect(await open_count() === 1, "A-x after Escape closed more than the highlighted tab, so Escape did not clear the marks");
+      await wait_open_count(1, "A-x after Escape did not close exactly the highlighted tab");
     } finally {
       await send_keys("-k", "Escape");
       await sleep(300);

@@ -56,7 +56,7 @@ just docs-gen    # regenerate the tables in docs/keymap.md
 just themes      # regenerate src/shared/themes.ts from themes/*.toml, then src/shared/setting_completion.ts
 just settings-defaults  # regenerate src/shared/default_settings.ts from src/shared/settings_table.ts and src/shared/setting_completion.ts from src/shared/settings_schema.ts
 just host-test   # Python unit tests of the native host and install.sh, with a temporary HOME and a stubbed curl
-just key-test    # real key presses in a nested Hyprland, about a minute
+just key-test    # real key presses in a nested Hyprland, about 20 minutes for now (key-test-speed, #273, brings it down)
 just sign        # sign as unlisted on addons.mozilla.org
 just install     # install through the Firefox policy file (needs sudo)
 just release     # from a clean non-main branch: bump the patch version, sign and install, commit and push the bump, create the GitHub release that carries the native host (needs a logged-in gh), reading the AMO key from rbw when unset
