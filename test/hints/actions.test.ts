@@ -25,7 +25,7 @@ function fixture(local: string, extra: Record<string, unknown> = {}) {
   return { calls, opened, copied, started, images, run, element };
 }
 
-const MOUSE_SEQUENCE = ["pointerover", "pointerenter", "mouseover", "pointerdown", "mousedown", "focus", "pointerup", "mouseup", "click"];
+const MOUSE_SEQUENCE = ["pointerover", "pointerenter", "mouseover", "mouseenter", "pointerdown", "mousedown", "focus", "pointerup", "mouseup", "click"];
 
 test("here sends the mouse events a real click sends, with click last", () => {
   const page = fixture("a", { href: "https://example.com/" });
@@ -43,7 +43,7 @@ test("a cancelled mousedown keeps the focus where the page put it", () => {
 test("a cancelled pointerdown skips mousedown, mouseup and focus and still clicks", () => {
   const page = fixture("a", { href: "https://example.com/", cancel: ["pointerdown"] });
   page.run("here");
-  assert.deepEqual(page.calls, ["pointerover", "pointerenter", "mouseover", "pointerdown", "pointerup", "click"]);
+  assert.deepEqual(page.calls, ["pointerover", "pointerenter", "mouseover", "mouseenter", "pointerdown", "pointerup", "click"]);
 });
 
 test("here sends the mouse events from the middle of the element", () => {
@@ -637,7 +637,7 @@ test("double_click sends two presses with click counts 1 and 2, a click after ea
   const sent: { type: string; detail?: number }[] = [];
   const page = fixture("div", { dispatchEvent: (event: { type: string; detail?: number }) => { sent.push(event); return true; } });
   page.run("double_click");
-  assert.deepEqual(sent.map((event) => event.type), ["pointerover", "pointerenter", "mouseover", "pointerdown", "mousedown", "pointerup", "mouseup", "click", "pointerdown", "mousedown", "pointerup", "mouseup", "click", "dblclick"]);
+  assert.deepEqual(sent.map((event) => event.type), ["pointerover", "pointerenter", "mouseover", "mouseenter", "pointerdown", "mousedown", "pointerup", "mouseup", "click", "pointerdown", "mousedown", "pointerup", "mouseup", "click", "dblclick"]);
   assert.deepEqual(sent.filter((event) => /^(mouse(down|up)|click|dblclick)$/.test(event.type)).map((event) => event.detail), [1, 1, 1, 2, 2, 2, 2]);
   assert.deepEqual(sent.filter((event) => event.type.startsWith("pointer")).map((event) => event.detail), Array(6).fill(undefined));
   assert.deepEqual(sent.slice(0, 3).map((event) => event.detail), [undefined, undefined, 0]);
@@ -692,4 +692,28 @@ test("is_inside_link is true for a link and for its children", () => {
   assert.equal(is_inside_link(node(false, node(true)) as never), true);
   assert.equal(is_inside_link(node(false, null, node(true)) as never), true);
   assert.equal(is_inside_link(node(false, node(false)) as never), false);
+});
+
+test("a click pick in a shadow root enters the host and the target", async () => {
+  const { unhover } = await import("../../src/content/hints/hover.ts");
+  unhover();
+  const host = fixture("div");
+  const inner = fixture("button");
+  Object.assign(inner.element, { parentElement: null, getRootNode: () => ({ host: host.element }) });
+  inner.run("here");
+  assert.deepEqual(host.calls.filter((type) => type.endsWith("enter")), ["pointerenter", "mouseenter"]);
+  assert.deepEqual(inner.calls.filter((type) => type.endsWith("enter")), ["pointerenter", "mouseenter"]);
+});
+
+test("hovering an item after a copy pick inside the hovered menu still enters it", async () => {
+  const { unhover } = await import("../../src/content/hints/hover.ts");
+  unhover();
+  const { menu, item } = tree();
+  menu.run("hover");
+  item.run("copy");
+  assert.deepEqual(item.calls.filter((type) => type.endsWith("enter")), []);
+  item.run("hover");
+  assert.deepEqual(item.calls.filter((type) => type.endsWith("enter")), ["pointerenter", "mouseenter"]);
+  assert.equal(menu.calls.filter((type) => type === "mouseenter").length, 1);
+  unhover();
 });
