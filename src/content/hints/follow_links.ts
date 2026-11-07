@@ -3,6 +3,7 @@
 import { collect, query_for } from "./candidates.ts";
 import type { Found } from "./candidates.ts";
 import { keep_present_found } from "./headings.ts";
+import { has_usable_address } from "./actions.ts";
 
 export type FollowDirection = "next" | "prev";
 
@@ -50,7 +51,8 @@ function is_better(rank: readonly number[], than: readonly number[]): boolean {
   return false;
 }
 
-const texts_of = (element: Element): string[] => [(element as HTMLElement).innerText ?? element.textContent ?? "", element.getAttribute("aria-label") ?? "", element.getAttribute("title") ?? "", (element as HTMLInputElement).value ?? ""].filter((text) => typeof text === "string" && text !== "");
+// A button's `value` is the form data it sends, not a label, so only an input offers its value.
+export const texts_of = (element: Element): string[] => [(element as HTMLElement).innerText ?? element.textContent ?? "", element.getAttribute("aria-label") ?? "", element.getAttribute("title") ?? "", element.localName === "input" ? (element as HTMLInputElement).value : ""].filter((text) => typeof text === "string" && text !== "");
 
 // Links and buttons that are on the page, including off-screen ones: the next link usually sits at the bottom.
 export function find_text_link(root: ParentNode, patterns: readonly string[]): Found | undefined {
@@ -60,5 +62,8 @@ export function find_text_link(root: ParentNode, patterns: readonly string[]): F
   const index = pick_by_text(items.map((item, place) => ({ texts: texts_of(item.element), is_link: place < links.length })), patterns);
   return items[index];
 }
+
+// The background reads a `javascript:` or `data:` address as typed text and would search for it. A button has no address and is clicked.
+export const can_open_elsewhere = (element: HTMLElement): boolean => !("href" in element) || has_usable_address(element, false, true);
 
 export const find_follow_link = (root: ParentNode, direction: FollowDirection, patterns: readonly string[]): Found | undefined => find_rel_link(root, direction) ?? find_text_link(root, patterns);

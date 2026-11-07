@@ -18,7 +18,7 @@ import { follow_windows } from "./follow.ts";
 import { box_owners, boxes_with_fallback, uncovered_through_frames, viewport_size } from "./visible.ts";
 import type { PageProbe } from "./visible.ts";
 import { clear_snapshot, go_to_heading, take_snapshot } from "./headings.ts";
-import { find_follow_link } from "./follow_links.ts";
+import { can_open_elsewhere, find_follow_link } from "./follow_links.ts";
 import type { FollowDirection } from "./follow_links.ts";
 import { DEFAULT_SETTINGS } from "../../shared/default_settings.ts";
 import type { HeadingItem } from "../../shared/messages.ts";
@@ -118,6 +118,7 @@ async function follow_page_link(direction: FollowDirection, place: Place): Promi
   const link = find_follow_link(document, direction, await read_patterns(direction));
   if (!link) return { ok: false, message: direction === "next" ? "No next page link" : "No previous page link" };
   const element = link.element as HTMLLinkElement;
+  if (place !== "here" && !can_open_elsewhere(element)) return { ok: false, message: "That page link cannot open in another tab" };
   if (element.localName === "link") {
     if (place === "here") window.location.assign(element.href);
     else await open_link(element.href, place);
