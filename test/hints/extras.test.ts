@@ -97,7 +97,7 @@ async function page_with(texts: string[]) {
   const doc = {
     documentElement: document_root,
     defaultView: win,
-    elementFromPoint: () => null,
+    createElement: () => new FakeNode(),
     addEventListener: () => {},
     elementFromPoint: () => null,
     querySelectorAll: () => [...links],
