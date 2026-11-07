@@ -5,7 +5,7 @@
 
 import type { CommandMeta, Mode } from "../command.ts";
 import { DEFAULT_SETTINGS, with_fallback_engines, type SnippetEntry } from "../config.ts";
-import { label_problem, to_firefox_shortcut, parse_sequence } from "../keys/index.ts";
+import { intent_problem, label_problem, to_firefox_shortcut, parse_sequence } from "../keys/index.ts";
 import { find_param } from "../registry/params.ts";
 import { check_args, create_registry, DefineError, type Registry } from "../registry/index.ts";
 import { parse_binding } from "../registry/parse_binding.ts";
@@ -119,15 +119,20 @@ export function resolve_bindings(merged: MergedData, registry: Registry, problem
         if (!binding) continue;
         const problem = entry.label === undefined ? null : label_problem(entry.label);
         if (problem) problems.push(`${where}: ${problem}`);
-        // The label sits on the first invocation, as the compiler reads it there.
-        else if (entry.label !== undefined) [binding].flat()[0]!.label = entry.label;
+        const intent_error = entry.intent === undefined ? null : intent_problem(entry.intent);
+        if (intent_error) problems.push(`${where}: ${intent_error}`);
+        // The label and the intent sit on the first invocation, as the compiler reads them there.
+        if (!problem && !intent_error) {
+          if (entry.label !== undefined) [binding].flat()[0]!.label = entry.label;
+          if (entry.intent !== undefined) [binding].flat()[0]!.intent = entry.intent;
+        }
         bindings[sequence] = binding;
       }
     }
   }
 }
 
-function is_labeled_binding(entry: unknown): entry is { run: string | string[]; label?: string } {
+function is_labeled_binding(entry: unknown): entry is { run: string | string[]; label?: string; intent?: string } {
   return typeof entry === "object" && entry !== null && !Array.isArray(entry) && "run" in entry;
 }
 

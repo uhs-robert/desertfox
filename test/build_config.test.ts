@@ -666,3 +666,15 @@ test("a key bound to open -t with no url builds, the conditional url default fil
   assert.deepEqual(normal?.["t"], { id: "open.url", args: { where: "tab" } });
   assert.deepEqual(normal?.["T"], { id: "open.url", args: { where: "window" } });
 });
+
+test("a keymap table accepts an intent and rejects an empty or non-string one", () => {
+  const toml = (intent: string) => ({ "keymap.toml": `[normal]\nJ = { run = "tab.next", intent = ${intent} }` });
+  const good = build_config(config_dir_with(toml('"Go to the next tab."')), commands);
+  assert.equal((good.keymap.normal?.["J"] as { intent?: string }).intent, "Go to the next tab.");
+  assert.match(problems_of(config_dir_with(toml('""'))).join("\n"), /an intent must not be empty/);
+  assert.match(problems_of(config_dir_with(toml("5"))).join("\n"), /must be a command string/);
+});
+
+test("the editor schema allows intent on a keymap table", () => {
+  assert.match(JSON.stringify(build_schemas(commands)), /"intent":\{"type":"string","minLength":1\}/);
+});

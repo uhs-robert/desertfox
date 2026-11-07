@@ -22,6 +22,8 @@ export type TreeLeaf = {
   kind: "leaf";
   // The which-key label of the key. The content script cannot load commands.json.
   label?: string;
+  // The which-key hover text the binding wrote. Without one the row shows the command intent.
+  intent?: string;
   steps: LeafStep[];
 };
 

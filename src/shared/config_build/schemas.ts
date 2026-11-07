@@ -22,8 +22,8 @@ function keymap_schema(commands: CommandMeta[]): Schema {
   const command_list: Schema = { type: "array", minItems: 1, items: { type: "string", minLength: 1 } };
   const labeled_binding: Schema = {
     type: "object",
-    description: "A binding with the label which-key shows for it, instead of the label derived from the command",
-    properties: { run: { anyOf: [command_text, command_list] }, label: { type: "string", minLength: 1 } },
+    description: "A binding with the label and the hover text which-key shows for it, instead of those of the command",
+    properties: { run: { anyOf: [command_text, command_list] }, label: { type: "string", minLength: 1 }, intent: { type: "string", minLength: 1 } },
     required: ["run"],
     additionalProperties: false,
   };

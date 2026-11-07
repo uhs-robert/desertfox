@@ -83,11 +83,15 @@ function modifier_variants(modifiers: Record<string, Modifier>, taken: Map<strin
       const variant_tokens = [...group, tokens[tokens.length - 1]!, ...source.tokens.slice(group.length)];
       const variant_key = variant_tokens.join("");
       if (taken.has(variant_key) || removed.has(variant_key)) continue;
-      variants.push({ sequence: variant_key, tokens: variant_tokens, binding: { ...binding, args: variant_args, ...(binding.variant_label === undefined ? {} : { label: binding.variant_label }) }, source_index: -1, layer: "defaults" });
+      variants.push({ sequence: variant_key, tokens: variant_tokens, binding: { ...without_intent(binding), args: variant_args, ...(binding.variant_label === undefined ? {} : { label: binding.variant_label }) }, source_index: -1, layer: "defaults" });
     }
     if (accepted === 0) warnings.push(`modifiers: "${sequence}" matches no key of its group, so it makes no variants`);
   }
   return variants;
+}
+
+function without_intent({ intent: _intent, ...rest }: BoundInvocation): BoundInvocation {
+  return rest;
 }
 
 type Drop = { default_sequence: string; extenders: string[] };
@@ -202,10 +206,18 @@ export function label_problem(label: string): string | null {
   return null;
 }
 
+// An intent is a sentence of hover text, so only an empty one or one with control characters is refused.
+export function intent_problem(intent: string): string | null {
+  if (intent.trim() === "") return "an intent must not be empty";
+  if (/\p{Cc}/u.test(intent)) return "an intent must not hold control characters";
+  return null;
+}
+
 function to_steps(mode: KeymapMode, entry: Entry, resolve: ResolveCommand, settings: Partial<Settings>, sources: LabelSources, ancestor_names: string[], warnings: string[]) {
   const invocations = Array.isArray(entry.binding) ? entry.binding : [entry.binding];
   const steps: LeafStep[] = [];
   let label: string | undefined;
+  let intent: string | undefined;
   for (const invocation of invocations) {
     const info = resolve(invocation.id);
     if (!info) {
@@ -218,6 +230,12 @@ function to_steps(mode: KeymapMode, entry: Entry, resolve: ResolveCommand, setti
         warnings.push(`${mode}: skipped "${entry.sequence}": ${written_problem}`);
         return undefined;
       }
+      const intent_error = invocation.intent === undefined ? null : intent_problem(invocation.intent);
+      if (intent_error) {
+        warnings.push(`${mode}: skipped "${entry.sequence}": ${intent_error}`);
+        return undefined;
+      }
+      intent = invocation.intent;
       label = invocation.label ?? derived_label(invocation, info, settings, sources, ancestor_names);
       // A derived label can carry a bad engine label or value phrase. The key still works, so it falls back to the command label.
       const derived_problem = invocation.label === undefined ? label_problem(label) : null;
@@ -227,14 +245,14 @@ function to_steps(mode: KeymapMode, entry: Entry, resolve: ResolveCommand, setti
       }
     }
     // The label is for the leaf. The steps stay the plain invocations the router runs.
-    const { label: _label, variant_label: _variant_label, ...plain } = invocation;
+    const { label: _label, intent: _intent, variant_label: _variant_label, ...plain } = invocation;
     steps.push({ invocation: plain, runs_in: info.runs_in, count_rule: info.count });
   }
   if (steps.length === 0) {
     warnings.push(`${mode}: skipped "${entry.sequence}": empty binding`);
     return undefined;
   }
-  return { steps, label };
+  return { steps, label, intent };
 }
 
 function insert_entry(root: TreeBranch, mode: KeymapMode, entry: Entry, resolve: ResolveCommand, settings: Partial<Settings>, sources: LabelSources, group_names: GroupName[], warnings: string[]) {
@@ -254,7 +272,7 @@ function insert_entry(root: TreeBranch, mode: KeymapMode, entry: Entry, resolve:
     } else if (existing) {
       warnings.push(`${mode}: skipped "${entry.sequence}": ${existing.kind === "leaf" ? "same keys as another binding" : "another binding already continues past it"}`);
     } else {
-      branch.children[token] = { kind: "leaf", ...(resolved.label === undefined ? {} : { label: resolved.label }), steps: resolved.steps };
+      branch.children[token] = { kind: "leaf", ...(resolved.label === undefined ? {} : { label: resolved.label }), ...(resolved.intent === undefined ? {} : { intent: resolved.intent }), steps: resolved.steps };
     }
   }
 }

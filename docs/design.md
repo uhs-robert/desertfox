@@ -195,7 +195,7 @@ The tool reads `~/.config/desertfox/` by default. Every data file is TOML. A lef
 
 Each data file can also have a matching directory, for example `keymap.d/`. The tool merges the main file first, then the files in the directory in name order. A later entry wins for the same key. This is how private config joins without editing public files: a private repo links `keymap.d/50-private.toml` and `snippets/` files into place.
 
-Every key lives in `keymap.toml`. The other files hold only data. A binding is one line of command text, in the grammar of [Command line syntax](#command-line-syntax), or a list of them that run in order, or a table `{ run = "...", label = "..." }` that names the key for which-key (`run` is a string or a list). TOML quotes any key that has symbols, so `"<C-[>"` and `"$"` are quoted and `gx` is not. Two shortcut sections remove most repetition:
+Every key lives in `keymap.toml`. The other files hold only data. A binding is one line of command text, in the grammar of [Command line syntax](#command-line-syntax), or a list of them that run in order, or a table `{ run = "...", label = "...", intent = "..." }` that names the key for which-key and can replace its hover text (`run` is a string or a list). TOML quotes any key that has symbols, so `"<C-[>"` and `"$"` are quoted and `gx` is not. Two shortcut sections remove most repetition:
 
 ```toml
 # keymap.toml
@@ -394,11 +394,11 @@ The background keeps one map of tab rows (`src/background/tab_model.ts`), built 
 
 ### Which-key
 
-Which-key is a first-class surface. After a prefix key, it lists each possible next key with the label of its command. Hovering a row shows the command's intent. It reads both from the registry, so a new command appears without extra work.
+Which-key is a first-class surface. After a prefix key, it lists each possible next key with the label of its command. Hovering a row shows the command's intent, or the `intent` of the binding when it has one. It reads both from the registry, so a new command appears without extra work.
 
 The label of a key comes from one rule, applied to the args the binding sets (never the defaults the validator fills in):
 
-- A binding `label` wins. It exists in the TOML table form and on the bindings of the default keymap. On a key that runs several commands, the label sits on the first command.
+- A binding `label` wins. It exists in the TOML table form and on the bindings of the default keymap. On a key that runs several commands, the label sits on the first command. The binding `intent` works the same way for the hover text, and modifier variants do not inherit it.
 - A key that sets a container reads as the container name, and the container named `default` reads "Default container".
 - Otherwise the label is the command label. A search engine with a label in `search_engines.toml` replaces it (a child engine's label is the chain of labels on its path), and a binding with no engine uses the default engine. Then each `enum` arg the binding sets to a non-default value adds its `value_labels` phrase, in param order ("Open URL in new tab"). A `bool` set to true adds the param name ("Reload hard"). Numbers, free strings and prompted params add nothing, so the keys that set them carry a hand `label` ("Scroll left", "Zoom in a lot"). A phrase that the name of any group above the key already says, as whole words and in any case, is left out: under a group named "Search in new tab", the key reads "Google", not "Google in new tab".
 - A snippet key shows the `// label:` header of its snippet.

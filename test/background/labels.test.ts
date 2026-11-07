@@ -417,3 +417,38 @@ test("a derived engine label under a named group keeps its whole path, even when
   assert.equal(leaf_at("G", "i").label, "GitHub: this repo: issues");
   assert.equal(leaf_at("H", "i").label, "GitHub: this repo: issues");
 });
+
+test("a binding intent lands on the leaf and not on its step", () => {
+  const { leaf_at, warnings } = labels_of({ normal: { a: { id: "page.reload", label: "X", intent: "Y" }, b: { id: "page.reload" } } });
+  assert.deepEqual(warnings, []);
+  assert.equal(leaf_at("a").intent, "Y");
+  assert.equal(leaf_at("a").steps[0]!.invocation.intent, undefined);
+  assert.equal("intent" in leaf_at("b"), false);
+});
+
+test("an empty or multi-line intent skips the key", () => {
+  const { children, warnings } = labels_of({ normal: { a: { id: "page.reload", intent: " " }, b: { id: "page.reload", intent: "x\ny" }, c: { id: "page.reload" } } });
+  assert.equal(children["a"], undefined);
+  assert.equal(children["b"], undefined);
+  assert.match(warnings.join("\n"), /an intent must not be empty/);
+  assert.match(warnings.join("\n"), /an intent must not hold control characters/);
+});
+
+test("modifier variants do not inherit the intent of their base key", () => {
+  const { leaf_at } = labels_of({ normal: { ";a": { id: "page.reload", intent: "Y" } }, modifiers: { ";h": { hard: true } } });
+  assert.equal(leaf_at(";", "a").intent, "Y");
+  assert.equal(leaf_at(";", "h", "a").steps[0]!.invocation.args?.["hard"], true);
+  assert.equal("intent" in leaf_at(";", "h", "a"), false);
+});
+
+test("W, B and E of the default keymap hover with WORD text", async () => {
+  const { compiled } = compile_config({
+    config: empty_config(),
+    default_keymap: DEFAULT_KEYMAP,
+    get_command: (id) => registry.get(id),
+    enum_sources: { search_engines: [], containers: [] },
+  });
+  const { panel_after_prefix } = await import("../../src/background/list_keys.ts");
+  const rows = panel_after_prefix(compiled.modes.caret!, [], (id) => registry.get(id)).rows;
+  for (const key of ["W", "B", "E"]) assert.match(rows.find((row) => row.keys === key)!.description, /WORD/);
+});
