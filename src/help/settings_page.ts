@@ -64,7 +64,9 @@ function ordered_list_widget(name: string, items: string[], hooks: Hooks): Widge
   let order = [...items];
   let checked = new Set<string>();
   const read = () => order.filter((item) => checked.has(item));
-  const draw = () => {
+  // `refocus` names the control that had focus before the redraw, so a move does not drop it.
+  const draw = (refocus?: { item: string; label?: string }) => {
+    let to_focus: HTMLElement | undefined;
     box.replaceChildren(
       ...order.map((item, index) => {
         const check = el("input", undefined) as HTMLInputElement;
@@ -84,14 +86,19 @@ function ordered_list_widget(name: string, items: string[], hooks: Hooks): Widge
             const other = order[index + by]!;
             order[index + by] = item;
             order[index] = other;
-            draw();
+            draw({ item, label });
             hooks.commit(read());
           });
           return button;
         };
-        return el("div", "desertfox-settings-order-row", el("label", undefined, check, ` ${item}`), move("Up", -1), move("Down", 1));
+        const up = move("Up", -1);
+        const down = move("Down", 1);
+        if (refocus?.item === item) to_focus = [up, down].find((button) => button.textContent === refocus.label && !button.disabled) ?? check;
+        return el("div", "desertfox-settings-order-row", el("label", undefined, check, ` ${item}`), up, down);
       }),
     );
+    // A detached node ignores focus, so it runs after the rows are in the box.
+    to_focus?.focus();
   };
   return {
     node: box,

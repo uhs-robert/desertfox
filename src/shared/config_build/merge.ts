@@ -93,7 +93,7 @@ function merge_keymap(layers: DataLayer[], origins: Origins, problems: string[])
           continue;
         }
         if (!generator_sections.includes(section) && !is_command_text(entry)) {
-          problems.push(`${layer.file}: keymap.${section}["${key}"] must be a command string, "" to unbind, a list of command strings, or { run = "...", label = "..." }`);
+          problems.push(`${layer.file}: keymap.${section}["${key}"] must be a command string, "" to unbind, a list of command strings, or { run = "...", label = "...", intent = "..." }`);
           continue;
         }
         // TOML has no null: "" is the unbind marker, stored as null.
@@ -108,9 +108,9 @@ function merge_keymap(layers: DataLayer[], origins: Origins, problems: string[])
 function is_command_text(entry: unknown): boolean {
   if (typeof entry === "string") return true;
   if (is_plain_object(entry)) {
-    const only_known_fields = Object.keys(entry).every((key) => key === "run" || key === "label");
+    const only_known_fields = Object.keys(entry).every((key) => key === "run" || key === "label" || key === "intent");
     const has_run = typeof entry.run === "string" ? entry.run !== "" : Array.isArray(entry.run) && is_command_text(entry.run);
-    return only_known_fields && has_run && (entry.label === undefined || typeof entry.label === "string");
+    return only_known_fields && has_run && (entry.label === undefined || typeof entry.label === "string") && (entry.intent === undefined || typeof entry.intent === "string");
   }
   return Array.isArray(entry) && entry.length > 0 && entry.every((item) => typeof item === "string" && item.trim() !== "");
 }

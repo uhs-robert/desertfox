@@ -1,6 +1,6 @@
 // What a picked hint does to its element.
 
-import { hover, leave_toward } from "./hover.ts";
+import { enter_for_click, hover, leave_toward } from "./hover.ts";
 
 export type HintAction = "here" | "tab" | "background" | "window" | "caret" | "visual" | "copy" | "copy_text" | "copy_image" | "download" | "delete" | "focus" | "hover" | "double_click" | "play_pause" | "mute" | "fullscreen";
 
@@ -120,13 +120,9 @@ function press_and_release(target: Target, detail: number): void {
   if (pointer_pressed) dispatch_mouse_event(target, "mouseup", null, undefined, detail);
 }
 
-const enter_like_a_mouse = (target: Target): void => {
-  for (const type of ["pointerover", "pointerenter", "mouseover"] as const) dispatch_mouse_event(target, type);
-};
-
 // The events a real click gives, so a widget that opens on mousedown or pointerdown opens. The click comes last, from click(), so a link or button acts once.
-function click_like_a_mouse(target: Target): void {
-  enter_like_a_mouse(target);
+function click_like_a_mouse(target: Target, pointer_from: Target | undefined): void {
+  enter_for_click(target, pointer_from);
   press_and_release(target, 1);
   target.click();
 }
@@ -167,8 +163,8 @@ function select_word_at(target: Target, at: { x: number; y: number }): void {
 }
 
 // Two presses with click counts 1 and 2, a click after each, then dblclick, as a mouse sends them. The clicks are events and not click(), because click() carries no count. A link would act on the first, so links are not offered as targets.
-function double_click_like_a_mouse(target: Target): void {
-  enter_like_a_mouse(target);
+function double_click_like_a_mouse(target: Target, pointer_from: Target | undefined): void {
+  enter_for_click(target, pointer_from);
   for (const detail of [1, 2]) {
     press_and_release(target, detail);
     dispatch_mouse_event(target, "click", null, undefined, detail);
@@ -243,11 +239,11 @@ function act_on_media(action: "play_pause" | "mute" | "fullscreen", target: Targ
 }
 
 export function perform(action: HintAction, target: Target, deps: ActionDeps, with_background = false): void | Refusal | Promise<unknown> {
-  if (action !== "hover") leave_toward(target);
+  const pointer_from = action === "hover" ? undefined : leave_toward(target);
   if (action === "delete") return target.remove();
   if (action === "focus") return focus_target(target);
   if (action === "hover") return hover(target);
-  if (action === "double_click") return double_click_like_a_mouse(target);
+  if (action === "double_click") return double_click_like_a_mouse(target, pointer_from);
   if (action === "play_pause" || action === "mute" || action === "fullscreen") return act_on_media(action, target);
   if (starts_caret(action)) return deps.start_caret(target as unknown as Element, action);
   const address = element_address(target, with_background);
@@ -257,10 +253,10 @@ export function perform(action: HintAction, target: Target, deps: ActionDeps, wi
   if (action === "copy_text") return is_frame_element(target) ? { ok: false, message: "A frame has no text" } : deps.copy((target.textContent ?? "").trim());
   if (action === "tab" || action === "background" || action === "window") {
     // A click on a frame does nothing, so it must not stand in for an open.
-    if (address === undefined) return is_frame_element(target) ? NO_WEB_ADDRESS : click_like_a_mouse(target);
+    if (address === undefined) return is_frame_element(target) ? NO_WEB_ADDRESS : click_like_a_mouse(target, pointer_from);
     return deps.open_link(address, action);
   }
   if (takes_typing(target)) return target.focus();
   if (is_frame_element(target)) return focus_target(target);
-  click_like_a_mouse(target);
+  click_like_a_mouse(target, pointer_from);
 }

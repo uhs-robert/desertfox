@@ -55,10 +55,13 @@ const cmdline = create_cmdline_service({
   tickets: browser.storage.session,
   new_ticket: () => crypto.randomUUID(),
   sources: async () => ({ search_engines: await get_search_engine_names(), containers: await container_names() }),
+  // A failed query must not stop the line from opening.
+  tab_count: async (window_id) => (await browser.tabs.query({ windowId: window_id }).catch(() => [])).length,
   container_stores,
   page_config: async () => {
     const config = await get_config();
-    return { commands: registry.list().map(command_meta), help_ids: [...built_in_ids], command_aliases: config.command_aliases, prompt: effective_settings(config.settings).cmdline_prompt, all_windows: effective_settings(config.settings).completion_all_windows };
+    const settings = effective_settings(config.settings);
+    return { commands: registry.list().map(command_meta), help_ids: [...built_in_ids], command_aliases: config.command_aliases, prompt: settings.cmdline_prompt, all_windows: settings.completion_all_windows, statusbar_widgets: settings.statusbar_widgets };
   },
 });
 
@@ -84,6 +87,7 @@ const complete_items = create_complete_items({
     const { open_completion, history_completion_max } = effective_settings((await get_config()).settings);
     return { sources: open_completion, history_max: history_completion_max };
   },
+  history_list_max: async () => effective_settings((await get_config()).settings).history_list_max,
 });
 
 track_window_focus(browser.storage.session, browser.windows);
@@ -110,7 +114,7 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
   if (request?.type === "load_bundle") return bundle_loader.answer(sender, request.name);
   if (request?.type === "find_scan" && is_scan_request(request)) return find_scan.answer(request, `${sender.tab?.id}:${sender.frameId}`);
   if (request?.type === "issue_cmdline_ticket") return cmdline.issue_ticket(sender.tab?.id);
-  if (request?.type === "open_cmdline") return get_config().then(() => cmdline.open(request.ticket, sender.tab?.id, sender.frameId, sender.tab?.windowId, sender.tab?.incognito === true));
+  if (request?.type === "open_cmdline") return get_config().then(() => cmdline.open(request.ticket, sender.tab?.id, sender.frameId, sender.tab?.windowId, sender.tab, sender.tab?.incognito === true));
   if (request?.type === "complete_items") return complete_items.answer(request.kind, asker_of(sender));
   if (request?.type === "tab_rows_action") return complete_items.tab_rows_action(request.action, request.tab_ids, asker_of(sender), request.cookie_store_id);
   if (request?.type === "image_action") return run_image_action(image_deps, request, { incognito: sender.tab?.incognito === true, cookie_store_id: sender.tab?.cookieStoreId });

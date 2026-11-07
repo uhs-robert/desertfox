@@ -50,7 +50,7 @@ test("help_name_url maps a command id to its card and a page name to its page", 
 });
 
 test("help_name_choices lists the pages, then the commands, and no Quick Start section", () => {
-  assert.deepEqual(help_name_choices(["scroll.top"]), ["home", "quick_start", "commands", "search_engines", "styling", "scroll.top"]);
+  assert.deepEqual(help_name_choices(["scroll.top"]), ["home", "settings", "quick_start", "commands", "search_engines", "styling", "scroll.top"]);
 });
 
 const HELP = "moz-extension://x/home.html";

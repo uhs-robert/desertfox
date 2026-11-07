@@ -47,7 +47,7 @@ async function until(condition: () => boolean): Promise<void> {
 // For a message that must not arrive: long enough for one that would.
 const settle = () => new Promise((resolve) => setTimeout(resolve, 50));
 
-async function load_host(t: TestContext, tag: string, { ticket_fails = false, run_answer = undefined as (() => Promise<unknown>) | undefined, search = undefined as ((finish: (outcome: unknown) => void) => void) | undefined, command = undefined as ((id: string, args: Record<string, unknown>) => Promise<unknown>) | undefined } = {}) {
+async function load_host(t: TestContext, tag: string, { ticket_fails = false, run_answer = undefined as (() => Promise<unknown>) | undefined, search = undefined as ((finish: (outcome: unknown) => void) => void) | undefined, scrolling_element = undefined as unknown, command = undefined as ((id: string, args: Record<string, unknown>) => Promise<unknown>) | undefined } = {}) {
   const modes: string[] = [];
   const handlers = new Map<string, (args: Record<string, unknown>) => unknown>();
   const sinks = new Map<string, Sink>();
@@ -78,7 +78,7 @@ async function load_host(t: TestContext, tag: string, { ticket_fails = false, ru
         },
       },
     },
-    document: { documentElement: { append: (child: { isConnected: boolean }) => void (child.isConnected = true) }, createElement: () => { const element = fake_element(); elements.push(element); return element; } },
+    document: { scrollingElement: scrolling_element, documentElement: { append: (child: { isConnected: boolean }) => void (child.isConnected = true) }, createElement: () => { const element = fake_element(); elements.push(element); return element; } },
     window: {
       innerHeight: 600,
       desertfox_host: {
@@ -524,4 +524,19 @@ test("a submit keeps the snapshot until the submitted command has run, then drop
   finish_run({ ok: true });
   await until(() => calls.length === 2);
   assert.deepEqual(calls.map((call) => call.id), ["heading.list", "heading.clear"]);
+});
+
+test("the start message carries the scroll place the page had when the line mounted", async (t) => {
+  const root = { scrollTop: 300, scrollHeight: 1000, clientHeight: 400 };
+  const { frame, ready } = await load_host(t, "scroll_snapshot", { scrolling_element: root });
+  // The page scrolls while the frame loads: the line keeps the place from the key press.
+  root.scrollTop = 0;
+  await ready();
+  assert.deepEqual(frame.posted[0]!.message.desertfox_cmdline.scroll, { top: 300, max: 600 });
+});
+
+test("a page with no scrolling element starts the line with a null scroll", async (t) => {
+  const { frame, ready } = await load_host(t, "scroll_none", { scrolling_element: null });
+  await ready();
+  assert.equal(frame.posted[0]!.message.desertfox_cmdline.scroll, null);
 });

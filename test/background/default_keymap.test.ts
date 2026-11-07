@@ -176,6 +176,7 @@ test("a search binding on the selection opens the command line when nothing is s
     get_command: (id) => registry.get(id),
     get_enum_sources: async () => ({ search_engines: ["github.repo"] }),
     active_tab: async () => ({ tab_id: 3, window_id: 1, url: "https://github.com/a/b" }),
+    get_tab: async () => undefined,
     has_content_script: async () => true,
     ask_selection: async () => "",
     runs_with_empty: async () => false,
@@ -245,4 +246,34 @@ test("the cmdline keys are single tokens and the selection keys each have one bi
   const selection_keys = ["<C-Space>", "<A-u>", "<A-x>", "<A-m>", "<A-p>", "<A-c>"];
   for (const key of selection_keys) assert.ok(!Array.isArray(cmdline[key]), key);
   assert.equal(new Set(selection_keys.map((key) => JSON.stringify(cmdline[key]))).size, selection_keys.length);
+});
+
+test("a user key that extends a real default leaf drops it with one warning", () => {
+  const { warnings, compiled } = compile_config({
+    config: { ...empty_config(), keymap: { normal: { gtx: { id: "tab.close" } } } },
+    default_keymap: DEFAULT_KEYMAP,
+    get_command: (id) => registry.get(id),
+    enum_sources: { search_engines: ["site"], containers: [] },
+  });
+  assert.deepEqual(warnings, ['normal: dropped default keys that your keys extend: "gt" by gtx']);
+  const t = (compiled.modes.normal!.children["g"] as TreeBranch).children["t"]!;
+  assert.equal(t.kind, "branch");
+});
+
+const gt_prefix_config = (keymap: KeymapConfig) => ({
+  config: { ...empty_config(), keymap, settings: { container_prefixes: { reopen: "gt", tab: "gT" }, search_prefixes: { here: "gt", tab: "gT" } } },
+  default_keymap: DEFAULT_KEYMAP,
+  get_command: (id: string) => registry.get(id),
+  enum_sources: { search_engines: ["site"], containers: ["Work"] },
+});
+
+test("a container key that extends a real default leaf drops it", () => {
+  const { compiled, warnings } = compile_config(gt_prefix_config({ container_keys: { x: "Work" } }));
+  assert.equal(warnings.length, 1);
+  assert.equal(((compiled.modes.normal!.children["g"] as TreeBranch).children["t"] as { kind: string }).kind, "branch");
+});
+
+test("a search key for an unknown engine leaves the default it would extend", () => {
+  const { compiled } = compile_config(gt_prefix_config({ search_keys: { x: "nope" } }));
+  assert.equal(((compiled.modes.normal!.children["g"] as TreeBranch).children["t"] as { kind: string }).kind, "leaf");
 });

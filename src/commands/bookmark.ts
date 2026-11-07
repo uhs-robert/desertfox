@@ -4,8 +4,7 @@ import { bookmark_items, browser_complete_items_deps } from "../background/compl
 import { show_toast_on_tab } from "../background/browser_deps.ts";
 import type { BookmarkItem, ToastKind } from "../shared/messages.ts";
 import { define } from "../shared/registry/builtin.ts";
-import { best_match } from "../shared/score.ts";
-import { open_in, WHERE_PARAM } from "./open_target.ts";
+import { open_in, pick_entry, WHERE_PARAM } from "./open_target.ts";
 import type { Where } from "./open_target.ts";
 
 export type BookmarkDeps = {
@@ -22,17 +21,7 @@ export type BookmarkDeps = {
   toast: (ctx: CommandContext, kind: ToastKind, message: string) => Promise<void>;
 };
 
-// An exact address wins, since a completion pick puts the address in the line. Other text is a fuzzy match on title
-// and address, and an equal tie is refused.
-export function pick_bookmark(bookmarks: readonly BookmarkItem[], text: string): BookmarkItem {
-  const typed = text.trim();
-  const exact = bookmarks.find((bookmark) => bookmark.url === typed);
-  if (exact) return exact;
-  const match = best_match(typed, bookmarks, (bookmark) => ({ name: bookmark.title, description: bookmark.url }));
-  if (match.found === "none") throw new RuntimeRefusal(`no bookmark matches "${typed}"`);
-  if (match.found === "tie") throw new RuntimeRefusal(`"${typed}" matches "${match.first.title}" (${match.first.url}) and "${match.second.title}" (${match.second.url}) equally, use the address`);
-  return match.item;
-}
+export const pick_bookmark = (bookmarks: readonly BookmarkItem[], text: string): BookmarkItem => pick_entry(bookmarks, text, "bookmark");
 
 export function make_bookmark_handlers(deps: BookmarkDeps) {
   return {

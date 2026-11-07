@@ -14,7 +14,7 @@ import { is_dynamic_values, static_values } from "../../src/shared/registry/para
 const CANNOT_RUN_ON_STUB: Record<string, string> = {};
 
 // One text each setting accepts. A name missing here gets "x", which the validator may drop.
-const VALID_SETTING_TEXT: Record<string, string> = { which_key_delay_ms: "500", hint_letters: "asdf", ignore_sites: "a.com b.com", light_intensity: "4", home_page: "https://example.org", default_engine: "stub", palette: "stub", cmdline_prompt: ">", history_completion_max: "5", newtab_bookmarks_max: "5", newtab_recent_tabs_max: "5", newtab_clock: "digital", newtab_clock_format: "24", open_completion: "bookmarks", which_key_border: "round", mode_indicator: "off", new_tab_page: "desertfox" };
+const VALID_SETTING_TEXT: Record<string, string> = { which_key_delay_ms: "500", hint_letters: "asdf", ignore_sites: "a.com b.com", light_intensity: "4", home_page: "https://example.org", default_engine: "stub", palette: "stub", cmdline_prompt: ">", history_completion_max: "5", history_list_max: "5", newtab_bookmarks_max: "5", newtab_recent_tabs_max: "5", newtab_clock: "digital", newtab_clock_format: "24", open_completion: "bookmarks", which_key_border: "round", mode_indicator: "off", new_tab_page: "desertfox" };
 
 // Refusals a handler may give on the stub, from its state or the config and not from an argument value: no sound playing, no
 // container, bookmark or home page, a tab that cannot unload, nothing to repeat. A refusal that matches no entry fails, so a
@@ -27,12 +27,14 @@ const EXPECTED_REFUSALS: Record<string, RegExp[]> = {
   "tab.reopen_in_container": [/No container named/],
   "tab.attach": [/already in that window/],
   "bookmark.open": [/no bookmark matches/],
+  "history.open": [/no history entry matches/],
   "bookmark.remove": [/no bookmark matches/, /No bookmark for this page/],
   "page.home": [/set home_page in settings.toml/],
   "open.url": [/No container named/],
   "open.search": [/No search engine named/],
   "open.clipboard": [/No container named/],
   "command.repeat": [/Nothing to repeat/],
+  "url.increment": [/has no number/],
 };
 
 const SOURCES: EnumSources = { search_engines: ["stub_engine"], containers: ["stub_container"] };
@@ -72,6 +74,7 @@ const STUB_ANSWERS: Record<string, unknown> = {
   "storage.local.get": {},
   "storage.managed.get": {},
   "runtime.getURL": "moz-extension://stub/home.html",
+  "runtime.sendNativeMessage": { ok: true, config_dir: "/stub/desertfox", config_dir_exists: true, files: {} },
 };
 
 // A `browser` whose calls answer from STUB_ANSWERS, so a handler runs past its first browser call into its own checks.

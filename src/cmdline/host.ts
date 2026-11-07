@@ -40,6 +40,8 @@ type Open = {
   from_mode: string;
   // Set when the line is a page search, and the way it searches. Enter sets `committed`, and the end of the line tells the search whether to keep its match.
   search?: "forward" | "backward" | undefined;
+  // Read before the frame joins the page, so it is the scroll place the user saw when pressing the key.
+  scroll: { top: number; max: number } | null;
   committed: boolean;
   // The line asked for the headings, so the hints bundle holds a snapshot of them. `submit` sets `submitted`: the command that
   // runs next may be `heading.go`, which needs the snapshot, so the line drops it only after the command ran.
@@ -85,6 +87,7 @@ if (!page.desertfox_cmdline_ready) {
     holder.setAttribute("popover", "manual");
     holder.setAttribute(LAYER_ATTRIBUTE, String(LAYERS.command_line));
     holder.style.cssText = `all:initial;position:fixed;left:0;right:0;bottom:0;height:${BAR_HEIGHT};z-index:${LAYERS.command_line};`;
+    const root = document.scrollingElement;
     const frame = document.createElement("iframe");
     // A color-scheme mismatch between the iframe and its page paints the frame white. See docs/firefox-behavior.md.
     frame.style.cssText = "all:initial;display:block;width:100%;height:100%;border:0;color-scheme:light dark;";
@@ -105,6 +108,7 @@ if (!page.desertfox_cmdline_ready) {
       text,
       from_mode,
       search,
+      scroll: root && { top: root.scrollTop, max: root.scrollHeight - root.clientHeight },
       committed: false,
       asked_headings: false,
       submitted: false,
@@ -183,7 +187,7 @@ if (!page.desertfox_cmdline_ready) {
       }
     };
     current.port = channel.port1;
-    const message: HostToPage = { kind: "start", ticket, text: current.text, tokens: current.typed, mode: current.from_mode, search: current.search };
+    const message: HostToPage = { kind: "start", ticket, text: current.text, tokens: current.typed, mode: current.from_mode, search: current.search, scroll: current.scroll };
     current.frame.contentWindow?.postMessage(wrap(message), origin, [channel.port2]);
     current.typed = [];
   };

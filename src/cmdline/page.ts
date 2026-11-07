@@ -23,6 +23,7 @@ import { wheel_rows } from "./wheel.ts";
 import type { Wheel_state } from "./wheel.ts";
 import { create_session } from "./session.ts";
 import type { Effect, Session } from "./session.ts";
+import { status_widgets } from "./status.ts";
 import { create_word_lookup } from "./word_lookup.ts";
 import { follow_theme, follow_user_css } from "../shared/theme/apply.ts";
 
@@ -40,6 +41,22 @@ const say_ready = () => window.parent.postMessage(wrap<PageToHost>({ kind: "read
 const ask_background = <Answer>(message: ContentToBackground) => browser.runtime.sendMessage(message) as Promise<Answer>;
 
 type Start = Extract<HostToPage, { kind: "start" }>;
+
+// Drawn once: each widget is a snapshot of the moment the line opened. A search line shows none, because its note row carries the match count.
+function show_status(area: HTMLElement, opened: CmdlineOpened, start: Start): void {
+  if (start.search) return;
+  const widgets = status_widgets(opened.statusbar_widgets, opened.status, start.scroll);
+  area.replaceChildren(
+    ...widgets.map((widget) => {
+      const element = document.createElement("span");
+      element.textContent = widget.text;
+      if (widget.title !== undefined) element.title = widget.title;
+      if (widget.state !== undefined) element.className = `desertfox-cmdline-status-${widget.state}`;
+      return element;
+    }),
+  );
+  area.hidden = widgets.length === 0;
+}
 
 // "caret" is the markup's own default. "colon" swaps the style class. Any other value is custom text in the caret style.
 function show_prompt(prompt: HTMLElement, setting: string): void {
@@ -69,6 +86,7 @@ async function open_line(start: Start, port: MessagePort): Promise<void> {
   const lookup = create_word_lookup(opened.commands, opened.command_aliases);
   if (start.search) show_prompt(document.querySelector<HTMLElement>(".desertfox-cmdline-prompt")!, start.search === "forward" ? "/ " : "? ");
   else if (opened.prompt) show_prompt(document.querySelector<HTMLElement>(".desertfox-cmdline-prompt")!, opened.prompt);
+  show_status(document.querySelector<HTMLElement>("#status")!, opened, start);
   const prompt = document.querySelector<HTMLElement>(".desertfox-cmdline-prompt")!;
   const line_prompt = prompt.textContent;
   const keymap = stored[COMPILED_KEYMAP_STORAGE_KEY] as CompiledKeymap | undefined;

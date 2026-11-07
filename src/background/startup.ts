@@ -13,15 +13,22 @@ import { CONFIG_STATUS_STORAGE_KEY, SLOT_TABLE_STORAGE_KEY, WARNINGS_STORAGE_KEY
 import { apply_slot_plan, plan_slots, slot_table } from "./slots.ts";
 import { no_repeat_memory } from "./repeat_memory.ts";
 import { create_snippets } from "./snippets.ts";
+import { browser_native_deps, create_native_client, NativeHostError } from "./native_client.ts";
+import { build_files_config, ConfigReloadError, KEPT_CURRENT } from "./config_reload.ts";
+import { create_autoconfig_mirror } from "./autoconfig_mirror.ts";
+import { commands_of_registry } from "../shared/config_build/build_config.ts";
+import { FILES_CONFIG_STORAGE_KEY } from "./storage_keys.ts";
 
 export const snippets = create_snippets(registry, snippet_deps, make_router_deps(get_config, no_repeat_memory));
+const native_host = create_native_client(browser_native_deps());
+const autoconfig = create_autoconfig_mirror({ write_autoconfig: native_host.write_autoconfig, warn: console.warn });
 
-// Everything the first load works out and `publish` reuses. Browser edits are not part of it: they change while this stays.
+// Everything a load (the first one, or a `config.reload`) works out and `publish` reuses. Browser edits are not part of it: they change while this stays.
 type LoadStep = {
   loaded: LoadedConfig;
   // Warnings of the load itself. A publish adds the compile warnings to them.
   load_warnings: string[];
-  // Found on the first publish. The slot plan cannot change later: `:set` refuses the prefix settings, the only ones that move keys.
+  // Found on the first publish of a load. A `:set` keeps it: it refuses the prefix settings, the only ones that move keys.
   slots?: { table: ReturnType<typeof slot_table>; warnings: string[] };
 };
 
@@ -44,11 +51,12 @@ async function start(): Promise<MergedConfig> {
   const snippet_warnings = snippets.register(loaded.config.snippets);
   const step: LoadStep = { loaded, load_warnings: [...loaded.warnings, ...snippet_warnings] };
   load_step = Promise.resolve(step);
-  return publish(step, await load_edits());
+  return (await publish(step, await load_edits())).config;
 }
 
 // Compiles the loaded config under the browser edits, stores the result and tells the tabs.
-async function publish(step: LoadStep, edits: SettingEdits): Promise<MergedConfig> {
+// `warnings` is the whole list the help page shows: load, compile and shortcut slots.
+async function publish(step: LoadStep, edits: SettingEdits): Promise<{ config: MergedConfig; warnings: string[] }> {
   const config = with_edits(step.loaded.config, edits);
   const { compiled, theme, warnings } = compile_config({
     config,
@@ -74,7 +82,7 @@ async function publish(step: LoadStep, edits: SettingEdits): Promise<MergedConfi
     [USER_CSS_STORAGE_KEY]: config.css,
   });
   await tell_tabs_tree_changed();
-  return config;
+  return { config, warnings: all_warnings };
 }
 
 // `:set` and `:unset` change the edits one at a time, so two of them in a row never read the same stored value.
@@ -91,8 +99,10 @@ export function change_edits(decide: (current: SettingEdits, config: MergedConfi
       // Inside the try: the saved and temp layers are two writes, and one can land while the other fails.
       await store_edits(next);
       // Assigned after the publish succeeds, so a failed one leaves the readers the last good config.
-      const published = await publish(await (load_step as Promise<LoadStep>), next);
+      const { config: published } = await publish(await (load_step as Promise<LoadStep>), next);
       current_config = Promise.resolve(published);
+      const saved_changed = JSON.stringify(next.saved) !== JSON.stringify(before.saved);
+      if (saved_changed) void autoconfig.mirror(next.saved);
     } catch (error) {
       // Pages read the stored edits themselves, so a failed publish must not leave them ahead of the config.
       // Best effort, so a failed rollback never hides the error that caused it.
@@ -104,6 +114,51 @@ export function change_edits(decide: (current: SettingEdits, config: MergedConfi
   });
   change_queue = change.catch(() => undefined);
   return change;
+}
+
+// Rereads the files through the native host and swaps the config in place. Nothing restarts, so the edits and the modes stay.
+// It runs in the change queue, so a reload and a `:set` never publish over each other.
+export function reload_config(): Promise<{ config_dir: string; warnings: number }> {
+  const reload = change_queue.then(async () => {
+    await get_config();
+    const current_step = await (load_step as Promise<LoadStep>);
+    const reply = await native_host.read_config().catch((error: unknown) => {
+      throw error instanceof NativeHostError ? new ConfigReloadError(`${KEPT_CURRENT} ${error.message}`) : error;
+    });
+    // The build checks snippet ids against the built-in commands, so the snippets of the last load stay out.
+    const built_in_commands = commands_of_registry(registry).filter((command) => !snippets.is_snippet(command.id));
+    const { stored, loaded } = build_files_config(reply, built_in_commands);
+    const edits = await load_edits();
+    // From here the registry holds the new snippets while the tabs still run the old keymap.
+    // Readers wait on `get_config` until the swap commits, so no command runs against half of it.
+    const config_before = current_config as Promise<MergedConfig>;
+    let commit!: (config: MergedConfig | Promise<MergedConfig>) => void;
+    current_config = new Promise<MergedConfig>((resolve) => (commit = resolve));
+    try {
+      // Before the publish, so a key bound to a snippet resolves.
+      const snippet_warnings = snippets.register(loaded.config.snippets);
+      // No slots: the new keymap can move the browser chords, so the publish plans them again.
+      const step: LoadStep = { loaded, load_warnings: [...loaded.warnings, ...snippet_warnings] };
+      const published = await publish(step, edits);
+      await browser.storage.local.set({ [FILES_CONFIG_STORAGE_KEY]: stored });
+      load_step = Promise.resolve(step);
+      commit(published.config);
+      return { config_dir: reply.config_dir, warnings: published.warnings.length };
+    } catch (error) {
+      // The failed publish may have written the new keymap and status already.
+      // Each step is best effort, so a failed rollback never hides the error that caused it.
+      try {
+        snippets.register(current_step.loaded.config.snippets);
+      } catch {
+        // The publish below still puts the old keymap back.
+      }
+      await publish({ loaded: current_step.loaded, load_warnings: current_step.load_warnings }, edits).catch(() => undefined);
+      commit(config_before);
+      throw error;
+    }
+  });
+  change_queue = reload.catch(() => undefined);
+  return reload;
 }
 
 async function tell_tabs_tree_changed(): Promise<void> {

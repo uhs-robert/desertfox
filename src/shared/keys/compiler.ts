@@ -23,7 +23,8 @@ export type ResolveCommand = (command_id: string) => CommandInfo | undefined;
 
 export type CompileResult = { compiled: CompiledKeymap; warnings: string[] };
 
-type Entry = { sequence: string; tokens: string[]; binding: KeyBinding; source_index: number };
+type Layer = "defaults" | "user";
+type Entry = { sequence: string; tokens: string[]; binding: KeyBinding; source_index: number; layer: Layer };
 
 // Explicit bindings win over generated ones, so generated entries go in first.
 function generated_bindings(keymap: KeymapConfig, settings: Partial<Settings>): Record<string, KeyBinding> {
@@ -82,11 +83,40 @@ function modifier_variants(modifiers: Record<string, Modifier>, taken: Map<strin
       const variant_tokens = [...group, tokens[tokens.length - 1]!, ...source.tokens.slice(group.length)];
       const variant_key = variant_tokens.join("");
       if (taken.has(variant_key) || removed.has(variant_key)) continue;
-      variants.push({ sequence: variant_key, tokens: variant_tokens, binding: { ...binding, args: variant_args, ...(binding.variant_label === undefined ? {} : { label: binding.variant_label }) }, source_index: -1 });
+      variants.push({ sequence: variant_key, tokens: variant_tokens, binding: { ...without_intent(binding), args: variant_args, ...(binding.variant_label === undefined ? {} : { label: binding.variant_label }) }, source_index: -1, layer: "defaults" });
     }
     if (accepted === 0) warnings.push(`modifiers: "${sequence}" matches no key of its group, so it makes no variants`);
   }
   return variants;
+}
+
+function without_intent({ intent: _intent, ...rest }: BoundInvocation): BoundInvocation {
+  return rest;
+}
+
+type Drop = { default_sequence: string; extenders: string[] };
+
+// A default leaf that a user key extends (default `sg`, user `sgg`) would hide the user key, so the default goes.
+// Only an extender that can compile counts, so a user key the registry refuses never leaves both keys unbound.
+// A dropped key joins `removed`, so a modifier variant cannot refill its slot.
+// The reverse, a user leaf shorter than a default group, needs no rule: the leaf is inserted first and the default longer key is skipped.
+function drop_default_leaves_under_user_keys(entries: Map<string, Entry>, removed: Set<string>, resolve: ResolveCommand, drops: Drop[]) {
+  const user_entries = [...entries.values()].filter((entry) => entry.layer === "user" && can_compile(entry, resolve));
+  for (const [normalized, entry] of entries) {
+    if (entry.layer !== "defaults") continue;
+    const extenders = user_entries.filter(({ tokens }) => tokens.length > entry.tokens.length && entry.tokens.every((token, index) => tokens[index] === token));
+    if (extenders.length === 0) continue;
+    entries.delete(normalized);
+    removed.add(normalized);
+    drops.push({ default_sequence: entry.sequence, extenders: extenders.map(({ sequence }) => sequence) });
+  }
+}
+
+function can_compile({ binding }: Entry, resolve: ResolveCommand): boolean {
+  return (Array.isArray(binding) ? binding : [binding]).every((invocation) => {
+    const info = resolve(invocation.id);
+    return info !== undefined && info.accepts_args?.(invocation.args ?? {}, invocation.prompt) !== false;
+  });
 }
 
 function entries_for_mode(
@@ -95,8 +125,10 @@ function entries_for_mode(
   settings: Partial<Settings>,
   resolve: ResolveCommand,
   warnings: string[],
+  default_layer: KeymapConfig,
 ): Entry[] {
   const sources = [mode === "normal" ? generated_bindings(keymap, settings) : {}, keymap[mode] ?? {}];
+  const default_sequences = [mode === "normal" ? generated_bindings(default_layer, settings) : {}, default_layer[mode] ?? {}];
   const by_normalized_sequence = new Map<string, Entry>();
   const removed = new Set<string>();
   for (const [source_index, source] of sources.entries()) {
@@ -115,14 +147,22 @@ function entries_for_mode(
         if (earlier && earlier.source_index === source_index) {
           warnings.push(`${mode}: "${sequence}" and "${earlier.sequence}" are the same keys, kept "${sequence}"`);
         }
-        by_normalized_sequence.set(normalized, { sequence, tokens: parsed.tokens, binding, source_index });
+        const layer: Layer = sequence in default_sequences[source_index]! ? "defaults" : "user";
+        by_normalized_sequence.set(normalized, { sequence, tokens: parsed.tokens, binding, source_index, layer });
       }
     }
   }
+  const drops: Drop[] = [];
+  drop_default_leaves_under_user_keys(by_normalized_sequence, removed, resolve, drops);
   if (mode === "normal") {
     for (const variant of modifier_variants(keymap.modifiers ?? {}, by_normalized_sequence, removed, resolve, warnings)) {
       by_normalized_sequence.set(variant.tokens.join(""), variant);
     }
+    // A generated variant is a default key too: a user key may extend it.
+    drop_default_leaves_under_user_keys(by_normalized_sequence, removed, resolve, drops);
+  }
+  if (drops.length > 0) {
+    warnings.push(`${mode}: dropped default keys that your keys extend: ${drops.map(({ default_sequence, extenders }) => `"${default_sequence}" by ${extenders.join(", ")}`).join("; ")}`);
   }
   // Shorter sequences first, so a prefix claims its place before the longer entries below it.
   return [...by_normalized_sequence.values()].sort((a, b) => a.tokens.length - b.tokens.length);
@@ -159,17 +199,22 @@ function says_phrase(name: string, phrase: string): boolean {
   return new RegExp(`(?<![\\p{L}\\p{N}_])${escaped}(?![\\p{L}\\p{N}_])`, "iu").test(name);
 }
 
-// A label is one line of text. Null when `label` is fine.
-export function label_problem(label: string): string | null {
-  if (label.trim() === "") return "a label must not be empty";
-  if (/\p{Cc}/u.test(label)) return "a label must not hold control characters";
+// A label or an intent is one line of text. `noun` starts the message ("a label"). Null when the text is fine.
+function line_problem(noun: string, text: string): string | null {
+  if (text.trim() === "") return `${noun} must not be empty`;
+  if (/\p{Cc}/u.test(text)) return `${noun} must not hold control characters`;
   return null;
 }
+
+export const label_problem = (label: string) => line_problem("a label", label);
+
+export const intent_problem = (intent: string) => line_problem("an intent", intent);
 
 function to_steps(mode: KeymapMode, entry: Entry, resolve: ResolveCommand, settings: Partial<Settings>, sources: LabelSources, ancestor_names: string[], warnings: string[]) {
   const invocations = Array.isArray(entry.binding) ? entry.binding : [entry.binding];
   const steps: LeafStep[] = [];
   let label: string | undefined;
+  let intent: string | undefined;
   for (const invocation of invocations) {
     const info = resolve(invocation.id);
     if (!info) {
@@ -182,6 +227,12 @@ function to_steps(mode: KeymapMode, entry: Entry, resolve: ResolveCommand, setti
         warnings.push(`${mode}: skipped "${entry.sequence}": ${written_problem}`);
         return undefined;
       }
+      const intent_error = invocation.intent === undefined ? null : intent_problem(invocation.intent);
+      if (intent_error) {
+        warnings.push(`${mode}: skipped "${entry.sequence}": ${intent_error}`);
+        return undefined;
+      }
+      intent = invocation.intent;
       label = invocation.label ?? derived_label(invocation, info, settings, sources, ancestor_names);
       // A derived label can carry a bad engine label or value phrase. The key still works, so it falls back to the command label.
       const derived_problem = invocation.label === undefined ? label_problem(label) : null;
@@ -191,14 +242,14 @@ function to_steps(mode: KeymapMode, entry: Entry, resolve: ResolveCommand, setti
       }
     }
     // The label is for the leaf. The steps stay the plain invocations the router runs.
-    const { label: _label, variant_label: _variant_label, ...plain } = invocation;
+    const { label: _label, intent: _intent, variant_label: _variant_label, ...plain } = invocation;
     steps.push({ invocation: plain, runs_in: info.runs_in, count_rule: info.count });
   }
   if (steps.length === 0) {
     warnings.push(`${mode}: skipped "${entry.sequence}": empty binding`);
     return undefined;
   }
-  return { steps, label };
+  return { steps, label, intent };
 }
 
 function insert_entry(root: TreeBranch, mode: KeymapMode, entry: Entry, resolve: ResolveCommand, settings: Partial<Settings>, sources: LabelSources, group_names: GroupName[], warnings: string[]) {
@@ -218,7 +269,7 @@ function insert_entry(root: TreeBranch, mode: KeymapMode, entry: Entry, resolve:
     } else if (existing) {
       warnings.push(`${mode}: skipped "${entry.sequence}": ${existing.kind === "leaf" ? "same keys as another binding" : "another binding already continues past it"}`);
     } else {
-      branch.children[token] = { kind: "leaf", ...(resolved.label === undefined ? {} : { label: resolved.label }), steps: resolved.steps };
+      branch.children[token] = { kind: "leaf", ...(resolved.label === undefined ? {} : { label: resolved.label }), ...(resolved.intent === undefined ? {} : { intent: resolved.intent }), steps: resolved.steps };
     }
   }
 }
@@ -250,7 +301,7 @@ function name_groups(root: TreeBranch, group_names: GroupName[]) {
   }
 }
 
-export function compile_keymap(keymap: KeymapConfig, settings: Partial<Settings>, resolve: ResolveCommand, label_sources: LabelSources = { engine_labels: {} }): CompileResult {
+export function compile_keymap(keymap: KeymapConfig, settings: Partial<Settings>, resolve: ResolveCommand, label_sources: LabelSources = { engine_labels: {} }, default_layer: KeymapConfig = {}): CompileResult {
   const warnings: string[] = [];
   const modes: CompiledKeymap["modes"] = {};
   const keymap_modes: readonly KeymapMode[] = [...RUNTIME_MODES, "browser"];
@@ -258,7 +309,7 @@ export function compile_keymap(keymap: KeymapConfig, settings: Partial<Settings>
   const group_names = parse_group_names({ ...modifier_names, ...keymap.group_names }, warnings);
   for (const mode of keymap_modes) {
     const root: TreeBranch = { kind: "branch", children: {} };
-    for (const entry of entries_for_mode(mode, keymap, settings, resolve, warnings)) {
+    for (const entry of entries_for_mode(mode, keymap, settings, resolve, warnings, default_layer)) {
       insert_entry(root, mode, entry, resolve, settings, label_sources, group_names, warnings);
     }
     name_groups(root, group_names);

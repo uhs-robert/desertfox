@@ -129,9 +129,18 @@ export function create_settings_session(deps: SessionDeps) {
     else fields.set(name, new_field(row));
   }
 
+  // A rejected send, for example while the background restarts, reads as a refusal.
+  async function ask_for_list(): Promise<ListSettingsAnswer> {
+    try {
+      return (await deps.send({ type: "list_settings" })) as ListSettingsAnswer;
+    } catch (error) {
+      return { ok: false, message: error instanceof Error ? error.message : String(error) };
+    }
+  }
+
   async function refresh_once(): Promise<void> {
     const seen = new Map(touched);
-    const answer = (await deps.send({ type: "list_settings" })) as ListSettingsAnswer;
+    const answer = await ask_for_list();
     if (!answer.ok) return;
     for (const row of answer.settings) {
       const field = fields.get(row.name);
@@ -170,16 +179,20 @@ export function create_settings_session(deps: SessionDeps) {
     deps.on_change(name);
   }
 
-  async function answered(name: string, field: Field, sequence: number, answer: ChangeSettingAnswer): Promise<void> {
+  async function answered(name: string, field: Field, sequence: number, request: Omit<ChangeSetting, "type" | "name">, answer: ChangeSettingAnswer): Promise<void> {
     // A later edit of this field is in flight. Its answer decides.
     if (touched.get(name) !== sequence) return;
     bump(name);
+    // The reader typed again while the save was in flight. That draft and its check result stay.
+    const typed_since = field.draft !== undefined && (request.action === "reset" || JSON.stringify(field.draft.value) !== JSON.stringify(request.value));
     if (answer.ok) {
       Object.assign(field, new_field(answer.setting));
-      delete field.draft;
-      delete field.error;
       field.note = answer.message;
-    } else {
+      if (!typed_since) {
+        delete field.draft;
+        delete field.error;
+      }
+    } else if (!typed_since) {
       field.error = answer.message;
     }
     deps.on_change(name);
@@ -196,7 +209,7 @@ export function create_settings_session(deps: SessionDeps) {
     } catch (error) {
       answer = { ok: false, message: error instanceof Error ? error.message : String(error) };
     }
-    await answered(name, field, sequence, answer);
+    await answered(name, field, sequence, request, answer);
   }
 
   // Saves at once, like `:set`, unless the check refuses the value.
@@ -219,7 +232,7 @@ export function create_settings_session(deps: SessionDeps) {
     fields: () => [...fields.values()],
     field: (name: string) => fields.get(name),
     load: async (): Promise<boolean> => {
-      const answer = (await deps.send({ type: "list_settings" })) as ListSettingsAnswer;
+      const answer = await ask_for_list();
       if (!answer.ok) return false;
       fields.clear();
       for (const row of answer.settings) take_row(row.name, row);

@@ -112,3 +112,35 @@ test("the tabs are read from the model, not asked for, and read as loading until
   assert.deepEqual(live.read("tabs"), { loading: false, items: TAB_ITEMS });
   assert.equal(asks.length, 0);
 });
+
+test("a failed history fetch caches no rows and a zero cap", async () => {
+  const { live, asks, settle } = make();
+  live.read("history");
+  asks[0]!.fail();
+  await settle();
+  assert.deepEqual(live.read("history"), { loading: false, items: { rows: [], max: 0 } });
+});
+
+test("a history reply that lands after close is dropped, and the fetch after the reopen is the one that lands", async () => {
+  const { live, asks, settle, ready } = make();
+  live.read("history");
+  live.close();
+  assert.deepEqual(live.read("history"), { loading: true });
+  assert.equal(asks.length, 2);
+  // The first reply comes last of the two, so it must not overwrite the newer one.
+  asks[1]!.answer({ items: { rows: [{ title: "New", url: "https://new.test/" }], max: 5 } });
+  await settle();
+  asks[0]!.answer({ items: { rows: [{ title: "Old", url: "https://old.test/" }], max: 1 } });
+  await settle();
+  assert.equal(ready(), 1);
+  assert.deepEqual(live.read("history"), { loading: false, items: { rows: [{ title: "New", url: "https://new.test/" }], max: 5 } });
+});
+
+test("a history reply that lands after close, with no reopen, changes nothing", async () => {
+  const { live, asks, settle, ready } = make();
+  live.read("history");
+  live.close();
+  asks[0]!.answer({ items: { rows: [{ title: "Old", url: "https://old.test/" }], max: 1 } });
+  await settle();
+  assert.equal(ready(), 0);
+});

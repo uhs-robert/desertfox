@@ -35,6 +35,35 @@ export function root_url(page_url: string): string | undefined {
   return url ? `${url.origin}/` : undefined;
 }
 
+// Digits past this lose precision as a double, and runs this long are ids or timestamps, not page numbers.
+const MAX_NUMBER_DIGITS = 15;
+const MAX_NUMBER = 10 ** MAX_NUMBER_DIGITS - 1;
+const PERCENT_ESCAPE = /%[0-9a-f]{2}/gi;
+
+// Changes the last number in the path and query, so the host and fragment are left alone. Leading zeros keep their width.
+// The edit works on the serialized href, so an empty `?` or `#` that the URL object drops from `search` and `hash` stays.
+export function incremented_url(page_url: string, direction: "up" | "down", amount: number): string {
+  const url = parse_http_url(page_url);
+  if (!url) throw new RuntimeRefusal("This address cannot change its number");
+  const href = url.href;
+  const path_start = href.indexOf("/", href.indexOf("//") + 2);
+  const hash_start = href.indexOf("#", path_start);
+  const changeable_end = hash_start === -1 ? href.length : hash_start;
+  const changeable = href.slice(path_start, changeable_end);
+  // The escape digits in %20 are not a number, so they are masked before the search and the edit keeps the original text.
+  const searchable = changeable.replace(PERCENT_ESCAPE, (escape) => "%".repeat(escape.length));
+  const last = [...searchable.matchAll(/\d+/g)].at(-1);
+  if (!last) throw new RuntimeRefusal("This address has no number");
+  const digits = last[0];
+  if (digits.length > MAX_NUMBER_DIGITS) throw new RuntimeRefusal(`The number ${digits} has more than ${MAX_NUMBER_DIGITS} digits`);
+  if (amount > MAX_NUMBER) throw new RuntimeRefusal(`The amount ${amount} has more than ${MAX_NUMBER_DIGITS} digits`);
+  const next = Number(digits) + (direction === "up" ? amount : -amount);
+  if (next < 0) throw new RuntimeRefusal(`The number ${digits} cannot go below 0`);
+  if (next > MAX_NUMBER) throw new RuntimeRefusal(`The number ${digits} cannot grow past ${MAX_NUMBER_DIGITS} digits`);
+  const start = path_start + last.index;
+  return href.slice(0, start) + String(next).padStart(digits.length, "0") + href.slice(start + digits.length);
+}
+
 // For typed text, which has no page behind it: a template that needs the page is refused.
 export function engine_search_url(template: string, query: string): string {
   const filled = fill_template(template, { query });

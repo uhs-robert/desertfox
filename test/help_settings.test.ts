@@ -166,16 +166,39 @@ test("unmounting stops the listener, and a load that ends after it adds none", a
   const events = { addListener: (listener: unknown) => added.push(listener), removeListener: (listener: unknown) => removed.push(listener) };
   // The container has no group boxes, so the session loads and nothing is drawn.
   const container = { querySelector: () => null, prepend: () => undefined } as never;
-  const send = async (message: unknown) => ((message as { type: string }).type === "list_settings" ? messages.list() : messages.change(message as never));
+  let last_send: Promise<unknown> = Promise.resolve();
+  const send = (message: unknown) => (last_send = (message as { type: string }).type === "list_settings" ? messages.list() : messages.change(message as never));
+  // The send has answered and the load's continuation has run.
+  const settled = async () => {
+    await last_send;
+    await new Promise((resolve) => setImmediate(resolve));
+  };
   const stop_late = mount_settings(container, send, [], events);
   stop_late();
-  await new Promise((resolve) => setTimeout(resolve, 20));
+  await settled();
   assert.equal(added.length, 0);
   const stop = mount_settings(container, send, [], events);
-  await new Promise((resolve) => setTimeout(resolve, 20));
+  await settled();
   assert.equal(added.length, 1);
   stop();
   assert.equal(removed.at(-1), added[0]);
+});
+
+test("typing while a save is in flight keeps the new draft and its check", async () => {
+  const { session } = await make();
+  const saving = session.commit("hint_letters", "ab");
+  session.draft("hint_letters", "a");
+  await saving;
+  assert.deepEqual(session.field("hint_letters")!.draft, { value: "a" });
+  assert.match(session.field("hint_letters")!.error!, /expected/);
+  assert.equal(session.field("hint_letters")!.row.value, "ab");
+});
+
+test("a rejected send reads as a refusal for load and refresh", async () => {
+  const failing = create_settings_session({ send: async () => { throw new Error("background gone"); }, engines: [], on_change: () => undefined });
+  assert.equal(await failing.load(), false);
+  await failing.refresh();
+  assert.deepEqual(failing.fields(), []);
 });
 
 test("two quick edits of one field end on the second value", async () => {

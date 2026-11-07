@@ -24,6 +24,8 @@ export type Registry = {
   // Resolves a command line word: a name, an alias or a full id.
   find(word: string): CommandDef | undefined;
   list(): CommandDef[];
+  // Frees the id and its words. Only snippets leave the registry: a config reload replaces them.
+  remove(id: string): void;
 };
 
 export const COMMAND_ID_PATTERN = /^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$/;
@@ -63,6 +65,12 @@ export function create_registry(): Registry {
     get: (id) => commands_by_id.get(id),
     find: (word) => commands_by_word.get(word),
     list: () => [...commands_by_id.values()],
+    remove: (id) => {
+      const command = commands_by_id.get(id);
+      if (!command) return;
+      commands_by_id.delete(id);
+      for (const [word, owner] of commands_by_word) if (owner === command) commands_by_word.delete(word);
+    },
   };
 }
 
@@ -236,7 +244,7 @@ function check_param_shape(param: ParamDef, at: string, fail: Fail): void {
     if (new Set(list).size !== list.length) fail(`${at}.values`, "has a repeated value");
   } else if (is_dynamic_values(param.values)) {
     const from = (param.values as { from: unknown }).from;
-    if (from !== "search_engines" && from !== "containers" && from !== "tabs" && from !== "bookmarks" && from !== "open" && from !== "windows" && from !== "headings") fail(`${at}.values`, `unknown source "${String(from)}"`);
+    if (from !== "search_engines" && from !== "containers" && from !== "tabs" && from !== "bookmarks" && from !== "history" && from !== "open" && from !== "windows" && from !== "headings") fail(`${at}.values`, `unknown source "${String(from)}"`);
   }
   check_rules(param, at, fail);
   check_value_labels(param, at, fail);
