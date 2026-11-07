@@ -86,9 +86,7 @@ if (!page.desertfox_cmdline_ready) {
     holder.setAttribute(LAYER_ATTRIBUTE, String(LAYERS.command_line));
     holder.style.cssText = `all:initial;position:fixed;left:0;right:0;bottom:0;height:${BAR_HEIGHT};z-index:${LAYERS.command_line};`;
     const frame = document.createElement("iframe");
-    // The same color-scheme as cmdline.html's meta, whatever the page declares: `normal` would follow the page's color-scheme meta. On a
-    // mismatch Firefox paints the frame's canvas opaque, so the holder shows white until `resize`. Not `light`: the theme inside the frame
-    // follows this scheme through `prefers-color-scheme`. See docs/firefox-behavior.md.
+    // A color-scheme mismatch between the iframe and its page paints the frame white. See docs/firefox-behavior.md.
     frame.style.cssText = "all:initial;display:block;width:100%;height:100%;border:0;color-scheme:light dark;";
     // Before the frame joins the page, so its only load is cmdline.html.
     frame.src = browser.runtime.getURL("cmdline.html");
