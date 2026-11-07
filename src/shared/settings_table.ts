@@ -38,6 +38,9 @@ export const SETTINGS_TABLE = {
   which_key_border: { kind: "enum", values: ["square", "round", "chamfer"], default: "square" },
   hint_letters: { kind: "custom", schema: { type: "string", minLength: 2 }, default: "asdfghjkl" },
   ignore_sites: { kind: "text_list", expectation: "a list of match pattern strings", default: [] },
+  // Matched as lowercase text of a link or button, in order: an earlier entry wins. A 1 or 2 character entry must be the whole text.
+  next_patterns: { kind: "text_list", expectation: "a list of link texts", default: ["next", "more", "newer", ">", "\u203a", "\u2192", "\u00bb", "\u226b", ">>"] },
+  prev_patterns: { kind: "text_list", expectation: "a list of link texts", default: ["prev", "previous", "back", "older", "<", "\u2039", "\u2190", "\u00ab", "\u226a", "<<"] },
   mode_indicator: { kind: "enum", values: ["always", "not_normal", "off"], default: "always" },
   // The theme names are examples, not an enum: a theme file in the config directory takes any name.
   palette: { kind: "custom", schema: { type: "string", minLength: 1, examples: BUILT_IN_THEME_NAMES }, default: "oasis_moonlight" },

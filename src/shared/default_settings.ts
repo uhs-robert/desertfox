@@ -7,6 +7,8 @@ export const DEFAULT_WHICH_KEY_DELAY_MS: Settings["which_key_delay_ms"] = 300;
 export const DEFAULT_WHICH_KEY_BORDER: Settings["which_key_border"] = "square";
 export const DEFAULT_HINT_LETTERS: Settings["hint_letters"] = "asdfghjkl";
 export const DEFAULT_IGNORE_SITES: Settings["ignore_sites"] = [];
+export const DEFAULT_NEXT_PATTERNS: Settings["next_patterns"] = ["next","more","newer",">","›","→","»","≫",">>"];
+export const DEFAULT_PREV_PATTERNS: Settings["prev_patterns"] = ["prev","previous","back","older","<","‹","←","«","≪","<<"];
 export const DEFAULT_MODE_INDICATOR: Settings["mode_indicator"] = "always";
 export const DEFAULT_PALETTE: Settings["palette"] = "oasis_moonlight";
 export const DEFAULT_LIGHT_INTENSITY: Settings["light_intensity"] = 3;
@@ -35,6 +37,8 @@ export const DEFAULT_SETTINGS: Settings = {
   which_key_border: DEFAULT_WHICH_KEY_BORDER,
   hint_letters: DEFAULT_HINT_LETTERS,
   ignore_sites: DEFAULT_IGNORE_SITES,
+  next_patterns: DEFAULT_NEXT_PATTERNS,
+  prev_patterns: DEFAULT_PREV_PATTERNS,
   mode_indicator: DEFAULT_MODE_INDICATOR,
   palette: DEFAULT_PALETTE,
   light_intensity: DEFAULT_LIGHT_INTENSITY,

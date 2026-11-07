@@ -8,6 +8,8 @@ import type { SettingName } from "./settings_table.ts";
 export const SETTING_DOCS: Record<SettingName, string> = {
   which_key_delay_ms: "Milliseconds after a prefix key before the which-key panel shows",
   which_key_border: "Corner style of the which-key panel border",
+  next_patterns: "Link texts that \`page.follow\` takes for the next page, best first",
+  prev_patterns: "Link texts that \`page.follow\` takes for the previous page, best first",
   hint_letters: "The letters hint labels use, each once, at least two",
   ignore_sites: "Match patterns where DesertFox starts in ignore mode",
   mode_indicator: "When the mode badge shows: always (NORMAL too), not_normal, or off",

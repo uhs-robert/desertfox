@@ -46,7 +46,7 @@ export function keep_present<T>(targets: readonly T[], probe: Pick<PageProbe<T>,
   });
 }
 
-function keep_present_headings(candidates: Found[]): Found[] {
+export function keep_present_found(candidates: Found[]): Found[] {
   const own_rects = (element: Element) => Array.from(element.getClientRects());
   const children = (element: Element) => Array.from(element.children);
   const keep_present_elements = (elements: Element[]) =>
@@ -99,7 +99,7 @@ export function jump_in({ found, rows }: Snapshot, typed: string): void {
 let snapshot: Snapshot | undefined;
 
 export function take_snapshot(): Snapshot {
-  const found = keep_present_headings(collect(document, { selector: HEADINGS, test: is_heading }));
+  const found = keep_present_found(collect(document, { selector: HEADINGS, test: is_heading }));
   snapshot = { found, rows: found.map(({ element }) => row_of(element)) };
   return snapshot;
 }

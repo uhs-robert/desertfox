@@ -18,20 +18,6 @@ note = "phase 3, key param"
 
 [[row]]
 mode = "normal"
-key = "[["
-status = "later"
-command = "page.follow --direction=prev"
-note = "phase 3"
-
-[[row]]
-mode = "normal"
-key = "]]"
-status = "later"
-command = "page.follow --direction=next"
-note = "phase 3"
-
-[[row]]
-mode = "normal"
 key = "`"
 status = "later"
 command = "mark.jump"

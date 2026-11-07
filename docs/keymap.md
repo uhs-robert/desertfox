@@ -22,7 +22,7 @@ A note "(prompts)" means the binding sets a `prompt` for a param, so the command
 
 <!-- BEGIN generated -->
 
-bound: 281 (normal 146, hint 2, cmdline 18, caret 35, visual 37, visual_line 38, insert 1, ignore 1, browser 3) | later: 10 | dropped: 6
+bound: 283 (normal 148, hint 2, cmdline 18, caret 35, visual 37, visual_line 38, insert 1, ignore 1, browser 3) | later: 8 | dropped: 6
 
 ### normal
 
@@ -48,6 +48,8 @@ bound: 281 (normal 146, hint 2, cmdline 18, caret 35, visual 37, visual_line 38,
 | `xp` | bound | `page.stop` | Stop loading |  |
 | `gh` | bound | `page.home` | Home page |  |
 | `gH` | bound | `page.home --tab` | Home page |  |
+| `]]` | bound | `page.follow --next` | Next page |  |
+| `[[` | bound | `page.follow --prev` | Previous page |  |
 | `.` | bound | `repeat` | Repeat |  |
 | `J` | bound | `tab.next` | Next tab |  |
 | `K` | bound | `tab.prev` | Previous tab |  |
@@ -176,8 +178,6 @@ bound: 281 (normal 146, hint 2, cmdline 18, caret 35, visual 37, visual_line 38,
 | `gV` | bound | `mode caret` | Set mode |  |
 | `m` | later | `mark.add` |  | phase 3, key param |
 | `M` | later | `quickmark.add` |  | phase 3, key param |
-| `[[` | later | `page.follow --direction=prev` |  | phase 3 |
-| `]]` | later | `page.follow --direction=next` |  | phase 3 |
 | `` ` `` | later | `mark.jump` |  | phase 3, key param |
 | `wi` | dropped |  |  | needs a shell |
 | `<C-o>` | later | `page.jump --step=-1` |  | phase 3 |

@@ -1,4 +1,5 @@
 import { get_config } from "../background/startup.ts";
+import { page_follow } from "../content/handlers/lazy_bundle.ts";
 import { stop_page } from "../content/handlers/stop.ts";
 import { NEW_TAB_PAGE_FILE } from "../shared/config.ts";
 import { define } from "../shared/registry/builtin.ts";
@@ -47,4 +48,13 @@ define("page.home", {
     const home_url = home_page_url((await get_config()).settings.home_page, () => browser.runtime.getURL(NEW_TAB_PAGE_FILE));
     await open_in(ctx, await typed_url_target(home_url), args.where as Where);
   },
+});
+
+// The link search sits in the hints bundle, which loads on the first run. It reads the top page and same-origin frames only: a frame of another site has its own script and the top page cannot see its links.
+define("page.follow", {
+  label: "Follow page link",
+  intent: "Go to the next or previous page of a series. It takes a link marked rel next or prev first, then the first link or button whose text matches the next_patterns or prev_patterns setting.",
+  params: [{ name: "direction", type: "enum", values: ["next", "prev"], value_labels: { next: "to next page", prev: "to previous page" }, description: { next: "Follow the link to the next page.", prev: "Follow the link to the previous page." } }, WHERE_PARAM],
+  runs_in: "content",
+  run: page_follow.run,
 });

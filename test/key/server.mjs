@@ -123,6 +123,16 @@ export function start_server() {
       const links = `<a href="/page?id=hint_hidden" style="display:none">hidden</a>${covered}<p><a href="/page?id=hint_one">one</a></p><p><a href="/page?id=hint_two">two</a></p>`;
       return response.end(page(`hints ${id}`, links + tall_filler));
     }
+    if (url.pathname === "/follow_rel") {
+      // The head link is the rel match. The visible text link would match a pattern too, so the test shows rel wins.
+      const head = '<link rel="next" href="/page?id=follow_rel_next"><link rel="prev" href="/page?id=follow_rel_prev">';
+      return response.end(page(`follow_rel ${id}`, '<a href="/page?id=follow_text_decoy">Next</a>' + tall_filler, head));
+    }
+    if (url.pathname === "/follow_text") {
+      // Both links sit below a tall filler, because a next link is usually off-screen.
+      const links = '<a href="/page?id=follow_text_prev">Previous</a> <a href="/page?id=follow_text_next">Next</a>';
+      return response.end(page(`follow_text ${id}`, tall_filler + links));
+    }
     if (url.pathname === "/media") {
       // A video in a player box of its own size, under an overlay that catches the pointer as a site's controls do, and a hidden audio.
       const player = '<div id="player" style="position:relative;width:320px;height:180px;background:#222"><video id="video" src="/tone.wav" loop style="width:320px;height:180px"></video><div style="position:absolute;inset:0"></div></div>';
