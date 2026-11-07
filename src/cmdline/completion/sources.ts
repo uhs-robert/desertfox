@@ -182,7 +182,8 @@ function setting_rows(context: Extract<CursorContext, { kind: "subject" }>, text
   if (command_id !== "settings.set" || setting === undefined || !is_setting_name(setting)) return [];
   const spec = completion_of(setting);
   if (context.position > 1 && !spec.is_list) return [];
-  return spec.values.map((value) => row(value, `${quote_word(value)} `, ""));
+  const already_typed = new Set(spec.is_list && Array.isArray(typed) ? typed.slice(2).map((token) => token.text) : []);
+  return spec.values.filter((value) => !already_typed.has(value)).map((value) => row(value, `${quote_word(value)} `, ""));
 }
 
 // With no word typed, the bookmark list shows this many of the newest.
