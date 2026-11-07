@@ -1108,6 +1108,21 @@ describe("reconcile against Firefox", () => {
     assert.deepEqual(pick(last(p.messages), "container_name"), [[1, "Job"]]);
   });
 
+  test("a detached tab whose container rename was missed attaches with the new name after a repair", async () => {
+    const f = make([tab(1, 1, 0, { cookieStoreId: "firefox-container-1" }), tab(2, 2, 0)], { containers: new Map([["firefox-container-1", WORK]]) });
+    await f.model.start();
+    const p = await f.connect_port();
+    f.fire("onDetached", 1, { oldWindowId: 1, oldPosition: 0 });
+    f.run_timers();
+    // Firefox leaves the moving tab out of this list, so it stays detached through the repair.
+    f.set_tabs([tab(2, 2, 0)]);
+    f.set_containers(new Map([["firefox-container-1", { ...WORK, name: "Job" }]]));
+    await resync(p);
+    f.fire("onAttached", 1, { newWindowId: 2, newPosition: 1 });
+    f.run_timers();
+    assert.deepEqual(pick(last(p.messages), "container_name"), [[1, "Job"]]);
+  });
+
   test("a repair that makes the previous tab active clears its previous mark", async () => {
     const f = make([tab(1, 1, 0, { active: true }), tab(2, 1, 1)], { previous: { 1: 2 } });
     await f.model.start();
