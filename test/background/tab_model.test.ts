@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { describe, test } from "node:test";
 import { create_tab_model, type TabModelDeps, type TabModelPort } from "../../src/background/tab_model.ts";
 import { create_cmdline_service } from "../../src/background/cmdline_service.ts";
 import type { ContainerIdentity, WindowLike } from "../../src/background/complete_items.ts";
@@ -260,6 +260,7 @@ test("a flush between detach and attach hides the tab, and the attach brings it 
   const first = p.messages[1];
   assert.ok(first.type === "patch");
   assert.deepEqual(first.removed, [1]);
+  f.set_tabs([tab(2, 1, 0), tab(1, 2, 0)]);
   const late = await f.connect_port();
   assert.deepEqual(order(late.messages[0]), ["1:0:2"]);
   f.fire("onAttached", 1, { newWindowId: 2, newPosition: 0 });
@@ -298,6 +299,7 @@ test("a port that connects mid-batch gets a snapshot that holds the pending chan
   await f.model.start();
   const early = await f.connect_port();
   f.fire("onCreated", tab(2, 1, 1));
+  f.set_tabs([tab(1, 1, 0), tab(2, 1, 1)]);
   const late = await f.connect_port();
   assert.deepEqual(order(late.messages[0]), ["1:0:1", "1:1:2"]);
   assert.equal(early.messages.length, 2, "pending change flushed to the earlier port");
@@ -378,29 +380,35 @@ test("a content script or another port name is refused", async () => {
   assert.equal((await f.connect_port({ name: "other" })).messages.length, 0);
 });
 
-test("resync sends a fresh snapshot at the port's current rev", async () => {
+test("resync queries Firefox again and sends a fresh snapshot at the port's current rev", async () => {
   const f = make([tab(1, 1, 0)]);
   await f.model.start();
   const p = await f.connect_port();
   f.fire("onUpdated", 1, { title: "z" }, tab(1, 1, 0, { title: "z" }));
+  f.set_tabs([tab(1, 1, 0, { title: "z" })]);
   f.run_timers();
+  const queries = f.query_calls();
   p.send({ type: "resync" });
+  await tick();
+  assert.equal(f.query_calls(), queries + 1);
   const snap = p.messages[2];
   assert.ok(snap.type === "snapshot");
   assert.equal(snap.rev, 1);
   assert.equal(snap.tabs[0]?.title, "z");
   p.send({ type: "nonsense" });
+  await tick();
   assert.equal(p.messages.length, 3);
 });
 
-test("settled flushes pending changes now and never re-queries", async () => {
+test("settled flushes pending changes now, and neither it nor start queries again", async () => {
   const f = make([tab(1, 1, 0)]);
   await f.model.start();
   const p = await f.connect_port();
+  const queries = f.query_calls();
   f.fire("onCreated", tab(2, 1, 1));
   await f.model.settled();
   await f.model.start();
-  assert.equal(f.query_calls(), 1);
+  assert.equal(f.query_calls(), queries);
   assert.equal(p.messages.length, 2);
   const patch = p.messages[1];
   assert.ok(patch.type === "patch");
@@ -589,6 +597,7 @@ test("a slow ticket check holds back every message, and the snapshot then holds 
   await f.model.start();
   const p = f.connect_port_now();
   f.fire("onUpdated", 1, { title: "z" }, tab(1, 1, 0, { title: "z" }));
+  f.set_tabs([tab(1, 1, 0, { title: "z" })]);
   f.run_timers();
   p.send({ type: "resync" });
   assert.equal(p.messages.length, 0);
@@ -765,6 +774,7 @@ test("closing the previous tab leaves the window without one, and a first activa
   f.fire("onActivated", { tabId: 3, windowId: 1, previousTabId: 1 });
   f.fire("onRemoved", 1, { windowId: 1, isWindowClosing: false });
   f.fire("onActivated", { tabId: 3, windowId: 1 });
+  f.set_tabs([tab(3, 1, 0, { active: true })]);
   f.run_timers();
   const late = await f.connect_port();
   assert.deepEqual(pick(late.messages[0], "previous"), [[3, false]]);
@@ -776,6 +786,7 @@ test("closing a window leaves the previous tab of the other windows alone", asyn
   const p = await f.connect_port();
   f.fire("onRemoved", 3, { windowId: 2, isWindowClosing: true });
   f.fire("onRemoved", 4, { windowId: 2, isWindowClosing: true });
+  f.set_tabs([tab(1, 1, 0, { active: true }), tab(2, 1, 1)]);
   f.set_windows([win(1)]);
   f.fire("windows.onRemoved", 2);
   await tick();
@@ -850,7 +861,8 @@ test("with containers off every row has empty container marks", async () => {
   await f.model.start();
   const p = await f.connect_port();
   assert.deepEqual(pick(p.messages[0], "container_name"), [[1, ""]]);
-  assert.equal(f.query_calls(), 1);
+  // The load and the reconcile at connect, and no retry for the failed container read.
+  assert.equal(f.query_calls(), 2);
 });
 
 // Reads for action messages
@@ -864,4 +876,179 @@ test("row_of gives a copy, and ids_of_privacy lists one privacy only", async () 
   assert.equal(f.model.row_of(1)?.title, "t1");
   assert.equal(f.model.row_of(9), undefined);
   assert.deepEqual([f.model.ids_of_privacy(false), f.model.ids_of_privacy(true)], [[1], [2]]);
+});
+
+describe("reconcile against Firefox", () => {
+  const abc = () => [tab(1, 1, 0), tab(2, 1, 1), tab(3, 1, 2)];
+  const resync = async (p: Awaited<ReturnType<ReturnType<typeof make>["connect_port"]>>) => {
+    p.send({ type: "resync" });
+    await tick();
+  };
+  const last = (messages: { length: number }) => (messages as unknown as TabModelMessage[])[messages.length - 1] as TabModelMessage;
+
+  test("resync repairs a stale create with a patch, then sends the snapshot", async () => {
+    const f = make(abc());
+    await f.model.start();
+    const p = await f.connect_port();
+    f.fire("onCreated", tab(4, 1, 1));
+    f.run_timers();
+    f.set_tabs([...abc(), tab(4, 1, 3)]);
+    await resync(p);
+    const patch = p.messages[2];
+    assert.ok(patch.type === "patch");
+    assert.deepEqual(patch.upserts.map((r) => `${r.id}:${r.index}`).sort(), ["2:1", "3:2", "4:3"]);
+    assert.deepEqual(order(p.messages[3]), ["1:0:1", "1:1:2", "1:2:3", "1:3:4"]);
+    assert.equal(p.messages[3].type === "snapshot" && p.messages[3].rev, 2);
+  });
+
+  test("resync adds a tab no event announced and drops a tab whose removal was missed", async () => {
+    const f = make(abc());
+    await f.model.start();
+    const p = await f.connect_port();
+    f.set_tabs([tab(1, 1, 0), tab(3, 1, 1), tab(5, 1, 2)]);
+    await resync(p);
+    const patch = p.messages[1];
+    assert.ok(patch.type === "patch");
+    assert.deepEqual(patch.removed, [2]);
+    assert.deepEqual(patch.upserts.map((r) => `${r.id}:${r.index}`).sort(), ["3:1", "5:2"]);
+    assert.deepEqual(order(p.messages[2]), ["1:0:1", "1:1:3", "1:2:5"]);
+  });
+
+  test("resync with no drift sends only the snapshot", async () => {
+    const f = make(abc());
+    await f.model.start();
+    const p = await f.connect_port();
+    await resync(p);
+    assert.equal(p.messages.length, 2);
+    assert.equal(p.messages[1].type, "snapshot");
+  });
+
+  test("a new port triggers the repair, and an open port gets it as a patch", async () => {
+    const f = make(abc());
+    await f.model.start();
+    const early = await f.connect_port();
+    f.set_tabs([tab(2, 1, 0), tab(1, 1, 1), tab(3, 1, 2)]);
+    const late = await f.connect_port();
+    assert.deepEqual(order(late.messages[0]), ["1:0:2", "1:1:1", "1:2:3"]);
+    assert.deepEqual(early.messages[1] && ids(early.messages[1]).sort(), [1, 2]);
+  });
+
+  test("the model's previous mark and active tab survive a repair", async () => {
+    const f = make([tab(1, 1, 0, { active: true }), tab(2, 1, 1), tab(3, 1, 2)], { previous: { 1: 2 } });
+    await f.model.start();
+    const p = await f.connect_port();
+    f.fire("onActivated", { tabId: 3, windowId: 1, previousTabId: 1 });
+    f.set_tabs([tab(1, 1, 0), tab(2, 1, 1, { title: "new" }), tab(3, 1, 2, { active: true })]);
+    await resync(p);
+    assert.deepEqual(pick(last(p.messages), "previous"), [[1, true], [2, false], [3, false]]);
+    assert.deepEqual(pick(last(p.messages), "title"), [[1, "t1"], [2, "new"], [3, "t3"]]);
+  });
+
+  for (const [name, fire_event, after] of [
+    ["onCreated", (f: ReturnType<typeof make>) => f.fire("onCreated", tab(4, 1, 3)), [...abc(), tab(4, 1, 3)]],
+    ["onMoved", (f: ReturnType<typeof make>) => f.fire("onMoved", 1, { windowId: 1, fromIndex: 0, toIndex: 2 }), [tab(2, 1, 0), tab(3, 1, 1), tab(1, 1, 2)]],
+    ["onRemoved", (f: ReturnType<typeof make>) => f.fire("onRemoved", 2, { windowId: 1, isWindowClosing: false }), [tab(1, 1, 0), tab(3, 1, 1)]],
+  ] as const) {
+    test(`an ${name} during the query discards the answer and queries again`, async () => {
+      const f = make(abc());
+      await f.model.start();
+      const p = await f.connect_port();
+      const queries = f.query_calls();
+      const release = f.hold_query();
+      p.send({ type: "resync" });
+      fire_event(f);
+      f.set_tabs([...after]);
+      release();
+      await tick();
+      assert.equal(f.query_calls(), queries + 2);
+      assert.deepEqual(order(last(p.messages)), after.map((t) => `${t.windowId}:${t.index}:${t.id}`).sort());
+    });
+  }
+
+  test("a reconcile that sees an event during every query gives up and leaves the event-built rows", async () => {
+    const f = make(abc());
+    await f.model.start();
+    const p = await f.connect_port();
+    const queries = f.query_calls();
+    let release = f.hold_query();
+    p.send({ type: "resync" });
+    for (const title of ["a", "b", "c"]) {
+      f.fire("onUpdated", 1, { title }, tab(1, 1, 0, { title }));
+      // The retry starts only after this turn, so the new hold catches it.
+      release();
+      release = f.hold_query();
+      await tick();
+    }
+    release();
+    await tick();
+    assert.equal(f.query_calls(), queries + 3);
+    assert.deepEqual(pick(last(p.messages), "title"), [[1, "c"], [2, "t2"], [3, "t3"]]);
+  });
+
+  test("a failed query still answers resync with a snapshot", async () => {
+    const f = make(abc());
+    await f.model.start();
+    const p = await f.connect_port();
+    f.fail_next_query();
+    await resync(p);
+    assert.deepEqual(order(last(p.messages)), ["1:0:1", "1:1:2", "1:2:3"]);
+  });
+
+  test("overlapping reconciles apply only the newest answer, and both ports get it", async () => {
+    const f = make(abc());
+    await f.model.start();
+    const p = await f.connect_port();
+    const queries = f.query_calls();
+    const release_older = f.hold_query();
+    f.set_tabs([tab(1, 1, 0), tab(2, 1, 1)]);
+    p.send({ type: "resync" });
+    const release_newer = f.hold_query();
+    f.set_tabs([tab(2, 1, 0), tab(1, 1, 1)]);
+    const late = f.connect_port_now();
+    await tick();
+    release_older();
+    await tick();
+    assert.equal(p.messages.length, 1, "the older resync waits for the newer answer");
+    release_newer();
+    await tick();
+    assert.equal(f.query_calls(), queries + 2);
+    const patches = (p.messages as unknown as TabModelMessage[]).filter((m) => m.type === "patch");
+    assert.equal(patches.length, 1);
+    assert.deepEqual(patches[0]?.type === "patch" && patches[0].removed, [3]);
+    assert.deepEqual(order(last(p.messages)), ["1:0:2", "1:1:1"]);
+    assert.deepEqual(order(late.messages[0]), ["1:0:2", "1:1:1"]);
+  });
+
+  test("a port that connects during the startup load gets the load's snapshot and no extra query", async () => {
+    const f = make(abc());
+    const release = f.hold_query();
+    const started = f.model.start();
+    const p = await f.connect_port();
+    p.send({ type: "resync" });
+    release();
+    await started;
+    await tick();
+    assert.equal(f.query_calls(), 1);
+    assert.equal(p.messages.length, 1);
+    assert.deepEqual(order(p.messages[0]), ["1:0:1", "1:1:2", "1:2:3"]);
+  });
+
+  test("a tab detached during the query stays out until its attach, which places it", async () => {
+    const f = make([...abc(), tab(4, 2, 0)]);
+    await f.model.start();
+    const p = await f.connect_port();
+    const release = f.hold_query();
+    p.send({ type: "resync" });
+    f.fire("onDetached", 2, { oldWindowId: 1, oldPosition: 1 });
+    // Firefox lists the tab mid-move. The model must not take that row over its detached one.
+    f.set_tabs([tab(1, 1, 0), tab(3, 1, 1), tab(2, 2, 1), tab(4, 2, 0)]);
+    release();
+    await tick();
+    assert.deepEqual(order(last(p.messages)), ["1:0:1", "1:1:3", "2:0:4"]);
+    f.fire("onAttached", 2, { newWindowId: 2, newPosition: 1 });
+    f.run_timers();
+    const patch = last(p.messages);
+    assert.ok(patch.type === "patch");
+    assert.deepEqual(patch.upserts.map((r) => `${r.window_id}:${r.index}:${r.id}`), ["2:1:2"]);
+  });
 });

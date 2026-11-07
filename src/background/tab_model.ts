@@ -13,6 +13,8 @@ import type { ContainerIdentity, WindowLike } from "./complete_items.ts";
 
 const PORT_PRIVACY: Record<string, boolean | undefined> = { [TAB_MODEL_PORT_NAME]: undefined, [TAB_MODEL_PORT_NORMAL]: false, [TAB_MODEL_PORT_PRIVATE]: true };
 export const FLUSH_DELAY_MS = 30;
+// A reconcile that keeps seeing events gives up, and the model stays as the events left it until the next one.
+const RECONCILE_ATTEMPTS = 3;
 
 type Entry = { row: TabRow; incognito: boolean };
 type Tab = browser.tabs.Tab;
@@ -119,6 +121,9 @@ export function create_tab_model(deps: TabModelDeps) {
   let loaded = false;
   let loading: Promise<void> | undefined;
   let raced = false;
+  let events_seen = 0;
+  let reconciles = 0;
+  let newest_reconcile: Promise<void> = Promise.resolve();
   let window_numbers: WindowNumbers = new Map();
   let containers: Containers = new Map();
 
@@ -228,6 +233,7 @@ export function create_tab_model(deps: TabModelDeps) {
 
   // Events that arrive while the model is loading are dropped: the load notices them and queries again.
   const when_loaded = <Args extends unknown[]>(handle: (...args: Args) => void) => (...args: Args) => {
+    events_seen += 1;
     if (!loaded) {
       raced = true;
       void load();
@@ -282,6 +288,45 @@ export function create_tab_model(deps: TabModelDeps) {
       }
     })();
     return loading;
+  };
+
+  const same_entry = (a: Entry, b: Entry) => a.incognito === b.incognito && (Object.keys(a.row) as (keyof TabRow)[]).every((field) => a.row[field] === b.row[field]);
+  // The event handlers shift indexes by hand, so one stale or missed event leaves rows wrong until Firefox is asked again.
+  // The diff goes through `touch` and `forget`, so ports get patches, not snapshots. `previous` stays the model's own, as in `UPDATABLE`.
+  const repair_from = (tabs: Tab[]) => {
+    const fresh = new Map<number, Entry>();
+    for (const tab of tabs) {
+      const entry = entry_of(tab, window_numbers, containers);
+      // A detached tab returns through `onAttached`, which expects the row still in `detached`.
+      if (entry && !detached.has(entry.row.id)) fresh.set(entry.row.id, entry);
+    }
+    for (const [id, entry] of entries) {
+      if (fresh.has(id)) continue;
+      entries.delete(id);
+      forget(id, entry.incognito);
+    }
+    for (const [id, entry] of fresh) {
+      const current = entries.get(id);
+      entry.row.previous = current?.row.previous ?? false;
+      if (current && same_entry(current, entry)) continue;
+      if (!current) created.add(id);
+      entries.set(id, entry);
+      touch(id);
+    }
+  };
+  // Like the startup load, an event during the query makes the answer stale, so it queries again. An overlapped call waits for the newest one.
+  const reconcile = (): Promise<void> => {
+    const call = ++reconciles;
+    newest_reconcile = (async () => {
+      for (let attempt = 0; attempt < RECONCILE_ATTEMPTS; attempt += 1) {
+        const seen = events_seen;
+        const tabs = await deps.query().catch(() => undefined);
+        if (call !== reconciles) return newest_reconcile;
+        if (tabs === undefined) return;
+        if (events_seen === seen) return repair_from(tabs);
+      }
+    })();
+    return newest_reconcile;
   };
 
   const { events } = deps;
@@ -404,17 +449,23 @@ export function create_tab_model(deps: TabModelDeps) {
     });
     port.onMessage.addListener((message) => {
       if (!state.ready || (message as TabModelRequest | undefined)?.type !== "resync") return;
-      flush();
-      send_snapshot(state);
+      void reconcile().then(() => {
+        if (!ports.has(state)) return;
+        flush();
+        send_snapshot(state);
+      });
     });
     // The port joins `ports` only once admitted, so neither a load nor a flush reaches it before.
     const admit = () => {
       ports.add(state);
       if (loaded) {
-        // Pending changes go to the ports first, so the snapshot holds nothing a later patch repeats.
-        flush();
-        state.ready = true;
-        send_snapshot(state);
+        void reconcile().then(() => {
+          if (!ports.has(state)) return;
+          // Pending changes go to the ports first, so the snapshot holds nothing a later patch repeats.
+          flush();
+          state.ready = true;
+          send_snapshot(state);
+        });
       } else void load();
     };
     // A web page can frame only a web-accessible page, so only that page needs the ticket. Any other extension page is extension code.
