@@ -566,10 +566,12 @@ export async function create_session({ name: shadow_name, timings }) {
     }
     // Callbacks run in reverse order when the piece ends, pass or fail.
     const on_teardown = (callback) => state.teardowns.push(callback);
+    // Stores a number for the end-of-run measurements line.
+    const record = (key, value) => { measurements[key] = value; };
     // The cases of a piece file in test/key/p<number>_*.mjs get these helpers.
     const context = { config_dir, config_copy, load_config_dir, take_shot: (path) => timed_shadow("shot", shadow_name, "--out", path), run_case: run_piece_case, setup, on_teardown, expect, open_page, send_keys, sleep, events, wait_event, since, find_event, url_of, rdp, extension_id: EXTENSION_ID, scroll_delta_after, became_visible, scroll_of, last_scroll_y,
       // Moved out of the run.mjs cases. Pieces may use them too.
-      in_background, read_local, reload_in_place, wait_reinject_report, injections_of, settled_injection_count, expect_no_scroll, expect_exactly_one_visible, visible_events, extension_view, close_tabs_with };
+      in_background, read_local, reload_in_place, wait_reinject_report, injections_of, settled_injection_count, expect_no_scroll, expect_exactly_one_visible, visible_events, extension_view, close_tabs_with, record };
     return { context, state, piece_file };
   }
 
