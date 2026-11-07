@@ -235,14 +235,137 @@ test("get_selection goes to the sender frame", async () => {
   assert.deepEqual(asked, [[7, 3]]);
 });
 
-test("a sender frame is not used in a different tab", async () => {
-  const frames: (number | undefined)[] = [];
+test("a sender frame is not used when the sender tab is gone and the active tab takes over", async () => {
+  const sent: [number, number | undefined][] = [];
   const { deps } = make_fake(
     { "scroll.lines": { label: "Scroll", intent: "x", runs_in: "content", run: () => {} } },
-    { send_to_tab: async (_tab, _message, frame_id) => void frames.push(frame_id) },
+    { get_tab: async () => undefined, send_to_tab: async (tab_id, _message, frame_id) => void sent.push([tab_id, frame_id]) },
   );
   await create_router(deps).run({ invocations: [{ id: "scroll.lines" }], mode: "normal", sender_tab_id: 99, frame_id: 3 });
-  assert.deepEqual(frames, [0]);
+  assert.deepEqual(sent, [[7, 0]]);
+});
+
+test("a live sender tab keeps its frame while another tab is active", async () => {
+  const sent: [number, number | undefined][] = [];
+  const { deps } = make_fake(
+    { "scroll.lines": { label: "Scroll", intent: "x", runs_in: "content", run: () => {} } },
+    { send_to_tab: async (tab_id, _message, frame_id) => void sent.push([tab_id, frame_id]) },
+  );
+  await create_router(deps).run({ invocations: [{ id: "scroll.lines" }], mode: "normal", sender_tab_id: 99, frame_id: 3 });
+  assert.deepEqual(sent, [[99, 3]]);
+});
+
+test("a tab switch before step 0 does not move a leading content step or a leading background step", async () => {
+  const sent: [number, number | undefined][] = [];
+  const closed: (number | undefined)[] = [];
+  const commands = {
+    "hint.run": { label: "Hint", intent: "x", runs_in: "content" as const, run: () => {} },
+    "tab.close": { label: "Close", intent: "x", runs_in: "background" as const, run: (ctx: { tab_id: number | undefined }) => void closed.push(ctx.tab_id) },
+  };
+  const { deps } = make_fake(commands, {
+    active_tab: async () => ({ tab_id: 2, window_id: 1, url: undefined }),
+    send_to_tab: async (tab_id, _message, frame_id) => void sent.push([tab_id, frame_id]),
+  });
+  const router = create_router(deps);
+  await router.run({ invocations: [{ id: "hint.run" }], mode: "normal", sender_tab_id: 1, frame_id: 4 });
+  await router.run({ invocations: [{ id: "tab.close" }], mode: "normal", sender_tab_id: 1, frame_id: 4 });
+  assert.deepEqual(sent, [[1, 4]]);
+  assert.deepEqual(closed, [1]);
+});
+
+test("a switch during a waiting step 0 sends step 1 to the tab that is active by then", async () => {
+  let active = 1;
+  const ran: (number | undefined)[] = [];
+  const pick = pending_content();
+  const { deps } = make_fake(
+    {
+      "hint.run": { label: "Hint", intent: "x", runs_in: "content", run: () => {} },
+      "tab.next": { label: "Next", intent: "x", runs_in: "background", run: (ctx) => void ran.push(ctx.tab_id) },
+    },
+    { active_tab: async () => ({ tab_id: active, window_id: 1, url: undefined }), send_to_tab: pick.send_to_tab },
+  );
+  const running = create_router(deps).run({ invocations: [{ id: "hint.run" }, { id: "tab.next" }], mode: "normal", sender_tab_id: 1 });
+  await turn();
+  active = 2;
+  pick.reply({ ok: true });
+  await running;
+  assert.deepEqual(ran, [2]);
+});
+
+test("a repeated step 0 pins only its first time, and a repeated background step follows the active tab", async () => {
+  let active = 2;
+  const seen: (number | undefined)[] = [];
+  const { deps } = make_fake(
+    { "tab.next": { label: "Next", intent: "x", runs_in: "background", count: "repeat", run: (ctx) => void (seen.push(ctx.tab_id), active++) } },
+    { active_tab: async () => ({ tab_id: active, window_id: 1, url: undefined }) },
+  );
+  await create_router(deps).run({ invocations: [{ id: "tab.next", count: 3 }], mode: "normal", sender_tab_id: 1 });
+  assert.deepEqual(seen, [1, 3, 4]);
+});
+
+test("a repeated content step sends every repeat in one message to the sender tab", async () => {
+  const sent: [number, unknown][] = [];
+  const { deps } = make_fake(
+    { "scroll.lines": { label: "Scroll", intent: "x", runs_in: "content", count: "repeat", run: () => {} } },
+    { send_to_tab: async (tab_id, message) => void sent.push([tab_id, (message as { invocations: unknown[] }).invocations.length]) },
+  );
+  await create_router(deps).run({ invocations: [{ id: "scroll.lines", count: 3 }], mode: "normal", sender_tab_id: 1 });
+  assert.deepEqual(sent, [[1, 3]]);
+});
+
+test("a sender tab that fails to look up falls back to the active tab without throwing", async () => {
+  const sent: number[] = [];
+  const { deps } = make_fake(
+    { "scroll.lines": { label: "Scroll", intent: "x", runs_in: "content", run: () => {} } },
+    { get_tab: async () => { throw new Error("no tab"); }, send_to_tab: async (tab_id) => void sent.push(tab_id) },
+  );
+  assert.deepEqual(await create_router(deps).run({ invocations: [{ id: "scroll.lines" }], mode: "normal", sender_tab_id: 99 }), { ok: true });
+  assert.deepEqual(sent, [7]);
+});
+
+test("a sender frame that is gone after navigation refuses in the sender tab and does not throw", async () => {
+  const log: string[] = [];
+  const { deps } = make_fake(
+    { "scroll.lines": { label: "Scroll", intent: "x", runs_in: "content", run: () => {} } },
+    { send_to_tab: async () => { throw new Error("no frame"); }, show_refusal: async (tab_id, refusal, frame_id) => void log.push(`refuse ${tab_id} ${frame_id} ${refusal.message}`) },
+  );
+  const response = await create_router(deps).run({ invocations: [{ id: "scroll.lines" }], mode: "normal", sender_tab_id: 1, frame_id: 5 });
+  assert.equal(response.ok, false);
+  assert.deepEqual(log, ["refuse 1 5 Scroll needs a page DesertFox runs on"]);
+});
+
+test("the private flag comes from the sender tab, not the active tab", async () => {
+  const commands = { "tab.close": { label: "Close", intent: "x", runs_in: "background" as const, repeatable: true, run: () => {} } };
+  const { deps, slots } = make_fake(commands, {
+    active_tab: async () => ({ tab_id: 2, window_id: 1, url: undefined, incognito: false }),
+    get_tab: async (tab_id) => ({ tab_id, window_id: 1, url: undefined, incognito: true }),
+  });
+  await create_router(deps).run({ invocations: [{ id: "tab.close" }], mode: "normal", sender_tab_id: 1 });
+  assert.equal(slots.private?.length, 1);
+  assert.equal(slots.normal, undefined);
+});
+
+test("two overlapping runs each keep their own sender tab", async () => {
+  const sent: number[] = [];
+  const releases: (() => void)[] = [];
+  const { deps } = make_fake(
+    { "scroll.lines": { label: "Scroll", intent: "x", runs_in: "content", run: () => {} } },
+    {
+      // Every lookup of a run waits, so the runs interleave at each one.
+      get_tab: (tab_id) => new Promise((resolve) => releases.push(() => resolve({ tab_id, window_id: 1, url: undefined }))),
+      send_to_tab: async (tab_id) => void sent.push(tab_id),
+    },
+  );
+  const router = create_router(deps);
+  const first = router.run({ invocations: [{ id: "scroll.lines" }], mode: "normal", sender_tab_id: 1 });
+  const second = router.run({ invocations: [{ id: "scroll.lines" }], mode: "normal", sender_tab_id: 2 });
+  const settled = Promise.all([first, second]);
+  for (let round = 0; round < 10; round++) {
+    await turn();
+    releases.splice(0).reverse().forEach((release) => release());
+  }
+  await settled;
+  assert.deepEqual(sent.sort(), [1, 2]);
 });
 
 const open_url = { label: "Open", intent: "x", name: "open", params: [{ name: "url", type: "string" as const, main: true }], runs_in: "background" as const, run: () => assert.fail() };

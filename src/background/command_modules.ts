@@ -8,6 +8,7 @@ import "../commands/window.ts";
 import "../commands/browser.ts";
 import "../commands/zoom.ts";
 import "../commands/bookmark.ts";
+import "../commands/history.ts";
 import "../commands/page.ts";
 import "../commands/url.ts";
 import "../commands/open.ts";

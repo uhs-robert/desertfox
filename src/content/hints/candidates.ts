@@ -1,5 +1,6 @@
 // Finds the elements a hint filter can label. Visibility is decided later, in visible.ts.
 
+import { shadow_root_of } from "../shadow.ts";
 import { LAYER_ATTRIBUTE } from "../../shared/layers.ts";
 import { is_scroll_box } from "../scroll_box.ts";
 import { element_address, is_image_element, takes_typing } from "./actions.ts";
@@ -76,10 +77,6 @@ export const query_for = (filter: HintFilter, custom_selector: string | undefine
 export type Found = { element: Element; frames: Element[]; weak?: true };
 
 const MAX_FRAME_DEPTH = 4;
-
-// Firefox gives content scripts closed shadow roots through this property.
-const shadow_root_of = (element: Element): ShadowRoot | null =>
-  (element as Element & { openOrClosedShadowRoot?: ShadowRoot | null }).openOrClosedShadowRoot ?? element.shadowRoot;
 
 // A frame from another origin throws. The walk stops there, so a frame inside it gets no label from this page: focus the outer frame, then pick again.
 function document_of_frame(frame: Element): Document | null {

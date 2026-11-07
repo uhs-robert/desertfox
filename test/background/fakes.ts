@@ -14,6 +14,7 @@ export function make_fake(commands: Record<string, CommandInput>, overrides: Par
     get_command: (id) => registry.get(id),
     get_enum_sources: async () => ({ search_engines: ["arch"], containers: [] }),
     active_tab: async () => ({ tab_id: 7, window_id: 1, url: "https://example.org/" }),
+    get_tab: async (tab_id) => ({ tab_id, window_id: 1, url: "https://example.org/" }),
     has_content_script: async () => true,
     ask_selection: async () => "chosen text",
     runs_with_empty: async () => false,
