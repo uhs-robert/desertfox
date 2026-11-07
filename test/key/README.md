@@ -1,6 +1,6 @@
 # test/key
 
-Key tests. Each run builds the extension, starts Firefox in its own nested, invisible session, sends real key presses and checks what the page and the background report. `harness.mjs` holds the session (`create_session`: Firefox, the page server, the helpers and `run_piece` with the piece lifecycle), `run.mjs` holds the inline cases and the order of the run, `p<number>_*.mjs` are the pieces, `timings.mjs` measures where the time goes, `server.mjs` and `rdp.mjs` read the results, `launch_firefox.sh` starts Firefox, and `user.js` and `config/` set up the test profile.
+Key tests. Each run builds the extension, starts Firefox in its own nested, invisible session, sends real key presses and checks what the page and the background report. `harness.mjs` holds the session (`create_session`: Firefox, the page server, the helpers and `run_piece` with the piece lifecycle), `run.mjs` holds the order of the run and the summary, `p<number>_*.mjs` are the pieces, `timings.mjs` measures where the time goes, `server.mjs` and `rdp.mjs` read the results, `launch_firefox.sh` starts Firefox, and `user.js` and `config/` set up the test profile.
 
 ## Run
 
@@ -9,9 +9,9 @@ just key-test
 KEY_TEST_ONLY=<regex> just key-test
 ```
 
-A full run takes about 20 minutes (1154 s for 243 cases in the latest run) and needs a nested Hyprland. The key-test-speed work (#273) brings that down.
+A full run takes about 20 minutes (1143 s for 241 cases in the latest run) and needs a nested Hyprland. The key-test-speed work (#273) brings that down.
 
-- `KEY_TEST_ONLY` runs only the cases whose name matches. It also runs the cases marked `{ setup: true }` (inline cases in `run.mjs`) and every `h.setup` step of a piece, which leave state that later cases read. The output tags those as `SETUP`.
+- `KEY_TEST_ONLY` runs only the cases whose name matches. It also runs the cases marked `{ setup: true }` and every `h.setup` step of a piece, which leave state that later cases read. The output tags those as `SETUP`.
 - `SHADOW_SH` must name a script that runs `up|spawn|keys|down <name>` for a nested, invisible compositor session. It can also answer `status` with one `<name>: up|down ...` line per session, which the sweep reads.
   Cleanup of killed runs works only for drivers that keep a session's runtime dir in `/tmp/shadow-<uid>-<name>`.
   When `SHADOW_SH` is unset, the recipe uses `$HOME/dotfiles/.claude/skills/shadow/shadow.sh` if it is executable. With neither, it exits.
@@ -21,7 +21,7 @@ A full run takes about 20 minutes (1154 s for 243 cases in the latest run) and n
 
 `run_piece` in `harness.mjs` gives every piece the same start and the same cleanup, so a piece needs no state from the one before it.
 
-- Before the piece: one window with one tab at `page?id=home_<piece>`, active and focused (the page reports `document.hasFocus()`), the config link on `config_dir`, no temp settings. The first piece also clears what the inline `run.mjs` cases left.
+- Before the piece: one window with one tab at `page?id=home_<piece>`, active and focused (the page reports `document.hasFocus()`), the config link on `config_dir`, no temp settings.
 - After the piece, pass or fail: the `h.on_teardown` callbacks in reverse, every tab and window that was not in the start snapshot closed, the config link restored and reloaded, temp settings unset. A failed step is reported as a FAIL named `<piece> teardown` or `<piece> cleanup`. A failed reset skips the piece and reports `<piece> reset`.
 - `h.setup(name, fn)` runs under any filter, is timed as `(setup)` and counts in no total. If it fails, the cases behind it fail with `setup failed`.
 - `h.config_copy()` returns a private copy of the base config. Edit the copy and load it with `h.load_config_dir`. Never write `config_dir`.
