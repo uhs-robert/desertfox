@@ -186,7 +186,7 @@ test("the defaults stay the same", () => {
     hint_letters: "asdfghjkl",
     ignore_sites: [],
     next_patterns: ["next", "more", "newer", ">", "\u203a", "\u2192", "\u00bb", "\u226b", ">>"],
-    prev_patterns: ["prev", "previous", "back", "older", "<", "\u2039", "\u2190", "\u00ab", "\u226a", "<<"],
+    prev_patterns: ["prev", "previous", "older", "<", "\u2039", "\u2190", "\u00ab", "\u226a", "<<"],
     mode_indicator: "always",
     palette: "oasis_moonlight",
     light_intensity: 3,

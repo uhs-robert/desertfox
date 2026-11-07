@@ -53,7 +53,7 @@ define("page.home", {
 // The link search sits in the hints bundle, which loads on the first run. It reads the top page and same-origin frames only: a frame of another site has its own script and the top page cannot see its links.
 define("page.follow", {
   label: "Follow page link",
-  intent: "Go to the next or previous page of a series. It takes a link marked rel next or prev first, then the first link or button whose text matches the next_patterns or prev_patterns setting.",
+  intent: "Go to the next or previous page of a series. It takes a link marked rel next or prev first, then the link or button whose text best matches the next_patterns or prev_patterns setting: an earlier pattern wins, then a link over a button, then the shorter text.",
   params: [{ name: "direction", type: "enum", values: ["next", "prev"], value_labels: { next: "to next page", prev: "to previous page" }, description: { next: "Follow the link to the next page.", prev: "Follow the link to the previous page." } }, WHERE_PARAM],
   runs_in: "content",
   run: page_follow.run,

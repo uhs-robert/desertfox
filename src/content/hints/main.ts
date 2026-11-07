@@ -97,17 +97,17 @@ async function keep_visible_ones(candidates: Found[], filter: HintFilter): Promi
   return keep_visible_deduplicated(candidates, probe);
 }
 
-async function read_letters(): Promise<string[]> {
+async function read_setting(name: string): Promise<unknown> {
   const stored = await browser.storage.local.get(CONFIG_STATUS_STORAGE_KEY);
-  const status = stored[CONFIG_STATUS_STORAGE_KEY] as { settings?: { hint_letters?: unknown } } | undefined;
-  return clean_letters(status?.settings?.hint_letters);
+  const status = stored[CONFIG_STATUS_STORAGE_KEY] as { settings?: Record<string, unknown> } | undefined;
+  return status?.settings?.[name];
 }
+
+const read_letters = async (): Promise<string[]> => clean_letters(await read_setting("hint_letters"));
 
 async function read_patterns(direction: FollowDirection): Promise<string[]> {
   const name = direction === "next" ? "next_patterns" : "prev_patterns";
-  const stored = await browser.storage.local.get(CONFIG_STATUS_STORAGE_KEY);
-  const status = stored[CONFIG_STATUS_STORAGE_KEY] as { settings?: Record<string, unknown> } | undefined;
-  const chosen = status?.settings?.[name];
+  const chosen = await read_setting(name);
   return Array.isArray(chosen) && chosen.every((entry) => typeof entry === "string") ? chosen : [...DEFAULT_SETTINGS[name]];
 }
 
