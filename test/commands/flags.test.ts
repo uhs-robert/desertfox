@@ -23,6 +23,7 @@ test("typed names are the dotted id except the family words and one-word command
     "heading.go=heading",
     "help.open=help",
     "hint.run=hint",
+    "history.open=history",
     "mode.set=mode",
     "open.clipboard=paste",
     "open.search=search",
