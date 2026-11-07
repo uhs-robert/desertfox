@@ -22,7 +22,7 @@ A note "(prompts)" means the binding sets a `prompt` for a param, so the command
 
 <!-- BEGIN generated -->
 
-bound: 276 (normal 142, hint 2, cmdline 17, caret 35, visual 37, visual_line 38, insert 1, ignore 1, browser 3) | later: 14 | dropped: 6
+bound: 277 (normal 142, hint 2, cmdline 18, caret 35, visual 37, visual_line 38, insert 1, ignore 1, browser 3) | later: 14 | dropped: 6
 
 ### normal
 
@@ -241,6 +241,7 @@ Which-key group names:
 | `<A-x>` | bound | `list.act close` | Close the tab |  |
 | `<A-m>` | bound | `list.act mute` | Mute or unmute the tab |  |
 | `<A-p>` | bound | `list.act pin` | Pin or unpin the tab |  |
+| `<A-c>` | bound | `list.act reopen` | Reopen the tab in a container |  |
 
 ### caret
 

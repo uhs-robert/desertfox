@@ -1,4 +1,4 @@
-import { define } from "../shared/registry/index.ts";
+import { define } from "../shared/registry/builtin.ts";
 import { mark_reload_pending } from "../background/reload.ts";
 
 define("config.reload", {

@@ -3,6 +3,8 @@
 // Text in fields, scripts, styles and hidden elements is left out: fields belong to insert mode.
 // The walk follows the rendered order into open and closed shadow roots and into same-origin frames.
 
+import { shadow_root_of } from "../shadow.ts";
+
 // A tree the text lives in. A Range and a style rule each reach into one tree only.
 export type TextTree = Document | ShadowRoot;
 
@@ -13,6 +15,12 @@ export type TextModel = {
   index_of: (node: Node, offset: number) => number | undefined;
   // Every tree with text in the model, in the order the text meets them.
   trees: TextTree[];
+  // Shadow roots and frame documents the walk met that gave no text, so a later fill is not seen through `trees`. Never overlaps `trees`.
+  empty_trees: TextTree[];
+  // Custom elements (a hyphen in the tag name) the walk met with no shadow root. One can attach a root later, and that fires no mutation. A plain element can too, and is left out: checking every element is the cost this list avoids.
+  pending_hosts: Element[];
+  // Every frame element the walk met. A frame that loads or navigates later fires `load` on the element and no mutation in this tree.
+  frames: Element[];
   // The characters from `from` up to `to`, cut where the text passes into another tree.
   tree_runs: (from: number, to: number) => TreeRun[];
   // The first character of the `start_node` given to the build, or of the text after it. Undefined when no text follows it.
@@ -39,10 +47,6 @@ const is_block = (style: CSSStyleDeclaration) => !style.display.startsWith("inli
 
 const is_frame = (element: Element) => element.localName === "iframe" || element.localName === "frame";
 
-// Firefox gives content scripts closed shadow roots through this property.
-const shadow_root_of = (element: Element): ShadowRoot | null =>
-  (element as Element & { openOrClosedShadowRoot?: ShadowRoot | null }).openOrClosedShadowRoot ?? element.shadowRoot;
-
 // Null for a frame from another origin: reading it throws, and its own content script covers it.
 export function frame_document(element: Element): Document | null {
   if (!is_frame(element)) return null;
@@ -66,6 +70,9 @@ export function build_text_model(root: Element = document.body, start_node?: Nod
   const empty_lines = new Map<number, DomPoint>();
   const tree_starts: TreeStart[] = [];
   const trees = new Set<TextTree>();
+  const met_trees = new Set<TextTree>();
+  const frames: Element[] = [];
+  const pending_hosts: Element[] = [];
   let text = "";
   let last_block: Element | undefined;
   let after_space = true;
@@ -148,9 +155,14 @@ export function build_text_model(root: Element = document.body, start_node?: Nod
     if (is_frame(element)) {
       // The frame is the block around its body, so its text starts and ends a line.
       const inner = frame_document(element);
+      frames.push(element);
+      if (inner) met_trees.add(inner);
       if (inner?.body && frame_depth < MAX_FRAME_DEPTH) visit(inner.body, element, false, frame_depth + 1);
       return;
     }
+    const shadow = shadow_root_of(element);
+    if (shadow) met_trees.add(shadow);
+    else if (element.localName.includes("-")) pending_hosts.push(element);
     const children = rendered_children(element);
     const inner_block = is_block(style) ? element : block;
     const inner_preformatted = style.whiteSpace.startsWith("pre");
@@ -163,6 +175,9 @@ export function build_text_model(root: Element = document.body, start_node?: Nod
     point_at: (index) => empty_lines.get(index) ?? point_at(segments, index),
     index_of: (node, offset) => index_of(segments, empty_lines, node, offset),
     trees: [...trees],
+    empty_trees: [...met_trees].filter((tree) => !trees.has(tree)),
+    pending_hosts,
+    frames,
     tree_runs: (from, to) => tree_runs(tree_starts, from, to),
     start_index,
     truncated,
@@ -191,6 +206,17 @@ function is_alive(tree: TextTree): boolean {
 }
 
 export const trees_alive = (model: TextModel): boolean => model.trees.every(is_alive);
+
+// True when a custom element that had no shadow root at build time has one now, so its text is not in the model.
+// A host of a removed or navigated frame is a dead wrapper in Firefox and throws on read. It counts as changed, so the model is read again.
+export const host_gained_root = (model: TextModel): boolean =>
+  model.pending_hosts.some((host) => {
+    try {
+      return shadow_root_of(host) !== null;
+    } catch {
+      return true;
+    }
+  });
 
 // Each document holds one selection, for itself and for the shadow roots inside it. A dead one is left out.
 export const documents_of = (model: TextModel): Document[] => [...new Set(model.trees.filter(is_alive).map(document_of))];

@@ -2,7 +2,7 @@ import "./command_modules.ts";
 import type { ContentToBackground, PageToBackground } from "../shared/messages.ts";
 import type { BoundInvocation } from "../shared/invocation.ts";
 import { DEFAULT_SETTINGS, effective_settings } from "../shared/config.ts";
-import { bundle_loader_deps, container_names, image_deps, make_router_deps, page_of, reinject_deps } from "./browser_deps.ts";
+import { bundle_loader_deps, container_names, container_stores, image_deps, make_router_deps, page_of, reinject_deps } from "./browser_deps.ts";
 import { run_image_action } from "./image_actions.ts";
 import { HELP_PAGE_FILE } from "../help/route.ts";
 import { open_quick_start_on_install } from "./first_install.ts";
@@ -27,7 +27,8 @@ import { SLOT_TABLE_STORAGE_KEY } from "./storage_keys.ts";
 import { change_edits, get_config, get_search_engine_names, snippets } from "./startup.ts";
 import { load_effective_config } from "./config_load.ts";
 import { create_settings_messages, is_extension_page } from "./settings_message.ts";
-import { command_meta, registry } from "../shared/registry/index.ts";
+import { command_meta } from "../shared/registry/index.ts";
+import { registry } from "../shared/registry/builtin.ts";
 import { forget_all_tab_modes, forget_mode_on_navigation, forget_tab_mode, recall_tab_mode, remember_reported_mode, shortcut_allowed } from "./tab_modes.ts";
 import type { SlotTable } from "./slots.ts";
 import type { SnippetCall } from "./snippets.ts";
@@ -56,6 +57,7 @@ const cmdline = create_cmdline_service({
   sources: async () => ({ search_engines: await get_search_engine_names(), containers: await container_names() }),
   // A failed query must not stop the line from opening.
   tab_count: async (window_id) => (await browser.tabs.query({ windowId: window_id }).catch(() => [])).length,
+  container_stores,
   page_config: async () => {
     const config = await get_config();
     const settings = effective_settings(config.settings);
@@ -85,6 +87,7 @@ const complete_items = create_complete_items({
     const { open_completion, history_completion_max } = effective_settings((await get_config()).settings);
     return { sources: open_completion, history_max: history_completion_max };
   },
+  history_list_max: async () => effective_settings((await get_config()).settings).history_list_max,
 });
 
 track_window_focus(browser.storage.session, browser.windows);
@@ -111,9 +114,9 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
   if (request?.type === "load_bundle") return bundle_loader.answer(sender, request.name);
   if (request?.type === "find_scan" && is_scan_request(request)) return find_scan.answer(request, `${sender.tab?.id}:${sender.frameId}`);
   if (request?.type === "issue_cmdline_ticket") return cmdline.issue_ticket(sender.tab?.id);
-  if (request?.type === "open_cmdline") return get_config().then(() => cmdline.open(request.ticket, sender.tab?.id, sender.frameId, sender.tab?.windowId, sender.tab));
+  if (request?.type === "open_cmdline") return get_config().then(() => cmdline.open(request.ticket, sender.tab?.id, sender.frameId, sender.tab?.windowId, sender.tab, sender.tab?.incognito === true));
   if (request?.type === "complete_items") return complete_items.answer(request.kind, asker_of(sender));
-  if (request?.type === "tab_rows_action") return complete_items.tab_rows_action(request.action, request.tab_ids, asker_of(sender));
+  if (request?.type === "tab_rows_action") return complete_items.tab_rows_action(request.action, request.tab_ids, asker_of(sender), request.cookie_store_id);
   if (request?.type === "image_action") return run_image_action(image_deps, request, { incognito: sender.tab?.incognito === true, cookie_store_id: sender.tab?.cookieStoreId });
   if (request?.type === "read_tab_address") return Promise.resolve(sender.tab?.url);
   if (request?.type === "open_help") return open_help.open(request.command_id, sender.tab?.id, sender.frameId);

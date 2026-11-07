@@ -19,6 +19,7 @@ export const DEFAULT_CMDLINE_PROMPT: Settings["cmdline_prompt"] = "caret";
 export const DEFAULT_OPEN_COMPLETION: Settings["open_completion"] = ["bookmarks","history"];
 export const DEFAULT_STATUSBAR_WIDGETS: Settings["statusbar_widgets"] = ["url","scroll","tabs"];
 export const DEFAULT_HISTORY_COMPLETION_MAX: Settings["history_completion_max"] = 10;
+export const DEFAULT_HISTORY_LIST_MAX: Settings["history_list_max"] = 20;
 export const DEFAULT_NEWTAB_CLOCK: Settings["newtab_clock"] = true;
 export const DEFAULT_NEWTAB_DATE: Settings["newtab_date"] = true;
 export const DEFAULT_NEWTAB_CLOCK_FORMAT: Settings["newtab_clock_format"] = 12;
@@ -46,6 +47,7 @@ export const DEFAULT_SETTINGS: Settings = {
   open_completion: DEFAULT_OPEN_COMPLETION,
   statusbar_widgets: DEFAULT_STATUSBAR_WIDGETS,
   history_completion_max: DEFAULT_HISTORY_COMPLETION_MAX,
+  history_list_max: DEFAULT_HISTORY_LIST_MAX,
   newtab_clock: DEFAULT_NEWTAB_CLOCK,
   newtab_date: DEFAULT_NEWTAB_DATE,
   newtab_clock_format: DEFAULT_NEWTAB_CLOCK_FORMAT,

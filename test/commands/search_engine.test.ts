@@ -14,7 +14,8 @@ import { get_config } from "../../src/background/startup.ts";
 import { current_page } from "../../src/commands/open_target.ts";
 import type { BoundInvocation } from "../../src/shared/invocation.ts";
 import type { TreeLeaf } from "../../src/shared/prefix_tree.ts";
-import { parse_command_line, registry } from "../../src/shared/registry/index.ts";
+import { parse_command_line } from "../../src/shared/registry/index.ts";
+import { registry } from "../../src/shared/registry/builtin.ts";
 import { parse_binding } from "../../src/shared/registry/parse_binding.ts";
 import { build_config, read_commands_file } from "../../tools/build-config/build_config.ts";
 
@@ -145,6 +146,7 @@ async function press(text: string, selection: string): Promise<{ lines: string[]
     get_command: (id) => registry.get(id),
     get_enum_sources: async () => ({ search_engines: Object.keys(stored_engines()), containers: [] }),
     active_tab: async () => ({ tab_id: 1, window_id: 1, url: page?.url }),
+    get_tab: async () => undefined,
     has_content_script: async () => true,
     ask_selection: async () => selection,
     runs_with_empty: async (id, args, param) => runs_with_empty(await get_config(), id, args, param, page),

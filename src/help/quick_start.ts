@@ -10,8 +10,9 @@ import type { Block, Inline } from "./blocks.ts";
 
 type Args = Record<string, unknown>;
 
-// `args` is the canonical form the command line fallback prints. `test` reads args with the registry defaults filled in.
-type Binding = { mode: KeymapMode; id: string; args: Args; test: (args: Args) => boolean; prefer?: string };
+// `args` is the canonical form the command line fallback prints. A key fits when its args, with the registry defaults filled in, equal the defaulted `args`.
+// `test` replaces that equality where a step accepts more than one form. It gets both defaulted sides.
+type Binding = { mode: KeymapMode; id: string; args: Args; test?: (args: Args, expected: Args) => boolean; prefer?: string };
 
 // A user binding that spells out a default (`direction = "forward"`) and one that leaves it out mean the same, so both sides read the defaults.
 function with_defaults(commands: CommandMeta[], id: string, args: Args | undefined): Args {
@@ -24,13 +25,28 @@ function with_defaults(commands: CommandMeta[], id: string, args: Args | undefin
   return filled;
 }
 
+// A key that runs several steps does more than the sentence says, so only a single step can fit.
+function fits(commands: CommandMeta[], binding: Binding, steps: { invocation: { id: string; args?: Args } }[]): boolean {
+  const [step] = steps;
+  if (steps.length !== 1 || step!.invocation.id !== binding.id) return false;
+  const args = with_defaults(commands, binding.id, step!.invocation.args);
+  const expected = with_defaults(commands, binding.id, binding.args);
+  return binding.test ? binding.test(args, expected) : same_args(args, expected);
+}
+
+function same_args(args: Args, expected: Args, ignored?: string): boolean {
+  const names = new Set([...Object.keys(args), ...Object.keys(expected)]);
+  names.delete(ignored ?? "");
+  return [...names].every((name) => args[name] === expected[name]);
+}
+
 // The token paths of every key that runs a matching invocation, shortest first. A `prefer` key wins when it is bound.
 function key_paths(compiled: CompiledKeymap | undefined, commands: CommandMeta[], binding: Binding): string[][] {
   const found: string[][] = [];
   const walk = (node: TreeNode, path: string[]): void => {
     if (node.kind === "branch") {
       for (const [token, child] of Object.entries(node.children)) walk(child, [...path, token]);
-    } else if (node.steps.some(({ invocation }) => invocation.id === binding.id && binding.test(with_defaults(commands, invocation.id, invocation.args)))) {
+    } else if (fits(commands, binding, node.steps)) {
       found.push(path);
     }
   };
@@ -40,46 +56,39 @@ function key_paths(compiled: CompiledKeymap | undefined, commands: CommandMeta[]
   return preferred.length > 0 ? preferred : found.sort((a, b) => a.join("").length - b.join("").length);
 }
 
-const arg_is = (name: string, value: unknown) => (args: Args): boolean => args[name] === value;
-const all = (...tests: ((args: Args) => boolean)[]) => (args: Args): boolean => tests.every((test) => test(args));
-const number_arg = (name: string, test: (value: number) => boolean) => (args: Args): boolean => typeof args[name] === "number" && test(args[name]);
-const forward = (args: Args): boolean => args.direction !== "back";
-const no_axis = (args: Args): boolean => args.axis === undefined || args.axis === "y";
-const move = (unit: string, back: boolean, extra: Args = {}): Pick<Binding, "id" | "args" | "test"> => ({
-  id: "caret.move",
-  args: { unit, ...(back ? { direction: "back" } : {}), ...extra },
-  test: (args) => args.unit === unit && (args.direction === "back") === back && args.big !== true,
-});
+// Any count of the right sign scrolls the way the sentence says.
+const scrolls = (positive: boolean): NonNullable<Binding["test"]> => (args, expected) => typeof args.count === "number" && (positive ? args.count > 0 : args.count < 0) && same_args(args, expected, "count");
+const move = (unit: string, back: boolean): Pick<Binding, "id" | "args"> => ({ id: "caret.move", args: { unit, ...(back ? { direction: "back" } : {}) } });
 
 const BINDINGS = {
-  down: { mode: "normal", id: "scroll.lines", args: { count: 10 }, test: number_arg("count", (n) => n > 0) },
-  up: { mode: "normal", id: "scroll.lines", args: { count: -10 }, test: number_arg("count", (n) => n < 0) },
-  top: { mode: "normal", id: "scroll.to", args: { percent: 0 }, test: all(arg_is("percent", 0), no_axis) },
-  bottom: { mode: "normal", id: "scroll.to", args: { percent: 100 }, test: all(arg_is("percent", 100), no_axis) },
-  half_page: { mode: "normal", id: "scroll.pages", args: { fraction: 0.5 }, test: arg_is("fraction", 0.5) },
-  hint: { mode: "normal", id: "hint.run", args: { action: "here" }, test: arg_is("action", "here") },
-  hint_copy: { mode: "normal", id: "hint.run", args: { action: "copy", filter: "links" }, test: all(arg_is("action", "copy"), arg_is("filter", "links")) },
-  cmdline: { mode: "normal", id: "cmdline.open", args: {}, test: (args) => args.text === "" || args.text === undefined },
-  find: { mode: "normal", id: "find.open", args: {}, test: all(arg_is("direction", "forward"), arg_is("source", "typed")) },
-  find_back: { mode: "normal", id: "find.open", args: { direction: "backward" }, test: all(arg_is("direction", "backward"), arg_is("source", "typed")) },
+  down: { mode: "normal", id: "scroll.lines", args: { count: 10 }, test: scrolls(true) },
+  up: { mode: "normal", id: "scroll.lines", args: { count: -10 }, test: scrolls(false) },
+  top: { mode: "normal", id: "scroll.to", args: { percent: 0 } },
+  bottom: { mode: "normal", id: "scroll.to", args: { percent: 100 } },
+  half_page: { mode: "normal", id: "scroll.pages", args: { fraction: 0.5 } },
+  hint: { mode: "normal", id: "hint.run", args: { action: "here" } },
+  hint_copy: { mode: "normal", id: "hint.run", args: { action: "copy", filter: "links" } },
+  cmdline: { mode: "normal", id: "cmdline.open", args: {} },
+  find: { mode: "normal", id: "find.open", args: {} },
+  find_back: { mode: "normal", id: "find.open", args: { direction: "backward" } },
   next: { mode: "normal", id: "find.next", args: {}, test: () => true },
   previous: { mode: "normal", id: "find.prev", args: {}, test: () => true },
-  caret: { mode: "normal", id: "mode.set", args: { mode: "caret" }, test: arg_is("mode", "caret") },
-  caret_at_element: { mode: "normal", id: "hint.run", args: { action: "caret", filter: "all" }, test: arg_is("action", "caret") },
-  visual_at_element: { mode: "normal", id: "hint.run", args: { action: "visual", filter: "all" }, test: arg_is("action", "visual") },
+  caret: { mode: "normal", id: "mode.set", args: { mode: "caret" } },
+  caret_at_text: { mode: "normal", id: "hint.run", args: { action: "caret", filter: "prose" } },
+  visual_at_text: { mode: "normal", id: "hint.run", args: { action: "visual", filter: "prose" } },
   // Looked up in caret mode, because the sentence follows entering caret mode and `v` there starts visual mode.
-  visual: { mode: "caret", id: "mode.set", args: { mode: "visual" }, test: arg_is("mode", "visual") },
-  visual_line: { mode: "caret", id: "mode.set", args: { mode: "visual_line" }, test: arg_is("mode", "visual_line") },
+  visual: { mode: "caret", id: "mode.set", args: { mode: "visual" } },
+  visual_line: { mode: "caret", id: "mode.set", args: { mode: "visual_line" } },
   caret_left: { mode: "caret", ...move("char", true) },
   caret_right: { mode: "caret", ...move("char", false) },
   caret_down: { mode: "caret", ...move("line", false) },
   caret_up: { mode: "caret", ...move("line", true) },
   caret_word: { mode: "caret", ...move("word", false) },
-  yank: { mode: "visual", id: "visual.act", args: { action: "yank" }, test: arg_is("action", "yank") },
-  swap: { mode: "visual", id: "visual.act", args: { action: "swap" }, test: arg_is("action", "swap") },
+  yank: { mode: "visual", id: "visual.act", args: { action: "yank" } },
+  swap: { mode: "visual", id: "visual.act", args: { action: "swap" } },
   // `<C-[>` also escapes, but `<Escape>` is the key a reader knows.
   escape: { mode: "normal", id: "mode.escape", args: {}, test: () => true, prefer: "<Escape>" },
-  help: { mode: "normal", id: "help.open", args: {}, test: () => true },
+  help: { mode: "normal", id: "help.open", args: {} },
 } satisfies Record<string, Binding>;
 
 type BindingName = keyof typeof BINDINGS;
@@ -154,7 +163,7 @@ export function quick_start_blocks(compiled: CompiledKeymap | undefined, command
     heading("Caret mode and visual mode"),
     say("Caret mode puts a cursor in the page text, so you can move over text with the keyboard and select it. It starts after a search at the match, and otherwise at the first visible text."),
     say("Press {caret} to start caret mode. Move with {caret_left}, {caret_down}, {caret_up} and {caret_right}, or by word with {caret_word}. Press {visual} to start visual mode, which selects the text you move over. Press {visual_line} instead to select whole lines. In visual mode, {yank} copies the selection and {swap} swaps its ends. {escape} steps back to the mode before."),
-    say("To start at a link or another element, press {caret_at_element} for caret mode or {visual_at_element} for visual mode, then type the label of the element."),
+    say("To start at a piece of text, press {caret_at_text} for caret mode or {visual_at_text} for visual mode, then type the label of the text."),
     heading("Help"),
     say("Press {help} on any page to open this help. The Commands page lists every key, and the Home page shows your settings and any config warnings."),
   ];

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { build_text_model, documents_of, MAX_TEXT_CHARS, trees_alive } from "../src/content/caret/text_model.ts";
+import { build_text_model, documents_of, host_gained_root, MAX_TEXT_CHARS, trees_alive } from "../src/content/caret/text_model.ts";
 
 // A fake rendered tree: just the DOM members the walk reads.
 type FakeNode = Record<string, unknown> & { nodeType: number; tree?: FakeTree };
@@ -164,4 +164,44 @@ test("one text node above the cap is cut at the cap", () => {
   const model = model_of(element("body", [element("p", [text("x".repeat(MAX_TEXT_CHARS + 1000))])]));
   assert.equal(model.truncated, true);
   assert.equal(model.text.length <= MAX_TEXT_CHARS, true);
+});
+
+test("a shadow root and a frame without text are listed for the watcher, and a root with text is not", () => {
+  const empty_host = element("div", [], { shadow: [] });
+  const full_host = element("div", [], { shadow: [text("in")] });
+  const empty_frame = element("iframe", [], { frame: element("body", []) });
+  const model = model_of(element("body", [element("p", [text("top")]), empty_host, full_host, empty_frame]));
+  assert.equal(model.trees.length, 2);
+  assert.equal(model.empty_trees.length, 2);
+  assert.equal(model.empty_trees.includes(empty_host.openOrClosedShadowRoot as never), true);
+  assert.equal(model.empty_trees.includes(full_host.openOrClosedShadowRoot as never), false);
+  assert.deepEqual(model.frames, [empty_frame as unknown as Element]);
+});
+
+test("a custom element with no shadow root is listed as pending, and a plain element or a custom element with a root is not", () => {
+  const pending = element("my-widget", [], {});
+  const rooted = element("my-card", [], { shadow: [text("in")] });
+  const plain = element("div", [], {});
+  const model = model_of(element("body", [element("p", [text("top")]), pending, rooted, plain]));
+  assert.deepEqual(model.pending_hosts, [pending as unknown as Element]);
+});
+
+test("a custom element that gains a root, open or closed, is seen by host_gained_root, and a plain element that gains one is not", () => {
+  for (const key of ["shadowRoot", "openOrClosedShadowRoot"]) {
+    const pending = element("my-widget", [], {});
+    const plain = element("div", [], {});
+    const model = model_of(element("body", [element("p", [text("top")]), pending, plain]));
+    assert.equal(host_gained_root(model), false);
+    plain[key] = { childNodes: [] };
+    assert.equal(host_gained_root(model), false, "a plain element is not watched");
+    pending[key] = { childNodes: [] };
+    assert.equal(host_gained_root(model), true, key);
+  }
+});
+
+test("a pending host whose shadow root read throws counts as changed", () => {
+  const dead = element("my-widget", [], {});
+  const model = model_of(element("body", [element("p", [text("top")]), dead]));
+  Object.defineProperty(dead, "openOrClosedShadowRoot", { get: () => { throw new Error("dead object"); } });
+  assert.equal(host_gained_root(model), true);
 });

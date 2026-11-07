@@ -7,7 +7,8 @@ import { empty_config } from "../../src/background/config_load.ts";
 import { create_router } from "../../src/background/router.ts";
 import type { TreeLeaf } from "../../src/shared/prefix_tree.ts";
 import { make_fake } from "../background/fakes.ts";
-import { check_args, registry } from "../../src/shared/registry/index.ts";
+import { check_args } from "../../src/shared/registry/index.ts";
+import { registry } from "../../src/shared/registry/builtin.ts";
 
 type Opened = { via: string; url: string | undefined };
 

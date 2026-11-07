@@ -196,6 +196,14 @@ export const SETTING_COMPLETION: readonly SettingCompletion[] = [
     "values": []
   },
   {
+    "name": "history_list_max",
+    "settable": true,
+    "is_toggle": false,
+    "is_list": false,
+    "expectation": "a whole number, 0 or more",
+    "values": []
+  },
+  {
     "name": "newtab_clock",
     "settable": true,
     "is_toggle": false,

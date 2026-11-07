@@ -1,10 +1,10 @@
 // The tabs, bookmarks, engines and headings the list offers. The background hands out the bookmarks, engines, open rows and windows and the host script the headings, once per kind, and the line keeps them, so
 // ranking a keystroke never waits. The tabs are not fetched: the live tab model keeps them current. Pure: the page passes in the asking and the redraw.
 
-import type { BookmarkItem, CompleteItemsAnswer, EngineItem, HeadingItem, OpenItems, TabItem, WindowItem } from "../../shared/messages.ts";
+import type { BookmarkItem, CompleteItemsAnswer, EngineItem, HeadingItem, HistoryItems, OpenItems, TabItem, WindowItem } from "../../shared/messages.ts";
 
-export type LiveKind = "tabs" | "bookmarks" | "engines" | "open" | "windows" | "headings";
-export type LiveItems = { tabs: TabItem[]; bookmarks: BookmarkItem[]; engines: EngineItem[]; open: OpenItems; windows: WindowItem[]; headings: HeadingItem[] };
+export type LiveKind = "tabs" | "bookmarks" | "engines" | "history" | "open" | "windows" | "headings";
+export type LiveItems = { tabs: TabItem[]; bookmarks: BookmarkItem[]; engines: EngineItem[]; history: HistoryItems; open: OpenItems; windows: WindowItem[]; headings: HeadingItem[] };
 export type LiveRead<Kind extends LiveKind> = { loading: true } | { loading: false; items: LiveItems[Kind] };
 
 type FetchedKind = Exclude<LiveKind, "tabs">;
@@ -17,7 +17,7 @@ export type LiveDeps = {
   on_ready: () => void;
 };
 
-const empty_items = (kind: FetchedKind): CompleteItemsAnswer["items"] => (kind === "open" ? { rows: [], history_max: 0 } : []);
+const empty_items = (kind: FetchedKind): CompleteItemsAnswer["items"] => (kind === "open" ? { rows: [], history_max: 0 } : kind === "history" ? { rows: [], max: 0 } : []);
 
 export function create_live_source(deps: LiveDeps) {
   const cache: { [Kind in FetchedKind]?: LiveItems[Kind] } = {};

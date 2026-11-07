@@ -1,6 +1,7 @@
 import type { ScrollCandidate, ScrollAxis } from "../scroll_target.ts";
 import { LINE_PIXELS, percent_to_offset, pick_scroll_target } from "../scroll_target.ts";
 import { candidate_of } from "../scroll_box.ts";
+import { deepest_focused_element } from "../editable.ts";
 import type { ContentHandler } from "./types.ts";
 
 export const SCROLL_TO_DEFAULT_AXIS = "y";
@@ -16,18 +17,9 @@ function page_candidate(): ScrollCandidate<Element> | undefined {
   };
 }
 
-// Focus inside a shadow root shows on the host only, so the walk goes down to the inner element first and climbs out through the hosts.
-type ShadowHost = Element & { openOrClosedShadowRoot?: ShadowRoot | null };
-
-function focused_element(): Element | null {
-  let element = document.activeElement;
-  for (let inner = element; inner; inner = (inner as ShadowHost).openOrClosedShadowRoot?.activeElement ?? (inner as ShadowHost).shadowRoot?.activeElement ?? null) element = inner;
-  return element;
-}
-
 function focus_chain(): ScrollCandidate<Element>[] {
   const chain: ScrollCandidate<Element>[] = [];
-  for (let element = focused_element(); element; element = element.parentElement ?? (element.getRootNode() as ShadowRoot).host ?? null) {
+  for (let element = deepest_focused_element(); element; element = element.parentElement ?? (element.getRootNode() as ShadowRoot).host ?? null) {
     if (element !== document.body && element !== document.documentElement) chain.push(candidate_of(element));
   }
   return chain;

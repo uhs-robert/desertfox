@@ -5,7 +5,7 @@ import "../../src/background/command_modules.ts";
 import { DEFAULT_KEYMAP } from "../../src/background/default_keymap.ts";
 import type { CommandDef } from "../../src/shared/command.ts";
 import type { KeymapConfig } from "../../src/shared/keymap.ts";
-import { registry } from "../../src/shared/registry/index.ts";
+import { registry } from "../../src/shared/registry/builtin.ts";
 import { read_planned } from "../../tools/keymap_docs/planned.ts";
 import { render } from "../../tools/keymap_docs/render.ts";
 import { BEGIN_MARKER, cell, code, END_MARKER, splice } from "../../tools/keymap_docs/splice.ts";

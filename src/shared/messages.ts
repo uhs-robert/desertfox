@@ -68,10 +68,15 @@ export type OpenCmdline = {
   ticket: string;
 };
 
+// A container by name and cookie store id. The page lists the names and sends the id, because names can repeat.
+export type ContainerStore = { name: string; cookie_store_id: string };
+
 export type CmdlineOpened = {
   // Oldest first.
   history: string[];
   sources: { search_engines: string[]; containers: string[] };
+  // The containers the tab list can reopen tabs in, `default` first. Empty on a private line and with containers off.
+  container_stores: ContainerStore[];
   // The runtime registry, snippets included, which `commands.json` lacks.
   commands: CommandMeta[];
   command_aliases: Record<string, string>;
@@ -98,17 +103,20 @@ export type RecordCmdline = {
 // sender is a tab whose line redeemed a ticket, and it holds only tabs and windows of the sender's own privacy (private or not).
 export type CompleteItems = {
   type: "complete_items";
-  kind: "bookmarks" | "engines" | "open" | "windows";
+  kind: "bookmarks" | "engines" | "history" | "open" | "windows";
 };
 
 // From the command line page when a row key acts on tabs of the list. `tab_ids` were captured at the key press, so a later change of the list does not change them. The answer is undefined unless the sender is a tab whose line
 // redeemed a ticket and every id that still names a tab is of the sender's own privacy. An id with no tab is skipped. `refusal` says why some tabs did not change.
-export type TabRowsAction = "close" | "unload" | "load" | "mute" | "unmute" | "pin" | "unpin";
+// `reopen` also carries `cookie_store_id`, the container to reopen the tabs in. The background also leaves out the line's own tab and tabs already in that container, and refuses a private line and a store id it does not know.
+// Its answer counts the tabs that moved when some did not.
+export type TabRowsAction = "close" | "unload" | "load" | "mute" | "unmute" | "pin" | "unpin" | "reopen";
 
 export type TabRowsActionRequest = {
   type: "tab_rows_action";
   action: TabRowsAction;
   tab_ids: number[];
+  cookie_store_id?: string;
 };
 
 export type TabRowsActionAnswer = { refusal?: string };
@@ -153,13 +161,16 @@ export type OpenRow = { title: string; url: string; tag: OpenTag };
 // Every row, in the group order of the `open_completion` setting and without a duplicate address. The page caps an empty word: 20 bookmarks and `history_max` history rows.
 export type OpenItems = { rows: OpenRow[]; history_max: number };
 
+// The `history` command's rows, newest first and with no dedup against bookmarks. `max` is the `history_list_max` cap that the page applies to an empty word, so a typed word still ranks every row.
+export type HistoryItems = { rows: HistoryItem[]; max: number };
+
 // `number` is the window's place in `windows.getAll`, counted from 1, so it stays when other windows drop out of the list. `title` is its active tab's.
 export type WindowItem = { number: number; title: string };
 
 // A heading of the page, from the host script. `level` is 1 to 6, `text` is the rendered text, trimmed.
 export type HeadingItem = { level: number; text: string };
 
-export type CompleteItemsAnswer = { items: BookmarkItem[] | EngineItem[] | OpenItems | WindowItem[] | HeadingItem[] };
+export type CompleteItemsAnswer = { items: BookmarkItem[] | EngineItem[] | HistoryItems | OpenItems | WindowItem[] | HeadingItem[] };
 
 // From the `hints` bundle at the start of a pick: what `.` shows again. The background checks it like any page message, because the sender is a page script.
 export type RecordRepeat = {

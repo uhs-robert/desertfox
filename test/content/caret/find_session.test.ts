@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { create_find, is_page_change } from "../../../src/content/caret/find_session.ts";
+import { create_find, is_page_change, page_watcher } from "../../../src/content/caret/find_session.ts";
 import type { FindDeps } from "../../../src/content/caret/find_session.ts";
 import type { ScanRegex } from "../../../src/content/caret/find_match.ts";
 import { scan_regex } from "../../../src/background/regex_scan.ts";
@@ -18,10 +18,11 @@ function fake_page(page_text = "ab ab ab") {
   const watchers: (() => void)[] = [];
   let retargets = 0;
   let builds = 0;
+  const pending_hosts: unknown[] = [];
   // The background scan, answered in place after one gate, so a newer keystroke can arrive while it runs.
   let background: ScanRegex = async (text, { source, flags }) => ({ ok: true, ...scan_regex({ text, source, flags }) });
   const make_model = (): TextModel =>
-    (builds++, { text: page_text, trees: [], point_at: (index: number) => ({ node: { index }, offset: 0 }), index_of: (node: { index: number }) => node.index }) as unknown as TextModel;
+    (builds++, { text: page_text, trees: [], empty_trees: [], pending_hosts: [...pending_hosts], frames: [], point_at: (index: number) => ({ node: { index }, offset: 0 }), index_of: (node: { index: number }) => node.index }) as unknown as TextModel;
   const deps: FindDeps = {
     build_model: make_model,
     start_index: () => 0,
@@ -48,7 +49,7 @@ function fake_page(page_text = "ab ab ab") {
       await new Promise((resume) => setImmediate(resume));
     }
   };
-  return { deps, retargets: () => retargets, builds: () => builds, change_page: () => watchers.forEach((notify) => notify()), painted, toasts, registers, settle, clears: () => clears, set_selection: (next: string[]) => (selection = next), set_background: (next: ScanRegex) => (background = next), host: { show_toast: (message: string) => void toasts.push(message) } };
+  return { deps, pending_hosts, retargets: () => retargets, builds: () => builds, change_page: () => watchers.forEach((notify) => notify()), painted, toasts, registers, settle, clears: () => clears, set_selection: (next: string[]) => (selection = next), set_background: (next: ScanRegex) => (background = next), host: { show_toast: (message: string) => void toasts.push(message) } };
 }
 
 test("a search begun while Enter waits for the old scan keeps its own state", async () => {
@@ -514,4 +515,109 @@ test("n after Enter on a pattern that timed out does not run the regex again", a
   await stepping;
   assert.equal(scans, 1);
   assert.deepEqual(page.toasts, ["2 of 2 (too slow as a regex, searched as text)"]);
+});
+
+// A MutationObserver that records what it watches.
+function fake_observer() {
+  const watched: unknown[] = [];
+  class FakeObserver {
+    observe = (target: unknown) => void watched.push(target);
+    disconnect = () => void (watched.length = 0);
+  }
+  return { observer_class: FakeObserver as unknown as typeof MutationObserver, watched };
+}
+
+function fake_frame() {
+  const listeners: { fire: () => void; signal: AbortSignal }[] = [];
+  return {
+    frame: { addEventListener: (_type: string, fire: () => void, options: { signal: AbortSignal }) => void listeners.push({ fire, signal: options.signal }) } as unknown as Element,
+    load: () => listeners.filter((listener) => !listener.signal.aborted).forEach((listener) => listener.fire()),
+  };
+}
+
+test("the watcher observes shadow roots and frame documents that held no text", () => {
+  (globalThis as { document?: unknown }).document = { name: "page" };
+  const { observer_class, watched } = fake_observer();
+  const empty_root = { name: "empty root" };
+  const model = { trees: [{ name: "text root" }], empty_trees: [empty_root], frames: [] } as unknown as TextModel;
+  page_watcher(observer_class)(() => {})(model);
+  assert.equal(watched.includes(empty_root), true);
+});
+
+test("a frame that loads after the model was built makes n read the page again", async () => {
+  (globalThis as { document?: unknown }).document = { name: "page" };
+  const { observer_class } = fake_observer();
+  const { frame, load } = fake_frame();
+  const page = fake_page();
+  const watch = page_watcher(observer_class);
+  const watch_page: FindDeps["watch_page"] = (on_change) => {
+    const retarget = watch(on_change);
+    return (model) => retarget({ ...model, frames: [frame] } as TextModel);
+  };
+  const find = create_find(page.host, { ...page.deps, watch_page });
+  find.begin("forward");
+  find.update("ab", () => {});
+  await page.settle();
+  await find.end(true);
+  const before = page.builds();
+  const stepping = find.step(false);
+  await page.settle();
+  await stepping;
+  assert.equal(page.builds(), before, "n read the page again with nothing changed");
+  load();
+  const stepping_again = find.step(false);
+  await page.settle();
+  await stepping_again;
+  assert.equal(page.builds() > before, true, "n kept the old model after the frame loaded");
+});
+
+test("a retarget drops the load listeners of the old model's frames", () => {
+  (globalThis as { document?: unknown }).document = { name: "page" };
+  const { observer_class } = fake_observer();
+  const { frame, load } = fake_frame();
+  let changes = 0;
+  const retarget = page_watcher(observer_class)(() => void changes++);
+  retarget({ trees: [], empty_trees: [], frames: [frame] } as unknown as TextModel);
+  retarget({ trees: [], empty_trees: [], frames: [] } as unknown as TextModel);
+  load();
+  assert.equal(changes, 0, "a frame the new model no longer lists still raised a change");
+});
+
+// A custom element that gains a shadow root fires no mutation, so the model lists it and `n` checks the list.
+async function step_after_host_change(host: Record<string, unknown>, change: () => void) {
+  const page = fake_page();
+  page.pending_hosts.push(host);
+  const find = create_find(page.host, page.deps);
+  find.begin("forward");
+  find.update("ab", () => {});
+  await page.settle();
+  await find.end(true);
+  const step = async () => {
+    const stepping = find.step(false);
+    await page.settle();
+    await stepping;
+  };
+  await step();
+  const before = page.builds();
+  await step();
+  assert.equal(page.builds(), before, "n read the page again with nothing changed");
+  change();
+  page.pending_hosts.length = 0;
+  await step();
+  const after_change = page.builds();
+  await step();
+  assert.equal(page.builds(), after_change, "n read the page again after the model took the new root");
+  return { before, after_change };
+}
+
+test("n reads the page once after a custom element gains a shadow root", async () => {
+  const host: Record<string, unknown> = { shadowRoot: null };
+  const { before, after_change } = await step_after_host_change(host, () => (host.shadowRoot = {}));
+  assert.equal(after_change, before + 1);
+});
+
+test("n reads the page once after a custom element gains a closed shadow root", async () => {
+  const host: Record<string, unknown> = { shadowRoot: null, openOrClosedShadowRoot: null };
+  const { before, after_change } = await step_after_host_change(host, () => (host.openOrClosedShadowRoot = {}));
+  assert.equal(after_change, before + 1);
 });

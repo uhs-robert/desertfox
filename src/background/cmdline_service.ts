@@ -13,6 +13,8 @@ export type CmdlineServiceDeps = {
   tickets: TicketStorage;
   new_ticket: () => string;
   sources: () => Promise<CmdlineOpened["sources"]>;
+  // What a tab list can reopen tabs in. Not asked of a private line.
+  container_stores: () => Promise<CmdlineOpened["container_stores"]>;
   // Read on every open, after the config has loaded.
   page_config: () => Promise<Pick<CmdlineOpened, "commands" | "help_ids" | "command_aliases" | "prompt" | "all_windows" | "statusbar_widgets">>;
   tab_count: (window_id: number) => Promise<number>;
@@ -50,7 +52,7 @@ export function create_cmdline_service(deps: CmdlineServiceDeps) {
       return ticket;
     },
     // Used up on the first try, so a frame reloaded with an old ticket gets nothing either.
-    open: async (ticket: unknown, tab_id: number | undefined, frame_id: number | undefined, window_id: number | undefined, tab: { url?: string | undefined; index?: number | undefined } = {}): Promise<CmdlineOpened | undefined> => {
+    open: async (ticket: unknown, tab_id: number | undefined, frame_id: number | undefined, window_id: number | undefined, tab: { url?: string | undefined; index?: number | undefined } = {}, incognito = false): Promise<CmdlineOpened | undefined> => {
       if (typeof ticket !== "string" || tab_id === undefined || frame_id === undefined || window_id === undefined) return undefined;
       const redeemed = (redemptions.get(ticket) ?? Promise.resolve()).then(() => redeem(ticket));
       const settled = redeemed.catch(() => undefined);
@@ -66,7 +68,7 @@ export function create_cmdline_service(deps: CmdlineServiceDeps) {
       // After the pending writes, so a line reopened at once already has the last command.
       await last_write;
       const status = { url: tab.url ?? "", tab_index: tab.index ?? 0, tab_count: await deps.tab_count(window_id) };
-      return { history: await read(), sources: await deps.sources(), window_id, status, ...(await deps.page_config()) };
+      return { history: await read(), sources: await deps.sources(), container_stores: incognito ? [] : await deps.container_stores(), window_id, status, ...(await deps.page_config()) };
     },
     // Whether this frame of the tab redeemed the tab's latest ticket, and the tab has not closed or navigated since.
     is_opener: async (tab_id: number | undefined, frame_id: number | undefined): Promise<boolean> => {

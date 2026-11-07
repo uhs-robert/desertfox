@@ -6,7 +6,7 @@ import { empty_config } from "../src/background/config_load.ts";
 import { DEFAULT_KEYMAP } from "../src/background/default_keymap.ts";
 import type { KeymapConfig } from "../src/shared/keymap.ts";
 import type { TreeBranch, TreeNode } from "../src/shared/prefix_tree.ts";
-import { registry } from "../src/shared/registry/index.ts";
+import { registry } from "../src/shared/registry/builtin.ts";
 
 function compile(keymap: KeymapConfig) {
   return compile_config({ config: empty_config(), default_keymap: keymap, get_command: (id) => registry.get(id), enum_sources: { search_engines: ["site"], containers: [] } });

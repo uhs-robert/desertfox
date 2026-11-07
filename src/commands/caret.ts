@@ -1,5 +1,5 @@
 import { caret_move } from "../content/handlers/lazy_bundle.ts";
-import { define } from "../shared/registry/index.ts";
+import { define } from "../shared/registry/builtin.ts";
 
 define("caret.move", {
   completion: ["caret", "visual", "visual_line"],

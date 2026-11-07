@@ -1,5 +1,5 @@
 import { cmdline_clear, cmdline_help, cmdline_history, cmdline_next_completion, cmdline_open, cmdline_prev_completion, cmdline_submit, list_act, list_select } from "../content/handlers/lazy_bundle.ts";
-import { define } from "../shared/registry/index.ts";
+import { define } from "../shared/registry/builtin.ts";
 
 define("cmdline.open", {
   completion: "hidden",
@@ -73,12 +73,13 @@ define("list.act", {
     {
       name: "action",
       type: "enum",
-      values: ["unload", "close", "mute", "pin"],
+      values: ["unload", "close", "mute", "pin", "reopen"],
       description: {
         unload: "Unload the loaded tabs, or load all when none is loaded.",
         close: "Close the tabs and move the highlight to the next row.",
         mute: "Mute all when any is not muted, else unmute all.",
         pin: "Pin all when any is not pinned, else unpin all.",
+        reopen: "Ask for a container, then reopen the tabs in it.",
       },
     },
   ],

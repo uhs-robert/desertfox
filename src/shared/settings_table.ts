@@ -55,6 +55,7 @@ export const SETTINGS_TABLE = {
   // List order is display order. An empty list hides the status area.
   statusbar_widgets: { kind: "enum_list", values: ["url", "scroll", "tabs"], default: ["url", "scroll", "tabs"] },
   history_completion_max: { kind: "number", whole: true, min: 0, default: 10 },
+  history_list_max: { kind: "number", whole: true, min: 0, default: 20 },
   // `true` means analog, as it did before the digital face.
   newtab_clock: { kind: "enum", values: [true, false, "analog", "digital"], default: true },
   newtab_date: { kind: "boolean", default: true },

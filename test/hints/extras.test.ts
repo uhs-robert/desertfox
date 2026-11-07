@@ -4,7 +4,7 @@ import { test } from "node:test";
 import "../../src/commands/hint.ts";
 import { check_args } from "../../src/shared/registry/check_args.ts";
 import type { Outcome } from "../../src/shared/messages.ts";
-import { registry } from "../../src/shared/registry/index.ts";
+import { registry } from "../../src/shared/registry/builtin.ts";
 
 class FakeNode {
   children: FakeNode[] = [];
@@ -98,6 +98,7 @@ async function page_with(texts: string[]) {
     documentElement: document_root,
     defaultView: win,
     createElement: () => new FakeNode(),
+    addEventListener: () => {},
     elementFromPoint: () => null,
     querySelectorAll: () => [...links],
   };

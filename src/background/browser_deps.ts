@@ -2,9 +2,10 @@
 
 import type { MergedConfig } from "../shared/config.ts";
 import type { PageInfo } from "../shared/engines/index.ts";
-import type { BackgroundToContent, Refusal, ToastKind } from "../shared/messages.ts";
+import { DEFAULT_CONTAINER_NAME, DEFAULT_COOKIE_STORE_ID } from "../shared/container_store.ts";
+import type { BackgroundToContent, ContainerStore, Refusal, ToastKind } from "../shared/messages.ts";
 import type { EnumSources } from "../shared/registry/check_args.ts";
-import { registry } from "../shared/registry/index.ts";
+import { registry } from "../shared/registry/builtin.ts";
 import { runs_with_empty } from "./availability.ts";
 import type { BundleLoaderDeps } from "./bundle_loader.ts";
 import type { ImageDeps, ImageKind } from "./image_actions.ts";
@@ -53,6 +54,13 @@ export async function container_names(): Promise<string[]> {
   return Array.isArray(identities) ? identities.map((identity) => identity.name) : [];
 }
 
+// `default` first, then the containers. Empty with containers off, where a reopen has nowhere to go.
+export async function container_stores(): Promise<ContainerStore[]> {
+  const identities = await browser.contextualIdentities.query({}).catch(() => undefined);
+  if (!Array.isArray(identities) || identities.length === 0) return [];
+  return [{ name: DEFAULT_CONTAINER_NAME, cookie_store_id: DEFAULT_COOKIE_STORE_ID }, ...identities.map((identity) => ({ name: identity.name, cookie_store_id: identity.cookieStoreId }))];
+}
+
 export function make_router_deps(get_config: () => Promise<MergedConfig>, repeat_memory: RepeatMemory): RouterDeps {
   const channels = { send_to_tab, notify };
   return {
@@ -63,6 +71,10 @@ export function make_router_deps(get_config: () => Promise<MergedConfig>, repeat
     }),
     active_tab: async () => {
       const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
+      return tab?.id === undefined ? undefined : { tab_id: tab.id, window_id: tab.windowId ?? -1, url: tab.url, incognito: tab.incognito };
+    },
+    get_tab: async (tab_id) => {
+      const tab = await browser.tabs.get(tab_id).catch(() => undefined);
       return tab?.id === undefined ? undefined : { tab_id: tab.id, window_id: tab.windowId ?? -1, url: tab.url, incognito: tab.incognito };
     },
     has_content_script,

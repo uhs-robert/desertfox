@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import "../../src/background/command_modules.ts";
-import { create_registry, description_problem, DefineError, first_sentence, registry, summary_problem, summary_problems } from "../../src/shared/registry/index.ts";
+import { create_registry, description_problem, DefineError, first_sentence, summary_problem, summary_problems } from "../../src/shared/registry/index.ts";
+import { registry } from "../../src/shared/registry/builtin.ts";
 import type { CommandInput } from "../../src/shared/registry/index.ts";
 
 test("every built-in command has a good summary and a described flag", () => {

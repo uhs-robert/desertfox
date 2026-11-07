@@ -624,6 +624,7 @@ test("with the real ticket service, only the tab that redeemed its own ticket re
     tickets: storage as never,
     new_ticket: () => `ticket-${++next}`,
     sources: async () => ({ search_engines: [], containers: [] }),
+    container_stores: async () => [],
     page_config: async () => ({ commands: [], help_ids: [], command_aliases: {}, prompt: ":", all_windows: false }) as never,
     tab_count: async () => 1,
   });

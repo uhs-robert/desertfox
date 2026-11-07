@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import "../../../src/background/command_modules.ts";
 import { create_completer, is_listed } from "../../../src/cmdline/completion/sources.ts";
-import { build_commands_file, create_registry, DefineError, parse_command_line, registry } from "../../../src/shared/registry/index.ts";
+import { build_commands_file, create_registry, DefineError, parse_command_line } from "../../../src/shared/registry/index.ts";
+import { registry } from "../../../src/shared/registry/builtin.ts";
 import type { CommandInput } from "../../../src/shared/registry/index.ts";
 import { create_word_lookup } from "../../../src/cmdline/word_lookup.ts";
 

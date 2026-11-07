@@ -4,9 +4,10 @@
 
 import type { SearchEngine } from "../shared/config.ts";
 import type { PageInfo } from "../shared/engines/index.ts";
-import type { BookmarkItem, CompleteItemsAnswer, EngineItem, HistoryItem, OpenRow, TabContainer, TabItem, TabRowsAction, TabRowsActionAnswer, WindowItem } from "../shared/messages.ts";
+import type { BookmarkItem, CompleteItemsAnswer, EngineItem, HistoryItem, HistoryItems, OpenRow, TabContainer, TabItem, TabRowsAction, TabRowsActionAnswer, WindowItem } from "../shared/messages.ts";
 import { available_engine_names } from "./availability.ts";
-import { close_tabs, set_muted, set_pinned } from "./tab_actions.ts";
+import { DEFAULT_COOKIE_STORE_ID } from "../shared/container_store.ts";
+import { close_tabs, reopen_tabs_in_container, set_muted, set_pinned } from "./tab_actions.ts";
 import type { TabActionDeps } from "./tab_actions.ts";
 import { describe_result, set_unloaded } from "./tab_discard.ts";
 import type { DiscardDeps } from "./tab_discard.ts";
@@ -200,12 +201,13 @@ export type CompleteItemsDeps = typeof browser_complete_items_deps & {
   // The page of the line's tab, undefined when it has none.
   page_of: (tab_id: number) => Promise<PageInfo | undefined>;
   open_settings: () => Promise<OpenSettings>;
+  history_list_max: () => Promise<number>;
   read_tab: (tab_id: number) => Promise<TabLike | undefined>;
   discard: DiscardDeps;
-  tab_actions: Pick<TabActionDeps, "set_muted" | "set_pinned" | "remove">;
+  tab_actions: Pick<TabActionDeps, "set_muted" | "set_pinned" | "remove" | "open_tab">;
 };
 
-const TAB_ROWS_ACTIONS: readonly string[] = ["close", "unload", "load", "mute", "unmute", "pin", "unpin"] satisfies TabRowsAction[];
+const TAB_ROWS_ACTIONS: readonly string[] = ["close", "unload", "load", "mute", "unmute", "pin", "unpin", "reopen"] satisfies TabRowsAction[];
 const is_tab_rows_action = (action: unknown): action is TabRowsAction => typeof action === "string" && TAB_ROWS_ACTIONS.includes(action);
 // A bound on one message, far above any real tab count.
 const MAX_ACTION_TABS = 5000;
@@ -221,10 +223,17 @@ export function create_complete_items(deps: CompleteItemsDeps) {
     return { rows: open_rows(sources, bookmarks, history), history_max };
   };
 
-  const fetch_items = async (kind: "bookmarks" | "engines" | "open" | "windows", asker: Asker): Promise<CompleteItemsAnswer["items"]> => {
+  // A private line lists nothing, as in `open_items`, and the `history` command refuses there.
+  const history_list = async (asker: Asker): Promise<HistoryItems> => ({
+    rows: asker.incognito ? [] : history_items(await deps.search_history().catch(() => [])),
+    max: await deps.history_list_max(),
+  });
+
+  const fetch_items = async (kind: "bookmarks" | "engines" | "history" | "open" | "windows", asker: Asker): Promise<CompleteItemsAnswer["items"]> => {
     // The set is read once per line. The line is modal over one tab, so the page cannot change under it.
     if (kind === "engines") return engine_items(await deps.search_engines(), await deps.page_of(asker.tab_id));
     if (kind === "open") return open_items(asker);
+    if (kind === "history") return history_list(asker);
     if (kind === "windows") return listed_windows(await deps.query_windows(), asker).map(({ number, title }) => ({ number, title }));
     return bookmark_items(await deps.all_bookmarks());
   };
@@ -232,13 +241,28 @@ export function create_complete_items(deps: CompleteItemsDeps) {
   return {
     // Runs a row key on the tab ids the page captured at the key press. Undefined for a sender that is not an opener, for a bad argument and when
     // any id names a tab of the other privacy: nothing runs then. An id with no tab is skipped, also one that closes while the action runs.
-    tab_rows_action: async (action: unknown, tab_ids: unknown, asker: Asker | undefined): Promise<TabRowsActionAnswer | undefined> => {
+    // `reopen` also needs `cookie_store_id`, a container the browser lists or the default store. A private line, a tab id of the other privacy and an unknown store give nothing.
+    // It leaves out the line's own tab, because closing it ends the line, and tabs already in the container. The answer names what moved and what was skipped when some tabs stayed.
+    tab_rows_action: async (action: unknown, tab_ids: unknown, asker: Asker | undefined, cookie_store_id?: unknown): Promise<TabRowsActionAnswer | undefined> => {
       if (!is_tab_rows_action(action) || !Array.isArray(tab_ids) || tab_ids.length > MAX_ACTION_TABS || !tab_ids.every(Number.isInteger) || !asker || !(await deps.is_opener(asker.tab_id, asker.frame_id))) return undefined;
       const unique_ids = [...new Set(tab_ids as number[])];
       const found = await Promise.all(unique_ids.map(async (id) => ({ id, tab: await deps.read_tab(id) })));
       // The reads take time: the line may have lost its ticket meanwhile.
       if (found.some(({ tab }) => tab && tab.incognito !== asker.incognito) || !(await deps.is_opener(asker.tab_id, asker.frame_id))) return undefined;
       const ids = found.filter(({ tab }) => tab).map(({ id }) => id);
+      if (action === "reopen") {
+        if (asker.incognito || typeof cookie_store_id !== "string" || !(cookie_store_id === DEFAULT_COOKIE_STORE_ID || (await deps.containers()).has(cookie_store_id))) return undefined;
+        if (!(await deps.is_opener(asker.tab_id, asker.frame_id))) return undefined;
+        const movable = found.flatMap(({ id, tab }) =>
+          tab && id !== asker.tab_id && tab.windowId !== undefined ? [{ id, window_id: tab.windowId, index: tab.index, pinned: tab.pinned === true, url: tab.url, cookie_store_id: tab.cookieStoreId }] : [],
+        );
+        const reopened = await reopen_tabs_in_container(deps.tab_actions, movable, cookie_store_id);
+        const left_out = ids.includes(asker.tab_id) ? 1 : 0;
+        const already_there = movable.filter((tab) => tab.cookie_store_id === cookie_store_id).length;
+        const failed = ids.length - reopened.length - left_out - already_there;
+        const skipped = [already_there > 0 ? `${already_there} already there` : "", left_out > 0 ? "line tab left out" : "", failed > 0 ? `${failed} failed` : ""].filter(Boolean);
+        return skipped.length === 0 ? {} : { refusal: [`reopened ${reopened.length}`, ...skipped].join(", ") };
+      }
       try {
         if (action === "close") await close_tabs(deps.tab_actions, ids);
         else if (action === "mute" || action === "unmute") await set_muted(deps.tab_actions, ids, action === "mute");
@@ -255,8 +279,8 @@ export function create_complete_items(deps: CompleteItemsDeps) {
     // Undefined for a sender that is not a tab, for a tab that opened no line and for a tab that closed or navigated
     // while the lookup ran. A failed browser call gives an empty list.
     answer: async (kind: unknown, asker: Asker | undefined): Promise<CompleteItemsAnswer | undefined> => {
-      if ((kind !== "bookmarks" && kind !== "engines" && kind !== "open" && kind !== "windows") || !asker || !(await deps.is_opener(asker.tab_id, asker.frame_id))) return undefined;
-      const items = await fetch_items(kind, asker).catch(() => (kind === "open" ? { rows: [], history_max: 0 } : []));
+      if ((kind !== "bookmarks" && kind !== "engines" && kind !== "history" && kind !== "open" && kind !== "windows") || !asker || !(await deps.is_opener(asker.tab_id, asker.frame_id))) return undefined;
+      const items = await fetch_items(kind, asker).catch(() => (kind === "open" ? { rows: [], history_max: 0 } : kind === "history" ? { rows: [], max: 0 } : []));
       return (await deps.is_opener(asker.tab_id, asker.frame_id)) ? { items } : undefined;
     },
   };

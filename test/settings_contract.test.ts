@@ -27,6 +27,7 @@ const EXPECTATIONS: Record<string, string> = {
   open_completion: 'a list of "bookmarks" and "history" with no repeat',
   statusbar_widgets: 'a list of "url", "scroll" and "tabs" with no repeat',
   history_completion_max: "a whole number, 0 or more",
+  history_list_max: "a whole number, 0 or more",
   newtab_clock: 'true, false, "analog" or "digital"',
   newtab_date: "true or false",
   newtab_clock_format: "12 or 24",
@@ -92,6 +93,7 @@ const ACCEPTS: Record<string, unknown[]> = {
   open_completion: [[], ["history"], ["history", "bookmarks"]],
   statusbar_widgets: [[], ["tabs"], ["tabs", "url"]],
   history_completion_max: [0, 10],
+  history_list_max: [0, 10],
   newtab_clock: [true, false, "analog", "digital"],
   newtab_date: [true, false],
   newtab_clock_format: [12, 24],
@@ -121,6 +123,7 @@ const REFUSES: Record<string, unknown[]> = {
   open_completion: [["bookmarks", "bookmarks"], ["tabs"], "history"],
   statusbar_widgets: [["url", "url"], ["clock"], "url"],
   history_completion_max: [-1, 1.5, "10"],
+  history_list_max: [-1, 1.5, "10"],
   newtab_clock: ["true", "Analog", 1],
   newtab_date: ["false"],
   newtab_clock_format: [11, "12", 12.0001],
@@ -188,6 +191,7 @@ test("the defaults stay the same", () => {
     open_completion: ["bookmarks", "history"],
     statusbar_widgets: ["url", "scroll", "tabs"],
     history_completion_max: 10,
+    history_list_max: 20,
     newtab_clock: true,
     newtab_date: true,
     newtab_clock_format: 12,
@@ -223,6 +227,8 @@ test("the editor schema matches its output before #85, apart from the listed cha
   properties.new_tab_page.default = "desertfox";
   properties.open_completion.default = ["bookmarks", "history"];
   properties.newtab_links.default = [];
+  // A setting added after the fixture.
+  properties.history_list_max = (settings_schema().properties as Record<string, unknown>).history_list_max;
   // Settings that had no description.
   const described_now = settings_schema().properties as Record<string, { description: string }>;
   for (const name of ["which_key_delay_ms", "hint_letters", "search_prefixes", "container_prefixes"]) {

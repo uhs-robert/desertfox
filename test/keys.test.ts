@@ -10,6 +10,7 @@ import {
 } from "../src/shared/keys/index.ts";
 import type { KeyEventLike } from "../src/shared/keys/index.ts";
 import type { KeymapConfig } from "../src/shared/index.ts";
+import { default_layer_of, merge_keymaps } from "../src/background/keymap_merge.ts";
 
 const tokens_of = (sequence: string) => parse_sequence(sequence).tokens;
 
@@ -112,6 +113,85 @@ test("compiler builds the tree with steps, runs_in and label", () => {
 
 test("compiler skips the longer entry when a shorter binding is its prefix", () => {
   const { compiled, warnings } = compile({ normal: { gg: { id: "a.b" }, g: { id: "c.d" }, gz: { id: "e.f" } } });
+  assert.equal(warnings.length, 2);
+  assert.ok(warnings.every((warning) => warning.includes("already a complete binding")));
+  assert.equal(compiled.modes.normal!.children["g"]!.kind, "leaf");
+});
+
+test("a user key that extends a default leaf drops the default and warns once", () => {
+  const defaults: KeymapConfig = { normal: { sg: { id: "a.b" }, x: { id: "a.b" } } };
+  const user: KeymapConfig = { normal: { sgg: { id: "c.d" }, sgd: { id: "c.d" } } };
+  const { compiled, warnings } = compile_keymap(merge_keymaps(defaults, user), {}, resolve, undefined, default_layer_of(defaults, user));
+  assert.deepEqual(warnings, ['normal: dropped default keys that your keys extend: "sg" by sgg, sgd']);
+  const s = compiled.modes.normal!.children["s"] as { children: Record<string, { kind: string; children: Record<string, { kind: string }> }> };
+  assert.equal(s.children["g"]!.kind, "branch");
+  assert.equal(s.children["g"]!.children["g"]!.kind, "leaf");
+  assert.equal(s.children["g"]!.children["d"]!.kind, "leaf");
+  assert.equal(compiled.modes.normal!.children["x"]!.kind, "leaf");
+});
+
+test("generated search_keys that extend a default leaf drop it", () => {
+  const defaults: KeymapConfig = { normal: { s: { id: "a.b" } } };
+  const user: KeymapConfig = { search_keys: { g: "github" } };
+  const { compiled, warnings } = compile_keymap(merge_keymaps(defaults, user), {}, resolve, undefined, default_layer_of(defaults, user));
+  assert.deepEqual(warnings, ['normal: dropped default keys that your keys extend: "s" by sg']);
+  assert.equal((compiled.modes.normal!.children["s"] as { children: Record<string, { kind: string }> }).children["g"]!.kind, "leaf");
+});
+
+test("a default generated key keeps a default leaf it extends", () => {
+  const defaults: KeymapConfig = { normal: { s: { id: "a.b" } }, search_keys: { g: "github" } };
+  const { compiled, warnings } = compile_keymap(merge_keymaps(defaults, {}), {}, resolve, undefined, default_layer_of(defaults, {}));
+  assert.equal(warnings.length, 1);
+  assert.ok(warnings[0]!.includes("already a complete binding"));
+  assert.equal(compiled.modes.normal!.children["s"]!.kind, "leaf");
+});
+
+test("a null on the default leaf lets the user keys compile with no drop warning", () => {
+  const defaults: KeymapConfig = { normal: { sg: { id: "a.b" } } };
+  const user: KeymapConfig = { normal: { sg: null, sgg: { id: "c.d" } } };
+  const { compiled, warnings } = compile_keymap(merge_keymaps(defaults, user), {}, resolve, undefined, default_layer_of(defaults, user));
+  assert.deepEqual(warnings, []);
+  assert.equal((compiled.modes.normal!.children["s"] as { children: Record<string, { children: Record<string, { kind: string }> }> }).children["g"]!.children["g"]!.kind, "leaf");
+});
+
+test("one warning per mode lists every dropped default", () => {
+  const defaults: KeymapConfig = { normal: { sg: { id: "a.b" }, gt: { id: "a.b" } }, visual: { s: { id: "a.b" } } };
+  const user: KeymapConfig = { normal: { sgg: { id: "c.d" }, gtx: { id: "c.d" } }, visual: { sx: { id: "c.d" } } };
+  const { warnings } = compile_keymap(merge_keymaps(defaults, user), {}, resolve, undefined, default_layer_of(defaults, user));
+  assert.deepEqual(warnings, ['normal: dropped default keys that your keys extend: "sg" by sgg; "gt" by gtx', 'visual: dropped default keys that your keys extend: "s" by sx']);
+});
+
+test("a default is kept when no user extender can compile", () => {
+  const defaults: KeymapConfig = { normal: { sg: { id: "a.b" } } };
+  const user: KeymapConfig = { normal: { sgg: { id: "bad.cmd" } } };
+  const { compiled } = compile_keymap(merge_keymaps(defaults, user), {}, resolve, undefined, default_layer_of(defaults, user));
+  assert.equal(compiled.modes.normal!.children["s"]!.kind, "branch");
+  const s = compiled.modes.normal!.children["s"] as { children: Record<string, { kind: string }> };
+  assert.equal(s.children["g"]!.kind, "leaf");
+});
+
+test("a user key extending a generated default variant replaces it", () => {
+  const defaults: KeymapConfig = { normal: { ";l": { id: "a.b" } }, modifiers: { ";r": { rapid: true } } };
+  const user: KeymapConfig = { normal: { ";rlx": { id: "c.d" } } };
+  const { compiled, warnings } = compile_keymap(merge_keymaps(defaults, user), {}, resolve, undefined, default_layer_of(defaults, user));
+  assert.deepEqual(warnings, ['normal: dropped default keys that your keys extend: ";rl" by ;rlx']);
+  const rl = (compiled.modes.normal!.children[";"] as { children: Record<string, { kind: string; children: Record<string, { kind: string }> }> }).children["r"]!.children["l"]!;
+  assert.equal(rl.kind, "branch");
+});
+
+test("a dropped default slot is not refilled by a modifier variant", () => {
+  const defaults: KeymapConfig = { normal: { ";I": { id: "a.b" }, ";yI": { id: "a.b" } }, modifiers: { ";y": { copy: true } } };
+  const user: KeymapConfig = { normal: { ";yIx": { id: "c.d" } } };
+  const { compiled, warnings } = compile_keymap(merge_keymaps(defaults, user), {}, resolve, undefined, default_layer_of(defaults, user));
+  assert.deepEqual(warnings, ['normal: dropped default keys that your keys extend: ";yI" by ;yIx']);
+  const y = (compiled.modes.normal!.children[";"] as { children: Record<string, { children: Record<string, { kind: string }> }> }).children["y"]!;
+  assert.equal(y.children["I"]!.kind, "branch");
+});
+
+test("a user leaf shorter than a default group keeps the user key and skips the default ones", () => {
+  const defaults: KeymapConfig = { normal: { gg: { id: "a.b" }, gt: { id: "a.b" } } };
+  const user: KeymapConfig = { normal: { g: { id: "c.d" } } };
+  const { compiled, warnings } = compile_keymap(merge_keymaps(defaults, user), {}, resolve, undefined, default_layer_of(defaults, user));
   assert.equal(warnings.length, 2);
   assert.ok(warnings.every((warning) => warning.includes("already a complete binding")));
   assert.equal(compiled.modes.normal!.children["g"]!.kind, "leaf");

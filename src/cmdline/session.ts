@@ -2,10 +2,11 @@
 // history walk. A key from the keymap arrives as a command id and becomes an effect for the page to carry out.
 
 import type { Invocation } from "../shared/invocation.ts";
-import type { TabItem, TabRowsAction } from "../shared/messages.ts";
+import type { ContainerStore, TabItem, TabRowsAction } from "../shared/messages.ts";
 import type { ParseResult } from "../shared/registry/index.ts";
+import { rank } from "../shared/score.ts";
 import { marks_of } from "./completion/sources.ts";
-import type { Completion, TabMarks } from "./completion/sources.ts";
+import type { Completion, Row, TabMarks } from "./completion/sources.ts";
 import { create_history_cursor } from "./history_cursor.ts";
 
 export type Effect =
@@ -18,8 +19,8 @@ export type Effect =
   // Open the help page at this command.
   | { kind: "help"; command_id: string }
   // `list.act` on the selected tabs, or the highlighted one: the page asks the background to run the action on these ids, which the key press fixed.
-  // The rows change when the model patch arrives.
-  | { kind: "tab_rows_action"; action: TabRowsAction; tab_ids: number[] };
+  // The rows change when the model patch arrives. `reopen` carries the container's store id.
+  | { kind: "tab_rows_action"; action: TabRowsAction; tab_ids: number[]; cookie_store_id?: string };
 
 export type SessionDeps = {
   history: readonly string[];
@@ -33,6 +34,8 @@ export type SessionDeps = {
   search?: boolean;
   // The tab model's rows, undefined before its first snapshot. The selection is checked against them, hidden tabs included.
   tabs?: () => readonly TabItem[] | undefined;
+  // The containers a tab list can reopen tabs in. Empty on a private line, which has none.
+  containers?: readonly ContainerStore[];
   // The id of the command a typed word names, for help when no row is selected.
   command_id_of?: (word: string) => string | undefined;
   // Whether the help page has a card for a command. Snippets have none. Without it every command has one.
@@ -59,6 +62,8 @@ export function create_session(deps: SessionDeps) {
   const selection = new Set<number>();
   // After a close, the tab the highlight moves to once the closed rows are gone from the list.
   let cursor_after_close: number | undefined;
+  // The container prompt, open over a tab list. It keeps what the list held, so Esc brings it back, and the tab that `<A-c>` found highlighted.
+  let picking: { back: { text: string; caret: number }; highlighted_tab: number | undefined; marked: boolean } | undefined;
   // The text and caret the list was ranked for. While a row is previewed, `text` differs from it.
   let saved: { text: string; caret: number } | undefined;
 
@@ -67,11 +72,20 @@ export function create_session(deps: SessionDeps) {
     message = undefined;
   };
 
+  // The container prompt ranks the containers by name. Any other line ranks as the page's completer does.
+  const complete = (at_text: string, at_caret: number): Completion | undefined =>
+    picking
+      ? { rows: rank(at_text, container_rows()), start: 0, end: at_text.length, usage: "Enter reopens the tabs in this container, Esc goes back", listing: true }
+      : deps.complete?.(at_text, at_caret);
+  // Each row carries its store id, because names can repeat.
+  const container_rows = (): Row[] =>
+    (deps.containers ?? []).map((container) => ({ name: container.name, insert: container.name, description: "", args: "", also_named: [], keywords: [], usage: `reopen in ${container.name}`, cookie_store_id: container.cookie_store_id }));
+
   const rows = () => (completion && list_shown ? completion.rows : NO_ROWS);
 
   // New typed text ends any preview: the list ranks what is now in the line.
   const refresh = () => {
-    completion = deps.complete?.(text, caret);
+    completion = complete(text, caret);
     list_shown = true;
     selected = -1;
     saved = undefined;
@@ -105,7 +119,7 @@ export function create_session(deps: SessionDeps) {
   // The accepted tab's row, found again by id in the list ranked for the text before the accept. Its new number goes into the line, or the typed text returns when the tab is gone.
   const follow_accepted = ({ tab_id, base }: NonNullable<typeof accepted>) => {
     const kept_message = message;
-    const ranked = deps.complete?.(base.text, base.caret);
+    const ranked = complete(base.text, base.caret);
     const row = ranked?.rows.find((candidate) => candidate.tab?.id === tab_id);
     if (ranked && row) {
       replace_text(base.text.slice(0, ranked.start) + row.insert + base.text.slice(ranked.end));
@@ -123,6 +137,7 @@ export function create_session(deps: SessionDeps) {
   let status = "";
 
   const submit = (): Effect => {
+    if (picking) return choose_container();
     if (deps.search) return text === "" ? { kind: "close" } : { kind: "find_commit" };
     const line = text.replace(/^[\s:]+/, "").trim();
     if (line === "") return { kind: "close" };
@@ -195,6 +210,52 @@ export function create_session(deps: SessionDeps) {
     return kept === undefined ? undefined : rows()[kept]!.tab!.id;
   };
 
+  const open_container_prompt = (): Effect => {
+    if (!deps.containers?.length) {
+      message = "this line has no containers";
+      return { kind: "render" };
+    }
+    picking = { back: saved ?? { text, caret }, highlighted_tab: rows()[selected]?.tab?.id, marked: selection.size > 0 };
+    fresh = false;
+    replace_text("");
+    caret = 0;
+    refresh();
+    return { kind: "render" };
+  };
+
+  // Back to the tab list as it was: its text and highlighted tab. The marks never left.
+  const leave_container_prompt = () => {
+    const { back, highlighted_tab } = picking!;
+    picking = undefined;
+    replace_text(back.text);
+    caret = back.caret;
+    refresh();
+    const index = completion?.rows.findIndex((row) => row.tab?.id === highlighted_tab) ?? -1;
+    if (index >= 0) preview(index);
+  };
+
+  // The previewed container, else the one named exactly. The tab ids are read now: the marks, else the highlighted tab if it is still there.
+  const choose_container = (): Effect => {
+    const typed = completion?.rows.filter((row) => row.name === text.trim()) ?? [];
+    if (selected < 0 && typed.length > 1) {
+      message = "several containers have that name, pick a row";
+      return { kind: "render" };
+    }
+    const chosen = completion?.rows[selected] ?? typed[0];
+    const cookie_store_id = (chosen as Partial<{ cookie_store_id: string }> | undefined)?.cookie_store_id;
+    if (cookie_store_id === undefined) {
+      message = "pick a container";
+      return { kind: "render" };
+    }
+    const { highlighted_tab, marked } = picking!;
+    // Marks that all closed leave nothing to reopen: the highlighted tab was never the choice.
+    const highlighted_present = !marked && highlighted_tab !== undefined && (deps.tabs?.()?.some((tab) => tab.id === highlighted_tab) ?? true);
+    const tab_ids = selection.size > 0 ? [...selection] : highlighted_present ? [highlighted_tab] : [];
+    leave_container_prompt();
+    if (tab_ids.length === 0) message = "no tab to reopen";
+    return tab_ids.length === 0 ? { kind: "render" } : { kind: "tab_rows_action", action: "reopen", tab_ids, cookie_store_id };
+  };
+
   // Mute and pin: any tab off turns all on, else all off. Unload: the loaded tabs unload, or all load when none is loaded.
   const act_on_rows = (action: unknown): Effect => {
     const tabs = acted_tabs();
@@ -202,6 +263,7 @@ export function create_session(deps: SessionDeps) {
       message = "select a tab row first";
       return { kind: "render" };
     }
+    if (action === "reopen") return open_container_prompt();
     const ids = (chosen: readonly TabMarks[]) => chosen.map((tab) => tab.id);
     const without = (flag: "muted" | "pinned") => tabs.some((tab) => !tab.flags.includes(flag));
     if (action === "close") {
@@ -230,6 +292,8 @@ export function create_session(deps: SessionDeps) {
 
   const walk_history = (direction: unknown): Effect => {
     if (deps.search) return { kind: "render" };
+    // The container prompt has no history, so Up and Down with no row to step to must not replace the typed name.
+    if (picking && rows().length === 0) return { kind: "render" };
     if (!fresh && rows().length > 0) return step_selection(direction);
     const next = direction === "next" ? cursor.next() : cursor.prev(text);
     if (next !== undefined) {
@@ -244,6 +308,8 @@ export function create_session(deps: SessionDeps) {
     get_text: () => text,
     get_caret: () => caret,
     get_message: () => message,
+    // The prompt text while the container prompt is open, else undefined and the page keeps its own.
+    get_prompt: (): string | undefined => (picking ? "container: " : undefined),
     // The rows to draw: none while the list is closed.
     get_rows: rows,
     get_selected: () => selected,
@@ -283,7 +349,7 @@ export function create_session(deps: SessionDeps) {
       if (!completion) return;
       if (accepted) return follow_accepted(accepted);
       if (selected < 0) {
-        completion = deps.complete?.(text, caret);
+        completion = complete(text, caret);
         return;
       }
       const tab_id = completion.rows[selected]?.tab?.id;
@@ -291,7 +357,7 @@ export function create_session(deps: SessionDeps) {
       const base = saved;
       // The inline note belongs to the last action, not to the text, so the rebuild keeps it.
       const kept_message = message;
-      completion = deps.complete?.(base.text, base.caret);
+      completion = complete(base.text, base.caret);
       const index = completion?.rows.findIndex((row) => row.tab?.id === tab_id) ?? -1;
       const next = index < 0 && cursor_after_close !== undefined ? completion?.rows.findIndex((row) => row.tab?.id === cursor_after_close) ?? -1 : -1;
       if (index < 0) cursor_after_close = undefined;
@@ -314,6 +380,8 @@ export function create_session(deps: SessionDeps) {
     // `index` counts from the first ranked row, not the first drawn one.
     pick: (index: number) => {
       if (!completion?.rows[index] || !list_shown) return;
+      // A container row stays selected, so Enter reads its store id and not its name, which can repeat.
+      if (picking) return preview(index);
       fresh = false;
       cursor_after_close = undefined;
       preview(index);
@@ -352,6 +420,10 @@ export function create_session(deps: SessionDeps) {
           refresh();
           return { kind: "render" };
         case "mode.escape":
+          if (picking) {
+            leave_container_prompt();
+            return { kind: "render" };
+          }
           if (selection.size > 0 && on_tab_list()) {
             selection.clear();
             return { kind: "render" };
