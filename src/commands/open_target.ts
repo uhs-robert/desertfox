@@ -105,7 +105,8 @@ async function open_in_unchecked(ctx: CommandContext, url: string, where: Where,
     await browser.windows.create({ url, ...store });
     return;
   }
-  const opener = ctx.tab_id === undefined ? {} : { openerTabId: ctx.tab_id };
+  // Firefox rejects an openerTabId from another window, and the sender tab can sit in a window that is not focused.
+  const opener = ctx.tab_id === undefined ? {} : { openerTabId: ctx.tab_id, ...(ctx.window_id === undefined || ctx.window_id < 0 ? {} : { windowId: ctx.window_id }) };
   await browser.tabs.create({ url, active: where === "tab", ...opener, ...store });
 }
 

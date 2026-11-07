@@ -19,6 +19,7 @@ export type TabInfo = {
   id: number;
   index: number;
   pinned: boolean;
+  active: boolean;
   audible: boolean;
   muted: boolean;
   url: string | undefined;
@@ -143,7 +144,7 @@ export function make_tab_handlers(deps: TabDeps) {
         const site = site_key(current.url ?? "").key;
         const outside = nearest_tab(tabs, current.index, (tab) => site_key(tab.url ?? "").key !== site);
         // Focus moves first, as for one tab, so Firefox does not pick its own tab after the close.
-        if (outside) await deps.activate(outside.id);
+        if (outside && current.active) await deps.activate(outside.id);
         await deps.remove(closing);
         return;
       }
@@ -152,8 +153,8 @@ export function make_tab_handlers(deps: TabDeps) {
         return;
       }
       const neighbor_index = focus_index_after_close(current.index, tabs.length, args.side === "focus_previous" ? "previous" : "next");
-      // Focus moves first so Firefox does not pick the tab it would choose after the close.
-      if (neighbor_index !== undefined) await activate_at(tabs, neighbor_index);
+      // Focus moves first so Firefox does not pick the tab it would choose after the close. A tab that is no longer active (the key came from it before a tab switch) leaves focus where it is.
+      if (neighbor_index !== undefined && current.active) await activate_at(tabs, neighbor_index);
       await deps.remove([current.id]);
     },
     undo_close: async () => {
@@ -261,6 +262,7 @@ function to_tab_info(tab: browser.tabs.Tab): TabInfo {
     id: tab.id ?? -1,
     index: tab.index,
     pinned: tab.pinned,
+    active: tab.active,
     audible: tab.audible ?? false,
     muted: tab.mutedInfo?.muted ?? false,
     url: tab.url,

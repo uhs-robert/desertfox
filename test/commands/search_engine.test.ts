@@ -146,6 +146,7 @@ async function press(text: string, selection: string): Promise<{ lines: string[]
     get_command: (id) => registry.get(id),
     get_enum_sources: async () => ({ search_engines: Object.keys(stored_engines()), containers: [] }),
     active_tab: async () => ({ tab_id: 1, window_id: 1, url: page?.url }),
+    get_tab: async () => undefined,
     has_content_script: async () => true,
     ask_selection: async () => selection,
     runs_with_empty: async (id, args, param) => runs_with_empty(await get_config(), id, args, param, page),

@@ -73,6 +73,10 @@ export function make_router_deps(get_config: () => Promise<MergedConfig>, repeat
       const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
       return tab?.id === undefined ? undefined : { tab_id: tab.id, window_id: tab.windowId ?? -1, url: tab.url, incognito: tab.incognito };
     },
+    get_tab: async (tab_id) => {
+      const tab = await browser.tabs.get(tab_id).catch(() => undefined);
+      return tab?.id === undefined ? undefined : { tab_id: tab.id, window_id: tab.windowId ?? -1, url: tab.url, incognito: tab.incognito };
+    },
     has_content_script,
     ask_selection: async (tab_id, frame_id) => {
       const answer: unknown = await send_to_tab(tab_id, { type: "get_selection" }, frame_id).catch(() => undefined);
