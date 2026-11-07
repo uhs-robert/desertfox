@@ -6,7 +6,7 @@ import { copy_url } from "./handlers/copy.ts";
 import { page_blur, page_focus_input } from "./handlers/page.ts";
 import { scroll_align } from "./handlers/align.ts";
 import { scroll_lines, scroll_pages, scroll_pixels, scroll_to } from "./handlers/scroll.ts";
-import { caret_move, cmdline_clear, cmdline_help, cmdline_history, cmdline_next_completion, cmdline_open, cmdline_prev_completion, cmdline_submit, find_next, find_open, find_prev, heading_go, help_whichkey, hint_run, list_act, list_select, visual_act } from "./handlers/lazy_bundle.ts";
+import { caret_move, cmdline_clear, cmdline_help, cmdline_history, cmdline_next_completion, cmdline_open, cmdline_prev_completion, cmdline_submit, find_next, find_open, find_prev, heading_go, help_whichkey, page_follow, hint_run, list_act, list_select, visual_act } from "./handlers/lazy_bundle.ts";
 import { stop_page } from "./handlers/stop.ts";
 import type { ContentHandler } from "./handlers/types.ts";
 
@@ -25,6 +25,7 @@ export const content_handlers: Record<string, ContentHandler> = {
   "copy.url": copy_url,
   "hint.run": hint_run,
   "heading.go": heading_go,
+  "page.follow": page_follow,
   "cmdline.open": cmdline_open,
   "cmdline.next_completion": cmdline_next_completion,
   "cmdline.prev_completion": cmdline_prev_completion,

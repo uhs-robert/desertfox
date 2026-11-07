@@ -14,6 +14,8 @@ const EXPECTATIONS: Record<string, string> = {
   which_key_border: '"square", "round" or "chamfer"',
   hint_letters: "a string of 2 or more distinct letters",
   ignore_sites: "a list of match pattern strings",
+  next_patterns: "a list of link texts",
+  prev_patterns: "a list of link texts",
   mode_indicator: '"always", "not_normal" or "off"',
   palette: "a theme name",
   light_intensity: "a whole number from 1 to 5",
@@ -67,7 +69,7 @@ test("every setting keeps its listed values", () => {
 });
 
 test("the list, unsettable and toggle sets stay the same", () => {
-  assert.deepEqual(SETTING_NAMES.filter((name) => SETTING_SPECS[name].is_list), ["ignore_sites", "open_completion", "statusbar_widgets"]);
+  assert.deepEqual(SETTING_NAMES.filter((name) => SETTING_SPECS[name].is_list), ["ignore_sites", "next_patterns", "prev_patterns", "open_completion", "statusbar_widgets"]);
   assert.deepEqual(SETTING_NAMES.filter((name) => !SETTING_SPECS[name].settable), ["search_prefixes", "container_prefixes", "newtab_links"]);
   // A toggle flips the value in force, so an absent one flips from its default.
   const toggles = Object.fromEntries(SETTING_NAMES.filter((name) => SETTING_SPECS[name].is_toggle).map((name) => [name, DEFAULT_SETTINGS[name]]));
@@ -79,6 +81,8 @@ const ACCEPTS: Record<string, unknown[]> = {
   which_key_border: ["square", "round", "chamfer"],
   hint_letters: ["ab", "asdfghjkl", "12"],
   ignore_sites: [[], ["*://a.com/*", "x"]],
+  next_patterns: [[], ["next", ">"]],
+  prev_patterns: [[], ["prev", "<"]],
   mode_indicator: ["always", "not_normal", "off"],
   palette: ["oasis_moonlight", "no_such_theme"],
   light_intensity: [1, 5],
@@ -110,6 +114,8 @@ const REFUSES: Record<string, unknown[]> = {
   which_key_border: ["Square", "", 1],
   hint_letters: ["a", "aa", "aba", 12],
   ignore_sites: ["a.com", [""], [1]],
+  next_patterns: ["next", [""], [1]],
+  prev_patterns: ["prev", [""], [1]],
   mode_indicator: ["normal", true],
   palette: ["", 1],
   light_intensity: [0, 6, 2.5, "3"],
@@ -179,6 +185,8 @@ test("the defaults stay the same", () => {
     which_key_border: "square",
     hint_letters: "asdfghjkl",
     ignore_sites: [],
+    next_patterns: ["next", "more", "newer", ">", "\u203a", "\u2192", "\u00bb", "\u226b", ">>"],
+    prev_patterns: ["prev", "previous", "back", "older", "<", "\u2039", "\u2190", "\u00ab", "\u226a", "<<"],
     mode_indicator: "always",
     palette: "oasis_moonlight",
     light_intensity: 3,
