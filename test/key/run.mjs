@@ -202,7 +202,7 @@ async function main() {
     return teardown_started;
   };
   for (const [signal, code] of [["SIGINT", 130], ["SIGTERM", 143]]) {
-    process.on(signal, () => teardown().finally(() => process.exit(code)));
+    process.on(signal, () => teardown().finally(() => { write_timings(); process.exit(code); }));
   }
 
   const url_of = (kind, id) => `http://127.0.0.1:${server.port}/${kind}?id=${id}`;
@@ -264,6 +264,20 @@ async function main() {
     expect(String(active_url).endsWith(`id=${expected_page_id}`), `expected the active tab to be ${expected_page_id}, it is ${active_url}`);
     const visible = visible_events(mark);
     expect(visible.length <= 1, `expected one switch to ${expected_page_id}, saw [${visible.map((event) => event.page_id).join(", ")}]`);
+  }
+
+  const timings_path = default_timings_path(repo_dir);
+  // Called after each piece, from the signal path and at the end, so a run killed at the time cap still leaves its numbers. A failed write must not hide the run's own error.
+  function write_timings({ print_summary = true } = {}) {
+    try {
+      const timings_report = timings.report();
+      timings.write_json(timings_path, timings_report);
+      if (!print_summary) return;
+      console.log(timings.summary_text(timings_report));
+      console.log(`key-test timings written to ${timings_path}`);
+    } catch (error) {
+      console.error(`key-test timings not written: ${error.message}`);
+    }
   }
 
   // Piled-up tabs may slow later steps, so the count is sampled between pieces. A failed sample is recorded as null.
@@ -865,6 +879,7 @@ async function main() {
       await timings.time_piece(file, async () => {
         await sample_tabs(`before ${file}`);
         await (await import(`./${file}`)).run_cases(case_context);
+        write_timings({ print_summary: false });
       });
     }
     await sample_tabs("after pieces");
@@ -885,11 +900,7 @@ async function main() {
   } finally {
     await teardown();
     console.log(JSON.stringify(measurements));
-    const timings_report = timings.report();
-    console.log(timings.summary_text(timings_report));
-    const timings_path = default_timings_path(repo_dir);
-    timings.write_json(timings_path, timings_report);
-    console.log(`key-test timings written to ${timings_path}`);
+    write_timings();
   }
 
   const failed = results.filter((result) => !result.pass);
