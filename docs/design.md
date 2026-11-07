@@ -82,7 +82,7 @@ The fields follow the Oasis action library (`home/hypr/.config/hypr/lib/act/init
 - `runs_in`: `background` or `content`. The router sends the invocation to that side. A command never runs in both.
 - `needs`: what must be true to run it. `content` means a content script in the tab. A permission name means an optional permission. The router refuses with a message instead of failing silently.
 - `count`: what a numeric prefix does. `repeat` runs the command that many times. A param name fills that param, for example `tab.goto` takes the count as its `index`. `ignore` drops it.
-- `repeatable`: whether `.` can replay the command. The default is true. Nine commands opt out: `command.repeat`, `browser.close_all`, `browser.focus_page`, `config.reload`, `help.open`, `engine.show`, `settings.set`, `settings.toggle` and `settings.unset`.
+- `repeatable`: whether `.` can replay the command. The default is true. Twelve commands opt out: `command.repeat`, `browser.close_all`, `browser.focus_page`, `config.reload`, `debug.restart`, `frame.exit`, `help.open`, `native.install`, `engine.show`, `settings.set`, `settings.toggle` and `settings.unset`.
 - `modes`: the modes where a key can run the command. The default is normal.
 - `completion`: where the command line list offers the command. Absent means always. `hidden` means never, and a list of modes means only when the line was opened from one of them. Typing the name still runs the command.
 - `run`: the handler. It gets the context (tab, frame, mode) and the checked args.
@@ -177,7 +177,7 @@ The keymap is data, not code. It maps a mode and a key sequence to an invocation
 
 ## Config
 
-The user config is a directory of files, one file per kind of setting. `tools/build-config` merges them into one JSON file, and Firefox's managed storage hands that file to the extension. The extension reads only the merged file.
+The user config is a directory of files, one file per kind of setting. `config.reload` reads them through the native host, and the extension merges and checks them with the same code `tools/build-config` runs. Until managed storage is removed, the merged file that `build-config` writes there still gives the config at startup, before the first `config.reload`.
 
 ### Source files
 
@@ -265,17 +265,17 @@ Each setting is one row of data in `src/shared/settings_table.ts`: its kind (tru
 
 ### Delivery
 
-Firefox reads `~/.mozilla/managed-storage/<extension id>.json` and gives its `data` to the extension through `browser.storage.managed`. No helper program or extra permission is needed, and nothing in the browser can change the file.
+`config.reload` (key `qr`) asks the native host for the raw text of the files (`read_config`), builds the config in the background with `build_config` and swaps it in place. Nothing restarts, so the temp edits, the modes and open hints stay.
 
-Firefox reads the file only when the extension loads. The phase 0 measurements confirmed this: an edit is invisible until the extension reloads, and Firefox sends no change event. So:
-
-- A `config.reload` command reloads the extension. The new config applies in about 1 s. The reload resets the mode and any open hints.
-- After a reload, the key listeners in open tabs are cut off. Firefox loads the content script into open tabs by itself after `runtime.reload`, so the reinjection step stays only as a fallback (see [firefox-behavior.md](firefox-behavior.md), "Phase 1 measurements").
-- In Oasis Dots, a `just desertfox-config` recipe runs the tool, and a key can run the recipe and then `config.reload`.
-- The load checks every setting in the file against `SETTING_SPECS`. It drops a setting with an unknown name or a value the check refuses, warns, and lets the layer below apply. `build-config` refuses both, but a hand-edited or older managed file can still hold one.
-- Users without a shell can import the merged file through the help page. DesertFox stores it in `storage.local`. Managed storage wins when both exist.
-- The help page's Home shows the config source, the settings in force, the warnings and the rebuild steps. It has no inputs. The add-on Preferences button opens it, so no separate options page exists. The import above stays in phase 3.
-- `set`, `toggle` and `unset` change a setting from the browser, with no file edit. The settings in force come from four layers, and a later layer wins: the defaults, the config file, the saved edits and the temp edits. The saved edits live in `storage.local` (`desertfox_saved_settings`) and last until `unset`. The temp edits live in `storage.session` (`desertfox_temp_settings`), and a browser restart clears them. `config.reload` clears them too, because Firefox clears `storage.session` when an extension reloads. Both layers are global, private windows included. `set name value` saves a value, `set name` shows it and `toggle name` flips a true or false setting. With `--temp` (`-t`) the change goes to the temp layer. A saved change drops the temp edit of the same name, because that temp edit would keep winning and hide the save. `unset name` drops both edits of a setting, so the config file value applies, and `unset all` drops every edit. `unset --temp` drops only the temp edits. A browser edit wins over the config file, as in qutebrowser, where `autoconfig.yml` holds the browser edits. `name` is a `strict` param of the known setting names, and `value` carries `value_of: "name"`, so `check_args` checks the value with that setting's entry in `SETTING_SPECS`. The two prefix settings are refused, because a live change could collide with other keys. The help page tags every value that differs from the default with its top layer: `settings.toml`, `saved` or `temp`. Writing the saved edits to a file is not built yet.
+- The swap runs in the same queue as `set`, `toggle` and `unset`, so a reload and an edit never publish over each other. It replaces the snippet commands (the old ones leave the registry first), compiles and publishes the keymap, tells open tabs (`tree_updated`) and replaces the config the background runs on. Commands that arrive during the swap wait for it to commit. The toast counts every warning Help shows.
+- The built config goes to `storage.local` (`desertfox_files_config`), with its build warnings, so Help still lists them after a restart. It wins over managed storage, so a restart, the help page and the new tab page all read what the last reload built. An import will land in the same slot.
+- A reload that cannot finish keeps the current config whole: config, snippets, keymap and stored files. Its toast names the cause and the fix: no permission or no host (run `:native.install`), a host error, a missing config folder, or the problems in the files (the first three, and a count).
+- The load checks every setting in the files against `SETTING_SPECS`. It drops a setting with an unknown name or a value the check refuses, warns, and lets the layer below apply. `build-config` refuses both, but a hand-edited or older managed file can still hold one.
+- Managed storage stays only as the startup config until it is removed. Firefox reads its file once per extension load (see [firefox-behavior.md](firefox-behavior.md), "Managed storage"). A development quirk follows: after one `qr`, `just build-config` and a restart show no change, because the stored files win. The next `qr` shows it.
+- `debug.restart` (no key) restarts the whole extension, for debugging. Firefox loads the content script into open tabs by itself after `runtime.reload`, so the reinjection step stays only as a fallback (see [firefox-behavior.md](firefox-behavior.md), "Phase 1 measurements").
+- The help page's Home shows the config source, the settings in force, the warnings and the steps to apply an edit. It has no inputs. The add-on Preferences button opens it, so no separate options page exists.
+- `set`, `toggle` and `unset` change a setting from the browser, with no file edit. The settings in force come from four layers, and a later layer wins: the defaults, the config files, the saved edits and the temp edits. The saved edits live in `storage.local` (`desertfox_saved_settings`) and last until `unset`. The temp edits live in `storage.session` (`desertfox_temp_settings`), and a browser restart clears them. `config.reload` keeps them. `debug.restart` clears them, because Firefox clears `storage.session` when an extension reloads. Both layers are global, private windows included. `set name value` saves a value, `set name` shows it and `toggle name` flips a true or false setting. With `--temp` (`-t`) the change goes to the temp layer. A saved change drops the temp edit of the same name, because that temp edit would keep winning and hide the save. `unset name` drops both edits of a setting, so the config file value applies, and `unset all` drops every edit. `unset --temp` drops only the temp edits. A browser edit wins over the config file, as in qutebrowser, where `autoconfig.yml` holds the browser edits. `name` is a `strict` param of the known setting names, and `value` carries `value_of: "name"`, so `check_args` checks the value with that setting's entry in `SETTING_SPECS`. The two prefix settings are refused, because a live change could collide with other keys. The help page tags every value that differs from the default with its top layer: `settings.toml`, `saved` or `temp`.
+- Each change to the saved edits is mirrored to `autoconfig.toml` in the config folder through the host (`write_autoconfig`). The file is write-only: the build skips it and nothing reads it back. A failed write never blocks or undoes the edit. Without the permission it is skipped quietly, and any other failure warns once in the background console.
 
 The background compiles the keymap into a prefix tree and writes it to `storage.local` for the content scripts.
 
@@ -447,7 +447,7 @@ A Python 3.9 stdlib-only host in `host/` (see `host/README.md`), separate from t
 - `read_config`: the raw text of every config file under `~/.config/desertfox/`, keyed by relative path. One reply carries all files, and the host returns a clear error above Firefox's 1 MB reply cap. Nothing is parsed host-side.
 - `write_autoconfig`: writes the saved browser edits to `~/.config/desertfox/autoconfig.toml`, atomically. Nothing loads that file back. Browser storage stays the only source of saved edits.
 
-The host writes no other file. `nativeMessaging` is an optional permission, requested from a button on the Help page that `:native.install` opens (Firefox grants it only from a click). The page also shows `curl ... | sh` for `host/install.sh`. A release build installs the host of its own version from the GitHub release, checked by SHA-256. A development install takes the host from `main` with no checksum, and `--channel main` forces that. `just release` uploads the host, its checksum and the script. Loading config does not use the host yet.
+The host writes no other file. `nativeMessaging` is an optional permission, requested from a button on the Help page that `:native.install` opens (Firefox grants it only from a click). The page also shows `curl ... | sh` for `host/install.sh`. A release build installs the host of its own version from the GitHub release, checked by SHA-256. A development install takes the host from `main` with no checksum, and `--channel main` forces that. `just release` uploads the host, its checksum and the script. `config.reload` reads the files through it, and each change to the saved edits writes `autoconfig.toml` (see [Delivery](#delivery)).
 
 ### Oasis host (planned)
 
@@ -480,7 +480,7 @@ Firefox keeps the background awake while the port is open, which also helps a la
 | Keymap as data vs as code | Data | None for rebinding. New behavior comes from snippets or a new DesertFox build. |
 | Snippets vs plugin extensions | Snippets | Page code only, no extension APIs. A move to MV3 means a rewrite to the `userScripts` API, which shows the user an extra permission warning. |
 | Config as JSONC vs Lua | JSONC | No loops or helpers. The `search_keys` and `container_keys` sections remove most repetition, and tools can still edit the files. |
-| Config through managed storage vs the native host | Managed storage | Each edit needs the merge tool and a reload key, about 2 s. No helper program and no permission warning. |
+| Config through managed storage vs the native host | The native host. Managed storage stays as the startup config until it is removed | A helper program to install and an optional permission. An edit applies with one key and no restart, so temp edits and modes stay. |
 | Command line in an iframe vs a shadow root | iframe | Focus handling is harder. Isolation and direct API access are better. |
 | Content script in all frames vs the top frame | All frames. A frame from another site starts its script on its first focus | Hints and keys work inside an embed after `;f` or a click. Ad frames the user never enters stay inert, with one idle focus listener each. |
 | Plain `J/K` only vs plus chords | Plus `Alt+J/K` | Two keys for one command. The chord is the only way to switch tabs from about: pages, the PDF viewer or the address bar. |
@@ -506,7 +506,7 @@ Firefox keeps the background awake while the port is open, which also helps a la
 9. Base16 theme importer, after macros.
 10. Toolbar click menu and icon. The menu turns DesertFox on and off and opens help. The icon greys out when it is off. The design is open: it does not yet say whether off applies to all sites or one, or how it differs from `ignore_sites`. The icon is a placeholder until a real one with an off state exists.
 11. Phase 4, Oasis. The native host merged with voxcmd's, `desertfox list` and `run`, the Quickshell which-key, and the Oasis theme file written on theme change.
-12. Phase 4, saved edits on disk. The native host writes the saved edits to a generated `autoconfig.toml` beside the user's files. It never edits the user's own files.
+12. Phase 4, saved edits on disk. Done: the native host writes the saved edits to a generated `autoconfig.toml` beside the user's files. It never edits the user's own files.
 13. Release path. The maintainer installs through `just release` (signed, unlisted) now. A listed addons.mozilla.org release is a later piece: the listing, a source upload, Mozilla review, permission justifications and a privacy note.
 
 ## Open questions

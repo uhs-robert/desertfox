@@ -17,6 +17,10 @@ It takes about a minute and needs a nested Hyprland.
   When `SHADOW_SH` is unset, the recipe uses `$HOME/dotfiles/.claude/skills/shadow/shadow.sh` if it is executable. With neither, it exits.
 - Each run starts its own shadow session, so runs from different worktrees go in parallel with no lock.
 
+## Native host
+
+`config.reload` reads the config through the native host, so each run installs it. `run.mjs` runs `host/install.sh main` with `HOME` set to the session's throwaway HOME and a `curl` stand-in that copies the host from this checkout. It refuses the real HOME. It grants `nativeMessaging` from chrome code, because Firefox grants it only from a click. `launch_firefox.sh` sets `DESERTFOX_CONFIG_DIR` to a link in the run folder, and `load_config_dir` points that link at another folder before it presses `qr`. Managed storage still gives the config at startup.
+
 ## Traps
 
 - Run key tests only in your own worktree. Never run two from one worktree: each `just key-test` rebuilds and clears that worktree's `dist/`.

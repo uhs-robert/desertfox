@@ -6,4 +6,6 @@ run_dir=$1 profile_dir=$2 debug_port=$3 managed_json=$4
 mkdir -p "$HOME/.mozilla/managed-storage"
 cp "$managed_json" "$HOME/.mozilla/managed-storage/"
 echo "$HOME" > "$run_dir/session_home"
+# The native host reads the config through this link, so a case can point it at another folder.
+export DESERTFOX_CONFIG_DIR="$run_dir/active_config"
 exec firefox -no-remote -profile "$profile_dir" -start-debugger-server "$debug_port" about:blank

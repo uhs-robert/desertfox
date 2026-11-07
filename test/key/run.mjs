@@ -3,9 +3,9 @@
 // `status` is optional. The sweep reads its stdout for lines that start `<name>: ` and skips the sweep if the verb fails.
 // The cleanup of killed runs works only for drivers that keep sessions in /tmp/shadow-<uid>-<name>.
 import { execFile, spawnSync } from "node:child_process";
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import net from "node:net";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir, userInfo } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
@@ -92,6 +92,20 @@ async function free_port() {
   return port;
 }
 
+// Runs the real install script into the session's throwaway HOME. A curl stand-in copies the host from this checkout, so the run needs no network and tests this branch's host.
+function install_native_host(work_dir, session_home) {
+  // realpath and the passwd entry catch a HOME override on this runner and a session HOME that links to the real one.
+  const real_homes = new Set([homedir(), userInfo().homedir].map((home) => realpathSync(home)));
+  if (session_home === "" || real_homes.has(realpathSync(session_home))) throw new Error(`refusing a host install into the real HOME: "${session_home}"`);
+  const stub_dir = join(work_dir, "install_stub");
+  mkdirSync(stub_dir, { recursive: true });
+  writeFileSync(join(stub_dir, "curl"), `#!/bin/sh\nout=""; url=""\nwhile [ $# -gt 0 ]; do case "$1" in -o) out=$2; shift 2;; http*) url=$1; shift;; *) shift;; esac; done\nexec cp "${join(repo_dir, "host")}/$(basename "$url")" "$out"\n`);
+  chmodSync(join(stub_dir, "curl"), 0o755);
+  const { XDG_DATA_HOME: _ignored, ...env } = process.env;
+  const result = spawnSync("sh", [join(repo_dir, "host", "install.sh"), "main"], { env: { ...env, HOME: session_home, PATH: `${stub_dir}:${process.env.PATH}` }, encoding: "utf8" });
+  if (result.status !== 0) throw new Error(`host install failed: ${result.stderr}${result.stdout}`);
+}
+
 function build_test_config(config_dir, out_file) {
   const result = spawnSync("node", ["tools/build-config/cli.ts", config_dir, "--out", out_file], { cwd: repo_dir, encoding: "utf8" });
   if (result.status !== 0) throw new Error(`build-config failed: ${result.stderr}${result.stdout}`);
@@ -142,6 +156,9 @@ async function main() {
   mkdirSync(profile_dir);
   cpSync(join(key_test_dir, "user.js"), join(profile_dir, "user.js"), { recursive: true });
   const managed_file = join(managed_dir, `${EXTENSION_ID}.json`);
+  // DESERTFOX_CONFIG_DIR points the native host here (launch_firefox.sh). load_config_dir moves the link.
+  const active_config = join(work_dir, "active_config");
+  symlinkSync(config_dir, active_config);
   const server = await start_server();
   // The built-in duck engine is replaced by this server, so a search from the keys lands on a page the test can read.
   // The keyfam.site engine is for p9_completion.mjs. The keysite, keyrepo, keysub, keypage, keyhere and keyother engines are for p8_engines.mjs (keyhere belongs to the test host, keyother to a host no test page has): the test page has a host but is no GitHub repo or subreddit.
@@ -272,6 +289,17 @@ async function main() {
       await ExtensionSettingsStore.addSetting("${EXTENSION_ID}", "newTabNotification", "${EXTENSION_ID}", true, () => false);
     })()`);
     if (notice_confirmation?.error) throw new Error(`confirming the new tab notice failed: ${notice_confirmation.error}`);
+    // config.reload reads the files through the native host. Firefox grants nativeMessaging only from a click, so the test grants it from chrome code.
+    install_native_host(work_dir, readFileSync(join(work_dir, "session_home"), "utf8").trim());
+    const permission_grant = await evaluate_in_chrome(rdp, `(async () => {
+      const { ExtensionPermissions } = ChromeUtils.importESModule("resource://gre/modules/ExtensionPermissions.sys.mjs");
+      // The third argument tells the running extension, as permissions.request does, so its background gains sendNativeMessage at once.
+      const { extension } = WebExtensionPolicy.getByID("${EXTENSION_ID}");
+      await ExtensionPermissions.add("${EXTENSION_ID}", { permissions: ["nativeMessaging"], origins: [] }, extension);
+    })()`);
+    if (permission_grant?.error) throw new Error(`granting nativeMessaging failed: ${permission_grant.error}`);
+    const native_api = await evaluate_in_background(rdp, EXTENSION_ID, `typeof browser.runtime.sendNativeMessage`);
+    if (native_api !== "function") throw new Error(`the background has no sendNativeMessage after the grant: ${native_api}`);
     await sleep(1500);
     const read_injections = async (file) => {
       const all = await evaluate_in_background(rdp, EXTENSION_ID, `(async () => (await browser.storage.local.get("desertfox_bundle_loads")).desertfox_bundle_loads ?? [])()`);
@@ -429,7 +457,33 @@ async function main() {
       }
     }, { setup: true });
 
-    await run_case("config.reload keeps keys working in open tabs", async () => {
+    // The debugger answers null for undefined, so the checks below compare with == null.
+    const read_background = (code) => evaluate_in_background(rdp, EXTENSION_ID, code).catch(() => undefined);
+    const read_local = (key) => read_background(`(async () => (await browser.storage.local.get("${key}"))["${key}"])()`);
+    // Presses qr and waits until the reload stores the files config. The key is removed first, so an earlier reload does not count.
+    async function reload_in_place() {
+      await read_background(`browser.storage.local.remove("desertfox_files_config")`);
+      await send_keys("qr");
+      for (let attempt = 0; attempt < 40; attempt++) {
+        await sleep(250);
+        if ((await read_local("desertfox_files_config")) != null) return;
+      }
+      // The host call made by hand tells a missing permission or host from a refused build.
+      const probe = await read_background(`(async () => ({ granted: await browser.permissions.contains({ permissions: ["nativeMessaging"] }), host: await browser.runtime.sendNativeMessage("desertfox_host", { cmd: "read_config" }).then((reply) => ({ ok: reply.ok, error: reply.error, files: Object.keys(reply.files ?? {}).length }), (error) => String(error)) }))()`);
+      throw new Error(`qr stored no files config after 10 s: ${JSON.stringify(probe)}`);
+    }
+    // Waits for the restart that debug.restart starts: the new background writes its tab repair report.
+    async function wait_reinject_report() {
+      let report;
+      for (let attempt = 0; attempt < 60 && !report; attempt++) {
+        await sleep(500);
+        report = await read_local("desertfox_reinject_report");
+      }
+      expect(report, "no desertfox_reinject_report after 30 s");
+      return report;
+    }
+
+    await run_case("config.reload applies the files in place, keeps a temp edit and keeps keys working in open tabs", async () => {
       writeFileSync(join(config_dir, "keymap.toml"), [
         "[normal]",
         'm = "scroll.to 50"',
@@ -439,23 +493,20 @@ async function main() {
         '"<A-.>" = "cmdline.open"',
         "",
       ].join("\n"));
-      build_test_config(config_dir, managed_file);
-      const session_home = readFileSync(join(work_dir, "session_home"), "utf8").trim();
-      cpSync(managed_file, join(session_home, ".mozilla", "managed-storage", `${EXTENSION_ID}.json`));
+      await send_keys(":set -t which_key_delay_ms 777", "-k", "Return");
+      await sleep(800);
+      const temp_before = await read_background(`(async () => (await browser.storage.session.get("desertfox_temp_settings")).desertfox_temp_settings)()`);
+      expect(temp_before?.which_key_delay_ms === 777, `the temp edit did not land: ${JSON.stringify(temp_before)}`);
 
       await send_keys("gg");
       await sleep(500);
-      await evaluate_in_background(rdp, EXTENSION_ID, `browser.storage.local.remove("desertfox_reinject_report")`);
-      await send_keys("qr");
-      let report;
-      for (let attempt = 0; attempt < 60 && !report; attempt++) {
-        await sleep(500);
-        report = await evaluate_in_background(rdp, EXTENSION_ID, `(await browser.storage.local.get("desertfox_reinject_report")).desertfox_reinject_report`).catch(() => undefined);
-      }
-      expect(report, "no desertfox_reinject_report after 30 s");
-      measurements.reinject_report = report;
-      console.log(`reinject report ${JSON.stringify(report)}`);
-      await sleep(1000);
+      await read_background(`browser.storage.local.remove("desertfox_reinject_report")`);
+      await reload_in_place();
+      await sleep(500);
+      expect((await read_local("desertfox_reinject_report")) == null, "qr restarted the extension: a tab repair report was written");
+      const status = await read_local("desertfox_config_status");
+      expect(status?.source === "files", `the config source is ${status?.source}, expected files`);
+      expect(status?.temp?.includes("which_key_delay_ms") && status?.settings?.which_key_delay_ms === 777, `the temp edit did not survive the reload: ${JSON.stringify(status?.temp)} ${status?.settings?.which_key_delay_ms}`);
 
       const one_j = await scroll_delta_after("a", ["j"]);
       expect(one_j === single_j_pixels, `after reload j moved ${one_j}px, before it moved ${single_j_pixels}px (double or missing action)`);
@@ -468,6 +519,22 @@ async function main() {
       await expect_exactly_one_visible(switch_mark, "b");
       const other_tab_delta = await scroll_delta_after("b", ["j"]);
       expect(other_tab_delta === single_j_pixels, `in an untouched tab j moved ${other_tab_delta}px, expected ${single_j_pixels}px`);
+    }, { setup: true });
+
+    await run_case("debug.restart restarts the extension, keeps keys working in open tabs and keeps the reloaded files over managed storage", async () => {
+      await read_background(`browser.storage.local.remove("desertfox_reinject_report")`);
+      await send_keys(":debug.restart", "-k", "Return");
+      const report = await wait_reinject_report();
+      measurements.reinject_report = report;
+      console.log(`reinject report ${JSON.stringify(report)}`);
+      await sleep(1000);
+      expect((await read_local("desertfox_config_status"))?.source === "files", "after the restart the config no longer comes from the files");
+      const one_j = await scroll_delta_after("b", ["j"]);
+      expect(one_j === single_j_pixels, `after the restart j moved ${one_j}px, expected ${single_j_pixels}px`);
+      const mark = events.length;
+      await send_keys("m");
+      const halfway = await wait_event(mark, scroll_of("b"), "scroll to 50 percent after the restart");
+      expect(Math.abs(halfway.y - halfway.max_y / 2) <= 2, `m stopped at ${halfway.y} of ${halfway.max_y}`);
     }, { setup: true });
 
     await run_case("keys work on a fresh load after the reload", async () => {
@@ -769,20 +836,12 @@ async function main() {
       await wait_event(mark, (event) => event.type === "tree_read" && event.page_id === "num_3", "the page num_3 after 3 Ctrl+X");
     });
 
-    // Builds a config folder, hands it to the running Firefox as managed storage and reloads it with qr. The which-key shots use it to show a copy of the user config.
+    // Points the native host at a config folder and reloads it in place with qr. The which-key shots use it to show a copy of the user config.
     const load_config_dir = async (dir) => {
-      build_test_config(dir, managed_file);
-      const session_home = readFileSync(join(work_dir, "session_home"), "utf8").trim();
-      cpSync(managed_file, join(session_home, ".mozilla", "managed-storage", `${EXTENSION_ID}.json`));
-      await evaluate_in_background(rdp, EXTENSION_ID, `browser.storage.local.remove("desertfox_reinject_report")`);
-      await send_keys("qr");
-      let report;
-      for (let attempt = 0; attempt < 60 && !report; attempt++) {
-        await sleep(500);
-        report = await evaluate_in_background(rdp, EXTENSION_ID, `(await browser.storage.local.get("desertfox_reinject_report")).desertfox_reinject_report`).catch(() => undefined);
-      }
-      expect(report, "no desertfox_reinject_report after 30 s");
-      await sleep(1000);
+      rmSync(active_config);
+      symlinkSync(dir, active_config);
+      await reload_in_place();
+      await sleep(500);
     };
 
     // Pieces keep their cases in test/key/p<number>_*.mjs, each exporting run_cases(context).

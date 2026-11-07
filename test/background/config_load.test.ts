@@ -5,22 +5,22 @@ import { empty_config, pick_config } from "../../src/background/config_load.ts";
 
 const file = (marker: string) => ({ format_version: CONFIG_FORMAT_VERSION, css: marker });
 
-test("managed wins over imported", () => {
-  const picked = pick_config(file("managed"), file("imported"));
-  assert.equal(picked.source, "managed");
-  assert.equal(picked.config.css, "managed");
+test("the files config config.reload stored wins over managed storage", () => {
+  const picked = pick_config(file("files"), file("managed"));
+  assert.equal(picked.source, "files");
+  assert.equal(picked.config.css, "files");
   assert.deepEqual(picked.config.keymap, {});
 });
-test("imported is used without managed", () => {
-  assert.equal(pick_config(undefined, file("imported")).source, "imported");
-  assert.equal(pick_config({}, file("imported")).source, "imported");
+test("managed storage is used until a reload stores the files", () => {
+  assert.equal(pick_config(undefined, file("managed")).source, "managed");
+  assert.equal(pick_config({}, file("managed")).source, "managed");
 });
 test("neither runs on defaults", () => {
   assert.deepEqual(pick_config(undefined, undefined), { config: empty_config(), source: "defaults", warnings: [] });
 });
 test("a wrong format version warns and falls through", () => {
-  const picked = pick_config({ format_version: 9 }, file("imported"));
-  assert.equal(picked.source, "imported");
+  const picked = pick_config({ format_version: 9 }, file("managed"));
+  assert.equal(picked.source, "managed");
   assert.equal(picked.warnings.length, 1);
 });
 test("a version 1 file, written before the open_target rename, is rejected", () => {

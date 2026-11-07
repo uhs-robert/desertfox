@@ -1,7 +1,7 @@
 // Every `storage.local` key the background owns. The compiled keymap key lives in `shared/prefix_tree.ts`, the theme and user CSS keys in `shared/theme/apply.ts`.
 
-// Phase 3 writes the merged config file here when the user imports it.
-export const IMPORTED_CONFIG_STORAGE_KEY = "desertfox_imported_config";
+// The config `config.reload` last built from the files. An import will land here too.
+export const FILES_CONFIG_STORAGE_KEY = "desertfox_files_config";
 
 // Strings for the help page: config, keymap and shortcut slot problems from the last load.
 export const WARNINGS_STORAGE_KEY = "desertfox_warnings";
