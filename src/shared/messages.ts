@@ -82,6 +82,10 @@ export type CmdlineOpened = {
   // The window of the line's tab and the `completion_all_windows` setting, which the page needs to filter the tab model's rows.
   window_id: number;
   all_windows: boolean;
+  // The `statusbar_widgets` setting, in display order.
+  statusbar_widgets: string[];
+  // What the widgets show, taken when the line opens. `tab_index` is zero-based and `tab_count` covers the line's window.
+  status: { url: string; tab_index: number; tab_count: number };
 };
 
 // From the command line page when typed text parsed. The background keeps it in the history unless the tab is private.

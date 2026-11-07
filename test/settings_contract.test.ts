@@ -25,6 +25,7 @@ const EXPECTATIONS: Record<string, string> = {
   completion_all_windows: "true or false",
   cmdline_prompt: "a string of 1 to 8 characters on one line",
   open_completion: 'a list of "bookmarks" and "history" with no repeat',
+  statusbar_widgets: 'a list of "url", "scroll" and "tabs" with no repeat',
   history_completion_max: "a whole number, 0 or more",
   newtab_clock: 'true, false, "analog" or "digital"',
   newtab_date: "true or false",
@@ -54,6 +55,7 @@ test("every setting keeps its listed values", () => {
     completion_all_windows: ["true", "false"],
     cmdline_prompt: ["caret", "colon"],
     open_completion: ["bookmarks", "history"],
+    statusbar_widgets: ["url", "scroll", "tabs"],
     newtab_clock: ["true", "false", "analog", "digital"],
     newtab_date: ["true", "false"],
     newtab_clock_format: ["12", "24"],
@@ -64,7 +66,7 @@ test("every setting keeps its listed values", () => {
 });
 
 test("the list, unsettable and toggle sets stay the same", () => {
-  assert.deepEqual(SETTING_NAMES.filter((name) => SETTING_SPECS[name].is_list), ["ignore_sites", "open_completion"]);
+  assert.deepEqual(SETTING_NAMES.filter((name) => SETTING_SPECS[name].is_list), ["ignore_sites", "open_completion", "statusbar_widgets"]);
   assert.deepEqual(SETTING_NAMES.filter((name) => !SETTING_SPECS[name].settable), ["search_prefixes", "container_prefixes", "newtab_links"]);
   // A toggle flips the value in force, so an absent one flips from its default.
   const toggles = Object.fromEntries(SETTING_NAMES.filter((name) => SETTING_SPECS[name].is_toggle).map((name) => [name, DEFAULT_SETTINGS[name]]));
@@ -88,6 +90,7 @@ const ACCEPTS: Record<string, unknown[]> = {
   // Code points, not UTF-16 units: eight emoji are sixteen units.
   cmdline_prompt: ["c", "> ", "12345678", "\u{1F600}".repeat(8), "\t"],
   open_completion: [[], ["history"], ["history", "bookmarks"]],
+  statusbar_widgets: [[], ["tabs"], ["tabs", "url"]],
   history_completion_max: [0, 10],
   newtab_clock: [true, false, "analog", "digital"],
   newtab_date: [true, false],
@@ -116,6 +119,7 @@ const REFUSES: Record<string, unknown[]> = {
   completion_all_windows: ["true", 1],
   cmdline_prompt: ["", "123456789", "\u{1F600}".repeat(9), "a\nb", "a\rb", 1, true],
   open_completion: [["bookmarks", "bookmarks"], ["tabs"], "history"],
+  statusbar_widgets: [["url", "url"], ["clock"], "url"],
   history_completion_max: [-1, 1.5, "10"],
   newtab_clock: ["true", "Analog", 1],
   newtab_date: ["false"],
@@ -182,6 +186,7 @@ test("the defaults stay the same", () => {
     completion_all_windows: false,
     cmdline_prompt: "caret",
     open_completion: ["bookmarks", "history"],
+    statusbar_widgets: ["url", "scroll", "tabs"],
     history_completion_max: 10,
     newtab_clock: true,
     newtab_date: true,
@@ -224,5 +229,7 @@ test("the editor schema matches its output before #85, apart from the listed cha
     assert.equal(properties[name].description, undefined, name);
     properties[name].description = described_now[name]!.description;
   }
+  // Settings added since the fixture was taken.
+  properties.statusbar_widgets = JSON.parse(JSON.stringify((settings_schema().properties as Record<string, unknown>).statusbar_widgets));
   assert.deepEqual(JSON.parse(JSON.stringify(settings_schema())), JSON.parse(JSON.stringify(before)));
 });

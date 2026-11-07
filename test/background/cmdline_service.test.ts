@@ -30,12 +30,20 @@ function make({ slow_set = false, stuck_ticket = "" } = {}) {
     tickets,
     new_ticket: () => `ticket-${++issued}`,
     sources: async () => ({ search_engines: ["arch"], containers: [] }),
-    page_config: async () => ({ commands: [{ id: "my.snippet", label: "Mine", intent: "page" }], help_ids: ["tab.next"], command_aliases: { g: "open.search" }, prompt: ">> ", all_windows: false }),
+    page_config: async () => ({ commands: [{ id: "my.snippet", label: "Mine", intent: "page" }], help_ids: ["tab.next"], command_aliases: { g: "open.search" }, prompt: ">> ", all_windows: false, statusbar_widgets: ["url", "tabs"] }),
+    tab_count: async (window_id) => (window_id === 10 ? 4 : 0),
   });
   // Opens the line the way the host and the page do: a ticket for tab 7, redeemed from the line's frame in tab 7.
   const open = async () => (await service.open(await service.issue_ticket(7), 7, LINE_FRAME, 10))!;
   return { service, open, session_data };
 }
+
+test("the status is the tab's address and place in its window, and the widgets come from the settings", async () => {
+  const { service } = make();
+  const opened = await service.open(await service.issue_ticket(7), 7, LINE_FRAME, 10, { url: "https://example.org/a", index: 2 });
+  assert.deepEqual(opened?.status, { url: "https://example.org/a", tab_index: 2, tab_count: 4 });
+  assert.deepEqual(opened?.statusbar_widgets, ["url", "tabs"]);
+});
 
 test("history keeps order, oldest first", async () => {
   const { service, open } = make();
