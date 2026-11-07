@@ -50,7 +50,7 @@ build-config dir="" *flags="": build
 host-test:
     python3 -m unittest discover -s host -p 'test_*.py'
 
-# Real key presses in a nested session. The latest full run took about 20 minutes (1154 s for 243 cases); the key-test-speed work (#273) brings it down. Needs SHADOW_SH, or the shadow skill script in dotfiles, as the nested-session driver.
+# Real key presses in a nested session. The latest full run took about 20 minutes (1143 s for 241 cases); the key-test-speed work (#273) brings it down. Needs SHADOW_SH, or the shadow skill script in dotfiles, as the nested-session driver.
 key-test: build
     #!/usr/bin/env bash
     set -euo pipefail
