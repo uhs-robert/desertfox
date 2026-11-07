@@ -182,7 +182,11 @@ function setting_rows(context: Extract<CursorContext, { kind: "subject" }>, text
   if (command_id !== "settings.set" || setting === undefined || !is_setting_name(setting)) return [];
   const spec = completion_of(setting);
   if (context.position > 1 && !spec.is_list) return [];
-  return spec.values.map((value) => row(value, `${quote_word(value)} `, ""));
+  const after = tokenize(text.slice(context.end));
+  const other_words = [...(Array.isArray(typed) ? typed.slice(2) : []), ...(Array.isArray(after) ? after : [])];
+  // Split on whitespace as `parse_setting_text` does: a quoted token can hold several items.
+  const already_typed = new Set(other_words.flatMap((token) => token.text.split(/\s+/)));
+  return spec.values.filter((value) => !already_typed.has(value)).map((value) => row(value, `${quote_word(value)} `, ""));
 }
 
 // With no word typed, the bookmark list shows this many of the newest.
