@@ -43,20 +43,33 @@ export function create_timings() {
       return await action();
     } finally {
       charge();
-      open_categories.splice(open_categories.indexOf(entry), 1);
+      const index = open_categories.indexOf(entry);
+      if (index >= 0) open_categories.splice(index, 1);
     }
+  }
+
+  let active_case;
+
+  // Safe to call twice and from a signal handler. It also drops the entries the case left open (the losing sleep of a Promise.race), so they are not charged to a later case.
+  function finish_active_case() {
+    if (!active_case) return;
+    charge();
+    const { name, meta, started_at } = active_case;
+    Object.assign(bucket_of(name), meta, { piece: current_piece, wall_ms: Date.now() - started_at });
+    open_categories.length = 0;
+    current_case = OUTSIDE_CASES;
+    active_case = undefined;
   }
 
   async function time_case(name, meta, action) {
     charge();
     current_case = name;
-    const case_started_at = Date.now();
+    const this_case = { name, meta, started_at: Date.now() };
+    active_case = this_case;
     try {
       return await action();
     } finally {
-      charge();
-      Object.assign(bucket_of(name), meta, { piece: current_piece, wall_ms: Date.now() - case_started_at });
-      current_case = OUTSIDE_CASES;
+      if (active_case === this_case) finish_active_case();
     }
   }
 
@@ -144,7 +157,7 @@ export function create_timings() {
     writeFileSync(path, `${JSON.stringify(full_report, null, 2)}\n`);
   }
 
-  return { time, time_case, time_piece, wrap_rdp, record_tab_count, report, summary_text, write_json };
+  return { time, time_case, finish_active_case, time_piece, wrap_rdp, record_tab_count, report, summary_text, write_json };
 }
 
 export function default_timings_path(repo_dir) {

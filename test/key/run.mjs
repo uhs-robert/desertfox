@@ -202,7 +202,12 @@ async function main() {
     return teardown_started;
   };
   for (const [signal, code] of [["SIGINT", 130], ["SIGTERM", 143]]) {
-    process.on(signal, () => teardown().finally(() => { write_timings(); process.exit(code); }));
+    process.on(signal, () => {
+      // Written before the teardown, so a hung teardown loses nothing and is not charged to the case.
+      timings.finish_active_case();
+      write_timings();
+      teardown().finally(() => process.exit(code));
+    });
   }
 
   const url_of = (kind, id) => `http://127.0.0.1:${server.port}/${kind}?id=${id}`;
@@ -879,8 +884,8 @@ async function main() {
       await timings.time_piece(file, async () => {
         await sample_tabs(`before ${file}`);
         await (await import(`./${file}`)).run_cases(case_context);
-        write_timings({ print_summary: false });
       });
+      write_timings({ print_summary: false });
     }
     await sample_tabs("after pieces");
 
