@@ -11,7 +11,7 @@ import { always_default, bare_word_param, default_of, flag_params, is_dynamic_va
 import { rank } from "../../shared/score.ts";
 import { completion_of, is_setting_name, SETTING_COMPLETION, type SettingCompletion } from "../../shared/setting_completion.ts";
 import type { Ranked } from "../../shared/score.ts";
-import type { BookmarkItem, EngineItem, HeadingItem, OpenItems, OpenRow, TabContainer, TabItem, WindowItem } from "../../shared/messages.ts";
+import type { BookmarkItem, EngineItem, HeadingItem, HistoryItems, OpenItems, OpenRow, TabContainer, TabItem, WindowItem } from "../../shared/messages.ts";
 import type { LiveKind, LiveSource } from "./live.ts";
 import { cursor_context } from "./tokenize.ts";
 import type { CursorContext } from "./tokenize.ts";
@@ -290,7 +290,7 @@ function engine_rows(engines: readonly EngineItem[], usage: string, marks_unavai
 const live_kind_of = (param: ParamDef | undefined): LiveKind | undefined => {
   if (!param || !is_dynamic_values(param.values)) return undefined;
   const from = param.values.from;
-  return from === "tabs" || from === "bookmarks" || from === "open" || from === "windows" || from === "headings" ? from : from === "search_engines" ? "engines" : undefined;
+  return from === "tabs" || from === "bookmarks" || from === "history" || from === "open" || from === "windows" || from === "headings" ? from : from === "search_engines" ? "engines" : undefined;
 };
 
 // The engine takes the first word of `search`, ahead of the query that follows it.
@@ -327,6 +327,11 @@ export function create_completer(
       if (kind === "open") {
         const items = read.items as OpenItems;
         return { ...span, usage, rows: open_ranked(context.word, open_rows(items.rows, usage), items), listing: true };
+      }
+      if (kind === "history") {
+        const items = read.items as HistoryItems;
+        const ranked = rank(context.word, bookmark_rows(items.rows, usage));
+        return { ...span, usage, rows: context.word.trim() === "" ? ranked.slice(0, items.max) : ranked, listing: true };
       }
       const rows =
         kind === "tabs"
