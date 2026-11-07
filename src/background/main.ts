@@ -54,7 +54,8 @@ const cmdline = create_cmdline_service({
   tickets: browser.storage.session,
   new_ticket: () => crypto.randomUUID(),
   sources: async () => ({ search_engines: await get_search_engine_names(), containers: await container_names() }),
-  tab_count: async (window_id) => (await browser.tabs.query({ windowId: window_id })).length,
+  // A failed query must not stop the line from opening.
+  tab_count: async (window_id) => (await browser.tabs.query({ windowId: window_id }).catch(() => [])).length,
   page_config: async () => {
     const config = await get_config();
     const settings = effective_settings(config.settings);
