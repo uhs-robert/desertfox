@@ -84,6 +84,7 @@ const complete_items = create_complete_items({
     const { open_completion, history_completion_max } = effective_settings((await get_config()).settings);
     return { sources: open_completion, history_max: history_completion_max };
   },
+  history_list_max: async () => effective_settings((await get_config()).settings).history_list_max,
 });
 
 track_window_focus(browser.storage.session, browser.windows);

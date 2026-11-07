@@ -4,7 +4,7 @@ import { create_live_source } from "../../src/cmdline/completion/live.ts";
 import { create_completer } from "../../src/cmdline/completion/sources.ts";
 import { create_session } from "../../src/cmdline/session.ts";
 import type { CommandMeta } from "../../src/shared/command.ts";
-import type { BookmarkItem, EngineItem, HeadingItem, OpenItems, WindowItem, TabItem } from "../../src/shared/messages.ts";
+import type { BookmarkItem, EngineItem, HeadingItem, HistoryItems, OpenItems, WindowItem, TabItem } from "../../src/shared/messages.ts";
 import { parse_command_line } from "../../src/shared/registry/index.ts";
 import { create_word_lookup } from "../../src/cmdline/word_lookup.ts";
 
@@ -34,6 +34,7 @@ const COMMANDS: CommandMeta[] = [
   { id: "engine.show", name: "engine.show", label: "Show engine", intent: "Show an engine.", params: [{ name: "engine", type: "enum", values: { from: "search_engines" } }] },
 ];
 COMMANDS.push({ id: "heading.go", name: "heading", label: "Go to heading", intent: "Go to a heading.", params: [{ name: "heading", type: "string", rest: true, main: true, values: { from: "headings" } }] });
+COMMANDS.push({ id: "history.open", name: "history", label: "Open history entry", intent: "Open history.", params: [{ name: "entry", type: "string", rest: true, main: true, values: { from: "history" } }] });
 COMMANDS.push({ id: "open.url", name: "open", label: "Open URL", intent: "Open a URL.", params: [{ name: "url", type: "string", main: true, values: { from: "open" } }] });
 const ENGINES: EngineItem[] = [
   { name: "duck", label: "DuckDuckGo", available: true },
@@ -62,7 +63,7 @@ const BOOKMARKS: BookmarkItem[] = Array.from({ length: 30 }, (_, index) => ({ ti
 
 // The background answers when the test says so.
 function make(containers: { name: string; cookie_store_id: string }[] = STORES, history: string[] = []) {
-  const asks: { kind: string; answer: (items: TabItem[] | BookmarkItem[] | EngineItem[] | OpenItems | WindowItem[] | HeadingItem[]) => void }[] = [];
+  const asks: { kind: string; answer: (items: TabItem[] | BookmarkItem[] | EngineItem[] | HistoryItems | OpenItems | WindowItem[] | HeadingItem[]) => void }[] = [];
   // The tab model has no reply to await. The first read is its cue to connect, and `answer` is the snapshot arriving.
   let tab_items: TabItem[] | undefined;
   let tabs_asked = false;
@@ -916,4 +917,42 @@ test("Up and Down in the container prompt with no matching container leave the t
   assert.equal(session.get_text(), "zzz");
   assert.deepEqual(enter(session), { kind: "render" });
   assert.equal(session.get_message(), "pick a container");
+});
+
+const VISITS: HistoryItems = { rows: Array.from({ length: 30 }, (_, index) => ({ title: `Visit ${index}`, url: `https://v${index}.test/` })), max: 5 };
+
+test("history shows the capped newest on an empty word, ranks every row for a typed word, and a pick inserts the address", async () => {
+  const { session, asks, settle } = make();
+  session.edit("history ");
+  assert.equal(asks.length, 1);
+  assert.equal(asks[0]!.kind, "history");
+  asks[0]!.answer(VISITS);
+  await settle();
+  assert.deepEqual(names(session), ["Visit 0", "Visit 1", "Visit 2", "Visit 3", "Visit 4"]);
+  session.edit("history 27");
+  assert.deepEqual(names(session), ["Visit 27"]);
+  tab_key(session);
+  assert.equal(session.get_text(), "history https://v27.test/ ");
+});
+
+test("a typed word keeps matching while a later history reply is the only one that counts", async () => {
+  const { session, live, asks, settle } = make();
+  session.edit("history v");
+  live.close();
+  session.edit("history vi");
+  assert.equal(asks.length, 2);
+  asks[1]!.answer({ rows: [{ title: "Fresh visit", url: "https://fresh.test/" }], max: 5 });
+  await settle();
+  asks[0]!.answer({ rows: [{ title: "Stale visit", url: "https://stale.test/" }], max: 5 });
+  await settle();
+  assert.deepEqual(names(session), ["Fresh visit"]);
+});
+
+test("a private line's empty history lists no rows and the line stays usable", async () => {
+  const { session, asks, settle } = make();
+  session.edit("history ");
+  asks[0]!.answer({ rows: [], max: 20 });
+  await settle();
+  assert.deepEqual(names(session), []);
+  assert.notEqual(session.get_hint(), "loading");
 });

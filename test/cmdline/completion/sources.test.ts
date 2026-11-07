@@ -108,7 +108,12 @@ test("set offers the setting names, then the values the setting lists", () => {
   assert.deepEqual(rows("set newtab_date "), ["true", "false"]);
   assert.deepEqual(rows("set hint_letters "), []);
   assert.deepEqual(rows("set which_key_border round "), []);
-  assert.deepEqual(rows("set open_completion history "), ["bookmarks", "history"]);
+  assert.deepEqual(rows("set open_completion history "), ["bookmarks"]);
+  assert.deepEqual(rows("set open_completion \"history\" "), ["bookmarks"]);
+  assert.deepEqual(rows("set open_completion history bookmarks "), []);
+  assert.deepEqual(rows("set open_completion "), ["bookmarks", "history"]);
+  assert.deepEqual(complete_set("set open_completion  history", 20).rows.map((row) => row.name), ["bookmarks"]);
+  assert.deepEqual(rows("set open_completion \"history bookmarks\" "), []);
   assert.ok(rows("set palette ").includes("oasis_moonlight"));
   assert.ok(!rows("set ").includes("search_prefixes"));
   assert.ok(rows("unset ").includes("all"));
@@ -161,7 +166,7 @@ test("a window title with several words completes on all of them", () => {
 test("search and set keep one word per position", () => {
   assert.deepEqual(picks("search duck two words"), []);
   assert.deepEqual(picks("set which_key_border round "), []);
-  assert.deepEqual(picks("set open_completion history "), ["bookmarks ", "history "]);
+  assert.deepEqual(picks("set open_completion history "), ["bookmarks "]);
 });
 
 test("the line right after a quoted pick still lists the picked row", () => {
