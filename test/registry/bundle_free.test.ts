@@ -29,6 +29,7 @@ test("a helper import from the registry index keeps no registry definer in the o
   const result = await build({ bundle: true, format: "iife", target: "firefox140", logLevel: "silent", stdin: { contents: 'import { tokenize } from "./src/shared/registry/index.ts"; console.log(tokenize);', resolveDir: "." }, write: false, metafile: true, minify: true, outdir: "dist" });
   // esbuild lists a tree-shaken re-export target in the inputs, so count the bytes that reach the output.
   const [output] = Object.values(result.metafile.outputs);
+  assert.ok(output, "the bundle has an output");
   const offenders = Object.entries(output.inputs).filter(([path, used]) => used.bytesInOutput > 0 && /registry\/(builtin|define)/.test(path));
   assert.deepEqual(offenders, []);
 });
