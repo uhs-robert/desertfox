@@ -9,7 +9,7 @@ just key-test
 KEY_TEST_ONLY=<regex> just key-test
 ```
 
-It takes about a minute and needs a nested Hyprland.
+A full run takes about 20 minutes (1154 s for 243 cases in the latest run) and needs a nested Hyprland. The key-test-speed work (#273) brings that down.
 
 - `KEY_TEST_ONLY` runs only the cases whose name matches. It also runs the cases marked `{ setup: true }`, which leave state that later cases read. The output tags those as `SETUP`.
 - `SHADOW_SH` must name a script that runs `up|spawn|keys|down <name>` for a nested, invisible compositor session. It can also answer `status` with one `<name>: up|down ...` line per session, which the sweep reads.
