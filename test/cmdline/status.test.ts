@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { scroll_label, security_state, tabs_label, url_label } from "../../src/cmdline/status.ts";
+import { scroll_label, security_state, status_widgets, tabs_label, url_label } from "../../src/cmdline/status.ts";
 
 test("security state follows the scheme", () => {
   assert.equal(security_state("https://example.org/a"), "ok");
@@ -42,4 +42,17 @@ test("the scroll label names the top, the bottom, a percent or a page that fits"
 test("the tabs label counts from one", () => {
   assert.equal(tabs_label(0, 1), "[1/1]");
   assert.equal(tabs_label(2, 12), "[3/12]");
+});
+
+test("status_widgets follows the setting's order and skips a name it does not know", () => {
+  const status = { url: "http://example.org/a", tab_index: 0, tab_count: 3 };
+  assert.deepEqual(
+    status_widgets(["tabs", "url", "clock", "scroll"], status, { top: 0, max: 0 }),
+    [
+      { name: "tabs", text: "[1/3]" },
+      { name: "url", text: "example.org/a", title: "http://example.org/a", state: "warn" },
+      { name: "scroll", text: "All" },
+    ],
+  );
+  assert.deepEqual(status_widgets([], status, null), []);
 });

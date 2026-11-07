@@ -14,6 +14,8 @@
         --desertfox-fg-core: #f5f5dc;
         --desertfox-primary: #7fa3c9;
         --desertfox-error: #ffa0a0;
+        --desertfox-ok: #9ece97;
+        --desertfox-warn: #e6c97a;
         --desertfox-fg-comment: #69809d;
         --desertfox-fg-dim: #717a84;
         --desertfox-fg-muted: #4e6578;
@@ -35,6 +37,10 @@
       .desertfox-cmdline-prompt { color: var(--desertfox-secondary); font-weight: bold; white-space: pre; }
       .desertfox-cmdline-prompt-colon { color: var(--desertfox-primary); font-weight: normal; margin-right: .5rem; }
       .desertfox-cmdline-input { flex: 1; background: transparent; color: inherit; border: 0; outline: 0; font: inherit; }
+      /* Not focusable and not selectable, so a click or Tab never moves the caret out of the input. The input keeps the room: the area is capped by the address cut and hides on a narrow line. */
+      .desertfox-cmdline-status { flex: none; display: flex; gap: 1ch; margin-left: .75rem; white-space: pre; color: var(--desertfox-fg-dim); user-select: none; }
+      .desertfox-cmdline-status-ok { color: var(--desertfox-ok); }
+      .desertfox-cmdline-status-warn { color: var(--desertfox-warn); }
       /* Each row is 20px. The keys column is last and never shrinks: --desertfox-keys-width is its widest text. */
       .desertfox-cmdline-list { overflow: hidden; }
       .desertfox-cmdline-item { display: flex; align-items: center; gap: .75rem; height: 20px; padding: 0 .75rem; white-space: nowrap; }
@@ -73,6 +79,9 @@
       .desertfox-cmdline-tag { flex: 0 0 auto; color: var(--desertfox-fg-comment); }
       .desertfox-cmdline-args-short { display: none; }
       .desertfox-cmdline-keys { flex: 0 0 var(--desertfox-keys-width); text-align: right; color: var(--desertfox-primary); }
+      @container (max-width: 30rem) {
+        .desertfox-cmdline-status { display: none; }
+      }
       @container (max-width: 40rem) {
         .desertfox-cmdline-args-full { display: none; }
         .desertfox-cmdline-args-short { display: inline; }
@@ -86,6 +95,7 @@
       <div class="desertfox-cmdline-row">
         <span class="desertfox-cmdline-prompt">&gt; </span>
         <input id="line" class="desertfox-cmdline-input" type="text" autocomplete="off" spellcheck="false" />
+        <span id="status" class="desertfox-cmdline-status" hidden></span>
       </div>
     </div>
     <script src="cmdline_page.js"></script>

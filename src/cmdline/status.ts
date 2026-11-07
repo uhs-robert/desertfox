@@ -31,6 +31,23 @@ export function tabs_label(index: number, count: number): string {
   return `[${index + 1}/${count}]`;
 }
 
+export type StatusWidget = { name: string; text: string; title?: string; state?: SecurityState };
+
+// The widgets in the order of the setting. `scroll` is the host's snapshot, and a page with no scrolling element reads as All.
+export function status_widgets(
+  names: readonly string[],
+  status: { url: string; tab_index: number; tab_count: number },
+  scroll: { top: number; max: number } | null | undefined,
+): StatusWidget[] {
+  const widget = (name: string): StatusWidget | undefined => {
+    if (name === "url") return { name, text: url_label(status.url), title: status.url, state: security_state(status.url) };
+    if (name === "scroll") return { name, text: scroll_label(scroll?.top ?? 0, scroll?.max ?? 0) };
+    if (name === "tabs") return { name, text: tabs_label(status.tab_index, status.tab_count) };
+    return undefined;
+  };
+  return names.flatMap((name) => widget(name) ?? []);
+}
+
 function parse_address(address: string): URL | undefined {
   try {
     return new URL(address);
