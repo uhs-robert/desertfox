@@ -110,6 +110,17 @@
   .desertfox-help th, .desertfox-help td { padding: .1rem 1rem .1rem 0; text-align: left; vertical-align: top; }
   .desertfox-help-params td:nth-child(n+4) { overflow-wrap: anywhere; }
   /* overflow-wrap: anywhere lowers the cell's minimum width, so a long URL wraps and the tag column stays on screen. */
+  .desertfox-settings-row { display: flex; flex-direction: column; gap: .25rem; padding: .6rem 0; border-bottom: 1px solid color-mix(in srgb, var(--desertfox-fg-core) 15%, transparent); }
+  .desertfox-settings-head { display: flex; align-items: center; gap: .5rem; }
+  .desertfox-settings-doc { margin: 0; }
+  .desertfox-settings-body { display: flex; flex-wrap: wrap; align-items: flex-start; gap: .5rem; }
+  .desertfox-settings-input { max-width: 100%; box-sizing: border-box; padding: .25rem .4rem; border: 1px solid color-mix(in srgb, var(--desertfox-fg-core) 40%, transparent); border-radius: var(--desertfox-radius); background: var(--desertfox-bg-core); color: var(--desertfox-fg-core); font: inherit; }
+  .desertfox-settings-input[aria-invalid="true"] { border-color: var(--desertfox-primary); }
+  .desertfox-settings-reset, .desertfox-settings-move { padding: .15rem .6rem; border: 1px solid color-mix(in srgb, var(--desertfox-fg-core) 40%, transparent); border-radius: var(--desertfox-radius); background: none; color: var(--desertfox-fg-core); font: inherit; cursor: pointer; }
+  .desertfox-settings-reset:disabled, .desertfox-settings-move:disabled { opacity: .4; cursor: default; }
+  .desertfox-settings-order-row { display: flex; align-items: center; gap: .4rem; margin-bottom: .2rem; }
+  .desertfox-settings-message:empty { display: none; }
+  .desertfox-settings-error { color: var(--desertfox-primary); }
   .desertfox-help-settings { max-width: 100%; }
   .desertfox-help-settings td:nth-child(2) { overflow-wrap: anywhere; }
   /* Narrow screens: the sidebar becomes a drawer that slides over the page from the left, opened by the menu button in a bar that stays on top. */

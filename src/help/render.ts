@@ -4,12 +4,13 @@ import { copy_text } from "../content/caret/copy_text.ts";
 import type { Block, Inline } from "./blocks.ts";
 import type { CommandRow, EngineRow, HelpModel, KeyRow } from "./model.ts";
 import { STYLE_CLASSES, STYLE_VARIABLES } from "./model.ts";
+import { GROUPS } from "./settings_model.ts";
 import { PAGES } from "./route.ts";
 import type { PageId, Route } from "./route.ts";
 
-type Child = Node | string;
+export type Child = Node | string;
 
-function el(tag: string, class_name: string | undefined, ...children: Child[]): HTMLElement {
+export function el(tag: string, class_name: string | undefined, ...children: Child[]): HTMLElement {
   const node = document.createElement(tag);
   if (class_name) node.className = class_name;
   node.append(...children);
@@ -210,9 +211,22 @@ function styling_page(): HTMLElement[] {
   ];
 }
 
+// Settings go in after the render: `main.ts` fills `.desertfox-settings` from the background.
+function settings_page(): HTMLElement[] {
+  return [
+    el("p", undefined, "A change is saved at once, the same as ", el("code", undefined, ":set"), ". Each setting shows the layer that sets its value. Reset drops the saved and temp edit, so the config file value applies."),
+    el("div", "desertfox-settings", ...page_sections("settings", []).flatMap((section, index) => {
+      const group = el("div", "desertfox-settings-group");
+      group.setAttribute("data-group", GROUPS[index]!.title);
+      return [section_heading("settings", section), group];
+    })),
+  ];
+}
+
 function page_body(route: Route, model: HelpModel, guide: Block[]): HTMLElement[] {
   switch (route.page) {
     case "home": return home_page(model);
+    case "settings": return settings_page();
     case "quick-start": return quick_start_page(model.quick_start);
     case "search-engines": return search_engines_page(guide, model);
     case "commands": return commands_page(model);
@@ -276,6 +290,7 @@ export function page_sections(page: PageId, source: HelpModel | Block[], guide: 
   const quick_start = Array.isArray(source) ? source : source.quick_start;
   switch (page) {
     case "home": return HOME_SECTIONS;
+    case "settings": return sections_from_titles(GROUPS.map((group) => group.title));
     case "quick-start": return sections_from_titles(quick_start.flatMap((block) => (block.kind === "heading" && block.level === 2 ? [block.text] : [])));
     case "commands": return Array.isArray(source) ? [] : sections_from_titles(source.groups.map((group) => group.name));
     case "search-engines": return sections_from_titles([...guide.flatMap((block) => (block.kind === "heading" && block.level === GUIDE_SUBSECTION_LEVEL ? [block.text] : [])), YOUR_ENGINES]);
