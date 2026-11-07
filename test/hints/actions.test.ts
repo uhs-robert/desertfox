@@ -717,3 +717,56 @@ test("hovering an item after a copy pick inside the hovered menu still enters it
   assert.equal(menu.calls.filter((type) => type === "mouseenter").length, 1);
   unhover();
 });
+
+const count = (calls: string[], type: string) => calls.filter((call) => call === type).length;
+
+test("two click picks on siblings inside one menu enter the menu once", async () => {
+  const { unhover } = await import("../../src/content/hints/hover.ts");
+  unhover();
+  const { menu, item } = tree();
+  const sibling = fixture("a", { href: "https://example.com/2", parentElement: menu.element });
+  item.run("here");
+  sibling.run("here");
+  assert.equal(count(menu.calls, "mouseenter"), 1);
+  assert.equal(count(item.calls, "mouseenter"), 1);
+  assert.equal(count(sibling.calls, "mouseenter"), 1);
+  unhover();
+});
+
+test("a click pick on an item a copy pick recorded sends the item's missing enter events", async () => {
+  const { unhover } = await import("../../src/content/hints/hover.ts");
+  unhover();
+  const { menu, item } = tree();
+  menu.run("hover");
+  item.run("copy");
+  item.run("here");
+  assert.deepEqual(item.calls.filter((type) => type.endsWith("enter")), ["pointerenter", "mouseenter"]);
+  assert.equal(count(menu.calls, "mouseenter"), 1);
+  item.run("hover");
+  assert.equal(count(item.calls, "mouseenter"), 1);
+  unhover();
+});
+
+test("a click pick on an item inside a hovered menu enters the item and not the menu again", async () => {
+  const { unhover } = await import("../../src/content/hints/hover.ts");
+  unhover();
+  const { menu, item } = tree();
+  menu.run("hover");
+  item.run("here");
+  assert.equal(count(menu.calls, "mouseenter"), 1);
+  assert.equal(count(item.calls, "mouseenter"), 1);
+  unhover();
+});
+
+test("a double-click pick enters its target and names where the pointer came from", async () => {
+  const { unhover } = await import("../../src/content/hints/hover.ts");
+  unhover();
+  const { menu, outside } = tree();
+  const related: unknown[] = [];
+  Object.assign(outside.element, { dispatchEvent: (event: { type: string; relatedTarget: unknown }) => { outside.calls.push(event.type); if (event.type === "mouseover") related.push(event.relatedTarget); return true; } });
+  menu.run("hover");
+  outside.run("double_click");
+  assert.deepEqual(outside.calls.slice(0, 4), ["pointerover", "pointerenter", "mouseover", "mouseenter"]);
+  assert.deepEqual(related, [menu.element]);
+  unhover();
+});

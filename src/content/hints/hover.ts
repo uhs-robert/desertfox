@@ -89,17 +89,20 @@ export function unhover(): void {
   if (old) leave(old, undefined);
 }
 
-// Another pick moves the pointer to its target. A target inside the hovered element becomes the hovered one, so Escape still closes the menu around it. That target has not been entered yet: a later hover sends the entry, unless the pick enters it first with `enter_for_click`. Returns the element the pointer left, for that entry.
+// Another pick moves the pointer to its target. A target inside the hovered element becomes the hovered one, so Escape still closes the menu around it. That target has not been entered yet: a later hover sends the entry, unless the pick enters it first with `enter_for_click`. Returns the element the pointer came from, for that entry: a pending target's own entry source when the pick lands on it again.
 export function leave_toward(target: Hoverable): Hoverable | undefined {
   const old = release();
   if (!old) return undefined;
   leave(old, target);
-  if (contains(old.element, target)) hovered = { element: target, at: center_of(target), entry_from: old.element };
-  return old.element;
+  const came_from = old.entry_from ?? old.element;
+  if (contains(old.element, target)) hovered = { element: target, at: center_of(target), entry_from: came_from };
+  return came_from;
 }
 
-// The entry a click gives its target, from the element `leave_toward` returned. It sends no pointer motion and leaves the hover alone, except that a target recorded as hovered counts as entered.
+// The entry a click gives its target, from the element `leave_toward` returned. It sends no pointer motion. The target is then the hovered element, as under a real mouse, so the next pick or Escape leaves it and a second pick inside one menu enters the menu's ancestors only once.
 export function enter_for_click(target: Hoverable, from: Hoverable | undefined): void {
-  enter_events(target, from, center_of(target));
-  if (hovered?.element === target) delete hovered.entry_from;
+  const at = center_of(target);
+  enter_events(target, from, at);
+  hovered = { element: target, at };
+  watch_tab();
 }
