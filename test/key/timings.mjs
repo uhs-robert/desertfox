@@ -27,21 +27,23 @@ export function create_timings() {
 
   function charge() {
     const now = Date.now();
-    category_of(current_case, open_categories.at(-1) ?? UNTRACKED).ms += now - last_charge_at;
+    category_of(current_case, open_categories.at(-1)?.category ?? UNTRACKED).ms += now - last_charge_at;
     last_charge_at = now;
   }
 
   // `count: false` charges time without counting a call, for the second half of a call that was already counted.
   async function time(category, action, { count = true } = {}) {
-    if (open_categories.at(-1) === ABSORBING_CATEGORY) return action();
+    if (open_categories.at(-1)?.category === ABSORBING_CATEGORY) return action();
     charge();
     if (count) category_of(current_case, category).count++;
-    open_categories.push(category);
+    // Two timed calls can overlap (Promise.race), so each call removes its own entry, not the top one.
+    const entry = { category };
+    open_categories.push(entry);
     try {
       return await action();
     } finally {
       charge();
-      open_categories.pop();
+      open_categories.splice(open_categories.indexOf(entry), 1);
     }
   }
 
