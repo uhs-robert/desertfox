@@ -4,7 +4,7 @@
 
 import type { SearchEngine } from "../shared/config.ts";
 import type { PageInfo } from "../shared/engines/index.ts";
-import type { BookmarkItem, CompleteItemsAnswer, EngineItem, HistoryItem, OpenRow, TabContainer, TabItem, TabRowsAction, TabRowsActionAnswer, WindowItem } from "../shared/messages.ts";
+import type { BookmarkItem, CompleteItemsAnswer, EngineItem, HistoryItem, HistoryItems, OpenRow, TabContainer, TabItem, TabRowsAction, TabRowsActionAnswer, WindowItem } from "../shared/messages.ts";
 import { available_engine_names } from "./availability.ts";
 import { DEFAULT_COOKIE_STORE_ID } from "../shared/container_store.ts";
 import { close_tabs, reopen_tabs_in_container, set_muted, set_pinned } from "./tab_actions.ts";
@@ -201,6 +201,7 @@ export type CompleteItemsDeps = typeof browser_complete_items_deps & {
   // The page of the line's tab, undefined when it has none.
   page_of: (tab_id: number) => Promise<PageInfo | undefined>;
   open_settings: () => Promise<OpenSettings>;
+  history_list_max: () => Promise<number>;
   read_tab: (tab_id: number) => Promise<TabLike | undefined>;
   discard: DiscardDeps;
   tab_actions: Pick<TabActionDeps, "set_muted" | "set_pinned" | "remove" | "open_tab">;
@@ -222,10 +223,17 @@ export function create_complete_items(deps: CompleteItemsDeps) {
     return { rows: open_rows(sources, bookmarks, history), history_max };
   };
 
-  const fetch_items = async (kind: "bookmarks" | "engines" | "open" | "windows", asker: Asker): Promise<CompleteItemsAnswer["items"]> => {
+  // A private line lists nothing, as in `open_items`, and the `history` command refuses there.
+  const history_list = async (asker: Asker): Promise<HistoryItems> => ({
+    rows: asker.incognito ? [] : history_items(await deps.search_history().catch(() => [])),
+    max: await deps.history_list_max(),
+  });
+
+  const fetch_items = async (kind: "bookmarks" | "engines" | "history" | "open" | "windows", asker: Asker): Promise<CompleteItemsAnswer["items"]> => {
     // The set is read once per line. The line is modal over one tab, so the page cannot change under it.
     if (kind === "engines") return engine_items(await deps.search_engines(), await deps.page_of(asker.tab_id));
     if (kind === "open") return open_items(asker);
+    if (kind === "history") return history_list(asker);
     if (kind === "windows") return listed_windows(await deps.query_windows(), asker).map(({ number, title }) => ({ number, title }));
     return bookmark_items(await deps.all_bookmarks());
   };
@@ -271,8 +279,8 @@ export function create_complete_items(deps: CompleteItemsDeps) {
     // Undefined for a sender that is not a tab, for a tab that opened no line and for a tab that closed or navigated
     // while the lookup ran. A failed browser call gives an empty list.
     answer: async (kind: unknown, asker: Asker | undefined): Promise<CompleteItemsAnswer | undefined> => {
-      if ((kind !== "bookmarks" && kind !== "engines" && kind !== "open" && kind !== "windows") || !asker || !(await deps.is_opener(asker.tab_id, asker.frame_id))) return undefined;
-      const items = await fetch_items(kind, asker).catch(() => (kind === "open" ? { rows: [], history_max: 0 } : []));
+      if ((kind !== "bookmarks" && kind !== "engines" && kind !== "history" && kind !== "open" && kind !== "windows") || !asker || !(await deps.is_opener(asker.tab_id, asker.frame_id))) return undefined;
+      const items = await fetch_items(kind, asker).catch(() => (kind === "open" ? { rows: [], history_max: 0 } : kind === "history" ? { rows: [], max: 0 } : []));
       return (await deps.is_opener(asker.tab_id, asker.frame_id)) ? { items } : undefined;
     },
   };

@@ -31,7 +31,7 @@ const window_of = (id: number, incognito: boolean, title: string, type = "normal
 // Two normal windows and one private window, in `windows.getAll` order.
 const WINDOWS = [window_of(10, false, "Mail"), window_of(20, true, "Secret"), window_of(11, false, "Docs\n tab")];
 
-function make({ openers = [1, 2], tabs = ALL_TABS, bookmarks = [] as BookmarkNode[], fail = false, page = undefined as { url: string } | undefined, history = [] as HistoryNode[], open = { sources: ["bookmarks", "history"], history_max: 10 } as OpenSettings, read_tab = (async () => undefined) as (id: number) => Promise<TabLike | undefined>, discard = {} as DiscardDeps, tab_actions = NO_ACTIONS as TabActions, containers = new Map() as ContainerMarks, on_containers = () => {} } = {}) {
+function make({ openers = [1, 2], tabs = ALL_TABS, bookmarks = [] as BookmarkNode[], fail = false, page = undefined as { url: string } | undefined, history = [] as HistoryNode[], open = { sources: ["bookmarks", "history"], history_max: 10 } as OpenSettings, read_tab = (async () => undefined) as (id: number) => Promise<TabLike | undefined>, discard = {} as DiscardDeps, tab_actions = NO_ACTIONS as TabActions, containers = new Map() as ContainerMarks, on_containers = () => {}, list_max = 20 } = {}) {
   const history_reads: number[] = [];
   const asked: (number | undefined)[] = [];
   const opened = new Set(openers);
@@ -66,6 +66,7 @@ function make({ openers = [1, 2], tabs = ALL_TABS, bookmarks = [] as BookmarkNod
       return history;
     },
     open_settings: async () => open,
+    history_list_max: async () => list_max,
   });
   return { service, asked, opened, history_reads };
 }
@@ -82,7 +83,7 @@ test("a tab that redeemed no ticket gets nothing and the browser is not asked", 
 test("a sender that is not a tab, and an unknown kind, get nothing", async () => {
   const { service } = make();
   assert.equal(await service.answer("bookmarks", undefined), undefined);
-  assert.equal(await service.answer("history", NORMAL_LINE), undefined);
+  assert.equal(await service.answer("recent", NORMAL_LINE), undefined);
 });
 
 test("the tab list is not a fetched kind any more: the tab model serves it", async () => {
@@ -151,6 +152,7 @@ test("a tab that navigates or closes while the lookup runs gets nothing", async 
     page_of: async () => undefined,
     search_history: async () => [],
     open_settings: async () => ({ sources: ["bookmarks", "history"], history_max: 10 }),
+    history_list_max: async () => 20,
   });
   assert.equal(await service.answer("bookmarks", NORMAL_LINE), undefined);
 });
@@ -287,6 +289,7 @@ test("the opener is checked before and after the history fetch", async () => {
       return VISITS;
     },
     open_settings: async () => ({ sources: ["history"], history_max: 10 }),
+    history_list_max: async () => 20,
   });
   assert.equal(await service.answer("open", NORMAL_LINE), undefined);
 });
@@ -313,10 +316,62 @@ test("a failed history read leaves the bookmarks, and a failed bookmark read lea
         return VISITS;
       },
       open_settings: async () => ({ sources: ["bookmarks", "history"], history_max: 10 }),
+      history_list_max: async () => 20,
     });
   const tags = async (failing: "history" | "bookmarks") => ((await service(failing).answer("open", NORMAL_LINE))?.items as { rows: { tag: string }[] }).rows.map((row) => row.tag);
   assert.deepEqual(await tags("history"), ["bm", "bm"]);
   assert.deepEqual(await tags("bookmarks"), ["hist", "hist", "hist"]);
+});
+
+test("the history kind lists every visit newest first with no dedup against bookmarks, and carries the cap", async () => {
+  const { service } = make({ bookmarks: MARKS, history: VISITS, list_max: 7 });
+  assert.deepEqual(await service.answer("history", NORMAL_LINE), {
+    items: {
+      rows: [
+        { title: "Newest", url: "https://new.test/" },
+        { title: "Marked page", url: "https://marked.test/" },
+        { title: "https://bare.test/", url: "https://bare.test/" },
+      ],
+      max: 7,
+    },
+  });
+});
+
+test("a private line gets no history rows and the history is not read", async () => {
+  const { service, history_reads } = make({ history: VISITS });
+  assert.deepEqual(await service.answer("history", PRIVATE_LINE), { items: { rows: [], max: 20 } });
+  assert.deepEqual(history_reads, []);
+});
+
+test("a failed history read gives no rows, and a tab that redeemed no ticket gets nothing", async () => {
+  assert.deepEqual(await make({ fail: true }).service.answer("history", NORMAL_LINE), { items: { rows: [], max: 20 } });
+  const closed = make({ openers: [], history: VISITS });
+  assert.equal(await closed.service.answer("history", NORMAL_LINE), undefined);
+  assert.deepEqual(closed.history_reads, []);
+});
+
+test("a history read that finishes after the line closed gives nothing", async () => {
+  const opened = new Set([1]);
+  const service = create_complete_items({
+    query_tabs: async () => [],
+    query_windows: async () => [],
+    all_bookmarks: async () => [],
+    is_opener: async (tab_id) => opened.has(tab_id),
+    containers: async () => new Map(),
+    previous_tab: async () => undefined,
+    read_tab: async () => undefined,
+    discard: {} as DiscardDeps,
+    tab_actions: NO_ACTIONS,
+    search_engines: async () => ENGINES,
+    page_of: async () => undefined,
+    search_history: async () => {
+      opened.delete(1);
+      return VISITS;
+    },
+    open_settings: async () => ({ sources: ["history"], history_max: 10 }),
+    history_list_max: async () => 20,
+  });
+  assert.equal(await service.answer("history", NORMAL_LINE), undefined);
 });
 
 const FOX = { color: "#37adff", icon: "resource://usercontext-content/fingerprint.svg" };
