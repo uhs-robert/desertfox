@@ -244,6 +244,6 @@ test("the editor schema matches its output before #85, apart from the listed cha
     properties[name].description = described_now[name]!.description;
   }
   // Settings added since the fixture was taken.
-  properties.statusbar_widgets = JSON.parse(JSON.stringify((settings_schema().properties as Record<string, unknown>).statusbar_widgets));
+  for (const name of ["statusbar_widgets", "next_patterns", "prev_patterns"]) properties[name] = JSON.parse(JSON.stringify((settings_schema().properties as Record<string, unknown>)[name]));
   assert.deepEqual(JSON.parse(JSON.stringify(settings_schema())), JSON.parse(JSON.stringify(before)));
 });

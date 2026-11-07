@@ -103,7 +103,9 @@ async function read_setting(name: string): Promise<unknown> {
   return status?.settings?.[name];
 }
 
-const read_letters = async (): Promise<string[]> => clean_letters(await read_setting("hint_letters"));
+async function read_letters(): Promise<string[]> {
+  return clean_letters(await read_setting("hint_letters"));
+}
 
 async function read_patterns(direction: FollowDirection): Promise<string[]> {
   const name = direction === "next" ? "next_patterns" : "prev_patterns";
