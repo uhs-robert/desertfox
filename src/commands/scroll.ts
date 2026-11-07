@@ -1,6 +1,6 @@
 import { scroll_align } from "../content/handlers/align.ts";
 import { scroll_lines, scroll_pages, scroll_pixels, scroll_to, SCROLL_TO_DEFAULT_AXIS } from "../content/handlers/scroll.ts";
-import { define } from "../shared/registry/index.ts";
+import { define } from "../shared/registry/builtin.ts";
 
 define("scroll.lines", {
   name: "scroll",

@@ -13,7 +13,8 @@ import { DEFAULT_KEYMAP } from "../src/background/default_keymap.ts";
 import { list_keys, without_unavailable } from "../src/background/list_keys.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY } from "../src/shared/prefix_tree.ts";
 import type { TreeBranch, TreeLeaf } from "../src/shared/prefix_tree.ts";
-import { build_commands_file, registry } from "../src/shared/registry/index.ts";
+import { build_commands_file } from "../src/shared/registry/index.ts";
+import { registry } from "../src/shared/registry/builtin.ts";
 import { build_config } from "../tools/build-config/build_config.ts";
 import { ConfigErrors } from "../src/shared/config_build/errors.ts";
 

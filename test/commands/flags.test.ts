@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import "../../src/background/command_modules.ts";
-import { parse_command_line, print_command, registry } from "../../src/shared/registry/index.ts";
+import { parse_command_line, print_command } from "../../src/shared/registry/index.ts";
+import { registry } from "../../src/shared/registry/builtin.ts";
 
 test("-t -b -w mean where and -c means container on every command that has the param", () => {
   for (const command of registry.list()) {

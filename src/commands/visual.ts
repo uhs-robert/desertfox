@@ -1,5 +1,5 @@
 import { visual_act } from "../content/handlers/lazy_bundle.ts";
-import { define } from "../shared/registry/index.ts";
+import { define } from "../shared/registry/builtin.ts";
 
 define("visual.act", {
   completion: ["visual", "visual_line"],

@@ -1,5 +1,5 @@
 import { heading_go } from "../content/handlers/lazy_bundle.ts";
-import { define } from "../shared/registry/index.ts";
+import { define } from "../shared/registry/builtin.ts";
 
 define("heading.go", {
   name: "heading",

@@ -1,5 +1,5 @@
 import { find_next, find_open, find_prev } from "../content/handlers/lazy_bundle.ts";
-import { define } from "../shared/registry/index.ts";
+import { define } from "../shared/registry/builtin.ts";
 
 define("find.open", {
   name: "find",

@@ -1,5 +1,5 @@
 import { hint_run } from "../content/handlers/lazy_bundle.ts";
-import { define } from "../shared/registry/index.ts";
+import { define } from "../shared/registry/builtin.ts";
 import { WHERE, WHERE_SHORT } from "./open_target.ts";
 
 // Filters whose elements have an address to open or copy. The mixed filters stay because some of their elements have one.

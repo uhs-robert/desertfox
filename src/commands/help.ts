@@ -2,7 +2,7 @@ import { help_whichkey } from "../content/handlers/lazy_bundle.ts";
 import { help_name_choices, help_name_url } from "../background/open_help.ts";
 import { HELP_PAGE_FILE } from "../help/route.ts";
 import { open_help_url } from "./help_tab.ts";
-import { define, registry } from "../shared/registry/index.ts";
+import { define, registry } from "../shared/registry/builtin.ts";
 
 define("help.whichkey", {
   label: "Which key",

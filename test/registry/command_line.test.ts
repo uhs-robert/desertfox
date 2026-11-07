@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { check_args, parse_command_line, tokenize, usage_line } from "../../src/shared/registry/index.ts";
 import type { EnumSources } from "../../src/shared/registry/index.ts";
 import "../../src/commands/hint.ts";
-import { registry as real_registry } from "../../src/shared/registry/index.ts";
+import { registry as real_registry } from "../../src/shared/registry/builtin.ts";
 import { grammar_registry, search_sources } from "./grammar_registry.ts";
 
 const registry = grammar_registry();

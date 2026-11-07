@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import "../src/background/command_modules.ts";
 import { ask_for_permission, create_panel_controller } from "../src/help/native_install.ts";
-import { registry } from "../src/shared/registry/index.ts";
+import { registry } from "../src/shared/registry/builtin.ts";
 
 test("a granted request says what to do next", async () => {
   const outcome = await ask_for_permission({ has: async () => false, request: async () => true });
