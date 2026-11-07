@@ -46,16 +46,14 @@ note = "phase 3"
 [[row]]
 mode = "normal"
 key = "yq"
-status = "later"
-command = "copy.qr"
-note = "phase 3"
+status = "dropped"
+note = "no longer planned"
 
 [[row]]
 mode = "normal"
 key = "gf"
-status = "later"
-command = "page.view_source"
-note = "phase 3"
+status = "dropped"
+note = "no longer planned"
 
 [[row]]
 mode = "normal"
