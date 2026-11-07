@@ -243,44 +243,6 @@
       "type": "boolean",
       "default": true,
       "description": "Whether the first install opens the Quick Start page. A first install has no config yet, so this helps managed setups, which carry the config from the start"
-    },
-    "next_patterns": {
-      "type": "array",
-      "items": {
-        "type": "string",
-        "minLength": 1
-      },
-      "default": [
-        "next",
-        "more",
-        "newer",
-        ">",
-        "›",
-        "→",
-        "»",
-        "≫",
-        ">>"
-      ],
-      "description": "Link texts that `page.follow` takes for the next page, best first"
-    },
-    "prev_patterns": {
-      "type": "array",
-      "items": {
-        "type": "string",
-        "minLength": 1
-      },
-      "default": [
-        "prev",
-        "previous",
-        "older",
-        "<",
-        "‹",
-        "←",
-        "«",
-        "≪",
-        "<<"
-      ],
-      "description": "Link texts that `page.follow` takes for the previous page, best first"
     }
   },
   "additionalProperties": false
