@@ -40,6 +40,10 @@ export async function run_cases({ run_case, setup, expect, send_keys, sleep, ope
   });
 
   await run_case("a failed parse keeps the line open, fixing the line runs it, and Up brings back that command", async () => {
+    // The corrected command scrolls to the top, so the page must be below it first or no scroll event follows.
+    const down_mark = events.length;
+    await send_keys("j");
+    await wait_event(down_mark, scroll_of("cmd"), "j to scroll away from the top");
     await send_keys(":nosuchcommand", "-k", "Return");
     await sleep(500);
     // Still open: Ctrl-u clears the line, and the next command still goes to it instead of the page.
