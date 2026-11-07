@@ -1,6 +1,6 @@
 # test/key
 
-Key tests. Each run builds the extension, starts Firefox in its own nested, invisible session, sends real key presses and checks what the page and the background report. `run.mjs` holds the cases, `timings.mjs` measures where the time goes, `server.mjs` and `rdp.mjs` read the results, `launch_firefox.sh` starts Firefox, and `user.js` and `config/` set up the test profile.
+Key tests. Each run builds the extension, starts Firefox in its own nested, invisible session, sends real key presses and checks what the page and the background report. `harness.mjs` holds the session (`create_session`: Firefox, the page server, the helpers and `run_piece`), `run.mjs` holds the inline cases and the order of the run, `p<number>_*.mjs` are the pieces, `timings.mjs` measures where the time goes, `server.mjs` and `rdp.mjs` read the results, `launch_firefox.sh` starts Firefox, and `user.js` and `config/` set up the test profile.
 
 ## Run
 
@@ -25,11 +25,11 @@ Every run times itself and prints a summary at the end: time by category, time o
 - Each moment of the run goes to one category: `keys` (a `shadow keys` call), `settle` (the pause after each key call), `sleeps` (other sleeps), `waits` (`wait_event`), `rdp` (debugger calls), `page_opens` (all of `open_page`, keys and waits inside it included), `driver` (`up`, `spawn`, `shot`) and `other` (everything untracked, such as test logic).
 - The JSON holds `categories` and `outside_cases` (ms and call counts), `pieces` (wall time per piece file), `cases` (wall time and categories per case) and `tab_samples` (open tab count before and after each piece). Setup between cases counts as `(outside cases)`.
 - The file is rewritten after each piece and when SIGINT or SIGTERM arrives, so a run killed at the time cap still leaves its numbers (the summary prints only at a normal end or on a signal).
-- Piece files need no hooks: they get the timed `sleep`, `open_page`, `wait_event` and `rdp` from the case context.
+- Piece files need no hooks: they get the timed `sleep`, `open_page`, `wait_event` and `rdp` from the case context (`context_for` in `harness.mjs`).
 
 ## Native host
 
-`config.reload` reads the config through the native host, so each run installs it. `run.mjs` runs `host/install.sh main` with `HOME` set to the session's throwaway HOME and a `curl` stand-in that copies the host from this checkout. It refuses the real HOME. It grants `nativeMessaging` from chrome code, because Firefox grants it only from a click. `launch_firefox.sh` sets `DESERTFOX_CONFIG_DIR` to a link in the run folder, and `load_config_dir` points that link at another folder before it presses `qr`. Managed storage still gives the config at startup.
+`config.reload` reads the config through the native host, so each run installs it. `harness.mjs` runs `host/install.sh main` with `HOME` set to the session's throwaway HOME and a `curl` stand-in that copies the host from this checkout. It refuses the real HOME. It grants `nativeMessaging` from chrome code, because Firefox grants it only from a click. `launch_firefox.sh` sets `DESERTFOX_CONFIG_DIR` to a link in the run folder, and `load_config_dir` points that link at another folder before it presses `qr`. Managed storage still gives the config at startup.
 
 ## Traps
 
