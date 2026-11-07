@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { find_rel_link, pick_by_text } from "../../src/content/hints/follow_links.ts";
+import { can_open_elsewhere, find_rel_link, pick_by_text, texts_of } from "../../src/content/hints/follow_links.ts";
 
 const link = (text: string, is_link = true) => ({ texts: [text], is_link });
 const NEXT = ["next", "more", "newer", ">", "›", ">>"];
@@ -45,4 +45,18 @@ test("the rel search takes the first match in document order and ignores the oth
   const found = find_rel_link(root as unknown as ParentNode, "next");
   assert.equal((found!.element as unknown as { name: string }).name, "first_next");
   assert.equal(find_rel_link({ querySelectorAll: () => [] } as unknown as ParentNode, "next"), undefined);
+});
+
+test("only an input offers its value as text, so a button's form value is no label", () => {
+  const element = (localName: string) => ({ localName, innerText: "Go", getAttribute: () => null, value: "next" }) as unknown as Element;
+  assert.deepEqual(texts_of(element("button")), ["Go"]);
+  assert.deepEqual(texts_of(element("input")), ["Go", "next"]);
+});
+
+test("a script or inline data link cannot open in another tab, so it never reaches the background as a search", () => {
+  const element = (fields: object) => fields as unknown as HTMLElement;
+  assert.equal(can_open_elsewhere(element({ href: "javascript:go()" })), false);
+  assert.equal(can_open_elsewhere(element({ href: "data:text/html,next" })), false);
+  assert.equal(can_open_elsewhere(element({ href: "https://a.test/page/2" })), true);
+  assert.equal(can_open_elsewhere(element({ localName: "button" })), true);
 });
