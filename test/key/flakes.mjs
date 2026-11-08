@@ -93,15 +93,23 @@ async function main(args) {
     const [commit, ...report_paths] = rest;
     const line = fold_batch(report_paths.map(read_report), { commit, at: new Date().toISOString() });
     const path = history_path();
-    mkdirSync(dirname(path), { recursive: true });
-    appendFileSync(path, `${JSON.stringify(line)}\n`);
+    // A failed write must not hide the alert, so it is logged and turned into the exit code below.
+    let history_failed = false;
+    try {
+      mkdirSync(dirname(path), { recursive: true });
+      appendFileSync(path, `${JSON.stringify(line)}\n`);
+    } catch (error) {
+      history_failed = true;
+      console.error(`key-test-flakes: history not written to ${path}: ${error.message}`);
+    }
     console.log(JSON.stringify(line));
     for (const text of summary_lines(line)) console.log(text);
     const reasons = alert_reasons(line);
-    if (reasons.length === 0) return 0;
-    for (const reason of reasons) console.log(`ALERT ${reason}`);
-    notify(reasons.join("\n"));
-    return 1;
+    if (reasons.length > 0) {
+      for (const reason of reasons) console.log(`ALERT ${reason}`);
+      notify(reasons.join("\n"));
+    }
+    return reasons.length > 0 || history_failed ? 1 : 0;
   }
   console.error("usage: flakes.mjs sweep | fold <commit> <report>...");
   return 2;

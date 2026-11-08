@@ -154,10 +154,15 @@ key-test-flakes n="10": build
     done
     exec node test/key/flakes.mjs fold "$(git rev-parse --short HEAD)" "${reports[@]}"
 
-# Symlink the weekly flake-rate timer from ops/systemd/ into ~/.config/systemd/user and enable it. With dry="dry" only print what would happen.
+# Symlink the weekly flake-rate timer from ops/systemd/ into ~/.config/systemd/user and enable it. Fails unless run from the main checkout ~/Development/personal/desertfox, which the service names as its WorkingDirectory: from a worktree the links would dangle once it is removed. The timer tests that checkout as it is, with its current branch and uncommitted changes. With dry="dry" only print what would happen.
 install-flake-timer dry="":
     #!/usr/bin/env bash
     set -euo pipefail
+    main_checkout="$HOME/Development/personal/desertfox"
+    if [ "$(realpath {{quote(justfile_directory())}})" != "$(realpath "$main_checkout")" ]; then
+        echo "install-flake-timer: run it from the main checkout $main_checkout, not {{justfile_directory()}}. The service runs the checkout at that path." >&2
+        exit 1
+    fi
     unit_dir="$HOME/.config/systemd/user"
     run() { if [ {{quote(dry)}} = dry ]; then echo "would run: $*"; else "$@"; fi; }
     run mkdir -p "$unit_dir"
