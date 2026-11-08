@@ -33,7 +33,7 @@ A full run takes about 40 s on 8 shards. It needs labwc, Hyprland, dbus-daemon a
 - Each session lives in `/tmp/dfk-<uid>-<name>`: its bus, its Wayland sockets and an `owner` file with the pid of the worker that started it. Every process of the session carries that dir in its environment. `stop()` and the sweep find the processes by it, so a daemon the bus started goes too.
 - The start takes about 1 s. The stop ends Firefox and the keyboard first, then the rest, with SIGKILL after 2 s each.
 - `keyboard.py` is the one keyboard of the session. It uploads the US keymap in `us.xkb` once, so every key arrives with its real `code`, and capitals and symbols press a real Shift. `press_keys` takes wtype-style args (`-k`, `-M`, `-m`, `-P`, `-p`, `-d`, `-s`, ASCII text). An unknown key fails the call by name, and a dead compositor fails every later call with the client's exit message.
-- The client pauses 10 ms after each key (`KEY_GAP_MS`), because some pieces type text and then an action key in one call and the action key would land before the text took effect.
+- The client sends keys as fast as the compositor takes them, with no pause between keys. A case that types text waits for it to take effect before the key that acts on it (`type_in_line`, see Waits).
 - `us.xkb` is the output of `xkbcli compile-keymap --layout us`, committed so a run needs no xkbcli.
 
 ## Areas and key-test-changed
