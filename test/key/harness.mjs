@@ -39,6 +39,8 @@ const KEY_ROUTE_FLOOR_MS = 100;
 // A tab hidden or shown within 150 ms of its opening lost the visibility report of its next switch in 6 of 6 tries, and 200 ms kept it in 6 of 6. A new page gets no keys before this age.
 const NEW_PAGE_QUIET_MS = 300;
 const BARRIER_KEY = "F8";
+// The which-key delay of the test config, so a check that a panel stays away sits out the timer written in config/settings.toml.
+const WHICH_KEY_DELAY_MS = Number(/^which_key_delay_ms\s*=\s*(\d+)/m.exec(readFileSync(join(key_test_dir, "config", "settings.toml"), "utf8"))?.[1]);
 const UNREADY_LINE_WAIT_MS = 500;
 // 100 ms polls: 20 s, below CASE_CAP_MS.
 const REINJECT_REPORT_POLLS = 200;
@@ -314,6 +316,15 @@ export async function create_session({ name: shadow_name, timings }) {
     await sleep(150);
   }
 
+  // The same read as scroll_delta_after, with no settle after the keys: the wait for the scroll report is the wait for the effect.
+  async function scroll_delta_by_press(page_id, keys) {
+    const before = last_scroll_y(page_id);
+    const mark = events.length;
+    await press_keys(...keys);
+    const reported = await wait_event(mark, scroll_of(page_id), `scroll on ${page_id} after ${keys.join(" ")}`);
+    return reported.y - before;
+  }
+
   async function scroll_delta_after(page_id, keys) {
     const before = last_scroll_y(page_id);
     const mark = events.length;
@@ -322,19 +333,31 @@ export async function create_session({ name: shadow_name, timings }) {
     return reported.y - before;
   }
 
-  async function expect_no_scroll(mark, page_id) {
-    await sleep(700);
-    expect(!find_event(mark, scroll_of(page_id)), `page ${page_id} scrolled`);
-  }
+  // A scroll is reported SCROLL_REPORT_DELAY_MS after it ends, so the check waits that long after its barrier. The page must report F8, which holds for any page that does not cancel keys in capture, ignore mode included.
+  const expect_no_scroll = (mark, page_id) => expect_absent(mark, page_id, scroll_of(page_id), `page ${page_id} scrolled`, { report_delay_ms: SCROLL_REPORT_DELAY_MS + 100 });
 
   // The active tab comes from the background, so a switch that landed on the wrong tab fails by name. A page report cannot say that.
-  async function expect_exactly_one_visible(mark, expected_page_id) {
-    await sleep(1500);
+  // The destination reports F8 after a settle, which proves the switch is done before the extra-switch check reads. A destination that cancels keys in capture never reports F8, so it passes `destination_cancels_keys` and the check sits out a fixed time.
+  async function expect_exactly_one_visible(mark, expected_page_id, { destination_cancels_keys = false } = {}) {
+    if (destination_cancels_keys) {
+      await sleep(1500);
+    } else {
+      await wait_event(mark, became_visible(expected_page_id), `${expected_page_id} to become visible`);
+      await settle_tab_switch();
+      await barrier(expected_page_id);
+    }
     const active_url = await evaluate_in_background(rdp, EXTENSION_ID, `browser.tabs.query({ active: true, currentWindow: true }).then((tabs) => tabs[0]?.url)`);
     expect(String(active_url).endsWith(`id=${expected_page_id}`), `expected the active tab to be ${expected_page_id}, it is ${active_url}`);
     const visible = visible_events(mark);
     expect(visible.length <= 1, `expected one switch to ${expected_page_id}, saw [${visible.map((event) => event.page_id).join(", ")}]`);
   }
+
+  // Hint labels sit in a closed shadow root, which the extension's own world reads. LAYERS.hints in src/shared/layers.ts, which the test cannot import.
+  const HINTS_LAYER = 2147483647 - 4;
+  const hint_label_count = async () => {
+    const counts = await in_background(`(async () => { const [tab] = await browser.tabs.query({ active: true, lastFocusedWindow: true }); return browser.tabs.executeScript(tab.id, { code: ${JSON.stringify(`(() => { const host = [...document.documentElement.children].find((child) => child.getAttribute("data-desertfox-layer") === "${HINTS_LAYER}"); return host?.openOrClosedShadowRoot?.querySelectorAll(".desertfox-hint").length ?? 0; })()`)} }); })()`);
+    return counts?.[0] ?? 0;
+  };
 
   const timings_path = default_timings_path(repo_dir);
   // Called after each piece, from the signal path and at the end, so a run killed at the time cap still leaves its numbers. A failed write must not hide the run's own error.
@@ -540,6 +563,13 @@ export async function create_session({ name: shadow_name, timings }) {
   }
 
   // A bulk tabs.remove of 30 or more tabs outlasts one debugger call, so the close is started and then polled.
+  // A tab that is hidden again, or shown again, within about 250 ms of its last switch loses the page's visibility reports (measured with J and K in a row, where the second switch came 175 ms after the first). A key that switches tab again waits this long. Slice 7's keyboard client should make it unneeded.
+  const TAB_SWITCH_FLOOR_MS = 250;
+  async function settle_tab_switch(options) {
+    await settle_focus(options);
+    await sleep(TAB_SWITCH_FLOOR_MS);
+  }
+
   async function wait_for_tabs(what, count_expr, expected) {
     await poll_until(what, async () => (await in_background(count_expr)) === expected, { timeout_ms: 30000 });
   }
@@ -756,9 +786,9 @@ export async function create_session({ name: shadow_name, timings }) {
     // Stores a number for the end-of-run measurements line.
     const record = (key, value) => { measurements[key] = value; };
     // The cases of a piece file in test/key/p<number>_*.mjs get these helpers.
-    const context = { config_dir, config_copy, load_config_dir, take_shot: (path) => timed_shadow("shot", shadow_name, "--out", path), run_case: run_piece_case, setup, on_teardown, expect, open_page, open_page_by_keys, send_keys, press_keys, settle_focus, poll_until, wait_tab_quiet, barrier, expect_absent, read_cmdline_state, wait_cmdline, close_cmdline, scroll_report_wait_ms: SCROLL_REPORT_DELAY_MS + 100, sleep, events, wait_event, since, find_event, url_of, rdp, extension_id: EXTENSION_ID, scroll_delta_after, became_visible, scroll_of, last_scroll_y,
+    const context = { config_dir, config_copy, load_config_dir, take_shot: (path) => timed_shadow("shot", shadow_name, "--out", path), run_case: run_piece_case, setup, on_teardown, expect, open_page, open_page_by_keys, send_keys, press_keys, settle_focus, settle_tab_switch, poll_until, wait_tab_quiet, barrier, expect_absent, read_cmdline_state, wait_cmdline, close_cmdline, scroll_report_wait_ms: SCROLL_REPORT_DELAY_MS + 100, which_key_delay_ms: WHICH_KEY_DELAY_MS, sleep, events, wait_event, since, find_event, url_of, rdp, extension_id: EXTENSION_ID, scroll_delta_after, scroll_delta_by_press, became_visible, scroll_of, last_scroll_y,
       // Moved out of the run.mjs cases. Pieces may use them too.
-      in_background, read_local, reload_in_place, wait_reinject_report, injections_of, settled_injection_count, expect_no_scroll, expect_exactly_one_visible, visible_events, extension_view, close_tabs_with, record };
+      in_background, read_local, reload_in_place, wait_reinject_report, injections_of, settled_injection_count, expect_no_scroll, expect_exactly_one_visible, hint_label_count, visible_events, extension_view, close_tabs_with, record };
     return { context, state, piece_file };
   }
 
