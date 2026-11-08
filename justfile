@@ -63,8 +63,8 @@ key-test: build
         exit 2
     fi
     # A test Firefox that runs away would otherwise take the whole tmux window with it: the kernel kills it, and systemd then stops every process in the window's unit. In its own capped scope, only this run dies.
-    if command -v systemd-run >/dev/null 2>&1 && systemd-run --user --scope --quiet -p MemoryMax=8G -p MemorySwapMax=0 -p RuntimeMaxSec=1800 true >/dev/null 2>&1; then
-        exec systemd-run --user --scope --quiet -p MemoryMax=8G -p MemorySwapMax=0 -p RuntimeMaxSec=1800 node test/key/run.mjs
+    if command -v systemd-run >/dev/null 2>&1 && systemd-run --user --scope --quiet -p MemoryMax=16G -p MemoryHigh=14G -p MemorySwapMax=0 -p RuntimeMaxSec=1800 true >/dev/null 2>&1; then
+        exec systemd-run --user --scope --quiet -p MemoryMax=16G -p MemoryHigh=14G -p MemorySwapMax=0 -p RuntimeMaxSec=1800 node test/key/run.mjs
     fi
     echo "key-test: no systemd user session, so this run has no memory cap." >&2
     exec node test/key/run.mjs

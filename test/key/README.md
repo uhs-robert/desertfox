@@ -129,7 +129,7 @@ Every run times itself and prints a summary at the end: time by category, time o
 ## Traps
 
 - Run key tests only in your own worktree. Never run two from one worktree: each `just key-test` rebuilds and clears that worktree's `dist/`.
-- Do not wrap `just key-test` in `timeout`. The recipe already runs in a systemd scope with a memory cap of 8 GB, no swap and a time limit of 1800 seconds. Without a systemd user session it runs uncapped and says so.
+- Do not wrap `just key-test` in `timeout`. The recipe already runs in a systemd scope with a memory cap of 16 GB (throttled from 14 GB), no swap and a time limit of 1800 seconds. Without a systemd user session it runs uncapped and says so.
 - On the first run after a build, an early setup case can fail. Rerun once before you debug.
 - Add-ons force-installed through the Firefox policy file can eat modifier chords in the shadow session. Disable them before you trust a chord result.
 - The first-install Quick Start tab opens beside the first tab and shifts the tab order. That was the cause of #123: Alt+J wrapped to an empty tab instead of page a. The test config now sets `open_quick_start_on_install = false`, and `expect_exactly_one_visible` also checks the active tab URL, so an empty tab fails the case (#155).
