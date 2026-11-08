@@ -115,7 +115,7 @@ test-all: install_deps
     echo "test-all: $((SECONDS - start_s)) s"
     exit "$failed"
 
-# Replay the key-test lifecycle probes: signals at startup and mid-run, a killed worker, a crashed Firefox, the deadline, distinct ports, a foreign sweep and a SIGKILLed run followed by a rerun. Serial, about 3 minutes, one probe at a time. Takes the key-test lock like `just key-test`, so never wrap it in `flock`. Name probes to run only those: `just key-test-lifecycle deadline kill-worker`.
+# Replay the key-test lifecycle probes: signals at startup and mid-run, a killed worker, a crashed Firefox, the deadline, distinct ports, a foreign sweep and a SIGKILLed run followed by a rerun. Serial, about 2 minutes, one probe at a time. Takes the key-test lock like `just key-test`, so never wrap it in `flock`. Name probes to run only those: `just key-test-lifecycle deadline kill-worker`.
 key-test-lifecycle *probes: build
     #!/usr/bin/env bash
     set -euo pipefail

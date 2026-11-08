@@ -161,7 +161,10 @@ export function create_timings() {
 // A worker passes create_dir false: its folder belongs to a run that a sweep may have removed, and recreating it would leave a folder that nothing owns.
 export function write_report(path, full_report, { create_dir = true } = {}) {
   if (create_dir) mkdirSync(dirname(path), { recursive: true });
-  else if (!existsSync(dirname(path))) return;
+  else if (!existsSync(dirname(path))) {
+    console.log(`timings not written: ${dirname(path)} is gone`);
+    return;
+  }
   writeFileSync(path, `${JSON.stringify(full_report, null, 2)}\n`);
 }
 

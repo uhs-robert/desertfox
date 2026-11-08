@@ -76,6 +76,20 @@ function stray_processes() {
   });
 }
 
+// Runs started and not yet exited, so a probe that fails early does not leave one running.
+const live_runs = new Set();
+
+async function stop_live_runs() {
+  for (const pid of live_runs) {
+    try { process.kill(-pid, "SIGINT"); } catch { /* gone */ }
+  }
+  await wait_for("started runs to exit", () => live_runs.size === 0, 30000).catch(() => {
+    for (const pid of live_runs) {
+      try { process.kill(-pid, "SIGKILL"); } catch { /* gone */ }
+    }
+  });
+}
+
 // Starts run.mjs in its own process group, so a signal to -pid is a Ctrl-C of the whole run.
 function start_run({ pieces = LONG_PIECES, shards = SHARDS, deadline_s, work_dir }) {
   const env = Object.fromEntries(Object.entries(process.env).filter(([name]) => !name.startsWith("KEY_TEST_")));
@@ -91,7 +105,8 @@ function start_run({ pieces = LONG_PIECES, shards = SHARDS, deadline_s, work_dir
   for (const stream of [child.stdout, child.stderr]) createInterface({ input: stream }).on("line", on_line);
   const exited = new Promise((resolve_exit) => child.on("exit", (code, signal) => resolve_exit({ code, signal })));
   let exit_result;
-  exited.then((result) => { exit_result = result; });
+  live_runs.add(child.pid);
+  exited.then((result) => { exit_result = result; live_runs.delete(child.pid); });
   return {
     pid: child.pid,
     lines,
@@ -145,7 +160,9 @@ function check_stopped_by(problems, result, { signal_name, exit_code }) {
   check(problems, result.output.includes(`key-test: stopping all shards: received ${signal_name}`), `no "stopping all shards: received ${signal_name}" line`);
   check(problems, /key-test incomplete \(received /.test(result.output), 'no "key-test incomplete" line');
   check(problems, result.report?.incomplete?.reason === `received ${signal_name}`, `report.incomplete.reason is ${JSON.stringify(result.report?.incomplete?.reason)}`);
-  check(problems, !/^FAIL /m.test(result.output), "a signal stop printed a FAIL line");
+  // A piece that ends as the signal lands fails its own reset or cleanup step on the dead keyboard or debugger. That is the stop itself, so only other FAIL lines count.
+  const fail_line = result.output.split("\n").find((line) => /^(\[s\d+\] )?FAIL /.test(line) && !/^(\[s\d+\] )?FAIL \S+\.mjs (reset|cleanup)/.test(line));
+  check(problems, fail_line === undefined, `a signal stop printed a FAIL line: ${fail_line}`);
 }
 
 const first_case_line = /\[s\d+\] (PASS|FAIL) /;
@@ -304,10 +321,36 @@ async function rerun_after_kill(context) {
 // Probes whose failure is a filed bug: they report KNOWN-FAIL and do not fail the run. A pass is reported too, so a fix shows.
 const KNOWN_FAILING = { "sigkill-coordinator-then-rerun": "issue #299, a worker that is slow to exit after its coordinator is killed" };
 
-// A known-failing probe leaves its leftovers for the next probe's precondition. Once the old workers are gone they are removed by name.
+// Only leftovers that these symptoms of #299 explain become KNOWN-FAIL. Any other problem stays a FAIL.
+const KNOWN_SYMPTOM = /^(the rerun left |left in \/tmp|still running)/;
+
+const owner_is_alive = (dir) => {
+  const pid = Number((readFileSync(join(dir, "owner"), "utf8").trim().split(" ")[0]));
+  if (!Number.isInteger(pid) || pid <= 0) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return error.code === "EPERM";
+  }
+};
+
+// A known-failing probe leaves its leftovers for the next probe's precondition. They are removed only after the old workers are gone, and never when an owner is alive.
 async function clear_leftovers() {
-  await wait_for("the old workers to exit", () => stray_processes().length === 0, 60000).catch(() => undefined);
-  for (const name of tmp_entries()) rmSync(join("/tmp", name), { recursive: true, force: true });
+  try {
+    await wait_for("the old workers to exit", () => stray_processes().length === 0, 60000);
+  } catch (error) {
+    console.log(`  leftovers kept: ${error.message}`);
+    return;
+  }
+  for (const name of tmp_entries()) {
+    const dir = join("/tmp", name);
+    let alive = false;
+    try {
+      alive = owner_is_alive(dir);
+    } catch { /* no owner file: nothing is running from it */ }
+    if (!alive) rmSync(dir, { recursive: true, force: true });
+  }
 }
 
 async function run_probe(name, body) {
@@ -324,17 +367,19 @@ async function run_probe(name, body) {
     problems.push(...await assert_nothing_left());
   } catch (error) {
     problems = [`probe error: ${error.message}`];
+    await stop_live_runs();
     problems.push(...await assert_nothing_left());
   } finally {
     rmSync(work_dir, { recursive: true, force: true });
   }
-  const known = KNOWN_FAILING[name];
+  const known_symptoms_only = problems.every((problem) => KNOWN_SYMPTOM.test(problem));
+  const known = name in KNOWN_FAILING && known_symptoms_only ? KNOWN_FAILING[name] : undefined;
   if (known && problems.length > 0) await clear_leftovers();
   const verdict = problems.length === 0 ? (known ? "PASS (known failing, passed this time)" : "PASS") : (known ? `KNOWN-FAIL (${known})` : "FAIL");
   console.log(`${verdict} ${name} (${((Date.now() - started) / 1000).toFixed(1)} s)`);
   for (const problem of problems) console.log(`  ${problem}`);
   if (problems.length > 0 && output) console.log(output.split("\n").slice(-30).map((line) => `  | ${line}`).join("\n"));
-  return problems.length === 0 || name in KNOWN_FAILING;
+  return problems.length === 0 || known !== undefined;
 }
 
 const wanted = process.argv.slice(2);

@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 
 // The .mjs modules carry no types, so they load through a dynamic import.
-const { create_timings, merge_reports, summary_text } = await import(join(import.meta.dirname, "timings.mjs"));
+const { create_timings, merge_reports, summary_text, write_report } = await import(join(import.meta.dirname, "timings.mjs"));
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -100,4 +102,17 @@ test("a lost-key suspect names its case and piece, and the merged summary counts
   assert.deepEqual(report.lost_key_suspects, [{ case: "j scrolls", piece: "p1.mjs", what: "scroll on c after j" }]);
   const merged = merge_reports([{ shard: 3, report }], { total_ms: 10, shards: [] });
   assert.match(summary_text(merged), /lost-key suspects \(waits that timed out after a key press\): 1\n {2}s3 {2}j scrolls: scroll on c after j\n/);
+});
+
+test("write_report with create_dir false does not recreate a folder that is gone", () => {
+  const root = mkdtempSync(join(tmpdir(), "timings-test-"));
+  try {
+    const gone = join(root, "run");
+    write_report(join(gone, "shard-1.json"), { a: 1 }, { create_dir: false });
+    assert.ok(!existsSync(gone));
+    write_report(join(gone, "shard-1.json"), { a: 1 });
+    assert.ok(existsSync(join(gone, "shard-1.json")));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
