@@ -15,7 +15,7 @@ const key_test_dir = dirname(fileURLToPath(import.meta.url));
 const repo_dir = resolve(key_test_dir, "../..");
 // 8 shards failed the same p11_find case in 3 of 3 full runs, and 6 shards finish as fast, because p11_find alone sets the floor. Slice 7 revisits the count.
 const DEFAULT_SHARDS = 6;
-const DEFAULT_DEADLINE_S = 280;
+const DEFAULT_DEADLINE_S = 230;
 // Eight nested compositors and Firefoxes that start at once can push `shadow up` past its own waits.
 const STARTUP_STAGGER_MS = 300;
 // A worker's own teardown (shadow down) gets this long after SIGTERM before it is killed.
