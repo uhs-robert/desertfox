@@ -154,3 +154,13 @@ Every run times itself and prints a summary at the end: time by category, time o
 - Add-ons force-installed through the Firefox policy file can eat modifier chords in the nested session. Disable them before you trust a chord result.
 - The first-install Quick Start tab opens beside the first tab and shifts the tab order. That was the cause of #123: Alt+J wrapped to an empty tab instead of page a. The test config now sets `open_quick_start_on_install = false`, and `expect_exactly_one_visible` also checks the active tab URL, so an empty tab fails the case (#155).
 - The sweep of leftover sessions stops only a session whose `owner` file names a dead run. A session dir with no owner file is skipped, so cleanup never stops another tool's session. Keep that rule when you change cleanup code.
+
+## Flake rate
+
+`just key-test-flakes [n=10]` runs `just key-test` n times, one after the other, and keeps each run's merged report and log in `.logs/key-test-flakes-<timestamp>/`. It first sweeps leftover `/tmp/desertfox-key-run-*` folders with the sweeps of `session.mjs`. `flakes.mjs` then folds the reports into one JSON line and appends it to `~/.local/state/desertfox/key-test-flakes.jsonl` (`KEY_TEST_FLAKES_HISTORY=<path>` sets another file).
+
+- The line holds `at`, `commit`, `runs`, `clean_runs`, `run_errors`, `too_thin` and `cases`: each failing case with its `fail` run count and its `suspects` (lost-key suspects) count.
+- A run error is a run with no report: the lock wait of 900 s ran out or the run died early. A batch with fewer than half its runs completed is marked `too_thin`.
+- The merged report of every run carries `failed_cases`, `failures` and `exit_code` for this.
+- When a case fails in 2 or more runs, or 3 or more runs error, the batch sends a `notify-send` alert and exits 1.
+- `ops/systemd/` holds a weekly user timer (Sunday 03:00, `Persistent=true`). `just install-flake-timer` symlinks and enables it, and `just install-flake-timer dry` only prints the steps. The recipe fails unless run from the main checkout `~/Development/personal/desertfox`, which the service names as its working directory. The timer tests that checkout as it is, with its current branch and uncommitted changes, so the `commit` of a line can name a dirty tree. The alert thresholds are absolute and assume n near 10.

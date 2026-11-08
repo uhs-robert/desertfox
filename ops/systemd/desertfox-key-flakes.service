@@ -1,0 +1,13 @@
+[Unit]
+Description=desertfox key-test flake-rate batch
+
+[Service]
+Type=oneshot
+# %h is the home directory. The unit tests the main checkout as it is: its current branch and uncommitted changes.
+# install-flake-timer refuses to run from any other checkout.
+WorkingDirectory=%h/Development/personal/desertfox
+# A user unit reads no shell profile, so PATH names the directories of node, just and the session tools.
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=/usr/bin/env just key-test-flakes
+Nice=10
+TimeoutStartSec=4h
