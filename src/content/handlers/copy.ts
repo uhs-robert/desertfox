@@ -1,4 +1,5 @@
 import type { Outcome } from "../../shared/messages.ts";
+import { link_text, markdown_address, org_address } from "../link_escape.ts";
 import { show_toast } from "../ui_proxy.ts";
 import type { ContentHandler } from "./types.ts";
 
@@ -12,9 +13,6 @@ export type PageLinkFacts = {
   short_url: string | undefined;
 };
 
-// Square brackets in a title would end the link text early.
-const link_text = (title: string) => title.replace(/\[/g, "(").replace(/\]/g, ")");
-
 export function format_page_link(format: CopyFormat, facts: PageLinkFacts): string {
   const { url, title } = facts;
   switch (format) {
@@ -27,9 +25,9 @@ export function format_page_link(format: CopyFormat, facts: PageLinkFacts): stri
     case "title":
       return title;
     case "markdown":
-      return `[${link_text(title)}](${url.replace(/\)/g, "%29")})`;
+      return `[${link_text(title)}](${markdown_address(url)})`;
     case "org":
-      return `[[${url.replace(/]/g, "%5D")}][${link_text(title)}]]`;
+      return `[[${org_address(url)}][${link_text(title)}]]`;
   }
 }
 
