@@ -121,7 +121,7 @@ A converted piece presses keys with `press_keys` (no settle) and waits for the e
 - `escape_to_normal(page_id)` presses Escape until the mode badge reads NORMAL, at most three times, and waits for the badge after each press.
 - `press_and_wait_for_move(page_id, keys, what)` presses a caret key and waits for the selection report. `badge_is(page_id, label)` and `is_selection_of(page_id)` are the matching event predicates.
 - `which_key_delay_ms` is the delay from `config/settings.toml` (100 ms). A check that no panel shows sits out `which_key_delay_ms` plus a margin. The toast life (3 s) is a constant in `src/`, so the test config cannot shorten it.
-- A window_focus report from a frame comes before the frame takes keys, so `p6_frames.mjs` keeps two 300 ms sleeps.
+- A window_focus report from a frame comes before the frame takes keys, so `p6_frames.mjs` runs the key probe on the frame instead.
 
 ## Timings
 
