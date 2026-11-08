@@ -81,11 +81,11 @@ Each piece exports `export const areas = ["hints", ...]`, the feature areas it e
 - The queue runs the longest piece first and a piece with no weight before all others. The weights come from `piece_seconds.json`, overridden piece by piece by the newest `.logs/key-test-timings-*.json` of this checkout when that file is newer. `just key-test-weights` rewrites `piece_seconds.json` from a full run. A piece that runs more than twice its weight, or 10 s over it, prints a `stale weight` line.
 - With one shard the queue keeps the given order. Each shard's sequence prints at the end (`s3 sequence: ...`), so `KEY_TEST_SHARDS=1 KEY_TEST_PIECES=<that list>` replays a failure that showed in one shard.
 - The coordinator picks a distinct debug port for each worker, below the kernel's ephemeral port range, so no page server or other worker can draw it. The workers start 300 ms apart.
-- The coordinator sweeps leftover sessions once before it forks. Workers never sweep, so no worker stops another worker's live session.
+- The coordinator sweeps leftover sessions and run folders once before it forks. Workers never sweep, so no worker stops another worker's live session.
 - Each output line carries its shard (`[s3] PASS ...`). The end of the run lists the failed cases by piece.
 - A failed piece is not retried. A worker that dies fails its running piece, and the other workers take the rest of the queue. A worker whose debugger connection closes (Firefox crashed or exited) takes no more pieces.
 - At the deadline, or on SIGINT or SIGTERM, the coordinator sends SIGTERM to every worker. Each worker writes its timings and stops its session. A worker still alive after 10 s is killed, and the coordinator stops its session. The run then writes the merged timings and exits.
-- Each worker's session files sit under a run folder in `/tmp`, which the coordinator removes at the end.
+- Each worker's session files sit under a run folder in `/tmp` (`desertfox-key-run-*`), which the coordinator removes at the end. Its `owner` file holds the coordinator's pid and start time. A killed coordinator leaves the folder behind, and the next run's sweep removes it once that pid is gone or belongs to a newer process. A folder with no owner file is skipped.
 - Exit codes: 0 when every chosen piece ran and passed, 1 for a failed case, a piece that never finished, a dead worker or the deadline, 2 for a setup error (a bad `KEY_TEST_PIECES`, `KEY_TEST_SHARDS` or `KEY_TEST_DEADLINE_S`), 130 or 143 after SIGINT or SIGTERM.
 
 ## Piece lifecycle
