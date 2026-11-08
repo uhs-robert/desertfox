@@ -109,6 +109,8 @@ export const DEFAULT_KEYMAP: KeymapConfig = {
     gH: { id: "page.home", args: { where: "tab" } },
     "]]": { id: "page.follow", args: { direction: "next" }, label: "Next page" },
     "[[": { id: "page.follow", args: { direction: "prev" }, label: "Previous page" },
+    "]i": { id: "page.focus_field", args: { direction: "next" }, label: "Next form control" },
+    "[i": { id: "page.focus_field", args: { direction: "prev" }, label: "Previous form control" },
 
     ".": { id: "command.repeat" },
 

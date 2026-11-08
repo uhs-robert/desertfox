@@ -19,6 +19,8 @@ import { box_owners, boxes_with_fallback, uncovered_through_frames, viewport_siz
 import type { PageProbe } from "./visible.ts";
 import { clear_snapshot, go_to_heading, take_snapshot } from "./headings.ts";
 import { can_open_elsewhere, find_follow_link } from "./follow_links.ts";
+import { focus_field } from "./focus_fields.ts";
+import type { FieldDirection } from "./focus_fields.ts";
 import type { FollowDirection } from "./follow_links.ts";
 import { DEFAULT_SETTINGS } from "../../shared/default_settings.ts";
 import type { HeadingItem } from "../../shared/messages.ts";
@@ -259,6 +261,10 @@ function register(host: BundleHostApi): void {
   }
 
   host.register_handler("page.follow", (args) => follow_page_link(args.direction as FollowDirection, args.where as Place));
+  host.register_handler("page.focus_field", (args): Outcome => {
+    const message = focus_field(document, args.last_blurred as Element | undefined, args.direction as FieldDirection, args.steps as number);
+    return message === undefined ? done : { ok: false, message };
+  });
   host.register_handler("hint.unhover", () => unhover());
 
   // The command line asks for the list and `report` hands it back, so the answer does not go through the background.
