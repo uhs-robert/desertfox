@@ -85,17 +85,30 @@ export function create_timings() {
     return rdp;
   }
 
+  let active_piece;
+
+  // Safe to call twice and from a signal handler. A killed run has no `finally` to record its piece, so this records it with `in_flight: true`. Call it after finish_active_case, so the piece's case time includes the case that was running.
+  function finish_active_piece() {
+    if (!active_piece) return;
+    charge();
+    const { name, started_at: piece_started_at, case_ms_before } = active_piece;
+    pieces.push({ name, wall_ms: Date.now() - piece_started_at, case_ms: total_case_ms() - case_ms_before, in_flight: true });
+    active_piece = undefined;
+  }
+
   async function time_piece(name, action) {
     charge();
     current_piece = name;
-    const piece_started_at = Date.now();
-    const case_ms_before = total_case_ms();
+    const this_piece = { name, started_at: Date.now(), case_ms_before: total_case_ms() };
+    active_piece = this_piece;
     try {
       await action();
     } finally {
-      charge();
-      const wall_ms = Date.now() - piece_started_at;
-      pieces.push({ name, wall_ms, case_ms: total_case_ms() - case_ms_before });
+      if (active_piece === this_piece) {
+        charge();
+        pieces.push({ name, wall_ms: Date.now() - this_piece.started_at, case_ms: total_case_ms() - this_piece.case_ms_before });
+        active_piece = undefined;
+      }
       current_piece = "run.mjs";
     }
   }
@@ -161,7 +174,30 @@ export function create_timings() {
     writeFileSync(path, `${JSON.stringify(full_report, null, 2)}\n`);
   }
 
-  return { time, time_case, finish_active_case, time_piece, wrap_rdp, record_tab_count, report, summary_text, write_json };
+  return { time, time_case, finish_active_case, finish_active_piece, time_piece, wrap_rdp, record_tab_count, report, summary_text, write_json };
+}
+
+// Joins the reports of parallel workers into one. The run lasts as long as its slowest worker, and every other figure adds up.
+export function merge_reports(reports) {
+  const add_categories = (target, source) => {
+    for (const [category, { ms, count }] of Object.entries(source)) {
+      target[category] ??= { ms: 0, count: 0 };
+      target[category].ms += ms;
+      target[category].count += count;
+    }
+  };
+  const merged = { total_ms: 0, cases_ms: 0, outside_cases_ms: 0, categories: {}, outside_cases: {}, pieces: [], tab_samples: [], cases: [] };
+  for (const report of reports) {
+    merged.total_ms = Math.max(merged.total_ms, report.total_ms);
+    merged.cases_ms += report.cases_ms;
+    merged.outside_cases_ms += report.outside_cases_ms;
+    add_categories(merged.categories, report.categories);
+    add_categories(merged.outside_cases, report.outside_cases);
+    merged.pieces.push(...report.pieces);
+    merged.tab_samples.push(...report.tab_samples);
+    merged.cases.push(...report.cases);
+  }
+  return merged;
 }
 
 export function default_timings_path(repo_dir) {
