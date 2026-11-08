@@ -1,7 +1,8 @@
 // Draws the settings page from a session and wires its controls. The session (`settings_model.ts`) holds the state, so this file only turns fields into nodes and events into session calls.
 
 import { el } from "./render.ts";
-import { create_settings_session, GROUPS, LAYER_LABEL, READ_ONLY_NOTE, text_of_value, touches_settings, value_of_text } from "./settings_model.ts";
+import { create_settings_session, GROUPS, LAYER_LABEL, READ_ONLY_NOTE, text_of_value, value_of_text } from "./settings_model.ts";
+import { touches_settings } from "../shared/storage_watch.ts";
 import type { Control, Field, SessionDeps, SettingsSession } from "./settings_model.ts";
 
 // One control: how to read the value it shows and how to put a value in without recreating it, which would drop focus and a half-typed edit.

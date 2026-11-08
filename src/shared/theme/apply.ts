@@ -3,6 +3,7 @@
 import { ROLES } from "./roles.ts";
 import type { RoleColors } from "./roles.ts";
 import { token_name } from "./tokens.ts";
+import { watch_stored } from "../storage_watch.ts";
 
 // The theme in force as `{ dark, light }` role colors, from the `palette` and `light_intensity` settings under any live `set`. Rewritten at every publish.
 export const THEME_STORAGE_KEY = "desertfox_theme";
@@ -18,16 +19,6 @@ export type StoredTheme = { dark: RoleColors; light: RoleColors };
 export function theme_css(theme: StoredTheme, selector: string): string {
   const block = (colors: RoleColors) => ROLES.filter((role) => typeof colors?.[role] === "string").map((role) => `${token_name(role)}: ${colors[role]};`).join(" ");
   return `${selector} { ${block(theme.dark)} }\n@media (prefers-color-scheme: light) { ${selector} { ${block(theme.light)} } }`;
-}
-
-// Calls `on_value` with the stored value now and again at every change. A failed first read calls it with undefined, so a caller that waits
-// on the first read never waits forever. Nothing is called when storage is unavailable.
-export function watch_stored<T>(key: string, on_value: (value: T | undefined) => void): void {
-  if (typeof browser === "undefined") return;
-  void browser.storage.local.get(key).then((stored) => on_value(stored[key] as T | undefined), () => on_value(undefined));
-  browser.storage.onChanged.addListener((changes, area) => {
-    if (area === "local" && key in changes) on_value(changes[key]!.newValue as T | undefined);
-  });
 }
 
 // How long a surface or page stays hidden for its first reads. A hung read must not hide it for good. A read that returns later still applies.

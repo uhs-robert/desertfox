@@ -53,17 +53,33 @@ export function draw_sections(sections: readonly ListSection[]): HTMLElement {
   return lists;
 }
 
-export function render_new_tab(body: HTMLElement, settings: WidgetSettings, readers: PageReaders = browser_page_readers): void {
+// Calls `tick` now and every second while the tab is visible. A hidden tab stops ticking. The first tick after it shows again lands past the animation gap, so the hands jump to the time. Returns the stop, which also removes the page listener.
+export function run_ticker(tick: () => void): () => void {
+  let timer: ReturnType<typeof setInterval> | undefined;
+  const start = () => {
+    tick();
+    timer = setInterval(tick, 1000);
+  };
+  const on_visibility = () => {
+    clearInterval(timer);
+    if (!document.hidden) start();
+  };
+  document.addEventListener("visibilitychange", on_visibility);
+  if (!document.hidden) start();
+  return () => {
+    clearInterval(timer);
+    document.removeEventListener("visibilitychange", on_visibility);
+  };
+}
+
+// The page now on screen and how to stop its clock. A redraw stops it before the new page takes its place, so two clocks never tick.
+let drawn: { page: HTMLElement; stop_ticker: () => void } | undefined;
+
+function build_page(settings: WidgetSettings): { page: HTMLElement; stop_ticker: () => void } {
   const page = document.createElement("main");
   page.className = "desertfox-newtab";
-  body.prepend(page);
-
-  void read_sections(settings, readers).then((sections) => {
-    if (sections.length > 0) page.append(draw_sections(sections));
-  });
-
   const enabled = enabled_widgets(settings);
-  if (!enabled.clock && !enabled.date) return;
+  if (!enabled.clock && !enabled.date) return { page, stop_ticker: () => {} };
   const time_block = document.createElement("div");
   time_block.className = "time";
   const slot = document.createElement("div");
@@ -78,20 +94,24 @@ export function render_new_tab(body: HTMLElement, settings: WidgetSettings, read
   if (enabled.date) time_block.append(date);
 
   // The tick also rewrites the date, so a tab left open past midnight shows the new day.
-  const tick = () => {
+  const stop_ticker = run_ticker(() => {
     const now = new Date();
     clock?.update(now);
     if (enabled.date) date.textContent = date_text(now);
-  };
-  let timer: ReturnType<typeof setInterval> | undefined;
-  const start = () => {
-    tick();
-    timer = setInterval(tick, 1000);
-  };
-  // A hidden tab stops ticking. The first tick after it shows again lands past the animation gap, so the hands jump to the time.
-  document.addEventListener("visibilitychange", () => {
-    clearInterval(timer);
-    if (!document.hidden) start();
   });
-  if (!document.hidden) start();
+  return { page, stop_ticker };
+}
+
+// The first call puts the page in at once and fills the lists when they arrive. A later call builds the new page off screen and swaps it in with its lists, so the page height holds and the scroll position stays. The returned promise settles after the swap. Calls must not overlap, which `follow_settings` guarantees.
+export async function render_new_tab(body: HTMLElement, settings: WidgetSettings, readers: PageReaders = browser_page_readers): Promise<void> {
+  const next = build_page(settings);
+  const previous = drawn;
+  drawn = next;
+  if (!previous) body.prepend(next.page);
+  const sections = await read_sections(settings, readers);
+  if (sections.length > 0) next.page.append(draw_sections(sections));
+  if (previous) {
+    previous.stop_ticker();
+    previous.page.replaceWith(next.page);
+  }
 }

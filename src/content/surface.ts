@@ -2,7 +2,8 @@
 // -font or -radius: a declaration shadows a value the page or host sets. Write each default as a var() fallback.
 
 import { LAYER_ATTRIBUTE, RESTACKED_EVENT } from "../shared/layers.ts";
-import { FIRST_READ_DEADLINE_MS, theme_css, THEME_STORAGE_KEY, USER_CSS_STORAGE_KEY, watch_stored } from "../shared/theme/apply.ts";
+import { FIRST_READ_DEADLINE_MS, theme_css, THEME_STORAGE_KEY, USER_CSS_STORAGE_KEY } from "../shared/theme/apply.ts";
+import { watch_stored } from "../shared/storage_watch.ts";
 import type { StoredTheme } from "../shared/theme/apply.ts";
 
 // Each surface holds, after its built-in style, a theme sheet and then a user CSS sheet, so user CSS wins. Every surface of the
