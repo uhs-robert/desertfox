@@ -72,12 +72,13 @@ async function main() {
   const ledger = create_ledger(queue);
   const merged_path = default_timings_path(repo_dir);
   const diagnostics_root = merged_path.replace(/\.json$/, "-diagnostics");
-  // Holds each shard's timings file and, through TMPDIR, each worker's session files, so one removal leaves nothing behind in /tmp.
-  const run_dir = mkdtempSync(join(tmpdir(), "desertfox-key-run-"));
   console.log(`key-test: ${piece_files.length} pieces on ${shard_count} shard${shard_count === 1 ? "" : "s"}, weights from ${weights_source}`);
 
   await sweep_dead_sessions();
   const debug_ports = await pick_debug_ports(shard_count);
+  // Holds each shard's timings file and, through TMPDIR, each worker's session files, so one removal leaves nothing behind in /tmp.
+  // Made after the sweep, because a signal before the handlers below kills the coordinator outright.
+  const run_dir = mkdtempSync(join(tmpdir(), "desertfox-key-run-"));
 
   const failures = [];
   const results = [];
@@ -133,6 +134,8 @@ async function main() {
   const all_exited_promise = new Promise((resolve_exited) => { all_exited = resolve_exited; });
 
   for (const entry of shards) {
+    // A send to a worker that died after its last message fails here, and the exit handler records the death.
+    entry.child.on("error", (error) => console.log(`key-test: s${entry.shard}: ${error.message}`));
     entry.child.on("message", (message) => {
       if (message.type === "ready") {
         entry.startup_ms = elapsed_ms();

@@ -28,8 +28,14 @@ function close_and_exit(code) {
 }
 
 // The harness tears the session down on a signal while the running piece goes on. That piece did not finish, so it is not reported done, and the coordinator lists it as in flight.
+// Before create_session installs its own handlers there is no session to tear down, and this listener would swallow the signal, since Node drops the default exit once a listener exists. So the worker exits at once then.
 let signalled = false;
-for (const signal of ["SIGINT", "SIGTERM"]) process.on(signal, () => { signalled = true; });
+for (const [signal, code] of [["SIGINT", 130], ["SIGTERM", 143]]) {
+  process.on(signal, () => {
+    signalled = true;
+    if (process.listenerCount(signal) === 1) process.exit(code);
+  });
+}
 
 // The coordinator died or dropped this worker. No session outlives its coordinator.
 process.on("disconnect", () => close_and_exit(1));
