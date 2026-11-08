@@ -17,7 +17,7 @@ addEventListener("scroll", () => {
     field_top: document.getElementById("field")?.getBoundingClientRect().top,
   }), 150);
 });
-addEventListener("keydown", (event) => send("keydown", { key: event.key }));
+addEventListener("keydown", (event) => send("keydown", { key: event.key, code: event.code }));
 document.addEventListener("selectionchange", () => send("selection", { text: String(getSelection()), scroll_y: scrollY, pane_top: document.getElementById("pane")?.scrollTop ?? null, top: getSelection().rangeCount ? getSelection().getRangeAt(0).getBoundingClientRect().top : null }));
 addEventListener("input", (event) => send("input", { value: event.target.value }));
 addEventListener("focus", () => send("window_focus"));
