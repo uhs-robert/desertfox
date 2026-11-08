@@ -1,12 +1,9 @@
 // Key cases of the media hint filter (#133). Firefox must give the hint keydown the user activation that play() and requestFullscreen() need.
 // The fixture page /media has a video in a player box under an overlay, and a hidden audio that gets no hint.
-import { evaluate_in_background } from "./rdp.mjs";
 
 export const areas = ["hints"];
 
-export async function run_cases({ run_case, press_keys, poll_until, expect_absent, hint_label_count, open_page, wait_event, events, expect, rdp, extension_id }) {
-  const background = (code) => evaluate_in_background(rdp, extension_id, code);
-  const in_active_tab = (code) => background(`(async () => { const [tab] = await browser.tabs.query({ active: true, currentWindow: true }); return browser.tabs.executeScript(tab.id, { code: ${JSON.stringify(code)} }); })()`);
+export async function run_cases({ run_case, press_keys, poll_until, expect_absent, hint_label_count, open_page, wait_event, events, expect, in_active_tab }) {
   const run_hint = (args) => in_active_tab(`browser.runtime.sendMessage({ type: "run", invocations: [{ id: "hint.run", args: ${JSON.stringify(args)} }], mode: "normal" }); 0`);
   const on_page = (page_id, type) => (event) => event.page_id === page_id && event.type === type;
   const wait_for_labels = () => poll_until("the hint labels", async () => (await hint_label_count()) > 0);

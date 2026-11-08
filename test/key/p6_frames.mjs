@@ -1,10 +1,9 @@
 // Key cases of the frames hint filter (#134). A frame from another site starts its content script on its first focus, and gF returns the keys to the top page.
 // The fixture page /frames holds a same-origin frame (a), a cross-origin frame (s) and a 10 px frame that gets no label.
-import { evaluate_in_background } from "./rdp.mjs";
 
 export const areas = ["hints"];
 
-export async function run_cases({ rdp, extension_id, run_case, press_keys, poll_until, barrier, expect_absent, hint_label_count, open_page, wait_event, find_event, events, expect, sleep, scroll_of, last_scroll_y }) {
+export async function run_cases({ run_case, press_keys, poll_until, barrier, expect_absent, hint_label_count, open_page, wait_event, find_event, events, expect, sleep, scroll_of, last_scroll_y, in_active_tab }) {
   const page_id = "p6_frames";
   const on_page = (id, type) => (event) => event.page_id === id && event.type === type;
   const script_starts = (id) => events.filter(on_page(id, "tree_read")).length;
@@ -74,8 +73,6 @@ export async function run_cases({ rdp, extension_id, run_case, press_keys, poll_
     await expect_absent(mark, page_id, on_page(`${page_id}_tiny`, "window_focus"), "the 10 px frame took the focus");
   });
 
-  const in_top_frame = (code) => evaluate_in_background(rdp, extension_id, `(async () => { const [tab] = await browser.tabs.query({ active: true, currentWindow: true }); return browser.tabs.executeScript(tab.id, { code: ${JSON.stringify(code)} }); })()`);
-
   // Tab walks the frames in page order: the same-origin one, the cross-origin one, then the 10 px one, which nothing has focused yet.
   await run_case("Tab into a cross-origin frame starts its script", async () => {
     const mark = events.length;
@@ -94,7 +91,7 @@ export async function run_cases({ rdp, extension_id, run_case, press_keys, poll_
     await press_keys("s");
     await wait_event(mark, on_page(`${page_id}_cross`, "window_focus"), "the cross-origin frame to take the focus");
     mark = events.length;
-    await in_top_frame(`document.getElementById("cross").src = "http://localhost:" + location.port + "/frame_inner?id=${page_id}_moved"`);
+    await in_active_tab(`document.getElementById("cross").src = "http://localhost:" + location.port + "/frame_inner?id=${page_id}_moved"`);
     await wait_event(mark, on_page(`${page_id}_moved`, "tree_read"), "the navigated frame to start at once, still focused");
     // The frame gets its focus back a moment after its script starts, and j sooner is lost. Its window_focus report comes too early to wait on (tried: j was still lost).
     await sleep(300);
@@ -102,7 +99,7 @@ export async function run_cases({ rdp, extension_id, run_case, press_keys, poll_
     await wait_event(mark, scroll_of(`${page_id}_moved`), "j to scroll the navigated frame");
     const before_top = last_scroll_y(page_id);
     mark = events.length;
-    await in_top_frame(`document.getElementById("cross").remove()`);
+    await in_active_tab(`document.getElementById("cross").remove()`);
     await sleep(300);
     await press_keys("j");
     await wait_event(mark, scroll_of(page_id), "j to scroll the top page after the focused frame left");

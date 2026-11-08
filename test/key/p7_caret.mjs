@@ -2,43 +2,19 @@
 // The pages report each change of their selection, and the highlight style the bundle puts on the document.
 
 import { mkdirSync } from "node:fs";
-import { evaluate_in_background } from "./rdp.mjs";
 
 export const areas = ["caret", "find"];
 
-export async function run_cases({ rdp, extension_id, take_shot, run_case, expect, expect_absent, open_page, press_keys, poll_until, barrier, scroll_of, wait_cmdline, settle_focus, became_visible, last_scroll_y, events, wait_event }) {
+export async function run_cases({ take_shot, run_case, expect, expect_absent, open_page, press_keys, poll_until, barrier, scroll_of, wait_cmdline, settle_focus, became_visible, last_scroll_y, events, wait_event, in_active_tab, hint_label_count, badge_is, is_selection_of, press_and_wait_for_move, escape_to_normal }) {
   const paste_ctrl_v = ["-M", "ctrl", "v", "-m", "ctrl"];
   // oasis_moonlight, the default palette, dark: the caret takes the `mode_caret` role and visual mode the `selection` role (src/content/caret/selection_colors.ts).
   const CARET_BACKGROUND = "#f0e68c";
   const VISUAL_BACKGROUND = "#24364d";
 
-  // Runs in the content script's world of the active tab, where `desertfox_host` lives.
-  const in_active_tab = (code) => evaluate_in_background(rdp, extension_id, `(async () => { const [tab] = await browser.tabs.query({ active: true, currentWindow: true }); return (await browser.tabs.executeScript(tab.id, { code: ${JSON.stringify(code)} }))[0]; })()`).then((value) => {
-    if (value?.error) throw new Error(`in the tab: ${JSON.stringify(value)}`);
-    return value;
-  });
   const selection_is = (page_id, text) => (event) => event.type === "selection" && event.page_id === page_id && event.text === text;
   const style_is = (page_id, has) => (event) => event.type === "selection_style" && event.page_id === page_id && has(event.css);
   const no_style = (css) => css === "";
-  const badge_is = (page_id, label) => (event) => event.type === "indicator" && event.page_id === page_id && event.label === label;
-  const is_selection_of = (page_id) => (event) => event.type === "selection" && event.page_id === page_id;
 
-  // A key that moves the caret reports a selection change, so this is the wait after it.
-  const press_and_wait_for_move = async (page_id, keys, what) => {
-    const mark = events.length;
-    await press_keys(keys);
-    return wait_event(mark, is_selection_of(page_id), what);
-  };
-  // Presses Escape until the mode badge reads NORMAL. Each press waits for the badge to change, so a visual mode that needs two presses is not read as one.
-  const escape_to_normal = async (page_id) => {
-    for (let presses = 0; presses < 3; presses++) {
-      const mark = events.length;
-      await press_keys("-k", "Escape");
-      const changed = await wait_event(mark, (event) => event.type === "indicator" && event.page_id === page_id, "a mode badge after Escape");
-      if (changed.label === "NORMAL") return;
-    }
-    throw new Error("the badge never reached NORMAL after three Escape presses");
-  };
   // The last selection report after the mark, once it passes `accept`. A count such as 120j moves the caret in one step, so its report is the last one.
   async function wait_for_last_selection(page_id, mark, accept, what) {
     const last = () => events.slice(mark).filter(is_selection_of(page_id)).at(-1);
@@ -239,8 +215,7 @@ export async function run_cases({ rdp, extension_id, take_shot, run_case, expect
     await escape_to_normal("caret_scrolled");
   });
 
-  // The hint labels sit in a surface host marked with LAYERS.hints (src/shared/layers.ts), which the page script cannot import. The host leaves with the labels.
-  const wait_for_hint_labels = () => poll_until("the hint labels to show", async () => (await in_active_tab(`[...document.documentElement.children].some((child) => child.getAttribute("data-desertfox-layer") === "2147483643")`)) === true);
+  const wait_for_hint_labels = () => poll_until("the hint labels to show", async () => (await hint_label_count()) > 0);
   // A hint starts the mode at its element: label "a" is the only element, so it is picked at once.
   const hint_into = async (page_id, flag, target) => {
     await open_page("caret_hint", page_id, { new_tab: true });

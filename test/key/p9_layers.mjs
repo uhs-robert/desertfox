@@ -8,8 +8,7 @@ import { evaluate_in_background } from "./rdp.mjs";
 
 export const areas = ["ui", "whichkey", "cmdline"];
 
-export async function run_cases({ rdp, extension_id, run_case, press_keys, open_page, wait_event, wait_cmdline, close_cmdline, events, expect }) {
-  const in_active_tab = (code) => evaluate_in_background(rdp, extension_id, `(async () => { const [tab] = await browser.tabs.query({ active: true, currentWindow: true }); return browser.tabs.executeScript(tab.id, { code: ${JSON.stringify(code)} }); })()`);
+export async function run_cases({ rdp, extension_id, run_case, press_keys, open_page, wait_event, wait_cmdline, close_cmdline, events, expect, in_active_tab }) {
   const hit_test_with_step = (step, before = "", right_width = Infinity) => `(() => {
     ${before}
     const layer = (element) => Number(element.getAttribute("data-desertfox-layer"));
@@ -48,7 +47,7 @@ export async function run_cases({ rdp, extension_id, run_case, press_keys, open_
     mark = events.length;
     await press_keys("_w");
     await wait_event(mark, (event) => event.type === "whichkey" && event.page_id === "p9_layers" && event.value !== "", "the which-key panel");
-    const { hosts, overlaps } = JSON.parse((await in_active_tab(hit_test))[0]);
+    const { hosts, overlaps } = JSON.parse(await in_active_tab(hit_test));
     expect(hosts >= 2, `${hosts} surface hosts are shown, need the which-key panel and the toast`);
     expect(overlaps.length > 0, "no two surfaces overlap in the bottom 160px, so the order is not tested");
     const wrong = overlaps.filter(([top, under]) => top < under);
@@ -88,7 +87,7 @@ export async function run_cases({ rdp, extension_id, run_case, press_keys, open_
     await wait_event(mark, (event) => event.type === "toast" && event.page_id === "p9_layers_line", "the pushed toast");
     // Only the bottom right corner, where the toast is. A hit test where the toast covers the line's frame is slow in Firefox, and
     // the whole bottom of the page stalls the extension process past the debugger's timeout.
-    const { hosts, overlaps } = JSON.parse((await in_active_tab(hit_test_with_step(8, move_toast_over_line, 320)))[0]);
+    const { hosts, overlaps } = JSON.parse(await in_active_tab(hit_test_with_step(8, move_toast_over_line, 320)));
     expect(overlaps.length > 0, `the toast and the line share no grid point in the bottom 160px (${hosts} surface hosts shown), so the order is not tested`);
     const wrong = overlaps.filter(([top, under]) => top < under);
     expect(wrong.length === 0, `a lower layer is on top of a higher one at ${wrong.length} points, first ${JSON.stringify(wrong[0])}`);
