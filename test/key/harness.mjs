@@ -1,33 +1,23 @@
 // The key test: real key presses in a nested session, results read from pages that report to a local server.
-// Needs SHADOW_SH, a script with `up|spawn|keys|down <name>` subcommands for a nested, invisible compositor.
-// `status` is optional. The sweep reads its stdout for lines that start `<name>: ` and skips the sweep if the verb fails.
-// The cleanup of killed runs works only for drivers that keep sessions in /tmp/shadow-<uid>-<name>.
-import { execFile, spawnSync } from "node:child_process";
+// session.mjs starts the nested session and its keyboard.
+import { spawnSync } from "node:child_process";
 import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import net from "node:net";
 import { homedir, tmpdir, userInfo } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { promisify } from "node:util";
 import { connect_rdp, evaluate_in_background, evaluate_in_chrome, evaluate_in_page_frames, install_temporary_addon } from "./rdp.mjs";
 import { start_server } from "./server.mjs";
+import { start_session, stop_session_named, sweep_dead_sessions } from "./session.mjs";
 import { default_timings_path } from "./timings.mjs";
 
-const run_execfile = promisify(execFile);
 const key_test_dir = dirname(fileURLToPath(import.meta.url));
 const repo_dir = resolve(key_test_dir, "../..");
 const dist_dir = join(repo_dir, "dist");
 const EXTENSION_ID = "desertfox@uhs-robert";
 const PADDED_BUNDLE_BYTES = 20 * 1024;
 
-const shadow_sh = process.env.SHADOW_SH;
-if (!shadow_sh) {
-  console.error("key-test: set SHADOW_SH to a script that runs `<script> {up|spawn|keys|down} <name> ...` in a nested session, and optionally `status` (lines `<name>: up|down ...`).");
-  process.exit(2);
-}
-
 const raw_sleep = (ms) => new Promise((resolve_sleep) => setTimeout(resolve_sleep, ms));
-const shadow = (...args) => run_execfile(shadow_sh, args, { maxBuffer: 1 << 24 });
 // The pause of send_keys lets a switched-to tab take keyboard focus before the next press. press_keys has none: wait for the key's effect instead.
 const KEY_SETTLE_MS = 350;
 // A case that runs past this fails by name. Its waits have their own, shorter timeouts, so only a wait with no end reaches it.
@@ -49,52 +39,6 @@ const REINJECT_REPORT_POLLS = 200;
 export const ALT = (key) => ["-M", "alt", key, "-m", "alt"];
 export const CTRL = (key) => ["-M", "ctrl", key, "-m", "ctrl"];
 export const SHIFT_ESCAPE = ["-M", "shift", "-k", "Escape", "-m", "shift"];
-
-// The last resort of a run that fails outside the session, such as before it exists.
-// A teardown that hangs would hold the whole run, so it gets a hard stop. The sweep downs what it leaves behind.
-const SHADOW_DOWN_TIMEOUT_MS = 30000;
-export const shadow_down = (name) => run_execfile(shadow_sh, ["down", name], { maxBuffer: 1 << 24, timeout: SHADOW_DOWN_TIMEOUT_MS, killSignal: "SIGKILL" });
-
-function process_is_alive(pid) {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (error) {
-    return error.code === "EPERM";
-  }
-}
-
-// shadow.sh keeps a session's runtime dir here (a literal /tmp, not TMPDIR), and `down` removes the dir with the marker in it.
-const OWNER_MARKER = "desertfox-key-owner";
-const marker_path = (name) => join("/tmp", `shadow-${process.getuid()}-${name}`, OWNER_MARKER);
-
-function read_owner_pid(name) {
-  try {
-    const text = readFileSync(marker_path(name), "utf8").trim();
-    return /^\d+$/.test(text) && Number(text) > 0 ? Number(text) : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-// A killed run leaves its session behind. Stop each session whose marker names a dead owner.
-// A live run is never touched. This run's own pid counts as dead, since a recycled pid can match an old leftover.
-// A session with no marker is skipped, whatever its name. That includes one killed between `up` and the marker write, which errs toward safety.
-export async function sweep_dead_sessions() {
-  let stdout;
-  try {
-    ({ stdout } = await shadow("status"));
-  } catch (error) {
-    console.error(`sweep skipped: shadow status failed: ${error.message}`);
-    return;
-  }
-  for (const [, name] of stdout.matchAll(/^([a-z0-9][a-z0-9-]*): /gm)) {
-    const owner_pid = read_owner_pid(name);
-    if (!Number.isInteger(owner_pid) || (owner_pid !== process.pid && process_is_alive(owner_pid))) continue;
-    console.log(`sweep: stopping ${name}, left by dead run ${owner_pid}`);
-    await shadow("down", name).catch((error) => console.error(`sweep: down ${name} failed: ${error.message}`));
-  }
-}
 
 async function free_port() {
   const probe = net.createServer();
@@ -138,12 +82,17 @@ function padded_bundle_text() {
 // One nested Firefox, its page server and its helpers. `timings` is the run's timing recorder from create_timings.
 // `sweep: false` skips the leftover sweep, for a caller that swept once for many sessions. `debug_port` lets that caller pick distinct ports, since two sessions that each probe for a free port can pick the same one.
 // `diagnostics_dir` keeps Firefox's output and crash dumps there when the session ends with a failure, since the teardown deletes both. `print_summary: false` leaves the timings summary to the caller.
-export async function create_session({ name: shadow_name, timings, sweep = true, debug_port: given_debug_port, diagnostics_dir, print_summary = true }) {
+export async function create_session({ name: session_name, timings, sweep = true, debug_port: given_debug_port, diagnostics_dir, print_summary = true }) {
   const results = [];
   const measurements = {};
   const sleep = (ms) => timings.time("sleeps", () => raw_sleep(ms));
-  const timed_shadow = (...args) => timings.time("driver", () => shadow(...args));
-  const press_keys = (...wtype_args) => timings.time("keys", () => shadow("keys", shadow_name, ...wtype_args));
+  let session;
+  // Set by each key press and cleared by the wait timeout it charges, so one lost key counts once however many waits then fail.
+  let pressed_since_timeout = false;
+  const press_keys = (...wtype_args) => timings.time("keys", () => {
+    pressed_since_timeout = true;
+    return session.press(wtype_args);
+  });
   async function send_keys(...wtype_args) {
     await press_keys(...wtype_args);
     await timings.time("settle", () => raw_sleep(KEY_SETTLE_MS));
@@ -243,7 +192,8 @@ export async function create_session({ name: shadow_name, timings, sweep = true,
     teardown_started ??= (async () => {
       if (keep_diagnostics && diagnostics_dir) save_diagnostics();
       rdp?.close();
-      await shadow("down", shadow_name).catch((error) => console.error(`shadow down failed: ${error.message}`));
+      // A signal during the start leaves no session object, so the session is found by its name.
+      await (session ? session.stop() : stop_session_named(session_name)).catch((error) => console.error(`session stop failed: ${error.message}`));
       server.close();
       rmSync(work_dir, { recursive: true, force: true });
     })();
@@ -263,7 +213,7 @@ export async function create_session({ name: shadow_name, timings, sweep = true,
     });
   }
 
-  // The session HOME and the profile go with the teardown. spawn.log sits beside the session HOME in the shadow.sh layout, which other drivers need not share, so a missing file is skipped.
+  // The session HOME and the profile go with the teardown. spawn.log sits beside the session HOME.
   function save_diagnostics() {
     try {
       mkdirSync(diagnostics_dir, { recursive: true });
@@ -290,7 +240,11 @@ export async function create_session({ name: shadow_name, timings, sweep = true,
     for (;;) {
       const found = find_event(mark, predicate);
       if (found) return found;
-      if (Date.now() > deadline) throw new Error(`timed out waiting for ${what}`);
+      if (Date.now() > deadline) {
+        if (pressed_since_timeout) timings.record_lost_key_suspect(what);
+        pressed_since_timeout = false;
+        throw new Error(`timed out waiting for ${what}`);
+      }
       await raw_sleep(50);
     }
   }
@@ -444,19 +398,16 @@ export async function create_session({ name: shadow_name, timings, sweep = true,
 
   try {
     if (sweep) await sweep_dead_sessions();
-    await timed_shadow("up", shadow_name);
-    // A driver that keeps sessions elsewhere has no such dir. Its sessions are never swept, which is safe.
-    if (existsSync(dirname(marker_path(shadow_name)))) writeFileSync(marker_path(shadow_name), String(process.pid));
-    else console.error(`no runtime dir for ${shadow_name} under /tmp: skipping the owner marker, so a killed run's session will not be swept`);
-    // A driver's own wait for the window can run out while several sessions start at once, though Firefox goes on starting. The debugger answering is the test that counts.
-    const spawn_failure = await timed_shadow("spawn", shadow_name, join(key_test_dir, "launch_firefox.sh"), work_dir, profile_dir, String(debug_port), managed_file).then(() => undefined, (error) => error);
-    if (spawn_failure) console.log(`spawn reported a failure, waiting for the debugger anyway: ${spawn_failure.message.split("\n").filter(Boolean).at(-1)}`);
+    session = await timings.time("driver", () => start_session({ name: session_name, session_dir: join(work_dir, "session") }));
+    const firefox = session.spawn([join(key_test_dir, "launch_firefox.sh"), work_dir, profile_dir, String(debug_port), managed_file]);
+    let firefox_exit;
+    firefox.on("exit", (code, signal) => { firefox_exit = signal ? `signal ${signal}` : `exit ${code}`; });
     for (let attempt = 0; ; attempt++) {
       try {
         rdp = timings.wrap_rdp(await connect_rdp(debug_port));
         break;
       } catch (error) {
-        if (attempt > 60) throw new Error(`Firefox debugger never answered: ${error.message}${spawn_failure ? `, after spawn failed: ${spawn_failure.message}` : ""}`);
+        if (attempt > 60 || firefox_exit) throw new Error(`Firefox debugger never answered: ${error.message}${firefox_exit ? `, after Firefox ended (${firefox_exit})` : ""}`);
         await sleep(500);
       }
     }
@@ -853,7 +804,7 @@ export async function create_session({ name: shadow_name, timings, sweep = true,
     // Stores a number for the end-of-run measurements line.
     const record = (key, value) => { measurements[key] = value; };
     // The cases of a piece file in test/key/p<number>_*.mjs get these helpers.
-    const context = { config_dir, config_copy, load_config_dir, take_shot: (path) => timed_shadow("shot", shadow_name, "--out", path), run_case: run_piece_case, setup, on_teardown, expect, open_page, open_page_by_keys, send_keys, press_keys, settle_focus, settle_tab_switch, poll_until, wait_tab_quiet, barrier, expect_absent, read_cmdline_state, wait_cmdline, close_cmdline, scroll_report_wait_ms: SCROLL_REPORT_DELAY_MS + 100, which_key_delay_ms: WHICH_KEY_DELAY_MS, sleep, events, wait_event, since, find_event, url_of, rdp, extension_id: EXTENSION_ID, scroll_delta_after, scroll_delta_by_press, became_visible, scroll_of, last_scroll_y,
+    const context = { config_dir, config_copy, load_config_dir, take_shot: (path) => timings.time("driver", () => session.shot(path)), run_case: run_piece_case, setup, on_teardown, expect, open_page, open_page_by_keys, send_keys, press_keys, settle_focus, settle_tab_switch, poll_until, wait_tab_quiet, barrier, expect_absent, read_cmdline_state, wait_cmdline, close_cmdline, scroll_report_wait_ms: SCROLL_REPORT_DELAY_MS + 100, which_key_delay_ms: WHICH_KEY_DELAY_MS, sleep, events, wait_event, since, find_event, url_of, rdp, extension_id: EXTENSION_ID, scroll_delta_after, scroll_delta_by_press, became_visible, scroll_of, last_scroll_y,
       // Moved out of the run.mjs cases. Pieces may use them too.
       in_background, read_local, reload_in_place, wait_reinject_report, injections_of, settled_injection_count, expect_no_scroll, expect_exactly_one_visible, hint_label_count, in_active_tab, badge_is, is_selection_of, press_and_wait_for_move, escape_to_normal, visible_events, extension_view, close_tabs_with, record };
     return { context, state, piece_file };

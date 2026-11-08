@@ -50,21 +50,13 @@ build-config dir="" *flags="": build
 host-test:
     python3 -m unittest discover -s host -p 'test_*.py'
 
-# Real key presses in a nested session. A full run takes about 1 minute on 6 shards. One run at a time per machine: a second waits up to 900 s for the lock. Needs SHADOW_SH, or the shadow skill script in dotfiles, as the nested-session driver.
+# Real key presses in a nested session. A full run takes about 40 s on 8 shards. One run at a time per machine: a second waits up to 900 s for the lock. Needs labwc, Hyprland, dbus-daemon and python3 (test/key/session.mjs).
 key-test: build
     #!/usr/bin/env bash
     set -euo pipefail
-    fallback_driver="$HOME/dotfiles/.claude/skills/shadow/shadow.sh"
-    if [ -z "${SHADOW_SH:-}" ] && [ -x "$fallback_driver" ]; then
-        export SHADOW_SH="$fallback_driver"
-    fi
-    if [ -z "${SHADOW_SH:-}" ]; then
-        echo "key-test needs SHADOW_SH: a script that runs 'up|spawn|keys|down <name>' in a nested, invisible compositor (optional: 'status', one '<name>: up|down ...' line per session). Cleanup of killed runs works only for drivers that keep sessions in /tmp/shadow-<uid>-<name>." >&2
-        exit 2
-    fi
     # One run at a time: two sharded runs together break the memory budget. -o keeps the lock fd out of the run, so a session that outlives it does not hold the lock.
     lock_file=/tmp/desertfox-key-test.lock
-    # A test Firefox that runs away would otherwise take the whole tmux window with it: the kernel kills it, and systemd then stops every process in the window's unit. In its own capped scope, only this run dies. The time limit is the run's own deadline plus a margin, so a serial run with a higher KEY_TEST_DEADLINE_S is not killed first. The margin covers the shutdown after the deadline: the worker stop grace (10 s, STOP_GRACE_MS in run.mjs), the shadow_down timeout (30 s, in harness.mjs) and 30 s of slack for the sweep and the merge.
+    # A test Firefox that runs away would otherwise take the whole tmux window with it: the kernel kills it, and systemd then stops every process in the window's unit. In its own capped scope, only this run dies. The time limit is the run's own deadline plus a margin, so a serial run with a higher KEY_TEST_DEADLINE_S is not killed first. The margin covers the shutdown after the deadline: the worker stop grace (10 s, STOP_GRACE_MS in run.mjs), the session stop (about 5 s, in session.mjs) and the rest as slack for the sweep and the merge.
     deadline_s="${KEY_TEST_DEADLINE_S:-230}"
     if ! [[ "$deadline_s" =~ ^[1-9][0-9]*$ ]]; then deadline_s=230; fi
     scope_args=(systemd-run --user --scope --quiet -p MemoryMax=16G -p MemoryHigh=14G -p MemorySwapMax=0 -p CPUQuota=1400% -p TimeoutStopSec=20 -p RuntimeMaxSec=$((deadline_s + 70)))

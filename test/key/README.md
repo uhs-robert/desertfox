@@ -1,6 +1,6 @@
 # test/key
 
-Key tests. Each run builds the extension, starts Firefox in its own nested, invisible session, sends real key presses and checks what the page and the background report. `harness.mjs` holds the session (`create_session`: Firefox, the page server, the helpers and `run_piece` with the piece lifecycle), `run.mjs` is the coordinator that splits the run across shards and prints the summary, `worker.mjs` runs one shard, `shards.mjs` orders the pieces by `piece_seconds.json` and tracks which shard holds which piece, `p<number>_*.mjs` are the pieces, `areas.mjs` maps src files to areas, `timings.mjs` measures where the time goes, `server.mjs` and `rdp.mjs` read the results (`rdp.mjs` also reads frames inside web pages), `launch_firefox.sh` starts Firefox, and `user.js` and `config/` set up the test profile.
+Key tests. Each run builds the extension, starts Firefox in its own nested, invisible session, sends real key presses and checks what the page and the background report. `session.mjs` starts the nested session, `keyboard.py` is its keyboard, `harness.mjs` holds the rest of a shard (`create_session`: Firefox, the page server, the helpers and `run_piece` with the piece lifecycle), `run.mjs` is the coordinator that splits the run across shards and prints the summary, `worker.mjs` runs one shard, `shards.mjs` orders the pieces by `piece_seconds.json` and tracks which shard holds which piece, `p<number>_*.mjs` are the pieces, `areas.mjs` maps src files to areas, `timings.mjs` measures where the time goes, `server.mjs` and `rdp.mjs` read the results (`rdp.mjs` also reads frames inside web pages), `launch_firefox.sh` starts Firefox, and `user.js` and `config/` set up the test profile.
 
 ## Run
 
@@ -14,22 +14,31 @@ just key-test-changed [base] [head]
 just key-test-weights [timings file]
 ```
 
-A full run takes about 1 minute on 6 shards and needs a nested Hyprland.
+A full run takes about 40 s on 8 shards. It needs labwc, Hyprland, dbus-daemon and python3, and grim for the screenshot cases.
 
 - `KEY_TEST_ONLY` runs only the cases whose name matches. It also runs the cases marked `{ setup: true }` and every `h.setup` step of a piece, which leave state that later cases read. The output tags those as `SETUP`.
 - `KEY_TEST_PIECES` is a comma-separated list of piece names (the file name without `.mjs`). Only those pieces run, and an unknown name or an empty list aborts the run. Each piece must pass alone.
 - `KEY_TEST_ORDER=reverse` runs the pieces from last to first, on one shard. A piece that fails only in reverse order depends on state from another piece.
-- `KEY_TEST_SHARDS=<n>` sets the shard count (default 6, never more than the chosen pieces). See Shards.
+- `KEY_TEST_SHARDS=<n>` sets the shard count (default 8, never more than the chosen pieces). See Shards.
 - `KEY_TEST_DEADLINE_S=<s>` sets when the run stops itself (default 230). A full run on one shard takes longer, so it needs a higher value. The recipe sets the scope's time limit to this value plus 70 s, which covers the shutdown after the deadline.
 - `KEY_TEST_WEIGHTS=<timings file>` orders the queue by that file instead of `piece_seconds.json` and the newest local timings.
-- `SHADOW_SH` must name a script that runs `up|spawn|keys|down <name>` for a nested, invisible compositor session. It can also answer `status` with one `<name>: up|down ...` line per session, which the sweep reads.
-  Cleanup of killed runs works only for drivers that keep a session's runtime dir in `/tmp/shadow-<uid>-<name>`.
-  When `SHADOW_SH` is unset, the recipe uses `$HOME/dotfiles/.claude/skills/shadow/shadow.sh` if it is executable. With neither, it exits.
+- `KEY_TEST_RENDER_NODE=/dev/dri/renderD<n>` picks the render node of the host compositor. By default it is the first node whose driver is not NVIDIA.
+- `KEY_TEST_PROBE=1 KEY_TEST_PIECES=p97_key_delivery KEY_TEST_DEADLINE_S=900 just key-test` runs the key-delivery probe. It presses every key the pieces use and checks each keydown's `key` and `code`, then counts lost F8 presses at 0, 30, 100 and 300 ms after a page loads. `KEY_TEST_PROBE_ROUNDS` sets the repeats (default 20). Without `KEY_TEST_PROBE` the piece does nothing.
 - One run at a time per machine, across worktrees: the recipe takes `/tmp/desertfox-key-test.lock` and a second run waits up to 900 s for it, after it prints the holders. Never wrap `just key-test` in `flock` on that file: the outer lock blocks the recipe's own for the whole wait.
+
+## Session and keyboard
+
+`session.mjs` starts one session per shard: a private session bus, headless labwc as the host and Hyprland nested in it. The session has no bar and no notification server, so `user.js` sets `alerts.useSystemBackend` to false and Firefox shows notices in a window of its own. Close a notice when the case is done, because its window holds the focus.
+
+- Each session lives in `/tmp/dfk-<uid>-<name>`: its bus, its Wayland sockets and an `owner` file with the pid of the worker that started it. Every process of the session carries that dir in its environment. `stop()` and the sweep find the processes by it, so a daemon the bus started goes too.
+- The start takes about 1 s. The stop ends Firefox and the keyboard first, then the rest, with SIGKILL after 2 s each.
+- `keyboard.py` is the one keyboard of the session. It uploads the US keymap in `us.xkb` once, so every key arrives with its real `code`, and capitals and symbols press a real Shift. `press_keys` takes wtype-style args (`-k`, `-M`, `-m`, `-P`, `-p`, `-d`, `-s`, ASCII text). An unknown key fails the call by name, and a dead compositor fails every later call with the client's exit message.
+- The client pauses 10 ms after each key (`KEY_GAP_MS`), because some pieces type text and then an action key in one call and the action key would land before the text took effect.
+- `us.xkb` is the output of `xkbcli compile-keymap --layout us`, committed so a run needs no xkbcli.
 
 ## Areas and key-test-changed
 
-Each piece exports `export const areas = ["hints", ...]`, the feature areas it exercises. Write it on one line: `areas.mjs` reads it as text, because importing a piece would load `harness.mjs`, which exits without `SHADOW_SH`. `areas.mjs` maps src paths to the same names, and a change runs the pieces that share an area with it.
+Each piece exports `export const areas = ["hints", ...]`, the feature areas it exercises. Write it on one line: `areas.mjs` reads it as text, so the selection loads no piece and no harness. `areas.mjs` maps src paths to the same names, and a change runs the pieces that share an area with it.
 
 | Area | Src it covers |
 | --- | --- |
@@ -67,7 +76,7 @@ Each piece exports `export const areas = ["hints", ...]`, the feature areas it e
 
 ## Shards
 
-`run.mjs` forks one `worker.mjs` per shard. Each worker owns one `create_session`: its own shadow session (named `ok` plus the worker pid in base 36), Firefox profile, page server and keyboard. The workers take pieces from one queue until it is empty, so a fast shard takes more pieces.
+`run.mjs` forks one `worker.mjs` per shard. Each worker owns one `create_session`: its own session (named `ok` plus the worker pid in base 36), Firefox profile, page server and keyboard. The workers take pieces from one queue until it is empty, so a fast shard takes more pieces.
 
 - The queue runs the longest piece first and a piece with no weight before all others. The weights come from `piece_seconds.json`, overridden piece by piece by the newest `.logs/key-test-timings-*.json` of this checkout when that file is newer. `just key-test-weights` rewrites `piece_seconds.json` from a full run. A piece that runs more than twice its weight, or 10 s over it, prints a `stale weight` line.
 - With one shard the queue keeps the given order. Each shard's sequence prints at the end (`s3 sequence: ...`), so `KEY_TEST_SHARDS=1 KEY_TEST_PIECES=<that list>` replays a failure that showed in one shard.
@@ -77,7 +86,7 @@ Each piece exports `export const areas = ["hints", ...]`, the feature areas it e
 - A failed piece is not retried. A worker that dies fails its running piece, and the other workers take the rest of the queue. A worker whose debugger connection closes (Firefox crashed or exited) takes no more pieces.
 - At the deadline, or on SIGINT or SIGTERM, the coordinator sends SIGTERM to every worker. Each worker writes its timings and stops its session. A worker still alive after 10 s is killed, and the coordinator stops its session. The run then writes the merged timings and exits.
 - Each worker's session files sit under a run folder in `/tmp`, which the coordinator removes at the end.
-- Exit codes: 0 when every chosen piece ran and passed, 1 for a failed case, a piece that never finished, a dead worker or the deadline, 2 for a setup error (no `SHADOW_SH`, a bad `KEY_TEST_PIECES`, `KEY_TEST_SHARDS` or `KEY_TEST_DEADLINE_S`), 130 or 143 after SIGINT or SIGTERM.
+- Exit codes: 0 when every chosen piece ran and passed, 1 for a failed case, a piece that never finished, a dead worker or the deadline, 2 for a setup error (a bad `KEY_TEST_PIECES`, `KEY_TEST_SHARDS` or `KEY_TEST_DEADLINE_S`), 130 or 143 after SIGINT or SIGTERM.
 
 ## Piece lifecycle
 
@@ -114,13 +123,14 @@ A converted piece presses keys with `press_keys` (no settle) and waits for the e
 Every run times itself and prints a summary at the end: time by category, time outside cases, the 20 slowest cases and the open tab count. It also writes the full numbers as JSON.
 
 - The file is `.logs/key-test-timings-<timestamp>.json` in the checkout. `KEY_TEST_TIMINGS_FILE=<path>` sets another path. Each worker writes its own file in the run folder, and the coordinator merges them into this one.
-- Each moment of the run goes to one category: `keys` (a `shadow keys` call), `settle` (the pause after each key call), `sleeps` (other sleeps), `waits` (`wait_event`, `poll_until`), `rdp` (debugger calls and the pauses between result polls), `page_opens` (all of `open_page`, keys and waits inside it included), `driver` (`up`, `spawn`, `shot`) and `other` (everything untracked, such as test logic).
+- Each moment of the run goes to one category: `keys` (a call to the keyboard client), `settle` (the pause after each key call), `sleeps` (other sleeps), `waits` (`wait_event`, `poll_until`), `rdp` (debugger calls and the pauses between result polls), `page_opens` (all of `open_page`, keys and waits inside it included), `driver` (the session start and screenshots) and `other` (everything untracked, such as test logic).
 - The JSON holds `categories` and `outside_cases` (ms and call counts), `pieces` (wall time per piece file), `cases` (wall time and categories per case) and `tab_samples` (open tab count before and after each piece). Setup between cases counts as `(outside cases)`.
 - `total_ms` is the coordinator's wall time. The case and category figures add up across shards, so they exceed it. Each `pieces`, `cases` and `tab_samples` entry carries its `shard`.
 - `shards` holds one entry per shard: `name`, `startup_ms` (run time when it was ready), `busy_ms` (time in pieces), `idle_ms` (time it sat finished while others ran), `finished_ms`, its `pieces` in order and its `exit`. `critical_shard` is the shard that finished last.
 - A `KEY_TEST_ONLY` run records its regex as `filter`. Its pieces skip cases, so neither the weights load nor `just key-test-weights` uses the file.
 - A piece that a signal cut short has an entry with `in_flight: true`. A run that did not finish has `incomplete: { reason, in_flight, not_started }`. The coordinator's own record of which shard holds which piece fills it, so it names the piece of a worker that was killed outright.
-- A failed shard keeps Firefox's output (`spawn.log` of the shadow session) and any crash dumps in `.logs/key-test-timings-<timestamp>-diagnostics/s<n>/`, because its teardown deletes them. When the debugger connection closes, every case that fails after it names the lost connection, so a crash reads differently from a hang.
+- A failed shard keeps Firefox's output (`spawn.log` of the session) and any crash dumps in `.logs/key-test-timings-<timestamp>-diagnostics/s<n>/`, because its teardown deletes them. When the debugger connection closes, every case that fails after it names the lost connection, so a crash reads differently from a hang.
+- `lost_key_suspects` lists each wait that timed out after a key press, with its case, and the summary prints the count. A clean run has none. A suspect is a lost key or an effect that never came.
 - Piece files need no hooks: they get the timed `sleep`, `open_page`, `wait_event` and `rdp` from the case context (`context_for` in `harness.mjs`).
 
 ## Native host
@@ -132,6 +142,6 @@ Every run times itself and prints a summary at the end: time by category, time o
 - Run key tests only in your own worktree. Never run two from one worktree: each `just key-test` rebuilds and clears that worktree's `dist/`.
 - Do not wrap `just key-test` in `timeout`. The recipe already runs in a systemd scope with a memory cap of 16 GB (throttled from 14 GB), no swap and CPU limited to 14 cores, and a time limit of the deadline plus 70 seconds (300 by default). Without a systemd user session it runs uncapped and says so.
 - On the first run after a build, an early setup case can fail. Rerun once before you debug.
-- Add-ons force-installed through the Firefox policy file can eat modifier chords in the shadow session. Disable them before you trust a chord result.
+- Add-ons force-installed through the Firefox policy file can eat modifier chords in the nested session. Disable them before you trust a chord result.
 - The first-install Quick Start tab opens beside the first tab and shifts the tab order. That was the cause of #123: Alt+J wrapped to an empty tab instead of page a. The test config now sets `open_quick_start_on_install = false`, and `expect_exactly_one_visible` also checks the active tab URL, so an empty tab fails the case (#155).
-- The sweep of leftover sessions stops only a session that carries the run's owner marker file, `desertfox-key-owner`, naming a dead run. A session with no marker is skipped, whatever its name, so cleanup never stops another tool's session. Keep that rule when you change cleanup code.
+- The sweep of leftover sessions stops only a session whose `owner` file names a dead run. A session dir with no owner file is skipped, so cleanup never stops another tool's session. Keep that rule when you change cleanup code.
