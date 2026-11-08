@@ -1,6 +1,8 @@
 import { evaluate_in_background } from "./rdp.mjs";
 
 // Repro cases for two caret mode bugs: j/k getting stuck, and the caret not starting at a find match.
+export const areas = ["caret", "find"];
+
 export async function run_cases({ run_case, expect, open_page, send_keys, sleep, events, wait_event, rdp, extension_id }) {
   const selections_of = (page_id) => events.filter((event) => event.type === "selection" && event.page_id === page_id && event.text !== "");
 

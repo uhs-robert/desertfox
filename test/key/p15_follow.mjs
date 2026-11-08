@@ -1,4 +1,6 @@
 // Key test cases of ]] and [[ (page.follow). run.mjs calls run_cases with its helpers.
+export const areas = ["hints"];
+
 export async function run_cases({ run_case, send_keys, open_page, wait_event, events, sleep, became_visible }) {
   const BRACKET_RIGHT_TWICE = ["-k", "bracketright", "-k", "bracketright"];
   const BRACKET_LEFT_TWICE = ["-k", "bracketleft", "-k", "bracketleft"];

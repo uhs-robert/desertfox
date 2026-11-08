@@ -1,6 +1,8 @@
 // The default t, x and r groups, where plain t, x and r are prefixes only, and Ctrl+A / Ctrl+X on the number in the address.
 import { CTRL } from "./harness.mjs";
 
+export const areas = ["tabs", "keys"];
+
 export async function run_cases({ run_case, setup, expect, open_page, send_keys, sleep, events, wait_event, find_event, scroll_delta_after, visible_events }) {
   await setup("open page d_reload", () => open_page("page", "d_reload", { new_tab: true }));
 

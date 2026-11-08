@@ -2,6 +2,8 @@
 // Set DESERTFOX_SHOT_DIR to save a shot of the page.
 import { evaluate_in_background } from "./rdp.mjs";
 
+export const areas = ["help", "config"];
+
 export async function run_cases({ run_case, rdp, extension_id, take_shot, expect, sleep }) {
   const view = `(browser.extension.getViews({ type: "tab" }).find((candidate) => candidate.location.pathname === "/home.html" && candidate.location.hash === "#/settings"))`;
   const in_page = (code) => evaluate_in_background(rdp, extension_id, `(() => { const view = ${view}; ${code} })()`);

@@ -6,6 +6,8 @@
 // The re-show order itself is covered by test/content/surface.test.ts.
 import { evaluate_in_background } from "./rdp.mjs";
 
+export const areas = ["ui", "whichkey", "cmdline"];
+
 export async function run_cases({ rdp, extension_id, run_case, send_keys, open_page, wait_event, events, expect, sleep }) {
   const in_active_tab = (code) => evaluate_in_background(rdp, extension_id, `(async () => { const [tab] = await browser.tabs.query({ active: true, currentWindow: true }); return browser.tabs.executeScript(tab.id, { code: ${JSON.stringify(code)} }); })()`);
   const hit_test_with_step = (step, before = "", right_width = Infinity) => `(() => {

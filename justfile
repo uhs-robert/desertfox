@@ -69,6 +69,14 @@ key-test: build
     echo "key-test: no systemd user session, so this run has no memory cap." >&2
     exec node test/key/run.mjs
 
+# Run only the key-test pieces whose areas match the src diff against base (default origin/main). With head, the diff is base...head. A shared file runs every piece, no src change runs none. test/key/areas.mjs holds the table.
+key-test-changed base="origin/main" head="":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    pieces=$(node test/key/areas.mjs {{quote(base)}} {{quote(head)}})
+    if [ -z "$pieces" ]; then exit 0; fi
+    KEY_TEST_PIECES="$pieces" exec just key-test
+
 # Sign dist/ as an unlisted add-on on addons.mozilla.org. Reads the AMO key from the environment only.
 sign: build
     #!/usr/bin/env bash

@@ -1,5 +1,7 @@
 // scroll.align (zt, zz, zb) on a field and on a page with nothing focused, and the zoom reset z=.
 
+export const areas = ["scroll"];
+
 export async function run_cases({ run_case, on_teardown, expect, open_page, send_keys, sleep, events, wait_event, scroll_of, expect_no_scroll, in_background, record }) {
   await run_case("scroll.align puts the field just left at the top, center and bottom", async () => {
     await open_page("aligned", "align", { new_tab: true });

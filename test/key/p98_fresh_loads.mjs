@@ -1,6 +1,8 @@
 // Timing only: 24 loads of a fresh page in one tab, to see how long the content script takes to read the page tree.
 const FRESH_LOAD_COUNT = 24;
 
+export const areas = ["caret"];
+
 export async function run_cases({ setup, open_page, events, find_event, record }) {
   // A setup step, so a failed load is reported and the run goes on to the other pieces.
   await setup("time fresh loads", async () => {

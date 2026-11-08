@@ -5,6 +5,8 @@
 import { mkdirSync } from "node:fs";
 import { evaluate_in_background } from "./rdp.mjs";
 
+export const areas = ["find"];
+
 export async function run_cases({ rdp, extension_id, run_case, expect, open_page, send_keys, sleep, events, wait_event, take_shot }) {
   const in_active_tab = (code) => evaluate_in_background(rdp, extension_id, `(async () => { const [tab] = await browser.tabs.query({ active: true, currentWindow: true }); return (await browser.tabs.executeScript(tab.id, { code: ${JSON.stringify(code)} }))[0]; })()`).then((value) => {
     if (value?.error) throw new Error(`in the tab: ${JSON.stringify(value)}`);

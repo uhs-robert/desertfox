@@ -3,6 +3,8 @@
 // There is no key for the text filter yet, so its cases send the same `run` message a key sends, from the active tab.
 import { evaluate_in_background } from "./rdp.mjs";
 
+export const areas = ["hints"];
+
 export async function run_cases({ rdp, extension_id, run_case, send_keys, open_page, wait_event, find_event, events, expect, sleep, scroll_delta_after, became_visible, take_shot }) {
   const background = (code) => evaluate_in_background(rdp, extension_id, code);
   const tab_count = () => background(`(async () => (await browser.tabs.query({})).length)()`);

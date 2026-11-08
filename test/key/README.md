@@ -1,6 +1,6 @@
 # test/key
 
-Key tests. Each run builds the extension, starts Firefox in its own nested, invisible session, sends real key presses and checks what the page and the background report. `harness.mjs` holds the session (`create_session`: Firefox, the page server, the helpers and `run_piece` with the piece lifecycle), `run.mjs` holds the order of the run and the summary, `p<number>_*.mjs` are the pieces, `timings.mjs` measures where the time goes, `server.mjs` and `rdp.mjs` read the results, `launch_firefox.sh` starts Firefox, and `user.js` and `config/` set up the test profile.
+Key tests. Each run builds the extension, starts Firefox in its own nested, invisible session, sends real key presses and checks what the page and the background report. `harness.mjs` holds the session (`create_session`: Firefox, the page server, the helpers and `run_piece` with the piece lifecycle), `run.mjs` holds the order of the run and the summary, `p<number>_*.mjs` are the pieces, `areas.mjs` maps src files to areas, `timings.mjs` measures where the time goes, `server.mjs` and `rdp.mjs` read the results, `launch_firefox.sh` starts Firefox, and `user.js` and `config/` set up the test profile.
 
 ## Run
 
@@ -9,6 +9,7 @@ just key-test
 KEY_TEST_ONLY=<regex> just key-test
 KEY_TEST_PIECES=p7_caret,p11_find just key-test
 KEY_TEST_ORDER=reverse just key-test
+just key-test-changed [base] [head]
 ```
 
 A full run takes about 20 minutes (1143 s for 241 cases in the latest run) and needs a nested Hyprland. The key-test-speed work (#273) brings that down.
@@ -20,6 +21,42 @@ A full run takes about 20 minutes (1143 s for 241 cases in the latest run) and n
   Cleanup of killed runs works only for drivers that keep a session's runtime dir in `/tmp/shadow-<uid>-<name>`.
   When `SHADOW_SH` is unset, the recipe uses `$HOME/dotfiles/.claude/skills/shadow/shadow.sh` if it is executable. With neither, it exits.
 - Each run starts its own shadow session, so runs from different worktrees go in parallel with no lock.
+
+## Areas and key-test-changed
+
+Each piece exports `export const areas = ["hints", ...]`, the feature areas it exercises. Write it on one line: `areas.mjs` reads it as text, because importing a piece would load `harness.mjs`, which exits without `SHADOW_SH`. `areas.mjs` maps src paths to the same names, and a change runs the pieces that share an area with it.
+
+| Area | Src it covers |
+| --- | --- |
+| `hints` | `content/hints`, hint, heading and page commands, image actions |
+| `caret` | `content/caret` (except find), caret and visual commands |
+| `find` | `content/caret/find_*`, the find command and workers |
+| `whichkey` | `content/whichkey`, the key list, the which-key timer |
+| `cmdline` | `cmdline/`, cmdline, history, bookmark and open-target commands, completion |
+| `help` | `help/`, help, settings and native commands, the settings schema and docs |
+| `newtab` | `newtab/` |
+| `tabs` | tab and window code, tab, window, url, browser and open commands |
+| `scroll` | scroll and align code, scroll and zoom commands |
+| `config` | config reading, building and reload, themes, snippets, argument checks |
+| `engines` | `shared/engines`, the engine command |
+| `bundles` | lazy bundle loading |
+| `keys` | the keymap compiler and merge, prefix tree, layers, repeat memory |
+| `ui` | `content/ui`, toast, surface, mode indicator |
+
+- The table in `areas.mjs` is `area_rules`. The first matching rule wins, so order matters.
+- A rule with no areas (README files, icons, manifest, managed schema) selects nothing.
+- The shared rule lists the key path and the command contract (for example `background/main.ts`, `shared/messages.ts`, `content/editable.ts`). A change to one of these files selects every area, so every piece runs.
+- A src file that matches no rule fails `test/key/areas.test.ts`. Add its glob to `area_rules`. The same test fails when a piece has no `areas` or names an unknown area.
+- A new piece needs its `areas` line. A new feature needs a name in `area_names`, a rule and the pieces that list it.
+- Add `keys` to a piece that exercises how bindings compile, merge or match, not to every piece that presses keys.
+
+`just key-test-changed [base] [head]` compares against `base` (default `origin/main`). It prints the changed area names and the chosen pieces first, then runs them through `KEY_TEST_PIECES`.
+
+- With no `head`, the diff is the merge base with `HEAD` against the working tree, plus new files under `src`. With `head`, it is `base...head`.
+- A shared file in the diff selects all pieces.
+- Only `src/` paths count. With no src change it says so and runs nothing. A change to a piece file or to `areas.mjs` alone selects nothing, so name those pieces with `KEY_TEST_PIECES`.
+- `node test/key/areas.mjs <base> [head]` prints the same choice without running anything.
+- The full suite still runs once before a PR is ready.
 
 ## Piece lifecycle
 

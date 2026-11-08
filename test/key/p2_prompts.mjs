@@ -5,6 +5,8 @@ import { evaluate_in_background } from "./rdp.mjs";
 const ALT = (key) => ["-M", "alt", key, "-m", "alt"];
 const CTRL = (key) => ["-M", "ctrl", key, "-m", "ctrl"];
 
+export const areas = ["cmdline", "keys"];
+
 export async function run_cases({ rdp, extension_id, run_case, send_keys, open_page, wait_event, find_event, events, expect, sleep, url_of }) {
   const scrolled = (page_id) => (event) => event.type === "scroll" && event.page_id === page_id;
   const loaded = (page_id) => (event) => event.type === "tree_read" && event.page_id === page_id;

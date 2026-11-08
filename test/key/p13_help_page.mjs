@@ -2,6 +2,8 @@
 import { SHIFT_ESCAPE } from "./harness.mjs";
 import { evaluate_in_background } from "./rdp.mjs";
 
+export const areas = ["help"];
+
 export async function run_cases({ run_case, setup, expect, send_keys, sleep, rdp, extension_id, record, settled_injection_count, injections_of, extension_view, close_tabs_with }) {
   const evaluate = (code) => evaluate_in_background(rdp, extension_id, code);
   const help_badge = () => evaluate(`${extension_view("home.html")}?.document.querySelector("[data-desertfox-mode]")?.getAttribute("data-desertfox-mode") ?? null`);

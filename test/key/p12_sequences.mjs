@@ -2,6 +2,8 @@
 // The bindings live in config/keymap.toml: ,n = [tab.next, scroll.to 0], ,h = [hint.run background, scroll 300],
 // ,f = [find.next, scroll 300], ,o = [cmdline.open, scroll 300], ,p = [:scroll.pixels, scroll 300], ,t = [hint.run background, tab.next].
 
+export const areas = ["keys", "tabs", "hints", "find", "cmdline", "scroll"];
+
 export async function run_cases({ close_tabs_with, run_case, send_keys, open_page, wait_event, find_event, events, expect, sleep, became_visible, scroll_delta_after, scroll_of, last_scroll_y }) {
   const ENTER = ["-k", "Return"];
   const ESCAPE = ["-k", "Escape"];

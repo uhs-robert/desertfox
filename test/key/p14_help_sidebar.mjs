@@ -2,6 +2,8 @@
 // Set DESERTFOX_SHOT_DIR to save a shot of the sidebar with Commands open and one with Quick Start open.
 import { evaluate_in_background } from "./rdp.mjs";
 
+export const areas = ["help"];
+
 export async function run_cases({ run_case, send_keys, rdp, extension_id, take_shot, expect, sleep }) {
   const view = `(browser.extension.getViews({ type: "tab" }).find((candidate) => candidate.location.pathname === "/home.html"))`;
   const in_help = (code) => evaluate_in_background(rdp, extension_id, `(() => { const view = ${view}; ${code} })()`);
