@@ -92,11 +92,14 @@ export async function run_cases({ run_case, setup, expect, send_keys, press_keys
     let tab_state;
     await poll_until("about:support to load", async () => (tab_state = await in_background(`browser.tabs.query({ active: true, currentWindow: true }).then(([tab]) => ({ url: tab.url, status: tab.status }))`))?.url === "about:support" && tab_state.status === "complete", { timeout_ms: 8000 }).catch((error) => { throw new Error(`${error.message} (tab: ${JSON.stringify(tab_state)})`); });
     await in_background(`(async () => { for (const id of Object.keys(await browser.notifications.getAll())) await browser.notifications.clear(id); })()`);
-    await press_keys(...ALT("."));
-    let notices = {};
-    await poll_until("the refusal notice", async () => Object.keys((notices = await in_background(`browser.notifications.getAll()`) ?? {})).length > 0, { timeout_ms: 3000 });
-    expect(Object.values(notices).some((notice) => /needs a page DesertFox runs on/.test(notice.message)), `notices: ${JSON.stringify(notices)}`);
-    // Firefox shows the notice in a window of its own (user.js), which holds the focus until it closes.
-    await in_background(`(async () => { for (const id of Object.keys(await browser.notifications.getAll())) await browser.notifications.clear(id); })()`);
+    try {
+      await press_keys(...ALT("."));
+      let notices = {};
+      await poll_until("the refusal notice", async () => Object.keys((notices = await in_background(`browser.notifications.getAll()`) ?? {})).length > 0, { timeout_ms: 3000 });
+      expect(Object.values(notices).some((notice) => /needs a page DesertFox runs on/.test(notice.message)), `notices: ${JSON.stringify(notices)}`);
+    } finally {
+      // Firefox shows the notice in a window of its own (user.js), which holds the focus until it closes, so a failed case clears it too.
+      await in_background(`(async () => { for (const id of Object.keys(await browser.notifications.getAll())) await browser.notifications.clear(id); })()`);
+    }
   });
 }

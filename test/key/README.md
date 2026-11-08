@@ -68,7 +68,7 @@ Each piece exports `export const areas = ["hints", ...]`, the feature areas it e
 
 - With no `head`, the diff is the merge base with `HEAD` against the working tree, plus new files under `src`, `test/key` and `tools`. With `head`, it is `base...head`.
 - A shared file in the diff selects all pieces.
-- A changed piece file selects that piece. A change to the test machinery (`harness.mjs`, `run.mjs`, `server.mjs`, `rdp.mjs`, `timings.mjs`, `areas.mjs`, `launch_firefox.sh`, `user.js`, `config/`) or to `tools/build.mjs` or a tools file it imports (`write_commands_json.mjs`, `render_docs.ts`) selects every piece. Other paths are ignored.
+- A changed piece file selects that piece. A change to the test machinery (`harness.mjs`, `run.mjs`, `server.mjs`, `rdp.mjs`, `session.mjs`, `keyboard.py`, `us.xkb`, `timings.mjs`, `areas.mjs`, `launch_firefox.sh`, `user.js`, `config/`) or to `tools/build.mjs` or a tools file it imports (`write_commands_json.mjs`, `render_docs.ts`) selects every piece. Other paths are ignored.
 - With no src, piece or harness change it says so and runs nothing.
 - Renames count both paths, so a moved file selects the areas of its old path too.
 - `node test/key/areas.mjs <base> [head]` prints the same choice without running anything.

@@ -233,6 +233,12 @@ export async function create_session({ name: session_name, timings, sweep = true
   const url_of = (kind, id) => `http://127.0.0.1:${server.port}/${kind}?id=${id}`;
   const since = (mark) => events.slice(mark);
   const find_event = (mark, predicate) => since(mark).find(predicate);
+  // Every wait that times out ends here, so a key press that went missing counts once whichever wait notices.
+  function wait_timeout_error(what) {
+    if (pressed_since_timeout) timings.record_lost_key_suspect(what);
+    pressed_since_timeout = false;
+    return new Error(`timed out waiting for ${what}`);
+  }
   const wait_event = (...args) => timings.time("waits", () => wait_event_untimed(...args));
   async function wait_event_untimed(mark, predicate, what, timeout_ms = 8000) {
     waiting_for = what;
@@ -240,11 +246,7 @@ export async function create_session({ name: session_name, timings, sweep = true
     for (;;) {
       const found = find_event(mark, predicate);
       if (found) return found;
-      if (Date.now() > deadline) {
-        if (pressed_since_timeout) timings.record_lost_key_suspect(what);
-        pressed_since_timeout = false;
-        throw new Error(`timed out waiting for ${what}`);
-      }
+      if (Date.now() > deadline) throw wait_timeout_error(what);
       await raw_sleep(50);
     }
   }
@@ -531,7 +533,7 @@ export async function create_session({ name: session_name, timings, sweep = true
     waiting_for = what;
     const deadline = Date.now() + timeout_ms;
     while (!(await check())) {
-      if (Date.now() > deadline) throw new Error(`timed out waiting for ${what}`);
+      if (Date.now() > deadline) throw wait_timeout_error(what);
       await raw_sleep(step_ms);
     }
   }
