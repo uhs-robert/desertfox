@@ -11,7 +11,8 @@ import { DEFAULT_KEYMAP } from "./default_keymap.ts";
 import { THEME_STORAGE_KEY, USER_CSS_STORAGE_KEY } from "../shared/theme/apply.ts";
 import { CONFIG_STATUS_STORAGE_KEY, DISABLED_STORAGE_KEY, SLOT_TABLE_STORAGE_KEY, WARNINGS_STORAGE_KEY } from "./storage_keys.ts";
 import { OFF_KEYMAP } from "./toolbar.ts";
-import { apply_slot_plan, plan_slots, slot_table } from "./slots.ts";
+import { apply_slot_plan, plan_slots, release_slots, slot_table } from "./slots.ts";
+import type { SlotPlan } from "./slots.ts";
 import { no_repeat_memory } from "./repeat_memory.ts";
 import { create_snippets } from "./snippets.ts";
 import { browser_native_deps, create_native_client, NativeHostError } from "./native_client.ts";
@@ -30,7 +31,7 @@ type LoadStep = {
   // Warnings of the load itself. A publish adds the compile warnings to them.
   load_warnings: string[];
   // Found on the first publish of a load. A `:set` keeps it: it refuses the prefix settings, the only ones that move keys.
-  slots?: { table: ReturnType<typeof slot_table>; warnings: string[] };
+  slots?: { plan: SlotPlan; table: ReturnType<typeof slot_table>; warnings: string[]; applied: boolean };
 };
 
 // Derived from storage on every start, so a restart loses nothing.
@@ -66,16 +67,20 @@ async function publish(step: LoadStep, edits: SettingEdits): Promise<{ config: M
     enum_sources: { search_engines: Object.keys(config.search_engines), containers: await container_names() },
   });
 
-  if (!step.slots) {
-    const plan = plan_slots(compiled.modes.browser);
+  // Read at every publish, so a restart with the switch off, a `:set` and a reload all store the empty keymap.
+  const disabled = (await browser.storage.local.get(DISABLED_STORAGE_KEY))[DISABLED_STORAGE_KEY] === true;
+  const plan = step.slots?.plan ?? plan_slots(compiled.modes.browser);
+  if (disabled) {
+    // A taken chord would still be eaten by Firefox, so the page would lose it while off.
+    await release_slots(plan, browser.commands);
+    step.slots = { plan, table: slot_table({ ...plan, assignments: [] }), warnings: plan.warnings, applied: false };
+  } else if (!step.slots?.applied) {
     const applied = await apply_slot_plan(plan, browser.commands);
-    step.slots = { table: slot_table({ ...plan, assignments: applied.applied }), warnings: [...plan.warnings, ...applied.warnings] };
+    step.slots = { plan, table: slot_table({ ...plan, assignments: applied.applied }), warnings: [...plan.warnings, ...applied.warnings], applied: true };
   }
   const all_warnings = [...step.load_warnings, ...warnings, ...step.slots.warnings];
   for (const warning of all_warnings) console.warn(`desertfox: ${warning}`);
 
-  // Read at every publish, so a restart with the switch off, a `:set` and a reload all store the empty keymap.
-  const disabled = (await browser.storage.local.get(DISABLED_STORAGE_KEY))[DISABLED_STORAGE_KEY] === true;
   await browser.storage.local.set({
     [COMPILED_KEYMAP_STORAGE_KEY]: disabled ? OFF_KEYMAP : compiled,
     [WARNINGS_STORAGE_KEY]: all_warnings,

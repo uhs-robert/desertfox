@@ -233,7 +233,10 @@ function start(): void {
       // The router already applied the count, so each invocation runs once. The router shows a failure.
       return run_in_order(message.invocations);
     } else if (message.type === "refusal") show_toast(message.refusal.message, message.kind);
-    else if (message.type === "set_mode") page_mode.set_mode(message.mode);
+    else if (message.type === "set_mode") {
+      page_mode.set_mode(message.mode);
+      if (is_editable_element(document.activeElement)) page_mode.focus_entered_editable();
+    }
     else if (message.type === "tree_updated") void install_after_tab_address(read_keymap());
   });
 

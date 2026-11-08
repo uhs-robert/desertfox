@@ -78,10 +78,10 @@ test("the shortcut and the popup racing end in a state both asked for, one after
   const { toolbar, is_disabled, log } = fake_toolbar();
   // Shortcut toggle, popup says off, shortcut toggle again, all at once.
   await Promise.all([toolbar.toggle(), toolbar.set_disabled(true), toolbar.toggle()]);
-  // on -> off (toggle), off (popup, no change), off -> on (toggle)
+  // on -> off (toggle), off (popup, already off: no change), off -> on (toggle)
   assert.equal(is_disabled(), false);
   const flags = log.filter((entry) => entry.startsWith("flag"));
-  assert.deepEqual(flags, ["flag true", "flag true", "flag false"]);
+  assert.deepEqual(flags, ["flag true", "flag false"]);
   // Each change finishes before the next starts.
   const first_off = log.indexOf("look icons/desertfox-off.svg DesertFox (off)");
   assert.ok(first_off < log.lastIndexOf("flag false"));
@@ -136,12 +136,12 @@ const config_with = (ignore_sites: string[]) => ({ settings: { ignore_sites } })
 
 test("disabling a site appends its pattern to the list in force, enabling removes it", () => {
   const pattern = "*://*.example.com/*";
-  const disabled = plan_site_edit(NO_EDITS, config_with(["*://file.test/*"]), pattern, "disable");
+  const disabled = plan_site_edit(NO_EDITS, ["*://file.test/*"], pattern, "disable");
   assert.deepEqual(disabled?.saved.ignore_sites, ["*://file.test/*", pattern]);
-  const enabled = plan_site_edit(disabled!, config_with(["*://file.test/*", pattern]), pattern, "enable");
+  const enabled = plan_site_edit(disabled!, ["*://file.test/*"], pattern, "enable");
   assert.deepEqual(enabled?.saved.ignore_sites, ["*://file.test/*"]);
-  assert.equal(plan_site_edit(disabled!, config_with([]), pattern, "disable"), undefined);
-  assert.equal(plan_site_edit(NO_EDITS, config_with([]), pattern, "enable"), undefined);
+  assert.equal(plan_site_edit(disabled!, [], pattern, "disable"), undefined);
+  assert.equal(plan_site_edit(NO_EDITS, [], pattern, "enable"), undefined);
 });
 
 test("the popup messages go to the switch, the edits and the reload, and a bad request is refused", async () => {
@@ -149,6 +149,7 @@ test("the popup messages go to the switch, the edits and the reload, and a bad r
   const deps = {
     toolbar: { set_disabled: async (disabled: boolean) => void calls.push(`set ${disabled}`) },
     change_edits: async (decide: (current: typeof NO_EDITS, config: MergedConfig) => unknown) => void calls.push(`edit ${JSON.stringify(decide(NO_EDITS, config_with([])))}`),
+    read_file_ignore_sites: async () => [],
     reload_config: async () => ({ config_dir: "/c", warnings: 1 }),
   };
   assert.deepEqual(await answer_toolbar_request({ type: "toolbar_set_disabled", disabled: true }, deps), { ok: true, message: "DesertFox is off" });
@@ -160,4 +161,27 @@ test("the popup messages go to the switch, the edits and the reload, and a bad r
   const failing = { ...deps, reload_config: async () => { throw new Error("no host"); } };
   assert.deepEqual(await answer_toolbar_request({ type: "toolbar_reload_config" }, failing), { ok: false, message: "no host" });
   assert.deepEqual(calls, ["set true", 'edit {"saved":{"ignore_sites":["*://*.example.com/*"]},"temp":{}}']);
+});
+
+test("a request for the state already in force changes nothing", async () => {
+  const { toolbar, log } = fake_toolbar({}, true);
+  await toolbar.set_disabled(true);
+  assert.deepEqual(log, []);
+  const on = fake_toolbar();
+  await on.toolbar.set_disabled(false);
+  assert.deepEqual(on.log, []);
+});
+
+test("the start-up icon waits for a change in flight", async () => {
+  const { toolbar, log } = fake_toolbar();
+  const change = toolbar.set_disabled(true);
+  await toolbar.sync_look();
+  await change;
+  assert.equal(log.filter((entry) => entry.startsWith("look")).at(-1), "look icons/desertfox-off.svg DesertFox (off)");
+});
+
+test("disabling a site seeds the saved list from the file, not from a temp edit", () => {
+  const current = { saved: {}, temp: { ignore_sites: ["*://temp.test/*"] } };
+  const next = plan_site_edit(current, ["*://file.test/*"], "*://*.a.test/*", "disable");
+  assert.deepEqual(next?.saved.ignore_sites, ["*://file.test/*", "*://*.a.test/*"]);
 });

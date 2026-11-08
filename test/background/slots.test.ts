@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { apply_slot_plan, plan_slots, slot_table } from "../../src/background/slots.ts";
+import { apply_slot_plan, plan_slots, release_slots, slot_table } from "../../src/background/slots.ts";
 import type { TreeBranch, TreeNode } from "../../src/shared/prefix_tree.ts";
 
 function leaf(id: string): TreeNode {
@@ -58,4 +58,16 @@ test("a refused slot is reset and left out of the slot table", async () => {
   });
   assert.ok(reset.includes("slot_2"));
   assert.deepEqual(Object.keys(slot_table({ ...plan, assignments: applied })), ["slot_1"]);
+});
+
+test("release resets every slot, assigned or not, and survives a refusal", async () => {
+  const plan = plan_slots(root({ "<A-j>": leaf("a.b") }), 3);
+  const reset: string[] = [];
+  await release_slots(plan, {
+    reset: async (name) => {
+      reset.push(name);
+      if (name === "slot_1") throw new Error("gone");
+    },
+  });
+  assert.deepEqual(reset, ["slot_1", "slot_2", "slot_3"]);
 });

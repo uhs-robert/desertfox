@@ -1,7 +1,6 @@
 // The on/off switch behind the toolbar popup and its shortcut. Browser access comes in as arguments, so tests run without a browser.
 
 import type { MergedConfig, SettingEdits } from "../shared/config.ts";
-import { effective_settings } from "../shared/config.ts";
 import { matches_pattern, ignores_any_address } from "../shared/match_pattern.ts";
 import { COMPILED_KEYMAP_VERSION } from "../shared/prefix_tree.ts";
 import type { ToolbarAnswer, ToolbarRequest } from "../shared/messages.ts";
@@ -59,6 +58,8 @@ export function create_toolbar(deps: ToolbarDeps) {
 
   async function apply(disabled: boolean): Promise<void> {
     const before = await deps.read_disabled();
+    // A repeat request must not send the ignored sites back to ignore mode.
+    if (before === disabled) return;
     await deps.write_disabled(disabled);
     try {
       await deps.republish();
@@ -74,7 +75,7 @@ export function create_toolbar(deps: ToolbarDeps) {
 
   return {
     // Run at every background start: Firefox forgets the icon, and the flag is stored.
-    sync_look: async (): Promise<void> => deps.set_look(toolbar_look(await deps.read_disabled())),
+    sync_look: (): Promise<void> => enqueue(async () => deps.set_look(toolbar_look(await deps.read_disabled()))),
     set_disabled: (disabled: boolean): Promise<void> => enqueue(() => apply(disabled)),
     toggle: (): Promise<void> => enqueue(async () => apply(!(await deps.read_disabled()))),
   };
@@ -114,10 +115,11 @@ export function site_state(url: string | undefined, layers: IgnoreLayers): SiteS
   return { kind: layers.effective.some((candidate) => matches_pattern(candidate, url)) ? "config" : "enabled", pattern };
 }
 
-// The edits after a site is disabled or enabled, or undefined when nothing changes. The saved list starts as the list in force,
+// The edits after a site is disabled or enabled, or undefined when nothing changes. The saved list starts as the config file's list,
 // so the edit keeps the file's patterns.
-export function plan_site_edit(current: SettingEdits, config: MergedConfig, pattern: string, action: "disable" | "enable"): SettingEdits | undefined {
-  const base = current.saved.ignore_sites ?? effective_settings(config.settings).ignore_sites;
+export function plan_site_edit(current: SettingEdits, file_patterns: readonly string[], pattern: string, action: "disable" | "enable"): SettingEdits | undefined {
+  // Never the list in force: that would copy a `:set --temp` into the saved layer.
+  const base = current.saved.ignore_sites ?? file_patterns;
   const listed = base.includes(pattern);
   if (action === "disable" ? listed : !listed) return undefined;
   const next = action === "disable" ? [...base, pattern] : base.filter((candidate) => candidate !== pattern);
@@ -127,6 +129,8 @@ export function plan_site_edit(current: SettingEdits, config: MergedConfig, patt
 export type ToolbarMessageDeps = {
   toolbar: Pick<ReturnType<typeof create_toolbar>, "set_disabled">;
   change_edits: (decide: (current: SettingEdits, config: MergedConfig) => SettingEdits | undefined) => Promise<void>;
+  // The config file's own `ignore_sites`.
+  read_file_ignore_sites: () => Promise<readonly string[]>;
   reload_config: () => Promise<{ config_dir: string; warnings: number }>;
 };
 
@@ -144,7 +148,8 @@ export async function answer_toolbar_request(request: ToolbarRequest, deps: Tool
       const pattern = site_pattern(typeof request.url === "string" ? request.url : undefined);
       if (pattern === undefined) return { ok: false, message: "this page has no site to change" };
       if (request.action !== "disable" && request.action !== "enable") return { ok: false, message: "action must be disable or enable" };
-      await deps.change_edits((current, config) => plan_site_edit(current, config, pattern, request.action));
+      const file_patterns = await deps.read_file_ignore_sites();
+      await deps.change_edits((current) => plan_site_edit(current, file_patterns, pattern, request.action));
       return { ok: true, message: request.action === "disable" ? "Disabled on this site" : "Enabled on this site" };
     }
     if (request.type === "toolbar_reload_config") {

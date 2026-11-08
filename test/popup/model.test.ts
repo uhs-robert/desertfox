@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { HOME_HASH, SETTINGS_HASH, WARNINGS_HASH, build_rows } from "../../src/popup/model.ts";
+import { disabled_after_click, HOME_HASH, SETTINGS_HASH, WARNINGS_HASH, build_rows } from "../../src/popup/model.ts";
 import type { PopupInputs } from "../../src/popup/model.ts";
 import { parse_route } from "../../src/help/route.ts";
 
@@ -44,4 +44,9 @@ test("the links land on Home, Settings and the Warnings heading", () => {
   assert.deepEqual(parse_route(HOME_HASH), { page: "home" });
   assert.deepEqual(parse_route(SETTINGS_HASH), { page: "settings" });
   assert.deepEqual(parse_route(WARNINGS_HASH), { page: "home", section: "warnings" });
+});
+
+test("a click on the switch asks for the opposite of what it shows", () => {
+  assert.equal(disabled_after_click(row(base, "power")), true);
+  assert.equal(disabled_after_click(row({ ...base, disabled: true }, "power")), false);
 });

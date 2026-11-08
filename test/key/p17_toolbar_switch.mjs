@@ -118,4 +118,45 @@ export async function run_cases({ rdp, extension_id, run_case, press_keys, poll_
       await close_popup();
     }
   });
+
+  const slot_chord = () => in_background(`browser.commands.getAll().then((all) => all.find((command) => command.name === "slot_1")?.shortcut ?? "")`);
+  const click_power = () => in_background(`browser.extension.getViews({ type: "tab" }).find((view) => view.location.pathname === "/popup.html").document.querySelector(".desertfox-popup-power").click()`);
+  const power_label = () => in_background(`browser.extension.getViews({ type: "tab" }).find((view) => view.location.pathname === "/popup.html")?.document.querySelector(".desertfox-popup-power")?.textContent ?? ""`);
+
+  await run_case("clicking the popup switch turns DesertFox off and on, and Firefox releases the slot chords while off", async () => {
+    try {
+      await ask({ type: "toolbar_set_disabled", disabled: false });
+      await poll_until("the popup to show on", async () => (await power_label()) === "DesertFox is on");
+      const chord_when_on = await slot_chord();
+      expect(chord_when_on !== "", "no slot chord was assigned while on");
+      await click_power();
+      await wait_state(true, "the switch click to turn DesertFox off");
+      await poll_until("the slot chord to be released", async () => (await slot_chord()) === "");
+      await poll_until("the popup to show off", async () => (await power_label()) === "DesertFox is off");
+      await click_power();
+      await wait_state(false, "the switch click to turn DesertFox on");
+      await poll_until("the slot chord to return", async () => (await slot_chord()) === chord_when_on);
+    } finally {
+      await turn_on();
+      await close_popup();
+    }
+  });
+
+  await run_case("typing in a field after an off and on cycle goes to the field", async () => {
+    await open_page("field", "sw_cycle", { new_tab: true });
+    try {
+      await poll_until("INSERT in the focused field", async () => events.filter((event) => event.type === "indicator" && event.page_id === "sw_cycle").at(-1)?.label === "INSERT");
+      await press_toggle();
+      await wait_state(true, "off in a field");
+      await press_toggle();
+      await wait_state(false, "on again in a field");
+      await poll_until("INSERT after the cycle", async () => events.filter((event) => event.type === "indicator" && event.page_id === "sw_cycle").at(-1)?.label === "INSERT");
+      const mark = events.length;
+      await press_keys("j");
+      await wait_event(mark, (event) => event.type === "input" && event.value === "j", "the field to hold j");
+      await expect_no_scroll(mark, "sw_cycle");
+    } finally {
+      await turn_on();
+    }
+  });
 }

@@ -8,7 +8,7 @@ import type { ToolbarAnswer, ToolbarRequest } from "../shared/messages.ts";
 import { HELP_PAGE_FILE } from "../help/route.ts";
 import { follow_theme } from "../shared/theme/apply.ts";
 import { DISABLED_STORAGE_KEY } from "../background/storage_keys.ts";
-import { build_rows, HOME_HASH, SETTINGS_HASH, WARNINGS_HASH } from "./model.ts";
+import { build_rows, disabled_after_click, HOME_HASH, SETTINGS_HASH, WARNINGS_HASH } from "./model.ts";
 import type { PopupRow } from "./model.ts";
 
 const root = document.getElementById("desertfox-popup")!;
@@ -41,7 +41,7 @@ async function open_help_page(hash: string): Promise<void> {
 
 async function act(row: PopupRow): Promise<void> {
   const tab = await active_tab();
-  if (row.id === "power") notice = (await ask({ type: "toolbar_set_disabled", disabled: row.on === true })).message;
+  if (row.id === "power") notice = (await ask({ type: "toolbar_set_disabled", disabled: disabled_after_click(row) })).message;
   else if (row.id === "settings") return open_help_page(SETTINGS_HASH);
   else if (row.id === "home") return open_help_page(HOME_HASH);
   else if (row.id === "warnings") return open_help_page(WARNINGS_HASH);
@@ -78,8 +78,7 @@ function row_element(row: PopupRow): HTMLElement {
     button.classList.add("desertfox-popup-power");
     button.setAttribute("role", "switch");
     button.setAttribute("aria-checked", String(row.on));
-    // The click asks for the opposite of what the switch shows now.
-    button.addEventListener("click", () => void act({ ...row, on: row.on !== true }));
+    button.addEventListener("click", () => void act(row));
   } else button.addEventListener("click", () => void act(row));
   return button;
 }

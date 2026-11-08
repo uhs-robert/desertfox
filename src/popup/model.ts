@@ -43,6 +43,9 @@ function site_row(site: SiteState, disabled: boolean): PopupRow {
   return { ...(disabled ? row(label, false, "DesertFox is off") : row(label, true)), site_action };
 }
 
+// What a click on the switch asks for: the opposite of what it shows now.
+export const disabled_after_click = (power_row: Pick<PopupRow, "on">): boolean => power_row.on === true;
+
 export function build_rows(inputs: PopupInputs): PopupRow[] {
   const rows: PopupRow[] = [
     { id: "power", kind: "switch", label: inputs.disabled ? "DesertFox is off" : "DesertFox is on", enabled: true, on: !inputs.disabled },

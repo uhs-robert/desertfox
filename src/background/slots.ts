@@ -80,3 +80,8 @@ export async function apply_slot_plan(
   }
   return { warnings, applied };
 }
+
+// Frees every slot chord, so Firefox stops taking them from the page.
+export async function release_slots(plan: SlotPlan, commands: Pick<typeof browser.commands, "reset">): Promise<void> {
+  for (const name of [...plan.assignments.map((assignment) => assignment.slot_name), ...plan.unused_slot_names]) await commands.reset(name).catch(() => undefined);
+}
