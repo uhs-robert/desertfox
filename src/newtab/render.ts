@@ -106,12 +106,22 @@ function build_page(settings: WidgetSettings): { page: HTMLElement; stop_ticker:
 export async function render_new_tab(body: HTMLElement, settings: WidgetSettings, readers: PageReaders = browser_page_readers): Promise<void> {
   const next = build_page(settings);
   const previous = drawn;
-  drawn = next;
-  if (!previous) body.prepend(next.page);
-  const sections = await read_sections(settings, readers);
+  if (!previous) {
+    drawn = next;
+    body.prepend(next.page);
+  }
+  let sections: ListSection[];
+  try {
+    sections = await read_sections(settings, readers);
+  } catch (error) {
+    // The old page stays on screen, so its clock keeps running and the new one stops.
+    if (previous) next.stop_ticker();
+    throw error;
+  }
   if (sections.length > 0) next.page.append(draw_sections(sections));
   if (previous) {
     previous.stop_ticker();
     previous.page.replaceWith(next.page);
+    drawn = next;
   }
 }

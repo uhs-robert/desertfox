@@ -3,6 +3,9 @@
 // Where the config and settings in force came from. Written at every startup and at the end of every settings edit, so a write of it tells every page that settings changed. The hint script reads its letters from it.
 export const CONFIG_STATUS_STORAGE_KEY = "desertfox_config_status";
 
+// The config `config.reload` last built from the files. Written after the status key, so it is the last write of a reload.
+export const FILES_CONFIG_STORAGE_KEY = "desertfox_files_config";
+
 // Calls `on_value` with the stored value now and again at every change. A failed first read calls it with undefined, so a caller that waits
 // on the first read never waits forever. Nothing is called when storage is unavailable.
 export function watch_stored<T>(key: string, on_value: (value: T | undefined) => void): void {
@@ -13,9 +16,9 @@ export function watch_stored<T>(key: string, on_value: (value: T | undefined) =>
   });
 }
 
-// What `storage.onChanged` reports when the settings in force changed. Only the background writes the saved and temp layers, and every edit ends with a write of the config status, so the status key alone tells the page.
+// What `storage.onChanged` reports when the settings in force changed. Only the background writes the saved and temp layers, and every edit ends with a write of the config status. A reload writes the status first and the files config after it, so a read between the two sees the old files: the files config key tells the page too.
 export function touches_settings(changes: Record<string, unknown>, area: string): boolean {
-  return area === "local" && CONFIG_STATUS_STORAGE_KEY in changes;
+  return area === "local" && (CONFIG_STATUS_STORAGE_KEY in changes || FILES_CONFIG_STORAGE_KEY in changes);
 }
 
 // What a redraw would lose: the scroll position and the focused element, named by id or by the href it links to.

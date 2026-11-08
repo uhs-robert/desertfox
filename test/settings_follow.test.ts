@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { mock, test } from "node:test";
 import { render_new_tab, run_ticker } from "../src/newtab/render.ts";
 import { effective_settings } from "../src/shared/config.ts";
-import { CONFIG_STATUS_STORAGE_KEY, follow_settings } from "../src/shared/storage_watch.ts";
+import { CONFIG_STATUS_STORAGE_KEY, FILES_CONFIG_STORAGE_KEY, follow_settings } from "../src/shared/storage_watch.ts";
 
 // Its own file: follow_settings registers a listener on the fake storage, and each test installs a fresh browser.
 type Listener = (changes: Record<string, { newValue?: unknown }>, area: string) => void;
@@ -178,6 +178,80 @@ test("redrawing the new tab page swaps the page and keeps one clock timer and on
     Object.defineProperty(date, "textContent", { get: () => text, set: (value: string) => ((text = value), writes++) });
     mock.timers.tick(1000);
     assert.equal(writes, 1);
+  } finally {
+    mock.timers.reset();
+  }
+});
+
+test("a reload redraws again at its last write, the files config, because the status key lands before it", async () => {
+  const { fire } = install_fakes();
+  const draws: boolean[] = [];
+  follow_settings((first) => void draws.push(first));
+  await settled();
+  fire({ [FILES_CONFIG_STORAGE_KEY]: { newValue: {} } });
+  await settled();
+  assert.deepEqual(draws, [true, false]);
+});
+
+test("a failed read during a redraw keeps the old page and its one clock, and stops the new clock", async () => {
+  mock.timers.enable({ apis: ["setInterval"] });
+  try {
+    const { body, page_listeners } = install_fakes();
+    // A fresh copy of the module, because it remembers the page of the earlier tests.
+    const fresh_module = "../src/newtab/render.ts?failed_read";
+    const { render_new_tab } = (await import(fresh_module)) as typeof import("../src/newtab/render.ts");
+    const good = { query_tabs: async () => [], bookmark_tree: async () => [], page_is_private: async () => false };
+    const settings = effective_settings({ newtab_clock: true, newtab_recent_tabs: true } as never);
+    const body_node = body as unknown as HTMLElement;
+    await render_new_tab(body_node, settings, good);
+    const old_page = body.children[0]!;
+    // read_sections swallows a reader error, so the failure comes from the read as a whole.
+    const broken = {
+      ...good,
+      query_tabs: () => {
+        throw new Error("no tabs");
+      },
+    };
+    await assert.rejects(render_new_tab(body_node, settings, broken));
+    assert.equal(body.children[0], old_page);
+    assert.equal(page_listeners.get("visibilitychange")?.size, 1);
+    await render_new_tab(body_node, settings, good);
+    assert.notEqual(body.children[0], old_page);
+    assert.equal(page_listeners.get("visibilitychange")?.size, 1);
+  } finally {
+    mock.timers.reset();
+  }
+});
+
+// Last in the file: importing main.ts starts its page followers once.
+test("only the first draw of the new tab page follows the new_tab_page redirect", async () => {
+  mock.timers.enable({ apis: ["setInterval"] });
+  try {
+    const listeners: Listener[] = [];
+    const saved: Record<string, unknown> = { new_tab_page: "https://start.example/" };
+    const replaced: string[] = [];
+    const node = (): Record<string, unknown> => ({ style: {}, classList: { add() {}, remove() {} }, append() {}, appendChild: (child: unknown) => child, prepend() {}, setAttribute() {}, getBoundingClientRect() {} });
+    Object.assign(globalThis, {
+      browser: {
+        storage: {
+          managed: { get: async () => ({}) },
+          local: { get: async (key: string) => (key === "desertfox_saved_settings" ? { [key]: saved } : {}), set: async () => {} },
+          session: { get: async () => ({}) },
+          onChanged: { addListener: (listener: Listener) => void listeners.push(listener) },
+        },
+      },
+      document: { ...node(), head: node(), body: node(), documentElement: node(), hidden: false, createElement: node, createElementNS: node, addEventListener() {}, removeEventListener() {} },
+      location: { search: "", replace: (url: string) => void replaced.push(url) },
+      window: { scrollX: 0, scrollY: 0, scrollTo() {} },
+      CSS: { escape: (text: string) => text },
+    });
+    await import("../src/newtab/main.ts");
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    assert.deepEqual(replaced, ["https://start.example/"]);
+    saved.new_tab_page = "https://other.example/";
+    listeners.forEach((listener) => listener({ [CONFIG_STATUS_STORAGE_KEY]: { newValue: {} } }, "local"));
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    assert.deepEqual(replaced, ["https://start.example/"]);
   } finally {
     mock.timers.reset();
   }
