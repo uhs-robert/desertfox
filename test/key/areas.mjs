@@ -103,7 +103,7 @@ export function read_piece_areas() {
 }
 
 // A change to these runs every piece: they are the test machinery and the build the pieces load.
-const harness_globs = ["test/key/{harness,run,server,rdp,timings,areas}.mjs", "test/key/{launch_firefox.sh,user.js}", "test/key/config/**", "tools/build.mjs"];
+const harness_globs = ["test/key/{harness,run,server,rdp,timings,areas}.mjs", "test/key/{launch_firefox.sh,user.js}", "test/key/config/**", "tools/{build,write_commands_json}.mjs", "tools/render_docs.ts"];
 const harness_patterns = harness_globs.map(glob_to_regex);
 
 // Pieces to run for a list of changed paths. A changed piece file selects that piece, a harness file selects every piece, and so does an unplaced src file (the safe side). Other paths are ignored.
