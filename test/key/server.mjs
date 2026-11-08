@@ -155,6 +155,19 @@ export function start_server() {
       const controls = '<input id="first"><input type="checkbox" id="box"><fieldset disabled><input id="off"></fieldset>' + tall_filler + '<input id="last">';
       return response.end(page(`controls ${id}`, controls, "<script>addEventListener('focusin', (event) => send('focused', { id: event.target.id }))</script>"));
     }
+    if (url.pathname === "/closed_field") {
+      // A field inside a closed root and a plain button outside. F9 focuses the inner field and F2 the outer one (not F10, whose key-up moves Firefox focus to the menu bar), because the test cannot reach into a closed root. With autofocus in the id, the inner field takes the focus at load.
+      const build = `<div id="host"></div><button id="outside">outside</button><script>
+        const inner = document.getElementById("host").attachShadow({ mode: "closed" });
+        inner.innerHTML = '<input id="inner">';
+        addEventListener("keydown", (event) => {
+          if (event.key === "F9") inner.getElementById("inner").focus();
+          if (event.key === "F2") document.getElementById("outside").focus();
+        });
+        if (location.search.includes("autofocus")) addEventListener("load", () => inner.getElementById("inner").focus());
+      </script>`;
+      return response.end(page(`closed_field ${id}`, build));
+    }
     if (url.pathname === "/framed") {
       const frame = '<iframe id="inner" src="/page?id=inner" style="width:300px;height:200px"></iframe>';
       return response.end(page(`framed ${id}`, frame, "<script>addEventListener('load', () => document.getElementById('inner').contentWindow.focus())</script>"));
