@@ -148,37 +148,46 @@ export function create_timings() {
     };
   }
 
-  const seconds = (ms) => (ms / 1000).toFixed(1).padStart(7);
-
-  function summary_text(full_report) {
-    const lines = [`key-test timings: ${seconds(full_report.total_ms).trim()} s total, ${seconds(full_report.cases_ms).trim()} s in cases, ${seconds(full_report.outside_cases_ms).trim()} s outside cases`];
-    lines.push("time by category (all cases and setup together):");
-    for (const [category, { ms, count }] of Object.entries(full_report.categories).sort((left, right) => right[1].ms - left[1].ms)) {
-      lines.push(`  ${category.padEnd(11)} ${seconds(ms)} s  ${String(count).padStart(6)} calls`);
-    }
-    lines.push("outside cases by category:");
-    for (const [category, { ms }] of Object.entries(full_report.outside_cases).sort((left, right) => right[1].ms - left[1].ms)) {
-      lines.push(`  ${category.padEnd(11)} ${seconds(ms)} s`);
-    }
-    lines.push(`slowest ${SLOWEST_SHOWN} cases:`);
-    for (const entry of [...full_report.cases].sort((left, right) => right.wall_ms - left.wall_ms).slice(0, SLOWEST_SHOWN)) {
-      lines.push(`  ${seconds(entry.wall_ms)} s  ${entry.name}`);
-    }
-    const tab_counts = full_report.tab_samples.map((sample) => sample.tab_count);
-    lines.push(`open tabs sampled ${tab_counts.length} times, last ${tab_counts.at(-1) ?? "n/a"}, max ${Math.max(0, ...tab_counts.filter(Number.isFinite))}`);
-    return lines.join("\n");
-  }
-
-  function write_json(path, full_report) {
-    mkdirSync(dirname(path), { recursive: true });
-    writeFileSync(path, `${JSON.stringify(full_report, null, 2)}\n`);
-  }
-
-  return { time, time_case, finish_active_case, finish_active_piece, time_piece, wrap_rdp, record_tab_count, report, summary_text, write_json };
+  return { time, time_case, finish_active_case, finish_active_piece, time_piece, wrap_rdp, record_tab_count, report, summary_text, write_json: write_report };
 }
 
-// Joins the reports of parallel workers into one. The run lasts as long as its slowest worker, and every other figure adds up.
-export function merge_reports(reports) {
+export function write_report(path, full_report) {
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, `${JSON.stringify(full_report, null, 2)}\n`);
+}
+
+const seconds = (ms) => (ms / 1000).toFixed(1).padStart(7);
+
+// Takes a report from create_timings or merge_reports. A merged report also gets one line per shard.
+export function summary_text(full_report) {
+  const lines = [`key-test timings: ${seconds(full_report.total_ms).trim()} s total, ${seconds(full_report.cases_ms).trim()} s in cases, ${seconds(full_report.outside_cases_ms).trim()} s outside cases`];
+  lines.push("time by category (all cases and setup together):");
+  for (const [category, { ms, count }] of Object.entries(full_report.categories).sort((left, right) => right[1].ms - left[1].ms)) {
+    lines.push(`  ${category.padEnd(11)} ${seconds(ms)} s  ${String(count).padStart(6)} calls`);
+  }
+  lines.push("outside cases by category:");
+  for (const [category, { ms }] of Object.entries(full_report.outside_cases).sort((left, right) => right[1].ms - left[1].ms)) {
+    lines.push(`  ${category.padEnd(11)} ${seconds(ms)} s`);
+  }
+  if (full_report.shards) {
+    lines.push(`shards (s${full_report.critical_shard ?? "?"} finished last):`);
+    for (const shard of full_report.shards) {
+      lines.push(`  s${shard.shard}  ${seconds(shard.busy_ms)} s busy  ${String(shard.pieces.length).padStart(2)} pieces  ${shard.pieces.map((piece) => piece.replace(/\.mjs$/, "")).join(", ")}`);
+    }
+  }
+  lines.push(`slowest ${SLOWEST_SHOWN} cases:`);
+  for (const entry of [...full_report.cases].sort((left, right) => right.wall_ms - left.wall_ms).slice(0, SLOWEST_SHOWN)) {
+    lines.push(`  ${seconds(entry.wall_ms)} s  ${full_report.shards ? `s${entry.shard}  ` : ""}${entry.name}`);
+  }
+  const tab_counts = full_report.tab_samples.map((sample) => sample.tab_count);
+  lines.push(`open tabs sampled ${tab_counts.length} times, last ${tab_counts.at(-1) ?? "n/a"}, max ${Math.max(0, ...tab_counts.filter(Number.isFinite))}`);
+  return lines.join("\n");
+}
+
+// Joins the reports of the shards into one. `shard_reports` is `[{ shard, report }]`, where a shard that wrote nothing has no report.
+// `coordinator_info` is `{ total_ms, shards, incomplete }`: the run lasts the coordinator's wall time, and the case and category figures add up across shards, so they exceed it.
+// Each shard entry carries `finished_ms`, the run time at which it exited. The shard that finished last is the critical shard.
+export function merge_reports(shard_reports, { total_ms, shards = [], incomplete }) {
   const add_categories = (target, source) => {
     for (const [category, { ms, count }] of Object.entries(source)) {
       target[category] ??= { ms: 0, count: 0 };
@@ -186,17 +195,18 @@ export function merge_reports(reports) {
       target[category].count += count;
     }
   };
-  const merged = { total_ms: 0, cases_ms: 0, outside_cases_ms: 0, categories: {}, outside_cases: {}, pieces: [], tab_samples: [], cases: [] };
-  for (const report of reports) {
-    merged.total_ms = Math.max(merged.total_ms, report.total_ms);
+  const merged = { total_ms, cases_ms: 0, outside_cases_ms: 0, categories: {}, outside_cases: {}, pieces: [], tab_samples: [], cases: [] };
+  for (const { shard, report } of shard_reports) {
+    if (!report) continue;
     merged.cases_ms += report.cases_ms;
     merged.outside_cases_ms += report.outside_cases_ms;
     add_categories(merged.categories, report.categories);
     add_categories(merged.outside_cases, report.outside_cases);
-    merged.pieces.push(...report.pieces);
-    merged.tab_samples.push(...report.tab_samples);
-    merged.cases.push(...report.cases);
+    for (const key of ["pieces", "tab_samples", "cases"]) merged[key].push(...report[key].map((entry) => ({ ...entry, shard })));
   }
+  merged.shards = shards;
+  merged.critical_shard = shards.filter((entry) => entry.finished_ms !== undefined).sort((left, right) => right.finished_ms - left.finished_ms)[0]?.shard;
+  if (incomplete) merged.incomplete = incomplete;
   return merged;
 }
 

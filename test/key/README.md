@@ -1,6 +1,6 @@
 # test/key
 
-Key tests. Each run builds the extension, starts Firefox in its own nested, invisible session, sends real key presses and checks what the page and the background report. `harness.mjs` holds the session (`create_session`: Firefox, the page server, the helpers and `run_piece` with the piece lifecycle), `run.mjs` holds the order of the run and the summary, `p<number>_*.mjs` are the pieces, `areas.mjs` maps src files to areas, `timings.mjs` measures where the time goes, `server.mjs` and `rdp.mjs` read the results (`rdp.mjs` also reads frames inside web pages), `launch_firefox.sh` starts Firefox, and `user.js` and `config/` set up the test profile.
+Key tests. Each run builds the extension, starts Firefox in its own nested, invisible session, sends real key presses and checks what the page and the background report. `harness.mjs` holds the session (`create_session`: Firefox, the page server, the helpers and `run_piece` with the piece lifecycle), `run.mjs` is the coordinator that splits the run across shards and prints the summary, `worker.mjs` runs one shard, `shards.mjs` orders the pieces by `piece_seconds.json` and tracks which shard holds which piece, `p<number>_*.mjs` are the pieces, `areas.mjs` maps src files to areas, `timings.mjs` measures where the time goes, `server.mjs` and `rdp.mjs` read the results (`rdp.mjs` also reads frames inside web pages), `launch_firefox.sh` starts Firefox, and `user.js` and `config/` set up the test profile.
 
 ## Run
 
@@ -9,14 +9,19 @@ just key-test
 KEY_TEST_ONLY=<regex> just key-test
 KEY_TEST_PIECES=p7_caret,p11_find just key-test
 KEY_TEST_ORDER=reverse just key-test
+KEY_TEST_SHARDS=1 KEY_TEST_DEADLINE_S=900 just key-test
 just key-test-changed [base] [head]
+just key-test-weights [timings file]
 ```
 
 A full run takes about 8.5 minutes (506 s for 241 cases in the latest run) and needs a nested Hyprland. The key-test-speed work (#273) brings that down further.
 
 - `KEY_TEST_ONLY` runs only the cases whose name matches. It also runs the cases marked `{ setup: true }` and every `h.setup` step of a piece, which leave state that later cases read. The output tags those as `SETUP`.
 - `KEY_TEST_PIECES` is a comma-separated list of piece names (the file name without `.mjs`). Only those pieces run, and an unknown name or an empty list aborts the run. Each piece must pass alone.
-- `KEY_TEST_ORDER=reverse` runs the pieces from last to first. A piece that fails only in reverse order depends on state from another piece.
+- `KEY_TEST_ORDER=reverse` runs the pieces from last to first, on one shard. A piece that fails only in reverse order depends on state from another piece.
+- `KEY_TEST_SHARDS=<n>` sets the shard count (default 6, never more than the chosen pieces). See Shards.
+- `KEY_TEST_DEADLINE_S=<s>` sets when the run stops itself (default 280). A full run on one shard takes longer, so it needs a higher value.
+- `KEY_TEST_WEIGHTS=<timings file>` orders the queue by that file instead of `piece_seconds.json` and the newest local timings.
 - `SHADOW_SH` must name a script that runs `up|spawn|keys|down <name>` for a nested, invisible compositor session. It can also answer `status` with one `<name>: up|down ...` line per session, which the sweep reads.
   Cleanup of killed runs works only for drivers that keep a session's runtime dir in `/tmp/shadow-<uid>-<name>`.
   When `SHADOW_SH` is unset, the recipe uses `$HOME/dotfiles/.claude/skills/shadow/shadow.sh` if it is executable. With neither, it exits.
@@ -60,6 +65,20 @@ Each piece exports `export const areas = ["hints", ...]`, the feature areas it e
 - `node test/key/areas.mjs <base> [head]` prints the same choice without running anything.
 - The full suite still runs once before a PR is ready.
 
+## Shards
+
+`run.mjs` forks one `worker.mjs` per shard. Each worker owns one `create_session`: its own shadow session (named `ok` plus the worker pid in base 36), Firefox profile, page server and keyboard. The workers take pieces from one queue until it is empty, so a fast shard takes more pieces.
+
+- The queue runs the longest piece first and a piece with no weight before all others. The weights come from `piece_seconds.json`, overridden piece by piece by the newest `.logs/key-test-timings-*.json` of this checkout when that file is newer. `just key-test-weights` rewrites `piece_seconds.json` from a full run. A piece that runs more than twice its weight, or 10 s over it, prints a `stale weight` line.
+- With one shard the queue keeps the given order. Each shard's sequence prints at the end (`s3 sequence: ...`), so `KEY_TEST_SHARDS=1 KEY_TEST_PIECES=<that list>` replays a failure that showed in one shard.
+- The coordinator picks a distinct debug port for each worker, below the kernel's ephemeral port range, so no page server or other worker can draw it. The workers start 300 ms apart.
+- The coordinator sweeps leftover sessions once before it forks. Workers never sweep, so no worker stops another worker's live session.
+- Each output line carries its shard (`[s3] PASS ...`). The end of the run lists the failed cases by piece.
+- A failed piece is not retried. A worker that dies fails its running piece, and the other workers take the rest of the queue. A worker whose debugger connection closes (Firefox crashed or exited) takes no more pieces.
+- At the deadline, or on SIGINT or SIGTERM, the coordinator sends SIGTERM to every worker. Each worker writes its timings and stops its session. A worker still alive after 10 s is killed, and the coordinator stops its session. The run then writes the merged timings and exits.
+- Each worker's session files sit under a run folder in `/tmp`, which the coordinator removes at the end.
+- Exit codes: 0 when every chosen piece ran and passed, 1 for a failed case, a piece that never finished, a dead worker or the deadline, 2 for a setup error (no `SHADOW_SH`, a bad `KEY_TEST_PIECES`, `KEY_TEST_SHARDS` or `KEY_TEST_DEADLINE_S`), 130 or 143 after SIGINT or SIGTERM.
+
 ## Piece lifecycle
 
 `run_piece` in `harness.mjs` gives every piece the same start and the same cleanup, so a piece needs no state from the one before it.
@@ -84,6 +103,9 @@ A converted piece presses keys with `press_keys` (no settle) and waits for the e
 - `settle_tab_switch()` is `settle_focus` plus 250 ms. A tab that is hidden and shown again within about 250 ms loses its visibility reports, so a key that switches tab again waits this long. Slice 7 should remove it with the other floors.
 - `scroll_delta_by_press(page_id, keys)` is `scroll_delta_after` with no settle.
 - `hint_label_count()` counts the hint labels in the active tab, so a case waits for labels before it types a label and for zero after Escape. Hint mode has no mode badge.
+- `in_active_tab(code)` runs code in the active tab's content script world and returns its first result. It throws on a script error, so a poll that calls it fails at once and does not poll again.
+- `escape_to_normal(page_id)` presses Escape until the mode badge reads NORMAL, at most three times, and waits for the badge after each press.
+- `press_and_wait_for_move(page_id, keys, what)` presses a caret key and waits for the selection report. `badge_is(page_id, label)` and `is_selection_of(page_id)` are the matching event predicates.
 - `which_key_delay_ms` is the delay from `config/settings.toml` (100 ms). A check that no panel shows sits out `which_key_delay_ms` plus a margin. The toast life (3 s) is a constant in `src/`, so the test config cannot shorten it.
 - A window_focus report from a frame comes before the frame takes keys, so `p6_frames.mjs` keeps two 300 ms sleeps.
 
@@ -91,10 +113,13 @@ A converted piece presses keys with `press_keys` (no settle) and waits for the e
 
 Every run times itself and prints a summary at the end: time by category, time outside cases, the 20 slowest cases and the open tab count. It also writes the full numbers as JSON.
 
-- The file is `.logs/key-test-timings-<timestamp>.json` in the checkout. `KEY_TEST_TIMINGS_FILE=<path>` sets another path.
+- The file is `.logs/key-test-timings-<timestamp>.json` in the checkout. `KEY_TEST_TIMINGS_FILE=<path>` sets another path. Each worker writes its own file in the run folder, and the coordinator merges them into this one.
 - Each moment of the run goes to one category: `keys` (a `shadow keys` call), `settle` (the pause after each key call), `sleeps` (other sleeps), `waits` (`wait_event`, `poll_until`), `rdp` (debugger calls and the pauses between result polls), `page_opens` (all of `open_page`, keys and waits inside it included), `driver` (`up`, `spawn`, `shot`) and `other` (everything untracked, such as test logic).
 - The JSON holds `categories` and `outside_cases` (ms and call counts), `pieces` (wall time per piece file), `cases` (wall time and categories per case) and `tab_samples` (open tab count before and after each piece). Setup between cases counts as `(outside cases)`.
-- The file is rewritten after each piece and when SIGINT or SIGTERM arrives, so a run killed at the time cap still leaves its numbers (the summary prints only at a normal end or on a signal).
+- `total_ms` is the coordinator's wall time. The case and category figures add up across shards, so they exceed it. Each `pieces`, `cases` and `tab_samples` entry carries its `shard`.
+- `shards` holds one entry per shard: `name`, `startup_ms` (run time when it was ready), `busy_ms` (time in pieces), `idle_ms` (time it sat finished while others ran), `finished_ms`, its `pieces` in order and its `exit`. `critical_shard` is the shard that finished last.
+- A piece that a signal cut short has an entry with `in_flight: true`. A run that did not finish has `incomplete: { reason, in_flight, not_started }`. The coordinator's own record of which shard holds which piece fills it, so it names the piece of a worker that was killed outright.
+- A failed shard keeps Firefox's output (`spawn.log` of the shadow session) and any crash dumps in `.logs/key-test-timings-<timestamp>-diagnostics/s<n>/`, because its teardown deletes them. When the debugger connection closes, every case that fails after it names the lost connection, so a crash reads differently from a hang.
 - Piece files need no hooks: they get the timed `sleep`, `open_page`, `wait_event` and `rdp` from the case context (`context_for` in `harness.mjs`).
 
 ## Native host
