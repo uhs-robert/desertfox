@@ -150,6 +150,11 @@ export function start_server() {
     if (url.pathname === "/aligned") {
       return response.end(page(`aligned ${id}`, `${tall_filler}<input id="field">${tall_filler}`));
     }
+    if (url.pathname === "/controls") {
+      // A text field and a checkbox up top, a control in a disabled fieldset that ]i skips, and a text field far below. The page reports each focus.
+      const controls = '<input id="first"><input type="checkbox" id="box"><fieldset disabled><input id="off"></fieldset>' + tall_filler + '<input id="last">';
+      return response.end(page(`controls ${id}`, controls, "<script>addEventListener('focusin', (event) => send('focused', { id: event.target.id }))</script>"));
+    }
     if (url.pathname === "/framed") {
       const frame = '<iframe id="inner" src="/page?id=inner" style="width:300px;height:200px"></iframe>';
       return response.end(page(`framed ${id}`, frame, "<script>addEventListener('load', () => document.getElementById('inner').contentWindow.focus())</script>"));
