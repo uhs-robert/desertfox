@@ -115,16 +115,22 @@ const sleep_sync = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4))
 // its session was still starting: the start code waits at an await, and stop_session_named would let it go on and spawn the next process.
 export function kill_session_now(name) {
   const runtime_dir = runtime_dir_of(name);
-  for (let pass = 0; pass < 50; pass++) {
-    const pids = pids_carrying(runtime_dir);
-    if (pids.length === 0) break;
-    signal_all(pids, "SIGKILL");
-    sleep_sync(20);
-  }
   // A process stuck in an uninterruptible wait outlives SIGKILL. Its dir and owner file stay, so a later sweep stops it.
-  const left = pids_carrying(runtime_dir);
-  if (left.length > 0) {
-    console.error(`session ${name}: processes still carry ${runtime_dir} after SIGKILL: ${left.join(", ")}`);
+  // A failed /proc scan counts the same way, and never throws, since the caller exits right after.
+  try {
+    for (let pass = 0; pass < 50; pass++) {
+      const pids = pids_carrying(runtime_dir);
+      if (pids.length === 0) break;
+      signal_all(pids, "SIGKILL");
+      sleep_sync(20);
+    }
+    const left = pids_carrying(runtime_dir);
+    if (left.length > 0) {
+      console.error(`session ${name}: processes still carry ${runtime_dir} after SIGKILL: ${left.join(", ")}`);
+      return;
+    }
+  } catch (error) {
+    console.error(`session ${name}: kept ${runtime_dir}, its processes could not be listed: ${error.message}`);
     return;
   }
   rmSync(runtime_dir, { recursive: true, force: true });
