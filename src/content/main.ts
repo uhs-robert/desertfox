@@ -8,7 +8,7 @@ import { ignores_any_address } from "../shared/match_pattern.ts";
 import { message_of } from "./bundle_host.ts";
 import type { BundleHostApi } from "./bundle_host.ts";
 import { bundles } from "./bundles.ts";
-import { is_editable_element } from "./editable.ts";
+import { deepest_focused_element, is_editable_element } from "./editable.ts";
 import { create_cancelled_keys } from "./cancelled_keys.ts";
 import { create_key_flow } from "./key_flow.ts";
 import { create_which_key_timer } from "./which_key_timer.ts";
@@ -235,7 +235,7 @@ function start(): void {
     } else if (message.type === "refusal") show_toast(message.refusal.message, message.kind);
     else if (message.type === "set_mode") {
       page_mode.set_mode(message.mode);
-      if (is_editable_element(document.activeElement)) page_mode.focus_entered_editable();
+      if (is_editable_element(deepest_focused_element())) page_mode.focus_entered_editable();
     }
     else if (message.type === "tree_updated") void install_after_tab_address(read_keymap());
   });

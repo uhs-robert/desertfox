@@ -6,7 +6,7 @@ export const areas = ["toolbar"];
 
 const TOGGLE = ["-M", "ctrl", "-M", "alt", "d", "-m", "alt", "-m", "ctrl"];
 
-export async function run_cases({ rdp, extension_id, run_case, press_keys, poll_until, open_page, wait_event, events, expect, sleep, scroll_delta_by_press, expect_no_scroll, hint_label_count, open_cmdline, wait_cmdline, wait_reinject_report, badge_is }) {
+export async function run_cases({ rdp, extension_id, run_case, press_keys, poll_until, open_page, wait_event, events, expect, sleep, scroll_delta_by_press, expect_no_scroll, hint_label_count, open_cmdline, wait_cmdline, wait_reinject_report, badge_is, in_active_tab }) {
   const in_background = (code) => evaluate_in_background(rdp, extension_id, code);
   const flag = () => in_background(`browser.storage.local.get("desertfox_disabled").then((got) => got.desertfox_disabled === true)`);
   const title = () => in_background(`browser.browserAction.getTitle({})`);
@@ -155,6 +155,22 @@ export async function run_cases({ rdp, extension_id, run_case, press_keys, poll_
       await press_keys("j");
       await wait_event(mark, (event) => event.type === "input" && event.value === "j", "the field to hold j");
       await expect_no_scroll(mark, "sw_cycle");
+    } finally {
+      await turn_on();
+    }
+  });
+
+  await run_case("a field inside a shadow root is still in insert mode after an off and on cycle", async () => {
+    await open_page("caret_editable_shadow", "sw_shadow", { new_tab: true });
+    try {
+      await in_active_tab(`document.getElementById("host").shadowRoot.getElementById("editable").focus()`);
+      const label = () => events.filter((event) => event.type === "indicator" && event.page_id === "sw_shadow").at(-1)?.label;
+      await poll_until("INSERT in the shadow field", async () => label() === "INSERT");
+      await press_toggle();
+      await wait_state(true, "off with a shadow field focused");
+      await press_toggle();
+      await wait_state(false, "on again with a shadow field focused");
+      await poll_until("INSERT after the cycle", async () => label() === "INSERT");
     } finally {
       await turn_on();
     }
