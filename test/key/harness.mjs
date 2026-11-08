@@ -39,6 +39,7 @@ const KEY_ROUTE_FLOOR_MS = 100;
 // A tab hidden or shown within 150 ms of its opening lost the visibility report of its next switch in 6 of 6 tries, and 200 ms kept it in 6 of 6. A new page gets no keys before this age.
 const NEW_PAGE_QUIET_MS = 300;
 const BARRIER_KEY = "F8";
+const UNREADY_LINE_WAIT_MS = 500;
 
 export const ALT = (key) => ["-M", "alt", key, "-m", "alt"];
 export const CTRL = (key) => ["-M", "ctrl", key, "-m", "ctrl"];
@@ -395,7 +396,11 @@ export async function create_session({ name: shadow_name, timings }) {
     if (permission_grant?.error) throw new Error(`granting nativeMessaging failed: ${permission_grant.error}`);
     const native_api = await evaluate_in_background(rdp, EXTENSION_ID, `typeof browser.runtime.sendNativeMessage`);
     if (native_api !== "function") throw new Error(`the background has no sendNativeMessage after the grant: ${native_api}`);
-    await sleep(1500);
+    // The background publishes its config status once it has loaded the config.
+    for (let attempt = 0; (await evaluate_in_background(rdp, EXTENSION_ID, `(async () => (await browser.storage.local.get("desertfox_config_status")).desertfox_config_status ?? null)()`)) == null; attempt++) {
+      if (attempt >= 300) throw new Error("the background published no config status within 15 s of the nativeMessaging grant");
+      await sleep(50);
+    }
   } catch (error) {
     await close();
     throw error;
@@ -426,11 +431,12 @@ export async function create_session({ name: shadow_name, timings }) {
   const read_local = (key) => in_background(`(async () => (await browser.storage.local.get("${key}"))["${key}"])()`);
   // Presses qr and waits until the reload stores the files config. The key is removed first, so an earlier reload does not count.
   async function reload_in_place() {
-    await in_background(`browser.storage.local.remove("desertfox_files_config")`);
+    await in_background(`browser.storage.local.remove(["desertfox_files_config", "desertfox_config_status"])`);
     await send_keys("qr");
-    for (let attempt = 0; attempt < 40; attempt++) {
-      await sleep(250);
-      if ((await read_local("desertfox_files_config")) != null) return;
+    for (let attempt = 0; attempt < 200; attempt++) {
+      await sleep(50);
+      // The status is published after the files config, so it shows that the new config is applied.
+      if ((await read_local("desertfox_files_config")) != null && (await read_local("desertfox_config_status")) != null) return;
     }
     // The host call made by hand tells a missing permission or host from a refused build.
     const probe = await in_background(`(async () => ({ granted: await browser.permissions.contains({ permissions: ["nativeMessaging"] }), host: await browser.runtime.sendNativeMessage("desertfox_host", { cmd: "read_config" }).then((reply) => ({ ok: reply.ok, error: reply.error, files: Object.keys(reply.files ?? {}).length }), (error) => String(error)) }))()`);
@@ -439,8 +445,8 @@ export async function create_session({ name: shadow_name, timings }) {
   // Waits for the restart that debug.restart starts: the new background writes its tab repair report.
   async function wait_reinject_report() {
     let report;
-    for (let attempt = 0; attempt < 60 && !report; attempt++) {
-      await sleep(500);
+    for (let attempt = 0; attempt < 300 && !report; attempt++) {
+      await sleep(100);
       report = await read_local("desertfox_reinject_report");
     }
     expect(report, "no desertfox_reinject_report after 30 s");
@@ -459,7 +465,6 @@ export async function create_session({ name: shadow_name, timings }) {
     if (dir !== config_dir) linked_config_dir = dir;
     await reload_in_place();
     linked_config_dir = dir;
-    await sleep(500);
   };
   // Pieces never write config_dir, so it stays the base config every piece starts from. A piece edits a copy and loads it with load_config_dir.
   let config_copy_count = 0;
@@ -677,7 +682,8 @@ export async function create_session({ name: shadow_name, timings }) {
   // Escape closes the list first and the line next, so this presses until the line is gone, and waits after each press for the state to change.
   async function close_cmdline() {
     for (let presses = 0; presses < 5; presses++) {
-      const before = await read_cmdline_state();
+      // A line caught before its page is ready can drop an Escape, so it gets a moment to become ready first. A line that stays unready is pressed anyway.
+      const before = await wait_cmdline((line) => !line.open || line.ready, "the command line to be ready or closed", UNREADY_LINE_WAIT_MS).catch(() => read_cmdline_state());
       if (!before.open) return;
       await press_keys("-k", "Escape");
       await wait_cmdline((after) => !after.open || after.list_open !== before.list_open || after.marked !== before.marked || after.value !== before.value, "Escape to change the command line");

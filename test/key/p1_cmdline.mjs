@@ -90,7 +90,7 @@ export async function run_cases({ run_case, setup, expect, send_keys, press_keys
     await send_keys(...CTRL("l"));
     await send_keys("about:support", "-k", "Return");
     let tab_state;
-    await poll_until("about:support to load", async () => (tab_state = await in_background(`browser.tabs.query({ active: true, currentWindow: true }).then(([tab]) => ({ url: tab.url, status: tab.status, count: 0 }))`))?.url === "about:support" && tab_state.status === "complete", { timeout_ms: 8000 }).catch((error) => { throw new Error(`${error.message} (tab: ${JSON.stringify(tab_state)})`); });
+    await poll_until("about:support to load", async () => (tab_state = await in_background(`browser.tabs.query({ active: true, currentWindow: true }).then(([tab]) => ({ url: tab.url, status: tab.status }))`))?.url === "about:support" && tab_state.status === "complete", { timeout_ms: 8000 }).catch((error) => { throw new Error(`${error.message} (tab: ${JSON.stringify(tab_state)})`); });
     await in_background(`(async () => { for (const id of Object.keys(await browser.notifications.getAll())) await browser.notifications.clear(id); })()`);
     await press_keys(...ALT("."));
     let notices = {};

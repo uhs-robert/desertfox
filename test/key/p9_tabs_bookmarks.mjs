@@ -68,7 +68,7 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, sleep,
     } finally {
       // A failed case must leave neither the tab nor the open line behind for the cases after it.
       if (live_id !== undefined) await background(`browser.tabs.remove(${live_id}).catch(() => {})`);
-      if (!picked) await close_cmdline();
+      if (!picked) await close_cmdline().catch((error) => console.log(`cleanup: the command line stayed open: ${error.message}`));
     }
   });
 
@@ -135,8 +135,8 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, sleep,
       await press_keys(...ALT("u"));
       await poll_until("the second A-u to load the tab again, so the list was kept open", async () => (await discarded()) === false);
     } finally {
-      await close_cmdline();
       await background(`browser.tabs.remove(${tab_id})`);
+      await close_cmdline().catch((error) => console.log(`cleanup: the command line stayed open: ${error.message}`));
     }
   });
 
@@ -161,8 +161,8 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, sleep,
       await press_keys(...ALT("m"));
       await poll_until("the second A-m to unmute both marked tabs", async () => (await muted()).every((value) => !value));
     } finally {
-      await close_cmdline();
       await background(`browser.tabs.remove(${JSON.stringify(ids)})`);
+      await close_cmdline().catch((error) => console.log(`cleanup: the command line stayed open: ${error.message}`));
     }
   });
 
@@ -185,8 +185,8 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, sleep,
       await sleep(300);
       expect((await open_count()) === 1, `A-x after Escape did not close exactly the highlighted tab: ${await open_count()} of the 2 tabs stayed open, expected 1`);
     } finally {
-      await close_cmdline();
       await background(`browser.tabs.remove(${JSON.stringify(ids)}).catch(() => {})`);
+      await close_cmdline().catch((error) => console.log(`cleanup: the command line stayed open: ${error.message}`));
     }
   });
 
@@ -221,12 +221,12 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, sleep,
       await poll_until("the old tabs to close after the reopen", async () => (await old_open()) === 0);
       expect(await background(`browser.tabs.query({ active: true, currentWindow: true }).then(([tab]) => tab.id)`) === line_tab, "a reopened tab took the focus from the line's tab");
     } finally {
-      await close_cmdline();
       await background(`(async () => {
         const tabs = await browser.tabs.query({ cookieStoreId: ${JSON.stringify(made.container)} });
         await browser.tabs.remove([...tabs.map((tab) => tab.id), ...${JSON.stringify(made.ids ?? [])}]).catch(() => {});
         await browser.contextualIdentities.remove(${JSON.stringify(made.container)});
       })()`);
+      await close_cmdline().catch((error) => console.log(`cleanup: the command line stayed open: ${error.message}`));
     }
   });
 
