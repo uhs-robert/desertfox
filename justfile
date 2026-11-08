@@ -76,11 +76,20 @@ key-test: build
     exec flock -o -w 900 "$lock_file" "${run_cmd[@]}"
 
 # Run `just test` and `just key-test` at the same time, so one command takes about as long as the key test alone (about 35 s). The unit tests start with the build and end before the shards start. Both always run to the end. The unit-test output prints only if it fails. Exit 1 if either failed. The environment (KEY_TEST_PIECES and the rest) goes to both unchanged.
-test-all:
+test-all: install_deps
     #!/usr/bin/env bash
     set -uo pipefail
+    # Job control gives the unit tests their own process group, so the exit trap can stop the whole `just test` tree, systemd scope included.
+    set -m
     unit_log=$(mktemp /tmp/desertfox-test-all.XXXXXX)
-    trap 'rm -f "$unit_log"' EXIT
+    unit_pid=
+    stop_unit_tests() {
+        if [ -n "$unit_pid" ]; then kill -TERM -- "-$unit_pid" 2>/dev/null; wait "$unit_pid" 2>/dev/null; fi
+        rm -f "$unit_log"
+    }
+    trap stop_unit_tests EXIT
+    trap 'exit 130' INT
+    trap 'exit 143' TERM
     start_s=$SECONDS
     just test >"$unit_log" 2>&1 &
     unit_pid=$!
@@ -88,6 +97,7 @@ test-all:
     key_status=$?
     wait "$unit_pid"
     unit_status=$?
+    unit_pid=
     failed=0
     if [ "$unit_status" -eq 0 ]; then
         echo "test: ok"
