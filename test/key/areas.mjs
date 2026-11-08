@@ -10,6 +10,7 @@ export const area_names = ["hints", "caret", "find", "whichkey", "cmdline", "hel
 
 // Key path and command contract: any change here can break any piece.
 const shared_files = [
+  "src/manifest.json",
   "src/background/{availability,browser_deps,main,refusal,router,slots,startup}.ts",
   "src/commands/{command,copy,mode}.ts",
   "src/content/{cancelled_keys,context,editable,handler_map,invocation_args,key_flow,main,mode_state,page_mode,run_content,shadow}.ts",
@@ -20,8 +21,10 @@ const shared_files = [
 
 // First match wins, so order matters: the no-area rule sits before folder globs such as help/**, and find_* before caret/**.
 export const area_rules = [
-  // Docs, icons, manifest and schema carry no behavior a key test reads.
-  { globs: ["src/**/README.md", "src/icons/**", "src/manifest.json", "src/managed_schema.json"], areas: [] },
+  // Docs and icons carry no behavior a key test reads.
+  { globs: ["src/**/README.md", "src/icons/**"], areas: [] },
+  // The schema validates the settings the help page edits and the config reads.
+  { globs: ["src/managed_schema.json"], areas: ["help", "config"] },
   { globs: shared_files, areas: area_names },
   { globs: ["src/content/hints/**", "src/commands/{hint,heading,page}.ts", "src/background/image_actions.ts", "src/content/handlers/page.ts"], areas: ["hints"] },
   { globs: ["src/content/handlers/lazy_bundle.ts", "src/background/{bundle_loader,command_modules}.ts", "src/content/{bundle_host,bundles}.ts", "src/shared/bundles.ts"], areas: ["bundles"] },
@@ -99,14 +102,20 @@ export function read_piece_areas() {
   return pieces;
 }
 
-// Pieces to run for a list of changed paths. Paths outside src are ignored. An unplaced src file selects every piece, the safe side.
+// A change to these runs every piece: they are the test machinery and the build the pieces load.
+const harness_globs = ["test/key/{harness,run,server,rdp,timings,areas}.mjs", "test/key/{launch_firefox.sh,user.js}", "test/key/config/**", "tools/build.mjs"];
+const harness_patterns = harness_globs.map(glob_to_regex);
+
+// Pieces to run for a list of changed paths. A changed piece file selects that piece, a harness file selects every piece, and so does an unplaced src file (the safe side). Other paths are ignored.
 export function select_pieces(changed_paths, piece_areas) {
   const src_paths = changed_paths.filter((path) => path.startsWith("src/"));
-  if (src_paths.length === 0) return { src_paths, areas: [], pieces: [] };
+  const piece_files = changed_paths.map((path) => /^test\/key\/(p\d+_.*)\.mjs$/.exec(path)?.[1]).filter((name) => piece_areas.has(name));
+  const harness_changed = changed_paths.some((path) => harness_patterns.some((pattern) => pattern.test(path)));
   const hit = new Set();
   for (const path of src_paths) for (const area of areas_of_file(path) ?? area_names) hit.add(area);
-  const pieces = [...piece_areas].filter(([, areas]) => areas.some((area) => hit.has(area))).map(([name]) => name);
-  return { src_paths, areas: area_names.filter((area) => hit.has(area)), pieces };
+  const chosen = ([name, areas]) => harness_changed || piece_files.includes(name) || areas.some((area) => hit.has(area));
+  const pieces = [...piece_areas].filter(chosen).map(([name]) => name);
+  return { src_paths, harness_changed, piece_files, areas: area_names.filter((area) => hit.has(area)), pieces };
 }
 
 function git(...args) {
@@ -115,19 +124,19 @@ function git(...args) {
 
 // With head, the commits base..head. Without it, everything since the merge base: commits, working tree and new files.
 function changed_paths_since(base, head) {
-  if (head) return git("diff", "--name-only", `${base}...${head}`);
+  if (head) return git("diff", "--name-only", "--no-renames", `${base}...${head}`);
   const merge_base = git("merge-base", base, "HEAD")[0];
-  return [...git("diff", "--name-only", merge_base), ...git("ls-files", "--others", "--exclude-standard", "--", "src")];
+  return [...git("diff", "--name-only", "--no-renames", merge_base), ...git("ls-files", "--others", "--exclude-standard", "--", "src")];
 }
 
 // node test/key/areas.mjs <base> [head]: prints the choice on stderr and the comma-separated pieces on stdout (empty for none).
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const [base = "origin/main", head] = process.argv.slice(2);
   const piece_areas = read_piece_areas();
-  const { src_paths, areas, pieces } = select_pieces(changed_paths_since(base, head), piece_areas);
-  if (src_paths.length === 0) console.error(`key-test-changed: no src change against ${base}, so no piece runs.`);
+  const { src_paths, harness_changed, piece_files, areas, pieces } = select_pieces(changed_paths_since(base, head), piece_areas);
+  if (pieces.length === 0 && src_paths.length === 0) console.error(`key-test-changed: no src, piece or harness change against ${base}, so no piece runs.`);
   else {
-    console.error(`key-test-changed: ${src_paths.length} src file(s) changed against ${base}, areas: ${areas.join(", ")}`);
+    console.error(`key-test-changed: against ${base}: ${src_paths.length} src file(s), ${piece_files.length} piece file(s), harness ${harness_changed ? "changed" : "unchanged"}; areas: ${areas.join(", ") || "none"}`);
     console.error(`key-test-changed: ${pieces.length} of ${piece_areas.size} pieces: ${pieces.join(", ")}`);
     console.log(pieces.join(","));
   }
