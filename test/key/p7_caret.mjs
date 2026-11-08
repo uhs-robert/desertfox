@@ -5,7 +5,7 @@ import { mkdirSync } from "node:fs";
 
 export const areas = ["caret", "find"];
 
-export async function run_cases({ take_shot, run_case, expect, expect_absent, open_page, press_keys, poll_until, barrier, scroll_of, wait_cmdline, settle_focus, became_visible, last_scroll_y, events, wait_event, in_active_tab, hint_label_count, badge_is, is_selection_of, press_and_wait_for_move, escape_to_normal }) {
+export async function run_cases({ take_shot, run_case, expect, expect_absent, open_page, press_keys, poll_until, barrier, scroll_of, wait_cmdline, settle_focus, became_visible, last_scroll_y, events, wait_event, in_active_tab, hint_label_count, badge_is, is_selection_of, press_and_wait_for_move, escape_to_normal, run_line, type_in_line }) {
   const paste_ctrl_v = ["-M", "ctrl", "v", "-m", "ctrl"];
   // oasis_moonlight, the default palette, dark: the caret takes the `mode_caret` role and visual mode the `selection` role (src/content/caret/selection_colors.ts).
   const CARET_BACKGROUND = "#f0e68c";
@@ -220,7 +220,7 @@ export async function run_cases({ take_shot, run_case, expect, expect_absent, op
   const hint_into = async (page_id, flag, target) => {
     await open_page("caret_hint", page_id, { new_tab: true });
     const mark = events.length;
-    await press_keys(`:hint ${flag} --custom --selector=${target}`, "-k", "Return");
+    await run_line(`:hint ${flag} --custom --selector=${target}`);
     await wait_for_hint_labels();
     await press_keys("a");
     return mark;
@@ -296,7 +296,8 @@ export async function run_cases({ take_shot, run_case, expect, expect_absent, op
     const mark = events.length;
     await press_keys(";;");
     await wait_cmdline((line) => line.open && line.ready && line.value.startsWith("hint"), "the line to open with hint typed");
-    await press_keys(" --caret --custom --selector=#pick", "-k", "Return");
+    await type_in_line(" --caret --custom --selector=#pick");
+    await press_keys("-k", "Return");
     await wait_for_hint_labels();
     await press_keys("a");
     await wait_event(mark, badge_is("hint_line", "CARET"), "the CARET badge from the hint typed into the line");

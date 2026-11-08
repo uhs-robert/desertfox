@@ -179,8 +179,14 @@ export async function evaluate_in_page_frames(rdp, frame_path, frame_code) {
     // The module's global is a chrome global, which has BrowsingContext. The console's own global has not.
     const value = await run_in_console(rdp, console_actor, `(async () => {
       const chrome_global = Components.utils.getGlobalForObject(ChromeUtils.importESModule("resource://gre/modules/ExtensionPageChild.sys.mjs"));
-      const frame_window = chrome_global.BrowsingContext.get(${context_id})?.window;
-      return frame_window ? (${frame_code})(frame_window) : null;
+      // A frame that closes between the listing and this read leaves a dead window behind. It counts as gone, as a frame the listing missed would.
+      try {
+        const frame_window = chrome_global.BrowsingContext.get(${context_id})?.window;
+        return frame_window ? (${frame_code})(frame_window) : null;
+      } catch (error) {
+        if (String(error).includes("dead object")) return null;
+        throw error;
+      }
     })()`);
     if (value?.error) throw new Error(`rdp: reading the ${frame_path} frame failed: ${value.error}`);
     if (value !== null) values.push(value);

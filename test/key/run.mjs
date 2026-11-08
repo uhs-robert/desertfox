@@ -2,12 +2,11 @@
 // This file is the coordinator. It forks one worker.mjs per shard, hands out pieces from one queue, merges the shards'
 // timings into one file, prints the summary and sets the exit code. harness.mjs holds the session and the helpers.
 import { fork } from "node:child_process";
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
-import { stop_session_named, sweep_dead_sessions } from "./session.mjs";
+import { make_run_dir, stop_session_named, sweep_dead_run_dirs, sweep_dead_sessions } from "./session.mjs";
 import { create_ledger, load_weights, pick_debug_ports, piece_name_of, queue_order, stale_weight_warnings } from "./shards.mjs";
 import { default_timings_path, merge_reports, summary_text, write_report } from "./timings.mjs";
 
@@ -75,10 +74,11 @@ async function main() {
   console.log(`key-test: ${piece_files.length} pieces on ${shard_count} shard${shard_count === 1 ? "" : "s"}, weights from ${weights_source}`);
 
   await sweep_dead_sessions();
+  sweep_dead_run_dirs();
   const debug_ports = await pick_debug_ports(shard_count);
   // Holds each shard's timings file and, through TMPDIR, each worker's session files, so one removal leaves nothing behind in /tmp.
   // Made after the sweep, because a signal before the handlers below kills the coordinator outright.
-  const run_dir = mkdtempSync(join(tmpdir(), "desertfox-key-run-"));
+  const run_dir = make_run_dir();
 
   const failures = [];
   const results = [];

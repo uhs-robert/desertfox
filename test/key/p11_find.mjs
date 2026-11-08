@@ -7,7 +7,7 @@ import { evaluate_in_background } from "./rdp.mjs";
 
 export const areas = ["find"];
 
-export async function run_cases({ rdp, extension_id, run_case, expect, expect_absent, open_page, press_keys, poll_until, barrier, wait_cmdline, close_cmdline, read_cmdline_state, scroll_of, scroll_report_wait_ms, sleep, events, wait_event, take_shot, in_active_tab, badge_is, is_selection_of, press_and_wait_for_move, escape_to_normal }) {
+export async function run_cases({ rdp, extension_id, run_case, expect, expect_absent, open_page, press_keys, poll_until, barrier, wait_cmdline, close_cmdline, read_cmdline_state, scroll_of, scroll_report_wait_ms, sleep, events, wait_event, take_shot, in_active_tab, badge_is, is_selection_of, press_and_wait_for_move, escape_to_normal, type_in_line }) {
   // Read in the page's own world: ranges and sheets that the content script made are not readable from the script that tabs.executeScript runs. The closed root has no sheet count here, since only the content script can reach it.
   const READ_HIGHLIGHTS = `JSON.parse(window.wrappedJSObject.eval(${JSON.stringify(`JSON.stringify((() => {
     const texts = (owner, name) => { const highlight = owner?.defaultView.CSS.highlights.get(name); const found = []; highlight?.forEach((range) => found.push(range.startContainer.data.slice(0, 40))); return found; };
@@ -142,7 +142,8 @@ export async function run_cases({ rdp, extension_id, run_case, expect, expect_ab
     await open_page("find_page", page_id, { new_tab: true });
     await type_search("/needle");
     await wait_highlights((read) => total_painted(read) === 5, "the matches");
-    await press_keys(...ENTER, "/", "four");
+    // At full speed a key that comes while the focus moves out of the line's frame is lost, which no person can type. The 10 ms pause keeps the keys at once for a person and out of that window.
+    await press_keys(...ENTER, "-s", "10", "/", "four");
     // A lost key leaves the line closed and empty. A product race leaves it open and holding four.
     await wait_highlights((read) => total_painted(read) === 1 && current_of(read) === "needle four", "the second search painting needle four").catch(async (error) => {
       throw new Error(`${error.message}, command line ${JSON.stringify(await read_cmdline_state())}`);
@@ -186,7 +187,7 @@ export async function run_cases({ rdp, extension_id, run_case, expect, expect_ab
     const step_and_check = async (key, step) => {
       await press_and_wait_for_new_current(key);
       let problem = "not read";
-      await poll_until(`the match to sit fully in view after ${key} number ${step + 1}`, async () => !(problem = fully_visible(await in_active_tab(READ_CURRENT_BOXES))), { timeout_ms: 5000, expected_timeout: true }).catch(() => undefined);
+      await poll_until(`the match to sit fully in view after ${key} number ${step + 1}`, async () => !(problem = fully_visible(await in_active_tab(READ_CURRENT_BOXES))), { timeout_ms: 5000 }).catch(() => undefined);
       expect(!problem, `after ${key} number ${step + 1}: ${problem}`);
     };
     for (let step = 0; step < 8; step++) await step_and_check("n", step);
@@ -292,7 +293,9 @@ export async function run_cases({ rdp, extension_id, run_case, expect, expect_ab
     await open_page("find_page", page_id, { new_tab: true });
     // 40 letters and then a character that fails the pattern: (a+)+$ takes about 2^40 steps if it runs as a regex.
     await in_active_tab(`document.body.textContent = ${JSON.stringify("a".repeat(40) + "!")}; true`);
-    await press_keys("/(a+)+$");
+    // An Escape that reaches the line before it is ready is dropped, so the pattern must be in the line first.
+    await press_keys("/");
+    await type_in_line("(a+)+$");
     // A frozen tab never answers, so the read races a time limit.
     const answered = await Promise.race([in_active_tab("document.title").then(() => true), sleep(5000).then(() => false)]);
     expect(answered, "the tab did not answer within 5 seconds of a costly pattern");
@@ -352,7 +355,8 @@ export async function run_cases({ rdp, extension_id, run_case, expect, expect_ab
     // No match as a regex, and seconds of backtracking over the run of "a" without the limit. As text it finds its own characters at the end.
     await in_active_tab(`document.body.textContent = ${JSON.stringify("a".repeat(60000) + " a.*b.*c(?=Q)")}; true`);
     const started = Date.now();
-    await press_keys("/a.*b.*c(?=Q)");
+    await press_keys("/");
+    await type_in_line("a.*b.*c(?=Q)");
     const answered = await Promise.race([in_active_tab("document.title").then(() => true), sleep(5000).then(() => false)]);
     expect(answered, "the tab did not answer within 5 seconds of a slow regex");
     let mark = events.length;

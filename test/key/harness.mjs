@@ -242,13 +242,9 @@ export async function create_session({ name: session_name, timings, sweep = true
   const wait_event = (...args) => timings.time("waits", () => wait_event_untimed(...args));
   async function wait_event_untimed(mark, predicate, what, timeout_ms = 8000) {
     waiting_for = what;
-    const deadline = Date.now() + timeout_ms;
-    for (;;) {
-      const found = find_event(mark, predicate);
-      if (found) return found;
-      if (Date.now() > deadline) throw wait_timeout_error(what);
-      await raw_sleep(50);
-    }
+    const found = await server.wait_for_event(mark, predicate, timeout_ms);
+    if (!found) throw wait_timeout_error(what);
+    return found;
   }
   const became_visible = (page_id) => (event) => event.type === "visibility" && event.state === "visible" && event.page_id === page_id;
   const visible_events = (mark) => since(mark).filter((event) => event.type === "visibility" && event.state === "visible");
@@ -632,7 +628,7 @@ export async function create_session({ name: session_name, timings, sweep = true
   // Unsets the temp edits through the command line, which rebuilds the effective config the way a user's :unset does. Returns whether it typed keys.
   async function clear_temp_settings() {
     if (!(await temp_settings_pending())) return false;
-    await send_keys(":unset -t all", "-k", "Return");
+    await run_line(":unset -t all");
     await poll_until("the temp settings to clear", async () => !(await temp_settings_pending()), { timeout_ms: 6000 });
     return true;
   }
@@ -756,6 +752,38 @@ export async function create_session({ name: session_name, timings, sweep = true
     return state;
   }
 
+  const line_takes_keys = (line) => line.open && line.focused;
+  // Keys typed while the focus moves into the line's frame can be lost, so this waits until the line holds the focus. It presses ":" only when no line is open.
+  async function open_cmdline() {
+    if (!(await read_cmdline_state()).open) await press_keys(":");
+    return wait_cmdline(line_takes_keys, "the command line to open and take the focus");
+  }
+  // Types text at the caret of the open line and waits until the line holds it, so the key pressed next acts on that text and not on a part of it.
+  // `until` adds a check on the same state, such as the rows the list must show first: the list of tabs or bookmarks fills in after the text.
+  async function type_in_line(text, { until = () => true, what } = {}) {
+    const before = await wait_cmdline(line_takes_keys, "the command line to take keys");
+    const expected = before.value.slice(0, before.caret) + text + before.value.slice(before.caret);
+    await press_keys(text);
+    return wait_cmdline((line) => line.value === expected && until(line), what ?? `the command line to hold "${expected}"`);
+  }
+  // Presses Tab and waits for its effect: a row previewed in the line, or the one match taken into it.
+  async function complete_in_line() {
+    const before = await wait_cmdline(line_takes_keys, "the command line to take keys");
+    await press_keys("-k", "Tab");
+    return wait_cmdline((line) => line.selected !== before.selected || line.value !== before.value, "Tab to complete in the command line");
+  }
+  // The address bar way of type_in_line, for the pages only the address bar opens. Firefox draws the bar, so chrome code reads its value.
+  async function type_in_address_bar(text) {
+    await press_keys(text);
+    await poll_until(`the address bar to hold "${text}"`, async () => (await evaluate_in_chrome(rdp, `Services.wm.getMostRecentWindow("navigator:browser").gURLBar.value`)) === text);
+  }
+  // Opens the line, types the command and presses Enter once the line holds it. A leading ":" is the key that opens the line.
+  async function run_line(text, options) {
+    await open_cmdline();
+    await type_in_line(text.replace(/^:/, ""), options);
+    await press_keys("-k", "Return");
+  }
+
   // Presses a key with no binding after the key under test and waits for the page to see it, so every earlier key has reached the page by then.
   // It returns the barrier event's index in `events`. It fails by name when the key never shows, or shows on another page, such as after a tab switch that was not meant.
   // A page that cancels keys in capture, or a mode that swallows keys, never reports it. Then the barrier times out and does not pass.
@@ -806,7 +834,7 @@ export async function create_session({ name: session_name, timings, sweep = true
     // Stores a number for the end-of-run measurements line.
     const record = (key, value) => { measurements[key] = value; };
     // The cases of a piece file in test/key/p<number>_*.mjs get these helpers.
-    const context = { config_dir, config_copy, load_config_dir, take_shot: (path) => timings.time("driver", () => session.shot(path)), run_case: run_piece_case, setup, on_teardown, expect, open_page, open_page_by_keys, send_keys, press_keys, settle_focus, settle_tab_switch, poll_until, wait_tab_quiet, barrier, expect_absent, read_cmdline_state, wait_cmdline, close_cmdline, scroll_report_wait_ms: SCROLL_REPORT_DELAY_MS + 100, which_key_delay_ms: WHICH_KEY_DELAY_MS, sleep, events, wait_event, since, find_event, url_of, rdp, extension_id: EXTENSION_ID, scroll_delta_after, scroll_delta_by_press, became_visible, scroll_of, last_scroll_y,
+    const context = { config_dir, config_copy, load_config_dir, take_shot: (path) => timings.time("driver", () => session.shot(path)), run_case: run_piece_case, setup, on_teardown, expect, open_page, open_page_by_keys, send_keys, press_keys, settle_focus, settle_tab_switch, poll_until, wait_tab_quiet, barrier, expect_absent, read_cmdline_state, wait_cmdline, close_cmdline, open_cmdline, type_in_line, complete_in_line, run_line, type_in_address_bar, scroll_report_wait_ms: SCROLL_REPORT_DELAY_MS + 100, which_key_delay_ms: WHICH_KEY_DELAY_MS, sleep, events, wait_event, since, find_event, url_of, rdp, extension_id: EXTENSION_ID, scroll_delta_after, scroll_delta_by_press, became_visible, scroll_of, last_scroll_y,
       // Moved out of the run.mjs cases. Pieces may use them too.
       in_background, read_local, reload_in_place, wait_reinject_report, injections_of, settled_injection_count, expect_no_scroll, expect_exactly_one_visible, hint_label_count, in_active_tab, badge_is, is_selection_of, press_and_wait_for_move, escape_to_normal, visible_events, extension_view, close_tabs_with, record };
     return { context, state, piece_file };

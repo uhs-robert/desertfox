@@ -71,15 +71,53 @@ const CANCEL_KEYS_IN_CAPTURE = `<script>
     target.addEventListener(type, (event) => { event.preventDefault(); event.stopImmediatePropagation(); }, true);
 </script>`;
 
-export function start_server() {
+// The reports in arrival order, and a wait that wakes on each new report. A waiter checks the reports and starts
+// listening in one synchronous step, and a report is pushed only between steps, so no report falls between the two.
+export function create_event_log() {
   const events = [];
+  const listeners = new Set();
+  function push(event) {
+    events.push(event);
+    for (const listener of [...listeners]) listener();
+  }
+  // Resolves with the first report from `mark` on that matches, or with undefined after timeout_ms. A predicate that
+  // throws rejects. Every end removes the listener and the timer.
+  function wait_for(mark, predicate, timeout_ms) {
+    return new Promise((resolve_wait, reject_wait) => {
+      let timer;
+      const finish = (settle, value) => {
+        clearTimeout(timer);
+        listeners.delete(look_for_match);
+        settle(value);
+      };
+      function look_for_match() {
+        let found;
+        try {
+          found = events.slice(mark).find(predicate);
+        } catch (error) {
+          finish(reject_wait, error);
+          return;
+        }
+        if (found) finish(resolve_wait, found);
+      }
+      listeners.add(look_for_match);
+      timer = setTimeout(() => finish(resolve_wait, undefined), timeout_ms);
+      look_for_match();
+    });
+  }
+  return { events, push, wait_for };
+}
+
+export function start_server() {
+  const event_log = create_event_log();
+  const { events } = event_log;
   const server = http.createServer((request, response) => {
     const url = new URL(request.url, "http://x");
     if (url.pathname === "/report" && request.method === "POST") {
       let text = "";
       request.on("data", (chunk) => (text += chunk));
       request.on("end", () => {
-        events.push({ at_ms: Date.now(), ...JSON.parse(text) });
+        event_log.push({ at_ms: Date.now(), ...JSON.parse(text) });
         if (process.env.KEY_TEST_LOG_REPORTS) { const { page_id, type } = events.at(-1); console.log(`report ${events.at(-1).at_ms} ${page_id} ${type}`); }
         response.writeHead(204).end();
       });
@@ -155,10 +193,11 @@ document.addEventListener("fullscreenchange", () => send("media_fullscreen", { e
       return response.end(page(`hoverbox ${id}`, boxes + script));
     }
     if (url.pathname === "/chosen") {
-      // A custom dropdown that opens on mousedown, as Chosen does: mousedown cancels the default and focuses its own search field. Its click handler only cancels the default. The page reports each mouse event it receives.
+      // A custom dropdown that opens on mousedown, as Chosen does: mousedown cancels the default and focuses its own search field. Its click handler only cancels the default. The page reports each mouse event it receives and keeps their order in `chosen_order`, because reports sent within a millisecond can reach the server out of order.
       const widget = '<div id="c"><a id="single" href="javascript:void(0)" tabindex="-1">Select</a><ul id="drop" style="position:absolute;left:-9000px"><li><input id="search"></li></ul></div>';
       const script = `<script>const c = document.getElementById("c");
-for (const name of ["pointerdown", "mousedown", "mouseup", "click"]) c.addEventListener(name, (event) => { if (name === "click") event.preventDefault(); send("chosen_" + name); });
+window.chosen_order = [];
+for (const name of ["pointerdown", "mousedown", "mouseup", "click"]) c.addEventListener(name, (event) => { if (name === "click") event.preventDefault(); window.chosen_order.push("chosen_" + name); send("chosen_" + name); });
 c.addEventListener("mousedown", (event) => { event.preventDefault(); document.getElementById("drop").style.left = "0"; document.getElementById("search").focus(); send("chosen_open"); })</script>`;
       return response.end(page(`chosen ${id}`, widget + tall_filler + script));
     }
@@ -357,7 +396,7 @@ shadow.getElementById("panel").addEventListener("scroll", () => send("panel_scro
   });
   return new Promise((resolve) => {
     server.listen(0, "127.0.0.1", () => {
-      resolve({ events, port: server.address().port, close: () => server.close() });
+      resolve({ events, wait_for_event: event_log.wait_for, port: server.address().port, close: () => server.close() });
     });
   });
 }

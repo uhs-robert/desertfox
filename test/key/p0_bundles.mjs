@@ -3,17 +3,21 @@ import { evaluate_in_background } from "./rdp.mjs";
 
 export const areas = ["bundles"];
 
-export async function run_cases({ run_case, expect, open_page, press_keys, poll_until, barrier, events, wait_event, rdp, extension_id, scroll_delta_by_press, scroll_of, last_scroll_y, in_background, settled_injection_count, injections_of, record }) {
+export async function run_cases({ run_case, expect, open_page, press_keys, poll_until, barrier, events, wait_event, rdp, extension_id, scroll_delta_by_press, scroll_of, last_scroll_y, in_background, injections_of, record, sleep }) {
   await run_case("a bundle loads on the first key, once, and no key typed during the load is lost", async () => {
     await open_page("page", "bundle_a", { new_tab: true });
-    const loads_before = await settled_injection_count("hints.js");
+    // The log keeps the last 20 loads, so after a hints piece on this shard its length stays put. Only this new tab's entries count.
+    const tab_id = await in_background(`browser.tabs.query({ active: true, currentWindow: true }).then((tabs) => tabs[0]?.id)`);
+    expect(Number.isInteger(tab_id), `no active tab id: ${tab_id}`);
+    const hint_loads_of_tab = async () => (await injections_of("hints.js")).filter((entry) => entry.tab_id === tab_id);
     // f starts the load. The three keys behind it arrive within a few milliseconds, before the injection can finish.
     // Held in order they scroll to the bottom. Reversed or dropped they would end at the top.
     const mark = events.length;
     await press_keys("fggG");
     await wait_event(mark, (event) => event.type === "scroll" && event.page_id === "bundle_a" && event.y > 0 && event.y >= event.max_y - 2, "the page to end at the bottom after fggG");
-    const hint_loads = await injections_of("hints.js", loads_before + 1);
-    expect(hint_loads.length === loads_before + 1, `expected one hints.js injection, saw ${hint_loads.length - loads_before}`);
+    await poll_until("the hints.js injection log entry of this tab", async () => (await hint_loads_of_tab()).length > 0, { timeout_ms: 1500 }).catch(() => undefined);
+    const hint_loads = await hint_loads_of_tab();
+    expect(hint_loads.length === 1, `expected one hints.js injection, saw ${hint_loads.length}`);
     record("stub_bundle_inject_ms", hint_loads.at(-1).ms);
     const again = events.length;
     await press_keys("gg");
@@ -21,7 +25,8 @@ export async function run_cases({ run_case, expect, open_page, press_keys, poll_
     expect(last_scroll_y("bundle_a") === 0, "keys did not work after the load");
     await press_keys("f");
     await barrier("bundle_a");
-    expect((await settled_injection_count("hints.js")) === loads_before + 1, "a second f injected the bundle again");
+    await sleep(300);
+    expect((await hint_loads_of_tab()).length === 1, "a second f injected the bundle again");
   });
 
   await run_case("a count typed during the load keeps its meaning", async () => {

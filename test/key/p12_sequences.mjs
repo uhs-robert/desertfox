@@ -4,7 +4,7 @@
 
 export const areas = ["keys", "tabs", "hints", "find", "cmdline", "scroll"];
 
-export async function run_cases({ close_tabs_with, run_case, press_keys, poll_until, settle_focus, settle_tab_switch, expect_absent, hint_label_count, close_cmdline, wait_cmdline, scroll_report_wait_ms, open_page, wait_event, find_event, events, expect, sleep, became_visible, scroll_delta_by_press, scroll_of, last_scroll_y }) {
+export async function run_cases({ close_tabs_with, run_case, press_keys, poll_until, settle_focus, settle_tab_switch, expect_absent, hint_label_count, close_cmdline, wait_cmdline, scroll_report_wait_ms, open_page, wait_event, find_event, events, expect, sleep, became_visible, scroll_delta_by_press, scroll_of, last_scroll_y, type_in_line }) {
   const ENTER = ["-k", "Return"];
   const ESCAPE = ["-k", "Escape"];
   const loaded = (page_id) => (event) => event.type === "tree_read" && event.page_id === page_id;
@@ -78,7 +78,8 @@ export async function run_cases({ close_tabs_with, run_case, press_keys, poll_un
     await wait_cmdline((line) => line.open, "the command line to open after ,o");
     await let_a_wrong_step_show();
     expect(!find_event(mark, scroll_of("sq_line")), "the page scrolled behind the open command line");
-    await press_keys("scroll.pixels --dy=0", ...ENTER);
+    await type_in_line("scroll.pixels --dy=0");
+    await press_keys(...ENTER);
     await wait_event(mark, scroll_of("sq_line"), "the scroll after Enter");
     mark = events.length;
     await press_keys(",o");
@@ -96,7 +97,8 @@ export async function run_cases({ close_tabs_with, run_case, press_keys, poll_un
     await wait_cmdline((line) => line.open, "the prompt to open after ,p");
     await let_a_wrong_step_show();
     expect(!find_event(mark, scroll_of("sq_prompt")), "the page scrolled while the prompt was open");
-    await press_keys("0", ...ENTER);
+    await type_in_line("0");
+    await press_keys(...ENTER);
     await wait_event(mark, (event) => scroll_of("sq_prompt")(event) && event.y >= 300, "the second step (scroll down 300) after Enter on a line that scrolls right by 0");
     await close_tabs_with("sq_prompt");
     await open_page("page", "sq_prompt2", { new_tab: true });

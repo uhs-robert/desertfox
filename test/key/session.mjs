@@ -4,8 +4,8 @@
 // owner file with the pid of the process that started it. Every process of the session carries that dir in its
 // environment, which is how stop() and the sweep find them, children and strays included.
 import { execFile, spawn } from "node:child_process";
-import { closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, readlinkSync, rmSync, writeFileSync } from "node:fs";
-import { userInfo } from "node:os";
+import { closeSync, existsSync, mkdirSync, mkdtempSync, openSync, readdirSync, readFileSync, readlinkSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir, userInfo } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
@@ -119,6 +119,49 @@ export async function sweep_dead_sessions() {
     if (!Number.isInteger(owner_pid) || (owner_pid !== process.pid && process_is_alive(owner_pid))) continue;
     console.log(`sweep: stopping ${entry.slice(RUNTIME_PREFIX.length)}, left by dead run ${owner_pid}`);
     await stop_runtime(runtime_dir).catch((error) => console.error(`sweep: ${error.message}`));
+  }
+}
+
+const RUN_DIR_PREFIX = "desertfox-key-run-";
+
+// The start time of a process in clock ticks since boot (field 22 of /proc/<pid>/stat), or undefined when it is gone.
+// A pid that the kernel hands to a new process comes with a later start time, so the pair names one process.
+function process_start_ticks(pid) {
+  try {
+    const stat = readFileSync(`/proc/${pid}/stat`, "latin1");
+    return stat.slice(stat.lastIndexOf(")") + 2).split(" ")[19];
+  } catch {
+    return undefined;
+  }
+}
+
+// Makes the run folder of the calling coordinator, with an owner file that holds its pid and start time.
+export function make_run_dir(tmp_root = tmpdir()) {
+  const run_dir = mkdtempSync(join(tmp_root, RUN_DIR_PREFIX));
+  writeFileSync(join(run_dir, OWNER_FILE), `${process.pid} ${process_start_ticks(process.pid)}\n`);
+  return run_dir;
+}
+
+// A SIGKILLed coordinator leaves its run folder, over 1 GB of profiles and session files. This removes each run folder
+// whose owner file names a process that is gone, or a pid that a newer process holds now.
+// A folder with no readable owner file is skipped, as the session sweep skips a dir with no owner file.
+export function sweep_dead_run_dirs(tmp_root = tmpdir()) {
+  for (const entry of readdirSync(tmp_root).filter((name) => name.startsWith(RUN_DIR_PREFIX))) {
+    const run_dir = join(tmp_root, entry);
+    let owner_pid, owner_start_ticks;
+    try {
+      [owner_pid, owner_start_ticks] = readFileSync(join(run_dir, OWNER_FILE), "utf8").trim().split(" ");
+    } catch {
+      continue;
+    }
+    if (!/^\d+$/.test(owner_pid) || !/^\d+$/.test(owner_start_ticks ?? "")) continue;
+    if (process_start_ticks(Number(owner_pid)) === owner_start_ticks) continue;
+    console.log(`sweep: removing ${entry}, left by dead run ${owner_pid}`);
+    try {
+      rmSync(run_dir, { recursive: true, force: true });
+    } catch (error) {
+      console.error(`sweep: ${error.message}`);
+    }
   }
 }
 

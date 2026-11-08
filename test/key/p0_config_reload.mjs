@@ -4,7 +4,7 @@ import { join } from "node:path";
 
 export const areas = ["config", "keys"];
 
-export async function run_cases({ config_copy, load_config_dir, run_case, setup, expect, open_page, press_keys, settle_focus, settle_tab_switch, poll_until, wait_cmdline, events, wait_event, scroll_delta_by_press, scroll_of, in_background, read_local, wait_reinject_report, expect_exactly_one_visible, became_visible, record }) {
+export async function run_cases({ config_copy, load_config_dir, run_case, setup, expect, open_page, press_keys, settle_focus, settle_tab_switch, poll_until, wait_cmdline, events, wait_event, scroll_delta_by_press, scroll_of, in_background, read_local, wait_reinject_report, expect_exactly_one_visible, became_visible, record, run_line }) {
   let single_j_pixels = 0;
   // Tabs a and b with a active. j on a page moves one fixed distance, which every case below compares against.
   await setup("open pages a and b and measure one j", async () => {
@@ -31,7 +31,7 @@ export async function run_cases({ config_copy, load_config_dir, run_case, setup,
       '"<A-.>" = "cmdline.open"',
       "",
     ].join("\n"));
-    await press_keys(":set -t which_key_delay_ms 777", "-k", "Return");
+    await run_line(":set -t which_key_delay_ms 777");
     const temp_edit = () => in_background(`(async () => (await browser.storage.session.get("desertfox_temp_settings")).desertfox_temp_settings)()`);
     await poll_until("the temp edit to land", async () => (await temp_edit())?.which_key_delay_ms === 777);
     await wait_cmdline((line) => !line.open, "the command line to close");
@@ -59,7 +59,7 @@ export async function run_cases({ config_copy, load_config_dir, run_case, setup,
 
   await run_case("debug.restart restarts the extension, keeps keys working in open tabs and keeps the reloaded files over managed storage", async () => {
     await in_background(`browser.storage.local.remove("desertfox_reinject_report")`);
-    await press_keys(":debug.restart", "-k", "Return");
+    await run_line(":debug.restart");
     const report = await wait_reinject_report();
     record("reinject_report", report);
     console.log(`reinject report ${JSON.stringify(report)}`);

@@ -3,7 +3,7 @@ import { evaluate_in_background } from "./rdp.mjs";
 // Repro cases for two caret mode bugs: j/k getting stuck, and the caret not starting at a find match.
 export const areas = ["caret", "find"];
 
-export async function run_cases({ run_case, expect, open_page, press_keys, poll_until, barrier, wait_cmdline, events, wait_event, rdp, extension_id, in_active_tab, badge_is, is_selection_of, press_and_wait_for_move, escape_to_normal }) {
+export async function run_cases({ run_case, expect, open_page, press_keys, poll_until, barrier, wait_cmdline, events, wait_event, rdp, extension_id, in_active_tab, badge_is, is_selection_of, press_and_wait_for_move, escape_to_normal, settle_focus }) {
   const last_selection_text = (page_id) => events.filter((event) => event.type === "selection" && event.page_id === page_id && event.text !== "").at(-1)?.text;
 
   async function press_and_wait_for_badge(page_id, keys, label) {
@@ -29,6 +29,8 @@ export async function run_cases({ run_case, expect, open_page, press_keys, poll_
     await wait_cmdline((line) => line.open && line.value === text, `the search line to hold ${text}`);
     await press_keys("-k", "Return");
     await wait_cmdline((line) => !line.open, "the search line to close");
+    // The line goes before the page has the focus back, and a key in between is lost.
+    await settle_focus();
   }
 
   // V starts on the title. Press a key n times and read the character under the caret ("" on an empty line, where no caret is drawn).
@@ -91,8 +93,14 @@ export async function run_cases({ run_case, expect, open_page, press_keys, poll_
     await open_page("caret_bug_lines", "lines_empty_line", { new_tab: true });
     await press_and_wait_for_move("lines_empty_line", "gV", "the caret on the title");
     await press_and_wait_for_badge("lines_empty_line", "v", "VISUAL");
-    let text = "";
-    for (let step = 0; step < 6; step++) text = (await press_and_wait_for_move("lines_empty_line", "j", `j number ${step + 1} to grow the selection`)).text;
+    // v reports the selection it starts from, and that report can come after the badge. So each j waits for a selection that differs from the one before it.
+    let text = last_selection_text("lines_empty_line");
+    for (let step = 0; step < 6; step++) {
+      const mark = events.length;
+      const previous = text;
+      await press_keys("j");
+      text = (await wait_event(mark, (event) => is_selection_of("lines_empty_line")(event) && event.text !== previous, `j number ${step + 1} to grow the selection`)).text;
+    }
     expect(text.trimEnd().endsWith("g"), `after v and 6 j the selection ends ${JSON.stringify(text.slice(-8))}, expected it to end on "g"`);
     await escape_to_normal("lines_empty_line");
   });

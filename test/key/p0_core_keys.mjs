@@ -4,7 +4,7 @@ import { ALT, CTRL, SHIFT_ESCAPE } from "./harness.mjs";
 
 export const areas = ["scroll", "tabs", "keys"];
 
-export async function run_cases({ run_case, setup, expect, open_page, press_keys, settle_focus, settle_tab_switch, poll_until, wait_tab_quiet, events, wait_event, since, find_event, scroll_delta_by_press, became_visible, scroll_of, last_scroll_y, expect_absent, expect_no_scroll, expect_exactly_one_visible, in_background, record }) {
+export async function run_cases({ run_case, setup, expect, open_page, press_keys, settle_focus, settle_tab_switch, poll_until, wait_tab_quiet, events, wait_event, since, find_event, scroll_delta_by_press, became_visible, scroll_of, last_scroll_y, expect_absent, expect_no_scroll, expect_exactly_one_visible, in_background, record, type_in_address_bar }) {
   await setup("open pages a, b and c", async () => {
     await open_page("page", "a", { new_tab: false });
     await open_page("page", "b", { new_tab: true });
@@ -68,9 +68,9 @@ export async function run_cases({ run_case, setup, expect, open_page, press_keys
     await press_keys(typed);
     await wait_event(mark, (event) => event.type === "input" && event.value === typed, `the field to hold "${typed}"`);
     await expect_absent(mark, "f", (event) => event.type === "visibility", "a tab switch happened while typing");
-    // A stray character after the text shows as a later input report.
-    const last_input = since(mark).filter((event) => event.type === "input").at(-1);
-    expect(last_input?.value === typed, `field holds "${last_input?.value}", typed "${typed}"`);
+    // A stray character after the text shows as an input report that is no prefix of the text. The reports of fast keys can reach the server out of order, so their order proves nothing.
+    const stray = since(mark).find((event) => event.type === "input" && !typed.startsWith(event.value));
+    expect(!stray, `field held "${stray?.value}", typed "${typed}"`);
   });
 
   await run_case("Escape leaves the field and keys act again", async () => {
@@ -132,7 +132,8 @@ export async function run_cases({ run_case, setup, expect, open_page, press_keys
     // Text typed in the same run as Ctrl+L loses its first characters, so the page losing the focus to the address bar comes first.
     await press_keys(...CTRL("l"));
     await poll_until("the new tab page to lose the focus to the address bar", async () => (await in_background(`browser.tabs.query({ active: true, lastFocusedWindow: true }).then(([tab]) => browser.tabs.executeScript(tab.id, { code: "document.hasFocus()" }))`))?.[0] === false, { expected_timeout: true }).catch(() => undefined);
-    await press_keys("about:support", "-k", "Return");
+    await type_in_address_bar("about:support");
+    await press_keys("-k", "Return");
     await poll_until("about:support to load", async () => (await in_background(`browser.tabs.query({ active: true, lastFocusedWindow: true }).then(([tab]) => tab.url === "about:support" && tab.status === "complete" ? tab.id : 0)`)) > 0, { timeout_ms: 8000 });
     await wait_tab_quiet(await in_background(`browser.tabs.query({ active: true, lastFocusedWindow: true }).then(([tab]) => tab.id)`));
   });
