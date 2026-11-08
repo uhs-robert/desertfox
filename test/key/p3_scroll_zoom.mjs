@@ -13,7 +13,10 @@ export async function run_cases({ run_case, on_teardown, expect, open_page, pres
     };
     await field_top_after(["gi"]);
     await press_keys("-k", "Escape");
-    await poll_until("the field to lose the focus", async () => (await in_background(`browser.tabs.query({ active: true, lastFocusedWindow: true }).then(([tab]) => browser.tabs.executeScript(tab.id, { code: "document.activeElement?.id" }))`))?.[0] !== "field");
+    await poll_until("the field to lose the focus", async () => {
+      const answer = await in_background(`browser.tabs.query({ active: true, lastFocusedWindow: true }).then(([tab]) => browser.tabs.executeScript(tab.id, { code: "document.activeElement?.id" }))`);
+      return typeof answer?.[0] === "string" && answer[0] !== "field";
+    });
     const top = await field_top_after(["zt"]);
     expect(Math.abs(top) <= 2, `zt left the field at ${top}`);
     const center = await field_top_after(["zz"]);
