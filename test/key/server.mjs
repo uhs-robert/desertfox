@@ -193,10 +193,11 @@ document.addEventListener("fullscreenchange", () => send("media_fullscreen", { e
       return response.end(page(`hoverbox ${id}`, boxes + script));
     }
     if (url.pathname === "/chosen") {
-      // A custom dropdown that opens on mousedown, as Chosen does: mousedown cancels the default and focuses its own search field. Its click handler only cancels the default. The page reports each mouse event it receives.
+      // A custom dropdown that opens on mousedown, as Chosen does: mousedown cancels the default and focuses its own search field. Its click handler only cancels the default. The page reports each mouse event it receives and keeps their order in `chosen_order`, because reports sent within a millisecond can reach the server out of order.
       const widget = '<div id="c"><a id="single" href="javascript:void(0)" tabindex="-1">Select</a><ul id="drop" style="position:absolute;left:-9000px"><li><input id="search"></li></ul></div>';
       const script = `<script>const c = document.getElementById("c");
-for (const name of ["pointerdown", "mousedown", "mouseup", "click"]) c.addEventListener(name, (event) => { if (name === "click") event.preventDefault(); send("chosen_" + name); });
+window.chosen_order = [];
+for (const name of ["pointerdown", "mousedown", "mouseup", "click"]) c.addEventListener(name, (event) => { if (name === "click") event.preventDefault(); window.chosen_order.push("chosen_" + name); send("chosen_" + name); });
 c.addEventListener("mousedown", (event) => { event.preventDefault(); document.getElementById("drop").style.left = "0"; document.getElementById("search").focus(); send("chosen_open"); })</script>`;
       return response.end(page(`chosen ${id}`, widget + tall_filler + script));
     }

@@ -60,8 +60,7 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, press_
     await wait_event(mark, (event) => event.type === "chosen_click" && event.page_id === "p6_chosen", "the click after the mouse events");
     // A second click would arrive before the barrier key does.
     await barrier("p6_chosen");
-    const seen = events.slice(mark).filter((event) => event.page_id === "p6_chosen" && event.type.startsWith("chosen_")).map((event) => event.type);
-    const order = seen.filter((type) => type !== "chosen_open").join(",");
+    const order = (await in_active_tab(`window.wrappedJSObject.chosen_order.join(",")`));
     expect(order === "chosen_pointerdown,chosen_mousedown,chosen_mouseup,chosen_click", `the page saw ${order}`);
     const focused = await in_active_tab(`document.activeElement.id`);
     expect(focused === "search", `the focus is on ${focused}, not the search field the page chose`);
