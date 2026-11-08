@@ -211,6 +211,8 @@ export async function start_session({ name, session_dir }) {
     HOME: home, USER: userInfo().username, LOGNAME: userInfo().username, PATH: SYSTEM_PATH, LANG: process.env.LANG || "C.UTF-8", TERM: "dumb",
     XDG_RUNTIME_DIR: runtime_dir, XDG_CONFIG_HOME: join(home, ".config"), XDG_STATE_HOME: join(home, ".local/state"), XDG_CACHE_HOME: join(home, ".cache"), XDG_DATA_HOME: join(home, ".local/share"),
     DBUS_SESSION_BUS_ADDRESS: `unix:path=${runtime_dir}/bus`,
+    // Firefox's GIO call would otherwise make the session bus start gvfsd, which mounts gvfsd-fuse under the runtime dir. A kill leaves that mount stale, and the dir can no longer be removed.
+    GIO_USE_VFS: "local", GVFS_DISABLE_FUSE: "1",
     HYPRLAND_NO_SD_VARS: "1", HYPRLAND_NO_SD_NOTIFY: "1", HYPRLAND_NO_CRASHREPORTER: "1",
     // Seat access stays inside the session: no seatd socket exists there, so nothing grabs a real seat.
     LIBSEAT_BACKEND: "seatd", SEATD_SOCK: `${runtime_dir}/no-seatd.sock`,
