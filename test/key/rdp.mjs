@@ -1,55 +1,152 @@
 // A small client for Firefox's remote debugging protocol: install a temporary add-on and run code in its background page.
 import net from "node:net";
 
-export async function connect_rdp(port) {
+// Firefox answers the requests to one actor in the order it got them (devtools-server-connection.js, _queueResponse), and it answers each one exactly once, with a result or an `error`.
+// So a packet without a `type` is a reply and belongs to the oldest request still waiting on its actor. A packet with a `type` is an event, which has no request.
+// Replies are never matched by their shape: a guess about the shape is what once handed a reply to the wrong caller.
+const DEFAULT_REQUEST_TIMEOUT_MS = 10000;
+const EVENT_QUEUE_MAX = 200;
+
+export async function connect_rdp(port, { request_timeout_ms = DEFAULT_REQUEST_TIMEOUT_MS } = {}) {
   const socket = net.connect(port, "127.0.0.1");
-  let buffer = "";
-  const inbox = [];
-  const waiting = [];
+  // Bytes, not text: a character of several bytes can arrive in two chunks, and the length prefix counts bytes.
+  let buffer = Buffer.alloc(0);
+  // Per actor, the requests still waiting for their reply, oldest first.
+  // A request that timed out keeps its place, marked abandoned, so its late reply is dropped here and cannot answer a later request.
+  const waiting_requests = new Map();
+  const event_queues = new Map();
+  const event_readers = new Set();
+  const event_subscribers = new Map();
   // Set when the socket closes, so a request to a crashed or exited Firefox fails at once and names the cause, where a hung one waits out its timeout.
   let closed_reason;
-  const wake_all = () => { for (const wake of waiting.splice(0)) wake(); };
+  let greeted = false;
+  let greeting_arrived;
+  const greeting = new Promise((resolve) => { greeting_arrived = resolve; });
+
+  const lost_message = (actor) => `rdp: connection to Firefox lost (${closed_reason})${actor ? ` while waiting for ${actor}` : ""}`;
+  const fail_everything = () => {
+    for (const queue of waiting_requests.values()) for (const entry of queue.splice(0)) entry.fail(new Error(lost_message(entry.actor)));
+    for (const read of [...event_readers]) read();
+  };
   socket.on("error", (error) => { closed_reason ??= error.message; });
   socket.on("close", () => {
     closed_reason ??= "the debugger closed the connection";
-    wake_all();
+    fail_everything();
   });
+
+  const queue_event = (packet) => {
+    const queue = event_queues.get(packet.from) ?? [];
+    event_queues.set(packet.from, queue);
+    queue.push(packet);
+    // Events nobody reads (frame updates and the like) must not pile up for a whole run.
+    if (queue.length > EVENT_QUEUE_MAX) queue.shift();
+    for (const read of [...event_readers]) read();
+  };
+  const dispatch = (packet) => {
+    const actor = packet.from;
+    if (packet.type !== undefined) {
+      if (!event_subscribers.get(actor)?.(packet)) queue_event(packet);
+      return;
+    }
+    if (!greeted && actor === "root") {
+      greeted = true;
+      greeting_arrived();
+      return;
+    }
+    const entry = waiting_requests.get(actor)?.shift();
+    if (!entry) {
+      console.error(`rdp: a reply from ${actor} has no request waiting: ${JSON.stringify(packet).slice(0, 200)}`);
+      return;
+    }
+    entry.settle(packet);
+  };
   socket.on("data", (chunk) => {
-    buffer += chunk.toString();
+    buffer = Buffer.concat([buffer, chunk]);
     for (;;) {
       const colon = buffer.indexOf(":");
       if (colon < 0) return;
-      const length = Number(buffer.slice(0, colon));
-      if (Buffer.byteLength(buffer.slice(colon + 1)) < length) return;
-      const body = Buffer.from(buffer.slice(colon + 1)).subarray(0, length).toString();
-      buffer = buffer.slice(colon + 1 + body.length);
-      inbox.push(JSON.parse(body));
-      wake_all();
+      const length = Number(buffer.subarray(0, colon).toString());
+      if (buffer.length < colon + 1 + length) return;
+      const body = buffer.subarray(colon + 1, colon + 1 + length).toString();
+      buffer = buffer.subarray(colon + 1 + length);
+      let packet;
+      try {
+        packet = JSON.parse(body);
+      } catch {
+        closed_reason ??= `an unreadable packet: ${body.slice(0, 80)}`;
+        socket.destroy();
+        return;
+      }
+      dispatch(packet);
     }
   });
-  const next_from = async (actor, matches = () => true, timeout_ms = 10000) => {
-    const deadline = Date.now() + timeout_ms;
-    for (;;) {
-      const index = inbox.findIndex((message) => message.from === actor && matches(message));
-      if (index >= 0) return inbox.splice(index, 1)[0];
-      if (closed_reason) throw new Error(`rdp: connection to Firefox lost (${closed_reason}) while waiting for ${actor}`);
-      if (Date.now() > deadline) throw new Error(`rdp: no answer from ${actor}`);
-      await new Promise((resolve) => { waiting.push(resolve); setTimeout(resolve, 200); });
+
+  // Resolves with the reply. An `error` reply rejects, with the error name in `rdp_error`.
+  const request = (to, message) => new Promise((resolve, reject) => {
+    if (closed_reason) {
+      reject(new Error(lost_message()));
+      return;
     }
-  };
-  const request = async (to, message, matches) => {
-    if (closed_reason) throw new Error(`rdp: connection to Firefox lost (${closed_reason})`);
+    let timer;
+    const entry = {
+      actor: to,
+      abandoned: false,
+      fail: (error) => { clearTimeout(timer); reject(error); },
+      settle: (reply) => {
+        clearTimeout(timer);
+        if (entry.abandoned) return;
+        if (reply.error === undefined) {
+          resolve(reply);
+          return;
+        }
+        reject(Object.assign(new Error(`rdp: ${to} answered ${reply.error}: ${reply.message ?? ""}`), { rdp_error: reply.error }));
+      },
+    };
+    timer = setTimeout(() => {
+      entry.abandoned = true;
+      reject(new Error(`rdp: no answer from ${to}`));
+    }, request_timeout_ms);
+    const queue = waiting_requests.get(to) ?? [];
+    waiting_requests.set(to, queue);
+    queue.push(entry);
     const text = JSON.stringify({ to, ...message });
     socket.write(`${Buffer.byteLength(text)}:${text}`);
-    return next_from(to, matches ?? ((reply) => reply.type === undefined || reply.type === message.type || "error" in reply));
-  };
+  });
+
+  // Takes the oldest event of `actor` that `matches`. The caller names the event it wants, with an id where events repeat, so a late event that nobody took cannot mislead another caller.
+  const next_event = (actor, matches = () => true, timeout_ms = DEFAULT_REQUEST_TIMEOUT_MS) => new Promise((resolve, reject) => {
+    let timer;
+    const read = () => {
+      const queue = event_queues.get(actor) ?? [];
+      const index = queue.findIndex(matches);
+      if (index >= 0) {
+        finish();
+        resolve(queue.splice(index, 1)[0]);
+      } else if (closed_reason) {
+        finish();
+        reject(new Error(lost_message(actor)));
+      }
+    };
+    const finish = () => { clearTimeout(timer); event_readers.delete(read); };
+    event_readers.add(read);
+    timer = setTimeout(() => {
+      finish();
+      reject(new Error(`rdp: no event from ${actor}`));
+    }, timeout_ms);
+    read();
+  });
+
+  // The handler sees each event of `actor` as it arrives and returns true to consume it, so state follows the events without a reader being there.
+  const subscribe = (actor, handler) => { event_subscribers.set(actor, handler); };
+
   await new Promise((resolve, reject) => { socket.once("connect", resolve); socket.once("error", reject); });
-  await next_from("root");
+  await greeting;
   // The polling pauses of this client go through here, so the timings can charge them to the debugger.
   const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-  return { request, next_from, pause, lost_reason: () => closed_reason, close: () => {
+  return { request, next_event, subscribe, pause, lost_reason: () => closed_reason, close: () => {
     closed_reason ??= "closed by the test";
     socket.destroy();
+    fail_everything();
   } };
 }
 
@@ -60,59 +157,80 @@ export async function install_temporary_addon(rdp, addon_path) {
   return reply.addon;
 }
 
-// Console actor per connection and add-on.
-const console_actors = new Map();
+// The live background page of an add-on, per connection, kept from the watcher's events as they arrive.
+// Firefox sends a target form once per watcher, and the add-on reuses one watcher for the whole run, so a second watchTargets sends none. State must come from the events, not from asking again.
+const background_trackers = new WeakMap();
 
-async function attach_console(rdp, addon_id) {
+const is_console_target_form = (event) => event.type === "target-available-form" && event.target?.consoleActor !== undefined;
+// The watcher sends a form for every extension frame, newtab and home tabs too. Only the background page counts.
+const is_background_target_form = (event) => is_console_target_form(event) && event.target.url?.endsWith("/_generated_background_page.html");
+
+function background_tracker(rdp, addon_id) {
+  if (!background_trackers.has(rdp)) background_trackers.set(rdp, new Map());
+  const trackers = background_trackers.get(rdp);
+  if (!trackers.has(addon_id)) {
+    const attached = attach_background_tracker(rdp, addon_id);
+    trackers.set(addon_id, attached);
+    attached.catch(() => trackers.delete(addon_id));
+  }
+  return trackers.get(addon_id);
+}
+
+async function attach_background_tracker(rdp, addon_id) {
   const { addons } = await rdp.request("root", { type: "listAddons" });
   const addon = addons.find((entry) => entry.id === addon_id);
   if (!addon) throw new Error(`rdp: add-on ${addon_id} is not listed`);
   const watcher = await rdp.request(addon.actor, { type: "getWatcher", isServerTargetSwitchingEnabled: false });
-  await rdp.request(watcher.actor, { type: "watchTargets", targetType: "frame" }, (reply) => reply.type === undefined);
-  const background_form = (await drain_to_newest_background_form(rdp, watcher.actor)) ?? (await rdp.next_from(watcher.actor, is_background_target_form));
-  return background_form.target.consoleActor;
-}
-
-// The watcher sends a target form for every extension frame, newtab and home tabs too, and nobody reads them while an actor lives.
-// The old forms point at closed tabs, where an evaluate waits out its whole timeout. Only the newest live background form counts.
-async function drain_to_newest_background_form(rdp, watcher_actor) {
-  const live_background_forms = [];
-  for (;;) {
-    let event;
-    try {
-      // A zero timeout reads only what is already queued.
-      event = await rdp.next_from(watcher_actor, is_target_event, 0);
-    } catch {
-      return live_background_forms.at(-1);
-    }
+  const live_targets = [];
+  const arrival_listeners = new Set();
+  rdp.subscribe(watcher.actor, (event) => {
     if (event.type === "target-destroyed-form") {
-      const destroyed_at = live_background_forms.findIndex((form) => form.target.actor === event.target?.actor);
-      if (destroyed_at >= 0) live_background_forms.splice(destroyed_at, 1);
-    } else if (is_background_target_form(event)) {
-      live_background_forms.push(event);
+      const destroyed_at = live_targets.findIndex((target) => target.target_actor === event.target?.actor);
+      if (destroyed_at >= 0) live_targets.splice(destroyed_at, 1);
+      return true;
     }
-  }
+    if (event.type !== "target-available-form") return false;
+    if (is_background_target_form(event)) {
+      live_targets.push({ target_actor: event.target.actor, console_actor: event.target.consoleActor });
+      for (const listener of [...arrival_listeners]) listener();
+    }
+    return true;
+  });
+  await rdp.request(watcher.actor, { type: "watchTargets", targetType: "frame" });
+  return {
+    // The newest live page. With none live, a reload is under way and its form is the next event.
+    console_actor: (timeout_ms = 10000) => new Promise((resolve, reject) => {
+      const answer = () => {
+        if (live_targets.length === 0) return false;
+        clearTimeout(timer);
+        arrival_listeners.delete(answer);
+        resolve(live_targets.at(-1).console_actor);
+        return true;
+      };
+      const timer = setTimeout(() => {
+        arrival_listeners.delete(answer);
+        reject(new Error(`rdp: no background page of ${addon_id} came up`));
+      }, timeout_ms);
+      if (!answer()) arrival_listeners.add(answer);
+    }),
+    forget: (console_actor) => {
+      const index = live_targets.findIndex((target) => target.console_actor === console_actor);
+      if (index >= 0) live_targets.splice(index, 1);
+    },
+  };
 }
-
-const is_target_event = (reply) => reply.type === "target-destroyed-form" || is_console_target_form(reply);
-const is_console_target_form = (reply) => reply.type === "target-available-form" && reply.target?.consoleActor !== undefined;
-const is_background_target_form = (reply) => is_console_target_form(reply) && reply.target.url?.endsWith("/_generated_background_page.html");
 
 // Runs async code in the add-on's background page and returns its JSON result.
-// Firefox sends the console actor once per watcher, so later calls reuse the first one. A reload kills it, so a dead actor is dropped and attached again.
+// Only a noSuchActor reply proves the page is gone (a reload kills it): then the next page is used. A slow or failed call says nothing about the page, so the page stays.
 export async function evaluate_in_background(rdp, addon_id, async_code) {
-  if (!console_actors.has(rdp)) console_actors.set(rdp, new Map());
-  const actors = console_actors.get(rdp);
   for (let attempt = 0; ; attempt++) {
-    const console_actor = actors.get(addon_id) ?? (await attach_console(rdp, addon_id));
-    actors.set(addon_id, console_actor);
+    const tracker = await background_tracker(rdp, addon_id);
+    const console_actor = await tracker.console_actor();
     try {
-      const value = await run_in_console(rdp, console_actor, async_code);
-      if (value?.error?.includes("is not defined") && attempt === 0) throw new Error("dead global");
-      return value;
+      return await run_in_console(rdp, console_actor, async_code);
     } catch (error) {
-      actors.delete(addon_id);
-      if (attempt >= 1) throw error;
+      if (error.rdp_error !== "noSuchActor" || attempt >= 1) throw error;
+      tracker.forget(console_actor);
     }
   }
 }
@@ -195,8 +313,8 @@ export async function evaluate_in_page_frames(rdp, frame_path, frame_code) {
 }
 
 async function evaluate(rdp, console_actor, text) {
-  const ack = await rdp.request(console_actor, { type: "evaluateJSAsync", text }, (reply) => "resultID" in reply);
-  const result = await rdp.next_from(console_actor, (reply) => reply.type === "evaluationResult" && reply.resultID === ack.resultID);
+  const ack = await rdp.request(console_actor, { type: "evaluateJSAsync", text });
+  const result = await rdp.next_event(console_actor, (event) => event.type === "evaluationResult" && event.resultID === ack.resultID);
   if (result.exception) throw new Error(`rdp: evaluation threw: ${JSON.stringify(result.exceptionMessage ?? result.exception)}`);
   return result.result;
 }

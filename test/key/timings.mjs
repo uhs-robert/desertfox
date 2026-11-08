@@ -82,9 +82,9 @@ export function create_timings() {
 
   // The debugger client answers a call with a request and then a wait for the result. Wrapping both times the whole call.
   function wrap_rdp(rdp) {
-    const { request, next_from } = rdp;
+    const { request, next_event } = rdp;
     rdp.request = (...args) => time("rdp", () => request(...args));
-    rdp.next_from = (...args) => time("rdp", () => next_from(...args), { count: false });
+    rdp.next_event = (...args) => time("rdp", () => next_event(...args), { count: false });
     const { pause } = rdp;
     rdp.pause = (...args) => time("rdp", () => pause(...args), { count: false });
     return rdp;
