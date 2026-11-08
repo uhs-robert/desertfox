@@ -18,6 +18,7 @@ test("typed names are the dotted id except the family words and one-word command
   assert.deepEqual(named.sort(), [
     "bookmark.open=bookmark",
     "command.repeat=repeat",
+    "copy.links=copylinks",
     "copy.url=copy",
     "find.open=find",
     "heading.go=heading",

@@ -22,7 +22,7 @@ A note "(prompts)" means the binding sets a `prompt` for a param, so the command
 
 <!-- BEGIN generated -->
 
-bound: 285 (normal 150, hint 2, cmdline 18, caret 35, visual 37, visual_line 38, insert 1, ignore 1, browser 3) | later: 6 | dropped: 8
+bound: 287 (normal 152, hint 2, cmdline 18, caret 35, visual 37, visual_line 38, insert 1, ignore 1, browser 3) | later: 6 | dropped: 8
 
 ### normal
 
@@ -106,6 +106,8 @@ bound: 285 (normal 150, hint 2, cmdline 18, caret 35, visual 37, visual_line 38,
 | `yo` | bound | `copy --org` | Copy URL |  |
 | `ys` | bound | `copy --short` | Copy URL |  |
 | `yt` | bound | `copy --title` | Copy URL |  |
+| `yL` | bound | `copylinks` | Copy page links |  |
+| `yl` | bound | `copylinks --viewport` | Copy links in view |  |
 | `gu` | bound | `url.parent` | Parent URL |  |
 | `gU` | bound | `url.root` | Root URL |  |
 | `<C-a>` | bound | `url.increment --up` | Change URL number |  |

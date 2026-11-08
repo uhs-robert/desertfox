@@ -12,6 +12,7 @@ const from_bundle = (command_id: string, bundle: BundleName): ContentHandler => 
 
 export const hint_run = from_bundle("hint.run", "hints");
 export const heading_go = from_bundle("heading.go", "hints");
+export const copy_links = from_bundle("copy.links", "hints");
 export const page_follow = from_bundle("page.follow", "hints");
 // The hints bundle cannot see the field the last Escape left, so it arrives with the args.
 export const page_focus_field: ContentHandler = {

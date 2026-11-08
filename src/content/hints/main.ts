@@ -17,7 +17,9 @@ import type { HintView } from "./view.ts";
 import { follow_windows } from "./follow.ts";
 import { box_owners, boxes_with_fallback, uncovered_through_frames, viewport_size } from "./visible.ts";
 import type { PageProbe } from "./visible.ts";
-import { clear_snapshot, go_to_heading, take_snapshot } from "./headings.ts";
+import { clear_snapshot, go_to_heading, keep_present_found, take_snapshot } from "./headings.ts";
+import { all_links, format_links, links_of } from "./yank_links.ts";
+import type { LinkFormat } from "./yank_links.ts";
 import { can_open_elsewhere, find_follow_link } from "./follow_links.ts";
 import { focus_field } from "./focus_fields.ts";
 import type { FieldDirection } from "./focus_fields.ts";
@@ -97,6 +99,17 @@ async function keep_visible_ones(candidates: Found[], filter: HintFilter): Promi
     is_reachable_at: (found, x, y) => uncovered_through_frames(found, x, y, filter === "images" || (filter === "media" && is_media(found.element))),
   };
   return keep_visible_deduplicated(candidates, probe);
+}
+
+// The page scope takes every link that is present, the viewport scope only those in view.
+async function yank_links(scope: "page" | "viewport", format: LinkFormat): Promise<Outcome> {
+  const found = all_links();
+  const kept = scope === "page" ? keep_present_found(found) : await keep_visible_ones(found, "links");
+  const links = links_of(kept, document.URL);
+  if (links.length === 0) return { ok: false, message: "No links on this page" };
+  if (!(await copy_text(navigator.clipboard, format_links(links, format)))) return { ok: false, message: "Could not copy to the clipboard" };
+  create_view().show_message(`Copied ${links.length} ${links.length === 1 ? "link" : "links"}`);
+  return done;
 }
 
 async function read_setting(name: string): Promise<unknown> {
@@ -265,6 +278,7 @@ function register(host: BundleHostApi): void {
     const message = focus_field(document, args.last_blurred as Element | undefined, args.direction as FieldDirection, args.steps as number);
     return message === undefined ? done : { ok: false, message };
   });
+  host.register_handler("copy.links", (args) => yank_links(args.scope as "page" | "viewport", args.format as LinkFormat));
   host.register_handler("hint.unhover", () => unhover());
 
   // The command line asks for the list and `report` hands it back, so the answer does not go through the background.

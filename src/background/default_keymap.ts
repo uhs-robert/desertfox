@@ -172,6 +172,8 @@ export const DEFAULT_KEYMAP: KeymapConfig = {
     yo: { id: "copy.url", args: { format: "org" } },
     ys: { id: "copy.url", args: { format: "short" } },
     yt: { id: "copy.url", args: { format: "title" } },
+    yL: { id: "copy.links", args: { scope: "page", format: "markdown" }, label: "Copy page links" },
+    yl: { id: "copy.links", args: { scope: "viewport", format: "markdown" }, label: "Copy links in view" },
     gu: { id: "url.parent" },
     gU: { id: "url.root" },
     "<C-a>": { id: "url.increment", args: { direction: "up" } },
