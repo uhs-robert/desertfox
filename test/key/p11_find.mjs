@@ -186,7 +186,7 @@ export async function run_cases({ rdp, extension_id, run_case, expect, expect_ab
     const step_and_check = async (key, step) => {
       await press_and_wait_for_new_current(key);
       let problem = "not read";
-      await poll_until(`the match to sit fully in view after ${key} number ${step + 1}`, async () => !(problem = fully_visible(await in_active_tab(READ_CURRENT_BOXES))), { timeout_ms: 5000 }).catch(() => undefined);
+      await poll_until(`the match to sit fully in view after ${key} number ${step + 1}`, async () => !(problem = fully_visible(await in_active_tab(READ_CURRENT_BOXES))), { timeout_ms: 5000, expected_timeout: true }).catch(() => undefined);
       expect(!problem, `after ${key} number ${step + 1}: ${problem}`);
     };
     for (let step = 0; step < 8; step++) await step_and_check("n", step);

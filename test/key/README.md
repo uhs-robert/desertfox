@@ -130,7 +130,7 @@ Every run times itself and prints a summary at the end: time by category, time o
 - A `KEY_TEST_ONLY` run records its regex as `filter`. Its pieces skip cases, so neither the weights load nor `just key-test-weights` uses the file.
 - A piece that a signal cut short has an entry with `in_flight: true`. A run that did not finish has `incomplete: { reason, in_flight, not_started }`. The coordinator's own record of which shard holds which piece fills it, so it names the piece of a worker that was killed outright.
 - A failed shard keeps Firefox's output (`spawn.log` of the session) and any crash dumps in `.logs/key-test-timings-<timestamp>-diagnostics/s<n>/`, because its teardown deletes them. When the debugger connection closes, every case that fails after it names the lost connection, so a crash reads differently from a hang.
-- `lost_key_suspects` lists each wait that timed out after a key press, with its case, and the summary prints the count. A clean run has none. A suspect is a lost key or an effect that never came.
+- `lost_key_suspects` lists each wait that timed out after a key press, with its case, and the summary prints the count. A clean run has none. A suspect is a lost key or an effect that never came. A probe whose timeout is the normal path passes `expected_timeout: true` to `poll_until` and is not counted.
 - Piece files need no hooks: they get the timed `sleep`, `open_page`, `wait_event` and `rdp` from the case context (`context_for` in `harness.mjs`).
 
 ## Native host

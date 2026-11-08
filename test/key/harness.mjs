@@ -527,13 +527,13 @@ export async function create_session({ name: session_name, timings, sweep = true
   };
   const close_tabs_with = (text) => in_background(`(async () => { for (const tab of await browser.tabs.query({})) if (tab.url.includes(${JSON.stringify(text)})) await browser.tabs.remove(tab.id); })()`);
 
-  // Polls until the check holds. `what` names the wait in the error.
+  // Polls until the check holds. `what` names the wait in the error. A probe whose timeout is the normal path and that the caller absorbs passes `expected_timeout`, so the timeout is not counted as a lost-key suspect.
   const poll_until = (what, check, options) => timings.time("waits", () => poll_until_untimed(what, check, options));
-  async function poll_until_untimed(what, check, { timeout_ms = 5000, step_ms = 50 } = {}) {
+  async function poll_until_untimed(what, check, { timeout_ms = 5000, step_ms = 50, expected_timeout = false } = {}) {
     waiting_for = what;
     const deadline = Date.now() + timeout_ms;
     while (!(await check())) {
-      if (Date.now() > deadline) throw wait_timeout_error(what);
+      if (Date.now() > deadline) throw expected_timeout ? new Error(`timed out waiting for ${what}`) : wait_timeout_error(what);
       await raw_sleep(step_ms);
     }
   }
@@ -544,7 +544,7 @@ export async function create_session({ name: session_name, timings, sweep = true
   const page_has_focus = (tab_id) => in_background(`browser.tabs.executeScript(${tab_id}, { code: "document.hasFocus()" }).then((answers) => answers[0] === true)`);
   // Focus lands in browser chrome after tabs close, and a closed window can leave compositor focus on it. Ask for the window and tab, then use the focus_page chord, until the page reports focus.
   async function confirm_page_focus(tab_id, window_id) {
-    const focused = (timeout_ms) => poll_until("page focus", () => page_has_focus(tab_id), { timeout_ms }).then(() => true, () => false);
+    const focused = (timeout_ms) => poll_until("page focus", () => page_has_focus(tab_id), { timeout_ms, expected_timeout: true }).then(() => true, () => false);
     if (await focused(300)) return;
     for (let attempt = 0; attempt < 3; attempt++) {
       await in_background(`(async () => { await browser.windows.update(${window_id}, { focused: true }); await browser.tabs.update(${tab_id}, { active: true }); })()`);
@@ -573,7 +573,7 @@ export async function create_session({ name: session_name, timings, sweep = true
       return { id: tab.id, window_id: tab.windowId };
     })()`);
     try {
-      await poll_until(`tab ${tab.id} to report page focus`, () => page_has_focus(tab.id), { timeout_ms });
+      await poll_until(`tab ${tab.id} to report page focus`, () => page_has_focus(tab.id), { timeout_ms, expected_timeout: true });
     } catch {
       await confirm_page_focus(tab.id, tab.window_id);
     }
@@ -738,7 +738,7 @@ export async function create_session({ name: session_name, timings, sweep = true
   async function close_cmdline() {
     for (let presses = 0; presses < 5; presses++) {
       // A line caught before its page is ready can drop an Escape, so it gets a moment to become ready first. A line that stays unready is pressed anyway.
-      const before = await wait_cmdline((line) => !line.open || line.ready, "the command line to be ready or closed", UNREADY_LINE_WAIT_MS).catch(() => read_cmdline_state());
+      const before = await wait_cmdline((line) => !line.open || line.ready, "the command line to be ready or closed", UNREADY_LINE_WAIT_MS, { expected_timeout: true }).catch(() => read_cmdline_state());
       if (!before.open) return;
       await press_keys("-k", "Escape");
       await wait_cmdline((after) => !after.open || after.list_open !== before.list_open || after.marked !== before.marked || after.value !== before.value, "Escape to change the command line");
@@ -746,10 +746,10 @@ export async function create_session({ name: session_name, timings, sweep = true
     throw new Error("the command line stayed open after five Escape presses");
   }
   // Polls the command line state until the check holds, and puts the last state in the timeout error.
-  async function wait_cmdline(check, what, timeout_ms = 3000) {
+  async function wait_cmdline(check, what, timeout_ms = 3000, { expected_timeout = false } = {}) {
     let state;
     try {
-      await poll_until(what, async () => check((state = await read_cmdline_state())), { timeout_ms });
+      await poll_until(what, async () => check((state = await read_cmdline_state())), { timeout_ms, expected_timeout });
     } catch (error) {
       throw new Error(`${error.message} (command line: ${JSON.stringify(state)})`);
     }

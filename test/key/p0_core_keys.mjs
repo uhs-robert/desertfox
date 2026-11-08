@@ -131,7 +131,7 @@ export async function run_cases({ run_case, setup, expect, open_page, press_keys
     await poll_until("the new tab to open", async () => (await tab_count()) === tabs_before + 1);
     // Text typed in the same run as Ctrl+L loses its first characters, so the page losing the focus to the address bar comes first.
     await press_keys(...CTRL("l"));
-    await poll_until("the new tab page to lose the focus to the address bar", async () => (await in_background(`browser.tabs.query({ active: true, lastFocusedWindow: true }).then(([tab]) => browser.tabs.executeScript(tab.id, { code: "document.hasFocus()" }))`))?.[0] === false).catch(() => undefined);
+    await poll_until("the new tab page to lose the focus to the address bar", async () => (await in_background(`browser.tabs.query({ active: true, lastFocusedWindow: true }).then(([tab]) => browser.tabs.executeScript(tab.id, { code: "document.hasFocus()" }))`))?.[0] === false, { expected_timeout: true }).catch(() => undefined);
     await press_keys("about:support", "-k", "Return");
     await poll_until("about:support to load", async () => (await in_background(`browser.tabs.query({ active: true, lastFocusedWindow: true }).then(([tab]) => tab.url === "about:support" && tab.status === "complete" ? tab.id : 0)`)) > 0, { timeout_ms: 8000 });
     await wait_tab_quiet(await in_background(`browser.tabs.query({ active: true, lastFocusedWindow: true }).then(([tab]) => tab.id)`));
