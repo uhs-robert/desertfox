@@ -40,6 +40,8 @@ const KEY_ROUTE_FLOOR_MS = 100;
 const NEW_PAGE_QUIET_MS = 300;
 const BARRIER_KEY = "F8";
 const UNREADY_LINE_WAIT_MS = 500;
+// 100 ms polls: 20 s, below CASE_CAP_MS.
+const REINJECT_REPORT_POLLS = 200;
 
 export const ALT = (key) => ["-M", "alt", key, "-m", "alt"];
 export const CTRL = (key) => ["-M", "ctrl", key, "-m", "ctrl"];
@@ -433,9 +435,10 @@ export async function create_session({ name: shadow_name, timings }) {
   async function reload_in_place() {
     await in_background(`browser.storage.local.remove(["desertfox_files_config", "desertfox_config_status"])`);
     await send_keys("qr");
+    waiting_for = "qr to store the files config and publish the config status";
     for (let attempt = 0; attempt < 200; attempt++) {
       await sleep(50);
-      // The status is published after the files config, so it shows that the new config is applied.
+      // The background writes the status before the files config, so only the pair shows that this reload finished.
       if ((await read_local("desertfox_files_config")) != null && (await read_local("desertfox_config_status")) != null) return;
     }
     // The host call made by hand tells a missing permission or host from a refused build.
@@ -445,11 +448,13 @@ export async function create_session({ name: shadow_name, timings }) {
   // Waits for the restart that debug.restart starts: the new background writes its tab repair report.
   async function wait_reinject_report() {
     let report;
-    for (let attempt = 0; attempt < 300 && !report; attempt++) {
+    // Ends before the case cap, so a missing report fails with this message and not with the cap's.
+    waiting_for = "the desertfox_reinject_report after debug.restart";
+    for (let attempt = 0; attempt < REINJECT_REPORT_POLLS && !report; attempt++) {
       await sleep(100);
       report = await read_local("desertfox_reinject_report");
     }
-    expect(report, "no desertfox_reinject_report after 30 s");
+    expect(report, "no desertfox_reinject_report after 20 s");
     return report;
   }
 
