@@ -28,6 +28,7 @@ If code and the design disagree, stop and ask the maintainer. Do not change the 
 - Keep the content script under 16 KB minified, with no runtime dependency. Load anything bigger on first use.
 - Do not evaluate strings. Snippets from the user's own config are the only exception.
 - Give the native host a fixed set of verbs. Never add a shell or eval verb.
+- Put no test hooks in `src/`. Tests drive the extension through its public surface.
 - Keep no state only in memory. Store it, so a later move to Manifest V3 stays small.
 - Set each command line name by hand. Never derive it from the id. The registry rejects duplicate names.
 - Express flags that exclude each other as one `enum` param with preset flags. `when`, the conditional `default` and `value_when` (which values of an enum a sibling's value allows) are the only conditions; the last two reuse the syntax of `when`. Split a command that needs more.
@@ -72,6 +73,8 @@ Reproduce a visual bug and record it, at 60 fps so flicker shows, before you ask
 
 Run `just test` before every commit. Run `just key-test` after a change to keys, modes, the content script or config reload. It needs labwc, Hyprland, dbus-daemon and python3. `test/key/session.mjs` starts the nested session. It runs on demand only. Read [`test/key/README.md`](test/key/README.md) before you run it.
 
+While building, run `just key-test-changed [base]` or set `KEY_TEST_PIECES`, not the full suite. Run one full `just key-test` before you report. Run the serial reverse run (`KEY_TEST_ORDER=reverse`) only when the shared test machinery changes: the harness, run, session, server or keyboard files in `test/key/`.
+
 ## Planning
 
 `.plans/` holds the trackers for work in progress and `.logs/` holds evidence: check output, review notes, PR bodies. Git ignores both. At the end of a topic, move anything durable into the repo, then delete them. A status goes into the docs. A decision's reason goes beside the code it explains.
@@ -80,3 +83,4 @@ Run `just test` before every commit. Run `just key-test` after a change to keys,
 
 - Write commit messages as Conventional Commits, with a body that explains why.
 - Work on a branch, never on `main`.
+- Put worktrees under `/home/roberth/Development/personal/desertfox-worktrees/`.
