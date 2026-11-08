@@ -7,7 +7,7 @@ import { evaluate_in_background } from "./rdp.mjs";
 
 export const areas = ["find"];
 
-export async function run_cases({ rdp, extension_id, run_case, expect, expect_absent, open_page, press_keys, poll_until, barrier, wait_cmdline, close_cmdline, scroll_of, scroll_report_wait_ms, sleep, events, wait_event, take_shot }) {
+export async function run_cases({ rdp, extension_id, run_case, expect, expect_absent, open_page, press_keys, poll_until, barrier, wait_cmdline, close_cmdline, read_cmdline_state, scroll_of, scroll_report_wait_ms, sleep, events, wait_event, take_shot }) {
   const in_active_tab = (code) => evaluate_in_background(rdp, extension_id, `(async () => { const [tab] = await browser.tabs.query({ active: true, currentWindow: true }); return (await browser.tabs.executeScript(tab.id, { code: ${JSON.stringify(code)} }))[0]; })()`).then((value) => {
     if (value?.error) throw new Error(`in the tab: ${JSON.stringify(value)}`);
     return value;
@@ -162,10 +162,13 @@ export async function run_cases({ rdp, extension_id, run_case, expect, expect_ab
   await run_case("Enter then / at once starts a new search that finds its matches", async () => {
     const page_id = "find_quick";
     await open_page("find_page", page_id, { new_tab: true });
-    await press_keys("/needle");
+    await type_search("/needle");
     await wait_highlights((read) => total_painted(read) === 5, "the matches");
     await press_keys(...ENTER, "/", "four");
-    await wait_highlights((read) => total_painted(read) === 1 && current_of(read) === "needle four", "the second search painting needle four");
+    // A lost key leaves the line closed and empty. A product race leaves it open and holding four.
+    await wait_highlights((read) => total_painted(read) === 1 && current_of(read) === "needle four", "the second search painting needle four").catch(async (error) => {
+      throw new Error(`${error.message}, command line ${JSON.stringify(await read_cmdline_state())}`);
+    });
     await press_keys(...ESCAPE);
     await wait_highlights((read) => total_painted(read) === 0, "every highlight cleared");
   });
@@ -410,6 +413,7 @@ export async function run_cases({ rdp, extension_id, run_case, expect, expect_ab
     await press_keys(...ESCAPE);
     await wait_cmdline((line) => !line.open, "the search line to close after Escape");
     await poll_until("the VISUAL badge to return after Escape", () => mode_badge(page_id) === "VISUAL");
+    await barrier(page_id);
     const after_escape = await in_active_tab(READ_SELECTION);
     expect(JSON.stringify(after_escape) === JSON.stringify(before), `Escape changed the selection from ${JSON.stringify(before)} to ${JSON.stringify(after_escape)}`);
     // Enter: the caret end goes to the match, the anchor stays.
