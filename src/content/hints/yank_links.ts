@@ -1,5 +1,7 @@
 // The links of the page for `copy.links`: which links count, their label, and the list in one of three formats.
 
+import { link_text, markdown_address, org_address } from "../link_escape.ts";
+import type { Outcome } from "../../shared/messages.ts";
 import { collect, query_for } from "./candidates.ts";
 import type { Found } from "./candidates.ts";
 import { rendered_text } from "./headings.ts";
@@ -13,7 +15,7 @@ const WEB_PROTOCOLS = new Set(["http:", "https:", "ftp:", "file:"]);
 
 export type YankedLink = { url: string; text: string };
 
-// Mailto, tel, javascript and data links are no web address, and a link that stays on its own page by a fragment is no destination.
+// Mailto, tel, javascript and data links are no web address, and a link that stays on its own page by a fragment is no destination. A bare `#` is a fragment too, though its `hash` is empty.
 export function web_address(raw: string, base: string, page_url: string): string | undefined {
   let url: URL;
   try {
@@ -23,7 +25,7 @@ export function web_address(raw: string, base: string, page_url: string): string
   }
   if (!WEB_PROTOCOLS.has(url.protocol)) return undefined;
   const without_fragment = (address: string) => address.split("#")[0];
-  if (url.hash !== "" && without_fragment(url.href) === without_fragment(page_url)) return undefined;
+  if (url.href.includes("#") && without_fragment(url.href) === without_fragment(page_url)) return undefined;
   return url.href;
 }
 
@@ -56,15 +58,32 @@ export function format_links(links: readonly YankedLink[], format: LinkFormat): 
         case "plain":
           return url;
         case "markdown":
-          return `- [${link_text(text)}](${url.replace(/\)/g, "%29")})`;
+          return `- [${link_text(text)}](${markdown_address(url)})`;
         case "org":
-          return `- [[${url.replace(/]/g, "%5D")}][${link_text(text)}]]`;
+          return `- [[${org_address(url)}][${link_text(text)}]]`;
       }
     })
     .join("\n");
 }
 
-// Square brackets in the text would end the link text early. The page copy in `handlers/copy.ts` does the same, but importing it would pull the toast proxy into this bundle.
-const link_text = (text: string) => text.replace(/\[/g, "(").replace(/\]/g, ")");
-
 export const all_links = (): Found[] => collect(document, query_for("links", undefined));
+
+export type YankDeps = {
+  find: () => Found[];
+  keep_present: (found: Found[]) => Found[];
+  keep_in_view: (found: Found[]) => Promise<Found[]>;
+  page_url: string;
+  copy: (text: string) => Promise<boolean>;
+  show_message: (message: string) => void;
+};
+
+// The page scope takes every link that is present, the viewport scope only those in view.
+export async function yank_links(scope: "page" | "viewport", format: LinkFormat, deps: YankDeps): Promise<Outcome> {
+  const found = deps.find();
+  const kept = scope === "page" ? deps.keep_present(found) : await deps.keep_in_view(found);
+  const links = links_of(kept, deps.page_url);
+  if (links.length === 0) return { ok: false, message: "No links on this page" };
+  if (!(await deps.copy(format_links(links, format)))) return { ok: false, message: "Could not copy to the clipboard" };
+  deps.show_message(`Copied ${links.length} ${links.length === 1 ? "link" : "links"}`);
+  return { ok: true };
+}
