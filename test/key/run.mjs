@@ -207,7 +207,12 @@ async function main() {
     pieces: ledger.sequence_of(entry.shard),
     exit: entry.exit,
   }));
+  const failed = results.filter((result) => !result.pass);
+  const exit_code = final_exit_code({ failed_case_count: failed.length, failure_count: failures.length, incomplete, stop_reason, stop_exit_code });
+  const failed_cases = failed.map(({ piece, name, reason, shard }) => ({ piece, name, reason, shard }));
   const merged = merge_reports(shard_reports, { total_ms, shards: shard_info, incomplete, filter: process.env.KEY_TEST_ONLY || undefined });
+  // The flake tracker (flakes.mjs) reads these three from the report. Without them a failed case would exist only on stdout.
+  Object.assign(merged, { failed_cases, failures, exit_code });
   try {
     write_report(merged_path, merged);
   } catch (error) {
@@ -220,7 +225,6 @@ async function main() {
   for (const warning of stale_weight_warnings(merged.pieces, weights)) console.log(`stale weight: ${warning} (just key-test-weights refreshes the weights)`);
   for (const entry of shard_info) console.log(`s${entry.shard} sequence: ${entry.pieces.map(piece_name_of).join(",")}`);
 
-  const failed = results.filter((result) => !result.pass);
   if (failed.length > 0) {
     console.log("failed cases:");
     for (const piece_file of new Set(failed.map((result) => result.piece))) {
@@ -234,7 +238,7 @@ async function main() {
   const setup_ran = results.filter((result) => result.setup).length;
   if (setup_ran > 0) console.log(`${setup_ran} setup cases ran only because KEY_TEST_ONLY filtered the run`);
   console.log(`${results.length - failed.length} of ${results.length} cases passed`);
-  process.exit(final_exit_code({ failed_case_count: failed.length, failure_count: failures.length, incomplete, stop_reason, stop_exit_code }));
+  process.exit(exit_code);
 }
 
 main().catch((error) => {

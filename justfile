@@ -136,6 +136,37 @@ key-test-lifecycle *probes: build
     fi
     exec flock -o -w 900 "$lock_file" "${run_cmd[@]}"
 
+# Run `just key-test` n times (default 10) and append one line to the flake history (~/.local/state/desertfox/key-test-flakes.jsonl, or KEY_TEST_FLAKES_HISTORY). Each run waits up to 900 s for the lock, and a run with no report counts as a run error. Sweeps leftover run folders first. Exits 1 and sends a notify-send alert when a case fails in 2 or more runs or 3 or more runs error. Keeps the reports and logs in .logs/key-test-flakes-<stamp>/. The weekly timer runs it (`just install-flake-timer`).
+key-test-flakes n="10": build
+    #!/usr/bin/env bash
+    set -uo pipefail
+    n={{quote(n)}}
+    if ! [[ "$n" =~ ^[1-9][0-9]*$ ]]; then echo "key-test-flakes: n must be a positive number, got $n" >&2; exit 2; fi
+    node test/key/flakes.mjs sweep
+    batch_dir=".logs/key-test-flakes-$(date -u +%Y%m%dT%H%M%SZ)"
+    mkdir -p "$batch_dir"
+    reports=()
+    for i in $(seq 1 "$n"); do
+        echo "key-test-flakes: run $i of $n"
+        KEY_TEST_TIMINGS_FILE="$batch_dir/run-$i.json" just key-test >"$batch_dir/run-$i.log" 2>&1
+        echo "key-test-flakes: run $i exit $?"
+        reports+=("$batch_dir/run-$i.json")
+    done
+    exec node test/key/flakes.mjs fold "$(git rev-parse --short HEAD)" "${reports[@]}"
+
+# Symlink the weekly flake-rate timer from ops/systemd/ into ~/.config/systemd/user and enable it. With dry="dry" only print what would happen.
+install-flake-timer dry="":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    unit_dir="$HOME/.config/systemd/user"
+    run() { if [ {{quote(dry)}} = dry ]; then echo "would run: $*"; else "$@"; fi; }
+    run mkdir -p "$unit_dir"
+    for unit in desertfox-key-flakes.service desertfox-key-flakes.timer; do
+        run ln -sfn "{{justfile_directory()}}/ops/systemd/$unit" "$unit_dir/$unit"
+    done
+    run systemctl --user daemon-reload
+    run systemctl --user enable --now desertfox-key-flakes.timer
+
 # Rewrite test/key/piece_seconds.json, the piece weights that order the sharded key test, from a full-run timings file (default: the newest .logs/key-test-timings-*.json that no KEY_TEST_ONLY filtered). Run it in the last PR of a change that moves piece run times.
 key-test-weights timings="":
     node test/key/shards.mjs write-weights {{ if timings == "" { "" } else { quote(timings) } }}
