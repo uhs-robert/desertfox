@@ -70,7 +70,8 @@ export async function run_cases({ rdp, extension_id, run_case, press_keys, open_
     try {
       await type_around_toast(typed_before, step_keys, typed_after);
     } finally {
-      await close_cmdline();
+      // A close failure here must not replace the error of the case.
+      await close_cmdline().catch((error) => console.log(`cleanup: the command line stayed open: ${error.message}`));
     }
   };
   const type_around_toast = async (typed_before, step_keys, typed_after) => {
