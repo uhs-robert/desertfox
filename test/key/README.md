@@ -44,8 +44,8 @@ Each piece exports `export const areas = ["hints", ...]`, the feature areas it e
 | `ui` | `content/ui`, toast, surface, mode indicator |
 
 - The table in `areas.mjs` is `area_rules`. The first matching rule wins, so order matters.
-- A rule with no areas (README files, icons, manifest, managed schema) selects nothing.
-- The shared rule lists the key path and the command contract (for example `background/main.ts`, `shared/messages.ts`, `content/editable.ts`). A change to one of these files selects every area, so every piece runs.
+- A rule with no areas (README files, icons) selects nothing. `managed_schema.json` maps to `help` and `config`.
+- The shared rule lists the key path and the command contract (for example `background/main.ts`, `shared/messages.ts`, `content/editable.ts`, and `manifest.json`). A change to one of these files selects every area, so every piece runs.
 - A src file that matches no rule fails `test/key/areas.test.ts`. Add its glob to `area_rules`. The same test fails when a piece has no `areas` or names an unknown area.
 - A new piece needs its `areas` line. A new feature needs a name in `area_names`, a rule and the pieces that list it.
 - Add `keys` to a piece that exercises how bindings compile, merge or match, not to every piece that presses keys.
@@ -54,7 +54,9 @@ Each piece exports `export const areas = ["hints", ...]`, the feature areas it e
 
 - With no `head`, the diff is the merge base with `HEAD` against the working tree, plus new files under `src`. With `head`, it is `base...head`.
 - A shared file in the diff selects all pieces.
-- Only `src/` paths count. With no src change it says so and runs nothing. A change to a piece file or to `areas.mjs` alone selects nothing, so name those pieces with `KEY_TEST_PIECES`.
+- A changed piece file selects that piece. A change to the test machinery (`harness.mjs`, `run.mjs`, `server.mjs`, `rdp.mjs`, `timings.mjs`, `areas.mjs`, `launch_firefox.sh`, `user.js`, `config/`) or to `tools/build.mjs` selects every piece. Other paths are ignored.
+- With no src, piece or harness change it says so and runs nothing.
+- Renames count both paths, so a moved file selects the areas of its old path too.
 - `node test/key/areas.mjs <base> [head]` prints the same choice without running anything.
 - The full suite still runs once before a PR is ready.
 

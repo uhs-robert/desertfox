@@ -4,7 +4,7 @@
 import { mkdirSync } from "node:fs";
 import { evaluate_in_background } from "./rdp.mjs";
 
-export const areas = ["caret"];
+export const areas = ["caret", "find"];
 
 export async function run_cases({ rdp, extension_id, take_shot, run_case, expect, open_page, send_keys, sleep, events, wait_event }) {
   const paste_ctrl_v = ["-M", "ctrl", "v", "-m", "ctrl"];
