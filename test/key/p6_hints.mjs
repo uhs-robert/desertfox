@@ -5,7 +5,7 @@ import { evaluate_in_background } from "./rdp.mjs";
 
 export const areas = ["hints", "scroll"];
 
-export async function run_cases({ rdp, extension_id, run_case, send_keys, press_keys, poll_until, barrier, expect_absent, hint_label_count, wait_cmdline, close_cmdline, scroll_report_wait_ms, open_page, wait_event, find_event, events, expect, sleep, scroll_delta_by_press, became_visible, take_shot, in_active_tab }) {
+export async function run_cases({ rdp, extension_id, run_case, send_keys, press_keys, poll_until, barrier, expect_absent, hint_label_count, wait_cmdline, close_cmdline, scroll_report_wait_ms, open_page, wait_event, find_event, events, expect, sleep, scroll_delta_by_press, became_visible, take_shot, in_active_tab, type_in_line }) {
   const background = (code) => evaluate_in_background(rdp, extension_id, code);
   const tab_count = () => background(`(async () => (await browser.tabs.query({})).length)()`);
   const close_tabs_with = (text) => background(`(async () => { for (const tab of await browser.tabs.query({})) if (tab.url.includes(${JSON.stringify(text)})) await browser.tabs.remove(tab.id); })()`);
@@ -18,6 +18,9 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, press_
   const run_hint = (args) => in_active_tab(`browser.runtime.sendMessage({ type: "run", invocations: [{ id: "hint.run", args: ${JSON.stringify(args)} }], mode: "normal" }); 0`);
   const link_count = async () => await in_active_tab(`document.querySelectorAll("a[href]").length`);
   const wait_for_link_count = (count, what) => poll_until(what, async () => (await link_count()) === count);
+  const notice_text = () => in_active_tab(`[...document.documentElement.children].map((child) => child.openOrClosedShadowRoot?.querySelector(".desertfox-toast, .desertfox-hint-message")?.textContent ?? "").join("")`);
+  // A rapid rebuild that finds nothing left shows its notice as it leaves hint mode. A key pressed before that waits for the labels and is dropped with the session.
+  const wait_for_rapid_end = () => poll_until("the rapid hint to end with its no-hints notice", async () => (await notice_text()) !== "");
   // A copy has no report of its own. The labels go when the pick is handled, and opening the paste page takes longer than the copy.
 
   await run_case(";yl a copies the link address", async () => {
@@ -135,6 +138,7 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, press_
     await wait_for_link_count(2, "the second pick to delete the next link");
     await wait_for_label_count(0, "after the second pick");
     // Only the hidden and the covered link are left, so the rebuild finds nothing and hint mode ends.
+    await wait_for_rapid_end();
     expect((await scroll_delta_by_press("p6_delete", ["j"])) > 0, "hint mode did not end when no link was left");
   });
 
@@ -149,6 +153,7 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, press_
     await press_keys("a");
     await wait_for_link_count(2, "the second pick to remove the next link");
     await wait_for_label_count(0, "after the second pick");
+    await wait_for_rapid_end();
     expect((await scroll_delta_by_press("p6_here", ["j"])) > 0, "hint mode did not end when no link was left");
   });
 
@@ -166,7 +171,7 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, press_
   await run_case("text with no match shows a notice and leaves keys alone", async () => {
     await open_page("hints", "p6_no_match", { new_tab: true });
     await run_hint({ filter: "links", text: "zzz" });
-    await poll_until("the no-match notice", async () => (await in_active_tab(`[...document.documentElement.children].map((child) => child.openOrClosedShadowRoot?.querySelector(".desertfox-toast, .desertfox-hint-message")?.textContent ?? "").join("")`)) !== "");
+    await poll_until("the no-match notice", async () => (await notice_text()) !== "");
     expect((await scroll_delta_by_press("p6_no_match", ["j"])) > 0, "keys did not work after a text with no match");
   });
 
@@ -217,7 +222,8 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, press_
     await open_page("headings", "p6_headings_up", { new_tab: true });
     await scroll_delta_by_press("p6_headings_up", ["G"]);
     await open_headings_line(4);
-    const delta = await scroll_delta_by_press("p6_headings_up", ["intro", ...enter_key]);
+    await type_in_line("intro");
+    const delta = await scroll_delta_by_press("p6_headings_up", enter_key);
     expect(delta < 0, `the page did not scroll up, delta ${delta}`);
     const top = await top_of("intro");
     expect(Math.abs(top) <= 2, `Intro sits ${top}px from the top`);

@@ -8,7 +8,7 @@ const CTRL = (key) => ["-M", "ctrl", key, "-m", "ctrl"];
 
 export const areas = ["cmdline"];
 
-export async function run_cases({ rdp, extension_id, run_case, send_keys, press_keys, open_page, wait_event, wait_cmdline, close_cmdline, close_tabs_with, poll_until, settle_focus, expect_absent, scroll_report_wait_ms, take_shot, events, expect, sleep, scroll_of, last_scroll_y, scroll_delta_after, became_visible }) {
+export async function run_cases({ rdp, extension_id, run_case, send_keys, press_keys, open_page, wait_event, wait_cmdline, close_cmdline, close_tabs_with, poll_until, settle_focus, expect_absent, scroll_report_wait_ms, take_shot, events, expect, sleep, scroll_of, last_scroll_y, scroll_delta_after, became_visible, type_in_line, complete_in_line }) {
   const shot_dir = process.env.DESERTFOX_SHOT_DIR;
   const set_zoom = (factor) => evaluate_in_background(rdp, extension_id, `(async () => { const [tab] = await browser.tabs.query({ active: true, currentWindow: true }); await browser.tabs.setZoom(tab.id, ${factor}); })()`);
   const active_url = () => evaluate_in_background(rdp, extension_id, `(async () => (await browser.tabs.query({ active: true, currentWindow: true }))[0].url)()`);
@@ -52,7 +52,9 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, press_
   await run_case("typing tc, Tab and Enter close the tab: the fuzzy match ranks tab.close first and Enter runs the shown line", async () => {
     await open_line();
     const mark = events.length;
-    await press_keys("tc", "-k", "Tab", "-k", "Return");
+    await type_in_line("tc");
+    await complete_in_line();
+    await press_keys("-k", "Return");
     const shown = await wait_event(mark, (event) => event.type === "visibility" && event.state === "visible" && event.page_id !== "p9_target", "another tab after the close");
     expect(shown.page_id === "p9_start", `the visible tab was ${shown.page_id}`);
     expect(!(await tab_urls()).some((url) => url.includes("p9_target")), "p9_target is still open");
@@ -70,7 +72,9 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, press_
       await settle_focus();
     }
     await open_line();
-    await press_keys("tab.close -A", "-k", "Tab", "-k", "Return");
+    await type_in_line("tab.close -A");
+    await complete_in_line();
+    await press_keys("-k", "Return");
     await poll_until("the tabs on the right to close", async () => !(await tab_urls()).some((url) => url.includes("p9_right_")));
     const urls = await tab_urls();
     expect(urls.some((url) => url.includes("p9_left")), "the active tab was closed too");
@@ -79,7 +83,10 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, press_
   await run_case("search keyfam. lists the family, Tab previews its engine and Enter runs the search with it", async () => {
     await open_line();
     const mark = events.length;
-    await press_keys("search keyfam.", "-k", "Tab", "hello", "-k", "Return");
+    await type_in_line("search keyfam.");
+    await complete_in_line();
+    await type_in_line("hello");
+    await press_keys("-k", "Return");
     const result = await wait_event(mark, (event) => event.type === "tree_read" && event.page_id === "engine_family", "the family engine page");
     expect(decodeURIComponent(result.search).includes("hello"), `the page opened with ${result.search}`);
     await close_tabs_with("id=engine_family");
@@ -111,7 +118,9 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, press_
   await run_case("Ctrl-h on a selected command row opens its help card in a new tab and closes the line", async () => {
     const before = (await tab_urls()).length;
     await open_line();
-    await press_keys("tab.close", "-k", "Tab", ...CTRL("h"));
+    await type_in_line("tab.close");
+    await complete_in_line();
+    await press_keys(...CTRL("h"));
     await poll_until("the help tab at the tab.close card", async () => (await tab_urls()).some((url) => url.includes("home.html#command=tab.close")));
     const urls = await tab_urls();
     expect(urls.length === before + 1, `expected one new tab, got ${urls.length - before}`);
@@ -121,7 +130,8 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, press_
   await run_case("Ctrl-h with only a typed command word opens that command's help", async () => {
     const before = (await tab_urls()).length;
     await open_line();
-    await press_keys("tab.close --right", ...CTRL("h"));
+    await type_in_line("tab.close --right");
+    await press_keys(...CTRL("h"));
     await poll_until("the help tab at the tab.close card", async () => (await tab_urls()).some((url) => url.includes("home.html#command=tab.close")));
     const urls = await tab_urls();
     expect(urls.length === before + 1, "no help tab for the typed word");

@@ -91,8 +91,14 @@ export async function run_cases({ run_case, expect, open_page, press_keys, poll_
     await open_page("caret_bug_lines", "lines_empty_line", { new_tab: true });
     await press_and_wait_for_move("lines_empty_line", "gV", "the caret on the title");
     await press_and_wait_for_badge("lines_empty_line", "v", "VISUAL");
-    let text = "";
-    for (let step = 0; step < 6; step++) text = (await press_and_wait_for_move("lines_empty_line", "j", `j number ${step + 1} to grow the selection`)).text;
+    // v reports the selection it starts from, and that report can come after the badge. So each j waits for a selection that differs from the one before it.
+    let text = last_selection_text("lines_empty_line");
+    for (let step = 0; step < 6; step++) {
+      const mark = events.length;
+      const previous = text;
+      await press_keys("j");
+      text = (await wait_event(mark, (event) => is_selection_of("lines_empty_line")(event) && event.text !== previous, `j number ${step + 1} to grow the selection`)).text;
+    }
     expect(text.trimEnd().endsWith("g"), `after v and 6 j the selection ends ${JSON.stringify(text.slice(-8))}, expected it to end on "g"`);
     await escape_to_normal("lines_empty_line");
   });

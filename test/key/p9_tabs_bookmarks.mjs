@@ -7,7 +7,7 @@ const ALT = (key) => ["-M", "alt", key, "-m", "alt"];
 
 export const areas = ["cmdline", "tabs"];
 
-export async function run_cases({ rdp, extension_id, run_case, send_keys, sleep, press_keys, open_page, wait_event, wait_cmdline, close_cmdline, close_tabs_with, poll_until, settle_focus, events, expect, url_of, became_visible, take_shot }) {
+export async function run_cases({ rdp, extension_id, run_case, send_keys, sleep, press_keys, open_page, wait_event, wait_cmdline, close_cmdline, close_tabs_with, poll_until, settle_focus, events, expect, url_of, became_visible, take_shot, type_in_line, complete_in_line }) {
   const background = (code) => evaluate_in_background(rdp, extension_id, code);
   // Opens the line on a page that has the keys. The tab before may have been switched or closed by the case before.
   const open_line = async () => {
@@ -37,7 +37,9 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, sleep,
   await run_case("tab, a typed name, Tab and Enter switch to that tab", async () => {
     await open_line();
     const mark = events.length;
-    await press_keys("tab p9e_one", "-k", "Tab", "-k", "Return");
+    await type_in_line("tab p9e_one", { until: shows_row("p9e_one") });
+    await complete_in_line();
+    await press_keys("-k", "Return");
     await wait_event(mark, became_visible("p9e_one"), "tab p9e_one after the pick");
   });
 
@@ -46,9 +48,10 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, sleep,
     const place = tabs.findIndex((url) => url.includes("p9e_three")) + 1;
     expect(place > 0, "p9e_three is not in the window");
     await open_line();
-    const mark = events.length;
-    await press_keys(`tab ${place}`, "-k", "Return");
-    await wait_event(mark, became_visible("p9e_three"), `tab p9e_three after "tab ${place}"`);
+    await type_in_line(`tab ${place}`, { until: shows_row("p9e_three") });
+    await press_keys("-k", "Return");
+    // The case before hid p9e_three moments ago, and a tab shown again that soon can lose its visibility report. So the background says which tab is active.
+    await poll_until(`tab p9e_three after "tab ${place}"`, async () => (await background(`browser.tabs.query({ active: true, currentWindow: true }).then(([tab]) => tab.url)`))?.includes("p9e_three"));
   });
 
   await run_case("the tabs list shows a tab created while the list is open, with no keypress", async () => {
@@ -56,13 +59,13 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, sleep,
     let picked = false;
     try {
       await open_line();
-      await press_keys("tab p9e_live");
-      await wait_cmdline((line) => line.value === "tab p9e_live", "the typed name in the line");
+      await type_in_line("tab p9e_live");
       // The list has no match yet. The model patch adds the row, and the pick below finds it.
       live_id = await background(`browser.tabs.create({ url: ${JSON.stringify(url_of("page", "p9e_live"))}, active: false }).then((tab) => tab.id)`);
       await wait_cmdline(shows_row("p9e_live"), "the new tab in the list");
       const mark = events.length;
-      await press_keys("-k", "Tab", "-k", "Return");
+      await complete_in_line();
+      await press_keys("-k", "Return");
       picked = true;
       await wait_event(mark, became_visible("p9e_live"), "the tab created under the open list");
     } finally {
@@ -76,7 +79,9 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, sleep,
     await background(`browser.bookmarks.create({ title: "P9e Zeta bookmark", url: ${JSON.stringify(url_of("page", "p9e_mark"))} })`);
     await open_line();
     const mark = events.length;
-    await press_keys("bookmark -t zeta", "-k", "Tab", "-k", "Return");
+    await type_in_line("bookmark -t zeta", { until: shows_row("Zeta bookmark") });
+    await complete_in_line();
+    await press_keys("-k", "Return");
     await wait_event(mark, (event) => event.type === "tree_read" && event.page_id === "p9e_mark", "the bookmarked page in a new tab");
     await close_tabs_with("id=p9e_mark");
   });
@@ -127,7 +132,8 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, sleep,
     const discarded = () => background(`browser.tabs.get(${tab_id}).then((tab) => tab.discarded)`);
     try {
       await open_line();
-      await press_keys("tab p9u_target", "-k", "Down");
+      await type_in_line("tab p9u_target", { until: shows_row("p9u_target") });
+      await press_keys("-k", "Down");
       await wait_cmdline((line) => line.selected !== null && shows_row("p9u_target")(line), "the p9u_target row to be highlighted");
       await press_keys(...ALT("u"));
       await poll_until("A-u to unload the highlighted tab", async () => (await discarded()) === true);
@@ -145,13 +151,15 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, sleep,
     const muted = () => background(`Promise.all(${JSON.stringify(ids)}.map((id) => browser.tabs.get(id).then((tab) => tab.mutedInfo.muted)))`);
     try {
       await open_line();
-      await press_keys("tab p9s_one", "-k", "Down");
+      await type_in_line("tab p9s_one", { until: shows_row("p9s_one") });
+      await press_keys("-k", "Down");
       await wait_cmdline((line) => line.selected !== null && shows_row("p9s_one")(line), "the p9s_one row to be highlighted");
       await press_keys(...CTRL(" "));
       await wait_cmdline((line) => line.marked === 1, "the first tab to be marked");
       await press_keys(...CTRL("u"));
       await wait_cmdline((line) => line.value === "", "Ctrl-u to clear the line");
-      await press_keys("tab p9s_two", "-k", "Down");
+      await type_in_line("tab p9s_two", { until: (line) => shows_row("p9s_two")(line) && !shows_row("p9s_one")(line) });
+      await press_keys("-k", "Down");
       await wait_cmdline((line) => line.selected !== null && shows_row("p9s_two")(line) && !shows_row("p9s_one")(line), "the p9s_two row to be highlighted alone");
       await press_keys(...CTRL(" "));
       await wait_cmdline((line) => line.marked === 1, "the second tab to be marked");
@@ -171,7 +179,8 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, sleep,
     const open_count = () => background(`browser.tabs.query({}).then((tabs) => tabs.filter((tab) => ${JSON.stringify(ids)}.includes(tab.id)).length)`);
     try {
       await open_line();
-      await press_keys("tab p9x_", "-k", "Down");
+      await type_in_line("tab p9x_", { until: shows_row("p9x_") });
+      await press_keys("-k", "Down");
       await wait_cmdline((line) => line.selected !== null && shows_row("p9x_")(line), "a p9x_ row to be highlighted");
       await press_keys(...CTRL(" "));
       await wait_cmdline((line) => line.marked === 1, "the first tab to be marked");
@@ -201,7 +210,8 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, sleep,
     const line_tab = await background(`browser.tabs.query({ active: true, currentWindow: true }).then(([tab]) => tab.id)`);
     try {
       await open_line();
-      await press_keys("tab p9c_", "-k", "Down");
+      await type_in_line("tab p9c_", { until: shows_row("p9c_") });
+      await press_keys("-k", "Down");
       await wait_cmdline((line) => line.selected !== null && shows_row("p9c_")(line), "a p9c_ row to be highlighted");
       await press_keys(...CTRL(" "));
       await wait_cmdline((line) => line.marked === 1, "the first tab to be marked");
@@ -214,7 +224,8 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, sleep,
       expect(await in_container() === 0 && await old_open() === 2, "Escape in the container prompt reopened tabs");
       await press_keys(...ALT("c"));
       await wait_cmdline(shows_row("P9cWork"), "the container prompt to list P9cWork again");
-      await press_keys("p9cwork", "-k", "Tab");
+      await type_in_line("p9cwork", { until: shows_row("P9cWork") });
+      await press_keys("-k", "Tab");
       await wait_cmdline((line) => line.value === "P9cWork", "Tab to complete the container name");
       await press_keys("-k", "Return");
       await poll_until("Enter to reopen both marked tabs in the container", async () => (await in_container()) === 2, { timeout_ms: 8000 });

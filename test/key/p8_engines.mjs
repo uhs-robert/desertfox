@@ -6,7 +6,7 @@ import { evaluate_in_background } from "./rdp.mjs";
 
 export const areas = ["engines"];
 
-export async function run_cases({ rdp, extension_id, run_case, press_keys, settle_focus, expect_absent, wait_cmdline, close_cmdline, open_page, wait_event, find_event, events, expect }) {
+export async function run_cases({ rdp, extension_id, run_case, press_keys, settle_focus, expect_absent, wait_cmdline, close_cmdline, open_page, wait_event, find_event, events, expect, run_line, type_in_line }) {
   const panel_event = () => (event) => event.type === "whichkey" && event.page_id === "eng" && event.value !== "";
   const loaded = (page_id) => (event) => event.type === "tree_read" && event.page_id === page_id;
   // Escape closes the panel, and the report of the closed panel says the key arrived.
@@ -74,7 +74,8 @@ export async function run_cases({ rdp, extension_id, run_case, press_keys, settl
     await press_keys("s/h");
     await wait_cmdline((line) => line.open, "the command line to open for s/h");
     const mark = events.length;
-    await press_keys("hello", "-k", "Return");
+    await type_in_line("hello");
+    await press_keys("-k", "Return");
     const result = await wait_event(mark, loaded("engine_here"), "the member engine page from the command line");
     expect(result.search.includes("q=127.0.0.1+hello"), `the page opened with ${result.search}`);
   });
@@ -111,7 +112,7 @@ export async function run_cases({ rdp, extension_id, run_case, press_keys, settl
   await run_case("a typed host engine fills the host slot and the query", async () => {
     await open_page("page", "eng_host_start", { new_tab: false });
     const mark = events.length;
-    await press_keys(":search keysite hello", "-k", "Return");
+    await run_line(":search keysite hello");
     const result = await wait_event(mark, loaded("engine_site"), "the host engine page");
     expect(result.search.includes("q=127.0.0.1+hello"), `the page opened with ${result.search}`);
   });
@@ -119,7 +120,7 @@ export async function run_cases({ rdp, extension_id, run_case, press_keys, settl
   await run_case("an engine with a fallback uses it when the subreddit slot cannot fill", async () => {
     await open_page("page", "eng_sub_start", { new_tab: false });
     const mark = events.length;
-    await press_keys(":search keysub fallback", "-k", "Return");
+    await run_line(":search keysub fallback");
     const result = await wait_event(mark, loaded("search_result"), "the fallback engine page");
     expect(result.search.includes("q=fallback"), `the page opened with ${result.search}`);
   });

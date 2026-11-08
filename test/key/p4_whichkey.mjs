@@ -3,7 +3,7 @@ import { evaluate_in_background } from "./rdp.mjs";
 
 export const areas = ["whichkey", "help"];
 
-export async function run_cases({ rdp, extension_id, take_shot, run_case, send_keys, press_keys, poll_until, open_page, wait_event, events, expect, sleep, settle_focus, which_key_delay_ms, scroll_delta_by_press, scroll_of }) {
+export async function run_cases({ rdp, extension_id, take_shot, run_case, send_keys, press_keys, poll_until, open_page, wait_event, events, expect, sleep, settle_focus, which_key_delay_ms, scroll_delta_by_press, scroll_of, run_line }) {
   const whichkey_events = (mark, page_id) => events.slice(mark).filter((event) => event.type === "whichkey" && event.page_id === page_id);
 
   await open_page("page", "wk", { new_tab: true });
@@ -165,7 +165,7 @@ export async function run_cases({ rdp, extension_id, take_shot, run_case, send_k
     await run_case("screenshots of the panel and the toast under a non-default theme", async () => {
       await open_page("caret", "wk_theme", { new_tab: true });
       // The surfaces read the stored theme, so a live set changes them. A page's own variables do not reach inside a surface.
-      await send_keys(":set palette oasis_cactus", "-k", "Return");
+      await run_line(":set palette oasis_cactus");
       await sleep(900);
       await send_keys("g");
       await sleep(900);

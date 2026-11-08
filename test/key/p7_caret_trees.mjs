@@ -4,7 +4,7 @@
 
 export const areas = ["caret"];
 
-export async function run_cases({ run_case, expect, open_page, press_keys, poll_until, sleep, scroll_report_wait_ms, scroll_of, last_scroll_y, events, wait_event, in_active_tab, badge_is, escape_to_normal, hint_label_count }) {
+export async function run_cases({ run_case, expect, open_page, press_keys, poll_until, sleep, scroll_report_wait_ms, scroll_of, last_scroll_y, events, wait_event, in_active_tab, badge_is, escape_to_normal, hint_label_count, run_line }) {
   const selection_styles = `document.querySelectorAll("style").length && [...document.querySelectorAll("style")].filter((style) => style.textContent.includes("::selection")).length`;
   const selection_is = (page_id, text) => (event) => event.type === "selection" && event.page_id === page_id && event.text === text;
   const last_selection = (page_id) => events.filter((event) => event.type === "selection" && event.page_id === page_id).at(-1)?.text;
@@ -15,7 +15,7 @@ export async function run_cases({ run_case, expect, open_page, press_keys, poll_
   const hint_into = async (kind, page_id, flag, target) => {
     await open_page(kind, page_id, { new_tab: true });
     const mark = events.length;
-    await press_keys(`:hint ${flag} --custom --selector=${target}`, "-k", "Return");
+    await run_line(`:hint ${flag} --custom --selector=${target}`);
     await poll_until("the hint labels to show", async () => (await hint_label_count()) > 0);
     await press_keys("a");
     return mark;
