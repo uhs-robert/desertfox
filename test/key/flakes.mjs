@@ -75,7 +75,7 @@ function read_report(path) {
   }
 }
 
-// A timer has no session bus address in its environment.
+// A shell started outside the desktop session (ssh, a tty) has no session bus address in its environment.
 function notify(text) {
   const bus = process.env.DBUS_SESSION_BUS_ADDRESS || `unix:path=/run/user/${process.getuid()}/bus`;
   const result = spawnSync("notify-send", ["-u", "critical", "desertfox key-test flakes", text], { env: { ...process.env, DBUS_SESSION_BUS_ADDRESS: bus }, stdio: "ignore" });
