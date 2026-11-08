@@ -58,6 +58,7 @@ just themes      # regenerate src/shared/themes.ts from themes/*.toml, then src/
 just settings-defaults  # regenerate src/shared/default_settings.ts from src/shared/settings_table.ts and src/shared/setting_completion.ts from src/shared/settings_schema.ts
 just host-test   # Python unit tests of the native host and install.sh, with a temporary HOME and a stubbed curl
 just key-test    # real key presses in a nested Hyprland, about 34 s on 8 shards, one run at a time (the recipe takes /tmp/desertfox-key-test.lock itself, so never wrap it in `flock`)
+just test-all    # `just test` and `just key-test` at once, about as long as key-test alone; exit 1 if either fails
 just sign        # sign as unlisted on addons.mozilla.org
 just install     # install through the Firefox policy file (needs sudo)
 just release     # from a clean non-main branch: bump the patch version, sign and install, commit and push the bump, create the GitHub release that carries the native host (needs a logged-in gh), reading the AMO key from rbw when unset
@@ -71,7 +72,7 @@ Reproduce a visual bug and record it, at 60 fps so flicker shows, before you ask
 
 `docs/keymap.md` is generated between its markers from `src/background/default_keymap.ts` and `docs/keymap_planned.toml` (keys that are `later` or `dropped`). Edit those two, then run `just docs-gen`. `just test` fails when the doc is stale.
 
-Run `just test` before every commit. Run `just key-test` after a change to keys, modes, the content script or config reload. It needs labwc, Hyprland, dbus-daemon and python3. `test/key/session.mjs` starts the nested session. It runs on demand only. Read [`test/key/README.md`](test/key/README.md) before you run it.
+Run `just test` before every commit. Run `just key-test` after a change to keys, modes, the content script or config reload. `just test-all` runs both at once. It needs labwc, Hyprland, dbus-daemon and python3. `test/key/session.mjs` starts the nested session. It runs on demand only. Read [`test/key/README.md`](test/key/README.md) before you run it.
 
 While building, run `just key-test-changed [base]` or set `KEY_TEST_PIECES`, not the full suite. Run one full `just key-test` before you report. Run the serial reverse run (`KEY_TEST_ORDER=reverse`) only when the shared test machinery changes: the harness, run, session, server or keyboard files in `test/key/`.
 
