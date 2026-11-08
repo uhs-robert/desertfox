@@ -12,7 +12,7 @@ KEY_TEST_ORDER=reverse just key-test
 just key-test-changed [base] [head]
 ```
 
-A full run takes about 11 minutes (667 s for 241 cases in the latest run) and needs a nested Hyprland. The key-test-speed work (#273) brings that down.
+A full run takes about 8.5 minutes (506 s for 241 cases in the latest run) and needs a nested Hyprland. The key-test-speed work (#273) brings that down further.
 
 - `KEY_TEST_ONLY` runs only the cases whose name matches. It also runs the cases marked `{ setup: true }` and every `h.setup` step of a piece, which leave state that later cases read. The output tags those as `SETUP`.
 - `KEY_TEST_PIECES` is a comma-separated list of piece names (the file name without `.mjs`). Only those pieces run, and an unknown name or an empty list aborts the run. Each piece must pass alone.
@@ -79,7 +79,13 @@ A converted piece presses keys with `press_keys` (no settle) and waits for the e
 - `expect_absent(mark, page_id, predicate, what)` runs a barrier and fails when a matching event came before it. A key that was lost also leaves nothing, so pair it with a proof that the key arrived (a line value, a badge). A scroll is reported 150 ms after it ends, so pass `report_delay_ms: scroll_report_wait_ms`.
 - `settle_focus({ tab_id })` waits until a test page reports focus, then 100 ms. Use it after keys that switch or close a tab. It cannot serve an extension page.
 - `open_page` goes through the background (`tabs.create` or `tabs.update`), waits for `tree_read` and focus, and returns no sooner than 300 ms after the open. A key pressed within about 30 ms of an open was lost every time, and a tab switched within about 150 ms lost the report of its next visibility change. `open_page_by_keys` is the address bar way for a case that tests the bar.
-- `expect_no_scroll` and `expect_exactly_one_visible` still sleep. `p0_core_keys.mjs` runs them on pages that cancel keys in capture, where a barrier cannot see F8.
+- `expect_no_scroll(mark, page_id)` is a barrier plus the scroll report delay. It works on any page that reports F8, ignore mode included.
+- `expect_exactly_one_visible(mark, page_id)` waits for the page to show, settles the switch, runs a barrier on it and then reads the active tab from the background. A destination that cancels keys in capture (`p0_core_keys.mjs` page `s`) never reports F8, so the call takes `{ destination_cancels_keys: true }` and sits out 1.5 s.
+- `settle_tab_switch()` is `settle_focus` plus 250 ms. A tab that is hidden and shown again within about 250 ms loses its visibility reports, so a key that switches tab again waits this long. Slice 7 should remove it with the other floors.
+- `scroll_delta_by_press(page_id, keys)` is `scroll_delta_after` with no settle.
+- `hint_label_count()` counts the hint labels in the active tab, so a case waits for labels before it types a label and for zero after Escape. Hint mode has no mode badge.
+- `which_key_delay_ms` is the delay from `config/settings.toml` (100 ms). A check that no panel shows sits out `which_key_delay_ms` plus a margin. The prefix timeout and the toast life (3 s) are constants in `src/`, so the test config cannot shorten them.
+- A window_focus report from a frame comes before the frame takes keys, so `p6_frames.mjs` keeps two 300 ms sleeps.
 
 ## Timings
 

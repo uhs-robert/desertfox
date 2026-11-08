@@ -4,18 +4,19 @@ import { join } from "node:path";
 
 export const areas = ["config", "keys"];
 
-export async function run_cases({ config_copy, load_config_dir, run_case, setup, expect, open_page, send_keys, sleep, events, wait_event, scroll_delta_after, scroll_of, in_background, read_local, wait_reinject_report, expect_exactly_one_visible, became_visible, record }) {
+export async function run_cases({ config_copy, load_config_dir, run_case, setup, expect, open_page, press_keys, settle_focus, settle_tab_switch, poll_until, wait_cmdline, events, wait_event, scroll_delta_by_press, scroll_of, in_background, read_local, wait_reinject_report, expect_exactly_one_visible, became_visible, record }) {
   let single_j_pixels = 0;
   // Tabs a and b with a active. j on a page moves one fixed distance, which every case below compares against.
   await setup("open pages a and b and measure one j", async () => {
     await open_page("page", "reload_a", { new_tab: false });
     await open_page("page", "reload_b", { new_tab: true });
     const mark = events.length;
-    await send_keys("K");
+    await press_keys("K");
     await wait_event(mark, became_visible("reload_a"), "tab a after K");
-    single_j_pixels = await scroll_delta_after("reload_a", ["j"]);
+    await settle_tab_switch();
+    single_j_pixels = await scroll_delta_by_press("reload_a", ["j"]);
     expect(single_j_pixels > 0, "j did not scroll down");
-    await scroll_delta_after("reload_a", ["gg"]);
+    await scroll_delta_by_press("reload_a", ["gg"]);
   });
 
   await run_case("config.reload applies the files in place, keeps a temp edit and keeps keys working in open tabs", async () => {
@@ -30,13 +31,12 @@ export async function run_cases({ config_copy, load_config_dir, run_case, setup,
       '"<A-.>" = "cmdline.open"',
       "",
     ].join("\n"));
-    await send_keys(":set -t which_key_delay_ms 777", "-k", "Return");
-    await sleep(800);
-    const temp_before = await in_background(`(async () => (await browser.storage.session.get("desertfox_temp_settings")).desertfox_temp_settings)()`);
-    expect(temp_before?.which_key_delay_ms === 777, `the temp edit did not land: ${JSON.stringify(temp_before)}`);
+    await press_keys(":set -t which_key_delay_ms 777", "-k", "Return");
+    const temp_edit = () => in_background(`(async () => (await browser.storage.session.get("desertfox_temp_settings")).desertfox_temp_settings)()`);
+    await poll_until("the temp edit to land", async () => (await temp_edit())?.which_key_delay_ms === 777);
+    await wait_cmdline((line) => !line.open, "the command line to close");
+    await settle_focus();
 
-    await send_keys("gg");
-    await sleep(500);
     await in_background(`browser.storage.local.remove("desertfox_reinject_report")`);
     await load_config_dir(reduced_config);
     expect((await read_local("desertfox_reinject_report")) == null, "qr restarted the extension: a tab repair report was written");
@@ -44,37 +44,37 @@ export async function run_cases({ config_copy, load_config_dir, run_case, setup,
     expect(status?.source === "files", `the config source is ${status?.source}, expected files`);
     expect(status?.temp?.includes("which_key_delay_ms") && status?.settings?.which_key_delay_ms === 777, `the temp edit did not survive the reload: ${JSON.stringify(status?.temp)} ${status?.settings?.which_key_delay_ms}`);
 
-    const one_j = await scroll_delta_after("reload_a", ["j"]);
+    const one_j = await scroll_delta_by_press("reload_a", ["j"]);
     expect(one_j === single_j_pixels, `after reload j moved ${one_j}px, before it moved ${single_j_pixels}px (double or missing action)`);
     const mark = events.length;
-    await send_keys("m");
+    await press_keys("m");
     const halfway = await wait_event(mark, scroll_of("reload_a"), "scroll to 50 percent");
     expect(Math.abs(halfway.y - halfway.max_y / 2) <= 2, `m stopped at ${halfway.y} of ${halfway.max_y}`);
     const switch_mark = events.length;
-    await send_keys("J");
+    await press_keys("J");
     await expect_exactly_one_visible(switch_mark, "reload_b");
-    const other_tab_delta = await scroll_delta_after("reload_b", ["j"]);
+    const other_tab_delta = await scroll_delta_by_press("reload_b", ["j"]);
     expect(other_tab_delta === single_j_pixels, `in an untouched tab j moved ${other_tab_delta}px, expected ${single_j_pixels}px`);
   }, { setup: true });
 
   await run_case("debug.restart restarts the extension, keeps keys working in open tabs and keeps the reloaded files over managed storage", async () => {
     await in_background(`browser.storage.local.remove("desertfox_reinject_report")`);
-    await send_keys(":debug.restart", "-k", "Return");
+    await press_keys(":debug.restart", "-k", "Return");
     const report = await wait_reinject_report();
     record("reinject_report", report);
     console.log(`reinject report ${JSON.stringify(report)}`);
-    await sleep(1000);
-    expect((await read_local("desertfox_config_status"))?.source === "files", "after the restart the config no longer comes from the files");
-    const one_j = await scroll_delta_after("reload_b", ["j"]);
+    await poll_until("the config source to be the files after the restart", async () => (await read_local("desertfox_config_status"))?.source === "files", { timeout_ms: 8000 });
+    await settle_focus();
+    const one_j = await scroll_delta_by_press("reload_b", ["j"]);
     expect(one_j === single_j_pixels, `after the restart j moved ${one_j}px, expected ${single_j_pixels}px`);
     const mark = events.length;
-    await send_keys("m");
+    await press_keys("m");
     const halfway = await wait_event(mark, scroll_of("reload_b"), "scroll to 50 percent after the restart");
     expect(Math.abs(halfway.y - halfway.max_y / 2) <= 2, `m stopped at ${halfway.y} of ${halfway.max_y}`);
   }, { setup: true });
 
   await run_case("keys work on a fresh load after the reload", async () => {
     await open_page("page", "after_reload", { new_tab: true });
-    expect((await scroll_delta_after("after_reload", ["j"])) === single_j_pixels, "j moved a different distance");
+    expect((await scroll_delta_by_press("after_reload", ["j"])) === single_j_pixels, "j moved a different distance");
   });
 }
