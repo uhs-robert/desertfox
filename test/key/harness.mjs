@@ -608,11 +608,19 @@ export async function create_session({ name: session_name, timings, sweep = true
   const wait_takes_keys = (page_id) => timings.time("waits", () => wait_takes_keys_untimed(page_id));
   async function wait_takes_keys_untimed(page_id) {
     const deadline = Date.now() + KEY_PROBE_TIMEOUT_MS;
+    const first_mark = events.length;
+    const is_probe_key = (event) => event.type === "keydown" && event.key === BARRIER_KEY;
     for (let presses = 1; ; presses++) {
       waiting_for = `${page_id} to take the probe key ${BARRIER_KEY}`;
       const mark = events.length;
       await press_keys("-k", BARRIER_KEY);
-      if (await server.wait_for_event(mark, (event) => event.type === "keydown" && event.key === BARRIER_KEY && event.page_id === page_id, KEY_PROBE_TRY_MS)) return;
+      if (await server.wait_for_event(mark, (event) => is_probe_key(event) && event.page_id === page_id, KEY_PROBE_TRY_MS)) {
+        // A press that was only slow would report after this return and pass the next barrier before the key under test arrives.
+        // So after a retry the probe waits for every press to report, or one more try for those that were lost.
+        const all_reported = () => events.slice(first_mark).filter(is_probe_key).length >= presses;
+        if (presses > 1) await server.wait_for_event(first_mark, all_reported, KEY_PROBE_TRY_MS);
+        return;
+      }
       if (Date.now() > deadline) throw wait_timeout_error(`${page_id} to take the probe key ${BARRIER_KEY} (${presses} presses)`);
       measurements.key_probe_retries = (measurements.key_probe_retries ?? 0) + 1;
     }
