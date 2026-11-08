@@ -20,12 +20,12 @@ A full run takes about 1 minute on 6 shards and needs a nested Hyprland.
 - `KEY_TEST_PIECES` is a comma-separated list of piece names (the file name without `.mjs`). Only those pieces run, and an unknown name or an empty list aborts the run. Each piece must pass alone.
 - `KEY_TEST_ORDER=reverse` runs the pieces from last to first, on one shard. A piece that fails only in reverse order depends on state from another piece.
 - `KEY_TEST_SHARDS=<n>` sets the shard count (default 6, never more than the chosen pieces). See Shards.
-- `KEY_TEST_DEADLINE_S=<s>` sets when the run stops itself (default 280). A full run on one shard takes longer, so it needs a higher value. The recipe sets the scope's time limit to this value plus 20 s.
+- `KEY_TEST_DEADLINE_S=<s>` sets when the run stops itself (default 280). A full run on one shard takes longer, so it needs a higher value. The recipe sets the scope's time limit to this value plus 70 s, which covers the shutdown after the deadline.
 - `KEY_TEST_WEIGHTS=<timings file>` orders the queue by that file instead of `piece_seconds.json` and the newest local timings.
 - `SHADOW_SH` must name a script that runs `up|spawn|keys|down <name>` for a nested, invisible compositor session. It can also answer `status` with one `<name>: up|down ...` line per session, which the sweep reads.
   Cleanup of killed runs works only for drivers that keep a session's runtime dir in `/tmp/shadow-<uid>-<name>`.
   When `SHADOW_SH` is unset, the recipe uses `$HOME/dotfiles/.claude/skills/shadow/shadow.sh` if it is executable. With neither, it exits.
-- One run at a time per machine, across worktrees: the recipe takes `$XDG_RUNTIME_DIR/desertfox-key-test.lock` and a second run waits up to 900 s for it.
+- One run at a time per machine, across worktrees: the recipe takes `/tmp/desertfox-key-test.lock` and a second run waits up to 900 s for it, after it prints the holders. Never wrap `just key-test` in `flock` on that file: the outer lock blocks the recipe's own for the whole wait.
 
 ## Areas and key-test-changed
 
@@ -130,7 +130,7 @@ Every run times itself and prints a summary at the end: time by category, time o
 ## Traps
 
 - Run key tests only in your own worktree. Never run two from one worktree: each `just key-test` rebuilds and clears that worktree's `dist/`.
-- Do not wrap `just key-test` in `timeout`. The recipe already runs in a systemd scope with a memory cap of 16 GB (throttled from 14 GB), no swap and CPU limited to 14 cores, and a time limit of the deadline plus 20 seconds (300 by default). Without a systemd user session it runs uncapped and says so.
+- Do not wrap `just key-test` in `timeout`. The recipe already runs in a systemd scope with a memory cap of 16 GB (throttled from 14 GB), no swap and CPU limited to 14 cores, and a time limit of the deadline plus 70 seconds (350 by default). Without a systemd user session it runs uncapped and says so.
 - On the first run after a build, an early setup case can fail. Rerun once before you debug.
 - Add-ons force-installed through the Firefox policy file can eat modifier chords in the shadow session. Disable them before you trust a chord result.
 - The first-install Quick Start tab opens beside the first tab and shifts the tab order. That was the cause of #123: Alt+J wrapped to an empty tab instead of page a. The test config now sets `open_quick_start_on_install = false`, and `expect_exactly_one_visible` also checks the active tab URL, so an empty tab fails the case (#155).

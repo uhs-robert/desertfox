@@ -63,11 +63,11 @@ key-test: build
         exit 2
     fi
     # One run at a time: two sharded runs together break the memory budget. -o keeps the lock fd out of the run, so a session that outlives it does not hold the lock.
-    lock_file="${XDG_RUNTIME_DIR:-/tmp}/desertfox-key-test.lock"
-    # A test Firefox that runs away would otherwise take the whole tmux window with it: the kernel kills it, and systemd then stops every process in the window's unit. In its own capped scope, only this run dies. The time limit is the run's own deadline plus a margin, so a serial run with a higher KEY_TEST_DEADLINE_S is not killed first.
+    lock_file=/tmp/desertfox-key-test.lock
+    # A test Firefox that runs away would otherwise take the whole tmux window with it: the kernel kills it, and systemd then stops every process in the window's unit. In its own capped scope, only this run dies. The time limit is the run's own deadline plus a margin, so a serial run with a higher KEY_TEST_DEADLINE_S is not killed first. The margin covers the shutdown after the deadline: the worker stop grace (10 s, STOP_GRACE_MS in run.mjs), the shadow_down timeout (30 s, in harness.mjs) and 30 s of slack for the sweep and the merge.
     deadline_s="${KEY_TEST_DEADLINE_S:-280}"
     if ! [[ "$deadline_s" =~ ^[1-9][0-9]*$ ]]; then deadline_s=280; fi
-    scope_args=(systemd-run --user --scope --quiet -p MemoryMax=16G -p MemoryHigh=14G -p MemorySwapMax=0 -p CPUQuota=1400% -p TimeoutStopSec=20 -p RuntimeMaxSec=$((deadline_s + 20)))
+    scope_args=(systemd-run --user --scope --quiet -p MemoryMax=16G -p MemoryHigh=14G -p MemorySwapMax=0 -p CPUQuota=1400% -p TimeoutStopSec=20 -p RuntimeMaxSec=$((deadline_s + 70)))
     run_cmd=(node test/key/run.mjs)
     if command -v systemd-run >/dev/null 2>&1 && "${scope_args[@]}" true >/dev/null 2>&1; then
         run_cmd=("${scope_args[@]}" "${run_cmd[@]}")
@@ -75,7 +75,11 @@ key-test: build
         echo "key-test: no systemd user session, so this run has no memory cap." >&2
     fi
     if ! flock -n -o "$lock_file" true; then
-        echo "key-test: another key-test run holds $lock_file, waiting up to 900 s for it." >&2
+        echo "key-test: the lock $lock_file is busy, waiting up to 900 s. Holders:" >&2
+        # An outer flock on this file around the recipe holds it for the whole wait. Never wrap the recipe in flock.
+        for holder_pid in $(fuser "$lock_file" 2>/dev/null); do
+            ps -o pid=,args= -p "$holder_pid" >&2 || true
+        done
     fi
     exec flock -o -w 900 "$lock_file" "${run_cmd[@]}"
 
