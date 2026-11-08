@@ -83,6 +83,8 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, open_p
     mark = events.length;
     await in_top_frame(`document.getElementById("cross").src = "http://localhost:" + location.port + "/frame_inner?id=${page_id}_moved"`);
     await wait_event(mark, on_page(`${page_id}_moved`, "tree_read"), "the navigated frame to start at once, still focused");
+    // The frame gets its focus back a moment after its script starts, and j sooner is lost. The slow result poll of in_top_frame used to cover this.
+    await sleep(300);
     await send_keys("j");
     await wait_event(mark, scroll_of(`${page_id}_moved`), "j to scroll the navigated frame");
     const before_top = last_scroll_y(page_id);

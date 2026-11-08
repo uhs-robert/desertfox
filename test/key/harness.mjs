@@ -9,7 +9,7 @@ import { homedir, tmpdir, userInfo } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
-import { connect_rdp, evaluate_in_background, evaluate_in_chrome, install_temporary_addon } from "./rdp.mjs";
+import { connect_rdp, evaluate_in_background, evaluate_in_chrome, evaluate_in_page_frames, install_temporary_addon } from "./rdp.mjs";
 import { start_server } from "./server.mjs";
 import { default_timings_path } from "./timings.mjs";
 
@@ -28,8 +28,17 @@ if (!shadow_sh) {
 
 const raw_sleep = (ms) => new Promise((resolve_sleep) => setTimeout(resolve_sleep, ms));
 const shadow = (...args) => run_execfile(shadow_sh, args, { maxBuffer: 1 << 24 });
-// The pause lets a switched-to tab take keyboard focus before the next press.
+// The pause of send_keys lets a switched-to tab take keyboard focus before the next press. press_keys has none: wait for the key's effect instead.
 const KEY_SETTLE_MS = 350;
+// A case that runs past this fails by name. Its waits have their own, shorter timeouts, so only a wait with no end reaches it.
+const CASE_CAP_MS = 30000;
+// The test pages report a scroll this long after it ends (the debounce in the reporter of server.mjs).
+const SCROLL_REPORT_DELAY_MS = 150;
+// A key pressed right after a page reported focus was lost in 12 of 12 tries, and one pressed 30 ms later was kept in 48 of 48.
+const KEY_ROUTE_FLOOR_MS = 100;
+// A tab hidden or shown within 150 ms of its opening lost the visibility report of its next switch in 6 of 6 tries, and 200 ms kept it in 6 of 6. A new page gets no keys before this age.
+const NEW_PAGE_QUIET_MS = 300;
+const BARRIER_KEY = "F8";
 
 export const ALT = (key) => ["-M", "alt", key, "-m", "alt"];
 export const CTRL = (key) => ["-M", "ctrl", key, "-m", "ctrl"];
@@ -124,9 +133,29 @@ export async function create_session({ name: shadow_name, timings }) {
   const measurements = {};
   const sleep = (ms) => timings.time("sleeps", () => raw_sleep(ms));
   const timed_shadow = (...args) => timings.time("driver", () => shadow(...args));
+  const press_keys = (...wtype_args) => timings.time("keys", () => shadow("keys", shadow_name, ...wtype_args));
   async function send_keys(...wtype_args) {
-    await timings.time("keys", () => shadow("keys", shadow_name, ...wtype_args));
+    await press_keys(...wtype_args);
     await timings.time("settle", () => raw_sleep(KEY_SETTLE_MS));
+  }
+
+  // The latest wait that started, so a case that hits the cap says what it was waiting for.
+  let waiting_for;
+  // The body cannot be cancelled, so one that outlives its cap runs on in the background. Its waits end by their own timeouts, and a late failure is logged here and reported nowhere else.
+  async function within_case_cap(name, body) {
+    let cap_reached = false;
+    waiting_for = undefined;
+    let cap_timer;
+    const running = body();
+    running.catch((error) => { if (cap_reached) console.log(`late failure of "${name}" after its cap: ${error.message}`); });
+    const capped = new Promise((_, reject) => {
+      cap_timer = setTimeout(() => { cap_reached = true; reject(new Error(`ran past the ${CASE_CAP_MS / 1000} s case cap${waiting_for ? ` while waiting for ${waiting_for}` : ""}`)); }, CASE_CAP_MS);
+    });
+    try {
+      return await Promise.race([running, capped]);
+    } finally {
+      clearTimeout(cap_timer);
+    }
   }
 
   // KEY_TEST_ONLY=<regex> runs only the cases whose name matches, for a quick repro.
@@ -139,7 +168,7 @@ export async function create_session({ name: shadow_name, timings }) {
     const label = selected ? "" : "SETUP ";
     await timings.time_case(name, { setup: !selected }, async () => {
       try {
-        await body();
+        await within_case_cap(name, body);
         results.push({ name, pass: true, setup: !selected });
         console.log(`${label}PASS ${name}`);
       } catch (error) {
@@ -213,6 +242,7 @@ export async function create_session({ name: shadow_name, timings }) {
   const find_event = (mark, predicate) => since(mark).find(predicate);
   const wait_event = (...args) => timings.time("waits", () => wait_event_untimed(...args));
   async function wait_event_untimed(mark, predicate, what, timeout_ms = 8000) {
+    waiting_for = what;
     const deadline = Date.now() + timeout_ms;
     for (;;) {
       const found = find_event(mark, predicate);
@@ -226,8 +256,42 @@ export async function create_session({ name: shadow_name, timings }) {
   const scroll_of = (page_id) => (event) => event.type === "scroll" && event.page_id === page_id;
   const last_scroll_y = (page_id) => events.filter(scroll_of(page_id)).at(-1)?.y ?? 0;
 
+  // The id of the page in the active tab when it is one of this server's pages, otherwise undefined.
+  async function active_test_page_id() {
+    const active_url = await in_background(`browser.tabs.query({ active: true, lastFocusedWindow: true }).then(([tab]) => tab?.url ?? "")`);
+    const url = URL.canParse(active_url ?? "") ? new URL(active_url) : undefined;
+    return url?.origin === new URL(url_of("page", "x")).origin ? url.searchParams.get("id") ?? undefined : undefined;
+  }
+
   const open_page = (...args) => timings.time("page_opens", () => open_page_untimed(...args));
+  // The background opens the page, so the address bar never takes the keys. `new_tab` adds an active tab at the end of the last focused window, otherwise the active tab navigates.
   async function open_page_untimed(kind, id, { new_tab }) {
+    const started_at = Date.now();
+    const mark = events.length;
+    const url = JSON.stringify(url_of(kind, id));
+    // The page we leave reports that it is hidden a few milliseconds after the open, which would land in the next case's events.
+    const leaving_page_id = new_tab ? await active_test_page_id() : undefined;
+    const open_in_new_tab = `(async () => { const window_id = (await browser.windows.getLastFocused()).id; const tab = await browser.tabs.create({ windowId: window_id, url: ${url}, active: true }); return tab.id; })()`;
+    const navigate_active_tab = `(async () => { const [tab] = await browser.tabs.query({ active: true, lastFocusedWindow: true }); await browser.tabs.update(tab.id, { url: ${url} }); return tab.id; })()`;
+    let tab_id;
+    // A page whose content script never reads the tree gets one more load, so one lost start keeps the test steady.
+    for (let attempt = 0; ; attempt++) {
+      tab_id = await background_call(attempt === 0 ? (new_tab ? open_in_new_tab : navigate_active_tab) : `browser.tabs.update(${tab_id}, { url: ${url} }).then((tab) => tab.id)`);
+      try {
+        await wait_event(mark, (event) => event.type === "tree_read" && event.page_id === id, `content script ready on ${id}`, 6000);
+        break;
+      } catch (error) {
+        if (attempt >= 1) throw error;
+        measurements.navigation_retries = (measurements.navigation_retries ?? 0) + 1;
+      }
+    }
+    if (leaving_page_id) await wait_event(mark, (event) => event.type === "visibility" && event.state === "hidden" && event.page_id === leaving_page_id, `${leaving_page_id} to report that it is hidden`, 3000);
+    await settle_focus({ tab_id });
+    await wait_page_quiet(started_at);
+  }
+
+  // The keyboard way in, for a case that tests the address bar. No case does today.
+  async function open_page_by_keys(kind, id, { new_tab }) {
     const mark = events.length;
     if (new_tab) {
       await send_keys(...CTRL("t"));
@@ -413,11 +477,13 @@ export async function create_session({ name: shadow_name, timings }) {
   const close_tabs_with = (text) => in_background(`(async () => { for (const tab of await browser.tabs.query({})) if (tab.url.includes(${JSON.stringify(text)})) await browser.tabs.remove(tab.id); })()`);
 
   // Polls until the check holds. `what` names the wait in the error.
-  async function poll_until(what, check, timeout_ms = 10000) {
+  const poll_until = (what, check, options) => timings.time("waits", () => poll_until_untimed(what, check, options));
+  async function poll_until_untimed(what, check, { timeout_ms = 5000, step_ms = 50 } = {}) {
+    waiting_for = what;
     const deadline = Date.now() + timeout_ms;
     while (!(await check())) {
       if (Date.now() > deadline) throw new Error(`timed out waiting for ${what}`);
-      await sleep(100);
+      await raw_sleep(step_ms);
     }
   }
 
@@ -427,7 +493,7 @@ export async function create_session({ name: shadow_name, timings }) {
   const page_has_focus = (tab_id) => in_background(`browser.tabs.executeScript(${tab_id}, { code: "document.hasFocus()" }).then((answers) => answers[0] === true)`);
   // Focus lands in browser chrome after tabs close, and a closed window can leave compositor focus on it. Ask for the window and tab, then use the focus_page chord, until the page reports focus.
   async function confirm_page_focus(tab_id, window_id) {
-    const focused = (timeout_ms) => poll_until("page focus", () => page_has_focus(tab_id), timeout_ms).then(() => true, () => false);
+    const focused = (timeout_ms) => poll_until("page focus", () => page_has_focus(tab_id), { timeout_ms }).then(() => true, () => false);
     if (await focused(300)) return;
     for (let attempt = 0; attempt < 3; attempt++) {
       await in_background(`(async () => { await browser.windows.update(${window_id}, { focused: true }); await browser.tabs.update(${tab_id}, { active: true }); })()`);
@@ -438,9 +504,34 @@ export async function create_session({ name: shadow_name, timings }) {
     throw new Error(`tab ${tab_id} never reported focus`);
   }
 
+  // Keys and visibility reports of a page are unreliable until NEW_PAGE_QUIET_MS after it was created, so the page that begins a piece or a case waits for that.
+  async function wait_page_quiet(created_at) {
+    const too_young_ms = NEW_PAGE_QUIET_MS - (Date.now() - created_at);
+    if (too_young_ms > 0) await sleep(too_young_ms);
+  }
+  // The same for a tab that a command opened, aged from the moment the browser activated it.
+  async function wait_tab_quiet(tab_id) {
+    await wait_page_quiet(await background_call(`browser.tabs.get(${tab_id}).then((tab) => tab.lastAccessed)`));
+  }
+
+  // The focus-only settle: waits for the page of a tab to report focus, then for KEY_ROUTE_FLOOR_MS, after keys that switch tab, close one or leave the line. Defaults to the active tab.
+  // It reads the page, so it serves the test pages only. An extension page cannot answer it.
+  async function settle_focus({ tab_id, timeout_ms = 3000 } = {}) {
+    const tab = await background_call(`(async () => {
+      const tab = ${tab_id === undefined ? "(await browser.tabs.query({ active: true, lastFocusedWindow: true }))[0]" : `await browser.tabs.get(${tab_id})`};
+      return { id: tab.id, window_id: tab.windowId };
+    })()`);
+    try {
+      await poll_until(`tab ${tab.id} to report page focus`, () => page_has_focus(tab.id), { timeout_ms });
+    } catch {
+      await confirm_page_focus(tab.id, tab.window_id);
+    }
+    await sleep(KEY_ROUTE_FLOOR_MS);
+  }
+
   // A bulk tabs.remove of 30 or more tabs outlasts one debugger call, so the close is started and then polled.
   async function wait_for_tabs(what, count_expr, expected) {
-    await poll_until(what, async () => (await in_background(count_expr)) === expected, 30000);
+    await poll_until(what, async () => (await in_background(count_expr)) === expected, { timeout_ms: 30000 });
   }
 
   async function close_tabs_outside(keep_tab_ids, keep_window_ids) {
@@ -462,34 +553,48 @@ export async function create_session({ name: shadow_name, timings }) {
     await wait_for_tabs("the extra tabs to close", `browser.tabs.query({}).then((tabs) => tabs.length)`, kept);
   }
 
-  // Focuses the active tab of the last focused window, or any tab when none is active, so a step that types keys has a page to type into.
+  // Focuses a test page, so a step that types keys has a page to type into. It prefers the active tab of the last focused window and never takes an about: or extension page, which cannot answer the focus check.
+  // With no test page left it opens one.
   async function refocus_any_tab() {
-    const target = await background_call(`(async () => {
-      const [active] = await browser.tabs.query({ active: true, lastFocusedWindow: true });
-      const tab = active ?? (await browser.tabs.query({}))[0];
-      return { id: tab.id, window_id: tab.windowId };
+    let target = await background_call(`(async () => {
+      const test_pages = { url: "*://127.0.0.1/*" };
+      const tab = (await browser.tabs.query({ ...test_pages, active: true, lastFocusedWindow: true }))[0] ?? (await browser.tabs.query(test_pages))[0];
+      return tab ? { id: tab.id, window_id: tab.windowId } : null;
     })()`);
+    if (!target) {
+      const mark = events.length;
+      target = await background_call(`browser.tabs.create({ url: ${JSON.stringify(url_of("page", "home_cleanup"))}, active: true }).then((tab) => ({ id: tab.id, window_id: tab.windowId }))`);
+      await wait_event(mark, (event) => event.type === "tree_read" && event.page_id === "home_cleanup", "content script ready on home_cleanup", 10000);
+    }
     await confirm_page_focus(target.id, target.window_id);
   }
 
-  // Unsets the temp edits through the command line, which rebuilds the effective config the way a user's :unset does.
+  const temp_settings_pending = async () => (await read_config_status())?.temp?.length > 0;
+
+  // Unsets the temp edits through the command line, which rebuilds the effective config the way a user's :unset does. Returns whether it typed keys.
   async function clear_temp_settings() {
-    if (!((await read_config_status())?.temp?.length > 0)) return;
+    if (!(await temp_settings_pending())) return false;
     await send_keys(":unset -t all", "-k", "Return");
-    await poll_until("the temp settings to clear", async () => !((await read_config_status())?.temp?.length > 0), 6000);
+    await poll_until("the temp settings to clear", async () => !(await temp_settings_pending()), { timeout_ms: 6000 });
+    return true;
   }
 
+  const config_restore_pending = () => linked_config_dir !== config_dir;
+
   // Puts the config link back on config_dir and reloads it in place. A debug.restart may still be starting the new background, and a qr sent to it is lost, so the status key comes first.
+  // Returns whether it typed keys.
   async function restore_config() {
-    if (linked_config_dir === config_dir) return;
-    await poll_until("the background to publish its config status", async () => (await read_config_status()) != null, 15000);
+    if (!config_restore_pending()) return false;
+    await poll_until("the background to publish its config status", async () => (await read_config_status()) != null, { timeout_ms: 15000 });
     await load_config_dir(config_dir);
-    await poll_until("the files config to apply", async () => (await read_config_status())?.source === "files", 10000);
+    await poll_until("the files config to apply", async () => (await read_config_status())?.source === "files", { timeout_ms: 10000 });
+    return true;
   }
 
   // Every piece starts from the same state: one window with one tab at home_<piece>, active and focused, on the base config with no temp edits.
   async function reset_for_piece(home_id) {
     const mark = events.length;
+    const created_at = Date.now();
     const home = await background_call(`(async () => {
       const keep = await browser.windows.getLastFocused();
       const tab = await browser.tabs.create({ windowId: keep.id, url: ${JSON.stringify(url_of("page", home_id))}, active: true });
@@ -502,10 +607,11 @@ export async function create_session({ name: shadow_name, timings }) {
     await wait_for_tabs("one window to be left", `browser.windows.getAll().then((windows) => windows.length)`, 1);
     await wait_event(mark, (event) => event.type === "tree_read" && event.page_id === home_id, `content script ready on ${home_id}`, 10000);
     await confirm_page_focus(home.tab_id, home.window_id);
-    await restore_config();
-    await clear_temp_settings();
-    // restore_config and clear_temp_settings type keys, so the page is asked once more.
-    await confirm_page_focus(home.tab_id, home.window_id);
+    const restored = await restore_config();
+    const unset = await clear_temp_settings();
+    // Their keys can leave the focus elsewhere, so the page is asked once more only when they typed.
+    if (restored || unset) await confirm_page_focus(home.tab_id, home.window_id);
+    await wait_page_quiet(created_at);
     return { tab_ids: [home.tab_id], window_ids: [home.window_id] };
   }
 
@@ -530,15 +636,85 @@ export async function create_session({ name: shadow_name, timings }) {
       }
     };
     await attempt("cleanup close", () => close_tabs_outside(snapshot.tab_ids, snapshot.window_ids));
-    await attempt("cleanup focus", refocus_any_tab);
-    await attempt("cleanup config restore", async () => {
-      await refocus_any_tab();
-      await restore_config();
-    });
-    await attempt("cleanup temp unset", async () => {
-      await refocus_any_tab();
-      await clear_temp_settings();
-    });
+    // Only these two steps type keys, so a piece that left no config or temp edits skips the refocus.
+    const restore_pending = config_restore_pending();
+    const unset_pending = await temp_settings_pending();
+    if (restore_pending || unset_pending) await attempt("cleanup focus", refocus_any_tab);
+    if (restore_pending) await attempt("cleanup config restore", restore_config);
+    if (unset_pending) await attempt("cleanup temp unset", clear_temp_settings);
+  }
+
+  // The command line is an extension iframe in the page. This reads its text, rows and note from the frame of the selected tab, or answers { open: false } when none is there.
+  // The function runs in the frame's content process, so it holds no outer variable.
+  const read_cmdline_frame = (frame_window) => {
+    const document = frame_window.document;
+    const line = document.getElementById("line");
+    if (!line) return { open: false, building: true };
+    const text = (element) => element?.textContent ?? "";
+    const items = [...document.querySelectorAll(".desertfox-cmdline-item")];
+    const note = document.getElementById("note");
+    return {
+      open: true,
+      // The page has taken its start message when the list shows or the line holds text. Before that it drops an Escape.
+      ready: !document.getElementById("list").hidden || line.value !== "",
+      value: line.value,
+      caret: line.selectionStart,
+      focused: document.hasFocus(),
+      prompt: text(document.querySelector(".desertfox-cmdline-prompt")),
+      list_open: !document.getElementById("list").hidden,
+      rows: items.length,
+      row_texts: items.map((item) => item.textContent),
+      row_flags: items.map((item) => [...item.querySelectorAll("[class*='desertfox-cmdline-flag-']")].map((flag) => flag.className.match(/desertfox-cmdline-flag-(\w+)/)[1])),
+      selected: items.find((item) => item.classList.contains("desertfox-cmdline-selected"))?.getAttribute("data-index") ?? null,
+      marked: items.filter((item) => item.classList.contains("desertfox-cmdline-item-marked")).length,
+      note: note.hidden ? "" : text(note),
+    };
+  };
+  async function read_cmdline_state() {
+    const frames = await evaluate_in_page_frames(rdp, "cmdline.html", read_cmdline_frame.toString());
+    return frames[0] ?? { open: false };
+  }
+  // Escape closes the list first and the line next, so this presses until the line is gone, and waits after each press for the state to change.
+  async function close_cmdline() {
+    for (let presses = 0; presses < 5; presses++) {
+      const before = await read_cmdline_state();
+      if (!before.open) return;
+      await press_keys("-k", "Escape");
+      await wait_cmdline((after) => !after.open || after.list_open !== before.list_open || after.marked !== before.marked || after.value !== before.value, "Escape to change the command line");
+    }
+    throw new Error("the command line stayed open after five Escape presses");
+  }
+  // Polls the command line state until the check holds, and puts the last state in the timeout error.
+  async function wait_cmdline(check, what, timeout_ms = 3000) {
+    let state;
+    try {
+      await poll_until(what, async () => check((state = await read_cmdline_state())), { timeout_ms });
+    } catch (error) {
+      throw new Error(`${error.message} (command line: ${JSON.stringify(state)})`);
+    }
+    return state;
+  }
+
+  // Presses a key with no binding after the key under test and waits for the page to see it, so every earlier key has reached the page by then.
+  // It returns the barrier event's index in `events`. It fails by name when the key never shows, or shows on another page, such as after a tab switch that was not meant.
+  // A page that cancels keys in capture, or a mode that swallows keys, never reports it. Then the barrier times out and does not pass.
+  async function barrier(page_id, { key = BARRIER_KEY, timeout_ms = 3000 } = {}) {
+    // The key would type into the line and never reach the page.
+    if ((await read_cmdline_state()).open) throw new Error(`barrier key ${key} refused: the command line is open`);
+    const mark = events.length;
+    await press_keys("-k", key);
+    const seen = await wait_event(mark, (event) => event.type === "keydown" && event.key === key, `barrier key ${key} on ${page_id}`, timeout_ms);
+    if (seen.page_id !== page_id) throw new Error(`barrier key ${key} reached ${seen.page_id}, not ${page_id}`);
+    return events.indexOf(seen);
+  }
+
+  // Fails when an event that matches `predicate` came between `mark` and the barrier. A key that never arrived also leaves nothing, so the caller needs a proof that it arrived (a command line value, a mode label).
+  // `report_delay_ms` waits after the barrier for a report that trails its cause, such as a scroll (SCROLL_REPORT_DELAY_MS plus a margin).
+  async function expect_absent(mark, page_id, predicate, what, { report_delay_ms = 0 } = {}) {
+    const barrier_index = await barrier(page_id);
+    if (report_delay_ms > 0) await sleep(report_delay_ms);
+    const found = events.slice(mark, report_delay_ms > 0 ? undefined : barrier_index).find(predicate);
+    expect(!found, `${what}: ${JSON.stringify(found)}`);
   }
 
   // One context per piece file: the shared helpers plus that piece's own setup steps and teardown list.
@@ -556,7 +732,7 @@ export async function create_session({ name: shadow_name, timings }) {
       if (state.setup_failure) return;
       await timings.time_case("(setup)", { setup: true }, async () => {
         try {
-          await body();
+          await within_case_cap(name, body);
           console.log(`SETUP ${name}`);
         } catch (error) {
           state.setup_failure = { name, reason: error.message };
@@ -569,7 +745,7 @@ export async function create_session({ name: shadow_name, timings }) {
     // Stores a number for the end-of-run measurements line.
     const record = (key, value) => { measurements[key] = value; };
     // The cases of a piece file in test/key/p<number>_*.mjs get these helpers.
-    const context = { config_dir, config_copy, load_config_dir, take_shot: (path) => timed_shadow("shot", shadow_name, "--out", path), run_case: run_piece_case, setup, on_teardown, expect, open_page, send_keys, sleep, events, wait_event, since, find_event, url_of, rdp, extension_id: EXTENSION_ID, scroll_delta_after, became_visible, scroll_of, last_scroll_y,
+    const context = { config_dir, config_copy, load_config_dir, take_shot: (path) => timed_shadow("shot", shadow_name, "--out", path), run_case: run_piece_case, setup, on_teardown, expect, open_page, open_page_by_keys, send_keys, press_keys, settle_focus, poll_until, wait_tab_quiet, barrier, expect_absent, read_cmdline_state, wait_cmdline, close_cmdline, scroll_report_wait_ms: SCROLL_REPORT_DELAY_MS + 100, sleep, events, wait_event, since, find_event, url_of, rdp, extension_id: EXTENSION_ID, scroll_delta_after, became_visible, scroll_of, last_scroll_y,
       // Moved out of the run.mjs cases. Pieces may use them too.
       in_background, read_local, reload_in_place, wait_reinject_report, injections_of, settled_injection_count, expect_no_scroll, expect_exactly_one_visible, visible_events, extension_view, close_tabs_with, record };
     return { context, state, piece_file };
