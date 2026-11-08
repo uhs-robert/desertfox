@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -63,4 +63,20 @@ test("the sweep leaves other folders in the tmp root alone", () => with_tmp_root
   writeFileSync(join(other, "owner"), `${dead_pid()} 1\n`);
   sweep_dead_run_dirs(tmp_root);
   assert.ok(existsSync(other));
+}));
+
+test("the sweep removes the owner file last, so a removal that stops midway leaves the folder to the next sweep", () => with_tmp_root((tmp_root) => {
+  const run_dir = left_run_dir(tmp_root, "stuck", `${dead_pid()} 12345\n`);
+  // A read-only folder with a file in it cannot be emptied, which stands in for a worker that keeps writing.
+  const stuck = join(run_dir, "s1");
+  writeFileSync(join(stuck, "file"), "x");
+  chmodSync(stuck, 0o500);
+  try {
+    sweep_dead_run_dirs(tmp_root);
+    assert.ok(existsSync(join(run_dir, "owner")));
+  } finally {
+    chmodSync(stuck, 0o700);
+  }
+  sweep_dead_run_dirs(tmp_root);
+  assert.ok(!existsSync(run_dir));
 }));

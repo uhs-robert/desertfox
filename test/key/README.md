@@ -26,6 +26,10 @@ A full run takes about 34 s on 8 shards. It needs labwc, Hyprland, dbus-daemon a
 - `KEY_TEST_PROBE=1 KEY_TEST_PIECES=p97_key_delivery KEY_TEST_DEADLINE_S=900 just key-test` runs the key-delivery probe. It presses every key the pieces use and checks each keydown's `key` and `code`, then counts lost F8 presses at 0, 30, 100 and 300 ms after a page loads. `KEY_TEST_PROBE_ROUNDS` sets the repeats (default 20). Without `KEY_TEST_PROBE` the piece does nothing.
 - One run at a time per machine, across worktrees: the recipe takes `/tmp/desertfox-key-test.lock` and a second run waits up to 900 s for it, after it prints the holders. Never wrap `just key-test` in `flock` on that file: the outer lock blocks the recipe's own for the whole wait. `just test-all` runs `just test` beside the key test, and the unit tests take no extra lock.
 
+## Lifecycle probes
+
+`just key-test-lifecycle [probe...]` runs `lifecycle_probe.mjs`: small real runs that are signalled, killed or crashed on purpose. The probes send SIGINT and SIGTERM to the whole process group and, in one probe, to the coordinator alone, at startup and mid-run. They also kill a worker, crash Firefox, hit the deadline, check the debug ports, run a foreign sweep, and SIGKILL a run before a rerun. Each probe checks the exit code, the output, the merged report's `incomplete` field, and that nothing stays in `/tmp` or running. The recipe takes the key-test lock, runs the probes one at a time and takes about 2 minutes. It stays out of `just test`. `sigkill-coordinator-then-rerun` is a known failure (issue #299): a worker that is slow to exit after its coordinator dies can leave a run folder. It prints `KNOWN-FAIL` and does not fail the run.
+
 ## Session and keyboard
 
 `session.mjs` starts one session per shard: a private session bus, headless labwc as the host and Hyprland nested in it. The session has no bar and no notification server, so `user.js` sets `alerts.useSystemBackend` to false and Firefox shows notices in a window of its own. Close a notice when the case is done, because its window holds the focus.

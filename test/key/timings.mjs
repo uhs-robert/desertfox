@@ -1,6 +1,6 @@
 // Wall-time accounting for one key-test run. Each moment of the run is charged to exactly one category
 // of the case that is running (or to OUTSIDE_CASES), so the categories of a case add up to its wall time.
-import { mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 export const OUTSIDE_CASES = "(outside cases)";
@@ -158,8 +158,13 @@ export function create_timings() {
   return { time, time_case, finish_active_case, finish_active_piece, time_piece, wrap_rdp, record_tab_count, record_lost_key_suspect, report, summary_text, write_json: write_report };
 }
 
-export function write_report(path, full_report) {
-  mkdirSync(dirname(path), { recursive: true });
+// A worker passes create_dir false: its folder belongs to a run that a sweep may have removed, and recreating it would leave a folder that nothing owns.
+export function write_report(path, full_report, { create_dir = true } = {}) {
+  if (create_dir) mkdirSync(dirname(path), { recursive: true });
+  else if (!existsSync(dirname(path))) {
+    console.log(`timings not written: ${dirname(path)} is gone`);
+    return;
+  }
   writeFileSync(path, `${JSON.stringify(full_report, null, 2)}\n`);
 }
 

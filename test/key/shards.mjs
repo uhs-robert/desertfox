@@ -56,6 +56,31 @@ export function load_weights({ committed_path = COMMITTED_WEIGHTS_PATH, logs_dir
   return { weights: committed, source: committed_path };
 }
 
+const exit_text = ({ code, signal }) => (signal ? `signal ${signal}` : `exit ${code}`);
+
+// What a worker's exit means. failure is the line to report, if any. clean_exit says the worker stopped on request, so the caller need not stop its session.
+// After stop_reason is set the exits are the stop itself, never failures.
+export function classify_exit({ exit, state, in_flight_piece, startup_ms, startup_failure, last_lines, stop_reason, shard }) {
+  const clean_exit = exit.code === 0 && state === "stopping";
+  if (stop_reason) return { failure: undefined, clean_exit };
+  if (in_flight_piece) return { failure: `${in_flight_piece}: worker s${shard} died (${exit_text(exit)}) while running it`, clean_exit };
+  if (startup_ms === undefined) return { failure: `shard s${shard} startup: ${startup_failure ?? `${exit_text(exit)}: ${last_lines.join(" | ")}`}`, clean_exit };
+  if (!clean_exit) return { failure: `shard s${shard} exited (${exit_text(exit)}) between pieces`, clean_exit };
+  return { failure: undefined, clean_exit };
+}
+
+// The record of a run that stopped before its queue was done, or undefined when every piece finished.
+export function build_incomplete({ stop_reason, in_flight, not_started }) {
+  if (in_flight.length + not_started.length === 0) return undefined;
+  return { reason: stop_reason ?? "every shard exited before the queue was empty", in_flight, not_started };
+}
+
+// 0 only for a run that passed and was not stopped. A stop picks its own code (130, 143, or 1 for the deadline).
+export function final_exit_code({ failed_case_count, failure_count, incomplete, stop_reason, stop_exit_code }) {
+  const passed = failed_case_count === 0 && failure_count === 0 && !incomplete && !stop_reason;
+  return passed ? 0 : (stop_exit_code ?? 1);
+}
+
 // Longest first, so the long pieces start early and the short ones fill the gaps at the end.
 // A piece with no weight goes first: a new piece of unknown length placed last can stretch the run by its whole length.
 export function queue_order(piece_files, weights) {

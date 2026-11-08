@@ -158,7 +158,11 @@ export function sweep_dead_run_dirs(tmp_root = tmpdir()) {
     if (process_start_ticks(Number(owner_pid)) === owner_start_ticks) continue;
     console.log(`sweep: removing ${entry}, left by dead run ${owner_pid}`);
     try {
-      rmSync(run_dir, { recursive: true, force: true });
+      // Workers of the dead coordinator may still be tearing down and writing into the folder, so the removal retries.
+      // The owner file goes last: a removal that fails midway leaves the folder to the next sweep instead of owner-less.
+      const retry = { recursive: true, force: true, maxRetries: 20, retryDelay: 250 };
+      for (const name of readdirSync(run_dir).filter((name) => name !== OWNER_FILE)) rmSync(join(run_dir, name), retry);
+      rmSync(run_dir, retry);
     } catch (error) {
       console.error(`sweep: ${error.message}`);
     }
@@ -207,6 +211,8 @@ export async function start_session({ name, session_dir }) {
     HOME: home, USER: userInfo().username, LOGNAME: userInfo().username, PATH: SYSTEM_PATH, LANG: process.env.LANG || "C.UTF-8", TERM: "dumb",
     XDG_RUNTIME_DIR: runtime_dir, XDG_CONFIG_HOME: join(home, ".config"), XDG_STATE_HOME: join(home, ".local/state"), XDG_CACHE_HOME: join(home, ".cache"), XDG_DATA_HOME: join(home, ".local/share"),
     DBUS_SESSION_BUS_ADDRESS: `unix:path=${runtime_dir}/bus`,
+    // Firefox's GIO call would otherwise make the session bus start gvfsd, which mounts gvfsd-fuse under the runtime dir. A kill leaves that mount stale, and the dir can no longer be removed.
+    GIO_USE_VFS: "local", GVFS_DISABLE_FUSE: "1",
     HYPRLAND_NO_SD_VARS: "1", HYPRLAND_NO_SD_NOTIFY: "1", HYPRLAND_NO_CRASHREPORTER: "1",
     // Seat access stays inside the session: no seatd socket exists there, so nothing grabs a real seat.
     LIBSEAT_BACKEND: "seatd", SEATD_SOCK: `${runtime_dir}/no-seatd.sock`,

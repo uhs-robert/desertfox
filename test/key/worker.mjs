@@ -67,6 +67,7 @@ try {
     debug_port: Number(process.env.KEY_TEST_DEBUG_PORT),
     diagnostics_dir: process.env.KEY_TEST_DIAGNOSTICS_DIR,
     print_summary: false,
+    create_timings_dir: false,
   });
 } catch (error) {
   // create_session tore its own session down before it threw.

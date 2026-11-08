@@ -115,6 +115,27 @@ test-all: install_deps
     echo "test-all: $((SECONDS - start_s)) s"
     exit "$failed"
 
+# Replay the key-test lifecycle probes: signals at startup and mid-run, a killed worker, a crashed Firefox, the deadline, distinct ports, a foreign sweep and a SIGKILLed run followed by a rerun. Serial, about 2 minutes, one probe at a time. Takes the key-test lock like `just key-test`, so never wrap it in `flock`. Name probes to run only those: `just key-test-lifecycle deadline kill-worker`.
+key-test-lifecycle *probes: build
+    #!/usr/bin/env bash
+    set -euo pipefail
+    # The lock and scope lines repeat those of key-test. The scope's time limit covers every probe, each of which stops its own runs.
+    lock_file=/tmp/desertfox-key-test.lock
+    scope_args=(systemd-run --user --scope --quiet -p MemoryMax=16G -p MemoryHigh=14G -p MemorySwapMax=0 -p CPUQuota=1400% -p TimeoutStopSec=20 -p RuntimeMaxSec=900)
+    run_cmd=(node test/key/lifecycle_probe.mjs {{probes}})
+    if command -v systemd-run >/dev/null 2>&1 && "${scope_args[@]}" true >/dev/null 2>&1; then
+        run_cmd=("${scope_args[@]}" "${run_cmd[@]}")
+    else
+        echo "key-test-lifecycle: no systemd user session, so this run has no memory cap." >&2
+    fi
+    if ! flock -n -o "$lock_file" true; then
+        echo "key-test-lifecycle: the lock $lock_file is busy, waiting up to 900 s. Holders:" >&2
+        for holder_pid in $(fuser "$lock_file" 2>/dev/null); do
+            ps -o pid=,args= -p "$holder_pid" >&2 || true
+        done
+    fi
+    exec flock -o -w 900 "$lock_file" "${run_cmd[@]}"
+
 # Rewrite test/key/piece_seconds.json, the piece weights that order the sharded key test, from a full-run timings file (default: the newest .logs/key-test-timings-*.json that no KEY_TEST_ONLY filtered). Run it in the last PR of a change that moves piece run times.
 key-test-weights timings="":
     node test/key/shards.mjs write-weights {{ if timings == "" { "" } else { quote(timings) } }}

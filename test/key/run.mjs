@@ -7,7 +7,7 @@ import { dirname, join, resolve } from "node:path";
 import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
 import { make_run_dir, stop_session_named, sweep_dead_run_dirs, sweep_dead_sessions } from "./session.mjs";
-import { create_ledger, load_weights, pick_debug_ports, piece_name_of, queue_order, stale_weight_warnings } from "./shards.mjs";
+import { build_incomplete, classify_exit, create_ledger, final_exit_code, load_weights, pick_debug_ports, piece_name_of, queue_order, stale_weight_warnings } from "./shards.mjs";
 import { default_timings_path, merge_reports, summary_text, write_report } from "./timings.mjs";
 
 const key_test_dir = dirname(fileURLToPath(import.meta.url));
@@ -58,8 +58,6 @@ function read_setup() {
     process.exit(SETUP_ERROR_EXIT);
   }
 }
-
-const exit_text = ({ code, signal }) => (signal ? `signal ${signal}` : `exit ${code}`);
 
 async function main() {
   const started_at = Date.now();
@@ -157,15 +155,8 @@ async function main() {
       entry.exit = { code, signal };
       entry.finished_ms = elapsed_ms();
       const piece_file = ledger.in_flight_of(entry.shard);
-      const clean_exit = code === 0 && entry.state === "stopping";
-      // After stop_all the incomplete record names the in-flight pieces, and a worker that exits on the SIGTERM did not die on its own.
-      if (piece_file && !stop_reason) {
-        failures.push(`${piece_file}: worker s${entry.shard} died (${exit_text(entry.exit)}) while running it`);
-      } else if (entry.startup_ms === undefined && !stop_reason) {
-        failures.push(`shard s${entry.shard} startup: ${entry.startup_failure ?? `${exit_text(entry.exit)}: ${entry.last_lines.join(" | ")}`}`);
-      } else if (!clean_exit && !stop_reason) {
-        failures.push(`shard s${entry.shard} exited (${exit_text(entry.exit)}) between pieces`);
-      }
+      const { failure, clean_exit } = classify_exit({ exit: entry.exit, state: entry.state, in_flight_piece: piece_file, startup_ms: entry.startup_ms, startup_failure: entry.startup_failure, last_lines: entry.last_lines, stop_reason, shard: entry.shard });
+      if (failure) failures.push(failure);
       // A worker that died without its own teardown leaves its session up. Its marker names a dead pid, so the next sweep would stop it, but this run stops it now.
       if (!clean_exit) await stop_session_named(entry.name).catch((error) => console.log(`key-test: s${entry.shard}: ${error.message}`));
       entry.state = "exited";
@@ -197,7 +188,7 @@ async function main() {
 
   const in_flight = ledger.in_flight();
   const not_started = ledger.not_started();
-  const incomplete = in_flight.length + not_started.length > 0 ? { reason: stop_reason ?? "every shard exited before the queue was empty", in_flight, not_started } : undefined;
+  const incomplete = build_incomplete({ stop_reason, in_flight, not_started });
   const shard_reports = shards.map((entry) => {
     try {
       return { shard: entry.shard, report: JSON.parse(readFileSync(entry.timings_file, "utf8")) };
@@ -243,8 +234,7 @@ async function main() {
   const setup_ran = results.filter((result) => result.setup).length;
   if (setup_ran > 0) console.log(`${setup_ran} setup cases ran only because KEY_TEST_ONLY filtered the run`);
   console.log(`${results.length - failed.length} of ${results.length} cases passed`);
-  const passed = failed.length === 0 && failures.length === 0 && !incomplete && !stop_reason;
-  process.exit(passed ? 0 : (stop_exit_code ?? 1));
+  process.exit(final_exit_code({ failed_case_count: failed.length, failure_count: failures.length, incomplete, stop_reason, stop_exit_code }));
 }
 
 main().catch((error) => {
