@@ -49,6 +49,10 @@ export function create_timings() {
     }
   }
 
+  let firefox;
+  // The version of the Firefox that ran, as `{ version, build_id }`. The session reads it over the debugger once its checks pass.
+  const set_firefox = (info) => { firefox = info; };
+
   let active_case;
 
   // Safe to call twice and from a signal handler. It also drops the entries the case left open (the losing sleep of a Promise.race), so they are not charged to a later case.
@@ -143,6 +147,7 @@ export function create_timings() {
     const outside = bucket_of(OUTSIDE_CASES);
     outside.wall_ms = Object.values(outside.categories).reduce((sum, { ms }) => sum + ms, 0);
     return {
+      ...(firefox && { firefox }),
       total_ms: Date.now() - started_at,
       cases_ms: total_case_ms(),
       outside_cases_ms: outside.wall_ms,
@@ -155,7 +160,7 @@ export function create_timings() {
     };
   }
 
-  return { time, time_case, finish_active_case, finish_active_piece, time_piece, wrap_rdp, record_tab_count, record_lost_key_suspect, report, summary_text, write_json: write_report };
+  return { time, time_case, finish_active_case, finish_active_piece, time_piece, wrap_rdp, set_firefox, record_tab_count, record_lost_key_suspect, report, summary_text, write_json: write_report };
 }
 
 // A worker passes create_dir false: its folder belongs to a run that a sweep may have removed, and recreating it would leave a folder that nothing owns.
@@ -173,6 +178,7 @@ const seconds = (ms) => (ms / 1000).toFixed(1).padStart(7);
 // Takes a report from create_timings or merge_reports. A merged report also gets one line per shard.
 export function summary_text(full_report) {
   const lines = [`key-test timings: ${seconds(full_report.total_ms).trim()} s total, ${seconds(full_report.cases_ms).trim()} s in cases, ${seconds(full_report.outside_cases_ms).trim()} s outside cases`];
+  if (full_report.firefox) lines.push(`Firefox ${full_report.firefox.version}${full_report.firefox.build_id ? ` (build ${full_report.firefox.build_id})` : ""}`);
   lines.push("time by category (all cases and setup together):");
   for (const [category, { ms, count }] of Object.entries(full_report.categories).sort((left, right) => right[1].ms - left[1].ms)) {
     lines.push(`  ${category.padEnd(11)} ${seconds(ms)} s  ${String(count).padStart(6)} calls`);
@@ -219,6 +225,11 @@ export function merge_reports(shard_reports, { total_ms, shards = [], incomplete
     add_categories(merged.outside_cases, report.outside_cases);
     for (const key of ["pieces", "tab_samples", "lost_key_suspects", "cases"]) merged[key].push(...(report[key] ?? []).map((entry) => ({ ...entry, shard })));
   }
+  // One machine runs every shard, so the first shard that read its version speaks for the run. A shard that differs is kept apart.
+  const firefoxes = shard_reports.map(({ report }) => report?.firefox).filter(Boolean);
+  if (firefoxes.length) merged.firefox = firefoxes[0];
+  const other_firefoxes = firefoxes.filter((entry) => entry.version !== firefoxes[0].version || entry.build_id !== firefoxes[0].build_id);
+  if (other_firefoxes.length) merged.other_firefoxes = other_firefoxes;
   merged.shards = shards;
   merged.critical_shard = shards.filter((entry) => entry.finished_ms !== undefined).sort((left, right) => right.finished_ms - left.finished_ms)[0]?.shard;
   if (incomplete) merged.incomplete = incomplete;

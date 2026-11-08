@@ -9,6 +9,7 @@ import { fileURLToPath } from "node:url";
 import { connect_rdp, evaluate_in_background, evaluate_in_chrome, evaluate_in_page_frames, install_temporary_addon } from "./rdp.mjs";
 import { start_server } from "./server.mjs";
 import { start_session, stop_session_named, sweep_dead_sessions } from "./session.mjs";
+import { check_firefox_internals, with_firefox_version } from "./firefox_internals.mjs";
 import { default_timings_path } from "./timings.mjs";
 
 const key_test_dir = dirname(fileURLToPath(import.meta.url));
@@ -429,6 +430,7 @@ export async function create_session({ name: session_name, timings, sweep = true
     timings.record_tab_count(label, tab_count);
   }
 
+  let firefox_info;
   try {
     if (sweep) await sweep_dead_sessions();
     session = await timings.time("driver", () => start_session({ name: session_name, session_dir: join(work_dir, "session") }));
@@ -468,6 +470,9 @@ export async function create_session({ name: session_name, timings, sweep = true
       await ExtensionPermissions.add("${EXTENSION_ID}", { permissions: ["nativeMessaging"], origins: [] }, extension);
     })()`);
     if (permission_grant?.error) throw new Error(`granting nativeMessaging failed: ${permission_grant.error}`);
+    // After the setup that uses three of the internals, so the add-on is loaded and a tab exists for the window path.
+    firefox_info = await check_firefox_internals(rdp, EXTENSION_ID);
+    timings.set_firefox(firefox_info);
     const native_api = await evaluate_in_background(rdp, EXTENSION_ID, `typeof browser.runtime.sendNativeMessage`);
     if (native_api !== "function") throw new Error(`the background has no sendNativeMessage after the grant: ${native_api}`);
     // The background publishes its config status once it has loaded the config.
@@ -775,7 +780,7 @@ export async function create_session({ name: session_name, timings, sweep = true
     };
   };
   async function read_cmdline_state() {
-    const frames = await evaluate_in_page_frames(rdp, "cmdline.html", read_cmdline_frame.toString());
+    const frames = await evaluate_in_page_frames(rdp, "cmdline.html", read_cmdline_frame.toString()).catch((error) => { throw with_firefox_version(error, firefox_info); });
     return frames[0] ?? { open: false };
   }
   // Escape closes the list first and the line next, so this presses until the line is gone, and waits after each press for the state to change.
