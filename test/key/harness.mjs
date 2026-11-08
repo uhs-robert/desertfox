@@ -242,13 +242,9 @@ export async function create_session({ name: session_name, timings, sweep = true
   const wait_event = (...args) => timings.time("waits", () => wait_event_untimed(...args));
   async function wait_event_untimed(mark, predicate, what, timeout_ms = 8000) {
     waiting_for = what;
-    const deadline = Date.now() + timeout_ms;
-    for (;;) {
-      const found = find_event(mark, predicate);
-      if (found) return found;
-      if (Date.now() > deadline) throw wait_timeout_error(what);
-      await raw_sleep(50);
-    }
+    const found = await server.wait_for_event(mark, predicate, timeout_ms);
+    if (!found) throw wait_timeout_error(what);
+    return found;
   }
   const became_visible = (page_id) => (event) => event.type === "visibility" && event.state === "visible" && event.page_id === page_id;
   const visible_events = (mark) => since(mark).filter((event) => event.type === "visibility" && event.state === "visible");
