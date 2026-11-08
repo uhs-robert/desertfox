@@ -7,6 +7,7 @@ type Fake = {
   localName: string;
   type?: string;
   disabled?: boolean;
+  in_disabled_fieldset?: boolean;
   editable?: "" | "true" | "false";
   size?: { width: number; height: number };
   top?: number;
@@ -28,7 +29,9 @@ function matches_selector(fake: Fake, selector: string): boolean {
     if (tag !== fake.localName) return false;
     return nots.every((not) => {
       const condition = not.slice(0, -1);
+      // Only the attribute is the fake's own; `:disabled` also holds for a control in a disabled fieldset.
       if (condition === "[disabled]") return !fake.disabled;
+      if (condition === ":disabled") return !fake.disabled && !fake.in_disabled_fieldset;
       const [, value] = /^\[type=(.*)\]$/.exec(condition)!;
       return fake.type !== value;
     });
@@ -97,6 +100,15 @@ test("every kind of form control takes focus, in page order", () => {
 test("hidden inputs, disabled controls, plain divs and contenteditable=false are left out", () => {
   const left_out: Fake[] = [field("hidden", { type: "hidden" }), field("off", { disabled: true }), { name: "off_area", localName: "textarea", disabled: true }, { name: "off_select", localName: "select", disabled: true }, { name: "off_button", localName: "button", disabled: true }, { name: "div", localName: "div" }, { name: "no_edit", localName: "div", editable: "false" }];
   for (const fake of left_out) assert.equal(matches_selector(fake, FORM_CONTROLS), false, fake.name);
+});
+
+test("a control inside a disabled fieldset is left out and skipped", () => {
+  const fieldset_kinds: Fake[] = [field("in_fieldset", { in_disabled_fieldset: true }), { name: "area_in_fieldset", localName: "textarea", in_disabled_fieldset: true }, { name: "button_in_fieldset", localName: "button", in_disabled_fieldset: true }, { name: "select_in_fieldset", localName: "select", in_disabled_fieldset: true }];
+  for (const fake of fieldset_kinds) assert.equal(matches_selector(fake, FORM_CONTROLS), false, fake.name);
+  const fakes = [field("a"), field("stuck", { in_disabled_fieldset: true }), field("c")];
+  events.length = 0;
+  focus_field(page(fakes, fakes[0]).root, undefined, "next", 1);
+  assert.deepEqual(events, ["focus c"]);
 });
 
 test("zero-size and hidden controls are skipped, offscreen ones are kept", () => {
