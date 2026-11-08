@@ -483,7 +483,7 @@ export async function run_cases({ rdp, extension_id, take_shot, run_case, expect
     // The page reports a scroll 150 ms after it ends, and a highlight would be drawn before that.
     const mark_scroll = events.length;
     await in_active_tab("window.scrollTo(0, 0); 0");
-    await wait_event(mark_scroll, scroll_of("ft_scroll"), "the scroll back to the top");
+    await wait_event(mark_scroll, (event) => scroll_of("ft_scroll")(event) && event.y === 0, "the scroll back to the top");
     expect(lit(await in_active_tab(READ_FT)) === 0, "a scroll after the end drew highlights");
     await escape_to_normal("ft_scroll");
   });

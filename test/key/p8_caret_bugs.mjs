@@ -92,7 +92,7 @@ export async function run_cases({ run_case, expect, open_page, press_keys, poll_
     await escape_to_normal("find_a");
   });
 
-  // In caret mode "/" is not bound, so Firefox's quick find runs and moves the page selection under the session.
+  // In caret mode "/" opens the DesertFox search line, and the match it finds moves the page selection under the session.
   await run_case("a find with / inside caret mode leaves the caret at the match for w", async () => {
     await open_page("caret_bug_find", "find_c", { new_tab: true });
     await press_and_wait_for_move("find_c", "gV", "the caret on the title");
