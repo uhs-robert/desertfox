@@ -1,5 +1,6 @@
 import type { BundleName } from "../../shared/bundles.ts";
 import { bundles } from "../bundles.ts";
+import { last_blurred_element } from "./page.ts";
 import type { ContentHandler } from "./types.ts";
 
 const BUNDLE_LABELS: Record<string, string> = { hints: "hints", cmdline: "the command line", whichkey: "the which-key panel", caret: "caret mode" };
@@ -12,6 +13,10 @@ const from_bundle = (command_id: string, bundle: BundleName): ContentHandler => 
 export const hint_run = from_bundle("hint.run", "hints");
 export const heading_go = from_bundle("heading.go", "hints");
 export const page_follow = from_bundle("page.follow", "hints");
+// The hints bundle cannot see the field the last Escape left, so it arrives with the args.
+export const page_focus_field: ContentHandler = {
+  run: (args) => bundles.run_command("page.focus_field", "hints", { ...args, last_blurred: last_blurred_element() }, "needs hints"),
+};
 export const cmdline_open = from_bundle("cmdline.open", "cmdline");
 export const cmdline_next_completion = from_bundle("cmdline.next_completion", "cmdline");
 export const cmdline_prev_completion = from_bundle("cmdline.prev_completion", "cmdline");
