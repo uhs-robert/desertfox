@@ -27,7 +27,7 @@ KEYMAP_FORMAT_XKB_V1 = 1
 KEY_RELEASED, KEY_PRESSED = 0, 1
 # A pause after each key. Without it the keys arrive faster than a person types, and pieces that type text and
 # then an action key in one call race the page: the action key lands before the text took effect. wtype paced
-# about 5 ms a character. Slice 7b of the key-test speed plan makes those call sites wait for the effect, then drops this gap.
+# about 5 ms a character. The gap stays until those call sites wait for the text to take effect before the action key.
 KEY_GAP_MS = 10
 EXIT_COMPOSITOR_LOST = 3
 EXIT_PROTOCOL_ERROR = 4
