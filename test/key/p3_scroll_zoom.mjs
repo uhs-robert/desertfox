@@ -1,8 +1,8 @@
-// scroll.align (zt, zz, zb) on a field and on a page with nothing focused, and the zoom reset z=.
+// scroll.align (zt, zz, zb) on a field and on a page with nothing focused, the zoom reset z=, and the form control keys ]i and [i.
 
-export const areas = ["scroll"];
+export const areas = ["scroll", "hints"];
 
-export async function run_cases({ run_case, on_teardown, expect, open_page, press_keys, poll_until, events, wait_event, scroll_of, expect_no_scroll, in_background, record }) {
+export async function run_cases({ run_case, on_teardown, expect, open_page, press_keys, poll_until, events, wait_event, find_event, scroll_of, expect_no_scroll, in_background, record }) {
   await run_case("scroll.align puts the field just left at the top, center and bottom", async () => {
     await open_page("aligned", "align", { new_tab: true });
     const field_top_after = async (keys) => {
@@ -44,5 +44,39 @@ export async function run_cases({ run_case, on_teardown, expect, open_page, pres
     await poll_until("the zoom to reach 300 percent", async () => (await in_background(active_zoom)) === 3).catch(async (error) => { throw new Error(`zI did not zoom to 300 percent (${error.message}, zoom ${await in_background(active_zoom)})`); });
     await press_keys("z=");
     await poll_until("the zoom to return to 100 percent", async () => (await in_background(active_zoom)) === 1).catch(async (error) => { throw new Error(`z= did not reset the zoom (${error.message}, zoom ${await in_background(active_zoom)})`); });
+  });
+
+  await run_case("]i and [i walk the form controls, skip a disabled fieldset, scroll to the far field and stop with a notice", async () => {
+    await open_page("controls", "controls", { new_tab: true });
+    const focused = (id) => (event) => event.type === "focused" && event.page_id === "controls" && event.id === id;
+    const badge = (label) => (event) => event.type === "indicator" && event.page_id === "controls" && event.label === label;
+    const press_and_wait = async (keys, predicate, what) => {
+      const mark = events.length;
+      await press_keys(...keys);
+      await wait_event(mark, predicate, what);
+      return mark;
+    };
+    const leave_field = (what) => press_and_wait(["-k", "Escape"], badge("NORMAL"), what);
+
+    await press_and_wait(["]i"], focused("first"), "]i to focus the first field");
+    await wait_event(0, badge("INSERT"), "the INSERT badge for a text field");
+    await leave_field("NORMAL after Escape from the first field");
+
+    const mark_box = await press_and_wait(["]i"], focused("box"), "]i to move on from the field Escape left, to the checkbox");
+    expect(!find_event(mark_box, badge("INSERT")), "the checkbox switched the mode to insert");
+
+    const mark_last = await press_and_wait(["]i"], focused("last"), "]i to skip the disabled fieldset and focus the far field");
+    await wait_event(mark_last, (event) => event.type === "scroll" && event.page_id === "controls" && event.y > 0, "the page to scroll to the far field");
+    await wait_event(mark_last, badge("INSERT"), "the INSERT badge for the far field");
+    await leave_field("NORMAL after Escape from the far field");
+
+    await press_and_wait(["[i"], focused("box"), "[i to go back to the checkbox, past the disabled fieldset");
+
+    await press_and_wait(["]i"], focused("last"), "]i to the far field again");
+    await leave_field("NORMAL after Escape at the last field");
+    const mark_end = events.length;
+    await press_keys("]i");
+    await wait_event(mark_end, (event) => event.type === "toast" && event.page_id === "controls", "the stop notice past the last control");
+    expect(!find_event(mark_end, (event) => event.type === "focused" && event.page_id === "controls"), "focus moved past the last control");
   });
 }
