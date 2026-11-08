@@ -80,7 +80,7 @@ test("merge_reports skips a shard that wrote nothing and keeps the incomplete re
 });
 
 test("merge_reports of no reports is an empty report", () => {
-  assert.deepEqual(merge_reports([], { total_ms: 0 }), { total_ms: 0, cases_ms: 0, outside_cases_ms: 0, categories: {}, outside_cases: {}, pieces: [], tab_samples: [], cases: [], shards: [], critical_shard: undefined });
+  assert.deepEqual(merge_reports([], { total_ms: 0 }), { total_ms: 0, cases_ms: 0, outside_cases_ms: 0, categories: {}, outside_cases: {}, pieces: [], tab_samples: [], lost_key_suspects: [], cases: [], shards: [], critical_shard: undefined });
 });
 
 test("summary_text of a merged report has one line per shard", () => {
@@ -91,4 +91,13 @@ test("summary_text of a merged report has one line per shard", () => {
 test("merge_reports records the KEY_TEST_ONLY filter of the run", () => {
   assert.equal(merge_reports([], { total_ms: 0, filter: "caret" }).filter, "caret");
   assert.equal("filter" in merge_reports([], { total_ms: 0 }), false);
+});
+
+test("a lost-key suspect names its case and piece, and the merged summary counts it per shard", async () => {
+  const timings = create_timings();
+  await timings.time_piece("p1.mjs", () => timings.time_case("j scrolls", {}, async () => timings.record_lost_key_suspect("scroll on c after j")));
+  const report = timings.report();
+  assert.deepEqual(report.lost_key_suspects, [{ case: "j scrolls", piece: "p1.mjs", what: "scroll on c after j" }]);
+  const merged = merge_reports([{ shard: 3, report }], { total_ms: 10, shards: [] });
+  assert.match(summary_text(merged), /lost-key suspects \(waits that timed out after a key press\): 1\n {2}s3 {2}j scrolls: scroll on c after j\n/);
 });

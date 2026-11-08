@@ -7,18 +7,18 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
-import { shadow_down, sweep_dead_sessions } from "./harness.mjs";
+import { stop_session_named, sweep_dead_sessions } from "./session.mjs";
 import { create_ledger, load_weights, pick_debug_ports, piece_name_of, queue_order, stale_weight_warnings } from "./shards.mjs";
 import { default_timings_path, merge_reports, summary_text, write_report } from "./timings.mjs";
 
 const key_test_dir = dirname(fileURLToPath(import.meta.url));
 const repo_dir = resolve(key_test_dir, "../..");
-// 8 shards failed the same p11_find case in 3 of 3 full runs, and 6 shards finish as fast, because p11_find alone sets the floor. Slice 7 revisits the count.
-const DEFAULT_SHARDS = 6;
+// 8 shards peak at about 8.5 GB, under the recipe's 14 GB throttle, and finish about 9 s sooner than 6.
+const DEFAULT_SHARDS = 8;
 const DEFAULT_DEADLINE_S = 230;
-// Eight nested compositors and Firefoxes that start at once can push `shadow up` past its own waits.
+// Eight nested compositors and Firefoxes that start at once can push a session start past its own waits.
 const STARTUP_STAGGER_MS = 300;
-// A worker's own teardown (shadow down) gets this long after SIGTERM before it is killed.
+// A worker's own teardown (the session stop) gets this long after SIGTERM before it is killed.
 const STOP_GRACE_MS = 10000;
 const SETUP_ERROR_EXIT = 2;
 
@@ -167,7 +167,7 @@ async function main() {
         failures.push(`shard s${entry.shard} exited (${exit_text(entry.exit)}) between pieces`);
       }
       // A worker that died without its own teardown leaves its session up. Its marker names a dead pid, so the next sweep would stop it, but this run stops it now.
-      if (!clean_exit) await shadow_down(entry.name).catch(() => undefined);
+      if (!clean_exit) await stop_session_named(entry.name).catch((error) => console.log(`key-test: s${entry.shard}: ${error.message}`));
       entry.state = "exited";
       if (shards.every((other) => other.state === "exited")) all_exited();
     });

@@ -378,6 +378,9 @@ export async function run_cases({ take_shot, run_case, expect, expect_absent, op
     const mark = events.length;
     await press_keys("f", " ");
     await wait_event(mark, selection_is("caret_find_space", " "), "f then Space to the space after caret");
+    // The first Escape ends the find and keeps caret mode.
+    await press_keys("-k", "Escape");
+    await wait_ft((state) => lit(state) === 0, "Escape to end the find");
     await escape_to_normal("caret_find_space");
   });
 

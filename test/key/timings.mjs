@@ -13,6 +13,7 @@ export function create_timings() {
   const started_at = Date.now();
   const cases = new Map();
   const tab_samples = [];
+  const lost_key_suspects = [];
   const pieces = [];
   const open_categories = [];
   let current_case = OUTSIDE_CASES;
@@ -120,6 +121,11 @@ export function create_timings() {
     tab_samples.push({ label, at_ms: Date.now() - started_at, tab_count });
   }
 
+  // A wait that timed out after a key press. Each one is a key that may have been lost, or an effect that never came.
+  function record_lost_key_suspect(what) {
+    lost_key_suspects.push({ case: current_case, piece: current_piece, what });
+  }
+
   function category_totals() {
     const totals = {};
     for (const entry of cases.values()) {
@@ -144,11 +150,12 @@ export function create_timings() {
       outside_cases: outside.categories,
       pieces,
       tab_samples,
+      lost_key_suspects,
       cases: case_entries(),
     };
   }
 
-  return { time, time_case, finish_active_case, finish_active_piece, time_piece, wrap_rdp, record_tab_count, report, summary_text, write_json: write_report };
+  return { time, time_case, finish_active_case, finish_active_piece, time_piece, wrap_rdp, record_tab_count, record_lost_key_suspect, report, summary_text, write_json: write_report };
 }
 
 export function write_report(path, full_report) {
@@ -180,6 +187,9 @@ export function summary_text(full_report) {
     lines.push(`  ${seconds(entry.wall_ms)} s  ${full_report.shards ? `s${entry.shard}  ` : ""}${entry.name}`);
   }
   const tab_counts = full_report.tab_samples.map((sample) => sample.tab_count);
+  const suspects = full_report.lost_key_suspects ?? [];
+  lines.push(`lost-key suspects (waits that timed out after a key press): ${suspects.length}`);
+  for (const suspect of suspects) lines.push(`  ${full_report.shards ? `s${suspect.shard}  ` : ""}${suspect.case}: ${suspect.what}`);
   lines.push(`open tabs sampled ${tab_counts.length} times, last ${tab_counts.at(-1) ?? "n/a"}, max ${Math.max(0, ...tab_counts.filter(Number.isFinite))}`);
   return lines.join("\n");
 }
@@ -195,14 +205,14 @@ export function merge_reports(shard_reports, { total_ms, shards = [], incomplete
       target[category].count += count;
     }
   };
-  const merged = { total_ms, cases_ms: 0, outside_cases_ms: 0, categories: {}, outside_cases: {}, pieces: [], tab_samples: [], cases: [] };
+  const merged = { total_ms, cases_ms: 0, outside_cases_ms: 0, categories: {}, outside_cases: {}, pieces: [], tab_samples: [], lost_key_suspects: [], cases: [] };
   for (const { shard, report } of shard_reports) {
     if (!report) continue;
     merged.cases_ms += report.cases_ms;
     merged.outside_cases_ms += report.outside_cases_ms;
     add_categories(merged.categories, report.categories);
     add_categories(merged.outside_cases, report.outside_cases);
-    for (const key of ["pieces", "tab_samples", "cases"]) merged[key].push(...report[key].map((entry) => ({ ...entry, shard })));
+    for (const key of ["pieces", "tab_samples", "lost_key_suspects", "cases"]) merged[key].push(...(report[key] ?? []).map((entry) => ({ ...entry, shard })));
   }
   merged.shards = shards;
   merged.critical_shard = shards.filter((entry) => entry.finished_ms !== undefined).sort((left, right) => right.finished_ms - left.finished_ms)[0]?.shard;

@@ -96,5 +96,7 @@ export async function run_cases({ run_case, setup, expect, send_keys, press_keys
     let notices = {};
     await poll_until("the refusal notice", async () => Object.keys((notices = await in_background(`browser.notifications.getAll()`) ?? {})).length > 0, { timeout_ms: 3000 });
     expect(Object.values(notices).some((notice) => /needs a page DesertFox runs on/.test(notice.message)), `notices: ${JSON.stringify(notices)}`);
+    // Firefox shows the notice in a window of its own (user.js), which holds the focus until it closes.
+    await in_background(`(async () => { for (const id of Object.keys(await browser.notifications.getAll())) await browser.notifications.clear(id); })()`);
   });
 }

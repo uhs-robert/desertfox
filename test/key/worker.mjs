@@ -4,8 +4,8 @@
 import { create_session } from "./harness.mjs";
 import { create_timings } from "./timings.mjs";
 
-// shadow.sh caps names at 8 characters. "ok" plus a base-36 pid is at most 8 and unique among live workers.
-const shadow_name = `ok${process.pid.toString(36)}`;
+// "ok" plus a base-36 pid is unique among live workers and short enough for the runtime dir's socket paths (session.mjs).
+const session_name = `ok${process.pid.toString(36)}`;
 const startup_delay_ms = Number(process.env.KEY_TEST_STARTUP_DELAY_MS ?? 0);
 
 // Resolves once the message is out, so a worker that exits right after still delivers it.
@@ -58,11 +58,10 @@ process.on("message", async (message) => {
   await send({ type: "piece_done", piece_file, results: session.results.slice(results_before), firefox_lost: session.firefox_lost() });
 });
 
-if (shadow_name.length > 8) throw new Error(`shadow name ${shadow_name} is longer than 8 characters`);
 await new Promise((resolve) => setTimeout(resolve, startup_delay_ms));
 try {
   session = await create_session({
-    name: shadow_name,
+    name: session_name,
     timings: create_timings(),
     sweep: false,
     debug_port: Number(process.env.KEY_TEST_DEBUG_PORT),
@@ -75,4 +74,4 @@ try {
   process.exit(1);
 }
 await session.sample_tabs("before pieces");
-await send({ type: "ready", name: shadow_name });
+await send({ type: "ready", name: session_name });
