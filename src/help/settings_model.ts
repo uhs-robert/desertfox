@@ -1,6 +1,5 @@
 // The settings page without a DOM: which control each setting gets, the checks as you type, and the session that sends changes and absorbs refreshes. Tests read this module.
 
-import { CONFIG_STATUS_STORAGE_KEY } from "../background/storage_keys.ts";
 import type { ChangeSetting, ChangeSettingAnswer, ListSettings, ListSettingsAnswer, SettingListRow } from "../shared/messages.ts";
 import type { SettingTag } from "../shared/setting_list.ts";
 import { SETTING_DOCS } from "../shared/settings_docs.ts";
@@ -73,11 +72,6 @@ export function problem_with(name: string, value: unknown): string | undefined {
   if (!is_setting_name(name)) return `unknown setting ${name}`;
   const spec = SETTING_SPECS[name];
   return spec.check(value) ? undefined : `${name}: expected ${spec.expectation}`;
-}
-
-// What `storage.onChanged` reports when the settings in force changed. Only the background writes the saved and temp layers, and every edit ends with a write of the config status, so the status key alone tells the page.
-export function touches_settings(changes: Record<string, unknown>, area: string): boolean {
-  return area === "local" && CONFIG_STATUS_STORAGE_KEY in changes;
 }
 
 // The tag text for each top layer. The record type fails the build when a layer is added without a label.

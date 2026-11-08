@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { create_surface } from "../../src/content/surface.ts";
-import { FIRST_READ_DEADLINE_MS, follow_theme, follow_user_css, theme_css, THEME_STORAGE_KEY, USER_CSS_STORAGE_KEY, watch_stored } from "../../src/shared/theme/apply.ts";
+import { FIRST_READ_DEADLINE_MS, follow_theme, follow_user_css, theme_css, THEME_STORAGE_KEY, USER_CSS_STORAGE_KEY } from "../../src/shared/theme/apply.ts";
+import { watch_stored } from "../../src/shared/storage_watch.ts";
 import type { StoredTheme } from "../../src/shared/theme/apply.ts";
 import { load_theme } from "../../src/shared/theme/load.ts";
 

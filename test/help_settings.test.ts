@@ -6,7 +6,8 @@ import { create_settings_messages } from "../src/background/settings_message.ts"
 import { CONFIG_STATUS_STORAGE_KEY, SAVED_SETTINGS_STORAGE_KEY } from "../src/background/storage_keys.ts";
 import { CONFIG_FORMAT_VERSION } from "../src/shared/config.ts";
 import { mount_settings } from "../src/help/settings_page.ts";
-import { control_of, create_settings_session, LAYER_LABEL, problem_with, touches_settings, value_of_text } from "../src/help/settings_model.ts";
+import { control_of, create_settings_session, LAYER_LABEL, problem_with, value_of_text } from "../src/help/settings_model.ts";
+import { touches_settings } from "../src/shared/storage_watch.ts";
 import type { SettingListRow } from "../src/shared/messages.ts";
 
 function install_fake_browser(file_settings: Record<string, unknown>) {

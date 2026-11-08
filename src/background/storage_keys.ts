@@ -1,13 +1,13 @@
 // Every `storage.local` key the background owns. The compiled keymap key lives in `shared/prefix_tree.ts`, the theme and user CSS keys in `shared/theme/apply.ts`.
 
-// The config `config.reload` last built from the files. An import will land here too.
-export const FILES_CONFIG_STORAGE_KEY = "desertfox_files_config";
+// The config `config.reload` last built from the files. An import will land here too. `FILES_CONFIG_STORAGE_KEY`, defined in `shared/storage_watch.ts` because a reload ends with a write of it.
+export { FILES_CONFIG_STORAGE_KEY } from "../shared/storage_watch.ts";
 
 // Strings for the help page: config, keymap and shortcut slot problems from the last load.
 export const WARNINGS_STORAGE_KEY = "desertfox_warnings";
 
-// Where the config came from and the settings in force. Written at every startup. The hint script reads its letters from it.
-export const CONFIG_STATUS_STORAGE_KEY = "desertfox_config_status";
+// Where the config came from and the settings in force: `CONFIG_STATUS_STORAGE_KEY`, defined in `shared/storage_watch.ts` for the pages that follow it.
+export { CONFIG_STATUS_STORAGE_KEY } from "../shared/storage_watch.ts";
 
 // Setting name to the value a saved browser edit gave it (`:set`). Global, private windows included.
 export const SAVED_SETTINGS_STORAGE_KEY = "desertfox_saved_settings";
