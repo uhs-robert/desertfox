@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { cpSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
@@ -96,4 +96,11 @@ test("build-config: a bad newtab_links item is named by index, label and field",
   assert.match(problems_with_settings(second_bad), /newtab_links: expected .*, but item 2 \("Bad"\) needs an http or https "url"/);
   assert.match(problems_with_settings('[[newtab_links]]\nurl = "https://a.example/"'), /but item 1 needs a non-empty "label"/);
   assert.match(problems_with_settings('[[newtab_links]]\nlabel = "A"\nurl = "https://a.example/"\nlink = 1'), /item 1 \("A"\) has the unknown field "link"/);
+});
+
+test("the built-in links include Settings, third after Getting Started and Help", () => {
+  const html = readFileSync(new URL("../src/newtab/newtab.html", import.meta.url), "utf8");
+  const nav = /<nav class="builtin-links">([\s\S]*?)<\/nav>/.exec(html)![1]!;
+  const anchors = [...nav.matchAll(/<a href="([^"]*)">([^<]*)<\/a>/g)].map((match) => [match[2], match[1]]);
+  assert.deepEqual(anchors, [["Getting Started", "home.html#/quick-start"], ["Help", "home.html"], ["Settings", "home.html#/settings"]]);
 });

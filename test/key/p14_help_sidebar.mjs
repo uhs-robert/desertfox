@@ -32,8 +32,8 @@ export async function run_cases({ run_case, press_keys, poll_until, rdp, extensi
     await poll_until("the Commands group to open", async () => (await group_state("Commands")).open);
     const commands = await group_state("Commands");
     expect(commands.open && commands.expanded === "true" && commands.links > 10, `the Commands group after the click was ${JSON.stringify(commands)}`);
-    const home = await group_state("Home");
-    expect(!home.open, "the Home group stayed open on the Commands page");
+    const settings = await group_state("Settings");
+    expect(!settings.open, "the Settings group stayed open on the Commands page");
     await shot("help-sidebar-commands");
 
     await click(`view.document.querySelector(".desertfox-help-sections:not([hidden]) a[href$='/tab']")`);
@@ -57,9 +57,9 @@ export async function run_cases({ run_case, press_keys, poll_until, rdp, extensi
     await shot("help-sidebar-quick-start");
 
     await click(`view.document.querySelector(".desertfox-help-nav-row button[aria-expanded='false']")`);
-    await poll_until("the Home group to open", async () => (await group_state("Home")).open).catch(() => undefined);
-    expect((await group_state("Home")).open, "the Home chevron did not open its group");
-    expect((await group_state("Quick Start")).open, "opening Home closed the Quick Start group");
+    await poll_until("the Settings group to open", async () => (await group_state("Settings")).open).catch(() => undefined);
+    expect((await group_state("Settings")).open, "the Settings chevron did not open its group");
+    expect((await group_state("Quick Start")).open, "opening Settings closed the Quick Start group");
     await close_help_tabs();
   });
 }

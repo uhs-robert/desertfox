@@ -165,6 +165,6 @@ export function quick_start_blocks(compiled: CompiledKeymap | undefined, command
     say("Press {caret} to start caret mode. Move with {caret_left}, {caret_down}, {caret_up} and {caret_right}, or by word with {caret_word}. Press {visual} to start visual mode, which selects the text you move over. Press {visual_line} instead to select whole lines. In visual mode, {yank} copies the selection and {swap} swaps its ends. {escape} steps back to the mode before."),
     say("To start at a piece of text, press {caret_at_text} for caret mode or {visual_at_text} for visual mode, then type the label of the text."),
     heading("Help"),
-    say("Press {help} on any page to open this help. The Commands page lists every key, and the Home page shows your settings and any config warnings."),
+    say("Press {help} on any page to open this help. The Commands page lists every key, and the Home page shows any config warnings."),
   ];
 }

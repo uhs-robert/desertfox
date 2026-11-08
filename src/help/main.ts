@@ -8,7 +8,7 @@ import { follow_settings } from "../shared/storage_watch.ts";
 import type { Block } from "./blocks.ts";
 import { build_help_model } from "./model.ts";
 import type { HelpModel } from "./model.ts";
-import { close_drawer_on_escape, close_drawer_on_window_blur, command_anchor, engine_anchor, render_help, section_anchor } from "./render.ts";
+import { close_drawer_on_escape, close_drawer_on_window_blur, command_anchor, engine_anchor, render_help, section_anchor, update_config_source } from "./render.ts";
 import { mount_native_install } from "./native_install.ts";
 import { mount_settings } from "./settings_page.ts";
 import { parse_route } from "./route.ts";
@@ -71,6 +71,7 @@ async function draw(first: boolean): Promise<void> {
   current = await load_inputs();
   if (first) show_route(current.model, current.guide, current.engines, "first");
   else if (parse_route(location.hash).page !== "settings") show_route(current.model, current.guide, current.engines, "refresh");
+  else update_config_source(current.model);
 }
 
 window.addEventListener("keydown", close_drawer_on_escape, true);
