@@ -68,9 +68,9 @@ export async function run_cases({ run_case, setup, expect, open_page, press_keys
     await press_keys(typed);
     await wait_event(mark, (event) => event.type === "input" && event.value === typed, `the field to hold "${typed}"`);
     await expect_absent(mark, "f", (event) => event.type === "visibility", "a tab switch happened while typing");
-    // A stray character after the text shows as a later input report.
-    const last_input = since(mark).filter((event) => event.type === "input").at(-1);
-    expect(last_input?.value === typed, `field holds "${last_input?.value}", typed "${typed}"`);
+    // A stray character after the text shows as an input report that is no prefix of the text. The reports of fast keys can reach the server out of order, so their order proves nothing.
+    const stray = since(mark).find((event) => event.type === "input" && !typed.startsWith(event.value));
+    expect(!stray, `field held "${stray?.value}", typed "${typed}"`);
   });
 
   await run_case("Escape leaves the field and keys act again", async () => {
