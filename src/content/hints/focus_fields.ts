@@ -7,8 +7,8 @@ import { keep_present_found } from "./headings.ts";
 
 export type FieldDirection = "next" | "prev";
 
-// Every control a person can focus to fill in or press: text fields, selects, checkboxes, radios and every kind of button. A hidden input has no box and a disabled one takes no focus.
-export const FORM_CONTROLS = 'input:not([type=hidden]):not([disabled]), textarea:not([disabled]), select:not([disabled]), button:not([disabled]), [contenteditable=""], [contenteditable="true"]';
+// Every control a person can focus to fill in or press: text fields, selects, checkboxes, radios and every kind of button. A hidden input has no box. A disabled one takes no focus, also through a disabled `fieldset`, so the test is `:disabled` and not the attribute.
+export const FORM_CONTROLS = 'input:not([type=hidden]):not(:disabled), textarea:not(:disabled), select:not(:disabled), button:not(:disabled), [contenteditable=""], [contenteditable="true"]';
 
 // Where the move starts. `index` is the control the user stands on (`on_field`), or else the first control after the start point.
 export type Place = { index: number; on_field: boolean };
