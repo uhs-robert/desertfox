@@ -14,7 +14,7 @@ just key-test-changed [base] [head]
 just key-test-weights [timings file]
 ```
 
-A full run takes about 40 s on 8 shards. It needs labwc, Hyprland, dbus-daemon and python3, and grim for the screenshot cases.
+A full run takes about 34 s on 8 shards. It needs labwc, Hyprland, dbus-daemon and python3, and grim for the screenshot cases.
 
 - `KEY_TEST_ONLY` runs only the cases whose name matches. It also runs the cases marked `{ setup: true }` and every `h.setup` step of a piece, which leave state that later cases read. The output tags those as `SETUP`.
 - `KEY_TEST_PIECES` is a comma-separated list of piece names (the file name without `.mjs`). Only those pieces run, and an unknown name or an empty list aborts the run. Each piece must pass alone.
