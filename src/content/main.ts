@@ -9,6 +9,7 @@ import { message_of } from "./bundle_host.ts";
 import type { BundleHostApi } from "./bundle_host.ts";
 import { bundles } from "./bundles.ts";
 import { deepest_focused_element, is_editable_element } from "./editable.ts";
+import { shadow_root_of } from "./shadow.ts";
 import { create_cancelled_keys } from "./cancelled_keys.ts";
 import { create_key_flow } from "./key_flow.ts";
 import { create_which_key_timer } from "./which_key_timer.ts";
@@ -148,9 +149,17 @@ function on_visibility_change(): void {
   if (document.hidden) bundles.page_hidden();
 }
 
+// A closed shadow root hides its inner field from the event path, which then ends at the host. The focus settles after the event, so the mode follows it a tick later.
 function follow_focus(entered: boolean, event: Event): void {
-  if (!is_editable_element(event.composedPath()[0] ?? null)) return;
+  const target = event.composedPath()[0] ?? null;
+  if (target instanceof Element && shadow_root_of(target)) return void setTimeout(sync_mode_to_focus);
+  if (!is_editable_element(target)) return;
   if (entered) page_mode.focus_entered_editable();
+  else page_mode.focus_left_editable();
+}
+
+function sync_mode_to_focus(): void {
+  if (is_editable_element(deepest_focused_element())) page_mode.focus_entered_editable();
   else page_mode.focus_left_editable();
 }
 

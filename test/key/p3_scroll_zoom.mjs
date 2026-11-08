@@ -79,4 +79,22 @@ export async function run_cases({ run_case, on_teardown, expect, open_page, pres
     await wait_event(mark_end, (event) => event.type === "toast" && event.page_id === "controls", "the stop notice past the last control");
     expect(!find_event(mark_end, (event) => event.type === "focused" && event.page_id === "controls"), "focus moved past the last control");
   });
+
+  await run_case("focus into and out of a field in a closed shadow root switches between INSERT and NORMAL", async () => {
+    const badge = (page_id, label) => (event) => event.type === "indicator" && event.page_id === page_id && event.label === label;
+    const press_and_wait = async (key, predicate, what) => {
+      const mark = events.length;
+      await press_keys("-k", key);
+      await wait_event(mark, predicate, what);
+    };
+
+    await open_page("closed_field", "closed_field", { new_tab: true });
+    await press_and_wait("F9", badge("closed_field", "INSERT"), "INSERT after the page focused the field in the closed root");
+    await press_and_wait("F2", badge("closed_field", "NORMAL"), "NORMAL after the page focused the plain button outside");
+
+    const mark_load = events.length;
+    await open_page("closed_field", "closed_field_autofocus", { new_tab: true });
+    await wait_event(mark_load, badge("closed_field_autofocus", "INSERT"), "INSERT for the field in the closed root focused at load");
+    await press_and_wait("F2", badge("closed_field_autofocus", "NORMAL"), "NORMAL after focus left the load-focused field");
+  });
 }
