@@ -78,7 +78,7 @@ function read_owner_pid(name) {
 // A killed run leaves its session behind. Stop each session whose marker names a dead owner.
 // A live run is never touched. This run's own pid counts as dead, since a recycled pid can match an old leftover.
 // A session with no marker is skipped, whatever its name. That includes one killed between `up` and the marker write, which errs toward safety.
-async function sweep_dead_sessions() {
+export async function sweep_dead_sessions() {
   let stdout;
   try {
     ({ stdout } = await shadow("status"));
@@ -134,7 +134,8 @@ function padded_bundle_text() {
 }
 
 // One nested Firefox, its page server and its helpers. `timings` is the run's timing recorder from create_timings.
-export async function create_session({ name: shadow_name, timings }) {
+// `sweep: false` skips the leftover sweep, for a caller that swept once for many sessions. `debug_port` lets that caller pick distinct ports, since two sessions that each probe for a free port can pick the same one.
+export async function create_session({ name: shadow_name, timings, sweep = true, debug_port: given_debug_port }) {
   const results = [];
   const measurements = {};
   const sleep = (ms) => timings.time("sleeps", () => raw_sleep(ms));
@@ -221,10 +222,12 @@ export async function create_session({ name: shadow_name, timings }) {
   writeFileSync(join(config_dir, "keymap.d", "80-site.toml"), '[site_keys]\nh = ["keyother", "keyhere"]\nn = ["keyother"]\n');
   build_test_config(config_dir, managed_file);
   const events = server.events;
-  const debug_port = await free_port();
+  const debug_port = given_debug_port ?? (await free_port());
   let rdp;
   // A signal can arrive during the normal teardown, so every path shares this one run of the cleanup.
   let teardown_started;
+  // Set by close(), so a signal after a finished run only exits and does not write the timings a second time.
+  let closed = false;
   const teardown = () => {
     teardown_started ??= (async () => {
       rdp?.close();
@@ -236,8 +239,13 @@ export async function create_session({ name: shadow_name, timings }) {
   };
   for (const [signal, code] of [["SIGINT", 130], ["SIGTERM", 143]]) {
     process.on(signal, () => {
+      if (closed) {
+        teardown().finally(() => process.exit(code));
+        return;
+      }
       // Written before the teardown, so a hung teardown loses nothing and is not charged to the case.
       timings.finish_active_case();
+      timings.finish_active_piece();
       write_timings();
       teardown().finally(() => process.exit(code));
     });
@@ -382,7 +390,7 @@ export async function create_session({ name: shadow_name, timings }) {
   }
 
   try {
-    await sweep_dead_sessions();
+    if (sweep) await sweep_dead_sessions();
     await timed_shadow("up", shadow_name);
     // A driver that keeps sessions elsewhere has no such dir. Its sessions are never swept, which is safe.
     if (existsSync(dirname(marker_path(shadow_name)))) writeFileSync(marker_path(shadow_name), String(process.pid));
@@ -824,6 +832,7 @@ export async function create_session({ name: shadow_name, timings }) {
 
   async function close() {
     await teardown();
+    closed = true;
     console.log(JSON.stringify(measurements));
     write_timings();
   }
