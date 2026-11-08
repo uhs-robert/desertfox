@@ -35,7 +35,9 @@ export async function connect_rdp(port) {
   };
   await new Promise((resolve, reject) => { socket.once("connect", resolve); socket.once("error", reject); });
   await next_from("root");
-  return { request, next_from, close: () => socket.destroy() };
+  // The polling pauses of this client go through here, so the timings can charge them to the debugger.
+  const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  return { request, next_from, pause, close: () => socket.destroy() };
 }
 
 export async function install_temporary_addon(rdp, addon_path) {
@@ -109,16 +111,68 @@ export async function evaluate_in_chrome(rdp, async_code) {
   return run_in_console(rdp, process.consoleActor, async_code);
 }
 
+// The result of a background evaluation is usually ready within a few milliseconds, so the first polls come fast and the later ones slow down.
+const RESULT_POLL_STEPS_MS = [0, 5, 10, 20, 50];
+const RESULT_POLL_STEP_MAX_MS = 100;
+const RESULT_TIMEOUT_MS = 5000;
+
 async function run_in_console(rdp, console_actor, async_code) {
   const slot = `__key_test_${Math.random().toString(36).slice(2)}`;
   const start = `globalThis.${slot} = undefined; (async () => ${async_code})().then((value) => { globalThis.${slot} = JSON.stringify(value ?? null); }, (error) => { globalThis.${slot} = JSON.stringify({ error: String(error) }); }); "started"`;
   await evaluate(rdp, console_actor, start);
-  for (let attempt = 0; attempt < 50; attempt++) {
+  const deadline = Date.now() + RESULT_TIMEOUT_MS;
+  for (let attempt = 0; Date.now() < deadline; attempt++) {
     const value = await evaluate(rdp, console_actor, `globalThis.${slot}`);
     if (typeof value === "string") return JSON.parse(value);
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    await rdp.pause(RESULT_POLL_STEPS_MS[attempt] ?? RESULT_POLL_STEP_MAX_MS);
   }
   throw new Error("rdp: background code did not finish");
+}
+
+// Content processes by pid, per connection. A pid is never reused within a run, so a dead process is never asked for.
+const process_consoles = new Map();
+
+async function console_of_process(rdp, pid) {
+  if (!process_consoles.has(rdp)) process_consoles.set(rdp, new Map());
+  const consoles = process_consoles.get(rdp);
+  if (!consoles.has(pid)) {
+    const { processes } = await rdp.request("root", { type: "listProcesses" });
+    const descriptor = processes.find((entry) => entry.id === pid);
+    if (!descriptor) throw new Error(`rdp: process ${pid} is not listed`);
+    const { process } = await rdp.request(descriptor.actor, { type: "getTarget" });
+    consoles.set(pid, process.consoleActor);
+  }
+  return consoles.get(pid);
+}
+
+// Reads a frame of the selected tab whose address ends with `/${frame_path}`, such as the command line, an extension page in an iframe of a web page.
+// The add-on's own watcher never lists such a frame, and neither does `getViews`. So the parent process finds the frames' browsing contexts,
+// and the content process that holds each one runs `frame_code`, a function source taking the frame's window. Returns one value per frame.
+export async function evaluate_in_page_frames(rdp, frame_path, frame_code) {
+  const frames = await evaluate_in_chrome(rdp, `(async () => {
+    const found = [];
+    const walk = (context) => {
+      const global = context.currentWindowGlobal;
+      if (global?.documentURI?.spec.split(/[?#]/)[0].endsWith(${JSON.stringify(`/${frame_path}`)})) found.push({ context_id: context.id, pid: global.domProcess.osPid });
+      for (const child of context.children) walk(child);
+    };
+    walk(Services.wm.getMostRecentWindow("navigator:browser").gBrowser.selectedBrowser.browsingContext);
+    return found;
+  })()`);
+  if (!Array.isArray(frames)) throw new Error(`rdp: listing the frames failed: ${JSON.stringify(frames)}`);
+  const values = [];
+  for (const { context_id, pid } of frames) {
+    const console_actor = await console_of_process(rdp, pid);
+    // The module's global is a chrome global, which has BrowsingContext. The console's own global has not.
+    const value = await run_in_console(rdp, console_actor, `(async () => {
+      const chrome_global = Components.utils.getGlobalForObject(ChromeUtils.importESModule("resource://gre/modules/ExtensionPageChild.sys.mjs"));
+      const frame_window = chrome_global.BrowsingContext.get(${context_id})?.window;
+      return frame_window ? (${frame_code})(frame_window) : null;
+    })()`);
+    if (value?.error) throw new Error(`rdp: reading the ${frame_path} frame failed: ${value.error}`);
+    if (value !== null) values.push(value);
+  }
+  return values;
 }
 
 async function evaluate(rdp, console_actor, text) {

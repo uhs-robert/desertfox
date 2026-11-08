@@ -8,7 +8,7 @@ import { evaluate_in_background } from "./rdp.mjs";
 
 export const areas = ["ui", "whichkey", "cmdline"];
 
-export async function run_cases({ rdp, extension_id, run_case, send_keys, open_page, wait_event, events, expect, sleep }) {
+export async function run_cases({ rdp, extension_id, run_case, press_keys, open_page, wait_event, wait_cmdline, close_cmdline, events, expect }) {
   const in_active_tab = (code) => evaluate_in_background(rdp, extension_id, `(async () => { const [tab] = await browser.tabs.query({ active: true, currentWindow: true }); return browser.tabs.executeScript(tab.id, { code: ${JSON.stringify(code)} }); })()`);
   const hit_test_with_step = (step, before = "", right_width = Infinity) => `(() => {
     ${before}
@@ -31,20 +31,24 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, open_p
 
   await run_case("where surfaces overlap, the higher layer is on top", async () => {
     await open_page("caret", "p9_layers", { new_tab: true });
-    await send_keys("gV");
-    await send_keys("3w");
-    await send_keys("v");
-    await send_keys("e");
+    // Each key waits for its effect: a mode badge or a moved selection.
+    const press_and_wait = async (keys, predicate, what) => {
+      const mark = events.length;
+      await press_keys(keys);
+      await wait_event(mark, (event) => event.page_id === "p9_layers" && predicate(event), what);
+    };
+    const badge_other_than_normal = (event) => event.type === "indicator" && event.label !== "" && event.label !== "NORMAL";
+    await press_and_wait("gV", badge_other_than_normal, "the caret badge");
+    await press_and_wait("3w", (event) => event.type === "selection", "the caret to move");
+    await press_and_wait("v", (event) => event.type === "indicator" && event.label === "VISUAL", "the VISUAL badge");
+    await press_and_wait("e", (event) => event.type === "selection" && event.text !== "", "a selected word");
     let mark = events.length;
-    await send_keys("y");
+    await press_keys("y");
     await wait_event(mark, (event) => event.type === "toast" && event.page_id === "p9_layers", "the copied toast");
     mark = events.length;
-    await send_keys("_w");
+    await press_keys("_w");
     await wait_event(mark, (event) => event.type === "whichkey" && event.page_id === "p9_layers" && event.value !== "", "the which-key panel");
     const { hosts, overlaps } = JSON.parse((await in_active_tab(hit_test))[0]);
-    await send_keys("-k", "Escape");
-    await send_keys("-k", "Escape");
-    await sleep(300);
     expect(hosts >= 2, `${hosts} surface hosts are shown, need the which-key panel and the toast`);
     expect(overlaps.length > 0, "no two surfaces overlap in the bottom 160px, so the order is not tested");
     const wrong = overlaps.filter(([top, under]) => top < under);
@@ -60,27 +64,24 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, open_p
   // the host makes it the containing block of the fixed toast inside, and the 0x0 host at the viewport's bottom right corner
   // keeps the toast where it was, 24px lower. The surface is reused, so a second toast keeps the move. LAYERS.toast, as in server.mjs.
   const move_toast_over_line = `for (const child of document.documentElement.children) if (child.getAttribute("data-desertfox-layer") === "2147483645") child.style.cssText += "left:100vw;top:calc(100vh + 24px);translate:0 0;";`;
-  // Escape closes the line, so a failed case does not leave it open for the next one.
-  const close_line = async () => {
-    await send_keys("-k", "Escape");
-    await sleep(300);
-    await send_keys("-k", "Escape");
-    await sleep(300);
-  };
   const toast_then_finish_typing = async (typed_before, step_keys, typed_after) => {
     // A tall page, so the command typed in the line has room to scroll. Each case opens it, so each runs alone.
     await open_page("page", "p9_layers_line", { new_tab: true });
     try {
       await type_around_toast(typed_before, step_keys, typed_after);
     } finally {
-      await close_line();
+      await close_cmdline();
     }
   };
   const type_around_toast = async (typed_before, step_keys, typed_after) => {
-    await send_keys(":");
-    await sleep(600);
-    await send_keys(typed_before);
-    if (step_keys.length > 0) await send_keys(...step_keys);
+    await press_keys(":");
+    await wait_cmdline((line) => line.ready, "the command line to open");
+    await press_keys(typed_before);
+    await wait_cmdline((line) => line.value === typed_before, "the typed text in the line");
+    if (step_keys.length > 0) {
+      await press_keys(...step_keys);
+      await wait_cmdline((line) => line.caret === typed_before.indexOf("."), "the caret to move left");
+    }
     let mark = events.length;
     await push_toast();
     await wait_event(mark, (event) => event.type === "toast" && event.page_id === "p9_layers_line", "the pushed toast");
@@ -90,9 +91,12 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, open_p
     expect(overlaps.length > 0, `the toast and the line share no grid point in the bottom 160px (${hosts} surface hosts shown), so the order is not tested`);
     const wrong = overlaps.filter(([top, under]) => top < under);
     expect(wrong.length === 0, `a lower layer is on top of a higher one at ${wrong.length} points, first ${JSON.stringify(wrong[0])}`);
-    await send_keys(typed_after);
+    // The toast showed the popover again, which drops the frame's focus until the host gives it back.
+    await wait_cmdline((line) => line.open && line.focused, "the line to hold the focus after the toast");
+    await press_keys(typed_after);
+    await wait_cmdline((line) => line.value === "scroll.lines", "the whole command in the line");
     mark = events.length;
-    await send_keys("-k", "Return");
+    await press_keys("-k", "Return");
     await wait_event(mark, (event) => event.type === "scroll" && event.page_id === "p9_layers_line", "scroll.lines run from the typed line");
   };
 

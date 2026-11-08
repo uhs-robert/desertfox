@@ -1,6 +1,6 @@
 # test/key
 
-Key tests. Each run builds the extension, starts Firefox in its own nested, invisible session, sends real key presses and checks what the page and the background report. `harness.mjs` holds the session (`create_session`: Firefox, the page server, the helpers and `run_piece` with the piece lifecycle), `run.mjs` holds the order of the run and the summary, `p<number>_*.mjs` are the pieces, `areas.mjs` maps src files to areas, `timings.mjs` measures where the time goes, `server.mjs` and `rdp.mjs` read the results, `launch_firefox.sh` starts Firefox, and `user.js` and `config/` set up the test profile.
+Key tests. Each run builds the extension, starts Firefox in its own nested, invisible session, sends real key presses and checks what the page and the background report. `harness.mjs` holds the session (`create_session`: Firefox, the page server, the helpers and `run_piece` with the piece lifecycle), `run.mjs` holds the order of the run and the summary, `p<number>_*.mjs` are the pieces, `areas.mjs` maps src files to areas, `timings.mjs` measures where the time goes, `server.mjs` and `rdp.mjs` read the results (`rdp.mjs` also reads frames inside web pages), `launch_firefox.sh` starts Firefox, and `user.js` and `config/` set up the test profile.
 
 ## Run
 
@@ -12,7 +12,7 @@ KEY_TEST_ORDER=reverse just key-test
 just key-test-changed [base] [head]
 ```
 
-A full run takes about 20 minutes (1143 s for 241 cases in the latest run) and needs a nested Hyprland. The key-test-speed work (#273) brings that down.
+A full run takes about 11 minutes (667 s for 241 cases in the latest run) and needs a nested Hyprland. The key-test-speed work (#273) brings that down.
 
 - `KEY_TEST_ONLY` runs only the cases whose name matches. It also runs the cases marked `{ setup: true }` and every `h.setup` step of a piece, which leave state that later cases read. The output tags those as `SETUP`.
 - `KEY_TEST_PIECES` is a comma-separated list of piece names (the file name without `.mjs`). Only those pieces run, and an unknown name or an empty list aborts the run. Each piece must pass alone.
@@ -64,17 +64,29 @@ Each piece exports `export const areas = ["hints", ...]`, the feature areas it e
 
 `run_piece` in `harness.mjs` gives every piece the same start and the same cleanup, so a piece needs no state from the one before it.
 
-- Before the piece: one window with one tab at `page?id=home_<piece>`, active and focused (the page reports `document.hasFocus()`), the config link on `config_dir`, no temp settings.
-- After the piece, pass or fail: the `h.on_teardown` callbacks in reverse, every tab and window that was not in the start snapshot closed, the config link restored and reloaded, temp settings unset. A failed step is reported as a FAIL named `<piece> teardown` or `<piece> cleanup`. A failed reset skips the piece and reports `<piece> reset`.
+- Before the piece: one window with one tab at `page?id=home_<piece>`, active and focused (the page reports `document.hasFocus()`) and at least 300 ms old, the config link on `config_dir`, no temp settings.
+- After the piece, pass or fail: the `h.on_teardown` callbacks in reverse, every tab and window that was not in the start snapshot closed, the config link restored and reloaded, temp settings unset. The page is refocused only when one of those two steps has work, and never on an about: or extension page. A failed step is reported as a FAIL named `<piece> teardown` or `<piece> cleanup`. A failed reset skips the piece and reports `<piece> reset`.
 - `h.setup(name, fn)` runs under any filter, is timed as `(setup)` and counts in no total. If it fails, the cases behind it fail with `setup failed`.
 - `h.config_copy()` returns a private copy of the base config. Edit the copy and load it with `h.load_config_dir`. Never write `config_dir`.
+
+## Waits
+
+A converted piece presses keys with `press_keys` (no settle) and waits for the effect of each key before the next press. `send_keys` keeps its 350 ms settle for pieces not converted yet.
+
+- `wait_event`, `poll_until(what, check, { timeout_ms, step_ms })` and `wait_cmdline(check, what)` fail by name when the effect never comes. A case that still runs after 30 s fails with the wait it was in. The body cannot be cancelled, so its late failure is only logged.
+- `read_cmdline_state()` reads the command line (value, caret, focus, rows, flags, marks, note) from the selected tab. The line is an extension iframe in the page, which `getViews` and the add-on's own debugger watcher do not list. So `evaluate_in_page_frames` in `rdp.mjs` finds the frame in the parent process and reads it in the content process that holds it. It returns `{ open: false }` when no line is open. `close_cmdline()` presses Escape until the line is gone.
+- `barrier(page_id)` presses F8, which nothing binds, and waits for the page's `keydown` report of it. Every earlier key has reached the page by then. It fails when the key shows on another page, never shows (a page that cancels keys in capture, a mode that swallows keys) or the line is open (the key would type into it).
+- `expect_absent(mark, page_id, predicate, what)` runs a barrier and fails when a matching event came before it. A key that was lost also leaves nothing, so pair it with a proof that the key arrived (a line value, a badge). A scroll is reported 150 ms after it ends, so pass `report_delay_ms: scroll_report_wait_ms`.
+- `settle_focus({ tab_id })` waits until a test page reports focus, then 100 ms. Use it after keys that switch or close a tab. It cannot serve an extension page.
+- `open_page` goes through the background (`tabs.create` or `tabs.update`), waits for `tree_read` and focus, and returns no sooner than 300 ms after the open. A key pressed within about 30 ms of an open was lost every time, and a tab switched within about 150 ms lost the report of its next visibility change. `open_page_by_keys` is the address bar way for a case that tests the bar.
+- `expect_no_scroll` and `expect_exactly_one_visible` still sleep. `p0_core_keys.mjs` runs them on pages that cancel keys in capture, where a barrier cannot see F8.
 
 ## Timings
 
 Every run times itself and prints a summary at the end: time by category, time outside cases, the 20 slowest cases and the open tab count. It also writes the full numbers as JSON.
 
 - The file is `.logs/key-test-timings-<timestamp>.json` in the checkout. `KEY_TEST_TIMINGS_FILE=<path>` sets another path.
-- Each moment of the run goes to one category: `keys` (a `shadow keys` call), `settle` (the pause after each key call), `sleeps` (other sleeps), `waits` (`wait_event`), `rdp` (debugger calls), `page_opens` (all of `open_page`, keys and waits inside it included), `driver` (`up`, `spawn`, `shot`) and `other` (everything untracked, such as test logic).
+- Each moment of the run goes to one category: `keys` (a `shadow keys` call), `settle` (the pause after each key call), `sleeps` (other sleeps), `waits` (`wait_event`, `poll_until`), `rdp` (debugger calls and the pauses between result polls), `page_opens` (all of `open_page`, keys and waits inside it included), `driver` (`up`, `spawn`, `shot`) and `other` (everything untracked, such as test logic).
 - The JSON holds `categories` and `outside_cases` (ms and call counts), `pieces` (wall time per piece file), `cases` (wall time and categories per case) and `tab_samples` (open tab count before and after each piece). Setup between cases counts as `(outside cases)`.
 - The file is rewritten after each piece and when SIGINT or SIGTERM arrives, so a run killed at the time cap still leaves its numbers (the summary prints only at a normal end or on a signal).
 - Piece files need no hooks: they get the timed `sleep`, `open_page`, `wait_event` and `rdp` from the case context (`context_for` in `harness.mjs`).

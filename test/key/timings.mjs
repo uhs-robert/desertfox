@@ -80,6 +80,8 @@ export function create_timings() {
     const { request, next_from } = rdp;
     rdp.request = (...args) => time("rdp", () => request(...args));
     rdp.next_from = (...args) => time("rdp", () => next_from(...args), { count: false });
+    const { pause } = rdp;
+    rdp.pause = (...args) => time("rdp", () => pause(...args), { count: false });
     return rdp;
   }
 
