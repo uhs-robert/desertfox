@@ -83,8 +83,8 @@ function padded_bundle_text() {
 
 // One nested Firefox, its page server and its helpers. `timings` is the run's timing recorder from create_timings.
 // `sweep: false` skips the leftover sweep, for a caller that swept once for many sessions. `debug_port` lets that caller pick distinct ports, since two sessions that each probe for a free port can pick the same one.
-// `diagnostics_dir` keeps Firefox's output and crash dumps there when the session ends with a failure, since the teardown deletes both. `print_summary: false` leaves the timings summary to the caller.
-export async function create_session({ name: session_name, timings, sweep = true, debug_port: given_debug_port, diagnostics_dir, print_summary = true }) {
+// `diagnostics_dir` keeps Firefox's output and crash dumps there when the session ends with a failure, since the teardown deletes both. `print_summary: false` leaves the timings summary to the caller. `create_timings_dir: false` skips a write whose folder is gone.
+export async function create_session({ name: session_name, timings, sweep = true, debug_port: given_debug_port, diagnostics_dir, print_summary = true, create_timings_dir = true }) {
   const results = [];
   const measurements = {};
   const sleep = (ms) => timings.time("sleeps", () => raw_sleep(ms));
@@ -414,7 +414,7 @@ export async function create_session({ name: session_name, timings, sweep = true
   function write_timings({ with_summary = print_summary } = {}) {
     try {
       const timings_report = timings.report();
-      timings.write_json(timings_path, timings_report);
+      timings.write_json(timings_path, timings_report, { create_dir: create_timings_dir });
       if (!with_summary) return;
       console.log(timings.summary_text(timings_report));
       console.log(`key-test timings written to ${timings_path}`);

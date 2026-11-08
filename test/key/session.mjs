@@ -158,7 +158,11 @@ export function sweep_dead_run_dirs(tmp_root = tmpdir()) {
     if (process_start_ticks(Number(owner_pid)) === owner_start_ticks) continue;
     console.log(`sweep: removing ${entry}, left by dead run ${owner_pid}`);
     try {
-      rmSync(run_dir, { recursive: true, force: true });
+      // Workers of the dead coordinator may still be tearing down and writing into the folder, so the removal retries.
+      // The owner file goes last: a removal that fails midway leaves the folder to the next sweep instead of owner-less.
+      const retry = { recursive: true, force: true, maxRetries: 20, retryDelay: 250 };
+      for (const name of readdirSync(run_dir).filter((name) => name !== OWNER_FILE)) rmSync(join(run_dir, name), retry);
+      rmSync(run_dir, retry);
     } catch (error) {
       console.error(`sweep: ${error.message}`);
     }
