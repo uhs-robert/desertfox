@@ -2,6 +2,8 @@
 // The fixture page /media has a video in a player box under an overlay, and a hidden audio that gets no hint.
 import { evaluate_in_background } from "./rdp.mjs";
 
+export const areas = ["hints"];
+
 export async function run_cases({ run_case, send_keys, open_page, wait_event, find_event, events, expect, sleep, rdp, extension_id }) {
   const background = (code) => evaluate_in_background(rdp, extension_id, code);
   const in_active_tab = (code) => background(`(async () => { const [tab] = await browser.tabs.query({ active: true, currentWindow: true }); return browser.tabs.executeScript(tab.id, { code: ${JSON.stringify(code)} }); })()`);

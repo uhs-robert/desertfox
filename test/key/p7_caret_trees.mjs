@@ -4,6 +4,8 @@
 
 import { evaluate_in_background } from "./rdp.mjs";
 
+export const areas = ["caret"];
+
 export async function run_cases({ rdp, extension_id, run_case, expect, open_page, send_keys, sleep, events, wait_event }) {
   const in_active_tab = (code) => evaluate_in_background(rdp, extension_id, `(async () => { const [tab] = await browser.tabs.query({ active: true, currentWindow: true }); return browser.tabs.executeScript(tab.id, { code: ${JSON.stringify(code)} }); })()`);
   const selection_styles = `document.querySelectorAll("style").length && [...document.querySelectorAll("style")].filter((style) => style.textContent.includes("::selection")).length`;

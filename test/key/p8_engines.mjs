@@ -4,6 +4,8 @@
 
 import { evaluate_in_background } from "./rdp.mjs";
 
+export const areas = ["engines"];
+
 export async function run_cases({ rdp, extension_id, run_case, send_keys, open_page, wait_event, find_event, events, expect, sleep }) {
   const panel_event = () => (event) => event.type === "whichkey" && event.page_id === "eng" && event.value !== "";
   const loaded = (page_id) => (event) => event.type === "tree_read" && event.page_id === page_id;

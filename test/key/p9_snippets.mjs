@@ -1,6 +1,8 @@
 // Snippets from test/key/config/snippets: the default arg, the match limit, error and depth toasts, and the top frame only.
 // The 3.5 s sleeps wait out the toast cooldown, so a toast from the case before cannot stand in for the next one.
 
+export const areas = ["config"];
+
 export async function run_cases({ run_case, setup, expect, open_page, send_keys, sleep, events, wait_event, since, find_event, scroll_delta_after }) {
   const snippet_events = (mark, type) => since(mark).filter((event) => event.type === type);
   await setup("open page snip", () => open_page("page", "snip", { new_tab: true }));

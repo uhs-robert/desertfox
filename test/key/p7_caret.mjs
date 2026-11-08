@@ -4,6 +4,8 @@
 import { mkdirSync } from "node:fs";
 import { evaluate_in_background } from "./rdp.mjs";
 
+export const areas = ["caret"];
+
 export async function run_cases({ rdp, extension_id, take_shot, run_case, expect, open_page, send_keys, sleep, events, wait_event }) {
   const paste_ctrl_v = ["-M", "ctrl", "v", "-m", "ctrl"];
   // oasis_moonlight, the default palette, dark: the caret takes the `mode_caret` role and visual mode the `selection` role (src/content/caret/selection_colors.ts).

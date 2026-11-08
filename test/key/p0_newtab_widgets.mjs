@@ -9,6 +9,8 @@ import { evaluate_in_background } from "./rdp.mjs";
 const test_config_dir = join(dirname(fileURLToPath(import.meta.url)), "config");
 const NEWTAB_VIEW = `(browser.extension.getViews({ type: "tab" }).find((view) => view.location.pathname === "/newtab.html"))`;
 
+export const areas = ["newtab", "config"];
+
 export async function run_cases({ config_dir, load_config_dir, take_shot, run_case, expect, sleep, open_page, rdp, extension_id }) {
   const shot_dir = process.env.DESERTFOX_SHOT_DIR;
   const in_background = (script) => evaluate_in_background(rdp, extension_id, script);

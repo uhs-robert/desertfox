@@ -2,6 +2,8 @@
 // The fixture page /frames holds a same-origin frame (a), a cross-origin frame (s) and a 10 px frame that gets no label.
 import { evaluate_in_background } from "./rdp.mjs";
 
+export const areas = ["hints"];
+
 export async function run_cases({ rdp, extension_id, run_case, send_keys, open_page, wait_event, find_event, events, expect, sleep, since, scroll_of, last_scroll_y }) {
   const page_id = "p6_frames";
   const on_page = (id, type) => (event) => event.page_id === id && event.type === type;

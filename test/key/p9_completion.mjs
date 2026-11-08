@@ -6,6 +6,8 @@ import { evaluate_in_background } from "./rdp.mjs";
 
 const CTRL = (key) => ["-M", "ctrl", key, "-m", "ctrl"];
 
+export const areas = ["cmdline"];
+
 export async function run_cases({ rdp, extension_id, run_case, send_keys, open_page, wait_event, take_shot, events, expect, sleep, scroll_of, last_scroll_y, scroll_delta_after }) {
   const shot_dir = process.env.DESERTFOX_SHOT_DIR;
   const set_zoom = (factor) => evaluate_in_background(rdp, extension_id, `(async () => { const [tab] = await browser.tabs.query({ active: true, currentWindow: true }); await browser.tabs.setZoom(tab.id, ${factor}); })()`);

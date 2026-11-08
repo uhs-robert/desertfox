@@ -1,6 +1,8 @@
 // Key test case of `:help <name>`. run.mjs calls run_cases with its helpers.
 import { evaluate_in_background } from "./rdp.mjs";
 
+export const areas = ["help", "cmdline"];
+
 export async function run_cases({ run_case, send_keys, rdp, extension_id, open_page, expect, sleep }) {
   const help_urls = () => evaluate_in_background(rdp, extension_id, `(async () => (await browser.tabs.query({})).map((tab) => tab.url).filter((url) => url.includes("/home.html")))()`);
   const close_help_tabs = () => evaluate_in_background(rdp, extension_id, `(async () => { for (const tab of await browser.tabs.query({})) if (tab.url.includes("/home.html")) await browser.tabs.remove(tab.id); })()`);

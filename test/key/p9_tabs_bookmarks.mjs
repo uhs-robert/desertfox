@@ -5,6 +5,8 @@ import { evaluate_in_background } from "./rdp.mjs";
 const CTRL = (key) => ["-M", "ctrl", key, "-m", "ctrl"];
 const ALT = (key) => ["-M", "alt", key, "-m", "alt"];
 
+export const areas = ["cmdline", "tabs"];
+
 export async function run_cases({ rdp, extension_id, run_case, send_keys, open_page, wait_event, events, expect, sleep, url_of, became_visible, take_shot }) {
   const background = (code) => evaluate_in_background(rdp, extension_id, code);
 

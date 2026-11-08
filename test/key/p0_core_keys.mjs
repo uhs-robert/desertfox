@@ -2,6 +2,8 @@
 // Tab order is a, b, c, then f, s and the about: page as each step opens them. The wrap cases rely on a being first.
 import { ALT, CTRL, SHIFT_ESCAPE } from "./harness.mjs";
 
+export const areas = ["scroll", "tabs", "keys"];
+
 export async function run_cases({ run_case, setup, expect, open_page, send_keys, sleep, events, wait_event, since, find_event, scroll_delta_after, became_visible, scroll_of, last_scroll_y, expect_no_scroll, expect_exactly_one_visible, record }) {
   await setup("open pages a, b and c", async () => {
     await open_page("page", "a", { new_tab: false });

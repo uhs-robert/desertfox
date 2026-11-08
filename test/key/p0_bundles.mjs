@@ -1,6 +1,8 @@
 // Bundles load on first use: once per tab, with no key lost during the load, plus the cost of a 20 KB executeScript.
 import { evaluate_in_background } from "./rdp.mjs";
 
+export const areas = ["bundles"];
+
 export async function run_cases({ run_case, expect, open_page, send_keys, sleep, events, wait_event, since, find_event, rdp, extension_id, scroll_delta_after, scroll_of, last_scroll_y, in_background, settled_injection_count, injections_of, record }) {
   await run_case("a bundle loads on the first key, once, and no key typed during the load is lost", async () => {
     await open_page("page", "bundle_a", { new_tab: true });

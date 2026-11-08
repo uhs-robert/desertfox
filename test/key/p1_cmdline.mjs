@@ -4,6 +4,8 @@
 const ALT = (key) => ["-M", "alt", key, "-m", "alt"];
 const CTRL = (key) => ["-M", "ctrl", key, "-m", "ctrl"];
 
+export const areas = ["cmdline"];
+
 export async function run_cases({ run_case, setup, expect, send_keys, sleep, open_page, events, wait_event, scroll_of, last_scroll_y, find_event, in_background }) {
   await setup("open the page the command line cases use", () => open_page("page", "cmd", { new_tab: false }));
 

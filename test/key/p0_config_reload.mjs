@@ -2,6 +2,8 @@
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 
+export const areas = ["config", "keys"];
+
 export async function run_cases({ config_copy, load_config_dir, run_case, setup, expect, open_page, send_keys, sleep, events, wait_event, scroll_delta_after, scroll_of, in_background, read_local, wait_reinject_report, expect_exactly_one_visible, became_visible, record }) {
   let single_j_pixels = 0;
   // Tabs a and b with a active. j on a page moves one fixed distance, which every case below compares against.

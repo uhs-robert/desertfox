@@ -1,6 +1,8 @@
 // The new tab page loads every key script by tag, since executeScript cannot reach an extension page.
 import { evaluate_in_background } from "./rdp.mjs";
 
+export const areas = ["newtab"];
+
 export async function run_cases({ run_case, expect, send_keys, sleep, rdp, extension_id, injections_of, extension_view }) {
   const evaluate = (code) => evaluate_in_background(rdp, extension_id, code);
 
