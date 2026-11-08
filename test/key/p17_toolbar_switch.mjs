@@ -166,11 +166,14 @@ export async function run_cases({ rdp, extension_id, run_case, press_keys, poll_
       await in_active_tab(`document.getElementById("host").shadowRoot.getElementById("editable").focus()`);
       const label = () => events.filter((event) => event.type === "indicator" && event.page_id === "sw_shadow").at(-1)?.label;
       await poll_until("INSERT in the shadow field", async () => label() === "INSERT");
+      let mark = events.length;
       await press_toggle();
       await wait_state(true, "off with a shadow field focused");
+      await wait_event(mark, badge_is("sw_shadow", ""), "the badge to go while off");
+      mark = events.length;
       await press_toggle();
       await wait_state(false, "on again with a shadow field focused");
-      await poll_until("INSERT after the cycle", async () => label() === "INSERT");
+      await wait_event(mark, badge_is("sw_shadow", "INSERT"), "INSERT after the cycle");
     } finally {
       await turn_on();
     }

@@ -175,7 +175,7 @@ function install_matcher(keymap: CompiledKeymap | undefined, tab_address: string
   const first_usable = usable !== undefined && !ignore_checked;
   if (usable) ignore_checked = true;
   if (first_usable && ignores_any_address(usable.ignore_regex, [location.href, tab_address])) page_mode.set_mode("ignore");
-  else if (first_install && is_editable_element(document.activeElement)) page_mode.focus_entered_editable();
+  else if (first_install && is_editable_element(deepest_focused_element())) page_mode.focus_entered_editable();
   refresh_mode_indicator();
   key_flow.set_matcher(create_matcher(usable ?? { format_version: COMPILED_KEYMAP_VERSION, modes: {}, mode_indicator: DEFAULT_MODE_INDICATOR, which_key_delay_ms: 0 }), usable?.modes.browser);
 }
