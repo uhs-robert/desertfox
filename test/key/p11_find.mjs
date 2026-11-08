@@ -7,11 +7,7 @@ import { evaluate_in_background } from "./rdp.mjs";
 
 export const areas = ["find"];
 
-export async function run_cases({ rdp, extension_id, run_case, expect, expect_absent, open_page, press_keys, poll_until, barrier, wait_cmdline, close_cmdline, read_cmdline_state, scroll_of, scroll_report_wait_ms, sleep, events, wait_event, take_shot }) {
-  const in_active_tab = (code) => evaluate_in_background(rdp, extension_id, `(async () => { const [tab] = await browser.tabs.query({ active: true, currentWindow: true }); return (await browser.tabs.executeScript(tab.id, { code: ${JSON.stringify(code)} }))[0]; })()`).then((value) => {
-    if (value?.error) throw new Error(`in the tab: ${JSON.stringify(value)}`);
-    return value;
-  });
+export async function run_cases({ rdp, extension_id, run_case, expect, expect_absent, open_page, press_keys, poll_until, barrier, wait_cmdline, close_cmdline, read_cmdline_state, scroll_of, scroll_report_wait_ms, sleep, events, wait_event, take_shot, in_active_tab, badge_is, is_selection_of, press_and_wait_for_move, escape_to_normal }) {
   // Read in the page's own world: ranges and sheets that the content script made are not readable from the script that tabs.executeScript runs. The closed root has no sheet count here, since only the content script can reach it.
   const READ_HIGHLIGHTS = `JSON.parse(window.wrappedJSObject.eval(${JSON.stringify(`JSON.stringify((() => {
     const texts = (owner, name) => { const highlight = owner?.defaultView.CSS.highlights.get(name); const found = []; highlight?.forEach((range) => found.push(range.startContainer.data.slice(0, 40))); return found; };
@@ -44,25 +40,7 @@ export async function run_cases({ rdp, extension_id, run_case, expect, expect_ab
     return last;
   }
   const wait_highlights = (predicate, what, timeout_ms) => poll_reads(() => in_active_tab(READ_HIGHLIGHTS), predicate, what, timeout_ms);
-  const badge_is = (page_id, label) => (event) => event.type === "indicator" && event.page_id === page_id && event.label === label;
   const last_scroll_y = (page_id) => events.filter((event) => event.type === "scroll" && event.page_id === page_id).at(-1)?.y ?? 0;
-  const is_selection_of = (page_id) => (event) => event.type === "selection" && event.page_id === page_id;
-  // A key that moves the caret reports a selection change, so this is the wait after it.
-  async function press_and_wait_for_move(page_id, keys, what) {
-    const mark = events.length;
-    await press_keys(keys);
-    return wait_event(mark, is_selection_of(page_id), what);
-  }
-  // Presses Escape until the mode badge reads NORMAL. Each press waits for the badge to change, so a visual mode that needs two presses is not read as one.
-  async function escape_to_normal(page_id) {
-    for (let presses = 0; presses < 3; presses++) {
-      const mark = events.length;
-      await press_keys("-k", "Escape");
-      const changed = await wait_event(mark, (event) => event.type === "indicator" && event.page_id === page_id, "a mode badge after Escape");
-      if (changed.label === "NORMAL") return;
-    }
-    throw new Error("the badge never reached NORMAL after three Escape presses");
-  }
   // Types a search into the line and waits until the line holds the text.
   async function type_search(typed) {
     await press_keys(typed);

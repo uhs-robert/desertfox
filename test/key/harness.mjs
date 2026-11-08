@@ -369,6 +369,30 @@ export async function create_session({ name: shadow_name, timings, sweep = true,
     return typeof counts?.[0] === "number" ? counts[0] : undefined;
   };
 
+  // The first executeScript result of the active tab, in the content script's world. A script error comes back as an object with `error`, which would pass a loose check, so it throws here.
+  const in_active_tab = (code) => evaluate_in_background(rdp, EXTENSION_ID, `(async () => { const [tab] = await browser.tabs.query({ active: true, currentWindow: true }); return (await browser.tabs.executeScript(tab.id, { code: ${JSON.stringify(code)} }))[0]; })()`).then((value) => {
+    if (value?.error) throw new Error(`in the tab: ${JSON.stringify(value)}`);
+    return value;
+  });
+  const badge_is = (page_id, label) => (event) => event.type === "indicator" && event.page_id === page_id && event.label === label;
+  const is_selection_of = (page_id) => (event) => event.type === "selection" && event.page_id === page_id;
+  // A key that moves the caret reports a selection change, so this is the wait after it. A caret that sticks reports nothing and the wait names the key.
+  async function press_and_wait_for_move(page_id, keys, what) {
+    const mark = events.length;
+    await press_keys(keys);
+    return wait_event(mark, is_selection_of(page_id), what);
+  }
+  // Presses Escape until the mode badge reads NORMAL. Each press waits for the badge to change, so a visual mode that needs two presses is not read as one.
+  async function escape_to_normal(page_id) {
+    for (let presses = 0; presses < 3; presses++) {
+      const mark = events.length;
+      await press_keys("-k", "Escape");
+      const changed = await wait_event(mark, (event) => event.type === "indicator" && event.page_id === page_id, "a mode badge after Escape");
+      if (changed.label === "NORMAL") return;
+    }
+    throw new Error("the badge never reached NORMAL after three Escape presses");
+  }
+
   const timings_path = default_timings_path(repo_dir);
   // Called after each piece, from the signal path and at the end, so a run killed at the time cap still leaves its numbers. A failed write must not hide the run's own error.
   function write_timings({ print_summary = true } = {}) {
@@ -798,7 +822,7 @@ export async function create_session({ name: shadow_name, timings, sweep = true,
     // The cases of a piece file in test/key/p<number>_*.mjs get these helpers.
     const context = { config_dir, config_copy, load_config_dir, take_shot: (path) => timed_shadow("shot", shadow_name, "--out", path), run_case: run_piece_case, setup, on_teardown, expect, open_page, open_page_by_keys, send_keys, press_keys, settle_focus, settle_tab_switch, poll_until, wait_tab_quiet, barrier, expect_absent, read_cmdline_state, wait_cmdline, close_cmdline, scroll_report_wait_ms: SCROLL_REPORT_DELAY_MS + 100, which_key_delay_ms: WHICH_KEY_DELAY_MS, sleep, events, wait_event, since, find_event, url_of, rdp, extension_id: EXTENSION_ID, scroll_delta_after, scroll_delta_by_press, became_visible, scroll_of, last_scroll_y,
       // Moved out of the run.mjs cases. Pieces may use them too.
-      in_background, read_local, reload_in_place, wait_reinject_report, injections_of, settled_injection_count, expect_no_scroll, expect_exactly_one_visible, hint_label_count, visible_events, extension_view, close_tabs_with, record };
+      in_background, read_local, reload_in_place, wait_reinject_report, injections_of, settled_injection_count, expect_no_scroll, expect_exactly_one_visible, hint_label_count, in_active_tab, badge_is, is_selection_of, press_and_wait_for_move, escape_to_normal, visible_events, extension_view, close_tabs_with, record };
     return { context, state, piece_file };
   }
 

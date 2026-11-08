@@ -5,7 +5,7 @@ import { evaluate_in_background } from "./rdp.mjs";
 
 export const areas = ["hints", "scroll"];
 
-export async function run_cases({ rdp, extension_id, run_case, send_keys, press_keys, poll_until, barrier, expect_absent, hint_label_count, wait_cmdline, close_cmdline, scroll_report_wait_ms, open_page, wait_event, find_event, events, expect, sleep, scroll_delta_by_press, became_visible, take_shot }) {
+export async function run_cases({ rdp, extension_id, run_case, send_keys, press_keys, poll_until, barrier, expect_absent, hint_label_count, wait_cmdline, close_cmdline, scroll_report_wait_ms, open_page, wait_event, find_event, events, expect, sleep, scroll_delta_by_press, became_visible, take_shot, in_active_tab }) {
   const background = (code) => evaluate_in_background(rdp, extension_id, code);
   const tab_count = () => background(`(async () => (await browser.tabs.query({})).length)()`);
   const close_tabs_with = (text) => background(`(async () => { for (const tab of await browser.tabs.query({})) if (tab.url.includes(${JSON.stringify(text)})) await browser.tabs.remove(tab.id); })()`);
@@ -15,10 +15,8 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, press_
   const wait_for_label_count = (count, what) => poll_until(`${count} hint labels ${what}`, async () => (await hint_label_count()) === count);
   const wait_for_tab_count = (count, what) => poll_until(what, async () => (await tab_count()) === count);
 
-  // Runs code in the active tab's content script world.
-  const in_active_tab = (code) => background(`(async () => { const [tab] = await browser.tabs.query({ active: true, currentWindow: true }); return browser.tabs.executeScript(tab.id, { code: ${JSON.stringify(code)} }); })()`);
   const run_hint = (args) => in_active_tab(`browser.runtime.sendMessage({ type: "run", invocations: [{ id: "hint.run", args: ${JSON.stringify(args)} }], mode: "normal" }); 0`);
-  const link_count = async () => (await in_active_tab(`document.querySelectorAll("a[href]").length`))[0];
+  const link_count = async () => await in_active_tab(`document.querySelectorAll("a[href]").length`);
   const wait_for_link_count = (count, what) => poll_until(what, async () => (await link_count()) === count);
   // A copy has no report of its own. The labels go when the pick is handled, and opening the paste page takes longer than the copy.
 
@@ -62,11 +60,11 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, press_
     const seen = events.slice(mark).filter((event) => event.page_id === "p6_chosen" && event.type.startsWith("chosen_")).map((event) => event.type);
     const order = seen.filter((type) => type !== "chosen_open").join(",");
     expect(order === "chosen_pointerdown,chosen_mousedown,chosen_mouseup,chosen_click", `the page saw ${order}`);
-    const [focused] = await in_active_tab(`document.activeElement.id`);
+    const focused = await in_active_tab(`document.activeElement.id`);
     expect(focused === "search", `the focus is on ${focused}, not the search field the page chose`);
   });
 
-  const outline_and_tabindex = async () => (await in_active_tab(`[document.getElementById("panel").style.outline, document.getElementById("panel").getAttribute("tabindex")]`))[0];
+  const outline_and_tabindex = async () => await in_active_tab(`[document.getElementById("panel").style.outline, document.getElementById("panel").getAttribute("tabindex")]`);
 
   await run_case(";s focuses a scroll box, then j scrolls the box and not the page", async () => {
     // The only scroll box is the side panel, so it gets the label "a". The page root is left out.
@@ -74,7 +72,7 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, press_
     await press_keys(";s");
     await wait_for_labels(";s");
     await press_keys("a");
-    await poll_until("the box to get its outline", async () => (await in_active_tab(`getComputedStyle(document.getElementById("panel")).outlineStyle`))[0] === "solid");
+    await poll_until("the box to get its outline", async () => (await in_active_tab(`getComputedStyle(document.getElementById("panel")).outlineStyle`)) === "solid");
     const mark = events.length;
     await press_keys("j");
     const moved = await wait_event(mark, (event) => event.type === "panel_scroll" && event.page_id === "p6_scrollbox", "the panel to scroll after j");
@@ -168,15 +166,15 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, press_
   await run_case("text with no match shows a notice and leaves keys alone", async () => {
     await open_page("hints", "p6_no_match", { new_tab: true });
     await run_hint({ filter: "links", text: "zzz" });
-    await poll_until("the no-match notice", async () => (await in_active_tab(`[...document.documentElement.children].map((child) => child.openOrClosedShadowRoot?.querySelector(".desertfox-toast, .desertfox-hint-message")?.textContent ?? "").join("")`))[0] !== "");
+    await poll_until("the no-match notice", async () => (await in_active_tab(`[...document.documentElement.children].map((child) => child.openOrClosedShadowRoot?.querySelector(".desertfox-toast, .desertfox-hint-message")?.textContent ?? "").join("")`)) !== "");
     expect((await scroll_delta_by_press("p6_no_match", ["j"])) > 0, "keys did not work after a text with no match");
   });
 
   // `;#` opens the command line with `heading ` typed. The list lives in the extension's frame, which the page cannot read, so these cases check what a pick does to the page.
   const toast_layer = 2147483647 - 2;
-  const toast_text = async () => (await in_active_tab(`(() => { const host = [...document.documentElement.children].find((child) => child.style.zIndex === "${toast_layer}"); return host?.openOrClosedShadowRoot?.textContent ?? ""; })()`))[0];
-  const scroll_y = async () => (await in_active_tab(`Math.round(scrollY)`))[0];
-  const top_of = async (id) => (await in_active_tab(`Math.round(document.getElementById(${JSON.stringify(id)}).getBoundingClientRect().top)`))[0];
+  const toast_text = async () => await in_active_tab(`(() => { const host = [...document.documentElement.children].find((child) => child.style.zIndex === "${toast_layer}"); return host?.openOrClosedShadowRoot?.textContent ?? ""; })()`);
+  const scroll_y = async () => await in_active_tab(`Math.round(scrollY)`);
+  const top_of = async (id) => await in_active_tab(`Math.round(document.getElementById(${JSON.stringify(id)}).getBoundingClientRect().top)`);
   const tab_key = ["-k", "Tab"];
   const enter_key = ["-k", "Return"];
   // A Tab before the list holds its rows is lost, so the line counts as open once the rows are in.
@@ -232,7 +230,7 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, press_
     await tab_to_third_row();
     const delta = await scroll_delta_by_press("p6_headings_frames", enter_key);
     expect(delta > 0, `the page did not scroll, delta ${delta}`);
-    const top = (await in_active_tab(`(() => { const frame = document.getElementById("shown"); return Math.round(frame.getBoundingClientRect().top + frame.contentDocument.getElementById("in_frame").getBoundingClientRect().top); })()`))[0];
+    const top = (await in_active_tab(`(() => { const frame = document.getElementById("shown"); return Math.round(frame.getBoundingClientRect().top + frame.contentDocument.getElementById("in_frame").getBoundingClientRect().top); })()`));
     expect(Math.abs(top) <= 2, `the heading in the frame sits ${top}px from the top of the view`);
   });
 

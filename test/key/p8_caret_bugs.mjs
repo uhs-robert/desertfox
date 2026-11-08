@@ -3,31 +3,13 @@ import { evaluate_in_background } from "./rdp.mjs";
 // Repro cases for two caret mode bugs: j/k getting stuck, and the caret not starting at a find match.
 export const areas = ["caret", "find"];
 
-export async function run_cases({ run_case, expect, open_page, press_keys, poll_until, barrier, wait_cmdline, events, wait_event, rdp, extension_id }) {
-  const is_selection_of = (page_id) => (event) => event.type === "selection" && event.page_id === page_id;
-  const badge_is = (page_id, label) => (event) => event.type === "indicator" && event.page_id === page_id && event.label === label;
+export async function run_cases({ run_case, expect, open_page, press_keys, poll_until, barrier, wait_cmdline, events, wait_event, rdp, extension_id, in_active_tab, badge_is, is_selection_of, press_and_wait_for_move, escape_to_normal }) {
   const last_selection_text = (page_id) => events.filter((event) => event.type === "selection" && event.page_id === page_id && event.text !== "").at(-1)?.text;
 
-  // A key that moves the caret reports a selection change, so this is the wait after it. A caret that sticks reports nothing and the wait names the key.
-  async function press_and_wait_for_move(page_id, keys, what) {
-    const mark = events.length;
-    await press_keys(keys);
-    return wait_event(mark, is_selection_of(page_id), what);
-  }
   async function press_and_wait_for_badge(page_id, keys, label) {
     const mark = events.length;
     await press_keys(keys);
     await wait_event(mark, badge_is(page_id, label), `the ${label} badge after ${keys}`);
-  }
-  // Presses Escape until the mode badge reads NORMAL. Each press waits for the badge to change, so a visual mode that needs two presses is not read as one.
-  async function escape_to_normal(page_id) {
-    for (let presses = 0; presses < 3; presses++) {
-      const mark = events.length;
-      await press_keys("-k", "Escape");
-      const changed = await wait_event(mark, (event) => event.type === "indicator" && event.page_id === page_id, "a mode badge after Escape");
-      if (changed.label === "NORMAL") return;
-    }
-    throw new Error("the badge never reached NORMAL after three Escape presses");
   }
   // The last selection report after the mark, once it passes `accept`. The timeout names that report, which tells a wrong caret from a missing one.
   async function wait_for_last_selection(page_id, mark, accept, what) {
@@ -149,7 +131,6 @@ export async function run_cases({ run_case, expect, open_page, press_keys, poll_
   });
 
   // Focus entering a field in caret or visual mode must switch to insert, so motion keys do not swallow typing.
-  const in_active_tab = (code) => evaluate_in_background(rdp, extension_id, `(async () => { const [tab] = await browser.tabs.query({ active: true, currentWindow: true }); return browser.tabs.executeScript(tab.id, { code: ${JSON.stringify(code)} }); })()`);
   for (const kind of ["caret", "visual"]) {
     await run_case(`focusing a field in ${kind} mode switches to insert and typing reaches the field`, async () => {
       const page_id = `focus_${kind}`;
@@ -161,7 +142,7 @@ export async function run_cases({ run_case, expect, open_page, press_keys, poll_
       await wait_event(mark, badge_is(page_id, "INSERT"), "the INSERT badge after the field took focus");
       await press_keys("jv");
       await wait_event(mark, (event) => event.type === "input" && event.page_id === page_id && event.value === "jv", "the field to hold jv");
-      const state = JSON.parse((await in_active_tab("JSON.stringify({ active: document.activeElement.id, start: document.activeElement.selectionStart, end: document.activeElement.selectionEnd })"))[0]);
+      const state = JSON.parse(await in_active_tab("JSON.stringify({ active: document.activeElement.id, start: document.activeElement.selectionStart, end: document.activeElement.selectionEnd })"));
       expect(state.active === "paste_target" && state.start === 2 && state.end === 2, `the field lost its caret: ${JSON.stringify(state)}`);
       const mark_escape = events.length;
       await press_keys("-k", "Escape");
@@ -172,7 +153,7 @@ export async function run_cases({ run_case, expect, open_page, press_keys, poll_
   // The typed keys reach the field after the badge, and nothing reports them, so the field's text is polled. The last text read is returned either way, for the case's own message.
   async function wait_for_field_text(field_expression) {
     let text;
-    await poll_until("the field to hold the typed keys", async () => (text = (await in_active_tab(`${field_expression}.textContent`))[0]) === "hellojv world").catch(() => undefined);
+    await poll_until("the field to hold the typed keys", async () => (text = await in_active_tab(`${field_expression}.textContent`)) === "hellojv world").catch(() => undefined);
     return text;
   }
 

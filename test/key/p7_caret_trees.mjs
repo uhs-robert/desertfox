@@ -2,43 +2,28 @@
 // /caret_shadow reads "alpha one", then "beta two" in an open root, "gamma three" in a closed root and "delta four" in an open root inside it.
 // /caret_frames reads "top head", a same-origin frame with "inner words here" and a frame inside it, "top tail", and a frame from another origin.
 
-import { evaluate_in_background } from "./rdp.mjs";
-
 export const areas = ["caret"];
 
-export async function run_cases({ rdp, extension_id, run_case, expect, open_page, press_keys, poll_until, sleep, scroll_report_wait_ms, scroll_of, last_scroll_y, events, wait_event }) {
-  const in_active_tab = (code) => evaluate_in_background(rdp, extension_id, `(async () => { const [tab] = await browser.tabs.query({ active: true, currentWindow: true }); return browser.tabs.executeScript(tab.id, { code: ${JSON.stringify(code)} }); })()`);
+export async function run_cases({ run_case, expect, open_page, press_keys, poll_until, sleep, scroll_report_wait_ms, scroll_of, last_scroll_y, events, wait_event, in_active_tab, badge_is, escape_to_normal, hint_label_count }) {
   const selection_styles = `document.querySelectorAll("style").length && [...document.querySelectorAll("style")].filter((style) => style.textContent.includes("::selection")).length`;
   const selection_is = (page_id, text) => (event) => event.type === "selection" && event.page_id === page_id && event.text === text;
-  const badge_is = (page_id, label) => (event) => event.type === "indicator" && event.page_id === page_id && event.label === label;
   const last_selection = (page_id) => events.filter((event) => event.type === "selection" && event.page_id === page_id).at(-1)?.text;
 
-  // The hint labels sit in a surface host marked with LAYERS.hints (src/shared/layers.ts), which the page script cannot import.
-  const hint_surface_is_shown = `[...document.documentElement.children].some((child) => child.getAttribute("data-desertfox-layer") === "2147483643")`;
-  const page_has = (code) => async () => (await in_active_tab(code))[0] === true;
+  const page_has = (code) => async () => (await in_active_tab(code)) === true;
 
   // Label "a" is the only element, so it is picked at once.
   const hint_into = async (kind, page_id, flag, target) => {
     await open_page(kind, page_id, { new_tab: true });
     const mark = events.length;
     await press_keys(`:hint ${flag} --custom --selector=${target}`, "-k", "Return");
-    await poll_until("the hint labels to show", page_has(hint_surface_is_shown));
+    await poll_until("the hint labels to show", async () => (await hint_label_count()) > 0);
     await press_keys("a");
     return mark;
   };
 
-  // Presses Escape until the mode badge reads NORMAL. Each press waits for the badge to change, so a visual mode that needs two presses is not read as one.
-  const escape_to_normal = async (page_id) => {
-    for (let presses = 0; presses < 3; presses++) {
-      const mark = events.length;
-      await press_keys("-k", "Escape");
-      const changed = await wait_event(mark, (event) => event.type === "indicator" && event.page_id === page_id, "a mode badge after Escape");
-      if (changed.label === "NORMAL") return;
-    }
-    throw new Error("the badge never reached NORMAL after three Escape presses");
-  };
   // A key that moves the caret reports a selection change on the page or in one of its frames.
-  const press_and_wait_for_move = async (page_id, key, what) => {
+  // Unlike the harness press_and_wait_for_move, this takes a selection report from a frame of the page too: a frame reports under the page id plus a suffix.
+  const press_and_wait_for_move_in_tree = async (page_id, key, what) => {
     const mark = events.length;
     await press_keys(key);
     await wait_event(mark, (event) => event.type === "selection" && event.page_id.startsWith(page_id), what);
@@ -78,7 +63,7 @@ export async function run_cases({ rdp, extension_id, run_case, expect, open_page
     const page_id = "shadow_visual";
     const mark = await hint_into("caret_shadow", page_id, "--visual", "#before");
     await wait_event(mark, selection_is(page_id, "a"), "one character selected");
-    await press_and_wait_for_move(page_id, "2w", "2w to move the selection");
+    await press_and_wait_for_move_in_tree(page_id, "2w", "2w to move the selection");
     const mark_e = events.length;
     await press_keys("e");
     const shown = await wait_event(mark_e, (event) => event.type === "selection" && event.page_id === page_id, "e to move the selection");
@@ -125,11 +110,11 @@ export async function run_cases({ rdp, extension_id, run_case, expect, open_page
     await press_keys("w");
     await wait_event(mark_w, selection_is(`${page_id}_inner`, "w"), "w onto words in the frame");
     // The next line is in the frame inside it, then top tail on the page. The column stays, so k twice comes back to "w".
-    await press_and_wait_for_move(page_id, "j", "the first j to leave the line in the frame");
+    await press_and_wait_for_move_in_tree(page_id, "j", "the first j to leave the line in the frame");
     const mark_j = events.length;
     await press_keys("j");
     await wait_event(mark_j, (event) => event.type === "selection" && event.page_id === page_id && event.text !== "", "j twice past the inner frame onto top tail");
-    await press_and_wait_for_move(page_id, "k", "the first k to leave top tail");
+    await press_and_wait_for_move_in_tree(page_id, "k", "the first k to leave top tail");
     const mark_k = events.length;
     await press_keys("k");
     await wait_event(mark_k, selection_is(`${page_id}_inner`, "w"), "k twice back into the frame");
@@ -141,7 +126,7 @@ export async function run_cases({ rdp, extension_id, run_case, expect, open_page
     const mark = events.length;
     await press_keys("gV");
     await wait_event(mark, selection_is(page_id, "c"), "the caret on the title");
-    for (const press of ["first", "second", "third"]) await press_and_wait_for_move(page_id, "j", `the ${press} j to move the caret`);
+    for (const press of ["first", "second", "third"]) await press_and_wait_for_move_in_tree(page_id, "j", `the ${press} j to move the caret`);
     await wait_event(mark, selection_is(`${page_id}_inner`, "i"), "j into the frame's first paragraph");
     await escape_to_normal(page_id);
     await poll_until("Escape to clear the selection in the frame", () => last_selection(`${page_id}_inner`) === "");
@@ -158,27 +143,27 @@ export async function run_cases({ rdp, extension_id, run_case, expect, open_page
     await wait_event(mark_w, (event) => event.type === "selection" && event.page_id === page_id && event.text !== "", "a caret on the page after the frame left");
     expect(!events.slice(mark_w).some(badge_is(page_id, "NORMAL")), "caret mode ended");
     await escape_to_normal(page_id);
-    await poll_until("the selection colors to leave the page after Escape", async () => (await in_active_tab(selection_styles))[0] === 0);
+    await poll_until("the selection colors to leave the page after Escape", async () => (await in_active_tab(selection_styles)) === 0);
   });
 
   await run_case("caret in a tall frame that is already on screen does not scroll the page", async () => {
     const page_id = "frames_tall";
     await open_page("caret_tall_frame", page_id, { new_tab: true });
     const frame_selection = `document.getElementById("tall").contentWindow.getSelection().toString()`;
-    const scroll_y = async () => (await in_active_tab("scrollY"))[0];
+    const scroll_y = async () => await in_active_tab("scrollY");
     // The load handler scrolls the page. Its scroll report comes after the scroll, so the wait is for the report: a later scroll event is then the caret's.
     await poll_until("the page to report its scroll to the frame text", () => last_scroll_y(page_id) > 1000);
     const before = await scroll_y();
     const mark = events.length;
     await press_keys("gV");
-    await poll_until("the caret to start in the frame", async () => (await in_active_tab(frame_selection))[0] !== "");
+    await poll_until("the caret to start in the frame", async () => (await in_active_tab(frame_selection)) !== "");
     // No barrier here: the key goes to the focused frame, whose document has no reporter. A scroll is reported scroll_report_wait_ms after its cause, so that is the wait.
     await sleep(scroll_report_wait_ms);
     expect(!events.slice(mark).some(scroll_of(page_id)), "the page scrolled with the caret already on screen");
     expect((await scroll_y()) === before, `the page scrolled from ${before} to ${await scroll_y()} with the caret already on screen`);
     // The frame holds the focus and has no reporter, so the frame's own selection shows that Escape arrived.
     await press_keys("-k", "Escape");
-    await poll_until("Escape to clear the selection in the frame", async () => (await in_active_tab(frame_selection))[0] === "");
+    await poll_until("Escape to clear the selection in the frame", async () => (await in_active_tab(frame_selection)) === "");
   });
 
   await run_case("hint --caret on a frame from another origin shows a notice and stays in normal mode", async () => {
