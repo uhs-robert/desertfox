@@ -4,7 +4,7 @@ import { ALT, CTRL, SHIFT_ESCAPE } from "./harness.mjs";
 
 export const areas = ["scroll", "tabs", "keys"];
 
-export async function run_cases({ run_case, setup, expect, open_page, press_keys, settle_focus, settle_tab_switch, poll_until, wait_tab_quiet, events, wait_event, since, find_event, scroll_delta_by_press, scroll_of, last_scroll_y, expect_absent, expect_no_scroll, expect_exactly_one_visible, in_background, record, type_in_address_bar, wait_active_tab, tab_switch_mark }) {
+export async function run_cases({ run_case, setup, expect, open_page, press_keys, settle_focus, poll_until, wait_tab_quiet, events, wait_event, since, find_event, scroll_delta_by_press, scroll_of, last_scroll_y, expect_absent, expect_no_scroll, expect_exactly_one_visible, in_background, record, type_in_address_bar, wait_active_tab, tab_switch_mark }) {
   await setup("open pages a, b and c", async () => {
     await open_page("page", "a", { new_tab: false });
     await open_page("page", "b", { new_tab: true });
@@ -15,7 +15,7 @@ export async function run_cases({ run_case, setup, expect, open_page, press_keys
     for (const [keys, expected] of [["K", "b"], ["K", "a"], ["J", "b"], ["J", "c"]]) {
       await press_keys(keys);
       await wait_active_tab(expected, `tab ${expected} after ${keys}`);
-      await settle_tab_switch();
+      await settle_focus();
     }
   });
 
@@ -80,20 +80,20 @@ export async function run_cases({ run_case, setup, expect, open_page, press_keys
     });
     await press_keys("K");
     await wait_active_tab("c", "tab c after K");
-    await settle_tab_switch();
+    await settle_focus();
     await press_keys("J");
     await wait_active_tab("f", "tab f after J");
-    await settle_tab_switch();
+    await settle_focus();
   });
 
   await setup("open the key-cancelling page s", () => open_page("swallow", "s", { new_tab: true }));
   await run_case("J and K work on a page that cancels keys in its own capture listener", async () => {
     await press_keys("K");
     await wait_active_tab("f", "tab f after K");
-    await settle_tab_switch();
+    await settle_focus();
     await press_keys("J");
     await wait_active_tab("s", "tab s after J");
-    await settle_tab_switch();
+    await settle_focus();
   });
 
   await run_case("chord on a cancelling page acts exactly once", async () => {
@@ -109,7 +109,7 @@ export async function run_cases({ run_case, setup, expect, open_page, press_keys
     await press_keys("gg");
     await press_keys("K");
     await wait_active_tab("f", "tab f after K");
-    await settle_tab_switch();
+    await settle_focus();
     let switch_mark = await tab_switch_mark();
     await press_keys(...ALT("k"));
     await expect_exactly_one_visible(switch_mark, "c");

@@ -4,7 +4,7 @@
 
 export const areas = ["keys", "tabs", "hints", "find", "cmdline", "scroll"];
 
-export async function run_cases({ close_tabs_with, run_case, press_keys, poll_until, settle_focus, settle_tab_switch, expect_absent, hint_label_count, close_cmdline, wait_cmdline, scroll_report_wait_ms, open_page, wait_event, find_event, events, expect, sleep, scroll_delta_by_press, scroll_of, last_scroll_y, type_in_line, wait_active_tab }) {
+export async function run_cases({ close_tabs_with, run_case, press_keys, poll_until, settle_focus, expect_absent, hint_label_count, close_cmdline, wait_cmdline, scroll_report_wait_ms, open_page, wait_event, find_event, events, expect, sleep, scroll_delta_by_press, scroll_of, last_scroll_y, type_in_line, wait_active_tab }) {
   const ENTER = ["-k", "Return"];
   const ESCAPE = ["-k", "Escape"];
   const loaded = (page_id) => (event) => event.type === "tree_read" && event.page_id === page_id;
@@ -28,12 +28,12 @@ export async function run_cases({ close_tabs_with, run_case, press_keys, poll_un
     expect(last_scroll_y("sq_two") > 0, "sq_two did not scroll down");
     await press_keys("gT");
     await wait_active_tab("sq_one", "sq_one after gT");
-    await settle_tab_switch();
+    await settle_focus();
     mark = events.length;
     await press_keys(",n");
     await wait_active_tab("sq_two", "sq_two after ,n");
     await wait_event(mark, (event) => scroll_of("sq_two")(event) && event.y === 0, "sq_two to scroll to the top");
-    await settle_tab_switch();
+    await settle_focus();
     await expect_absent(mark, "sq_two", scroll_of("sq_one"), "the first tab scrolled", { report_delay_ms: scroll_report_wait_ms });
     await close_tabs_with("sq_");
   });

@@ -362,7 +362,7 @@ export async function create_session({ name: session_name, timings, sweep = true
       await sleep(1500);
     } else {
       await wait_active_tab(expected_page_id);
-      await settle_tab_switch();
+      await settle_focus();
       await barrier(expected_page_id);
     }
     const active_page_id = await active_test_page_id();
@@ -618,13 +618,6 @@ export async function create_session({ name: session_name, timings, sweep = true
     }
   }
 
-  // A tab that is hidden again, or shown again, within about 250 ms of its last switch loses the page's visibility reports (measured with J and K in a row, where the second switch came 175 ms after the first). A key that switches tab again waits this long. Slice 7's keyboard client should make it unneeded.
-  const TAB_SWITCH_FLOOR_MS = 250;
-  async function settle_tab_switch(options) {
-    await settle_focus(options);
-    await sleep(TAB_SWITCH_FLOOR_MS);
-  }
-
   // A bulk tabs.remove of 30 or more tabs outlasts one debugger call, so the close is started and then polled.
   async function wait_for_tabs(what, count_expr, expected) {
     await poll_until(what, async () => (await in_background(count_expr)) === expected, { timeout_ms: 30000 });
@@ -875,7 +868,7 @@ export async function create_session({ name: session_name, timings, sweep = true
     // Stores a number for the end-of-run measurements line.
     const record = (key, value) => { measurements[key] = value; };
     // The cases of a piece file in test/key/p<number>_*.mjs get these helpers.
-    const context = { config_dir, config_copy, load_config_dir, take_shot: (path) => timings.time("driver", () => session.shot(path)), run_case: run_piece_case, setup, on_teardown, expect, open_page, open_page_by_keys, send_keys, press_keys, settle_focus, settle_tab_switch, wait_takes_keys, poll_until, wait_tab_quiet, barrier, expect_absent, read_cmdline_state, wait_cmdline, close_cmdline, open_cmdline, type_in_line, complete_in_line, run_line, type_in_address_bar, scroll_report_wait_ms: SCROLL_REPORT_DELAY_MS + 100, which_key_delay_ms: WHICH_KEY_DELAY_MS, sleep, events, wait_event, since, find_event, url_of, rdp, extension_id: EXTENSION_ID, scroll_delta_after, scroll_delta_by_press, wait_active_tab, tab_switch_mark, tabs_shown_since, scroll_of, last_scroll_y,
+    const context = { config_dir, config_copy, load_config_dir, take_shot: (path) => timings.time("driver", () => session.shot(path)), run_case: run_piece_case, setup, on_teardown, expect, open_page, open_page_by_keys, send_keys, press_keys, settle_focus, wait_takes_keys, poll_until, wait_tab_quiet, barrier, expect_absent, read_cmdline_state, wait_cmdline, close_cmdline, open_cmdline, type_in_line, complete_in_line, run_line, type_in_address_bar, scroll_report_wait_ms: SCROLL_REPORT_DELAY_MS + 100, which_key_delay_ms: WHICH_KEY_DELAY_MS, sleep, events, wait_event, since, find_event, url_of, rdp, extension_id: EXTENSION_ID, scroll_delta_after, scroll_delta_by_press, wait_active_tab, tab_switch_mark, tabs_shown_since, scroll_of, last_scroll_y,
       // Moved out of the run.mjs cases. Pieces may use them too.
       in_background, read_local, reload_in_place, wait_reinject_report, injections_of, settled_injection_count, expect_no_scroll, expect_exactly_one_visible, hint_label_count, in_active_tab, badge_is, is_selection_of, press_and_wait_for_move, escape_to_normal, extension_view, close_tabs_with, record };
     return { context, state, piece_file };

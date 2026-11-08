@@ -4,7 +4,7 @@ import { join } from "node:path";
 
 export const areas = ["config", "keys"];
 
-export async function run_cases({ config_copy, load_config_dir, run_case, setup, expect, open_page, press_keys, settle_focus, settle_tab_switch, poll_until, wait_cmdline, events, wait_event, scroll_delta_by_press, scroll_of, in_background, read_local, wait_reinject_report, expect_exactly_one_visible, record, run_line, wait_active_tab, tab_switch_mark }) {
+export async function run_cases({ config_copy, load_config_dir, run_case, setup, expect, open_page, press_keys, settle_focus, poll_until, wait_cmdline, events, wait_event, scroll_delta_by_press, scroll_of, in_background, read_local, wait_reinject_report, expect_exactly_one_visible, record, run_line, wait_active_tab, tab_switch_mark }) {
   let single_j_pixels = 0;
   // Tabs a and b with a active. j on a page moves one fixed distance, which every case below compares against.
   await setup("open pages a and b and measure one j", async () => {
@@ -12,7 +12,7 @@ export async function run_cases({ config_copy, load_config_dir, run_case, setup,
     await open_page("page", "reload_b", { new_tab: true });
     await press_keys("K");
     await wait_active_tab("reload_a", "tab a after K");
-    await settle_tab_switch();
+    await settle_focus();
     single_j_pixels = await scroll_delta_by_press("reload_a", ["j"]);
     expect(single_j_pixels > 0, "j did not scroll down");
     await scroll_delta_by_press("reload_a", ["gg"]);
