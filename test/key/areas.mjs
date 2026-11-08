@@ -126,7 +126,7 @@ function git(...args) {
 function changed_paths_since(base, head) {
   if (head) return git("diff", "--name-only", "--no-renames", `${base}...${head}`);
   const merge_base = git("merge-base", base, "HEAD")[0];
-  return [...git("diff", "--name-only", "--no-renames", merge_base), ...git("ls-files", "--others", "--exclude-standard", "--", "src")];
+  return [...git("diff", "--name-only", "--no-renames", merge_base), ...git("ls-files", "--others", "--exclude-standard", "--", "src", "test/key", "tools")];
 }
 
 // node test/key/areas.mjs <base> [head]: prints the choice on stderr and the comma-separated pieces on stdout (empty for none).

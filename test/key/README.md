@@ -52,7 +52,7 @@ Each piece exports `export const areas = ["hints", ...]`, the feature areas it e
 
 `just key-test-changed [base] [head]` compares against `base` (default `origin/main`). It prints the changed area names and the chosen pieces first, then runs them through `KEY_TEST_PIECES`.
 
-- With no `head`, the diff is the merge base with `HEAD` against the working tree, plus new files under `src`. With `head`, it is `base...head`.
+- With no `head`, the diff is the merge base with `HEAD` against the working tree, plus new files under `src`, `test/key` and `tools`. With `head`, it is `base...head`.
 - A shared file in the diff selects all pieces.
 - A changed piece file selects that piece. A change to the test machinery (`harness.mjs`, `run.mjs`, `server.mjs`, `rdp.mjs`, `timings.mjs`, `areas.mjs`, `launch_firefox.sh`, `user.js`, `config/`) or to `tools/build.mjs` or a tools file it imports (`write_commands_json.mjs`, `render_docs.ts`) selects every piece. Other paths are ignored.
 - With no src, piece or harness change it says so and runs nothing.
