@@ -21,7 +21,7 @@ export function weights_from_report(report) {
   return weights;
 }
 
-// The newest key-test-timings file in logs_dir that lists pieces, or undefined.
+// The newest key-test-timings file in logs_dir that lists pieces and ran every case, or undefined.
 export function newest_timings_file(logs_dir) {
   let names;
   try {
@@ -33,7 +33,8 @@ export function newest_timings_file(logs_dir) {
   for (const { path, mtime_ms } of by_age) {
     try {
       const report = JSON.parse(readFileSync(path, "utf8"));
-      if (Array.isArray(report.pieces) && report.pieces.length > 0) return { path, mtime_ms, report };
+      // A KEY_TEST_ONLY run skips most cases, so its piece times are far too short to order a full run.
+      if (Array.isArray(report.pieces) && report.pieces.length > 0 && !report.filter) return { path, mtime_ms, report };
     } catch {
       // A file cut off by a kill mid-write is skipped.
     }
@@ -130,6 +131,7 @@ export async function pick_debug_ports(count, { floor = ephemeral_port_floor(), 
 export function write_weights(timings_path, { committed_path = COMMITTED_WEIGHTS_PATH, piece_names }) {
   const report = JSON.parse(readFileSync(timings_path, "utf8"));
   if (report.incomplete) throw new Error(`${timings_path} is from a run that did not finish (${report.incomplete.reason}), so its pieces are cut short`);
+  if (report.filter) throw new Error(`${timings_path} is from a run filtered by KEY_TEST_ONLY=${report.filter}, so its pieces skipped cases`);
   const fresh = weights_from_report(report);
   if (Object.keys(fresh).length === 0) throw new Error(`${timings_path} lists no finished piece`);
   const old = JSON.parse(readFileSync(committed_path, "utf8"));

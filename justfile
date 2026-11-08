@@ -69,7 +69,7 @@ key-test: build
     echo "key-test: no systemd user session, so this run has no memory cap." >&2
     exec node test/key/run.mjs
 
-# Rewrite test/key/piece_seconds.json, the piece weights that order the sharded key test, from a full-run timings file (default: the newest .logs/key-test-timings-*.json). Run it in the last PR of a change that moves piece run times.
+# Rewrite test/key/piece_seconds.json, the piece weights that order the sharded key test, from a full-run timings file (default: the newest .logs/key-test-timings-*.json that no KEY_TEST_ONLY filtered). Run it in the last PR of a change that moves piece run times.
 key-test-weights timings="":
     node test/key/shards.mjs write-weights {{ if timings == "" { "" } else { quote(timings) } }}
 

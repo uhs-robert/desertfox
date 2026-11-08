@@ -216,7 +216,7 @@ async function main() {
     pieces: ledger.sequence_of(entry.shard),
     exit: entry.exit,
   }));
-  const merged = merge_reports(shard_reports, { total_ms, shards: shard_info, incomplete });
+  const merged = merge_reports(shard_reports, { total_ms, shards: shard_info, incomplete, filter: process.env.KEY_TEST_ONLY || undefined });
   try {
     write_report(merged_path, merged);
   } catch (error) {
