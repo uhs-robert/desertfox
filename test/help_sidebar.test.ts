@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { close_drawer_on_escape, close_drawer_on_window_blur, render_help, reset_group_state, section_hash } from "../src/help/render.ts";
+import { close_drawer_on_escape, close_drawer_on_window_blur, render_help, reset_group_state, section_hash, update_config_source } from "../src/help/render.ts";
 import { parse_route } from "../src/help/route.ts";
 import type { Route } from "../src/help/route.ts";
 import type { Block } from "../src/help/blocks.ts";
@@ -366,4 +366,11 @@ test("Settings shows the config source and the apply steps above the groups", ()
   assert.equal(headings[0], "Apply a config file edit");
   assert.ok(page.find_all((node) => node.tag === "ol").length === 1);
   assert.equal(page.find_all(by_class("desertfox-settings-install")).length, 1);
+});
+
+test("a model change updates the Settings config source line in place", () => {
+  const root = render({ page: "settings" });
+  const line = root.querySelector(".desertfox-config-source")!;
+  update_config_source({ config_source: "Config files, read by config.reload" } as never);
+  assert.equal(line.textContent, "Config source: Config files, read by config.reload.");
 });

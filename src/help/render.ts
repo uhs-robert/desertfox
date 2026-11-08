@@ -210,11 +210,20 @@ function install_native_host_button(): HTMLElement {
   return el("p", undefined, button);
 }
 
+const CONFIG_SOURCE_CLASS = "desertfox-config-source";
+const config_source_text = (model: HelpModel): string => `Config source: ${model.config_source}.`;
+
+// The Settings page is not redrawn on a settings change, so a reload that changes the source updates this line in place and leaves the fields alone.
+export function update_config_source(model: HelpModel): void {
+  const line = document.querySelector(`.${CONFIG_SOURCE_CLASS}`);
+  if (line) line.textContent = config_source_text(model);
+}
+
 // Settings go in after the render: `main.ts` fills `.desertfox-settings` from the background.
 function settings_page(model: HelpModel): HTMLElement[] {
   return [
     el("p", undefined, "A change is saved at once, the same as ", el("code", undefined, ":set"), ". Each setting shows the layer that sets its value. Reset drops the saved and temp edit, so the config file value applies."),
-    el("p", undefined, `Config source: ${model.config_source}.`),
+    el("p", CONFIG_SOURCE_CLASS, config_source_text(model)),
     el("h2", undefined, "Apply a config file edit"),
     el("p", undefined, "After you edit the config files, run:"),
     el("ol", undefined, ...model.rebuild_steps.map((step) => el("li", undefined, el("code", undefined, step)))),
