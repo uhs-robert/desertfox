@@ -121,6 +121,12 @@ export function kill_session_now(name) {
     signal_all(pids, "SIGKILL");
     sleep_sync(20);
   }
+  // A process stuck in an uninterruptible wait outlives SIGKILL. Its dir and owner file stay, so a later sweep stops it.
+  const left = pids_carrying(runtime_dir);
+  if (left.length > 0) {
+    console.error(`session ${name}: processes still carry ${runtime_dir} after SIGKILL: ${left.join(", ")}`);
+    return;
+  }
   rmSync(runtime_dir, { recursive: true, force: true });
 }
 
@@ -139,6 +145,16 @@ export async function sweep_dead_sessions() {
 
 const RUN_DIR_PREFIX = "desertfox-key-run-";
 const RUN_DIR_CARRIER_WAIT_MS = 3000;
+
+// The processes that still carry the folder once they all left or the wait ran out. A failed /proc scan throws.
+async function carriers_after_wait(run_dir, wait_ms) {
+  const deadline = Date.now() + wait_ms;
+  for (;;) {
+    const pids = pids_carrying(run_dir);
+    if (pids.length === 0 || Date.now() > deadline) return pids;
+    await sleep(50);
+  }
+}
 
 // The start time of a process in clock ticks since boot (field 22 of /proc/<pid>/stat), or undefined when it is gone.
 // A pid that the kernel hands to a new process comes with a later start time, so the pair names one process.
@@ -176,9 +192,15 @@ export async function sweep_dead_run_dirs(tmp_root = tmpdir(), { carrier_wait_ms
     }
     if (!/^\d+$/.test(owner_pid) || !/^\d+$/.test(owner_start_ticks ?? "")) continue;
     if (process_start_ticks(Number(owner_pid)) === owner_start_ticks) continue;
-    const carried = await wait_until(`the processes of ${entry} to exit`, () => pids_carrying(run_dir).length === 0, { timeout_ms: carrier_wait_ms }).then(() => false, () => true);
-    if (carried) {
-      console.log(`sweep: keeping ${entry} of dead run ${owner_pid}, processes still use it: ${pids_carrying(run_dir).join(", ")}`);
+    let carriers;
+    try {
+      carriers = await carriers_after_wait(run_dir, carrier_wait_ms);
+    } catch (error) {
+      console.error(`sweep: keeping ${entry} of dead run ${owner_pid}, its processes could not be listed: ${error.message}`);
+      continue;
+    }
+    if (carriers.length > 0) {
+      console.log(`sweep: keeping ${entry} of dead run ${owner_pid}, processes still use it: ${carriers.join(", ")}`);
       continue;
     }
     console.log(`sweep: removing ${entry}, left by dead run ${owner_pid}`);
