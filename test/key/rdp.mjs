@@ -54,9 +54,28 @@ async function attach_console(rdp, addon_id) {
   if (!addon) throw new Error(`rdp: add-on ${addon_id} is not listed`);
   const watcher = await rdp.request(addon.actor, { type: "getWatcher", isServerTargetSwitchingEnabled: false });
   await rdp.request(watcher.actor, { type: "watchTargets", targetType: "frame" }, (reply) => reply.type === undefined);
-  const available = await rdp.next_from(watcher.actor, (reply) => reply.type === "target-available-form" && reply.target?.consoleActor);
-  return available.target.consoleActor;
+  const background_form = (await drain_to_newest_background_form(rdp, watcher.actor)) ?? (await rdp.next_from(watcher.actor, is_background_target_form));
+  return background_form.target.consoleActor;
 }
+
+// The watcher sends a target form for every extension frame, newtab and home tabs too, and nobody reads them while an actor lives.
+// The old forms point at closed tabs, where an evaluate waits out its whole timeout. Only the newest background form counts.
+async function drain_to_newest_background_form(rdp, watcher_actor) {
+  let newest_background_form;
+  for (;;) {
+    let form;
+    try {
+      // A zero timeout reads only what is already queued.
+      form = await rdp.next_from(watcher_actor, is_console_target_form, 0);
+    } catch {
+      return newest_background_form;
+    }
+    if (is_background_target_form(form)) newest_background_form = form;
+  }
+}
+
+const is_console_target_form = (reply) => reply.type === "target-available-form" && reply.target?.consoleActor !== undefined;
+const is_background_target_form = (reply) => is_console_target_form(reply) && reply.target.url?.endsWith("/_generated_background_page.html");
 
 // Runs async code in the add-on's background page and returns its JSON result.
 // Firefox sends the console actor once per watcher, so later calls reuse the first one. A reload kills it, so a dead actor is dropped and attached again.
