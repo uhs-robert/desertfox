@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 
 // The .mjs modules carry no types, so they load through a dynamic import.
-const { create_ledger, load_weights, newest_timings_file, pick_debug_ports, queue_order, stale_weight_warnings, weights_from_report, write_weights } = await import(join(import.meta.dirname, "shards.mjs"));
+const { build_incomplete, classify_exit, create_ledger, final_exit_code, load_weights, newest_timings_file, pick_debug_ports, queue_order, stale_weight_warnings, weights_from_report, write_weights } = await import(join(import.meta.dirname, "shards.mjs"));
 
 const with_dir = (body: (dir: string) => void) => {
   const dir = mkdtempSync(join(tmpdir(), "shards-test-"));
@@ -138,4 +138,40 @@ test("newest_timings_file skips a run filtered by KEY_TEST_ONLY", () => {
     writeFileSync(join(dir, "key-test-timings-filtered.json"), JSON.stringify({ pieces: [{ name: "p1_a.mjs", wall_ms: 1000 }], filter: "caret" }));
     assert.equal(newest_timings_file(dir)?.path, full_path);
   });
+});
+
+const exiting = (overrides = {}) => ({ exit: { code: 1, signal: null }, state: "busy", in_flight_piece: undefined, startup_ms: 500, startup_failure: undefined, last_lines: [], stop_reason: undefined, shard: 3, ...overrides });
+
+test("classify_exit names the failure for each way a worker can leave", () => {
+  const cases: [string, ReturnType<typeof exiting>, { failure: string | undefined; clean_exit: boolean }][] = [
+    ["died with a piece in flight", exiting({ in_flight_piece: "p1_a.mjs", exit: { code: null, signal: "SIGKILL" } }), { failure: "p1_a.mjs: worker s3 died (signal SIGKILL) while running it", clean_exit: false }],
+    ["died at startup with a reported reason", exiting({ startup_ms: undefined, state: "starting", startup_failure: "no firefox" }), { failure: "shard s3 startup: no firefox", clean_exit: false }],
+    ["died at startup with only output", exiting({ startup_ms: undefined, state: "starting", last_lines: ["a", "b"] }), { failure: "shard s3 startup: exit 1: a | b", clean_exit: false }],
+    ["exited between pieces", exiting({ exit: { code: null, signal: "SIGSEGV" } }), { failure: "shard s3 exited (signal SIGSEGV) between pieces", clean_exit: false }],
+    ["exit 0 while busy is not a clean stop", exiting({ exit: { code: 0, signal: null } }), { failure: "shard s3 exited (exit 0) between pieces", clean_exit: false }],
+    ["clean stop on request", exiting({ exit: { code: 0, signal: null }, state: "stopping" }), { failure: undefined, clean_exit: true }],
+    ["exit 1 while stopping is not clean", exiting({ state: "stopping" }), { failure: "shard s3 exited (exit 1) between pieces", clean_exit: false }],
+    ["exit after a stop with a piece in flight", exiting({ in_flight_piece: "p1_a.mjs", stop_reason: "received SIGINT", exit: { code: 130, signal: null } }), { failure: undefined, clean_exit: false }],
+    ["exit after a stop at startup", exiting({ startup_ms: undefined, stop_reason: "received SIGTERM" }), { failure: undefined, clean_exit: false }],
+  ];
+  for (const [name, input, expected] of cases) assert.deepEqual(classify_exit(input), expected, name);
+});
+
+test("build_incomplete is undefined when every piece finished and names the stop otherwise", () => {
+  assert.equal(build_incomplete({ stop_reason: "received SIGINT", in_flight: [], not_started: [] }), undefined);
+  assert.deepEqual(build_incomplete({ stop_reason: "received SIGINT", in_flight: ["p1_a.mjs"], not_started: [] }), { reason: "received SIGINT", in_flight: ["p1_a.mjs"], not_started: [] });
+  assert.deepEqual(build_incomplete({ stop_reason: undefined, in_flight: [], not_started: ["p2_b.mjs"] }), { reason: "every shard exited before the queue was empty", in_flight: [], not_started: ["p2_b.mjs"] });
+});
+
+test("final_exit_code is 0 only for a passed, unstopped run", () => {
+  const passed = { failed_case_count: 0, failure_count: 0, incomplete: undefined, stop_reason: undefined, stop_exit_code: undefined };
+  const incomplete = { reason: "x", in_flight: [], not_started: ["p.mjs"] };
+  assert.equal(final_exit_code(passed), 0);
+  assert.equal(final_exit_code({ ...passed, failed_case_count: 2 }), 1);
+  assert.equal(final_exit_code({ ...passed, failure_count: 1 }), 1);
+  assert.equal(final_exit_code({ ...passed, incomplete }), 1);
+  assert.equal(final_exit_code({ ...passed, stop_reason: "received SIGINT", stop_exit_code: 130 }), 130);
+  assert.equal(final_exit_code({ ...passed, stop_reason: "received SIGTERM", stop_exit_code: 143, incomplete }), 143);
+  assert.equal(final_exit_code({ ...passed, stop_reason: "the 15 s deadline passed", stop_exit_code: 1 }), 1);
+  assert.equal(final_exit_code({ ...passed, failed_case_count: 1, stop_reason: "received SIGINT", stop_exit_code: 130 }), 130);
 });
