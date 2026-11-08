@@ -256,3 +256,21 @@ test("only the first draw of the new tab page follows the new_tab_page redirect"
     mock.timers.reset();
   }
 });
+
+test("a throw while keeping the view is logged and does not stop later redraws", async () => {
+  const { fire, dom } = install_fakes();
+  const logged = mock.method(console, "error", () => {});
+  try {
+    const draws: boolean[] = [];
+    Object.defineProperty(dom, "activeElement", { configurable: true, get: () => { throw new Error("no focus"); } });
+    follow_settings((first) => void draws.push(first));
+    await settled();
+    Object.defineProperty(dom, "activeElement", { configurable: true, value: dom.body });
+    fire(status_change);
+    await settled();
+    assert.deepEqual(draws, [false]);
+    assert.equal(logged.mock.callCount(), 1);
+  } finally {
+    logged.mock.restore();
+  }
+});

@@ -42,22 +42,26 @@ export function follow_settings(draw: (first: boolean) => void | Promise<void>):
     }
     running = true;
     let is_first = first;
-    do {
-      again = false;
-      const { scrollX, scrollY } = window;
-      const key = focus_key();
-      try {
-        await draw(is_first);
-      } catch {
-        // A failed draw leaves the last page in place; the next change draws again.
-      }
-      if (!is_first) {
-        window.scrollTo(scrollX, scrollY);
-        if (key) document.querySelector<HTMLElement>(key)?.focus({ preventScroll: true });
-      }
-      is_first = false;
-    } while (again);
-    running = false;
+    try {
+      do {
+        again = false;
+        // Anything that throws, the draw or the restore, leaves the last page in place and the next change draws again.
+        try {
+          const { scrollX, scrollY } = window;
+          const key = focus_key();
+          await draw(is_first);
+          if (!is_first) {
+            window.scrollTo(scrollX, scrollY);
+            if (key) document.querySelector<HTMLElement>(key)?.focus({ preventScroll: true });
+          }
+        } catch (error) {
+          console.error("desertfox: page draw failed", error);
+        }
+        is_first = false;
+      } while (again);
+    } finally {
+      running = false;
+    }
   };
   void run(true);
   if (typeof browser === "undefined") return;
