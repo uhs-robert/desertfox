@@ -3,7 +3,7 @@
 
 export const areas = ["hints"];
 
-export async function run_cases({ run_case, press_keys, poll_until, barrier, expect_absent, hint_label_count, open_page, wait_event, find_event, events, expect, sleep, scroll_of, last_scroll_y, in_active_tab }) {
+export async function run_cases({ run_case, press_keys, poll_until, barrier, expect_absent, hint_label_count, open_page, wait_event, find_event, events, expect, wait_takes_keys, scroll_of, last_scroll_y, in_active_tab }) {
   const page_id = "p6_frames";
   const on_page = (id, type) => (event) => event.page_id === id && event.type === type;
   const script_starts = (id) => events.filter(on_page(id, "tree_read")).length;
@@ -93,14 +93,14 @@ export async function run_cases({ run_case, press_keys, poll_until, barrier, exp
     mark = events.length;
     await in_active_tab(`document.getElementById("cross").src = "http://localhost:" + location.port + "/frame_inner?id=${page_id}_moved"`);
     await wait_event(mark, on_page(`${page_id}_moved`, "tree_read"), "the navigated frame to start at once, still focused");
-    // The frame gets its focus back a moment after its script starts, and j sooner is lost. Its window_focus report comes too early to wait on (tried: j was still lost).
-    await sleep(300);
+    // The frame gets its focus back a moment after its script starts, and j sooner is lost. Its window_focus report comes too early to wait on (tried: j was still lost), so the key probe waits for a key to reach it.
+    await wait_takes_keys(`${page_id}_moved`);
     await press_keys("j");
     await wait_event(mark, scroll_of(`${page_id}_moved`), "j to scroll the navigated frame");
     const before_top = last_scroll_y(page_id);
     mark = events.length;
     await in_active_tab(`document.getElementById("cross").remove()`);
-    await sleep(300);
+    await wait_takes_keys(page_id);
     await press_keys("j");
     await wait_event(mark, scroll_of(page_id), "j to scroll the top page after the focused frame left");
     expect(last_scroll_y(page_id) > before_top, "the top page did not scroll after the frame left");

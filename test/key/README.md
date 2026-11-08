@@ -14,7 +14,7 @@ just key-test-changed [base] [head]
 just key-test-weights [timings file]
 ```
 
-A full run takes about 40 s on 8 shards. It needs labwc, Hyprland, dbus-daemon and python3, and grim for the screenshot cases.
+A full run takes about 34 s on 8 shards. It needs labwc, Hyprland, dbus-daemon and python3, and grim for the screenshot cases.
 
 - `KEY_TEST_ONLY` runs only the cases whose name matches. It also runs the cases marked `{ setup: true }` and every `h.setup` step of a piece, which leave state that later cases read. The output tags those as `SETUP`.
 - `KEY_TEST_PIECES` is a comma-separated list of piece names (the file name without `.mjs`). Only those pieces run, and an unknown name or an empty list aborts the run. Each piece must pass alone.
@@ -92,7 +92,7 @@ Each piece exports `export const areas = ["hints", ...]`, the feature areas it e
 
 `run_piece` in `harness.mjs` gives every piece the same start and the same cleanup, so a piece needs no state from the one before it.
 
-- Before the piece: one window with one tab at `page?id=home_<piece>`, active and focused (the page reports `document.hasFocus()`) and at least 300 ms old, the config link on `config_dir`, no temp settings.
+- Before the piece: one window with one tab at `page?id=home_<piece>`, active and focused (the page reports `document.hasFocus()`) and taking keys (it reported the key probe), the config link on `config_dir`, no temp settings.
 - After the piece, pass or fail: the `h.on_teardown` callbacks in reverse, every tab and window that was not in the start snapshot closed, the config link restored and reloaded, temp settings unset. The page is refocused only when one of those two steps has work, and never on an about: or extension page. A failed step is reported as a FAIL named `<piece> teardown` or `<piece> cleanup`. A failed reset skips the piece and reports `<piece> reset`.
 - `h.setup(name, fn)` runs under any filter, is timed as `(setup)` and counts in no total. If it fails, the cases behind it fail with `setup failed`.
 - `h.config_copy()` returns a private copy of the base config. Edit the copy and load it with `h.load_config_dir`. Never write `config_dir`.
@@ -108,18 +108,20 @@ A converted piece presses keys with `press_keys` (no settle) and waits for the e
 - `p1_cmdline.mjs` keeps one case that types `:`, a command and Enter in one call, because it tests that no key typed during the line's load is lost.
 - `barrier(page_id)` presses F8, which nothing binds, and waits for the page's `keydown` report of it. Every earlier key has reached the page by then. It fails when the key shows on another page, never shows (a page that cancels keys in capture, a mode that swallows keys) or the line is open (the key would type into it).
 - `expect_absent(mark, page_id, predicate, what)` runs a barrier and fails when a matching event came before it. A key that was lost also leaves nothing, so pair it with a proof that the key arrived (a line value, a badge). A scroll is reported 150 ms after it ends, so pass `report_delay_ms: scroll_report_wait_ms`.
-- `settle_focus({ tab_id })` waits until a test page reports focus, then 100 ms. Use it after keys that switch or close a tab. It cannot serve an extension page.
-- `open_page` goes through the background (`tabs.create` or `tabs.update`), waits for `tree_read` and focus, and returns no sooner than 300 ms after the open. A key pressed within about 30 ms of an open was lost every time, and a tab switched within about 150 ms lost the report of its next visibility change. `open_page_by_keys` is the address bar way for a case that tests the bar.
+- `settle_focus({ tab_id })` waits until a test page reports focus, then runs the key probe on it. Use it after keys that switch or close a tab. It cannot serve an extension page.
+- The key probe (`wait_takes_keys(page_id)`) presses F8 until the page reports it, again every 200 ms for up to 3 s. After a retry it waits up to 200 ms more for every press to report, so a slow probe press cannot pass the next barrier. A page drops every key of its first moments (a key 30 ms after `tree_read` was lost every time, one at 100 ms never) and a key pressed right after it reports focus. A probe press can come after the case's mark, so a case that counts keydown reports skips F8. The page `s` that cancels keys in capture still reports each keydown, so the probe works there too.
+- `open_page` goes through the background (`tabs.create` or `tabs.update`), waits for `tree_read` and focus, then runs the key probe. `open_page_by_keys` is the address bar way for a case that tests the bar.
 - `expect_no_scroll(mark, page_id)` is a barrier plus the scroll report delay. It works on any page that reports F8, ignore mode included.
-- `expect_exactly_one_visible(mark, page_id)` waits for the page to show, settles the switch, runs a barrier on it and then reads the active tab from the background. A destination that cancels keys in capture (`p0_core_keys.mjs` page `s`) never reports F8, so the call takes `{ destination_cancels_keys: true }` and sits out 1.5 s.
-- `settle_tab_switch()` is `settle_focus` plus 250 ms. A tab that is hidden and shown again within about 250 ms loses its visibility reports, so a key that switches tab again waits this long. Slice 7 should remove it with the other floors.
+- `wait_active_tab(page_id_or_check, what)` polls the background until the active tab holds that page, and returns its page id. A tab hidden and shown again within about 300 ms of its last switch sends no visibility report, so no case waits on a visibility report for a tab switch.
+- `tab_switch_mark()` and `tabs_shown_since(switch_mark)` read a log of tab activations that a listener in the background keeps. A case that checks that a key switched only once reads it, and `expect_no_tab_shown(switch_mark, what)` fails when any tab came to the front.
+- `expect_exactly_one_visible(switch_mark, page_id)` waits for the page to be the active tab, settles the switch, runs a barrier on it and then reads the active tab and the switches since `switch_mark` from the background. A destination that cancels keys in capture (`p0_core_keys.mjs` page `s`) takes `{ destination_cancels_keys: true }` and sits out 1.5 s instead.
 - `scroll_delta_by_press(page_id, keys)` is `scroll_delta_after` with no settle.
 - `hint_label_count()` counts the hint labels in the active tab, so a case waits for labels before it types a label and for zero after Escape. Hint mode has no mode badge.
 - `in_active_tab(code)` runs code in the active tab's content script world and returns its first result. It throws on a script error, so a poll that calls it fails at once and does not poll again.
 - `escape_to_normal(page_id)` presses Escape until the mode badge reads NORMAL, at most three times, and waits for the badge after each press.
 - `press_and_wait_for_move(page_id, keys, what)` presses a caret key and waits for the selection report. `badge_is(page_id, label)` and `is_selection_of(page_id)` are the matching event predicates.
 - `which_key_delay_ms` is the delay from `config/settings.toml` (100 ms). A check that no panel shows sits out `which_key_delay_ms` plus a margin. The toast life (3 s) is a constant in `src/`, so the test config cannot shorten it.
-- A window_focus report from a frame comes before the frame takes keys, so `p6_frames.mjs` keeps two 300 ms sleeps.
+- A window_focus report from a frame comes before the frame takes keys, so `p6_frames.mjs` runs the key probe on the frame instead.
 
 ## Timings
 

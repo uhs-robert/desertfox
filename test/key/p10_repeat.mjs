@@ -3,7 +3,7 @@ import { evaluate_in_background } from "./rdp.mjs";
 
 export const areas = ["keys"];
 
-export async function run_cases({ rdp, extension_id, run_case, press_keys, poll_until, settle_focus, settle_tab_switch, barrier, hint_label_count, open_page, wait_event, find_event, events, expect, became_visible }) {
+export async function run_cases({ rdp, extension_id, run_case, press_keys, poll_until, settle_focus, barrier, hint_label_count, open_page, wait_event, find_event, events, expect, wait_active_tab, tab_switch_mark, expect_no_tab_shown }) {
   const tab_count = () => evaluate_in_background(rdp, extension_id, `(async () => (await browser.tabs.query({})).length)()`);
   const close_tabs_with = (text) => evaluate_in_background(rdp, extension_id, `(async () => { for (const tab of await browser.tabs.query({})) if (tab.url.includes(${JSON.stringify(text)})) await browser.tabs.remove(tab.id); })()`);
   const loaded = (page_id) => (event) => event.type === "tree_read" && event.page_id === page_id;
@@ -14,18 +14,15 @@ export async function run_cases({ rdp, extension_id, run_case, press_keys, poll_
     await open_page("page", "rp_two", { new_tab: true });
     await open_page("page", "rp_three", { new_tab: true });
     for (const expected of ["rp_two", "rp_one"]) {
-      const mark = events.length;
       await press_keys("gT");
-      await wait_event(mark, became_visible(expected), `${expected} after gT`);
-      await settle_tab_switch();
+      await wait_active_tab(expected, `${expected} after gT`);
+      await settle_focus();
     }
-    let mark = events.length;
     await press_keys("gt");
-    await wait_event(mark, became_visible("rp_two"), "rp_two after gt");
-    await settle_tab_switch();
-    mark = events.length;
+    await wait_active_tab("rp_two", "rp_two after gt");
+    await settle_focus();
     await press_keys(".");
-    await wait_event(mark, became_visible("rp_three"), "rp_three after .");
+    await wait_active_tab("rp_three", "rp_three after .");
     await close_tabs_with("rp_");
   });
 
@@ -40,6 +37,7 @@ export async function run_cases({ rdp, extension_id, run_case, press_keys, poll_
     await close_tabs_with("hint_two");
     await poll_until("the background tab to close", async () => (await tab_count()) === tabs_before);
     const mark = events.length;
+    const switch_mark = await tab_switch_mark();
     await press_keys(".");
     await wait_for_labels(".");
     await press_keys("s");
@@ -47,7 +45,7 @@ export async function run_cases({ rdp, extension_id, run_case, press_keys, poll_
     await poll_until(". then a label to open one background tab", async () => (await tab_count()) === tabs_before + 1);
     // The barrier reaches this page only when it is still the front tab.
     await barrier("rp_hints");
-    expect(!find_event(mark, became_visible("hint_two")), "the background tab came to the front");
+    await expect_no_tab_shown(switch_mark, "a background tab came to the front");
     await close_tabs_with("hint_two");
     await close_tabs_with("rp_hints");
   });

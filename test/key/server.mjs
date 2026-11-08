@@ -66,9 +66,14 @@ const page = (title, body = "", head = "") =>
 
 const tall_filler = '<div style="height:6000px;background:linear-gradient(#fff,#ccc)"></div>';
 
+// The page still reports each keydown it cancels, so the key probe of the harness works on it. `send` comes from the reporter, which runs later.
 const CANCEL_KEYS_IN_CAPTURE = `<script>
   for (const target of [window, document]) for (const type of ["keydown", "keypress", "keyup"])
-    target.addEventListener(type, (event) => { event.preventDefault(); event.stopImmediatePropagation(); }, true);
+    target.addEventListener(type, (event) => {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      if (target === window && type === "keydown" && typeof send === "function") send("keydown", { key: event.key, code: event.code });
+    }, true);
 </script>`;
 
 // The reports in arrival order, and a wait that wakes on each new report. A waiter checks the reports and starts
@@ -284,7 +289,9 @@ shadow.getElementById("panel").addEventListener("scroll", () => send("panel_scro
     }
     if (url.pathname === "/caret_tall_frame") {
       // A tall same-origin frame below a spacer, with the page scrolled so the frame's text sits on screen. In the frame's own coordinates that text is far below the page's viewport edge, so a wrong space shows as a scroll.
-      const inner = '<body style=\'margin:0\'><div style=\'height:1200px\'></div><p>target words</p></body>';
+      // The frame reports its keydowns only, as ${id}_frame, so the key probe of the harness can see that keys reach it.
+      const report_keys = `<script>addEventListener('keydown', (event) => fetch('/report', { method: 'POST', body: JSON.stringify({ page_id: '${id}_frame', type: 'keydown', key: event.key, code: event.code }) }))</script>`;
+      const inner = `<body style='margin:0'><div style='height:1200px'></div><p>target words</p>${report_keys}</body>`;
       const frame = `<div style="height:600px"></div><iframe id="tall" srcdoc="${inner}" style="width:400px;height:3000px;border:0;display:block"></iframe>`;
       return response.end(page(`caret_tall_frame ${id}`, frame, "<script>addEventListener('load', () => { scrollTo(0, 1500); document.getElementById('tall').contentWindow.focus(); })</script>"));
     }

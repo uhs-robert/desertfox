@@ -4,7 +4,7 @@ import { ALT, CTRL, SHIFT_ESCAPE } from "./harness.mjs";
 
 export const areas = ["scroll", "tabs", "keys"];
 
-export async function run_cases({ run_case, setup, expect, open_page, press_keys, settle_focus, settle_tab_switch, poll_until, wait_tab_quiet, events, wait_event, since, find_event, scroll_delta_by_press, became_visible, scroll_of, last_scroll_y, expect_absent, expect_no_scroll, expect_exactly_one_visible, in_background, record, type_in_address_bar }) {
+export async function run_cases({ run_case, setup, expect, open_page, press_keys, settle_focus, poll_until, wait_tab_quiet, events, wait_event, since, find_event, scroll_delta_by_press, scroll_of, last_scroll_y, expect_absent, expect_no_scroll, expect_exactly_one_visible, in_background, record, type_in_address_bar, wait_active_tab, tab_switch_mark }) {
   await setup("open pages a, b and c", async () => {
     await open_page("page", "a", { new_tab: false });
     await open_page("page", "b", { new_tab: true });
@@ -13,10 +13,9 @@ export async function run_cases({ run_case, setup, expect, open_page, press_keys
 
   await run_case("J and K switch tabs", async () => {
     for (const [keys, expected] of [["K", "b"], ["K", "a"], ["J", "b"], ["J", "c"]]) {
-      const mark = events.length;
       await press_keys(keys);
-      await wait_event(mark, became_visible(expected), `tab ${expected} after ${keys}`);
-      await settle_tab_switch();
+      await wait_active_tab(expected, `tab ${expected} after ${keys}`);
+      await settle_focus();
     }
   });
 
@@ -79,47 +78,44 @@ export async function run_cases({ run_case, setup, expect, open_page, press_keys
       const answer = await in_background(`(async () => { const [tab] = await browser.tabs.query({ active: true, lastFocusedWindow: true }); return browser.tabs.executeScript(tab.id, { code: "document.activeElement?.id" }); })()`);
       return typeof answer?.[0] === "string" && answer[0] !== "field";
     });
-    const mark = events.length;
     await press_keys("K");
-    await wait_event(mark, became_visible("c"), "tab c after K");
-    await settle_tab_switch();
+    await wait_active_tab("c", "tab c after K");
+    await settle_focus();
     await press_keys("J");
-    await wait_event(mark, became_visible("f"), "tab f after J");
-    await settle_tab_switch();
+    await wait_active_tab("f", "tab f after J");
+    await settle_focus();
   });
 
   await setup("open the key-cancelling page s", () => open_page("swallow", "s", { new_tab: true }));
   await run_case("J and K work on a page that cancels keys in its own capture listener", async () => {
-    let mark = events.length;
     await press_keys("K");
-    await wait_event(mark, became_visible("f"), "tab f after K");
-    await settle_tab_switch();
+    await wait_active_tab("f", "tab f after K");
+    await settle_focus();
     await press_keys("J");
-    await wait_event(mark, became_visible("s"), "tab s after J");
-    await settle_tab_switch();
+    await wait_active_tab("s", "tab s after J");
+    await settle_focus();
   });
 
   await run_case("chord on a cancelling page acts exactly once", async () => {
-    let mark = events.length;
+    let switch_mark = await tab_switch_mark();
     await press_keys(...ALT("j"));
-    await expect_exactly_one_visible(mark, "a");
-    mark = events.length;
+    await expect_exactly_one_visible(switch_mark, "a");
+    switch_mark = await tab_switch_mark();
     await press_keys(...ALT("k"));
-    await expect_exactly_one_visible(mark, "s", { destination_cancels_keys: true });
+    await expect_exactly_one_visible(switch_mark, "s", { destination_cancels_keys: true });
   });
 
   await run_case("chord on a normal page acts exactly once", async () => {
     await press_keys("gg");
-    let mark = events.length;
     await press_keys("K");
-    await wait_event(mark, became_visible("f"), "tab f after K");
-    await settle_tab_switch();
-    mark = events.length;
+    await wait_active_tab("f", "tab f after K");
+    await settle_focus();
+    let switch_mark = await tab_switch_mark();
     await press_keys(...ALT("k"));
-    await expect_exactly_one_visible(mark, "c");
-    mark = events.length;
+    await expect_exactly_one_visible(switch_mark, "c");
+    switch_mark = await tab_switch_mark();
     await press_keys(...ALT("j"));
-    await expect_exactly_one_visible(mark, "f");
+    await expect_exactly_one_visible(switch_mark, "f");
   });
 
   const active_url = () => in_background(`browser.tabs.query({ active: true, lastFocusedWindow: true }).then(([tab]) => tab?.url)`);
@@ -139,14 +135,14 @@ export async function run_cases({ run_case, setup, expect, open_page, press_keys
   });
 
   await run_case("Alt+J and Alt+K work on an about: page", async () => {
-    let mark = events.length;
+    let switch_mark = await tab_switch_mark();
     await press_keys(...ALT("k"));
-    await expect_exactly_one_visible(mark, "s", { destination_cancels_keys: true });
+    await expect_exactly_one_visible(switch_mark, "s", { destination_cancels_keys: true });
     await press_keys(...ALT("j"));
     await poll_until("the about:support tab to be active", async () => (await active_url()) === "about:support");
-    mark = events.length;
+    switch_mark = await tab_switch_mark();
     await press_keys(...ALT("j"));
-    await expect_exactly_one_visible(mark, "a");
+    await expect_exactly_one_visible(switch_mark, "a");
   }, { setup: true });
 
   await run_case("focus_page from the address bar returns keys to the page", async () => {

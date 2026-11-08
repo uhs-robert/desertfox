@@ -46,12 +46,13 @@ export async function run_cases({ run_case, setup, open_page, press_keys, wait_e
   const wrong_keys = new Map();
   const count_into = (map, label) => map.set(label, (map.get(label) ?? 0) + 1);
 
-  // Waits for the first keydown that is not a modifier, so a real Shift before a capital is counted apart.
+  // Waits for the first keydown that is not a modifier, so a real Shift before a capital is counted apart. An F8 for another key is a late press of the harness's key probe.
+  const is_reading_of = (page_id, key) => (event) => event.type === "keydown" && event.page_id === page_id && !MODIFIER_KEYS.has(event.key) && (event.key !== "F8" || key === "F8");
   async function press_and_read(page_id, { args, key, code }) {
     const mark = events.length;
     tally.presses++;
     await press_keys(...args);
-    const seen = await wait_event(mark, (event) => event.type === "keydown" && event.page_id === page_id && !MODIFIER_KEYS.has(event.key), `keydown of ${key}`, KEY_REPORT_TIMEOUT_MS).catch(() => undefined);
+    const seen = await wait_event(mark, is_reading_of(page_id, key), `keydown of ${key}`, KEY_REPORT_TIMEOUT_MS).catch(() => undefined);
     if (events.slice(mark).some((event) => event.type === "keydown" && event.key === "Shift")) tally.real_shift++;
     if (!seen) {
       tally.lost++;

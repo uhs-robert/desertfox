@@ -7,7 +7,7 @@ const ALT = (key) => ["-M", "alt", key, "-m", "alt"];
 
 export const areas = ["cmdline", "tabs"];
 
-export async function run_cases({ rdp, extension_id, run_case, send_keys, sleep, press_keys, open_page, wait_event, wait_cmdline, close_cmdline, close_tabs_with, poll_until, settle_focus, events, expect, url_of, became_visible, take_shot, type_in_line, complete_in_line }) {
+export async function run_cases({ rdp, extension_id, run_case, send_keys, sleep, press_keys, open_page, wait_event, wait_cmdline, close_cmdline, close_tabs_with, poll_until, settle_focus, events, expect, url_of, take_shot, type_in_line, complete_in_line, wait_active_tab }) {
   const background = (code) => evaluate_in_background(rdp, extension_id, code);
   // Opens the line on a page that has the keys. The tab before may have been switched or closed by the case before.
   const open_line = async () => {
@@ -36,11 +36,10 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, sleep,
 
   await run_case("tab, a typed name, Tab and Enter switch to that tab", async () => {
     await open_line();
-    const mark = events.length;
     await type_in_line("tab p9e_one", { until: shows_row("p9e_one") });
     await complete_in_line();
     await press_keys("-k", "Return");
-    await wait_event(mark, became_visible("p9e_one"), "tab p9e_one after the pick");
+    await wait_active_tab("p9e_one", "tab p9e_one after the pick");
   });
 
   await run_case("a leading number picks the tab at that place of the tab bar", async () => {
@@ -50,8 +49,7 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, sleep,
     await open_line();
     await type_in_line(`tab ${place}`, { until: shows_row("p9e_three") });
     await press_keys("-k", "Return");
-    // The case before hid p9e_three moments ago, and a tab shown again that soon can lose its visibility report. So the background says which tab is active.
-    await poll_until(`tab p9e_three after "tab ${place}"`, async () => (await background(`browser.tabs.query({ active: true, currentWindow: true }).then(([tab]) => tab.url)`))?.includes("p9e_three"));
+    await wait_active_tab("p9e_three", `tab p9e_three after "tab ${place}"`);
   });
 
   await run_case("the tabs list shows a tab created while the list is open, with no keypress", async () => {
@@ -63,11 +61,10 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, sleep,
       // The list has no match yet. The model patch adds the row, and the pick below finds it.
       live_id = await background(`browser.tabs.create({ url: ${JSON.stringify(url_of("page", "p9e_live"))}, active: false }).then((tab) => tab.id)`);
       await wait_cmdline(shows_row("p9e_live"), "the new tab in the list");
-      const mark = events.length;
       await complete_in_line();
       await press_keys("-k", "Return");
       picked = true;
-      await wait_event(mark, became_visible("p9e_live"), "the tab created under the open list");
+      await wait_active_tab("p9e_live", "the tab created under the open list");
     } finally {
       // A failed case must leave neither the tab nor the open line behind for the cases after it.
       if (live_id !== undefined) await background(`browser.tabs.remove(${live_id}).catch(() => {})`);
