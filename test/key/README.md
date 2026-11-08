@@ -84,7 +84,7 @@ A converted piece presses keys with `press_keys` (no settle) and waits for the e
 - `settle_tab_switch()` is `settle_focus` plus 250 ms. A tab that is hidden and shown again within about 250 ms loses its visibility reports, so a key that switches tab again waits this long. Slice 7 should remove it with the other floors.
 - `scroll_delta_by_press(page_id, keys)` is `scroll_delta_after` with no settle.
 - `hint_label_count()` counts the hint labels in the active tab, so a case waits for labels before it types a label and for zero after Escape. Hint mode has no mode badge.
-- `which_key_delay_ms` is the delay from `config/settings.toml` (100 ms). A check that no panel shows sits out `which_key_delay_ms` plus a margin. The prefix timeout and the toast life (3 s) are constants in `src/`, so the test config cannot shorten them.
+- `which_key_delay_ms` is the delay from `config/settings.toml` (100 ms). A check that no panel shows sits out `which_key_delay_ms` plus a margin. The toast life (3 s) is a constant in `src/`, so the test config cannot shorten it.
 - A window_focus report from a frame comes before the frame takes keys, so `p6_frames.mjs` keeps two 300 ms sleeps.
 
 ## Timings

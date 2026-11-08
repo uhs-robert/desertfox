@@ -41,6 +41,7 @@ const NEW_PAGE_QUIET_MS = 300;
 const BARRIER_KEY = "F8";
 // The which-key delay of the test config, so a check that a panel stays away sits out the timer written in config/settings.toml.
 const WHICH_KEY_DELAY_MS = Number(/^which_key_delay_ms\s*=\s*(\d+)/m.exec(readFileSync(join(key_test_dir, "config", "settings.toml"), "utf8"))?.[1]);
+if (!Number.isFinite(WHICH_KEY_DELAY_MS)) throw new Error("which_key_delay_ms is missing from test/key/config/settings.toml");
 const UNREADY_LINE_WAIT_MS = 500;
 // 100 ms polls: 20 s, below CASE_CAP_MS.
 const REINJECT_REPORT_POLLS = 200;
@@ -356,7 +357,8 @@ export async function create_session({ name: shadow_name, timings }) {
   const HINTS_LAYER = 2147483647 - 4;
   const hint_label_count = async () => {
     const counts = await in_background(`(async () => { const [tab] = await browser.tabs.query({ active: true, lastFocusedWindow: true }); return browser.tabs.executeScript(tab.id, { code: ${JSON.stringify(`(() => { const host = [...document.documentElement.children].find((child) => child.getAttribute("data-desertfox-layer") === "${HINTS_LAYER}"); return host?.openOrClosedShadowRoot?.querySelectorAll(".desertfox-hint").length ?? 0; })()`)} }); })()`);
-    return counts?.[0] ?? 0;
+    // A failed call gives no number, so neither a "no labels" nor a "labels shown" wait passes on it.
+    return typeof counts?.[0] === "number" ? counts[0] : undefined;
   };
 
   const timings_path = default_timings_path(repo_dir);
@@ -562,7 +564,6 @@ export async function create_session({ name: shadow_name, timings }) {
     await sleep(KEY_ROUTE_FLOOR_MS);
   }
 
-  // A bulk tabs.remove of 30 or more tabs outlasts one debugger call, so the close is started and then polled.
   // A tab that is hidden again, or shown again, within about 250 ms of its last switch loses the page's visibility reports (measured with J and K in a row, where the second switch came 175 ms after the first). A key that switches tab again waits this long. Slice 7's keyboard client should make it unneeded.
   const TAB_SWITCH_FLOOR_MS = 250;
   async function settle_tab_switch(options) {
@@ -570,6 +571,7 @@ export async function create_session({ name: shadow_name, timings }) {
     await sleep(TAB_SWITCH_FLOOR_MS);
   }
 
+  // A bulk tabs.remove of 30 or more tabs outlasts one debugger call, so the close is started and then polled.
   async function wait_for_tabs(what, count_expr, expected) {
     await poll_until(what, async () => (await in_background(count_expr)) === expected, { timeout_ms: 30000 });
   }

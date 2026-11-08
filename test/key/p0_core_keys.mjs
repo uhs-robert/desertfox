@@ -68,11 +68,17 @@ export async function run_cases({ run_case, setup, expect, open_page, press_keys
     await press_keys(typed);
     await wait_event(mark, (event) => event.type === "input" && event.value === typed, `the field to hold "${typed}"`);
     await expect_absent(mark, "f", (event) => event.type === "visibility", "a tab switch happened while typing");
+    // A stray character after the text shows as a later input report.
+    const last_input = since(mark).filter((event) => event.type === "input").at(-1);
+    expect(last_input?.value === typed, `field holds "${last_input?.value}", typed "${typed}"`);
   });
 
   await run_case("Escape leaves the field and keys act again", async () => {
     await press_keys("-k", "Escape");
-    await poll_until("the field to lose the focus", async () => (await in_background(`(async () => { const [tab] = await browser.tabs.query({ active: true, lastFocusedWindow: true }); return browser.tabs.executeScript(tab.id, { code: "document.activeElement?.id" }); })()`))?.[0] !== "field");
+    await poll_until("the field to lose the focus", async () => {
+      const answer = await in_background(`(async () => { const [tab] = await browser.tabs.query({ active: true, lastFocusedWindow: true }); return browser.tabs.executeScript(tab.id, { code: "document.activeElement?.id" }); })()`);
+      return typeof answer?.[0] === "string" && answer[0] !== "field";
+    });
     const mark = events.length;
     await press_keys("K");
     await wait_event(mark, became_visible("c"), "tab c after K");
@@ -123,7 +129,10 @@ export async function run_cases({ run_case, setup, expect, open_page, press_keys
     const tabs_before = await tab_count();
     await press_keys(...CTRL("t"));
     await poll_until("the new tab to open", async () => (await tab_count()) === tabs_before + 1);
-    await press_keys(...CTRL("l"), "about:support", "-k", "Return");
+    // Text typed in the same run as Ctrl+L loses its first characters, so the page losing the focus to the address bar comes first.
+    await press_keys(...CTRL("l"));
+    await poll_until("the new tab page to lose the focus to the address bar", async () => (await in_background(`browser.tabs.query({ active: true, lastFocusedWindow: true }).then(([tab]) => browser.tabs.executeScript(tab.id, { code: "document.hasFocus()" }))`))?.[0] === false).catch(() => undefined);
+    await press_keys("about:support", "-k", "Return");
     await poll_until("about:support to load", async () => (await in_background(`browser.tabs.query({ active: true, lastFocusedWindow: true }).then(([tab]) => tab.url === "about:support" && tab.status === "complete" ? tab.id : 0)`)) > 0, { timeout_ms: 8000 });
     await wait_tab_quiet(await in_background(`browser.tabs.query({ active: true, lastFocusedWindow: true }).then(([tab]) => tab.id)`));
   });
@@ -146,9 +155,9 @@ export async function run_cases({ run_case, setup, expect, open_page, press_keys
     await press_keys(...CTRL("l"));
     await poll_until("the page to lose the focus to the address bar", async () => (await page_focus()) === false);
     await press_keys(...ALT(","));
-    await settle_focus();
-    await press_keys("j");
-    const focus_page_works = Boolean(await wait_event(mark, scroll_of("a"), "j to scroll page a after focus_page", 3000).catch(() => undefined));
+    const page_has_focus_again = await poll_until("the page to take the focus back", async () => (await page_focus()) === true).then(() => true, () => false);
+    if (page_has_focus_again) await press_keys("j");
+    const focus_page_works = page_has_focus_again && Boolean(await wait_event(mark, scroll_of("a"), "j to scroll page a after focus_page", 3000).catch(() => undefined));
     record("focus_page_works", focus_page_works);
     if (!focus_page_works) {
       await press_keys("-k", "Escape", "-k", "Escape");
