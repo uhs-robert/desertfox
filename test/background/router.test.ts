@@ -631,3 +631,14 @@ test("an optional param with a blank expansion reaches the handler as empty, an 
   assert.equal(refused.ok, false);
   assert.ok(content.log.every((entry) => !entry.startsWith("send")), content.log.join());
 });
+
+test("while off nothing runs: a slot chord, a snippet call or a replay is refused with no side effect", async () => {
+  const seen: unknown[] = [];
+  const { deps } = make_fake(
+    { "tab.close": { label: "Close Tab", intent: "x", params: [], runs_in: "background", run: () => void seen.push("ran") } },
+    { is_disabled: async () => true },
+  );
+  const response = await create_router(deps).run({ invocations: [{ id: "tab.close" }], mode: "normal" });
+  assert.deepEqual(response, { ok: false, refusal: { id: "desertfox.off", message: "DesertFox is off" } });
+  assert.deepEqual(seen, []);
+});

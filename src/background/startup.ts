@@ -9,7 +9,8 @@ import { build_config_status, load_config, load_edits, store_edits, with_edits }
 import type { LoadedConfig } from "./config_load.ts";
 import { DEFAULT_KEYMAP } from "./default_keymap.ts";
 import { THEME_STORAGE_KEY, USER_CSS_STORAGE_KEY } from "../shared/theme/apply.ts";
-import { CONFIG_STATUS_STORAGE_KEY, SLOT_TABLE_STORAGE_KEY, WARNINGS_STORAGE_KEY } from "./storage_keys.ts";
+import { CONFIG_STATUS_STORAGE_KEY, DISABLED_STORAGE_KEY, SLOT_TABLE_STORAGE_KEY, WARNINGS_STORAGE_KEY } from "./storage_keys.ts";
+import { OFF_KEYMAP } from "./toolbar.ts";
 import { apply_slot_plan, plan_slots, slot_table } from "./slots.ts";
 import { no_repeat_memory } from "./repeat_memory.ts";
 import { create_snippets } from "./snippets.ts";
@@ -73,8 +74,10 @@ async function publish(step: LoadStep, edits: SettingEdits): Promise<{ config: M
   const all_warnings = [...step.load_warnings, ...warnings, ...step.slots.warnings];
   for (const warning of all_warnings) console.warn(`desertfox: ${warning}`);
 
+  // Read at every publish, so a restart with the switch off, a `:set` and a reload all store the empty keymap.
+  const disabled = (await browser.storage.local.get(DISABLED_STORAGE_KEY))[DISABLED_STORAGE_KEY] === true;
   await browser.storage.local.set({
-    [COMPILED_KEYMAP_STORAGE_KEY]: compiled,
+    [COMPILED_KEYMAP_STORAGE_KEY]: disabled ? OFF_KEYMAP : compiled,
     [WARNINGS_STORAGE_KEY]: all_warnings,
     [CONFIG_STATUS_STORAGE_KEY]: build_config_status(step.loaded.source, step.loaded.config.settings, edits, `~/.mozilla/managed-storage/${browser.runtime.id}.json`),
     [SLOT_TABLE_STORAGE_KEY]: step.slots.table,
@@ -114,6 +117,16 @@ export function change_edits(decide: (current: SettingEdits, config: MergedConfi
   });
   change_queue = change.catch(() => undefined);
   return change;
+}
+
+// Publishes again under the current edits, for a change that is not an edit: the toolbar switch. It runs in the change queue like the edits.
+export function republish(): Promise<void> {
+  const again = change_queue.then(async () => {
+    await get_config();
+    await publish(await (load_step as Promise<LoadStep>), await load_edits());
+  });
+  change_queue = again.catch(() => undefined);
+  return again;
 }
 
 // Rereads the files through the native host and swaps the config in place. Nothing restarts, so the edits and the modes stay.

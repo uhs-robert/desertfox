@@ -2,7 +2,7 @@ import "./command_modules.ts";
 import type { ContentToBackground, PageToBackground } from "../shared/messages.ts";
 import type { BoundInvocation } from "../shared/invocation.ts";
 import { DEFAULT_SETTINGS, effective_settings } from "../shared/config.ts";
-import { bundle_loader_deps, container_names, container_stores, image_deps, make_router_deps, page_of, reinject_deps } from "./browser_deps.ts";
+import { bundle_loader_deps, container_names, read_disabled, container_stores, image_deps, make_router_deps, page_of, reinject_deps } from "./browser_deps.ts";
 import { run_image_action } from "./image_actions.ts";
 import { HELP_PAGE_FILE } from "../help/route.ts";
 import { open_quick_start_on_install } from "./first_install.ts";
@@ -23,8 +23,12 @@ import { browser_find_scan_deps, create_find_scan, is_scan_request } from "./fin
 import { create_router } from "./router.ts";
 import { create_repeat_memory, page_record } from "./repeat_memory.ts";
 import { wire_repeat } from "../commands/command.ts";
-import { SLOT_TABLE_STORAGE_KEY } from "./storage_keys.ts";
-import { change_edits, get_config, get_search_engine_names, snippets } from "./startup.ts";
+import { DISABLED_STORAGE_KEY, SLOT_TABLE_STORAGE_KEY } from "./storage_keys.ts";
+import { COMPILED_KEYMAP_STORAGE_KEY } from "../shared/prefix_tree.ts";
+import type { CompiledKeymap } from "../shared/prefix_tree.ts";
+import { send_to_tab } from "./browser_deps.ts";
+import { change_edits, get_config, get_search_engine_names, reload_config, republish, snippets } from "./startup.ts";
+import { answer_toolbar_request, create_toolbar, TOGGLE_COMMAND } from "./toolbar.ts";
 import { load_effective_config } from "./config_load.ts";
 import { create_settings_messages, is_extension_page } from "./settings_message.ts";
 import { command_meta } from "../shared/registry/index.ts";
@@ -97,6 +101,16 @@ const asker_of = (sender: browser.runtime.MessageSender): Asker | undefined => {
   return id === undefined || windowId === undefined || sender.frameId === undefined ? undefined : { tab_id: id, frame_id: sender.frameId, window_id: windowId, incognito: incognito === true };
 };
 const find_scan = create_find_scan(browser_find_scan_deps());
+const toolbar = create_toolbar({
+  read_disabled,
+  write_disabled: (disabled) => (disabled ? browser.storage.local.set({ [DISABLED_STORAGE_KEY]: true }) : browser.storage.local.remove(DISABLED_STORAGE_KEY)),
+  set_look: ({ path, title }) => Promise.all([browser.browserAction.setIcon({ path }), browser.browserAction.setTitle({ title })]).then(() => undefined),
+  republish,
+  tabs: async () => (await browser.tabs.query({})).flatMap((tab) => (tab.id === undefined ? [] : [{ tab_id: tab.id, url: tab.url }])),
+  set_tab_mode: (tab_id, mode) => send_to_tab(tab_id, { type: "set_mode", mode }),
+  ignore_regex: async () => ((await browser.storage.local.get(COMPILED_KEYMAP_STORAGE_KEY))[COMPILED_KEYMAP_STORAGE_KEY] as CompiledKeymap | undefined)?.ignore_regex,
+});
+void toolbar.sync_look();
 const settings_messages = create_settings_messages({ change_edits, read_layers: load_effective_config });
 
 // Listeners register in the first turn, so no event is missed while the config loads.
@@ -106,6 +120,10 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
   if (page_request?.type === "change_setting" || page_request?.type === "list_settings") {
     if (!is_extension_page(sender, browser.runtime.id, browser.runtime.getURL(""))) return Promise.resolve({ ok: false, message: "only the extension's own pages may change settings" });
     return get_config().then((): Promise<unknown> => (page_request.type === "list_settings" ? settings_messages.list() : settings_messages.change(page_request)));
+  }
+  if (page_request?.type === "toolbar_set_disabled" || page_request?.type === "toolbar_site" || page_request?.type === "toolbar_reload_config") {
+    if (!is_extension_page(sender, browser.runtime.id, browser.runtime.getURL(""))) return Promise.resolve({ ok: false, message: "only the extension's own pages may use the toolbar" });
+    return answer_toolbar_request(page_request, { toolbar, change_edits, reload_config });
   }
   if (request?.type === "mode_changed" && sender.tab?.id !== undefined) {
     const tab_id = sender.tab.id;
@@ -172,13 +190,15 @@ browser.runtime.onInstalled.addListener(({ reason }) => {
 });
 
 browser.commands.onCommand.addListener(async (slot_name: string) => {
+  // Before the slot table and the off gate: the toggle must work while off, and it is the only shortcut that does.
+  if (slot_name === TOGGLE_COMMAND) return toolbar.toggle();
   await get_config();
   const stored = await browser.storage.local.get(SLOT_TABLE_STORAGE_KEY);
   const invocations: BoundInvocation[] | undefined = (stored[SLOT_TABLE_STORAGE_KEY] as SlotTable | undefined)?.[slot_name];
   if (!invocations) return;
   const [active] = await browser.tabs.query({ active: true, currentWindow: true });
   const mode = active?.id === undefined ? "normal" : await recall_tab_mode(browser.storage.local, active.id);
-  if (shortcut_allowed(mode, invocations, (id) => registry.get(id))) await router.run({ invocations, mode, may_prompt: true });
+  if (shortcut_allowed(mode, invocations, (id) => registry.get(id), await read_disabled())) await router.run({ invocations, mode, may_prompt: true });
 });
 
 browser.tabs.onUpdated.addListener((tab_id, change) => {

@@ -24,9 +24,9 @@ test("a tab's mode is stored, defaults to normal and is removed with the tab", a
 test("in ignore mode only a shortcut that can run there goes through", () => {
   const commands = { "tab.next": { modes: ["normal"] }, "mode.leave": { modes: ["normal", "ignore"] } } as const;
   const get = (id: string) => (commands as Record<string, { modes: readonly ("normal" | "ignore")[] }>)[id];
-  assert.equal(shortcut_allowed("ignore", [{ id: "tab.next" }], get), false);
-  assert.equal(shortcut_allowed("ignore", [{ id: "mode.leave" }], get), true);
-  assert.equal(shortcut_allowed("normal", [{ id: "tab.next" }], get), true);
+  assert.equal(shortcut_allowed("ignore", [{ id: "tab.next" }], get, false), false);
+  assert.equal(shortcut_allowed("ignore", [{ id: "mode.leave" }], get, false), true);
+  assert.equal(shortcut_allowed("normal", [{ id: "tab.next" }], get, false), true);
 });
 
 test("loading a new page forgets the tab's mode, other updates keep it", async () => {
@@ -52,4 +52,10 @@ test("only the top frame's report sets the tab's mode", async () => {
   await remember_reported_mode(storage, 4, 0, "ignore");
   await remember_reported_mode(storage, 4, 3, "insert");
   assert.equal(await recall_tab_mode(storage, 4), "ignore");
+});
+
+test("while off no shortcut runs, ignore-capable ones included", () => {
+  const get = () => ({ modes: ["normal", "ignore"] as const });
+  assert.equal(shortcut_allowed("normal", [{ id: "tab.next" }], get, true), false);
+  assert.equal(shortcut_allowed("ignore", [{ id: "mode.leave" }], get, true), false);
 });

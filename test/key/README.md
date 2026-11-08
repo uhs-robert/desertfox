@@ -60,6 +60,7 @@ Each piece exports `export const areas = ["hints", ...]`, the feature areas it e
 | `bundles` | lazy bundle loading |
 | `keys` | the keymap compiler and merge, prefix tree, layers, repeat memory |
 | `ui` | `content/ui`, toast, surface, mode indicator |
+| `toolbar` | `popup/`, `background/toolbar.ts`, the on/off switch and the toolbar shortcut |
 
 - The table in `areas.mjs` is `area_rules`. The first matching rule wins, so order matters.
 - A rule with no areas (README files, icons) selects nothing. `managed_schema.json` maps to `help` and `config`.
