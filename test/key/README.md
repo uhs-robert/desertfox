@@ -143,6 +143,10 @@ Every run times itself and prints a summary at the end: time by category, time o
 - `lost_key_suspects` lists each wait that timed out after a key press, with its case, and the summary prints the count. A clean run has none. A suspect is a lost key or an effect that never came. A probe whose timeout is the normal path passes `expected_timeout: true` to `poll_until` and is not counted.
 - Piece files need no hooks: they get the timed `sleep`, `open_page`, `wait_event` and `rdp` from the case context (`context_for` in `harness.mjs`).
 
+## Firefox internals
+
+The key tests reach into five Firefox internals: `ExtensionPageChild.sys.mjs`, the window path to the selected tab's browsing context, `ExtensionSettingsStore`, `ExtensionPermissions` with `WebExtensionPolicy`, and `gURLBar`. After setup each shard runs one chrome check of all five (`firefox_internals.mjs`, about 20 to 50 ms). A broken one fails the shard with `Firefox internal broken: <name> (Firefox <version>, build <id>)`. The version and build ID come from `Services.appinfo` and go into the `firefox` field of the timings report and the summary. A late command-line read error also carries the version. No list of known-good versions exists, so an update that breaks nothing fails nothing. After a Firefox update that trips a check, fix the call site named in the message, then the check.
+
 ## Native host
 
 `config.reload` reads the config through the native host, so each run installs it. `harness.mjs` runs `host/install.sh main` with `HOME` set to the session's throwaway HOME and a `curl` stand-in that copies the host from this checkout. It refuses the real HOME. It grants `nativeMessaging` from chrome code, because Firefox grants it only from a click. `launch_firefox.sh` sets `DESERTFOX_CONFIG_DIR` to a link in the run folder, and `load_config_dir` points that link at another folder before it presses `qr`. Managed storage still gives the config at startup.
