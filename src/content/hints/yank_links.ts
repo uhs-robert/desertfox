@@ -16,7 +16,7 @@ const WEB_PROTOCOLS = new Set(["http:", "https:", "ftp:", "file:"]);
 export type YankedLink = { url: string; text: string };
 
 // Mailto, tel, javascript and data links are no web address, and a link that stays on its own page by a fragment is no destination. A bare `#` is a fragment too, though its `hash` is empty.
-export function web_address(raw: string, base: string, page_url: string): string | undefined {
+export function web_address(raw: string, base: string, document_url: string): string | undefined {
   let url: URL;
   try {
     url = new URL(raw, base);
@@ -25,7 +25,7 @@ export function web_address(raw: string, base: string, page_url: string): string
   }
   if (!WEB_PROTOCOLS.has(url.protocol)) return undefined;
   const without_fragment = (address: string) => address.split("#")[0];
-  if (url.href.includes("#") && without_fragment(url.href) === without_fragment(page_url)) return undefined;
+  if (url.href.includes("#") && without_fragment(url.href) === without_fragment(document_url)) return undefined;
   return url.href;
 }
 
@@ -38,11 +38,11 @@ export function label_of(element: Element, address: string): string {
 }
 
 // The first link to an address wins. The list stops at the cap.
-export function links_of(found: readonly Found[], page_url: string): YankedLink[] {
+export function links_of(found: readonly Found[]): YankedLink[] {
   const seen = new Set<string>();
   const links: YankedLink[] = [];
   for (const { element } of found) {
-    const url = web_address(element.getAttribute("href") ?? "", element.baseURI, page_url);
+    const url = web_address(element.getAttribute("href") ?? "", element.baseURI, element.ownerDocument.URL);
     if (url === undefined || seen.has(url)) continue;
     seen.add(url);
     links.push({ url, text: label_of(element, url) });
@@ -72,7 +72,6 @@ export type YankDeps = {
   find: () => Found[];
   keep_present: (found: Found[]) => Found[];
   keep_in_view: (found: Found[]) => Promise<Found[]>;
-  page_url: string;
   copy: (text: string) => Promise<boolean>;
   show_message: (message: string) => void;
 };
@@ -81,7 +80,7 @@ export type YankDeps = {
 export async function yank_links(scope: "page" | "viewport", format: LinkFormat, deps: YankDeps): Promise<Outcome> {
   const found = deps.find();
   const kept = scope === "page" ? deps.keep_present(found) : await deps.keep_in_view(found);
-  const links = links_of(kept, deps.page_url);
+  const links = links_of(kept);
   if (links.length === 0) return { ok: false, message: "No links on this page" };
   if (!(await deps.copy(format_links(links, format)))) return { ok: false, message: "Could not copy to the clipboard" };
   deps.show_message(`Copied ${links.length} ${links.length === 1 ? "link" : "links"}`);

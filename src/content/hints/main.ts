@@ -101,12 +101,10 @@ async function keep_visible_ones(candidates: Found[], filter: HintFilter): Promi
   return keep_visible_deduplicated(candidates, probe);
 }
 
-// Built per run: the address of the page can change between runs.
 const yank_deps = (): YankDeps => ({
   find: all_links,
   keep_present: keep_present_found,
   keep_in_view: (found) => keep_visible_ones(found, "links"),
-  page_url: document.URL,
   copy: (text) => copy_text(navigator.clipboard, text),
   show_message: (message) => create_view().show_message(message),
 });

@@ -6,11 +6,12 @@ import { format_links, label_of, links_of, MAX_YANKED_LINKS, web_address, yank_l
 
 const PAGE = "https://a.com/post";
 
-type FakeLink = { href?: string; text?: string; aria?: string; title?: string; alt?: string };
+type FakeLink = { document_url?: string; href?: string; text?: string; aria?: string; title?: string; alt?: string };
 const link = (fake: FakeLink): Found => {
   const attributes: Record<string, string | undefined> = { href: fake.href, "aria-label": fake.aria, title: fake.title };
   const element = {
-    baseURI: PAGE,
+    baseURI: fake.document_url ?? PAGE,
+    ownerDocument: { URL: fake.document_url ?? PAGE },
     innerText: fake.text ?? "",
     textContent: fake.text ?? "",
     getAttribute: (name: string) => attributes[name] ?? null,
@@ -34,6 +35,12 @@ test("a fragment of the same page is dropped, a fragment of another page is kept
   assert.equal(web_address("/other#top", PAGE, PAGE), "https://a.com/other#top");
 });
 
+test("a fragment link in a frame is compared with the frame, not the top page", () => {
+  const frame = "https://b.com/frame";
+  const links = links_of([link({ document_url: frame, href: "#section", text: "In frame" }), link({ document_url: frame, href: "/post#top", text: "Top page" }), link({ document_url: frame, href: "/frame#x", text: "Self" })]);
+  assert.deepEqual(links, [{ url: "https://b.com/post#top", text: "Top page" }]);
+});
+
 test("the label falls back from text to aria-label, title, image alt and the address", () => {
   const url = "https://a.com/x";
   assert.equal(label_of(link({ text: " Hello \n world ", aria: "A" }).element, url), "Hello world");
@@ -44,17 +51,17 @@ test("the label falls back from text to aria-label, title, image alt and the add
 });
 
 test("the first link to an address wins, in document order", () => {
-  const links = links_of([link({ href: "/a", text: "One" }), link({ href: "mailto:x@y.z", text: "Mail" }), link({ href: "/b", text: "Two" }), link({ href: "/a", text: "Again" })], PAGE);
+  const links = links_of([link({ href: "/a", text: "One" }), link({ href: "mailto:x@y.z", text: "Mail" }), link({ href: "/b", text: "Two" }), link({ href: "/a", text: "Again" })]);
   assert.deepEqual(links, [{ url: "https://a.com/a", text: "One" }, { url: "https://a.com/b", text: "Two" }]);
 });
 
 test("the list stops at the cap", () => {
   const many = Array.from({ length: MAX_YANKED_LINKS + 20 }, (_, index) => link({ href: `/p${index}`, text: "x" }));
-  assert.equal(links_of(many, PAGE).length, MAX_YANKED_LINKS);
+  assert.equal(links_of(many).length, MAX_YANKED_LINKS);
 });
 
 test("an empty list formats to nothing", () => {
-  assert.equal(links_of([], PAGE).length, 0);
+  assert.equal(links_of([]).length, 0);
   assert.equal(format_links([], "markdown"), "");
 });
 
@@ -71,7 +78,6 @@ function deps_with(overrides: Partial<YankDeps>, copied: string[] = [], messages
     find: () => everything,
     keep_present: (found) => found.filter((item) => item.element.getAttribute("href") !== "/hidden"),
     keep_in_view: async (found) => found.filter((item) => item.element.getAttribute("href") === "/in-view"),
-    page_url: PAGE,
     copy: async (text) => {
       copied.push(text);
       return true;
