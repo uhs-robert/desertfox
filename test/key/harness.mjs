@@ -27,8 +27,6 @@ const SCROLL_REPORT_DELAY_MS = 150;
 // A tab hidden or shown within 150 ms of its opening lost the visibility report of its next switch in 6 of 6 tries, and 200 ms kept it in 6 of 6.
 // Only wait_tab_quiet keeps this age, for the extension and about: pages that report no keys. A test page takes the key probe instead.
 const NEW_PAGE_QUIET_MS = 300;
-// The pause settle_focus adds after the key probe.
-const KEY_ROUTE_FLOOR_MS = 100;
 const BARRIER_KEY = "F8";
 // A key that a young page drops does not come late (7a probe: 40 of 40 such presses stayed unseen for 1 s), so a probe press unseen this long is pressed again.
 const KEY_PROBE_TRY_MS = 200;
@@ -589,7 +587,7 @@ export async function create_session({ name: session_name, timings, sweep = true
     if (too_young_ms > 0) await sleep(too_young_ms);
   }
 
-  // The focus-only settle: waits for the page of a tab to report focus, then for the key probe and KEY_ROUTE_FLOOR_MS, after keys that switch tab, close one or leave the line. Defaults to the active tab.
+  // The focus-only settle: waits for the page of a tab to report focus, then for the key probe, after keys that switch tab, close one or leave the line. Defaults to the active tab.
   // It reads the page, so it serves the test pages only. An extension page cannot answer it.
   async function settle_focus({ tab_id, keys_page_id, timeout_ms = 3000 } = {}) {
     const tab = await background_call(`(async () => {
@@ -602,7 +600,6 @@ export async function create_session({ name: session_name, timings, sweep = true
       await confirm_page_focus(tab.id, tab.window_id);
     }
     await wait_takes_keys(keys_page_id ?? new URL(tab.url).searchParams.get("id"));
-    await sleep(KEY_ROUTE_FLOOR_MS);
   }
 
   // A page drops every key of its first moments (7a probe: F8 lost at 0 and 30 ms after tree_read, kept at 100 ms), and a key pressed right after it reports focus.
