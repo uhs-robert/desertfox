@@ -160,8 +160,8 @@ function check_stopped_by(problems, result, { signal_name, exit_code }) {
   check(problems, result.output.includes(`key-test: stopping all shards: received ${signal_name}`), `no "stopping all shards: received ${signal_name}" line`);
   check(problems, /key-test incomplete \(received /.test(result.output), 'no "key-test incomplete" line');
   check(problems, result.report?.incomplete?.reason === `received ${signal_name}`, `report.incomplete.reason is ${JSON.stringify(result.report?.incomplete?.reason)}`);
-  // A piece that ends as the signal lands fails its own reset or cleanup step on the dead keyboard or debugger. That is the stop itself, so only other FAIL lines count.
-  const fail_line = result.output.split("\n").find((line) => /^(\[s\d+\] )?FAIL /.test(line) && !/^(\[s\d+\] )?FAIL \S+\.mjs (reset|cleanup)/.test(line));
+  // Only the coordinator's own FAIL lines count (a worker died, a startup failed). A case or piece step in flight when the signal lands prints an "[sN] FAIL" line as its session is torn down, which is the stop itself.
+  const fail_line = result.output.split("\n").find((line) => /^FAIL /.test(line));
   check(problems, fail_line === undefined, `a signal stop printed a FAIL line: ${fail_line}`);
 }
 
