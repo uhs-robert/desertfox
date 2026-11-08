@@ -2,6 +2,7 @@
 // and runs the pieces the coordinator hands it, one at a time, until it is told to stop.
 // The coordinator passes KEY_TEST_DEBUG_PORT, KEY_TEST_STARTUP_DELAY_MS, KEY_TEST_DIAGNOSTICS_DIR and this shard's KEY_TEST_TIMINGS_FILE.
 import { create_session } from "./harness.mjs";
+import { kill_session_now } from "./session.mjs";
 import { create_timings } from "./timings.mjs";
 
 // "ok" plus a base-36 pid is unique among live workers and short enough for the runtime dir's socket paths (session.mjs).
@@ -16,11 +17,15 @@ const send = (message) => new Promise((resolve) => {
 
 let session;
 let closing;
-function close_and_exit(code) {
+function close_and_exit(code, { orphaned = false } = {}) {
   closing ??= (async () => {
     if (session) {
-      await session.sample_tabs("after pieces").catch(() => undefined);
+      // The piece in flight still uses the debugger, and a sample beside it can lose its replies to the piece and wait out
+      // two debugger timeouts. close() shuts the debugger first, so the piece fails fast.
+      if (!orphaned) await session.sample_tabs("after pieces").catch(() => undefined);
       await session.close().catch((error) => console.error(`session close failed: ${error.message}`));
+    } else if (orphaned) {
+      kill_session_now(session_name);
     }
     process.exit(code);
   })();
@@ -38,7 +43,7 @@ for (const [signal, code] of [["SIGINT", 130], ["SIGTERM", 143]]) {
 }
 
 // The coordinator died or dropped this worker. No session outlives its coordinator.
-process.on("disconnect", () => close_and_exit(1));
+process.on("disconnect", () => close_and_exit(1, { orphaned: true }));
 
 process.on("message", async (message) => {
   if (message.type === "stop") {

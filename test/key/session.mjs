@@ -109,6 +109,21 @@ function read_owner_pid(runtime_dir) {
 // Stops the session of a worker that died without its own teardown. The caller knows the owner is gone.
 export const stop_session_named = (name) => stop_runtime(runtime_dir_of(name));
 
+const sleep_sync = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+
+// SIGKILLs every process of a session and removes its runtime dir without yielding. For a worker whose coordinator died while
+// its session was still starting: the start code waits at an await, and stop_session_named would let it go on and spawn the next process.
+export function kill_session_now(name) {
+  const runtime_dir = runtime_dir_of(name);
+  for (let pass = 0; pass < 50; pass++) {
+    const pids = pids_carrying(runtime_dir);
+    if (pids.length === 0) break;
+    signal_all(pids, "SIGKILL");
+    sleep_sync(20);
+  }
+  rmSync(runtime_dir, { recursive: true, force: true });
+}
+
 // A killed run leaves its sessions behind. Stop each session whose owner file names a dead process.
 // A live run is never touched. This process counts as dead, since a recycled pid can match an old leftover.
 // A dir with no owner file is skipped. start_session writes the file right after it makes the dir, before any process starts.
@@ -123,6 +138,7 @@ export async function sweep_dead_sessions() {
 }
 
 const RUN_DIR_PREFIX = "desertfox-key-run-";
+const RUN_DIR_CARRIER_WAIT_MS = 3000;
 
 // The start time of a process in clock ticks since boot (field 22 of /proc/<pid>/stat), or undefined when it is gone.
 // A pid that the kernel hands to a new process comes with a later start time, so the pair names one process.
@@ -145,7 +161,11 @@ export function make_run_dir(tmp_root = tmpdir()) {
 // A SIGKILLed coordinator leaves its run folder, over 1 GB of profiles and session files. This removes each run folder
 // whose owner file names a process that is gone, or a pid that a newer process holds now.
 // A folder with no readable owner file is skipped, as the session sweep skips a dir with no owner file.
-export function sweep_dead_run_dirs(tmp_root = tmpdir()) {
+// The workers of a SIGKILLed coordinator outlive it and stop their own sessions inside its folder. Their sessions write
+// there as they stop and recreate the folder after a removal, with no owner file. So the sweep waits for every process
+// that carries the folder in its environment (TMPDIR of a worker, HOME of a session process) to go, and skips the
+// folder if one stays. The owner file stays with it, so the next sweep tries again.
+export async function sweep_dead_run_dirs(tmp_root = tmpdir(), { carrier_wait_ms = RUN_DIR_CARRIER_WAIT_MS } = {}) {
   for (const entry of readdirSync(tmp_root).filter((name) => name.startsWith(RUN_DIR_PREFIX))) {
     const run_dir = join(tmp_root, entry);
     let owner_pid, owner_start_ticks;
@@ -156,9 +176,14 @@ export function sweep_dead_run_dirs(tmp_root = tmpdir()) {
     }
     if (!/^\d+$/.test(owner_pid) || !/^\d+$/.test(owner_start_ticks ?? "")) continue;
     if (process_start_ticks(Number(owner_pid)) === owner_start_ticks) continue;
+    const carried = await wait_until(`the processes of ${entry} to exit`, () => pids_carrying(run_dir).length === 0, { timeout_ms: carrier_wait_ms }).then(() => false, () => true);
+    if (carried) {
+      console.log(`sweep: keeping ${entry} of dead run ${owner_pid}, processes still use it: ${pids_carrying(run_dir).join(", ")}`);
+      continue;
+    }
     console.log(`sweep: removing ${entry}, left by dead run ${owner_pid}`);
     try {
-      // Workers of the dead coordinator may still be tearing down and writing into the folder, so the removal retries.
+      // The removal still retries, for a writer that carries no path to the folder in its environment.
       // The owner file goes last: a removal that fails midway leaves the folder to the next sweep instead of owner-less.
       const retry = { recursive: true, force: true, maxRetries: 20, retryDelay: 250 };
       for (const name of readdirSync(run_dir).filter((name) => name !== OWNER_FILE)) rmSync(join(run_dir, name), retry);
