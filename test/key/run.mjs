@@ -72,7 +72,7 @@ async function main() {
   console.log(`key-test: ${piece_files.length} pieces on ${shard_count} shard${shard_count === 1 ? "" : "s"}, weights from ${weights_source}`);
 
   await sweep_dead_sessions();
-  sweep_dead_run_dirs();
+  await sweep_dead_run_dirs();
   const debug_ports = await pick_debug_ports(shard_count);
   // Holds each shard's timings file and, through TMPDIR, each worker's session files, so one removal leaves nothing behind in /tmp.
   // Made after the sweep, because a signal before the handlers below kills the coordinator outright.

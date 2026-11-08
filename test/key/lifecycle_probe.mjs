@@ -195,6 +195,34 @@ function mid_run_probe({ signal, signal_name, exit_code, to_group }) {
   };
 }
 
+// The orphaned workers of a killed coordinator get this long to stop their sessions and exit.
+const ORPHAN_EXIT_MS = 3000;
+
+// SIGKILLs the coordinator alone, mid-case or while the sessions start, then reruns.
+function sigkill_coordinator_probe({ wait_for_orphans, startup_delay_ms }) {
+  return async (context) => {
+    const first = start_run(context);
+    if (startup_delay_ms === undefined) {
+      await first.line_matching(first_case_line);
+    } else {
+      await first.line_matching(/^key-test: \d+ pieces on/);
+      await sleep(startup_delay_ms);
+    }
+    const sessions_at_kill = tmp_entries().filter((name) => name.startsWith(RUNTIME_PREFIX)).length;
+    first.signal_coordinator("SIGKILL");
+    await first.exited;
+    const problems = [];
+    check(problems, sessions_at_kill > 0, "no session had started at the kill, so the probe did not reach the session stop it tests");
+    check(problems, tmp_entries().some((name) => name.startsWith(RUN_DIR_PREFIX)), "the killed run left no run folder, so the probe did not reach the leak it tests");
+    if (wait_for_orphans) {
+      await wait_for("the orphaned workers and their sessions to exit", () => stray_processes().length === 0, ORPHAN_EXIT_MS).catch(() => {
+        problems.push(`still running ${ORPHAN_EXIT_MS / 1000} s after the kill: ${stray_processes().map((pid) => `${pid} ${(read_proc(pid, "cmdline") ?? "").replaceAll("\0", " ").slice(0, 60)}`).join("; ")}`);
+      });
+    }
+    return { problems: [...problems, ...await rerun_after_kill(context)] };
+  };
+}
+
 const probes = {
   "int-group-mid-run": mid_run_probe({ signal: "SIGINT", signal_name: "SIGINT", exit_code: 130, to_group: true }),
   "term-group-mid-run": mid_run_probe({ signal: "SIGTERM", signal_name: "SIGTERM", exit_code: 143, to_group: true }),
@@ -272,7 +300,7 @@ const probes = {
     const run = start_run(context);
     for (let shard = 1; shard <= SHARDS; shard++) await run.line_matching(new RegExp(`^\\[s${shard}\\] (PASS|FAIL) `));
     const before = tmp_entries();
-    const sweep_script = `import { sweep_dead_sessions, sweep_dead_run_dirs } from ${JSON.stringify(join(key_test_dir, "session.mjs"))}; await sweep_dead_sessions(); sweep_dead_run_dirs();`;
+    const sweep_script = `import { sweep_dead_sessions, sweep_dead_run_dirs } from ${JSON.stringify(join(key_test_dir, "session.mjs"))}; await sweep_dead_sessions(); await sweep_dead_run_dirs();`;
     const { stdout, stderr } = await run_execfile(process.execPath, ["--input-type=module", "-e", sweep_script]);
     const problems = [];
     check(problems, stdout.trim() === "" && stderr.trim() === "", `the foreign sweep printed: ${stdout}${stderr}`.trim());
@@ -283,15 +311,12 @@ const probes = {
   },
 
   // The coordinator dies without a handler. Its workers see the closed channel and tear down. The run folder stays, and the next run sweeps it.
-  async "sigkill-coordinator-then-rerun"(context) {
-    const first = start_run(context);
-    await first.line_matching(first_case_line);
-    first.signal_coordinator("SIGKILL");
-    await first.exited;
-    const problems = [];
-    check(problems, tmp_entries().some((name) => name.startsWith(RUN_DIR_PREFIX)), "the killed run left no run folder, so the probe did not reach the leak it tests");
-    return { problems: [...problems, ...await rerun_after_kill(context)] };
-  },
+  // The rerun starts at once, so its sweep races the dying workers.
+  "sigkill-coordinator-then-rerun": sigkill_coordinator_probe({ wait_for_orphans: false }),
+  // The same kill, but the orphaned workers must stop their sessions and exit on their own, before any rerun.
+  "sigkill-coordinator-orphans-exit": sigkill_coordinator_probe({ wait_for_orphans: true }),
+  // A kill while the sessions start: each orphan must kill its half-started session.
+  "sigkill-coordinator-at-startup": sigkill_coordinator_probe({ wait_for_orphans: true, startup_delay_ms: 1500 }),
 
   // The whole group dies at once: the sessions stay up as well, owned by dead workers.
   async "sigkill-group-then-rerun"(context) {
@@ -318,41 +343,6 @@ async function rerun_after_kill(context) {
   return problems;
 }
 
-// Probes whose failure is a filed bug: they report KNOWN-FAIL and do not fail the run. A pass is reported too, so a fix shows.
-const KNOWN_FAILING = { "sigkill-coordinator-then-rerun": "issue #299, a worker that is slow to exit after its coordinator is killed" };
-
-// Only leftovers that these symptoms of #299 explain become KNOWN-FAIL. Any other problem stays a FAIL.
-const KNOWN_SYMPTOM = /^(the rerun left |left in \/tmp|still running)/;
-
-const owner_is_alive = (dir) => {
-  const pid = Number((readFileSync(join(dir, "owner"), "utf8").trim().split(" ")[0]));
-  if (!Number.isInteger(pid) || pid <= 0) return false;
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (error) {
-    return error.code === "EPERM";
-  }
-};
-
-// A known-failing probe leaves its leftovers for the next probe's precondition. They are removed only after the old workers are gone, and never when an owner is alive.
-async function clear_leftovers() {
-  try {
-    await wait_for("the old workers to exit", () => stray_processes().length === 0, 60000);
-  } catch (error) {
-    console.log(`  leftovers kept: ${error.message}`);
-    return;
-  }
-  for (const name of tmp_entries()) {
-    const dir = join("/tmp", name);
-    let alive = false;
-    try {
-      alive = owner_is_alive(dir);
-    } catch { /* no owner file: nothing is running from it */ }
-    if (!alive) rmSync(dir, { recursive: true, force: true });
-  }
-}
-
 async function run_probe(name, body) {
   const work_dir = mkdtempSync(join(tmpdir(), "desertfox-lifecycle-"));
   const started = Date.now();
@@ -372,14 +362,10 @@ async function run_probe(name, body) {
   } finally {
     rmSync(work_dir, { recursive: true, force: true });
   }
-  const known_symptoms_only = problems.every((problem) => KNOWN_SYMPTOM.test(problem));
-  const known = name in KNOWN_FAILING && known_symptoms_only ? KNOWN_FAILING[name] : undefined;
-  if (known && problems.length > 0) await clear_leftovers();
-  const verdict = problems.length === 0 ? (known ? "PASS (known failing, passed this time)" : "PASS") : (known ? `KNOWN-FAIL (${known})` : "FAIL");
-  console.log(`${verdict} ${name} (${((Date.now() - started) / 1000).toFixed(1)} s)`);
+  console.log(`${problems.length === 0 ? "PASS" : "FAIL"} ${name} (${((Date.now() - started) / 1000).toFixed(1)} s)`);
   for (const problem of problems) console.log(`  ${problem}`);
   if (problems.length > 0 && output) console.log(output.split("\n").slice(-30).map((line) => `  | ${line}`).join("\n"));
-  return problems.length === 0 || known !== undefined;
+  return problems.length === 0;
 }
 
 const wanted = process.argv.slice(2);
@@ -389,8 +375,7 @@ if (unknown.length > 0) {
   process.exit(2);
 }
 let failed = 0;
-const ordered = Object.entries(probes).sort(([left], [right]) => (left in KNOWN_FAILING) - (right in KNOWN_FAILING));
-for (const [name, body] of ordered) {
+for (const [name, body] of Object.entries(probes)) {
   if (wanted.length > 0 && !wanted.includes(name)) continue;
   if (!await run_probe(name, body)) failed++;
 }
