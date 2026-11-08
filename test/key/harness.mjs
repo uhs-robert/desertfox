@@ -51,7 +51,9 @@ export const CTRL = (key) => ["-M", "ctrl", key, "-m", "ctrl"];
 export const SHIFT_ESCAPE = ["-M", "shift", "-k", "Escape", "-m", "shift"];
 
 // The last resort of a run that fails outside the session, such as before it exists.
-export const shadow_down = (name) => shadow("down", name);
+// A teardown that hangs would hold the whole run, so it gets a hard stop. The sweep downs what it leaves behind.
+const SHADOW_DOWN_TIMEOUT_MS = 30000;
+export const shadow_down = (name) => run_execfile(shadow_sh, ["down", name], { maxBuffer: 1 << 24, timeout: SHADOW_DOWN_TIMEOUT_MS, killSignal: "SIGKILL" });
 
 function process_is_alive(pid) {
   try {

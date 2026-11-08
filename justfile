@@ -50,7 +50,7 @@ build-config dir="" *flags="": build
 host-test:
     python3 -m unittest discover -s host -p 'test_*.py'
 
-# Real key presses in a nested session. The latest full run took about 8.5 minutes (506 s for 241 cases); the key-test-speed work (#273) brings it down further. Needs SHADOW_SH, or the shadow skill script in dotfiles, as the nested-session driver.
+# Real key presses in a nested session. A full run takes about 1 minute on 6 shards. One run at a time per machine: a second waits up to 900 s for the lock. Needs SHADOW_SH, or the shadow skill script in dotfiles, as the nested-session driver.
 key-test: build
     #!/usr/bin/env bash
     set -euo pipefail
@@ -62,12 +62,22 @@ key-test: build
         echo "key-test needs SHADOW_SH: a script that runs 'up|spawn|keys|down <name>' in a nested, invisible compositor (optional: 'status', one '<name>: up|down ...' line per session). Cleanup of killed runs works only for drivers that keep sessions in /tmp/shadow-<uid>-<name>." >&2
         exit 2
     fi
-    # A test Firefox that runs away would otherwise take the whole tmux window with it: the kernel kills it, and systemd then stops every process in the window's unit. In its own capped scope, only this run dies.
-    if command -v systemd-run >/dev/null 2>&1 && systemd-run --user --scope --quiet -p MemoryMax=16G -p MemoryHigh=14G -p MemorySwapMax=0 -p RuntimeMaxSec=1800 true >/dev/null 2>&1; then
-        exec systemd-run --user --scope --quiet -p MemoryMax=16G -p MemoryHigh=14G -p MemorySwapMax=0 -p RuntimeMaxSec=1800 node test/key/run.mjs
+    # One run at a time: two sharded runs together break the memory budget. -o keeps the lock fd out of the run, so a session that outlives it does not hold the lock.
+    lock_file="${XDG_RUNTIME_DIR:-/tmp}/desertfox-key-test.lock"
+    # A test Firefox that runs away would otherwise take the whole tmux window with it: the kernel kills it, and systemd then stops every process in the window's unit. In its own capped scope, only this run dies. The time limit is the run's own deadline plus a margin, so a serial run with a higher KEY_TEST_DEADLINE_S is not killed first.
+    deadline_s="${KEY_TEST_DEADLINE_S:-280}"
+    if ! [[ "$deadline_s" =~ ^[1-9][0-9]*$ ]]; then deadline_s=280; fi
+    scope_args=(systemd-run --user --scope --quiet -p MemoryMax=16G -p MemoryHigh=14G -p MemorySwapMax=0 -p CPUQuota=1400% -p TimeoutStopSec=20 -p RuntimeMaxSec=$((deadline_s + 20)))
+    run_cmd=(node test/key/run.mjs)
+    if command -v systemd-run >/dev/null 2>&1 && "${scope_args[@]}" true >/dev/null 2>&1; then
+        run_cmd=("${scope_args[@]}" "${run_cmd[@]}")
+    else
+        echo "key-test: no systemd user session, so this run has no memory cap." >&2
     fi
-    echo "key-test: no systemd user session, so this run has no memory cap." >&2
-    exec node test/key/run.mjs
+    if ! flock -n -o "$lock_file" true; then
+        echo "key-test: another key-test run holds $lock_file, waiting up to 900 s for it." >&2
+    fi
+    exec flock -o -w 900 "$lock_file" "${run_cmd[@]}"
 
 # Rewrite test/key/piece_seconds.json, the piece weights that order the sharded key test, from a full-run timings file (default: the newest .logs/key-test-timings-*.json that no KEY_TEST_ONLY filtered). Run it in the last PR of a change that moves piece run times.
 key-test-weights timings="":
