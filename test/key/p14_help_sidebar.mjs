@@ -32,8 +32,8 @@ export async function run_cases({ run_case, press_keys, poll_until, rdp, extensi
     await poll_until("the Commands group to open", async () => (await group_state("Commands")).open);
     const commands = await group_state("Commands");
     expect(commands.open && commands.expanded === "true" && commands.links > 10, `the Commands group after the click was ${JSON.stringify(commands)}`);
-    const home = await group_state("Settings");
-    expect(!home.open, "the Settings group stayed open on the Commands page");
+    const settings = await group_state("Settings");
+    expect(!settings.open, "the Settings group stayed open on the Commands page");
     await shot("help-sidebar-commands");
 
     await click(`view.document.querySelector(".desertfox-help-sections:not([hidden]) a[href$='/tab']")`);
