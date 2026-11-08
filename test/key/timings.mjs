@@ -185,9 +185,9 @@ export function summary_text(full_report) {
 }
 
 // Joins the reports of the shards into one. `shard_reports` is `[{ shard, report }]`, where a shard that wrote nothing has no report.
-// `coordinator_info` is `{ total_ms, shards, incomplete }`: the run lasts the coordinator's wall time, and the case and category figures add up across shards, so they exceed it.
+// `coordinator_info` is `{ total_ms, shards, incomplete, filter }`, where `filter` is the run's KEY_TEST_ONLY: the run lasts the coordinator's wall time, and the case and category figures add up across shards, so they exceed it.
 // Each shard entry carries `finished_ms`, the run time at which it exited. The shard that finished last is the critical shard.
-export function merge_reports(shard_reports, { total_ms, shards = [], incomplete }) {
+export function merge_reports(shard_reports, { total_ms, shards = [], incomplete, filter }) {
   const add_categories = (target, source) => {
     for (const [category, { ms, count }] of Object.entries(source)) {
       target[category] ??= { ms: 0, count: 0 };
@@ -207,6 +207,7 @@ export function merge_reports(shard_reports, { total_ms, shards = [], incomplete
   merged.shards = shards;
   merged.critical_shard = shards.filter((entry) => entry.finished_ms !== undefined).sort((left, right) => right.finished_ms - left.finished_ms)[0]?.shard;
   if (incomplete) merged.incomplete = incomplete;
+  if (filter) merged.filter = filter;
   return merged;
 }
 

@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 
 // The .mjs modules carry no types, so they load through a dynamic import.
-const { create_ledger, load_weights, pick_debug_ports, queue_order, stale_weight_warnings, weights_from_report, write_weights } = await import(join(import.meta.dirname, "shards.mjs"));
+const { create_ledger, load_weights, newest_timings_file, pick_debug_ports, queue_order, stale_weight_warnings, weights_from_report, write_weights } = await import(join(import.meta.dirname, "shards.mjs"));
 
 const with_dir = (body: (dir: string) => void) => {
   const dir = mkdtempSync(join(tmpdir(), "shards-test-"));
@@ -117,4 +117,25 @@ test("pick_debug_ports skips a port that is taken", async () => {
   } finally {
     held.close();
   }
+});
+
+test("write_weights refuses a run filtered by KEY_TEST_ONLY", () => {
+  with_dir((dir) => {
+    const committed_path = join(dir, "piece_seconds.json");
+    writeFileSync(committed_path, JSON.stringify({ p1_a: 20 }));
+    const filtered_path = join(dir, "filtered.json");
+    writeFileSync(filtered_path, JSON.stringify({ pieces: [{ name: "p1_a.mjs", wall_ms: 1000 }], filter: "caret" }));
+    assert.throws(() => write_weights(filtered_path, { committed_path, piece_names: ["p1_a"] }), /filtered by KEY_TEST_ONLY=caret/);
+  });
+});
+
+test("newest_timings_file skips a run filtered by KEY_TEST_ONLY", () => {
+  with_dir((dir) => {
+    const full_path = join(dir, "key-test-timings-full.json");
+    writeFileSync(full_path, JSON.stringify({ pieces: [{ name: "p1_a.mjs", wall_ms: 20000 }] }));
+    const old = new Date(Date.now() - 60000);
+    utimesSync(full_path, old, old);
+    writeFileSync(join(dir, "key-test-timings-filtered.json"), JSON.stringify({ pieces: [{ name: "p1_a.mjs", wall_ms: 1000 }], filter: "caret" }));
+    assert.equal(newest_timings_file(dir)?.path, full_path);
+  });
 });

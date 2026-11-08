@@ -87,3 +87,8 @@ test("summary_text of a merged report has one line per shard", () => {
   const merged = merge_reports([{ shard: 1, report: shard_report("a.mjs") }], { total_ms: 100, shards: [{ shard: 1, busy_ms: 9000, finished_ms: 100, pieces: ["a.mjs"] }] });
   assert.match(summary_text(merged), /s1 +9\.0 s busy +1 pieces +a\n/);
 });
+
+test("merge_reports records the KEY_TEST_ONLY filter of the run", () => {
+  assert.equal(merge_reports([], { total_ms: 0, filter: "caret" }).filter, "caret");
+  assert.equal("filter" in merge_reports([], { total_ms: 0 }), false);
+});
