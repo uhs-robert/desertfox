@@ -5,7 +5,7 @@ import { evaluate_in_background } from "./rdp.mjs";
 
 export const areas = ["hints", "scroll"];
 
-export async function run_cases({ rdp, extension_id, run_case, send_keys, press_keys, poll_until, barrier, expect_absent, hint_label_count, wait_cmdline, close_cmdline, scroll_report_wait_ms, open_page, wait_event, find_event, events, expect, sleep, scroll_delta_by_press, take_shot, in_active_tab, type_in_line, tab_switch_mark, tabs_shown_since }) {
+export async function run_cases({ rdp, extension_id, run_case, send_keys, press_keys, poll_until, barrier, expect_absent, hint_label_count, wait_cmdline, close_cmdline, scroll_report_wait_ms, open_page, wait_event, find_event, events, expect, sleep, scroll_delta_by_press, take_shot, in_active_tab, type_in_line, tab_switch_mark, expect_no_tab_shown }) {
   const background = (code) => evaluate_in_background(rdp, extension_id, code);
   const tab_count = () => background(`(async () => (await browser.tabs.query({})).length)()`);
   const close_tabs_with = (text) => background(`(async () => { for (const tab of await browser.tabs.query({})) if (tab.url.includes(${JSON.stringify(text)})) await browser.tabs.remove(tab.id); })()`);
@@ -116,7 +116,7 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, press_
     await wait_for_label_count(0, "gone after Escape");
     // The barrier reaches this page only when it is still the front tab.
     await barrier("p6_rapid");
-    expect((await tabs_shown_since(switch_mark)).length === 0, `a background tab came to the front: ${(await tabs_shown_since(switch_mark)).join(", ")}`);
+    await expect_no_tab_shown(switch_mark, "a background tab came to the front");
     await press_keys("a");
     // The scroll report of the next case's j trails by 150 ms, which gives a link opened by a stray a time to show as a tab.
     expect((await scroll_delta_by_press("p6_rapid", ["j"])) > 0, "keys did not work again after Escape");

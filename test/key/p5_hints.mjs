@@ -4,7 +4,7 @@ import { evaluate_in_background } from "./rdp.mjs";
 
 export const areas = ["hints"];
 
-export async function run_cases({ rdp, extension_id, run_case, send_keys, press_keys, poll_until, barrier, expect_absent, hint_label_count, scroll_report_wait_ms, open_page, wait_event, find_event, events, expect, sleep, scroll_delta_by_press, scroll_of, take_shot, tab_switch_mark, tabs_shown_since }) {
+export async function run_cases({ rdp, extension_id, run_case, send_keys, press_keys, poll_until, barrier, expect_absent, hint_label_count, scroll_report_wait_ms, open_page, wait_event, find_event, events, expect, sleep, scroll_delta_by_press, scroll_of, take_shot, tab_switch_mark, expect_no_tab_shown }) {
   const tab_count = () => evaluate_in_background(rdp, extension_id, `(async () => (await browser.tabs.query({})).length)()`);
   const close_tabs_with = (text) => evaluate_in_background(rdp, extension_id, `(async () => { for (const tab of await browser.tabs.query({})) if (tab.url.includes(${JSON.stringify(text)})) await browser.tabs.remove(tab.id); })()`);
   const loaded = (page_id) => (event) => event.type === "tree_read" && event.page_id === page_id;
@@ -33,7 +33,7 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, press_
     await poll_until("exactly one more tab", async () => (await tab_count()) === tabs_before + 1);
     // The barrier reaches this page only when it is still the front tab.
     await barrier("h_background");
-    expect((await tabs_shown_since(switch_mark)).length === 0, `a background tab came to the front: ${(await tabs_shown_since(switch_mark)).join(", ")}`);
+    await expect_no_tab_shown(switch_mark, "a background tab came to the front");
     await close_tabs_with("hint_two");
   });
 

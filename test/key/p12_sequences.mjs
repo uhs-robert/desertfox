@@ -4,7 +4,7 @@
 
 export const areas = ["keys", "tabs", "hints", "find", "cmdline", "scroll"];
 
-export async function run_cases({ close_tabs_with, run_case, press_keys, poll_until, settle_focus, expect_absent, hint_label_count, close_cmdline, wait_cmdline, scroll_report_wait_ms, open_page, wait_event, find_event, events, expect, sleep, scroll_delta_by_press, scroll_of, last_scroll_y, type_in_line, wait_active_tab }) {
+export async function run_cases({ close_tabs_with, run_case, press_keys, poll_until, settle_focus, expect_absent, hint_label_count, close_cmdline, wait_cmdline, scroll_report_wait_ms, open_page, wait_event, find_event, events, expect, sleep, scroll_delta_by_press, scroll_of, last_scroll_y, type_in_line, wait_active_tab, tab_switch_mark, expect_no_tab_shown }) {
   const ENTER = ["-k", "Return"];
   const ESCAPE = ["-k", "Escape"];
   const loaded = (page_id) => (event) => event.type === "tree_read" && event.page_id === page_id;
@@ -112,17 +112,17 @@ export async function run_cases({ close_tabs_with, run_case, press_keys, poll_un
 
   await run_case("[hint.run, tab.next]: a pick switches tab, Escape does not", async () => {
     await open_page("hints", "sq_tabhint", { new_tab: true });
-    let mark = events.length;
+    const switch_mark = await tab_switch_mark();
     await press_keys(",t");
     await wait_for_labels(",t");
     await let_a_wrong_step_show();
-    expect(!find_event(mark, became_any_visible), "a tab switched while the hint labels were up");
+    await expect_no_tab_shown(switch_mark, "a tab switched while the hint labels were up");
     await press_keys("s");
     await wait_active_tab((page_id) => page_id !== undefined && page_id !== "sq_tabhint", "another tab after the hint pick");
     await close_tabs_with("hint_two");
     await close_tabs_with("sq_tabhint");
     await open_page("hints", "sq_tabhint2", { new_tab: true });
-    mark = events.length;
+    const mark = events.length;
     await press_keys(",t");
     await wait_for_labels(",t again");
     await press_keys(...ESCAPE);
