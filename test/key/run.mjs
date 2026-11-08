@@ -1,54 +1,250 @@
-// The key test: real key presses in a nested session, results read from pages that report to a local server.
-// harness.mjs holds the session and the helpers. This file holds the order of the run and the summary.
-import { readdirSync } from "node:fs";
-import { dirname } from "node:path";
+// The key test: real key presses in nested sessions, results read from pages that report to a local server.
+// This file is the coordinator. It forks one worker.mjs per shard, hands out pieces from one queue, merges the shards'
+// timings into one file, prints the summary and sets the exit code. harness.mjs holds the session and the helpers.
+import { fork } from "node:child_process";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join, resolve } from "node:path";
+import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
-import { create_session, shadow_down } from "./harness.mjs";
-import { create_timings } from "./timings.mjs";
+import { shadow_down, sweep_dead_sessions } from "./harness.mjs";
+import { create_ledger, load_weights, pick_debug_ports, piece_name_of, queue_order, stale_weight_warnings } from "./shards.mjs";
+import { default_timings_path, merge_reports, summary_text, write_report } from "./timings.mjs";
 
 const key_test_dir = dirname(fileURLToPath(import.meta.url));
-// KEY_TEST_PIECES=p7_caret,p11_find runs only those pieces. KEY_TEST_ORDER=reverse runs them last to first.
+const repo_dir = resolve(key_test_dir, "../..");
+// 8 shards failed the same p11_find case in 3 of 3 full runs, and 6 shards finish as fast, because p11_find alone sets the floor. Slice 7 revisits the count.
+const DEFAULT_SHARDS = 6;
+const DEFAULT_DEADLINE_S = 280;
+// Eight nested compositors and Firefoxes that start at once can push `shadow up` past its own waits.
+const STARTUP_STAGGER_MS = 300;
+// A worker's own teardown (shadow down) gets this long after SIGTERM before it is killed.
+const STOP_GRACE_MS = 10000;
+const SETUP_ERROR_EXIT = 2;
+
+// KEY_TEST_PIECES=p7_caret,p11_find runs only those pieces, in that order when one shard runs them. KEY_TEST_ORDER=reverse runs them last to first, on one shard.
 function chosen_piece_files() {
   const all = readdirSync(key_test_dir).filter((name) => /^p\d+_.*\.mjs$/.test(name)).sort();
-  const wanted = (process.env.KEY_TEST_PIECES ?? "").split(",").map((name) => name.trim().replace(/\.mjs$/, "")).filter(Boolean);
+  const wanted = [...new Set((process.env.KEY_TEST_PIECES ?? "").split(",").map((name) => name.trim().replace(/\.mjs$/, "")).filter(Boolean))];
   if (process.env.KEY_TEST_PIECES !== undefined && wanted.length === 0) throw new Error(`KEY_TEST_PIECES names no piece: "${process.env.KEY_TEST_PIECES}"`);
   const unknown = wanted.filter((name) => !all.includes(`${name}.mjs`));
   if (unknown.length > 0) throw new Error(`KEY_TEST_PIECES names no piece: ${unknown.join(", ")}`);
-  const files = wanted.length === 0 ? all : all.filter((file) => wanted.includes(file.replace(/\.mjs$/, "")));
+  const files = wanted.length === 0 ? all : wanted.map((name) => `${name}.mjs`);
   if (process.env.KEY_TEST_ORDER === "reverse") files.reverse();
   else if (process.env.KEY_TEST_ORDER) throw new Error(`KEY_TEST_ORDER must be "reverse" or unset, got ${process.env.KEY_TEST_ORDER}`);
   return files;
 }
 
-// shadow.sh caps names at 8 characters. "ok" plus a base-36 pid is at most 8 and unique among live runs.
-const SHADOW_NAME = `ok${process.pid.toString(36)}`;
-if (SHADOW_NAME.length > 8) throw new Error(`shadow name ${SHADOW_NAME} is longer than 8 characters`);
+function positive_integer_from_env(name, fallback) {
+  const text = process.env[name];
+  if (text === undefined || text === "") return fallback;
+  if (!/^[1-9]\d*$/.test(text)) throw new Error(`${name} must be a whole number above 0, got "${text}"`);
+  return Number(text);
+}
+
+// Reverse order means nothing across a shared queue, so it runs on one shard.
+function chosen_shard_count(piece_count) {
+  const reverse = process.env.KEY_TEST_ORDER === "reverse";
+  const asked = positive_integer_from_env("KEY_TEST_SHARDS", reverse ? 1 : DEFAULT_SHARDS);
+  if (reverse && asked > 1) throw new Error(`KEY_TEST_ORDER=reverse needs one shard, got KEY_TEST_SHARDS=${asked}`);
+  return Math.min(asked, piece_count);
+}
+
+function read_setup() {
+  try {
+    const piece_files = chosen_piece_files();
+    return { piece_files, shard_count: chosen_shard_count(piece_files.length), deadline_s: positive_integer_from_env("KEY_TEST_DEADLINE_S", DEFAULT_DEADLINE_S) };
+  } catch (error) {
+    console.error(`key-test: ${error.message}`);
+    process.exit(SETUP_ERROR_EXIT);
+  }
+}
+
+const exit_text = ({ code, signal }) => (signal ? `signal ${signal}` : `exit ${code}`);
 
 async function main() {
-  const piece_files = chosen_piece_files();
-  const timings = create_timings();
-  const session = await create_session({ name: SHADOW_NAME, timings });
-  const { results } = session;
+  const started_at = Date.now();
+  const elapsed_ms = () => Date.now() - started_at;
+  const { piece_files, shard_count, deadline_s } = read_setup();
+  const { weights, source: weights_source } = load_weights({ logs_dir: join(repo_dir, ".logs"), chosen_file: process.env.KEY_TEST_WEIGHTS });
+  // One shard keeps the caller's order, so a sequence that a shard logged replays exactly with KEY_TEST_SHARDS=1 KEY_TEST_PIECES=<sequence>.
+  const queue = shard_count === 1 ? piece_files : queue_order(piece_files, weights);
+  const ledger = create_ledger(queue);
+  const merged_path = default_timings_path(repo_dir);
+  const diagnostics_root = merged_path.replace(/\.json$/, "-diagnostics");
+  // Holds each shard's timings file and, through TMPDIR, each worker's session files, so one removal leaves nothing behind in /tmp.
+  const run_dir = mkdtempSync(join(tmpdir(), "desertfox-key-run-"));
+  console.log(`key-test: ${piece_files.length} pieces on ${shard_count} shard${shard_count === 1 ? "" : "s"}, weights from ${weights_source}`);
 
-  try {
-    await session.sample_tabs("before pieces");
-    for (const file of piece_files) {
-      await session.run_piece(file, await import(`./${file}`));
+  await sweep_dead_sessions();
+  const debug_ports = await pick_debug_ports(shard_count);
+
+  const failures = [];
+  const results = [];
+  let stop_reason;
+  let stop_exit_code;
+
+  const shards = Array.from({ length: shard_count }, (_, index) => {
+    const shard = index + 1;
+    const worker_tmp = join(run_dir, `s${shard}`);
+    mkdirSync(worker_tmp);
+    const timings_file = join(run_dir, `shard-${shard}.json`);
+    const child = fork(join(key_test_dir, "worker.mjs"), [], {
+      silent: true,
+      env: {
+        ...process.env,
+        KEY_TEST_DEBUG_PORT: String(debug_ports[index]),
+        KEY_TEST_STARTUP_DELAY_MS: String(index * STARTUP_STAGGER_MS),
+        KEY_TEST_TIMINGS_FILE: timings_file,
+        KEY_TEST_DIAGNOSTICS_DIR: join(diagnostics_root, `s${shard}`),
+        TMPDIR: worker_tmp,
+      },
+    });
+    return { shard, child, name: `ok${child.pid.toString(36)}`, timings_file, state: "starting", startup_ms: undefined, finished_ms: undefined, exit: undefined, startup_failure: undefined, last_lines: [] };
+  });
+
+  // Live lines, so nothing is lost when the run is killed. The tag says which shard printed them.
+  for (const entry of shards) {
+    for (const stream of [entry.child.stdout, entry.child.stderr]) {
+      createInterface({ input: stream }).on("line", (line) => {
+        entry.last_lines = [...entry.last_lines.slice(-4), line];
+        console.log(`[s${entry.shard}] ${line}`);
+      });
     }
-    await session.sample_tabs("after pieces");
-  } finally {
-    await session.close();
   }
 
+  function stop_worker(entry) {
+    entry.state = "stopping";
+    entry.child.send({ type: "stop" });
+  }
+
+  function hand_out(entry) {
+    if (stop_reason) return;
+    const piece_file = ledger.take(entry.shard, elapsed_ms());
+    if (piece_file === undefined) {
+      stop_worker(entry);
+      return;
+    }
+    entry.state = "busy";
+    entry.child.send({ type: "run", piece_file });
+  }
+
+  let all_exited;
+  const all_exited_promise = new Promise((resolve_exited) => { all_exited = resolve_exited; });
+
+  for (const entry of shards) {
+    entry.child.on("message", (message) => {
+      if (message.type === "ready") {
+        entry.startup_ms = elapsed_ms();
+        hand_out(entry);
+      } else if (message.type === "startup_failed") {
+        entry.startup_failure = message.reason;
+      } else if (message.type === "piece_done") {
+        ledger.finish(message.piece_file, elapsed_ms());
+        results.push(...message.results.map((result) => ({ ...result, piece: message.piece_file, shard: entry.shard })));
+        if (message.firefox_lost) {
+          failures.push(`shard s${entry.shard}: the connection to Firefox was lost during ${message.piece_file} (${message.firefox_lost}), so the shard took no more pieces`);
+          stop_worker(entry);
+          return;
+        }
+        hand_out(entry);
+      }
+    });
+    entry.child.on("exit", async (code, signal) => {
+      entry.exit = { code, signal };
+      entry.finished_ms = elapsed_ms();
+      const piece_file = ledger.in_flight_of(entry.shard);
+      const clean_exit = code === 0 && entry.state === "stopping";
+      // After stop_all the incomplete record names the in-flight pieces, and a worker that exits on the SIGTERM did not die on its own.
+      if (piece_file && !stop_reason) {
+        failures.push(`${piece_file}: worker s${entry.shard} died (${exit_text(entry.exit)}) while running it`);
+      } else if (entry.startup_ms === undefined && !stop_reason) {
+        failures.push(`shard s${entry.shard} startup: ${entry.startup_failure ?? `${exit_text(entry.exit)}: ${entry.last_lines.join(" | ")}`}`);
+      } else if (!clean_exit && !stop_reason) {
+        failures.push(`shard s${entry.shard} exited (${exit_text(entry.exit)}) between pieces`);
+      }
+      // A worker that died without its own teardown leaves its session up. Its marker names a dead pid, so the next sweep would stop it, but this run stops it now.
+      if (!clean_exit) await shadow_down(entry.name).catch(() => undefined);
+      entry.state = "exited";
+      if (shards.every((other) => other.state === "exited")) all_exited();
+    });
+  }
+
+  function stop_all(reason, exit_code) {
+    if (stop_reason) return;
+    stop_reason = reason;
+    stop_exit_code = exit_code;
+    console.log(`key-test: stopping all shards: ${reason}`);
+    for (const entry of shards) if (entry.exit === undefined) entry.child.kill("SIGTERM");
+    setTimeout(() => {
+      for (const entry of shards) {
+        if (entry.exit !== undefined) continue;
+        console.log(`key-test: s${entry.shard} did not stop within ${STOP_GRACE_MS / 1000} s, killing it`);
+        entry.child.kill("SIGKILL");
+      }
+    }, STOP_GRACE_MS).unref();
+  }
+
+  const deadline_timer = setTimeout(() => stop_all(`the ${deadline_s} s deadline passed (KEY_TEST_DEADLINE_S)`, 1), deadline_s * 1000);
+  for (const [signal, code] of [["SIGINT", 130], ["SIGTERM", 143]]) process.on(signal, () => stop_all(`received ${signal}`, code));
+
+  await all_exited_promise;
+  clearTimeout(deadline_timer);
+  const total_ms = elapsed_ms();
+
+  const in_flight = ledger.in_flight();
+  const not_started = ledger.not_started();
+  const incomplete = in_flight.length + not_started.length > 0 ? { reason: stop_reason ?? "every shard exited before the queue was empty", in_flight, not_started } : undefined;
+  const shard_reports = shards.map((entry) => {
+    try {
+      return { shard: entry.shard, report: JSON.parse(readFileSync(entry.timings_file, "utf8")) };
+    } catch {
+      return { shard: entry.shard, report: undefined };
+    }
+  });
+  const shard_info = shards.map((entry) => ({
+    shard: entry.shard,
+    name: entry.name,
+    startup_ms: entry.startup_ms,
+    busy_ms: ledger.busy_ms_of(entry.shard, total_ms),
+    // How long this shard sat finished while others still ran: the slack of the balance.
+    idle_ms: total_ms - entry.finished_ms,
+    finished_ms: entry.finished_ms,
+    pieces: ledger.sequence_of(entry.shard),
+    exit: entry.exit,
+  }));
+  const merged = merge_reports(shard_reports, { total_ms, shards: shard_info, incomplete });
+  try {
+    write_report(merged_path, merged);
+  } catch (error) {
+    console.error(`key-test timings not written: ${error.message}`);
+  }
+  rmSync(run_dir, { recursive: true, force: true });
+
+  console.log(summary_text(merged));
+  console.log(`key-test timings written to ${merged_path}`);
+  for (const warning of stale_weight_warnings(merged.pieces, weights)) console.log(`stale weight: ${warning} (just key-test-weights refreshes the weights)`);
+  for (const entry of shard_info) console.log(`s${entry.shard} sequence: ${entry.pieces.map(piece_name_of).join(",")}`);
+
   const failed = results.filter((result) => !result.pass);
+  if (failed.length > 0) {
+    console.log("failed cases:");
+    for (const piece_file of new Set(failed.map((result) => result.piece))) {
+      const of_piece = failed.filter((result) => result.piece === piece_file);
+      console.log(`  ${piece_file} (s${of_piece[0].shard})`);
+      for (const result of of_piece) console.log(`    ${result.name}: ${result.reason}`);
+    }
+  }
+  for (const failure of failures) console.log(`FAIL ${failure}`);
+  if (incomplete) console.log(`key-test incomplete (${incomplete.reason}): in flight ${in_flight.join(", ") || "none"}; not started ${not_started.join(", ") || "none"}`);
   const setup_ran = results.filter((result) => result.setup).length;
   if (setup_ran > 0) console.log(`${setup_ran} setup cases ran only because KEY_TEST_ONLY filtered the run`);
   console.log(`${results.length - failed.length} of ${results.length} cases passed`);
-  process.exit(failed.length === 0 ? 0 : 1);
+  const passed = failed.length === 0 && failures.length === 0 && !incomplete && !stop_reason;
+  process.exit(passed ? 0 : (stop_exit_code ?? 1));
 }
 
-main().catch(async (error) => {
+main().catch((error) => {
   console.error(`key-test aborted: ${error.stack}`);
-  await shadow_down(SHADOW_NAME).catch(() => undefined);
   process.exit(1);
 });

@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 
 // The .mjs modules carry no types, so they load through a dynamic import.
-const { create_timings, merge_reports } = await import(join(import.meta.dirname, "timings.mjs"));
+const { create_timings, merge_reports, summary_text } = await import(join(import.meta.dirname, "timings.mjs"));
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -37,28 +37,53 @@ test("finish_active_piece does nothing between pieces", () => {
   assert.deepEqual(timings.report().pieces, []);
 });
 
-test("merge_reports takes the longest total and adds the rest", () => {
-  const report = (total_ms: number, name: string) => ({
-    total_ms,
-    cases_ms: 10,
-    outside_cases_ms: 5,
-    categories: { keys: { ms: 4, count: 2 } },
-    outside_cases: { driver: { ms: 3, count: 1 } },
-    pieces: [{ name, wall_ms: 9, case_ms: 8 }],
-    tab_samples: [{ label: name, at_ms: 1, tab_count: 1 }],
-    cases: [{ name: `case ${name}`, wall_ms: 8, categories: {} }],
-  });
-  const merged = merge_reports([report(100, "a"), report(250, "b")]);
-  assert.equal(merged.total_ms, 250);
+const shard_report = (name: string) => ({
+  total_ms: 999,
+  cases_ms: 10,
+  outside_cases_ms: 5,
+  categories: { keys: { ms: 4, count: 2 } },
+  outside_cases: { driver: { ms: 3, count: 1 } },
+  pieces: [{ name, wall_ms: 9, case_ms: 8 }],
+  tab_samples: [{ label: name, at_ms: 1, tab_count: 1 }],
+  cases: [{ name: "(setup)", wall_ms: 8, categories: {} }],
+});
+
+test("merge_reports takes the coordinator's wall time, adds the rest and tags every entry with its shard", () => {
+  const shards = [
+    { shard: 1, name: "oka", startup_ms: 5, busy_ms: 9, idle_ms: 20, finished_ms: 80, pieces: ["a.mjs"], exit: { code: 0, signal: null } },
+    { shard: 2, name: "okb", startup_ms: 6, busy_ms: 9, idle_ms: 0, finished_ms: 100, pieces: ["b.mjs"], exit: { code: 0, signal: null } },
+  ];
+  const merged = merge_reports([{ shard: 1, report: shard_report("a.mjs") }, { shard: 2, report: shard_report("b.mjs") }], { total_ms: 100, shards });
+  assert.equal(merged.total_ms, 100);
   assert.equal(merged.cases_ms, 20);
   assert.equal(merged.outside_cases_ms, 10);
   assert.deepEqual(merged.categories, { keys: { ms: 8, count: 4 } });
   assert.deepEqual(merged.outside_cases, { driver: { ms: 6, count: 2 } });
-  assert.deepEqual(merged.pieces.map((piece: { name: string }) => piece.name), ["a", "b"]);
-  assert.equal(merged.tab_samples.length, 2);
-  assert.equal(merged.cases.length, 2);
+  assert.deepEqual(merged.pieces.map((piece: { name: string; shard: number }) => [piece.name, piece.shard]), [["a.mjs", 1], ["b.mjs", 2]]);
+  assert.deepEqual(merged.cases.map((entry: { name: string; shard: number }) => [entry.name, entry.shard]), [["(setup)", 1], ["(setup)", 2]]);
+  assert.deepEqual(merged.tab_samples.map((sample: { shard: number }) => sample.shard), [1, 2]);
+  assert.deepEqual(merged.shards, shards);
+  assert.equal(merged.critical_shard, 2);
+  assert.equal("incomplete" in merged, false);
+});
+
+test("merge_reports skips a shard that wrote nothing and keeps the incomplete record", () => {
+  const incomplete = { reason: "received SIGTERM", in_flight: ["b.mjs"], not_started: ["c.mjs"] };
+  const merged = merge_reports([{ shard: 1, report: shard_report("a.mjs") }, { shard: 2, report: undefined }], {
+    total_ms: 50,
+    shards: [{ shard: 1, finished_ms: 40 }, { shard: 2, finished_ms: 45 }],
+    incomplete,
+  });
+  assert.equal(merged.pieces.length, 1);
+  assert.equal(merged.critical_shard, 2);
+  assert.deepEqual(merged.incomplete, incomplete);
 });
 
 test("merge_reports of no reports is an empty report", () => {
-  assert.deepEqual(merge_reports([]), { total_ms: 0, cases_ms: 0, outside_cases_ms: 0, categories: {}, outside_cases: {}, pieces: [], tab_samples: [], cases: [] });
+  assert.deepEqual(merge_reports([], { total_ms: 0 }), { total_ms: 0, cases_ms: 0, outside_cases_ms: 0, categories: {}, outside_cases: {}, pieces: [], tab_samples: [], cases: [], shards: [], critical_shard: undefined });
+});
+
+test("summary_text of a merged report has one line per shard", () => {
+  const merged = merge_reports([{ shard: 1, report: shard_report("a.mjs") }], { total_ms: 100, shards: [{ shard: 1, busy_ms: 9000, finished_ms: 100, pieces: ["a.mjs"] }] });
+  assert.match(summary_text(merged), /s1 +9\.0 s busy +1 pieces +a\n/);
 });

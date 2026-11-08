@@ -135,7 +135,8 @@ function padded_bundle_text() {
 
 // One nested Firefox, its page server and its helpers. `timings` is the run's timing recorder from create_timings.
 // `sweep: false` skips the leftover sweep, for a caller that swept once for many sessions. `debug_port` lets that caller pick distinct ports, since two sessions that each probe for a free port can pick the same one.
-export async function create_session({ name: shadow_name, timings, sweep = true, debug_port: given_debug_port }) {
+// `diagnostics_dir` keeps Firefox's output and crash dumps there when the session ends with a failure, since the teardown deletes both. `print_summary: false` leaves the timings summary to the caller.
+export async function create_session({ name: shadow_name, timings, sweep = true, debug_port: given_debug_port, diagnostics_dir, print_summary = true }) {
   const results = [];
   const measurements = {};
   const sleep = (ms) => timings.time("sleeps", () => raw_sleep(ms));
@@ -175,12 +176,20 @@ export async function create_session({ name: shadow_name, timings, sweep = true,
     const label = selected ? "" : "SETUP ";
     await timings.time_case(name, { setup: !selected }, async () => {
       try {
+        // With the browser gone each case would wait out its own timeouts, so the rest of the piece fails at once.
+        const lost_before = rdp?.lost_reason();
+        if (lost_before) throw new Error(`connection to Firefox lost: ${lost_before}`);
         await within_case_cap(name, body);
         results.push({ name, pass: true, setup: !selected });
         console.log(`${label}PASS ${name}`);
       } catch (error) {
-        results.push({ name, pass: false, reason: error.message, setup: !selected });
-        console.log(`${label}FAIL ${name}: ${error.message}`);
+        // A signal tears the session down under the running piece. Its cases then fail on the closed debugger, which says nothing about them.
+        if (teardown_started) return;
+        // A dead browser fails every wait by timeout, so the lost connection is named on each case it fails.
+        const lost = rdp?.lost_reason();
+        const reason = lost && !error.message.includes("connection to Firefox lost") ? `${error.message} (connection to Firefox lost: ${lost})` : error.message;
+        results.push({ name, pass: false, reason, setup: !selected });
+        console.log(`${label}FAIL ${name}: ${reason}`);
       }
     });
   }
@@ -228,8 +237,9 @@ export async function create_session({ name: shadow_name, timings, sweep = true,
   let teardown_started;
   // Set by close(), so a signal after a finished run only exits and does not write the timings a second time.
   let closed = false;
-  const teardown = () => {
+  const teardown = ({ keep_diagnostics }) => {
     teardown_started ??= (async () => {
+      if (keep_diagnostics && diagnostics_dir) save_diagnostics();
       rdp?.close();
       await shadow("down", shadow_name).catch((error) => console.error(`shadow down failed: ${error.message}`));
       server.close();
@@ -240,15 +250,32 @@ export async function create_session({ name: shadow_name, timings, sweep = true,
   for (const [signal, code] of [["SIGINT", 130], ["SIGTERM", 143]]) {
     process.on(signal, () => {
       if (closed) {
-        teardown().finally(() => process.exit(code));
+        teardown({ keep_diagnostics: false }).finally(() => process.exit(code));
         return;
       }
       // Written before the teardown, so a hung teardown loses nothing and is not charged to the case.
       timings.finish_active_case();
       timings.finish_active_piece();
       write_timings();
-      teardown().finally(() => process.exit(code));
+      teardown({ keep_diagnostics: true }).finally(() => process.exit(code));
     });
+  }
+
+  // The session HOME and the profile go with the teardown. spawn.log sits beside the session HOME in the shadow.sh layout, which other drivers need not share, so a missing file is skipped.
+  function save_diagnostics() {
+    try {
+      mkdirSync(diagnostics_dir, { recursive: true });
+      const session_home = readFileSync(join(work_dir, "session_home"), "utf8").trim();
+      const kept = [
+        [join(dirname(session_home), "logs", "spawn.log"), "spawn.log"],
+        [join(profile_dir, "minidumps"), "minidumps"],
+        [join(session_home, ".mozilla", "firefox", "Crash Reports"), "crash_reports"],
+      ].filter(([from]) => existsSync(from));
+      for (const [from, to] of kept) cpSync(from, join(diagnostics_dir, to), { recursive: true });
+      console.log(`diagnostics kept in ${diagnostics_dir}: ${kept.map(([, to]) => to).join(", ") || "nothing to keep"}`);
+    } catch (error) {
+      console.error(`diagnostics not kept: ${error.message}`);
+    }
   }
 
   const url_of = (kind, id) => `http://127.0.0.1:${server.port}/${kind}?id=${id}`;
@@ -395,11 +422,11 @@ export async function create_session({ name: shadow_name, timings, sweep = true,
 
   const timings_path = default_timings_path(repo_dir);
   // Called after each piece, from the signal path and at the end, so a run killed at the time cap still leaves its numbers. A failed write must not hide the run's own error.
-  function write_timings({ print_summary = true } = {}) {
+  function write_timings({ with_summary = print_summary } = {}) {
     try {
       const timings_report = timings.report();
       timings.write_json(timings_path, timings_report);
-      if (!print_summary) return;
+      if (!with_summary) return;
       console.log(timings.summary_text(timings_report));
       console.log(`key-test timings written to ${timings_path}`);
     } catch (error) {
@@ -419,13 +446,15 @@ export async function create_session({ name: shadow_name, timings, sweep = true,
     // A driver that keeps sessions elsewhere has no such dir. Its sessions are never swept, which is safe.
     if (existsSync(dirname(marker_path(shadow_name)))) writeFileSync(marker_path(shadow_name), String(process.pid));
     else console.error(`no runtime dir for ${shadow_name} under /tmp: skipping the owner marker, so a killed run's session will not be swept`);
-    await timed_shadow("spawn", shadow_name, join(key_test_dir, "launch_firefox.sh"), work_dir, profile_dir, String(debug_port), managed_file);
+    // A driver's own wait for the window can run out while several sessions start at once, though Firefox goes on starting. The debugger answering is the test that counts.
+    const spawn_failure = await timed_shadow("spawn", shadow_name, join(key_test_dir, "launch_firefox.sh"), work_dir, profile_dir, String(debug_port), managed_file).then(() => undefined, (error) => error);
+    if (spawn_failure) console.log(`spawn reported a failure, waiting for the debugger anyway: ${spawn_failure.message.split("\n").filter(Boolean).at(-1)}`);
     for (let attempt = 0; ; attempt++) {
       try {
         rdp = timings.wrap_rdp(await connect_rdp(debug_port));
         break;
       } catch (error) {
-        if (attempt > 60) throw new Error(`Firefox debugger never answered: ${error.message}`);
+        if (attempt > 60) throw new Error(`Firefox debugger never answered: ${error.message}${spawn_failure ? `, after spawn failed: ${spawn_failure.message}` : ""}`);
         await sleep(500);
       }
     }
@@ -461,7 +490,7 @@ export async function create_session({ name: shadow_name, timings, sweep = true,
       await sleep(50);
     }
   } catch (error) {
-    await close();
+    await close({ keep_diagnostics: true });
     throw error;
   }
 
@@ -692,6 +721,8 @@ export async function create_session({ name: shadow_name, timings, sweep = true,
   // Runs after the cases, pass or fail. The teardown callbacks each report their own failure. Close, focus, config restore and temp unset each run in their own try, so a failed close does not skip the config restore.
   async function clean_up_piece(file, state, snapshot) {
     const failed_step = (step, error) => {
+      // After a signal the steps fail on the closed debugger, as the cases do in run_case.
+      if (teardown_started) return;
       results.push({ name: `${file} ${step}`, pass: false, reason: error.message, setup: false });
       console.log(`FAIL ${file} ${step}: ${error.message}`);
     };
@@ -851,15 +882,18 @@ export async function create_session({ name: shadow_name, timings, sweep = true,
         await sample_tabs(`after ${file}`);
       }
     });
-    write_timings({ print_summary: false });
+    write_timings({ with_summary: false });
   }
 
-  async function close() {
-    await teardown();
+  async function close({ keep_diagnostics = results.some((result) => !result.pass) } = {}) {
+    await teardown({ keep_diagnostics });
     closed = true;
     console.log(JSON.stringify(measurements));
     write_timings();
   }
 
-  return { context_for, run_piece, results, measurements, sample_tabs, close };
+  // The reason the debugger connection closed, or undefined while Firefox answers. A worker stops taking pieces once its browser is gone.
+  const firefox_lost = () => rdp?.lost_reason();
+
+  return { context_for, run_piece, results, measurements, sample_tabs, firefox_lost, close };
 }

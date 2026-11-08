@@ -6,6 +6,14 @@ export async function connect_rdp(port) {
   let buffer = "";
   const inbox = [];
   const waiting = [];
+  // Set when the socket closes, so a request to a crashed or exited Firefox fails at once and names the cause, where a hung one waits out its timeout.
+  let closed_reason;
+  const wake_all = () => { for (const wake of waiting.splice(0)) wake(); };
+  socket.on("error", (error) => { closed_reason ??= error.message; });
+  socket.on("close", () => {
+    closed_reason ??= "the debugger closed the connection";
+    wake_all();
+  });
   socket.on("data", (chunk) => {
     buffer += chunk.toString();
     for (;;) {
@@ -16,7 +24,7 @@ export async function connect_rdp(port) {
       const body = Buffer.from(buffer.slice(colon + 1)).subarray(0, length).toString();
       buffer = buffer.slice(colon + 1 + body.length);
       inbox.push(JSON.parse(body));
-      for (const wake of waiting.splice(0)) wake();
+      wake_all();
     }
   });
   const next_from = async (actor, matches = () => true, timeout_ms = 10000) => {
@@ -24,11 +32,13 @@ export async function connect_rdp(port) {
     for (;;) {
       const index = inbox.findIndex((message) => message.from === actor && matches(message));
       if (index >= 0) return inbox.splice(index, 1)[0];
+      if (closed_reason) throw new Error(`rdp: connection to Firefox lost (${closed_reason}) while waiting for ${actor}`);
       if (Date.now() > deadline) throw new Error(`rdp: no answer from ${actor}`);
       await new Promise((resolve) => { waiting.push(resolve); setTimeout(resolve, 200); });
     }
   };
   const request = async (to, message, matches) => {
+    if (closed_reason) throw new Error(`rdp: connection to Firefox lost (${closed_reason})`);
     const text = JSON.stringify({ to, ...message });
     socket.write(`${Buffer.byteLength(text)}:${text}`);
     return next_from(to, matches ?? ((reply) => reply.type === undefined || reply.type === message.type || "error" in reply));
@@ -37,7 +47,10 @@ export async function connect_rdp(port) {
   await next_from("root");
   // The polling pauses of this client go through here, so the timings can charge them to the debugger.
   const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-  return { request, next_from, pause, close: () => socket.destroy() };
+  return { request, next_from, pause, lost_reason: () => closed_reason, close: () => {
+    closed_reason ??= "closed by the test";
+    socket.destroy();
+  } };
 }
 
 export async function install_temporary_addon(rdp, addon_path) {
