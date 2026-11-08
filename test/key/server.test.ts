@@ -8,25 +8,28 @@ const { create_event_log } = await import(join(import.meta.dirname, "server.mjs"
 type Report = { type: string; n?: number };
 const is_type = (type: string) => (event: Report) => event.type === type;
 
+// Whether the promise settled before one turn of the event loop ran out. A wake on the push settles it within that turn. A poll waits for its next timer, which comes later.
+async function settles_within_one_turn(promise: Promise<unknown>) {
+  let settled = false;
+  promise.then(() => { settled = true; }, () => { settled = true; });
+  await new Promise(setImmediate);
+  return settled;
+}
+
 test("a report pushed in the same step that starts the wait wakes it", async () => {
   const log = create_event_log();
   const waiting = log.wait_for(0, is_type("hit"), 1000);
   log.push({ type: "hit" });
-  const started = Date.now();
+  assert.ok(await settles_within_one_turn(waiting), "the push did not wake the wait");
   assert.deepEqual(await waiting, { type: "hit" });
-  assert.ok(Date.now() - started < 100, "the wait slept to its timeout");
 });
 
 test("a report that came later wakes the wait at once, not on a poll step", async () => {
   const log = create_event_log();
   const waiting = log.wait_for(0, is_type("hit"), 1000);
-  let pushed_at = 0;
-  setTimeout(() => {
-    pushed_at = Date.now();
-    log.push({ type: "hit" });
-  }, 20);
-  await waiting;
-  assert.ok(Date.now() - pushed_at < 10, `woke ${Date.now() - pushed_at} ms after the push`);
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  log.push({ type: "hit" });
+  assert.ok(await settles_within_one_turn(waiting), "the push did not wake the wait");
 });
 
 test("a report already in the log answers at once, and reports before the mark do not count", async () => {
