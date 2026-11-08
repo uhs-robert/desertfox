@@ -11,6 +11,7 @@ const key_test_dir = dirname(fileURLToPath(import.meta.url));
 function chosen_piece_files() {
   const all = readdirSync(key_test_dir).filter((name) => /^p\d+_.*\.mjs$/.test(name)).sort();
   const wanted = (process.env.KEY_TEST_PIECES ?? "").split(",").map((name) => name.trim().replace(/\.mjs$/, "")).filter(Boolean);
+  if (process.env.KEY_TEST_PIECES !== undefined && wanted.length === 0) throw new Error(`KEY_TEST_PIECES names no piece: "${process.env.KEY_TEST_PIECES}"`);
   const unknown = wanted.filter((name) => !all.includes(`${name}.mjs`));
   if (unknown.length > 0) throw new Error(`KEY_TEST_PIECES names no piece: ${unknown.join(", ")}`);
   const files = wanted.length === 0 ? all : all.filter((file) => wanted.includes(file.replace(/\.mjs$/, "")));

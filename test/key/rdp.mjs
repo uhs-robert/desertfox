@@ -59,21 +59,27 @@ async function attach_console(rdp, addon_id) {
 }
 
 // The watcher sends a target form for every extension frame, newtab and home tabs too, and nobody reads them while an actor lives.
-// The old forms point at closed tabs, where an evaluate waits out its whole timeout. Only the newest background form counts.
+// The old forms point at closed tabs, where an evaluate waits out its whole timeout. Only the newest live background form counts.
 async function drain_to_newest_background_form(rdp, watcher_actor) {
-  let newest_background_form;
+  const live_background_forms = [];
   for (;;) {
-    let form;
+    let event;
     try {
       // A zero timeout reads only what is already queued.
-      form = await rdp.next_from(watcher_actor, is_console_target_form, 0);
+      event = await rdp.next_from(watcher_actor, is_target_event, 0);
     } catch {
-      return newest_background_form;
+      return live_background_forms.at(-1);
     }
-    if (is_background_target_form(form)) newest_background_form = form;
+    if (event.type === "target-destroyed-form") {
+      const destroyed_at = live_background_forms.findIndex((form) => form.target.actor === event.target?.actor);
+      if (destroyed_at >= 0) live_background_forms.splice(destroyed_at, 1);
+    } else if (is_background_target_form(event)) {
+      live_background_forms.push(event);
+    }
   }
 }
 
+const is_target_event = (reply) => reply.type === "target-destroyed-form" || is_console_target_form(reply);
 const is_console_target_form = (reply) => reply.type === "target-available-form" && reply.target?.consoleActor !== undefined;
 const is_background_target_form = (reply) => is_console_target_form(reply) && reply.target.url?.endsWith("/_generated_background_page.html");
 
