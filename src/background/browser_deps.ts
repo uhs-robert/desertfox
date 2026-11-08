@@ -12,7 +12,7 @@ import type { ImageDeps, ImageKind } from "./image_actions.ts";
 import { create_load_log } from "./load_log.ts";
 import type { RepeatMemory } from "./repeat_memory.ts";
 import type { ReinjectDeps } from "./reload.ts";
-import { BUNDLE_LOADS_STORAGE_KEY } from "./storage_keys.ts";
+import { BUNDLE_LOADS_STORAGE_KEY, DISABLED_STORAGE_KEY } from "./storage_keys.ts";
 import { deliver_refusal, deliver_toast } from "./refusal.ts";
 import type { RouterDeps } from "./router.ts";
 import type { SnippetDeps } from "./snippets.ts";
@@ -61,6 +61,10 @@ export async function container_stores(): Promise<ContainerStore[]> {
   return [{ name: DEFAULT_CONTAINER_NAME, cookie_store_id: DEFAULT_COOKIE_STORE_ID }, ...identities.map((identity) => ({ name: identity.name, cookie_store_id: identity.cookieStoreId }))];
 }
 
+export async function read_disabled(): Promise<boolean> {
+  return (await browser.storage.local.get(DISABLED_STORAGE_KEY))[DISABLED_STORAGE_KEY] === true;
+}
+
 export function make_router_deps(get_config: () => Promise<MergedConfig>, repeat_memory: RepeatMemory): RouterDeps {
   const channels = { send_to_tab, notify };
   return {
@@ -88,6 +92,7 @@ export function make_router_deps(get_config: () => Promise<MergedConfig>, repeat
     send_to_tab,
     open_cmdline: (tab_id, frame_id, text) => send_to_tab(tab_id, { type: "run_in_content", invocations: [{ id: "cmdline.open", args: { text } }] }, frame_id),
     show_refusal: (tab_id, refusal, frame_id) => deliver_refusal(channels, tab_id, refusal, frame_id),
+    is_disabled: read_disabled,
     repeat_memory,
   };
 }

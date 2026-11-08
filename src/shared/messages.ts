@@ -239,7 +239,16 @@ export type ChangeSettingAnswer = { ok: true; setting: SettingListRow; message: 
 
 export type ListSettingsAnswer = { ok: true; settings: SettingListRow[] } | { ok: false; message: string };
 
-export type PageToBackground = ChangeSetting | ListSettings;
+// What the toolbar popup asks. Only a top-level extension page may send them.
+export type ToolbarRequest =
+  | { type: "toolbar_set_disabled"; disabled: boolean }
+  // `url` is the tab's address. The background derives the match pattern from it.
+  | { type: "toolbar_site"; url: string; action: "disable" | "enable" }
+  | { type: "toolbar_reload_config" };
+
+export type ToolbarAnswer = { ok: true; message: string } | { ok: false; message: string };
+
+export type PageToBackground = ChangeSetting | ListSettings | ToolbarRequest;
 
 export type ContentToBackground = RunRequest | ModeChanged | LoadBundle | ListKeys | IssueCmdlineTicket | OpenCmdline | RecordCmdline | CompleteItems | TabRowsActionRequest | OpenHelp | RecordRepeat | ReadTabAddress | FindScan | ImageAction;
 

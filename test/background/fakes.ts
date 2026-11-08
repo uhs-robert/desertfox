@@ -23,6 +23,7 @@ export function make_fake(commands: Record<string, CommandInput>, overrides: Par
     send_to_tab: async (tab_id, message) => void log.push(`send ${tab_id} ${JSON.stringify(message)}`),
     open_cmdline: async (tab_id, frame_id, text) => void log.push(`cmdline ${tab_id} ${frame_id} ${text}`),
     show_refusal: async (tab_id, refusal) => void log.push(`refuse ${tab_id} ${refusal.message}`),
+    is_disabled: async () => false,
     repeat_memory: {
       save: async (invocations, is_private) => void (slots[is_private ? "private" : "normal"] = invocations),
       load: async (is_private) => slots[is_private ? "private" : "normal"],

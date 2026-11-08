@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>DesertFox</title>
+<style>
+  html { background: var(--desertfox-bg-core, #0c0e13); color-scheme: dark light; }
+  body { margin: 0; }
+  /* The defaults sit on an inner element, like every DesertFox surface. */
+  .desertfox-popup {
+    --desertfox-bg-core: #0c0e13;
+    --desertfox-fg-core: #f5f5dc;
+    --desertfox-primary: #7fa3c9;
+    --desertfox-font: 14px/1.4 system-ui, sans-serif;
+    --desertfox-radius: 6px;
+    box-sizing: border-box; width: 17rem; padding: .35rem;
+    background: var(--desertfox-bg-core); color: var(--desertfox-fg-core); font: var(--desertfox-font);
+  }
+  .desertfox-popup-row {
+    display: flex; flex-direction: column; align-items: flex-start; width: 100%; padding: .4rem .6rem;
+    border: 0; border-radius: var(--desertfox-radius); background: none; color: inherit; font: inherit; text-align: left; cursor: pointer;
+  }
+  .desertfox-popup-row:hover:not(:disabled), .desertfox-popup-row:focus-visible { background: color-mix(in srgb, var(--desertfox-fg-core) 12%, transparent); outline: none; }
+  .desertfox-popup-row:disabled { opacity: .5; cursor: default; }
+  .desertfox-popup-detail { font-size: .85em; opacity: .8; }
+  .desertfox-popup-power { font-weight: bold; color: var(--desertfox-primary); }
+  .desertfox-popup-power[aria-checked="false"] { color: inherit; opacity: .7; }
+  .desertfox-popup-info { padding: .4rem .6rem; opacity: .7; font-size: .85em; }
+  .desertfox-popup-notice { margin: .25rem .6rem; font-size: .85em; }
+</style>
+</head>
+<body>
+<div class="desertfox-popup" id="desertfox-popup"></div>
+<script src="popup.js"></script>
+</body>
+</html>

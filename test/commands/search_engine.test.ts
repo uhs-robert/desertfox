@@ -155,6 +155,7 @@ async function press(text: string, selection: string): Promise<{ lines: string[]
     send_to_tab: async () => undefined,
     open_cmdline: async (_tab, _frame, line) => void lines.push(line),
     show_refusal: async (_tab, refusal) => void refusals.push(refusal.message),
+    is_disabled: async () => false,
     repeat_memory: no_repeat_memory,
   });
   await router.run({ invocations: [compiled_key(text)], mode: "normal", may_prompt: true });

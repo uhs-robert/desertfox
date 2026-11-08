@@ -29,6 +29,8 @@ export type RouterDeps = {
   // Opens the command line in the frame with the text typed in. Rejects when the tab has no content script.
   open_cmdline: (tab_id: number, frame_id: number, text: string) => Promise<unknown>;
   show_refusal: (tab_id: number | undefined, refusal: Refusal, frame_id?: number) => Promise<unknown>;
+  // True while the user has DesertFox turned off.
+  is_disabled: () => Promise<boolean>;
   // What `.` replays. A nested snippet router gets a no-op, so only the outermost request counts.
   repeat_memory: RepeatMemory;
 };
@@ -76,6 +78,8 @@ export function create_router(deps: RouterDeps): Router {
   }
 
   async function run(request: RouteRequest): Promise<RunResponse> {
+    // Keys stop in the page, so this catches what does not come from a key: a slot chord, a snippet call, a line that was open.
+    if (await deps.is_disabled()) return { ok: false, refusal: { id: "desertfox.off", message: "DesertFox is off" } };
     // Read before any step: window.new, window.close and tab.attach change which tab is active.
     const is_private = (await read_now(request, true)).active?.incognito === true;
     const prompted = new Set<BoundInvocation>();

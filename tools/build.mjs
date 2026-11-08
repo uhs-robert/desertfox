@@ -1,5 +1,6 @@
 import { build } from "esbuild";
 import { write_commands_json } from "./write_commands_json.mjs";
+import { grey_svg } from "./grey_svg.mjs";
 import { copyFile, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 
 // Minified size limits. content.js loads on every page, so its limit is the tightest. The rest load on first use.
@@ -22,6 +23,7 @@ const common = { bundle: true, format: "iife", target: "firefox140", logLevel: "
 await build({ ...common, entryPoints: { background: "src/background/main.ts" }, outdir: "dist", sourcemap: true });
 await build({ ...common, entryPoints: { help: "src/help/main.ts" }, outdir: "dist", sourcemap: true });
 await build({ ...common, entryPoints: { newtab: "src/newtab/main.ts" }, outdir: "dist", sourcemap: true });
+await build({ ...common, entryPoints: { popup: "src/popup/main.ts" }, outdir: "dist", sourcemap: true });
 const minified_entries = {
   content: "src/content/main.ts",
   hints: "src/content/hints/main.ts",
@@ -37,7 +39,7 @@ for (const [name, entry] of Object.entries(minified_entries)) {
   await build({ ...common, entryPoints: { [name]: entry }, outdir: "dist", minify: true });
 }
 
-for (const file of ["manifest.json", "managed_schema.json", "help/home.html", "newtab/newtab.html", "cmdline/cmdline.html"]) {
+for (const file of ["manifest.json", "managed_schema.json", "help/home.html", "newtab/newtab.html", "popup/popup.html", "cmdline/cmdline.html"]) {
   await copyFile(`src/${file}`, `dist/${file.split("/").pop()}`);
 }
 
@@ -46,6 +48,7 @@ for (const file of ["DSEG7Classic-Regular.ttf", "OFL-DSEG.txt"]) await copyFile(
 
 await mkdir("dist/icons", { recursive: true });
 await copyFile("src/icons/desertfox.svg", "dist/icons/desertfox.svg");
+await writeFile("dist/icons/desertfox-off.svg", grey_svg(await readFile("src/icons/desertfox.svg", "utf8")));
 // The keycap mark lives with the docs images; the help welcome page shows it, so it ships from there.
 await copyFile("docs/images/desertfox-keycap.svg", "dist/icons/desertfox-keycap.svg");
 
