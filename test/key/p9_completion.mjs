@@ -8,7 +8,7 @@ const CTRL = (key) => ["-M", "ctrl", key, "-m", "ctrl"];
 
 export const areas = ["cmdline"];
 
-export async function run_cases({ rdp, extension_id, run_case, send_keys, press_keys, open_page, wait_event, wait_cmdline, close_cmdline, close_tabs_with, poll_until, settle_focus, expect_absent, scroll_report_wait_ms, take_shot, events, expect, sleep, scroll_of, last_scroll_y, scroll_delta_after, became_visible, type_in_line, complete_in_line }) {
+export async function run_cases({ rdp, extension_id, run_case, send_keys, press_keys, open_page, wait_event, wait_cmdline, close_cmdline, close_tabs_with, poll_until, settle_focus, expect_absent, scroll_report_wait_ms, take_shot, events, expect, sleep, scroll_of, last_scroll_y, scroll_delta_after, type_in_line, complete_in_line, wait_active_tab }) {
   const shot_dir = process.env.DESERTFOX_SHOT_DIR;
   const set_zoom = (factor) => evaluate_in_background(rdp, extension_id, `(async () => { const [tab] = await browser.tabs.query({ active: true, currentWindow: true }); await browser.tabs.setZoom(tab.id, ${factor}); })()`);
   const active_url = () => evaluate_in_background(rdp, extension_id, `(async () => (await browser.tabs.query({ active: true, currentWindow: true }))[0].url)()`);
@@ -51,12 +51,11 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, press_
 
   await run_case("typing tc, Tab and Enter close the tab: the fuzzy match ranks tab.close first and Enter runs the shown line", async () => {
     await open_line();
-    const mark = events.length;
     await type_in_line("tc");
     await complete_in_line();
     await press_keys("-k", "Return");
-    const shown = await wait_event(mark, (event) => event.type === "visibility" && event.state === "visible" && event.page_id !== "p9_target", "another tab after the close");
-    expect(shown.page_id === "p9_start", `the visible tab was ${shown.page_id}`);
+    const shown_page_id = await wait_active_tab((page_id) => page_id !== undefined && page_id !== "p9_target", "another tab after the close");
+    expect(shown_page_id === "p9_start", `the active tab was ${shown_page_id}`);
     expect(!(await tab_urls()).some((url) => url.includes("p9_target")), "p9_target is still open");
   });
 
@@ -66,9 +65,8 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, press_
     await open_page("page", "p9_right_b", { new_tab: true });
     // K walks left, so p9_left ends up active with the two new tabs on its right.
     for (const page_id of ["p9_right_a", "p9_left"]) {
-      const mark = events.length;
       await press_keys("K");
-      await wait_event(mark, became_visible(page_id), `tab ${page_id} after K`);
+      await wait_active_tab(page_id, `tab ${page_id} after K`);
       await settle_focus();
     }
     await open_line();

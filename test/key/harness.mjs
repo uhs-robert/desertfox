@@ -24,11 +24,15 @@ const KEY_SETTLE_MS = 350;
 const CASE_CAP_MS = 30000;
 // The test pages report a scroll this long after it ends (the debounce in the reporter of server.mjs).
 const SCROLL_REPORT_DELAY_MS = 150;
-// A key pressed right after a page reported focus was lost in 12 of 12 tries, and one pressed 30 ms later was kept in 48 of 48.
-const KEY_ROUTE_FLOOR_MS = 100;
-// A tab hidden or shown within 150 ms of its opening lost the visibility report of its next switch in 6 of 6 tries, and 200 ms kept it in 6 of 6. A new page gets no keys before this age.
+// A tab hidden or shown within 150 ms of its opening lost the visibility report of its next switch in 6 of 6 tries, and 200 ms kept it in 6 of 6.
+// Only wait_tab_quiet keeps this age, for the extension and about: pages that report no keys. A test page takes the key probe instead.
 const NEW_PAGE_QUIET_MS = 300;
+// The pause settle_focus adds after the key probe.
+const KEY_ROUTE_FLOOR_MS = 100;
 const BARRIER_KEY = "F8";
+// A key that a young page drops does not come late (7a probe: 40 of 40 such presses stayed unseen for 1 s), so a probe press unseen this long is pressed again.
+const KEY_PROBE_TRY_MS = 200;
+const KEY_PROBE_TIMEOUT_MS = 3000;
 // The which-key delay of the test config, so a check that a panel stays away sits out the timer written in config/settings.toml.
 const WHICH_KEY_DELAY_MS = Number(/^which_key_delay_ms\s*=\s*(\d+)/m.exec(readFileSync(join(key_test_dir, "config", "settings.toml"), "utf8"))?.[1]);
 if (!Number.isFinite(WHICH_KEY_DELAY_MS)) throw new Error("which_key_delay_ms is missing from test/key/config/settings.toml");
@@ -246,8 +250,6 @@ export async function create_session({ name: session_name, timings, sweep = true
     if (!found) throw wait_timeout_error(what);
     return found;
   }
-  const became_visible = (page_id) => (event) => event.type === "visibility" && event.state === "visible" && event.page_id === page_id;
-  const visible_events = (mark) => since(mark).filter((event) => event.type === "visibility" && event.state === "visible");
   const scroll_of = (page_id) => (event) => event.type === "scroll" && event.page_id === page_id;
   const last_scroll_y = (page_id) => events.filter(scroll_of(page_id)).at(-1)?.y ?? 0;
 
@@ -260,8 +262,8 @@ export async function create_session({ name: session_name, timings, sweep = true
 
   const open_page = (...args) => timings.time("page_opens", () => open_page_untimed(...args));
   // The background opens the page, so the address bar never takes the keys. `new_tab` adds an active tab at the end of the last focused window, otherwise the active tab navigates.
-  async function open_page_untimed(kind, id, { new_tab }) {
-    const started_at = Date.now();
+  // `keys_page_id` names the frame that reports the key probe, for a page that hands the focus to a frame of its own.
+  async function open_page_untimed(kind, id, { new_tab, keys_page_id = id }) {
     const mark = events.length;
     const url = JSON.stringify(url_of(kind, id));
     // The page we leave reports that it is hidden a few milliseconds after the open, which would land in the next case's events.
@@ -281,8 +283,7 @@ export async function create_session({ name: session_name, timings, sweep = true
       }
     }
     if (leaving_page_id) await wait_event(mark, (event) => event.type === "visibility" && event.state === "hidden" && event.page_id === leaving_page_id, `${leaving_page_id} to report that it is hidden`, 3000);
-    await settle_focus({ tab_id });
-    await wait_page_quiet(started_at);
+    await settle_focus({ tab_id, keys_page_id });
   }
 
   // The keyboard way in, for a case that tests the address bar. No case does today.
@@ -323,23 +324,53 @@ export async function create_session({ name: session_name, timings, sweep = true
     return reported.y - before;
   }
 
+  // A tab hidden and shown again within about 300 ms of its last switch sends no visibility report, so tab switches are read from the background, never from the pages.
+  // `expected` is a page id or a check on the active page id. Returns the active page id.
+  async function wait_active_tab(expected, what = `${expected} to be the active tab`, timeout_ms = 8000) {
+    const matches = typeof expected === "function" ? expected : (page_id) => page_id === expected;
+    let active_page_id;
+    await poll_until(what, async () => matches((active_page_id = await active_test_page_id())), { timeout_ms });
+    return active_page_id;
+  }
+
+  // Every tab activation since the first call, recorded by a listener in the background. The log lives in the background page, so a background restart starts it again.
+  const SWITCH_LOG = "desertfox_key_test_tab_switches";
+  async function tab_switch_mark() {
+    return background_call(`(() => {
+      if (!globalThis.${SWITCH_LOG}) {
+        globalThis.${SWITCH_LOG} = [];
+        browser.tabs.onActivated.addListener(({ tabId }) => globalThis.${SWITCH_LOG}.push(tabId));
+      }
+      return globalThis.${SWITCH_LOG}.length;
+    })()`);
+  }
+  // The page ids of the tabs activated since the mark, in order. A tab that is gone or holds no test page shows as its tab id.
+  async function tabs_shown_since(switch_mark) {
+    const urls = await background_call(`(async () => {
+      const log = globalThis.${SWITCH_LOG};
+      if (!log || log.length < ${switch_mark}) return { error: "the tab switch log is gone (did the background restart?)" };
+      return Promise.all(log.slice(${switch_mark}).map((tab_id) => browser.tabs.get(tab_id).then((tab) => tab.url, () => "tab " + tab_id)));
+    })()`);
+    return urls.map((url) => (URL.canParse(url) ? new URL(url).searchParams.get("id") ?? url : url));
+  }
+
   // A scroll is reported SCROLL_REPORT_DELAY_MS after it ends, so the check waits that long after its barrier. The page must report F8, which holds for any page that does not cancel keys in capture, ignore mode included.
   const expect_no_scroll = (mark, page_id) => expect_absent(mark, page_id, scroll_of(page_id), `page ${page_id} scrolled`, { report_delay_ms: SCROLL_REPORT_DELAY_MS + 100 });
 
-  // The active tab comes from the background, so a switch that landed on the wrong tab fails by name. A page report cannot say that.
-  // The destination reports F8 after a settle, which proves the switch is done before the extra-switch check reads. A destination that cancels keys in capture never reports F8, so it passes `destination_cancels_keys` and the check sits out a fixed time.
-  async function expect_exactly_one_visible(mark, expected_page_id, { destination_cancels_keys = false } = {}) {
+  // The background gives the active tab and the switches since `switch_mark` (from tab_switch_mark before the keys), so a switch that landed on the wrong tab or came twice fails by name.
+  // The destination reports F8 after a settle, which proves the switch is done before the extra-switch check reads. A destination that cancels keys in capture passes `destination_cancels_keys` and the check sits out a fixed time.
+  async function expect_exactly_one_visible(switch_mark, expected_page_id, { destination_cancels_keys = false } = {}) {
     if (destination_cancels_keys) {
       await sleep(1500);
     } else {
-      await wait_event(mark, became_visible(expected_page_id), `${expected_page_id} to become visible`);
+      await wait_active_tab(expected_page_id);
       await settle_tab_switch();
       await barrier(expected_page_id);
     }
-    const active_url = await evaluate_in_background(rdp, EXTENSION_ID, `browser.tabs.query({ active: true, currentWindow: true }).then((tabs) => tabs[0]?.url)`);
-    expect(String(active_url).endsWith(`id=${expected_page_id}`), `expected the active tab to be ${expected_page_id}, it is ${active_url}`);
-    const visible = visible_events(mark);
-    expect(visible.length <= 1, `expected one switch to ${expected_page_id}, saw [${visible.map((event) => event.page_id).join(", ")}]`);
+    const active_page_id = await active_test_page_id();
+    expect(active_page_id === expected_page_id, `expected the active tab to be ${expected_page_id}, it is ${active_page_id ?? "no test page"}`);
+    const shown = await tabs_shown_since(switch_mark);
+    expect(shown.length === 1, `expected one switch to ${expected_page_id}, saw [${shown.join(", ")}]`);
   }
 
   // Hint labels sit in a closed shadow root, which the extension's own world reads. LAYERS.hints in src/shared/layers.ts, which the test cannot import.
@@ -551,29 +582,43 @@ export async function create_session({ name: session_name, timings, sweep = true
     throw new Error(`tab ${tab_id} never reported focus`);
   }
 
-  // Keys and visibility reports of a page are unreliable until NEW_PAGE_QUIET_MS after it was created, so the page that begins a piece or a case waits for that.
-  async function wait_page_quiet(created_at) {
-    const too_young_ms = NEW_PAGE_QUIET_MS - (Date.now() - created_at);
+  // Keys and visibility reports of a page are unreliable until NEW_PAGE_QUIET_MS after the browser activated its tab.
+  async function wait_tab_quiet(tab_id) {
+    const activated_at = await background_call(`browser.tabs.get(${tab_id}).then((tab) => tab.lastAccessed)`);
+    const too_young_ms = NEW_PAGE_QUIET_MS - (Date.now() - activated_at);
     if (too_young_ms > 0) await sleep(too_young_ms);
   }
-  // The same for a tab that a command opened, aged from the moment the browser activated it.
-  async function wait_tab_quiet(tab_id) {
-    await wait_page_quiet(await background_call(`browser.tabs.get(${tab_id}).then((tab) => tab.lastAccessed)`));
-  }
 
-  // The focus-only settle: waits for the page of a tab to report focus, then for KEY_ROUTE_FLOOR_MS, after keys that switch tab, close one or leave the line. Defaults to the active tab.
+  // The focus-only settle: waits for the page of a tab to report focus, then for the key probe and KEY_ROUTE_FLOOR_MS, after keys that switch tab, close one or leave the line. Defaults to the active tab.
   // It reads the page, so it serves the test pages only. An extension page cannot answer it.
-  async function settle_focus({ tab_id, timeout_ms = 3000 } = {}) {
+  async function settle_focus({ tab_id, keys_page_id, timeout_ms = 3000 } = {}) {
     const tab = await background_call(`(async () => {
       const tab = ${tab_id === undefined ? "(await browser.tabs.query({ active: true, lastFocusedWindow: true }))[0]" : `await browser.tabs.get(${tab_id})`};
-      return { id: tab.id, window_id: tab.windowId };
+      return { id: tab.id, window_id: tab.windowId, url: tab.url };
     })()`);
     try {
       await poll_until(`tab ${tab.id} to report page focus`, () => page_has_focus(tab.id), { timeout_ms, expected_timeout: true });
     } catch {
       await confirm_page_focus(tab.id, tab.window_id);
     }
+    await wait_takes_keys(keys_page_id ?? new URL(tab.url).searchParams.get("id"));
     await sleep(KEY_ROUTE_FLOOR_MS);
+  }
+
+  // A page drops every key of its first moments (7a probe: F8 lost at 0 and 30 ms after tree_read, kept at 100 ms), and a key pressed right after it reports focus.
+  // So the page is ready when it reports a key: F8, which nothing binds, pressed again until the page sees one. A key seen on another page, such as the top page of a frame that has no focus yet, counts as not seen.
+  // A case that counts the page's keydown reports skips F8, because a probe press can land after the case's mark.
+  const wait_takes_keys = (page_id) => timings.time("waits", () => wait_takes_keys_untimed(page_id));
+  async function wait_takes_keys_untimed(page_id) {
+    const deadline = Date.now() + KEY_PROBE_TIMEOUT_MS;
+    for (let presses = 1; ; presses++) {
+      waiting_for = `${page_id} to take the probe key ${BARRIER_KEY}`;
+      const mark = events.length;
+      await press_keys("-k", BARRIER_KEY);
+      if (await server.wait_for_event(mark, (event) => event.type === "keydown" && event.key === BARRIER_KEY && event.page_id === page_id, KEY_PROBE_TRY_MS)) return;
+      if (Date.now() > deadline) throw wait_timeout_error(`${page_id} to take the probe key ${BARRIER_KEY} (${presses} presses)`);
+      measurements.key_probe_retries = (measurements.key_probe_retries ?? 0) + 1;
+    }
   }
 
   // A tab that is hidden again, or shown again, within about 250 ms of its last switch loses the page's visibility reports (measured with J and K in a row, where the second switch came 175 ms after the first). A key that switches tab again waits this long. Slice 7's keyboard client should make it unneeded.
@@ -648,7 +693,6 @@ export async function create_session({ name: session_name, timings, sweep = true
   // Every piece starts from the same state: one window with one tab at home_<piece>, active and focused, on the base config with no temp edits.
   async function reset_for_piece(home_id) {
     const mark = events.length;
-    const created_at = Date.now();
     const home = await background_call(`(async () => {
       const keep = await browser.windows.getLastFocused();
       const tab = await browser.tabs.create({ windowId: keep.id, url: ${JSON.stringify(url_of("page", home_id))}, active: true });
@@ -665,7 +709,7 @@ export async function create_session({ name: session_name, timings, sweep = true
     const unset = await clear_temp_settings();
     // Their keys can leave the focus elsewhere, so the page is asked once more only when they typed.
     if (restored || unset) await confirm_page_focus(home.tab_id, home.window_id);
-    await wait_page_quiet(created_at);
+    await wait_takes_keys(home_id);
     return { tab_ids: [home.tab_id], window_ids: [home.window_id] };
   }
 
@@ -834,9 +878,9 @@ export async function create_session({ name: session_name, timings, sweep = true
     // Stores a number for the end-of-run measurements line.
     const record = (key, value) => { measurements[key] = value; };
     // The cases of a piece file in test/key/p<number>_*.mjs get these helpers.
-    const context = { config_dir, config_copy, load_config_dir, take_shot: (path) => timings.time("driver", () => session.shot(path)), run_case: run_piece_case, setup, on_teardown, expect, open_page, open_page_by_keys, send_keys, press_keys, settle_focus, settle_tab_switch, poll_until, wait_tab_quiet, barrier, expect_absent, read_cmdline_state, wait_cmdline, close_cmdline, open_cmdline, type_in_line, complete_in_line, run_line, type_in_address_bar, scroll_report_wait_ms: SCROLL_REPORT_DELAY_MS + 100, which_key_delay_ms: WHICH_KEY_DELAY_MS, sleep, events, wait_event, since, find_event, url_of, rdp, extension_id: EXTENSION_ID, scroll_delta_after, scroll_delta_by_press, became_visible, scroll_of, last_scroll_y,
+    const context = { config_dir, config_copy, load_config_dir, take_shot: (path) => timings.time("driver", () => session.shot(path)), run_case: run_piece_case, setup, on_teardown, expect, open_page, open_page_by_keys, send_keys, press_keys, settle_focus, settle_tab_switch, wait_takes_keys, poll_until, wait_tab_quiet, barrier, expect_absent, read_cmdline_state, wait_cmdline, close_cmdline, open_cmdline, type_in_line, complete_in_line, run_line, type_in_address_bar, scroll_report_wait_ms: SCROLL_REPORT_DELAY_MS + 100, which_key_delay_ms: WHICH_KEY_DELAY_MS, sleep, events, wait_event, since, find_event, url_of, rdp, extension_id: EXTENSION_ID, scroll_delta_after, scroll_delta_by_press, wait_active_tab, tab_switch_mark, tabs_shown_since, scroll_of, last_scroll_y,
       // Moved out of the run.mjs cases. Pieces may use them too.
-      in_background, read_local, reload_in_place, wait_reinject_report, injections_of, settled_injection_count, expect_no_scroll, expect_exactly_one_visible, hint_label_count, in_active_tab, badge_is, is_selection_of, press_and_wait_for_move, escape_to_normal, visible_events, extension_view, close_tabs_with, record };
+      in_background, read_local, reload_in_place, wait_reinject_report, injections_of, settled_injection_count, expect_no_scroll, expect_exactly_one_visible, hint_label_count, in_active_tab, badge_is, is_selection_of, press_and_wait_for_move, escape_to_normal, extension_view, close_tabs_with, record };
     return { context, state, piece_file };
   }
 

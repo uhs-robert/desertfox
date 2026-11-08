@@ -148,7 +148,7 @@ export async function run_cases({ run_case, expect, open_page, press_keys, poll_
 
   await run_case("caret in a tall frame that is already on screen does not scroll the page", async () => {
     const page_id = "frames_tall";
-    await open_page("caret_tall_frame", page_id, { new_tab: true });
+    await open_page("caret_tall_frame", page_id, { new_tab: true, keys_page_id: `${page_id}_frame` });
     const frame_selection = `document.getElementById("tall").contentWindow.getSelection().toString()`;
     const scroll_y = async () => await in_active_tab("scrollY");
     // The load handler scrolls the page. Its scroll report comes after the scroll, so the wait is for the report: a later scroll event is then the caret's.
@@ -157,11 +157,11 @@ export async function run_cases({ run_case, expect, open_page, press_keys, poll_
     const mark = events.length;
     await press_keys("gV");
     await poll_until("the caret to start in the frame", async () => (await in_active_tab(frame_selection)) !== "");
-    // No barrier here: the key goes to the focused frame, whose document has no reporter. A scroll is reported scroll_report_wait_ms after its cause, so that is the wait.
+    // A wrong scroll of the page is reported scroll_report_wait_ms after its cause, so that is the wait. A barrier in the frame would come sooner than the report.
     await sleep(scroll_report_wait_ms);
     expect(!events.slice(mark).some(scroll_of(page_id)), "the page scrolled with the caret already on screen");
     expect((await scroll_y()) === before, `the page scrolled from ${before} to ${await scroll_y()} with the caret already on screen`);
-    // The frame holds the focus and has no reporter, so the frame's own selection shows that Escape arrived.
+    // The frame holds the focus and reports only keydowns, so the frame's own selection shows that Escape arrived.
     await press_keys("-k", "Escape");
     await poll_until("Escape to clear the selection in the frame", async () => (await in_active_tab(frame_selection)) === "");
   });

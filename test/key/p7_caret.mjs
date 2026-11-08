@@ -5,7 +5,7 @@ import { mkdirSync } from "node:fs";
 
 export const areas = ["caret", "find"];
 
-export async function run_cases({ take_shot, run_case, expect, expect_absent, open_page, press_keys, poll_until, barrier, scroll_of, wait_cmdline, settle_focus, became_visible, last_scroll_y, events, wait_event, in_active_tab, hint_label_count, badge_is, is_selection_of, press_and_wait_for_move, escape_to_normal, run_line, type_in_line }) {
+export async function run_cases({ take_shot, run_case, expect, expect_absent, open_page, press_keys, poll_until, barrier, scroll_of, wait_cmdline, settle_focus, last_scroll_y, events, wait_event, in_active_tab, hint_label_count, badge_is, is_selection_of, press_and_wait_for_move, escape_to_normal, run_line, type_in_line, wait_active_tab }) {
   const paste_ctrl_v = ["-M", "ctrl", "v", "-m", "ctrl"];
   // oasis_moonlight, the default palette, dark: the caret takes the `mode_caret` role and visual mode the `selection` role (src/content/caret/selection_colors.ts).
   const CARET_BACKGROUND = "#f0e68c";
@@ -79,9 +79,8 @@ export async function run_cases({ take_shot, run_case, expect, expect_absent, op
     await press_keys("-M", "ctrl", "-k", "Next", "-m", "ctrl");
     await wait_event(mark_switch, selection_is("caret_tab", ""), "an empty selection after the tab switch");
     await wait_event(mark_switch, style_is("caret_tab", no_style), "no highlight style after the tab switch");
-    const mark_back = events.length;
     await press_keys("-M", "ctrl", "-k", "Prior", "-m", "ctrl");
-    await wait_event(mark_back, became_visible("caret_tab"), "the page to come back to the front");
+    await wait_active_tab("caret_tab", "the page to come back to the front");
     await settle_focus();
     const again = events.length;
     await press_keys("gV");

@@ -49,7 +49,7 @@ export async function run_cases({ run_case, setup, expect, open_page, press_keys
 
   await run_case("a snippet key pressed inside an iframe runs in the top frame only", async () => {
     const focus_mark = events.length;
-    await open_page("framed", "framed", { new_tab: true });
+    await open_page("framed", "framed", { new_tab: true, keys_page_id: "inner" });
     await wait_event(focus_mark, (event) => event.type === "window_focus" && event.page_id === "inner", "the iframe to take focus");
     const mark = events.length;
     await press_keys(",s");

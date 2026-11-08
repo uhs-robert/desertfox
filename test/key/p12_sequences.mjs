@@ -4,7 +4,7 @@
 
 export const areas = ["keys", "tabs", "hints", "find", "cmdline", "scroll"];
 
-export async function run_cases({ close_tabs_with, run_case, press_keys, poll_until, settle_focus, settle_tab_switch, expect_absent, hint_label_count, close_cmdline, wait_cmdline, scroll_report_wait_ms, open_page, wait_event, find_event, events, expect, sleep, became_visible, scroll_delta_by_press, scroll_of, last_scroll_y, type_in_line }) {
+export async function run_cases({ close_tabs_with, run_case, press_keys, poll_until, settle_focus, settle_tab_switch, expect_absent, hint_label_count, close_cmdline, wait_cmdline, scroll_report_wait_ms, open_page, wait_event, find_event, events, expect, sleep, scroll_delta_by_press, scroll_of, last_scroll_y, type_in_line, wait_active_tab }) {
   const ENTER = ["-k", "Return"];
   const ESCAPE = ["-k", "Escape"];
   const loaded = (page_id) => (event) => event.type === "tree_read" && event.page_id === page_id;
@@ -26,13 +26,12 @@ export async function run_cases({ close_tabs_with, run_case, press_keys, poll_un
     await press_keys("G");
     await wait_event(mark, scroll_of("sq_two"), "sq_two to scroll to the bottom");
     expect(last_scroll_y("sq_two") > 0, "sq_two did not scroll down");
-    mark = events.length;
     await press_keys("gT");
-    await wait_event(mark, became_visible("sq_one"), "sq_one after gT");
+    await wait_active_tab("sq_one", "sq_one after gT");
     await settle_tab_switch();
     mark = events.length;
     await press_keys(",n");
-    await wait_event(mark, became_visible("sq_two"), "sq_two after ,n");
+    await wait_active_tab("sq_two", "sq_two after ,n");
     await wait_event(mark, (event) => scroll_of("sq_two")(event) && event.y === 0, "sq_two to scroll to the top");
     await settle_tab_switch();
     await expect_absent(mark, "sq_two", scroll_of("sq_one"), "the first tab scrolled", { report_delay_ms: scroll_report_wait_ms });
@@ -119,7 +118,7 @@ export async function run_cases({ close_tabs_with, run_case, press_keys, poll_un
     await let_a_wrong_step_show();
     expect(!find_event(mark, became_any_visible), "a tab switched while the hint labels were up");
     await press_keys("s");
-    await wait_event(mark, (event) => became_any_visible(event) && event.page_id !== "sq_tabhint", "another tab after the hint pick");
+    await wait_active_tab((page_id) => page_id !== undefined && page_id !== "sq_tabhint", "another tab after the hint pick");
     await close_tabs_with("hint_two");
     await close_tabs_with("sq_tabhint");
     await open_page("hints", "sq_tabhint2", { new_tab: true });

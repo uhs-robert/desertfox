@@ -4,15 +4,14 @@ import { join } from "node:path";
 
 export const areas = ["config", "keys"];
 
-export async function run_cases({ config_copy, load_config_dir, run_case, setup, expect, open_page, press_keys, settle_focus, settle_tab_switch, poll_until, wait_cmdline, events, wait_event, scroll_delta_by_press, scroll_of, in_background, read_local, wait_reinject_report, expect_exactly_one_visible, became_visible, record, run_line }) {
+export async function run_cases({ config_copy, load_config_dir, run_case, setup, expect, open_page, press_keys, settle_focus, settle_tab_switch, poll_until, wait_cmdline, events, wait_event, scroll_delta_by_press, scroll_of, in_background, read_local, wait_reinject_report, expect_exactly_one_visible, record, run_line, wait_active_tab, tab_switch_mark }) {
   let single_j_pixels = 0;
   // Tabs a and b with a active. j on a page moves one fixed distance, which every case below compares against.
   await setup("open pages a and b and measure one j", async () => {
     await open_page("page", "reload_a", { new_tab: false });
     await open_page("page", "reload_b", { new_tab: true });
-    const mark = events.length;
     await press_keys("K");
-    await wait_event(mark, became_visible("reload_a"), "tab a after K");
+    await wait_active_tab("reload_a", "tab a after K");
     await settle_tab_switch();
     single_j_pixels = await scroll_delta_by_press("reload_a", ["j"]);
     expect(single_j_pixels > 0, "j did not scroll down");
@@ -50,7 +49,7 @@ export async function run_cases({ config_copy, load_config_dir, run_case, setup,
     await press_keys("m");
     const halfway = await wait_event(mark, scroll_of("reload_a"), "scroll to 50 percent");
     expect(Math.abs(halfway.y - halfway.max_y / 2) <= 2, `m stopped at ${halfway.y} of ${halfway.max_y}`);
-    const switch_mark = events.length;
+    const switch_mark = await tab_switch_mark();
     await press_keys("J");
     await expect_exactly_one_visible(switch_mark, "reload_b");
     const other_tab_delta = await scroll_delta_by_press("reload_b", ["j"]);

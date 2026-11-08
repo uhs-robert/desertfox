@@ -3,7 +3,7 @@ import { CTRL } from "./harness.mjs";
 
 export const areas = ["tabs", "keys"];
 
-export async function run_cases({ run_case, setup, expect, open_page, press_keys, settle_focus, expect_absent, wait_cmdline, close_cmdline, events, wait_event, scroll_delta_by_press }) {
+export async function run_cases({ run_case, setup, expect, open_page, press_keys, settle_focus, expect_absent, wait_cmdline, close_cmdline, events, wait_event, scroll_delta_by_press, wait_active_tab }) {
   const panel_event = (event) => event.type === "whichkey" && event.page_id === "d_reload" && event.value !== "";
   await setup("open page d_reload", () => open_page("page", "d_reload", { new_tab: true }));
 
@@ -34,12 +34,10 @@ export async function run_cases({ run_case, setup, expect, open_page, press_keys
 
   await run_case("xx closes the tab", async () => {
     await open_page("page", "d_close", { new_tab: true });
-    const mark = events.length;
     await press_keys("xx");
-    const shown = await wait_event(mark, (event) => event.type === "visibility" && event.state === "visible" && event.page_id !== "d_close", "another tab after xx");
-    expect(shown.page_id !== "d_close", "d_close is still the visible tab");
+    const shown_page_id = await wait_active_tab((page_id) => page_id !== undefined && page_id !== "d_close", "another tab after xx");
     await settle_focus();
-    expect(await scroll_delta_by_press(shown.page_id, ["j"]) > 0, "the tab left after xx does not take keys");
+    expect(await scroll_delta_by_press(shown_page_id, ["j"]) > 0, "the tab left after xx does not take keys");
   });
 
   await run_case("Ctrl+A adds one to the number in the address, and 3 then Ctrl+X takes three off", async () => {
