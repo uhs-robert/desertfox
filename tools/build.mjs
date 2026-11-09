@@ -15,6 +15,7 @@ const MAX_BYTES = {
   "page.js": 4 * 1024,
   "cmdline_page.js": 44 * 1024,
   "find_worker.js": 2 * 1024,
+  "devtools.js": 2 * 1024,
 };
 
 await rm("dist", { recursive: true, force: true });
@@ -43,12 +44,14 @@ const minified_entries = {
   cmdline_page: "src/cmdline/page.ts",
   // Not an injected bundle: the background starts it as a Worker for each regex page search (find_scan.ts).
   find_worker: "src/background/find_worker.ts",
+  // The page that DevTools loads in each toolbox (the manifest's `devtools_page`).
+  devtools: "src/devtools/main.ts",
 };
 for (const [name, entry] of Object.entries(minified_entries)) {
   await build_with_cache({ entryPoints: { [name]: entry }, outdir: "dist", minify: true });
 }
 
-for (const file of ["manifest.json", "help/home.html", "newtab/newtab.html", "popup/popup.html", "cmdline/cmdline.html"]) {
+for (const file of ["manifest.json", "help/home.html", "newtab/newtab.html", "popup/popup.html", "cmdline/cmdline.html", "devtools/devtools.html"]) {
   await copyFile(`src/${file}`, `dist/${file.split("/").pop()}`);
 }
 

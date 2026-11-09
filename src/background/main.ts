@@ -1,5 +1,5 @@
 import "./command_modules.ts";
-import type { ContentToBackground, PageToBackground } from "../shared/messages.ts";
+import type { ContentToBackground, DevtoolsHello, PageToBackground } from "../shared/messages.ts";
 import type { BoundInvocation } from "../shared/invocation.ts";
 import { effective_settings } from "../shared/config.ts";
 import { bundle_loader_deps, container_names, read_disabled, container_stores, image_deps, make_router_deps, page_of, reinject_deps } from "./browser_deps.ts";
@@ -17,6 +17,7 @@ import { requirement_lookup, site_engine_for, with_site_engines } from "./availa
 import { list_keys } from "./list_keys.ts";
 import { create_bundle_loader } from "./bundle_loader.ts";
 import { track_window_focus } from "./window_focus.ts";
+import { create_inspect_relay } from "./inspect_relay.ts";
 import { repair_tabs_after_reload } from "./reload.ts";
 import { browser_tab_model_deps, create_tab_model } from "./tab_model.ts";
 import { browser_find_scan_deps, create_find_scan, is_scan_request } from "./find_scan.ts";
@@ -100,6 +101,16 @@ const complete_items = create_complete_items({
 
 track_window_focus(browser.storage.session, browser.windows);
 
+const inspect_relay = create_inspect_relay(browser.storage.session, Date.now);
+// Only the extension's own devtools page may register, because a content script can open a port too.
+browser.runtime.onConnect.addListener((port) => {
+  if (port.name !== "devtools_inspect" || !is_extension_page(port.sender ?? {}, browser.runtime.id, browser.runtime.getURL("devtools.html")) || port.sender?.tab !== undefined) return;
+  port.onMessage.addListener((message: unknown) => {
+    const hello = message as DevtoolsHello | undefined;
+    if (hello?.type === "devtools_hello" && Number.isInteger(hello.tab_id)) void inspect_relay.connected(hello.tab_id, port, (listener) => port.onDisconnect.addListener(listener));
+  });
+});
+
 const asker_of = (sender: browser.runtime.MessageSender): Asker | undefined => {
   const { id, windowId, incognito } = sender.tab ?? {};
   return id === undefined || windowId === undefined || sender.frameId === undefined ? undefined : { tab_id: id, frame_id: sender.frameId, window_id: windowId, incognito: incognito === true };
@@ -151,6 +162,7 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
   if (request?.type === "complete_items") return complete_items.answer(request.kind, asker_of(sender));
   if (request?.type === "tab_rows_action") return complete_items.tab_rows_action(request.action, request.tab_ids, asker_of(sender), request.cookie_store_id);
   if (request?.type === "image_action") return run_image_action(image_deps, request, { incognito: sender.tab?.incognito === true, cookie_store_id: sender.tab?.cookieStoreId });
+  if (request?.type === "inspect_pick") return sender.tab?.id === undefined ? Promise.resolve({ ok: false, message: "No tab to inspect" }) : inspect_relay.pick(sender.tab.id);
   if (request?.type === "read_tab_address") return Promise.resolve(sender.tab?.url);
   if (request?.type === "open_help") return open_help.open(request.command_id, sender.tab?.id, sender.frameId);
   if (request?.type === "record_cmdline") return cmdline.record(request.text, sender.tab?.incognito === true);
@@ -217,6 +229,7 @@ browser.commands.onCommand.addListener(async (slot_name: string) => {
 
 browser.tabs.onUpdated.addListener((tab_id, change) => {
   void cmdline.forget_opener_on_navigation(tab_id, change);
+  if (change.status === "loading") void inspect_relay.forget(tab_id);
   return forget_mode_on_navigation(browser.storage.local, tab_id, change);
 });
 
@@ -225,6 +238,7 @@ browser.tabs.onActivated.addListener(({ windowId, previousTabId }) => previous_t
 browser.tabs.onRemoved.addListener((tab_id, { windowId, isWindowClosing }) => {
   void previous_tabs.removed(tab_id, windowId, isWindowClosing);
   void cmdline.forget_opener(tab_id);
+  void inspect_relay.forget(tab_id);
   return forget_tab_mode(browser.storage.local, tab_id);
 });
 

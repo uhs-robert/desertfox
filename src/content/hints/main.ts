@@ -7,6 +7,7 @@ import type { BundleHostApi } from "../bundle_host.ts";
 import { unhover } from "./hover.ts";
 import { has_usable_address, is_inside_link, is_media, OPEN_PLACES, perform, starts_caret } from "./actions.ts";
 import type { CaretMode, HintAction, Place } from "./actions.ts";
+import { hand_to_devtools } from "./inspect.ts";
 import { copy_text } from "../caret/copy_text.ts";
 import { collect, keep_text_matches, keep_visible_deduplicated, query_for, scroll_clips_in_page, weak_test_for, window_of } from "./candidates.ts";
 import type { Found, HintFilter } from "./candidates.ts";
@@ -86,7 +87,7 @@ function find_candidates(filter: HintFilter, custom_selector: string | undefined
 
 const none_message = (text: string | undefined): string => (text === undefined ? "No hints on this page" : `No link matches ${text}`);
 
-async function keep_visible_ones(candidates: Found[], filter: HintFilter): Promise<Found[]> {
+async function keep_visible_ones(candidates: Found[], filter: HintFilter, skips_cover_test = false): Promise<Found[]> {
   const own_rects = (element: Element) => Array.from(element.getClientRects());
   const children = (element: Element) => Array.from(element.children);
   const owners = new Map(candidates.map((found) => [found.element, box_owners(found.element, own_rects, children)]));
@@ -98,7 +99,7 @@ async function keep_visible_ones(candidates: Found[], filter: HintFilter): Promi
     viewport_of_: (found) => viewport_size(found.element.ownerDocument, window_of(found.element)),
     is_hidden_by_style_: (found) => window_of(found.element).getComputedStyle(found.element).visibility === "hidden",
     // Site players lay click-catching controls over the video, and a card lays a stretched link over its picture, so a cover test would drop them.
-    is_reachable_at_: (found, x, y) => uncovered_through_frames(found, x, y, filter === "images" || (filter === "media" && is_media(found.element))),
+    is_reachable_at_: (found, x, y) => uncovered_through_frames(found, x, y, skips_cover_test || filter === "images" || (filter === "media" && is_media(found.element))),
   };
   return keep_visible_deduplicated(candidates, probe);
 }
@@ -171,7 +172,9 @@ function start_caret_(target: Element, mode: CaretMode): void {
   page.desertfox_host.set_mode_(mode);
 }
 
-const deps = { open_link_, copy: copy_to_clipboard, image_action, start_caret_ };
+const inspect_ = (target: Element): Promise<Outcome> => hand_to_devtools(window as never, target, () => browser.runtime.sendMessage({ type: "inspect_pick" }), setTimeout);
+
+const deps = { open_link_, copy: copy_to_clipboard, image_action, start_caret_, inspect_ };
 
 function register(host: BundleHostApi): void {
   let session: Session | undefined;
@@ -224,7 +227,7 @@ function register(host: BundleHostApi): void {
 
   // Finds, labels and shows the hints. Keys typed meanwhile wait and replay. Rapid mode calls it again after each pick.
   async function build(current: Session, candidates: Found[], first_build: boolean): Promise<void> {
-    const [letters, visible] = await Promise.all([read_letters(), keep_visible_ones(candidates, current.filter)]);
+    const [letters, visible] = await Promise.all([read_letters(), keep_visible_ones(candidates, current.filter, current.action === "inspect")]);
     if (current.cancelled) return;
     const found = current.lower_text_ === undefined ? visible : keep_text_matches(visible, current.lower_text_);
     if (found.length === 0) {

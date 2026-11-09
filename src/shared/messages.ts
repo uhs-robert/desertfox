@@ -211,6 +211,22 @@ export type ImageAction = {
   address: string;
 };
 
+// From the `hints` bundle once it has set `window.__desertfox_pick` to the picked element. The background hands the pick to the devtools page of the sender's tab, which selects it in the Inspector. The answer is an `Outcome`: ok once a devtools page took it, a failure with the toast text when the pick waits for DevTools to open.
+export type InspectPick = {
+  type: "inspect_pick";
+};
+
+// From the devtools page, as the first message on its port: which tab its toolbox inspects.
+export type DevtoolsHello = {
+  type: "devtools_hello";
+  tab_id: number;
+};
+
+// From the background to a devtools page, on its port: select the pick now on the page.
+export type DevtoolsPick = {
+  type: "devtools_pick";
+};
+
 // From an extension page (the settings page): sets or resets one setting. `value` is the typed value, checked by the setting's own check. `layer` defaults to `saved`. A reset drops the saved and the temp edit.
 // The answer is a ChangeSettingAnswer. The background refuses any sender that is not an extension page.
 export type ChangeSetting = {
@@ -302,7 +318,7 @@ export type ImportSessions = { type: "import_sessions"; text: string };
 
 export type PageToBackground = ChangeSetting | ListSettings | ToolbarRequest | PreviewConfigImport | CommitConfigImport | ExportConfig | ListSnippets | RemoveSnippet | ExportSessions | ImportSessions;
 
-export type ContentToBackground = RunRequest | ModeChanged | LoadBundle | ListKeys | IssueCmdlineTicket | OpenCmdline | RecordCmdline | CompleteItems | TabRowsActionRequest | OpenHelp | RecordRepeat | ReadTabAddress | FindScan | ImageAction;
+export type ContentToBackground = RunRequest | ModeChanged | LoadBundle | ListKeys | IssueCmdlineTicket | OpenCmdline | RecordCmdline | CompleteItems | TabRowsActionRequest | OpenHelp | RecordRepeat | ReadTabAddress | FindScan | ImageAction | InspectPick;
 
 // How a command ended. Done is `{ ok: true }`. A handler that returns nothing is done, and one that throws is failed.
 // Cancelled means the user left a waiting step (Escape, an unrelated key, a page change), so the rest of a sequence does not run and nothing is shown.

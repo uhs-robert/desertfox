@@ -3,7 +3,7 @@
 import { enter_for_click, hover, leave_toward } from "./hover.ts";
 import { selector_of } from "./selector_of.ts";
 
-export type HintAction = "here" | "tab" | "background" | "window" | "caret" | "visual" | "copy" | "copy_text" | "copy_image" | "copy_selector" | "copy_html" | "download" | "delete" | "focus" | "hover" | "double_click" | "play_pause" | "mute" | "fullscreen";
+export type HintAction = "here" | "tab" | "background" | "window" | "caret" | "visual" | "copy" | "copy_text" | "copy_image" | "copy_selector" | "copy_html" | "inspect" | "download" | "delete" | "focus" | "hover" | "double_click" | "play_pause" | "mute" | "fullscreen";
 
 export type Place = "here" | "tab" | "background" | "window";
 
@@ -21,6 +21,8 @@ export type ActionDeps = {
   // The background fetches the address. The content script never does, because the page's rules would block a picture from another site.
   image_action: (action: "copy_image" | "download", address: string) => Promise<unknown>;
   start_caret_: (target: Element, mode: CaretMode) => void;
+  // Sends the element to the Inspector through the devtools page. A failed outcome carries the toast text.
+  inspect_: (target: Element) => Promise<unknown>;
 };
 
 type Target = Pick<HTMLElement, "click" | "focus" | "remove"> & { dispatchEvent?: (event: Event) => boolean; getBoundingClientRect?: () => { left: number; top: number; width: number; height: number } } & { tabIndex?: number; setAttribute?: (name: string, value: string) => void; style?: CSSStyleDeclaration } & { textContent?: string | null; href?: unknown; localName: string; type?: unknown; isContentEditable?: boolean } & { currentSrc?: string; src?: string; getAttribute?: (name: string) => string | null; ownerDocument?: Document; baseURI?: string };
@@ -257,6 +259,7 @@ export function perform(action: HintAction, target: Target, deps: ActionDeps, wi
     const element = target as unknown as Element;
     return deps.copy(selector_of(element, (selector) => (element.getRootNode() as ParentNode).querySelectorAll(selector).length), "selector");
   }
+  if (action === "inspect") return deps.inspect_(target as unknown as Element);
   if (action === "copy_html") return deps.copy((target as unknown as Element).outerHTML, "HTML");
   if (action === "tab" || action === "background" || action === "window") {
     // A click on a frame does nothing, so it must not stand in for an open.

@@ -106,6 +106,17 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, press_
     });
   }
 
+  // A key test cannot see the toolbox, and none is open here. The pick then waits, so the page shows the element on `__desertfox_pick` and the "press F12" toast.
+  await run_case(";ol a leaves the picked element on the page and toasts press F12 while DevTools is closed", async () => {
+    await open_page("hints", "p6_inspect", { new_tab: true });
+    await press_keys(";ol");
+    await wait_for_labels(";ol");
+    await press_keys("a");
+    await wait_for_label_count(0, "gone after the pick");
+    await poll_until("the pick on the page", async () => (await in_active_tab(`window.wrappedJSObject.__desertfox_pick?.localName ?? ""`)) === "a");
+    await poll_until("the press F12 toast", async () => (await notice_text()).includes("F12"));
+  });
+
   await run_case(";yc keeps a link that wraps one child", async () => {
     await open_page("prose", "p6_yank_link_wrapper", { new_tab: true });
     await in_active_tab(`document.body.innerHTML = '<a id="card" href="#x"><span id="inner">Open</span></a>'; 0`);
