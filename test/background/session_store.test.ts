@@ -197,3 +197,14 @@ test("a new name that an unreadable entry holds is refused by save and rename, a
   assert.deepEqual(Object.keys(stored).toSorted(), ["good", "odd"]);
   assert.deepEqual(stored["odd"], bad);
 });
+
+test("save and rename refuse names the command line would misread", async () => {
+  const store = make_session_store(fake_storage().fake);
+  await store.save("a", tabs_of(1));
+  for (const name of ["-t", "work -t", "@selection", "a@b -x"]) {
+    await assert.rejects(store.save(name, tabs_of(1)), /cannot start with/, name);
+    await assert.rejects(store.rename("a", name), /cannot start with/, name);
+  }
+  await store.save("work-day @home", tabs_of(1));
+  assert.deepEqual((await store.list()).map((session) => session.name).toSorted(), ["a", "work-day @home"]);
+});

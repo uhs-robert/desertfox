@@ -102,6 +102,13 @@ export function make_session_store(storage: SessionStorage, now: () => number = 
   const list = async (): Promise<NamedSession[]> =>
     [...(await read_map(storage)).sessions].map(([name, session]) => ({ name, ...session })).toSorted((a, b) => b.saved_at - a.saved_at);
 
+  // The command line reads `-t` as a flag and `@selection` as a slot, so a picked name that holds one would not run as the session.
+  const new_name = (text: string): string => {
+    const name = checked_name(text);
+    if (/^[-@]| -/.test(name)) throw new RuntimeRefusal(`A session name cannot start with "-" or "@" or contain " -": "${name}"`);
+    return name;
+  };
+
   return {
     // Newest first.
     list,
@@ -121,7 +128,7 @@ export function make_session_store(storage: SessionStorage, now: () => number = 
     // An existing name is updated and keeps its display case. `previous_tabs` is the count it replaced.
     save: (text: string, tabs: SessionTab[]): Promise<{ name: string; previous_tabs: number | undefined }> =>
       exclusive(async () => {
-        const typed = checked_name(text);
+        const typed = new_name(text);
         const loaded = await read_map(storage);
         const { sessions } = loaded;
         const existing = find_name(sessions, typed);
@@ -151,7 +158,7 @@ export function make_session_store(storage: SessionStorage, now: () => number = 
         const { sessions } = loaded;
         const from = find_name(sessions, checked_name(text));
         if (from === undefined) throw new RuntimeRefusal(`No session named "${normalize_session_name(text)}"`);
-        const to = checked_name(new_text);
+        const to = new_name(new_text);
         refuse_unread_name(loaded, to);
         const taken = find_name(sessions, to);
         if (taken !== undefined && taken !== from) throw new RuntimeRefusal(`A session named "${taken}" exists`);
