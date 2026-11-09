@@ -223,6 +223,16 @@ export function import_config(source: unknown, accepted: unknown): Promise<{ war
   });
 }
 
+// Drops one installed snippet from the slot's raw files and rebuilds. A key that binds it makes the build refuse, and the snippet stays.
+export function remove_snippet(path: string): Promise<{ warnings: number }> {
+  return in_change_queue(async () => {
+    const current = await load_files_source();
+    if (!path.startsWith("snippets/") || !Object.hasOwn(current.files, path)) throw new ConfigRefusal(`${KEPT_CURRENT.remove} No snippet ${path} is installed.`);
+    const { [path]: _removed, ...files } = current.files;
+    return apply_files(files, current.dir_label, "remove");
+  });
+}
+
 async function tell_tabs_tree_changed(): Promise<void> {
   const tabs = await browser.tabs.query({});
   await Promise.all(

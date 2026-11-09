@@ -9,11 +9,12 @@ import type { ConfigFiles } from "../shared/config_build/source_files.ts";
 import { pick_config } from "./config_load.ts";
 import type { FilesSlot, LoadedConfig } from "./config_load.ts";
 
-export type ApplyAction = "reload" | "import";
+export type ApplyAction = "reload" | "import" | "remove";
 
 export const KEPT_CURRENT: Record<ApplyAction, string> = {
   reload: "Config not reloaded, the current one stays.",
   import: "Config not imported, the current one stays.",
+  remove: "Snippet not removed, the current config stays.",
 };
 
 // Every reason a reload or an import keeps the current config. The message is the whole toast: the cause and what to do.
