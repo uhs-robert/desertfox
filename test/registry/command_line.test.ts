@@ -401,6 +401,7 @@ test("a verbatim subject is never tokenized, so an open quote or a trailing back
   assert.deepEqual(verbatim_args(`pick a[title=it's]`), { selector: "a[title=it's]" });
   assert.deepEqual(verbatim_args(`pick -r "x`), { rapid: true, selector: '"x' });
   assert.deepEqual(verbatim_args(`pick .a\\`), { selector: ".a\\" });
+  assert.deepEqual(verbatim_args(`pick -- -x[a="b`), { selector: '-x[a="b' });
   assert.equal(error_of_verbatim(`pick -r='x`), "unterminated ' quote");
   assert.equal(error_of(`open "oops`), 'unterminated " quote');
 });

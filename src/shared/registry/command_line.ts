@@ -131,7 +131,7 @@ function parse_words(command: ParsedCommand, pull: () => Read, text: string, sou
   for (let read = pull(); read; read = pull()) {
     if ("error" in read) {
       // The first word of a verbatim subject may hold an open quote or a trailing backslash, which is plain text there. A dash word is a flag attempt and keeps the error.
-      if (!main?.verbatim || text[read.start] === "-" || positional.some((param) => !Object.hasOwn(args, param.name))) return error(read.error);
+      if (!main?.verbatim || (!options_ended && text[read.start] === "-") || positional.some((param) => !Object.hasOwn(args, param.name))) return error(read.error);
       found.subject_start = read.start;
       args[main.name] = text.slice(read.start).trimEnd();
       break;

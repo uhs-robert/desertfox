@@ -113,5 +113,6 @@ test("a verbatim subject takes quotes inside it as plain text", () => {
   assert.equal(at("hint -"), "flag:-:5-6");
   // An open quote in a flag value is still no completion, as for any command.
   assert.equal(at("hint --text='a"), "none");
+  assert.equal(at('hint -u -- -x[a="b'), 'subject:-x[a="b:11-18');
   assert.equal(at("hint -u 🦊 a[x=\"日本"), 'subject:🦊 a[x="日本:8-' + 'hint -u 🦊 a[x="日本'.length);
 });
