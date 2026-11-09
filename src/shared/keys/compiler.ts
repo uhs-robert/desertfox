@@ -3,15 +3,16 @@
 import type { BundleName } from "../bundles.ts";
 import { MODES as RUNTIME_MODES } from "../command.ts";
 import type { CountBehavior, ParamDef, RunsIn } from "../command.ts";
-import { ignore_regex_source } from "../match_pattern.ts";
+import { match_regex_source } from "../match_pattern.ts";
 import { COMPILED_KEYMAP_VERSION } from "../prefix_tree.ts";
-import type { CompiledKeymap, LeafStep, TreeBranch, TreeNode } from "../prefix_tree.ts";
+import type { CompiledKeymap, LeafStep, SiteRule, TreeBranch, TreeNode } from "../prefix_tree.ts";
 import { DEFAULT_SETTINGS } from "../config.ts";
 import type { Settings } from "../config.ts";
 import type { BoundInvocation, KeyBinding, Prompt } from "../invocation.ts";
 import type { KeymapConfig, KeymapMode, Modifier } from "../keymap.ts";
 import { default_of, is_dynamic_values } from "../registry/params.ts";
 import { parse_sequence } from "./notation.ts";
+import { is_empty_tree, prune_tree } from "./prune_tree.ts";
 
 // `accepts_args` is the registry validator, passed in because the content bundle includes the keys index: importing the validator here grew content.js from 15.7 KB to 21 KB, over its 16 KB limit. Without it a modifier variant is never judged and always inserted.
 export type CommandInfo = { runs_in: RunsIn; bundle?: BundleName; label: string; count: CountBehavior; params?: readonly ParamDef[]; accepts_args?: (args: Record<string, unknown>, prompt?: Prompt) => boolean };
@@ -302,6 +303,27 @@ function name_groups(root: TreeBranch, group_names: GroupName[]) {
   }
 }
 
+const key_sequences = (text: string, warnings: string[]): string[][] =>
+  text.split(/\s+/).flatMap((word) => {
+    if (word === "") return [];
+    const parsed = parse_sequence(word);
+    if (parsed.error !== undefined) warnings.push(`site_rules: skipped "${word}": ${parsed.error}`);
+    return parsed.tokens === undefined ? [] : [parsed.tokens];
+  });
+
+// A rule whose pattern never matches is dropped. A rule that leaves no normal key is all off, so the page enters ignore mode.
+function compile_site_rules(rules: Settings["site_rules"], normal: TreeBranch | undefined, warnings: string[]): SiteRule[] {
+  return rules.flatMap((rule) => {
+    const regex = match_regex_source([rule.site]);
+    if (regex === undefined) return [];
+    const keys = rule.pass ?? rule.only;
+    if (keys === undefined || normal === undefined) return [{ regex, all_off: true }];
+    const sequences = key_sequences(keys, warnings);
+    const pruned = prune_tree(normal, rule.pass === undefined ? { only: sequences } : { pass: sequences });
+    return [is_empty_tree(pruned) ? { regex, all_off: true } : { regex, normal: pruned }];
+  });
+}
+
 export function compile_keymap(keymap: KeymapConfig, settings: Partial<Settings>, resolve: ResolveCommand, label_sources: LabelSources = { engine_labels: {} }, default_layer: KeymapConfig = {}): CompileResult {
   const warnings: string[] = [];
   const modes: CompiledKeymap["modes"] = {};
@@ -316,11 +338,11 @@ export function compile_keymap(keymap: KeymapConfig, settings: Partial<Settings>
     name_groups(root, group_names);
     if (Object.keys(root.children).length > 0) modes[mode] = root;
   }
-  const ignore_regex = ignore_regex_source(settings.ignore_sites ?? DEFAULT_SETTINGS.ignore_sites);
+  const site_rules = compile_site_rules(settings.site_rules ?? DEFAULT_SETTINGS.site_rules, modes.normal, warnings);
   const compiled: CompiledKeymap = {
     format_version: COMPILED_KEYMAP_VERSION,
     modes,
-    ...(ignore_regex ? { ignore_regex } : {}),
+    ...(site_rules.length > 0 ? { site_rules } : {}),
     mode_indicator: settings.mode_indicator ?? DEFAULT_SETTINGS.mode_indicator,
     which_key_border: settings.which_key_border ?? DEFAULT_SETTINGS.which_key_border,
     which_key_delay_ms: settings.which_key_delay_ms ?? DEFAULT_SETTINGS.which_key_delay_ms,

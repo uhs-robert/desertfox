@@ -62,7 +62,8 @@ test("each setting kind gets its control", async () => {
     assert.equal(kind("light_intensity"), "select");
     assert.equal(kind("history_completion_max"), "number");
     assert.equal(kind("home_page"), "text");
-    assert.equal(kind("ignore_sites"), "text_list");
+    assert.equal(kind("next_patterns"), "text_list");
+    assert.equal(kind("site_rules"), "read_only");
     assert.equal(kind("open_completion"), "ordered_list");
     assert.equal(kind("default_engine"), "select");
     assert.equal(kind("palette"), "select");

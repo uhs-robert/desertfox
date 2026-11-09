@@ -16,12 +16,10 @@ export type PopupInputs = {
   warning_count: number;
   version: string;
   has_native_host: boolean;
-  // A site change reaches open pages only on reload, so the popup offers it.
-  site_changed: boolean;
 };
 
 export type PopupRow = {
-  id: "power" | "settings" | "home" | "site" | "reload_tab" | "reload_config" | "warnings" | "version";
+  id: "power" | "settings" | "home" | "site" | "rule" | "reload_config" | "warnings" | "version";
   kind: "switch" | "link" | "action" | "info";
   label: string;
   // A greyed row says why in `detail`.
@@ -36,7 +34,7 @@ export type PopupRow = {
 function site_row(site: SiteState, disabled: boolean): PopupRow {
   const row = (label: string, enabled: boolean, detail?: string): PopupRow => ({ id: "site", kind: "action", label, enabled, ...(detail === undefined ? {} : { detail }) });
   if (site.kind === "unavailable") return row("Disable on this site", false, "no site on this page");
-  if (site.kind === "config") return row("Disabled on this site", false, "set in config");
+  if (site.kind === "config") return row("Disable on this site", false, "a rule covers it");
   const site_action = site.kind === "disabled" ? "enable" : "disable";
   const label = site_action === "enable" ? "Enable on this site" : "Disable on this site";
   // Off wins over a disabled site, so the row has no effect to offer.
@@ -53,7 +51,8 @@ export function build_rows(inputs: PopupInputs): PopupRow[] {
     { id: "home", kind: "link", label: "Help", enabled: true },
     site_row(inputs.site, inputs.disabled),
   ];
-  if (inputs.site_changed) rows.push({ id: "reload_tab", kind: "action", label: "Reload this tab", detail: "to apply the site change", enabled: true });
+  // A rule edit reaches open pages at once. The link opens the settings page, where the rules are listed.
+  if (inputs.site.kind === "disabled" || inputs.site.kind === "config") rows.push({ id: "rule", kind: "link", label: "Rule on this page", detail: inputs.site.rule, enabled: true });
   rows.push(
     inputs.has_native_host
       ? { id: "reload_config", kind: "action", label: "Reload config", enabled: true }

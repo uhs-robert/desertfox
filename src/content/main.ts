@@ -4,7 +4,7 @@
 import type { BackgroundToContent, CompiledKeymap, ContentToBackground, Mode, ModeIndicator, ReadTabAddress, RunResponse, TreeLeaf } from "../shared/index.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY, COMPILED_KEYMAP_VERSION, DEFAULT_MODE_INDICATOR, current_keymap } from "../shared/index.ts";
 import { create_matcher, event_to_token } from "../shared/keys/index.ts";
-import { ignores_any_address } from "../shared/match_pattern.ts";
+import { matches_any_address } from "../shared/match_pattern.ts";
 import { message_of } from "./bundle_host.ts";
 import type { BundleHostApi } from "./bundle_host.ts";
 import { bundles } from "./bundles.ts";
@@ -175,8 +175,8 @@ function sync_mode_to_focus(): void {
 }
 
 let matcher_installed = false;
-// The first usable tree decides ignore mode, whether it came at load or later through `tree_updated` (after an upgrade).
-let ignore_checked = false;
+// Whether the last install matched an all-off rule. An install enters ignore mode only on the change into all-off, so a manual `qi` or `<S-Escape>` survives an unrelated edit.
+let was_all_off = false;
 
 // A frame of another site cannot read the tab's address, so it asks the background.
 function read_tab_address(): Promise<string | undefined> {
@@ -192,12 +192,16 @@ function install_matcher(keymap: CompiledKeymap | undefined, tab_address: string
   // The mode comes first, so keys held during the load replay in the right mode.
   const first_install = !matcher_installed;
   matcher_installed = true;
-  const first_usable = usable !== undefined && !ignore_checked;
-  if (usable) ignore_checked = true;
-  if (first_usable && ignores_any_address(usable.ignore_regex, [location.href, tab_address])) page_mode.set_mode_("ignore");
+  const rule = usable?.site_rules?.find(({ regex }) => matches_any_address(regex, [location.href, tab_address]));
+  const all_off = rule !== undefined && "all_off" in rule;
+  const entered_all_off = all_off && !was_all_off;
+  if (usable) was_all_off = all_off;
+  if (entered_all_off) page_mode.set_mode_("ignore");
   else if (first_install && is_editable_element(deepest_focused_element())) page_mode.focus_entered_editable_();
   refresh_mode_indicator();
-  key_flow.set_matcher_(create_matcher(usable ?? { format_version: COMPILED_KEYMAP_VERSION, modes: {}, mode_indicator: DEFAULT_MODE_INDICATOR, which_key_delay_ms: 0 }), usable?.modes.browser);
+  // The rule's tree goes in before the matcher, so held keys replay against it.
+  const tree = usable ?? { format_version: COMPILED_KEYMAP_VERSION, modes: {}, mode_indicator: DEFAULT_MODE_INDICATOR, which_key_delay_ms: 0 };
+  key_flow.set_matcher_(create_matcher(rule !== undefined && "normal" in rule ? { ...tree, modes: { ...tree.modes, normal: rule.normal } } : tree), usable?.modes.browser);
 }
 
 async function read_keymap(): Promise<CompiledKeymap | undefined> {

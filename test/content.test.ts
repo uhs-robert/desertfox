@@ -4,7 +4,7 @@ import { takes_typing } from "../src/content/editable.ts";
 import { args_for_count } from "../src/content/invocation_args.ts";
 import { create_cancelled_keys } from "../src/content/cancelled_keys.ts";
 import { cancels_unbound_key, create_key_flow } from "../src/content/key_flow.ts";
-import { ignore_regex_source, ignores_any_address, matches_pattern } from "../src/shared/match_pattern.ts";
+import { match_regex_source, matches_any_address, matches_pattern } from "../src/shared/match_pattern.ts";
 import { mode_label } from "../src/content/mode_label.ts";
 import { wire_mode_reports } from "../src/content/mode_report.ts";
 import { create_mode_state } from "../src/content/mode_state.ts";
@@ -283,7 +283,7 @@ test("match patterns", () => {
 
 // What the content script does with the compiled keymap: one regex against the page URL.
 const is_ignored_site = (patterns: string[], url: string): boolean => {
-  const source = ignore_regex_source(patterns);
+  const source = match_regex_source(patterns);
   return source !== undefined && new RegExp(source).test(url);
 };
 
@@ -306,29 +306,29 @@ test("the precompiled ignore regex agrees with matches_pattern on every pattern 
   }
   assert.equal(is_ignored_site(patterns, "https://a.test/x"), true);
   for (const bad of ["https://*foo.com/*", "https://a*.test/*", "https://a.test:8080/*", "https://a.test/a#b"]) {
-    assert.equal(ignore_regex_source([bad]), undefined, bad);
+    assert.equal(match_regex_source([bad]), undefined, bad);
   }
-  assert.equal(ignore_regex_source([]), undefined);
-  assert.equal(ignore_regex_source(["not a pattern"]), undefined);
+  assert.equal(match_regex_source([]), undefined);
+  assert.equal(match_regex_source(["not a pattern"]), undefined);
 });
 
 test("a frame on an ignored page is ignored by the tab address, and a broken regex ignores nothing", () => {
-  const source = ignore_regex_source(["https://ignored.test/*"]);
-  assert.equal(ignores_any_address(source, ["https://embed.test/video", "https://ignored.test/page"]), true);
-  assert.equal(ignores_any_address(source, ["https://ignored.test/frame", undefined]), true);
-  assert.equal(ignores_any_address(source, ["https://embed.test/video", "https://other.test/"]), false);
-  assert.equal(ignores_any_address(undefined, ["https://ignored.test/page"]), false);
-  assert.equal(ignores_any_address("(", ["https://ignored.test/page"]), false);
+  const source = match_regex_source(["https://ignored.test/*"]);
+  assert.equal(matches_any_address(source, ["https://embed.test/video", "https://ignored.test/page"]), true);
+  assert.equal(matches_any_address(source, ["https://ignored.test/frame", undefined]), true);
+  assert.equal(matches_any_address(source, ["https://embed.test/video", "https://other.test/"]), false);
+  assert.equal(matches_any_address(undefined, ["https://ignored.test/page"]), false);
+  assert.equal(matches_any_address("(", ["https://ignored.test/page"]), false);
 });
 
 test("a keymap stored in the old format is treated as absent until the background recompiles it", () => {
-  const old_format = { format_version: 1, modes: {}, ignore_sites: ["*://*/*"], mode_indicator: "always", which_key_delay_ms: 0 } as unknown as CompiledKeymap;
+  const old_format = { format_version: 3, modes: {}, ignore_regex: "^https://a\\.test/$", mode_indicator: "always", which_key_delay_ms: 0 } as unknown as CompiledKeymap;
   assert.equal(current_keymap(old_format), undefined);
   assert.equal(current_keymap(undefined), undefined);
-  const compiled = compile_keymap({}, { ignore_sites: ["https://a.test/*"] }, () => undefined as never).compiled;
+  const compiled = compile_keymap({}, { site_rules: [{ site: "https://a.test/*" }] }, () => undefined as never).compiled;
   assert.equal(current_keymap(compiled), compiled);
   assert.equal(compiled.format_version, COMPILED_KEYMAP_VERSION);
-  assert.ok(new RegExp(compiled.ignore_regex ?? "").test("https://a.test/z"));
+  assert.ok(new RegExp(compiled.site_rules?.[0]?.regex ?? "").test("https://a.test/z"));
 });
 
 test("editable kinds", () => {

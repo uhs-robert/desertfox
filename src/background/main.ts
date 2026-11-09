@@ -108,7 +108,6 @@ const toolbar = create_toolbar({
   republish,
   tabs: async () => (await browser.tabs.query({})).flatMap((tab) => (tab.id === undefined ? [] : [{ tab_id: tab.id, url: tab.url }])),
   set_tab_mode: (tab_id, mode) => send_to_tab(tab_id, { type: "set_mode", mode }),
-  ignore_regex: async () => ((await browser.storage.local.get(COMPILED_KEYMAP_STORAGE_KEY))[COMPILED_KEYMAP_STORAGE_KEY] as CompiledKeymap | undefined)?.ignore_regex,
 });
 void toolbar.sync_look();
 const settings_messages = create_settings_messages({ change_edits, read_layers: load_effective_config });
@@ -123,7 +122,7 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
   }
   if (page_request?.type === "toolbar_set_disabled" || page_request?.type === "toolbar_site" || page_request?.type === "toolbar_reload_config") {
     if (!is_extension_page(sender, browser.runtime.id, browser.runtime.getURL(""))) return Promise.resolve({ ok: false, message: "only the extension's own pages may use the toolbar" });
-    return answer_toolbar_request(page_request, { toolbar, change_edits, read_file_ignore_sites: async () => (await load_effective_config()).config_settings.ignore_sites ?? [], reload_config });
+    return answer_toolbar_request(page_request, { toolbar, change_edits, read_file_site_rules: async () => (await load_effective_config()).config_settings.site_rules ?? [], reload_config });
   }
   if (request?.type === "mode_changed" && sender.tab?.id !== undefined) {
     const tab_id = sender.tab.id;

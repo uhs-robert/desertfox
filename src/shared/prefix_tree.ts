@@ -9,7 +9,7 @@ import type { KeymapMode } from "./keymap.ts";
 
 export const COMPILED_KEYMAP_STORAGE_KEY = "desertfox_compiled_keymap";
 
-export const COMPILED_KEYMAP_VERSION = 3;
+export const COMPILED_KEYMAP_VERSION = 4;
 
 // One step of a binding. The side that runs it and the count rule are resolved at compile time.
 export type LeafStep = {
@@ -40,13 +40,16 @@ export type TreeBranch = {
 
 export type TreeNode = TreeLeaf | TreeBranch;
 
+// `normal` is the normal tree with the rule's keys pruned, built in the background so the content script only tests the regex and swaps the tree. `all_off` has no tree: every normal key goes to the page.
+export type SiteRule = { regex: string } & ({ normal: TreeBranch } | { all_off: true });
+
 export type CompiledKeymap = {
   format_version: typeof COMPILED_KEYMAP_VERSION;
   // Root branch per mode. A mode without bindings is absent.
   modes: Partial<Record<KeymapMode, TreeBranch>>;
   // Settings the content script needs before it can handle a key.
-  // One regex source tested against the page URL. Absent when no site is ignored.
-  ignore_regex?: string;
+  // In list order. The first rule whose regex fits the page or the tab wins. Absent when no rule exists.
+  site_rules?: SiteRule[];
   mode_indicator: ModeIndicator;
   which_key_delay_ms: number;
   // A tree stored before this setting has none, and the panel keeps square corners.

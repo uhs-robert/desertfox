@@ -434,8 +434,8 @@ test("the build warnings of a reload survive a restart", async () => {
 test("a saved value TOML cannot hold only warns, and the edit stays", async () => {
   const warned: string[] = [];
   const mirror = create_autoconfig_mirror({ write_autoconfig: async () => undefined, warn: (message) => void warned.push(message) });
-  assert.doesNotThrow(() => mirror.mirror({ ignore_sites: [, "a.com"] as unknown as string[] }));
-  await mirror.mirror({ ignore_sites: [, "a.com"] as unknown as string[] });
+  assert.doesNotThrow(() => mirror.mirror({ next_patterns: [, "a.com"] as unknown as string[] }));
+  await mirror.mirror({ next_patterns: [, "a.com"] as unknown as string[] });
   assert.equal(warned.length, 1);
 });
 

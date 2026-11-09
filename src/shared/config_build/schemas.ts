@@ -84,7 +84,7 @@ function value_schema(row: SettingRow): Schema {
       return { type: "object", properties: Object.fromEntries(row.keys.map((key) => [key, non_empty_text])), required: [...row.keys], additionalProperties: false };
     case "table_list": {
       // A JSON Schema `pattern` has no case flag, so it refuses an upper-case scheme that the check takes.
-      const field_schema = (value: "text" | "web_url"): Schema => (value === "web_url" ? { type: "string", pattern: "^https?://\\S+$" } : non_empty_text);
+      const field_schema = (value: "text" | "web_url" | "keys"): Schema => (value === "web_url" ? { type: "string", pattern: "^https?://\\S+$" } : non_empty_text);
       return {
         type: "array",
         items: {
@@ -92,6 +92,8 @@ function value_schema(row: SettingRow): Schema {
           properties: Object.fromEntries(Object.entries(row.fields).map(([field, rule]) => [field, field_schema(rule.value)])),
           required: Object.entries(row.fields).filter(([, rule]) => !rule.optional).map(([field]) => field),
           additionalProperties: false,
+          // Exactly two exclusive fields: `not` with `required` refuses a table that sets both.
+          ...(row.exclusive?.length === 2 ? { not: { required: [...row.exclusive] } } : {}),
         },
       };
     }

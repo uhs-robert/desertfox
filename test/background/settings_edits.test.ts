@@ -15,8 +15,8 @@ test("an edit wins over the config, a temp edit wins over a saved one, and the r
 });
 
 test("a stored edit layer keeps only what the schema accepts", () => {
-  const stored = { which_key_delay_ms: 5, light_intensity: 9, nope: 1, search_prefixes: { here: "s", tab: "S" }, ignore_sites: ["a.com"] };
-  assert.deepEqual(checked_edit_layer(stored), { which_key_delay_ms: 5, ignore_sites: ["a.com"] });
+  const stored = { which_key_delay_ms: 5, light_intensity: 9, nope: 1, search_prefixes: { here: "s", tab: "S" }, next_patterns: ["a.com"] };
+  assert.deepEqual(checked_edit_layer(stored), { which_key_delay_ms: 5, next_patterns: ["a.com"] });
   assert.deepEqual(checked_edit_layer(undefined), {});
   assert.deepEqual(checked_edit_layer([1]), {});
 });
@@ -245,4 +245,10 @@ test("a failed write of one layer puts both layers back", async () => {
   assert.deepEqual(session[TEMP_SETTINGS_STORAGE_KEY], { newtab_date: false });
   assert.deepEqual(local[SAVED_SETTINGS_STORAGE_KEY], {});
   assert.deepEqual((await startup.get_config()).settings, { newtab_date: false });
+});
+
+test("a saved site rule list survives the load, since the popup saves it", () => {
+  const rules = [{ site: "*://*.a.test/*" }, { site: "*://b.test/*", pass: "j" }];
+  assert.deepEqual(checked_edit_layer({ site_rules: rules }), { site_rules: rules });
+  assert.deepEqual(checked_edit_layer({ site_rules: [{ site: "*://b.test/*", pass: "j", only: "k" }] }), {});
 });

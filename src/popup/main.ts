@@ -12,7 +12,6 @@ import { build_rows, disabled_after_click, HOME_HASH, SETTINGS_HASH, WARNINGS_HA
 import type { PopupRow } from "./model.ts";
 
 const root = document.getElementById("desertfox-popup")!;
-let site_changed = false;
 let notice = "";
 
 const ask = (request: ToolbarRequest): Promise<ToolbarAnswer> => browser.runtime.sendMessage(request) as Promise<ToolbarAnswer>;
@@ -24,9 +23,9 @@ async function active_tab(): Promise<browser.tabs.Tab | undefined> {
 async function read_site(url: string | undefined): Promise<SiteState> {
   const { config, edits, config_settings } = await load_effective_config();
   return site_state(url, {
-    file: config_settings.ignore_sites ?? [],
-    saved: edits.saved.ignore_sites,
-    effective: effective_settings(config.settings).ignore_sites,
+    file: config_settings.site_rules ?? [],
+    saved: edits.saved.site_rules,
+    effective: effective_settings(config.settings).site_rules,
   });
 }
 
@@ -45,13 +44,10 @@ async function act(row: PopupRow): Promise<void> {
   else if (row.id === "settings") return open_help_page(SETTINGS_HASH);
   else if (row.id === "home") return open_help_page(HOME_HASH);
   else if (row.id === "warnings") return open_help_page(WARNINGS_HASH);
-  else if (row.id === "reload_tab") {
-    if (tab?.id !== undefined) await browser.tabs.reload(tab.id);
-    return window.close();
-  } else if (row.id === "site") {
+  else if (row.id === "rule") return open_help_page(SETTINGS_HASH);
+  else if (row.id === "site") {
     const answer = await ask({ type: "toolbar_site", url: tab?.url ?? "", action: row.site_action ?? "disable" });
     notice = answer.message;
-    site_changed = site_changed || answer.ok;
   } else if (row.id === "reload_config") notice = (await ask({ type: "toolbar_reload_config" })).message;
   await draw();
 }
@@ -95,7 +91,6 @@ async function draw(): Promise<void> {
     warning_count: ((stored[WARNINGS_STORAGE_KEY] as string[] | undefined) ?? []).length,
     version: browser.runtime.getManifest().version,
     has_native_host: host,
-    site_changed,
   });
   const elements = rows.map(row_element);
   if (notice !== "") {

@@ -1,10 +1,11 @@
 // The on/off switch behind the toolbar popup and its shortcut. Browser access comes in as arguments, so tests run without a browser.
 
 import type { MergedConfig, SettingEdits } from "../shared/config.ts";
-import { matches_pattern, ignores_any_address } from "../shared/match_pattern.ts";
+import { matches_pattern } from "../shared/match_pattern.ts";
 import { COMPILED_KEYMAP_VERSION } from "../shared/prefix_tree.ts";
 import type { ToolbarAnswer, ToolbarRequest } from "../shared/messages.ts";
 import type { CompiledKeymap } from "../shared/prefix_tree.ts";
+import type { Settings } from "../shared/config.ts";
 
 // The manifest `commands` entry that toggles. It is not a slot: no keymap chord reaches it, and it runs while DesertFox is off.
 export const TOGGLE_COMMAND = "toggle_enabled";
@@ -29,8 +30,7 @@ export type ToolbarDeps = {
   republish: () => Promise<void>;
   tabs: () => Promise<{ tab_id: number; url: string | undefined }[]>;
   // A tab without a content script rejects. The caller treats that as nothing to do.
-  set_tab_mode: (tab_id: number, mode: "normal" | "ignore") => Promise<unknown>;
-  ignore_regex: () => Promise<string | undefined>;
+  set_tab_mode: (tab_id: number, mode: "normal") => Promise<unknown>;
 };
 
 export function create_toolbar(deps: ToolbarDeps) {
@@ -48,17 +48,8 @@ export function create_toolbar(deps: ToolbarDeps) {
     await Promise.all(tabs.map((tab) => deps.set_tab_mode(tab.tab_id, "normal").catch(() => undefined)));
   }
 
-  // The content script decides ignore mode once per page, so the first turn off drops it. Turning on puts it back where the setting says.
-  async function restore_ignored(): Promise<void> {
-    const source = await deps.ignore_regex();
-    if (source === undefined) return;
-    const tabs = await deps.tabs();
-    await Promise.all(tabs.filter((tab) => ignores_any_address(source, [tab.url])).map((tab) => deps.set_tab_mode(tab.tab_id, "ignore").catch(() => undefined)));
-  }
-
   async function apply(disabled: boolean): Promise<void> {
     const before = await deps.read_disabled();
-    // A repeat request must not send the ignored sites back to ignore mode.
     if (before === disabled) return;
     await deps.write_disabled(disabled);
     try {
@@ -69,8 +60,8 @@ export function create_toolbar(deps: ToolbarDeps) {
       throw error;
     }
     await deps.set_look(toolbar_look(disabled));
+    // Turning on needs no step: the content script sees the stored tree change and enters ignore mode on an all-off rule.
     if (disabled) await leave_modes();
-    else await restore_ignored();
   }
 
   return {
@@ -95,42 +86,59 @@ export function site_pattern(url: string | undefined): string | undefined {
   return bare === "" ? undefined : `*://*.${bare}/*`;
 }
 
-// `config` is a pattern in the config file, so only editing the file undoes it.
-export type SiteState = { kind: "unavailable" } | { kind: "enabled" | "disabled" | "config"; pattern: string };
+export type SiteRuleRow = Settings["site_rules"][number];
 
-export type IgnoreLayers = {
-  // The config file's own list.
-  file: readonly string[];
+// `disabled` is the all-off row this popup wrote, which a click can remove. `config` is a rule from the config file or one with keys, so only editing the settings removes it.
+// `rule` words what the matching rule does to this page, and is absent when no rule matches.
+export type SiteState = { kind: "unavailable" } | { kind: "enabled"; pattern: string } | { kind: "disabled" | "config"; pattern: string; rule: string };
+
+export type SiteRuleLayers = {
+  // The config file's own rules.
+  file: readonly SiteRuleRow[];
   // The saved edit, absent when none was saved.
-  saved: readonly string[] | undefined;
-  // The list in force, edits included.
-  effective: readonly string[];
+  saved: readonly SiteRuleRow[] | undefined;
+  // The rules in force, edits included.
+  effective: readonly SiteRuleRow[];
 };
 
-export function site_state(url: string | undefined, layers: IgnoreLayers): SiteState {
+const is_all_off = (rule: SiteRuleRow): boolean => rule.pass === undefined && rule.only === undefined;
+const key_count = (keys: string): number => keys.split(/\s+/).filter((word) => word !== "").length;
+const plural = (count: number): string => `${count} ${count === 1 ? "key" : "keys"}`;
+
+export function describe_rule(rule: SiteRuleRow): string {
+  if (rule.pass !== undefined) return `pass ${plural(key_count(rule.pass))}`;
+  if (rule.only !== undefined) return `only ${plural(key_count(rule.only))}`;
+  return "all off";
+}
+
+export function site_state(url: string | undefined, layers: SiteRuleLayers): SiteState {
   const pattern = site_pattern(url);
   if (pattern === undefined || url === undefined) return { kind: "unavailable" };
-  const file_matches = layers.file.some((candidate) => matches_pattern(candidate, url));
-  if (layers.saved?.includes(pattern) && !file_matches) return { kind: "disabled", pattern };
-  return { kind: layers.effective.some((candidate) => matches_pattern(candidate, url)) ? "config" : "enabled", pattern };
+  const winner = layers.effective.find((rule) => matches_pattern(rule.site, url));
+  if (winner === undefined) return { kind: "enabled", pattern };
+  const file_matches = layers.file.some((rule) => matches_pattern(rule.site, url));
+  const rule = describe_rule(winner);
+  if (is_all_off(winner) && winner.site === pattern && layers.saved?.some((saved) => is_all_off(saved) && saved.site === pattern) && !file_matches) return { kind: "disabled", pattern, rule };
+  return { kind: "config", pattern, rule };
 }
 
 // The edits after a site is disabled or enabled, or undefined when nothing changes. The saved list starts as the config file's list,
-// so the edit keeps the file's patterns.
-export function plan_site_edit(current: SettingEdits, file_patterns: readonly string[], pattern: string, action: "disable" | "enable"): SettingEdits | undefined {
+// so the edit keeps the file's rules. Disabling appends an all-off row, and enabling removes the all-off rows for the pattern.
+export function plan_site_edit(current: SettingEdits, file_rules: readonly SiteRuleRow[], pattern: string, action: "disable" | "enable"): SettingEdits | undefined {
   // Never the list in force: that would copy a `:set --temp` into the saved layer.
-  const base = current.saved.ignore_sites ?? file_patterns;
-  const listed = base.includes(pattern);
+  const base = current.saved.site_rules ?? file_rules;
+  const is_row = (rule: SiteRuleRow) => is_all_off(rule) && rule.site === pattern;
+  const listed = base.some(is_row);
   if (action === "disable" ? listed : !listed) return undefined;
-  const next = action === "disable" ? [...base, pattern] : base.filter((candidate) => candidate !== pattern);
-  return { ...current, saved: { ...current.saved, ignore_sites: next } };
+  const next = action === "disable" ? [...base, { site: pattern }] : base.filter((rule) => !is_row(rule));
+  return { ...current, saved: { ...current.saved, site_rules: next } };
 }
 
 export type ToolbarMessageDeps = {
   toolbar: Pick<ReturnType<typeof create_toolbar>, "set_disabled">;
   change_edits: (decide: (current: SettingEdits, config: MergedConfig) => SettingEdits | undefined) => Promise<void>;
-  // The config file's own `ignore_sites`.
-  read_file_ignore_sites: () => Promise<readonly string[]>;
+  // The config file's own `site_rules`.
+  read_file_site_rules: () => Promise<readonly SiteRuleRow[]>;
   reload_config: () => Promise<{ config_dir: string; warnings: number }>;
 };
 
@@ -148,8 +156,8 @@ export async function answer_toolbar_request(request: ToolbarRequest, deps: Tool
       const pattern = site_pattern(typeof request.url === "string" ? request.url : undefined);
       if (pattern === undefined) return { ok: false, message: "this page has no site to change" };
       if (request.action !== "disable" && request.action !== "enable") return { ok: false, message: "action must be disable or enable" };
-      const file_patterns = await deps.read_file_ignore_sites();
-      await deps.change_edits((current) => plan_site_edit(current, file_patterns, pattern, request.action));
+      const file_rules = await deps.read_file_site_rules();
+      await deps.change_edits((current) => plan_site_edit(current, file_rules, pattern, request.action));
       return { ok: true, message: request.action === "disable" ? "Disabled on this site" : "Enabled on this site" };
     }
     if (request.type === "toolbar_reload_config") {

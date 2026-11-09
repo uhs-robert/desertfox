@@ -24,8 +24,9 @@ export type SettingRow = (
   | { kind: "enum_list"; values: readonly string[]; default: readonly string[] }
   // A table of exactly these keys, each a non-empty string.
   | { kind: "text_table"; keys: readonly string[]; default: Readonly<Record<string, string>> }
-  // A list of tables with these fields. A `web_url` field takes an http or https URL.
-  | { kind: "table_list"; fields: Readonly<Record<string, { value: "text" | "web_url"; optional?: true }>>; default: readonly [] }
+  // A list of tables with these fields. A `web_url` field takes an http or https URL. A `keys` field takes key sequences in keymap notation, split by spaces.
+  // The fields in `exclusive` refuse to appear together in one table.
+  | { kind: "table_list"; fields: Readonly<Record<string, { value: "text" | "web_url" | "keys"; optional?: true }>>; exclusive?: readonly string[]; default: readonly [] }
   // A string whose check and expectation sit in `settings_schema.ts`, with the editor schema fragment here.
   | { kind: "custom"; schema: Readonly<Record<string, unknown>>; default: string }
 ) & {
@@ -37,7 +38,9 @@ export const SETTINGS_TABLE = {
   which_key_delay_ms: { kind: "number", min: 0, unit: "milliseconds", default: 300 },
   which_key_border: { kind: "enum", values: ["square", "round", "chamfer"], default: "square" },
   hint_letters: { kind: "custom", schema: { type: "string", minLength: 2 }, default: "asdfghjkl" },
-  ignore_sites: { kind: "text_list", expectation: "a list of match pattern strings", default: [] },
+  // The first row whose `site` matches the page wins. `pass` lists keys that go to the page, `only` lists the only keys that stay on, and a row with neither turns every normal-mode key off.
+  // Settable, though `:set` has no typed form for a list of tables: the popup saves rows, and a saved edit of an unsettable setting is dropped when the edits load.
+  site_rules: { kind: "table_list", fields: { site: { value: "text" }, pass: { value: "keys", optional: true }, only: { value: "keys", optional: true } }, exclusive: ["pass", "only"], default: [] },
   // Matched as lowercase text of a link or button, in order: an earlier entry wins. A 1 or 2 character entry must be the whole text.
   // "back" stays out of the prev list: it would match a "Back to top" footer link on a page with no previous page.
   next_patterns: { kind: "text_list", expectation: "a list of link texts", default: ["next", "more", "newer", ">", "\u203a", "\u2192", "\u00bb", "\u226b", ">>"] },
@@ -77,7 +80,7 @@ export type SettingName = keyof Table;
 
 type Simplify<T> = { [K in keyof T]: T[K] };
 
-type FieldValue<F> = F extends { value: "text" | "web_url" } ? string : never;
+type FieldValue<F> = F extends { value: "text" | "web_url" | "keys" } ? string : never;
 type TableOf<Fields> = Simplify<
   { -readonly [K in keyof Fields as Fields[K] extends { optional: true } ? never : K]: FieldValue<Fields[K]> } & {
     -readonly [K in keyof Fields as Fields[K] extends { optional: true } ? K : never]?: FieldValue<Fields[K]>;
