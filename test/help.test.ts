@@ -220,3 +220,10 @@ test("a conditional default reads as the value and its condition", () => {
   const model = build_help_model(build_commands_file(registry).commands, undefined, []);
   assert.equal(model.groups[0]!.commands[0]!.params[0]!.default, '"" when where is tab, background or window');
 });
+
+test("the help home and new tab pages load page.js by tag, because executeScript is refused there", () => {
+  for (const file of ["../src/help/home.html", "../src/newtab/newtab.html"]) {
+    const html = readFileSync(new URL(file, import.meta.url), "utf8");
+    assert.ok(html.indexOf('<script src="page.js"></script>') > html.indexOf('<script src="content.js"></script>'), file);
+  }
+});
