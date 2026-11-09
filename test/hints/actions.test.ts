@@ -189,17 +189,18 @@ test("copy falls back to the text for an element with no address", () => {
 
 test("copy_html copies the whole outer HTML and names it in the toast", () => {
   const whats: (string | undefined)[] = [];
-  const element = { localName: "div", outerHTML: "<div id=\"a\"><b>x</b></div>" };
-  perform("copy_html", element as never, { copy: (_text: string, what?: string) => void whats.push(what) } as never);
-  const page = fixture("div", { outerHTML: element.outerHTML });
-  page.run("copy_html");
-  assert.deepEqual(page.copied, [element.outerHTML]);
+  const outer_html = "<div id=\"a\"><b>x</b></div>";
+  const element = { localName: "div", outerHTML: outer_html };
+  const copied: string[] = [];
+  perform("copy_html", element as never, { copy: (text: string, what?: string) => void (copied.push(text), whats.push(what)) } as never);
+  assert.deepEqual(copied, [outer_html]);
   assert.deepEqual(whats, ["HTML"]);
 });
 
-test("copy_selector copies a selector that is unique in the root of the element", () => {
+// Uniqueness itself is covered in selector_of.test.ts. This only checks that the action counts matches in the root of the element and copies the result.
+test("copy_selector counts matches in the root of the element", () => {
   const root = { querySelectorAll: (selector: string) => ({ length: selector === "#main" ? 1 : 2 }) };
-  const page = fixture("main", { id: "main", classList: [], parentElement: null, children: [], getRootNode: () => root });
+  const page = fixture("main", { id: "main", classList: [], parentElement: null, parentNode: null, getRootNode: () => root });
   page.run("copy_selector");
   assert.deepEqual(page.copied, ["#main"]);
 });
