@@ -5,7 +5,7 @@ import type { CommandMeta } from "../shared/command.ts";
 import { build_config } from "../shared/config_build/build_config.ts";
 import { ConfigErrors } from "../shared/config_build/errors.ts";
 import { parse_snippet } from "../shared/config_build/snippet.ts";
-import { KNOWN_TOP_LEVEL, type ConfigFiles } from "../shared/config_build/source_files.ts";
+import { AUTOCONFIG_FILE, KNOWN_TOP_LEVEL, type ConfigFiles } from "../shared/config_build/source_files.ts";
 import type { CommitConfigImport, ConfigImportAnswer, ConfigImportPreview, ImportSource, PreviewConfigImport, SnippetPreview } from "../shared/messages.ts";
 import { read_folder, read_zip, ZipError } from "../shared/zip.ts";
 import { ConfigRefusal, KEPT_CURRENT } from "./config_reload.ts";
@@ -49,8 +49,9 @@ export async function read_import_source(source: unknown): Promise<ConfigFiles> 
 
 const is_snippet_path = (path: string) => path.startsWith(SNIPPETS_PREFIX);
 
+// `autoconfig.toml` is left out: the build never reads it, so alone it would replace the config with the defaults.
 function split_files(files: ConfigFiles): { config_files: ConfigFiles; snippet_files: ConfigFiles } {
-  const entries = Object.entries(files);
+  const entries = Object.entries(files).filter(([path]) => path !== AUTOCONFIG_FILE);
   return {
     config_files: Object.fromEntries(entries.filter(([path]) => !is_snippet_path(path))),
     snippet_files: Object.fromEntries(entries.filter(([path]) => is_snippet_path(path))),
