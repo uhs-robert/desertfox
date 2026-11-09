@@ -17,4 +17,4 @@ The content script. It runs at `document_start` in every frame. A frame that can
 - `ui_proxy.ts`, `ui/main.ts`: `show_toast` and `show_mode_label` as the rest of the script calls them. They ask the `ui` bundle (`ui.js`), which holds the toast and the badge, and a call made before it loads waits and runs after. Neither holds keys. The help page loads `ui.js` by script tag, because `executeScript` is refused there.
 - `mode_label.ts`, `mode_indicator.ts`: the badge text (pure) and the badge (in the `ui` bundle), top frame only. It follows the `mode_indicator` setting and sits 8 px above the bottom edge. Its colors are the theme tokens `--desertfox-mode-<mode>` and `--desertfox-bg-core`, picked by a `data-mode` attribute, so the light variant follows the theme sheet that `surface.ts` adds.
 
-The key test reads `data-desertfox-tree-read-ms` and `data-desertfox-tree-ready-at-ms` on the document element.
+`data-desertfox-tree-read-ms` on the document element is the one test hook allowed in `src/`. The key test reads it as the signal that the content script is ready.
