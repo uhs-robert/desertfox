@@ -117,7 +117,7 @@ test("the default modifiers give the owner's keys and no stacked or refused ones
 test("the yank keys are eight plain leaves, each with a fixed action and filter", () => {
   const { compiled, warnings } = compile(DEFAULT_KEYMAP);
   assert.deepEqual(warnings, []);
-  const expected = { l: ["copy", "links"], i: ["copy_image", "images"], I: ["copy", "images"], m: ["copy", "media"], f: ["copy", "frames"], t: ["copy_text", "all"], c: ["copy_selector", "all"], h: ["copy_html", "all"] };
+  const expected = { l: ["copy", "links"], i: ["copy_image", "images"], I: ["copy", "images"], m: ["copy", "media"], f: ["copy", "frames"], t: ["copy_text", "all"], c: ["copy_selector", "every"], h: ["copy_html", "every"] };
   for (const [key, [action, filter]] of Object.entries(expected)) {
     assert.equal(node_at(compiled, ";", "y", key)?.kind, "leaf", key);
     assert.deepEqual([args_at(compiled, ";", "y", key)?.action, args_at(compiled, ";", "y", key)?.filter], [action, filter], key);

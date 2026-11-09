@@ -22,7 +22,7 @@ A note "(prompts)" means the binding sets a `prompt` for a param, so the command
 
 <!-- BEGIN generated -->
 
-bound: 296 (normal 161, hint 2, cmdline 18, caret 35, visual 37, visual_line 38, insert 1, ignore 1, browser 3) | later: 6 | dropped: 8
+bound: 297 (normal 162, hint 2, cmdline 18, caret 35, visual 37, visual_line 38, insert 1, ignore 1, browser 3) | later: 6 | dropped: 8
 
 ### normal
 
@@ -162,6 +162,7 @@ bound: 296 (normal 161, hint 2, cmdline 18, caret 35, visual 37, visual_line 38,
 | `;v` | bound | `hint --caret --prose` | Start caret mode at text |  |
 | `;V` | bound | `hint --visual --prose` | Start visual mode at text |  |
 | `;#` | bound | `cmdline.open --text='heading '` | Jump to heading |  |
+| `;u` | bound | `cmdline.open --text='hint --custom --selector='` | Hint a CSS selector |  |
 | `;;` | bound | `cmdline.open --text='hint '` | Open the command line with hint |  |
 | `;B` | bound | `hint --buttons` | Click button |  |
 | `;a` | bound | `hint --all` | Click any element |  |
@@ -176,8 +177,8 @@ bound: 296 (normal 161, hint 2, cmdline 18, caret 35, visual 37, visual_line 38,
 | `;ym` | bound | `hint --copy --media` | Copy media URL |  |
 | `;yf` | bound | `hint --copy --frames` | Copy frame URL |  |
 | `;yt` | bound | `hint --copy-text --all` | Copy text |  |
-| `;yc` | bound | `hint --copy-selector --all` | Copy CSS selector |  |
-| `;yh` | bound | `hint --copy-html --all` | Copy outer HTML |  |
+| `;yc` | bound | `hint --copy-selector --every` | Copy CSS selector |  |
+| `;yh` | bound | `hint --copy-html --every` | Copy outer HTML |  |
 | `;f` | bound | `hint --frames` | Focus frame |  |
 | `;m` | bound | `hint --media` | Play or pause media |  |
 | `:` | bound | `cmdline.open` | Command line |  |

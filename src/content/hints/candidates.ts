@@ -7,7 +7,7 @@ import { element_address, is_image_element, takes_typing } from "./actions.ts";
 import { keep_visible, scroll_clips_of } from "./visible.ts";
 import type { PageProbe, Rect } from "./visible.ts";
 
-export type HintFilter = "all" | "clickable" | "buttons" | "inputs" | "links" | "prose" | "scrollable" | "media" | "images" | "frames" | "custom";
+export type HintFilter = "all" | "every" | "clickable" | "buttons" | "inputs" | "links" | "prose" | "scrollable" | "media" | "images" | "frames" | "custom";
 
 const TEXT_FIELDS = 'input:not([type=hidden]):not([disabled]), textarea:not([disabled]), select:not([disabled]), [contenteditable=""], [contenteditable="true"]';
 const LINKS = "a[href]";
@@ -56,8 +56,19 @@ const is_own_layer_frame = (element: Element): boolean => (element.getRootNode?.
 // A frame of the page that is big enough to hold something. A frame from another site gets its label too: the pick focuses it from the outside.
 export const is_pickable_frame = (element: Element): boolean => image_has_size(element) && !is_own_layer_frame(element);
 
+// A link, button or label is a target in itself, so it keeps its hint when it wraps one child.
+const KEEPS_ONE_CHILD = "a, button, label, [role=button]";
+
+// A box with no size or a pass-through wrapper adds nothing the child does not. The child count runs first because it is cheaper than a layout read.
+export const is_every_target = (element: Element): boolean => {
+  if (element.children.length === 1 && !has_own_text(element) && !element.matches(KEEPS_ONE_CHILD)) return false;
+  const box = element.getBoundingClientRect();
+  return box.width > 0 && box.height > 0;
+};
+
 const QUERIES: Record<Exclude<HintFilter, "custom">, Query> = {
   all: { selector: ALL },
+  every: { selector: "*", test: is_every_target },
   clickable: { selector: CLICKABLE },
   buttons: { selector: BUTTONS },
   inputs: { selector: TEXT_FIELDS },
