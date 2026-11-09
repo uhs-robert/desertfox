@@ -9,16 +9,24 @@ import { ConfigRefusal } from "./config_reload.ts";
 
 const SNIPPETS_PREFIX = "snippets/";
 const SAVED_EDITS_FILE = "settings.toml";
-// Sorts after any other file of `settings.d`, so the saved edits win over it, as they do in the browser.
-const SAVED_EDITS_FALLBACK_FILE = "settings.d/zz-saved-edits.toml";
+const SETTINGS_DIR = "settings.d/";
+const SAVED_EDITS_NAME = "zz-saved-edits.toml";
 
 const is_snippet_path = (path: string) => path.startsWith(SNIPPETS_PREFIX);
 
-// The saved edits go in `settings.toml`. A config that already has one keeps it, and the edits go in a later file of `settings.d`.
+// A later `settings.d` file wins, as the saved edits do in the browser. So the edits go in `settings.d`, in a file that sorts after every file there and overwrites none, unless the config has no settings file at all. Then `settings.toml` holds them.
+function saved_edits_path(config_files: ConfigFiles): string {
+  const taken = Object.keys(config_files).filter((path) => path.startsWith(SETTINGS_DIR)).map((path) => path.slice(SETTINGS_DIR.length));
+  if (taken.length === 0 && !Object.hasOwn(config_files, SAVED_EDITS_FILE)) return SAVED_EDITS_FILE;
+  const last = taken.reduce((a, b) => (a > b ? a : b), "");
+  // Past the last name, the new name is longer than it and so sorts after it, and after every other name.
+  return `${SETTINGS_DIR}${last < SAVED_EDITS_NAME ? SAVED_EDITS_NAME : `${last}-${SAVED_EDITS_NAME}`}`;
+}
+
 export function export_files(files: ConfigFiles, saved: SettingOverrides): { config_files: ConfigFiles; snippet_files: ConfigFiles } {
   const entries = Object.entries(files).filter(([path]) => path !== AUTOCONFIG_FILE);
   const config_files: ConfigFiles = Object.fromEntries(entries.filter(([path]) => !is_snippet_path(path)));
-  if (Object.keys(saved).length > 0) config_files[Object.hasOwn(config_files, SAVED_EDITS_FILE) ? SAVED_EDITS_FALLBACK_FILE : SAVED_EDITS_FILE] = stringify(saved);
+  if (Object.keys(saved).length > 0) config_files[saved_edits_path(config_files)] = stringify(saved);
   return { config_files, snippet_files: Object.fromEntries(entries.filter(([path]) => is_snippet_path(path))) };
 }
 
@@ -47,7 +55,7 @@ export async function answer_config_transfer(request: ExportConfig | ListSnippet
     if (request.type === "export_config") return { ok: true, ...export_files(await deps.read_files(), await deps.read_saved()) };
     if (typeof request.path !== "string") return { ok: false, message: "The removal names no snippet." };
     const { warnings } = await deps.remove(request.path);
-    return { ok: true, message: `Removed ${request.path}${warnings === 0 ? "" : `, with ${warnings} warning(s) on the Help page`}` };
+    return { ok: true, message: `Removed ${request.path}${warnings === 0 ? "" : `, with ${warnings} warning(s) on the Help page`}. A config.reload brings it back while the file stays in the config folder.` };
   } catch (error) {
     return { ok: false, message: error instanceof ConfigRefusal ? error.message : message_of(error) };
   }

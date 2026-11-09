@@ -67,6 +67,8 @@ export function can_commit(review: Review): boolean {
 
 export function create_transfer_session(deps: TransferDeps) {
   const state: TransferState = { busy: false, snippets: [] };
+  // A new pick or a cancel supersedes any pick still waiting on its preview, so a late answer cannot replace the newer review or revive a cancelled one.
+  let selection = 0;
   const set = (change: Partial<TransferState>) => {
     Object.assign(state, change);
     deps.on_change();
@@ -81,13 +83,17 @@ export function create_transfer_session(deps: TransferDeps) {
 
   // Reads the pick and asks for the preview. Nothing is stored, and the review replaces an earlier one.
   async function choose(read: () => Promise<ImportSource>): Promise<void> {
+    const mine = ++selection;
     set({ busy: true, review: undefined });
     try {
       const source = await read();
+      if (mine !== selection) return;
       const preview = (await deps.send({ type: "preview_config_import", source })) as ConfigImportPreview;
+      if (mine !== selection) return;
       if (preview.ok) set({ busy: false, message: undefined, review: { source, preview, accepted: new Set() } });
       else set({ busy: false, message: { ok: false, text: preview.message } });
     } catch (error) {
+      if (mine !== selection) return;
       set({ busy: false, message: { ok: false, text: error instanceof ZipError ? `Config not imported, the current one stays. The import is refused: ${error.message}.` : `Config not imported, the current one stays. ${message_of(error)}` } });
     }
   }
@@ -115,7 +121,8 @@ export function create_transfer_session(deps: TransferDeps) {
   }
 
   function cancel(): void {
-    set({ review: undefined, message: { ok: true, text: "Import cancelled. Nothing was stored." } });
+    selection++;
+    set({ busy: false, review: undefined, message: { ok: true, text: "Import cancelled. Nothing was stored." } });
   }
 
   async function remove(path: string): Promise<void> {

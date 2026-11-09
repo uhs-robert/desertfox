@@ -4,6 +4,8 @@ import "../../src/background/command_modules.ts";
 import { answer_config_transfer, export_files, installed_snippets } from "../../src/background/config_transfer.ts";
 import { FILES_SOURCE_STORAGE_KEY } from "../../src/background/storage_keys.ts";
 import { load_files_source } from "../../src/background/config_load.ts";
+import { build_config, commands_of_registry } from "../../src/shared/config_build/build_config.ts";
+import { registry } from "../../src/shared/registry/builtin.ts";
 import { install_fake_browser, type Files } from "./config_fake_browser.ts";
 
 type Startup = typeof import("../../src/background/startup.ts");
@@ -54,4 +56,26 @@ test("removing a snippet rebuilds without it, and a key that binds it refuses th
   assert.equal(refused.ok, false);
   assert.equal(JSON.stringify((await load_files_source()).files), before);
   assert.equal(startup.snippets.is_snippet("user.other"), true);
+});
+
+// The exported config files, built, give the settings the source gave with the saved edits on top.
+const settings_in_force = (files: Files, saved: Record<string, unknown>) => {
+  const commands = commands_of_registry(registry);
+  return { ...build_config(files, commands, [], { dir_label: "x" }).settings, ...saved };
+};
+
+test("the exported config builds to the settings in force, whatever settings files the source has", () => {
+  const saved = { hint_letters: "ab", newtab_date: false };
+  const sources: Files[] = [
+    {},
+    { "settings.toml": 'hint_letters = "xy"\nnewtab_recent_tabs = true\n' },
+    { "settings.d/10-x.toml": 'hint_letters = "xy"\nnewtab_recent_tabs = true\n' },
+    { "settings.d/zz-saved-edits.toml": 'hint_letters = "xy"\nnewtab_recent_tabs = true\n', "settings.d/10-x.toml": "newtab_date = true\n" },
+    { "settings.d/zzz.toml": 'hint_letters = "xy"\n', "settings.d/~x.toml": "newtab_date = true\n" },
+  ];
+  for (const source of sources) {
+    const { config_files } = export_files(source, saved);
+    assert.deepEqual(settings_in_force(config_files, {}), settings_in_force(source, saved), JSON.stringify(source));
+    for (const [path, text] of Object.entries(source)) assert.equal(config_files[path], text, `${path} was overwritten`);
+  }
 });
