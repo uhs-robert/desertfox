@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { parse_command_line, print_command } from "../../src/shared/registry/index.ts";
+import { registry as real_registry } from "../../src/shared/registry/builtin.ts";
+import "../../src/commands/hint.ts";
 import { grammar_registry, search_sources } from "./grammar_registry.ts";
 
 const registry = grammar_registry();
@@ -119,4 +121,16 @@ test("an open positional param prints as an empty word, and an open subject afte
   assert.equal(print_command(command, {}, { open_param: "name" }), "pos.set ");
   assert.equal(print_command(command, { name: "" }, { open_param: "name" }), "pos.set ");
   assert.equal(print_command(command, { name: "alpha" }, { open_param: "value" }), "pos.set alpha ");
+});
+
+test("a verbatim subject prints raw and reads back as typed", () => {
+  const hint = real_registry.get("hint.run")!;
+  for (const selector of ['a[href="x"]', "a[title='it']  .b", '"a b"', ".a\\:b  c"]) {
+    const text = print_command(hint, { filter: "custom", selector }, { flags: "long" });
+    assert.equal(text, `hint --custom ${selector}`);
+    const parsed = parse_command_line(real_registry, text);
+    assert.deepEqual(parsed.kind === "invocation" ? parsed.invocation.args : parsed, { filter: "custom", selector });
+  }
+  const guarded = print_command(hint, { filter: "custom", selector: "-x[a]" }, { flags: "long" });
+  assert.equal(guarded, "hint --custom -- -x[a]");
 });

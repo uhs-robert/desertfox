@@ -266,3 +266,11 @@ test("a background command has a run, and a content command has none", () => {
   assert.equal(create_registry().define("t.lazy", { ...no_run, runs_in: "content", bundle: "hints" }).bundle, "hints");
   assert.equal(create_registry().define("t.in_page", { ...no_run, runs_in: "content" } as never).run, undefined);
 });
+
+test("verbatim is for the main string param, and not with value_of", () => {
+  const verbatim = (param: Record<string, unknown>) => ({ ...base, params: [param as never] }) as CommandInput;
+  rejects("x.a", verbatim({ name: "q", type: "string", main: true, verbatim: true, value_of: "k" }), /verbatim|value_of/);
+  rejects("x.b", verbatim({ name: "q", type: "int", main: true, verbatim: true }), /verbatim|string/);
+  rejects("x.c", verbatim({ name: "q", type: "string", verbatim: true }), /only the main param can be verbatim/);
+  create_registry().define("x.d", verbatim({ name: "q", type: "string", main: true, rest: true, verbatim: true }));
+});

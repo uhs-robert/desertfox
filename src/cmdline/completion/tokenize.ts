@@ -3,7 +3,7 @@
 
 import type { ParamDef } from "../../shared/command.ts";
 import { read_flag, tokenize } from "../../shared/registry/command_line.ts";
-import type { CommandLookup } from "../../shared/registry/command_line.ts";
+import type { CommandLookup, Token } from "../../shared/registry/command_line.ts";
 import { bare_word_param, find_param, is_dynamic_values, subject_param } from "../../shared/registry/params.ts";
 
 type Command = NonNullable<ReturnType<CommandLookup["find"]>>;
@@ -62,6 +62,21 @@ function picks_by_whole_text(command: Command): boolean {
   return subject?.main === true && subject.rest === true && subject.values !== undefined && !(engine && is_dynamic_values(engine.values));
 }
 
+// A verbatim subject runs raw to the end of the line, so a quote inside it never groups and never blocks completion.
+// The words before it are whole, so each reads alone. Returns where the subject begins when the caret is inside it.
+function verbatim_subject(head: string, starts: number[], find: CommandLookup["find"]): { command: Command; start: number } | undefined {
+  const command = find((tokenize(head.slice(starts[0], starts[1])) as Token[])[0]?.text ?? "");
+  if (!command || subject_param(command)?.verbatim !== true) return undefined;
+  let flags_open = true;
+  for (const [index, start] of starts.entries()) {
+    if (index === 0) continue;
+    const word = (tokenize(head.slice(start, starts[index + 1])) as Token[])[0];
+    if (flags_open && word && word.text === "--" && word.quoted_from === null) flags_open = false;
+    else if (!(flags_open && word && (is_flag_token(word) || (index === starts.length - 1 && head[start] === "-")))) return { command, start };
+  }
+  return undefined;
+}
+
 function flag_value_context(command: Command, word: string, start: number, end: number): CursorContext {
   const equals = word.indexOf("=");
   const flag = word.slice(0, equals);
@@ -76,6 +91,8 @@ export function cursor_context(text: string, caret: number, find: CommandLookup[
   if (caret < lead) return { kind: "none" };
   const head = text.slice(lead, caret);
   const { starts, in_word, quote_open } = word_starts(head);
+  const verbatim = verbatim_subject(head, starts, find);
+  if (verbatim) return { kind: "subject", command: verbatim.command, position: 0, engine_settled: false, word: head.slice(verbatim.start), start: lead + verbatim.start, end: text.length };
   const word_start = quote_open ? null : in_word ? (starts.at(-1) as number) : head.length;
   const tokens = word_start === null ? undefined : tokenize(head);
   if (word_start === null || !tokens || "error" in tokens) return { kind: "none" };
