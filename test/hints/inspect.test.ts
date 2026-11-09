@@ -25,8 +25,9 @@ test("the element is on the page when the pick is sent", async () => {
 test("a pick that waits for the toolbox answers ok, shows the notice and keeps the property", async () => {
   const { win, page } = make_window();
   const notices: string[] = [];
-  const outcome = await hand_to_devtools(win, element, async () => ({ ok: false, message: "press F12" }), () => {}, () => {});
-  assert.deepEqual(outcome, { ok: false, message: "press F12" });
+  const outcome = await hand_to_devtools(win, element, async () => ({ ok: true, waiting: true }), () => {}, (message) => void notices.push(message));
+  assert.deepEqual(outcome, { ok: true });
+  assert.deepEqual(notices, [TOOLBOX_CLOSED_MESSAGE]);
   assert.equal(page.__desertfox_pick, element);
 });
 
