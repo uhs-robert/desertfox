@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { Found } from "../../src/content/hints/candidates.ts";
-import { keep_text_matches, collect, drop_redundant_weak, keep_visible_deduplicated, has_click_sign, has_own_text, is_every_target, NO_OWN_TEXT, has_text, is_image, is_pickable_frame, make_weak_test, query_for } from "../../src/content/hints/candidates.ts";
+import { keep_text_matches, collect, drop_redundant_weak, keep_visible_deduplicated, has_click_sign, has_own_text, is_every_target, KEEPS_ONE_CHILD, NO_OWN_TEXT, has_text, is_image, is_pickable_frame, make_weak_test, query_for } from "../../src/content/hints/candidates.ts";
 
 type Fake = { name: string; local: string; shadow?: Fake[]; frame?: Fake[] | "cross_origin"; href?: boolean; side?: number };
 
@@ -228,7 +228,7 @@ const every_fake = (children: number, options: { text?: string; local?: string; 
     hidden: false,
     children: { length: children },
     childNodes: options.text ? [text_node(options.text)] : [],
-    matches: (selector: string) => selector.split(", ").some((part) => part === (options.local ?? "div") || (part === "[role=button]" && options.local === "role_button")),
+    matches: (selector: string) => selector.split(", ").some((part) => part === (options.local ?? "div") || (part === "[role=link]" && options.local === "role_link")),
     getBoundingClientRect: () => ({ width: options.width ?? 100, height: options.height ?? 20 }),
   }) as unknown as Element;
 
@@ -249,8 +249,14 @@ test("every skips a wrapper of one element and no text of its own, but keeps one
 });
 
 test("every keeps a link, button or label that wraps one child", () => {
-  for (const local of ["a", "button", "label", "role_button"]) assert.equal(is_every_target(every_fake(1, { local })), true, local);
+  for (const local of ["a", "button", "label", "role_link"]) assert.equal(is_every_target(every_fake(1, { local })), true, local);
   assert.equal(is_every_target(every_fake(1, { local: "a", width: 0 })), false);
+});
+
+test("every keeps the exemptions the clickable selector lists, and skips the page root and body", () => {
+  for (const part of ["a", "button", "label", "[role=link]", "[onclick]"]) assert.ok(KEEPS_ONE_CHILD.split(", ").includes(part), part);
+  assert.equal(is_every_target(every_fake(2, { local: "html" })), false);
+  assert.equal(is_every_target(every_fake(2, { local: "body" })), false);
 });
 
 test("the prose filter carries its test and the others carry none", () => {

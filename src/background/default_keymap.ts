@@ -233,7 +233,7 @@ export const DEFAULT_KEYMAP: KeymapConfig = {
     ";v": { id: "hint.run", args: { action: "caret", filter: "prose" }, label: "Start caret mode at text" },
     ";V": { id: "hint.run", args: { action: "visual", filter: "prose" }, label: "Start visual mode at text" },
     ";#": { id: "cmdline.open", args: { text: "heading " }, label: "Jump to heading" },
-    ";u": { id: "cmdline.open", args: { text: "hint --custom --selector=" }, label: "Hint a CSS selector" },
+    ";u": { id: "cmdline.open", args: { text: "hint --custom " }, label: "Hint a CSS selector" },
     ";;": { id: "cmdline.open", args: { text: "hint " }, label: "Open the command line with hint" },
     ";B": { id: "hint.run", args: { filter: "buttons" }, label: "Click button", variant_label: "Button" },
     ";a": { id: "hint.run", args: { filter: "all" }, label: "Click any element", variant_label: "Any element" },
