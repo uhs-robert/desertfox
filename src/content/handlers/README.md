@@ -3,9 +3,10 @@
 The content-side code of each command that runs in the page. One file per command group, and each command is one `ContentHandler` object: a `run(args)` function and an optional `fill_from_page` map. `run` returns nothing for done, throws for failed, or returns an `Outcome` or a promise of one. A command that hands control to the user (`hint.run`, `cmdline.open`, `find.open`) stays pending until the user finishes: a pick or Enter is done, and Escape, an unrelated key or a page change is cancelled. A failed command returns its message and does not toast it, so the caller shows it once.
 
 - `types.ts`: the `ContentHandler` type. `fill_from_page` names the params that the handler reads from the page when the invocation leaves them out.
-- `scroll.ts`, `align.ts`: the `scroll.*` commands.
-- `page.ts`: the page focus commands. It also holds `blur_focused_element` and remembers the last blurred field for `scroll.align`.
-- `mode.ts`, `stop.ts`, `copy.ts`: the mode, stop and copy commands.
+- `scroll.ts`: the `scroll.*` commands.
+- `page.ts`: `page.blur`. It holds `blur_focused_element` and remembers the last blurred field, which the bundles read through the host.
+- `mode.ts`, `stop.ts`: the mode and stop commands.
+- `align.ts`, `copy.ts`, `focus_input.ts`: the code of `scroll.align`, `copy.url` and `page.focus_input`. These are plain functions, not `ContentHandler` objects. The `page` bundle (`../page/main.ts`) registers them.
 - `focus.ts`: a helper that has no handler object.
 
 How a handler is found and called:

@@ -1,8 +1,6 @@
 import type { AlignFocus, AlignPosition, AlignSelection } from "../align_target.ts";
 import { choose_align_target, SCROLL_BLOCK } from "../align_target.ts";
 import { deepest_focused_element } from "../editable.ts";
-import { last_blurred_element } from "./page.ts";
-import type { ContentHandler } from "./types.ts";
 
 function focused_element(): AlignFocus<Element> | undefined {
   const focused = deepest_focused_element();
@@ -22,12 +20,10 @@ function selection_target(blurred: Element | undefined): AlignSelection<Element>
   };
 }
 
-export const scroll_align: ContentHandler = {
-  run: (args) => {
-    const last_blurred = last_blurred_element();
-    const blurred = last_blurred?.isConnected ? last_blurred : undefined;
-    const target = choose_align_target(focused_element(), selection_target(blurred), blurred);
-    if (!target) throw new Error("Nothing focused or selected to align");
-    target.scrollIntoView({ block: SCROLL_BLOCK[args.position as AlignPosition], behavior: "instant" });
-  },
-};
+// `last_blurred` comes from the host: this file runs in the page bundle, which has no copy of the blur state.
+export function align_focus(position: AlignPosition, last_blurred: Element | undefined): void {
+  const blurred = last_blurred?.isConnected ? last_blurred : undefined;
+  const target = choose_align_target(focused_element(), selection_target(blurred), blurred);
+  if (!target) throw new Error("Nothing focused or selected to align");
+  target.scrollIntoView({ block: SCROLL_BLOCK[position], behavior: "instant" });
+}

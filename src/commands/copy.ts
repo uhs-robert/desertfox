@@ -1,4 +1,4 @@
-import { COPY_FORMATS, copy_url } from "../content/handlers/copy.ts";
+import { COPY_FORMATS } from "../content/handlers/copy.ts";
 import { define } from "../shared/registry/builtin.ts";
 
 define("copy.url", {
@@ -23,7 +23,7 @@ define("copy.url", {
     },
   ],
   runs_in: "content",
-  run: copy_url.run,
+  bundle: "page",
 });
 
 define("copy.links", {
