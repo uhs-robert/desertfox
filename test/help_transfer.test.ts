@@ -104,3 +104,34 @@ test("an export with nothing to write says so and builds no zip", async () => {
   assert.equal(file?.name, "desertfox-config.zip");
   assert.deepEqual([...(await read_zip(file!.bytes))], [["settings.toml", "x = 1\n"]]);
 });
+
+test("a superseded pick cannot replace the newer review, and a cancel drops a pick still waiting", async () => {
+  const release: (() => void)[] = [];
+  const sent: unknown[] = [];
+  const session = create_transfer_session({
+    send: async (message) => {
+      sent.push(message);
+      const { source } = message as { source: { entries: { text: string }[] } };
+      const code = source.entries[0]!.text;
+      if (code === "old") await new Promise<void>((resolve) => release.push(resolve));
+      return preview_of([snippet("snippets/a.js", code)]);
+    },
+    on_change: () => undefined,
+  });
+  const pick = (text: string) => async () => ({ kind: "folder" as const, entries: [{ path: "cfg/snippets/a.js", text }] });
+  const older = session.choose(pick("old"));
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  await session.choose(pick("new"));
+  release[0]!();
+  await older;
+  assert.equal(session.state.review?.preview.snippets[0]?.code, "new");
+  assert.equal((session.state.review!.source as { entries: { text: string }[] }).entries[0]!.text, "new");
+
+  const waiting = session.choose(pick("old"));
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  session.cancel();
+  release[1]!();
+  await waiting;
+  assert.equal(session.state.review, undefined);
+  assert.equal(session.state.busy, false);
+});
