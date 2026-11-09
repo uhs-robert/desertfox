@@ -31,8 +31,9 @@ import { change_edits, get_config, get_search_engine_names, import_config, previ
 import { answer_config_import } from "./config_import.ts";
 import { answer_toolbar_request, create_toolbar, TOGGLE_COMMAND } from "./toolbar.ts";
 import { load_edits, load_effective_config, load_files_source } from "./config_load.ts";
-import { answer_config_transfer, answer_sessions_transfer } from "./config_transfer.ts";
+import { answer_config_transfer } from "./config_transfer.ts";
 import { browser_session_storage, make_session_store } from "./session_store.ts";
+import { answer_sessions_transfer } from "./sessions_transfer.ts";
 import { create_settings_messages, is_extension_page } from "./settings_message.ts";
 import { command_meta } from "../shared/registry/index.ts";
 import { registry } from "../shared/registry/builtin.ts";

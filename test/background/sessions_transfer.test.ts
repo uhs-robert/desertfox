@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { make_session_store } from "../../src/background/session_store.ts";
 import type { SessionStorage, SessionTab } from "../../src/background/session_store.ts";
-import { answer_sessions_transfer } from "../../src/background/config_transfer.ts";
+import { answer_sessions_transfer } from "../../src/background/sessions_transfer.ts";
 import { SESSIONS_STORAGE_KEY } from "../../src/background/storage_keys.ts";
 
 function fake_storage(initial?: unknown) {

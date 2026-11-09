@@ -30,7 +30,7 @@ export const area_rules = [
   { globs: ["src/content/caret/find_*.ts", "src/commands/find.ts", "src/background/{find_scan,find_worker,regex_scan}.ts"], areas: ["find"] },
   { globs: ["src/content/caret/**", "src/commands/{caret,visual}.ts"], areas: ["caret"] },
   { globs: ["src/content/whichkey/**", "src/background/list_keys.ts", "src/content/which_key_timer.ts"], areas: ["whichkey"] },
-  { globs: ["src/commands/session.ts", "src/background/session_store.ts"], areas: ["cmdline", "tabs"] },
+  { globs: ["src/commands/session.ts", "src/background/session_store.ts", "src/background/sessions_transfer.ts"], areas: ["cmdline", "tabs"] },
   {
     globs: ["src/cmdline/**", "src/commands/{cmdline,history,bookmark,open_target}.ts", "src/background/{cmdline_service,complete_items}.ts", "src/shared/{setting_completion,score}.ts"],
     areas: ["cmdline"],
