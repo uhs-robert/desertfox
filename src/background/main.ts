@@ -32,6 +32,8 @@ import { answer_config_import } from "./config_import.ts";
 import { answer_toolbar_request, create_toolbar, TOGGLE_COMMAND } from "./toolbar.ts";
 import { load_edits, load_effective_config, load_files_source } from "./config_load.ts";
 import { answer_config_transfer } from "./config_transfer.ts";
+import { browser_session_storage, make_session_store } from "./session_store.ts";
+import { answer_sessions_transfer } from "./sessions_transfer.ts";
 import { create_settings_messages, is_extension_page } from "./settings_message.ts";
 import { command_meta } from "../shared/registry/index.ts";
 import { registry } from "../shared/registry/builtin.ts";
@@ -129,6 +131,10 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
   if (page_request?.type === "export_config" || page_request?.type === "list_snippets" || page_request?.type === "remove_snippet") {
     if (!is_extension_page(sender, browser.runtime.id, browser.runtime.getURL(""))) return Promise.resolve({ ok: false, message: "only the extension's own pages may export or change snippets" });
     return answer_config_transfer(page_request, { read_files: async () => (await load_files_source()).files, read_saved: async () => (await load_edits()).saved, remove: remove_snippet });
+  }
+  if (page_request?.type === "export_sessions" || page_request?.type === "import_sessions") {
+    if (!is_extension_page(sender, browser.runtime.id, browser.runtime.getURL(""))) return Promise.resolve({ ok: false, message: "only the extension's own pages may export or import sessions" });
+    return answer_sessions_transfer(page_request, make_session_store(browser_session_storage));
   }
   if (page_request?.type === "toolbar_set_disabled" || page_request?.type === "toolbar_site" || page_request?.type === "toolbar_reload_config") {
     if (!is_extension_page(sender, browser.runtime.id, browser.runtime.getURL(""))) return Promise.resolve({ ok: false, message: "only the extension's own pages may use the toolbar" });

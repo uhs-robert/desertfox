@@ -293,7 +293,14 @@ export type ListSnippetsAnswer = { ok: true; snippets: InstalledSnippet[] } | { 
 // From an extension page: removes one installed snippet and rebuilds the config without it. The answer is a ConfigImportAnswer.
 export type RemoveSnippet = { type: "remove_snippet"; path: string };
 
-export type PageToBackground = ChangeSetting | ListSettings | ToolbarRequest | PreviewConfigImport | CommitConfigImport | ExportConfig | ListSnippets | RemoveSnippet;
+// From an extension page: the saved tab sessions as the text of `desertfox-sessions.json`. `count` is 0 when none is saved.
+export type ExportSessions = { type: "export_sessions" };
+export type ExportSessionsAnswer = { ok: true; json: string; count: number } | { ok: false; message: string };
+
+// From an extension page: adds the sessions of an export file. A name that is taken keeps both, and the import gets a suffix. The answer is a ConfigImportAnswer.
+export type ImportSessions = { type: "import_sessions"; text: string };
+
+export type PageToBackground = ChangeSetting | ListSettings | ToolbarRequest | PreviewConfigImport | CommitConfigImport | ExportConfig | ListSnippets | RemoveSnippet | ExportSessions | ImportSessions;
 
 export type ContentToBackground = RunRequest | ModeChanged | LoadBundle | ListKeys | IssueCmdlineTicket | OpenCmdline | RecordCmdline | CompleteItems | TabRowsActionRequest | OpenHelp | RecordRepeat | ReadTabAddress | FindScan | ImageAction;
 

@@ -34,6 +34,10 @@ export const browser_session_storage: SessionStorage = {
 // Text typed in a line may carry any run of spaces, and the line's tokenizer joins words with one space, so the stored name does too.
 export const normalize_session_name = (text: string): string => text.split(/\s+/).filter(Boolean).join(" ");
 
+// The line reads a leading `-` as a flag and a leading `@` as a slot, so a name that starts so would not run again when picked from the list. The param schema of `session.save` and `session.rename` and the import use this one rule. The ones that look a name up take any text, so a stored name always resolves.
+export const NEW_NAME_PATTERN = "^\\s*[^\\s@-]";
+const new_name_rule = new RegExp(NEW_NAME_PATTERN);
+
 const same_name = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
 
 const is_session_tab = (value: unknown): value is SessionTab => {
@@ -72,6 +76,25 @@ function find_name(sessions: Map<string, Session>, name: string): string | undef
 export function session_age(saved_at: number, now: number): string {
   const minutes = Math.floor((now - saved_at) / 60_000);
   return minutes < 1 ? "just now" : minutes < 60 ? `${minutes}m ago` : minutes < 1440 ? `${Math.floor(minutes / 60)}h ago` : `${Math.floor(minutes / 1440)}d ago`;
+}
+
+export type ImportResult = { added: string[]; skipped: string[] };
+
+function parse_export(text: string): [string, unknown][] {
+  let parsed: Partial<StoredSessions> | null;
+  try {
+    parsed = JSON.parse(text) as Partial<StoredSessions> | null;
+  } catch {
+    throw new RuntimeRefusal("The file is not JSON");
+  }
+  if (parsed?.version !== 1 || typeof parsed.sessions !== "object" || parsed.sessions === null || Array.isArray(parsed.sessions)) throw new RuntimeRefusal("The file is not a DesertFox sessions export (version 1)");
+  return Object.entries(parsed.sessions);
+}
+
+// `name (2)`, the first of `(2)`, `(3)` and so on that is free. A name that already ends in a suffix gets another one, so no stored session is ever the target of a clash.
+function free_name(name: string, taken: (name: string) => boolean): string {
+  if (!taken(name)) return name;
+  for (let number = 2; ; number++) if (!taken(`${name} (${number})`)) return `${name} (${number})`;
 }
 
 export type SessionStore = ReturnType<typeof make_session_store>;
@@ -131,6 +154,35 @@ export function make_session_store(storage: SessionStorage, now: () => number = 
         sessions.set(name, { saved_at: now(), tabs });
         await write(loaded);
         return { name, previous_tabs };
+      }),
+
+    // The file the settings page downloads: the stored shape, readable sessions only. `count` is 0 when there is nothing to export.
+    export_json: async (): Promise<{ json: string; count: number }> => {
+      const { sessions } = await read_map(storage);
+      return { json: JSON.stringify({ version: 1, sessions: Object.fromEntries(sessions) }, null, 2), count: sessions.size };
+    },
+
+    // Adds the sessions of an export file and removes none. A name that is taken keeps the stored session and the import arrives as `name (2)`, `name (3)` and so on. An entry that is no session or has a name the save rule refuses is skipped and named in `skipped`. A file that is no export refuses as a whole and stores nothing.
+    import_json: (text: string): Promise<ImportResult> =>
+      exclusive(async () => {
+        const entries = parse_export(text);
+        const loaded = await read_map(storage);
+        const { sessions } = loaded;
+        const taken = (name: string) => find_name(sessions, name) !== undefined || loaded.unread.some(([key]) => same_name(key, name));
+        const added: string[] = [];
+        const skipped: string[] = [];
+        for (const [key, session] of entries) {
+          const name = normalize_session_name(key);
+          if (!is_session(session) || !new_name_rule.test(name)) {
+            skipped.push(key);
+            continue;
+          }
+          const stored_as = free_name(name, taken);
+          sessions.set(stored_as, session);
+          added.push(stored_as);
+        }
+        if (added.length > 0) await write(loaded);
+        return { added, skipped };
       }),
 
     remove: (text: string): Promise<string> =>
