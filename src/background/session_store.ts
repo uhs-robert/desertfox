@@ -58,6 +58,12 @@ async function read_map(storage: SessionStorage): Promise<Loaded> {
   return { sessions: new Map(entries.filter(([, session]) => is_session(session)) as [string, Session][]), unread: entries.filter(([, session]) => !is_session(session)) };
 }
 
+// An entry this version cannot read keeps its key. A new session may not take it, because the write would give the unread entry the key back.
+function refuse_unread_name({ unread }: Loaded, name: string): void {
+  const clash = unread.find(([key]) => same_name(key, name));
+  if (clash) throw new RuntimeRefusal(`A session named "${clash[0]}" exists`);
+}
+
 function find_name(sessions: Map<string, Session>, name: string): string | undefined {
   return [...sessions.keys()].find((existing) => same_name(existing, name));
 }
@@ -118,7 +124,9 @@ export function make_session_store(storage: SessionStorage, now: () => number = 
         const typed = checked_name(text);
         const loaded = await read_map(storage);
         const { sessions } = loaded;
-        const name = find_name(sessions, typed) ?? typed;
+        const existing = find_name(sessions, typed);
+        if (existing === undefined) refuse_unread_name(loaded, typed);
+        const name = existing ?? typed;
         const previous_tabs = sessions.get(name)?.tabs.length;
         sessions.set(name, { saved_at: now(), tabs });
         await write(loaded);
@@ -144,6 +152,7 @@ export function make_session_store(storage: SessionStorage, now: () => number = 
         const from = find_name(sessions, checked_name(text));
         if (from === undefined) throw new RuntimeRefusal(`No session named "${normalize_session_name(text)}"`);
         const to = checked_name(new_text);
+        refuse_unread_name(loaded, to);
         const taken = find_name(sessions, to);
         if (taken !== undefined && taken !== from) throw new RuntimeRefusal(`A session named "${taken}" exists`);
         // Delete first and set after, so the renamed entry takes the end of the map. Its `saved_at` is kept.
