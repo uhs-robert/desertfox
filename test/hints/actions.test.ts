@@ -187,6 +187,23 @@ test("copy falls back to the text for an element with no address", () => {
   assert.deepEqual(heading.copied, ["Title"]);
 });
 
+test("copy_html copies the whole outer HTML and names it in the toast", () => {
+  const whats: (string | undefined)[] = [];
+  const element = { localName: "div", outerHTML: "<div id=\"a\"><b>x</b></div>" };
+  perform("copy_html", element as never, { copy: (_text: string, what?: string) => void whats.push(what) } as never);
+  const page = fixture("div", { outerHTML: element.outerHTML });
+  page.run("copy_html");
+  assert.deepEqual(page.copied, [element.outerHTML]);
+  assert.deepEqual(whats, ["HTML"]);
+});
+
+test("copy_selector copies a selector that is unique in the root of the element", () => {
+  const root = { querySelectorAll: (selector: string) => ({ length: selector === "#main" ? 1 : 2 }) };
+  const page = fixture("main", { id: "main", classList: [], parentElement: null, children: [], getRootNode: () => root });
+  page.run("copy_selector");
+  assert.deepEqual(page.copied, ["#main"]);
+});
+
 test("caret and visual hand the element to the caret start and do nothing else", () => {
   for (const mode of ["caret", "visual"] as const) {
     const page = fixture("p");

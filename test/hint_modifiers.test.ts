@@ -106,26 +106,34 @@ test("a key whose required param comes from a prompt still gets variants", () =>
 test("the default modifiers give the owner's keys and no stacked or refused ones", () => {
   const { compiled, warnings } = compile(DEFAULT_KEYMAP);
   assert.deepEqual(warnings, []);
-  for (const keys of [["r", "l"], ["b", "l"], ["w", "l"], ["y", "l"], ["Y", "p"], ["h", "a"], ["x", "a"], ["2", "a"], ["b", "I"], ["y", "l"]]) assert.ok(node_at(compiled, ";", ...keys), keys.join(""));
+  for (const keys of [["r", "l"], ["b", "l"], ["w", "l"], ["h", "a"], ["x", "a"], ["2", "a"], ["b", "I"]]) assert.ok(node_at(compiled, ";", ...keys), keys.join(""));
   assert.equal(args_at(compiled, ";", "h", "a")?.action, "hover");
-  assert.equal(args_at(compiled, ";", "Y", "p")?.action, "copy_text");
   assert.equal(args_at(compiled, ";", "2", "a")?.action, "double_click");
   assert.equal(node_at(compiled, ";", "2", "l"), undefined);
   // Keys that set their own action, the cmdline keys and stacked modifiers do not exist.
-  for (const keys of [["b", "B"], ["y", "i"], ["Y", "I"], ["b", "t"], ["h", "s"], ["y", "v"], ["r", "v"], ["r", "V"], ["b", ";"], ["r", "b"], ["t"], ["R"]]) assert.equal(node_at(compiled, ";", ...keys), undefined, keys.join(""));
+  for (const keys of [["b", "B"], ["b", "t"], ["h", "s"], ["r", "v"], ["r", "V"], ["b", ";"], ["r", "b"], ["t"], ["R"]]) assert.equal(node_at(compiled, ";", ...keys), undefined, keys.join(""));
 });
 
-test("the default picture keys: ;yI copies the picture, ;d reaches images, links, media and all", () => {
+test("the yank keys are eight plain leaves, each with a fixed action and filter", () => {
   const { compiled, warnings } = compile(DEFAULT_KEYMAP);
   assert.deepEqual(warnings, []);
-  // The default leaf wins over the address copy that the ;y modifier would derive at the same key.
-  assert.deepEqual([args_at(compiled, ";", "y", "I")?.action, args_at(compiled, ";", "y", "I")?.filter], ["copy_image", "images"]);
+  const expected = { l: ["copy", "links"], i: ["copy_image", "images"], I: ["copy", "images"], m: ["copy", "media"], f: ["copy", "frames"], t: ["copy_text", "all"], c: ["copy_selector", "all"], h: ["copy_html", "all"] };
+  for (const [key, [action, filter]] of Object.entries(expected)) {
+    assert.equal(node_at(compiled, ";", "y", key)?.kind, "leaf", key);
+    assert.deepEqual([args_at(compiled, ";", "y", key)?.action, args_at(compiled, ";", "y", key)?.filter], [action, filter], key);
+  }
+  // Nothing derives beyond them: no filter step and no modifiers under the leaves, and the old modifiers are gone.
+  assert.deepEqual(Object.keys((node_at(compiled, ";", "y") as unknown as TreeBranch).children).sort(), Object.keys(expected).sort());
+  assert.equal(DEFAULT_KEYMAP.modifiers![";y"], undefined);
+  assert.equal(DEFAULT_KEYMAP.modifiers![";Y"], undefined);
+});
+
+test("the default picture keys: ;d reaches images, links, media and all", () => {
+  const { compiled, warnings } = compile(DEFAULT_KEYMAP);
+  assert.deepEqual(warnings, []);
   assert.equal(args_at(compiled, ";", "I")?.action, "tab");
   for (const [key, filter] of [["I", "images"], ["l", "links"], ["m", "media"], ["a", "all"]] as const) {
     assert.deepEqual([args_at(compiled, ";", "d", key)?.action, args_at(compiled, ";", "d", key)?.filter], ["download", filter], key);
   }
   for (const key of ["B", "i", "p", "f"]) assert.equal(node_at(compiled, ";", "d", key), undefined, key);
-  // No modifier derives copy_image onto another filter.
-  assert.equal(node_at(compiled, ";", "y", "l")?.kind, "leaf");
-  assert.equal(args_at(compiled, ";", "y", "l")?.action, "copy");
 });

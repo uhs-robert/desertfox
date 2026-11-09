@@ -34,18 +34,32 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, press_
     expect(pasted.value.endsWith("/page?id=hint_one"), `;yl copied "${pasted.value}"`);
   });
 
-  await run_case(";Yp labels the elements with text of their own and copies the picked text", async () => {
-    // Labels run in page order: the heading "a", "alpha text" "s", "beta text" "d". A labelled wrapper div would take "s".
-    await open_page("prose", "p6_prose", { new_tab: true });
-    await press_keys(";Yp");
-    await wait_for_labels(";Yp");
-    await press_keys("d");
+  // Each yank key labels the elements of the prose page in page order: the heading "a" and the paragraph "s" (the spans sit in a wrapper that the all filter drops). The paste shows what the key copied.
+  const yank_and_paste = async (keys, label, page_id) => {
+    await open_page("prose", `${page_id}`, { new_tab: true });
+    await press_keys(keys);
+    await wait_for_labels(keys);
+    await press_keys(label);
     await wait_for_label_count(0, "gone after the pick");
-    await open_page("field", "p6_prose_paste", { new_tab: true });
+    await open_page("field", `${page_id}_paste`, { new_tab: true });
     const mark = events.length;
     await press_keys(...paste_ctrl_v);
-    const pasted = await wait_event(mark, (event) => event.type === "input" && event.page_id === "p6_prose_paste", "the pasted text");
-    expect(pasted.value === "beta text", `;Yp d copied "${pasted.value}"`);
+    return (await wait_event(mark, (event) => event.type === "input" && event.page_id === `${page_id}_paste`, "the pasted text")).value;
+  };
+
+  await run_case(";yt copies the text of the picked element", async () => {
+    const pasted = await yank_and_paste(";yt", "s", "p6_yank_text");
+    expect(pasted === "gamma bold", `;yt copied "${pasted}"`);
+  });
+
+  await run_case(";yc copies the shortest unique selector of the picked element", async () => {
+    const pasted = await yank_and_paste(";yc", "s", "p6_yank_selector");
+    expect(pasted === "p", `;yc copied "${pasted}"`);
+  });
+
+  await run_case(";yh copies the whole outer HTML of the picked element", async () => {
+    const pasted = await yank_and_paste(";yh", "s", "p6_yank_html");
+    expect(pasted === "<p>gamma <b>bold</b></p>", `;yh copied "${pasted}"`);
   });
 
   await run_case("f opens a dropdown that opens on mousedown, with one click after the mouse events", async () => {

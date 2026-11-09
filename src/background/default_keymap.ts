@@ -51,13 +51,11 @@ const VISUAL_KEYS: ModeBindings = {
 export const DEFAULT_KEYMAP: KeymapConfig = {
   // `s//` and `S//`: search the current site with the built-in `site` engine. Only the shipped keymap may use the letter `/`: the build refuses it in a user file.
   site_keys: { "/": ["site"] },
-  // Each key adds its args to a variant of every key in the `;` group that accepts them: `;bl` opens a link in a background tab, `;ya` copies the address of any element. The label names the group.
+  // Each key adds its args to a variant of every key in the `;` group that accepts them: `;bl` opens a link in a background tab, `;da` saves the file of any element. The label names the group.
   modifiers: {
     ";r": { rapid: true, label: "Rapid" },
     ";b": { action: "background", label: "Background tab" },
     ";w": { action: "window", label: "New window" },
-    ";y": { action: "copy", label: "Copy address" },
-    ";Y": { action: "copy_text", label: "Copy text" },
     ";d": { action: "download", label: "Download" },
     ";h": { action: "hover", label: "Hover" },
     ";x": { action: "delete", label: "Delete" },
@@ -78,6 +76,7 @@ export const DEFAULT_KEYMAP: KeymapConfig = {
     z: "Zoom and scroll",
     q: "DesertFox",
     ";": "Hints",
+    ";y": "Yank",
     s: "Search here",
     S: "Search in new tab",
     "s/": "Site search",
@@ -242,7 +241,14 @@ export const DEFAULT_KEYMAP: KeymapConfig = {
     ";i": { id: "hint.run", args: { filter: "inputs" }, label: "Click input", variant_label: "Input" },
     ";l": { id: "hint.run", args: { filter: "links" }, label: "Click link", variant_label: "Link" },
     ";I": { id: "hint.run", args: { filter: "images" }, label: "Open image in new tab", variant_label: "Image" },
-    ";yI": { id: "hint.run", args: { action: "copy_image", filter: "images" }, label: "Copy image" },
+    ";yl": { id: "hint.run", args: { action: "copy", filter: "links" }, label: "Copy link URL" },
+    ";yi": { id: "hint.run", args: { action: "copy_image", filter: "images" }, label: "Copy picture" },
+    ";yI": { id: "hint.run", args: { action: "copy", filter: "images" }, label: "Copy image URL" },
+    ";ym": { id: "hint.run", args: { action: "copy", filter: "media" }, label: "Copy media URL" },
+    ";yf": { id: "hint.run", args: { action: "copy", filter: "frames" }, label: "Copy frame URL" },
+    ";yt": { id: "hint.run", args: { action: "copy_text", filter: "all" }, label: "Copy text" },
+    ";yc": { id: "hint.run", args: { action: "copy_selector", filter: "all" }, label: "Copy CSS selector" },
+    ";yh": { id: "hint.run", args: { action: "copy_html", filter: "all" }, label: "Copy outer HTML" },
     ";f": { id: "hint.run", args: { filter: "frames" }, label: "Focus frame", variant_label: "Frame" },
     ";m": { id: "hint.run", args: { filter: "media" }, label: "Play or pause media", variant_label: "Media" },
     ":": { id: "cmdline.open" },

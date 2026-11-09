@@ -52,8 +52,8 @@ test("quick start: a key that runs several steps is not picked", () => {
 });
 
 test("quick start: a copy hint bound to inputs only is not picked", () => {
-  const { ";y": _copy, ...modifiers } = DEFAULT_KEYMAP.modifiers!;
-  const codes = codes_with_normal({ "<A-y>": { id: "hint.run", args: { action: "copy", filter: "inputs" } } }, [], { ...DEFAULT_KEYMAP, modifiers });
+  const { ";yl": _link, ...normal } = DEFAULT_KEYMAP.normal as Record<string, unknown>;
+  const codes = codes_with_normal({ "<A-y>": { id: "hint.run", args: { action: "copy", filter: "inputs" } } }, [], { ...DEFAULT_KEYMAP, normal: normal as never });
   assert.ok(!codes.includes("<A-y>"));
   assert.ok(codes.includes(":hint --copy --links"));
 });
