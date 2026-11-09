@@ -80,7 +80,8 @@ export async function run_cases({ run_case, expect, open_page, press_keys, poll_
     await press_and_wait_for_move("find_c", "gV", "the caret on the title");
     const mark_search = events.length;
     await search_with_line("needle");
-    await wait_event(mark_search, is_selection_of("find_c"), "the caret at the match");
+    // The caret rests on the first letter of the match. An intermediate report before the find lands is another text.
+    await wait_for_last_selection("find_c", mark_search, (last) => last.text === "n", "the caret at the match");
     const mark = events.length;
     await press_keys("w");
     await wait_for_last_selection("find_c", mark, (last) => last.text === "s", 'w to put the caret on "s" (the word after needle)');
