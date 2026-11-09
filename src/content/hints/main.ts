@@ -74,12 +74,12 @@ function windows_of(found: Found[]): Window[] {
 }
 
 // A double-click skips links. Opening in another place needs an address, and an inline one cannot open. The images filter always needs one, so no label promises an image that a copy or an open cannot use.
-function find_candidates(filter: HintFilter, custom_selector_: string | undefined, action: HintAction): Found[] {
+function find_candidates(filter: HintFilter, custom_selector: string | undefined, action: HintAction): Found[] {
   const opens_elsewhere = OPEN_PLACES.includes(action);
-  const with_background_ = filter === "images";
-  const found = collect(document, query_for(filter, custom_selector_), weak_test_for(filter));
+  const with_background = filter === "images";
+  const found = collect(document, query_for(filter, custom_selector), weak_test_for(filter));
   const outside_links = action === "double_click" ? found.filter((item) => !is_inside_link(item.element)) : found;
-  return outside_links.filter((item) => (!opens_elsewhere && !with_background_) || has_usable_address(item.element as HTMLElement, with_background_, opens_elsewhere));
+  return outside_links.filter((item) => (!opens_elsewhere && !with_background) || has_usable_address(item.element as HTMLElement, with_background, opens_elsewhere));
 }
 
 const none_message = (text: string | undefined): string => (text === undefined ? "No hints on this page" : `No link matches ${text}`);
@@ -241,11 +241,11 @@ function register(host: BundleHostApi): void {
         current.waiting_tokens_.unshift(...queued.slice(index));
         break;
       }
-      handle_token_(current, token);
+      handle_token(current, token);
     }
   }
 
-  function handle_token_(current: Session, token: string): "handled" | "pass" {
+  function handle_token(current: Session, token: string): "handled" | "pass" {
     const ready = current.ready!;
     const outcome = ready.picker.on_token_(token);
     if (outcome.kind === "pass") return "pass";
@@ -286,7 +286,7 @@ function register(host: BundleHostApi): void {
   host.register_sink_("hint", {
     on_token_: (token) => {
       if (!session) return "pass";
-      if (session.ready) return handle_token_(session, token);
+      if (session.ready) return handle_token(session, token);
       if (token.length !== 1) return "pass";
       session.waiting_tokens_.push(token);
       return "handled";

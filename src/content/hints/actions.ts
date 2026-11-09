@@ -71,25 +71,25 @@ function frame_address(target: Target): string | undefined {
   return is_web_address(target.src) ? target.src : undefined;
 }
 
-const own_source = (target: Target, with_background_: boolean): string | undefined => {
+const own_source = (target: Target, with_background: boolean): string | undefined => {
   if (is_frame_element(target)) return frame_address(target);
   if (target.localName === "img") return image_source(target);
   if (target.localName === "input" && target.type === "image") return target.src;
   if (is_media(target)) return target.currentSrc || target.src;
-  return with_background_ ? background_url(target) : undefined;
+  return with_background ? background_url(target) : undefined;
 };
 
 // Where the element itself points: a link's href, an image's picture, a media element's source. Never an ancestor's. A script or `blob:` address is no use outside the page, and an inline `data:` one over 8 KB is too long to copy. `with_background_` is for the images filter: the element then stands for its picture, so a background image wins over the href of a link.
-export function element_address(target: Target, with_background_ = false): string | undefined {
-  if (!with_background_ && typeof target.href === "string" && target.href !== "") return /^javascript:/i.test(target.href) ? undefined : target.href;
-  const source = own_source(target, with_background_);
+export function element_address(target: Target, with_background = false): string | undefined {
+  if (!with_background && typeof target.href === "string" && target.href !== "") return /^javascript:/i.test(target.href) ? undefined : target.href;
+  const source = own_source(target, with_background);
   if (!source || /^(javascript|blob):/i.test(source)) return undefined;
   return is_inline(source) && source.length > MAX_INLINE_ADDRESS ? undefined : source;
 }
 
 // Whether an element can take the action by its address: an open needs one that can open, and the images filter needs any.
-export function has_usable_address(target: Target, with_background_: boolean, opens_elsewhere: boolean): boolean {
-  const address = element_address(target, with_background_);
+export function has_usable_address(target: Target, with_background: boolean, opens_elsewhere: boolean): boolean {
+  const address = element_address(target, with_background);
   return address !== undefined && !(opens_elsewhere && is_inline(address));
 }
 
@@ -238,7 +238,7 @@ function act_on_media(action: "play_pause" | "mute" | "fullscreen", target: Targ
   return refusal_as_outcome(doc.fullscreenElement ? doc.exitFullscreen() : player_box(media).requestFullscreen());
 }
 
-export function perform(action: HintAction, target: Target, deps: ActionDeps, with_background_ = false): void | Refusal | Promise<unknown> {
+export function perform(action: HintAction, target: Target, deps: ActionDeps, with_background = false): void | Refusal | Promise<unknown> {
   const pointer_from = action === "hover" ? undefined : leave_toward(target);
   if (action === "delete") return target.remove();
   if (action === "focus") return focus_target(target);
@@ -246,7 +246,7 @@ export function perform(action: HintAction, target: Target, deps: ActionDeps, wi
   if (action === "double_click") return double_click_like_a_mouse(target, pointer_from);
   if (action === "play_pause" || action === "mute" || action === "fullscreen") return act_on_media(action, target);
   if (starts_caret(action)) return deps.start_caret_(target as unknown as Element, action);
-  const address = element_address(target, with_background_);
+  const address = element_address(target, with_background);
   // A copy of the address falls back to the text for an element that has none, except a picture, whose text is empty.
   if (action === "copy") return address === undefined && (is_image_element(target) || is_media(target) || is_frame_element(target)) ? NO_WEB_ADDRESS : deps.copy(address ?? (target.textContent ?? "").trim());
   if (action === "copy_image" || action === "download") return address === undefined ? NO_WEB_ADDRESS : deps.image_action(action, address);

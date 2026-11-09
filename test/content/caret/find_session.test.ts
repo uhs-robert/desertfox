@@ -179,11 +179,11 @@ test("a costly pattern is not searched, says so, and leaves the older results in
   const lines: string[] = [];
   find.update("(a+)", (status) => lines.push(status));
   await page.settle();
-  const painted_ = page.painted_.length;
+  const painted = page.painted_.length;
   const clears = page.clears();
   find.update("(a+)+", (status) => lines.push(status));
   await page.settle();
-  assert.equal(page.painted_.length, painted_);
+  assert.equal(page.painted_.length, painted);
   assert.equal(page.clears(), clears);
   assert.match(lines.at(-1)!, /too slow/);
 });
@@ -350,11 +350,11 @@ test("a regex past the time limit says so while typing and leaves the older resu
   const lines: string[] = [];
   find.update("a", (status) => lines.push(status));
   await page.settle();
-  const painted_ = page.painted_.length;
+  const painted = page.painted_.length;
   const clears = page.clears();
   find.update("a.*c", (status) => lines.push(status));
   await page.settle();
-  assert.equal(page.painted_.length, painted_);
+  assert.equal(page.painted_.length, painted);
   assert.equal(page.clears(), clears);
   assert.equal(lines.at(-1), "Pattern too slow, stopped after 0.3 s: a.*c");
 });

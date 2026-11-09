@@ -73,11 +73,11 @@ export function scroll_to_index(model: TextModel, index: number, options: { bott
 }
 
 // `goal_x_` is where j and k aim on each new line, so a short line in between does not move the column. A caller keeps what comes back for the next j or k and drops it after any other motion.
-export function screen_line_target(model: TextModel, from: number, motion: Motion, goal_x_?: number): { index: number; goal_x_: number | undefined } {
+export function screen_line_target(model: TextModel, from: number, motion: Motion, goal_x?: number): { index: number; goal_x_: number | undefined } {
   const modified = modify_target(model, from, motion);
   const target = motion.unit === "line" ? line_target(model, from, modified, motion.direction) : modified;
   if (motion.unit !== "line" || target === from) return { index: target, goal_x_: undefined };
-  const wanted_x = goal_x_ ?? character_box(model, from)?.left ?? 0;
+  const wanted_x = goal_x ?? character_box(model, from)?.left ?? 0;
   return { index: nearest_on_line(model, target, wanted_x), goal_x_: wanted_x };
 }
 

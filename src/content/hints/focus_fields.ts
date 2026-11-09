@@ -48,10 +48,10 @@ function reveal({ element, frames }: Found): void {
   for (const target of [element, ...[...frames].reverse()]) if (!is_fully_in_view(target)) target.scrollIntoView({ block: "center", inline: "nearest", behavior: "instant" });
 }
 
-export function focus_field(root: ParentNode, last_blurred_: Element | undefined, direction: FieldDirection, steps: number): string | undefined {
+export function focus_field(root: ParentNode, last_blurred: Element | undefined, direction: FieldDirection, steps: number): string | undefined {
   const found = keep_present_found(collect(root, { selector: FORM_CONTROLS }));
   if (found.length === 0) return "No form control on this page";
-  const place = place_of(found.map((item) => item.element), [deepest_focused_element(), last_blurred_], is_above_view);
+  const place = place_of(found.map((item) => item.element), [deepest_focused_element(), last_blurred], is_above_view);
   const pick = pick_field(found.length, place, direction, steps);
   if ("end" in pick) return direction === "next" ? "No next form control" : "No previous form control";
   const target = found[pick.index]!;

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { heading_level, is_heading, jump_in, keep_present_, pick_heading, row_of, scroll_to_top } from "../../src/content/hints/headings.ts";
+import { heading_level, is_heading, jump_in, keep_present, pick_heading, row_of, scroll_to_top } from "../../src/content/hints/headings.ts";
 
 type FakeHeading = { localName: string; text?: string; rendered?: string; role?: string; level?: string };
 const heading = (fake: FakeHeading) => ({ localName: fake.localName, textContent: fake.text ?? "Title", innerText: fake.rendered ?? fake.text ?? "Title", getAttribute: (name: string) => (name === "role" ? (fake.role ?? null) : name === "aria-level" ? (fake.level ?? null) : null) }) as unknown as Element;
@@ -40,7 +40,7 @@ test("keep_present drops hidden, boxless, clipped and tiny headings and keeps of
     is_hidden_: (name: string) => hidden.includes(name),
   });
   const names_in = ["above", "below", "none", "hidden", "clipped", "tiny"];
-  const kept = keep_present_(
+  const kept = keep_present(
     names_in,
     probe({ above: box(-500), below: box(5000), hidden: box(0), clipped: box(0), tiny: box(0, 1) }, ["hidden"], { clipped: [{ left: 0, top: 100, right: 100, bottom: 200 }] }),
   );

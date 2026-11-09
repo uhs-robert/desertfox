@@ -7,7 +7,7 @@ import type { ToastKind } from "../shared/messages.ts";
 
 const MISSING = "DesertFox could not load ui";
 
-export const show_toast_ = (message: string, kind?: ToastKind): void => void bundles.run_command_("ui.toast", "ui", { message, kind }, MISSING, false);
+export const show_toast = (message: string, kind?: ToastKind): void => void bundles.run_command_("ui.toast", "ui", { message, kind }, MISSING, false);
 
 // Hiding first removes hosts an earlier instance left, which needs no bundle. Only the top frame draws the badge. A frame with no badge to remove does not load the bundle.
 export function show_mode_label(label: string | undefined, mode?: string): void {

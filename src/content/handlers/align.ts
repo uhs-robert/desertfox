@@ -21,8 +21,8 @@ function selection_target(blurred: Element | undefined): AlignSelection<Element>
 }
 
 // `last_blurred_` comes from the host: this file runs in the page bundle, which has no copy of the blur state.
-export function align_focus(position: AlignPosition, last_blurred_: Element | undefined): void {
-  const blurred = last_blurred_?.isConnected ? last_blurred_ : undefined;
+export function align_focus(position: AlignPosition, last_blurred: Element | undefined): void {
+  const blurred = last_blurred?.isConnected ? last_blurred : undefined;
   const target = choose_align_target(focused_element(), selection_target(blurred), blurred);
   if (!target) throw new Error("Nothing focused or selected to align");
   target.scrollIntoView({ block: SCROLL_BLOCK[position], behavior: "instant" });

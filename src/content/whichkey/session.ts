@@ -15,11 +15,11 @@ export function create_which_key_session(
   // Every hide and every manual show moves this on, so an older manual answer finds itself stale.
   let manual_epoch = 0;
 
-  async function show(prefix: PendingPrefix, is_current_: () => boolean): Promise<void> {
+  async function show(prefix: PendingPrefix, is_current: () => boolean): Promise<void> {
     if (!MODES_WITH_PANEL.includes(prefix.mode)) return;
     const panel = await fetch_panel(prefix.mode, prefix.typed);
     // The next key may have arrived while the background answered.
-    if (is_current_() && panel.rows.length > 0) draw(panel);
+    if (is_current() && panel.rows.length > 0) draw(panel);
   }
 
   return {

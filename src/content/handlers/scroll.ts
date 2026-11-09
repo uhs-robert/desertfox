@@ -82,7 +82,7 @@ export const scroll_pages: ContentHandler = {
   },
 };
 
-export const scroll_to_: ContentHandler = {
+export const scroll_to: ContentHandler = {
   run: (args, repeat) => {
     const axis = args.axis as ScrollAxis;
     const behavior = smooth_unless(repeat);

@@ -172,19 +172,19 @@ export function build_text_model(root: Element = document.body, start_node?: Nod
   visit(root, root, false, 0);
   return {
     text,
-    point_at_: (index) => empty_lines.get(index) ?? point_at_(segments, index),
-    index_of_: (node, offset) => index_of_(segments, empty_lines, node, offset),
+    point_at_: (index) => empty_lines.get(index) ?? point_at(segments, index),
+    index_of_: (node, offset) => index_of(segments, empty_lines, node, offset),
     trees: [...trees],
     empty_trees_: [...met_trees].filter((tree) => !trees.has(tree)),
     pending_hosts_,
     frames,
-    tree_runs_: (from, to) => tree_runs_(tree_starts, from, to),
+    tree_runs_: (from, to) => tree_runs(tree_starts, from, to),
     start_index_,
     truncated,
   };
 }
 
-function tree_runs_(tree_starts: TreeStart[], from: number, to: number): TreeRun[] {
+function tree_runs(tree_starts: TreeStart[], from: number, to: number): TreeRun[] {
   const runs: TreeRun[] = [];
   tree_starts.forEach(({ index, tree }, at) => {
     const run = { tree, from: Math.max(from, index), to: Math.min(to, tree_starts[at + 1]?.index ?? to) };
@@ -221,7 +221,7 @@ export const host_gained_root = (model: TextModel): boolean =>
 // Each document holds one selection, for itself and for the shadow roots inside it. A dead one is left out.
 export const documents_of = (model: TextModel): Document[] => [...new Set(model.trees.filter(is_alive).map(document_of))];
 
-function point_at_(segments: Segment[], index: number): DomPoint {
+function point_at(segments: Segment[], index: number): DomPoint {
   let low = 0;
   let high = segments.length - 1;
   while (low < high) {
@@ -234,7 +234,7 @@ function point_at_(segments: Segment[], index: number): DomPoint {
   return { node: segment.node, offset: Math.max(offset, 0) };
 }
 
-function index_of_(segments: Segment[], empty_lines: Map<number, DomPoint>, node: Node, offset: number): number | undefined {
+function index_of(segments: Segment[], empty_lines: Map<number, DomPoint>, node: Node, offset: number): number | undefined {
   if (node.nodeType !== TEXT_NODE) {
     for (const [index, point] of empty_lines) if (point.node === node && point.offset === offset) return index;
     return undefined;

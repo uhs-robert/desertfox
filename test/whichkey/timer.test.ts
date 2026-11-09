@@ -31,11 +31,11 @@ function make_page(delay_ms: number | undefined) {
   let panel_up = false;
   const follow_prefix = create_which_key_timer(
     () => delay_ms,
-    (prefix: PendingPrefix | undefined, is_current_) => {
+    (prefix: PendingPrefix | undefined, is_current) => {
       if (!prefix) return void (panel_up && (hidden.push(true), (panel_up = false)));
       // The bundle answers later, like the background does.
       void Promise.resolve().then(() => {
-        if (!is_current_()) return;
+        if (!is_current()) return;
         shown.push(`${prefix.mode}:${prefix.typed.join("")}`);
         panel_up = true;
       });
@@ -120,7 +120,7 @@ test("a delay of zero or none turns which-key off", async () => {
 
 test("an answer that arrives after the next key finds its prefix no longer current", () => {
   const asked: (() => boolean)[] = [];
-  const follow = create_which_key_timer(() => 1, (prefix, is_current_) => void (prefix && asked.push(is_current_)));
+  const follow = create_which_key_timer(() => 1, (prefix, is_current) => void (prefix && asked.push(is_current)));
   follow({ mode: "normal", typed: ["g"] });
   return sleep(10).then(() => {
     assert.equal(asked[0]?.(), true);

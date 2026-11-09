@@ -7,7 +7,7 @@ import { collect_matches, compile_query, describe_match, describe_timeout, neare
 import type { Direction, Fallback, Matches, ScanRegex, Search, Slicing } from "./find_match.ts";
 import { create_painter } from "./find_paint.ts";
 import type { FindColors, Painter } from "./find_paint.ts";
-import { get_register_, set_register_ } from "./registers.ts";
+import { get_register, set_register } from "./registers.ts";
 import { scroll_to_index } from "./screen_line.ts";
 import { find_colors_of, stored_theme } from "./selection_colors.ts";
 import { first_visible_index } from "./start_point.ts";
@@ -44,11 +44,11 @@ export type FindDeps = {
   build_model_: () => TextModel;
   start_index_: (model: TextModel) => number;
   painter: Painter;
-  scroll_to_: (model: TextModel, first_index_: number, last_index_: number, bottom_inset_: number) => void;
+  scroll_to_: (model: TextModel, first_index: number, last_index: number, bottom_inset: number) => void;
   read_colors_: () => Promise<FindColors>;
   get_register_: (name: string) => Promise<string | undefined>;
   set_register_: (name: string, text: string) => Promise<void>;
-  slicing: (is_stale_: () => boolean) => Slicing;
+  slicing: (is_stale: () => boolean) => Slicing;
   scan_regex: ScanRegex;
   // Where each document's own selection sits, both ends: a drag from the same anchor to a new point moves it too. A click moves it, which makes a later position win over an older match.
   selection_key_: (model: TextModel) => unknown[];
@@ -103,10 +103,10 @@ const browser_deps = (): FindDeps => ({
   build_model_: () => build_text_model(document.body),
   start_index_: (model) => (model.text === "" ? 0 : first_visible_index(model)),
   painter: create_painter(),
-  scroll_to_: (model, first_index_, last_index_, bottom_inset_) => scroll_to_index(model, first_index_, { bottom_inset_, last_index_ }),
+  scroll_to_: (model, first_index, last_index_, bottom_inset_) => scroll_to_index(model, first_index, { bottom_inset_, last_index_ }),
   read_colors_: read_find_colors,
-  get_register_,
-  set_register_,
+  get_register_: get_register,
+  set_register_: set_register,
   slicing: (is_stale_) => ({ is_stale_, yield_to_page_: () => new Promise<void>((resume) => setTimeout(resume, 0)), now: () => performance.now(), slice_ms_: SLICE_MS }),
   scan_regex: (text, { source, flags }) => browser.runtime.sendMessage({ type: "find_scan", text, source, flags } satisfies FindScan) as Promise<FindScanAnswer>,
   selection_key_: (model) => documents_of(model).flatMap((owner) => [owner.getSelection()?.anchorNode, owner.getSelection()?.anchorOffset, owner.getSelection()?.focusNode, owner.getSelection()?.focusOffset]),
@@ -157,7 +157,7 @@ export function create_find(host: Host, deps: FindDeps = browser_deps()) {
     highlighted = false;
   };
 
-  const scroll_to_ = (found: Found, inset: number) => {
+  const scroll_to = (found: Found, inset: number) => {
     try {
       deps.scroll_to_(found.model, found.matches.from[found.current]!, found.matches.to[found.current]! - 1, inset);
     } catch {}
@@ -188,28 +188,28 @@ export function create_find(host: Host, deps: FindDeps = browser_deps()) {
   };
 
   // A frame or shadow host that left the page takes its text with it, and a host that gained a root has text the model lacks. Either way the model is read again.
-  const is_current_ = (model: TextModel) => trees_alive(model) && !host_gained_root(model) && !page_changed;
-  const fresh_model = (model: TextModel): TextModel => (is_current_(model) ? model : read_model());
+  const is_current = (model: TextModel) => trees_alive(model) && !host_gained_root(model) && !page_changed;
+  const fresh_model = (model: TextModel): TextModel => (is_current(model) ? model : read_model());
 
   // `as_text_` is for Enter: it searches the text fallback that a costly or timed-out pattern skipped while typing.
-  async function run_update(open: Live, text: string, run: number, report: (status: string) => void, as_text_ = false): Promise<void> {
-    const is_stale_ = () => live !== open || open.generation_ !== run;
+  async function run_update(open: Live, text: string, run: number, report: (status: string) => void, as_text = false): Promise<void> {
+    const is_stale = () => live !== open || open.generation_ !== run;
     const query = compile_query(text);
     if (!query) {
       open.found = undefined;
       drop_highlights();
       return report("");
     }
-    if (!is_current_(open.model)) {
+    if (!is_current(open.model)) {
       open.model = read_model();
       open.start = locate(open.model, open.start_point_) ?? deps.start_index_(open.model);
     }
     // A pattern typed one key at a time passes through costly shapes such as `(a+)+`. It is not searched, and the results of the last keystroke stay on the page.
-    if (query.fallback === "costly" && !as_text_) return report(`Pattern too slow as a regex: ${text}`);
-    const [search, fallback] = as_text_ ? [query.as_text_, "costly" as const] : [query.search, query.fallback];
+    if (query.fallback === "costly" && !as_text) return report(`Pattern too slow as a regex: ${text}`);
+    const [search, fallback] = as_text ? [query.as_text_, "costly" as const] : [query.search, query.fallback];
     open.timed_out_ = undefined;
-    const matches = await collect_matches(open.model.text, search, deps.slicing(is_stale_), deps.scan_regex);
-    if (!matches || is_stale_()) return;
+    const matches = await collect_matches(open.model.text, search, deps.slicing(is_stale), deps.scan_regex);
+    if (!matches || is_stale()) return;
     // As with a costly shape, the results of the last keystroke stay on the page.
     if (matches === "timeout") {
       open.timed_out_ = timed_out_query = text;
@@ -217,9 +217,9 @@ export function create_find(host: Host, deps: FindDeps = browser_deps()) {
     }
     if (search.kind === "regex" && timed_out_query === text) timed_out_query = undefined;
     const colors = await open.colors;
-    if (is_stale_()) return;
+    if (is_stale()) return;
     // The page can lose a frame while the scan runs. Then the match positions no longer fit the text, so the scan starts over.
-    if (!trees_alive(open.model)) return run_update(open, text, run, report, as_text_);
+    if (!trees_alive(open.model)) return run_update(open, text, run, report, as_text);
     const first = nearest_match(matches.from, open.start, open.direction);
     if (!first) {
       open.found = undefined;
@@ -229,7 +229,7 @@ export function create_find(host: Host, deps: FindDeps = browser_deps()) {
     const found: Found = { model: open.model, query: text, fallback, direction: open.direction, matches, current: first.index };
     open.found = found;
     paint(found, colors);
-    scroll_to_(found, LINE_HEIGHT_PX);
+    scroll_to(found, LINE_HEIGHT_PX);
     report(cut_note(open.model, describe_match(text, matches.from.length, first.index, fallback, first.wrapped)));
   }
 
@@ -269,7 +269,7 @@ export function create_find(host: Host, deps: FindDeps = browser_deps()) {
     const direction = reverse ? opposite(previous.direction) : previous.direction;
     const colors = await deps.read_colors_();
     const kept = shown?.query === previous.query ? shown : undefined;
-    let found = kept && is_current_(kept.model) ? kept : undefined;
+    let found = kept && is_current(kept.model) ? kept : undefined;
     let wrapped = false;
     // A step from a caret (visual mode) looks from the caret, as the search line does, and not from the last match.
     if (found && !origin) {
@@ -301,7 +301,7 @@ export function create_find(host: Host, deps: FindDeps = browser_deps()) {
     }
     stand_on(found);
     paint(found, colors);
-    scroll_to_(found, 0);
+    scroll_to(found, 0);
     host.show_toast_(cut_note(found.model, describe_match(found.query, found.matches.from.length, found.current, found.fallback, wrapped)));
     return { ok: true };
   }

@@ -191,8 +191,8 @@ function end_session(): void {
 function adopt_page_selection(open: Session): void {
   for (const selection of selections_of(open.model)) {
     const ends = ends_of(selection);
-    const painted_ = open.painted_.find((record) => record.selection === selection)?.ends ?? [];
-    if (ends.length === painted_.length && ends.every((end, at) => end === painted_[at])) continue;
+    const painted = open.painted_.find((record) => record.selection === selection)?.ends ?? [];
+    if (ends.length === painted.length && ends.every((end, at) => end === painted[at])) continue;
     const found = selection_span(open.model, selection);
     if (!found) continue;
     open.cursor = page_selection_cursor(open.model, selection) ?? with_caret(open.cursor, found.first, is_visual(open.mode));

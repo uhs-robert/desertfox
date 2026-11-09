@@ -33,7 +33,7 @@ function link_href(rel: string): string | undefined {
   return document.querySelector<HTMLLinkElement>(`link[rel~="${rel}"][href]`)?.href || undefined;
 }
 
-export function copy_page_url(format: CopyFormat, show_toast_: (message: string) => void): Promise<Outcome | void> {
+export function copy_page_url(format: CopyFormat, show_toast: (message: string) => void): Promise<Outcome | void> {
   const text = format_page_link(format, {
     url: location.href,
     title: document.title,
@@ -42,7 +42,7 @@ export function copy_page_url(format: CopyFormat, show_toast_: (message: string)
   });
   // The failure goes to the caller, which shows it once.
   return navigator.clipboard.writeText(text).then(
-    () => show_toast_(`Copied ${text}`),
+    () => show_toast(`Copied ${text}`),
     (): Outcome => ({ ok: false, message: "Could not copy to the clipboard" }),
   );
 }

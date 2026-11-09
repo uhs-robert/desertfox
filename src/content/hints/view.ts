@@ -90,9 +90,9 @@ export function create_view() {
     },
     reposition,
     // Labels that no longer start with the typed text hide. The typed part of the others dims.
-    show_progress_: (typed: string, still_possible_: ReadonlySet<number>): void => {
+    show_progress_: (typed: string, still_possible: ReadonlySet<number>): void => {
       drawn.forEach((label, index) => {
-        filter_label(label.node.style, still_possible_.has(index));
+        filter_label(label.node.style, still_possible.has(index));
         label.typed_part_.textContent = typed;
         label.rest_part_.textContent = label.text.slice(typed.length);
       });

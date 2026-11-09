@@ -69,8 +69,8 @@ const QUERIES: Record<Exclude<HintFilter, "custom">, Query> = {
   scrollable: { selector: "*", test: (element) => !takes_typing(element as HTMLElement) && is_scroll_box(element) },
 };
 
-export const query_for = (filter: HintFilter, custom_selector_: string | undefined): Query =>
-  filter === "custom" ? { selector: custom_selector_ ?? "" } : QUERIES[filter];
+export const query_for = (filter: HintFilter, custom_selector: string | undefined): Query =>
+  filter === "custom" ? { selector: custom_selector ?? "" } : QUERIES[filter];
 
 // An element and the iframes that hold it, outermost first. The frames give its place on the top page.
 // `weak` marks an element that only looks clickable (a pointer cursor, a spot in a menu), see `drop_redundant_weak`.

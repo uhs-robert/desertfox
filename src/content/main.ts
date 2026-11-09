@@ -14,7 +14,7 @@ import { create_cancelled_keys } from "./cancelled_keys.ts";
 import { create_key_flow } from "./key_flow.ts";
 import { create_which_key_timer } from "./which_key_timer.ts";
 import { mode_label } from "./mode_label.ts";
-import { show_mode_label, show_toast_ } from "./ui_proxy.ts";
+import { show_mode_label, show_toast } from "./ui_proxy.ts";
 import { wire_mode_reports } from "./mode_report.ts";
 import { page_mode } from "./page_mode.ts";
 import { counted_invocations, run_content_steps, run_in_order } from "./run_content.ts";
@@ -53,14 +53,14 @@ async function send_to_background(message: ContentToBackground): Promise<RunResp
 
 // A leaf with a background step goes to the router whole: it reads the active tab at each step, so a step after tab.next runs in the new tab.
 // A leaf of content steps runs here and shows its own failure.
-async function run_leaf_(leaf: TreeLeaf, count: number | undefined, repeat: boolean): Promise<void> {
+async function run_leaf(leaf: TreeLeaf, count: number | undefined, repeat: boolean): Promise<void> {
   if (leaf.steps.some((step) => step.runs_in === "background")) {
     // The background shows a refusal itself.
     await send_to_background({ type: "run", invocations: counted_invocations(leaf.steps, count), mode: page_mode.get_mode() });
     return;
   }
   const outcome = await run_content_steps(leaf.steps, count, repeat);
-  if (!outcome.ok) show_toast_(outcome.message);
+  if (!outcome.ok) show_toast(outcome.message);
 }
 
 // Zero turns which-key off.
@@ -75,7 +75,7 @@ const key_flow = create_key_flow({
   on_prefix_: follow_prefix,
   get_mode: page_mode.get_mode,
   take_pass_next_: page_mode.take_pass_next_,
-  run_leaf_: (leaf, count, repeat) => void run_leaf_(leaf, count, repeat),
+  run_leaf_: (leaf, count, repeat) => void run_leaf(leaf, count, repeat),
   leave_insert_: () => {
     page_mode.escape();
     blur_focused_element();
@@ -90,12 +90,12 @@ bundles.connect({
   request_bundle_: async (name) => (await send_to_background({ type: "load_bundle", name })).ok,
   on_idle_: key_flow.release,
   set_mode_: page_mode.set_mode_,
-  show_toast_,
+  show_toast_: show_toast,
   // The toast needs the ui bundle, so without it an error has nowhere to show.
-  show_error_: (message) => (bundles.has_handler_("ui.toast") ? show_toast_(message) : console.error(message)),
+  show_error_: (message) => (bundles.has_handler_("ui.toast") ? show_toast(message) : console.error(message)),
   on_sink_missing_: (mode) => {
     page_mode.set_mode_("normal");
-    show_toast_(`${mode} mode is not available yet`);
+    show_toast(`${mode} mode is not available yet`);
   },
 });
 
@@ -252,7 +252,7 @@ function start(): void {
     if (message.type === "run_in_content") {
       // The router already applied the count, so each invocation runs once. The router shows a failure.
       return run_in_order(message.invocations);
-    } else if (message.type === "refusal") show_toast_(message.refusal.message, message.kind);
+    } else if (message.type === "refusal") show_toast(message.refusal.message, message.kind);
     else if (message.type === "set_mode") {
       page_mode.set_mode_(message.mode);
       if (is_editable_element(deepest_focused_element())) page_mode.focus_entered_editable_();
