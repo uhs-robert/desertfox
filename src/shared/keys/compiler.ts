@@ -313,14 +313,14 @@ const key_sequences = (text: string, warnings: string[]): string[][] =>
 
 // A rule whose pattern never matches is dropped. A rule that leaves no normal key is all off, so the page enters ignore mode.
 function compile_site_rules(rules: Settings["site_rules"], normal: TreeBranch | undefined, warnings: string[]): SiteRule[] {
-  return rules.flatMap((rule) => {
+  return rules.flatMap((rule): SiteRule[] => {
     const regex = match_regex_source([rule.site]);
     if (regex === undefined) return [];
     const keys = rule.pass ?? rule.only;
     if (keys === undefined || normal === undefined) return [{ regex, all_off: true }];
     const sequences = key_sequences(keys, warnings);
-    const pruned = prune_tree(normal, rule.pass === undefined ? { only: sequences } : { pass: sequences });
-    return [is_empty_tree(pruned) ? { regex, all_off: true } : { regex, normal: pruned }];
+    const key_rule = rule.pass === undefined ? { only: sequences } : { pass: sequences };
+    return [is_empty_tree(prune_tree(normal, key_rule)) ? { regex, all_off: true } : { regex, ...key_rule }];
   });
 }
 

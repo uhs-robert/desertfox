@@ -151,7 +151,7 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
       page,
       requirement_of: requirement_lookup(config),
       site_engine_label_of: (invocation) => config.search_engines[site_engine_for(config.search_engines, invocation.site_search?.engines ?? [], page) ?? ""]?.label,
-    }));
+    }, [sender.url, tab?.url]));
   }
   if ((message as SnippetCall)?.type === "snippet_run") {
     return get_config().then(() => snippets.handle_call(message as SnippetCall, { tab_id: sender.tab?.id, frame_id: sender.frameId }));

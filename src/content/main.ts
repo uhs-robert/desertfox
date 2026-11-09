@@ -5,6 +5,7 @@ import type { BackgroundToContent, CompiledKeymap, ContentToBackground, Mode, Mo
 import { COMPILED_KEYMAP_STORAGE_KEY, COMPILED_KEYMAP_VERSION, DEFAULT_MODE_INDICATOR, current_keymap } from "../shared/index.ts";
 import { create_matcher, event_to_token } from "../shared/keys/index.ts";
 import { matches_any_address } from "../shared/match_pattern.ts";
+import { prune_tree, rule_frees } from "../shared/keys/prune_tree.ts";
 import { message_of } from "./bundle_host.ts";
 import type { BundleHostApi } from "./bundle_host.ts";
 import { bundles } from "./bundles.ts";
@@ -194,14 +195,20 @@ function install_matcher(keymap: CompiledKeymap | undefined, tab_address: string
   matcher_installed = true;
   const rule = usable?.site_rules?.find(({ regex }) => matches_any_address(regex, [location.href, tab_address]));
   const all_off = rule !== undefined && "all_off" in rule;
-  const entered_all_off = all_off && !was_all_off;
+  const keyed_rule = rule !== undefined && !("all_off" in rule) ? rule : undefined;
+  // The rule's own ignore mode ends with the rule, so removing or rewriting it takes effect on the open page. A manual ignore mode on a page that no rule turned off stays.
+  const left_all_off = !all_off && was_all_off && page_mode.get_mode() === "ignore";
+  if (all_off && !was_all_off) page_mode.set_mode_("ignore");
+  else {
+    if (left_all_off) page_mode.set_mode_("normal");
+    if ((first_install || left_all_off) && is_editable_element(deepest_focused_element())) page_mode.focus_entered_editable_();
+  }
   if (usable) was_all_off = all_off;
-  if (entered_all_off) page_mode.set_mode_("ignore");
-  else if (first_install && is_editable_element(deepest_focused_element())) page_mode.focus_entered_editable_();
   refresh_mode_indicator();
   // The rule's tree goes in before the matcher, so held keys replay against it.
   const tree = usable ?? { format_version: COMPILED_KEYMAP_VERSION, modes: {}, mode_indicator: DEFAULT_MODE_INDICATOR, which_key_delay_ms: 0 };
-  key_flow.set_matcher_(create_matcher(rule !== undefined && "normal" in rule ? { ...tree, modes: { ...tree.modes, normal: rule.normal } } : tree), usable?.modes.browser);
+  const ruled_tree = keyed_rule ? { ...tree, modes: { ...tree.modes, normal: prune_tree(tree.modes.normal, keyed_rule) } } : tree;
+  key_flow.set_matcher_(create_matcher(ruled_tree, keyed_rule && ((token) => rule_frees(keyed_rule, token))), usable?.modes.browser);
 }
 
 async function read_keymap(): Promise<CompiledKeymap | undefined> {

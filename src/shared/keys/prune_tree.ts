@@ -1,4 +1,4 @@
-// Prunes a copy of a mode's tree for a site rule. Only the compiler imports it, so the content script carries none of this.
+// Prunes a copy of a mode's tree for a site rule. The compiler runs it to learn whether a rule leaves any key, the content script to get the page's tree, and which-key to list only the keys that still run.
 
 import type { TreeBranch, TreeNode } from "../prefix_tree.ts";
 
@@ -30,12 +30,19 @@ function only(node: TreeNode, sequences: Sequences): TreeNode | undefined {
   return Object.keys(children).length === 0 ? undefined : { ...node, children };
 }
 
+export type KeyRule = { pass: Sequences } | { only: Sequences };
+
 const EMPTY_ROOT: TreeBranch = { kind: "branch", children: {} };
 
 // Shares unchanged subtrees with the input and never mutates it. The result is empty when nothing is left.
-export function prune_tree(root: TreeBranch, rule: { pass: Sequences } | { only: Sequences }): TreeBranch {
-  const pruned = "pass" in rule ? without(root, rule.pass) : only(root, rule.only);
+export function prune_tree(root: TreeBranch | undefined, rule: KeyRule): TreeBranch {
+  const pruned = root && ("pass" in rule ? without(root, rule.pass) : only(root, rule.only));
   return pruned?.kind === "branch" ? pruned : EMPTY_ROOT;
 }
 
 export const is_empty_tree = (branch: TreeBranch): boolean => Object.keys(branch.children).length === 0;
+
+// Whether the rule hands this single key to the page even where the tree never binds it: `/`, `'` and the digits, which the key flow would otherwise cancel or take as a count.
+// Under `only` every key but the first key of a listed sequence goes to the page.
+export const rule_frees = (rule: KeyRule, token: string): boolean =>
+  "pass" in rule ? rule.pass.some((sequence) => sequence.length === 1 && sequence[0] === token) : !rule.only.some((sequence) => sequence[0] === token);

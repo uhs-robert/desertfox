@@ -8,7 +8,7 @@ import type { ToolbarAnswer, ToolbarRequest } from "../shared/messages.ts";
 import { HELP_PAGE_FILE } from "../help/route.ts";
 import { follow_theme } from "../shared/theme/apply.ts";
 import { DISABLED_STORAGE_KEY } from "../background/storage_keys.ts";
-import { build_rows, disabled_after_click, HOME_HASH, SETTINGS_HASH, WARNINGS_HASH } from "./model.ts";
+import { build_rows, disabled_after_click, HOME_HASH, SETTINGS_HASH, SITE_RULES_HASH, WARNINGS_HASH } from "./model.ts";
 import type { PopupRow } from "./model.ts";
 
 const root = document.getElementById("desertfox-popup")!;
@@ -44,7 +44,7 @@ async function act(row: PopupRow): Promise<void> {
   else if (row.id === "settings") return open_help_page(SETTINGS_HASH);
   else if (row.id === "home") return open_help_page(HOME_HASH);
   else if (row.id === "warnings") return open_help_page(WARNINGS_HASH);
-  else if (row.id === "rule") return open_help_page(SETTINGS_HASH);
+  else if (row.id === "rule") return open_help_page(SITE_RULES_HASH);
   else if (row.id === "site") {
     const answer = await ask({ type: "toolbar_site", url: tab?.url ?? "", action: row.site_action ?? "disable" });
     notice = answer.message;

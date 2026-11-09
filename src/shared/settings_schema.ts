@@ -55,7 +55,7 @@ function table_problem(fields: TableFields, exclusive: readonly string[], value:
     if (rule.optional && field_value === undefined) continue;
     if (rule.value === "keys" && is_text(field_value)) {
       const key_problem = keys_problem(field_value);
-      if (key_problem !== undefined) return `has a "${field}" that ${key_problem}`;
+      if (key_problem !== undefined) return `has a field "${field}" that ${key_problem}`;
       continue;
     }
     if (is_text(field_value) && (rule.value !== "web_url" || is_web_url(field_value))) continue;

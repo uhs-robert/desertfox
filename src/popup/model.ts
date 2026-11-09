@@ -2,11 +2,14 @@
 
 import type { SiteState } from "../background/toolbar.ts";
 import { PAGES } from "../help/route.ts";
+import { group_of } from "../help/settings_model.ts";
 
 const page_hash = (id: (typeof PAGES)[number]["id"]) => PAGES.find((page) => page.id === id)!.hash;
 
 export const HOME_HASH = page_hash("home");
 export const SETTINGS_HASH = page_hash("settings");
+// The settings group that lists `site_rules`, as its section slug.
+export const SITE_RULES_HASH = `${SETTINGS_HASH.replace("#/", "#section=")}/${group_of("site_rules").toLowerCase()}`;
 // The Warnings heading on Home, where the count points.
 export const WARNINGS_HASH = "#section=home/warnings";
 
@@ -51,7 +54,7 @@ export function build_rows(inputs: PopupInputs): PopupRow[] {
     { id: "home", kind: "link", label: "Help", enabled: true },
     site_row(inputs.site, inputs.disabled),
   ];
-  // A rule edit reaches open pages at once. The link opens the settings page, where the rules are listed.
+  // A rule edit reaches open pages at once. The link opens the settings group that lists them.
   if (inputs.site.kind === "disabled" || inputs.site.kind === "config") rows.push({ id: "rule", kind: "link", label: "Rule on this page", detail: inputs.site.rule, enabled: true });
   rows.push(
     inputs.has_native_host

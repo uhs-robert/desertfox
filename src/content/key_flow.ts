@@ -19,6 +19,8 @@ export type Matcher = {
   feed: (mode: string, token: string) => MatchResult;
   reset: () => void;
   binds_after_: (mode: string, ahead: readonly string[], token: string) => boolean;
+  // A site rule hands this key to the page.
+  passes_: (mode: string, token: string) => boolean;
 };
 
 export type KeyFlowDeps = {
@@ -110,7 +112,7 @@ export function create_key_flow(deps: KeyFlowDeps) {
     const last_held = held_tokens.at(-1);
     if (last_held === undefined) reset_sequence_();
     else if (last_held !== SEQUENCE_BREAK) held_tokens.push(SEQUENCE_BREAK);
-    return cancels_unbound_key(mode, token, false) ? "cancel" : "pass";
+    return !matcher.passes_(mode, token) && cancels_unbound_key(mode, token, false) ? "cancel" : "pass";
   };
 
   const step = (active: Matcher, token: string, repeat: boolean): KeyDecision => {
@@ -137,7 +139,7 @@ export function create_key_flow(deps: KeyFlowDeps) {
     if (result.kind === "pending") return "cancel";
     // The page sees this Escape too, so it can close its own dialog.
     if (mode === "insert" && token === "<Escape>") deps.leave_insert_();
-    return cancels_unbound_key(mode, token, deps.in_editable_field_()) ? "cancel" : "pass";
+    return !active.passes_(mode, token) && cancels_unbound_key(mode, token, deps.in_editable_field_()) ? "cancel" : "pass";
   };
 
   const decide = (active: Matcher, token: string, repeat: boolean): KeyDecision => {
