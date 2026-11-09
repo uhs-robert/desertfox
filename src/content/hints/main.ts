@@ -12,6 +12,7 @@ import { collect, keep_text_matches, keep_visible_deduplicated, query_for, scrol
 import type { Found, HintFilter } from "./candidates.ts";
 import { clean_letters, make_labels } from "./labels.ts";
 import { create_picker } from "./pick.ts";
+import { is_hint_char } from "./hint_keys.ts";
 import { create_view } from "./view.ts";
 import type { HintView } from "./view.ts";
 import { follow_windows } from "./follow.ts";
@@ -287,7 +288,7 @@ function register(host: BundleHostApi): void {
     on_token_: (token) => {
       if (!session) return "pass";
       if (session.ready) return handle_token(session, token);
-      if (token.length !== 1) return "pass";
+      if (!is_hint_char(token)) return "pass";
       session.waiting_tokens_.push(token);
       return "handled";
     },

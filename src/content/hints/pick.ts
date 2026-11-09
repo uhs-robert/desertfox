@@ -1,6 +1,7 @@
 // The typing side of hints: which keys count, what has been typed, when a label is complete. Pure, so it needs no page.
 
 import { is_chord } from "../../shared/keys/token.ts";
+import { is_hint_char } from "./hint_keys.ts";
 import { narrow } from "./labels.ts";
 
 export type Typed = { typed: string; still_possible_: number[] };
@@ -21,7 +22,7 @@ export function create_picker(labels: readonly string[]) {
         typed = typed.slice(0, -1);
         return { kind: "handled", typed, still_possible_: narrow(labels, typed).still_possible_ };
       }
-      if (token.length !== 1) return { kind: "pass" };
+      if (!is_hint_char(token)) return { kind: "pass" };
       const next = typed + token.toLowerCase();
       const { still_possible_, complete } = narrow(labels, next);
       if (still_possible_.length === 0) return { kind: "handled", typed, still_possible_: narrow(labels, typed).still_possible_ };

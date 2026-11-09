@@ -4,6 +4,8 @@
 
 import type { Mode, TreeBranch, TreeLeaf } from "../shared/index.ts";
 import type { MatchResult } from "../shared/keys/index.ts";
+import type { BundleName } from "../shared/bundles.ts";
+import { hint_mode_takes } from "./hints/hint_keys.ts";
 import type { Sink } from "./bundle_host.ts";
 import { is_caret_mode } from "../shared/command.ts";
 import { is_chord } from "../shared/keys/token.ts";
@@ -28,8 +30,8 @@ export type KeyFlowDeps = {
   in_editable_field_: () => boolean;
   // A bundle is loading, and the mode its keys replay in is not known yet.
   is_loading_: () => boolean;
-  // The loading bundle registers a sink, so its mode may take any key on replay.
-  is_loading_sink_bundle_: () => boolean;
+  // The loading bundles that register a sink. Their mode may take keys on replay.
+  loading_sink_bundles_: () => readonly BundleName[];
   sink_of_: (mode: Mode) => Sink | undefined;
   // Called with the prefix after each key that leaves a sequence half-typed, and with nothing when the sequence ends or resets. `at_once` skips the pause before the panel.
   on_prefix_: (prefix: PendingPrefix | undefined, at_once?: boolean) => void;
@@ -43,8 +45,15 @@ const SEQUENCE_BREAK = "";
 // Insert and ignore mode give keys to the page, and hint and cmdline mode own theirs. Every other mode blocks Quick Find, so a new mode does too.
 const MODES_WITHOUT_QUICK_FIND_BLOCK: readonly Mode[] = ["insert", "ignore", "hint", "cmdline"];
 
-// What a caret mode still lets through: focus moves, Firefox's function keys, the way out of a page dialog and the page scroll keys.
-const KEYS_PAST_CARET_MODES = /^<(?:S-)?(?:Tab|F\d+|Escape|PageUp|PageDown|Home|End)>$/;
+// What a caret mode never takes: focus moves, Firefox's function keys and the page scroll keys.
+const CARET_PAGE_KEYS = /^<(?:S-)?(?:Tab|F\d+|PageUp|PageDown|Home|End)>$/;
+
+// What a caret mode still lets through: those keys and the way out of a page dialog.
+const KEYS_PAST_CARET_MODES = new RegExp(`${CARET_PAGE_KEYS.source}|^<(?:S-)?Escape>$`);
+
+// Whether the mode a sink bundle serves may take the key once the bundle is in. Only such keys wait for the load. Cmdline takes every key.
+const bundle_may_take = (bundle: BundleName, token: string): boolean =>
+  bundle === "hints" ? hint_mode_takes(token) : bundle === "caret" ? !CARET_PAGE_KEYS.test(token) : true;
 
 // Which unbound keys the page never sees. Firefox starts Quick Find on `/` and `'` in page content, beside DesertFox's own page search. A caret mode is for reading, so a site shortcut there moves the user away from the caret. In a field every key is typing, and a chord stays with Firefox and the page (Ctrl+C copies a selection).
 export const cancels_unbound_key = (mode: Mode, token: string, in_field: boolean): boolean => {
@@ -81,7 +90,7 @@ export function create_key_flow(deps: KeyFlowDeps) {
 
   // The held keys are not fed yet, so the check reads ahead through them. It cannot read through Backspace, which edits the sequence, or an insert mode Escape, which leaves the mode on replay, so those keys and every key after them wait.
   const waits_for_replay = (active: Matcher, mode: Mode, token: string): boolean =>
-    deps.is_loading_sink_bundle_() ||
+    deps.loading_sink_bundles_().some((bundle) => bundle_may_take(bundle, token)) ||
     !!deps.sink_of_(mode) ||
     token === "<Backspace>" ||
     (mode === "insert" && token === "<Escape>") ||

@@ -78,7 +78,7 @@ test("the first key of a lazy command waits one bundle load, holds the keys type
     take_pass_next_: state.take_pass_next_,
     in_editable_field_: () => false,
     is_loading_: bundles.is_loading_,
-    is_loading_sink_bundle_: bundles.is_loading_sink_bundle_,
+    loading_sink_bundles_: bundles.loading_sink_bundles_,
     sink_of_: bundles.sink_of_,
     on_prefix_: () => {},
     leave_insert_: () => state.escape(),
