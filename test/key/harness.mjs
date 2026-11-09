@@ -9,6 +9,7 @@ import { fileURLToPath } from "node:url";
 import { connect_rdp, evaluate_in_background, evaluate_in_chrome, evaluate_in_page_frames, install_temporary_addon } from "./rdp.mjs";
 import { start_server } from "./server.mjs";
 import { start_session, stop_session_named, sweep_dead_sessions } from "./session.mjs";
+import { create_stall_capture, stall_capture_mode } from "./stall_capture.mjs";
 import { check_firefox_internals, with_firefox_version } from "./firefox_internals.mjs";
 import { default_timings_path } from "./timings.mjs";
 
@@ -187,12 +188,17 @@ export async function create_session({ name: session_name, timings, sweep = true
   const events = server.events;
   const debug_port = given_debug_port ?? (await free_port());
   let rdp;
+  // Undefined unless KEY_TEST_STALL_CAPTURE=1 and gdb is present. Then Firefox runs under gdb (launch_firefox.sh).
+  const launch_mode = stall_capture_mode();
+  const stall_capture = launch_mode === "gdb" ? create_stall_capture({ debug_port, gdb_log: join(work_dir, "gdb.log"), out_dir: diagnostics_dir ?? join(repo_dir, ".logs"), label: session_name }) : undefined;
   // A signal can arrive during the normal teardown, so every path shares this one run of the cleanup.
   let teardown_started;
   // Set by close(), so a signal after a finished run only exits and does not write the timings a second time.
   let closed = false;
-  const teardown = ({ keep_diagnostics }) => {
+  // A signal skips the wait for a running capture, since the coordinator is waiting to end the run.
+  const teardown = ({ keep_diagnostics, wait_for_capture = true }) => {
     teardown_started ??= (async () => {
+      if (wait_for_capture) await stall_capture?.settled();
       if (keep_diagnostics && diagnostics_dir) save_diagnostics();
       rdp?.close();
       // A signal during the start leaves no session object, so the session is found by its name.
@@ -205,14 +211,14 @@ export async function create_session({ name: session_name, timings, sweep = true
   for (const [signal, code] of [["SIGINT", 130], ["SIGTERM", 143]]) {
     process.on(signal, () => {
       if (closed) {
-        teardown({ keep_diagnostics: false }).finally(() => process.exit(code));
+        teardown({ keep_diagnostics: false, wait_for_capture: false }).finally(() => process.exit(code));
         return;
       }
       // Written before the teardown, so a hung teardown loses nothing and is not charged to the case.
       timings.finish_active_case();
       timings.finish_active_piece();
       write_timings();
-      teardown({ keep_diagnostics: true }).finally(() => process.exit(code));
+      teardown({ keep_diagnostics: true, wait_for_capture: false }).finally(() => process.exit(code));
     });
   }
 
@@ -434,7 +440,7 @@ export async function create_session({ name: session_name, timings, sweep = true
   try {
     if (sweep) await sweep_dead_sessions();
     session = await timings.time("driver", () => start_session({ name: session_name, session_dir: join(work_dir, "session") }));
-    const firefox = session.spawn([join(key_test_dir, "launch_firefox.sh"), work_dir, profile_dir, String(debug_port), managed_file]);
+    const firefox = session.spawn([join(key_test_dir, "launch_firefox.sh"), work_dir, profile_dir, String(debug_port), managed_file, launch_mode]);
     let firefox_exit;
     firefox.on("exit", (code, signal) => { firefox_exit = signal ? `signal ${signal}` : `exit ${code}`; });
     for (let attempt = 0; ; attempt++) {
@@ -446,6 +452,7 @@ export async function create_session({ name: session_name, timings, sweep = true
         await sleep(500);
       }
     }
+    if (stall_capture) rdp.on_close(() => stall_capture.note_lost(rdp.lost_reason()));
     // The padded bundles stand in for a 20 KB hints or caret bundle. They go into a copy, so dist/ stays as built.
     const extension_dir = join(work_dir, "extension");
     cpSync(dist_dir, extension_dir, { recursive: true });
