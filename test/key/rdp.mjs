@@ -21,12 +21,18 @@ export async function connect_rdp(port, { request_timeout_ms = DEFAULT_REQUEST_T
   let closed_reason;
   let greeted = false;
   let greeting_arrived;
-  const greeting = new Promise((resolve) => { greeting_arrived = resolve; });
+  let greeting_failed;
+  const greeting = new Promise((resolve, reject) => { greeting_arrived = resolve; greeting_failed = reject; });
+  // A rejection nobody awaits yet (the close can come before connect_rdp reaches the await) must not crash the run.
+  greeting.catch(() => {});
+  const close_listeners = new Set();
 
   const lost_message = (actor) => `rdp: connection to Firefox lost (${closed_reason})${actor ? ` while waiting for ${actor}` : ""}`;
   const fail_everything = () => {
     for (const queue of waiting_requests.values()) for (const entry of queue.splice(0)) entry.fail(new Error(lost_message(entry.actor)));
     for (const read of [...event_readers]) read();
+    for (const listener of [...close_listeners]) listener();
+    if (!greeted) greeting_failed(new Error(`rdp: connection to Firefox lost before it greeted (${closed_reason})`));
   };
   socket.on("error", (error) => { closed_reason ??= error.message; });
   socket.on("close", () => {
@@ -140,10 +146,23 @@ export async function connect_rdp(port, { request_timeout_ms = DEFAULT_REQUEST_T
   const subscribe = (actor, handler) => { event_subscribers.set(actor, handler); };
 
   await new Promise((resolve, reject) => { socket.once("connect", resolve); socket.once("error", reject); });
-  await greeting;
+  // A Firefox that accepts the connection but never greets would hang the caller, so the wait ends as the old client's did.
+  const greeting_timer = setTimeout(() => {
+    closed_reason ??= "no greeting";
+    socket.destroy();
+    fail_everything();
+  }, request_timeout_ms);
+  try {
+    await greeting;
+  } catch (error) {
+    socket.destroy();
+    throw error;
+  } finally {
+    clearTimeout(greeting_timer);
+  }
   // The polling pauses of this client go through here, so the timings can charge them to the debugger.
   const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-  return { request, next_event, subscribe, pause, lost_reason: () => closed_reason, close: () => {
+  return { request, next_event, subscribe, on_close: (listener) => { close_listeners.add(listener); return () => close_listeners.delete(listener); }, pause, lost_reason: () => closed_reason, close: () => {
     closed_reason ??= "closed by the test";
     socket.destroy();
     fail_everything();
@@ -204,11 +223,18 @@ async function attach_background_tracker(rdp, addon_id) {
         if (live_targets.length === 0) return false;
         clearTimeout(timer);
         arrival_listeners.delete(answer);
+        stop_watching_close();
         resolve(live_targets.at(-1).console_actor);
         return true;
       };
+      const stop_watching_close = rdp.on_close(() => {
+        clearTimeout(timer);
+        arrival_listeners.delete(answer);
+        reject(new Error(`rdp: connection to Firefox lost (${rdp.lost_reason()}) while waiting for the background page of ${addon_id}`));
+      });
       const timer = setTimeout(() => {
         arrival_listeners.delete(answer);
+        stop_watching_close();
         reject(new Error(`rdp: no background page of ${addon_id} came up`));
       }, timeout_ms);
       if (!answer()) arrival_listeners.add(answer);

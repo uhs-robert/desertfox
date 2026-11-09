@@ -16,14 +16,15 @@ const frame = (packet: object): Buffer => {
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 // A debugger server that greets like Firefox and hands each request to `on_packet`, which answers with fake.send.
-async function fake_server(on_packet: (packet: Packet, fake: Fake) => void): Promise<Fake> {
+async function fake_server(on_packet: (packet: Packet, fake: Fake) => void, greeting: "greets" | "closes" | "stays silent" = "greets"): Promise<Fake> {
   let connection: net.Socket | undefined;
   const sockets: net.Socket[] = [];
   const server = net.createServer((socket) => {
     connection = socket;
     sockets.push(socket);
     socket.setNoDelay(true);
-    socket.write(frame({ from: "root", applicationType: "browser" }));
+    if (greeting === "closes") socket.destroy();
+    else if (greeting === "greets") socket.write(frame({ from: "root", applicationType: "browser" }));
     let pending = Buffer.alloc(0);
     socket.on("data", (chunk: Buffer) => {
       pending = Buffer.concat([pending, chunk]);
@@ -249,5 +250,51 @@ test("a request fails at once when the connection closes", async () => {
     fake.close();
     await assert.rejects(pending, /connection to Firefox lost/);
     await assert.rejects(rdp.request("actor1", { type: "again" }), /connection to Firefox lost/);
+  });
+});
+
+test("connecting fails at once when the socket closes before the greeting", async () => {
+  const fake = await fake_server(() => {}, "closes");
+  try {
+    await assert.rejects(connect_rdp(fake.port), /lost before it greeted/);
+  } finally {
+    fake.close();
+  }
+});
+
+test("connecting fails when the debugger never greets", async () => {
+  const fake = await fake_server(() => {}, "stays silent");
+  try {
+    await assert.rejects(connect_rdp(fake.port, { request_timeout_ms: 100 }), /lost before it greeted \(no greeting\)/);
+  } finally {
+    fake.close();
+  }
+});
+
+test("a noSuchActor reply followed by a late new form waits for that form", async () => {
+  // Race: the page is gone and the reload's form is still on its way. The retry must wait for it, where the test above has it queued already.
+  const firefox = addon_firefox((packet, fake, slots) => {
+    if (packet.to === "console1") {
+      fake.send({ from: "console1", error: "noSuchActor", message: "no actor" });
+      fake.send({ from: "watcher1", type: "target-destroyed-form", target: { actor: "target1" } });
+      setTimeout(() => fake.send(background_form("target2", "console2")), 50);
+      return;
+    }
+    answer_evaluation(packet, fake, slots);
+  });
+  await with_rdp(firefox, async (rdp, fake) => {
+    assert.equal(await evaluate_in_background(rdp, ADDON, `"after late reload"`), "after late reload");
+    assert.ok(fake.sent.some((packet) => packet.to === "console2"));
+  });
+});
+
+test("waiting for a new background page ends with the lost-connection error when the socket closes", async () => {
+  const firefox = addon_firefox((packet, fake) => {
+    fake.send({ from: packet.to, error: "noSuchActor", message: "no actor" });
+    fake.send({ from: "watcher1", type: "target-destroyed-form", target: { actor: "target1" } });
+    setTimeout(() => fake.close(), 50);
+  });
+  await with_rdp(firefox, async (rdp) => {
+    await assert.rejects(evaluate_in_background(rdp, ADDON, `"never"`), /connection to Firefox lost .* while waiting for the background page/);
   });
 });
