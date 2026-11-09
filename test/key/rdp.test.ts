@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 
 // The .mjs modules carry no types, so they load through a dynamic import.
-const { connect_rdp, evaluate_in_background } = await import(join(import.meta.dirname, "rdp.mjs"));
+const { connect_rdp, evaluate_in_background, evaluate_in_chrome } = await import(join(import.meta.dirname, "rdp.mjs"));
 
 type Packet = { to: string; type?: string; text?: string; [key: string]: unknown };
 type Fake = { port: number; sent: Packet[]; send: (packet: object) => void; send_bytes: (bytes: Uint8Array) => void; close: () => void };
@@ -311,4 +311,39 @@ test("a wait for a background page that starts on a closed socket fails at once 
     await assert.rejects(evaluate_in_background(rdp, ADDON, `"never"`), /connection to Firefox lost .* while waiting for the background page/);
     assert.ok(Date.now() - started_at < 2000);
   });
+});
+
+// A Firefox whose parent process hands out a new console actor on each getTarget. `dead` names consoles that answer noSuchActor.
+function chrome_firefox(dead: Set<string> = new Set()) {
+  const slots = new Map<string, string>();
+  let targets = 0;
+  return (packet: Packet, fake: Fake) => {
+    if (packet.to === "root" && packet.type === "getProcess") fake.send({ from: "root", processDescriptor: { actor: "process1" } });
+    else if (packet.to === "process1") fake.send({ from: "process1", process: { consoleActor: `chrome_console${++targets}` } });
+    else if (dead.has(packet.to as string)) fake.send({ from: packet.to, error: "noSuchActor", message: "no actor" });
+    else answer_evaluation(packet, fake, slots);
+  };
+}
+
+test("repeated chrome calls ask for the parent-process target once", { timeout: 40000 }, async () => {
+  await with_rdp(chrome_firefox(), async (rdp, fake) => {
+    assert.equal(await evaluate_in_chrome(rdp, `"one"`), "one");
+    assert.equal(await evaluate_in_chrome(rdp, `"two"`), "two");
+    assert.equal(fake.sent.filter((packet) => packet.type === "getTarget").length, 1);
+  });
+});
+
+test("a noSuchActor reply refreshes the parent-process console", { timeout: 40000 }, async () => {
+  await with_rdp(chrome_firefox(new Set(["chrome_console1"])), async (rdp, fake) => {
+    assert.equal(await evaluate_in_chrome(rdp, `"after refresh"`), "after refresh");
+    assert.equal(fake.sent.filter((packet) => packet.type === "getTarget").length, 2);
+    assert.ok(fake.sent.some((packet) => packet.to === "chrome_console2"));
+  });
+});
+
+test("a silent root fails the connection at once, naming the debugger", async () => {
+  await with_rdp(() => {}, async (rdp) => {
+    await assert.rejects(rdp.request("root", { type: "getProcess", id: 0 }), /no answer from root/);
+    await assert.rejects(rdp.request("actor1", { type: "ask" }), /Firefox stopped answering the debugger/);
+  }, { request_timeout_ms: 100 });
 });
