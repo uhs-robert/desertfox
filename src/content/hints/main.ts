@@ -13,6 +13,7 @@ import type { Found, HintFilter } from "./candidates.ts";
 import { clean_letters, make_labels } from "./labels.ts";
 import { create_picker } from "./pick.ts";
 import { is_hint_char } from "./hint_keys.ts";
+import { insert_into_focused_field } from "./insert_text.ts";
 import { create_view } from "./view.ts";
 import type { HintView } from "./view.ts";
 import { follow_windows } from "./follow.ts";
@@ -211,10 +212,14 @@ function register(host: BundleHostApi): void {
   }
 
   // Keys typed while the build ran never reached a mode. They run in normal mode, in order, once the mode change has ended the session.
-  function leave_with_keys(current: Session): void {
+  // `after_leaving` runs the pick. A pick that focuses a field gets the keys as text, which a replay in insert mode would drop.
+  // Insert mode after the pick means the pick focused the field: Escape leaves insert mode without a blur, so a field focused earlier is not a target.
+  function leave_with_keys(current: Session, after_leaving?: () => void): void {
     const keys = current.waiting_tokens_.splice(0);
     host.set_mode_("normal");
-    if (keys.length > 0) host.hold_keys_until_(Promise.resolve(keys));
+    after_leaving?.();
+    const left = after_leaving && host.get_mode() === "insert" ? insert_into_focused_field(keys) : keys;
+    if (left.length > 0) host.hold_keys_until_(Promise.resolve(left));
   }
 
   // Finds, labels and shows the hints. Keys typed meanwhile wait and replay. Rapid mode calls it again after each pick.
@@ -233,8 +238,7 @@ function register(host: BundleHostApi): void {
     // One match needs no label. Only the first build does this, so rapid mode cannot repeat the same pick.
     if (first_build && current.lower_text_ !== undefined && found.length === 1) {
       const performed = begin_pick(current);
-      leave_with_keys(current);
-      performed(() => perform(current.action, found[0]!.element as HTMLElement, deps, current.with_background_));
+      leave_with_keys(current, () => performed(() => perform(current.action, found[0]!.element as HTMLElement, deps, current.with_background_)));
       return;
     }
     const view = create_view();

@@ -59,6 +59,9 @@ const settle = async () => {
   for (let turn = 0; turn < 6; turn++) await new Promise((resolve) => setTimeout(resolve, 0));
 };
 
+class FakeHtmlElement {}
+class FakeHtmlInputElement extends FakeHtmlElement {}
+
 let import_count = 0;
 
 // Builds a page of links with the given texts and loads the hints bundle against it.
@@ -93,6 +96,7 @@ async function page_with(texts: string[]) {
         mode = next;
         if (left_hint) sink?.exit();
       },
+      get_mode: () => mode,
       show_toast_: () => {},
       hold_keys_until_: (handed_back: Promise<string[]>) => void handed_back.then((tokens) => held_key_batches.push(tokens)),
     },
@@ -130,6 +134,9 @@ async function page_with(texts: string[]) {
   const globals = globalThis as Record<string, unknown>;
   globals.window = win;
   globals.document = doc;
+  // The one-match path asks whether a field has focus, which tests `instanceof HTMLElement` and `HTMLInputElement`.
+  globals.HTMLElement = FakeHtmlElement;
+  globals.HTMLInputElement = FakeHtmlInputElement;
   globals.requestAnimationFrame = (callback: () => void) => setTimeout(callback, 0);
   globals.IntersectionObserver = class {
     callback: (entries: unknown[]) => void;
@@ -180,6 +187,8 @@ async function page_with(texts: string[]) {
     run: (args: Record<string, unknown>) => handlers.get("hint.run")!({ action: "here", filter: "links", rapid: false, ...args }) as Outcome | Promise<Outcome>,
     type: (token: string) => sink!.on_token_(token),
     escape: () => win.desertfox_host.set_mode_("normal"),
+    // The focus event of a field that takes focus.
+    enter_insert: () => win.desertfox_host.set_mode_("insert"),
     // The label text of each label that is not hidden by typing.
     labels: () => nodes_with_class("desertfox-hint").filter((node) => node.style.display !== "none").map((node) => node.children.map((part) => part.textContent).join("")),
     label_tops: () => nodes_with_class("desertfox-hint").map((node) => node.style.top),
@@ -385,6 +394,52 @@ test("keys typed while rapid mode builds again wait and replay, also when the fi
   await settle();
   assert.equal(page.sent.length, 4);
   page.escape();
+});
+
+// A click that focuses a textarea, as a "Search" link does. `inserted` is what `execCommand("insertText")` received.
+async function page_whose_link_focuses_a_field(focuses_field: boolean, field_focused_before = false) {
+  const page = await page_with(["Search"]);
+  const doc = document as unknown as { activeElement?: unknown; execCommand?: unknown };
+  const textarea = Object.assign(new FakeHtmlElement(), { tagName: "TEXTAREA", isContentEditable: false });
+  const inserted: string[] = [];
+  doc.activeElement = field_focused_before ? textarea : null;
+  doc.execCommand = (command: string, _ui: boolean, text: string) => command === "insertText" && inserted.push(text) > 0;
+  page.links[0]!.on_click = () => {
+    if (!focuses_field) return;
+    doc.activeElement = textarea;
+    page.enter_insert();
+  };
+  return { page, inserted };
+}
+
+test("a text pick that focuses a field types the keys queued during the build into it", async () => {
+  const { page, inserted } = await page_whose_link_focuses_a_field(true);
+  page.run({ text: "sear" });
+  page.type("a");
+  page.type("b");
+  await settle();
+  assert.deepEqual(inserted, ["a", "b"]);
+  assert.deepEqual(page.held_key_batches, []);
+});
+
+test("a text pick that focuses no field hands the queued keys back to the keymap", async () => {
+  const { page, inserted } = await page_whose_link_focuses_a_field(false);
+  page.run({ text: "sear" });
+  page.type("a");
+  page.type("b");
+  await settle();
+  assert.deepEqual(inserted, []);
+  assert.deepEqual(page.held_key_batches, [["a", "b"]]);
+});
+
+test("a text pick that leaves an earlier focused field alone hands the keys back instead of typing into it", async () => {
+  const { page, inserted } = await page_whose_link_focuses_a_field(false, true);
+  page.run({ text: "sear" });
+  page.type("a");
+  page.type("b");
+  await settle();
+  assert.deepEqual(inserted, []);
+  assert.deepEqual(page.held_key_batches, [["a", "b"]]);
 });
 
 test("caret and visual hand the picked element to the caret bundle and enter that mode, also with rapid", async () => {
