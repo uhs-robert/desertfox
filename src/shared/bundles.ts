@@ -1,4 +1,4 @@
-// Scripts loaded on first use, not at page load. `ui` holds the badge and the toast. `page` holds three rare page commands: align, copy url and focus input. Each name is a file `<name>.js` in the extension.
+// Scripts loaded on first use, not at page load. `ui` holds the badge and the toast. `page` holds two rare page commands: align and copy url. Each name is a file `<name>.js` in the extension.
 
 import type { Mode } from "./command.ts";
 

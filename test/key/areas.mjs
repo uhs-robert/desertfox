@@ -27,7 +27,7 @@ export const area_rules = [
   { globs: ["src/managed_schema.json"], areas: ["help", "config"] },
   { globs: shared_files, areas: area_names },
   { globs: ["src/content/hints/**", "src/commands/{hint,heading,page}.ts", "src/background/image_actions.ts", "src/content/handlers/page.ts"], areas: ["hints"] },
-  { globs: ["src/content/run_content.ts", "src/commands/{caret,cmdline,copy,find,heading,help,hint,page,visual}.ts", "src/background/{bundle_loader,command_modules}.ts", "src/content/{bundle_host,bundles}.ts", "src/content/page/**", "src/content/handlers/focus_input.ts", "src/shared/bundles.ts"], areas: ["bundles"] },
+  { globs: ["src/content/run_content.ts", "src/commands/{caret,cmdline,copy,find,heading,help,hint,page,visual}.ts", "src/background/{bundle_loader,command_modules}.ts", "src/content/{bundle_host,bundles}.ts", "src/content/page/**", "src/shared/bundles.ts"], areas: ["bundles"] },
   { globs: ["src/content/caret/find_*.ts", "src/commands/find.ts", "src/background/{find_scan,find_worker,regex_scan}.ts"], areas: ["find"] },
   { globs: ["src/content/caret/**", "src/commands/{caret,visual}.ts"], areas: ["caret"] },
   { globs: ["src/content/whichkey/**", "src/background/list_keys.ts", "src/content/which_key_timer.ts"], areas: ["whichkey"] },

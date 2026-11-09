@@ -1,5 +1,5 @@
 import { mode_escape, mode_pass_next, mode_set, SETTABLE_MODES } from "../content/handlers/mode.ts";
-import { page_blur } from "../content/handlers/page.ts";
+import { page_blur, page_focus_input } from "../content/handlers/page.ts";
 import { define } from "../shared/registry/builtin.ts";
 
 const mode_in_words = (mode: string) => (mode === "visual_line" ? "line visual" : mode);
@@ -44,7 +44,7 @@ define("page.focus_input", {
   label: "Focus input",
   intent: "Focus the first text field on the page. It takes the first visible field and prefers one in view.",
   runs_in: "content",
-  bundle: "page",
+  run: page_focus_input.run,
 });
 
 define("page.blur", {

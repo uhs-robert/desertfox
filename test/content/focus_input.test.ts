@@ -10,7 +10,7 @@ globals.HTMLInputElement = FakeHTMLInputElement;
 globals.innerHeight = 600;
 globals.innerWidth = 800;
 globals.getComputedStyle = (element: { visibility?: string }) => ({ visibility: element.visibility ?? "visible" });
-const { focus_first_input } = await import("../../src/content/handlers/focus_input.ts");
+const { page_focus_input } = await import("../../src/content/handlers/page.ts");
 
 type Fake = { name: string; tag: "input" | "textarea" | "div" | "select" | "button"; type?: string; editable?: boolean; disabled?: boolean; top?: number; height?: number; visibility?: string };
 
@@ -30,7 +30,7 @@ function run_gi(fakes: Fake[]): string | undefined {
     return element;
   });
   globals.document = { querySelectorAll: () => elements };
-  focus_first_input();
+  page_focus_input.run({});
   return focused;
 }
 
