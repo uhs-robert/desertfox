@@ -710,6 +710,8 @@ export async function create_session({ name: session_name, timings, sweep = true
     await wait_for_tabs("one window to be left", `browser.windows.getAll().then((windows) => windows.length)`, 1);
     await wait_event(mark, (event) => event.type === "tree_read" && event.page_id === home_id, `content script ready on ${home_id}`, 10000);
     await confirm_page_focus(home.tab_id, home.window_id);
+    // A page drops the keys of its first moments, and restore_config types qr, so a pending load waits for the key probe first.
+    if (config_restore_pending()) await wait_takes_keys(home_id);
     const restored = await restore_config();
     const unset = await clear_temp_settings();
     // Their keys can leave the focus elsewhere, so the page is asked once more only when they typed.
