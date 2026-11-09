@@ -251,7 +251,37 @@ export type ToolbarRequest =
 
 export type ToolbarAnswer = { ok: true; message: string } | { ok: false; message: string };
 
-export type PageToBackground = ChangeSetting | ListSettings | ToolbarRequest;
+// The user's pick for an import: a zip's bytes, or the files of a `webkitdirectory` folder as read by the page, with paths relative to the picked folder's parent.
+export type ImportSource = { kind: "zip"; bytes: Uint8Array | ArrayBuffer } | { kind: "folder"; entries: { path: string; text: string }[] };
+
+// From an extension page: reads an import and says what it would change. Nothing is stored and no snippet runs. The answer is a ConfigImportPreview.
+export type PreviewConfigImport = { type: "preview_config_import"; source: ImportSource };
+
+// From an extension page: applies an import. `accepted` maps each snippet path the user accepted to the code the preview showed. Any other snippet is left out. The answer is a ConfigImportAnswer.
+export type CommitConfigImport = { type: "commit_config_import"; source: ImportSource; accepted: Record<string, string> };
+
+// One snippet of an import as the consent screen shows it. The header fields are absent when the header does not parse.
+export type SnippetPreview = {
+  path: string;
+  code: string;
+  // A snippet with this path is installed, and accepting replaces it.
+  replaces: boolean;
+  problems: string[];
+  id?: string;
+  label?: string;
+  intent?: string;
+  matches?: string[];
+  requires?: string[];
+};
+
+// `replaces_config` says the import holds config files, which replace every config file in force. `problems` come from a build with every snippet accepted: the commit refuses while any remain.
+export type ConfigImportPreview =
+  | { ok: true; replaces_config: boolean; config_files: string[]; snippets: SnippetPreview[]; problems: string[]; warnings: string[] }
+  | { ok: false; message: string };
+
+export type ConfigImportAnswer = { ok: true; message: string } | { ok: false; message: string };
+
+export type PageToBackground = ChangeSetting | ListSettings | ToolbarRequest | PreviewConfigImport | CommitConfigImport;
 
 export type ContentToBackground = RunRequest | ModeChanged | LoadBundle | ListKeys | IssueCmdlineTicket | OpenCmdline | RecordCmdline | CompleteItems | TabRowsActionRequest | OpenHelp | RecordRepeat | ReadTabAddress | FindScan | ImageAction;
 
