@@ -35,7 +35,7 @@ export function first_visible_index(model: TextModel): number {
   for (const selection of documents_of(model).map((owner) => owner.getSelection())) {
     const anchor = selection?.anchorNode;
     if (anchor?.nodeType !== Node.TEXT_NODE || !on_screen(anchor)) continue;
-    const index = model.index_of(anchor, selection!.anchorOffset);
+    const index = model.index_of_(anchor, selection!.anchorOffset);
     if (index !== undefined) return index;
   }
   return first_index_not_before(model, (box) => box.bottom < 0);

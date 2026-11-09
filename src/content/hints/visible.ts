@@ -4,16 +4,16 @@ export type Rect = { left: number; top: number; right: number; bottom: number };
 
 export type PageProbe<T> = {
   // The IntersectionObserver result: the target shows inside every scrolling box that holds it.
-  is_intersecting: (target: T) => boolean;
+  is_intersecting_: (target: T) => boolean;
   // Position in the viewport of the document that holds the target, and the size of the part a click can reach (without scrollbars).
   // One box per line a wrapped link covers; the bounding box when there are none.
-  rects_of: (target: T) => Rect[];
-  // The visible boxes of every scrolling ancestor, in the same coordinates as `rects_of`. A point outside one of them is clipped away, so it cannot hit the target.
-  clips_of: (target: T) => Rect[];
-  viewport_of: (target: T) => { width: number; height: number };
-  is_hidden_by_style: (target: T) => boolean;
+  rects_of_: (target: T) => Rect[];
+  // The visible boxes of every scrolling ancestor, in the same coordinates as `rects_of_`. A point outside one of them is clipped away, so it cannot hit the target.
+  clips_of_: (target: T) => Rect[];
+  viewport_of_: (target: T) => { width: number; height: number };
+  is_hidden_by_style_: (target: T) => boolean;
   // Whether the topmost thing at the point is the target, inside it or around it.
-  is_reachable_at: (target: T, x: number, y: number) => boolean;
+  is_reachable_at_: (target: T, x: number, y: number) => boolean;
 };
 
 // The middle of the part of the box that is on screen, or undefined when none of it is.
@@ -91,7 +91,7 @@ export function anchor_box<T>(element: T, own_box: (e: T) => Rect, rects: (e: T)
   return has_area(own) ? own : boxes_with_fallback(element, rects, children)[0];
 }
 
-type Ancestor = { position: string; clips_x: boolean; clips_y: boolean; box: Rect };
+type Ancestor = { position: string; clips_x_: boolean; clips_y_: boolean; box: Rect };
 
 // The boxes that clip a target, from its chain of ancestors (nearest first, each with its computed position, the axes its overflow clips, and its visible box).
 // A box clips only the axes that its overflow clips. An absolutely positioned target escapes the clip of ancestors above it until its containing block, and a fixed one escapes them all.
@@ -102,13 +102,13 @@ export function clipping_boxes(own_position: string, ancestors: readonly Ancesto
   for (const ancestor of ancestors) {
     if (escaping && ancestor.position === "static") continue;
     escaping = false;
-    if (!ancestor.clips_x && !ancestor.clips_y) continue;
+    if (!ancestor.clips_x_ && !ancestor.clips_y_) continue;
     const { box } = ancestor;
     boxes.push({
-      left: ancestor.clips_x ? box.left : -Infinity,
-      right: ancestor.clips_x ? box.right : Infinity,
-      top: ancestor.clips_y ? box.top : -Infinity,
-      bottom: ancestor.clips_y ? box.bottom : Infinity,
+      left: ancestor.clips_x_ ? box.left : -Infinity,
+      right: ancestor.clips_x_ ? box.right : Infinity,
+      top: ancestor.clips_y_ ? box.top : -Infinity,
+      bottom: ancestor.clips_y_ ? box.bottom : Infinity,
     });
   }
   return boxes;
@@ -118,7 +118,7 @@ export function clipping_boxes(own_position: string, ancestors: readonly Ancesto
 export type ClipReads<T> = {
   parent_of: (element: T) => T | null;
   tag_of: (element: T) => string;
-  style_of: (element: T) => { position: string; display: string; overflow_x: string; overflow_y: string };
+  style_of_: (element: T) => { position: string; display: string; overflow_x_: string; overflow_y_: string };
   // The padding box, which is what an overflow clips to.
   box_of: (element: T) => Rect;
 };
@@ -131,22 +131,22 @@ export function scroll_clips_of<T>(element: T, reads: ClipReads<T>): Rect[] {
   const ancestors: Ancestor[] = [];
   for (let up = reads.parent_of(element); up !== null; up = reads.parent_of(up)) {
     if (CANNOT_CLIP_TAGS.has(reads.tag_of(up))) continue;
-    const style = reads.style_of(up);
+    const style = reads.style_of_(up);
     const can_clip = !CANNOT_CLIP_DISPLAYS.has(style.display);
-    const clips_x = can_clip && style.overflow_x !== "visible";
-    const clips_y = can_clip && style.overflow_y !== "visible";
-    ancestors.push({ position: style.position, clips_x, clips_y, box: clips_x || clips_y ? reads.box_of(up) : { left: 0, top: 0, right: 0, bottom: 0 } });
+    const clips_x_ = can_clip && style.overflow_x_ !== "visible";
+    const clips_y_ = can_clip && style.overflow_y_ !== "visible";
+    ancestors.push({ position: style.position, clips_x_, clips_y_, box: clips_x_ || clips_y_ ? reads.box_of(up) : { left: 0, top: 0, right: 0, bottom: 0 } });
   }
-  return clipping_boxes(reads.style_of(element).position, ancestors);
+  return clipping_boxes(reads.style_of_(element).position, ancestors);
 }
 
 export function keep_visible<T>(targets: readonly T[], probe: PageProbe<T>): T[] {
   return targets.filter((target) => {
-    if (!probe.is_intersecting(target) || probe.is_hidden_by_style(target)) return false;
-    const clips = probe.clips_of(target);
-    const rects = probe.rects_of(target).map((rect) => clip_to(rect, clips)).filter(has_area);
-    const points = points_to_probe(rects, probe.viewport_of(target));
-    return points.some((point) => probe.is_reachable_at(target, point.x, point.y));
+    if (!probe.is_intersecting_(target) || probe.is_hidden_by_style_(target)) return false;
+    const clips = probe.clips_of_(target);
+    const rects = probe.rects_of_(target).map((rect) => clip_to(rect, clips)).filter(has_area);
+    const points = points_to_probe(rects, probe.viewport_of_(target));
+    return points.some((point) => probe.is_reachable_at_(target, point.x, point.y));
   });
 }
 

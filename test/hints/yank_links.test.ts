@@ -76,13 +76,13 @@ function deps_with(overrides: Partial<YankDeps>, copied: string[] = [], messages
   const everything = [link({ href: "/in-view", text: "Seen" }), link({ href: "/hidden", text: "Hidden" }), link({ href: "/below", text: "Below" })];
   return {
     find: () => everything,
-    keep_present: (found) => found.filter((item) => item.element.getAttribute("href") !== "/hidden"),
-    keep_in_view: async (found) => found.filter((item) => item.element.getAttribute("href") === "/in-view"),
+    keep_present_: (found) => found.filter((item) => item.element.getAttribute("href") !== "/hidden"),
+    keep_in_view_: async (found) => found.filter((item) => item.element.getAttribute("href") === "/in-view"),
     copy: async (text) => {
       copied.push(text);
       return true;
     },
-    show_message: (message) => void messages.push(message),
+    show_message_: (message) => void messages.push(message),
     ...overrides,
   };
 }

@@ -13,6 +13,6 @@ const page = window as unknown as PageWindow;
 if (!page.desertfox_page_ready) {
   page.desertfox_page_ready = true;
   const host = page.desertfox_host;
-  host.register_handler("scroll.align", (args) => align_focus(args.position as AlignPosition, host.last_blurred()));
-  host.register_handler("copy.url", (args) => copy_page_url(args.format as CopyFormat, host.show_toast));
+  host.register_handler_("scroll.align", (args) => align_focus(args.position as AlignPosition, host.last_blurred_()));
+  host.register_handler_("copy.url", (args) => copy_page_url(args.format as CopyFormat, host.show_toast_));
 }

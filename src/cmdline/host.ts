@@ -26,18 +26,18 @@ type Open = {
   // about:blank it is same-origin with the page, which can read both.
   ticket: Promise<unknown>;
   // The frame said `ready` once. Another `ready` means it loaded again.
-  said_ready: boolean;
+  said_ready_: boolean;
   // Set at `start`. Every message after `start` goes over it.
   port?: MessagePort;
   // The page redeemed its ticket and took over the keys.
-  page_opened: boolean;
+  page_opened_: boolean;
   // Runs from a frame load until the page answers the check.
-  check_timer?: ReturnType<typeof setTimeout>;
-  removal_watch: MutationObserver;
+  check_timer_?: ReturnType<typeof setTimeout>;
+  removal_watch_: MutationObserver;
   typed: string[];
   text: string;
   // The mode the key was pressed in, sent to the page in `start`.
-  from_mode: string;
+  from_mode_: string;
   // Set when the line is a page search, and the way it searches. Enter sets `committed`, and the end of the line tells the search whether to keep its match.
   search?: "forward" | "backward" | undefined;
   // Read before the frame joins the page, so it is the scroll place the user saw when pressing the key.
@@ -45,10 +45,10 @@ type Open = {
   committed: boolean;
   // The line asked for the headings, so the hints bundle holds a snapshot of them. `submit` sets `submitted`: the command that
   // runs next may be `heading.go`, which needs the snapshot, so the line drops it only after the command ran.
-  asked_headings: boolean;
+  asked_headings_: boolean;
   submitted: boolean;
   // The end of the page search, once the line has closed. Enter waits for it, so the next step sees the committed match.
-  search_ended?: Promise<Outcome>;
+  search_ended_?: Promise<Outcome>;
   // Settles the promise `cmdline.open` returned. The first call wins, so Enter settles it before `close` ends the line as cancelled.
   finish: (outcome: Outcome | Promise<Outcome>) => void;
   timer: ReturnType<typeof setTimeout>;
@@ -65,10 +65,10 @@ if (!page.desertfox_cmdline_ready) {
     if (!open) return;
     open.finish({ ok: true, cancelled: true });
     clearTimeout(open.timer);
-    clearTimeout(open.check_timer);
-    open.removal_watch.disconnect();
-    if (open.asked_headings && !open.submitted) void host.run_command("heading.clear", "hints", {});
-    if (open.search) open.search_ended = host.run_command("find.end", "caret", { keep: open.committed });
+    clearTimeout(open.check_timer_);
+    open.removal_watch_.disconnect();
+    if (open.asked_headings_ && !open.submitted) void host.run_command_("heading.clear", "hints", {});
+    if (open.search) open.search_ended_ = host.run_command_("find.end", "caret", { keep: open.committed });
     open.port?.close();
     open.holder.remove();
     open = undefined;
@@ -76,11 +76,11 @@ if (!page.desertfox_cmdline_ready) {
 
   // Mode first: the exit hook then runs `unmount`, and the keys of the page return to the keymap.
   const close = () => {
-    host.set_mode("normal");
+    host.set_mode_("normal");
     unmount();
   };
 
-  function mount(text: string, from_mode: string, finish: (outcome: Outcome | Promise<Outcome>) => void, search?: "forward" | "backward") {
+  function mount(text: string, from_mode_: string, finish: (outcome: Outcome | Promise<Outcome>) => void, search?: "forward" | "backward") {
     const holder = document.createElement("div");
     // A top-layer popover like the other surfaces. It is shown last, so it draws above them. It is not made by `create_surface`: its
     // shadow root and text would cost the 4 KB budget of this bundle.
@@ -98,19 +98,19 @@ if (!page.desertfox_cmdline_ready) {
       holder,
       // A failed request reads as no ticket, so `ready` closes the line.
       ticket: browser.runtime.sendMessage({ type: "issue_cmdline_ticket" }).catch(() => undefined),
-      said_ready: false,
-      page_opened: false,
+      said_ready_: false,
+      page_opened_: false,
       // A page that removes the bar would leave the sink taking every key with nobody to show them.
-      removal_watch: new MutationObserver(() => {
+      removal_watch_: new MutationObserver(() => {
         if (open === current && !holder.isConnected) close();
       }),
       typed: [],
       text,
-      from_mode,
+      from_mode_,
       search,
       scroll: root && { top: root.scrollTop, max: root.scrollHeight - root.clientHeight },
       committed: false,
-      asked_headings: false,
+      asked_headings_: false,
       submitted: false,
       finish,
       timer: setTimeout(close, READY_TIMEOUT_MS),
@@ -120,9 +120,9 @@ if (!page.desertfox_cmdline_ready) {
     // `opened` is not fixed. Before `opened` the page may still be redeeming its ticket and cannot answer, and the
     // ready timer covers that time.
     frame.addEventListener("load", () => {
-      if (open !== current || !current.port || !current.page_opened) return;
-      clearTimeout(current.check_timer);
-      current.check_timer = setTimeout(() => open === current && close(), CHECK_TIMEOUT_MS);
+      if (open !== current || !current.port || !current.page_opened_) return;
+      clearTimeout(current.check_timer_);
+      current.check_timer_ = setTimeout(() => open === current && close(), CHECK_TIMEOUT_MS);
       send(current.port, { kind: "check" });
     });
     holder.attachShadow({ mode: "closed" }).append(frame);
@@ -131,11 +131,11 @@ if (!page.desertfox_cmdline_ready) {
     holder.showPopover();
     // A surface mounted later showed the holder again, and that dropped the frame's focus. The page puts it back in the input, which keeps its caret and selection.
     holder.addEventListener(RESTACKED_EVENT, () => {
-      if (open !== current || !current.page_opened) return;
+      if (open !== current || !current.page_opened_) return;
       current.frame.focus();
       send(current.port, { kind: "refocus" });
     });
-    current.removal_watch.observe(document, { childList: true, subtree: true });
+    current.removal_watch_.observe(document, { childList: true, subtree: true });
     open = current;
   }
 
@@ -147,7 +147,7 @@ if (!page.desertfox_cmdline_ready) {
     current.submitted = true;
     close();
     await browser.runtime.sendMessage({ type: "run", invocations: [message.invocation], mode: "normal" }).catch(() => undefined);
-    if (current.asked_headings) void host.run_command("heading.clear", "hints", {});
+    if (current.asked_headings_) void host.run_command_("heading.clear", "hints", {});
     answered();
   }
 
@@ -163,31 +163,31 @@ if (!page.desertfox_cmdline_ready) {
       // The page redeemed the ticket and can take keys itself. Until then the ready timer still runs.
       if (message.kind === "opened") {
         clearTimeout(current.timer);
-        current.page_opened = true;
+        current.page_opened_ = true;
         current.frame.focus();
         send(channel.port1, { kind: "focused" });
-      } else if (message.kind === "here") clearTimeout(current.check_timer);
+      } else if (message.kind === "here") clearTimeout(current.check_timer_);
       else if (message.kind === "close") close();
       else if (message.kind === "resize" && Number.isFinite(message.height)) current.holder.style.height = `${Math.min(message.height, window.innerHeight)}px`;
       else if (message.kind === "submit") void submit(current, message);
       else if (message.kind === "list_headings") {
-        current.asked_headings = true;
+        current.asked_headings_ = true;
         // The hints bundle may still be loading, so the line can close first. Its `heading.clear` then runs after this handler, and the late answer goes nowhere.
         const report = (items: HeadingItem[]) => tell({ kind: "headings", items });
-        void host.run_command("heading.list", "hints", { report }).then((outcome) => outcome.ok || report([]));
+        void host.run_command_("heading.list", "hints", { report }).then((outcome) => outcome.ok || report([]));
       } else if (message.kind === "find_text") {
         const report = (status: string) => tell({ kind: "find_status", text: status });
-        host.run_command("find.live", "caret", { text: message.text, report });
+        host.run_command_("find.live", "caret", { text: message.text, report });
       } else if (message.kind === "find_commit") {
         current.committed = true;
         let ended!: (outcome: Outcome) => void;
         current.finish(new Promise<Outcome>((resolve) => (ended = resolve)));
         close();
-        void (current.search_ended ?? Promise.resolve<Outcome>({ ok: true })).then(ended);
+        void (current.search_ended_ ?? Promise.resolve<Outcome>({ ok: true })).then(ended);
       }
     };
     current.port = channel.port1;
-    const message: HostToPage = { kind: "start", ticket, text: current.text, tokens: current.typed, mode: current.from_mode, search: current.search, scroll: current.scroll };
+    const message: HostToPage = { kind: "start", ticket, text: current.text, tokens: current.typed, mode: current.from_mode_, search: current.search, scroll: current.scroll };
     current.frame.contentWindow?.postMessage(wrap(message), origin, [channel.port2]);
     current.typed = [];
   };
@@ -197,8 +197,8 @@ if (!page.desertfox_cmdline_ready) {
     const current = open;
     const message = unwrap<PageToHost>(event.data);
     if (!current || message?.kind !== "ready" || event.source !== current.frame.contentWindow) return;
-    if (current.said_ready) return close();
-    current.said_ready = true;
+    if (current.said_ready_) return close();
+    current.said_ready_ = true;
     void current.ticket.then((ticket) => {
       if (open !== current) return;
       if (typeof ticket === "string") start(current, ticket);
@@ -206,8 +206,8 @@ if (!page.desertfox_cmdline_ready) {
     });
   });
 
-  host.register_sink("cmdline", {
-    on_token: (token) => {
+  host.register_sink_("cmdline", {
+    on_token_: (token) => {
       if (!open) return "pass";
       // Here and not in the page, so Escape closes even when the page or its port is gone.
       if (token === "<Escape>") close();
@@ -219,12 +219,12 @@ if (!page.desertfox_cmdline_ready) {
   });
 
   // Pending until the user submits, commits a search or leaves the line.
-  host.register_handler("cmdline.open", (args): Outcome | Promise<Outcome> => {
+  host.register_handler_("cmdline.open", (args): Outcome | Promise<Outcome> => {
     // Joining the open line would let two sequences resume from one Enter.
     if (open) return { ok: false, message: "The command line is already open" };
     return new Promise<Outcome>((finish) => {
       mount(typeof args.text === "string" ? args.text : "", host.get_mode(), finish, args.search === "forward" || args.search === "backward" ? args.search : undefined);
-      host.set_mode("cmdline");
+      host.set_mode_("cmdline");
     });
   });
 }

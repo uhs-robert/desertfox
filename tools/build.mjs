@@ -19,12 +19,18 @@ const MAX_BYTES = {
 await rm("dist", { recursive: true, force: true });
 await mkdir("dist", { recursive: true });
 
-const common = { bundle: true, format: "iife", target: "firefox140", logLevel: "warning" };
+// A property name that ends in `_` is internal to the extension's own scripts, and the build shortens it. One cache serves every build, so a name that crosses bundles (the bundle host API) gets the same short name in each. esbuild does not change the cache it is given. It returns the grown one, so `build_with_cache` passes that on to the next build. Never end a name in `_` when it crosses storage, a runtime message, the manifest, a DOM attribute, CSS, a page or browser API, or a file on disk.
+let mangle_cache = {};
+const common = { bundle: true, format: "iife", target: "firefox140", logLevel: "warning", mangleProps: /_$/ };
+async function build_with_cache(options) {
+  const result = await build({ ...common, ...options, mangleCache: mangle_cache });
+  mangle_cache = result.mangleCache;
+}
 
-await build({ ...common, entryPoints: { background: "src/background/main.ts" }, outdir: "dist", sourcemap: true });
-await build({ ...common, entryPoints: { help: "src/help/main.ts" }, outdir: "dist", sourcemap: true });
-await build({ ...common, entryPoints: { newtab: "src/newtab/main.ts" }, outdir: "dist", sourcemap: true });
-await build({ ...common, entryPoints: { popup: "src/popup/main.ts" }, outdir: "dist", sourcemap: true });
+await build_with_cache({ entryPoints: { background: "src/background/main.ts" }, outdir: "dist", sourcemap: true });
+await build_with_cache({ entryPoints: { help: "src/help/main.ts" }, outdir: "dist", sourcemap: true });
+await build_with_cache({ entryPoints: { newtab: "src/newtab/main.ts" }, outdir: "dist", sourcemap: true });
+await build_with_cache({ entryPoints: { popup: "src/popup/main.ts" }, outdir: "dist", sourcemap: true });
 const minified_entries = {
   content: "src/content/main.ts",
   hints: "src/content/hints/main.ts",
@@ -38,7 +44,7 @@ const minified_entries = {
   find_worker: "src/background/find_worker.ts",
 };
 for (const [name, entry] of Object.entries(minified_entries)) {
-  await build({ ...common, entryPoints: { [name]: entry }, outdir: "dist", minify: true });
+  await build_with_cache({ entryPoints: { [name]: entry }, outdir: "dist", minify: true });
 }
 
 for (const file of ["manifest.json", "managed_schema.json", "help/home.html", "newtab/newtab.html", "popup/popup.html", "cmdline/cmdline.html"]) {

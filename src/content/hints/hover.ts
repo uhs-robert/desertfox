@@ -7,8 +7,8 @@ type Point = { x: number; y: number };
 type Hoverable = Parameters<typeof dispatch_mouse_event>[0] & { isConnected?: boolean; parentElement?: Hoverable | null; getRootNode?: () => unknown };
 
 // The pointer's last point is kept with the element, so the leave events come from where it entered.
-// `entry_from` is set while the element is recorded as hovered but its entry events were not sent, and names the element the pointer came from.
-let hovered: { element: Hoverable; at: Point; entry_from?: Hoverable } | undefined;
+// `entry_from_` is set while the element is recorded as hovered but its entry events were not sent, and names the element the pointer came from.
+let hovered: { element: Hoverable; at: Point; entry_from_?: Hoverable } | undefined;
 let watching_tab = false;
 
 // A hidden tab gets no mouseleave from the browser, so a preview would keep playing. The listener goes on at the first hover or click pick, so a page that never does either carries none.
@@ -71,9 +71,9 @@ function release(): NonNullable<typeof hovered> | undefined {
 export function hover(target: Hoverable): void {
   // A pointer that stays on its element sends nothing, so a preview that closes on out stays open.
   if (hovered?.element === target) {
-    const { entry_from, at } = hovered;
-    if (entry_from) enter(target, entry_from, at);
-    delete hovered.entry_from;
+    const { entry_from_, at } = hovered;
+    if (entry_from_) enter(target, entry_from_, at);
+    delete hovered.entry_from_;
     return;
   }
   const old = release();
@@ -94,8 +94,8 @@ export function leave_toward(target: Hoverable): Hoverable | undefined {
   const old = release();
   if (!old) return undefined;
   leave(old, target);
-  const came_from = old.entry_from ?? old.element;
-  if (contains(old.element, target)) hovered = { element: target, at: center_of(target), entry_from: came_from };
+  const came_from = old.entry_from_ ?? old.element;
+  if (contains(old.element, target)) hovered = { element: target, at: center_of(target), entry_from_: came_from };
   return came_from;
 }
 

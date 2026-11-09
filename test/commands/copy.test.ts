@@ -6,8 +6,8 @@ import type { PageLinkFacts } from "../../src/content/handlers/copy.ts";
 const facts: PageLinkFacts = {
   url: "https://a.com/p?x=(1)",
   title: "A [draft] page",
-  canonical_url: "https://a.com/p",
-  short_url: "https://a.co/1",
+  canonical_url_: "https://a.com/p",
+  short_url_: "https://a.co/1",
 };
 
 test("each format builds its string", () => {
@@ -20,7 +20,7 @@ test("each format builds its string", () => {
 });
 
 test("a missing link falls back to the plain URL", () => {
-  const bare = { ...facts, canonical_url: undefined, short_url: undefined };
+  const bare = { ...facts, canonical_url_: undefined, short_url_: undefined };
   assert.equal(format_page_link("canonical", bare), facts.url);
   assert.equal(format_page_link("short", bare), facts.url);
 });

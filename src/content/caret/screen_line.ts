@@ -23,7 +23,7 @@ export function frame_offset(of_document: Document): { x: number; y: number } {
 
 // The box of one character in this script's window, so boxes in a frame compare with boxes outside it. Undefined when it has none to measure, as on an empty line.
 export function character_box(model: TextModel, index: number): DOMRect | undefined {
-  const { node, offset } = model.point_at(index);
+  const { node, offset } = model.point_at_(index);
   const range = node.ownerDocument!.createRange();
   range.setStart(node, offset);
   range.setEnd(node, Math.min(offset + 1, node.nodeType === Node.TEXT_NODE ? (node as Text).length : node.childNodes.length));
@@ -47,11 +47,11 @@ function span_box(model: TextModel, from: number, to = from): DOMRect | undefine
 const outer_view = (node: Node): Element | null =>
   node.parentElement ?? (node.parentNode as ShadowRoot | null)?.host ?? (node.nodeType === Node.DOCUMENT_NODE ? ((node as Document).defaultView?.frameElement ?? null) : null);
 
-// Only the character, or the span up to `last_index`, counts: its paragraph can be taller than the screen. Each scrollable ancestor scrolls first, then the window, then the same again out through each frame.
+// Only the character, or the span up to `last_index_`, counts: its paragraph can be taller than the screen. Each scrollable ancestor scrolls first, then the window, then the same again out through each frame.
 // The boxes are all in this script's window, so a view's edges shift by the frames around it.
-// `bottom_inset` keeps the match above something drawn over the bottom of this script's window, such as the command line. A frame's own viewport is not covered by it. 
-export function scroll_to_index(model: TextModel, index: number, options: { bottom_inset?: number; last_index?: number } = {}): void {
-  const caret_node = model.point_at(index).node;
+// `bottom_inset_` keeps the match above something drawn over the bottom of this script's window, such as the command line. A frame's own viewport is not covered by it. 
+export function scroll_to_index(model: TextModel, index: number, options: { bottom_inset_?: number; last_index_?: number } = {}): void {
+  const caret_node = model.point_at_(index).node;
   for (let view = caret_node.nodeType === Node.ELEMENT_NODE ? (caret_node as Element) : outer_view(caret_node); view; ) {
     const owner = view.ownerDocument;
     const nested = view !== owner.documentElement && view !== owner.body;
@@ -59,11 +59,11 @@ export function scroll_to_index(model: TextModel, index: number, options: { bott
       view = outer_view(view);
       continue;
     }
-    const box = span_box(model, index, options.last_index);
+    const box = span_box(model, index, options.last_index_);
     const window_of_view = owner.defaultView;
     if (!box || !window_of_view) return;
     const shift = frame_offset(owner);
-    const edges = nested ? view.getBoundingClientRect() : { left: 0, right: window_of_view.innerWidth, top: 0, bottom: window_of_view.innerHeight - (owner === document ? (options.bottom_inset ?? 0) : 0) };
+    const edges = nested ? view.getBoundingClientRect() : { left: 0, right: window_of_view.innerWidth, top: 0, bottom: window_of_view.innerHeight - (owner === document ? (options.bottom_inset_ ?? 0) : 0) };
     const by_x = scroll_delta({ low: box.left, high: box.right }, { low: edges.left + shift.x, high: edges.right + shift.x }, box.height);
     const by_y = scroll_delta({ low: box.top, high: box.bottom }, { low: edges.top + shift.y, high: edges.bottom + shift.y }, box.height);
     if (by_x || by_y) (nested ? view : window_of_view).scrollBy(by_x, by_y);
@@ -72,13 +72,13 @@ export function scroll_to_index(model: TextModel, index: number, options: { bott
   }
 }
 
-// `goal_x` is where j and k aim on each new line, so a short line in between does not move the column. A caller keeps what comes back for the next j or k and drops it after any other motion.
-export function screen_line_target(model: TextModel, from: number, motion: Motion, goal_x?: number): { index: number; goal_x: number | undefined } {
+// `goal_x_` is where j and k aim on each new line, so a short line in between does not move the column. A caller keeps what comes back for the next j or k and drops it after any other motion.
+export function screen_line_target(model: TextModel, from: number, motion: Motion, goal_x?: number): { index: number; goal_x_: number | undefined } {
   const modified = modify_target(model, from, motion);
   const target = motion.unit === "line" ? line_target(model, from, modified, motion.direction) : modified;
-  if (motion.unit !== "line" || target === from) return { index: target, goal_x: undefined };
+  if (motion.unit !== "line" || target === from) return { index: target, goal_x_: undefined };
   const wanted_x = goal_x ?? character_box(model, from)?.left ?? 0;
-  return { index: nearest_on_line(model, target, wanted_x), goal_x: wanted_x };
+  return { index: nearest_on_line(model, target, wanted_x), goal_x_: wanted_x };
 }
 
 const same_row = (model: TextModel, one: number, other: number): boolean => {
@@ -109,7 +109,7 @@ export function crosses_frame_or_block_host(runs: TreeRun[]): boolean {
 
 // Where Selection.modify stalls or leaves its document, the next or previous line of the model stands in.
 export function line_target(model: TextModel, from: number, modified: number, direction: Motion["direction"]): number {
-  const crossed = crosses_frame_or_block_host(model.tree_runs(Math.min(from, modified), Math.max(from, modified) + 1));
+  const crossed = crosses_frame_or_block_host(model.tree_runs_(Math.min(from, modified), Math.max(from, modified) + 1));
   const stalled = modified === from || same_row(model, from, modified);
   return crossed || stalled ? adjacent_line_start(model.text, from, direction) : modified;
 }
@@ -132,19 +132,19 @@ function nearest_on_line(model: TextModel, target: number, x: number): number {
 }
 
 function modify_target(model: TextModel, from: number, motion: Motion): number {
-  const start = model.point_at(from);
+  const start = model.point_at_(from);
   const selection = start.node.ownerDocument!.getSelection()!;
   selection.collapse(start.node, start.offset);
   const by_line = motion.unit === "line";
   selection.modify("move", motion.unit === "line_end" || (by_line && motion.direction === "forward") ? "forward" : "backward", by_line ? "line" : "lineboundary");
   const { focusNode: node, focusOffset: offset } = selection;
-  const found = node && model.index_of(node, offset);
+  const found = node && model.index_of_(node, offset);
   if (found === undefined || found === null) return from;
   let index = found;
   if (motion.unit === "line_first") while (model.text[index] === " ") index++;
   if (motion.unit === "line_end") {
     // The boundary sits after the last character, but the model clamps a position past the end of its node onto that character.
-    if (model.point_at(index).offset >= offset && model.text[index - 1] !== "\n" && index > 0) index--;
+    if (model.point_at_(index).offset >= offset && model.text[index - 1] !== "\n" && index > 0) index--;
     if (model.text[index] === " " && model.text[index - 1] !== "\n" && index > 0) index--;
   }
   return index;

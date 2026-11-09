@@ -19,16 +19,16 @@ export function make_labels(count: number, letters: readonly string[]): string[]
   return labels.slice(0, count);
 }
 
-export type Narrowed = { still_possible: number[]; complete: number | undefined };
+export type Narrowed = { still_possible_: number[]; complete: number | undefined };
 
 // Which labels still start with what was typed, by index. `complete` is set once exactly one label equals the typed text.
 export function narrow(labels: readonly string[], typed: string): Narrowed {
-  const still_possible: number[] = [];
+  const still_possible_: number[] = [];
   let complete: number | undefined;
   labels.forEach((label, index) => {
     if (!label.startsWith(typed)) return;
-    still_possible.push(index);
+    still_possible_.push(index);
     if (label === typed) complete = index;
   });
-  return { still_possible, complete };
+  return { still_possible_, complete };
 }

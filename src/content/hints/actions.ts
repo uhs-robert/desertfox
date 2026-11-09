@@ -14,11 +14,11 @@ export const starts_caret = (action: HintAction): action is CaretMode => action 
 
 export type ActionDeps = {
   // A promise settles when the action is finished, so the sequence that started the hints goes on after it.
-  open_link: (url: string, place: Place) => void | Promise<unknown>;
+  open_link_: (url: string, place: Place) => void | Promise<unknown>;
   copy: (text: string) => void | Promise<unknown>;
   // The background fetches the address. The content script never does, because the page's rules would block a picture from another site.
   image_action: (action: "copy_image" | "download", address: string) => Promise<unknown>;
-  start_caret: (target: Element, mode: CaretMode) => void;
+  start_caret_: (target: Element, mode: CaretMode) => void;
 };
 
 type Target = Pick<HTMLElement, "click" | "focus" | "remove"> & { dispatchEvent?: (event: Event) => boolean; getBoundingClientRect?: () => { left: number; top: number; width: number; height: number } } & { tabIndex?: number; setAttribute?: (name: string, value: string) => void; style?: CSSStyleDeclaration } & { textContent?: string | null; href?: unknown; localName: string; type?: unknown; isContentEditable?: boolean } & { currentSrc?: string; src?: string; getAttribute?: (name: string) => string | null; ownerDocument?: Document; baseURI?: string };
@@ -79,7 +79,7 @@ const own_source = (target: Target, with_background: boolean): string | undefine
   return with_background ? background_url(target) : undefined;
 };
 
-// Where the element itself points: a link's href, an image's picture, a media element's source. Never an ancestor's. A script or `blob:` address is no use outside the page, and an inline `data:` one over 8 KB is too long to copy. `with_background` is for the images filter: the element then stands for its picture, so a background image wins over the href of a link.
+// Where the element itself points: a link's href, an image's picture, a media element's source. Never an ancestor's. A script or `blob:` address is no use outside the page, and an inline `data:` one over 8 KB is too long to copy. `with_background_` is for the images filter: the element then stands for its picture, so a background image wins over the href of a link.
 export function element_address(target: Target, with_background = false): string | undefined {
   if (!with_background && typeof target.href === "string" && target.href !== "") return /^javascript:/i.test(target.href) ? undefined : target.href;
   const source = own_source(target, with_background);
@@ -245,7 +245,7 @@ export function perform(action: HintAction, target: Target, deps: ActionDeps, wi
   if (action === "hover") return hover(target);
   if (action === "double_click") return double_click_like_a_mouse(target, pointer_from);
   if (action === "play_pause" || action === "mute" || action === "fullscreen") return act_on_media(action, target);
-  if (starts_caret(action)) return deps.start_caret(target as unknown as Element, action);
+  if (starts_caret(action)) return deps.start_caret_(target as unknown as Element, action);
   const address = element_address(target, with_background);
   // A copy of the address falls back to the text for an element that has none, except a picture, whose text is empty.
   if (action === "copy") return address === undefined && (is_image_element(target) || is_media(target) || is_frame_element(target)) ? NO_WEB_ADDRESS : deps.copy(address ?? (target.textContent ?? "").trim());
@@ -254,7 +254,7 @@ export function perform(action: HintAction, target: Target, deps: ActionDeps, wi
   if (action === "tab" || action === "background" || action === "window") {
     // A click on a frame does nothing, so it must not stand in for an open.
     if (address === undefined) return is_frame_element(target) ? NO_WEB_ADDRESS : click_like_a_mouse(target, pointer_from);
-    return deps.open_link(address, action);
+    return deps.open_link_(address, action);
   }
   if (takes_typing(target)) return target.focus();
   if (is_frame_element(target)) return focus_target(target);

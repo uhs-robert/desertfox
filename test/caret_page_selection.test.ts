@@ -4,7 +4,7 @@ import { page_selection_cursor } from "../src/content/caret/page_selection.ts";
 
 // One text node, so a node and an offset map straight to an index.
 const text_node = { nodeType: 3 };
-const model = { index_of: (node: unknown, offset: number) => (node === text_node ? offset : undefined) } as never;
+const model = { index_of_: (node: unknown, offset: number) => (node === text_node ? offset : undefined) } as never;
 
 // A drag from `from` to `to` in the node, in the forms a Selection takes: the range is always ordered, the anchor and focus are not.
 function drag(from: number, to: number) {

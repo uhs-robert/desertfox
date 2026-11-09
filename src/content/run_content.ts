@@ -10,7 +10,7 @@ import { args_for_count } from "./invocation_args.ts";
 // A command whose code sits in a bundle runs through the bundle host, which loads the bundle on the first run. A bundle that registers no handler yet refuses with `needs <label>`.
 const lazy_handler = ({ id, bundle }: Invocation): ContentHandler => {
   if (!bundle) throw new Error(`${id} cannot run in the page`);
-  return { run: (args) => bundles.run_command(id, bundle, args, `needs ${BUNDLE_LABELS[bundle]}`) };
+  return { run: (args) => bundles.run_command_(id, bundle, args, `needs ${BUNDLE_LABELS[bundle]}`) };
 };
 
 // Runs one invocation here and answers how it ended. Never rejects and shows nothing: the caller shows a failure once.
@@ -20,7 +20,7 @@ export const run_content_invocation = (invocation: Invocation, count_rule: Count
   settle(async () => {
     const handler = content_handlers[invocation.id] ?? lazy_handler(invocation);
     const filled: Record<string, unknown> = { ...invocation.args };
-    for (const [param, source] of Object.entries(handler.fill_from_page ?? {})) {
+    for (const [param, source] of Object.entries(handler.fill_from_page_ ?? {})) {
       filled[param] ??= read_context_source(source);
     }
     for (const args of args_for_count(filled, invocation.count, count_rule)) {

@@ -2,7 +2,7 @@
 
 export type AlignPosition = "top" | "center" | "bottom";
 
-export type AlignFocus<Ref> = { ref: Ref; is_page_root: boolean };
+export type AlignFocus<Ref> = { ref: Ref; is_page_root_: boolean };
 
 export type AlignSelection<Ref> = {
   // The editing host or field that holds the selection focus, when it has one.
@@ -11,7 +11,7 @@ export type AlignSelection<Ref> = {
   parent: Ref;
   // The element around the selection contains the element just blurred. Escape from a field leaves the
   // selection on the field's wrapper, so the blurred field is the better target.
-  holds_remembered: boolean;
+  holds_remembered_: boolean;
 };
 
 // Order: the focused element unless it is the page itself, then the selection's field, then the blurred
@@ -21,9 +21,9 @@ export function choose_align_target<Ref>(
   selection: AlignSelection<Ref> | undefined,
   remembered: Ref | undefined,
 ): Ref | undefined {
-  if (focused && !focused.is_page_root) return focused.ref;
+  if (focused && !focused.is_page_root_) return focused.ref;
   if (selection?.editable) return selection.editable;
-  if (selection?.holds_remembered) return remembered;
+  if (selection?.holds_remembered_) return remembered;
   return selection?.parent ?? remembered;
 }
 

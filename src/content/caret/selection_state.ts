@@ -6,16 +6,16 @@ export type Cursor = { anchor: number; caret: number };
 export type CaretMode = "caret" | "visual" | "visual_line";
 export type Span = { from: number; to: number };
 // Where the screen line that holds a character starts and ends, both characters included. Only layout knows where a line wraps, so the caller measures it.
-export type LineBounds = { start_of: (index: number) => number; end_of: (index: number) => number };
+export type LineBounds = { start_of_: (index: number) => number; end_of: (index: number) => number };
 
 export const is_visual = (mode: CaretMode): boolean => mode !== "caret";
 
 export const selected_span = ({ anchor, caret }: Cursor): Span => ({ from: Math.min(anchor, caret), to: Math.max(anchor, caret) + 1 });
 
 // From the start of the earlier end's line to the end of the later end's line. A bound on the wrong side of its end, as a failed measure gives, leaves that end as it is.
-export function line_span(cursor: Cursor, { start_of, end_of }: LineBounds): Span {
+export function line_span(cursor: Cursor, { start_of_, end_of }: LineBounds): Span {
   const { from, to } = selected_span(cursor);
-  return { from: Math.min(from, start_of(from)), to: Math.max(to, end_of(to - 1) + 1) };
+  return { from: Math.min(from, start_of_(from)), to: Math.max(to, end_of(to - 1) + 1) };
 }
 
 export const selected_text = (text: string, { from, to }: Span): string => text.slice(from, to);
@@ -28,6 +28,6 @@ export function swap_ends({ anchor, caret }: Cursor): Cursor {
 }
 
 // Points an open session at a rebuilt model with a new cursor, in place. A copy in flight holds the session object, and only the same object tells it the session is still its own.
-export function retarget<Open extends { model: unknown; cursor: Cursor; goal_x: number | undefined; painted: unknown[] }>(open: Open, model: Open["model"], cursor: Cursor): Open {
-  return Object.assign(open, { model, cursor, goal_x: undefined, painted: [] });
+export function retarget<Open extends { model: unknown; cursor: Cursor; goal_x_: number | undefined; painted_: unknown[] }>(open: Open, model: Open["model"], cursor: Cursor): Open {
+  return Object.assign(open, { model, cursor, goal_x_: undefined, painted_: [] });
 }

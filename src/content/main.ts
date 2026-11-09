@@ -27,7 +27,7 @@ let mode_indicator: ModeIndicator = DEFAULT_MODE_INDICATOR;
 
 function refresh_mode_indicator(): void {
   const mode = page_mode.get_mode();
-  const pass_next_armed = page_mode.is_pass_next_armed();
+  const pass_next_armed = page_mode.is_pass_next_armed_();
   show_mode_label(mode_label(mode, pass_next_armed, mode_indicator), pass_next_armed ? undefined : mode);
 }
 
@@ -68,33 +68,33 @@ let which_key_delay_ms: number | undefined;
 // Hiding asks only once the bundle has loaded, because before that there is no panel.
 const follow_prefix = create_which_key_timer(
   () => which_key_delay_ms,
-  (prefix, is_current) => (prefix || bundles.has_handler("whichkey")) && bundles.run_command("whichkey", "whichkey", { prefix, is_current }, "", false),
+  (prefix, is_current_) => (prefix || bundles.has_handler_("whichkey")) && bundles.run_command_("whichkey", "whichkey", { prefix, is_current_ }, "", false),
 );
 
 const key_flow = create_key_flow({
-  on_prefix: follow_prefix,
+  on_prefix_: follow_prefix,
   get_mode: page_mode.get_mode,
-  take_pass_next: page_mode.take_pass_next,
-  run_leaf: (leaf, count, repeat) => void run_leaf(leaf, count, repeat),
-  leave_insert: () => {
+  take_pass_next_: page_mode.take_pass_next_,
+  run_leaf_: (leaf, count, repeat) => void run_leaf(leaf, count, repeat),
+  leave_insert_: () => {
     page_mode.escape();
     blur_focused_element();
   },
-  in_editable_field: () => is_editable_element(document.activeElement),
-  is_loading: bundles.is_loading,
-  is_loading_sink_bundle: bundles.is_loading_sink_bundle,
-  sink_of: bundles.sink_of,
+  in_editable_field_: () => is_editable_element(document.activeElement),
+  is_loading_: bundles.is_loading_,
+  is_loading_sink_bundle_: bundles.is_loading_sink_bundle_,
+  sink_of_: bundles.sink_of_,
 });
 
 bundles.connect({
-  request_bundle: async (name) => (await send_to_background({ type: "load_bundle", name })).ok,
-  on_idle: key_flow.release,
-  set_mode: page_mode.set_mode,
-  show_toast,
+  request_bundle_: async (name) => (await send_to_background({ type: "load_bundle", name })).ok,
+  on_idle_: key_flow.release,
+  set_mode_: page_mode.set_mode_,
+  show_toast_: show_toast,
   // The toast needs the ui bundle, so without it an error has nowhere to show.
-  show_error: (message) => (bundles.has_handler("ui.toast") ? show_toast(message) : console.error(message)),
-  on_sink_missing: (mode) => {
-    page_mode.set_mode("normal");
+  show_error_: (message) => (bundles.has_handler_("ui.toast") ? show_toast(message) : console.error(message)),
+  on_sink_missing_: (mode) => {
+    page_mode.set_mode_("normal");
     show_toast(`${mode} mode is not available yet`);
   },
 });
@@ -111,17 +111,17 @@ function on_keydown(event: KeyboardEvent): void {
   if (!event.isTrusted || event.isComposing) return;
   const token = event_to_token(event);
   if (token === null) return;
-  const decision = key_flow.handle_token(token, event.repeat);
-  cancelled_keys.record_keydown(event.code, decision);
+  const decision = key_flow.handle_token_(token, event.repeat);
+  cancelled_keys.record_keydown_(event.code, decision);
   if (decision === "cancel") cancel(event);
 }
 
 function on_keypress(event: KeyboardEvent): void {
-  if (cancelled_keys.cancels_keypress(event.code)) cancel(event);
+  if (cancelled_keys.cancels_keypress_(event.code)) cancel(event);
 }
 
 function on_keyup(event: KeyboardEvent): void {
-  if (cancelled_keys.take_keyup(event.code)) cancel(event);
+  if (cancelled_keys.take_keyup_(event.code)) cancel(event);
 }
 
 const on_focusin = (event: Event) => follow_focus(true, event);
@@ -143,7 +143,7 @@ function stop_listening(): void {
 }
 
 function on_visibility_change(): void {
-  if (document.hidden) bundles.page_hidden();
+  if (document.hidden) bundles.page_hidden_();
 }
 
 // A closed shadow root hides its inner field from the event path, which then ends at the host. The focus settles after the event, so the mode follows it a tick later.
@@ -152,8 +152,8 @@ function follow_focus(entered: boolean, event: Event): void {
   watch_roots_around_focus();
   if (target instanceof Element && shadow_root_of(target)) return void setTimeout(sync_mode_to_focus);
   if (!is_editable_element(target)) return;
-  if (entered) page_mode.focus_entered_editable();
-  else page_mode.focus_left_editable();
+  if (entered) page_mode.focus_entered_editable_();
+  else page_mode.focus_left_editable_();
 }
 
 // A focus move between two nodes of one root retargets both ends to the host, so the window never sees it. A listener on the root itself does. Roots are watched lazily, once focus sits in them. The shared handlers make a repeat add a no-op.
@@ -169,8 +169,8 @@ function watch_roots_around_focus(): void {
 
 function sync_mode_to_focus(): void {
   watch_roots_around_focus();
-  if (is_editable_element(deepest_focused_element())) page_mode.focus_entered_editable();
-  else page_mode.focus_left_editable();
+  if (is_editable_element(deepest_focused_element())) page_mode.focus_entered_editable_();
+  else page_mode.focus_left_editable_();
 }
 
 let matcher_installed = false;
@@ -193,10 +193,10 @@ function install_matcher(keymap: CompiledKeymap | undefined, tab_address: string
   matcher_installed = true;
   const first_usable = usable !== undefined && !ignore_checked;
   if (usable) ignore_checked = true;
-  if (first_usable && ignores_any_address(usable.ignore_regex, [location.href, tab_address])) page_mode.set_mode("ignore");
-  else if (first_install && is_editable_element(deepest_focused_element())) page_mode.focus_entered_editable();
+  if (first_usable && ignores_any_address(usable.ignore_regex, [location.href, tab_address])) page_mode.set_mode_("ignore");
+  else if (first_install && is_editable_element(deepest_focused_element())) page_mode.focus_entered_editable_();
   refresh_mode_indicator();
-  key_flow.set_matcher(create_matcher(usable ?? { format_version: COMPILED_KEYMAP_VERSION, modes: {}, mode_indicator: DEFAULT_MODE_INDICATOR, which_key_delay_ms: 0 }), usable?.modes.browser);
+  key_flow.set_matcher_(create_matcher(usable ?? { format_version: COMPILED_KEYMAP_VERSION, modes: {}, mode_indicator: DEFAULT_MODE_INDICATOR, which_key_delay_ms: 0 }), usable?.modes.browser);
 }
 
 async function read_keymap(): Promise<CompiledKeymap | undefined> {
@@ -219,13 +219,13 @@ function start(): void {
   window.addEventListener("focusin", on_focusin, { capture: true, signal });
   window.addEventListener("focusout", on_focusout, { capture: true, signal });
   watch_roots_around_focus();
-  addEventListener("pagehide", bundles.page_hidden, { signal });
+  addEventListener("pagehide", bundles.page_hidden_, { signal });
   document.addEventListener("visibilitychange", on_visibility_change, { signal });
 
   wire_mode_reports(page_mode, (mode) => {
     if (!extension_context_alive()) return stop_listening();
-    key_flow.reset_sequence();
-    bundles.enter_mode(mode);
+    key_flow.reset_sequence_();
+    bundles.enter_mode_(mode);
     void send_to_background({ type: "mode_changed", mode });
   });
 
@@ -234,7 +234,7 @@ function start(): void {
     if (event.persisted) void send_to_background({ type: "mode_changed", mode: page_mode.get_mode() });
   });
 
-  page_mode.listen_display(refresh_mode_indicator);
+  page_mode.listen_display_(refresh_mode_indicator);
 
   // Both installs wait for the one tab address read, so a `tree_updated` that comes first cannot decide ignore mode on the frame address alone.
   const tab_address_read = read_tab_address();
@@ -254,8 +254,8 @@ function start(): void {
       return run_in_order(message.invocations);
     } else if (message.type === "refusal") show_toast(message.refusal.message, message.kind);
     else if (message.type === "set_mode") {
-      page_mode.set_mode(message.mode);
-      if (is_editable_element(deepest_focused_element())) page_mode.focus_entered_editable();
+      page_mode.set_mode_(message.mode);
+      if (is_editable_element(deepest_focused_element())) page_mode.focus_entered_editable_();
     }
     else if (message.type === "tree_updated") void install_after_tab_address(read_keymap());
   });

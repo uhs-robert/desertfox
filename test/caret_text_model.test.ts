@@ -102,7 +102,7 @@ test("tree_runs cuts a span where the text changes tree", () => {
   const host = element("span", [], { shadow: [text("in")] });
   const model = model_of(element("body", [element("p", [text("ab "), host, text(" cd")])]));
   assert.equal(model.text, "ab in cd");
-  const runs = model.tree_runs(1, 7).map(({ from, to, tree }) => [from, to, (tree as unknown as FakeTree).name]);
+  const runs = model.tree_runs_(1, 7).map(({ from, to, tree }) => [from, to, (tree as unknown as FakeTree).name]);
   assert.deepEqual(runs, [
     [1, 3, "top"],
     [3, 5, "shadow of span"],
@@ -110,12 +110,12 @@ test("tree_runs cuts a span where the text changes tree", () => {
   ]);
 });
 
-test("point_at and index_of reach a text node in a shadow root", () => {
+test("point_at and index_of_ reach a text node in a shadow root", () => {
   const inside = text("xyz");
   const model = model_of(element("body", [element("p", [text("ab")]), element("div", [], { shadow: [element("p", [inside])] })]));
-  assert.equal(model.point_at(4).node, inside as unknown as Node);
-  assert.equal(model.point_at(4).offset, 1);
-  assert.equal(model.index_of(inside as unknown as Node, 2), 5);
+  assert.equal(model.point_at_(4).node, inside as unknown as Node);
+  assert.equal(model.point_at_(4).offset, 1);
+  assert.equal(model.index_of_(inside as unknown as Node, 2), 5);
 });
 
 test("start_index is the start node's own first character, or the first after it", () => {
@@ -124,12 +124,12 @@ test("start_index is the start node's own first character, or the first after it
   const field = element("input");
   const in_shadow = element("p", [text("gamma")]);
   const body = element("body", [element("p", [text("alpha")]), paragraph, image, field, element("div", [], { shadow: [in_shadow] })]);
-  assert.equal(model_of(body, paragraph).start_index, 6);
-  assert.equal(model_of(body, image).start_index, 11);
-  assert.equal(model_of(body, field).start_index, 11);
-  assert.equal(model_of(body, in_shadow).start_index, 11);
+  assert.equal(model_of(body, paragraph).start_index_, 6);
+  assert.equal(model_of(body, image).start_index_, 11);
+  assert.equal(model_of(body, field).start_index_, 11);
+  assert.equal(model_of(body, in_shadow).start_index_, 11);
   const last = element("img");
-  assert.equal(model_of(element("body", [element("p", [text("only")]), last]), last).start_index, undefined);
+  assert.equal(model_of(element("body", [element("p", [text("only")]), last]), last).start_index_, undefined);
 });
 
 test("the model is stale once a shadow host leaves the page", () => {
@@ -172,9 +172,9 @@ test("a shadow root and a frame without text are listed for the watcher, and a r
   const empty_frame = element("iframe", [], { frame: element("body", []) });
   const model = model_of(element("body", [element("p", [text("top")]), empty_host, full_host, empty_frame]));
   assert.equal(model.trees.length, 2);
-  assert.equal(model.empty_trees.length, 2);
-  assert.equal(model.empty_trees.includes(empty_host.openOrClosedShadowRoot as never), true);
-  assert.equal(model.empty_trees.includes(full_host.openOrClosedShadowRoot as never), false);
+  assert.equal(model.empty_trees_.length, 2);
+  assert.equal(model.empty_trees_.includes(empty_host.openOrClosedShadowRoot as never), true);
+  assert.equal(model.empty_trees_.includes(full_host.openOrClosedShadowRoot as never), false);
   assert.deepEqual(model.frames, [empty_frame as unknown as Element]);
 });
 
@@ -183,7 +183,7 @@ test("a custom element with no shadow root is listed as pending, and a plain ele
   const rooted = element("my-card", [], { shadow: [text("in")] });
   const plain = element("div", [], {});
   const model = model_of(element("body", [element("p", [text("top")]), pending, rooted, plain]));
-  assert.deepEqual(model.pending_hosts, [pending as unknown as Element]);
+  assert.deepEqual(model.pending_hosts_, [pending as unknown as Element]);
 });
 
 test("a custom element that gains a root, open or closed, is seen by host_gained_root, and a plain element that gains one is not", () => {

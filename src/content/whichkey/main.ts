@@ -9,7 +9,7 @@ import { create_which_key_session } from "./session.ts";
 type WhichKeyWindow = { desertfox_host: BundleHostApi; desertfox_whichkey_ready?: true };
 const page = window as unknown as WhichKeyWindow;
 
-type ShowArgs = { prefix?: PendingPrefix; is_current: () => boolean };
+type ShowArgs = { prefix?: PendingPrefix; is_current_: () => boolean };
 
 const session = create_which_key_session(
   (mode, typed) => browser.runtime.sendMessage({ type: "list_keys", mode, prefix: typed } satisfies ListKeys) as Promise<WhichKeyPanel>,
@@ -21,10 +21,10 @@ const ignore_failure = () => undefined;
 // A second run would register a second copy of the handler.
 if (!page.desertfox_whichkey_ready) {
   page.desertfox_whichkey_ready = true;
-  page.desertfox_host.register_handler("whichkey", (args) => {
-    const { prefix, is_current } = args as ShowArgs;
+  page.desertfox_host.register_handler_("whichkey", (args) => {
+    const { prefix, is_current_ } = args as ShowArgs;
     if (!prefix) return session.hide();
-    void session.show_prefix(prefix, is_current).catch(ignore_failure);
+    void session.show_prefix_(prefix, is_current_).catch(ignore_failure);
   });
-  page.desertfox_host.register_handler("help.whichkey", () => void session.show_manual(page.desertfox_host.get_mode()).catch(ignore_failure));
+  page.desertfox_host.register_handler_("help.whichkey", () => void session.show_manual_(page.desertfox_host.get_mode()).catch(ignore_failure));
 }

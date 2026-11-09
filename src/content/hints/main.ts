@@ -39,21 +39,21 @@ type Session = {
   picked?: true;
   // The hint.run args, which `.` repeats after a pick.
   args: Record<string, unknown>;
-  // Settles the promise `hint.run` returned. The first call wins, so each path that leaves hint mode must call it before `set_mode`, because the mode change ends the session as cancelled.
+  // Settles the promise `hint.run` returned. The first call wins, so each path that leaves hint mode must call it before `set_mode_`, because the mode change ends the session as cancelled.
   finish: (outcome: Outcome | Promise<Outcome>) => void;
   action: HintAction;
   // Keys typed while the elements are still being found.
-  waiting_tokens: string[];
+  waiting_tokens_: string[];
   // Rapid mode picks again after each pick.
   rapid: boolean;
   filter: HintFilter;
   // Only the images filter takes a picture from a CSS background.
-  with_background: boolean;
-  custom_selector: string | undefined;
+  with_background_: boolean;
+  custom_selector_: string | undefined;
   // The `text` param as typed, and lower-cased for the match. Both are undefined without it.
   text: string | undefined;
-  lower_text: string | undefined;
-  ready?: { picker: ReturnType<typeof create_picker>; found: Found[]; view: HintView; stop_following: () => void };
+  lower_text_: string | undefined;
+  ready?: { picker: ReturnType<typeof create_picker>; found: Found[]; view: HintView; stop_following_: () => void };
 };
 
 function observe_intersecting(elements: Element[]): Promise<Set<Element>> {
@@ -90,23 +90,23 @@ async function keep_visible_ones(candidates: Found[], filter: HintFilter): Promi
   const owners = new Map(candidates.map((found) => [found.element, box_owners(found.element, own_rects, children)]));
   const seen = await observe_intersecting([...new Set([...owners.values()].flat())]);
   const probe: PageProbe<Found> = {
-    is_intersecting: (found) => owners.get(found.element)!.some((owner) => seen.has(owner)),
-    rects_of: (found) => boxes_with_fallback(found.element, own_rects, children),
-    clips_of: (found) => scroll_clips_in_page(found.element),
-    viewport_of: (found) => viewport_size(found.element.ownerDocument, window_of(found.element)),
-    is_hidden_by_style: (found) => window_of(found.element).getComputedStyle(found.element).visibility === "hidden",
+    is_intersecting_: (found) => owners.get(found.element)!.some((owner) => seen.has(owner)),
+    rects_of_: (found) => boxes_with_fallback(found.element, own_rects, children),
+    clips_of_: (found) => scroll_clips_in_page(found.element),
+    viewport_of_: (found) => viewport_size(found.element.ownerDocument, window_of(found.element)),
+    is_hidden_by_style_: (found) => window_of(found.element).getComputedStyle(found.element).visibility === "hidden",
     // Site players lay click-catching controls over the video, and a card lays a stretched link over its picture, so a cover test would drop them.
-    is_reachable_at: (found, x, y) => uncovered_through_frames(found, x, y, filter === "images" || (filter === "media" && is_media(found.element))),
+    is_reachable_at_: (found, x, y) => uncovered_through_frames(found, x, y, filter === "images" || (filter === "media" && is_media(found.element))),
   };
   return keep_visible_deduplicated(candidates, probe);
 }
 
 const yank_deps = (): YankDeps => ({
   find: all_links,
-  keep_present: keep_present_found,
-  keep_in_view: (found) => keep_visible_ones(found, "links"),
+  keep_present_: keep_present_found,
+  keep_in_view_: (found) => keep_visible_ones(found, "links"),
   copy: (text) => copy_text(navigator.clipboard, text),
-  show_message: (message) => create_view().show_message(message),
+  show_message_: (message) => create_view().show_message_(message),
 });
 
 async function read_setting(name: string): Promise<unknown> {
@@ -133,7 +133,7 @@ async function follow_page_link(direction: FollowDirection, place: Place): Promi
   if (place !== "here" && !can_open_elsewhere(element)) return { ok: false, message: "That page link cannot open in another tab" };
   if (element.localName === "link") {
     if (place === "here") window.location.assign(element.href);
-    else await open_link(element.href, place);
+    else await open_link_(element.href, place);
     return done;
   }
   const result = await perform(place, element, deps);
@@ -145,7 +145,7 @@ function copy_to_clipboard(text: string): Promise<Outcome | undefined> {
   return copy_text(navigator.clipboard, text).then((copied) => {
     if (!copied) return { ok: false, message: "Could not copy to the clipboard" };
     // A view of its own, so the notice does not wipe the labels that rapid mode shows.
-    create_view().show_message(`Copied ${text.length > 40 ? text.slice(0, 40) + "..." : text}`);
+    create_view().show_message_(`Copied ${text.length > 40 ? text.slice(0, 40) + "..." : text}`);
   });
 }
 
@@ -153,37 +153,37 @@ function copy_to_clipboard(text: string): Promise<Outcome | undefined> {
 function image_action(action: "copy_image" | "download", address: string): Promise<Outcome> {
   return browser.runtime.sendMessage({ type: "image_action", action, address }).then((outcome: Outcome | undefined) => {
     if (!outcome) return { ok: false, message: "The picture action got no answer" };
-    if (outcome.ok) create_view().show_message(action === "copy_image" ? "Copied image" : "Started the download");
+    if (outcome.ok) create_view().show_message_(action === "copy_image" ? "Copied image" : "Started the download");
     return outcome;
   });
 }
 
 // `from_hints` keeps the router from storing this `open.url`, so `.` shows hints again instead of reopening the address.
-function open_link(url: string, place: Place): Promise<unknown> {
+function open_link_(url: string, place: Place): Promise<unknown> {
   return browser.runtime.sendMessage({ type: "run", invocations: [{ id: "open.url", args: { url, where: place } }], mode: "normal", from_hints: true });
 }
 
 // The caret bundle reads the element in `start_session` when the mode starts, and loads on that first entry.
-function start_caret(target: Element, mode: CaretMode): void {
+function start_caret_(target: Element, mode: CaretMode): void {
   page.desertfox_caret_target = target;
-  page.desertfox_host.set_mode(mode);
+  page.desertfox_host.set_mode_(mode);
 }
 
-const deps = { open_link, copy: copy_to_clipboard, image_action, start_caret };
+const deps = { open_link_, copy: copy_to_clipboard, image_action, start_caret_ };
 
 function register(host: BundleHostApi): void {
   let session: Session | undefined;
 
   function end_session(): void {
-    session?.ready?.stop_following();
-    session?.ready?.view.clear_labels();
+    session?.ready?.stop_following_();
+    session?.ready?.view.clear_labels_();
     if (session) session.cancelled = true;
     session?.finish(cancelled_outcome);
     session = undefined;
   }
 
   // A pick records what `.` repeats, so Escape or a failed filter stores nothing. The wait ends when the returned function gets the
-  // action's result, so a later step sees the opened tab or the copied text. Call it before `set_mode`, which ends the session as cancelled.
+  // action's result, so a later step sees the opened tab or the copied text. Call it before `set_mode_`, which ends the session as cancelled.
   function begin_pick(current: Session): (run: () => unknown) => void {
     let answer!: (outcome: Outcome) => void;
     const first = !current.picked;
@@ -195,7 +195,7 @@ function register(host: BundleHostApi): void {
       // A refused open comes back as a RunResponse with no message. The background already showed it, so it only stops the sequence.
       if (!outcome.ok && typeof outcome.message !== "string") outcome = { ok: true, cancelled: true };
       if (first) answer(outcome);
-      else if (!outcome.ok) create_view().show_message(outcome.message);
+      else if (!outcome.ok) create_view().show_message_(outcome.message);
     };
     // A throw from the action is a failed pick, and a rejected open means the page went away, which cancels.
     return (run) => {
@@ -213,32 +213,32 @@ function register(host: BundleHostApi): void {
   async function build(current: Session, candidates: Found[], first_build: boolean): Promise<void> {
     const [letters, visible] = await Promise.all([read_letters(), keep_visible_ones(candidates, current.filter)]);
     if (current.cancelled) return;
-    const found = current.lower_text === undefined ? visible : keep_text_matches(visible, current.lower_text);
+    const found = current.lower_text_ === undefined ? visible : keep_text_matches(visible, current.lower_text_);
     if (found.length === 0) {
       const message = none_message(current.text);
       current.finish({ ok: false, message });
-      host.set_mode("normal");
+      host.set_mode_("normal");
       // Only a rapid rebuild gets here with its promise already settled, so nobody else shows the message.
-      if (!first_build) create_view().show_message(message);
+      if (!first_build) create_view().show_message_(message);
       return;
     }
     // One match needs no label. Only the first build does this, so rapid mode cannot repeat the same pick.
-    if (first_build && current.lower_text !== undefined && found.length === 1) {
+    if (first_build && current.lower_text_ !== undefined && found.length === 1) {
       const performed = begin_pick(current);
-      host.set_mode("normal");
-      performed(() => perform(current.action, found[0]!.element as HTMLElement, deps, current.with_background));
+      host.set_mode_("normal");
+      performed(() => perform(current.action, found[0]!.element as HTMLElement, deps, current.with_background_));
       return;
     }
     const view = create_view();
     const labels = make_labels(found.length, letters);
     view.show(found.map((item, index) => ({ found: item, text: labels[index]! })));
-    current.ready = { picker: create_picker(labels), found, view, stop_following: follow_windows(windows_of(found), view.reposition) };
-    const queued = current.waiting_tokens.splice(0);
+    current.ready = { picker: create_picker(labels), found, view, stop_following_: follow_windows(windows_of(found), view.reposition) };
+    const queued = current.waiting_tokens_.splice(0);
     for (const [index, token] of queued.entries()) {
       if (current.cancelled) break;
       // A rapid pick starts the next build, which replays the keys that are left.
       if (!current.ready) {
-        current.waiting_tokens.unshift(...queued.slice(index));
+        current.waiting_tokens_.unshift(...queued.slice(index));
         break;
       }
       handle_token(current, token);
@@ -247,63 +247,63 @@ function register(host: BundleHostApi): void {
 
   function handle_token(current: Session, token: string): "handled" | "pass" {
     const ready = current.ready!;
-    const outcome = ready.picker.on_token(token);
+    const outcome = ready.picker.on_token_(token);
     if (outcome.kind === "pass") return "pass";
-    ready.view.show_progress(outcome.typed, new Set(outcome.still_possible));
+    ready.view.show_progress_(outcome.typed, new Set(outcome.still_possible_));
     if (outcome.picked !== undefined) {
       const { element } = ready.found[outcome.picked]!;
       const picked = element as HTMLElement;
       const performed = begin_pick(current);
       if (!current.rapid) {
         // Leave hint mode first: a picked field then raises insert mode through its own focus event.
-        host.set_mode("normal");
-        performed(() => perform(current.action, picked, deps, current.with_background));
+        host.set_mode_("normal");
+        performed(() => perform(current.action, picked, deps, current.with_background_));
         return "handled";
       }
       // Rapid: the pick may delete or move elements, so drop these labels and label the page again.
-      ready.stop_following();
-      ready.view.clear_labels();
+      ready.stop_following_();
+      ready.view.clear_labels_();
       delete current.ready;
-      performed(() => perform(current.action, picked, deps, current.with_background));
-      if (!current.cancelled) void build(current, find_candidates(current.filter, current.custom_selector, current.action), false);
+      performed(() => perform(current.action, picked, deps, current.with_background_));
+      if (!current.cancelled) void build(current, find_candidates(current.filter, current.custom_selector_, current.action), false);
     }
     return "handled";
   }
 
-  host.register_handler("page.follow", (args) => follow_page_link(args.direction as FollowDirection, args.where as Place));
-  host.register_handler("page.focus_field", (args): Outcome => {
-    const message = focus_field(document, host.last_blurred(), args.direction as FieldDirection, args.steps as number);
+  host.register_handler_("page.follow", (args) => follow_page_link(args.direction as FollowDirection, args.where as Place));
+  host.register_handler_("page.focus_field", (args): Outcome => {
+    const message = focus_field(document, host.last_blurred_(), args.direction as FieldDirection, args.steps as number);
     return message === undefined ? done : { ok: false, message };
   });
-  host.register_handler("copy.links", (args) => yank_links(args.scope as "page" | "viewport", args.format as LinkFormat, yank_deps()));
-  host.register_handler("hint.unhover", () => unhover());
+  host.register_handler_("copy.links", (args) => yank_links(args.scope as "page" | "viewport", args.format as LinkFormat, yank_deps()));
+  host.register_handler_("hint.unhover", () => unhover());
 
   // The command line asks for the list and `report` hands it back, so the answer does not go through the background.
-  host.register_handler("heading.list", (args) => void (args.report as (items: HeadingItem[]) => void)(take_snapshot().rows));
-  host.register_handler("heading.go", (args) => go_to_heading(String(args.heading)));
-  host.register_handler("heading.clear", () => clear_snapshot());
+  host.register_handler_("heading.list", (args) => void (args.report as (items: HeadingItem[]) => void)(take_snapshot().rows));
+  host.register_handler_("heading.go", (args) => go_to_heading(String(args.heading)));
+  host.register_handler_("heading.clear", () => clear_snapshot());
 
-  host.register_sink("hint", {
-    on_token: (token) => {
+  host.register_sink_("hint", {
+    on_token_: (token) => {
       if (!session) return "pass";
       if (session.ready) return handle_token(session, token);
       if (token.length !== 1) return "pass";
-      session.waiting_tokens.push(token);
+      session.waiting_tokens_.push(token);
       return "handled";
     },
     exit: end_session,
   });
 
-  host.register_handler("hint.run", (args): Outcome | Promise<Outcome> => {
+  host.register_handler_("hint.run", (args): Outcome | Promise<Outcome> => {
     const action = args.action as HintAction;
     end_session();
     const filter = args.filter as HintFilter;
-    const custom_selector = args.selector as string | undefined;
+    const custom_selector_ = args.selector as string | undefined;
     let candidates: Found[];
     try {
-      candidates = find_candidates(filter, custom_selector, action);
+      candidates = find_candidates(filter, custom_selector_, action);
     } catch {
-      return { ok: false, message: `Invalid selector: ${custom_selector}` };
+      return { ok: false, message: `Invalid selector: ${custom_selector_}` };
     }
     // With nothing to label the mode never changes, so keys held during the load run as normal keys.
     const text = (args.text as string | undefined) || undefined;
@@ -311,9 +311,9 @@ function register(host: BundleHostApi): void {
     // Pending until the user picks a label or leaves hint mode.
     return new Promise<Outcome>((finish) => {
       // A caret start ends hint mode on the first pick, so rapid has nothing to repeat.
-      const current: Session = { cancelled: false, args, finish, action, waiting_tokens: [], rapid: args.rapid === true && !starts_caret(action), filter, with_background: filter === "images", custom_selector, text, lower_text: text?.toLowerCase() };
+      const current: Session = { cancelled: false, args, finish, action, waiting_tokens_: [], rapid: args.rapid === true && !starts_caret(action), filter, with_background_: filter === "images", custom_selector_, text, lower_text_: text?.toLowerCase() };
       session = current;
-      host.set_mode("hint");
+      host.set_mode_("hint");
       void build(current, candidates, true);
     });
   });
