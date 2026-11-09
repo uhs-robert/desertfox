@@ -602,20 +602,22 @@ export async function create_session({ name: session_name, timings, sweep = true
       const page = await browser.tabs.executeScript(${tab_id}, { code: "[document.hasFocus(), document.visibilityState]" }).then((answers) => answers[0], (error) => String(error.message));
       return { page, tab_active: tab.active, window_focused: window?.focused ?? "window gone" };
     })()`);
-    return `firefox ${JSON.stringify(firefox)}, compositor focus ${await session.focused_window()}`;
+    return `firefox ${JSON.stringify(firefox)}, compositor focus ${await session.focused_window()}, clients ${await session.window_list()}`;
   }
-  // Focus lands in browser chrome after tabs close, and a closed window can leave compositor focus on nothing, which no extension call can restore on Wayland. Each round starts with a hyprctl focus of the Firefox window, then asks for the window and tab, then uses the focus_page chord, until the page reports focus.
+  // Focus lands in browser chrome after tabs close, and a closed window leaves compositor focus on a Firefox window that is not the page's (measured), which no extension call can restore on Wayland. Each round starts with a hyprctl focus of the page's window by title, then asks for the window and tab, then uses the focus_page chord, until the page reports focus.
   async function confirm_page_focus(tab_id, window_id) {
     const focused = (timeout_ms) => poll_until("page focus", () => page_has_focus(tab_id), { timeout_ms, expected_timeout: true }).then(() => true, () => false);
     if (await focused(300)) return;
     const rounds = [];
     for (let attempt = 0; attempt < 3; attempt++) {
-      await session.focus_firefox_window();
+      const title = await in_background(`browser.tabs.get(${tab_id}).then((tab) => tab.title)`);
+      // A failed hyprctl call must not end the round: the extension calls and the chord below worked before it.
+      const hyprctl_error = await session.focus_firefox_window(typeof title === "string" ? title : "").then(() => "", (error) => ` (hyprctl focus failed: ${error.message.split("\n")[0]})`);
       await in_background(`(async () => { await browser.windows.update(${window_id}, { focused: true }); await browser.tabs.update(${tab_id}, { active: true }); })()`);
       if (await focused(1500)) return;
       await send_keys(...ALT(","));
       if (await focused(1500)) return;
-      rounds.push(`round ${attempt + 1}: ${await focus_state(tab_id, window_id)}`);
+      rounds.push(`round ${attempt + 1}: ${await focus_state(tab_id, window_id)}${hyprctl_error}`);
     }
     throw new Error(`tab ${tab_id} never reported focus (${rounds.join("; ")})`);
   }

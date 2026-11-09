@@ -295,8 +295,22 @@ export async function start_session({ name, session_dir }) {
     }
   };
 
-  // Hyprland 0.57 takes a Lua call as the dispatch argument. A session holds only Firefox windows, so the class names no other client.
-  const focus_firefox_window = () => hyprctl("dispatch", 'hl.dsp.focus({ window = "class:^firefox$" })');
+  // Hyprland 0.57 takes a Lua call as the dispatch argument, and it reports a Lua error on stdout with a zero exit. A closed window leaves a mapped Firefox client with an empty title that holds the focus (measured), so the target is picked by address: the client titled after the page, else any client with a title.
+  async function focus_firefox_window(page_title = "") {
+    const clients = JSON.parse(await hyprctl("clients", "-j")).filter((client) => client.class === "firefox" && client.mapped);
+    const target = clients.find((client) => page_title !== "" && client.title.startsWith(page_title)) ?? clients.find((client) => client.title !== "");
+    if (!target) return;
+    const reply = await hyprctl("dispatch", `hl.dsp.focus({ window = "address:${target.address}" })`);
+    if (!/^ok\b/.test(reply.trim())) throw new Error(`hyprctl focus ${target.address}: ${reply.trim()}`);
+  }
+  // Every client with the fields that tell a stale window from the page's, for a failure message.
+  async function window_list() {
+    try {
+      return JSON.parse(await hyprctl("clients", "-j")).map((client) => `${client.address} class=${client.class} title=${JSON.stringify(client.title)} mapped=${client.mapped} hidden=${client.hidden} focus_order=${client.focusHistoryID} size=${client.size.join("x")}`).join(" | ");
+    } catch (error) {
+      return `unknown (${error.message.split("\n")[0]})`;
+    }
+  }
   // The compositor's focused window as `class "title"`, or "none" when no window has the focus. For a failure message.
   async function focused_window() {
     try {
@@ -358,6 +372,7 @@ export async function start_session({ name, session_dir }) {
       press: (args) => keyboard.press(args),
       focus_firefox_window,
       focused_window,
+      window_list,
       shot: (path) => run_execfile("grim", [path], { env: client_env, timeout: 10000 }),
       stop,
     };
