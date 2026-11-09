@@ -121,16 +121,16 @@ export async function run_cases({ run_case, setup, expect, open_page, press_keys
   const active_url = () => in_background(`browser.tabs.query({ active: true, lastFocusedWindow: true }).then(([tab]) => tab?.url)`);
   // Extensions cannot open an about: page, so the address bar does.
   const tab_count = () => in_background(`browser.tabs.query({}).then((tabs) => tabs.length)`);
-  await setup("open about:support", async () => {
+  await setup("open about:license", async () => {
     const tabs_before = await tab_count();
     await press_keys(...CTRL("t"));
     await poll_until("the new tab to open", async () => (await tab_count()) === tabs_before + 1);
     // Text typed in the same run as Ctrl+L loses its first characters, so the page losing the focus to the address bar comes first.
     await press_keys(...CTRL("l"));
     await poll_until("the new tab page to lose the focus to the address bar", async () => (await in_background(`browser.tabs.query({ active: true, lastFocusedWindow: true }).then(([tab]) => browser.tabs.executeScript(tab.id, { code: "document.hasFocus()" }))`))?.[0] === false, { expected_timeout: true }).catch(() => undefined);
-    await type_in_address_bar("about:support");
+    await type_in_address_bar("about:license");
     await press_keys("-k", "Return");
-    await poll_until("about:support to load", async () => (await in_background(`browser.tabs.query({ active: true, lastFocusedWindow: true }).then(([tab]) => tab.url === "about:support" && tab.status === "complete" ? tab.id : 0)`)) > 0, { timeout_ms: 8000 });
+    await poll_until("about:license to load", async () => (await in_background(`browser.tabs.query({ active: true, lastFocusedWindow: true }).then(([tab]) => tab.url === "about:license" && tab.status === "complete" ? tab.id : 0)`)) > 0, { timeout_ms: 8000 });
     await wait_tab_quiet(await in_background(`browser.tabs.query({ active: true, lastFocusedWindow: true }).then(([tab]) => tab.id)`));
   });
 
@@ -139,7 +139,7 @@ export async function run_cases({ run_case, setup, expect, open_page, press_keys
     await press_keys(...ALT("k"));
     await expect_exactly_one_visible(switch_mark, "s", { destination_cancels_keys: true });
     await press_keys(...ALT("j"));
-    await poll_until("the about:support tab to be active", async () => (await active_url()) === "about:support");
+    await poll_until("the about:license tab to be active", async () => (await active_url()) === "about:license");
     switch_mark = await tab_switch_mark();
     await press_keys(...ALT("j"));
     await expect_exactly_one_visible(switch_mark, "a");
