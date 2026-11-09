@@ -186,3 +186,14 @@ test("an entry this version cannot read is written back unchanged by a later cha
   assert.deepEqual(Object.keys(stored).toSorted(), ["better", "odd"]);
   assert.deepEqual(stored["odd"], bad);
 });
+
+test("a new name that an unreadable entry holds is refused by save and rename, and nothing is lost", async () => {
+  const bad = { saved_at: "x" };
+  const { fake, values } = fake_storage({ version: 1, sessions: { good: { saved_at: 1, tabs: tabs_of(1) }, odd: bad } });
+  const store = make_session_store(fake);
+  await assert.rejects(store.save("Odd", tabs_of(1)), /A session named "odd" exists/);
+  await assert.rejects(store.rename("good", "odd"), /A session named "odd" exists/);
+  const stored = (values.get(SESSIONS_STORAGE_KEY) as { sessions: Record<string, unknown> }).sessions;
+  assert.deepEqual(Object.keys(stored).toSorted(), ["good", "odd"]);
+  assert.deepEqual(stored["odd"], bad);
+});
