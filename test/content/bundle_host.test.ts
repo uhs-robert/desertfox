@@ -49,7 +49,7 @@ function make_page() {
     take_pass_next_: state.take_pass_next_,
     in_editable_field_: () => in_field,
     is_loading_: host.is_loading_,
-    is_loading_sink_bundle_: host.is_loading_sink_bundle_,
+    loading_sink_bundles_: host.loading_sink_bundles_,
     sink_of_: host.sink_of_,
     on_prefix_: () => {},
     leave_insert_: () => state.escape(),
@@ -454,13 +454,11 @@ test("a key that binds nothing reaches the page at once while a bundle without a
   assert.deepEqual(page.events, ["align", "run log_j"]);
 });
 
-test("while a bundle with a sink loads, or a sink takes the current mode, every plain key waits for it", async () => {
-  for (const name of ["hints", "caret", "cmdline"] as const) {
-    const page = make_page();
-    void page.host.run_command_("open", name, {}, "missing");
-    page.press("<F8>", "q");
-    assert.deepEqual(page.decisions, ["<F8>:cancel", "q:cancel"], name);
-  }
+test("while the cmdline bundle loads, or a sink takes the current mode, every plain key waits for it", async () => {
+  const loading = make_page();
+  void loading.host.run_command_("open", "cmdline", {}, "missing");
+  loading.press("<F8>", "q");
+  assert.deepEqual(loading.decisions, ["<F8>:cancel", "q:cancel"]);
   const page = make_page();
   page.host.api.register_sink_("hint", page.recording_sink("hint", ["q"]));
   page.state.set_mode_("hint");
@@ -572,4 +570,24 @@ test("during a load, insert mode outside a field passes unbound keys and holds E
   page.state.set_mode_("insert");
   page.press("z");
   assert.equal(page.decisions.at(-1), "z:pass");
+});
+
+test("keys the hints mode ignores pass at once while the hints bundle loads", () => {
+  const page = make_page();
+  page.press("f", "a", "<Tab>", "<Enter>", "<Down>", "<PageUp>", "<Home>", "<End>", "<F5>", "<Backspace>", "<Escape>");
+  assert.deepEqual(page.decisions, [
+    "f:cancel", "a:cancel", "<Tab>:pass", "<Enter>:pass", "<Down>:pass", "<PageUp>:pass", "<Home>:pass", "<End>:pass", "<F5>:pass",
+    "<Backspace>:cancel", "<Escape>:cancel",
+  ]);
+  assert.deepEqual(page.events, []);
+});
+
+test("keys the caret modes never take pass at once while the caret bundle loads", () => {
+  const page = make_page();
+  page.press("V", "j", "<Tab>", "<S-Tab>", "<PageDown>", "<Home>", "<End>", "<F5>", "<Escape>");
+  assert.equal(page.loads[0]!.name, "caret");
+  assert.deepEqual(page.decisions, [
+    "V:cancel", "j:cancel", "<Tab>:pass", "<S-Tab>:pass", "<PageDown>:pass", "<Home>:pass", "<End>:pass", "<F5>:pass", "<Escape>:cancel",
+  ]);
+  assert.deepEqual(page.events, []);
 });

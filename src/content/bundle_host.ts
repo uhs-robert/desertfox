@@ -63,7 +63,7 @@ export function create_bundle_host() {
   const loads = new Map<BundleName, Promise<boolean>>();
   let deps: BundleHostDeps;
   let waiting = 0;
-  let waiting_on_sink_bundle = 0;
+  const waiting_on_sink_bundle = new Map<BundleName, number>();
   let current_mode: Mode = "normal";
 
   // A second call joins the first load. A failed load is forgotten, so the next call tries again.
@@ -78,7 +78,7 @@ export function create_bundle_host() {
     }
     const sink_bundle = hold && Object.values(BUNDLE_FOR_MODE).includes(name);
     if (hold) waiting++;
-    if (sink_bundle) waiting_on_sink_bundle++;
+    if (sink_bundle) waiting_on_sink_bundle.set(name, (waiting_on_sink_bundle.get(name) ?? 0) + 1);
     void started.then((loaded) => {
       try {
         after(loaded);
@@ -86,7 +86,7 @@ export function create_bundle_host() {
         deps.show_error_((error as Error).message);
       }
       if (hold) waiting--;
-      if (sink_bundle) waiting_on_sink_bundle--;
+      if (sink_bundle) waiting_on_sink_bundle.set(name, waiting_on_sink_bundle.get(name)! - 1);
       deps.on_idle_();
     });
   }
@@ -122,8 +122,8 @@ export function create_bundle_host() {
       deps = next;
     },
     is_loading_: () => waiting > 0,
-    // The loading bundle registers a sink, and its mode may take any key once the load is done.
-    is_loading_sink_bundle_: () => waiting_on_sink_bundle > 0,
+    // The bundles loading now that register a sink, so their mode may take keys once the load is done.
+    loading_sink_bundles_: (): BundleName[] => [...waiting_on_sink_bundle].filter(([, count]) => count > 0).map(([name]) => name),
     sink_of_: (mode: Mode) => sinks.get(mode),
     has_handler_: (command_id: string) => handlers.has(command_id),
     run_command_,
