@@ -22,7 +22,8 @@ export type OpenTab = {
   url: string;
   // Only used with `discarded`, because Firefox shows a title only for a tab it did not load.
   title: string;
-  index: number;
+  // Absent when the tab goes to the end of the window.
+  index: number | undefined;
   active: boolean;
   discarded: boolean;
   // Never set together with `discarded`: Firefox refuses that pair.
@@ -37,7 +38,7 @@ export type SessionDeps = {
   containers: () => Promise<ContainerRef[]>;
   // A new window with one blank tab, which the restore removes once the session's tabs are in.
   create_window: () => Promise<{ window_id: number; blank_tab_id: number | undefined }>;
-  tab_count: (window_id: number) => Promise<number>;
+  window_exists: (window_id: number) => Promise<boolean>;
   // Rejects for an address Firefox does not let an extension open.
   create_tab: (open: OpenTab) => Promise<number>;
   set_pinned: (tab_id: number, pinned: boolean) => Promise<void>;
@@ -98,20 +99,21 @@ export function make_session_handlers(deps: SessionDeps) {
       const planned = plan_restore(session.tabs, await deps.containers());
       if (planned.length === 0) throw new RuntimeRefusal(`The session "${session.name}" has no tabs`);
 
-      const target =
-        args.into === "window" ? await deps.create_window() : { window_id: ctx.window_id as number, blank_tab_id: undefined };
-      const first_index = args.into === "window" ? 0 : await deps.tab_count(target.window_id);
+      const into_window = args.into === "window";
+      const target = into_window ? await deps.create_window() : { window_id: ctx.window_id as number, blank_tab_id: undefined };
       const opened: number[] = [];
-      let active_opened = false;
+      let active_tab_id: number | undefined;
+      let window_closed = false;
       for (const tab of planned) {
-        const discarded = !tab.active;
+        // Into the current window every tab is discarded and the user's tab stays active. Appending with no index keeps two restores at once from interleaving.
+        const discarded = !(into_window && tab.active);
         try {
           const tab_id = await deps.create_tab({
             window_id: target.window_id,
             url: tab.url,
             title: tab.title,
-            index: first_index + opened.length,
-            active: tab.active,
+            index: into_window ? opened.length : undefined,
+            active: !discarded,
             discarded,
             pinned: tab.pinned && !discarded,
             cookie_store_id: tab.cookie_store_id,
@@ -119,24 +121,34 @@ export function make_session_handlers(deps: SessionDeps) {
           // A pinned tab is created unpinned and pinned after, because Firefox refuses to create a tab both pinned and discarded.
           if (tab.pinned && discarded) await deps.set_pinned(tab_id, true);
           opened.push(tab_id);
-          active_opened ||= tab.active;
+          if (!discarded) active_tab_id = tab_id;
         } catch {
-          // Firefox refuses addresses such as about:config for an extension. The rest go on.
+          // Firefox refuses addresses such as about:config for an extension, and the rest go on. A window that is gone ends the restore.
+          if (!(await deps.window_exists(target.window_id))) {
+            window_closed = true;
+            break;
+          }
         }
       }
+      if (window_closed) throw new RuntimeRefusal(`The window closed while "${session.name}" was opening`);
       const skipped = planned.length - opened.length;
       if (opened.length === 0) {
-        if (args.into === "window") await deps.close_window(target.window_id).catch(() => undefined);
+        if (into_window) await deps.close_window(target.window_id).catch(() => undefined);
         throw new RuntimeRefusal(`No tab of "${session.name}" could be opened`);
       }
       // The active tab was one Firefox refused, so the first tab that opened takes its place and loads.
-      if (!active_opened) await deps.activate(opened[0] as number).catch(() => undefined);
+      if (into_window && active_tab_id === undefined) {
+        active_tab_id = opened[0] as number;
+        await deps.activate(active_tab_id).catch(() => undefined);
+      }
       if (target.blank_tab_id !== undefined) await deps.remove_tab(target.blank_tab_id).catch(() => undefined);
 
       const lost_container = planned.filter((tab) => tab.container_lost).length;
       const notes = [skipped > 0 ? `skipped ${skipped}` : "", lost_container > 0 ? `${plural(lost_container, "tab")} lost their container` : ""].filter(Boolean);
       const message = `Opened "${session.name}": ${plural(opened.length, "tab")}${notes.length > 0 ? `, ${notes.join(", ")}` : ""}`;
-      await deps.toast(ctx, notes.length > 0 ? "warning" : "success", message);
+      // The user is looking at the new window, so the toast goes on its tab.
+      const toast_ctx = into_window ? { ...ctx, tab_id: active_tab_id, frame_id: 0 } : ctx;
+      await deps.toast(toast_ctx, notes.length > 0 ? "warning" : "success", message);
     },
 
     remove: async (ctx: CommandContext, args: { name: string }) => {
@@ -176,12 +188,12 @@ export const browser_session_deps: SessionDeps = {
     if (created.id === undefined) throw new RuntimeRefusal("Firefox did not open a window");
     return { window_id: created.id, blank_tab_id: created.tabs?.[0]?.id };
   },
-  tab_count: async (window_id) => (await browser.tabs.query({ windowId: window_id })).length,
+  window_exists: (window_id) => browser.windows.get(window_id).then(() => true, () => false),
   create_tab: async (open) => {
     const created = await browser.tabs.create({
       windowId: open.window_id,
       url: open.url,
-      index: open.index,
+      ...(open.index === undefined ? {} : { index: open.index }),
       active: open.active,
       ...(open.pinned ? { pinned: true } : {}),
       ...(open.discarded ? { discarded: true, ...(open.title === "" ? {} : { title: open.title }) } : {}),

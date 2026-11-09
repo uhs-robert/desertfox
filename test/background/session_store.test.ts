@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { make_session_store, normalize_session_name, plan_restore } from "../../src/background/session_store.ts";
+import { make_session_store, normalize_session_name, plan_restore, session_age } from "../../src/background/session_store.ts";
 import type { SessionStorage, SessionTab } from "../../src/background/session_store.ts";
 import { SESSIONS_STORAGE_KEY } from "../../src/background/storage_keys.ts";
 
@@ -36,7 +36,7 @@ test("a saved session reads back with its name, tabs and time, newest first", as
   await store.save("old", tabs_of(2));
   await store.save("new", tabs_of(3));
   assert.deepEqual((await store.list()).map(({ name, saved_at }) => [name, saved_at]), [["new", 101], ["old", 100]]);
-  assert.deepEqual(await store.items(), [{ name: "new", tabs: 3, saved_at: 101 }, { name: "old", tabs: 2, saved_at: 100 }]);
+  assert.deepEqual(await store.items(), [{ name: "new", description: "3 tabs, just now" }, { name: "old", description: "2 tabs, just now" }]);
   assert.deepEqual((await store.get("old")).tabs, tabs_of(2));
 });
 
@@ -165,4 +165,24 @@ test("restore plan: a container is found by id, then by name, else the default c
   );
   assert.deepEqual(planned.map((entry) => entry.cookie_store_id), ["firefox-container-2", "firefox-container-9", undefined, undefined]);
   assert.deepEqual(planned.map((entry) => entry.container_lost), [false, false, true, false]);
+});
+
+test("session_age picks the biggest whole unit", () => {
+  assert.equal(session_age(0, 30_000), "just now");
+  assert.equal(session_age(0, 5 * 60_000), "5m ago");
+  assert.equal(session_age(0, 150 * 60_000), "2h ago");
+  assert.equal(session_age(0, 50 * 3_600_000), "2d ago");
+  assert.equal(session_age(10, 0), "just now");
+});
+
+test("an entry this version cannot read is written back unchanged by a later change", async () => {
+  const bad = { saved_at: "x", from: "a later version" };
+  const { fake, values } = fake_storage({ version: 1, sessions: { good: { saved_at: 1, tabs: tabs_of(1) }, odd: bad } });
+  const store = make_session_store(fake);
+  await store.save("fresh", tabs_of(1));
+  await store.rename("good", "better");
+  await store.remove("fresh");
+  const stored = (values.get(SESSIONS_STORAGE_KEY) as { sessions: Record<string, unknown> }).sessions;
+  assert.deepEqual(Object.keys(stored).toSorted(), ["better", "odd"]);
+  assert.deepEqual(stored["odd"], bad);
 });

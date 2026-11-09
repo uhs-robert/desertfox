@@ -170,8 +170,8 @@ export type WindowItem = { number: number; title: string };
 // A heading of the page, from the host script. `level` is 1 to 6, `text` is the rendered text, trimmed.
 export type HeadingItem = { level: number; text: string };
 
-// A saved tab session: its name, how many tabs it holds and when it was saved (milliseconds since the epoch).
-export type SessionItem = { name: string; tabs: number; saved_at: number };
+// A saved tab session: its name and the text of the description column (tab count and age), which the background writes.
+export type SessionItem = { name: string; description: string };
 
 export type CompleteItemsAnswer = { items: BookmarkItem[] | EngineItem[] | HistoryItems | OpenItems | WindowItem[] | HeadingItem[] | SessionItem[] };
 
