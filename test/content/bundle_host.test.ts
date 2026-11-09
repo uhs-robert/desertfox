@@ -71,6 +71,7 @@ function make_page() {
   host.connect({
     request_bundle_: (name) => new Promise<boolean>((resolve) => loads.push({ name, finish: (loaded, register) => (register?.(), resolve(loaded)) })),
     on_idle_: flow.release,
+    hold_first_: flow.hold_first_,
     set_mode_: state.set_mode_,
     show_error_: (message) => errors.push(message),
     show_toast_: (message) => toasts.push(message),
@@ -206,15 +207,36 @@ test("a leaving page mid-load strands nothing: the held keys are gone with the p
   assert.equal(old_page.host.is_loading_(), true);
 });
 
-test("held keys beyond 32 are dropped, the first 32 replay in order", async () => {
+test("40 keys held during a load all replay in order", async () => {
   const page = make_page();
   page.press("f");
   const typed = Array.from({ length: 40 }, (_, index) => (index % 2 === 0 ? "x" : "j"));
   page.press(...typed);
+  assert.ok(page.decisions.every((decision) => decision.endsWith(":cancel")));
   page.loads[0]!.finish(true);
   await page.settle();
-  assert.equal(page.events.filter((event) => event.startsWith("run")).length, 32);
-  assert.deepEqual(page.events.slice(0, 4), ["run log_x", "run log_j", "run log_x", "run log_j"]);
+  assert.deepEqual(page.events, typed.map((key) => `run log_${key}`));
+});
+
+test("keys the command line hands back replay ahead of the keys the page held meanwhile, and an unbound key passes at once", async () => {
+  const page = make_page();
+  let hand_back!: (tokens: readonly string[]) => void;
+  page.host.api.hold_keys_until_(new Promise((resolve) => (hand_back = resolve)));
+  page.press("q", "x");
+  assert.deepEqual(page.decisions, ["q:pass", "x:cancel"]);
+  assert.deepEqual(page.events, []);
+  hand_back(["j", "g", "g"]);
+  await page.settle();
+  assert.deepEqual(page.events, ["run log_j", "run log_gg", "run log_x"]);
+  assert.equal(page.host.is_loading_(), false);
+});
+
+test("a hand-back that fails still releases the keys the page held", async () => {
+  const page = make_page();
+  page.host.api.hold_keys_until_(Promise.reject(new Error("frame gone")));
+  page.press("x");
+  await page.settle();
+  assert.deepEqual(page.events, ["run log_x"]);
 });
 
 test("chords and keys typed in a field pass through while a bundle loads", async () => {
@@ -350,7 +372,7 @@ test("a bundle shows a toast through the host, and the error path takes it when 
   assert.deepEqual(page.toasts, ["Copied x"]);
   const bare = create_bundle_host();
   const shown: string[] = [];
-  bare.connect({ request_bundle_: async () => true, on_idle_: () => {}, show_error_: (message) => shown.push(message), set_mode_: () => {}, on_sink_missing_: () => {} });
+  bare.connect({ request_bundle_: async () => true, on_idle_: () => {}, hold_first_: () => {}, show_error_: (message) => shown.push(message), set_mode_: () => {}, on_sink_missing_: () => {} });
   bare.api.show_toast_("hello");
   assert.deepEqual(shown, ["hello"]);
 });

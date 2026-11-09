@@ -45,6 +45,31 @@ export async function run_cases({ run_case, setup, expect, send_keys, press_keys
     expect(last_scroll_y("cmd") > before, "j did not scroll after Escape");
   });
 
+  // Race: the key after Enter reaches the frame while the focus moves back to the page, so the frame hands it back before it goes.
+  await run_case("Enter and the next key in one press: the key acts on the page once the line has run", async () => {
+    await open_cmdline();
+    await type_in_line("scroll.pixels --dy=300");
+    const before = last_scroll_y("cmd");
+    const mark = events.length;
+    await press_keys("-k", "Return", "j");
+    // The command and j each scroll, in either order, so only both together pass the line's 300 pixels.
+    await wait_event(mark, (event) => scroll_of("cmd")(event) && event.y > before + 300, "j after Enter to scroll past the command's 300 pixels").catch((error) => {
+      throw new Error(`${error.message}, last scroll ${last_scroll_y("cmd")} from ${before}`);
+    });
+    await wait_cmdline((line) => !line.open, "the line to close after Enter");
+  });
+
+  // Race: as above, after the Escape the frame takes as its own key.
+  await run_case("Escape and the next key in one press: the key acts on the page", async () => {
+    await open_cmdline();
+    const before = last_scroll_y("cmd");
+    const mark = events.length;
+    // The list is open on an empty line, so the first Escape closes it and the second closes the line.
+    await press_keys("-k", "Escape", "-k", "Escape", "j");
+    await wait_event(mark, (event) => scroll_of("cmd")(event) && event.y > before, "j after Escape to scroll");
+    await wait_cmdline((line) => !line.open, "the line to close after Escape");
+  });
+
   await run_case("a failed parse keeps the line open, fixing the line runs it, and Up brings back that command", async () => {
     // The corrected command scrolls to the top, so the page must be below it first or no scroll event follows.
     await scroll_down_and_wait("j to scroll away from the top");
@@ -82,6 +107,16 @@ export async function run_cases({ run_case, setup, expect, send_keys, press_keys
     const stored = await in_background(`(async () => (await browser.storage.local.get("desertfox_cmdline_history")).desertfox_cmdline_history ?? [])()`);
     expect(Array.isArray(stored) && stored.includes("scroll.pixels --dy=150"), `history was ${JSON.stringify(stored)}`);
     expect(!stored.includes("nohistorycommand"), "a failed parse was stored");
+  });
+
+  // Race: the keys after the first colon of a page wait for cmdline.js, and that wait once dropped every key past the 32nd.
+  // Last but one, because it leaves its own tab active.
+  await run_case("40 keys typed at once after the first colon of a page all reach the line", async () => {
+    await open_page("page", "cmd_first_colon", { new_tab: true });
+    const typed = "abcdefghij".repeat(4);
+    await press_keys(`:${typed}`);
+    await wait_cmdline((line) => line.value === typed, `the line to hold all ${typed.length} keys`, 8000);
+    await close_cmdline();
   });
 
   await run_case("a page with no content script refuses the command line with a notice", async () => {

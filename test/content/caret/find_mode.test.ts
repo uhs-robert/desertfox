@@ -86,6 +86,7 @@ function make_page() {
   host.connect({
     request_bundle_: async () => true,
     on_idle_: flow.release,
+    hold_first_: flow.hold_first_,
     set_mode_: state.set_mode_,
     show_error_: () => {},
     show_toast_: () => {},

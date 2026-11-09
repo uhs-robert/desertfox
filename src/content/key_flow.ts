@@ -1,5 +1,5 @@
 // Decides, for one key token, whether the page keeps the key. Holds keys that
-// arrive before the compiled keymap is read or while a bundle loads, and replays them in order once they can run.
+// arrive before the compiled keymap is read, while a bundle loads or while the command line hands focus back, and replays them in order once they can run.
 // During a load only keys that can bind wait. Every other key reaches the page at once, because a replayed key arrives after its keydown was cancelled.
 
 import type { Mode, TreeBranch, TreeLeaf } from "../shared/index.ts";
@@ -28,7 +28,7 @@ export type KeyFlowDeps = {
   run_leaf_: (leaf: TreeLeaf, count: number | undefined, repeat: boolean) => void;
   leave_insert_: () => void;
   in_editable_field_: () => boolean;
-  // A bundle is loading, and the mode its keys replay in is not known yet.
+  // A bundle is loading or the command line is handing focus back, and the mode the keys replay in is not known yet.
   is_loading_: () => boolean;
   // The loading bundles that register a sink. Their mode may take keys on replay.
   loading_sink_bundles_: () => readonly BundleName[];
@@ -36,8 +36,6 @@ export type KeyFlowDeps = {
   // Called with the prefix after each key that leaves a sequence half-typed, and with nothing when the sequence ends or resets. `at_once` skips the pause before the panel.
   on_prefix_: (prefix: PendingPrefix | undefined, at_once?: boolean) => void;
 };
-
-const MAX_HELD_KEYS = 32;
 
 // Stands in the held keys for a key the page got while a sequence waited. It ends that sequence on replay, as the key would have. No binding uses it, so reading ahead through it ends the sequence too.
 const SEQUENCE_BREAK = "";
@@ -91,8 +89,6 @@ export function create_key_flow(deps: KeyFlowDeps) {
     return true;
   };
 
-  const keep_held = (entry: string) => held_tokens.length < MAX_HELD_KEYS && held_tokens.push(entry);
-
   // The held keys are not fed yet, so the check reads ahead through them. It cannot read through Backspace, which edits the sequence, or an insert mode Escape, which leaves the mode on replay, so those keys and every key after them wait.
   const waits_for_replay = (active: Matcher, mode: Mode, token: string): boolean =>
     deps.loading_sink_bundles_().some((bundle) => bundle_may_take(active, held_tokens, bundle, token)) ||
@@ -108,12 +104,12 @@ export function create_key_flow(deps: KeyFlowDeps) {
     const mode = deps.get_mode();
     // Before the keymap is read nothing is known to bind, so every plain key waits.
     if (!matcher || waits_for_replay(matcher, mode, token)) {
-      keep_held(token);
+      held_tokens.push(token);
       return "cancel";
     }
     const last_held = held_tokens.at(-1);
     if (last_held === undefined) reset_sequence_();
-    else if (last_held !== SEQUENCE_BREAK) keep_held(SEQUENCE_BREAK);
+    else if (last_held !== SEQUENCE_BREAK) held_tokens.push(SEQUENCE_BREAK);
     return cancels_unbound_key(mode, token, false) ? "cancel" : "pass";
   };
 
@@ -181,5 +177,7 @@ export function create_key_flow(deps: KeyFlowDeps) {
       replay();
     },
     release: replay,
+    // Keys typed before the ones held, which reached another document: the command line frame hands back the keys it got after the line ended.
+    hold_first_: (tokens: readonly string[]) => void held_tokens.unshift(...tokens),
   };
 }

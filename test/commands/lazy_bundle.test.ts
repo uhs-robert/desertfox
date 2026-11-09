@@ -19,6 +19,7 @@ function connect(asked: string[], shown: string[], on_idle_ = () => {}, load: ()
       return load();
     },
     on_idle_,
+    hold_first_: () => {},
     set_mode_: () => {},
     show_error_: (message) => shown.push(message),
     on_sink_missing_: () => {},
