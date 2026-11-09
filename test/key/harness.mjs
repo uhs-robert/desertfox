@@ -592,18 +592,30 @@ export async function create_session({ name: session_name, timings, sweep = true
 
   // The page itself says it holds focus, so a focus that landed in the address bar or another window is caught. document.hasFocus() is false for both.
   const page_has_focus = (tab_id) => in_background(`browser.tabs.executeScript(${tab_id}, { code: "document.hasFocus()" }).then((answers) => answers[0] === true)`);
+  // What each side says about the focus, for the error of confirm_page_focus: the page, the tab and window as Firefox has them, and the window the compositor has focused.
+  async function focus_state(tab_id, window_id) {
+    const firefox = await in_background(`(async () => {
+      const tab = await browser.tabs.get(${tab_id});
+      const window = await browser.windows.get(${window_id}).catch(() => null);
+      const page = await browser.tabs.executeScript(${tab_id}, { code: "[document.hasFocus(), document.visibilityState]" }).then((answers) => answers[0], (error) => String(error.message));
+      return { page, tab_active: tab.active, window_focused: window?.focused ?? "window gone" };
+    })()`);
+    return `firefox ${JSON.stringify(firefox)}, compositor focus ${await session.focused_window()}`;
+  }
   // Focus lands in browser chrome after tabs close, and a closed window can leave compositor focus on nothing, which no extension call can restore on Wayland. Each round starts with a hyprctl focus of the Firefox window, then asks for the window and tab, then uses the focus_page chord, until the page reports focus.
   async function confirm_page_focus(tab_id, window_id) {
     const focused = (timeout_ms) => poll_until("page focus", () => page_has_focus(tab_id), { timeout_ms, expected_timeout: true }).then(() => true, () => false);
     if (await focused(300)) return;
+    const rounds = [];
     for (let attempt = 0; attempt < 3; attempt++) {
       await session.focus_firefox_window();
       await in_background(`(async () => { await browser.windows.update(${window_id}, { focused: true }); await browser.tabs.update(${tab_id}, { active: true }); })()`);
       if (await focused(1500)) return;
       await send_keys(...ALT(","));
       if (await focused(1500)) return;
+      rounds.push(`round ${attempt + 1}: ${await focus_state(tab_id, window_id)}`);
     }
-    throw new Error(`tab ${tab_id} never reported focus`);
+    throw new Error(`tab ${tab_id} never reported focus (${rounds.join("; ")})`);
   }
 
   // Keys and visibility reports of a page are unreliable until NEW_PAGE_QUIET_MS after the browser activated its tab.
