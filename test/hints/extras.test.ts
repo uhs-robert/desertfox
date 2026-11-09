@@ -407,7 +407,7 @@ test("keys typed behind a non-rapid label pick reach normal mode", async () => {
   assert.deepEqual(page.held_key_batches, [["j"]]);
 });
 
-test("Escape queued behind nothing still drops the keys: an Escape during the build hands none back", async () => {
+test("Escape during the build drops the queued keys", async () => {
   const page = await page_with(["one", "two"]);
   page.run({ action: "background" });
   page.type("j");
