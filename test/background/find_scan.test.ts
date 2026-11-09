@@ -136,7 +136,8 @@ test("the real worker: a runaway regex is stopped near the limit, and the next s
 });
 
 test("the real worker: a pattern that throws in the worker answers failed", async () => {
-  const scan = create_find_scan(real_deps);
+  // The limit counts the start of a Node worker thread, which a busy machine can push past 300 ms. The test is about the throw, not the limit.
+  const scan = create_find_scan({ ...real_deps, limit_ms: 5000 });
   const answer = await scan.answer({ text: "abc", source: "(", flags: "giu" }, "1:0");
   assert.equal(answer.ok === false && answer.reason, "failed");
 });
