@@ -17,6 +17,9 @@ interface Crafted {
   method?: number;
   external_attributes?: number;
   made_by_host?: number;
+  // Like Info-ZIP and bsdtar when streaming: flag bit 3, zero sizes in the local header, a data descriptor after the data.
+  descriptor?: boolean;
+  local_extra?: Uint8Array;
 }
 
 const encoder = new TextEncoder();
@@ -45,18 +48,29 @@ function craft(entries: Crafted[], tail: { comment?: Uint8Array } = {}): Uint8Ar
     const size = entry.declared_size ?? raw.length;
     const compressed = entry.declared_compressed ?? body.length;
 
-    const local = new Uint8Array(30 + local_name.length + body.length);
+    const extra = entry.local_extra ?? new Uint8Array();
+    const descriptor_bytes = entry.descriptor ? 16 : 0;
+    const local = new Uint8Array(30 + local_name.length + extra.length + body.length + descriptor_bytes);
     const lv = new DataView(local.buffer);
     lv.setUint32(0, 0x04034b50, true);
     lv.setUint16(4, 20, true);
-    lv.setUint16(6, entry.flags ?? 0x800, true);
+    lv.setUint16(6, (entry.flags ?? 0x800) | (entry.descriptor ? 0x8 : 0), true);
     lv.setUint16(8, method, true);
-    lv.setUint32(14, crc, true);
-    lv.setUint32(18, compressed, true);
-    lv.setUint32(22, size, true);
+    lv.setUint32(14, entry.descriptor ? 0 : crc, true);
+    lv.setUint32(18, entry.descriptor ? 0 : compressed, true);
+    lv.setUint32(22, entry.descriptor ? 0 : size, true);
     lv.setUint16(26, local_name.length, true);
+    lv.setUint16(28, extra.length, true);
     local.set(local_name, 30);
-    local.set(body, 30 + local_name.length);
+    local.set(extra, 30 + local_name.length);
+    local.set(body, 30 + local_name.length + extra.length);
+    if (entry.descriptor) {
+      const at = 30 + local_name.length + extra.length + body.length;
+      lv.setUint32(at, 0x08074b50, true);
+      lv.setUint32(at + 4, crc, true);
+      lv.setUint32(at + 8, compressed, true);
+      lv.setUint32(at + 12, size, true);
+    }
 
     const c = new Uint8Array(46 + name.length);
     const cv = new DataView(c.buffer);
@@ -141,7 +155,6 @@ for (const [label, name, pattern] of [
   ["drive letter", "C:/evil.toml", /absolute/],
   ["backslash", "themes\\a.toml", /backslash/],
   ["backslash climb", "..\\evil.toml", /backslash/],
-  ["dot segment", "./a.toml", /dot segment/],
   ["empty segment", "a//b.toml", /empty path segment/],
   ["control character", "a\u0000b.toml", /control/],
   ["empty name", "", /empty path/],
@@ -159,10 +172,54 @@ test("rejects a name that is not UTF-8", async () => {
   await rejects(bytes, /not valid UTF-8/);
 });
 
-test("rejects duplicate entries, also when only the case differs", async () => {
+test("rejects exact duplicate entries, also after dot segments are dropped", async () => {
   await rejects(craft([{ name: "a.toml", data: text("1") }, { name: "a.toml", data: text("2") }]), /duplicate/);
-  await rejects(craft([{ name: "a.toml", data: text("1") }, { name: "A.TOML", data: text("2") }]), /duplicate/);
-  assert.throws(() => write_zip(new Map([["a.toml", "1"], ["A.toml", "2"]])), /duplicate/);
+  await rejects(craft([{ name: "a.toml", data: text("1") }, { name: "./a.toml", data: text("2") }]), /duplicate/);
+});
+
+test("names that differ only in case are two files", async () => {
+  const files = { "themes/Dark.toml": "1", "themes/dark.toml": "2" };
+  assert.deepEqual(Object.fromEntries(await read_zip(write_zip(files))), files);
+});
+
+test("the writer refuses a dot segment, the reader drops it", async () => {
+  assert.throws(() => write_zip({ "./a.toml": "x" }), /dot segment/);
+  const bytes = craft([{ name: "./" }, { name: "./themes/" }, { name: "./themes/a.toml", data: text("x") }]);
+  assert.deepEqual([...(await read_zip(bytes))], [["themes/a.toml", "x"]]);
+});
+
+test("reads a bsdtar-style archive: ./ names and data descriptors", async () => {
+  const body = text("key = 'value'\n".repeat(40));
+  const bytes = craft([
+    { name: "./", descriptor: true },
+    { name: "./settings.toml", data: text("a = 1\n"), descriptor: true },
+    { name: "./style.css", data: body, deflate: true, descriptor: true },
+  ]);
+  const files = await read_zip(bytes);
+  assert.deepEqual([...files.keys()], ["settings.toml", "style.css"]);
+  assert.equal(files.get("style.css"), new TextDecoder().decode(body));
+});
+
+test("reads an entry whose local extra field differs from the central one", async () => {
+  const bytes = craft([{ name: "a.toml", data: text("x"), local_extra: new Uint8Array([0x55, 0x54, 0x01, 0x00, 0x03]) }]);
+  assert.equal((await read_zip(bytes)).get("a.toml"), "x");
+});
+
+test("skips Finder junk without decoding it, and still reads the config", async () => {
+  const apple_double = new Uint8Array([0x00, 0x05, 0x16, 0x07, 0xb0, 0xff, 0xfe, 0x80]);
+  const bytes = craft([
+    { name: "cfg/" },
+    { name: "cfg/settings.toml", data: text("a = 1\n") },
+    { name: "cfg/.DS_Store", data: apple_double },
+    { name: "__MACOSX/" },
+    { name: "__MACOSX/cfg/", },
+    { name: "__MACOSX/cfg/._settings.toml", data: apple_double, deflate: true },
+  ]);
+  assert.deepEqual([...(await read_zip(bytes))], [["cfg/settings.toml", "a = 1\n"]]);
+});
+
+test("junk entries still pass the path rules", async () => {
+  await rejects(craft([{ name: "__MACOSX/../evil", data: text("x") }]), /climbs out/);
 });
 
 test("rejects a symlink entry", async () => {
@@ -207,15 +264,21 @@ test("rejects too many entries", async () => {
   assert.equal((await read_zip(craft(at_cap))).size, DEFAULT_ZIP_LIMITS.max_entries);
 });
 
-test("rejects a zip bomb by ratio: 1 MiB of zeros in about a kilobyte", async () => {
+test("a 1 MiB entry of zeros that is within the caps reads fine", async () => {
   const zeros = new Uint8Array(1024 * 1024);
-  await rejects(craft([{ name: "a.toml", data: zeros, deflate: true }]), /ratio/);
+  const files = await read_zip(craft([{ name: "a.toml", data: zeros, deflate: true }]));
+  assert.equal(files.get("a.toml")!.length, zeros.length);
+});
+
+test("rejects a deflated entry whose compressed size is out of proportion to its declared size", async () => {
+  const noise = new Uint8Array(200_000).map((_, i) => (i * 7919) & 0xff);
+  await rejects(craft([{ name: "a.toml", data: noise, deflate: true, declared_size: 100 }]), /not plausible/);
 });
 
 test("rejects a bomb whose header lies about the size", async () => {
   const zeros = new Uint8Array(1024 * 1024);
-  // Header claims 100 bytes, within the ratio. The stream holds 1 MiB.
-  const lying = craft([{ name: "a.toml", data: zeros, deflate: true, declared_size: 100, crc: 0 }]);
+  // Header claims 1500 bytes, enough to pass the compressed-size check. The stream holds 1 MiB.
+  const lying = craft([{ name: "a.toml", data: zeros, deflate: true, declared_size: 1500, crc: 0 }]);
   await rejects(lying, /larger than its header says/);
   // Header claims more than the stream holds.
   const body = text("key = 1\n".repeat(20));
@@ -223,11 +286,12 @@ test("rejects a bomb whose header lies about the size", async () => {
 });
 
 test("rejects two directory entries that point at one local record", async () => {
+  // "./a.toml" and "a.toml" are one path to the local-name check, so only the shared offset can fail. Structure is checked before duplicates.
   const bytes = craft([
     { name: "a.toml", data: text("hello") },
-    { name: "b.toml", data: text("hello"), local_offset: 0, local_name: "a.toml" },
+    { name: "./a.toml", data: text("hello"), local_offset: 0, local_name: "a.toml" },
   ]);
-  await rejects(bytes, /overlapping|local header name differs/);
+  await rejects(bytes, /overlapping/);
 });
 
 test("rejects an entry whose data runs into the next entry", async () => {

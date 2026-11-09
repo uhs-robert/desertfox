@@ -4,19 +4,18 @@ export interface ZipLimits {
   max_entry_bytes: number;
   max_total_bytes: number;
   max_entries: number;
-  // A deflated entry may not expand past this multiple of its compressed size (small entries are exempt).
-  max_ratio: number;
 }
 
-// The byte caps match the host's reply cap (MAX_REPLY_BYTES), so an import is never larger than a reload can be.
+// The byte caps match the host's reply cap (MAX_REPLY_BYTES).
 export const DEFAULT_ZIP_LIMITS: ZipLimits = {
   max_entry_bytes: 1024 * 1024,
   max_total_bytes: 1024 * 1024,
   max_entries: 512,
-  max_ratio: 100,
 };
 
-const RATIO_EXEMPT_BYTES = 4096;
+// Deflate never grows data by more than 5 bytes per 16383-byte block plus a small header.
+const DEFLATE_BLOCK_BYTES = 16383;
+const INFLATE_SLICE_BYTES = 8192;
 const MAX_PATH_BYTES = 255;
 
 export class ZipError extends Error {
@@ -70,26 +69,32 @@ function decode_utf8(bytes: Uint8Array, what: string): string {
   }
 }
 
-// A directory entry ("themes/") has no content and only passes the path rules. Returns the path without its trailing slash.
-function check_path(name: string): string {
+// A directory entry ("themes/") has no content and only passes the path rules. Returns the path without its trailing slash. A reader drops "." segments, because archivers such as bsdtar write "./a.toml" and a dot cannot leave the root. The writer refuses them.
+function check_path(name: string, drop_dot_segments: boolean): string {
   if (name === "") throw new ZipError("an entry has an empty path");
   if (utf8_encoder.encode(name).length > MAX_PATH_BYTES) throw new ZipError(`path too long: ${name.slice(0, 40)}`);
   if (name.includes("\\")) throw new ZipError(`path has a backslash: ${name}`);
   // eslint-disable-next-line no-control-regex
   if (/[\u0000-\u001f\u007f]/.test(name)) throw new ZipError(`path has a control character: ${JSON.stringify(name)}`);
   if (name.startsWith("/") || /^[A-Za-z]:/.test(name)) throw new ZipError(`absolute path: ${name}`);
-  const path = name.endsWith("/") ? name.slice(0, -1) : name;
-  for (const segment of path.split("/")) {
+  const segments = (name.endsWith("/") ? name.slice(0, -1) : name).split("/");
+  for (const segment of segments) {
     if (segment === "") throw new ZipError(`empty path segment: ${name}`);
     if (segment === "..") throw new ZipError(`path climbs out of the archive: ${name}`);
-    if (segment === ".") throw new ZipError(`path has a dot segment: ${name}`);
+    if (segment === "." && !drop_dot_segments) throw new ZipError(`path has a dot segment: ${name}`);
   }
-  return path;
+  return segments.filter((segment) => segment !== ".").join("/");
+}
+
+// Archivers add junk that the importer ignores anyway and that need not be text: Finder's __MACOSX/ AppleDouble files and dot-files such as .DS_Store. They are never inflated or decoded.
+function is_ignored(path: string): boolean {
+  return path === "" || path.split("/").some((segment) => segment === "__MACOSX" || segment.startsWith("."));
 }
 
 interface Entry {
   path: string;
   is_directory: boolean;
+  ignored: boolean;
   method: number;
   crc: number;
   compressed_bytes: number;
@@ -136,7 +141,7 @@ function read_central_directory(bytes: Uint8Array, limits: ZipLimits): { entries
     if (next > end) throw new ZipError("bad central directory entry");
     const name = decode_utf8(bytes.subarray(at + CENTRAL_HEADER_BYTES, at + CENTRAL_HEADER_BYTES + name_bytes), "an entry name");
     const raw_is_directory = name.endsWith("/");
-    const path = check_path(name);
+    const path = check_path(name, true);
     if (flags & FLAG_ENCRYPTED) throw new ZipError(`encrypted entry: ${name}`);
     const method = view.getUint16(at + 10, true);
     if (method !== METHOD_STORED && method !== METHOD_DEFLATE) throw new ZipError(`unsupported compression method ${method}: ${name}`);
@@ -149,6 +154,7 @@ function read_central_directory(bytes: Uint8Array, limits: ZipLimits): { entries
     entries.push({
       path,
       is_directory: raw_is_directory,
+      ignored: is_ignored(path),
       method,
       crc: view.getUint32(at + 16, true),
       compressed_bytes,
@@ -165,17 +171,15 @@ function check_entries(entries: Entry[], limits: ZipLimits): void {
   const seen = new Set<string>();
   let total = 0;
   for (const entry of entries) {
-    // Lower-cased so two names that clash on a case-insensitive disk count as one.
-    const key = entry.path.toLowerCase();
-    if (seen.has(key)) throw new ZipError(`duplicate entry: ${entry.path}`);
-    seen.add(key);
+    if (entry.ignored) continue;
+    if (seen.has(entry.path)) throw new ZipError(`duplicate entry: ${entry.path}`);
+    seen.add(entry.path);
     if (entry.size > limits.max_entry_bytes) throw new ZipError(`entry too large: ${entry.path} (limit ${limits.max_entry_bytes} bytes)`);
     total += entry.size;
     if (total > limits.max_total_bytes) throw new ZipError(`archive too large (limit ${limits.max_total_bytes} bytes)`);
     if (entry.method === METHOD_STORED && entry.compressed_bytes !== entry.size) throw new ZipError(`stored entry sizes differ: ${entry.path}`);
-    if (entry.size > RATIO_EXEMPT_BYTES && entry.size > limits.max_ratio * entry.compressed_bytes) {
-      throw new ZipError(`compression ratio too high: ${entry.path}`);
-    }
+    const longest_deflate = entry.size + 5 * Math.ceil(entry.size / DEFLATE_BLOCK_BYTES) + 16;
+    if (entry.method === METHOD_DEFLATE && entry.compressed_bytes > longest_deflate) throw new ZipError(`compressed size is not plausible: ${entry.path}`);
   }
 }
 
@@ -193,7 +197,7 @@ function locate_data(bytes: Uint8Array, entries: Entry[], directory_start: numbe
     const data_end = data_start + entry.compressed_bytes;
     if (data_end > directory_start) throw new ZipError(`entry data runs past the archive: ${entry.path}`);
     const local_name = decode_utf8(bytes.subarray(at + LOCAL_HEADER_BYTES, at + LOCAL_HEADER_BYTES + name_bytes), "an entry name");
-    if (local_name.replace(/\/$/, "") !== entry.path) throw new ZipError(`local header name differs from the directory: ${entry.path}`);
+    if (check_path(local_name, true) !== entry.path) throw new ZipError(`local header name differs from the directory: ${entry.path}`);
     data_starts.set(entry, data_start);
     spans.push({ start: at, end: data_end, path: entry.path });
   }
@@ -204,24 +208,32 @@ function locate_data(bytes: Uint8Array, entries: Entry[], directory_start: numbe
   return data_starts;
 }
 
-// Stops at `size` bytes, so a header that understates the real length cannot make the stream run on.
+// Stops at `size` bytes, so a header that understates the real length cannot make the stream run on. The input goes in small slices because a decompressor may inflate a whole chunk before the reader sees any of it.
 async function inflate(compressed: Uint8Array, size: number, path: string): Promise<Uint8Array> {
   const out = new Uint8Array(size);
   let filled = 0;
+  const stream = new DecompressionStream("deflate-raw");
+  const writer = stream.writable.getWriter();
+  const reader = stream.readable.getReader();
+  const feed = (async () => {
+    for (let at = 0; at < compressed.length; at += INFLATE_SLICE_BYTES) {
+      await writer.write(compressed.subarray(at, at + INFLATE_SLICE_BYTES) as Uint8Array<ArrayBuffer>);
+    }
+    await writer.close();
+  })();
+  feed.catch(() => {});
   try {
-    const stream = new Blob([compressed as BlobPart]).stream().pipeThrough(new DecompressionStream("deflate-raw"));
-    const reader = stream.getReader();
     for (;;) {
       const { done, value } = await reader.read();
       if (done) break;
-      if (filled + value.length > size) {
-        await reader.cancel();
-        throw new ZipError(`entry is larger than its header says: ${path}`);
-      }
+      if (filled + value.length > size) throw new ZipError(`entry is larger than its header says: ${path}`);
       out.set(value, filled);
       filled += value.length;
     }
+    await feed;
   } catch (error) {
+    reader.cancel().catch(() => {});
+    writer.abort().catch(() => {});
     if (error instanceof ZipError) throw error;
     throw new ZipError(`entry does not decompress: ${path}`);
   }
@@ -232,11 +244,11 @@ async function inflate(compressed: Uint8Array, size: number, path: string): Prom
 // Reads every file entry as UTF-8 text, keyed by its path. Any guard failure throws a ZipError and returns nothing.
 export async function read_zip(bytes: Uint8Array, limits: ZipLimits = DEFAULT_ZIP_LIMITS): Promise<Map<string, string>> {
   const { entries, directory_start } = read_central_directory(bytes, limits);
-  check_entries(entries, limits);
   const data_starts = locate_data(bytes, entries, directory_start);
+  check_entries(entries, limits);
   const files = new Map<string, string>();
   for (const entry of entries) {
-    if (entry.is_directory) continue;
+    if (entry.is_directory || entry.ignored) continue;
     const start = data_starts.get(entry)!;
     const stored = bytes.subarray(start, start + entry.compressed_bytes);
     const data = entry.method === METHOD_STORED ? stored : await inflate(stored, entry.size, entry.path);
@@ -246,7 +258,7 @@ export async function read_zip(bytes: Uint8Array, limits: ZipLimits = DEFAULT_ZI
   return files;
 }
 
-// Store-only: config text is small, and a stored archive needs no compressor. The output is deterministic (fixed timestamp, sorted by insertion order).
+// Store-only: config text is small, and a stored archive needs no compressor. The output is deterministic (fixed timestamp, insertion order).
 export function write_zip(files: Map<string, string> | Record<string, string>, limits: ZipLimits = DEFAULT_ZIP_LIMITS): Uint8Array {
   const pairs = files instanceof Map ? [...files] : Object.entries(files);
   if (pairs.length > limits.max_entries) throw new ZipError(`too many entries: ${pairs.length} (limit ${limits.max_entries})`);
@@ -257,9 +269,9 @@ export function write_zip(files: Map<string, string> | Record<string, string>, l
   let total = 0;
   for (const [name, text] of pairs) {
     if (name.endsWith("/")) throw new ZipError(`not a file path: ${name}`);
-    check_path(name);
-    if (seen.has(name.toLowerCase())) throw new ZipError(`duplicate entry: ${name}`);
-    seen.add(name.toLowerCase());
+    check_path(name, false);
+    if (seen.has(name)) throw new ZipError(`duplicate entry: ${name}`);
+    seen.add(name);
     const name_bytes = utf8_encoder.encode(name);
     const data = utf8_encoder.encode(text);
     if (data.length > limits.max_entry_bytes) throw new ZipError(`entry too large: ${name} (limit ${limits.max_entry_bytes} bytes)`);

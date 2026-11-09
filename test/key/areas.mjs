@@ -56,7 +56,7 @@ export const area_rules = [
     globs: [
       "src/background/{config_*,autoconfig_mirror,snippets,storage_keys,first_install,load_log,settings_message,reload}.ts",
       "src/commands/config.ts",
-      "src/shared/{config_build/**,theme/**,themes,theme_names,default_settings,config,match_pattern,site_key}.ts",
+      "src/shared/{config_build/**,theme/**,themes,theme_names,default_settings,config,match_pattern,site_key,zip}.ts",
       "src/shared/registry/{check_args,check_shape,params,parse_binding,commands_file,print_command,summary,usage,command_line}.ts",
     ],
     areas: ["config"],
