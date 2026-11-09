@@ -110,11 +110,13 @@ export async function run_cases({ run_case, expect, open_page, press_keys, poll_
     await press_and_wait_for_badge("find_d", "v", "VISUAL");
     const mark_search = events.length;
     await search_with_line("needle");
-    await wait_event(mark_search, is_selection_of("find_d"), "the selection to follow the match");
+    // The first report can be an intermediate selection, so wait for the finished one.
+    const reaches_match_start = (last) => last.text.startsWith("caret_bug_find") && last.text.trimEnd().endsWith("n") && !last.text.trimEnd().endsWith("needle");
+    await wait_for_last_selection("find_d", mark_search, reaches_match_start, 'the selection to run from the title to the "n" of needle');
     // o swaps the ends, which makes the session adopt the find first. The selected text is the same either way, so o reports nothing and a barrier orders it before the read.
     await press_keys("o");
     await barrier("find_d");
-    const text = events.filter(is_selection_of("find_d")).at(-1)?.text ?? "";
+    const text = events.slice(mark_search).filter(is_selection_of("find_d")).at(-1)?.text ?? "";
     expect(text.startsWith("caret_bug_find") && text.trimEnd().endsWith("n") && !text.trimEnd().endsWith("needle"), `the selection is ${JSON.stringify(text.slice(0, 20))}...${JSON.stringify(text.slice(-12))}, expected from the title to the "n" of "needle"`);
     await escape_to_normal("find_d");
   });
