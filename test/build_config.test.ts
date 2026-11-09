@@ -5,7 +5,7 @@ import { dirname, join } from "node:path";
 import { test } from "node:test";
 import { build_config, read_commands_file } from "../tools/build-config/build_config.ts";
 import { ConfigErrors } from "../src/shared/config_build/errors.ts";
-import { resolved_engines_text, write_schemas } from "../tools/build-config/output.ts";
+import { write_schemas } from "../tools/build-config/output.ts";
 import { fill_template } from "../src/shared/engines/index.ts";
 import { build_schemas } from "../src/shared/config_build/schemas.ts";
 import { build_commands_file, create_registry } from "../src/shared/registry/index.ts";
@@ -468,14 +468,6 @@ test("a later file replaces the table at one dotted path and leaves the parent",
   assert.equal(engines["github.issues"]?.url, "https://github.com/search?q={query}&type=issues");
   // The narrowing lived in the replaced table, so all values are generated now.
   assert.ok(engines["github.repo.prs"]);
-});
-
-test("the resolved engine file is sorted, one engine per line and stable", () => {
-  const dir = config_dir_with({ "search_engines.toml": `${GITHUB_TREE}\n[aaa]\nurl = "a?{query}"` });
-  const text = resolved_engines_text(build_config(dir, commands).search_engines);
-  const names = text.trimEnd().split("\n").map((line) => (JSON.parse(line) as { name: string }).name);
-  assert.deepEqual(names, [...names].sort());
-  assert.equal(text, resolved_engines_text(build_config(dir, commands).search_engines));
 });
 
 test("a snippet name or alias that clashes with a built-in name is rejected", () => {

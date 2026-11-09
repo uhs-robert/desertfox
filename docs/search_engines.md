@@ -5,8 +5,8 @@ A search engine is a named URL template. You type `search arch pacman mirrors` o
 ### Start with the example
 
 - Copy `examples/engines.toml` from the DesertFox repository to `~/.config/desertfox/search_engines.toml`. It holds 66 engines, including GitHub and YouTube trees.
-- Run `just build-config`. The tool checks the file and stores the resolved engines for Firefox.
-- Run `config.reload` (`qr` by default) in Firefox, or restart it.
+- Run `just build-config`. The tool only checks the file and prints problems.
+- Run `config.reload` (`qr` by default) in Firefox. That loads the file through the native host.
 - Check the table below this guide. Your engines show there with the file that set each field.
 
 An entry named `duck` in your file replaces the built-in one. A `search_engines.d/` directory next to the file can hold later files. A later file replaces the table at the same dotted path.
@@ -79,7 +79,7 @@ scope = "repo:{repo} "
 ### Tips
 
 - Put the one-line engines first in the file. TOML puts a plain key under the table above it.
-- Run `just build-config` after each edit. It rejects an unknown slot, a param no URL uses, a fallback to a missing engine and a fallback loop.
+- Run `just build-config` after each edit to lint it. It rejects an unknown slot, a param no URL uses, a fallback to a missing engine and a fallback loop.
 - Prefer an engine over a snippet when the result is a URL. Use a snippet when you need the page DOM or several steps.
 - Run `engine.show <name>` to open this page at one engine.
 - See [a fuller real example](https://github.com/uhs-robert/oasis-dots/blob/main/home/desertfox/.config/desertfox/search_engines.toml).
