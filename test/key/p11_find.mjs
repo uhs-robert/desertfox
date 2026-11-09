@@ -116,6 +116,8 @@ export async function run_cases({ rdp, extension_id, run_case, expect, expect_ab
     const scrolled_to = last_scroll_y(page_id);
     const mark_escape = events.length;
     await press_keys(...ESCAPE);
+    // Race: the highlights clear as the line ends, but the frame stays until it hands back its late keys, and the barrier refuses an open line.
+    await wait_cmdline((line) => !line.open, "the search line to close after Escape");
     const state = await wait_highlights((read) => total_painted(read) === 0, "every highlight cleared");
     expect(Object.values(state.sheets).every((count) => count === 0), `a sheet was left behind: ${JSON.stringify(state.sheets)}`);
     await expect_absent(mark_escape, page_id, scroll_of(page_id), "the page scrolled back after Escape", { report_delay_ms: scroll_report_wait_ms });
