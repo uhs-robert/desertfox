@@ -42,7 +42,7 @@ test: install_deps
 install_deps:
     @test -d node_modules || npm install --no-audit --no-fund
 
-# Lint the config directory (default ~/.config/desertfox): build it in memory and print problems. Writes nothing Firefox reads. Extra flags (such as --schemas) go to the CLI.
+# Lint the config directory (default ~/.config/desertfox): build it in memory and print problems. Writes nothing Firefox reads, but the build prerequisite rewrites dist/ because the lint reads dist/commands.json. Extra flags (such as --schemas) go to the CLI.
 build-config dir="" *flags="": build
     node tools/build-config/cli.ts {{ if dir == "" { "" } else { quote(dir) } }} {{flags}}
 
