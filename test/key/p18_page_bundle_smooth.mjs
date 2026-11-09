@@ -27,8 +27,8 @@ export async function run_cases({ run_case, on_teardown, expect, open_page, pres
   });
 
   await run_case("the first C-d scrolls the page smoothly when general.smoothScroll is on", async () => {
-    await evaluate_in_chrome(rdp, `Services.prefs.setBoolPref("general.smoothScroll", true)`);
     on_teardown(() => evaluate_in_chrome(rdp, `Services.prefs.setBoolPref("general.smoothScroll", false)`));
+    await evaluate_in_chrome(rdp, `Services.prefs.setBoolPref("general.smoothScroll", true)`);
     await open_page("aligned", "smooth_page", { new_tab: true });
     const in_page = (code) => in_background(`browser.tabs.query({ active: true, lastFocusedWindow: true }).then(([tab]) => browser.tabs.executeScript(tab.id, { code: ${JSON.stringify(code)} }))`);
     await in_page(`window.__samples = []; addEventListener("scroll", () => window.__samples.push(scrollY)); 0`);
