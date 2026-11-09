@@ -330,3 +330,11 @@ test("bare words fill the required strict params in schema order, then the subje
   assert.equal(check_args(positional.get("pos.set")!, parse("pos.set typo")).ok, false);
   assert.equal(usage_line(positional.get("pos.set")!), "pos.set <name> [value...]");
 });
+
+test("hint refuses a selector unless the filter is custom", () => {
+  for (const text of ["hint --links foo", "hint --copy x", "hint foo"]) {
+    const result = parse_command_line(real_registry, text, search_sources);
+    const refused = result.kind === "error" || !check_args(real_registry.get("hint.run")!, result.kind === "invocation" ? result.invocation.args : {}, search_sources).ok;
+    assert.equal(refused, true, text);
+  }
+});
