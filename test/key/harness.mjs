@@ -521,6 +521,8 @@ export async function create_session({ name: session_name, timings, sweep = true
   // The debugger answers null for undefined, so the checks below compare with == null.
   const in_background = (code) => evaluate_in_background(rdp, EXTENSION_ID, code).catch(() => undefined);
   const read_local = (key) => in_background(`(async () => (await browser.storage.local.get("${key}"))["${key}"])()`);
+  // Whether the key holds a value. The test runs in the background, so a large value (a built config) never crosses the debugger.
+  const has_local = (key) => in_background(`browser.storage.local.get("${key}").then((stored) => stored["${key}"] != null)`);
   // Presses qr and waits until the reload stores the files config. The key is removed first, so an earlier reload does not count.
   async function reload_in_place() {
     await in_background(`browser.storage.local.remove(["desertfox_files_config", "desertfox_config_status"])`);
@@ -529,7 +531,7 @@ export async function create_session({ name: session_name, timings, sweep = true
     for (let attempt = 0; attempt < 200; attempt++) {
       await sleep(50);
       // The background writes the status before the files config, so only the pair shows that this reload finished.
-      if ((await read_local("desertfox_files_config")) != null && (await read_local("desertfox_config_status")) != null) return;
+      if ((await has_local("desertfox_files_config")) && (await has_local("desertfox_config_status"))) return;
     }
     // The host call made by hand tells a missing permission or host from a refused build.
     const probe = await in_background(`(async () => ({ granted: await browser.permissions.contains({ permissions: ["nativeMessaging"] }), host: await browser.runtime.sendNativeMessage("desertfox_host", { cmd: "read_config" }).then((reply) => ({ ok: reply.ok, error: reply.error, files: Object.keys(reply.files ?? {}).length }), (error) => String(error)) }))()`);

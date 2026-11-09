@@ -319,6 +319,8 @@ async function run_in_console(rdp, console_actor, async_code) {
   for (let attempt = 0; Date.now() < deadline; attempt++) {
     const value = await evaluate(rdp, console_actor, `globalThis.${slot}`);
     if (typeof value === "string") return JSON.parse(value);
+    // The debugger sends a string over about 10 KB as a grip, which would otherwise read as no result until the timeout.
+    if (value?.type === "longString") throw new Error(`rdp: the result is ${value.length} characters, too long for the debugger to send whole; return a smaller value, such as a count or a boolean`);
     await rdp.pause(RESULT_POLL_STEPS_MS[attempt] ?? RESULT_POLL_STEP_MAX_MS);
   }
   throw new Error("rdp: background code did not finish");
