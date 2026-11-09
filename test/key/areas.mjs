@@ -24,7 +24,6 @@ export const area_rules = [
   // Docs and icons carry no behavior a key test reads.
   { globs: ["src/**/README.md", "src/icons/**"], areas: [] },
   // The schema validates the settings the help page edits and the config reads.
-  { globs: ["src/managed_schema.json"], areas: ["help", "config"] },
   { globs: shared_files, areas: area_names },
   { globs: ["src/content/hints/**", "src/commands/{hint,heading,page}.ts", "src/background/image_actions.ts", "src/content/handlers/page.ts"], areas: ["hints"] },
   { globs: ["src/content/run_content.ts", "src/commands/{caret,cmdline,copy,find,heading,help,hint,page,visual}.ts", "src/background/{bundle_loader,command_modules}.ts", "src/content/{bundle_host,bundles}.ts", "src/content/page/**", "src/shared/bundles.ts"], areas: ["bundles"] },

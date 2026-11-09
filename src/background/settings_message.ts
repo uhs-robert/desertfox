@@ -40,7 +40,7 @@ export function create_settings_messages(deps: SettingsMessageDeps) {
         return undefined;
       });
       const { source, config_settings } = await deps.read_layers();
-      return { ok: true, settings: build_setting_list(build_config_status(source, config_settings, edits!, "")) };
+      return { ok: true, settings: build_setting_list(build_config_status(source, config_settings, edits!)) };
     } catch (error) {
       return failure(error);
     }
@@ -67,7 +67,7 @@ export function create_settings_messages(deps: SettingsMessageDeps) {
       });
       // The row comes from the edits this change left, so a later change in the queue does not alter this reply.
       const { source, config_settings } = await deps.read_layers();
-      const status = build_config_status(source, config_settings, final_edits!, "");
+      const status = build_config_status(source, config_settings, final_edits!);
       return { ok: true, setting: build_setting_list(status).find((row) => row.name === name)!, message };
     } catch (error) {
       return failure(error);

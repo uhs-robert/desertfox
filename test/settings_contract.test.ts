@@ -38,7 +38,6 @@ const EXPECTATIONS: Record<string, string> = {
   newtab_recent_tabs: "true or false",
   newtab_recent_tabs_max: "a whole number, 0 or more",
   newtab_links: 'a list of tables with "label", an http or https "url" and an optional "group"',
-  open_quick_start_on_install: "true or false",
 };
 
 test("every setting keeps its expectation text, in the declared order", () => {
@@ -64,7 +63,6 @@ test("every setting keeps its listed values", () => {
     newtab_clock_format: ["12", "24"],
     newtab_bookmarks: ["true", "false"],
     newtab_recent_tabs: ["true", "false"],
-    open_quick_start_on_install: ["true", "false"],
   });
 });
 
@@ -73,7 +71,7 @@ test("the list, unsettable and toggle sets stay the same", () => {
   assert.deepEqual(SETTING_NAMES.filter((name) => !SETTING_SPECS[name].settable), ["search_prefixes", "container_prefixes", "newtab_links"]);
   // A toggle flips the value in force, so an absent one flips from its default.
   const toggles = Object.fromEntries(SETTING_NAMES.filter((name) => SETTING_SPECS[name].is_toggle).map((name) => [name, DEFAULT_SETTINGS[name]]));
-  assert.deepEqual(toggles, { completion_all_windows: false, newtab_date: true, newtab_bookmarks: false, newtab_recent_tabs: false, open_quick_start_on_install: true });
+  assert.deepEqual(toggles, { completion_all_windows: false, newtab_date: true, newtab_bookmarks: false, newtab_recent_tabs: false });
 });
 
 const ACCEPTS: Record<string, unknown[]> = {
@@ -106,7 +104,6 @@ const ACCEPTS: Record<string, unknown[]> = {
   newtab_recent_tabs: [false],
   newtab_recent_tabs_max: [3],
   newtab_links: [[], [{ label: "A", url: "https://a.example/", group: "G" }, { label: "B", url: "http://b.example/" }]],
-  open_quick_start_on_install: [true, false],
 };
 
 const REFUSES: Record<string, unknown[]> = {
@@ -138,7 +135,6 @@ const REFUSES: Record<string, unknown[]> = {
   newtab_recent_tabs: ["yes"],
   newtab_recent_tabs_max: [Number.NaN],
   newtab_links: ["x", [{ label: "A", url: "javascript:alert(1)" }], [{ label: "A", url: "https://a.example/", group: "" }], [{ url: "https://a.example/" }]],
-  open_quick_start_on_install: [null],
 };
 
 test("every setting accepts and refuses the same values", () => {
@@ -208,7 +204,6 @@ test("the defaults stay the same", () => {
     newtab_recent_tabs: false,
     newtab_recent_tabs_max: 8,
     newtab_links: [],
-    open_quick_start_on_install: true,
   });
   assert.equal("home_page" in DEFAULT_SETTINGS, false, "page.home refuses without one");
 });
@@ -243,6 +238,8 @@ test("the editor schema matches its output before #85, apart from the listed cha
     assert.equal(properties[name].description, undefined, name);
     properties[name].description = described_now[name]!.description;
   }
+  // Removed: no setting can turn the first-install Quick Start page off.
+  delete properties.open_quick_start_on_install;
   // Settings added since the fixture was taken.
   for (const name of ["statusbar_widgets", "next_patterns", "prev_patterns"]) properties[name] = JSON.parse(JSON.stringify((settings_schema().properties as Record<string, unknown>)[name]));
   assert.deepEqual(JSON.parse(JSON.stringify(settings_schema())), JSON.parse(JSON.stringify(before)));

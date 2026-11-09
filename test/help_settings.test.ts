@@ -3,7 +3,7 @@ import "../src/background/command_modules.ts";
 import { test } from "node:test";
 import { load_effective_config } from "../src/background/config_load.ts";
 import { create_settings_messages } from "../src/background/settings_message.ts";
-import { CONFIG_STATUS_STORAGE_KEY, SAVED_SETTINGS_STORAGE_KEY } from "../src/background/storage_keys.ts";
+import { CONFIG_STATUS_STORAGE_KEY, FILES_CONFIG_STORAGE_KEY, SAVED_SETTINGS_STORAGE_KEY } from "../src/background/storage_keys.ts";
 import { CONFIG_FORMAT_VERSION } from "../src/shared/config.ts";
 import { mount_settings } from "../src/help/settings_page.ts";
 import { control_of, create_settings_session, LAYER_LABEL, problem_with, value_of_text } from "../src/help/settings_model.ts";
@@ -11,7 +11,7 @@ import { touches_settings } from "../src/shared/storage_watch.ts";
 import type { SettingListRow } from "../src/shared/messages.ts";
 
 function install_fake_browser(file_settings: Record<string, unknown>) {
-  const local: Record<string, unknown> = {};
+  const local: Record<string, unknown> = { [FILES_CONFIG_STORAGE_KEY]: { config: { format_version: CONFIG_FORMAT_VERSION, settings: file_settings }, warnings: [] } };
   const session: Record<string, unknown> = {};
   const area = (store: Record<string, unknown>) => ({
     get: async (key?: string | string[]) => {
@@ -26,7 +26,7 @@ function install_fake_browser(file_settings: Record<string, unknown>) {
   Object.assign(globalThis, {
     browser: {
       runtime: { id: "test@desertfox" },
-      storage: { local: area(local), managed: { get: async () => ({ format_version: CONFIG_FORMAT_VERSION, settings: file_settings }) }, session: area(session) },
+      storage: { local: area(local), session: area(session) },
       tabs: { query: async () => [], sendMessage: async () => undefined },
       contextualIdentities: { query: async () => [] },
       commands: { update: async () => undefined, reset: async () => undefined },

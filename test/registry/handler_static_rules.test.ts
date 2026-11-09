@@ -75,7 +75,6 @@ const STUB_ANSWERS: Record<string, unknown> = {
   "permissions.contains": true,
   "storage.session.get": {},
   "storage.local.get": {},
-  "storage.managed.get": {},
   "runtime.getURL": "moz-extension://stub/home.html",
   "runtime.sendNativeMessage": { ok: true, config_dir: "/stub/desertfox", config_dir_exists: true, files: {} },
 };

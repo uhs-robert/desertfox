@@ -4,11 +4,11 @@ import { test } from "node:test";
 import { load_effective_config } from "../../src/background/config_load.ts";
 import { create_settings_messages, is_extension_page } from "../../src/background/settings_message.ts";
 import { CONFIG_FORMAT_VERSION } from "../../src/shared/config.ts";
-import { SAVED_SETTINGS_STORAGE_KEY, TEMP_SETTINGS_STORAGE_KEY } from "../../src/background/storage_keys.ts";
+import { FILES_CONFIG_STORAGE_KEY, SAVED_SETTINGS_STORAGE_KEY, TEMP_SETTINGS_STORAGE_KEY } from "../../src/background/storage_keys.ts";
 
 // A browser that keeps storage in memory. `fail_session_writes` makes the temp layer's writes throw, after the saved layer's write has landed.
 function install_fake_browser(file_settings: Record<string, unknown>) {
-  const local: Record<string, unknown> = {};
+  const local: Record<string, unknown> = { [FILES_CONFIG_STORAGE_KEY]: { config: { format_version: CONFIG_FORMAT_VERSION, settings: file_settings }, warnings: [] } };
   const session: Record<string, unknown> = {};
   const state = { fail_session_writes: 0 };
   const area = (store: Record<string, unknown>, before_set?: () => void | Promise<void>) => ({
@@ -27,7 +27,6 @@ function install_fake_browser(file_settings: Record<string, unknown>) {
       runtime: { id: "test@desertfox" },
       storage: {
         local: area(local),
-        managed: { get: async () => ({ format_version: CONFIG_FORMAT_VERSION, settings: file_settings }) },
         session: area(session, async () => {
           if (state.fail_session_writes > 0) {
             state.fail_session_writes--;

@@ -65,9 +65,6 @@
   "chrome_url_overrides": {
     "newtab": "newtab.html"
   },
-  "storage": {
-    "managed_schema": "managed_schema.json"
-  },
   "commands": {
     "toggle_enabled": {
       "suggested_key": {

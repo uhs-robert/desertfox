@@ -30,7 +30,6 @@ export const DEFAULT_NEWTAB_BOOKMARKS_MAX: Settings["newtab_bookmarks_max"] = 8;
 export const DEFAULT_NEWTAB_RECENT_TABS: Settings["newtab_recent_tabs"] = false;
 export const DEFAULT_NEWTAB_RECENT_TABS_MAX: Settings["newtab_recent_tabs_max"] = 8;
 export const DEFAULT_NEWTAB_LINKS: Settings["newtab_links"] = [];
-export const DEFAULT_OPEN_QUICK_START_ON_INSTALL: Settings["open_quick_start_on_install"] = true;
 
 export const DEFAULT_SETTINGS: Settings = {
   which_key_delay_ms: DEFAULT_WHICH_KEY_DELAY_MS,
@@ -60,5 +59,4 @@ export const DEFAULT_SETTINGS: Settings = {
   newtab_recent_tabs: DEFAULT_NEWTAB_RECENT_TABS,
   newtab_recent_tabs_max: DEFAULT_NEWTAB_RECENT_TABS_MAX,
   newtab_links: DEFAULT_NEWTAB_LINKS,
-  open_quick_start_on_install: DEFAULT_OPEN_QUICK_START_ON_INSTALL,
 };

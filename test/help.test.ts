@@ -165,9 +165,9 @@ test("the styling page lists every theme role as a variable", () => {
 
 test("the model carries the config source and apply steps for the settings page", () => {
   const { commands, compiled } = sample();
-  const status = { source: "managed" as const, settings: { ...DEFAULT_SETTINGS, palette: "x" }, managed_file_hint: "", saved: [], temp: [], configured: [] };
+  const status = { source: "files" as const, settings: { ...DEFAULT_SETTINGS, palette: "x" }, saved: [], temp: [], configured: [] };
   const model = build_help_model(commands, compiled, [], {}, {}, status);
-  assert.equal(model.config_source, "Managed storage file, until config.reload reads the files");
+  assert.equal(model.config_source, "Config files, read by config.reload through the native host");
   assert.match(model.rebuild_steps[1]!, /config\.reload/);
   assert.equal(build_help_model(commands, compiled, []).config_source, "Unknown, the background has not written a status yet");
 });

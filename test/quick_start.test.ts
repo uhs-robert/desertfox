@@ -1,7 +1,4 @@
 import assert from "node:assert/strict";
-import { cpSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
 import { test } from "node:test";
 import { open_quick_start_on_install } from "../src/background/first_install.ts";
 import { DEFAULT_KEYMAP } from "../src/background/default_keymap.ts";
@@ -13,12 +10,7 @@ import { compile_keymap } from "../src/shared/keys/compiler.ts";
 import { command_meta } from "../src/shared/registry/index.ts";
 import { registry } from "../src/shared/registry/builtin.ts";
 import { parse_command_line } from "../src/shared/registry/command_line.ts";
-import { build_config, read_commands_file } from "../tools/build-config/build_config.ts";
-import { ConfigErrors } from "../src/shared/config_build/errors.ts";
-import { build_schemas } from "../src/shared/config_build/schemas.ts";
 
-const FIXTURES = join(import.meta.dirname, "fixtures", "build-config");
-const commands = read_commands_file(join(FIXTURES, "commands.json"));
 
 const all_commands = registry.list().map(command_meta);
 const any_command = { runs_in: "content" as const, label: "x", count: "ignore" as const };
@@ -106,37 +98,17 @@ test("quick start: every command line it can show resolves in the registry", () 
 test("the Quick Start route and the install URL agree", async () => {
   assert.equal(parse_route("#/quick-start").page, "quick-start");
   const opened: string[] = [];
-  const deps = (reason: string, on: boolean) => ({ reason, open_on_install: async () => on, open_tab: async (url: string) => void opened.push(url) });
+  const deps = (reason: string) => ({ reason, open_tab: async (url: string) => void opened.push(url) });
   const url_of = (file: string) => `moz-extension://x/${file}`;
-  assert.equal(await open_quick_start_on_install(deps("install", true), url_of), true);
+  assert.equal(await open_quick_start_on_install(deps("install"), url_of), true);
   assert.deepEqual(opened, ["moz-extension://x/home.html#/quick-start"]);
 });
 
-test("the Quick Start page opens on a first install only, and the setting turns it off", async () => {
+test("the Quick Start page opens on a first install only", async () => {
   const opened: string[] = [];
   const url_of = (file: string) => file;
-  for (const [reason, on] of [["update", true], ["browser_update", true], ["install", false]] as const) {
-    assert.equal(await open_quick_start_on_install({ reason, open_on_install: async () => on, open_tab: async (url) => void opened.push(url) }, url_of), false, `${reason} ${on}`);
+  for (const reason of ["update", "browser_update"]) {
+    assert.equal(await open_quick_start_on_install({ reason, open_tab: async (url) => void opened.push(url) }, url_of), false, reason);
   }
   assert.deepEqual(opened, []);
-});
-
-function problems_with_settings(settings_toml: string): string {
-  const dir = mkdtempSync(join(tmpdir(), "desertfox-config-"));
-  cpSync(join(FIXTURES, "full"), dir, { recursive: true });
-  mkdirSync(dirname(join(dir, "settings.toml")), { recursive: true });
-  writeFileSync(join(dir, "settings.toml"), settings_toml);
-  try {
-    build_config(dir, commands);
-  } catch (error) {
-    if (error instanceof ConfigErrors) return error.problems.join("\n");
-    throw error;
-  }
-  return "";
-}
-
-test("open_quick_start_on_install takes a boolean and the schema lists it", () => {
-  assert.equal(problems_with_settings("open_quick_start_on_install = false"), "");
-  assert.match(problems_with_settings('open_quick_start_on_install = "no"'), /expected/);
-  assert.ok("open_quick_start_on_install" in (build_schemas(commands).settings as { properties: Record<string, unknown> }).properties);
 });
