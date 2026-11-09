@@ -733,6 +733,8 @@ export async function create_session({ name: session_name, timings, sweep = true
     })()`);
     await wait_for_tabs("one tab to be left", `browser.tabs.query({}).then((tabs) => tabs.length)`, 1);
     await wait_for_tabs("one window to be left", `browser.windows.getAll().then((windows) => windows.length)`, 1);
+    // The count settles before Firefox picks the new active tab, and a late close of the old active tab can move it.
+    await wait_for_tabs("the home tab to be the active tab", `browser.tabs.query({ active: true, lastFocusedWindow: true }).then(([tab]) => tab?.id)`, home.tab_id);
     await wait_event(mark, (event) => event.type === "tree_read" && event.page_id === home_id, `content script ready on ${home_id}`, 10000);
     await confirm_page_focus(home.tab_id, home.window_id);
     // A page drops the keys of its first moments, and restore_config types qr, so a pending load waits for the key probe first.
