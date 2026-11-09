@@ -5,7 +5,7 @@
 import type { Mode, TreeBranch, TreeLeaf } from "../shared/index.ts";
 import type { MatchResult } from "../shared/keys/index.ts";
 import type { BundleName } from "../shared/bundles.ts";
-import { hint_mode_takes } from "./hints/hint_keys.ts";
+import { is_hint_char } from "./hints/hint_keys.ts";
 import type { Sink } from "./bundle_host.ts";
 import { is_caret_mode } from "../shared/command.ts";
 import { is_chord } from "../shared/keys/token.ts";
@@ -51,9 +51,14 @@ const CARET_PAGE_KEYS = /^<(?:S-)?(?:Tab|F\d+|PageUp|PageDown|Home|End)>$/;
 // What a caret mode still lets through: those keys and the way out of a page dialog.
 const KEYS_PAST_CARET_MODES = new RegExp(`${CARET_PAGE_KEYS.source}|^<(?:S-)?Escape>$`);
 
-// Whether the mode a sink bundle serves may take the key once the bundle is in. Only such keys wait for the load. Cmdline takes every key.
-const bundle_may_take = (bundle: BundleName, token: string): boolean =>
-  bundle === "hints" ? hint_mode_takes(token) : bundle === "caret" ? !CARET_PAGE_KEYS.test(token) : true;
+// The modes a sink bundle serves, and for each the keys its sink takes by itself. A key its keymap binds is held too, whoever bound it. Cmdline takes every key.
+const MODES_OF_BUNDLE: Partial<Record<BundleName, readonly Mode[]>> = { hints: ["hint"], caret: ["caret", "visual", "visual_line"] };
+const sink_takes_by_itself = (bundle: BundleName, token: string): boolean =>
+  bundle === "hints" ? is_hint_char(token) : bundle !== "caret" || !CARET_PAGE_KEYS.test(token);
+
+// Whether the mode a sink bundle serves may take the key once the bundle is in. Only such keys wait for the load.
+const bundle_may_take = (active: Matcher, held: readonly string[], bundle: BundleName, token: string): boolean =>
+  sink_takes_by_itself(bundle, token) || !!MODES_OF_BUNDLE[bundle]?.some((mode) => active.binds_after_(mode, held, token));
 
 // Which unbound keys the page never sees. Firefox starts Quick Find on `/` and `'` in page content, beside DesertFox's own page search. A caret mode is for reading, so a site shortcut there moves the user away from the caret. In a field every key is typing, and a chord stays with Firefox and the page (Ctrl+C copies a selection).
 export const cancels_unbound_key = (mode: Mode, token: string, in_field: boolean): boolean => {
@@ -90,7 +95,7 @@ export function create_key_flow(deps: KeyFlowDeps) {
 
   // The held keys are not fed yet, so the check reads ahead through them. It cannot read through Backspace, which edits the sequence, or an insert mode Escape, which leaves the mode on replay, so those keys and every key after them wait.
   const waits_for_replay = (active: Matcher, mode: Mode, token: string): boolean =>
-    deps.loading_sink_bundles_().some((bundle) => bundle_may_take(bundle, token)) ||
+    deps.loading_sink_bundles_().some((bundle) => bundle_may_take(active, held_tokens, bundle, token)) ||
     !!deps.sink_of_(mode) ||
     token === "<Backspace>" ||
     (mode === "insert" && token === "<Escape>") ||

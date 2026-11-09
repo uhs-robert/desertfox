@@ -27,7 +27,7 @@ const keymap: CompiledKeymap = {
       },
     },
     hint: { kind: "branch", children: { "<Escape>": leaf("mode.escape") } },
-    caret: { kind: "branch", children: { "<Escape>": leaf("mode.escape"), e: leaf("log_caret_e") } },
+    caret: { kind: "branch", children: { "<Escape>": leaf("mode.escape"), e: leaf("log_caret_e"), "<F7>": leaf("log_caret_f7") } },
   },
 };
 
@@ -590,4 +590,19 @@ test("keys the caret modes never take pass at once while the caret bundle loads"
     "V:cancel", "j:cancel", "<Tab>:pass", "<S-Tab>:pass", "<PageDown>:pass", "<Home>:pass", "<End>:pass", "<F5>:pass", "<Escape>:cancel",
   ]);
   assert.deepEqual(page.events, []);
+});
+
+test("a page key the caret keymap binds waits for the caret bundle", () => {
+  const page = make_page();
+  page.press("V", "<F5>", "<F7>");
+  assert.deepEqual(page.decisions, ["V:cancel", "<F5>:pass", "<F7>:cancel"]);
+});
+
+test("while the cmdline and hints bundles load together every key waits", () => {
+  const page = make_page();
+  void page.host.run_command_("open", "hints", {}, "missing");
+  void page.host.run_command_("open", "cmdline", {}, "missing");
+  page.press("<Tab>", "<F5>", "j");
+  assert.deepEqual(page.loads.map((load) => load.name), ["hints", "cmdline"]);
+  assert.deepEqual(page.decisions, ["<Tab>:cancel", "<F5>:cancel", "j:cancel"]);
 });
