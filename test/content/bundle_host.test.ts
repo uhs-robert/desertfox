@@ -27,7 +27,7 @@ const keymap: CompiledKeymap = {
       },
     },
     hint: { kind: "branch", children: { "<Escape>": leaf("mode.escape") } },
-    caret: { kind: "branch", children: { "<Escape>": leaf("mode.escape") } },
+    caret: { kind: "branch", children: { "<Escape>": leaf("mode.escape"), e: leaf("log_caret_e") } },
   },
 };
 
@@ -473,10 +473,50 @@ test("while a bundle with a sink loads, or a sink takes the current mode, every 
 
 test("a key the page gets during a load goes ahead of the held keys typed before it", async () => {
   const page = make_page();
+  page.press("z", "g", "<F8>", "t");
+  assert.deepEqual(page.decisions, ["z:cancel", "g:cancel", "<F8>:pass", "t:pass"]);
+  await finish_page_load(page);
+  // F8 ended the held g before t came, so gt does not run.
+  assert.deepEqual(page.events, ["align"]);
+});
+
+test("after a held binding every key waits, because the binding can change the mode the keys replay in", async () => {
+  const page = make_page();
   page.press("z", "x", "<F8>");
-  assert.deepEqual(page.decisions, ["z:cancel", "x:cancel", "<F8>:pass"]);
+  assert.deepEqual(page.decisions, ["z:cancel", "x:cancel", "<F8>:cancel"]);
   await finish_page_load(page);
   assert.deepEqual(page.events, ["align", "run log_x"]);
+});
+
+test("a held key that enters caret mode during a load hands the next key to the caret sink", async () => {
+  const page = make_page();
+  page.host.api.register_sink("caret", page.recording_sink("caret", ["e"]));
+  page.press("z", "V", "e");
+  assert.deepEqual(page.decisions, ["z:cancel", "V:cancel", "e:cancel"]);
+  await finish_page_load(page);
+  assert.deepEqual(page.events, ["align", "caret sink enter", "caret sink e"]);
+});
+
+test("a held hint start during a load hands the next key to the hint sink once hints load", async () => {
+  const page = make_page();
+  page.press("z", "f", "s");
+  assert.deepEqual(page.decisions, ["z:cancel", "f:cancel", "s:cancel"]);
+  await finish_page_load(page);
+  assert.equal(page.loads.at(-1)!.name, "hints");
+  page.loads.at(-1)!.finish(true, () => {
+    page.host.api.register_sink("hint", page.recording_sink("hint", ["s"]));
+    page.host.api.register_handler("hint.run", () => page.state.set_mode("hint"));
+  });
+  await page.settle();
+  assert.deepEqual(page.events, ["align", "hint sink enter", "hint sink s"]);
+});
+
+test("breaks from many keys the page gets take one held slot, so a later bound key still waits", async () => {
+  const page = make_page();
+  page.press("z", "g", ...Array.from({ length: 40 }, () => "<F8>"), "j");
+  assert.equal(page.decisions.at(-1), "j:cancel");
+  await finish_page_load(page);
+  assert.deepEqual(page.events, ["align", "run log_j"]);
 });
 
 test("a held half-typed sequence waits for the key that continues it and ends at the key the page got", async () => {
@@ -498,10 +538,16 @@ test("a held half-typed sequence waits for the key that continues it and ends at
 
 test("a count typed during a load waits with its command, and a key the page gets drops it", async () => {
   const page = make_page();
-  page.press("z", "3", "j", "4", "<F8>", "j");
-  assert.deepEqual(page.decisions, ["z:cancel", "3:cancel", "j:cancel", "4:cancel", "<F8>:pass", "j:cancel"]);
+  page.press("z", "3", "j");
+  assert.deepEqual(page.decisions, ["z:cancel", "3:cancel", "j:cancel"]);
   await finish_page_load(page);
-  assert.deepEqual(page.events, ["align", "run log_j3", "run log_j"]);
+  assert.deepEqual(page.events, ["align", "run log_j3"]);
+
+  const dropped = make_page();
+  dropped.press("z", "4", "<F8>", "j");
+  assert.deepEqual(dropped.decisions, ["z:cancel", "4:cancel", "<F8>:pass", "j:cancel"]);
+  await finish_page_load(dropped);
+  assert.deepEqual(dropped.events, ["align", "run log_j"]);
 });
 
 test("Backspace during a load waits with every key after it, so it still edits the held sequence", async () => {
@@ -512,15 +558,16 @@ test("Backspace during a load waits with every key after it, so it still edits t
   assert.deepEqual(page.events, ["align", "run log_gg"]);
 });
 
-test("during a load, insert mode outside a field passes unbound keys and holds Escape, which leaves on replay", async () => {
+test("during a load, insert mode outside a field passes unbound keys and holds Escape and every key after it", async () => {
   const page = make_page();
   page.state.set_mode("insert");
   void page.host.run_command("page.align", "whichkey", {}, "needs page");
-  page.press("q", "<Escape>");
-  assert.deepEqual(page.decisions, ["q:pass", "<Escape>:cancel"]);
+  page.press("q", "<Escape>", "j");
+  assert.deepEqual(page.decisions, ["q:pass", "<Escape>:cancel", "j:cancel"]);
   assert.equal(page.state.get_mode(), "insert");
   await finish_page_load(page);
   assert.equal(page.state.get_mode(), "normal");
+  assert.deepEqual(page.events, ["align", "run log_j"]);
   page.set_in_field(true);
   page.state.set_mode("insert");
   page.press("z");

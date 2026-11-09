@@ -257,7 +257,7 @@ test("matcher: binds_after reads ahead through keys not yet fed and leaves the w
   assert.equal(matcher.binds_after("normal", [], "J"), true);
   assert.equal(matcher.binds_after("normal", [], "t"), false);
   assert.equal(matcher.binds_after("normal", ["z"], "t"), true);
-  // A key that breaks the sequence is tried again as a first key.
+  // A key that breaks the sequence is tried again as a first key, in `feed` too.
   assert.equal(matcher.binds_after("normal", ["z"], "J"), true);
   assert.equal(matcher.binds_after("normal", ["z", "q"], "t"), false);
   assert.equal(matcher.binds_after("normal", [], "3"), true);
@@ -265,8 +265,11 @@ test("matcher: binds_after reads ahead through keys not yet fed and leaves the w
   assert.equal(matcher.binds_after("ignore", [], "J"), false);
   assert.equal(matcher.feed("normal", "z").kind, "pending");
   assert.equal(matcher.binds_after("normal", [], "t"), true);
-  assert.equal(matcher.binds_after("normal", ["J"], "t"), false);
+  // After a completed binding the mode the keys replay in is unknown.
+  assert.equal(matcher.binds_after("normal", ["J"], "t"), true);
   assert.equal(leaf_id(matcher.feed("normal", "t")), "scroll.align");
+  matcher.feed("normal", "z");
+  assert.equal(leaf_id(matcher.feed("normal", "J")), "tab.next");
 });
 
 test("matcher: counts", () => {
