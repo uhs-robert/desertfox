@@ -23,6 +23,7 @@ function make_fake({ containers = [] as { id: string; name: string }[], private_
   const windows = new Map<number, FakeTab[]>();
   const log: string[] = [];
   const toasts: { kind: string; message: string }[] = [];
+  const toast_tabs: (number | undefined)[] = [];
   let next_id = 1000;
   // Holds every create_tab until released, so a test can act while a restore is in flight.
   const gate = { wait: undefined as Promise<void> | undefined };
@@ -40,7 +41,7 @@ function make_fake({ containers = [] as { id: string; name: string }[], private_
       windows.set(window_id, [blank]);
       return { window_id, blank_tab_id: blank.id };
     },
-    tab_count: async (window_id) => windows.get(window_id)?.length ?? 0,
+    window_exists: async (window_id) => windows.has(window_id),
     create_tab: async (open: OpenTab) => {
       await gate.wait;
       if (open.pinned && open.discarded) throw new Error("Pinned tabs cannot be created and discarded.");
@@ -49,7 +50,7 @@ function make_fake({ containers = [] as { id: string; name: string }[], private_
       if (!tabs) throw new Error("No window with id");
       const tab: FakeTab = { id: ++next_id, url: open.url, title: open.title, pinned: open.pinned, active: open.active, discarded: open.discarded, cookie_store_id: open.cookie_store_id ?? "firefox-default" };
       if (open.active) tabs.forEach((other) => (other.active = false));
-      tabs.splice(Math.min(open.index, tabs.length), 0, tab);
+      tabs.splice(Math.min(open.index ?? tabs.length, tabs.length), 0, tab);
       return tab.id;
     },
     set_pinned: async (tab_id, pinned) => {
@@ -66,14 +67,14 @@ function make_fake({ containers = [] as { id: string; name: string }[], private_
       }
     },
     close_window: async (window_id) => void windows.delete(window_id),
-    toast: async (_ctx, kind, message) => void toasts.push({ kind, message }),
+    toast: async (toast_ctx, kind, message) => (toasts.push({ kind, message }), void toast_tabs.push(toast_ctx.tab_id)),
   };
   const add_window = (window_id: number, tabs: Partial<FakeTab>[]) =>
     windows.set(
       window_id,
       tabs.map((tab, index) => ({ id: window_id * 100 + index, url: `https://t${index}.test/`, title: `Tab ${index}`, pinned: false, active: tabs.some((other) => other.active) ? false : index === 0, discarded: false, cookie_store_id: "firefox-default", ...tab })),
     );
-  return { handlers: make_session_handlers(deps), deps, store, windows, log, toasts, gate, add_window };
+  return { handlers: make_session_handlers(deps), deps, store, windows, log, toasts, toast_tabs, gate, add_window };
 }
 
 const ctx = (window_id: number): CommandContext => ({ tab_id: window_id * 100, window_id, frame_id: 0, mode: "normal" });
@@ -165,13 +166,28 @@ test("a pinned background tab is created unpinned and pinned after, and a pinned
   assert.deepEqual(tabs?.map((tab) => [tab.pinned, tab.discarded]), [[true, true], [true, false], [false, true]]);
 });
 
-test("open with into tab appends after the existing tabs, in the current window", async () => {
+test("open with into tab appends every tab discarded and leaves the current tab active", async () => {
   const fake = make_fake();
-  await saved_session(fake, "s", [{}, {}]);
+  await saved_session(fake, "s", [{}, { active: true }, { pinned: true }]);
   fake.add_window(5, [{}, {}, {}]);
   await fake.handlers.open(ctx(5), { name: "s", into: "tab" });
   assert.equal(fake.log.includes("window"), false);
-  assert.deepEqual(fake.windows.get(5)?.map((tab) => tab.url), ["https://t0.test/", "https://t1.test/", "https://t2.test/", "https://t0.test/", "https://t1.test/"]);
+  const tabs = fake.windows.get(5) ?? [];
+  assert.equal(tabs.length, 6);
+  assert.deepEqual(tabs.slice(3).map((tab) => [tab.discarded, tab.active]), [[true, false], [true, false], [true, false]]);
+  assert.equal(tabs[0]?.active, true);
+  assert.equal(tabs.slice(3).find((tab) => tab.url === "https://t2.test/")?.pinned, true);
+  assert.equal(fake.log.some((entry) => entry.startsWith("activate")), false);
+});
+
+test("a new window's toast goes on a tab of that window, and into tab keeps it on the command's tab", async () => {
+  const fake = make_fake();
+  await saved_session(fake, "s", [{ url: "about:config" }, { url: "https://a.test/", active: true }]);
+  await fake.handlers.open(ctx(1), { name: "s", into: "window" });
+  const new_tab = [...fake.windows].find(([id]) => id !== 1)?.[1][0]?.id;
+  assert.equal(fake.toast_tabs.at(-1), new_tab);
+  await fake.handlers.open(ctx(1), { name: "s", into: "tab" });
+  assert.equal(fake.toast_tabs.at(-1), ctx(1).tab_id);
 });
 
 test("addresses Firefox refuses are skipped and counted, and the first tab that opened loads when the active one was refused", async () => {
@@ -238,7 +254,7 @@ test("two restores at once make two windows with every tab each", async () => {
   for (const urls of opened) assert.deepEqual(urls, ["https://t0.test/", "https://t1.test/", "https://t2.test/"]);
 });
 
-test("the new window closing while the restore runs leaves skipped tabs and no crash", async () => {
+test("the new window closing while the restore runs ends the restore and says so", async () => {
   const fake = make_fake();
   await saved_session(fake, "s", [{}, {}]);
   let release!: () => void;
@@ -247,7 +263,7 @@ test("the new window closing while the restore runs leaves skipped tabs and no c
   await new Promise((resolve) => setImmediate(resolve));
   for (const id of [...fake.windows.keys()].filter((window_id) => window_id !== 1)) fake.windows.delete(id);
   release();
-  await assert.rejects(restoring, /could be opened/);
+  await assert.rejects(restoring, /The window closed while "s" was opening/);
 });
 
 test("delete and rename change the store and toast", async () => {

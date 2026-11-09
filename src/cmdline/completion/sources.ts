@@ -248,18 +248,12 @@ function window_rows(windows: readonly WindowItem[], usage: string): Row[] {
   }));
 }
 
-// `3d ago`, the biggest whole unit. Under a minute reads `just now`.
-export function session_age(saved_at: number, now: number): string {
-  const minutes = Math.floor((now - saved_at) / 60_000);
-  return minutes < 1 ? "just now" : minutes < 60 ? `${minutes}m ago` : minutes < 1440 ? `${Math.floor(minutes / 60)}h ago` : `${Math.floor(minutes / 1440)}d ago`;
-}
-
 // The name is the whole subject, so the handler matches it as typed. Newest first is the order the background sends, and an empty word keeps it.
-function session_rows(sessions: readonly SessionItem[], usage: string, now: number): Row[] {
+function session_rows(sessions: readonly SessionItem[], usage: string): Row[] {
   return sessions.map((session) => ({
     name: session.name,
     insert: `${/["'\\]/.test(session.name) ? quote_word(session.name) : session.name} `,
-    description: `${session.tabs} ${session.tabs === 1 ? "tab" : "tabs"}, ${session_age(session.saved_at, now)}`,
+    description: session.description,
     args: "",
     also_named: [],
     keywords: [],
@@ -362,7 +356,7 @@ export function create_completer(
               : kind === "headings"
                 ? heading_rows(read.items as HeadingItem[], usage)
                 : kind === "sessions"
-                  ? session_rows(read.items as SessionItem[], usage, Date.now())
+                  ? session_rows(read.items as SessionItem[], usage)
                   : bookmark_rows(read.items as BookmarkItem[], usage);
       const ranked = rank(context.word, rows);
       return { ...span, usage, rows: kind === "bookmarks" && context.word.trim() === "" ? ranked.slice(0, RECENT_BOOKMARKS) : ranked, listing: true };

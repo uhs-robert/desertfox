@@ -46,17 +46,26 @@ const is_session = (value: unknown): value is Session => {
   return typeof session?.saved_at === "number" && Array.isArray(session.tabs) && session.tabs.every(is_session_tab);
 };
 
-// A Map keyed by display name, because a session called `__proto__` must not reach the prototype of a plain object.
-async function read_map(storage: SessionStorage): Promise<Map<string, Session>> {
+// The sessions this version reads, a Map keyed by display name because a session called `__proto__` must not reach the prototype of a plain object. `unread` holds the entries it cannot read, which a write gives back unchanged.
+type Loaded = { sessions: Map<string, Session>; unread: [string, unknown][] };
+
+async function read_map(storage: SessionStorage): Promise<Loaded> {
   const stored = (await storage.get(SESSIONS_STORAGE_KEY)) as Partial<StoredSessions> | undefined;
-  if (stored === undefined || stored === null) return new Map();
+  if (stored === undefined || stored === null) return { sessions: new Map(), unread: [] };
   // A newer version may have a shape this code cannot keep. Refusing here keeps a later write from destroying it.
   if (stored.version !== 1 || typeof stored.sessions !== "object" || stored.sessions === null) throw new RuntimeRefusal("The saved sessions have a format this version cannot read");
-  return new Map(Object.entries(stored.sessions).filter(([, session]) => is_session(session)));
+  const entries = Object.entries(stored.sessions);
+  return { sessions: new Map(entries.filter(([, session]) => is_session(session)) as [string, Session][]), unread: entries.filter(([, session]) => !is_session(session)) };
 }
 
 function find_name(sessions: Map<string, Session>, name: string): string | undefined {
   return [...sessions.keys()].find((existing) => same_name(existing, name));
+}
+
+// `3d ago`, the biggest whole unit. Under a minute reads `just now`.
+export function session_age(saved_at: number, now: number): string {
+  const minutes = Math.floor((now - saved_at) / 60_000);
+  return minutes < 1 ? "just now" : minutes < 60 ? `${minutes}m ago` : minutes < 1440 ? `${Math.floor(minutes / 60)}h ago` : `${Math.floor(minutes / 1440)}d ago`;
 }
 
 export type SessionStore = ReturnType<typeof make_session_store>;
@@ -70,8 +79,8 @@ export function make_session_store(storage: SessionStorage, now: () => number = 
     return run;
   };
 
-  async function write(sessions: Map<string, Session>): Promise<void> {
-    const value: StoredSessions = { version: 1, sessions: Object.fromEntries(sessions) };
+  async function write({ sessions, unread }: Loaded): Promise<void> {
+    const value = { version: 1, sessions: Object.fromEntries([...sessions, ...unread]) };
     // A failed write leaves the stored value as it was, so the refusal names the cause and nothing is half saved.
     await storage.set(SESSIONS_STORAGE_KEY, value).catch((error: unknown) => {
       throw new RuntimeRefusal(`Could not store the sessions: ${error instanceof Error ? error.message : String(error)}`);
@@ -85,18 +94,19 @@ export function make_session_store(storage: SessionStorage, now: () => number = 
   };
 
   const list = async (): Promise<NamedSession[]> =>
-    [...(await read_map(storage))].map(([name, session]) => ({ name, ...session })).toSorted((a, b) => b.saved_at - a.saved_at);
+    [...(await read_map(storage)).sessions].map(([name, session]) => ({ name, ...session })).toSorted((a, b) => b.saved_at - a.saved_at);
 
   return {
     // Newest first.
     list,
 
     // What the command line lists.
-    items: async (): Promise<SessionItem[]> => (await list()).map(({ name, tabs, saved_at }) => ({ name, tabs: tabs.length, saved_at })),
+    items: async (): Promise<SessionItem[]> =>
+      (await list()).map(({ name, tabs, saved_at }) => ({ name, description: `${tabs.length} ${tabs.length === 1 ? "tab" : "tabs"}, ${session_age(saved_at, now())}` })),
 
     // The session as it is now. A later save of the same name does not change what this returned.
     get: async (text: string): Promise<NamedSession> => {
-      const sessions = await read_map(storage);
+      const { sessions } = await read_map(storage);
       const name = find_name(sessions, checked_name(text));
       if (name === undefined) throw new RuntimeRefusal(`No session named "${normalize_session_name(text)}"`);
       return { name, ...(sessions.get(name) as Session) };
@@ -106,28 +116,31 @@ export function make_session_store(storage: SessionStorage, now: () => number = 
     save: (text: string, tabs: SessionTab[]): Promise<{ name: string; previous_tabs: number | undefined }> =>
       exclusive(async () => {
         const typed = checked_name(text);
-        const sessions = await read_map(storage);
+        const loaded = await read_map(storage);
+        const { sessions } = loaded;
         const name = find_name(sessions, typed) ?? typed;
         const previous_tabs = sessions.get(name)?.tabs.length;
         sessions.set(name, { saved_at: now(), tabs });
-        await write(sessions);
+        await write(loaded);
         return { name, previous_tabs };
       }),
 
     remove: (text: string): Promise<string> =>
       exclusive(async () => {
-        const sessions = await read_map(storage);
+        const loaded = await read_map(storage);
+        const { sessions } = loaded;
         const name = find_name(sessions, checked_name(text));
         if (name === undefined) throw new RuntimeRefusal(`No session named "${normalize_session_name(text)}"`);
         sessions.delete(name);
-        await write(sessions);
+        await write(loaded);
         return name;
       }),
 
     // Changing only the case of a name is allowed. Any other name that is taken is refused.
     rename: (text: string, new_text: string): Promise<{ from: string; to: string }> =>
       exclusive(async () => {
-        const sessions = await read_map(storage);
+        const loaded = await read_map(storage);
+        const { sessions } = loaded;
         const from = find_name(sessions, checked_name(text));
         if (from === undefined) throw new RuntimeRefusal(`No session named "${normalize_session_name(text)}"`);
         const to = checked_name(new_text);
@@ -137,7 +150,7 @@ export function make_session_store(storage: SessionStorage, now: () => number = 
         const session = sessions.get(from) as Session;
         sessions.delete(from);
         sessions.set(to, session);
-        await write(sessions);
+        await write(loaded);
         return { from, to };
       }),
   };

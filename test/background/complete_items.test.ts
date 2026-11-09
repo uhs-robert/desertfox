@@ -690,7 +690,7 @@ test("tab_rows_action refuses a reopen when the line loses its ticket during the
 });
 
 test("the sessions list goes to a normal line only, and a failed read gives an empty list", async () => {
-  const sessions = [{ name: "work", tabs: 3, saved_at: 5 }];
+  const sessions = [{ name: "work", description: "3 tabs, 1d ago" }];
   const { service } = make({ sessions });
   assert.deepEqual(await service.answer("sessions", NORMAL_LINE), { items: sessions });
   assert.deepEqual(await service.answer("sessions", PRIVATE_LINE), { items: [] });

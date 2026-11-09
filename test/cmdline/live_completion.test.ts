@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { create_live_source } from "../../src/cmdline/completion/live.ts";
-import { create_completer, session_age } from "../../src/cmdline/completion/sources.ts";
+import { create_completer } from "../../src/cmdline/completion/sources.ts";
 import { create_session } from "../../src/cmdline/session.ts";
 import type { CommandMeta } from "../../src/shared/command.ts";
 import type { BookmarkItem, EngineItem, HeadingItem, HistoryItems, OpenItems, SessionItem, WindowItem, TabItem } from "../../src/shared/messages.ts";
@@ -292,22 +292,13 @@ test("a session pick puts the name in the line, and the rows show the tab count 
   const { session, asks, settle } = make();
   session.edit("session.open ");
   assert.deepEqual(asks.map((ask) => ask.kind), ["sessions"]);
-  const now = Date.now();
-  asks[0]!.answer([{ name: "work day", tabs: 12, saved_at: now - 3 * 86_400_000 }, { name: "one", tabs: 1, saved_at: now }]);
+  asks[0]!.answer([{ name: "work day", description: "12 tabs, 3d ago" }, { name: "one", description: "1 tab, just now" }]);
   await settle();
   assert.deepEqual(names(session), ["work day", "one"]);
   assert.deepEqual(session.get_rows().map((row) => row.description), ["12 tabs, 3d ago", "1 tab, just now"]);
   session.edit("session.open wor");
   tab_key(session);
   assert.equal(session.get_text(), "session.open work day ");
-});
-
-test("session_age picks the biggest whole unit", () => {
-  assert.equal(session_age(0, 30_000), "just now");
-  assert.equal(session_age(0, 5 * 60_000), "5m ago");
-  assert.equal(session_age(0, 150 * 60_000), "2h ago");
-  assert.equal(session_age(0, 50 * 3_600_000), "2d ago");
-  assert.equal(session_age(10, 0), "just now");
 });
 
 const OPEN: OpenItems = {
