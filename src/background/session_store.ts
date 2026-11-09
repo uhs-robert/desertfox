@@ -168,7 +168,9 @@ export function make_session_store(storage: SessionStorage, now: () => number = 
         const entries = parse_export(text);
         const loaded = await read_map(storage);
         const { sessions } = loaded;
-        const taken = (name: string) => find_name(sessions, name) !== undefined || loaded.unread.some(([key]) => same_name(key, name));
+        // Lowercase names in a Set, so a large file costs one lookup per name. It uses the lowercase rule of `same_name`.
+        const used = new Set([...sessions.keys(), ...loaded.unread.map(([key]) => key)].map((key) => key.toLowerCase()));
+        const taken = (name: string) => used.has(name.toLowerCase());
         const added: string[] = [];
         const skipped: string[] = [];
         for (const [key, session] of entries) {
@@ -179,6 +181,7 @@ export function make_session_store(storage: SessionStorage, now: () => number = 
           }
           const stored_as = free_name(name, taken);
           sessions.set(stored_as, session);
+          used.add(stored_as.toLowerCase());
           added.push(stored_as);
         }
         if (added.length > 0) await write(loaded);

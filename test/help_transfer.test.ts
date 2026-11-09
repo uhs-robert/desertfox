@@ -148,7 +148,7 @@ test("the sessions export downloads the file text, and refuses when none is save
 
 test("the sessions import checks File.size first, then sends the text and shows the answer", async () => {
   const { session, sent } = session_with({ import_sessions: { ok: true, message: "Imported 1 session" } });
-  await session.import_sessions(unread_file("big.json", 65 * 1024 * 1024));
+  await session.import_sessions(unread_file("big.json", 17 * 1024 * 1024));
   assert.deepEqual(sent, []);
   assert.match(session.state.message!.text, /too large/);
   await session.import_sessions(text_file("desertfox-sessions.json", "{}"));

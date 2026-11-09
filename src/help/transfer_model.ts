@@ -8,8 +8,8 @@ export const CONFIG_ZIP_NAME = "desertfox-config.zip";
 export const SNIPPETS_ZIP_NAME = "desertfox-snippets.zip";
 export const SESSIONS_FILE_NAME = "desertfox-sessions.json";
 
-// 400 sessions of 50 tabs are about 5 MB, so this leaves room and still stops a file that would fill memory.
-export const MAX_SESSIONS_FILE_BYTES = 64 * 1024 * 1024;
+// 400 sessions of 50 tabs are about 5 MB, so 16 MB leaves room and still stops a file that would fill memory.
+export const MAX_SESSIONS_FILE_BYTES = 16 * 1024 * 1024;
 
 export const SNIPPET_WARNING = "A snippet is code that runs in the pages it matches and can use every DesertFox permission: it can read and change any page it matches, open and close tabs, and read your bookmarks and history. Accept only snippets you have read and trust.";
 

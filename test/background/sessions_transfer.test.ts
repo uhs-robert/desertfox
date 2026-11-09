@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { make_session_store } from "../../src/background/session_store.ts";
 import type { SessionStorage, SessionTab } from "../../src/background/session_store.ts";
-import { answer_sessions_transfer } from "../../src/background/sessions_transfer.ts";
+import { answer_sessions_transfer } from "../../src/background/config_transfer.ts";
 import { SESSIONS_STORAGE_KEY } from "../../src/background/storage_keys.ts";
 
 function fake_storage(initial?: unknown) {
@@ -101,4 +101,13 @@ test("the answers say what was added and skipped, and refuse a file with nothing
 
   const exported = await answer_sessions_transfer({ type: "export_sessions" }, store);
   assert.equal("count" in exported && exported.count, 1);
+});
+
+test("a failed write leaves the stored sessions as they were", async () => {
+  const stored = { version: 1, sessions: { keep: session("https://a.test/") } };
+  const { storage, values } = fake_storage(stored);
+  const store = make_session_store({ get: storage.get, set: async () => Promise.reject(new Error("quota")) });
+  await assert.rejects(store.import_json(file_of({ other: session("https://b.test/") })), /Could not store the sessions: quota/);
+  assert.deepEqual(values.get(SESSIONS_STORAGE_KEY), stored);
+  assert.deepEqual(await names_of(make_session_store(storage)), ["keep"]);
 });
