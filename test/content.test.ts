@@ -37,7 +37,7 @@ function make_flow(in_field = false) {
     in_editable_field: () => in_field,
     get_mode: state.get_mode,
     take_pass_next: state.take_pass_next,
-    run_leaf: (matched, count) => ran.push(`${matched.steps[0]?.invocation.id}${count ?? ""}`),
+    run_leaf: (matched, count, repeat) => ran.push(`${matched.steps[0]?.invocation.id}${count ?? ""}${repeat ? "!" : ""}`),
     leave_insert: () => state.escape(),
     is_loading: () => false,
     sink_of: () => undefined,
@@ -404,4 +404,13 @@ test("the mode is reported at start and on every change", () => {
   wire_mode_reports(state, (mode) => reports.push(mode));
   state.set_mode("ignore");
   assert.deepEqual(reports, ["normal", "ignore"]);
+});
+
+test("a key repeat reaches run_leaf as true, and a first press, a replayed key and a browser chord as false", () => {
+  const { flow, ran } = make_flow();
+  flow.set_matcher(create_matcher(keymap), keymap.modes.browser);
+  flow.handle_token("j", true);
+  flow.handle_token("j");
+  flow.handle_token("<A-j>", true);
+  assert.deepEqual(ran, ["down!", "down", "next_tab"]);
 });

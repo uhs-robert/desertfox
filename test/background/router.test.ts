@@ -145,7 +145,6 @@ test("a content command goes to the tab with count repeated", async () => {
       params: [{ name: "lines", type: "int", default: 1 }],
       runs_in: "content",
       count: "repeat",
-      run: () => assert.fail(),
     },
   });
   await create_router(deps).run({ invocations: [{ id: "scroll.lines", count: 2 }], mode: "normal", may_prompt: true });
@@ -156,7 +155,7 @@ test("a content command goes to the tab with count repeated", async () => {
 test("a content command into a tab without a script refuses and stops the chain", async () => {
   const { deps, log } = make_fake(
     {
-      "scroll.lines": { label: "Scroll", intent: "x", runs_in: "content", run: () => {} },
+      "scroll.lines": { label: "Scroll", intent: "x", runs_in: "content" },
       "a.b": { label: "AB", intent: "x", runs_in: "background", run: () => assert.fail() },
     },
     { send_to_tab: async () => Promise.reject(new Error("no receiver")) },
@@ -191,7 +190,7 @@ test("content runs and the command line open go to the sender frame, or frame 0"
   const frames: (number | undefined)[] = [];
   const { deps } = make_fake(
     {
-      "scroll.lines": { label: "Scroll", intent: "x", runs_in: "content", run: () => {} },
+      "scroll.lines": { label: "Scroll", intent: "x", runs_in: "content" },
       "open.url": { label: "Open", intent: "x", params: [{ name: "url", type: "string" }], runs_in: "background", run: () => {} },
     },
     {
@@ -238,7 +237,7 @@ test("get_selection goes to the sender frame", async () => {
 test("a sender frame is not used when the sender tab is gone and the active tab takes over", async () => {
   const sent: [number, number | undefined][] = [];
   const { deps } = make_fake(
-    { "scroll.lines": { label: "Scroll", intent: "x", runs_in: "content", run: () => {} } },
+    { "scroll.lines": { label: "Scroll", intent: "x", runs_in: "content" } },
     { get_tab: async () => undefined, send_to_tab: async (tab_id, _message, frame_id) => void sent.push([tab_id, frame_id]) },
   );
   await create_router(deps).run({ invocations: [{ id: "scroll.lines" }], mode: "normal", sender_tab_id: 99, frame_id: 3 });
@@ -248,7 +247,7 @@ test("a sender frame is not used when the sender tab is gone and the active tab 
 test("a live sender tab keeps its frame while another tab is active", async () => {
   const sent: [number, number | undefined][] = [];
   const { deps } = make_fake(
-    { "scroll.lines": { label: "Scroll", intent: "x", runs_in: "content", run: () => {} } },
+    { "scroll.lines": { label: "Scroll", intent: "x", runs_in: "content" } },
     { send_to_tab: async (tab_id, _message, frame_id) => void sent.push([tab_id, frame_id]) },
   );
   await create_router(deps).run({ invocations: [{ id: "scroll.lines" }], mode: "normal", sender_tab_id: 99, frame_id: 3 });
@@ -259,7 +258,7 @@ test("a tab switch before step 0 does not move a leading content step or a leadi
   const sent: [number, number | undefined][] = [];
   const closed: (number | undefined)[] = [];
   const commands = {
-    "hint.run": { label: "Hint", intent: "x", runs_in: "content" as const, run: () => {} },
+    "hint.run": { label: "Hint", intent: "x", runs_in: "content" as const },
     "tab.close": { label: "Close", intent: "x", runs_in: "background" as const, run: (ctx: { tab_id: number | undefined }) => void closed.push(ctx.tab_id) },
   };
   const { deps } = make_fake(commands, {
@@ -279,7 +278,7 @@ test("a switch during a waiting step 0 sends step 1 to the tab that is active by
   const pick = pending_content();
   const { deps } = make_fake(
     {
-      "hint.run": { label: "Hint", intent: "x", runs_in: "content", run: () => {} },
+      "hint.run": { label: "Hint", intent: "x", runs_in: "content" },
       "tab.next": { label: "Next", intent: "x", runs_in: "background", run: (ctx) => void ran.push(ctx.tab_id) },
     },
     { active_tab: async () => ({ tab_id: active, window_id: 1, url: undefined }), send_to_tab: pick.send_to_tab },
@@ -306,7 +305,7 @@ test("a repeated step 0 pins only its first time, and a repeated background step
 test("a repeated content step sends every repeat in one message to the sender tab", async () => {
   const sent: [number, unknown][] = [];
   const { deps } = make_fake(
-    { "scroll.lines": { label: "Scroll", intent: "x", runs_in: "content", count: "repeat", run: () => {} } },
+    { "scroll.lines": { label: "Scroll", intent: "x", runs_in: "content", count: "repeat" } },
     { send_to_tab: async (tab_id, message) => void sent.push([tab_id, (message as { invocations: unknown[] }).invocations.length]) },
   );
   await create_router(deps).run({ invocations: [{ id: "scroll.lines", count: 3 }], mode: "normal", sender_tab_id: 1 });
@@ -316,7 +315,7 @@ test("a repeated content step sends every repeat in one message to the sender ta
 test("a sender tab that fails to look up falls back to the active tab without throwing", async () => {
   const sent: number[] = [];
   const { deps } = make_fake(
-    { "scroll.lines": { label: "Scroll", intent: "x", runs_in: "content", run: () => {} } },
+    { "scroll.lines": { label: "Scroll", intent: "x", runs_in: "content" } },
     { get_tab: async () => { throw new Error("no tab"); }, send_to_tab: async (tab_id) => void sent.push(tab_id) },
   );
   assert.deepEqual(await create_router(deps).run({ invocations: [{ id: "scroll.lines" }], mode: "normal", sender_tab_id: 99 }), { ok: true });
@@ -326,7 +325,7 @@ test("a sender tab that fails to look up falls back to the active tab without th
 test("a sender frame that is gone after navigation refuses in the sender tab and does not throw", async () => {
   const log: string[] = [];
   const { deps } = make_fake(
-    { "scroll.lines": { label: "Scroll", intent: "x", runs_in: "content", run: () => {} } },
+    { "scroll.lines": { label: "Scroll", intent: "x", runs_in: "content" } },
     { send_to_tab: async () => { throw new Error("no frame"); }, show_refusal: async (tab_id, refusal, frame_id) => void log.push(`refuse ${tab_id} ${frame_id} ${refusal.message}`) },
   );
   const response = await create_router(deps).run({ invocations: [{ id: "scroll.lines" }], mode: "normal", sender_tab_id: 1, frame_id: 5 });
@@ -349,7 +348,7 @@ test("two overlapping runs each keep their own sender tab", async () => {
   const sent: number[] = [];
   const releases: (() => void)[] = [];
   const { deps } = make_fake(
-    { "scroll.lines": { label: "Scroll", intent: "x", runs_in: "content", run: () => {} } },
+    { "scroll.lines": { label: "Scroll", intent: "x", runs_in: "content" } },
     {
       // Every lookup of a run waits, so the runs interleave at each one.
       get_tab: (tab_id) => new Promise((resolve) => releases.push(() => resolve({ tab_id, window_id: 1, url: undefined }))),
@@ -417,7 +416,7 @@ test("a line that fails to open stops the sequence with one toast", async () => 
 
 test("a content step waits for its answer: done goes on, failed stops with one toast, cancelled stops quietly, no answer is done", async () => {
   const commands = {
-    "page.look": { label: "Look", intent: "x", runs_in: "content" as const, run: () => {} },
+    "page.look": { label: "Look", intent: "x", runs_in: "content" as const },
     "tab.close": { label: "Close", intent: "x", runs_in: "background" as const, run: () => void ran.push("closed") },
   };
   const ran: string[] = [];
@@ -441,7 +440,7 @@ test("a content step whose reply is lost refuses with the page message and stops
   const ran: string[] = [];
   const { deps, log } = make_fake(
     {
-      "page.look": { label: "Look", intent: "x", runs_in: "content", run: () => {} },
+      "page.look": { label: "Look", intent: "x", runs_in: "content" },
       "tab.close": { label: "Close", intent: "x", runs_in: "background", run: () => void ran.push("closed") },
     },
     { send_to_tab: async () => { throw new Error("The message channel closed"); } },
@@ -520,7 +519,7 @@ function pending_content() {
   return { send_to_tab: () => new Promise<unknown>((resolve) => replies.push(resolve)), reply: (value: unknown) => replies.shift()!(value) };
 }
 const waiting_commands = (ran: string[]) => ({
-  "hint.run": { label: "Hint", intent: "x", runs_in: "content" as const, run: () => {} },
+  "hint.run": { label: "Hint", intent: "x", runs_in: "content" as const },
   "tab.next": { label: "Next", intent: "x", runs_in: "background" as const, run: () => void ran.push("tab.next") },
 });
 
@@ -554,7 +553,7 @@ test("a background step then a content step sends the content step to the tab th
   const { deps } = make_fake(
     {
       "tab.next": { label: "Next", intent: "x", runs_in: "background", run: () => void active++ },
-      "scroll.to": { label: "Scroll", intent: "x", runs_in: "content", run: () => {} },
+      "scroll.to": { label: "Scroll", intent: "x", runs_in: "content" },
     },
     {
       active_tab: async () => ({ tab_id: active, window_id: 1, url: undefined }),
@@ -614,7 +613,6 @@ test("an optional param with a blank expansion reaches the handler as empty, an 
       intent: "x",
       params: [{ name: "pick", type: "string", main: true, pattern: "^[a-z]+$" }],
       runs_in: "content",
-      run: () => assert.fail(),
     },
   } as const;
   const blank = make_fake(commands, { read_clipboard: async () => "   ", ask_selection: async () => "" });

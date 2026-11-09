@@ -100,3 +100,8 @@ test("the first key of a lazy command waits one bundle load, holds the keys type
   assert.deepEqual(shown, []);
   assert.equal(bundles.is_loading(), false);
 });
+
+test("every content command without a bundle has a handler in the content script", () => {
+  const missing = registry.list().filter((command) => command.runs_in === "content" && !command.bundle && !content_handlers[command.id]).map((command) => command.id);
+  assert.deepEqual(missing, []);
+});
