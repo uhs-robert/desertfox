@@ -125,10 +125,10 @@ export async function run_cases({ run_case, setup, expect, send_keys, press_keys
     await send_keys(...CTRL("t"));
     // Text typed in the same run as Ctrl+L can lose its first character before the address bar has the focus.
     await send_keys(...CTRL("l"));
-    await type_in_address_bar("about:support");
+    await type_in_address_bar("about:license");
     await press_keys("-k", "Return");
     let tab_state;
-    await poll_until("about:support to load", async () => (tab_state = await in_background(`browser.tabs.query({ active: true, currentWindow: true }).then(([tab]) => ({ id: tab.id, url: tab.url, status: tab.status }))`))?.url === "about:support" && tab_state.status === "complete", { timeout_ms: 8000 }).catch((error) => { throw new Error(`${error.message} (tab: ${JSON.stringify(tab_state)})`); });
+    await poll_until("about:license to load", async () => (tab_state = await in_background(`browser.tabs.query({ active: true, currentWindow: true }).then(([tab]) => ({ id: tab.id, url: tab.url, status: tab.status }))`))?.url === "about:license" && tab_state.status === "complete", { timeout_ms: 8000 }).catch((error) => { throw new Error(`${error.message} (tab: ${JSON.stringify(tab_state)})`); });
     // The page reports nothing, so the tab age is the only sign that Alt+. will reach Firefox and not the address bar that is giving up the focus.
     await wait_tab_quiet(tab_state.id);
     await in_background(`(async () => { for (const id of Object.keys(await browser.notifications.getAll())) await browser.notifications.clear(id); })()`);
