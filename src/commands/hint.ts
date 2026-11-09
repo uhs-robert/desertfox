@@ -92,7 +92,7 @@ define("hint.run", {
         custom: "Label the elements that match a selector.",
       },
     },
-    { name: "selector", type: "string", when: { filter: ["custom"] }, description: "Label the elements that match this CSS selector." },
+    { name: "selector", type: "string", main: true, rest: true, when: { filter: ["custom"] }, description: "Label the elements that match this CSS selector." },
     { name: "text", type: "string", optional: true, description: "Keep only the links whose text holds this." },
     { name: "rapid", type: "bool", default: false, short: "r", description: "Keep hint mode open for more picks." },
   ],

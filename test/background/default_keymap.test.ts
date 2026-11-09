@@ -101,7 +101,7 @@ test("the keys of the new modes compile and resolve to their commands", () => {
   assert.equal(leaf_id("normal", ";", "V"), 'hint.run {"action":"visual","filter":"prose","text":"","rapid":false}');
   assert.equal(leaf_id("normal", ";", "#"), 'cmdline.open {"text":"heading "}');
   assert.equal(leaf_id("normal", ";", ";"), 'cmdline.open {"text":"hint "}');
-  assert.equal(leaf_id("normal", ";", "u"), 'cmdline.open {"text":"hint --custom --selector="}');
+  assert.equal(leaf_id("normal", ";", "u"), 'cmdline.open {"text":"hint --custom "}');
   assert.equal(leaf_id("caret", "v"), 'mode.set {"mode":"visual"}');
   assert.equal(leaf_id("caret", "V"), 'mode.set {"mode":"visual_line"}');
   assert.equal(leaf_id("visual", "V"), 'mode.set {"mode":"visual_line"}');

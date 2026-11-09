@@ -56,11 +56,14 @@ const is_own_layer_frame = (element: Element): boolean => (element.getRootNode?.
 // A frame of the page that is big enough to hold something. A frame from another site gets its label too: the pick focuses it from the outside.
 export const is_pickable_frame = (element: Element): boolean => image_has_size(element) && !is_own_layer_frame(element);
 
-// A link, button or label is a target in itself, so it keeps its hint when it wraps one child.
-const KEEPS_ONE_CHILD = "a, button, label, [role=button]";
+// An element that is a target in itself keeps its hint when it wraps one child: a link, button, label or anything a role or handler makes actionable.
+export const KEEPS_ONE_CHILD = `a, button, label, ${CLICKABLE_BY_ACTION}`;
+// The page root and body cover the page and would take the first labels.
+const PAGE_ROOTS = new Set(["html", "body"]);
 
 // A box with no size or a pass-through wrapper adds nothing the child does not. The child count runs first because it is cheaper than a layout read.
 export const is_every_target = (element: Element): boolean => {
+  if (PAGE_ROOTS.has(element.localName)) return false;
   if (element.children.length === 1 && !has_own_text(element) && !element.matches(KEEPS_ONE_CHILD)) return false;
   const box = element.getBoundingClientRect();
   return box.width > 0 && box.height > 0;

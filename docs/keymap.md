@@ -162,7 +162,7 @@ bound: 297 (normal 162, hint 2, cmdline 18, caret 35, visual 37, visual_line 38,
 | `;v` | bound | `hint --caret --prose` | Start caret mode at text |  |
 | `;V` | bound | `hint --visual --prose` | Start visual mode at text |  |
 | `;#` | bound | `cmdline.open --text='heading '` | Jump to heading |  |
-| `;u` | bound | `cmdline.open --text='hint --custom --selector='` | Hint a CSS selector |  |
+| `;u` | bound | `cmdline.open --text='hint --custom '` | Hint a CSS selector |  |
 | `;;` | bound | `cmdline.open --text='hint '` | Open the command line with hint |  |
 | `;B` | bound | `hint --buttons` | Click button |  |
 | `;a` | bound | `hint --all` | Click any element |  |
