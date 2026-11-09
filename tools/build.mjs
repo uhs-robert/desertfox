@@ -47,7 +47,7 @@ for (const [name, entry] of Object.entries(minified_entries)) {
   await build_with_cache({ entryPoints: { [name]: entry }, outdir: "dist", minify: true });
 }
 
-for (const file of ["manifest.json", "managed_schema.json", "help/home.html", "newtab/newtab.html", "popup/popup.html", "cmdline/cmdline.html"]) {
+for (const file of ["manifest.json", "help/home.html", "newtab/newtab.html", "popup/popup.html", "cmdline/cmdline.html"]) {
   await copyFile(`src/${file}`, `dist/${file.split("/").pop()}`);
 }
 

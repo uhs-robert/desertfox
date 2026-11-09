@@ -70,7 +70,6 @@ export const SETTINGS_TABLE = {
   newtab_recent_tabs_max: { kind: "number", whole: true, min: 0, default: 8 },
   // A list of tables has no typed form, so `:set` refuses it.
   newtab_links: { kind: "table_list", fields: { label: { value: "text" }, url: { value: "web_url" }, group: { value: "text", optional: true } }, default: [], settable: false },
-  open_quick_start_on_install: { kind: "boolean", default: true },
 } as const satisfies Record<string, SettingRow>;
 
 type Table = typeof SETTINGS_TABLE;

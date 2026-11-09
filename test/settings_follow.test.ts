@@ -234,7 +234,6 @@ test("only the first draw of the new tab page follows the new_tab_page redirect"
     Object.assign(globalThis, {
       browser: {
         storage: {
-          managed: { get: async () => ({}) },
           local: { get: async (key: string) => (key === "desertfox_saved_settings" ? { [key]: saved } : {}), set: async () => {} },
           session: { get: async () => ({}) },
           onChanged: { addListener: (listener: Listener) => void listeners.push(listener) },

@@ -34,5 +34,4 @@ export const SETTING_DOCS: Record<SettingName, string> = {
   newtab_recent_tabs: "Whether the new tab page lists your open tabs, last used first. Private tabs never show",
   newtab_recent_tabs_max: "Recent tab rows on the new tab page",
   newtab_links: "Links on the new tab page, one [[newtab_links]] table each. Links with the same group share a list",
-  open_quick_start_on_install: "Whether the first install opens the Quick Start page. A first install has no config yet, so this helps managed setups, which carry the config from the start",
 };

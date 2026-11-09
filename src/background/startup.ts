@@ -84,7 +84,7 @@ async function publish(step: LoadStep, edits: SettingEdits): Promise<{ config: M
   await browser.storage.local.set({
     [COMPILED_KEYMAP_STORAGE_KEY]: disabled ? OFF_KEYMAP : compiled,
     [WARNINGS_STORAGE_KEY]: all_warnings,
-    [CONFIG_STATUS_STORAGE_KEY]: build_config_status(step.loaded.source, step.loaded.config.settings, edits, `~/.mozilla/managed-storage/${browser.runtime.id}.json`),
+    [CONFIG_STATUS_STORAGE_KEY]: build_config_status(step.loaded.source, step.loaded.config.settings, edits),
     [SLOT_TABLE_STORAGE_KEY]: step.slots.table,
     [THEME_STORAGE_KEY]: theme,
     [USER_CSS_STORAGE_KEY]: config.css,

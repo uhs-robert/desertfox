@@ -1,6 +1,5 @@
-// The merged config file `tools/build-config` writes to
-// `~/.mozilla/managed-storage/<extension id>.json`. Firefox hands its `data`
-// to the extension through `storage.managed`.
+// The merged config the extension runs on: the shape `config.reload` builds from the config files
+// and keeps in `storage.local`.
 
 import type { CommandMeta } from "./command.ts";
 import type { KeymapConfig } from "./keymap.ts";

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import "../../src/background/command_modules.ts";
+import { empty_config } from "../../src/background/config_load.ts";
 import { test } from "node:test";
 import { registry } from "../../src/shared/registry/builtin.ts";
 import { CONFIG_FORMAT_VERSION } from "../../src/shared/config.ts";
@@ -39,7 +40,7 @@ function install_fake_browser(host: { files: Files; reply?: () => Promise<unknow
       },
     },
     permissions: { contains: async () => host.granted !== false },
-    storage: { local: area(local), managed: { get: async () => undefined }, session: area(session) },
+    storage: { local: area(local), session: area(session) },
     tabs: {
       query: async () => tabs.map((tab) => ({ ...tab })),
       sendMessage: async (tab_id: number) => void told.push(tab_id),
@@ -112,15 +113,34 @@ test("a :set started while a reload publishes waits for it, so the reload cannot
   assert.deepEqual(status_of(local).temp, ["which_key_delay_ms"]);
 });
 
-test("after a reload, a restart picks the stored files over the managed storage file", async () => {
+test("a restart with a files slot and no managed storage starts on the stored files", async () => {
   const host = { files: settings_file('hint_letters = "ab"\n') };
-  const { fake } = install_fake_browser(host);
-  fake.storage.managed.get = async () => ({ format_version: CONFIG_FORMAT_VERSION, settings: { hint_letters: "mn" } }) as never;
-  const before = await fresh_startup("files_over_managed");
-  assert.equal((await before.get_config()).settings.hint_letters, "mn");
+  const { local } = install_fake_browser(host);
+  const before = await fresh_startup("files_slot");
+  await before.get_config();
+  assert.equal(status_of(local).source, "defaults");
   await before.reload_config();
-  const after = await fresh_startup("files_over_managed_restart");
+  const after = await fresh_startup("files_slot_restart");
   assert.equal((await after.get_config()).settings.hint_letters, "ab");
+  assert.equal(status_of(local).source, "files");
+});
+
+test("a first start with no files slot runs on defaults, with no snippets or engines of its own", async () => {
+  const { local } = install_fake_browser({ files: {} });
+  const startup = await fresh_startup("neither");
+  const config = await startup.get_config();
+  assert.equal(status_of(local).source, "defaults");
+  assert.deepEqual(config.snippets, []);
+  assert.deepEqual(Object.keys(config.search_engines), Object.keys(empty_config().search_engines));
+});
+
+test("a stale managed source in storage.local is replaced by the first publish", async () => {
+  const { local } = install_fake_browser({ files: {} });
+  local[CONFIG_STATUS_STORAGE_KEY] = { source: "managed", settings: {}, managed_file_hint: "x", saved: [], temp: [], configured: [] };
+  const startup = await fresh_startup("stale_managed");
+  await startup.get_config();
+  assert.equal(status_of(local).source, "defaults");
+  assert.equal("managed_file_hint" in status_of(local), false);
 });
 
 test("two reloads at once run one after the other and the second one's files win", async () => {

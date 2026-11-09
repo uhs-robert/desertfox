@@ -34,6 +34,6 @@ export function build_files_config(reply: ConfigFilesReply, commands: CommandMet
     const more = error.problems.length > PROBLEMS_SHOWN ? `; and ${error.problems.length - PROBLEMS_SHOWN} more` : "";
     throw new ConfigReloadError(`${KEPT_CURRENT} Fix the files and reload again. ${error.problems.length} problem(s): ${shown}${more}`);
   }
-  const loaded = pick_config(config, undefined);
+  const loaded = pick_config(config);
   return { stored: { config, warnings: build_warnings }, loaded: { ...loaded, warnings: [...build_warnings, ...loaded.warnings] } };
 }

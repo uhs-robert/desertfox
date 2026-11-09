@@ -1,4 +1,2 @@
-# The first-install Quick Start tab would open beside the first tab and move page a off the first slot, which Alt+J wraps to.
-open_quick_start_on_install = false
 # The which-key panel shows 100 ms after a prefix key, so the cases that wait out the timer sit out 100 ms and not the default 300 ms. p4_whichkey and p3_tab_keys read the panel.
 which_key_delay_ms = 100

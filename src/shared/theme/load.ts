@@ -7,7 +7,7 @@ import { LIGHT_INTENSITIES, ROLES } from "./roles.ts";
 import type { LightIntensity, LocalTheme, OasisTheme, RoleColors, Theme } from "./roles.ts";
 import { COLOR_FORMATS, parse_color } from "./theme_file.ts";
 
-// Managed storage can be edited by hand, so a local theme's shape is not taken on trust. Every role is needed, because the
+// The stored config can be edited by hand, so a local theme's shape is not taken on trust. Every role is needed, because the
 // stored theme sets every token and a missing one would leave a surface on its fallback. A value that is not a color
 // would be published as an invalid CSS declaration, so it fails the same check the theme files pass. Returns the first
 // problem as text, or undefined when the theme is usable.
@@ -48,6 +48,6 @@ export function load_theme(name: string, light_intensity: LightIntensity, local_
   if (local_theme?.name === name && has_all_roles(local_theme.colors)) return { dark: as_hex(local_theme.colors.dark), light: as_hex(local_theme.colors.light) };
   if (Object.hasOwn(REPO_THEMES, name)) return REPO_THEMES[name]!;
   const oasis = oasis_theme(name);
-  // A light_intensity outside 1 to 5 can come from a hand-edited managed config, so it falls back to the middle set instead of throwing.
+  // A light_intensity outside 1 to 5 can come from a hand-edited config, so it falls back to the middle set instead of throwing.
   return oasis && { dark: oasis.dark, light: oasis.light[light_intensity] ?? oasis.light[DEFAULT_LIGHT_INTENSITY] };
 }

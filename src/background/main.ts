@@ -1,7 +1,7 @@
 import "./command_modules.ts";
 import type { ContentToBackground, PageToBackground } from "../shared/messages.ts";
 import type { BoundInvocation } from "../shared/invocation.ts";
-import { DEFAULT_SETTINGS, effective_settings } from "../shared/config.ts";
+import { effective_settings } from "../shared/config.ts";
 import { bundle_loader_deps, container_names, read_disabled, container_stores, image_deps, make_router_deps, page_of, reinject_deps } from "./browser_deps.ts";
 import { run_image_action } from "./image_actions.ts";
 import { HELP_PAGE_FILE } from "../help/route.ts";
@@ -177,12 +177,11 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
   });
 });
 
-// The config may fail to load, and a failed load must not stop the page: the default is to open it.
+// No setting turns this off: a first install has no config yet, so none could apply.
 browser.runtime.onInstalled.addListener(({ reason }) => {
   void open_quick_start_on_install(
     {
       reason,
-      open_on_install: () => get_config().then((config) => effective_settings(config.settings).open_quick_start_on_install, () => DEFAULT_SETTINGS.open_quick_start_on_install),
       open_tab: (url) => browser.tabs.create({ url }),
     },
     (file) => browser.runtime.getURL(file),

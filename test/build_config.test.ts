@@ -5,7 +5,7 @@ import { dirname, join } from "node:path";
 import { test } from "node:test";
 import { build_config, read_commands_file } from "../tools/build-config/build_config.ts";
 import { ConfigErrors } from "../src/shared/config_build/errors.ts";
-import { resolved_engines_text, write_managed_storage, write_schemas } from "../tools/build-config/output.ts";
+import { resolved_engines_text, write_schemas } from "../tools/build-config/output.ts";
 import { fill_template } from "../src/shared/engines/index.ts";
 import { build_schemas } from "../src/shared/config_build/schemas.ts";
 import { build_commands_file, create_registry } from "../src/shared/registry/index.ts";
@@ -339,19 +339,6 @@ test("a snippet without a modes header is still rejected in visual mode", () => 
 test("a snippet modes header rejects an unknown mode name", () => {
   const dir = config_dir_with({ "snippets/pick.js": MODES_SNIPPET("// modes: normal, vsual\n") });
   assert.match(problems_of(dir).join("\n"), /pick\.js: header "modes": unknown mode "vsual"/);
-});
-
-test("output is the managed storage document", () => {
-  const out = join(mkdtempSync(join(tmpdir(), "desertfox-out-")), "managed", "desertfox@uhs-robert.json");
-  write_managed_storage(out, full());
-  const document = JSON.parse(readFileSync(out, "utf8"));
-  assert.deepEqual(Object.keys(document), ["name", "description", "type", "data"]);
-  assert.equal(document.name, "desertfox@uhs-robert");
-  assert.equal(document.type, "storage");
-  assert.deepEqual(Object.keys(document.data).sort(), [
-    "command_aliases", "css", "format_version", "keymap", "search_engines", "settings", "snippets",
-  ]);
-  assert.deepEqual(readdirSync(dirname(out)), ["desertfox@uhs-robert.json"]);
 });
 
 test("one schema per data file offers command names", () => {

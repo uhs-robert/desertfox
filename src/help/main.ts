@@ -59,7 +59,7 @@ async function load_inputs(): Promise<Inputs> {
     { search_engines: Object.keys(config.search_engines) },
     config.search_engines,
     // The same shape the background stores, built from the fresh load so a config.reload shows at once.
-    build_config_status(source, config_settings, edits, `~/.mozilla/managed-storage/${browser.runtime.id}.json`),
+    build_config_status(source, config_settings, edits),
   );
   // A missing guide must not blank the other pages. The guide ships with the build, so one fetch serves every draw.
   loaded_guide ??= await fetch(browser.runtime.getURL("search_engines_guide.json")).then((response) => response.json() as Promise<Block[]>).catch(() => []);
