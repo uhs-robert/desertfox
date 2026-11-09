@@ -592,11 +592,12 @@ export async function create_session({ name: session_name, timings, sweep = true
 
   // The page itself says it holds focus, so a focus that landed in the address bar or another window is caught. document.hasFocus() is false for both.
   const page_has_focus = (tab_id) => in_background(`browser.tabs.executeScript(${tab_id}, { code: "document.hasFocus()" }).then((answers) => answers[0] === true)`);
-  // Focus lands in browser chrome after tabs close, and a closed window can leave compositor focus on it. Ask for the window and tab, then use the focus_page chord, until the page reports focus.
+  // Focus lands in browser chrome after tabs close, and a closed window can leave compositor focus on nothing, which no extension call can restore on Wayland. Each round starts with a hyprctl focus of the Firefox window, then asks for the window and tab, then uses the focus_page chord, until the page reports focus.
   async function confirm_page_focus(tab_id, window_id) {
     const focused = (timeout_ms) => poll_until("page focus", () => page_has_focus(tab_id), { timeout_ms, expected_timeout: true }).then(() => true, () => false);
     if (await focused(300)) return;
     for (let attempt = 0; attempt < 3; attempt++) {
+      await session.focus_firefox_window();
       await in_background(`(async () => { await browser.windows.update(${window_id}, { focused: true }); await browser.tabs.update(${tab_id}, { active: true }); })()`);
       if (await focused(1500)) return;
       await send_keys(...ALT(","));

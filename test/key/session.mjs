@@ -295,6 +295,9 @@ export async function start_session({ name, session_dir }) {
     }
   };
 
+  // Hyprland 0.57 takes a Lua call as the dispatch argument. A session holds only Firefox windows, so the class names no other client.
+  const focus_firefox_window = () => hyprctl("dispatch", 'hl.dsp.focus({ window = "class:^firefox$" })');
+
   async function stop() {
     keyboard?.mark_stopping();
     await stop_runtime(runtime_dir, client_groups);
@@ -344,6 +347,7 @@ export async function start_session({ name, session_dir }) {
       // Starts a client in the session, its output appended to logs/<log_name>.
       spawn: (argv, log_name = "spawn.log") => start_child(argv, client_env, log_name, { client: true }),
       press: (args) => keyboard.press(args),
+      focus_firefox_window,
       shot: (path) => run_execfile("grim", [path], { env: client_env, timeout: 10000 }),
       stop,
     };
