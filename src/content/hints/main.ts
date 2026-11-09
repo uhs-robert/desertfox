@@ -210,6 +210,13 @@ function register(host: BundleHostApi): void {
     };
   }
 
+  // Keys typed while the build ran never reached a mode. They run in normal mode, in order, once the mode change has ended the session.
+  function leave_with_keys(current: Session): void {
+    const keys = current.waiting_tokens_.splice(0);
+    host.set_mode_("normal");
+    if (keys.length > 0) host.hold_keys_until_(Promise.resolve(keys));
+  }
+
   // Finds, labels and shows the hints. Keys typed meanwhile wait and replay. Rapid mode calls it again after each pick.
   async function build(current: Session, candidates: Found[], first_build: boolean): Promise<void> {
     const [letters, visible] = await Promise.all([read_letters(), keep_visible_ones(candidates, current.filter)]);
@@ -218,7 +225,7 @@ function register(host: BundleHostApi): void {
     if (found.length === 0) {
       const message = none_message(current.text);
       current.finish({ ok: false, message });
-      host.set_mode_("normal");
+      leave_with_keys(current);
       // Only a rapid rebuild gets here with its promise already settled, so nobody else shows the message.
       if (!first_build) create_view().show_message_(message);
       return;
@@ -226,7 +233,7 @@ function register(host: BundleHostApi): void {
     // One match needs no label. Only the first build does this, so rapid mode cannot repeat the same pick.
     if (first_build && current.lower_text_ !== undefined && found.length === 1) {
       const performed = begin_pick(current);
-      host.set_mode_("normal");
+      leave_with_keys(current);
       performed(() => perform(current.action, found[0]!.element as HTMLElement, deps, current.with_background_));
       return;
     }
