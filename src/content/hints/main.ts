@@ -245,16 +245,8 @@ function register(host: BundleHostApi): void {
     const labels = make_labels(found.length, letters);
     view.show(found.map((item, index) => ({ found: item, text: labels[index]! })));
     current.ready = { picker: create_picker(labels), found, view, stop_following_: follow_windows(windows_of(found), view.reposition) };
-    const queued = current.waiting_tokens_.splice(0);
-    for (const [index, token] of queued.entries()) {
-      if (current.cancelled) break;
-      // A rapid pick starts the next build, which replays the keys that are left.
-      if (!current.ready) {
-        current.waiting_tokens_.unshift(...queued.slice(index));
-        break;
-      }
-      handle_token(current, token);
-    }
+    // The queue stays on the session while the loop drains it: a pick hands what is left to normal mode, a rapid pick leaves it for the next build.
+    while (current.ready && !current.cancelled && current.waiting_tokens_.length > 0) handle_token(current, current.waiting_tokens_.shift()!);
   }
 
   function handle_token(current: Session, token: string): "handled" | "pass" {
@@ -267,9 +259,7 @@ function register(host: BundleHostApi): void {
       const picked = element as HTMLElement;
       const performed = begin_pick(current);
       if (!current.rapid) {
-        // Leave hint mode first: a picked field then raises insert mode through its own focus event.
-        host.set_mode_("normal");
-        performed(() => perform(current.action, picked, deps, current.with_background_));
+        leave_with_keys(current, () => performed(() => perform(current.action, picked, deps, current.with_background_)));
         return "handled";
       }
       // Rapid: the pick may delete or move elements, so drop these labels and label the page again.
