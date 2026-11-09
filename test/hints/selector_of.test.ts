@@ -2,11 +2,14 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { selector_of } from "../../src/content/hints/selector_of.ts";
 
-type Fake = { localName: string; id: string; classList: string[]; parentElement: Fake | null; children: Fake[] };
+type Fake = { localName: string; id: string; classList: string[]; parentElement: Fake | null; parentNode: { children: Fake[] } | null; children: Fake[] };
 
 function node(localName: string, options: { id?: string; classes?: string[] } = {}, children: Fake[] = []): Fake {
-  const made: Fake = { localName, id: options.id ?? "", classList: options.classes ?? [], parentElement: null, children };
-  for (const child of children) child.parentElement = made;
+  const made: Fake = { localName, id: options.id ?? "", classList: options.classes ?? [], parentElement: null, parentNode: null, children };
+  for (const child of children) {
+    child.parentElement = made;
+    child.parentNode = made;
+  }
   return made;
 }
 
@@ -16,7 +19,7 @@ const every = (root: Fake): Fake[] => [root, ...root.children.flatMap(every)];
 function matches_step(item: Fake, step: string): boolean {
   if (step.startsWith("#")) return item.id === step.slice(1);
   const nth = step.match(/^(\w+):nth-of-type\((\d+)\)$/);
-  if (nth) return item.localName === nth[1] && item.parentElement!.children.filter((s) => s.localName === nth[1]).indexOf(item) === Number(nth[2]) - 1;
+  if (nth) return item.localName === nth[1] && item.parentNode!.children.filter((s) => s.localName === nth[1]).indexOf(item) === Number(nth[2]) - 1;
   const [tag, ...classes] = step.split(".");
   return item.localName === tag && classes.every((name) => item.classList.includes(name));
 }
@@ -79,4 +82,21 @@ test("ids that look generated or need escaping are skipped", () => {
     const root = node("html", {}, [node("body", {}, [target, node("div")])]);
     assert.ok(!selector_of(target, count_in(root)).includes("#"), id);
   }
+});
+
+test("two same-tag children at the top of a shadow root get a position", () => {
+  const first = node("div");
+  const second = node("div");
+  // A shadow root has children but is no element, so the top-level divs have a parentNode and no parentElement.
+  const shadow = { children: [first, second] };
+  first.parentNode = shadow;
+  second.parentNode = shadow;
+  const count = (selector: string) => [first, second].filter((item) => matches_step(item, selector)).length;
+  assert.equal(selector_of(second, count), "div:nth-of-type(2)");
+});
+
+test("a duplicate id is not unique, so the path is used", () => {
+  const target = node("button", { id: "dup" });
+  const root = node("html", {}, [node("body", {}, [target, node("button", { id: "dup" })])]);
+  assert.equal(selector_of(target, count_in(root)), "button:nth-of-type(1)");
 });

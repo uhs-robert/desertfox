@@ -5,7 +5,8 @@ type Node = {
   id: string;
   classList: ArrayLike<string>;
   parentElement: Node | null;
-  children: ArrayLike<Node>;
+  // A shadow root is no element, so its top-level children have a parentNode and no parentElement.
+  parentNode: { children: ArrayLike<Node> } | null;
 };
 
 // An id or class that a build tool or framework made up changes on the next deploy, so a selector built on it would not last.
@@ -41,7 +42,7 @@ export function selector_of(element: Node, count_matches: (selector: string) => 
       steps.push(`#${node.id}`);
       break;
     }
-    steps.push(step_of(node, node.parentElement?.children ?? [node]));
+    steps.push(step_of(node, node.parentNode?.children ?? [node]));
   }
   for (let length = 1; length < steps.length; length++) {
     const selector = steps.slice(0, length).reverse().join(" > ");
