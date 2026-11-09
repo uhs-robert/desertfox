@@ -82,6 +82,7 @@ const key_flow = create_key_flow({
   },
   in_editable_field: () => is_editable_element(document.activeElement),
   is_loading: bundles.is_loading,
+  is_loading_sink_bundle: bundles.is_loading_sink_bundle,
   sink_of: bundles.sink_of,
 });
 
@@ -148,13 +149,26 @@ function on_visibility_change(): void {
 // A closed shadow root hides its inner field from the event path, which then ends at the host. The focus settles after the event, so the mode follows it a tick later.
 function follow_focus(entered: boolean, event: Event): void {
   const target = event.composedPath()[0] ?? null;
+  watch_roots_around_focus();
   if (target instanceof Element && shadow_root_of(target)) return void setTimeout(sync_mode_to_focus);
   if (!is_editable_element(target)) return;
   if (entered) page_mode.focus_entered_editable();
   else page_mode.focus_left_editable();
 }
 
+// A focus move between two nodes of one root retargets both ends to the host, so the window never sees it. A listener on the root itself does. Roots are watched lazily, once focus sits in them. The shared handlers make a repeat add a no-op.
+function watch_roots_around_focus(): void {
+  const { signal } = page_listeners;
+  let element = document.activeElement;
+  for (let root = element && shadow_root_of(element); root; root = element && shadow_root_of(element)) {
+    root.addEventListener("focusin", on_focusin, { capture: true, signal });
+    root.addEventListener("focusout", on_focusout, { capture: true, signal });
+    element = root.activeElement;
+  }
+}
+
 function sync_mode_to_focus(): void {
+  watch_roots_around_focus();
   if (is_editable_element(deepest_focused_element())) page_mode.focus_entered_editable();
   else page_mode.focus_left_editable();
 }
@@ -204,6 +218,7 @@ function start(): void {
   window.addEventListener("keyup", on_keyup, { capture: true, signal });
   window.addEventListener("focusin", on_focusin, { capture: true, signal });
   window.addEventListener("focusout", on_focusout, { capture: true, signal });
+  watch_roots_around_focus();
   addEventListener("pagehide", bundles.page_hidden, { signal });
   document.addEventListener("visibilitychange", on_visibility_change, { signal });
 

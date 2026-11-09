@@ -24,7 +24,7 @@ export function create_matcher(keymap: CompiledKeymap) {
     count_digits = "";
   };
 
-  const feed = (mode: string, token: string): MatchResult => {
+  const walk = (mode: string, token: string): MatchResult => {
     if (mode !== walk_mode) {
       reset();
       walk_mode = mode;
@@ -60,5 +60,25 @@ export function create_matcher(keymap: CompiledKeymap) {
     return { kind: "pending", node: next, typed, ...count };
   };
 
-  return { feed, reset };
+  // A key that breaks a half-typed sequence gets one more try as a first key, so Enter after a stray prefix key still submits.
+  const feed = (mode: string, token: string): MatchResult => {
+    const in_progress = typed.length > 0 || count_digits !== "";
+    const result = walk(mode, token);
+    return result.kind === "no_match" && in_progress ? walk(mode, token) : result;
+  };
+
+  // Whether `token` binds after the keys in `ahead`: it adds a count digit or starts, continues or ends a binding. The walk is left as it was.
+  // A completed binding in `ahead` can change the mode the later keys replay in, so every key after it counts as binding.
+  const binds_after = (mode: string, ahead: readonly string[], token: string): boolean => {
+    const saved = [walk_mode, node, typed, count_digits] as const;
+    let result: MatchResult = { kind: "no_match" };
+    for (const key of [...ahead, token]) {
+      if (result.kind === "match") break;
+      result = feed(mode, key);
+    }
+    [walk_mode, node, typed, count_digits] = saved;
+    return result.kind !== "no_match";
+  };
+
+  return { feed, reset, binds_after };
 }

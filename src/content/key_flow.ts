@@ -1,5 +1,6 @@
 // Decides, for one key token, whether the page keeps the key. Holds keys that
 // arrive before the compiled keymap is read or while a bundle loads, and replays them in order once they can run.
+// During a load only keys that can bind wait. Every other key reaches the page at once, because a replayed key arrives after its keydown was cancelled.
 
 import type { Mode, TreeBranch, TreeLeaf } from "../shared/index.ts";
 import type { MatchResult } from "../shared/keys/index.ts";
@@ -12,7 +13,11 @@ export type KeyDecision = "cancel" | "pass";
 // The keys typed so far in a half-typed sequence. Which-key reads it.
 export type PendingPrefix = { mode: Mode; typed: string[] };
 
-export type Matcher = { feed: (mode: string, token: string) => MatchResult; reset: () => void };
+export type Matcher = {
+  feed: (mode: string, token: string) => MatchResult;
+  reset: () => void;
+  binds_after: (mode: string, ahead: readonly string[], token: string) => boolean;
+};
 
 export type KeyFlowDeps = {
   get_mode: () => Mode;
@@ -22,12 +27,17 @@ export type KeyFlowDeps = {
   in_editable_field: () => boolean;
   // A bundle is loading, and the mode its keys replay in is not known yet.
   is_loading: () => boolean;
+  // The loading bundle registers a sink, so its mode may take any key on replay.
+  is_loading_sink_bundle: () => boolean;
   sink_of: (mode: Mode) => Sink | undefined;
   // Called with the prefix after each key that leaves a sequence half-typed, and with nothing when the sequence ends or resets. `at_once` skips the pause before the panel.
   on_prefix: (prefix: PendingPrefix | undefined, at_once?: boolean) => void;
 };
 
 const MAX_HELD_KEYS = 32;
+
+// Stands in the held keys for a key the page got while a sequence waited. It ends that sequence on replay, as the key would have. No binding uses it, so reading ahead through it ends the sequence too.
+const SEQUENCE_BREAK = "";
 
 // Insert and ignore mode give keys to the page, and hint and cmdline mode own theirs. Every other mode blocks Quick Find, so a new mode does too.
 const MODES_WITHOUT_QUICK_FIND_BLOCK: readonly Mode[] = ["insert", "ignore", "hint", "cmdline"];
@@ -66,11 +76,30 @@ export function create_key_flow(deps: KeyFlowDeps) {
     return true;
   };
 
+  const keep_held = (entry: string) => held_tokens.length < MAX_HELD_KEYS && held_tokens.push(entry);
+
+  // The held keys are not fed yet, so the check reads ahead through them. It cannot read through Backspace, which edits the sequence, or an insert mode Escape, which leaves the mode on replay, so those keys and every key after them wait.
+  const waits_for_replay = (active: Matcher, mode: Mode, token: string): boolean =>
+    deps.is_loading_sink_bundle() ||
+    !!deps.sink_of(mode) ||
+    token === "<Backspace>" ||
+    (mode === "insert" && token === "<Escape>") ||
+    held_tokens.some((held) => held === "<Backspace>" || held === "<Escape>") ||
+    active.binds_after(mode, held_tokens, token);
+
   const hold = (token: string): KeyDecision => {
-    // Plain keys outside a field wait. Cancelling them keeps the page from acting twice on replay.
+    // Chords and keys in a field never wait. A waiting key is cancelled, so the page does not act on it twice.
     if (is_chord(token) || deps.in_editable_field()) return "pass";
-    if (held_tokens.length < MAX_HELD_KEYS) held_tokens.push(token);
-    return "cancel";
+    const mode = deps.get_mode();
+    // Before the keymap is read nothing is known to bind, so every plain key waits.
+    if (!matcher || waits_for_replay(matcher, mode, token)) {
+      keep_held(token);
+      return "cancel";
+    }
+    const last_held = held_tokens.at(-1);
+    if (last_held === undefined) reset_sequence();
+    else if (last_held !== SEQUENCE_BREAK) keep_held(SEQUENCE_BREAK);
+    return cancels_unbound_key(mode, token, false) ? "cancel" : "pass";
   };
 
   const step = (active: Matcher, token: string): KeyDecision => {
@@ -85,9 +114,7 @@ export function create_key_flow(deps: KeyFlowDeps) {
       deps.on_prefix(kept.length > 0 ? { mode, typed: kept } : undefined, true);
       return "cancel";
     }
-    let result = active.feed(mode, token);
-    // A key that breaks a half-typed sequence gets one more try as a first key.
-    if (result.kind === "no_match" && was_in_progress) result = active.feed(mode, token);
+    const result = active.feed(mode, token);
     sequence_in_progress = result.kind === "pending";
     if (result.kind === "pending") ({ typed, count } = result);
     // A bare count (`3`) has typed nothing yet, so no keys can be listed.
@@ -113,7 +140,11 @@ export function create_key_flow(deps: KeyFlowDeps) {
 
   // A replayed key can start another load, and the keys behind it wait for that load too.
   const replay = () => {
-    while (matcher && held_tokens.length > 0 && !deps.is_loading()) decide(matcher, held_tokens.shift()!);
+    while (matcher && held_tokens.length > 0 && !deps.is_loading()) {
+      const entry = held_tokens.shift()!;
+      if (entry === SEQUENCE_BREAK) reset_sequence();
+      else decide(matcher, entry);
+    }
   };
 
   return {

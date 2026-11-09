@@ -40,6 +40,7 @@ function make_flow(in_field = false) {
     run_leaf: (matched, count) => ran.push(`${matched.steps[0]?.invocation.id}${count ?? ""}`),
     leave_insert: () => state.escape(),
     is_loading: () => false,
+    is_loading_sink_bundle: () => false,
     sink_of: () => undefined,
     on_prefix: () => {},
   });
