@@ -4,13 +4,13 @@ export type ScrollAxis = "x" | "y";
 
 export type ScrollCandidate<Ref> = {
   ref: Ref;
-  can_scroll_x: boolean;
-  can_scroll_y: boolean;
+  can_scroll_x_: boolean;
+  can_scroll_y_: boolean;
   area: number;
 };
 
 const can_scroll = (candidate: ScrollCandidate<unknown>, axis: ScrollAxis) =>
-  axis === "x" ? candidate.can_scroll_x : candidate.can_scroll_y;
+  axis === "x" ? candidate.can_scroll_x_ : candidate.can_scroll_y_;
 
 // Order: a scrollable ancestor of the focused element, then the page, then the largest scrollable
 // element. `all_candidates` is lazy because it walks the whole document.

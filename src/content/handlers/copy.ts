@@ -7,8 +7,8 @@ export type CopyFormat = (typeof COPY_FORMATS)[number];
 export type PageLinkFacts = {
   url: string;
   title: string;
-  canonical_url: string | undefined;
-  short_url: string | undefined;
+  canonical_url_: string | undefined;
+  short_url_: string | undefined;
 };
 
 export function format_page_link(format: CopyFormat, facts: PageLinkFacts): string {
@@ -17,9 +17,9 @@ export function format_page_link(format: CopyFormat, facts: PageLinkFacts): stri
     case "plain":
       return url;
     case "canonical":
-      return facts.canonical_url ?? url;
+      return facts.canonical_url_ ?? url;
     case "short":
-      return facts.short_url ?? url;
+      return facts.short_url_ ?? url;
     case "title":
       return title;
     case "markdown":
@@ -33,16 +33,16 @@ function link_href(rel: string): string | undefined {
   return document.querySelector<HTMLLinkElement>(`link[rel~="${rel}"][href]`)?.href || undefined;
 }
 
-export function copy_page_url(format: CopyFormat, show_toast: (message: string) => void): Promise<Outcome | void> {
+export function copy_page_url(format: CopyFormat, show_toast_: (message: string) => void): Promise<Outcome | void> {
   const text = format_page_link(format, {
     url: location.href,
     title: document.title,
-    canonical_url: link_href("canonical"),
-    short_url: link_href("shortlink"),
+    canonical_url_: link_href("canonical"),
+    short_url_: link_href("shortlink"),
   });
   // The failure goes to the caller, which shows it once.
   return navigator.clipboard.writeText(text).then(
-    () => show_toast(`Copied ${text}`),
+    () => show_toast_(`Copied ${text}`),
     (): Outcome => ({ ok: false, message: "Could not copy to the clipboard" }),
   );
 }

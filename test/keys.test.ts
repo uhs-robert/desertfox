@@ -252,21 +252,21 @@ test("matcher: single key, sequence, pending and mismatch reset", () => {
   assert.equal(matcher.feed("normal", "q").kind, "no_match");
 });
 
-test("matcher: binds_after reads ahead through keys not yet fed and leaves the walk as it was", () => {
+test("matcher: binds_after_ reads ahead through keys not yet fed and leaves the walk as it was", () => {
   const matcher = matcher_for({ normal: { J: { id: "tab.next" }, zt: { id: "scroll.align" } }, ignore: { "<S-Escape>": { id: "mode.set" } } });
-  assert.equal(matcher.binds_after("normal", [], "J"), true);
-  assert.equal(matcher.binds_after("normal", [], "t"), false);
-  assert.equal(matcher.binds_after("normal", ["z"], "t"), true);
+  assert.equal(matcher.binds_after_("normal", [], "J"), true);
+  assert.equal(matcher.binds_after_("normal", [], "t"), false);
+  assert.equal(matcher.binds_after_("normal", ["z"], "t"), true);
   // A key that breaks the sequence is tried again as a first key, in `feed` too.
-  assert.equal(matcher.binds_after("normal", ["z"], "J"), true);
-  assert.equal(matcher.binds_after("normal", ["z", "q"], "t"), false);
-  assert.equal(matcher.binds_after("normal", [], "3"), true);
-  assert.equal(matcher.binds_after("normal", ["3"], "0"), true);
-  assert.equal(matcher.binds_after("ignore", [], "J"), false);
+  assert.equal(matcher.binds_after_("normal", ["z"], "J"), true);
+  assert.equal(matcher.binds_after_("normal", ["z", "q"], "t"), false);
+  assert.equal(matcher.binds_after_("normal", [], "3"), true);
+  assert.equal(matcher.binds_after_("normal", ["3"], "0"), true);
+  assert.equal(matcher.binds_after_("ignore", [], "J"), false);
   assert.equal(matcher.feed("normal", "z").kind, "pending");
-  assert.equal(matcher.binds_after("normal", [], "t"), true);
+  assert.equal(matcher.binds_after_("normal", [], "t"), true);
   // After a completed binding the mode the keys replay in is unknown.
-  assert.equal(matcher.binds_after("normal", ["J"], "t"), true);
+  assert.equal(matcher.binds_after_("normal", ["J"], "t"), true);
   assert.equal(leaf_id(matcher.feed("normal", "t")), "scroll.align");
   matcher.feed("normal", "z");
   assert.equal(leaf_id(matcher.feed("normal", "J")), "tab.next");

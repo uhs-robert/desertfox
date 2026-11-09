@@ -70,19 +70,19 @@ export const all_links = (): Found[] => collect(document, query_for("links", und
 
 export type YankDeps = {
   find: () => Found[];
-  keep_present: (found: Found[]) => Found[];
-  keep_in_view: (found: Found[]) => Promise<Found[]>;
+  keep_present_: (found: Found[]) => Found[];
+  keep_in_view_: (found: Found[]) => Promise<Found[]>;
   copy: (text: string) => Promise<boolean>;
-  show_message: (message: string) => void;
+  show_message_: (message: string) => void;
 };
 
 // The page scope takes every link that is present, the viewport scope only those in view.
 export async function yank_links(scope: "page" | "viewport", format: LinkFormat, deps: YankDeps): Promise<Outcome> {
   const found = deps.find();
-  const kept = scope === "page" ? deps.keep_present(found) : await deps.keep_in_view(found);
+  const kept = scope === "page" ? deps.keep_present_(found) : await deps.keep_in_view_(found);
   const links = links_of(kept);
   if (links.length === 0) return { ok: false, message: "No links on this page" };
   if (!(await deps.copy(format_links(links, format)))) return { ok: false, message: "Could not copy to the clipboard" };
-  deps.show_message(`Copied ${links.length} ${links.length === 1 ? "link" : "links"}`);
+  deps.show_message_(`Copied ${links.length} ${links.length === 1 ? "link" : "links"}`);
   return { ok: true };
 }

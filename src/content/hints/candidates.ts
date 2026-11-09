@@ -69,8 +69,8 @@ const QUERIES: Record<Exclude<HintFilter, "custom">, Query> = {
   scrollable: { selector: "*", test: (element) => !takes_typing(element as HTMLElement) && is_scroll_box(element) },
 };
 
-export const query_for = (filter: HintFilter, custom_selector: string | undefined): Query =>
-  filter === "custom" ? { selector: custom_selector ?? "" } : QUERIES[filter];
+export const query_for = (filter: HintFilter, custom_selector_: string | undefined): Query =>
+  filter === "custom" ? { selector: custom_selector_ ?? "" } : QUERIES[filter];
 
 // An element and the iframes that hold it, outermost first. The frames give its place on the top page.
 // `weak` marks an element that only looks clickable (a pointer cursor, a spot in a menu), see `drop_redundant_weak`.
@@ -109,7 +109,7 @@ export function collect(root: ParentNode, query: Query, is_weak?: WeakTest, fram
 }
 
 // Page reads behind the weak test, so tests run on fake elements.
-export type ClickStyles = { cursor_of: (element: Element) => string; parent_of: (element: Element) => Element | null };
+export type ClickStyles = { cursor_of_: (element: Element) => string; parent_of: (element: Element) => Element | null };
 
 const NEVER_WEAK = new Set(["html", "body", "head", "script", "style", "option"]);
 
@@ -117,17 +117,17 @@ const NEVER_WEAK = new Set(["html", "body", "head", "script", "style", "option"]
 export function has_click_sign(element: Element, styles: ClickStyles): boolean {
   if (NEVER_WEAK.has(element.localName)) return false;
   if (element.hasAttribute("disabled") || element.getAttribute("aria-disabled") === "true") return false;
-  if (styles.cursor_of(element) !== "pointer") return false;
+  if (styles.cursor_of_(element) !== "pointer") return false;
   // An `<a>` without href is a link whose click a script handles. An inherited pointer still counts: a menu list that sets it on the list must not hide one of its links.
   if (element.localName === "a") return true;
   const parent = styles.parent_of(element);
-  return parent === null || styles.cursor_of(parent) !== "pointer";
+  return parent === null || styles.cursor_of_(parent) !== "pointer";
 }
 
 export const make_weak_test = (styles: ClickStyles): WeakTest => (element) => element.matches(MENU_ITEM) || has_click_sign(element, styles);
 
 const dom_styles: ClickStyles = {
-  cursor_of: (element) => (element.ownerDocument.defaultView ?? window).getComputedStyle(element).cursor,
+  cursor_of_: (element) => (element.ownerDocument.defaultView ?? window).getComputedStyle(element).cursor,
   parent_of: (element) => element.parentElement ?? (element.parentNode as ShadowRoot | null)?.host ?? null,
 };
 
@@ -177,9 +177,9 @@ export function scroll_clips_in_page(element: Element): Rect[] {
   return scroll_clips_of(element, {
     parent_of,
     tag_of: (e) => e.localName,
-    style_of: (e) => {
+    style_of_: (e) => {
       const style = win.getComputedStyle(e);
-      return { position: style.position, display: style.display, overflow_x: style.overflowX, overflow_y: style.overflowY };
+      return { position: style.position, display: style.display, overflow_x_: style.overflowX, overflow_y_: style.overflowY };
     },
     box_of: (e) => {
       const box = e.getBoundingClientRect();

@@ -5,7 +5,7 @@ import { is_scroll_box } from "../src/content/scroll_box.ts";
 const document_like = { documentElement: {} as Element, body: {} as Element };
 const box = (sizes: { sw: number; cw: number; sh: number; ch: number }) =>
   ({ scrollWidth: sizes.sw, clientWidth: sizes.cw, scrollHeight: sizes.sh, clientHeight: sizes.ch, ownerDocument: document_like }) as unknown as Element;
-const style = (overflow_x: string, overflow_y: string) => ({ overflowX: overflow_x, overflowY: overflow_y });
+const style = (overflow_x_: string, overflow_y_: string) => ({ overflowX: overflow_x_, overflowY: overflow_y_ });
 const tall = { sw: 100, cw: 100, sh: 900, ch: 100 };
 
 test("a box with more content than room and overflow auto, scroll or overlay is a scroll box", () => {

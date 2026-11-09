@@ -21,7 +21,7 @@ let surface: ReturnType<typeof create_surface> | undefined;
 let hide_timer: ReturnType<typeof setTimeout> | undefined;
 
 // Each kind takes its frame color from one theme role. The text stays fg_core, so the message reads the same in every kind.
-export function show_toast(message: string, kind: ToastKind = "error"): void {
+export function show_toast_(message: string, kind: ToastKind = "error"): void {
   surface ??= create_surface("desertfox-toast", STYLE, LAYERS.toast);
   surface.text.textContent = message;
   surface.text.className = `desertfox-toast ${kind}`;

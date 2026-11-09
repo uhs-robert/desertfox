@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { heading_level, is_heading, jump_in, keep_present, pick_heading, row_of, scroll_to_top } from "../../src/content/hints/headings.ts";
+import { heading_level, is_heading, jump_in, keep_present_, pick_heading, row_of, scroll_to_top } from "../../src/content/hints/headings.ts";
 
 type FakeHeading = { localName: string; text?: string; rendered?: string; role?: string; level?: string };
 const heading = (fake: FakeHeading) => ({ localName: fake.localName, textContent: fake.text ?? "Title", innerText: fake.rendered ?? fake.text ?? "Title", getAttribute: (name: string) => (name === "role" ? (fake.role ?? null) : name === "aria-level" ? (fake.level ?? null) : null) }) as unknown as Element;
@@ -35,12 +35,12 @@ test("a row holds the level and the rendered text on one line, whole however lon
 test("keep_present drops hidden, boxless, clipped and tiny headings and keeps off-screen ones", () => {
   const box = (top: number, height = 20) => [{ left: 0, top, right: 100, bottom: top + height }];
   const probe = (rects: Record<string, ReturnType<typeof box>>, hidden: string[] = [], clips: Record<string, ReturnType<typeof box>> = {}) => ({
-    rects_of: (name: string) => rects[name] ?? [],
-    clips_of: (name: string) => clips[name] ?? [],
-    is_hidden: (name: string) => hidden.includes(name),
+    rects_of_: (name: string) => rects[name] ?? [],
+    clips_of_: (name: string) => clips[name] ?? [],
+    is_hidden_: (name: string) => hidden.includes(name),
   });
   const names_in = ["above", "below", "none", "hidden", "clipped", "tiny"];
-  const kept = keep_present(
+  const kept = keep_present_(
     names_in,
     probe({ above: box(-500), below: box(5000), hidden: box(0), clipped: box(0), tiny: box(0, 1) }, ["hidden"], { clipped: [{ left: 0, top: 100, right: 100, bottom: 200 }] }),
   );

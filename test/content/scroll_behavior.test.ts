@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { mock, test } from "node:test";
-import { scroll_lines, scroll_pages, scroll_to, tapped_end } from "../../src/content/handlers/scroll.ts";
+import { scroll_lines, scroll_pages, scroll_to_, tapped_end } from "../../src/content/handlers/scroll.ts";
 
 type Call = { method: string; top?: number | undefined; behavior: string };
 
@@ -37,8 +37,8 @@ test("page scroll and the top and bottom jumps are smooth on a first press and i
   with_page((calls) => {
     scroll_pages.run(half_page, false);
     scroll_pages.run(half_page, true);
-    scroll_to.run({ axis: "y", percent: 100 }, false);
-    scroll_to.run({ axis: "y", percent: 100 }, true);
+    scroll_to_.run({ axis: "y", percent: 100 }, false);
+    scroll_to_.run({ axis: "y", percent: 100 }, true);
     assert.deepEqual(calls.map((call) => call.behavior), ["smooth", "instant", "smooth", "instant"]);
   });
 });
@@ -87,7 +87,7 @@ test("the end in flight resets after the timeout", () => {
 });
 
 test("an instant scroll resets the end in flight", () => {
-  for (const instant of [() => scroll_lines.run({ count: 1 }, false), () => scroll_pages.run(half_page, true), () => scroll_to.run({ axis: "y", percent: 0 }, false)]) {
+  for (const instant of [() => scroll_lines.run({ count: 1 }, false), () => scroll_pages.run(half_page, true), () => scroll_to_.run({ axis: "y", percent: 0 }, false)]) {
     with_page((calls, root) => {
       scroll_pages.run(half_page, false);
       instant();

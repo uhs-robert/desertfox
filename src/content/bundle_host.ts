@@ -1,5 +1,5 @@
 // Loads bundles on first use and holds what they register. A bundle is a script the background injects
-// into this frame. It registers through `register_sink` and `register_handler` and enters its mode with `set_mode`.
+// into this frame. It registers through `register_sink_` and `register_handler_` and enters its mode with `set_mode_`.
 // main.ts puts all three on `window.desertfox_host`. The host counts every wait on a load, and key_flow holds keys until none is left.
 
 import { last_blurred_element } from "./handlers/page.ts";
@@ -13,7 +13,7 @@ export type ExitDestination = Mode | "page_hidden";
 
 // Gets each key token while its mode is active. "pass" hands the token on to the keymap.
 // `enter` runs once per entry, after the sink is registered. `exit` runs once per exit, whichever path led out.
-export type Sink = { on_token: (token: string) => "handled" | "pass"; enter?: () => void; exit: (destination: ExitDestination) => void };
+export type Sink = { on_token_: (token: string) => "handled" | "pass"; enter?: () => void; exit: (destination: ExitDestination) => void };
 
 // What a handler returns: nothing for done, or an Outcome. A promise stays pending while the handler waits on the user. A throw is failed.
 export type HandlerResult = void | Outcome | Promise<void | Outcome>;
@@ -21,30 +21,30 @@ export type BundleHandler = (args: Record<string, unknown>) => HandlerResult;
 
 // What a bundle sees of the host.
 export type BundleHostApi = {
-  register_sink: (mode: Mode, sink: Sink) => void;
-  register_handler: (command_id: string, handler: BundleHandler) => void;
+  register_sink_: (mode: Mode, sink: Sink) => void;
+  register_handler_: (command_id: string, handler: BundleHandler) => void;
   // Any mode, the same path as a key that changes mode. A bundle uses it to enter its own mode.
-  set_mode: (mode: Mode) => void;
+  set_mode_: (mode: Mode) => void;
   get_mode: () => Mode;
   // Runs a handler of another bundle, loading that bundle first if needed. The id need not be a registry command: a bundle may offer handlers only its sibling calls. The args are bundle-internal and unchecked by the validator, and may hold functions.
   // The answer is the handler's real outcome, and stays pending while the handler waits on the user. A missing handler or a failed load answers failed.
-  run_command: (command_id: string, name: BundleName, args: Record<string, unknown>) => Promise<Outcome>;
-  show_toast: (message: string) => void;
+  run_command_: (command_id: string, name: BundleName, args: Record<string, unknown>) => Promise<Outcome>;
+  show_toast_: (message: string) => void;
   // The field the last Escape left, which a bundle cannot see.
-  last_blurred: () => Element | undefined;
+  last_blurred_: () => Element | undefined;
 };
 
 export type BundleHostDeps = {
   // Never rejects: a failure answers false.
-  request_bundle: (name: BundleName) => Promise<boolean>;
+  request_bundle_: (name: BundleName) => Promise<boolean>;
   // Runs after a load and everything that waited on it is done, so held keys can replay.
-  on_idle: () => void;
-  show_error: (message: string) => void;
-  // Without it a bundle's toast goes to show_error.
-  show_toast?: (message: string) => void;
-  set_mode: (mode: Mode) => void;
+  on_idle_: () => void;
+  show_error_: (message: string) => void;
+  // Without it a bundle's toast goes to show_error_.
+  show_toast_?: (message: string) => void;
+  set_mode_: (mode: Mode) => void;
   // A mode with a sink ended its load without one, so nothing would take its keys.
-  on_sink_missing: (mode: Mode) => void;
+  on_sink_missing_: (mode: Mode) => void;
 };
 
 export const message_of = (error: unknown) => String((error as Error)?.message ?? error);
@@ -72,7 +72,7 @@ export function create_bundle_host() {
   function after_load(name: BundleName, after: (loaded: boolean) => void, hold = true): void {
     let started = loads.get(name);
     if (!started) {
-      started = deps.request_bundle(name);
+      started = deps.request_bundle_(name);
       loads.set(name, started);
       void started.then((loaded) => loaded || loads.delete(name));
     }
@@ -83,19 +83,19 @@ export function create_bundle_host() {
       try {
         after(loaded);
       } catch (error) {
-        deps.show_error((error as Error).message);
+        deps.show_error_((error as Error).message);
       }
       if (hold) waiting--;
       if (sink_bundle) waiting_on_sink_bundle--;
-      deps.on_idle();
+      deps.on_idle_();
     });
   }
 
   // Runs a command whose code sits in a bundle, loading the bundle first if needed. `missing` is the failure for a bundle that registers nothing.
   // Keys are held for the load only, never while the handler's promise is pending.
   // `args` reaches the handler as given. Nothing validates it, so it holds whatever the caller and the handler agree on, functions included. Take it only from bundle code, never from keymap or command-line input, which the registry validates first.
-  // `hold` false is for drawing, which nobody awaits, so a failure there goes to `show_error`.
-  function run_command(command_id: string, name: BundleName, args: Record<string, unknown>, missing: string, hold = true): Promise<Outcome> {
+  // `hold` false is for drawing, which nobody awaits, so a failure there goes to `show_error_`.
+  function run_command_(command_id: string, name: BundleName, args: Record<string, unknown>, missing: string, hold = true): Promise<Outcome> {
     const run = handlers.get(command_id);
     const answer = run
       ? settle(() => run(args))
@@ -113,7 +113,7 @@ export function create_bundle_host() {
             hold,
           ),
         );
-    if (!hold) void answer.then((outcome) => outcome.ok || deps.show_error(outcome.message));
+    if (!hold) void answer.then((outcome) => outcome.ok || deps.show_error_(outcome.message));
     return answer;
   }
 
@@ -121,14 +121,14 @@ export function create_bundle_host() {
     connect: (next: BundleHostDeps) => {
       deps = next;
     },
-    is_loading: () => waiting > 0,
+    is_loading_: () => waiting > 0,
     // The loading bundle registers a sink, and its mode may take any key once the load is done.
-    is_loading_sink_bundle: () => waiting_on_sink_bundle > 0,
-    sink_of: (mode: Mode) => sinks.get(mode),
-    has_handler: (command_id: string) => handlers.has(command_id),
-    run_command,
+    is_loading_sink_bundle_: () => waiting_on_sink_bundle > 0,
+    sink_of_: (mode: Mode) => sinks.get(mode),
+    has_handler_: (command_id: string) => handlers.has(command_id),
+    run_command_,
     // Called on every mode change: the mode left exits its sink, and a mode with a sink loads its bundle and enters it.
-    enter_mode: (next: Mode): void => {
+    enter_mode_: (next: Mode): void => {
       const left = current_mode;
       current_mode = next;
       sinks.get(left)?.exit(next);
@@ -138,28 +138,28 @@ export function create_bundle_host() {
         if (current_mode !== next) return;
         const sink = sinks.get(next);
         if (sink) sink.enter?.();
-        else deps.on_sink_missing(next);
+        else deps.on_sink_missing_(next);
       };
       if (sinks.has(next)) enter();
       else after_load(name, enter);
     },
     // The tab or page went away. A mode with a sink ends and the page returns to normal mode.
-    page_hidden: (): void => {
+    page_hidden_: (): void => {
       const sink = sinks.get(current_mode);
       if (!sink) return;
       current_mode = "normal";
       sink.exit("page_hidden");
-      deps.set_mode("normal");
+      deps.set_mode_("normal");
     },
     // What a bundle sees.
     api: {
-      register_sink: (mode, sink) => void sinks.set(mode, sink),
-      register_handler: (command_id, handler) => void handlers.set(command_id, handler),
-      set_mode: (mode) => deps.set_mode(mode),
+      register_sink_: (mode, sink) => void sinks.set(mode, sink),
+      register_handler_: (command_id, handler) => void handlers.set(command_id, handler),
+      set_mode_: (mode) => deps.set_mode_(mode),
       get_mode: () => current_mode,
-      run_command: (command_id, name, args) => run_command(command_id, name, args, `${name} has no ${command_id}`),
-      show_toast: (message) => (deps.show_toast ?? deps.show_error)(message),
-      last_blurred: last_blurred_element,
+      run_command_: (command_id, name, args) => run_command_(command_id, name, args, `${name} has no ${command_id}`),
+      show_toast_: (message) => (deps.show_toast_ ?? deps.show_error_)(message),
+      last_blurred_: last_blurred_element,
     } satisfies BundleHostApi,
   };
 }

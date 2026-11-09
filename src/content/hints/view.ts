@@ -58,7 +58,7 @@ export function place_label(style: LabelStyle, position: { left: number; top: nu
   style.top = `${Math.max(position.top, 0)}px`;
 }
 
-type DrawnLabel = { found: Found; text: string; node: HTMLElement; typed_part: HTMLElement; rest_part: HTMLElement };
+type DrawnLabel = { found: Found; text: string; node: HTMLElement; typed_part_: HTMLElement; rest_part_: HTMLElement };
 
 export function create_view() {
   const surface = create_surface("desertfox-hints", STYLE, LAYERS.hints);
@@ -78,11 +78,11 @@ export function create_view() {
       drawn = items.map(({ found, text }) => {
         const node = document.createElement("div");
         node.className = "desertfox-hint";
-        const typed_part = document.createElement("b");
-        const rest_part = document.createElement("span");
-        rest_part.textContent = text;
-        node.append(typed_part, rest_part);
-        return { found, text, node, typed_part, rest_part };
+        const typed_part_ = document.createElement("b");
+        const rest_part_ = document.createElement("span");
+        rest_part_.textContent = text;
+        node.append(typed_part_, rest_part_);
+        return { found, text, node, typed_part_, rest_part_ };
       });
       surface.text.append(...drawn.map((label) => label.node));
       mount();
@@ -90,14 +90,14 @@ export function create_view() {
     },
     reposition,
     // Labels that no longer start with the typed text hide. The typed part of the others dims.
-    show_progress: (typed: string, still_possible: ReadonlySet<number>): void => {
+    show_progress_: (typed: string, still_possible_: ReadonlySet<number>): void => {
       drawn.forEach((label, index) => {
-        filter_label(label.node.style, still_possible.has(index));
-        label.typed_part.textContent = typed;
-        label.rest_part.textContent = label.text.slice(typed.length);
+        filter_label(label.node.style, still_possible_.has(index));
+        label.typed_part_.textContent = typed;
+        label.rest_part_.textContent = label.text.slice(typed.length);
       });
     },
-    show_message: (message: string): void => {
+    show_message_: (message: string): void => {
       const note = document.createElement("div");
       note.className = "desertfox-hint-message";
       note.textContent = message;
@@ -107,7 +107,7 @@ export function create_view() {
       message_timer = setTimeout(() => surface.host.remove(), MESSAGE_MS);
     },
     // Leaves a message that is still showing.
-    clear_labels: (): void => {
+    clear_labels_: (): void => {
       for (const label of drawn) label.node.remove();
       drawn = [];
       if (surface.text.childElementCount === 0) surface.host.remove();

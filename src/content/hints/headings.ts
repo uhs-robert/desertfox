@@ -37,12 +37,12 @@ export function row_of(element: Element): HeadingItem {
 
 // The list shows off-screen headings, so it skips the viewport and cover tests of `keep_visible`.
 // A heading stays when it has a box of real size that no scrolling ancestor clips away and the page does not hide, by `display`, `visibility` or a closed `<details>`.
-export function keep_present<T>(targets: readonly T[], probe: Pick<PageProbe<T>, "rects_of" | "clips_of"> & { is_hidden: (target: T) => boolean }): T[] {
+export function keep_present_<T>(targets: readonly T[], probe: Pick<PageProbe<T>, "rects_of_" | "clips_of_"> & { is_hidden_: (target: T) => boolean }): T[] {
   const has_size = (rect: Rect) => rect.right - rect.left >= MIN_BOX_SIDE && rect.bottom - rect.top >= MIN_BOX_SIDE;
   return targets.filter((target) => {
-    if (probe.is_hidden(target)) return false;
-    const clips = probe.clips_of(target);
-    return probe.rects_of(target).some((rect) => has_size(clip_to(rect, clips)));
+    if (probe.is_hidden_(target)) return false;
+    const clips = probe.clips_of_(target);
+    return probe.rects_of_(target).some((rect) => has_size(clip_to(rect, clips)));
   });
 }
 
@@ -51,11 +51,11 @@ export function keep_present_found(candidates: Found[]): Found[] {
   const children = (element: Element) => Array.from(element.children);
   const keep_present_elements = (elements: Element[]) =>
     new Set(
-      keep_present(elements, {
-        rects_of: (element) => boxes_with_fallback(element, own_rects, children),
-        clips_of: scroll_clips_in_page,
+      keep_present_(elements, {
+        rects_of_: (element) => boxes_with_fallback(element, own_rects, children),
+        clips_of_: scroll_clips_in_page,
         // `checkVisibility` also catches the content of a closed `<details>`, which Firefox still gives a box.
-        is_hidden: (element) => !element.checkVisibility({ visibilityProperty: true, opacityProperty: true }),
+        is_hidden_: (element) => !element.checkVisibility({ visibilityProperty: true, opacityProperty: true }),
       }),
     );
   // A heading in a hidden or clipped frame is as hidden as the frame, so each frame passes the same rules as the heading.

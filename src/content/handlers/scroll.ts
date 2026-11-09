@@ -11,8 +11,8 @@ function page_candidate(): ScrollCandidate<Element> | undefined {
   if (!root) return undefined;
   return {
     ref: root,
-    can_scroll_x: root.scrollWidth > root.clientWidth,
-    can_scroll_y: root.scrollHeight > root.clientHeight,
+    can_scroll_x_: root.scrollWidth > root.clientWidth,
+    can_scroll_y_: root.scrollHeight > root.clientHeight,
     area: root.clientWidth * root.clientHeight,
   };
 }
@@ -82,7 +82,7 @@ export const scroll_pages: ContentHandler = {
   },
 };
 
-export const scroll_to: ContentHandler = {
+export const scroll_to_: ContentHandler = {
   run: (args, repeat) => {
     const axis = args.axis as ScrollAxis;
     const behavior = smooth_unless(repeat);

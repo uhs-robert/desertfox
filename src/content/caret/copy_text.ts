@@ -16,10 +16,10 @@ export async function copy_text(clipboard: { writeText: (text: string) => Promis
 export async function yank_text(
   clipboard: Parameters<typeof copy_text>[0],
   text: string,
-  steps: { is_same_session: () => boolean; toast: (message: string) => void; leave_visual: () => void },
+  steps: { is_same_session_: () => boolean; toast: (message: string) => void; leave_visual_: () => void },
 ): Promise<Outcome> {
   if (!(await copy_text(clipboard, text))) return { ok: false, message: "Could not copy to the clipboard" };
   steps.toast(`Copied ${text.length > 40 ? text.slice(0, 40) + "..." : text}`);
-  if (steps.is_same_session()) steps.leave_visual();
+  if (steps.is_same_session_()) steps.leave_visual_();
   return { ok: true };
 }

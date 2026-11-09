@@ -20,7 +20,7 @@ function fixture(local: string, extra: Record<string, unknown> = {}) {
   const copied: string[] = [];
   const started: string[] = [];
   const images: [string, string][] = [];
-  const deps = { open_link: (url: string, place: string) => opened.push([url, place]), copy: (text: string) => copied.push(text), image_action: (action: string, address: string) => images.push([action, address]), start_caret: (_target: unknown, mode: string) => started.push(mode) };
+  const deps = { open_link_: (url: string, place: string) => opened.push([url, place]), copy: (text: string) => copied.push(text), image_action: (action: string, address: string) => images.push([action, address]), start_caret_: (_target: unknown, mode: string) => started.push(mode) };
   const run = (action: HintAction) => perform(action, element as never, deps as never);
   return { calls, opened, copied, started, images, run, element };
 }
@@ -49,7 +49,7 @@ test("a cancelled pointerdown skips mousedown, mouseup and focus and still click
 test("here sends the mouse events from the middle of the element", () => {
   const sent: { type: string; clientX?: number; clientY?: number; button?: number }[] = [];
   const element = { localName: "div", click: () => {}, focus: () => {}, remove: () => {}, dispatchEvent: (event: never) => sent.push(event), getBoundingClientRect: () => ({ left: 10, top: 20, width: 100, height: 40 }) };
-  perform("here", element as never, { open_link: () => {}, copy: () => {}, image_action: () => Promise.resolve(), start_caret: () => {} });
+  perform("here", element as never, { open_link_: () => {}, copy: () => {}, image_action: () => Promise.resolve(), start_caret_: () => {} });
   const down = sent.find((event) => event.type === "mousedown");
   assert.deepEqual([down?.clientX, down?.clientY, down?.button], [60, 40, 0]);
 });
@@ -224,7 +224,7 @@ function box_fixture(attributes: Record<string, string>) {
 test("focus gives a box without tabindex tabindex=-1 before it focuses, and flashes an outline that then goes away", async (context) => {
   context.mock.timers.enable({ apis: ["setTimeout"] });
   const page = box_fixture({});
-  perform("focus", page.element as never, { open_link: () => {}, copy: () => {}, image_action: () => Promise.resolve(), start_caret: () => {} });
+  perform("focus", page.element as never, { open_link_: () => {}, copy: () => {}, image_action: () => Promise.resolve(), start_caret_: () => {} });
   assert.deepEqual(page.calls.slice(0, 3), ["set tabindex=-1", "focus", "outline 2px solid currentColor"]);
   assert.equal(page.outline.priority, "important");
   context.mock.timers.tick(5000);
@@ -235,7 +235,7 @@ test("focus keeps a tabindex the page set and restores an outline the page set",
   context.mock.timers.enable({ apis: ["setTimeout"] });
   const page = box_fixture({ tabindex: "0" });
   page.outline.value = "1px dotted red";
-  perform("focus", page.element as never, { open_link: () => {}, copy: () => {}, image_action: () => Promise.resolve(), start_caret: () => {} });
+  perform("focus", page.element as never, { open_link_: () => {}, copy: () => {}, image_action: () => Promise.resolve(), start_caret_: () => {} });
   assert.equal(page.attributes.tabindex, "0");
   context.mock.timers.tick(5000);
   assert.equal(page.outline.value, "1px dotted red");
@@ -244,7 +244,7 @@ test("focus keeps a tabindex the page set and restores an outline the page set",
 test("focus on a box that is focusable already leaves its tabindex alone", () => {
   const link = box_fixture({});
   Object.assign(link.element, { localName: "a", tabIndex: 0 });
-  perform("focus", link.element as never, { open_link: () => {}, copy: () => {}, image_action: () => Promise.resolve(), start_caret: () => {} });
+  perform("focus", link.element as never, { open_link_: () => {}, copy: () => {}, image_action: () => Promise.resolve(), start_caret_: () => {} });
   assert.equal("tabindex" in link.attributes, false);
 });
 
@@ -252,7 +252,7 @@ test("focus twice inside the flash still restores the original outline", (contex
   context.mock.timers.enable({ apis: ["setTimeout"] });
   const page = box_fixture({});
   page.outline.value = "1px dotted red";
-  const deps = { open_link: () => {}, copy: () => {}, image_action: () => Promise.resolve(), start_caret: () => {} };
+  const deps = { open_link_: () => {}, copy: () => {}, image_action: () => Promise.resolve(), start_caret_: () => {} };
   perform("focus", page.element as never, deps);
   context.mock.timers.tick(300);
   perform("focus", page.element as never, deps);

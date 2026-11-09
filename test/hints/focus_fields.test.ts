@@ -194,7 +194,7 @@ test("a count moves that many controls and stops on the last", () => {
 });
 
 test("pick_field moves by steps and clamps at the ends", () => {
-  const on = (index: number) => ({ index, on_field: true });
+  const on = (index: number) => ({ index, on_field_: true });
   assert.deepEqual(pick_field(5, on(1), "next", 1), { index: 2 });
   assert.deepEqual(pick_field(5, on(1), "next", 2), { index: 3 });
   assert.deepEqual(pick_field(5, on(1), "next", 99), { index: 4 });
@@ -205,7 +205,7 @@ test("pick_field moves by steps and clamps at the ends", () => {
 });
 
 test("pick_field from a point between controls counts the next control as the first step", () => {
-  const between = (index: number) => ({ index, on_field: false });
+  const between = (index: number) => ({ index, on_field_: false });
   assert.deepEqual(pick_field(5, between(2), "next", 1), { index: 2 });
   assert.deepEqual(pick_field(5, between(2), "next", 2), { index: 3 });
   assert.deepEqual(pick_field(5, between(2), "prev", 1), { index: 1 });
@@ -216,9 +216,9 @@ test("pick_field from a point between controls counts the next control as the fi
 test("place_of takes the first anchor that is in the list", () => {
   const [a, b, c] = [{}, {}, {}] as Element[];
   const never = () => false;
-  assert.deepEqual(place_of([a!, b!, c!], [b, c], never), { index: 1, on_field: true });
-  assert.deepEqual(place_of([a!, b!, c!], [{} as Element, c], never), { index: 2, on_field: true });
-  assert.deepEqual(place_of([a!, b!, c!], [null, undefined], never), { index: 0, on_field: false });
-  assert.deepEqual(place_of([a!, b!, c!], [], (element) => element !== c), { index: 2, on_field: false });
-  assert.deepEqual(place_of([a!, b!], [], () => true), { index: 2, on_field: false });
+  assert.deepEqual(place_of([a!, b!, c!], [b, c], never), { index: 1, on_field_: true });
+  assert.deepEqual(place_of([a!, b!, c!], [{} as Element, c], never), { index: 2, on_field_: true });
+  assert.deepEqual(place_of([a!, b!, c!], [null, undefined], never), { index: 0, on_field_: false });
+  assert.deepEqual(place_of([a!, b!, c!], [], (element) => element !== c), { index: 2, on_field_: false });
+  assert.deepEqual(place_of([a!, b!], [], () => true), { index: 2, on_field_: false });
 });

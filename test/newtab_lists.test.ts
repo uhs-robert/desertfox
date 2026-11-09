@@ -28,9 +28,9 @@ test("bookmarks: newest added first, web addresses only, capped", () => {
 
 test("lists are empty when the flags are off, and the readers never run", async () => {
   let reads = 0;
-  const counting = readers({ query_tabs: async () => (reads++, TABS), bookmark_tree: async () => (reads++, TREE) });
-  assert.deepEqual(await read_sections(effective_settings({}), counting), []);
-  assert.deepEqual(await read_sections(effective_settings({ newtab_bookmarks: false, newtab_recent_tabs: false }), counting), []);
+  const counting_ = readers({ query_tabs: async () => (reads++, TABS), bookmark_tree: async () => (reads++, TREE) });
+  assert.deepEqual(await read_sections(effective_settings({}), counting_), []);
+  assert.deepEqual(await read_sections(effective_settings({ newtab_bookmarks: false, newtab_recent_tabs: false }), counting_), []);
   assert.equal(reads, 0);
 });
 

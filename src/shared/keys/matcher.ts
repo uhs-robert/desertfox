@@ -69,7 +69,7 @@ export function create_matcher(keymap: CompiledKeymap) {
 
   // Whether `token` binds after the keys in `ahead`: it adds a count digit or starts, continues or ends a binding. The walk is left as it was.
   // A completed binding in `ahead` can change the mode the later keys replay in, so every key after it counts as binding.
-  const binds_after = (mode: string, ahead: readonly string[], token: string): boolean => {
+  const binds_after_ = (mode: string, ahead: readonly string[], token: string): boolean => {
     const saved = [walk_mode, node, typed, count_digits] as const;
     let result: MatchResult = { kind: "no_match" };
     for (const key of [...ahead, token]) {
@@ -80,5 +80,5 @@ export function create_matcher(keymap: CompiledKeymap) {
     return result.kind !== "no_match";
   };
 
-  return { feed, reset, binds_after };
+  return { feed, reset, binds_after_ };
 }

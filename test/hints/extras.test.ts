@@ -71,7 +71,7 @@ async function page_with(texts: string[]) {
   const copied: string[] = [];
   const modes: string[] = [];
   const handlers = new Map<string, (args: Record<string, unknown>) => unknown>();
-  let sink: { on_token: (token: string) => string; exit: () => void } | undefined;
+  let sink: { on_token_: (token: string) => string; exit: () => void } | undefined;
   let mode = "normal";
   let sends_held: (() => Promise<unknown>) | undefined;
 
@@ -82,16 +82,16 @@ async function page_with(texts: string[]) {
     addEventListener: (type: string) => void active_listeners.add(type),
     removeEventListener: (type: string) => void active_listeners.delete(type),
     desertfox_host: {
-      register_sink: (_mode: string, registered: typeof sink) => void (sink = registered),
-      register_handler: (id: string, handler: (args: Record<string, unknown>) => unknown) => void handlers.set(id, handler),
+      register_sink_: (_mode: string, registered: typeof sink) => void (sink = registered),
+      register_handler_: (id: string, handler: (args: Record<string, unknown>) => unknown) => void handlers.set(id, handler),
       // The real host calls the sink's exit when the mode leaves hint.
-      set_mode: (next: string) => {
+      set_mode_: (next: string) => {
         modes.push(next);
         const left_hint = mode === "hint" && next !== "hint";
         mode = next;
         if (left_hint) sink?.exit();
       },
-      show_toast: () => {},
+      show_toast_: () => {},
     },
   };
   const doc = {
@@ -171,8 +171,8 @@ async function page_with(texts: string[]) {
     active_listeners,
     // What the handler answers: an Outcome now, or a promise that stays pending while hints wait for the user.
     run: (args: Record<string, unknown>) => handlers.get("hint.run")!({ action: "here", filter: "links", rapid: false, ...args }) as Outcome | Promise<Outcome>,
-    type: (token: string) => sink!.on_token(token),
-    escape: () => win.desertfox_host.set_mode("normal"),
+    type: (token: string) => sink!.on_token_(token),
+    escape: () => win.desertfox_host.set_mode_("normal"),
     // The label text of each label that is not hidden by typing.
     labels: () => nodes_with_class("desertfox-hint").filter((node) => node.style.display !== "none").map((node) => node.children.map((part) => part.textContent).join("")),
     label_tops: () => nodes_with_class("desertfox-hint").map((node) => node.style.top),

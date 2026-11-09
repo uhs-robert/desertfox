@@ -12,16 +12,16 @@ import "../../src/background/command_modules.ts";
 import { registry } from "../../src/shared/registry/builtin.ts";
 
 // `bundles` is one host per frame, so these tests share it. It remembers a loaded bundle, so each test uses a bundle the ones before did not load.
-function connect(asked: string[], shown: string[], on_idle = () => {}, load: () => Promise<boolean> = async () => true) {
+function connect(asked: string[], shown: string[], on_idle_ = () => {}, load: () => Promise<boolean> = async () => true) {
   bundles.connect({
-    request_bundle: (name) => {
+    request_bundle_: (name) => {
       asked.push(name);
       return load();
     },
-    on_idle,
-    set_mode: () => {},
-    show_error: (message) => shown.push(message),
-    on_sink_missing: () => {},
+    on_idle_,
+    set_mode_: () => {},
+    show_error_: (message) => shown.push(message),
+    on_sink_missing_: () => {},
   });
 }
 
@@ -30,11 +30,11 @@ test("a command with a bundle field loads its bundle and refuses with the reason
   const asked: string[] = [];
   connect(asked, shown);
   const answer = run_content_invocation({ id: "hint.run", args: {}, bundle: "hints" }, "ignore");
-  assert.equal(bundles.is_loading(), true);
+  assert.equal(bundles.is_loading_(), true);
   assert.deepEqual(await answer, { ok: false, message: "needs hints" });
   assert.deepEqual(asked, ["hints"]);
   assert.deepEqual(shown, []);
-  assert.equal(bundles.is_loading(), false);
+  assert.equal(bundles.is_loading_(), false);
 });
 
 test("the refusal names the missing bundle in words a user reads", async () => {
@@ -75,31 +75,31 @@ test("the first key of a lazy command waits one bundle load, holds the keys type
   content_handlers["t.plain"] = { run: () => void events.push("plain x") };
   const flow = create_key_flow({
     get_mode: state.get_mode,
-    take_pass_next: state.take_pass_next,
-    in_editable_field: () => false,
-    is_loading: bundles.is_loading,
-    is_loading_sink_bundle: bundles.is_loading_sink_bundle,
-    sink_of: bundles.sink_of,
-    on_prefix: () => {},
-    leave_insert: () => state.escape(),
-    run_leaf: (matched) => void run_content_steps(matched.steps, undefined).then((outcome) => outcome.ok || shown.push(outcome.message)),
+    take_pass_next_: state.take_pass_next_,
+    in_editable_field_: () => false,
+    is_loading_: bundles.is_loading_,
+    is_loading_sink_bundle_: bundles.is_loading_sink_bundle_,
+    sink_of_: bundles.sink_of_,
+    on_prefix_: () => {},
+    leave_insert_: () => state.escape(),
+    run_leaf_: (matched) => void run_content_steps(matched.steps, undefined).then((outcome) => outcome.ok || shown.push(outcome.message)),
   });
-  flow.set_matcher(create_matcher(keymap));
+  flow.set_matcher_(create_matcher(keymap));
   let finish_load: () => void = () => {};
   connect(asked, shown, flow.release, () => new Promise<boolean>((resolve) => (finish_load = () => resolve(true))));
 
-  assert.equal(flow.handle_token("n"), "cancel");
-  assert.equal(flow.handle_token("x"), "cancel");
+  assert.equal(flow.handle_token_("n"), "cancel");
+  assert.equal(flow.handle_token_("x"), "cancel");
   assert.equal(events.length, 0);
   assert.deepEqual(asked, ["caret"]);
   assert.equal(events.length, 0);
-  bundles.api.register_handler("find.next", () => void events.push("find.next"));
+  bundles.api.register_handler_("find.next", () => void events.push("find.next"));
   finish_load();
   await new Promise((resolve) => setImmediate(resolve));
   assert.deepEqual(asked, ["caret"]);
   assert.deepEqual(events, ["find.next", "plain x"]);
   assert.deepEqual(shown, []);
-  assert.equal(bundles.is_loading(), false);
+  assert.equal(bundles.is_loading_(), false);
 });
 
 test("every content command without a bundle has a handler in the content script", () => {

@@ -49,13 +49,13 @@ const sheet_text = (names: HighlightNames, { all, current }: FindColors) =>
 
 // One Range per tree the match passes through. A line break at the end of a run has no character to cover.
 function ranges_of(model: TextModel, from: number, to: number): Range[] {
-  const runs = model.tree_runs(from, to);
+  const runs = model.tree_runs_(from, to);
   const ranges: Range[] = [];
   runs.forEach((run, at) => {
     let run_to = run.to;
     while (at < runs.length - 1 && run_to > run.from + 1 && model.text[run_to - 1] === "\n") run_to--;
-    const start = model.point_at(run.from);
-    const end = model.point_at(run_to - 1);
+    const start = model.point_at_(run.from);
+    const end = model.point_at_(run_to - 1);
     // An empty line has no text node to cover.
     if (start.node.nodeType !== Node.TEXT_NODE || end.node.nodeType !== Node.TEXT_NODE) return;
     const range = owner_of(run.tree).createRange();

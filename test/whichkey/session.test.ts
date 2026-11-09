@@ -19,7 +19,7 @@ function make_session() {
 
 test("a manual show that a later key hid is not drawn when its answer arrives", async () => {
   const { session, drawn, answer } = make_session();
-  const shown = session.show_manual("normal");
+  const shown = session.show_manual_("normal");
   session.hide();
   answer(0);
   await shown;
@@ -28,16 +28,16 @@ test("a manual show that a later key hid is not drawn when its answer arrives", 
 
 test("a manual show with no key in between is drawn", async () => {
   const { session, drawn, answer } = make_session();
-  const shown = session.show_manual("normal");
+  const shown = session.show_manual_("normal");
   answer(0);
   await shown;
   assert.deepEqual(drawn, ["keys"]);
 });
 
-test("a prefix show stays tied to the timer's own is_current check", async () => {
+test("a prefix show stays tied to the timer's own is_current_ check", async () => {
   const { session, drawn, answer } = make_session();
   let current = true;
-  const shown = session.show_prefix({ mode: "normal", typed: ["g"] }, () => current);
+  const shown = session.show_prefix_({ mode: "normal", typed: ["g"] }, () => current);
   current = false;
   answer(0);
   await shown;

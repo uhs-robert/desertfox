@@ -5,7 +5,7 @@ import { deepest_focused_element } from "../editable.ts";
 function focused_element(): AlignFocus<Element> | undefined {
   const focused = deepest_focused_element();
   if (!focused) return undefined;
-  return { ref: focused, is_page_root: focused === document.body || focused === document.documentElement };
+  return { ref: focused, is_page_root_: focused === document.body || focused === document.documentElement };
 }
 
 function selection_target(blurred: Element | undefined): AlignSelection<Element> | undefined {
@@ -16,13 +16,13 @@ function selection_target(blurred: Element | undefined): AlignSelection<Element>
   return {
     parent,
     editable: (parent.isContentEditable && parent.closest("[contenteditable]")) || undefined,
-    holds_remembered: !!blurred && parent.contains(blurred),
+    holds_remembered_: !!blurred && parent.contains(blurred),
   };
 }
 
-// `last_blurred` comes from the host: this file runs in the page bundle, which has no copy of the blur state.
-export function align_focus(position: AlignPosition, last_blurred: Element | undefined): void {
-  const blurred = last_blurred?.isConnected ? last_blurred : undefined;
+// `last_blurred_` comes from the host: this file runs in the page bundle, which has no copy of the blur state.
+export function align_focus(position: AlignPosition, last_blurred_: Element | undefined): void {
+  const blurred = last_blurred_?.isConnected ? last_blurred_ : undefined;
   const target = choose_align_target(focused_element(), selection_target(blurred), blurred);
   if (!target) throw new Error("Nothing focused or selected to align");
   target.scrollIntoView({ block: SCROLL_BLOCK[position], behavior: "instant" });

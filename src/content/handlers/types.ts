@@ -10,5 +10,5 @@ export type ContentHandler = {
   // `repeat` is true when an auto-repeat keydown started the run, false for every other source.
   run: (args: CheckedArgs, repeat: boolean) => HandlerResult;
   // Params the handler fills from the page when the invocation leaves them out.
-  fill_from_page?: Record<string, ContentContextSource>;
+  fill_from_page_?: Record<string, ContentContextSource>;
 };

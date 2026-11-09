@@ -11,20 +11,20 @@ export type TextTree = Document | ShadowRoot;
 export type TextModel = {
   text: string;
   // Character index to a DOM position, and the other way. An empty line made by a <br> has no text node, so its position is the <br> in its parent.
-  point_at: (index: number) => DomPoint;
-  index_of: (node: Node, offset: number) => number | undefined;
+  point_at_: (index: number) => DomPoint;
+  index_of_: (node: Node, offset: number) => number | undefined;
   // Every tree with text in the model, in the order the text meets them.
   trees: TextTree[];
   // Shadow roots and frame documents the walk met that gave no text, so a later fill is not seen through `trees`. Never overlaps `trees`.
-  empty_trees: TextTree[];
+  empty_trees_: TextTree[];
   // Custom elements (a hyphen in the tag name) the walk met with no shadow root. One can attach a root later, and that fires no mutation. A plain element can too, and is left out: checking every element is the cost this list avoids.
-  pending_hosts: Element[];
+  pending_hosts_: Element[];
   // Every frame element the walk met. A frame that loads or navigates later fires `load` on the element and no mutation in this tree.
   frames: Element[];
   // The characters from `from` up to `to`, cut where the text passes into another tree.
-  tree_runs: (from: number, to: number) => TreeRun[];
+  tree_runs_: (from: number, to: number) => TreeRun[];
   // The first character of the `start_node` given to the build, or of the text after it. Undefined when no text follows it.
-  start_index: number | undefined;
+  start_index_: number | undefined;
   // True when the walk stopped at MAX_TEXT_CHARS, so the text is only the start of the page.
   truncated: boolean;
 };
@@ -32,7 +32,7 @@ export type TextModel = {
 export type DomPoint = { node: Node; offset: number };
 export type TreeRun = { tree: TextTree; from: number; to: number };
 
-type Segment = { node: Text; first_index: number; offsets: number[] };
+type Segment = { node: Text; first_index_: number; offsets: number[] };
 type TreeStart = { index: number; tree: TextTree };
 
 const ELEMENT_NODE = 1;
@@ -72,12 +72,12 @@ export function build_text_model(root: Element = document.body, start_node?: Nod
   const trees = new Set<TextTree>();
   const met_trees = new Set<TextTree>();
   const frames: Element[] = [];
-  const pending_hosts: Element[] = [];
+  const pending_hosts_: Element[] = [];
   let text = "";
   let last_block: Element | undefined;
   let after_space = true;
   let start_seen = false;
-  let start_index: number | undefined;
+  let start_index_: number | undefined;
   let truncated = false;
 
   // The last blank before a line end is the line end, so a line never ends in a space.
@@ -88,7 +88,7 @@ export function build_text_model(root: Element = document.body, start_node?: Nod
 
   // Runs just before the text of `node` is added at text.length.
   const note_text_of = (node: Node) => {
-    if (start_seen) start_index ??= text.length;
+    if (start_seen) start_index_ ??= text.length;
     const tree = node.getRootNode() as TextTree;
     if (tree_starts.at(-1)?.tree !== tree) tree_starts.push({ index: text.length, tree });
     trees.add(tree);
@@ -132,7 +132,7 @@ export function build_text_model(root: Element = document.body, start_node?: Nod
       if (piece === "") return;
     }
     note_text_of(node);
-    segments.push({ node, first_index: text.length, offsets });
+    segments.push({ node, first_index_: text.length, offsets });
     text += piece;
     after_space = blank_before;
     last_block = block;
@@ -162,7 +162,7 @@ export function build_text_model(root: Element = document.body, start_node?: Nod
     }
     const shadow = shadow_root_of(element);
     if (shadow) met_trees.add(shadow);
-    else if (element.localName.includes("-")) pending_hosts.push(element);
+    else if (element.localName.includes("-")) pending_hosts_.push(element);
     const children = rendered_children(element);
     const inner_block = is_block(style) ? element : block;
     const inner_preformatted = style.whiteSpace.startsWith("pre");
@@ -172,19 +172,19 @@ export function build_text_model(root: Element = document.body, start_node?: Nod
   visit(root, root, false, 0);
   return {
     text,
-    point_at: (index) => empty_lines.get(index) ?? point_at(segments, index),
-    index_of: (node, offset) => index_of(segments, empty_lines, node, offset),
+    point_at_: (index) => empty_lines.get(index) ?? point_at_(segments, index),
+    index_of_: (node, offset) => index_of_(segments, empty_lines, node, offset),
     trees: [...trees],
-    empty_trees: [...met_trees].filter((tree) => !trees.has(tree)),
-    pending_hosts,
+    empty_trees_: [...met_trees].filter((tree) => !trees.has(tree)),
+    pending_hosts_,
     frames,
-    tree_runs: (from, to) => tree_runs(tree_starts, from, to),
-    start_index,
+    tree_runs_: (from, to) => tree_runs_(tree_starts, from, to),
+    start_index_,
     truncated,
   };
 }
 
-function tree_runs(tree_starts: TreeStart[], from: number, to: number): TreeRun[] {
+function tree_runs_(tree_starts: TreeStart[], from: number, to: number): TreeRun[] {
   const runs: TreeRun[] = [];
   tree_starts.forEach(({ index, tree }, at) => {
     const run = { tree, from: Math.max(from, index), to: Math.min(to, tree_starts[at + 1]?.index ?? to) };
@@ -210,7 +210,7 @@ export const trees_alive = (model: TextModel): boolean => model.trees.every(is_a
 // True when a custom element that had no shadow root at build time has one now, so its text is not in the model.
 // A host of a removed or navigated frame is a dead wrapper in Firefox and throws on read. It counts as changed, so the model is read again.
 export const host_gained_root = (model: TextModel): boolean =>
-  model.pending_hosts.some((host) => {
+  model.pending_hosts_.some((host) => {
     try {
       return shadow_root_of(host) !== null;
     } catch {
@@ -221,20 +221,20 @@ export const host_gained_root = (model: TextModel): boolean =>
 // Each document holds one selection, for itself and for the shadow roots inside it. A dead one is left out.
 export const documents_of = (model: TextModel): Document[] => [...new Set(model.trees.filter(is_alive).map(document_of))];
 
-function point_at(segments: Segment[], index: number): DomPoint {
+function point_at_(segments: Segment[], index: number): DomPoint {
   let low = 0;
   let high = segments.length - 1;
   while (low < high) {
     const middle = (low + high + 1) >> 1;
-    if (segments[middle]!.first_index <= index) low = middle;
+    if (segments[middle]!.first_index_ <= index) low = middle;
     else high = middle - 1;
   }
   const segment = segments[low]!;
-  const offset = segment.offsets[Math.min(index - segment.first_index, segment.offsets.length - 1)]!;
+  const offset = segment.offsets[Math.min(index - segment.first_index_, segment.offsets.length - 1)]!;
   return { node: segment.node, offset: Math.max(offset, 0) };
 }
 
-function index_of(segments: Segment[], empty_lines: Map<number, DomPoint>, node: Node, offset: number): number | undefined {
+function index_of_(segments: Segment[], empty_lines: Map<number, DomPoint>, node: Node, offset: number): number | undefined {
   if (node.nodeType !== TEXT_NODE) {
     for (const [index, point] of empty_lines) if (point.node === node && point.offset === offset) return index;
     return undefined;
@@ -242,5 +242,5 @@ function index_of(segments: Segment[], empty_lines: Map<number, DomPoint>, node:
   const segment = segments.find((candidate) => candidate.node === node);
   if (!segment) return undefined;
   const at = segment.offsets.findIndex((raw) => raw >= offset);
-  return segment.first_index + (at < 0 ? segment.offsets.length - 1 : at);
+  return segment.first_index_ + (at < 0 ? segment.offsets.length - 1 : at);
 }

@@ -76,7 +76,7 @@ test("the clickable selector adds roving-tabindex items", () => {
 // A fake page element for the click sign: a tag, a cursor, a parent and attributes.
 type Dom = { name: string; local: string; cursor?: string; parent?: Dom; attrs?: Record<string, string>; in_menu?: boolean; plain?: boolean; focus_only?: boolean };
 const dom_styles = {
-  cursor_of: (e: Element) => (e as unknown as Dom).cursor ?? "auto",
+  cursor_of_: (e: Element) => (e as unknown as Dom).cursor ?? "auto",
   parent_of: (e: Element) => ((e as unknown as Dom).parent ?? null) as unknown as Element | null,
 };
 const el = (d: Dom) =>
@@ -166,12 +166,12 @@ test("a visible wrapper keeps its hint when the clickable child inside it is hid
   const wrapper = el({ name: "wrapper", local: "div", cursor: "pointer" });
   const child = el({ name: "hidden button", local: "button", parent: wrapper as unknown as Dom });
   const probe = {
-    is_intersecting: (f: Found) => f.element !== child,
-    rects_of: () => [{ left: 0, top: 0, right: 10, bottom: 10 }],
-    clips_of: () => [],
-    viewport_of: () => ({ width: 100, height: 100 }),
-    is_hidden_by_style: () => false,
-    is_reachable_at: () => true,
+    is_intersecting_: (f: Found) => f.element !== child,
+    rects_of_: () => [{ left: 0, top: 0, right: 10, bottom: 10 }],
+    clips_of_: () => [],
+    viewport_of_: () => ({ width: 100, height: 100 }),
+    is_hidden_by_style_: () => false,
+    is_reachable_at_: () => true,
   };
   assert.deepEqual(names_of(keep_visible_deduplicated([weak(wrapper), strong(child)], probe)), ["wrapper"]);
 });

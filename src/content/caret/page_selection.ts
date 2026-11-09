@@ -9,14 +9,14 @@ const TEXT_NODE = 3;
 export function selection_span(model: TextModel, selection: Selection): { first: number; last: number } | undefined {
   if (selection.rangeCount === 0) return undefined;
   const range = selection.getRangeAt(0);
-  const first = model.index_of(range.startContainer, range.startOffset);
+  const first = model.index_of_(range.startContainer, range.startOffset);
   const last_range = selection.getRangeAt(selection.rangeCount - 1);
   const end = last_range.endContainer;
   const end_in_text = end.nodeType === TEXT_NODE;
   let last: number | undefined = first;
   if (selection.rangeCount > 1 || !range.collapsed) {
     // An end on an empty line is the <br> itself, painted without the +1 a text end has. A text end at offset 0 excludes its own character, so the span stops one before it.
-    const end_index = model.index_of(end, end_in_text ? Math.max(last_range.endOffset - 1, 0) : last_range.endOffset);
+    const end_index = model.index_of_(end, end_in_text ? Math.max(last_range.endOffset - 1, 0) : last_range.endOffset);
     last = end_in_text && last_range.endOffset === 0 && end_index !== undefined ? Math.max(end_index - 1, first ?? 0) : end_index;
   }
   return first === undefined || last === undefined ? undefined : { first, last };

@@ -5,19 +5,19 @@ import "../src/commands/scroll.ts";
 import { check_args } from "../src/shared/registry/index.ts";
 import { registry } from "../src/shared/registry/builtin.ts";
 
-const focus = (ref: string) => ({ ref, is_page_root: false });
-const page_root = (ref: string) => ({ ref, is_page_root: true });
+const focus = (ref: string) => ({ ref, is_page_root_: false });
+const page_root = (ref: string) => ({ ref, is_page_root_: true });
 
 test("the focused element wins over the selection", () => {
-  assert.equal(choose_align_target(focus("field"), { editable: undefined, parent: "paragraph", holds_remembered: false }, "left"), "field");
+  assert.equal(choose_align_target(focus("field"), { editable: undefined, parent: "paragraph", holds_remembered_: false }, "left"), "field");
 });
 
 test("body and html are skipped, so the selection is used", () => {
-  assert.equal(choose_align_target(page_root("body"), { editable: undefined, parent: "paragraph", holds_remembered: false }, undefined), "paragraph");
+  assert.equal(choose_align_target(page_root("body"), { editable: undefined, parent: "paragraph", holds_remembered_: false }, undefined), "paragraph");
 });
 
 test("a selection inside an editable uses the editable", () => {
-  assert.equal(choose_align_target(undefined, { editable: "editor", parent: "line", holds_remembered: false }, "left"), "editor");
+  assert.equal(choose_align_target(undefined, { editable: "editor", parent: "line", holds_remembered_: false }, "left"), "editor");
 });
 
 test("nothing focused or selected gives no target", () => {
@@ -28,12 +28,12 @@ test("nothing focused or selected gives no target", () => {
 test("the blurred element is the last resort, after focus and selection", () => {
   assert.equal(choose_align_target(undefined, undefined, "left"), "left");
   assert.equal(choose_align_target(page_root("body"), undefined, "left"), "left");
-  assert.equal(choose_align_target(undefined, { editable: undefined, parent: "paragraph", holds_remembered: false }, "left"), "paragraph");
+  assert.equal(choose_align_target(undefined, { editable: undefined, parent: "paragraph", holds_remembered_: false }, "left"), "paragraph");
   assert.equal(choose_align_target(focus("field"), undefined, "left"), "field");
 });
 
 test("a selection on the field's wrapper gives way to the blurred field inside it", () => {
-  assert.equal(choose_align_target(undefined, { editable: undefined, parent: "wrapper", holds_remembered: true }, "field"), "field");
+  assert.equal(choose_align_target(undefined, { editable: undefined, parent: "wrapper", holds_remembered_: true }, "field"), "field");
 });
 
 test("scroll.align defaults to center and refuses an unknown position", () => {
