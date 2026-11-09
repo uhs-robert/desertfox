@@ -40,8 +40,9 @@ export type TreeBranch = {
 
 export type TreeNode = TreeLeaf | TreeBranch;
 
-// `normal` is the normal tree with the rule's keys pruned, built in the background so the content script only tests the regex and swaps the tree. `all_off` has no tree: every normal key goes to the page.
-export type SiteRule = { regex: string } & ({ normal: TreeBranch } | { all_off: true });
+// `pass` and `only` hold parsed key sequences, one token array each. The content script prunes the normal tree with them, so the stored keymap does not grow a tree per rule.
+// `all_off` is a rule with no keys, or whose keys leave no normal binding: every normal key goes to the page.
+export type SiteRule = { regex: string } & ({ pass: string[][] } | { only: string[][] } | { all_off: true });
 
 export type CompiledKeymap = {
   format_version: typeof COMPILED_KEYMAP_VERSION;

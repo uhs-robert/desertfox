@@ -12,6 +12,7 @@ import { percent_to_offset, pick_scroll_target } from "../src/content/scroll_tar
 import { create_matcher } from "../src/shared/keys/index.ts";
 import { COMPILED_KEYMAP_VERSION, current_keymap } from "../src/shared/index.ts";
 import { compile_keymap } from "../src/shared/keys/index.ts";
+import { prune_tree, rule_frees } from "../src/shared/keys/prune_tree.ts";
 import type { CompiledKeymap, TreeLeaf } from "../src/shared/index.ts";
 
 const leaf = (id: string): TreeLeaf => ({ kind: "leaf", steps: [{ invocation: { id }, runs_in: "content", count_rule: "ignore" }] });
@@ -128,6 +129,38 @@ test("key flow cancels matches and half-typed sequences, passes unbound keys", (
   assert.equal(flow.handle_token_("3"), "cancel");
   assert.equal(flow.handle_token_("j"), "cancel");
   assert.deepEqual(ran, ["down", "down3"]);
+});
+
+test("a tree swap mid-sequence drops the sequence, and keys held at load replay against the new tree", () => {
+  const { ran, flow } = make_flow();
+  flow.set_matcher_(create_matcher(keymap));
+  assert.equal(flow.handle_token_("g"), "cancel");
+  const pruned = { ...keymap, modes: { ...keymap.modes, normal: prune_tree(keymap.modes.normal, { pass: [["g"]] }) } };
+  flow.set_matcher_(create_matcher(pruned));
+  assert.equal(flow.handle_token_("g"), "pass");
+  const held = make_flow();
+  assert.equal(held.flow.handle_token_("g"), "cancel");
+  assert.equal(held.flow.handle_token_("j"), "cancel");
+  held.flow.set_matcher_(create_matcher(pruned));
+  assert.deepEqual([ran, held.ran], [[], ["down"]]);
+});
+
+test("a rule hands Quick Find keys and digits to the page", () => {
+  const { ran, flow } = make_flow();
+  const rule = { pass: [["/"], ["j"]] };
+  const ruled = { ...keymap, modes: { ...keymap.modes, normal: prune_tree(keymap.modes.normal, rule) } };
+  flow.set_matcher_(create_matcher(ruled, (token) => rule_frees(rule, token)));
+  assert.equal(flow.handle_token_("/"), "pass");
+  assert.equal(flow.handle_token_("j"), "pass");
+  assert.equal(flow.handle_token_("'"), "cancel");
+  const only = { only: [["g", "g"]] };
+  const only_flow = make_flow();
+  only_flow.flow.set_matcher_(create_matcher({ ...keymap, modes: { ...keymap.modes, normal: prune_tree(keymap.modes.normal, only) } }, (token) => rule_frees(only, token)));
+  assert.equal(only_flow.flow.handle_token_("'"), "pass");
+  assert.equal(only_flow.flow.handle_token_("4"), "pass");
+  assert.equal(only_flow.flow.handle_token_("g"), "cancel");
+  assert.equal(only_flow.flow.handle_token_("g"), "cancel");
+  assert.deepEqual([ran, only_flow.ran], [[], ["top"]]);
 });
 
 test("key flow in ignore mode passes everything but the leaving binding", () => {

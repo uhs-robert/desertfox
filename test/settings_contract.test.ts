@@ -179,8 +179,8 @@ test("a bad link names its item and its fault", () => {
 test("a bad site rule names its item and its fault", () => {
   const explain = SETTING_SPECS.site_rules.explain!;
   assert.equal(explain([{ site: "*://a.test/*" }, { site: "*://b.test/*", pass: "j", only: "k" }]), 'item 2 sets both "pass" and "only", and only one may be set');
-  assert.equal(explain([{ site: "*://a.test/*", pass: " " }]), 'item 1 has a "pass" that lists no key');
-  assert.match(explain([{ site: "*://a.test/*", only: "j <j>" }])!, /^item 1 has a "only" that has "<j>", which /);
+  assert.equal(explain([{ site: "*://a.test/*", pass: " " }]), 'item 1 has a field "pass" that lists no key');
+  assert.match(explain([{ site: "*://a.test/*", only: "j <j>" }])!, /^item 1 has a field "only" that has "<j>", which /);
   assert.equal(explain([{ pass: "j" }]), 'item 1 needs a non-empty "site"');
 });
 

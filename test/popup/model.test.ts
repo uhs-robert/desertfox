@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { disabled_after_click, HOME_HASH, SETTINGS_HASH, WARNINGS_HASH, build_rows } from "../../src/popup/model.ts";
+import { disabled_after_click, HOME_HASH, SETTINGS_HASH, SITE_RULES_HASH, WARNINGS_HASH, build_rows } from "../../src/popup/model.ts";
 import type { PopupInputs } from "../../src/popup/model.ts";
 import { parse_route } from "../../src/help/route.ts";
 
@@ -53,4 +53,11 @@ test("the links land on Home, Settings and the Warnings heading", () => {
 test("a click on the switch asks for the opposite of what it shows", () => {
   assert.equal(disabled_after_click(row(base, "power")), true);
   assert.equal(disabled_after_click(row({ ...base, disabled: true }, "power")), false);
+});
+
+test("the rule link lands on the settings group that holds site_rules", async () => {
+  const { page_sections } = await import("../../src/help/render.ts");
+  const route = parse_route(SITE_RULES_HASH);
+  assert.equal(route.page, "settings");
+  assert.ok(page_sections("settings", []).some((section) => section.slug === route.section));
 });

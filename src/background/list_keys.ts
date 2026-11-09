@@ -9,6 +9,8 @@ import { COMPILED_KEYMAP_STORAGE_KEY } from "../shared/prefix_tree.ts";
 import type { CompiledKeymap, TreeBranch, TreeLeaf, TreeNode } from "../shared/prefix_tree.ts";
 
 import { is_available } from "./availability.ts";
+import { prune_tree } from "../shared/keys/prune_tree.ts";
+import { matches_any_address } from "../shared/match_pattern.ts";
 
 type KeymapStorage = Pick<typeof browser.storage.local, "get">;
 
@@ -86,10 +88,14 @@ export async function list_keys(
   find_command: (id: string) => CommandMeta | undefined,
   request: Pick<ListKeys, "mode" | "prefix">,
   availability?: PageAvailability,
+  addresses: readonly (string | undefined)[] = [],
 ): Promise<WhichKeyPanel> {
   const stored = await storage.get(COMPILED_KEYMAP_STORAGE_KEY);
   const keymap = stored[COMPILED_KEYMAP_STORAGE_KEY] as CompiledKeymap | undefined;
-  const root = keymap?.modes[request.mode as keyof CompiledKeymap["modes"]];
+  const mode_root = keymap?.modes[request.mode as keyof CompiledKeymap["modes"]];
+  // The panel lists what the page's rule leaves, the same tree the content script walks.
+  const rule = request.mode === "normal" ? keymap?.site_rules?.find(({ regex }) => matches_any_address(regex, addresses)) : undefined;
+  const root = rule === undefined || "all_off" in rule ? mode_root : prune_tree(mode_root, rule);
   const shown = root && availability ? without_unavailable(root, availability) : root;
   return panel_after_prefix(shown, request.prefix, find_command, keymap?.which_key_border);
 }

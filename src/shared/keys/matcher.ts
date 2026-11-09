@@ -12,7 +12,8 @@ const MAX_COUNT_DIGITS = 6;
 // Only the modes that move through the page have counts. In the others a digit is just a key.
 const COUNT_MODES = ["normal", "caret", "visual", "visual_line"];
 
-export function create_matcher(keymap: CompiledKeymap) {
+// `frees` names the keys a site rule hands to the page. While no sequence is under way, such a key matches nothing and is no count digit.
+export function create_matcher(keymap: CompiledKeymap, frees?: (token: string) => boolean) {
   let walk_mode = "";
   let node: TreeBranch | undefined;
   let typed: string[] = [];
@@ -24,6 +25,9 @@ export function create_matcher(keymap: CompiledKeymap) {
     count_digits = "";
   };
 
+  // Whether the page gets this key whatever the tree says, so the key flow does not cancel it either.
+  const passes_ = (mode: string, token: string): boolean => mode === "normal" && typed.length === 0 && count_digits === "" && frees?.(token) === true;
+
   const walk = (mode: string, token: string): MatchResult => {
     if (mode !== walk_mode) {
       reset();
@@ -32,6 +36,7 @@ export function create_matcher(keymap: CompiledKeymap) {
     const root = keymap.modes[mode as keyof CompiledKeymap["modes"]];
     if (!root) return { kind: "no_match" };
     node ??= root;
+    if (passes_(mode, token)) return reset(), { kind: "no_match" };
 
     const is_digit = /^[0-9]$/.test(token);
     const key_is_count_digit =
@@ -80,5 +85,5 @@ export function create_matcher(keymap: CompiledKeymap) {
     return result.kind !== "no_match";
   };
 
-  return { feed, reset, binds_after_ };
+  return { feed, reset, binds_after_, passes_ };
 }
