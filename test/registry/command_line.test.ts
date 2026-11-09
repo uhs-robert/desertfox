@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { check_args, parse_command_line, tokenize, usage_line } from "../../src/shared/registry/index.ts";
-import type { EnumSources } from "../../src/shared/registry/index.ts";
+import { check_args, create_registry, parse_command_line, tokenize, usage_line } from "../../src/shared/registry/index.ts";
+import type { EnumSources, Token } from "../../src/shared/registry/index.ts";
 import "../../src/commands/hint.ts";
 import { registry as real_registry } from "../../src/shared/registry/builtin.ts";
 import { grammar_registry, search_sources } from "./grammar_registry.ts";
@@ -221,16 +221,26 @@ test("@source words are context sources, unquoted only", () => {
 });
 
 test("shell quoting", () => {
-  assert.deepEqual(tokenize(`a "b c" 'd e' f\\ g "h\\"i" 'j\\k' l"m n"o x="y z"`), [
-    { text: "a", quoted_from: null },
-    { text: "b c", quoted_from: 0 },
-    { text: "d e", quoted_from: 0 },
-    { text: "f g", quoted_from: 1 },
-    { text: 'h"i', quoted_from: 0 },
-    { text: "j\\k", quoted_from: 0 },
-    { text: "lm no", quoted_from: 1 },
-    { text: "x=y z", quoted_from: 2 },
-  ]);
+  const line = `a "b c" 'd e' f\\ g "h\\"i" 'j\\k' l"m n"o x="y z"`;
+  const tokens = tokenize(line) as Token[];
+  assert.deepEqual(
+    tokens.map(({ text, quoted_from }) => ({ text, quoted_from })),
+    [
+      { text: "a", quoted_from: null },
+      { text: "b c", quoted_from: 0 },
+      { text: "d e", quoted_from: 0 },
+      { text: "f g", quoted_from: 1 },
+      { text: 'h"i', quoted_from: 0 },
+      { text: "j\\k", quoted_from: 0 },
+      { text: "lm no", quoted_from: 1 },
+      { text: "x=y z", quoted_from: 2 },
+    ],
+  );
+  // `start` is where the raw word begins in the line, so the raw text of a word is `line.slice(start)` up to its end.
+  assert.deepEqual(
+    tokens.map(({ start }) => line.slice(start).split(" ")[0]),
+    ["a", '"b', "'d", "f\\", '"h\\"i"', "'j\\k'", 'l"m', 'x="y'],
+  );
   assert.deepEqual(parsed(`open --where=tab "two words"`).args, { where: "tab", url: "two words" });
   assert.deepEqual(parsed(`open --url="my page" --where=tab`).args, { url: "my page", where: "tab" });
   assert.deepEqual(parsed(`open --url=""`).args, { url: "" });
@@ -337,4 +347,52 @@ test("hint refuses a selector unless the filter is custom", () => {
     const refused = result.kind === "error" || !check_args(real_registry.get("hint.run")!, result.kind === "invocation" ? result.invocation.args : {}, search_sources).ok;
     assert.equal(refused, true, text);
   }
+});
+
+// A verbatim main param takes the typed text as is, from its first word to the end of the line.
+const verbatim_registry = create_registry();
+verbatim_registry.define("pick.run", {
+  name: "pick",
+  label: "L",
+  intent: "I.",
+  runs_in: "background",
+  run: () => {},
+  params: [
+    { name: "rapid", type: "bool", default: false, short: "r" },
+    { name: "where", type: "enum", values: ["here", "tab"], default: "here", short: { tab: "t" } },
+    { name: "selector", type: "string", main: true, rest: true, verbatim: true },
+  ],
+});
+
+function verbatim_args(text: string) {
+  const result = parse_command_line(verbatim_registry, text);
+  assert.equal(result.kind, "invocation", JSON.stringify(result));
+  return result.kind === "invocation" ? result.invocation.args : never();
+}
+
+test("a verbatim param keeps quotes, backslashes and inner spacing, and drops the end spacing", () => {
+  assert.deepEqual(verbatim_args(`pick a[href="/x"]`), { selector: 'a[href="/x"]' });
+  assert.deepEqual(verbatim_args(`pick   a[title='it']  .b   `), { selector: "a[title='it']  .b" });
+  assert.deepEqual(verbatim_args(`pick .a\\:b   c`), { selector: ".a\\:b   c" });
+  assert.deepEqual(verbatim_args(`pick "a b"`), { selector: '"a b"' });
+  assert.deepEqual(verbatim_args(`pick @selection`), { selector: "@selection" });
+  assert.deepEqual(verbatim_args(`pick @selection x`), { selector: "@selection x" });
+});
+
+test("flags come before a verbatim param, and later flag-like words are text", () => {
+  assert.deepEqual(verbatim_args(`pick -r --tab a[href="x"] -r`), { rapid: true, where: "tab", selector: 'a[href="x"] -r' });
+  assert.deepEqual(verbatim_args(`pick -- -x[a="b"]`), { selector: '-x[a="b"]' });
+  assert.deepEqual(verbatim_args(`pick -r -- --a   b`), { rapid: true, selector: "--a   b" });
+  assert.match(error_of_verbatim(`pick -x[a="b"]`), /unknown flag/);
+});
+
+function error_of_verbatim(text: string): string {
+  const result = parse_command_line(verbatim_registry, text);
+  assert.equal(result.kind, "error", JSON.stringify(result));
+  return result.kind === "error" ? result.error : "";
+}
+
+test("the real hint command reads a selector with double quotes verbatim", () => {
+  const result = parse_command_line(real_registry, `hint --custom a[href="x y"] > b`, search_sources);
+  assert.deepEqual(result.kind === "invocation" ? result.invocation.args : result, { filter: "custom", selector: 'a[href="x y"] > b' });
 });

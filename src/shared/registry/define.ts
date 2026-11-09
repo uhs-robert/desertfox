@@ -152,6 +152,11 @@ function check_params(input: CommandInput, fail: Fail): void {
   params.forEach((param, index) => {
     const at = `params[${index}]`;
     if (param.rest && param.type !== "string") fail(`${at}.rest`, "only a string param can take the rest");
+    if (param.verbatim) {
+      if (param.type !== "string") fail(`${at}.verbatim`, "only a string param can be verbatim");
+      if (!param.main) fail(`${at}.verbatim`, "only the main param can be verbatim");
+      if (param.value_of !== undefined) fail(`${at}.verbatim`, "a verbatim param cannot hold a setting value (value_of)");
+    }
     if (param.value_of !== undefined) {
       const sibling = find_param(input, param.value_of);
       if (sibling?.strict !== true) fail(`${at}.value_of`, `names "${param.value_of}", which is not a strict string param`);

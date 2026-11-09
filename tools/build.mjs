@@ -13,7 +13,7 @@ const MAX_BYTES = {
   "cmdline.js": 4 * 1024,
   "ui.js": 8 * 1024,
   "page.js": 4 * 1024,
-  "cmdline_page.js": 44 * 1024,
+  "cmdline_page.js": 45 * 1024,
   "find_worker.js": 2 * 1024,
 };
 

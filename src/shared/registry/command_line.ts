@@ -10,6 +10,8 @@ import { usage_line } from "./usage.ts";
 
 export type Token = {
   text: string;
+  // Index in the tokenized text where the raw word begins, so a verbatim param can take the raw text from here.
+  start: number;
   // Index in `text` of the first quoted or escaped character, or null when none was.
   // A quoted word is always free text, never a param name, switch, value word or @source.
   quoted_from: number | null;
@@ -20,16 +22,16 @@ export type Token = {
 export function tokenize(text: string): Token[] | { error: string } {
   const tokens: Token[] = [];
   let current: Token | null = null;
+  let index = 0;
   const start_quote = (): Token => {
-    current ??= { text: "", quoted_from: null };
+    current ??= { text: "", quoted_from: null, start: index };
     current.quoted_from ??= current.text.length;
     return current;
   };
   const add = (char: string): void => {
-    current ??= { text: "", quoted_from: null };
+    current ??= { text: "", quoted_from: null, start: index };
     current.text += char;
   };
-  let index = 0;
   while (index < text.length) {
     const char = text[index] as string;
     if (/\s/.test(char)) {
@@ -87,11 +89,11 @@ export function parse_command_line(registry: CommandLookup, text: string, source
   if (!first) return { kind: "error", error: "empty command line" };
   const command = registry.find(first.text);
   if (!command) return { kind: "error", error: `unknown command "${first.text}"` };
-  return parse_words(command, words, sources);
+  return parse_words(command, words, text, sources);
 }
 
-// Flags come first, then the subject, which runs to the end of the line.
-function parse_words(command: ParsedCommand, words: Token[], sources: EnumSources): ParseResult {
+// Flags come first, then the subject, which runs to the end of the line. `text` is the line `words` came from.
+function parse_words(command: ParsedCommand, words: Token[], text: string, sources: EnumSources): ParseResult {
   const params = command.params ?? [];
   const command_word = command.name ?? command.id;
   const args: Record<string, unknown> = {};
@@ -151,7 +153,10 @@ function parse_words(command: ParsedCommand, words: Token[], sources: EnumSource
     }
     if (Object.hasOwn(args, main.name)) return error(`${main.name} is set twice, quote text that has spaces`);
     const rest = words.slice(index);
-    if (rest.length === 1) {
+    if (main.verbatim) {
+      // The raw text keeps quotes, backslashes and inner spacing. A leading `@name` stays text too.
+      args[main.name] = text.slice(word.start).trimEnd();
+    } else if (rest.length === 1) {
       const value = value_of(word.text, unquoted);
       if (typeof value === "object" && "error" in value) return error(value.error);
       args[main.name] = value;
