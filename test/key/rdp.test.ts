@@ -185,6 +185,24 @@ test("concurrent evaluations on one console each get their own result", { timeou
   });
 });
 
+test("a result sent as a long-string grip fails at once and says so", { timeout: 40000 }, async () => {
+  const firefox = addon_firefox((packet, fake, slots) => {
+    const text = packet.text as string;
+    if (/^globalThis\.__key_test_\w+$/.test(text)) {
+      const resultID = "r-long";
+      fake.send({ from: packet.to, resultID });
+      fake.send({ from: packet.to, type: "evaluationResult", resultID, result: { type: "longString", length: 20000, initial: "{", actor: "long1" } });
+      return;
+    }
+    answer_evaluation(packet, fake, slots);
+  });
+  await with_rdp(firefox, async (rdp) => {
+    const started = Date.now();
+    await assert.rejects(evaluate_in_background(rdp, ADDON, `"big"`), /20000 characters, too long/);
+    assert.ok(Date.now() - started < 2000, "the call waited for the timeout");
+  });
+});
+
 test("a failed background call leaves the next one working", { timeout: 40000 }, async () => {
   // Race: the first evaluation throws in the page. The old client dropped the console and asked the watcher again, which sends no second form, so every later call waited out its timeout.
   let first = true;
