@@ -30,6 +30,8 @@ const SCROLL_REPORT_DELAY_MS = 150;
 // Only wait_tab_quiet keeps this age, for the extension and about: pages that report no keys. A test page takes the key probe instead.
 const NEW_PAGE_QUIET_MS = 300;
 const BARRIER_KEY = "F8";
+// The probe has its own key, so no barrier check can match a late probe report. F4 has no binding in src/ and no default action in Firefox.
+const PROBE_KEY = "F4";
 // A key that a young page drops does not come late (7a probe: 40 of 40 such presses stayed unseen for 1 s), so a probe press unseen this long is pressed again.
 const KEY_PROBE_TRY_MS = 200;
 const KEY_PROBE_TIMEOUT_MS = 3000;
@@ -621,25 +623,17 @@ export async function create_session({ name: session_name, timings, sweep = true
   }
 
   // A page drops every key of its first moments (7a probe: F8 lost at 0 and 30 ms after tree_read, kept at 100 ms), and a key pressed right after it reports focus.
-  // So the page is ready when it reports a key: F8, which nothing binds, pressed again until the page sees one. A key seen on another page, such as the top page of a frame that has no focus yet, counts as not seen.
-  // A case that counts the page's keydown reports skips F8, because a probe press can land after the case's mark.
+  // So the page is ready when it reports a key: PROBE_KEY, which nothing binds, pressed again until the page sees one. A key seen on another page, such as the top page of a frame that has no focus yet, counts as not seen.
+  // A late probe report matches no barrier, which waits for BARRIER_KEY. A case that counts the page's keydown reports skips PROBE_KEY, because a probe press can land after the case's mark.
   const wait_takes_keys = (page_id) => timings.time("waits", () => wait_takes_keys_untimed(page_id));
   async function wait_takes_keys_untimed(page_id) {
     const deadline = Date.now() + KEY_PROBE_TIMEOUT_MS;
-    const first_mark = events.length;
-    const is_probe_key = (event) => event.type === "keydown" && event.key === BARRIER_KEY;
     for (let presses = 1; ; presses++) {
-      waiting_for = `${page_id} to take the probe key ${BARRIER_KEY}`;
+      waiting_for = `${page_id} to take the probe key ${PROBE_KEY}`;
       const mark = events.length;
-      await press_keys("-k", BARRIER_KEY);
-      if (await server.wait_for_event(mark, (event) => is_probe_key(event) && event.page_id === page_id, KEY_PROBE_TRY_MS)) {
-        // A press that was only slow would report after this return and pass the next barrier before the key under test arrives.
-        // So after a retry the probe waits for every press to report, or one more try for those that were lost.
-        const all_reported = () => events.slice(first_mark).filter(is_probe_key).length >= presses;
-        if (presses > 1) await server.wait_for_event(first_mark, all_reported, KEY_PROBE_TRY_MS);
-        return;
-      }
-      if (Date.now() > deadline) throw wait_timeout_error(`${page_id} to take the probe key ${BARRIER_KEY} (${presses} presses)`);
+      await press_keys("-k", PROBE_KEY);
+      if (await server.wait_for_event(mark, (event) => event.type === "keydown" && event.key === PROBE_KEY && event.page_id === page_id, KEY_PROBE_TRY_MS)) return;
+      if (Date.now() > deadline) throw wait_timeout_error(`${page_id} to take the probe key ${PROBE_KEY} (${presses} presses)`);
       measurements.key_probe_retries = (measurements.key_probe_retries ?? 0) + 1;
     }
   }
@@ -846,7 +840,7 @@ export async function create_session({ name: session_name, timings, sweep = true
 
   // Presses a key with no binding after the key under test and waits for the page to see it, so every earlier key has reached the page by then.
   // It returns the barrier event's index in `events`. It fails by name when the key never shows, or shows on another page, such as after a tab switch that was not meant.
-  // A page that cancels keys in capture, or a mode that swallows keys, never reports it. Then the barrier times out and does not pass.
+  // A mode that swallows keys never reports it. Then the barrier times out and does not pass.
   async function barrier(page_id, { key = BARRIER_KEY, timeout_ms = 3000 } = {}) {
     // The key would type into the line and never reach the page.
     if ((await read_cmdline_state()).open) throw new Error(`barrier key ${key} refused: the command line is open`);
