@@ -126,9 +126,13 @@ test("only keeps the one-shot pass and the ways into and out of ignore mode", ()
   const keymap: KeymapConfig = { normal: { f: { id: "a.f" }, j: { id: "a.j" }, "<C-v>": { id: "a.v" }, "<S-Escape>": { id: "a.i" }, "<Escape>": { id: "a.e" } } };
   const { compiled } = compile_keymap(keymap, { site_rules: [{ site: "https://a.test/*", only: "f" }] }, resolve);
   const matcher = matcher_for(compiled, "https://a.test/");
-  for (const key of ["f", "<C-v>", "<S-Escape>", "<Escape>"]) assert.equal(matcher.feed("normal", key).kind, "match", key);
+  for (const key of ["f", "<C-v>", "<S-Escape>"]) assert.equal(matcher.feed("normal", key).kind, "match", key);
   assert.equal(matcher.feed("normal", "j").kind, "no_match");
-  assert.equal(matcher.passes_("normal", "<Escape>"), false);
+  // Normal-mode Escape goes to the page. Insert mode has its own tree, which no rule prunes.
+  assert.equal(matcher.feed("normal", "<Escape>").kind, "no_match");
+  assert.equal(matcher.passes_("normal", "<Escape>"), true);
+  const insert = compile_keymap({ ...keymap, insert: { "<Escape>": { id: "a.e" } } }, { site_rules: [{ site: "https://a.test/*", only: "f" }] }, resolve).compiled;
+  assert.equal(create_matcher(insert).feed("insert", "<Escape>").kind, "match");
 });
 
 test("an unusable keymap never changes the mode, and a later usable one still enters ignore", () => {
@@ -138,4 +142,12 @@ test("an unusable keymap never changes the mode, and a later usable one still en
   assert.equal(all_off_step(true, false, true, "ignore"), "leave");
   assert.equal(all_off_step(true, false, true, "normal"), "none");
   assert.equal(all_off_step(true, false, false, "ignore"), "none");
+});
+
+test("a subtree no listed sequence names is shared, not copied", () => {
+  const root = compile_keymap(KEYMAP, {}, resolve).compiled.modes.normal!;
+  const pruned = prune_tree(root, { pass: [["j"]] });
+  assert.equal(pruned.children["k"], root.children["k"]);
+  assert.equal(pruned.children["g"], root.children["g"]);
+  assert.equal(pruned.children["j"], undefined);
 });

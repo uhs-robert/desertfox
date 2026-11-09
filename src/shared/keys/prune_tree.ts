@@ -36,8 +36,8 @@ function only(node: TreeNode, sequences: Sequences): TreeNode | undefined {
 
 export type KeyRule = { pass: Sequences } | { only: Sequences };
 
-// `only` keeps these even when unlisted: the one-shot pass, the way into ignore mode and the way out of a mode.
-const ESCAPE_KEYS: Sequences = [["<C-v>"], ["<S-Escape>"], ["<Escape>"]];
+// `only` keeps these even when unlisted: the one-shot pass and the way into ignore mode. Escape is not kept, so a normal-mode Escape reaches the page. Insert mode has its own tree and still leaves on Escape.
+const ESCAPE_KEYS: Sequences = [["<C-v>"], ["<S-Escape>"]];
 
 const EMPTY_ROOT: TreeBranch = { kind: "branch", children: {} };
 

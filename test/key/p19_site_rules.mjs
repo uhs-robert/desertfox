@@ -34,6 +34,19 @@ export async function run_cases({ run_case, open_page, press_keys, wait_event, e
     expect((await scroll_delta_by_press("rule_only", ["G"])) > 0, "G did not scroll under an only rule for G");
   });
 
+  await run_case("under an only rule, Escape reaches the page in normal mode and still leaves insert mode", async () => {
+    await open_page("field", "rule_only_field", { new_tab: true });
+    // The page focuses its field on load, so it starts in insert mode.
+    await poll_until("INSERT in the focused field", async () => badge_of("rule_only_field") === "INSERT");
+    const insert_mark = events.length;
+    await press_keys("-k", "Escape");
+    await wait_event(insert_mark, (event) => event.type === "indicator" && event.page_id === "rule_only_field" && event.label === "NORMAL", "NORMAL after Escape in insert mode");
+    await open_page("page", "rule_only_escape", { new_tab: true });
+    const mark = events.length;
+    await press_keys("-k", "Escape");
+    await wait_event(mark, (event) => event.type === "keydown" && event.key === "Escape" && event.page_id === "rule_only_escape", "the page to see Escape in normal mode");
+  });
+
   await run_case("a rule with no keys starts the page in ignore mode, and the leaving key still works", async () => {
     await open_page("page", "rule_off", { new_tab: true });
     await poll_until("the IGNORE badge", async () => badge_of("rule_off") === "IGNORE");
