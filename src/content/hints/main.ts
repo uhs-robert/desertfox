@@ -213,11 +213,12 @@ function register(host: BundleHostApi): void {
 
   // Keys typed while the build ran never reached a mode. They run in normal mode, in order, once the mode change has ended the session.
   // `after_leaving` runs the pick. A pick that focuses a field gets the keys as text, which a replay in insert mode would drop.
+  // Insert mode after the pick means the pick focused the field: Escape leaves insert mode without a blur, so a field focused earlier is not a target.
   function leave_with_keys(current: Session, after_leaving?: () => void): void {
     const keys = current.waiting_tokens_.splice(0);
     host.set_mode_("normal");
     after_leaving?.();
-    const left = after_leaving ? insert_into_focused_field(keys) : keys;
+    const left = after_leaving && host.get_mode() === "insert" ? insert_into_focused_field(keys) : keys;
     if (left.length > 0) host.hold_keys_until_(Promise.resolve(left));
   }
 
