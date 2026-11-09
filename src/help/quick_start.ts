@@ -156,7 +156,7 @@ export function quick_start_blocks(compiled: CompiledKeymap | undefined, command
     say(
       prefix === undefined
         ? "Which-key lists the keys that can come next after a key that starts a longer sequence. Your keymap has no such key now. The wait is the [which_key_delay_ms] setting."
-        : `Many keys start with a prefix. Press [${prefix}] and wait. A panel lists the keys that can come next, with a name for each. The wait is the [which_key_delay_ms] setting.`,
+        : `Many keys start with a prefix. Press [${prefix}] and wait. A panel lists the keys that can come next, with a name for each. The wait is the [which_key_delay_ms] setting. It applies to the first panel only: while the panel is up, each further key shows its panel at once.`,
     ),
     heading("Search the page"),
     say("Press {find} to search forward and {find_back} to search backward. Type the text and press Enter. {next} jumps to the next match and {previous} to the one before."),
