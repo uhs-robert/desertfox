@@ -298,3 +298,17 @@ test("waiting for a new background page ends with the lost-connection error when
     await assert.rejects(evaluate_in_background(rdp, ADDON, `"never"`), /connection to Firefox lost .* while waiting for the background page/);
   });
 });
+
+test("a wait for a background page that starts on a closed socket fails at once with the lost-connection error", async () => {
+  // Race: the socket closes before the wait starts, so the close hook never fires for it.
+  const firefox = addon_firefox((packet, fake, slots) => answer_evaluation(packet, fake, slots));
+  await with_rdp(firefox, async (rdp, fake) => {
+    assert.equal(await evaluate_in_background(rdp, ADDON, `"warm up"`), "warm up");
+    fake.send({ from: "watcher1", type: "target-destroyed-form", target: { actor: "target1" } });
+    fake.close();
+    while (!rdp.lost_reason()) await sleep(5);
+    const started_at = Date.now();
+    await assert.rejects(evaluate_in_background(rdp, ADDON, `"never"`), /connection to Firefox lost .* while waiting for the background page/);
+    assert.ok(Date.now() - started_at < 2000);
+  });
+});

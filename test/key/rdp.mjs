@@ -227,17 +227,25 @@ async function attach_background_tracker(rdp, addon_id) {
         resolve(live_targets.at(-1).console_actor);
         return true;
       };
-      const stop_watching_close = rdp.on_close(() => {
+      const lost = () => {
         clearTimeout(timer);
         arrival_listeners.delete(answer);
         reject(new Error(`rdp: connection to Firefox lost (${rdp.lost_reason()}) while waiting for the background page of ${addon_id}`));
-      });
+      };
+      const stop_watching_close = rdp.on_close(lost);
       const timer = setTimeout(() => {
         arrival_listeners.delete(answer);
         stop_watching_close();
         reject(new Error(`rdp: no background page of ${addon_id} came up`));
       }, timeout_ms);
-      if (!answer()) arrival_listeners.add(answer);
+      if (answer()) return;
+      // A socket that closed before this wait began fires no close hook.
+      if (rdp.lost_reason()) {
+        stop_watching_close();
+        lost();
+        return;
+      }
+      arrival_listeners.add(answer);
     }),
     forget: (console_actor) => {
       const index = live_targets.findIndex((target) => target.console_actor === console_actor);
