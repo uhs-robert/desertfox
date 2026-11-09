@@ -6,7 +6,7 @@ const CTRL = (key) => ["-M", "ctrl", key, "-m", "ctrl"];
 
 export const areas = ["cmdline"];
 
-export async function run_cases({ run_case, setup, expect, send_keys, press_keys, settle_focus, open_page, events, wait_event, wait_cmdline, close_cmdline, poll_until, expect_absent, scroll_report_wait_ms, scroll_of, last_scroll_y, in_background, open_cmdline, type_in_line, run_line, type_in_address_bar }) {
+export async function run_cases({ run_case, setup, expect, send_keys, press_keys, settle_focus, wait_tab_quiet, open_page, events, wait_event, wait_cmdline, close_cmdline, poll_until, expect_absent, scroll_report_wait_ms, scroll_of, last_scroll_y, in_background, open_cmdline, type_in_line, run_line, type_in_address_bar }) {
   await setup("open the page the command line cases use", () => open_page("page", "cmd", { new_tab: false }));
 
   const open_line = async () => {
@@ -128,7 +128,9 @@ export async function run_cases({ run_case, setup, expect, send_keys, press_keys
     await type_in_address_bar("about:support");
     await press_keys("-k", "Return");
     let tab_state;
-    await poll_until("about:support to load", async () => (tab_state = await in_background(`browser.tabs.query({ active: true, currentWindow: true }).then(([tab]) => ({ url: tab.url, status: tab.status }))`))?.url === "about:support" && tab_state.status === "complete", { timeout_ms: 8000 }).catch((error) => { throw new Error(`${error.message} (tab: ${JSON.stringify(tab_state)})`); });
+    await poll_until("about:support to load", async () => (tab_state = await in_background(`browser.tabs.query({ active: true, currentWindow: true }).then(([tab]) => ({ id: tab.id, url: tab.url, status: tab.status }))`))?.url === "about:support" && tab_state.status === "complete", { timeout_ms: 8000 }).catch((error) => { throw new Error(`${error.message} (tab: ${JSON.stringify(tab_state)})`); });
+    // The page reports nothing, so the tab age is the only sign that Alt+. will reach Firefox and not the address bar that is giving up the focus.
+    await wait_tab_quiet(tab_state.id);
     await in_background(`(async () => { for (const id of Object.keys(await browser.notifications.getAll())) await browser.notifications.clear(id); })()`);
     try {
       await press_keys(...ALT("."));
