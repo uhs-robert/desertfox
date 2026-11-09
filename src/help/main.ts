@@ -43,7 +43,7 @@ function show_route(model: HelpModel, guide: Block[], engines: string[], cause: 
   }
 }
 
-type Inputs = { model: HelpModel; guide: Block[]; engines: string[] };
+type Inputs = { model_: HelpModel; guide: Block[]; engines: string[] };
 let current: Inputs | undefined;
 let loaded_guide: Block[] | undefined;
 
@@ -63,20 +63,20 @@ async function load_inputs(): Promise<Inputs> {
   );
   // A missing guide must not blank the other pages. The guide ships with the build, so one fetch serves every draw.
   loaded_guide ??= await fetch(browser.runtime.getURL("search_engines_guide.json")).then((response) => response.json() as Promise<Block[]>).catch(() => []);
-  return { model, guide: loaded_guide, engines: Object.keys(config.search_engines) };
+  return { model_: model, guide: loaded_guide, engines: Object.keys(config.search_engines) };
 }
 
 // The Settings page follows storage by itself and keeps what the user is typing, so a full redraw there would only clobber it. It still takes the new inputs, for the next page.
 async function draw(first: boolean): Promise<void> {
   current = await load_inputs();
-  if (first) show_route(current.model, current.guide, current.engines, "first");
-  else if (parse_route(location.hash).page !== "settings") show_route(current.model, current.guide, current.engines, "refresh");
-  else update_config_source(current.model);
+  if (first) show_route(current.model_, current.guide, current.engines, "first");
+  else if (parse_route(location.hash).page !== "settings") show_route(current.model_, current.guide, current.engines, "refresh");
+  else update_config_source(current.model_);
 }
 
 window.addEventListener("keydown", close_drawer_on_escape, true);
 window.addEventListener("blur", close_drawer_on_window_blur);
-window.addEventListener("hashchange", () => current && show_route(current.model, current.guide, current.engines, "moved"));
+window.addEventListener("hashchange", () => current && show_route(current.model_, current.guide, current.engines, "moved"));
 follow_theme(":root, .desertfox-help");
 follow_user_css();
 follow_settings(draw);
