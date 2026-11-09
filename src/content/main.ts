@@ -70,7 +70,7 @@ let which_key_delay_ms: number | undefined;
 // Hiding asks only once the bundle has loaded, because before that there is no panel.
 const follow_prefix = create_which_key_timer(
   () => which_key_delay_ms,
-  (prefix, is_current_) => (prefix || bundles.has_handler_("whichkey")) && bundles.run_command_("whichkey", "whichkey", { prefix, is_current_ }, "", false),
+  (prefix, is_current_, drawn_) => (prefix || bundles.has_handler_("whichkey")) && bundles.run_command_("whichkey", "whichkey", { prefix, is_current_, drawn_ }, "", false),
 );
 
 const key_flow = create_key_flow({
