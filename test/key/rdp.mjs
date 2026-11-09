@@ -111,6 +111,17 @@ export async function connect_rdp(port, { request_timeout_ms = DEFAULT_REQUEST_T
     timer = setTimeout(() => {
       entry.abandoned = true;
       reject(new Error(`rdp: no answer from ${to}`));
+      // Root answers at once on a healthy Firefox. When it stays silent the debugger is stuck (the main thread is blocked), and every later request would wait out its own timeout. Closing the connection fails the shard now.
+      // The stall shows first on whichever actor was asked, so any timeout probes root. A live root means only that actor is slow.
+      if (to === "root") {
+        if (!closed_reason) {
+          closed_reason = "Firefox stopped answering the debugger: root did not reply";
+          socket.destroy();
+          fail_everything();
+        }
+      } else {
+        request("root", { type: "getRoot" }).catch(() => {});
+      }
     }, request_timeout_ms);
     const queue = waiting_requests.get(to) ?? [];
     waiting_requests.set(to, queue);
@@ -269,11 +280,30 @@ export async function evaluate_in_background(rdp, addon_id, async_code) {
   }
 }
 
+// The parent-process console, per connection. Firefox keeps every target it hands out until the connection closes, so asking on each call leaked one target per call.
+const parent_consoles = new Map();
+
+async function parent_console(rdp) {
+  if (!parent_consoles.has(rdp)) {
+    const { processDescriptor } = await rdp.request("root", { type: "getProcess", id: 0 });
+    const { process } = await rdp.request(processDescriptor.actor, { type: "getTarget" });
+    parent_consoles.set(rdp, process.consoleActor);
+  }
+  return parent_consoles.get(rdp);
+}
+
 // Runs async code in Firefox's parent process, with chrome privileges.
+// Like the background page, the console is dropped only on a noSuchActor reply.
 export async function evaluate_in_chrome(rdp, async_code) {
-  const { processDescriptor } = await rdp.request("root", { type: "getProcess", id: 0 });
-  const { process } = await rdp.request(processDescriptor.actor, { type: "getTarget" });
-  return run_in_console(rdp, process.consoleActor, async_code);
+  for (let attempt = 0; ; attempt++) {
+    const console_actor = await parent_console(rdp);
+    try {
+      return await run_in_console(rdp, console_actor, async_code);
+    } catch (error) {
+      if (error.rdp_error !== "noSuchActor" || attempt >= 1) throw error;
+      parent_consoles.delete(rdp);
+    }
+  }
 }
 
 // The result of a background evaluation is usually ready within a few milliseconds, so the first polls come fast and the later ones slow down.
