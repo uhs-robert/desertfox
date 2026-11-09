@@ -167,7 +167,7 @@ export async function run_cases({ run_case, expect, open_page, press_keys, poll_
   await run_case("focusing a contenteditable field in caret mode keeps its caret and typing lands there", async () => {
     const page_id = "focus_editable";
     await open_page("caret_editable", page_id, { new_tab: true });
-    await press_and_wait_for_badge(page_id, "gV", "CARET");
+    await press_and_wait_for_move(page_id, "gV", "the caret report from the loaded caret bundle");
     const mark = events.length;
     await in_active_tab("(() => { const field = document.getElementById('editable'); const range = document.createRange(); range.setStart(field.firstChild, 5); range.collapse(true); const selection = getSelection(); selection.removeAllRanges(); selection.addRange(range); field.focus(); })()");
     await wait_event(mark, badge_is(page_id, "INSERT"), "the INSERT badge after the field took focus");
@@ -180,7 +180,7 @@ export async function run_cases({ run_case, expect, open_page, press_keys, poll_
   await run_case("focusing a contenteditable field in an open shadow root keeps its caret", async () => {
     const page_id = "focus_editable_shadow";
     await open_page("caret_editable_shadow", page_id, { new_tab: true });
-    await press_and_wait_for_badge(page_id, "gV", "CARET");
+    await press_and_wait_for_move(page_id, "gV", "the caret report from the loaded caret bundle");
     const mark = events.length;
     await in_active_tab("(() => { const field = document.getElementById('host').shadowRoot.getElementById('editable'); const range = document.createRange(); range.setStart(field.firstChild, 5); range.collapse(true); const selection = getSelection(); selection.removeAllRanges(); selection.addRange(range); field.focus(); })()");
     await wait_event(mark, badge_is(page_id, "INSERT"), "the INSERT badge after the field took focus");
@@ -199,9 +199,9 @@ export async function run_cases({ run_case, expect, open_page, press_keys, poll_
     await drag_in_page(from, to);
     await wait_event(mark, (event) => is_selection_of(page_id)(event) && event.text === text, `the drag to select ${text}`);
   }
-  // V after a selection: the badge shows V arrived, and the barrier flushes the reports that follow it.
+  // V after a selection: the badge is drawn before the caret bundle loads, and the load cancels plain keys, so the barrier waits for the bundle's own selection report.
   async function press_visual_and_read(page_id) {
-    await press_and_wait_for_badge(page_id, "V", "VISUAL");
+    await press_and_wait_for_move(page_id, "V", "the selection report from the loaded caret bundle");
     await barrier(page_id);
     return last_selection_text(page_id);
   }

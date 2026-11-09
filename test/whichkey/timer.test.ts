@@ -46,7 +46,7 @@ function make_page(delay_ms: number | undefined) {
     take_pass_next_: state.take_pass_next_,
     in_editable_field_: () => false,
     is_loading_: () => false,
-    is_loading_sink_bundle_: () => false,
+    loading_sink_bundles_: () => [],
     sink_of_: () => undefined,
     leave_insert_: () => state.escape(),
     run_leaf_: (leaf, count) => void ran.push([leaf.steps[0]?.invocation.id, count]),
