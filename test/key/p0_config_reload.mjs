@@ -56,7 +56,7 @@ export async function run_cases({ config_copy, load_config_dir, run_case, setup,
     expect(other_tab_delta === single_j_pixels, `in an untouched tab j moved ${other_tab_delta}px, expected ${single_j_pixels}px`);
   }, { setup: true });
 
-  await run_case("debug.restart restarts the extension, keeps keys working in open tabs and keeps the reloaded files over managed storage", async () => {
+  await run_case("debug.restart restarts the extension, keeps keys working in open tabs and keeps the reloaded files", async () => {
     await in_background(`browser.storage.local.remove("desertfox_reinject_report")`);
     await run_line(":debug.restart");
     const report = await wait_reinject_report();

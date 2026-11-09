@@ -68,11 +68,6 @@ function install_native_host(work_dir, session_home) {
   if (result.status !== 0) throw new Error(`host install failed: ${result.stderr}${result.stdout}`);
 }
 
-function build_test_config(config_dir, out_file) {
-  const result = spawnSync("node", ["tools/build-config/cli.ts", config_dir, "--out", out_file], { cwd: repo_dir, encoding: "utf8" });
-  if (result.status !== 0) throw new Error(`build-config failed: ${result.stderr}${result.stdout}`);
-}
-
 // Valid script text of about PADDED_BUNDLE_BYTES, so the bundle timings include a real parse and run.
 function padded_bundle_text() {
   const lines = [];
@@ -156,12 +151,10 @@ export async function create_session({ name: session_name, timings, sweep = true
   }
   const work_dir = mkdtempSync(join(tmpdir(), "desertfox-key-"));
   const profile_dir = join(work_dir, "profile");
-  const managed_dir = join(work_dir, "managed");
   const config_dir = join(work_dir, "config");
   cpSync(join(key_test_dir, "config"), config_dir, { recursive: true });
   mkdirSync(profile_dir);
   cpSync(join(key_test_dir, "user.js"), join(profile_dir, "user.js"), { recursive: true });
-  const managed_file = join(managed_dir, `${EXTENSION_ID}.json`);
   // DESERTFOX_CONFIG_DIR points the native host here (launch_firefox.sh). load_config_dir moves the link.
   const active_config = join(work_dir, "active_config");
   symlinkSync(config_dir, active_config);
@@ -186,7 +179,6 @@ export async function create_session({ name: session_name, timings, sweep = true
   );
   // Written here, not kept in config/, because a copy of config/ has no engines and a site key must name real ones. h picks keyhere on the test host, n has an engine for another host only.
   writeFileSync(join(config_dir, "keymap.d", "80-site.toml"), '[site_keys]\nh = ["keyother", "keyhere"]\nn = ["keyother"]\n');
-  build_test_config(config_dir, managed_file);
   const events = server.events;
   const debug_port = given_debug_port ?? (await free_port());
   let rdp;
@@ -442,7 +434,7 @@ export async function create_session({ name: session_name, timings, sweep = true
   try {
     if (sweep) await sweep_dead_sessions();
     session = await timings.time("driver", () => start_session({ name: session_name, session_dir: join(work_dir, "session") }));
-    const firefox = session.spawn([join(key_test_dir, "launch_firefox.sh"), work_dir, profile_dir, String(debug_port), managed_file, launch_mode]);
+    const firefox = session.spawn([join(key_test_dir, "launch_firefox.sh"), work_dir, profile_dir, String(debug_port), launch_mode]);
     let firefox_exit;
     firefox.on("exit", (code, signal) => { firefox_exit = signal ? `signal ${signal}` : `exit ${code}`; });
     for (let attempt = 0; ; attempt++) {
@@ -485,10 +477,12 @@ export async function create_session({ name: session_name, timings, sweep = true
     const native_api = await evaluate_in_background(rdp, EXTENSION_ID, `typeof browser.runtime.sendNativeMessage`);
     if (native_api !== "function") throw new Error(`the background has no sendNativeMessage after the grant: ${native_api}`);
     // The background publishes its config status once it has loaded the config.
-    for (let attempt = 0; (await evaluate_in_background(rdp, EXTENSION_ID, `(async () => (await browser.storage.local.get("desertfox_config_status")).desertfox_config_status ?? null)()`)) == null; attempt++) {
+    let first_status;
+    for (let attempt = 0; (first_status = await evaluate_in_background(rdp, EXTENSION_ID, `(async () => (await browser.storage.local.get("desertfox_config_status")).desertfox_config_status ?? null)()`)) == null; attempt++) {
       if (attempt >= 300) throw new Error("the background published no config status within 15 s of the nativeMessaging grant");
       await sleep(50);
     }
+    if (first_status.source !== "defaults") throw new Error(`a new profile must start on the defaults, got source "${first_status.source}"`);
   } catch (error) {
     await close({ keep_diagnostics: true });
     throw error;
@@ -548,7 +542,8 @@ export async function create_session({ name: session_name, timings, sweep = true
   const extension_view = (name) => `(browser.extension.getViews({ type: "tab" }).find((view) => view.location.pathname === "/${name}"))`;
 
   // Points the native host at a config folder and reloads it in place with qr. The which-key shots use it to show a copy of the user config.
-  let linked_config_dir = config_dir;
+  // Null until the first reset loads config_dir: a new profile starts on defaults, and the files config reaches the extension only through the host.
+  let linked_config_dir = null;
   const load_config_dir = async (dir) => {
     rmSync(active_config);
     symlinkSync(dir, active_config);
@@ -690,7 +685,7 @@ export async function create_session({ name: session_name, timings, sweep = true
 
   const config_restore_pending = () => linked_config_dir !== config_dir;
 
-  // Puts the config link back on config_dir and reloads it in place. A debug.restart may still be starting the new background, and a qr sent to it is lost, so the status key comes first.
+  // Puts the config link on config_dir and reloads it in place. The first reset calls it for the initial load. A debug.restart may still be starting the new background, and a qr sent to it is lost, so the status key comes first.
   // Returns whether it typed keys.
   async function restore_config() {
     if (!config_restore_pending()) return false;
