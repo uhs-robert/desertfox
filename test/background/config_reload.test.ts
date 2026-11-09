@@ -113,7 +113,7 @@ test("a :set started while a reload publishes waits for it, so the reload cannot
   assert.deepEqual(status_of(local).temp, ["which_key_delay_ms"]);
 });
 
-test("a restart with a files slot and no managed storage starts on the stored files", async () => {
+test("a start on defaults, then a reload and a restart, ends on the stored files", async () => {
   const host = { files: settings_file('hint_letters = "ab"\n') };
   const { local } = install_fake_browser(host);
   const before = await fresh_startup("files_slot");

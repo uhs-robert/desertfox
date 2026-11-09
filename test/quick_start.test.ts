@@ -11,7 +11,6 @@ import { command_meta } from "../src/shared/registry/index.ts";
 import { registry } from "../src/shared/registry/builtin.ts";
 import { parse_command_line } from "../src/shared/registry/command_line.ts";
 
-
 const all_commands = registry.list().map(command_meta);
 const any_command = { runs_in: "content" as const, label: "x", count: "ignore" as const };
 const compile = (keymap: typeof DEFAULT_KEYMAP) => compile_keymap(keymap, {}, () => any_command).compiled;
