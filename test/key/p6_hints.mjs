@@ -34,7 +34,7 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, press_
     expect(pasted.value.endsWith("/page?id=hint_one"), `;yl copied "${pasted.value}"`);
   });
 
-  // Each yank key labels the elements of the prose page in page order: the heading "a" and the paragraph "s" (the spans sit in a wrapper that the all filter drops). The paste shows what the key copied.
+  // The yank keys label elements by page order. ;yt uses the all filter: the heading "a" and the paragraph "s" (the spans sit in a wrapper that the all filter drops). ;yc and ;yh use the every filter, which labels the page root, the body, the heading, the card, its spans and the paragraph. The paste shows what the key copied.
   const yank_and_paste = async (keys, label, page_id) => {
     await open_page("prose", `${page_id}`, { new_tab: true });
     await press_keys(keys);
@@ -53,13 +53,36 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, press_
   });
 
   await run_case(";yc copies the shortest unique selector of the picked element", async () => {
-    const pasted = await yank_and_paste(";yc", "s", "p6_yank_selector");
+    const pasted = await yank_and_paste(";yc", "j", "p6_yank_selector");
     expect(pasted === "p", `;yc copied "${pasted}"`);
   });
 
   await run_case(";yh copies the whole outer HTML of the picked element", async () => {
-    const pasted = await yank_and_paste(";yh", "s", "p6_yank_html");
+    const pasted = await yank_and_paste(";yh", "j", "p6_yank_html");
     expect(pasted === "<p>gamma <b>bold</b></p>", `;yh copied "${pasted}"`);
+  });
+
+  await run_case(";yc skips a plain wrapper div and labels the element inside it", async () => {
+    await open_page("prose", "p6_yank_wrapper", { new_tab: true });
+    await in_active_tab(`document.body.innerHTML = '<div id="wrapper"><section id="leaf">leaf text</section></div>'; 0`);
+    await press_keys(";yc");
+    await wait_for_label_count(2, "on the page root and the leaf only");
+    await press_keys("s");
+    await wait_for_label_count(0, "gone after the pick");
+    await open_page("field", "p6_yank_wrapper_paste", { new_tab: true });
+    const mark = events.length;
+    await press_keys(...paste_ctrl_v);
+    const pasted = (await wait_event(mark, (event) => event.type === "input" && event.page_id === "p6_yank_wrapper_paste", "the pasted selector")).value;
+    expect(pasted === "#leaf", `;yc copied "${pasted}", not the leaf`);
+  });
+
+  await run_case(";u opens the command line with the selector prompt, and a typed selector labels its matches", async () => {
+    await open_page("hints", "p6_selector_prompt", { new_tab: true });
+    await press_keys(";u");
+    await wait_cmdline((line) => line.open && line.value === "hint --custom --selector=", "the line to open with the prefilled prompt");
+    await type_in_line("a[href]");
+    await press_keys("-k", "Return");
+    await wait_for_label_count(2, "on the two visible links");
   });
 
   await run_case("f opens a dropdown that opens on mousedown, with one click after the mouse events", async () => {
