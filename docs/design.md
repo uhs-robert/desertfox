@@ -177,7 +177,7 @@ The keymap is data, not code. It maps a mode and a key sequence to an invocation
 
 ## Config
 
-The user config is a directory of files, one file per kind of setting. `config.reload` reads them through the native host, and the extension merges and checks them with the same code `tools/build-config` runs. Before the first `config.reload` the extension runs on the built-in defaults. `just build-config` only lints the directory and writes nothing Firefox reads. The native host is optional: browser edits cover casual use, and only the TOML files need it. A stale `~/.mozilla/managed-storage/desertfox@uhs-robert.json` from older versions is ignored and safe to delete.
+The user config is a directory of files, one file per kind of setting. `config.reload` reads them through the native host, and the extension merges and checks them with the same code `tools/build-config` runs. Before the first `config.reload` the extension runs on the built-in defaults. `just build-config` only lints the directory and writes nothing Firefox reads. The native host is optional: browser edits cover casual use, and only the config files (TOML, snippets and CSS) need it. A stale `~/.mozilla/managed-storage/desertfox@uhs-robert.json` from older versions is ignored and safe to delete.
 
 ### Source files
 

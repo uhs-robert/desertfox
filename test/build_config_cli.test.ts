@@ -28,8 +28,11 @@ test("a bare run lints, exits 0 and writes nothing", () => {
 });
 
 test("--live and --out are no longer flags", () => {
-  assert.notEqual(run_cli(["--live"]).result.status, 0);
-  assert.notEqual(run_cli(["--out", join(tmpdir(), "desertfox-never.json")]).result.status, 0);
+  for (const args of [["--live"], ["--out", join(tmpdir(), "desertfox-never.json")]]) {
+    const { result } = run_cli(args);
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, new RegExp(`Unknown option '${args[0]}'`));
+  }
 });
 
 test("--schemas writes the data schemas and nothing else", () => {
