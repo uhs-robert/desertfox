@@ -1,6 +1,6 @@
 # handlers
 
-The content-side code of each command that runs in the page. One file per command group, and each command is one `ContentHandler` object: a `run(args)` function and an optional `fill_from_page` map. `run` returns nothing for done, throws for failed, or returns an `Outcome` or a promise of one. A command that hands control to the user (`hint.run`, `cmdline.open`, `find.open`) stays pending until the user finishes: a pick or Enter is done, and Escape, an unrelated key or a page change is cancelled. A failed command returns its message and does not toast it, so the caller shows it once.
+The content-side code of each command that runs in the page. One file per command group, and each command is one `ContentHandler` object: a `run(args, repeat)` function and an optional `fill_from_page` map. `repeat` is true when an auto-repeat keydown started the run and false for every other source. `run` returns nothing for done, throws for failed, or returns an `Outcome` or a promise of one. A command that hands control to the user (`hint.run`, `cmdline.open`, `find.open`) stays pending until the user finishes: a pick or Enter is done, and Escape, an unrelated key or a page change is cancelled. A failed command returns its message and does not toast it, so the caller shows it once.
 
 - `types.ts`: the `ContentHandler` type. `fill_from_page` names the params that the handler reads from the page when the invocation leaves them out.
 - `scroll.ts`, `align.ts`: the `scroll.*` commands.

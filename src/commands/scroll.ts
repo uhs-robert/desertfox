@@ -27,9 +27,12 @@ define("scroll.pixels", {
 define("scroll.pages", {
   label: "Scroll pages",
   intent: "Scroll the page by a fraction of the view. The fraction is of the visible height. A negative fraction scrolls up.",
-  params: [{ name: "fraction", type: "float", default: 1 }],
+  params: [
+    { name: "fraction", type: "float", default: 1 },
+    { name: "count", type: "int", default: 1, description: "Scroll this many fractions in one move." },
+  ],
   runs_in: "content",
-  count: "repeat",
+  count: { param: "count" },
   run: scroll_pages.run,
 });
 

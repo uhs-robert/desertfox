@@ -81,11 +81,13 @@ Result: no. A collapsed range in plain text paints nothing. A one-character rang
 
 Question: does `behavior: "smooth"` in `scrollBy` and `scrollTo` follow Firefox's own smooth-scrolling setting?
 
-Setup: Firefox 159 in the key-test nested session, a content-script call of 600 px on a 6087 px page, sampled with `requestAnimationFrame` for 500 ms, with `general.smoothScroll` toggled at runtime.
+Setup: Firefox 159.0.1 in the key-test nested session, a content-script call of 600 px on a 6087 px page, sampled with `requestAnimationFrame` for 500 ms, with `general.smoothScroll` toggled at runtime.
 
 Result: yes. With the pref true, `"smooth"` animated (about 30 distinct positions, not done at 500 ms). With the pref false, `"smooth"` jumped at once, even when the page CSS said `scroll-behavior: smooth`. `"instant"` always jumped. `"auto"` and an omitted behavior follow the page CSS. So DesertFox needs no smooth-scroll setting of its own. Firefox's default for the pref is true, and the key-test profile sets it false.
 
-A held key lags with `"smooth"` on every keydown. Firefox starts each smooth scroll from the current animated position, so each repeat restarts the animation. At 25 repeats a second the page moved 235 px while instant scrolling moved 960 px, then drifted 33 px after release. So the page scroll keys use `"smooth"` on the first press and `"instant"` on repeats, and line scroll stays instant.
+A single smooth scroll takes about 460 ms to finish. A held key lags with `"smooth"` on every keydown. Firefox starts each smooth scroll from the current animated position, so each repeat restarts the animation. At 25 repeats a second the page moved 235 px while instant scrolling moved 960 px, then drifted 33 px after release. So the page scroll keys use `"smooth"` on the first press and `"instant"` on repeats, and line scroll stays instant.
+
+Smooth scrolls restart each other. Three `scrollBy` calls of 400 px in one tick with the pref true ended at 400 px, not 1200, and one call of 1200 px reached 1200. Two taps 50 ms apart ended at 472 px of 800, 150 ms apart at 667, 300 ms apart at 777 and 450 ms apart at 797. So a counted page scroll is one call for the whole distance.
 
 ## Firefox defaults (not measured)
 

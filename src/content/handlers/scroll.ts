@@ -36,7 +36,7 @@ function scroll_target(axis: ScrollAxis): Element {
 }
 
 // Firefox decides whether "smooth" animates (general.smoothScroll). A held key restarts the animation on every repeat and lags far behind the key, so repeats jump.
-export const smooth_unless = (repeat: boolean): ScrollBehavior => (repeat ? "instant" : "smooth");
+const smooth_unless = (repeat: boolean): ScrollBehavior => (repeat ? "instant" : "smooth");
 
 const scroll_by = (dx: number, dy: number, behavior: ScrollBehavior = "instant") => {
   const axis = dy !== 0 ? "y" : "x";
@@ -52,7 +52,7 @@ export const scroll_pixels: ContentHandler = {
 };
 
 export const scroll_pages: ContentHandler = {
-  run: (args, repeat) => scroll_by(0, Number(args.fraction) * scroll_target("y").clientHeight, smooth_unless(repeat)),
+  run: (args, repeat) => scroll_by(0, Number(args.fraction) * Number(args.count) * scroll_target("y").clientHeight, smooth_unless(repeat)),
 };
 
 export const scroll_to: ContentHandler = {
