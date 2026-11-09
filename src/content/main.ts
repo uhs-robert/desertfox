@@ -135,14 +135,10 @@ function extension_context_alive(): boolean {
   }
 }
 
+const page_listeners = new AbortController();
+
 function stop_listening(): void {
-  window.removeEventListener("keydown", on_keydown, true);
-  window.removeEventListener("keypress", on_keypress, true);
-  window.removeEventListener("keyup", on_keyup, true);
-  window.removeEventListener("focusin", on_focusin, true);
-  window.removeEventListener("focusout", on_focusout, true);
-  removeEventListener("pagehide", bundles.page_hidden);
-  document.removeEventListener("visibilitychange", on_visibility_change);
+  page_listeners.abort();
 }
 
 function on_visibility_change(): void {
@@ -194,22 +190,22 @@ async function read_keymap(): Promise<CompiledKeymap | undefined> {
   return stored[COMPILED_KEYMAP_STORAGE_KEY] as CompiledKeymap | undefined;
 }
 
-// The key test reads these two attributes. Times are milliseconds.
+// The one test hook in src/: the key test reads this attribute as the content script's ready signal. Time is milliseconds.
 function publish_timing(): void {
   const root = document.documentElement;
   root?.setAttribute("data-desertfox-tree-read-ms", (performance.now() - script_started_ms).toFixed(2));
-  root?.setAttribute("data-desertfox-tree-ready-at-ms", performance.now().toFixed(2));
 }
 
 function start(): void {
   (window as unknown as { desertfox_host: BundleHostApi }).desertfox_host = bundles.api;
-  window.addEventListener("keydown", on_keydown, true);
-  window.addEventListener("keypress", on_keypress, true);
-  window.addEventListener("keyup", on_keyup, true);
-  window.addEventListener("focusin", on_focusin, true);
-  window.addEventListener("focusout", on_focusout, true);
-  addEventListener("pagehide", bundles.page_hidden);
-  document.addEventListener("visibilitychange", on_visibility_change);
+  const { signal } = page_listeners;
+  window.addEventListener("keydown", on_keydown, { capture: true, signal });
+  window.addEventListener("keypress", on_keypress, { capture: true, signal });
+  window.addEventListener("keyup", on_keyup, { capture: true, signal });
+  window.addEventListener("focusin", on_focusin, { capture: true, signal });
+  window.addEventListener("focusout", on_focusout, { capture: true, signal });
+  addEventListener("pagehide", bundles.page_hidden, { signal });
+  document.addEventListener("visibilitychange", on_visibility_change, { signal });
 
   wire_mode_reports(page_mode, (mode) => {
     if (!extension_context_alive()) return stop_listening();
