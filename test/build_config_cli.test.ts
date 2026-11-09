@@ -30,8 +30,9 @@ test("a bare run lints, exits 0 and writes nothing", () => {
 test("--live and --out are no longer flags", () => {
   for (const args of [["--live"], ["--out", join(tmpdir(), "desertfox-never.json")]]) {
     const { result } = run_cli(args);
-    assert.notEqual(result.status, 0);
+    assert.equal(result.status, 1);
     assert.match(result.stderr, new RegExp(`Unknown option '${args[0]}'`));
+    assert.doesNotMatch(result.stderr, /\n\s+at /);
   }
 });
 

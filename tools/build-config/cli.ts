@@ -9,13 +9,22 @@ import { ConfigErrors } from "../../src/shared/config_build/errors.ts";
 import { write_schemas } from "./output.ts";
 import { build_schemas } from "../../src/shared/config_build/schemas.ts";
 
-const { values, positionals } = parseArgs({
-  allowPositionals: true,
-  options: {
-    commands: { type: "string", default: join(import.meta.dirname, "..", "..", "dist", "commands.json") },
-    schemas: { type: "string" },
-  },
-});
+function parse_command_line() {
+  try {
+    return parseArgs({
+      allowPositionals: true,
+      options: {
+        commands: { type: "string", default: join(import.meta.dirname, "..", "..", "dist", "commands.json") },
+        schemas: { type: "string" },
+      },
+    });
+  } catch (error) {
+    console.error(`build-config: ${(error as Error).message}`);
+    process.exit(1);
+  }
+}
+
+const { values, positionals } = parse_command_line();
 
 const config_dir = resolve(positionals[0] ?? join(homedir(), ".config", "desertfox"));
 
