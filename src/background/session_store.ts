@@ -1,0 +1,174 @@
+// The saved tab sessions: a name store in `storage.local` (`SESSIONS_STORAGE_KEY`) and the pure plan for opening one again.
+// The browser calls (reading tabs, creating windows and tabs) live in `commands/session.ts`.
+
+import { RuntimeRefusal } from "../shared/command.ts";
+import type { SessionItem } from "../shared/messages.ts";
+import { SESSIONS_STORAGE_KEY } from "./storage_keys.ts";
+
+export type SessionTab = {
+  url: string;
+  title: string;
+  pinned: boolean;
+  active: boolean;
+  // Absent for a tab in the default container.
+  container_id?: string;
+  container_name?: string;
+};
+
+// The tabs are in tab bar order, so the array position is the saved order.
+export type Session = { saved_at: number; tabs: SessionTab[] };
+export type NamedSession = Session & { name: string };
+
+type StoredSessions = { version: 1; sessions: Record<string, Session> };
+
+export type SessionStorage = {
+  get: (key: string) => Promise<unknown>;
+  set: (key: string, value: unknown) => Promise<void>;
+};
+
+export const browser_session_storage: SessionStorage = {
+  get: async (key) => (await browser.storage.local.get(key))[key],
+  set: (key, value) => browser.storage.local.set({ [key]: value }),
+};
+
+// Text typed in a line may carry any run of spaces, and the line's tokenizer joins words with one space, so the stored name does too.
+export const normalize_session_name = (text: string): string => text.split(/\s+/).filter(Boolean).join(" ");
+
+const same_name = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
+
+const is_session_tab = (value: unknown): value is SessionTab => {
+  const tab = value as Partial<SessionTab> | null;
+  return typeof tab?.url === "string" && typeof tab.title === "string" && typeof tab.pinned === "boolean" && typeof tab.active === "boolean";
+};
+
+const is_session = (value: unknown): value is Session => {
+  const session = value as Partial<Session> | null;
+  return typeof session?.saved_at === "number" && Array.isArray(session.tabs) && session.tabs.every(is_session_tab);
+};
+
+// A Map keyed by display name, because a session called `__proto__` must not reach the prototype of a plain object.
+async function read_map(storage: SessionStorage): Promise<Map<string, Session>> {
+  const stored = (await storage.get(SESSIONS_STORAGE_KEY)) as Partial<StoredSessions> | undefined;
+  if (stored === undefined || stored === null) return new Map();
+  // A newer version may have a shape this code cannot keep. Refusing here keeps a later write from destroying it.
+  if (stored.version !== 1 || typeof stored.sessions !== "object" || stored.sessions === null) throw new RuntimeRefusal("The saved sessions have a format this version cannot read");
+  return new Map(Object.entries(stored.sessions).filter(([, session]) => is_session(session)));
+}
+
+function find_name(sessions: Map<string, Session>, name: string): string | undefined {
+  return [...sessions.keys()].find((existing) => same_name(existing, name));
+}
+
+export type SessionStore = ReturnType<typeof make_session_store>;
+
+export function make_session_store(storage: SessionStorage, now: () => number = Date.now) {
+  // Every change reads, edits and writes the whole value, so two at once would lose one of them. They run one after another.
+  let queue: Promise<unknown> = Promise.resolve();
+  const exclusive = <Result>(change: () => Promise<Result>): Promise<Result> => {
+    const run = queue.then(change, change);
+    queue = run.catch(() => undefined);
+    return run;
+  };
+
+  async function write(sessions: Map<string, Session>): Promise<void> {
+    const value: StoredSessions = { version: 1, sessions: Object.fromEntries(sessions) };
+    // A failed write leaves the stored value as it was, so the refusal names the cause and nothing is half saved.
+    await storage.set(SESSIONS_STORAGE_KEY, value).catch((error: unknown) => {
+      throw new RuntimeRefusal(`Could not store the sessions: ${error instanceof Error ? error.message : String(error)}`);
+    });
+  }
+
+  const checked_name = (text: string): string => {
+    const name = normalize_session_name(text);
+    if (name === "") throw new RuntimeRefusal("A session needs a name");
+    return name;
+  };
+
+  const list = async (): Promise<NamedSession[]> =>
+    [...(await read_map(storage))].map(([name, session]) => ({ name, ...session })).toSorted((a, b) => b.saved_at - a.saved_at);
+
+  return {
+    // Newest first.
+    list,
+
+    // What the command line lists.
+    items: async (): Promise<SessionItem[]> => (await list()).map(({ name, tabs, saved_at }) => ({ name, tabs: tabs.length, saved_at })),
+
+    // The session as it is now. A later save of the same name does not change what this returned.
+    get: async (text: string): Promise<NamedSession> => {
+      const sessions = await read_map(storage);
+      const name = find_name(sessions, checked_name(text));
+      if (name === undefined) throw new RuntimeRefusal(`No session named "${normalize_session_name(text)}"`);
+      return { name, ...(sessions.get(name) as Session) };
+    },
+
+    // An existing name is updated and keeps its display case. `previous_tabs` is the count it replaced.
+    save: (text: string, tabs: SessionTab[]): Promise<{ name: string; previous_tabs: number | undefined }> =>
+      exclusive(async () => {
+        const typed = checked_name(text);
+        const sessions = await read_map(storage);
+        const name = find_name(sessions, typed) ?? typed;
+        const previous_tabs = sessions.get(name)?.tabs.length;
+        sessions.set(name, { saved_at: now(), tabs });
+        await write(sessions);
+        return { name, previous_tabs };
+      }),
+
+    remove: (text: string): Promise<string> =>
+      exclusive(async () => {
+        const sessions = await read_map(storage);
+        const name = find_name(sessions, checked_name(text));
+        if (name === undefined) throw new RuntimeRefusal(`No session named "${normalize_session_name(text)}"`);
+        sessions.delete(name);
+        await write(sessions);
+        return name;
+      }),
+
+    // Changing only the case of a name is allowed. Any other name that is taken is refused.
+    rename: (text: string, new_text: string): Promise<{ from: string; to: string }> =>
+      exclusive(async () => {
+        const sessions = await read_map(storage);
+        const from = find_name(sessions, checked_name(text));
+        if (from === undefined) throw new RuntimeRefusal(`No session named "${normalize_session_name(text)}"`);
+        const to = checked_name(new_text);
+        const taken = find_name(sessions, to);
+        if (taken !== undefined && taken !== from) throw new RuntimeRefusal(`A session named "${taken}" exists`);
+        // Delete first and set after, so the renamed entry takes the end of the map. Its `saved_at` is kept.
+        const session = sessions.get(from) as Session;
+        sessions.delete(from);
+        sessions.set(to, session);
+        await write(sessions);
+        return { from, to };
+      }),
+  };
+}
+
+export type PlannedTab = {
+  url: string;
+  title: string;
+  pinned: boolean;
+  // The one tab that loads. Every other planned tab is created discarded.
+  active: boolean;
+  cookie_store_id?: string;
+  // The tab had a container the browser no longer has, by id or by name.
+  container_lost: boolean;
+};
+
+export type ContainerRef = { id: string; name: string };
+
+// Exactly one tab is active: the saved one, or the first when the session has none. A container is found by its id, then by its name, because a deleted and recreated container gets a new id. A container that is gone leaves the tab in the default one.
+export function plan_restore(tabs: readonly SessionTab[], containers: readonly ContainerRef[]): PlannedTab[] {
+  const saved_active = tabs.findIndex((tab) => tab.active);
+  const active_index = saved_active === -1 ? 0 : saved_active;
+  return tabs.map((tab, index) => {
+    const container = tab.container_id === undefined ? undefined : (containers.find((known) => known.id === tab.container_id) ?? containers.find((known) => known.name === tab.container_name));
+    return {
+      url: tab.url,
+      title: tab.title,
+      pinned: tab.pinned,
+      active: index === active_index,
+      ...(container ? { cookie_store_id: container.id } : {}),
+      container_lost: tab.container_id !== undefined && container === undefined,
+    };
+  });
+}

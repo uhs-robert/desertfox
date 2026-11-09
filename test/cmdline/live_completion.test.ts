@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { create_live_source } from "../../src/cmdline/completion/live.ts";
-import { create_completer } from "../../src/cmdline/completion/sources.ts";
+import { create_completer, session_age } from "../../src/cmdline/completion/sources.ts";
 import { create_session } from "../../src/cmdline/session.ts";
 import type { CommandMeta } from "../../src/shared/command.ts";
-import type { BookmarkItem, EngineItem, HeadingItem, HistoryItems, OpenItems, WindowItem, TabItem } from "../../src/shared/messages.ts";
+import type { BookmarkItem, EngineItem, HeadingItem, HistoryItems, OpenItems, SessionItem, WindowItem, TabItem } from "../../src/shared/messages.ts";
 import { parse_command_line } from "../../src/shared/registry/index.ts";
 import { create_word_lookup } from "../../src/cmdline/word_lookup.ts";
 
@@ -34,6 +34,7 @@ const COMMANDS: CommandMeta[] = [
   { id: "engine.show", name: "engine.show", label: "Show engine", intent: "Show an engine.", params: [{ name: "engine", type: "enum", values: { from: "search_engines" } }] },
 ];
 COMMANDS.push({ id: "heading.go", name: "heading", label: "Go to heading", intent: "Go to a heading.", params: [{ name: "heading", type: "string", rest: true, main: true, values: { from: "headings" } }] });
+COMMANDS.push({ id: "session.open", name: "session.open", label: "Open tab session", intent: "Open a session.", params: [{ name: "name", type: "string", rest: true, main: true, values: { from: "sessions" } }] });
 COMMANDS.push({ id: "history.open", name: "history", label: "Open history entry", intent: "Open history.", params: [{ name: "entry", type: "string", rest: true, main: true, values: { from: "history" } }] });
 COMMANDS.push({ id: "open.url", name: "open", label: "Open URL", intent: "Open a URL.", params: [{ name: "url", type: "string", main: true, values: { from: "open" } }] });
 const ENGINES: EngineItem[] = [
@@ -63,7 +64,7 @@ const BOOKMARKS: BookmarkItem[] = Array.from({ length: 30 }, (_, index) => ({ ti
 
 // The background answers when the test says so.
 function make(containers: { name: string; cookie_store_id: string }[] = STORES, history: string[] = []) {
-  const asks: { kind: string; answer: (items: TabItem[] | BookmarkItem[] | EngineItem[] | HistoryItems | OpenItems | WindowItem[] | HeadingItem[]) => void }[] = [];
+  const asks: { kind: string; answer: (items: TabItem[] | BookmarkItem[] | EngineItem[] | HistoryItems | OpenItems | WindowItem[] | HeadingItem[] | SessionItem[]) => void }[] = [];
   // The tab model has no reply to await. The first read is its cue to connect, and `answer` is the snapshot arriving.
   let tab_items: TabItem[] | undefined;
   let tabs_asked = false;
@@ -285,6 +286,28 @@ test("a window pick puts its number and title in the line, and the list is fetch
   tab_key(session);
   assert.equal(session.get_text(), "tab.attach 3 Docs ");
   assert.equal(asks.length, 1);
+});
+
+test("a session pick puts the name in the line, and the rows show the tab count and age", async () => {
+  const { session, asks, settle } = make();
+  session.edit("session.open ");
+  assert.deepEqual(asks.map((ask) => ask.kind), ["sessions"]);
+  const now = Date.now();
+  asks[0]!.answer([{ name: "work day", tabs: 12, saved_at: now - 3 * 86_400_000 }, { name: "one", tabs: 1, saved_at: now }]);
+  await settle();
+  assert.deepEqual(names(session), ["work day", "one"]);
+  assert.deepEqual(session.get_rows().map((row) => row.description), ["12 tabs, 3d ago", "1 tab, just now"]);
+  session.edit("session.open wor");
+  tab_key(session);
+  assert.equal(session.get_text(), "session.open work day ");
+});
+
+test("session_age picks the biggest whole unit", () => {
+  assert.equal(session_age(0, 30_000), "just now");
+  assert.equal(session_age(0, 5 * 60_000), "5m ago");
+  assert.equal(session_age(0, 150 * 60_000), "2h ago");
+  assert.equal(session_age(0, 50 * 3_600_000), "2d ago");
+  assert.equal(session_age(10, 0), "just now");
 });
 
 const OPEN: OpenItems = {

@@ -55,5 +55,8 @@ export const REPEAT_PRIVATE_STORAGE_KEY = "desertfox_last_repeat_private";
 // Prefix of one `storage.local` key per register, holding its text. Register `/` holds the last page search. Not written from a private window.
 export const REGISTER_STORAGE_PREFIX = "desertfox_register_";
 
+// The saved tab sessions: `{ version: 1, sessions: { [name]: { saved_at, tabs } } }`. Only `session_store.ts` reads and writes it. Never read from a private window.
+export const SESSIONS_STORAGE_KEY = "desertfox_sessions";
+
 // Set while the user has turned DesertFox off from the toolbar or its shortcut. Absent means on, so a profile from before the switch stays on. Only the background writes it.
 export const DISABLED_STORAGE_KEY = "desertfox_disabled";

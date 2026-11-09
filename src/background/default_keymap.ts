@@ -140,6 +140,8 @@ export const DEFAULT_KEYMAP: KeymapConfig = {
     // The t group works on tabs. Plain `t` is only a prefix.
     tt: { id: "open.url", args: { where: "tab" }, prompt: { param: "url" } },
     tT: { id: "tab.switch", prompt: { param: "tab" } },
+    ts: { id: "session.save", prompt: { param: "name" } },
+    tS: { id: "session.open", prompt: { param: "name" } },
     td: { id: "tab.duplicate" },
     tm: { id: "tab.move", prompt: { param: "offset" } },
     tn: { id: "tab.next" },

@@ -33,6 +33,9 @@ const EXPECTED_REFUSALS: Record<string, RegExp[]> = {
   "open.url": [/No container named/],
   "open.search": [/No search engine named/],
   "open.clipboard": [/No container named/],
+  "session.open": [/No session named/],
+  "session.delete": [/No session named/],
+  "session.rename": [/No session named/],
   "command.repeat": [/Nothing to repeat/],
   "url.increment": [/has no number/],
 };

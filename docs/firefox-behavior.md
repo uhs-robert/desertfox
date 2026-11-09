@@ -104,3 +104,16 @@ Setup: Firefox 159 with the command line inside the extension's closed shadow ro
 Result: an iframe's `color-scheme: normal` resolves through the embedding page's `<meta name="color-scheme">`. GitHub declares `light dark`, so the iframe's used scheme was dark while cmdline.html, with no meta, was light. On that mismatch Firefox paints the frame's canvas opaque in the frame's own scheme, and the whole 80 px holder showed white until the frame reported `resize`. A CSS `color-scheme` on the page's root does not change what `normal` means, so such pages never flashed. A scheme set by script in the frame comes after the first paint and only cut the flashes. `light dark` on the iframe and in a meta in cmdline.html gave 0 white frames in 3 GitHub runs and 2 plain runs. The open came within 20 ms of the unfixed open.
 
 `prefers-color-scheme` inside the frame follows the iframe's used scheme, and the DesertFox theme switches on that query. So `light` on both sides also stops the flash but shows the light theme in dark mode.
+
+## Tab sessions: storage quota and discarded tabs (0.1.9)
+
+Question: how much session data does `storage.local` take, and does `tabs.create` accept `discarded` with `pinned`?
+
+Setup: Firefox 159.0.1 in the key test session, run from the extension's background page. A fixture of sessions with 50 tabs each (long address, title, container id and name).
+
+Result:
+- 100 sessions of 50 tabs are 1.29 MB of JSON. `storage.local.set` and `get` round-tripped it, and 400 such sessions (about 5 MB), with no `unlimitedStorage` permission. No quota showed up at these sizes. The key test fixture is smaller (no container fields), so the unit test only checks the order of magnitude.
+- `tabs.create({ pinned: true, discarded: true })` rejects with "Pinned tabs cannot be created and discarded."
+- `tabs.create({ discarded: true, title })` keeps the title and the tab stays discarded. `tabs.create({ pinned: true })` alone works.
+- Creating the tab discarded and then `tabs.update(id, { pinned: true })` gives a pinned, still discarded tab that keeps its title.
+- `tabs.create` rejects `about:config` and `file:///...` with "Illegal URL".

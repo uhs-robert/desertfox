@@ -11,7 +11,7 @@ import { always_default, bare_word_param, default_of, flag_params, is_dynamic_va
 import { rank } from "../../shared/score.ts";
 import { completion_of, is_setting_name, SETTING_COMPLETION, type SettingCompletion } from "../../shared/setting_completion.ts";
 import type { Ranked } from "../../shared/score.ts";
-import type { BookmarkItem, EngineItem, HeadingItem, HistoryItems, OpenItems, OpenRow, TabContainer, TabItem, WindowItem } from "../../shared/messages.ts";
+import type { BookmarkItem, EngineItem, HeadingItem, HistoryItems, OpenItems, OpenRow, SessionItem, TabContainer, TabItem, WindowItem } from "../../shared/messages.ts";
 import type { LiveKind, LiveSource } from "./live.ts";
 import { cursor_context } from "./tokenize.ts";
 import type { CursorContext } from "./tokenize.ts";
@@ -248,6 +248,25 @@ function window_rows(windows: readonly WindowItem[], usage: string): Row[] {
   }));
 }
 
+// `3d ago`, the biggest whole unit. Under a minute reads `just now`.
+export function session_age(saved_at: number, now: number): string {
+  const minutes = Math.floor((now - saved_at) / 60_000);
+  return minutes < 1 ? "just now" : minutes < 60 ? `${minutes}m ago` : minutes < 1440 ? `${Math.floor(minutes / 60)}h ago` : `${Math.floor(minutes / 1440)}d ago`;
+}
+
+// The name is the whole subject, so the handler matches it as typed. Newest first is the order the background sends, and an empty word keeps it.
+function session_rows(sessions: readonly SessionItem[], usage: string, now: number): Row[] {
+  return sessions.map((session) => ({
+    name: session.name,
+    insert: `${/["'\\]/.test(session.name) ? quote_word(session.name) : session.name} `,
+    description: `${session.tabs} ${session.tabs === 1 ? "tab" : "tabs"}, ${session_age(session.saved_at, now)}`,
+    args: "",
+    also_named: [],
+    keywords: [],
+    usage,
+  }));
+}
+
 // The place first, as in a tab row, so the handler reads the leading number and the pick still finds the heading after the page changed its text.
 // The name is the plain text, because the highlight positions count its letters. Indent counts from the shallowest level on the page, so a page without an h1 loses no width.
 function heading_rows(headings: readonly HeadingItem[], usage: string): Row[] {
@@ -290,7 +309,7 @@ function engine_rows(engines: readonly EngineItem[], usage: string, marks_unavai
 const live_kind_of = (param: ParamDef | undefined): LiveKind | undefined => {
   if (!param || !is_dynamic_values(param.values)) return undefined;
   const from = param.values.from;
-  return from === "tabs" || from === "bookmarks" || from === "history" || from === "open" || from === "windows" || from === "headings" ? from : from === "search_engines" ? "engines" : undefined;
+  return from === "tabs" || from === "bookmarks" || from === "history" || from === "open" || from === "windows" || from === "headings" || from === "sessions" ? from : from === "search_engines" ? "engines" : undefined;
 };
 
 // The engine takes the first word of `search`, ahead of the query that follows it.
@@ -342,7 +361,9 @@ export function create_completer(
               ? window_rows(read.items as WindowItem[], usage)
               : kind === "headings"
                 ? heading_rows(read.items as HeadingItem[], usage)
-                : bookmark_rows(read.items as BookmarkItem[], usage);
+                : kind === "sessions"
+                  ? session_rows(read.items as SessionItem[], usage, Date.now())
+                  : bookmark_rows(read.items as BookmarkItem[], usage);
       const ranked = rank(context.word, rows);
       return { ...span, usage, rows: kind === "bookmarks" && context.word.trim() === "" ? ranked.slice(0, RECENT_BOOKMARKS) : ranked, listing: true };
     }
