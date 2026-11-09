@@ -60,5 +60,18 @@ export function create_matcher(keymap: CompiledKeymap) {
     return { kind: "pending", node: next, typed, ...count };
   };
 
-  return { feed, reset };
+  // Whether `token` binds after the keys in `ahead`: it adds a count digit or starts, continues or ends a binding. A key that breaks a half-typed sequence gets one more try as a first key, as the callers of `feed` do. The walk is left as it was.
+  const binds_after = (mode: string, ahead: readonly string[], token: string): boolean => {
+    const saved = [walk_mode, node, typed, count_digits] as const;
+    let result: MatchResult = { kind: "no_match" };
+    for (const key of [...ahead, token]) {
+      const in_progress = typed.length > 0 || count_digits !== "";
+      result = feed(mode, key);
+      if (result.kind === "no_match" && in_progress) result = feed(mode, key);
+    }
+    [walk_mode, node, typed, count_digits] = saved;
+    return result.kind !== "no_match";
+  };
+
+  return { feed, reset, binds_after };
 }

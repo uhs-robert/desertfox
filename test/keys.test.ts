@@ -252,6 +252,23 @@ test("matcher: single key, sequence, pending and mismatch reset", () => {
   assert.equal(matcher.feed("normal", "q").kind, "no_match");
 });
 
+test("matcher: binds_after reads ahead through keys not yet fed and leaves the walk as it was", () => {
+  const matcher = matcher_for({ normal: { J: { id: "tab.next" }, zt: { id: "scroll.align" } }, ignore: { "<S-Escape>": { id: "mode.set" } } });
+  assert.equal(matcher.binds_after("normal", [], "J"), true);
+  assert.equal(matcher.binds_after("normal", [], "t"), false);
+  assert.equal(matcher.binds_after("normal", ["z"], "t"), true);
+  // A key that breaks the sequence is tried again as a first key.
+  assert.equal(matcher.binds_after("normal", ["z"], "J"), true);
+  assert.equal(matcher.binds_after("normal", ["z", "q"], "t"), false);
+  assert.equal(matcher.binds_after("normal", [], "3"), true);
+  assert.equal(matcher.binds_after("normal", ["3"], "0"), true);
+  assert.equal(matcher.binds_after("ignore", [], "J"), false);
+  assert.equal(matcher.feed("normal", "z").kind, "pending");
+  assert.equal(matcher.binds_after("normal", [], "t"), true);
+  assert.equal(matcher.binds_after("normal", ["J"], "t"), false);
+  assert.equal(leaf_id(matcher.feed("normal", "t")), "scroll.align");
+});
+
 test("matcher: counts", () => {
   const matcher = matcher_for({ normal: { J: { id: "tab.next" }, "0": { id: "scroll.left" }, "g0": { id: "tab.first" } } });
   const first = matcher.feed("normal", "3");

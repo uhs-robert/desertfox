@@ -15,7 +15,17 @@ const keymap: CompiledKeymap = {
   mode_indicator: "always",
   which_key_delay_ms: 0,
   modes: {
-    normal: { kind: "branch", children: { f: leaf("hint.run"), V: leaf("mode.set", { mode: "caret" }), x: leaf("log_x"), j: leaf("log_j") } },
+    normal: {
+      kind: "branch",
+      children: {
+        f: leaf("hint.run"),
+        V: leaf("mode.set", { mode: "caret" }),
+        x: leaf("log_x"),
+        j: leaf("log_j"),
+        z: leaf("page.align"),
+        g: { kind: "branch", children: { g: leaf("log_gg"), t: leaf("log_gt") } },
+      },
+    },
     hint: { kind: "branch", children: { "<Escape>": leaf("mode.escape") } },
     caret: { kind: "branch", children: { "<Escape>": leaf("mode.escape") } },
   },
@@ -39,16 +49,19 @@ function make_page() {
     take_pass_next: state.take_pass_next,
     in_editable_field: () => in_field,
     is_loading: host.is_loading,
+    is_loading_sink_bundle: host.is_loading_sink_bundle,
     sink_of: host.sink_of,
     on_prefix: () => {},
     leave_insert: () => state.escape(),
-    run_leaf: (matched) => {
+    run_leaf: (matched, count) => {
       const { id, args } = matched.steps[0]!.invocation;
       // As main.ts does: a failed outcome is shown once, by the caller.
       if (id === "hint.run") void host.run_command("hint.run", "hints", {}, "needs hints").then((outcome) => outcome.ok || errors.push(outcome.message));
+      // The which-key bundle stands in for any bundle without a sink.
+      else if (id === "page.align") void host.run_command("page.align", "whichkey", {}, "needs page");
       else if (id === "mode.set") state.set_mode(args?.mode as Mode);
       else if (id === "mode.escape") state.escape();
-      else events.push(`run ${id}`);
+      else events.push(`run ${id}${count ?? ""}`);
     },
   });
   state.listen((mode) => {
@@ -425,4 +438,91 @@ test("a handler that throws something that is not an Error still answers a faile
     throw "plain string";
   });
   assert.deepEqual(await page.host.api.run_command("hint.run", "hints", {}), { ok: false, message: "plain string" });
+});
+
+// A bundle without a sink, loading. `z` asks for it.
+async function finish_page_load(page: ReturnType<typeof make_page>) {
+  page.loads.at(-1)!.finish(true, () => page.host.api.register_handler("page.align", () => void page.events.push("align")));
+  await page.settle();
+}
+
+test("a key that binds nothing reaches the page at once while a bundle without a sink loads", async () => {
+  const page = make_page();
+  page.press("z", "<F8>", "j");
+  assert.deepEqual(page.decisions, ["z:cancel", "<F8>:pass", "j:cancel"]);
+  await finish_page_load(page);
+  assert.deepEqual(page.events, ["align", "run log_j"]);
+});
+
+test("while a bundle with a sink loads, or a sink takes the current mode, every plain key waits for it", async () => {
+  for (const name of ["hints", "caret", "cmdline"] as const) {
+    const page = make_page();
+    void page.host.run_command("open", name, {}, "missing");
+    page.press("<F8>", "q");
+    assert.deepEqual(page.decisions, ["<F8>:cancel", "q:cancel"], name);
+  }
+  const page = make_page();
+  page.host.api.register_sink("hint", page.recording_sink("hint", ["q"]));
+  page.state.set_mode("hint");
+  void page.host.run_command("page.align", "whichkey", {}, "needs page");
+  page.press("<F8>", "q");
+  assert.deepEqual(page.decisions, ["<F8>:cancel", "q:cancel"]);
+  await finish_page_load(page);
+  assert.deepEqual(page.events, ["hint sink enter", "align", "hint sink <F8>", "hint sink q"]);
+});
+
+test("a key the page gets during a load goes ahead of the held keys typed before it", async () => {
+  const page = make_page();
+  page.press("z", "x", "<F8>");
+  assert.deepEqual(page.decisions, ["z:cancel", "x:cancel", "<F8>:pass"]);
+  await finish_page_load(page);
+  assert.deepEqual(page.events, ["align", "run log_x"]);
+});
+
+test("a held half-typed sequence waits for the key that continues it and ends at the key the page got", async () => {
+  const page = make_page();
+  page.press("z", "g", "t");
+  assert.deepEqual(page.decisions, ["z:cancel", "g:cancel", "t:cancel"]);
+  await finish_page_load(page);
+  assert.deepEqual(page.events, ["align", "run log_gt"]);
+
+  const broken = make_page();
+  broken.press("z", "g", "q", "g");
+  assert.deepEqual(broken.decisions, ["z:cancel", "g:cancel", "q:pass", "g:cancel"]);
+  await finish_page_load(broken);
+  // q ended the first g, so the second g starts a new sequence instead of running gg.
+  assert.deepEqual(broken.events, ["align"]);
+  broken.press("g");
+  assert.deepEqual(broken.events, ["align", "run log_gg"]);
+});
+
+test("a count typed during a load waits with its command, and a key the page gets drops it", async () => {
+  const page = make_page();
+  page.press("z", "3", "j", "4", "<F8>", "j");
+  assert.deepEqual(page.decisions, ["z:cancel", "3:cancel", "j:cancel", "4:cancel", "<F8>:pass", "j:cancel"]);
+  await finish_page_load(page);
+  assert.deepEqual(page.events, ["align", "run log_j3", "run log_j"]);
+});
+
+test("Backspace during a load waits with every key after it, so it still edits the held sequence", async () => {
+  const page = make_page();
+  page.press("z", "g", "<Backspace>", "g", "g", "<F8>");
+  assert.deepEqual(page.decisions.slice(1), ["g:cancel", "<Backspace>:cancel", "g:cancel", "g:cancel", "<F8>:cancel"]);
+  await finish_page_load(page);
+  assert.deepEqual(page.events, ["align", "run log_gg"]);
+});
+
+test("during a load, insert mode outside a field passes unbound keys and holds Escape, which leaves on replay", async () => {
+  const page = make_page();
+  page.state.set_mode("insert");
+  void page.host.run_command("page.align", "whichkey", {}, "needs page");
+  page.press("q", "<Escape>");
+  assert.deepEqual(page.decisions, ["q:pass", "<Escape>:cancel"]);
+  assert.equal(page.state.get_mode(), "insert");
+  await finish_page_load(page);
+  assert.equal(page.state.get_mode(), "normal");
+  page.set_in_field(true);
+  page.state.set_mode("insert");
+  page.press("z");
+  assert.equal(page.decisions.at(-1), "z:pass");
 });

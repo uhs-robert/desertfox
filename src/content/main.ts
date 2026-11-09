@@ -82,6 +82,7 @@ const key_flow = create_key_flow({
   },
   in_editable_field: () => is_editable_element(document.activeElement),
   is_loading: bundles.is_loading,
+  is_loading_sink_bundle: bundles.is_loading_sink_bundle,
   sink_of: bundles.sink_of,
 });
 
