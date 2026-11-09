@@ -19,8 +19,6 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, press_
   const link_count = async () => await in_active_tab(`document.querySelectorAll("a[href]").length`);
   const wait_for_link_count = (count, what) => poll_until(what, async () => (await link_count()) === count);
   const notice_text = () => in_active_tab(`[...document.documentElement.children].map((child) => child.openOrClosedShadowRoot?.querySelector(".desertfox-toast, .desertfox-hint-message")?.textContent ?? "").join("")`);
-  // A rapid rebuild that finds nothing left shows its notice as it leaves hint mode. A key pressed before that waits for the labels and is dropped with the session.
-  const wait_for_rapid_end = () => poll_until("the rapid hint to end with its no-hints notice", async () => (await notice_text()) !== "");
   // A copy has no report of its own. The labels go when the pick is handled, and opening the paste page takes longer than the copy.
 
   await run_case(";yl a copies the link address", async () => {
@@ -136,9 +134,7 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, press_
     await wait_for_label_count(1, "after the first pick");
     await press_keys("a");
     await wait_for_link_count(2, "the second pick to delete the next link");
-    await wait_for_label_count(0, "after the second pick");
-    // Only the hidden and the covered link are left, so the rebuild finds nothing and hint mode ends.
-    await wait_for_rapid_end();
+    // Only the hidden and the covered link are left, so the rebuild finds nothing and hint mode ends. The key goes right after the pick and rides out the rebuild.
     expect((await scroll_delta_by_press("p6_delete", ["j"])) > 0, "hint mode did not end when no link was left");
   });
 
@@ -152,8 +148,6 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, press_
     await wait_for_label_count(1, "after the first pick");
     await press_keys("a");
     await wait_for_link_count(2, "the second pick to remove the next link");
-    await wait_for_label_count(0, "after the second pick");
-    await wait_for_rapid_end();
     expect((await scroll_delta_by_press("p6_here", ["j"])) > 0, "hint mode did not end when no link was left");
   });
 

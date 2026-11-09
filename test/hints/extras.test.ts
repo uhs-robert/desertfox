@@ -70,6 +70,8 @@ async function page_with(texts: string[]) {
   const repeat_records: unknown[] = [];
   const copied: string[] = [];
   const modes: string[] = [];
+  const held_key_batches: string[][] = [];
+  let intersecting = true;
   const handlers = new Map<string, (args: Record<string, unknown>) => unknown>();
   let sink: { on_token_: (token: string) => string; exit: () => void } | undefined;
   let mode = "normal";
@@ -92,6 +94,7 @@ async function page_with(texts: string[]) {
         if (left_hint) sink?.exit();
       },
       show_toast_: () => {},
+      hold_keys_until_: (handed_back: Promise<string[]>) => void handed_back.then((tokens) => held_key_batches.push(tokens)),
     },
   };
   const doc = {
@@ -136,7 +139,7 @@ async function page_with(texts: string[]) {
     targets: unknown[] = [];
     // One callback with every target, as the browser delivers the first observation.
     observe = (target: unknown) => {
-      if (this.targets.push(target) === 1) queueMicrotask(() => this.callback(this.targets.map((each) => ({ isIntersecting: true, target: each }))));
+      if (this.targets.push(target) === 1) queueMicrotask(() => this.callback(this.targets.map((each) => ({ isIntersecting: intersecting, target: each }))));
     };
     disconnect = () => {};
   };
@@ -164,6 +167,10 @@ async function page_with(texts: string[]) {
     repeat_records,
     copied,
     modes,
+    // Each batch of keys that hint mode handed back to the keymap, in order.
+    held_key_batches,
+    // The next build finds no candidate in view.
+    hide_all: () => void (intersecting = false),
     // The next opened link answers when this promise settles.
     refuse_clipboard: () => Object.defineProperty(globalThis, "navigator", { value: { clipboard: { writeText: () => Promise.reject(new Error("denied")) } }, configurable: true }),
     hold_sends: (held: () => Promise<unknown>) => void (sends_held = held),
@@ -549,4 +556,55 @@ test("a pick whose action throws answers failed, and one whose open reply is los
   await settle();
   lost.type(lost.labels()[0]!.toLowerCase());
   assert.deepEqual(await cancelled, { ok: true, cancelled: true });
+});
+
+test("rapid delete: a key typed in the last rebuild gap runs in normal mode", async () => {
+  const page = await page_with(["one", "two"]);
+  page.run({ action: "delete", rapid: true });
+  await settle();
+  page.type(page.labels()[0]!.toLowerCase());
+  await settle();
+  page.type(page.labels()[0]!.toLowerCase());
+  assert.equal(page.type("j"), "handled");
+  await settle();
+  assert.equal(page.mode(), "normal");
+  assert.deepEqual(page.held_key_batches, [["j"]]);
+});
+
+test("a first build with nothing in view hands the keys typed meanwhile back", async () => {
+  const page = await page_with(["one", "two"]);
+  page.hide_all();
+  const outcome = page.run({});
+  assert.equal(page.type("j"), "handled");
+  await settle();
+  assert.deepEqual(await outcome, { ok: false, message: "No hints on this page" });
+  assert.equal(page.mode(), "normal");
+  assert.deepEqual(page.held_key_batches, [["j"]]);
+});
+
+test("text with one match hands the keys typed meanwhile back", async () => {
+  const page = await page_with(["Alpha", "Beta"]);
+  page.run({ text: "bet", action: "background" });
+  assert.equal(page.type("j"), "handled");
+  await settle();
+  assert.equal(page.sent.length, 1);
+  assert.equal(page.mode(), "normal");
+  assert.deepEqual(page.held_key_batches, [["j"]]);
+});
+
+test("keys handed back keep the order they were typed in", async () => {
+  const page = await page_with(["one"]);
+  page.hide_all();
+  page.run({});
+  for (const key of ["j", "k", "a", "j"]) page.type(key);
+  await settle();
+  assert.deepEqual(page.held_key_batches, [["j", "k", "a", "j"]]);
+});
+
+test("no keys typed during a failed build hand nothing back", async () => {
+  const page = await page_with(["one"]);
+  page.hide_all();
+  page.run({});
+  await settle();
+  assert.deepEqual(page.held_key_batches, []);
 });
