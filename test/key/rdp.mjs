@@ -112,10 +112,15 @@ export async function connect_rdp(port, { request_timeout_ms = DEFAULT_REQUEST_T
       entry.abandoned = true;
       reject(new Error(`rdp: no answer from ${to}`));
       // Root answers at once on a healthy Firefox. When it stays silent the debugger is stuck (the main thread is blocked), and every later request would wait out its own timeout. Closing the connection fails the shard now.
-      if (to === "root" && !closed_reason) {
-        closed_reason = "Firefox stopped answering the debugger: root did not reply";
-        socket.destroy();
-        fail_everything();
+      // The stall shows first on whichever actor was asked, so any timeout probes root. A live root means only that actor is slow.
+      if (to === "root") {
+        if (!closed_reason) {
+          closed_reason = "Firefox stopped answering the debugger: root did not reply";
+          socket.destroy();
+          fail_everything();
+        }
+      } else {
+        request("root", { type: "getRoot" }).catch(() => {});
       }
     }, request_timeout_ms);
     const queue = waiting_requests.get(to) ?? [];

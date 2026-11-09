@@ -347,3 +347,22 @@ test("a silent root fails the connection at once, naming the debugger", async ()
     await assert.rejects(rdp.request("actor1", { type: "ask" }), /Firefox stopped answering the debugger/);
   }, { request_timeout_ms: 100 });
 });
+
+test("a silent console with a silent root closes the connection", async () => {
+  await with_rdp(() => {}, async (rdp) => {
+    await assert.rejects(rdp.request("console1", { type: "ask" }), /no answer from console1/);
+    await sleep(300);
+    await assert.rejects(rdp.request("actor1", { type: "ask" }), /Firefox stopped answering the debugger/);
+  }, { request_timeout_ms: 100 });
+});
+
+test("a silent console with a live root leaves the connection open", async () => {
+  await with_rdp((packet, fake) => {
+    if (packet.to === "root") fake.send({ from: "root", addonsActor: "addons1" });
+  }, async (rdp) => {
+    await assert.rejects(rdp.request("console1", { type: "ask" }), /no answer from console1/);
+    await sleep(300);
+    assert.equal(rdp.lost_reason(), undefined);
+    assert.equal((await rdp.request("root", { type: "getRoot" })).addonsActor, "addons1");
+  }, { request_timeout_ms: 100 });
+});
