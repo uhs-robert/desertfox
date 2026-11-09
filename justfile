@@ -42,9 +42,9 @@ test: install_deps
 install_deps:
     @test -d node_modules || npm install --no-audit --no-fund
 
-# Merge the config directory (default ~/.config/desertfox) into the live managed storage file. Extra flags (such as --schemas) go to the CLI. For another output path run the CLI with --out.
+# Lint the config directory (default ~/.config/desertfox): build it in memory and print problems. Writes nothing Firefox reads. Extra flags (such as --schemas) go to the CLI.
 build-config dir="" *flags="": build
-    node tools/build-config/cli.ts {{ if dir == "" { "" } else { quote(dir) } }} --live {{flags}}
+    node tools/build-config/cli.ts {{ if dir == "" { "" } else { quote(dir) } }} {{flags}}
 
 # Python unit tests of the native host and its install script. The install tests use a temporary HOME and a stubbed curl.
 host-test:

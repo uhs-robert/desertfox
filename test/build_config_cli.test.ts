@@ -1,15 +1,14 @@
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, readdirSync } from "node:fs";
+import { mkdtempSync, readdirSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { EXTENSION_ID } from "../tools/build-config/output.ts";
 
 const CLI = join(import.meta.dirname, "..", "tools", "build-config", "cli.ts");
 const FIXTURES = join(import.meta.dirname, "fixtures", "build-config");
 
-// HOME is a tmp dir so no case can touch the real live config.
+// HOME is a tmp dir so a stray write would show there, not in the real home.
 function run_cli(args: string[]) {
   const home = mkdtempSync(join(tmpdir(), "desertfox-home-"));
   const config_dir = mkdtempSync(join(tmpdir(), "desertfox-cfg-"));
@@ -18,33 +17,30 @@ function run_cli(args: string[]) {
     [CLI, config_dir, "--commands", join(FIXTURES, "commands.json"), ...args],
     { env: { ...process.env, HOME: home }, encoding: "utf8" },
   );
-  return { result, home };
+  return { result, home, config_dir };
 }
 
-test("no output flag exits 2 and writes nothing", () => {
-  const { result, home } = run_cli([]);
-  assert.equal(result.status, 2);
-  assert.match(result.stderr, /--out or --live/);
-  assert.deepEqual(readdirSync(home), []);
-});
-
-test("--out and --live together exit 2 and write nothing", () => {
-  const { result, home } = run_cli(["--live", "--out", join(tmpdir(), "desertfox-never.json")]);
-  assert.equal(result.status, 2);
-  assert.deepEqual(readdirSync(home), []);
-});
-
-test("--out writes only the given path and its engines file", () => {
-  const out_dir = mkdtempSync(join(tmpdir(), "desertfox-out-"));
-  const { result, home } = run_cli(["--out", join(out_dir, "x.json")]);
+test("a bare run lints, exits 0 and writes nothing", () => {
+  const { result, home, config_dir } = run_cli([]);
   assert.equal(result.status, 0, result.stderr);
-  assert.deepEqual(readdirSync(out_dir).sort(), ["x.engines.jsonl", "x.json"]);
+  assert.deepEqual(readdirSync(home), []);
+  assert.deepEqual(readdirSync(config_dir), []);
+});
+
+test("--live and --out are no longer flags", () => {
+  assert.notEqual(run_cli(["--live"]).result.status, 0);
+  assert.notEqual(run_cli(["--out", join(tmpdir(), "desertfox-never.json")]).result.status, 0);
+});
+
+test("--schemas writes the data schemas and nothing else", () => {
+  const schemas_dir = mkdtempSync(join(tmpdir(), "desertfox-schemas-"));
+  const { result, home } = run_cli(["--schemas", schemas_dir]);
+  assert.equal(result.status, 0, result.stderr);
+  assert.ok(readdirSync(schemas_dir).every((name) => name.endsWith(".schema.json")));
   assert.deepEqual(readdirSync(home), []);
 });
 
-test("--live writes the managed storage file under HOME", () => {
-  const { result, home } = run_cli(["--live"]);
-  assert.equal(result.status, 0, result.stderr);
-  assert.ok(existsSync(join(home, ".mozilla", "managed-storage", `${EXTENSION_ID}.json`)));
-  assert.deepEqual(readdirSync(home), [".mozilla"]);
+test("an unreadable commands file exits non-zero", () => {
+  const { result } = run_cli(["--commands", join(FIXTURES, "missing.json")]);
+  assert.notEqual(result.status, 0);
 });
