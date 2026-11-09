@@ -14,7 +14,6 @@ function sample() {
   registry.define("scroll.lines", {
     name: "scroll", label: "Scroll Lines", intent: "Scroll by lines.", runs_in: "content",
     params: [{ name: "count", type: "int", default: 1 }],
-    run: () => {},
   });
   registry.define("open.url", {
     name: "open", label: "Open URL", intent: "Open a URL.", runs_in: "background",

@@ -53,13 +53,13 @@ async function send_to_background(message: ContentToBackground): Promise<RunResp
 
 // A leaf with a background step goes to the router whole: it reads the active tab at each step, so a step after tab.next runs in the new tab.
 // A leaf of content steps runs here and shows its own failure.
-async function run_leaf(leaf: TreeLeaf, count: number | undefined): Promise<void> {
+async function run_leaf(leaf: TreeLeaf, count: number | undefined, repeat: boolean): Promise<void> {
   if (leaf.steps.some((step) => step.runs_in === "background")) {
     // The background shows a refusal itself.
     await send_to_background({ type: "run", invocations: counted_invocations(leaf.steps, count), mode: page_mode.get_mode() });
     return;
   }
-  const outcome = await run_content_steps(leaf.steps, count);
+  const outcome = await run_content_steps(leaf.steps, count, repeat);
   if (!outcome.ok) show_toast(outcome.message);
 }
 
@@ -75,7 +75,7 @@ const key_flow = create_key_flow({
   on_prefix: follow_prefix,
   get_mode: page_mode.get_mode,
   take_pass_next: page_mode.take_pass_next,
-  run_leaf: (leaf, count) => void run_leaf(leaf, count),
+  run_leaf: (leaf, count, repeat) => void run_leaf(leaf, count, repeat),
   leave_insert: () => {
     page_mode.escape();
     blur_focused_element();
@@ -111,7 +111,7 @@ function on_keydown(event: KeyboardEvent): void {
   if (!event.isTrusted || event.isComposing) return;
   const token = event_to_token(event);
   if (token === null) return;
-  const decision = key_flow.handle_token(token);
+  const decision = key_flow.handle_token(token, event.repeat);
   cancelled_keys.record_keydown(event.code, decision);
   if (decision === "cancel") cancel(event);
 }

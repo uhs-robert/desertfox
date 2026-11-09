@@ -83,7 +83,7 @@ export function create_snippets(registry: Registry, deps: SnippetDeps, router_de
   function command_at_depth(id: string, depth: number): CommandDef | undefined {
     const command = registry.get(id);
     const entry = entries_by_id.get(id);
-    if (!command || !entry) return command;
+    if (!command || !entry || command.runs_in !== "background") return command;
     return { ...command, run: (context, args) => run_snippet(entry, context, args, depth) };
   }
 

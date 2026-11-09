@@ -48,7 +48,7 @@ test("bad args warn and skip, defaults are filled, prompt bindings stay", () => 
 
 test("a binding that lacks a required param and sets no prompt warns and is skipped", () => {
   const { registry } = make_fake({
-    "mode.set": { label: "Mode", intent: "x", params: [{ name: "mode", type: "enum" as const, values: ["normal", "ignore"] }], runs_in: "content", run: () => {} },
+    "mode.set": { label: "Mode", intent: "x", params: [{ name: "mode", type: "enum" as const, values: ["normal", "ignore"] }], runs_in: "content" },
   });
   const { compiled, warnings } = compile_config({
     config: { ...empty_config(), keymap: { normal: { i: { id: "mode.set" }, j: { id: "mode.set", prompt: { param: "mode" } } } } },
@@ -64,7 +64,7 @@ test("a binding that lacks a required param and sets no prompt warns and is skip
 
 test("a prompt leaf goes to the background so the router can refuse it", () => {
   const { registry } = make_fake({
-    "mode.set": { label: "Mode", intent: "x", params: [{ name: "mode", type: "enum" as const, values: ["normal", "ignore"], default: "normal" }], runs_in: "content", run: () => {} },
+    "mode.set": { label: "Mode", intent: "x", params: [{ name: "mode", type: "enum" as const, values: ["normal", "ignore"], default: "normal" }], runs_in: "content" },
   });
   const { compiled, warnings } = compile_config({
     config: { ...empty_config(), keymap: { normal: { i: { id: "mode.set", prompt: { param: "mode" } } } } },
@@ -93,7 +93,7 @@ test("a prompt naming a missing param warns and skips", () => {
 test("a binding in a mode the command does not allow is warned about and skipped", () => {
   const { registry } = make_fake({
     "tab.close": { label: "Close", intent: "x", runs_in: "background", run: () => {} },
-    "mode.leave": { label: "Leave", intent: "x", runs_in: "content", modes: ["normal", "ignore"], run: () => {} },
+    "mode.leave": { label: "Leave", intent: "x", runs_in: "content", modes: ["normal", "ignore"] },
   });
   const { compiled, warnings } = compile_config({
     config: empty_config(),

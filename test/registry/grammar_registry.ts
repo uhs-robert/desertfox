@@ -5,7 +5,7 @@ import type { CommandInput, Registry } from "../../src/shared/registry/index.ts"
 const WHERE = ["here", "tab", "background", "window"];
 const WHERE_SHORT = { tab: "t", background: "b", window: "w" };
 
-const define = (registry: Registry, id: string, input: Omit<CommandInput, "label" | "intent" | "runs_in" | "run">) =>
+const define = (registry: Registry, id: string, input: Omit<Extract<CommandInput, { runs_in: "background" }>, "label" | "intent" | "runs_in" | "run">) =>
   registry.define(id, { label: "L", intent: "I.", runs_in: "background", run: () => {}, ...input });
 
 export function grammar_registry(): Registry {

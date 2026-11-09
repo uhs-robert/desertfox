@@ -109,3 +109,13 @@ test("the first step of a content leaf runs in the caller's turn, and the typed 
   assert.deepEqual(counted_invocations([content_step("a"), content_step("b")], 4), [{ id: "a", count: 4 }, { id: "b", count: 4 }]);
   assert.deepEqual(counted_invocations([content_step("a")], undefined), [{ id: "a" }]);
 });
+
+test("a repeat flag reaches the handler as given, and a run with none reaches it as false", async () => {
+  const seen: unknown[] = [];
+  content_handlers["t.repeat"] = { run: ((_args: unknown, repeat: unknown) => void seen.push(repeat)) as never };
+  await run_content_steps([content_step("t.repeat")], undefined, true);
+  await run_content_steps([content_step("t.repeat")], undefined);
+  await run_content_invocation({ id: "t.repeat" }, "ignore");
+  await run_in_order([{ id: "t.repeat" }]);
+  assert.deepEqual(seen, [true, false, false, false]);
+});

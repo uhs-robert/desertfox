@@ -22,7 +22,8 @@ export type Matcher = {
 export type KeyFlowDeps = {
   get_mode: () => Mode;
   take_pass_next: () => boolean;
-  run_leaf: (leaf: TreeLeaf, count: number | undefined) => void;
+  // `repeat` is true for an auto-repeat keydown of a held key.
+  run_leaf: (leaf: TreeLeaf, count: number | undefined, repeat: boolean) => void;
   leave_insert: () => void;
   in_editable_field: () => boolean;
   // A bundle is loading, and the mode its keys replay in is not known yet.
@@ -72,7 +73,7 @@ export function create_key_flow(deps: KeyFlowDeps) {
     const node = browser_chords?.children[token];
     if (node?.kind !== "leaf" || (mode !== "normal" && mode !== "insert")) return false;
     reset_sequence();
-    deps.run_leaf(node, undefined);
+    deps.run_leaf(node, undefined, false);
     return true;
   };
 
@@ -102,7 +103,7 @@ export function create_key_flow(deps: KeyFlowDeps) {
     return cancels_unbound_key(mode, token, false) ? "cancel" : "pass";
   };
 
-  const step = (active: Matcher, token: string): KeyDecision => {
+  const step = (active: Matcher, token: string, repeat: boolean): KeyDecision => {
     const mode = deps.get_mode();
     const was_in_progress = sequence_in_progress;
     // Backspace drops the last key of a half-typed sequence. The matcher cannot step back, so the shorter prefix is typed again.
@@ -110,7 +111,7 @@ export function create_key_flow(deps: KeyFlowDeps) {
       const kept = typed.slice(0, -1);
       reset_sequence();
       // The count goes back in as its digits, ahead of the kept keys.
-      for (const key of [...`${count ?? ""}`, ...kept]) step(active, key);
+      for (const key of [...`${count ?? ""}`, ...kept]) step(active, key, false);
       deps.on_prefix(kept.length > 0 ? { mode, typed: kept } : undefined, true);
       return "cancel";
     }
@@ -120,7 +121,7 @@ export function create_key_flow(deps: KeyFlowDeps) {
     // A bare count (`3`) has typed nothing yet, so no keys can be listed.
     deps.on_prefix(result.kind === "pending" && result.typed.length > 0 ? { mode, typed: result.typed } : undefined);
     if (result.kind === "match") {
-      deps.run_leaf(result.leaf, result.count);
+      deps.run_leaf(result.leaf, result.count, repeat);
       return "cancel";
     }
     if (result.kind === "pending") return "cancel";
@@ -129,13 +130,13 @@ export function create_key_flow(deps: KeyFlowDeps) {
     return cancels_unbound_key(mode, token, deps.in_editable_field()) ? "cancel" : "pass";
   };
 
-  const decide = (active: Matcher, token: string): KeyDecision => {
+  const decide = (active: Matcher, token: string, repeat: boolean): KeyDecision => {
     // A sink takes the token before the keymap, and "pass" lets the keymap see it.
     if (deps.sink_of(deps.get_mode())?.on_token(token) === "handled") {
       reset_sequence();
       return "cancel";
     }
-    return run_browser_chord(token) ? "cancel" : step(active, token);
+    return run_browser_chord(token) ? "cancel" : step(active, token, repeat);
   };
 
   // A replayed key can start another load, and the keys behind it wait for that load too.
@@ -143,18 +144,18 @@ export function create_key_flow(deps: KeyFlowDeps) {
     while (matcher && held_tokens.length > 0 && !deps.is_loading()) {
       const entry = held_tokens.shift()!;
       if (entry === SEQUENCE_BREAK) reset_sequence();
-      else decide(matcher, entry);
+      else decide(matcher, entry, false);
     }
   };
 
   return {
-    handle_token: (token: string): KeyDecision => {
+    handle_token: (token: string, repeat = false): KeyDecision => {
       if (deps.take_pass_next()) {
         reset_sequence();
         return "pass";
       }
       if (!matcher || deps.is_loading()) return hold(token);
-      return decide(matcher, token);
+      return decide(matcher, token, repeat);
     },
     reset_sequence,
     // The first call also replays the held keys. Later calls swap the keymap.

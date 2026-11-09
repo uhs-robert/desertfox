@@ -36,10 +36,10 @@ bound: 287 (normal 152, hint 2, cmdline 18, caret 35, visual 37, visual_line 38,
 | `G` | bound | `scroll.to 100` | Scroll to bottom |  |
 | `$` | bound | `scroll.to --x 100` | Scroll to right edge |  |
 | `^` | bound | `scroll.to --x 0` | Scroll to left edge |  |
-| `<C-d>` | bound | `scroll.pages 0.5` | Scroll half page down |  |
-| `<C-u>` | bound | `scroll.pages -0.5` | Scroll half page up |  |
+| `<C-d>` | bound | `scroll.pages --fraction=0.5` | Scroll half page down |  |
+| `<C-u>` | bound | `scroll.pages --fraction=-0.5` | Scroll half page up |  |
 | `<C-f>` | bound | `scroll.pages` | Scroll page down |  |
-| `<C-b>` | bound | `scroll.pages -1` | Scroll page up |  |
+| `<C-b>` | bound | `scroll.pages --fraction=-1` | Scroll page up |  |
 | `H` | bound | `page.back` | Back |  |
 | `L` | bound | `page.forward` | Forward |  |
 | `rr` | bound | `page.reload` | Reload |  |

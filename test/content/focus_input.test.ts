@@ -30,7 +30,7 @@ function run_gi(fakes: Fake[]): string | undefined {
     return element;
   });
   globals.document = { querySelectorAll: () => elements };
-  page_focus_input.run({});
+  page_focus_input.run({}, false);
   return focused;
 }
 
