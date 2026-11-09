@@ -228,3 +228,13 @@ test("the answer names what the import changed, and a preview failure is an answ
   assert.deepEqual(await answer_config_import(commit, deps({ warnings: 1, replaces_config: false, snippets: 1 })), { ok: true, message: "Imported 1 snippet(s), with 1 warning(s) on the Help page" });
   assert.deepEqual(await answer_config_import({ type: "preview_config_import", source: folder_of({}) }, deps({ warnings: 0, replaces_config: true, snippets: 0 })), { ok: false, message: "Config not imported, the current one stays. Bad zip." });
 });
+
+test("autoconfig.toml alone is not a config import, and an import never stores it", async () => {
+  const { startup, local } = await started("autoconfig_only");
+  assert.match(await refusal_of(startup.import_config(zip_of({ "d/autoconfig.toml": 'hint_letters = "zx"\n' }), {})), /holds no config files and no snippet was accepted/);
+  assert.equal((await startup.get_config()).settings.hint_letters, "ab");
+  const preview = (await startup.preview_config_import(zip_of({ "d/autoconfig.toml": "", "d/snippets/a.js": snippet_file("autoconfig_only.a") }))) as Extract<ConfigImportPreview, { ok: true }>;
+  assert.equal(preview.replaces_config, false);
+  await startup.import_config(zip_of({ "d/autoconfig.toml": "", "d/snippets/a.js": snippet_file("autoconfig_only.a") }), { "snippets/a.js": snippet_file("autoconfig_only.a") });
+  assert.deepEqual(Object.keys(slot_of(local).source.files).sort(), ["settings.toml", "snippets/a.js", "snippets/home.js"]);
+});
