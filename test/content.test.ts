@@ -34,17 +34,18 @@ function make_flow(in_field = false) {
   const state = create_mode_state();
   const ran: string[] = [];
   const flow = create_key_flow({
-    in_editable_field: () => in_field,
+    in_editable_field_: () => in_field,
     get_mode: state.get_mode,
-    take_pass_next: state.take_pass_next,
-    run_leaf: (matched, count) => ran.push(`${matched.steps[0]?.invocation.id}${count ?? ""}`),
-    leave_insert: () => state.escape(),
-    is_loading: () => false,
-    sink_of: () => undefined,
-    on_prefix: () => {},
+    take_pass_next_: state.take_pass_next_,
+    run_leaf_: (matched, count, repeat) => ran.push(`${matched.steps[0]?.invocation.id}${count ?? ""}${repeat ? "!" : ""}`),
+    leave_insert_: () => state.escape(),
+    is_loading_: () => false,
+    loading_sink_bundles_: () => [],
+    sink_of_: () => undefined,
+    on_prefix_: () => {},
   });
   // The same wiring main.ts does.
-  state.listen(() => flow.reset_sequence());
+  state.listen(() => flow.reset_sequence_());
   return { state, ran, flow };
 }
 
@@ -52,22 +53,22 @@ test("mode state follows focus into a field from normal, caret and visual only",
   const state = create_mode_state();
   const seen: string[] = [];
   state.listen((mode) => seen.push(mode));
-  state.focus_entered_editable();
-  state.focus_left_editable();
-  state.set_mode("ignore");
-  state.focus_entered_editable();
+  state.focus_entered_editable_();
+  state.focus_left_editable_();
+  state.set_mode_("ignore");
+  state.focus_entered_editable_();
   state.escape();
-  state.focus_left_editable();
+  state.focus_left_editable_();
   assert.deepEqual(seen, ["insert", "normal", "ignore"]);
 });
 
 for (const mode of ["caret", "visual"] as const) {
   test(`focus in a field leaves ${mode} mode for insert, and leaving the field returns to normal`, () => {
     const state = create_mode_state();
-    state.set_mode(mode);
-    state.focus_entered_editable();
+    state.set_mode_(mode);
+    state.focus_entered_editable_();
     assert.equal(state.get_mode(), "insert");
-    state.focus_left_editable();
+    state.focus_left_editable_();
     assert.equal(state.get_mode(), "normal");
   });
 }
@@ -75,18 +76,18 @@ for (const mode of ["caret", "visual"] as const) {
 for (const mode of ["ignore", "hint", "cmdline"] as const) {
   test(`focus in a field keeps ${mode} mode`, () => {
     const state = create_mode_state();
-    state.set_mode(mode);
-    state.focus_entered_editable();
+    state.set_mode_(mode);
+    state.focus_entered_editable_();
     assert.equal(state.get_mode(), mode);
   });
 }
 
 test("typing in a field after focus from caret mode passes through the key flow", () => {
   const { state, ran, flow } = make_flow(true);
-  flow.set_matcher(create_matcher({ ...keymap, modes: { ...keymap.modes, caret: { kind: "branch", children: { j: leaf("caret_down") } } } }));
-  state.set_mode("caret");
-  state.focus_entered_editable();
-  assert.equal(flow.handle_token("j"), "pass");
+  flow.set_matcher_(create_matcher({ ...keymap, modes: { ...keymap.modes, caret: { kind: "branch", children: { j: leaf("caret_down") } } } }));
+  state.set_mode_("caret");
+  state.focus_entered_editable_();
+  assert.equal(flow.handle_token_("j"), "pass");
   assert.deepEqual(ran, []);
 });
 
@@ -94,118 +95,118 @@ test("escape leaves insert but not ignore", () => {
   const state = create_mode_state("insert");
   state.escape();
   assert.equal(state.get_mode(), "normal");
-  state.set_mode("ignore");
+  state.set_mode_("ignore");
   state.escape();
   assert.equal(state.get_mode(), "ignore");
 });
 
 test("pass_next fires once", () => {
   const state = create_mode_state();
-  state.arm_pass_next();
-  assert.equal(state.take_pass_next(), true);
-  assert.equal(state.take_pass_next(), false);
+  state.arm_pass_next_();
+  assert.equal(state.take_pass_next_(), true);
+  assert.equal(state.take_pass_next_(), false);
 });
 
 test("key flow holds keys before the keymap and replays them", () => {
   const { ran, flow } = make_flow();
-  assert.equal(flow.handle_token("j"), "cancel");
-  assert.equal(flow.handle_token("g"), "cancel");
-  assert.equal(flow.handle_token("g"), "cancel");
+  assert.equal(flow.handle_token_("j"), "cancel");
+  assert.equal(flow.handle_token_("g"), "cancel");
+  assert.equal(flow.handle_token_("g"), "cancel");
   assert.deepEqual(ran, []);
-  flow.set_matcher(create_matcher(keymap));
+  flow.set_matcher_(create_matcher(keymap));
   assert.deepEqual(ran, ["down", "top"]);
 });
 
 test("key flow cancels matches and half-typed sequences, passes unbound keys", () => {
   const { ran, flow } = make_flow();
-  flow.set_matcher(create_matcher(keymap));
-  assert.equal(flow.handle_token("x"), "pass");
-  assert.equal(flow.handle_token("j"), "cancel");
-  assert.equal(flow.handle_token("g"), "cancel");
-  assert.equal(flow.handle_token("x"), "pass");
-  assert.equal(flow.handle_token("x"), "pass");
-  assert.equal(flow.handle_token("3"), "cancel");
-  assert.equal(flow.handle_token("j"), "cancel");
+  flow.set_matcher_(create_matcher(keymap));
+  assert.equal(flow.handle_token_("x"), "pass");
+  assert.equal(flow.handle_token_("j"), "cancel");
+  assert.equal(flow.handle_token_("g"), "cancel");
+  assert.equal(flow.handle_token_("x"), "pass");
+  assert.equal(flow.handle_token_("x"), "pass");
+  assert.equal(flow.handle_token_("3"), "cancel");
+  assert.equal(flow.handle_token_("j"), "cancel");
   assert.deepEqual(ran, ["down", "down3"]);
 });
 
 test("key flow in ignore mode passes everything but the leaving binding", () => {
   const { state, ran, flow } = make_flow();
-  flow.set_matcher(create_matcher(keymap));
-  state.set_mode("ignore");
-  assert.equal(flow.handle_token("j"), "pass");
-  assert.equal(flow.handle_token("<S-Escape>"), "cancel");
+  flow.set_matcher_(create_matcher(keymap));
+  state.set_mode_("ignore");
+  assert.equal(flow.handle_token_("j"), "pass");
+  assert.equal(flow.handle_token_("<S-Escape>"), "cancel");
   assert.deepEqual(ran, ["leave"]);
 });
 
 test("key flow in insert mode leaves on Escape and passes letters", () => {
   const { state, flow } = make_flow();
-  flow.set_matcher(create_matcher(keymap));
-  state.set_mode("insert");
-  assert.equal(flow.handle_token("j"), "pass");
-  assert.equal(flow.handle_token("<Escape>"), "pass");
+  flow.set_matcher_(create_matcher(keymap));
+  state.set_mode_("insert");
+  assert.equal(flow.handle_token_("j"), "pass");
+  assert.equal(flow.handle_token_("<Escape>"), "pass");
   assert.equal(state.get_mode(), "normal");
 });
 
 test("pass_next passes one key that would match", () => {
   const { state, ran, flow } = make_flow();
-  flow.set_matcher(create_matcher(keymap));
-  state.arm_pass_next();
-  assert.equal(flow.handle_token("j"), "pass");
-  assert.equal(flow.handle_token("j"), "cancel");
+  flow.set_matcher_(create_matcher(keymap));
+  state.arm_pass_next_();
+  assert.equal(flow.handle_token_("j"), "pass");
+  assert.equal(flow.handle_token_("j"), "cancel");
   assert.deepEqual(ran, ["down"]);
 });
 
 test("a key that breaks a sequence is retried from the root", () => {
   const { ran, flow } = make_flow();
-  flow.set_matcher(create_matcher(keymap));
-  assert.equal(flow.handle_token("g"), "cancel");
-  assert.equal(flow.handle_token("j"), "cancel");
+  flow.set_matcher_(create_matcher(keymap));
+  assert.equal(flow.handle_token_("g"), "cancel");
+  assert.equal(flow.handle_token_("j"), "cancel");
   assert.deepEqual(ran, ["down"]);
 });
 
 test("a mode change drops a pending sequence and count", () => {
   const { state, ran, flow } = make_flow();
-  flow.set_matcher(create_matcher(keymap));
-  assert.equal(flow.handle_token("g"), "cancel");
-  state.set_mode("insert");
-  state.set_mode("normal");
-  assert.equal(flow.handle_token("x"), "pass");
-  assert.equal(flow.handle_token("5"), "cancel");
-  state.set_mode("ignore");
-  state.set_mode("normal");
-  assert.equal(flow.handle_token("j"), "cancel");
+  flow.set_matcher_(create_matcher(keymap));
+  assert.equal(flow.handle_token_("g"), "cancel");
+  state.set_mode_("insert");
+  state.set_mode_("normal");
+  assert.equal(flow.handle_token_("x"), "pass");
+  assert.equal(flow.handle_token_("5"), "cancel");
+  state.set_mode_("ignore");
+  state.set_mode_("normal");
+  assert.equal(flow.handle_token_("j"), "cancel");
   assert.deepEqual(ran, ["down"]);
 });
 
 test("browser chords run in normal and insert mode and are cancelled", () => {
   const { state, ran, flow } = make_flow();
-  flow.set_matcher(create_matcher(keymap), browser_chords);
-  assert.equal(flow.handle_token("<A-j>"), "cancel");
-  state.set_mode("insert");
-  assert.equal(flow.handle_token("<A-j>"), "cancel");
-  assert.equal(flow.handle_token("<C-x>"), "cancel");
-  state.set_mode("ignore");
-  assert.equal(flow.handle_token("<A-j>"), "pass");
+  flow.set_matcher_(create_matcher(keymap), browser_chords);
+  assert.equal(flow.handle_token_("<A-j>"), "cancel");
+  state.set_mode_("insert");
+  assert.equal(flow.handle_token_("<A-j>"), "cancel");
+  assert.equal(flow.handle_token_("<C-x>"), "cancel");
+  state.set_mode_("ignore");
+  assert.equal(flow.handle_token_("<A-j>"), "pass");
   assert.deepEqual(ran, ["next_tab", "next_tab", "insert_chord"]);
 });
 
 test("startup holds plain keys outside fields and drops what matches nothing", () => {
   const { ran, flow } = make_flow();
-  assert.equal(flow.handle_token("<A-j>"), "pass");
-  assert.equal(flow.handle_token("x"), "cancel");
-  assert.equal(flow.handle_token("j"), "cancel");
-  flow.set_matcher(create_matcher(keymap));
+  assert.equal(flow.handle_token_("<A-j>"), "pass");
+  assert.equal(flow.handle_token_("x"), "cancel");
+  assert.equal(flow.handle_token_("j"), "cancel");
+  flow.set_matcher_(create_matcher(keymap));
   assert.deepEqual(ran, ["down"]);
   const in_field = make_flow(true);
-  assert.equal(in_field.flow.handle_token("j"), "pass");
+  assert.equal(in_field.flow.handle_token_("j"), "pass");
 });
 
 test("startup replay uses the mode set before the keymap", () => {
   const { state, ran, flow } = make_flow();
-  assert.equal(flow.handle_token("j"), "cancel");
-  state.set_mode("ignore");
-  flow.set_matcher(create_matcher(keymap));
+  assert.equal(flow.handle_token_("j"), "cancel");
+  state.set_mode_("ignore");
+  flow.set_matcher_(create_matcher(keymap));
   assert.deepEqual(ran, []);
 });
 
@@ -227,45 +228,45 @@ test("caret and both visual modes keep every unbound plain key from the page, ou
 
 test("key flow in caret mode cancels an unbound letter and passes Tab and Ctrl+C", () => {
   const { state, flow } = make_flow();
-  flow.set_matcher(create_matcher(keymap));
-  state.set_mode("caret");
-  assert.equal(flow.handle_token("e"), "cancel");
-  assert.equal(flow.handle_token("<Tab>"), "pass");
-  assert.equal(flow.handle_token("<C-c>"), "pass");
+  flow.set_matcher_(create_matcher(keymap));
+  state.set_mode_("caret");
+  assert.equal(flow.handle_token_("e"), "cancel");
+  assert.equal(flow.handle_token_("<Tab>"), "pass");
+  assert.equal(flow.handle_token_("<C-c>"), "pass");
 });
 
 test("key flow cancels an unbound Quick Find key and drops the sequence or count before it", () => {
   const { state, ran, flow } = make_flow();
-  flow.set_matcher(create_matcher(keymap));
-  assert.equal(flow.handle_token("'"), "cancel");
-  assert.equal(flow.handle_token("g"), "cancel");
-  assert.equal(flow.handle_token("'"), "cancel");
-  assert.equal(flow.handle_token("3"), "cancel");
-  assert.equal(flow.handle_token("/"), "cancel");
-  assert.equal(flow.handle_token("j"), "cancel");
-  state.set_mode("insert");
-  assert.equal(flow.handle_token("/"), "pass");
+  flow.set_matcher_(create_matcher(keymap));
+  assert.equal(flow.handle_token_("'"), "cancel");
+  assert.equal(flow.handle_token_("g"), "cancel");
+  assert.equal(flow.handle_token_("'"), "cancel");
+  assert.equal(flow.handle_token_("3"), "cancel");
+  assert.equal(flow.handle_token_("/"), "cancel");
+  assert.equal(flow.handle_token_("j"), "cancel");
+  state.set_mode_("insert");
+  assert.equal(flow.handle_token_("/"), "pass");
   assert.deepEqual(ran, ["down"]);
 });
 
 test("a bound Quick Find key runs its command", () => {
   const bound: CompiledKeymap = { ...keymap, modes: { ...keymap.modes, normal: { kind: "branch", children: { "/": leaf("find") } } } };
   const { ran, flow } = make_flow();
-  flow.set_matcher(create_matcher(bound));
-  assert.equal(flow.handle_token("2"), "cancel");
-  assert.equal(flow.handle_token("/"), "cancel");
+  flow.set_matcher_(create_matcher(bound));
+  assert.equal(flow.handle_token_("2"), "cancel");
+  assert.equal(flow.handle_token_("/"), "cancel");
   assert.deepEqual(ran, ["find2"]);
 });
 
 test("a stale cancelled code does not eat a later typed letter", () => {
   const keys = create_cancelled_keys();
-  keys.record_keydown("KeyJ", "cancel");
+  keys.record_keydown_("KeyJ", "cancel");
   // The keyup went to another tab. Later the same key is typed into a field.
-  keys.record_keydown("KeyJ", "pass");
-  assert.equal(keys.cancels_keypress("KeyJ"), false);
-  keys.record_keydown("KeyK", "cancel");
-  assert.equal(keys.cancels_keypress("KeyK"), true);
-  assert.equal(keys.take_keyup("KeyK"), true);
+  keys.record_keydown_("KeyJ", "pass");
+  assert.equal(keys.cancels_keypress_("KeyJ"), false);
+  keys.record_keydown_("KeyK", "cancel");
+  assert.equal(keys.cancels_keypress_("KeyK"), true);
+  assert.equal(keys.take_keyup_("KeyK"), true);
 });
 
 test("match patterns", () => {
@@ -348,7 +349,7 @@ test("count rules", () => {
   assert.deepEqual(args_for_count(args, 3, { param: "n" }), [{ a: 1, n: 3 }]);
 });
 
-const area = (ref: string, can_scroll_x: boolean, can_scroll_y: boolean, size: number) => ({ ref, can_scroll_x, can_scroll_y, area: size });
+const area = (ref: string, can_scroll_x_: boolean, can_scroll_y_: boolean, size: number) => ({ ref, can_scroll_x_, can_scroll_y_, area: size });
 
 test("scroll target order: focus chain, page, largest", () => {
   const pane = area("pane", false, true, 100);
@@ -388,13 +389,13 @@ test("mode label follows the mode_indicator setting", () => {
 test("display listener fires on mode changes and on pass-next arming and use", () => {
   const state = create_mode_state();
   let fired = 0;
-  state.listen_display(() => fired++);
-  state.arm_pass_next();
-  assert.equal(state.is_pass_next_armed(), true);
-  assert.equal(state.take_pass_next(), true);
-  assert.equal(state.take_pass_next(), false);
-  state.set_mode("ignore");
-  state.set_mode("ignore");
+  state.listen_display_(() => fired++);
+  state.arm_pass_next_();
+  assert.equal(state.is_pass_next_armed_(), true);
+  assert.equal(state.take_pass_next_(), true);
+  assert.equal(state.take_pass_next_(), false);
+  state.set_mode_("ignore");
+  state.set_mode_("ignore");
   assert.equal(fired, 3);
 });
 
@@ -402,7 +403,7 @@ test("the mode is reported at start and on every change", () => {
   const state = create_mode_state();
   const reports: string[] = [];
   wire_mode_reports(state, (mode) => reports.push(mode));
-  state.set_mode("ignore");
+  state.set_mode_("ignore");
   assert.deepEqual(reports, ["normal", "ignore"]);
 });
 
@@ -443,4 +444,13 @@ test("a document holds its own focus unless a child frame has it", () => {
   assert.equal(holds_own_focus(doc(true, "iframe")), false);
   assert.equal(holds_own_focus(doc(true, "frame")), false);
   assert.equal(holds_own_focus(doc(false, "body")), false);
+});
+
+test("a key repeat reaches run_leaf_ as true, and a first press, a replayed key and a browser chord as false", () => {
+  const { flow, ran } = make_flow();
+  flow.set_matcher_(create_matcher(keymap), keymap.modes.browser);
+  flow.handle_token_("j", true);
+  flow.handle_token_("j");
+  flow.handle_token_("<A-j>", true);
+  assert.deepEqual(ran, ["down!", "down", "next_tab"]);
 });

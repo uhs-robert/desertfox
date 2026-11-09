@@ -7,12 +7,12 @@ export type Direction = "forward" | "backward";
 
 // A capitalised plain-text query is a literal search and never becomes a regex. Plain text with no capital is `folded`: an escaped regex, which cannot backtrack, so it runs in the page.
 // A `regex` is the user's own pattern. It runs in a background Worker that stops it at the time limit, because one `exec` cannot be interrupted.
-// A pattern that is not a regex, that could freeze the tab, or that ran past the time limit, is searched as its own characters (`as_text`), and `fallback` says why.
+// A pattern that is not a regex, that could freeze the tab, or that ran past the time limit, is searched as its own characters (`as_text_`), and `fallback` says why.
 export type Search = { kind: "literal"; needle: string } | { kind: "folded"; regex: RegExp } | { kind: "regex"; regex: RegExp };
 
 export type Fallback = "invalid" | "costly";
 
-export type Query = { search: Search; fallback: Fallback | undefined; as_text: Search };
+export type Query = { search: Search; fallback: Fallback | undefined; as_text_: Search };
 
 export type Matches = { from: number[]; to: number[] };
 
@@ -84,23 +84,23 @@ const is_exact = (query: string) => /\p{Lu}/u.test(query.replace(/\\./gu, ""));
 export function compile_query(query: string): Query | undefined {
   if (query === "") return undefined;
   const exact = is_exact(query);
-  const as_text: Search = exact ? { kind: "literal", needle: query } : { kind: "folded", regex: new RegExp(space_matches_line_break(query.replace(ESCAPED_EVERYWHERE, "\\$&")), "giu") };
-  if (!ESCAPED.test(query)) return { search: as_text, fallback: undefined, as_text };
-  if (is_costly_pattern(query)) return { search: as_text, fallback: "costly", as_text };
+  const as_text_: Search = exact ? { kind: "literal", needle: query } : { kind: "folded", regex: new RegExp(space_matches_line_break(query.replace(ESCAPED_EVERYWHERE, "\\$&")), "giu") };
+  if (!ESCAPED.test(query)) return { search: as_text_, fallback: undefined, as_text_ };
+  if (is_costly_pattern(query)) return { search: as_text_, fallback: "costly", as_text_ };
   try {
-    return { search: { kind: "regex", regex: new RegExp(space_matches_line_break(query), exact ? "gu" : "giu") }, fallback: undefined, as_text };
+    return { search: { kind: "regex", regex: new RegExp(space_matches_line_break(query), exact ? "gu" : "giu") }, fallback: undefined, as_text_ };
   } catch {
-    return { search: as_text, fallback: "invalid", as_text };
+    return { search: as_text_, fallback: "invalid", as_text_ };
   }
 }
 
 export type Slicing = {
   // True once a newer query or the end of the search made this scan useless.
-  is_stale: () => boolean;
+  is_stale_: () => boolean;
   // Lets the page and the keys run, then resumes.
-  yield_to_page: () => Promise<void>;
+  yield_to_page_: () => Promise<void>;
   now: () => number;
-  slice_ms: number;
+  slice_ms_: number;
 };
 
 // Runs a `regex` search in the background (the `find_scan` message).
@@ -115,10 +115,10 @@ export async function collect_matches(text: string, search: Search, slicing: Sli
   if (search.kind === "regex") {
     // A frame torn down or a background reload rejects the send. That says nothing to a search that is already stale.
     const answer = await scan_regex(text, search.regex).catch((error: unknown) => {
-      if (slicing.is_stale()) return undefined;
+      if (slicing.is_stale_()) return undefined;
       throw error;
     });
-    if (!answer || slicing.is_stale()) return undefined;
+    if (!answer || slicing.is_stale_()) return undefined;
     if (answer.ok) return { from: Array.from(answer.from), to: Array.from(answer.to) };
     if (answer.reason === "failed") throw new Error(answer.message);
     return answer.reason === "timeout" ? "timeout" : undefined;
@@ -150,12 +150,12 @@ export async function collect_matches(text: string, search: Search, slicing: Sli
   for (let hit = next(); hit; hit = next()) {
     found.from.push(hit.from);
     found.to.push(hit.to);
-    if (slicing.now() - slice_started < slicing.slice_ms) continue;
-    await slicing.yield_to_page();
-    if (slicing.is_stale()) return undefined;
+    if (slicing.now() - slice_started < slicing.slice_ms_) continue;
+    await slicing.yield_to_page_();
+    if (slicing.is_stale_()) return undefined;
     slice_started = slicing.now();
   }
-  return slicing.is_stale() ? undefined : found;
+  return slicing.is_stale_() ? undefined : found;
 }
 
 // The first match at or after `start` going forward, or the last one before it going backward. Wraps to the other end when there is none.

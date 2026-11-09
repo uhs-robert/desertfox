@@ -28,8 +28,8 @@ type CaretWindow = { desertfox_host: BundleHostApi; desertfox_caret_ready?: true
 const page = window as unknown as CaretWindow;
 const find = create_find(page.desertfox_host);
 
-// `painted` holds the ends of each selection as the last paint left it, so a later change by the page shows. `painted_span` is the text that paint drew, which a linewise session cannot measure again without moving the page selection.
-type Session = { model: TextModel; cursor: Cursor; mode: CaretMode; goal_x: number | undefined; painted: SelectionEnds[]; painted_span: Span };
+// `painted_` holds the ends of each selection as the last paint left it, so a later change by the page shows. `painted_span_` is the text that paint drew, which a linewise session cannot measure again without moving the page selection.
+type Session = { model: TextModel; cursor: Cursor; mode: CaretMode; goal_x_: number | undefined; painted_: SelectionEnds[]; painted_span_: Span };
 type SelectionEnds = { selection: Selection; ends: unknown[] };
 let session: Session | undefined;
 // Counts visual starts, so a copy can tell its own visual run from a later one in the same session.
@@ -54,7 +54,7 @@ function show_char_matches(view: FindView<FindColors>): void {
   if (!view.colors) return;
   if (char_matches?.model !== open.model || char_matches.char !== last_find.char) char_matches = { model: open.model, char: last_find.char, from: find_char_matches(open.model.text, last_find.char) };
   const { from } = char_matches;
-  const marked = view.current !== undefined && view.current_owner === open.model ? view.current : open.cursor.caret;
+  const marked = view.current !== undefined && view.current_owner_ === open.model ? view.current : open.cursor.caret;
   const current = from.indexOf(marked);
   const { first, last } = visible_index_range(open.model);
   const padded = pad_range(first, last, open.model.text.length);
@@ -62,7 +62,7 @@ function show_char_matches(view: FindView<FindColors>): void {
 }
 
 // One scroll or resize burst repaints once, in the next frame.
-function watch_view(on_change: () => void): () => void {
+function watch_view_(on_change: () => void): () => void {
   let frame = 0;
   const on_event = () => {
     if (frame === 0) frame = requestAnimationFrame(() => ((frame = 0), on_change()));
@@ -78,7 +78,7 @@ function watch_view(on_change: () => void): () => void {
   };
 }
 
-const find_mode = create_find_mode({ read_colors: read_find_colors, show: show_char_matches, hide: () => char_painter.clear(), watch_view, defer: (task) => queueMicrotask(task) });
+const find_mode = create_find_mode({ read_colors_: read_find_colors, show: show_char_matches, hide: () => char_painter.clear(), watch_view_, defer: (task) => queueMicrotask(task) });
 
 const selections_of = (model: TextModel): Selection[] => documents_of(model).flatMap((owner) => owner.getSelection() ?? []);
 
@@ -97,23 +97,23 @@ const SCREEN_LINE_END: Motion = { unit: "line_end", direction: "forward", big: f
 function span_of(open: Session): Span {
   if (open.mode !== "visual_line") return selected_span(open.cursor);
   return line_span(open.cursor, {
-    start_of: (index) => screen_line_target(open.model, index, SCREEN_LINE_START).index,
+    start_of_: (index) => screen_line_target(open.model, index, SCREEN_LINE_START).index,
     end_of: (index) => screen_line_target(open.model, index, SCREEN_LINE_END).index,
   });
 }
 
 // A Range stays in one tree, so a span across a shadow root or a frame takes one range per tree. Firefox keeps several ranges in one selection.
 function paint(open: Session): void {
-  const { from, to } = (open.painted_span = span_of(open));
+  const { from, to } = (open.painted_span_ = span_of(open));
   const selections = selections_of(open.model);
   for (const selection of selections) selection.removeAllRanges();
-  const runs = open.model.tree_runs(from, to);
+  const runs = open.model.tree_runs_(from, to);
   runs.forEach((run, at) => {
     // The line end before the next tree has no character to select.
     let run_to = run.to;
     while (at < runs.length - 1 && run_to > run.from + 1 && open.model.text[run_to - 1] === "\n") run_to--;
-    const start = open.model.point_at(run.from);
-    const end = open.model.point_at(run_to - 1);
+    const start = open.model.point_at_(run.from);
+    const end = open.model.point_at_(run_to - 1);
     const owner = start.node.ownerDocument!;
     const range = owner.createRange();
     range.setStart(start.node, start.offset);
@@ -121,7 +121,7 @@ function paint(open: Session): void {
     range.setEnd(end.node, open.model.text[run_to - 1] === "\n" ? end.offset : end.offset + 1);
     owner.getSelection()?.addRange(range);
   });
-  open.painted = selections.map((selection) => ({ selection, ends: ends_of(selection) }));
+  open.painted_ = selections.map((selection) => ({ selection, ends: ends_of(selection) }));
   scroll_to_index(open.model, open.cursor.caret);
 }
 
@@ -140,11 +140,11 @@ function start_session(mode: CaretMode): Session | string {
   const dragged = target === undefined ? selections_of(model).flatMap((selection) => page_selection_cursor(model, selection) ?? [])[0] : undefined;
   // A search position is valid only while no selection came after it, so it is newer than any drag and wins.
   const searched = target === undefined ? find.position(model) : undefined;
-  if (is_visual(mode) && dragged && searched === undefined) return { model, cursor: dragged, mode, goal_x: undefined, painted: [], painted_span: selected_span(dragged) };
-  const caret = target === undefined ? (searched ?? dragged?.caret ?? first_visible_index(model)) : model.start_index;
+  if (is_visual(mode) && dragged && searched === undefined) return { model, cursor: dragged, mode, goal_x_: undefined, painted_: [], painted_span_: selected_span(dragged) };
+  const caret = target === undefined ? (searched ?? dragged?.caret ?? first_visible_index(model)) : model.start_index_;
   if (caret === undefined) return "No text here";
   const cursor = { anchor: caret, caret };
-  return { model, cursor, mode, goal_x: undefined, painted: [], painted_span: selected_span(cursor) };
+  return { model, cursor, mode, goal_x_: undefined, painted_: [], painted_span_: selected_span(cursor) };
 }
 
 // A frame or a shadow host left the page while the session was open.
@@ -160,9 +160,9 @@ function rebuild_model(open: Session): Session | undefined {
   if (model.text === "") return undefined;
   // A node of a removed frame throws on any read.
   const carry = (index: number) => {
-    const { node, offset } = open.model.point_at(index);
+    const { node, offset } = open.model.point_at_(index);
     try {
-      return model.index_of(node, offset);
+      return model.index_of_(node, offset);
     } catch {
       return undefined;
     }
@@ -191,12 +191,12 @@ function end_session(): void {
 function adopt_page_selection(open: Session): void {
   for (const selection of selections_of(open.model)) {
     const ends = ends_of(selection);
-    const painted = open.painted.find((record) => record.selection === selection)?.ends ?? [];
+    const painted = open.painted_.find((record) => record.selection === selection)?.ends ?? [];
     if (ends.length === painted.length && ends.every((end, at) => end === painted[at])) continue;
     const found = selection_span(open.model, selection);
     if (!found) continue;
     open.cursor = page_selection_cursor(open.model, selection) ?? with_caret(open.cursor, found.first, is_visual(open.mode));
-    open.goal_x = undefined;
+    open.goal_x_ = undefined;
     return;
   }
 }
@@ -210,7 +210,7 @@ function ensure_session(mode: CaretMode): Session | string {
   if (!session) {
     const started = start_session(mode);
     if (typeof started === "string") {
-      page.desertfox_host.set_mode("normal");
+      page.desertfox_host.set_mode_("normal");
       return started;
     }
     session = started;
@@ -245,8 +245,8 @@ function take_find_target(token: string): "handled" | "pass" {
 function move_to_find(open: Session, find: CharFind, count: number, again: boolean): void {
   const hit = find_char_hit(open.model.text, open.cursor.caret, find, count, again);
   open.cursor = with_caret(open.cursor, hit?.caret ?? open.cursor.caret, is_visual(open.mode));
-  if (hit) find_mode.set_current(hit.match, open.model);
-  open.goal_x = undefined;
+  if (hit) find_mode.set_current_(hit.match, open.model);
+  open.goal_x_ = undefined;
   paint(open);
 }
 
@@ -258,17 +258,17 @@ const sink_for = (mode: CaretMode) => ({
     pending_find = undefined;
     find_mode.end();
     const started = ensure_session(mode);
-    if (typeof started === "string") page.desertfox_host.show_toast(started);
+    if (typeof started === "string") page.desertfox_host.show_toast_(started);
   },
-  on_token: (token: string): "handled" | "pass" => {
+  on_token_: (token: string): "handled" | "pass" => {
     if (pending_find) return take_find_target(token);
-    if (find_mode.is_live()) {
+    if (find_mode.is_live_()) {
       // Escape only ends the find, in the visual modes too.
-      return find_mode.on_token(token);
+      return find_mode.on_token_(token);
     }
     if (mode === "caret" || !is_escape(token)) return "pass";
     // Escape in a visual mode goes back to caret mode, and the keymap never sees it.
-    page.desertfox_host.set_mode("caret");
+    page.desertfox_host.set_mode_("caret");
     return "handled";
   },
   // Between caret and the visual modes the highlight stays. Every other way out clears it.
@@ -288,8 +288,8 @@ const handle_move = (args: Record<string, unknown>): Outcome | undefined => {
   if (args.unit === "char_find") {
     const direction = (args.direction as CharFind["direction"] | undefined) ?? "forward";
     const till = args.till === true;
-    find_mode.note_find_key();
-    if (find_mode.is_live() && last_find && find_mode.is_till() === till) {
+    find_mode.note_find_key_();
+    if (find_mode.is_live_() && last_find && find_mode.is_till() === till) {
       // The same key family repeats in the key's own direction, which then is the direction of `;`.
       last_find = { ...last_find, direction };
       move_to_find(open, last_find, 1, till);
@@ -303,7 +303,7 @@ const handle_move = (args: Record<string, unknown>): Outcome | undefined => {
     return;
   }
   if (args.unit === "find_repeat") {
-    find_mode.note_find_key();
+    find_mode.note_find_key_();
     if (!last_find) return;
     const reversed = args.direction === "back";
     const direction = reversed === (last_find.direction === "back") ? "forward" : "back";
@@ -314,12 +314,12 @@ const handle_move = (args: Record<string, unknown>): Outcome | undefined => {
   const motion: Motion = { unit: args.unit as Motion["unit"], direction: (args.direction as Motion["direction"] | undefined) ?? "forward", big: args.big === true };
   let caret: number;
   if (SCREEN_LINE_UNITS.includes(motion.unit)) {
-    const target = screen_line_target(open.model, open.cursor.caret, motion, open.goal_x);
+    const target = screen_line_target(open.model, open.cursor.caret, motion, open.goal_x_);
     caret = target.index;
-    open.goal_x = target.goal_x;
+    open.goal_x_ = target.goal_x_;
   } else {
     caret = move_once(open.model.text, open.cursor.caret, motion);
-    open.goal_x = undefined;
+    open.goal_x_ = undefined;
   }
   open.cursor = with_caret(open.cursor, caret, is_visual(open.mode));
   paint(open);
@@ -334,19 +334,19 @@ const handle_act = (args: Record<string, unknown>): Outcome | Promise<Outcome> |
     paint(open);
     return;
   }
-  const text = selected_text(open.model.text, open.painted_span);
+  const text = selected_text(open.model.text, open.painted_span_);
   if (action === "search") {
     // The router shows a refusal of its own, so the answer only decides whether a sequence goes on.
     const searched = browser.runtime.sendMessage({ type: "run", invocations: [{ id: "open.search", args: { query: text } }], mode: "visual" }) as Promise<RunResponse>;
-    page.desertfox_host.set_mode("caret");
+    page.desertfox_host.set_mode_("caret");
     return searched.then((answer): Outcome => (answer.ok ? answer : { ok: true, cancelled: true }), (): Outcome => ({ ok: false, message: "DesertFox background did not answer" }));
   }
   const run = visual_runs;
   // Visual mode stays until the copy is done, so a refused copy leaves the selection to retry.
   return yank_text(navigator.clipboard, text, {
-    is_same_session: () => visual_runs === run && session === open && is_visual(open.mode),
-    toast: page.desertfox_host.show_toast,
-    leave_visual: () => page.desertfox_host.set_mode("caret"),
+    is_same_session_: () => visual_runs === run && session === open && is_visual(open.mode),
+    toast: page.desertfox_host.show_toast_,
+    leave_visual_: () => page.desertfox_host.set_mode_("caret"),
   });
 };
 
@@ -367,8 +367,8 @@ function word_target(): { pattern: string; from: DomPoint } | string {
   const at = session ? undefined : (find.position(model) ?? first_visible_index(model));
   const cursor = session?.cursor ?? { anchor: at!, caret: at! };
   if (session && is_visual(session.mode)) {
-    const { from, to } = session.painted_span;
-    return { pattern: `(?-i:${escape_regex(model.text.slice(from, to))})`, from: model.point_at(from) };
+    const { from, to } = session.painted_span_;
+    return { pattern: `(?-i:${escape_regex(model.text.slice(from, to))})`, from: model.point_at_(from) };
   }
   const on_word = (index: number) => in_word(model.text, index);
   if (!on_word(cursor.caret)) return "No word under the caret";
@@ -378,7 +378,7 @@ function word_target(): { pattern: string; from: DomPoint } | string {
   while (on_word(end)) end++;
   // Lookarounds and not `\b`, which treats a letter outside ASCII as a boundary.
   const pattern = `(?<![\\p{L}\\p{N}_])${escape_regex(model.text.slice(first, end))}(?![\\p{L}\\p{N}_])`;
-  return { pattern, from: model.point_at(first) };
+  return { pattern, from: model.point_at_(first) };
 }
 
 // A session searches from its caret, so it first catches up with the page. Normal mode has no session.
@@ -397,7 +397,7 @@ function land_on_match(open: Session): boolean {
   if (rebuilt) void apply_selection_colors(open.mode, open.model.trees);
   if (landed === undefined) return rebuilt;
   open.cursor = with_caret(open.cursor, landed, is_visual(open.mode));
-  open.goal_x = undefined;
+  open.goal_x_ = undefined;
   return true;
 }
 
@@ -405,7 +405,7 @@ function land_on_match(open: Session): boolean {
 async function find_step(reverse: boolean): Promise<Outcome> {
   const started = open_session_now();
   if (typeof started === "string") return { ok: false, message: started };
-  const outcome = await find.step(reverse, started && started.model.point_at(started.cursor.caret));
+  const outcome = await find.step(reverse, started && started.model.point_at_(started.cursor.caret));
   const open = session;
   if (open && outcome.ok && !("cancelled" in outcome && outcome.cancelled) && land_on_match(open)) paint(open);
   return outcome;
@@ -428,36 +428,36 @@ async function end_session_search(from: Session, keep: boolean): Promise<void> {
   if (session !== from) return;
   // Painted before the mode change, because entering the mode adopts any page selection that differs from the last paint.
   if (keep && land_on_match(from)) paint(from);
-  page.desertfox_host.set_mode(from.mode);
+  page.desertfox_host.set_mode_(from.mode);
 }
 
 // A bundle may run twice, and a second run would hold fresh state next to the first.
 if (!page.desertfox_caret_ready) {
   page.desertfox_caret_ready = true;
-  page.desertfox_host.register_sink("caret", sink_for("caret"));
-  page.desertfox_host.register_sink("visual", sink_for("visual"));
-  page.desertfox_host.register_sink("visual_line", sink_for("visual_line"));
-  page.desertfox_host.register_handler("caret.move", handle_move);
-  page.desertfox_host.register_handler("visual.act", handle_act);
-  page.desertfox_host.register_handler("find.open", (args) => {
+  page.desertfox_host.register_sink_("caret", sink_for("caret"));
+  page.desertfox_host.register_sink_("visual", sink_for("visual"));
+  page.desertfox_host.register_sink_("visual_line", sink_for("visual_line"));
+  page.desertfox_host.register_handler_("caret.move", handle_move);
+  page.desertfox_host.register_handler_("visual.act", handle_act);
+  page.desertfox_host.register_handler_("find.open", (args) => {
     const direction = args.direction === "backward" ? "backward" : "forward";
     if (args.source === "word") return find_word(direction);
     const started = open_session_now();
     if (typeof started === "string") return { ok: false, message: started };
     searching_from = started;
-    find.begin(direction, started?.model.point_at(started.cursor.caret));
-    return page.desertfox_host.run_command("cmdline.open", "cmdline", { search: direction });
+    find.begin(direction, started?.model.point_at_(started.cursor.caret));
+    return page.desertfox_host.run_command_("cmdline.open", "cmdline", { search: direction });
   });
-  page.desertfox_host.register_handler("find.next", () => find_step(false));
-  page.desertfox_host.register_handler("find.prev", () => find_step(true));
+  page.desertfox_host.register_handler_("find.next", () => find_step(false));
+  page.desertfox_host.register_handler_("find.prev", () => find_step(true));
   // Called by the command line while it is open, and not by any key.
-  page.desertfox_host.register_handler("find.live", (args) => find.update(args.text as string, args.report as (status: string) => void));
-  page.desertfox_host.register_handler("find.end", async (args) => {
+  page.desertfox_host.register_handler_("find.live", (args) => find.update(args.text as string, args.report as (status: string) => void));
+  page.desertfox_host.register_handler_("find.end", async (args) => {
     const keep = args.keep === true;
     await find.end(keep);
     const from = searching_from;
     searching_from = undefined;
     if (from) await end_session_search(from, keep);
   });
-  page.desertfox_host.register_handler("find.clear", () => find.clear());
+  page.desertfox_host.register_handler_("find.clear", () => find.clear());
 }

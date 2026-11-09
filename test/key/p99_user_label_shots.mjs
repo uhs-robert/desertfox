@@ -7,6 +7,8 @@ import { fileURLToPath } from "node:url";
 
 const test_config_dir = join(dirname(fileURLToPath(import.meta.url)), "config");
 
+export const areas = ["whichkey", "config"];
+
 export async function run_cases({ config_dir, load_config_dir, take_shot, run_case, send_keys, open_page, wait_event, events, sleep }) {
   const shot_dir = process.env.DESERTFOX_SHOT_DIR;
   const user_copy = process.env.DESERTFOX_USER_COPY;

@@ -35,9 +35,9 @@ test("a row holds the level and the rendered text on one line, whole however lon
 test("keep_present drops hidden, boxless, clipped and tiny headings and keeps off-screen ones", () => {
   const box = (top: number, height = 20) => [{ left: 0, top, right: 100, bottom: top + height }];
   const probe = (rects: Record<string, ReturnType<typeof box>>, hidden: string[] = [], clips: Record<string, ReturnType<typeof box>> = {}) => ({
-    rects_of: (name: string) => rects[name] ?? [],
-    clips_of: (name: string) => clips[name] ?? [],
-    is_hidden: (name: string) => hidden.includes(name),
+    rects_of_: (name: string) => rects[name] ?? [],
+    clips_of_: (name: string) => clips[name] ?? [],
+    is_hidden_: (name: string) => hidden.includes(name),
   });
   const names_in = ["above", "below", "none", "hidden", "clipped", "tiny"];
   const kept = keep_present(

@@ -18,6 +18,7 @@ test("typed names are the dotted id except the family words and one-word command
   assert.deepEqual(named.sort(), [
     "bookmark.open=bookmark",
     "command.repeat=repeat",
+    "copy.links=copylinks",
     "copy.url=copy",
     "find.open=find",
     "heading.go=heading",
@@ -49,7 +50,7 @@ test("prefills use the short flags", () => {
 
 test("only these commands opt out of `.`, so a new command repeats unless someone decides otherwise", () => {
   const opted_out = registry.list().filter((command) => command.repeatable === false).map((command) => command.id);
-  assert.deepEqual(opted_out.sort(), ["browser.close_all", "browser.focus_page", "command.repeat", "config.reload", "engine.show", "frame.exit", "help.open", "native.install", "settings.set", "settings.toggle", "settings.unset"]);
+  assert.deepEqual(opted_out.sort(), ["browser.close_all", "browser.focus_page", "command.repeat", "config.reload", "debug.restart", "engine.show", "frame.exit", "help.open", "native.install", "settings.set", "settings.toggle", "settings.unset"]);
 });
 
 test("the search keys run in caret and visual mode too, and the registry lets them", async () => {

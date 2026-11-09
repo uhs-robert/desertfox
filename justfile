@@ -26,7 +26,7 @@ build: install_deps
     npm run --silent typecheck
     npm run --silent build
 
-# Check no old-name tokens remain, docs/keymap.md, src/shared/themes.ts, src/shared/default_settings.ts and src/shared/setting_completion.ts are current, then run the unit tests from TypeScript source by Node's type stripping, and the Python host tests.
+# Check no old-name tokens remain, docs/keymap.md, src/shared/themes.ts, src/shared/default_settings.ts and src/shared/setting_completion.ts are current, then run the unit tests from TypeScript source by Node's type stripping, and the Python host tests. `just test-all` runs this beside `just key-test`.
 test: install_deps
     #!/usr/bin/env bash
     set -euo pipefail
@@ -50,24 +50,121 @@ build-config dir="" *flags="": build
 host-test:
     python3 -m unittest discover -s host -p 'test_*.py'
 
-# Real key presses in a nested session, about a minute. Needs SHADOW_SH, or the shadow skill script in dotfiles, as the nested-session driver.
+# Real key presses in a nested session. A full run takes about 34 s on 8 shards. `just test-all` runs the unit tests beside it. One run at a time per machine: a second waits up to 900 s for the lock. Needs labwc, Hyprland, dbus-daemon and python3 (test/key/session.mjs).
 key-test: build
     #!/usr/bin/env bash
     set -euo pipefail
-    fallback_driver="$HOME/dotfiles/.claude/skills/shadow/shadow.sh"
-    if [ -z "${SHADOW_SH:-}" ] && [ -x "$fallback_driver" ]; then
-        export SHADOW_SH="$fallback_driver"
+    # One run at a time: two sharded runs together break the memory budget. -o keeps the lock fd out of the run, so a session that outlives it does not hold the lock.
+    lock_file=/tmp/desertfox-key-test.lock
+    # A test Firefox that runs away would otherwise take the whole tmux window with it: the kernel kills it, and systemd then stops every process in the window's unit. In its own capped scope, only this run dies. The time limit is the run's own deadline plus a margin, so a serial run with a higher KEY_TEST_DEADLINE_S is not killed first. The margin covers the shutdown after the deadline: the worker stop grace (10 s, STOP_GRACE_MS in run.mjs), the session stop (about 5 s, in session.mjs) and the rest as slack for the sweep and the merge.
+    deadline_s="${KEY_TEST_DEADLINE_S:-230}"
+    if ! [[ "$deadline_s" =~ ^[1-9][0-9]*$ ]]; then deadline_s=230; fi
+    scope_args=(systemd-run --user --scope --quiet -p MemoryMax=16G -p MemoryHigh=14G -p MemorySwapMax=0 -p CPUQuota=1400% -p TimeoutStopSec=20 -p RuntimeMaxSec=$((deadline_s + 70)))
+    run_cmd=(node test/key/run.mjs)
+    if command -v systemd-run >/dev/null 2>&1 && "${scope_args[@]}" true >/dev/null 2>&1; then
+        run_cmd=("${scope_args[@]}" "${run_cmd[@]}")
+    else
+        echo "key-test: no systemd user session, so this run has no memory cap." >&2
     fi
-    if [ -z "${SHADOW_SH:-}" ]; then
-        echo "key-test needs SHADOW_SH: a script that runs 'up|spawn|keys|down <name>' in a nested, invisible compositor (optional: 'status', one '<name>: up|down ...' line per session). Cleanup of killed runs works only for drivers that keep sessions in /tmp/shadow-<uid>-<name>." >&2
-        exit 2
+    if ! flock -n -o "$lock_file" true; then
+        echo "key-test: the lock $lock_file is busy, waiting up to 900 s. Holders:" >&2
+        # An outer flock on this file around the recipe holds it for the whole wait. Never wrap the recipe in flock.
+        for holder_pid in $(fuser "$lock_file" 2>/dev/null); do
+            ps -o pid=,args= -p "$holder_pid" >&2 || true
+        done
     fi
-    # A test Firefox that runs away would otherwise take the whole tmux window with it: the kernel kills it, and systemd then stops every process in the window's unit. In its own capped scope, only this run dies.
-    if command -v systemd-run >/dev/null 2>&1 && systemd-run --user --scope --quiet -p MemoryMax=8G -p MemorySwapMax=0 -p RuntimeMaxSec=1800 true >/dev/null 2>&1; then
-        exec systemd-run --user --scope --quiet -p MemoryMax=8G -p MemorySwapMax=0 -p RuntimeMaxSec=1800 node test/key/run.mjs
+    exec flock -o -w 900 "$lock_file" "${run_cmd[@]}"
+
+# Run `just test` and `just key-test` at the same time, so one command takes about as long as the key test alone (about 35 s). The unit tests start with the build and end before the shards start. Both always run to the end. The unit-test output prints only if it fails. Exit 1 if either failed. The environment (KEY_TEST_PIECES and the rest) goes to both unchanged.
+test-all: install_deps
+    #!/usr/bin/env bash
+    set -uo pipefail
+    # Job control gives the unit tests their own process group, so the exit trap can stop the whole `just test` tree, systemd scope included.
+    set -m
+    unit_log=$(mktemp /tmp/desertfox-test-all.XXXXXX)
+    unit_pid=
+    stop_unit_tests() {
+        if [ -n "$unit_pid" ]; then kill -TERM -- "-$unit_pid" 2>/dev/null; wait "$unit_pid" 2>/dev/null; fi
+        rm -f "$unit_log"
+    }
+    trap stop_unit_tests EXIT
+    trap 'exit 130' INT
+    trap 'exit 143' TERM
+    start_s=$SECONDS
+    just test >"$unit_log" 2>&1 &
+    unit_pid=$!
+    just key-test
+    key_status=$?
+    wait "$unit_pid"
+    unit_status=$?
+    unit_pid=
+    failed=0
+    if [ "$unit_status" -eq 0 ]; then
+        echo "test: ok"
+    else
+        cat "$unit_log"
+        echo "test: FAIL (exit $unit_status)"
+        failed=1
     fi
-    echo "key-test: no systemd user session, so this run has no memory cap." >&2
-    exec node test/key/run.mjs
+    if [ "$key_status" -eq 0 ]; then
+        echo "key-test: ok"
+    else
+        echo "key-test: FAIL (exit $key_status)"
+        failed=1
+    fi
+    echo "test-all: $((SECONDS - start_s)) s"
+    exit "$failed"
+
+# Replay the key-test lifecycle probes: signals at startup and mid-run, a killed worker, a crashed Firefox, the deadline, distinct ports, a foreign sweep and a SIGKILLed run followed by a rerun. Serial, about 2 minutes, one probe at a time. Takes the key-test lock like `just key-test`, so never wrap it in `flock`. Name probes to run only those: `just key-test-lifecycle deadline kill-worker`.
+key-test-lifecycle *probes: build
+    #!/usr/bin/env bash
+    set -euo pipefail
+    # The lock and scope lines repeat those of key-test. The scope's time limit covers every probe, each of which stops its own runs.
+    lock_file=/tmp/desertfox-key-test.lock
+    scope_args=(systemd-run --user --scope --quiet -p MemoryMax=16G -p MemoryHigh=14G -p MemorySwapMax=0 -p CPUQuota=1400% -p TimeoutStopSec=20 -p RuntimeMaxSec=900)
+    run_cmd=(node test/key/lifecycle_probe.mjs {{probes}})
+    if command -v systemd-run >/dev/null 2>&1 && "${scope_args[@]}" true >/dev/null 2>&1; then
+        run_cmd=("${scope_args[@]}" "${run_cmd[@]}")
+    else
+        echo "key-test-lifecycle: no systemd user session, so this run has no memory cap." >&2
+    fi
+    if ! flock -n -o "$lock_file" true; then
+        echo "key-test-lifecycle: the lock $lock_file is busy, waiting up to 900 s. Holders:" >&2
+        for holder_pid in $(fuser "$lock_file" 2>/dev/null); do
+            ps -o pid=,args= -p "$holder_pid" >&2 || true
+        done
+    fi
+    exec flock -o -w 900 "$lock_file" "${run_cmd[@]}"
+
+# Run `just key-test` n times (default 10) and append one line to the flake history (~/.local/state/desertfox/key-test-flakes.jsonl, or KEY_TEST_FLAKES_HISTORY). Each run waits up to 900 s for the lock, and a run with no report counts as a run error. Sweeps leftover run folders first. Exits 1 and sends a notify-send alert when a case fails in 2 or more runs or 3 or more runs error. Keeps the reports and logs in .logs/key-test-flakes-<stamp>/. Run it when you suspect a flaky test.
+key-test-flakes n="10": build
+    #!/usr/bin/env bash
+    set -uo pipefail
+    n={{quote(n)}}
+    if ! [[ "$n" =~ ^[1-9][0-9]*$ ]]; then echo "key-test-flakes: n must be a positive number, got $n" >&2; exit 2; fi
+    node test/key/flakes.mjs sweep
+    batch_dir=".logs/key-test-flakes-$(date -u +%Y%m%dT%H%M%SZ)"
+    mkdir -p "$batch_dir"
+    reports=()
+    for i in $(seq 1 "$n"); do
+        echo "key-test-flakes: run $i of $n"
+        KEY_TEST_TIMINGS_FILE="$batch_dir/run-$i.json" just key-test >"$batch_dir/run-$i.log" 2>&1
+        echo "key-test-flakes: run $i exit $?"
+        reports+=("$batch_dir/run-$i.json")
+    done
+    exec node test/key/flakes.mjs fold "$(git rev-parse --short HEAD)" "${reports[@]}"
+
+# Rewrite test/key/piece_seconds.json, the piece weights that order the sharded key test, from a full-run timings file (default: the newest .logs/key-test-timings-*.json that no KEY_TEST_ONLY filtered). Run it in the last PR of a change that moves piece run times.
+key-test-weights timings="":
+    node test/key/shards.mjs write-weights {{ if timings == "" { "" } else { quote(timings) } }}
+
+# Run only the key-test pieces whose areas match the src diff against base (default origin/main). With head, the diff is base...head. A shared file runs every piece, no src change runs none. test/key/areas.mjs holds the table.
+key-test-changed base="origin/main" head="":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    pieces=$(node test/key/areas.mjs {{quote(base)}} {{quote(head)}})
+    if [ -z "$pieces" ]; then exit 0; fi
+    KEY_TEST_PIECES="$pieces" exec just key-test
 
 # Sign dist/ as an unlisted add-on on addons.mozilla.org. Reads the AMO key from the environment only.
 sign: build

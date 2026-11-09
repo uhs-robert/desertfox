@@ -22,6 +22,8 @@ export type ConfigFiles = Record<string, string>;
 export const KNOWN_FILES = new Set<string>([...DATA_KINDS.map((kind) => `${kind}.toml`), "style.css"]);
 export const KNOWN_DIRS = new Set<string>([...DATA_KINDS.map((kind) => `${kind}.d`), "snippets", "style.d", "themes"]);
 export const KNOWN_TOP_LEVEL = new Set<string>([...KNOWN_FILES, ...KNOWN_DIRS]);
+// The native host writes the saved browser edits here. Nothing reads it back, so the build skips it.
+export const AUTOCONFIG_FILE = "autoconfig.toml";
 
 // `dir_label` is the config directory as the user knows it. It prefixes every path in a problem message.
 export function labeled_path(dir_label: string, relative_path: string): string {
@@ -98,7 +100,7 @@ function parse_text_dir(files: ConfigFiles, dir_label: string, dir: string, exte
 }
 
 export function parse_source_files(files: ConfigFiles, dir_label: string, problems: string[]): SourceFiles {
-  for (const name of entry_names(files, "")) {
+  for (const name of entry_names(files, "").filter((entry) => entry !== AUTOCONFIG_FILE)) {
     const label = labeled_path(dir_label, name);
     const is_file = is_file_entry(files, "", name);
     if (KNOWN_FILES.has(name) && !is_file) problems.push(`${label}: expected a file, found a directory`);

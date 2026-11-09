@@ -15,7 +15,7 @@ import { build_text_model, documents_of, host_gained_root, MAX_TEXT_CHARS, trees
 import type { DomPoint, TextModel } from "./text_model.ts";
 
 // What the engine needs of the host script. A bundle reaches it through `window.desertfox_host`.
-type Host = Pick<BundleHostApi, "show_toast">;
+type Host = Pick<BundleHostApi, "show_toast_">;
 
 type Found = { model: TextModel; query: string; fallback: Fallback | undefined; direction: Direction; matches: Matches; current: number };
 
@@ -25,13 +25,13 @@ type Live = {
   direction: Direction;
   start: number;
   // `start` as a point in the page, so a rebuilt model keeps the same origin.
-  start_point: DomPoint | undefined;
+  start_point_: DomPoint | undefined;
   // Bumped by each keystroke and by the end of the search. A scan or paint that finds it changed drops its work.
-  generation: number;
+  generation_: number;
   // The text of the line as of the last keystroke.
   text: string;
   // The text of the latest run when its regex ran past the time limit, so Enter searches it as text. Each run clears it as it starts.
-  timed_out: string | undefined;
+  timed_out_: string | undefined;
   found: Found | undefined;
   pending: Promise<void>;
   colors: Promise<FindColors>;
@@ -41,19 +41,19 @@ type Live = {
 
 // Everything that touches the page or storage, so the state machine runs under test with fakes.
 export type FindDeps = {
-  build_model: () => TextModel;
-  start_index: (model: TextModel) => number;
+  build_model_: () => TextModel;
+  start_index_: (model: TextModel) => number;
   painter: Painter;
-  scroll_to: (model: TextModel, first_index: number, last_index: number, bottom_inset: number) => void;
-  read_colors: () => Promise<FindColors>;
-  get_register: (name: string) => Promise<string | undefined>;
-  set_register: (name: string, text: string) => Promise<void>;
+  scroll_to_: (model: TextModel, first_index: number, last_index: number, bottom_inset: number) => void;
+  read_colors_: () => Promise<FindColors>;
+  get_register_: (name: string) => Promise<string | undefined>;
+  set_register_: (name: string, text: string) => Promise<void>;
   slicing: (is_stale: () => boolean) => Slicing;
   scan_regex: ScanRegex;
   // Where each document's own selection sits, both ends: a drag from the same anchor to a new point moves it too. A click moves it, which makes a later position win over an older match.
-  selection_key: (model: TextModel) => unknown[];
+  selection_key_: (model: TextModel) => unknown[];
   // Calls `on_change` when text changes in the page or in any of the trees the model read, or when a frame it met loads. The returned function points the watcher at a new model.
-  watch_page: (on_change: () => void) => (model: TextModel) => void;
+  watch_page_: (on_change: () => void) => (model: TextModel) => void;
 };
 
 const SLICE_MS = 8;
@@ -94,23 +94,23 @@ export const page_watcher = (observer_class: typeof MutationObserver) => (on_cha
     observer.disconnect();
     frame_listening.abort();
     frame_listening = new AbortController();
-    for (const tree of [document, ...model.trees, ...model.empty_trees]) observer.observe(tree, { childList: true, characterData: true, subtree: true });
+    for (const tree of [document, ...model.trees, ...model.empty_trees_]) observer.observe(tree, { childList: true, characterData: true, subtree: true });
     for (const frame of model.frames) frame.addEventListener("load", on_change, { signal: frame_listening.signal });
   };
 };
 
 const browser_deps = (): FindDeps => ({
-  build_model: () => build_text_model(document.body),
-  start_index: (model) => (model.text === "" ? 0 : first_visible_index(model)),
+  build_model_: () => build_text_model(document.body),
+  start_index_: (model) => (model.text === "" ? 0 : first_visible_index(model)),
   painter: create_painter(),
-  scroll_to: (model, first_index, last_index, bottom_inset) => scroll_to_index(model, first_index, { bottom_inset, last_index }),
-  read_colors: read_find_colors,
-  get_register,
-  set_register,
-  slicing: (is_stale) => ({ is_stale, yield_to_page: () => new Promise<void>((resume) => setTimeout(resume, 0)), now: () => performance.now(), slice_ms: SLICE_MS }),
+  scroll_to_: (model, first_index, last_index_, bottom_inset_) => scroll_to_index(model, first_index, { bottom_inset_, last_index_ }),
+  read_colors_: read_find_colors,
+  get_register_: get_register,
+  set_register_: set_register,
+  slicing: (is_stale_) => ({ is_stale_, yield_to_page_: () => new Promise<void>((resume) => setTimeout(resume, 0)), now: () => performance.now(), slice_ms_: SLICE_MS }),
   scan_regex: (text, { source, flags }) => browser.runtime.sendMessage({ type: "find_scan", text, source, flags } satisfies FindScan) as Promise<FindScanAnswer>,
-  selection_key: (model) => documents_of(model).flatMap((owner) => [owner.getSelection()?.anchorNode, owner.getSelection()?.anchorOffset, owner.getSelection()?.focusNode, owner.getSelection()?.focusOffset]),
-  watch_page: (on_change) => page_watcher(MutationObserver)(on_change),
+  selection_key_: (model) => documents_of(model).flatMap((owner) => [owner.getSelection()?.anchorNode, owner.getSelection()?.anchorOffset, owner.getSelection()?.focusNode, owner.getSelection()?.focusOffset]),
+  watch_page_: (on_change) => page_watcher(MutationObserver)(on_change),
 });
 
 // Said under the line and in the toast when the model stopped at the size cap.
@@ -119,8 +119,8 @@ const cut_note = (model: TextModel, message: string) => (model.truncated ? `${me
 // Where the current match of `old` sits in a rebuilt model. Undefined when its text has left the page: a node of a removed frame throws on any read.
 function carry_index(old: Found, model: TextModel): number | undefined {
   try {
-    const { node, offset } = old.model.point_at(old.matches.from[old.current]!);
-    return model.index_of(node, offset);
+    const { node, offset } = old.model.point_at_(old.matches.from[old.current]!);
+    return model.index_of_(node, offset);
   } catch {
     return undefined;
   }
@@ -159,41 +159,41 @@ export function create_find(host: Host, deps: FindDeps = browser_deps()) {
 
   const scroll_to = (found: Found, inset: number) => {
     try {
-      deps.scroll_to(found.model, found.matches.from[found.current]!, found.matches.to[found.current]! - 1, inset);
+      deps.scroll_to_(found.model, found.matches.from[found.current]!, found.matches.to[found.current]! - 1, inset);
     } catch {}
   };
 
   const remember = async (query: string, direction: Direction) => {
     last = { query, direction };
-    await Promise.all([deps.set_register(QUERY_REGISTER, query), deps.set_register(DIRECTION_REGISTER, direction)]);
+    await Promise.all([deps.set_register_(QUERY_REGISTER, query), deps.set_register_(DIRECTION_REGISTER, direction)]);
   };
 
   async function recall(): Promise<typeof last> {
     if (last) return last;
-    const [query, direction] = await Promise.all([deps.get_register(QUERY_REGISTER), deps.get_register(DIRECTION_REGISTER)]);
+    const [query, direction] = await Promise.all([deps.get_register_(QUERY_REGISTER), deps.get_register_(DIRECTION_REGISTER)]);
     return (last = query !== undefined && query !== "" && (direction === "forward" || direction === "backward") ? { query, direction } : undefined);
   }
 
   // Every model the search reads goes through here, so the flag always speaks of the newest one. The watcher starts with the first search and ends with the page.
   const read_model = (): TextModel => {
-    const model = deps.build_model();
+    const model = deps.build_model_();
     page_changed = false;
-    (retarget_watcher ??= deps.watch_page(() => (page_changed = true)))(model);
+    (retarget_watcher ??= deps.watch_page_(() => (page_changed = true)))(model);
     return model;
   };
 
   const stand_on = (found: Found) => {
     shown = found;
-    shown_selection = deps.selection_key(found.model);
+    shown_selection = deps.selection_key_(found.model);
   };
 
   // A frame or shadow host that left the page takes its text with it, and a host that gained a root has text the model lacks. Either way the model is read again.
   const is_current = (model: TextModel) => trees_alive(model) && !host_gained_root(model) && !page_changed;
   const fresh_model = (model: TextModel): TextModel => (is_current(model) ? model : read_model());
 
-  // `as_text` is for Enter: it searches the text fallback that a costly or timed-out pattern skipped while typing.
+  // `as_text_` is for Enter: it searches the text fallback that a costly or timed-out pattern skipped while typing.
   async function run_update(open: Live, text: string, run: number, report: (status: string) => void, as_text = false): Promise<void> {
-    const is_stale = () => live !== open || open.generation !== run;
+    const is_stale = () => live !== open || open.generation_ !== run;
     const query = compile_query(text);
     if (!query) {
       open.found = undefined;
@@ -202,17 +202,17 @@ export function create_find(host: Host, deps: FindDeps = browser_deps()) {
     }
     if (!is_current(open.model)) {
       open.model = read_model();
-      open.start = locate(open.model, open.start_point) ?? deps.start_index(open.model);
+      open.start = locate(open.model, open.start_point_) ?? deps.start_index_(open.model);
     }
     // A pattern typed one key at a time passes through costly shapes such as `(a+)+`. It is not searched, and the results of the last keystroke stay on the page.
     if (query.fallback === "costly" && !as_text) return report(`Pattern too slow as a regex: ${text}`);
-    const [search, fallback] = as_text ? [query.as_text, "costly" as const] : [query.search, query.fallback];
-    open.timed_out = undefined;
+    const [search, fallback] = as_text ? [query.as_text_, "costly" as const] : [query.search, query.fallback];
+    open.timed_out_ = undefined;
     const matches = await collect_matches(open.model.text, search, deps.slicing(is_stale), deps.scan_regex);
     if (!matches || is_stale()) return;
     // As with a costly shape, the results of the last keystroke stay on the page.
     if (matches === "timeout") {
-      open.timed_out = timed_out_query = text;
+      open.timed_out_ = timed_out_query = text;
       return report(describe_timeout(text));
     }
     if (search.kind === "regex" && timed_out_query === text) timed_out_query = undefined;
@@ -235,7 +235,7 @@ export function create_find(host: Host, deps: FindDeps = browser_deps()) {
 
   const locate = (model: TextModel, point: DomPoint | undefined): number | undefined => {
     try {
-      return point && model.index_of(point.node, point.offset);
+      return point && model.index_of_(point.node, point.offset);
     } catch {
       return undefined;
     }
@@ -243,7 +243,7 @@ export function create_find(host: Host, deps: FindDeps = browser_deps()) {
 
   const point_of = (model: TextModel, index: number): DomPoint | undefined => {
     try {
-      return model.point_at(index);
+      return model.point_at_(index);
     } catch {
       return undefined;
     }
@@ -267,7 +267,7 @@ export function create_find(host: Host, deps: FindDeps = browser_deps()) {
     if (run !== step_generation) return taken_over;
     if (!previous) return { ok: false, message: "No previous search" };
     const direction = reverse ? opposite(previous.direction) : previous.direction;
-    const colors = await deps.read_colors();
+    const colors = await deps.read_colors_();
     const kept = shown?.query === previous.query ? shown : undefined;
     let found = kept && is_current(kept.model) ? kept : undefined;
     let wrapped = false;
@@ -288,12 +288,12 @@ export function create_find(host: Host, deps: FindDeps = browser_deps()) {
       if (matches === "timeout") {
         timed_out_query = previous.query;
         fallback = "costly";
-        matches = await scan(query!.as_text);
+        matches = await scan(query!.as_text_);
       }
       if (!matches || matches === "timeout" || run !== step_generation) return taken_over;
       // After a rebuild the step goes on from the match the user was on, when its text is still on the page.
       const carried = kept && carry_index(kept, model);
-      const start = from_origin(model, direction) ?? (carried === undefined ? deps.start_index(model) : direction === "forward" ? carried + 1 : carried);
+      const start = from_origin(model, direction) ?? (carried === undefined ? deps.start_index_(model) : direction === "forward" ? carried + 1 : carried);
       const first = nearest_match(matches.from, start, direction);
       if (!first) return { ok: false, message: describe_match(previous.query, 0, 0, fallback) };
       found = { model, query: previous.query, fallback, direction: previous.direction, matches, current: first.index };
@@ -302,7 +302,7 @@ export function create_find(host: Host, deps: FindDeps = browser_deps()) {
     stand_on(found);
     paint(found, colors);
     scroll_to(found, 0);
-    host.show_toast(cut_note(found.model, describe_match(found.query, found.matches.from.length, found.current, found.fallback, wrapped)));
+    host.show_toast_(cut_note(found.model, describe_match(found.query, found.matches.from.length, found.current, found.fallback, wrapped)));
     return { ok: true };
   }
 
@@ -316,9 +316,9 @@ export function create_find(host: Host, deps: FindDeps = browser_deps()) {
       step_generation++;
       const model = read_model();
       origin = from;
-      const start = from_origin(model, direction) ?? deps.start_index(model);
+      const start = from_origin(model, direction) ?? deps.start_index_(model);
       origin = undefined;
-      live = { model, direction, start, start_point: point_of(model, start), generation: 0, text: "", timed_out: undefined, found: undefined, pending: Promise.resolve(), colors: deps.read_colors(), finished: undefined };
+      live = { model, direction, start, start_point_: point_of(model, start), generation_: 0, text: "", timed_out_: undefined, found: undefined, pending: Promise.resolve(), colors: deps.read_colors_(), finished: undefined };
     },
 
     // The text of the line changed. `report` gets the line to show under it.
@@ -326,8 +326,8 @@ export function create_find(host: Host, deps: FindDeps = browser_deps()) {
       const open = live;
       if (!open || open.finished) return;
       open.text = text;
-      const run = ++open.generation;
-      open.pending = run_update(open, text, run, report).catch((error) => host.show_toast(`Search failed: ${(error as Error).message}`));
+      const run = ++open.generation_;
+      open.pending = run_update(open, text, run, report).catch((error) => host.show_toast_(`Search failed: ${(error as Error).message}`));
     },
 
     // The line closed. Enter (`keep`) waits for the scan of the last keystroke and leaves the highlights. Escape stops the scan and clears them.
@@ -336,14 +336,14 @@ export function create_find(host: Host, deps: FindDeps = browser_deps()) {
       const open = live;
       if (!open) return Promise.resolve();
       if (open.finished) return open.finished;
-      if (!keep) open.generation++;
+      if (!keep) open.generation_++;
       open.finished = (async () => {
         if (keep) await open.pending;
         // Enter commits the pattern, so the text fallback that was skipped while typing runs now.
-        const text_fallback_skipped = open.timed_out === open.text || compile_query(open.text)?.fallback === "costly";
+        const text_fallback_skipped = open.timed_out_ === open.text || compile_query(open.text)?.fallback === "costly";
         // A timeout of the last run wins over older results of the same text, which stay on the page only while typing.
-        const found_is_current = open.found?.query === open.text && open.timed_out !== open.text;
-        if (keep && live === open && !found_is_current && text_fallback_skipped) await run_update(open, open.text, ++open.generation, () => {}, true);
+        const found_is_current = open.found?.query === open.text && open.timed_out_ !== open.text;
+        if (keep && live === open && !found_is_current && text_fallback_skipped) await run_update(open, open.text, ++open.generation_, () => {}, true);
         // A new search may have begun while the scan finished, and it owns the page now.
         if (live !== open) return;
         live = undefined;
@@ -398,7 +398,7 @@ export function create_find(host: Host, deps: FindDeps = browser_deps()) {
     // Where the search stands in `model`, for a caret or visual session that starts at it. A later click or selection takes the position, so nothing then.
     position(model: TextModel): number | undefined {
       if (!shown) return undefined;
-      const now = deps.selection_key(shown.model);
+      const now = deps.selection_key_(shown.model);
       if (now.length !== shown_selection.length || now.some((entry, at) => entry !== shown_selection[at])) return undefined;
       return carry_index(shown, model);
     },

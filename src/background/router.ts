@@ -29,6 +29,8 @@ export type RouterDeps = {
   // Opens the command line in the frame with the text typed in. Rejects when the tab has no content script.
   open_cmdline: (tab_id: number, frame_id: number, text: string) => Promise<unknown>;
   show_refusal: (tab_id: number | undefined, refusal: Refusal, frame_id?: number) => Promise<unknown>;
+  // True while the user has DesertFox turned off.
+  is_disabled: () => Promise<boolean>;
   // What `.` replays. A nested snippet router gets a no-op, so only the outermost request counts.
   repeat_memory: RepeatMemory;
 };
@@ -76,6 +78,8 @@ export function create_router(deps: RouterDeps): Router {
   }
 
   async function run(request: RouteRequest): Promise<RunResponse> {
+    // Keys stop in the page, so this catches what does not come from a key: a slot chord, a snippet call, a line that was open.
+    if (await deps.is_disabled()) return { ok: false, refusal: { id: "desertfox.off", message: "DesertFox is off" } };
     // Read before any step: window.new, window.close and tab.attach change which tab is active.
     const is_private = (await read_now(request, true)).active?.incognito === true;
     const prompted = new Set<BoundInvocation>();
@@ -147,7 +151,7 @@ export function create_router(deps: RouterDeps): Router {
 
     if (command.runs_in === "content") return run_in_content(command, final_args, counted.times, context);
     for (let time = 0; time < counted.times; time++) {
-      const result = outcome_of_reply(await command.run(time === 0 ? context : (await read_now(request, false)).context, final_args));
+      const result = outcome_of_reply(await command.run!(time === 0 ? context : (await read_now(request, false)).context, final_args));
       if (!result.ok) return result;
     }
     return done;
@@ -167,7 +171,7 @@ export function create_router(deps: RouterDeps): Router {
   async function run_in_content(command: CommandDef, args: CheckedArgs, times: number, context: CommandContext): Promise<Outcome> {
     const { tab_id, frame_id } = context;
     if (tab_id === undefined) return refuse(`${command.label} needs a tab`);
-    const invocations = Array.from({ length: times }, () => ({ id: command.id, args }));
+    const invocations = Array.from({ length: times }, () => ({ id: command.id, args, ...(command.bundle && { bundle: command.bundle }) }));
     try {
       return outcome_of_reply(await deps.send_to_tab(tab_id, { type: "run_in_content", invocations }, frame_id));
     } catch {

@@ -4,7 +4,7 @@ import type { KeymapConfig, ModeBindings } from "../shared/keymap.ts";
 // Search engine keys (`s`, `S`, `,`) and container keys (`c`) come from the user's config.
 // Hint, cmdline, caret and visual commands load their bundle on first use and refuse if it registers no handler.
 // The caret and visual motions. `0` and `$` are line ends, `^` the first non-blank, `gg` and `G` the ends of the text.
-const MOTIONS: Record<string, { id: string; args: Record<string, unknown>; label?: string }> = {
+const MOTIONS: Record<string, { id: string; args: Record<string, unknown>; label?: string; intent?: string }> = {
   h: { id: "caret.move", args: { unit: "char", direction: "back" } },
   l: { id: "caret.move", args: { unit: "char" } },
   j: { id: "caret.move", args: { unit: "line" } },
@@ -16,9 +16,9 @@ const MOTIONS: Record<string, { id: string; args: Record<string, unknown>; label
   w: { id: "caret.move", args: { unit: "word" } },
   b: { id: "caret.move", args: { unit: "word", direction: "back" } },
   e: { id: "caret.move", args: { unit: "word_end" } },
-  W: { id: "caret.move", args: { unit: "word", big: true }, label: "Move caret by WORD" },
-  B: { id: "caret.move", args: { unit: "word", direction: "back", big: true }, label: "Move caret by WORD backward" },
-  E: { id: "caret.move", args: { unit: "word_end", big: true }, label: "Move caret to WORD end" },
+  W: { id: "caret.move", args: { unit: "word", big: true }, label: "Move caret by WORD", intent: "Move the caret to the next WORD, a run of characters between spaces." },
+  B: { id: "caret.move", args: { unit: "word", direction: "back", big: true }, label: "Move caret by WORD backward", intent: "Move the caret to the start of the previous WORD, a run of characters between spaces." },
+  E: { id: "caret.move", args: { unit: "word_end", big: true }, label: "Move caret to WORD end", intent: "Move the caret to the end of the current WORD, a run of characters between spaces." },
   "0": { id: "caret.move", args: { unit: "line_start" } },
   "^": { id: "caret.move", args: { unit: "line_first" } },
   $: { id: "caret.move", args: { unit: "line_end" } },
@@ -107,6 +107,10 @@ export const DEFAULT_KEYMAP: KeymapConfig = {
     xp: { id: "page.stop" },
     gh: { id: "page.home" },
     gH: { id: "page.home", args: { where: "tab" } },
+    "]]": { id: "page.follow", args: { direction: "next" }, label: "Next page" },
+    "[[": { id: "page.follow", args: { direction: "prev" }, label: "Previous page" },
+    "]i": { id: "page.focus_field", args: { direction: "next" }, label: "Next form control" },
+    "[i": { id: "page.focus_field", args: { direction: "prev" }, label: "Previous form control" },
 
     ".": { id: "command.repeat" },
 
@@ -168,6 +172,8 @@ export const DEFAULT_KEYMAP: KeymapConfig = {
     yo: { id: "copy.url", args: { format: "org" } },
     ys: { id: "copy.url", args: { format: "short" } },
     yt: { id: "copy.url", args: { format: "title" } },
+    yL: { id: "copy.links", args: { scope: "page", format: "markdown" }, label: "Copy page links" },
+    yl: { id: "copy.links", args: { scope: "viewport", format: "markdown" }, label: "Copy links in view" },
     gu: { id: "url.parent" },
     gU: { id: "url.root" },
     "<C-a>": { id: "url.increment", args: { direction: "up" } },

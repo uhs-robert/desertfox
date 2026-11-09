@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "DesertFox",
-  "version": "0.1.5",
+  "version": "0.1.8",
   "description": "Keyboard-first Firefox extension built around one command registry.",
   "browser_specific_settings": {
     "gecko": {
@@ -55,10 +55,11 @@
   ],
   "browser_action": {
     "default_title": "DesertFox",
-    "default_icon": "icons/desertfox.svg"
+    "default_icon": "icons/desertfox.svg",
+    "default_popup": "popup.html"
   },
   "options_ui": {
-    "page": "home.html",
+    "page": "home.html#/settings",
     "open_in_tab": true
   },
   "chrome_url_overrides": {
@@ -68,6 +69,12 @@
     "managed_schema": "managed_schema.json"
   },
   "commands": {
+    "toggle_enabled": {
+      "suggested_key": {
+        "default": "Ctrl+Alt+D"
+      },
+      "description": "Turn DesertFox on or off. It works while DesertFox is off."
+    },
     "slot_1": {
       "description": "DesertFox shortcut slot 1. The background assigns the chord."
     },

@@ -50,6 +50,22 @@ export const SETTING_COMPLETION: readonly SettingCompletion[] = [
     "values": []
   },
   {
+    "name": "next_patterns",
+    "settable": true,
+    "is_toggle": false,
+    "is_list": true,
+    "expectation": "a list of link texts",
+    "values": []
+  },
+  {
+    "name": "prev_patterns",
+    "settable": true,
+    "is_toggle": false,
+    "is_list": true,
+    "expectation": "a list of link texts",
+    "values": []
+  },
+  {
     "name": "mode_indicator",
     "settable": true,
     "is_toggle": false,
@@ -173,6 +189,18 @@ export const SETTING_COMPLETION: readonly SettingCompletion[] = [
     "values": [
       "bookmarks",
       "history"
+    ]
+  },
+  {
+    "name": "statusbar_widgets",
+    "settable": true,
+    "is_toggle": false,
+    "is_list": true,
+    "expectation": "a list of \"url\", \"scroll\" and \"tabs\" with no repeat",
+    "values": [
+      "url",
+      "scroll",
+      "tabs"
     ]
   },
   {

@@ -27,8 +27,9 @@ export type SnippetSender = { tab_id: number | undefined; frame_id: number | und
 export type SnippetAnswer = { ok: true } | { ok: false; message: string };
 
 export type Snippets = {
-  // Defines the commands. Returns a warning for each one the registry rejects.
+  // Replaces the snippet commands with these. Returns a warning for each one the registry rejects.
   register: (entries: readonly SnippetEntry[]) => string[];
+  is_snippet: (command_id: string) => boolean;
   handle_call: (call: SnippetCall, sender: SnippetSender) => Promise<SnippetAnswer>;
 };
 
@@ -82,11 +83,14 @@ export function create_snippets(registry: Registry, deps: SnippetDeps, router_de
   function command_at_depth(id: string, depth: number): CommandDef | undefined {
     const command = registry.get(id);
     const entry = entries_by_id.get(id);
-    if (!command || !entry) return command;
+    if (!command || !entry || command.runs_in !== "background") return command;
     return { ...command, run: (context, args) => run_snippet(entry, context, args, depth) };
   }
 
   function register(entries: readonly SnippetEntry[]): string[] {
+    // A reload hands over the whole set, so a snippet gone from the files stops running and a kept one is not defined twice.
+    for (const id of entries_by_id.keys()) registry.remove(id);
+    entries_by_id.clear();
     const warnings: string[] = [];
     const built_in_groups = new Set(registry.list().map((command) => command.id.split(".")[0]));
     for (const entry of entries) {
@@ -141,5 +145,5 @@ export function create_snippets(registry: Registry, deps: SnippetDeps, router_de
     return response.ok ? { ok: true } : { ok: false, message: response.refusal.message };
   }
 
-  return { register, handle_call };
+  return { register, is_snippet: (command_id) => entries_by_id.has(command_id), handle_call };
 }

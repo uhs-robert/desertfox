@@ -3,27 +3,35 @@
 // There is no key for the text filter yet, so its cases send the same `run` message a key sends, from the active tab.
 import { evaluate_in_background } from "./rdp.mjs";
 
-export async function run_cases({ rdp, extension_id, run_case, send_keys, open_page, wait_event, find_event, events, expect, sleep, scroll_delta_after, became_visible, take_shot }) {
+export const areas = ["hints", "scroll"];
+
+export async function run_cases({ rdp, extension_id, run_case, send_keys, press_keys, poll_until, barrier, expect_absent, hint_label_count, wait_cmdline, close_cmdline, scroll_report_wait_ms, open_page, wait_event, find_event, events, expect, sleep, scroll_delta_by_press, take_shot, in_active_tab, type_in_line, tab_switch_mark, expect_no_tab_shown }) {
   const background = (code) => evaluate_in_background(rdp, extension_id, code);
   const tab_count = () => background(`(async () => (await browser.tabs.query({})).length)()`);
   const close_tabs_with = (text) => background(`(async () => { for (const tab of await browser.tabs.query({})) if (tab.url.includes(${JSON.stringify(text)})) await browser.tabs.remove(tab.id); })()`);
   const loaded = (page_id) => (event) => event.type === "tree_read" && event.page_id === page_id;
   const paste_ctrl_v = ["-M", "ctrl", "v", "-m", "ctrl"];
+  const wait_for_labels = (what) => poll_until(`the hint labels after ${what}`, async () => (await hint_label_count()) > 0);
+  const wait_for_label_count = (count, what) => poll_until(`${count} hint labels ${what}`, async () => (await hint_label_count()) === count);
+  const wait_for_tab_count = (count, what) => poll_until(what, async () => (await tab_count()) === count);
 
-  // Runs code in the active tab's content script world.
-  const in_active_tab = (code) => background(`(async () => { const [tab] = await browser.tabs.query({ active: true, currentWindow: true }); return browser.tabs.executeScript(tab.id, { code: ${JSON.stringify(code)} }); })()`);
   const run_hint = (args) => in_active_tab(`browser.runtime.sendMessage({ type: "run", invocations: [{ id: "hint.run", args: ${JSON.stringify(args)} }], mode: "normal" }); 0`);
-  const link_count = async () => (await in_active_tab(`document.querySelectorAll("a[href]").length`))[0];
+  const link_count = async () => await in_active_tab(`document.querySelectorAll("a[href]").length`);
+  const wait_for_link_count = (count, what) => poll_until(what, async () => (await link_count()) === count);
+  const notice_text = () => in_active_tab(`[...document.documentElement.children].map((child) => child.openOrClosedShadowRoot?.querySelector(".desertfox-toast, .desertfox-hint-message")?.textContent ?? "").join("")`);
+  // A rapid rebuild that finds nothing left shows its notice as it leaves hint mode. A key pressed before that waits for the labels and is dropped with the session.
+  const wait_for_rapid_end = () => poll_until("the rapid hint to end with its no-hints notice", async () => (await notice_text()) !== "");
+  // A copy has no report of its own. The labels go when the pick is handled, and opening the paste page takes longer than the copy.
 
   await run_case(";yl a copies the link address", async () => {
     await open_page("hints", "p6_copy", { new_tab: true });
-    await send_keys(";yl");
-    await send_keys("a");
-    await sleep(500);
+    await press_keys(";yl");
+    await wait_for_labels(";yl");
+    await press_keys("a");
+    await wait_for_label_count(0, "gone after the pick");
     await open_page("field", "p6_paste", { new_tab: true });
-    await sleep(300);
     const mark = events.length;
-    await send_keys(...paste_ctrl_v);
+    await press_keys(...paste_ctrl_v);
     const pasted = await wait_event(mark, (event) => event.type === "input" && event.page_id === "p6_paste", "the pasted address");
     expect(pasted.value.endsWith("/page?id=hint_one"), `;yl copied "${pasted.value}"`);
   });
@@ -31,13 +39,13 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, open_p
   await run_case(";Yp labels the elements with text of their own and copies the picked text", async () => {
     // Labels run in page order: the heading "a", "alpha text" "s", "beta text" "d". A labelled wrapper div would take "s".
     await open_page("prose", "p6_prose", { new_tab: true });
-    await send_keys(";Yp");
-    await send_keys("d");
-    await sleep(500);
+    await press_keys(";Yp");
+    await wait_for_labels(";Yp");
+    await press_keys("d");
+    await wait_for_label_count(0, "gone after the pick");
     await open_page("field", "p6_prose_paste", { new_tab: true });
-    await sleep(300);
     const mark = events.length;
-    await send_keys(...paste_ctrl_v);
+    await press_keys(...paste_ctrl_v);
     const pasted = await wait_event(mark, (event) => event.type === "input" && event.page_id === "p6_prose_paste", "the pasted text");
     expect(pasted.value === "beta text", `;Yp d copied "${pasted.value}"`);
   });
@@ -45,96 +53,108 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, open_p
   await run_case("f opens a dropdown that opens on mousedown, with one click after the mouse events", async () => {
     await open_page("chosen", "p6_chosen", { new_tab: true });
     const mark = events.length;
-    await send_keys("f");
-    await send_keys("a");
+    await press_keys("f");
+    await wait_for_labels("f");
+    await press_keys("a");
     await wait_event(mark, (event) => event.type === "chosen_open" && event.page_id === "p6_chosen", "the dropdown to open on mousedown");
-    await sleep(300);
-    const seen = events.slice(mark).filter((event) => event.page_id === "p6_chosen" && event.type.startsWith("chosen_")).map((event) => event.type);
-    const order = seen.filter((type) => type !== "chosen_open").join(",");
+    await wait_event(mark, (event) => event.type === "chosen_click" && event.page_id === "p6_chosen", "the click after the mouse events");
+    // A second click would arrive before the barrier key does.
+    await barrier("p6_chosen");
+    const order = (await in_active_tab(`window.wrappedJSObject.chosen_order.join(",")`));
     expect(order === "chosen_pointerdown,chosen_mousedown,chosen_mouseup,chosen_click", `the page saw ${order}`);
-    const [focused] = await in_active_tab(`document.activeElement.id`);
+    const focused = await in_active_tab(`document.activeElement.id`);
     expect(focused === "search", `the focus is on ${focused}, not the search field the page chose`);
   });
+
+  const outline_and_tabindex = async () => await in_active_tab(`[document.getElementById("panel").style.outline, document.getElementById("panel").getAttribute("tabindex")]`);
 
   await run_case(";s focuses a scroll box, then j scrolls the box and not the page", async () => {
     // The only scroll box is the side panel, so it gets the label "a". The page root is left out.
     await open_page("scrollbox", "p6_scrollbox", { new_tab: true });
-    await send_keys(";s");
-    await send_keys("a");
-    await sleep(300);
-    const [outlined] = await in_active_tab(`getComputedStyle(document.getElementById("panel")).outlineStyle`);
-    expect(outlined === "solid", `the box has outline ${outlined} right after the pick`);
+    await press_keys(";s");
+    await wait_for_labels(";s");
+    await press_keys("a");
+    await poll_until("the box to get its outline", async () => (await in_active_tab(`getComputedStyle(document.getElementById("panel")).outlineStyle`)) === "solid");
     const mark = events.length;
-    await send_keys("j");
+    await press_keys("j");
     const moved = await wait_event(mark, (event) => event.type === "panel_scroll" && event.page_id === "p6_scrollbox", "the panel to scroll after j");
     expect(moved.top > 0, `the panel is at ${moved.top} after j`);
-    await sleep(400); // The fixture reports a page scroll 150 ms after it settles.
-    expect(!find_event(mark, (event) => event.type === "scroll" && event.page_id === "p6_scrollbox"), "the page scrolled with the panel");
-    await sleep(1000);
-    const [after] = await in_active_tab(`[document.getElementById("panel").style.outline, document.getElementById("panel").getAttribute("tabindex")]`);
-    expect(after[0] === "" && after[1] === "-1", `after the flash: inline outline "${after[0]}", tabindex ${after[1]}`);
+    // The fixture reports a page scroll 150 ms after it settles.
+    await expect_absent(mark, "p6_scrollbox", (event) => event.type === "scroll" && event.page_id === "p6_scrollbox", "the page scrolled with the panel", { report_delay_ms: scroll_report_wait_ms });
+    await poll_until("the outline flash to end", async () => { const [outline, tabindex] = await outline_and_tabindex(); return outline === "" && tabindex === "-1"; }).catch(async (error) => { const [outline, tabindex] = await outline_and_tabindex(); throw new Error(`after the flash: inline outline "${outline}", tabindex ${tabindex} (${error.message})`); });
   });
 
   await run_case(";s focuses a scroll box inside a shadow root, then j scrolls that box and not the page", async () => {
     await open_page("shadowbox", "p6_shadowbox", { new_tab: true });
-    await send_keys(";s");
-    await send_keys("a");
-    await sleep(300);
+    await press_keys(";s");
+    await wait_for_labels(";s");
+    await press_keys("a");
+    // The label is gone once the box has the focus.
+    await wait_for_label_count(0, "gone after the pick");
     const mark = events.length;
-    await send_keys("j");
+    await press_keys("j");
     const moved = await wait_event(mark, (event) => event.type === "panel_scroll" && event.page_id === "p6_shadowbox", "the shadow panel to scroll after j");
     expect(moved.top > 0, `the shadow panel is at ${moved.top} after j`);
-    await sleep(400); // The fixture reports a page scroll 150 ms after it settles.
-    expect(!find_event(mark, (event) => event.type === "scroll" && event.page_id === "p6_shadowbox"), "the page scrolled with the shadow panel");
+    await expect_absent(mark, "p6_shadowbox", (event) => event.type === "scroll" && event.page_id === "p6_shadowbox", "the page scrolled with the shadow panel", { report_delay_ms: scroll_report_wait_ms });
   });
 
   await run_case(";rl opens each pick in a background tab and keeps picking until Escape", async () => {
     await open_page("hints", "p6_rapid", { new_tab: true });
     const tabs_before = await tab_count();
     const mark = events.length;
-    await send_keys(";rl");
-    await send_keys("a");
-    await send_keys("s");
+    const switch_mark = await tab_switch_mark();
+    await press_keys(";rl");
+    await wait_for_labels(";rl");
+    await press_keys("a");
+    await wait_event(mark, loaded("hint_one"), "the first link to load after the first pick");
+    // Rapid mode draws the labels again after a pick.
+    await wait_for_labels("the first pick");
+    await press_keys("s");
     await wait_event(mark, loaded("hint_two"), "the second link to load after two picks");
-    await sleep(500);
-    expect((await tab_count()) === tabs_before + 2, "two picks did not open two tabs");
-    expect(!find_event(mark, became_visible("hint_one")) && !find_event(mark, became_visible("hint_two")), "a background tab came to the front");
-    await send_keys("-k", "Escape");
-    await send_keys("a");
-    await sleep(800);
+    await wait_for_tab_count(tabs_before + 2, "two picks to open two tabs");
+    await press_keys("-k", "Escape");
+    await wait_for_label_count(0, "gone after Escape");
+    // The barrier reaches this page only when it is still the front tab.
+    await barrier("p6_rapid");
+    await expect_no_tab_shown(switch_mark, "a background tab came to the front");
+    await press_keys("a");
+    // The scroll report of the next case's j trails by 150 ms, which gives a link opened by a stray a time to show as a tab.
+    expect((await scroll_delta_by_press("p6_rapid", ["j"])) > 0, "keys did not work again after Escape");
     expect((await tab_count()) === tabs_before + 2, "a opened a link after Escape");
-    expect((await scroll_delta_after("p6_rapid", ["j"])) > 0, "keys did not work again after Escape");
     await close_tabs_with("hint_one");
     await close_tabs_with("hint_two");
-    await sleep(300);
   });
 
   await run_case("rapid delete labels the page again after each pick, and ends when nothing is left", async () => {
     await open_page("hints", "p6_delete", { new_tab: true });
     expect((await link_count()) === 4, "the fixture does not hold four links");
     await run_hint({ action: "delete", filter: "links", rapid: true });
-    await sleep(600);
-    await send_keys("a");
-    await sleep(400);
-    expect((await link_count()) === 3, "the first pick did not delete a link");
-    await send_keys("a");
-    await sleep(400);
-    expect((await link_count()) === 2, "the second pick did not delete the next link");
+    await wait_for_label_count(2, "after the delete hint started");
+    await press_keys("a");
+    await wait_for_link_count(3, "the first pick to delete a link");
+    // One link has a label left, so the labels were drawn again.
+    await wait_for_label_count(1, "after the first pick");
+    await press_keys("a");
+    await wait_for_link_count(2, "the second pick to delete the next link");
+    await wait_for_label_count(0, "after the second pick");
     // Only the hidden and the covered link are left, so the rebuild finds nothing and hint mode ends.
-    expect((await scroll_delta_after("p6_delete", ["j"])) > 0, "hint mode did not end when no link was left");
+    await wait_for_rapid_end();
+    expect((await scroll_delta_by_press("p6_delete", ["j"])) > 0, "hint mode did not end when no link was left");
   });
 
   await run_case("rapid here follows a click that removes the link", async () => {
     await open_page("hints", "p6_here", { new_tab: true });
     await in_active_tab(`for (const link of document.querySelectorAll("a[href]")) link.addEventListener("click", (event) => { event.preventDefault(); link.remove(); }); 0`);
     await run_hint({ action: "here", filter: "links", rapid: true });
-    await sleep(600);
-    await send_keys("a");
-    await sleep(400);
-    await send_keys("a");
-    await sleep(400);
-    expect((await link_count()) === 2, "two picks did not remove two links");
-    expect((await scroll_delta_after("p6_here", ["j"])) > 0, "hint mode did not end when no link was left");
+    await wait_for_label_count(2, "after the here hint started");
+    await press_keys("a");
+    await wait_for_link_count(3, "the first pick to remove a link");
+    await wait_for_label_count(1, "after the first pick");
+    await press_keys("a");
+    await wait_for_link_count(2, "the second pick to remove the next link");
+    await wait_for_label_count(0, "after the second pick");
+    await wait_for_rapid_end();
+    expect((await scroll_delta_by_press("p6_here", ["j"])) > 0, "hint mode did not end when no link was left");
   });
 
   await run_case("text with one match opens it at once and leaves hint mode", async () => {
@@ -143,54 +163,56 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, open_p
     const mark = events.length;
     await run_hint({ action: "background", filter: "links", text: "TWO", rapid: true });
     await wait_event(mark, loaded("hint_two"), "the matching link to load");
-    await sleep(300);
-    expect((await tab_count()) === tabs_before + 1, "the match did not open exactly one tab");
-    expect((await scroll_delta_after("p6_one_match", ["j"])) > 0, "hint mode did not end after the one match");
+    await wait_for_tab_count(tabs_before + 1, "the match to open exactly one tab");
+    expect((await scroll_delta_by_press("p6_one_match", ["j"])) > 0, "hint mode did not end after the one match");
     await close_tabs_with("hint_two");
-    await sleep(300);
   });
 
   await run_case("text with no match shows a notice and leaves keys alone", async () => {
     await open_page("hints", "p6_no_match", { new_tab: true });
     await run_hint({ filter: "links", text: "zzz" });
-    await sleep(500);
-    expect((await scroll_delta_after("p6_no_match", ["j"])) > 0, "keys did not work after a text with no match");
+    await poll_until("the no-match notice", async () => (await notice_text()) !== "");
+    expect((await scroll_delta_by_press("p6_no_match", ["j"])) > 0, "keys did not work after a text with no match");
   });
 
   // `;#` opens the command line with `heading ` typed. The list lives in the extension's frame, which the page cannot read, so these cases check what a pick does to the page.
   const toast_layer = 2147483647 - 2;
-  const toast_text = async () => (await in_active_tab(`(() => { const host = [...document.documentElement.children].find((child) => child.style.zIndex === "${toast_layer}"); return host?.openOrClosedShadowRoot?.textContent ?? ""; })()`))[0];
-  const scroll_y = async () => (await in_active_tab(`Math.round(scrollY)`))[0];
-  const top_of = async (id) => (await in_active_tab(`Math.round(document.getElementById(${JSON.stringify(id)}).getBoundingClientRect().top)`))[0];
-  const scrolled_since = (mark, page_id) => find_event(mark, (event) => event.type === "scroll" && event.page_id === page_id);
+  const toast_text = async () => await in_active_tab(`(() => { const host = [...document.documentElement.children].find((child) => child.style.zIndex === "${toast_layer}"); return host?.openOrClosedShadowRoot?.textContent ?? ""; })()`);
+  const scroll_y = async () => await in_active_tab(`Math.round(scrollY)`);
+  const top_of = async (id) => await in_active_tab(`Math.round(document.getElementById(${JSON.stringify(id)}).getBoundingClientRect().top)`);
   const tab_key = ["-k", "Tab"];
   const enter_key = ["-k", "Return"];
-  const open_headings_line = async () => {
-    await send_keys(";#");
-    await sleep(700);
+  // A Tab before the list holds its rows is lost, so the line counts as open once the rows are in.
+  const open_headings_line = async (row_count) => {
+    await press_keys(";#");
+    await wait_cmdline((line) => line.open && line.rows === row_count, `the headings line to open with ${row_count} rows`);
+  };
+  // The third Tab selects the third row, which is the row index 2.
+  const tab_to_third_row = async () => {
+    await press_keys(...tab_key, ...tab_key, ...tab_key);
+    await wait_cmdline((line) => line.selected === "2", "the third row to be selected");
   };
   // The /headings page lists the title, Intro, Below the fold and Last. The hidden, closed and screen-reader-only headings are not rows.
   const run_heading = (heading) => in_active_tab(`browser.runtime.sendMessage({ type: "run", invocations: [{ id: "heading.go", args: { heading: ${JSON.stringify(heading)} } }], mode: "normal" }); 0`);
 
   await run_case(";# lists the headings in page order and Tab then Enter scrolls to one below the screen", async () => {
     await open_page("headings", "p6_headings", { new_tab: true });
-    await open_headings_line();
+    await open_headings_line(4);
     // With no text typed the rows keep page order: the third row is "Below the fold".
-    await send_keys(...tab_key, ...tab_key, ...tab_key);
-    await sleep(200);
-    const delta = await scroll_delta_after("p6_headings", enter_key);
+    await tab_to_third_row();
+    const delta = await scroll_delta_by_press("p6_headings", enter_key);
     expect(delta > 0, `the page did not scroll, delta ${delta}`);
     const top = await top_of("below");
     expect(Math.abs(top) <= 2, `Below the fold sits ${top}px from the top`);
-    expect((await scroll_delta_after("p6_headings", ["j"])) > 0, "keys did not work again after the jump");
+    expect((await scroll_delta_by_press("p6_headings", ["j"])) > 0, "keys did not work again after the jump");
   });
 
   await run_case(";# typing narrows the list and Enter with text takes the best match", async () => {
     await open_page("headings", "p6_headings_typed", { new_tab: true });
-    await open_headings_line();
-    await send_keys("last");
-    await sleep(200);
-    const delta = await scroll_delta_after("p6_headings_typed", enter_key);
+    await open_headings_line(4);
+    await press_keys("last");
+    await wait_cmdline((line) => line.open && line.value.endsWith("last") && line.rows === 1, "the typed text to narrow the list to one row");
+    const delta = await scroll_delta_by_press("p6_headings_typed", enter_key);
     expect(delta > 0, `the page did not scroll, delta ${delta}`);
     const top = await top_of("last");
     expect(Math.abs(top) <= 2, `Last sits ${top}px from the top`);
@@ -198,9 +220,10 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, open_p
 
   await run_case(";# reaches a heading above the screen", async () => {
     await open_page("headings", "p6_headings_up", { new_tab: true });
-    await scroll_delta_after("p6_headings_up", ["G"]);
-    await open_headings_line();
-    const delta = await scroll_delta_after("p6_headings_up", ["intro", ...enter_key]);
+    await scroll_delta_by_press("p6_headings_up", ["G"]);
+    await open_headings_line(4);
+    await type_in_line("intro");
+    const delta = await scroll_delta_by_press("p6_headings_up", enter_key);
     expect(delta < 0, `the page did not scroll up, delta ${delta}`);
     const top = await top_of("intro");
     expect(Math.abs(top) <= 2, `Intro sits ${top}px from the top`);
@@ -208,81 +231,77 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, open_p
 
   await run_case(";# jumps to a heading in a same-origin frame, skips one in a hidden frame, and scrolls the frame too", async () => {
     await open_page("headings_frames", "p6_headings_frames", { new_tab: true });
-    await open_headings_line();
+    await open_headings_line(3);
     // The rows are the title, Top and "In frame". The heading in the hidden frame is no row.
-    await send_keys(...tab_key, ...tab_key, ...tab_key);
-    await sleep(200);
-    const delta = await scroll_delta_after("p6_headings_frames", enter_key);
+    await tab_to_third_row();
+    const delta = await scroll_delta_by_press("p6_headings_frames", enter_key);
     expect(delta > 0, `the page did not scroll, delta ${delta}`);
-    const top = (await in_active_tab(`(() => { const frame = document.getElementById("shown"); return Math.round(frame.getBoundingClientRect().top + frame.contentDocument.getElementById("in_frame").getBoundingClientRect().top); })()`))[0];
+    const top = (await in_active_tab(`(() => { const frame = document.getElementById("shown"); return Math.round(frame.getBoundingClientRect().top + frame.contentDocument.getElementById("in_frame").getBoundingClientRect().top); })()`));
     expect(Math.abs(top) <= 2, `the heading in the frame sits ${top}px from the top of the view`);
   });
 
   await run_case(";# closes on Escape without moving, and keys work again", async () => {
     await open_page("headings", "p6_headings_close", { new_tab: true });
-    await open_headings_line();
-    await send_keys(...tab_key);
+    await open_headings_line(4);
+    await press_keys(...tab_key);
+    await wait_cmdline((line) => line.selected !== null, "a row to be selected");
     // The list is open, so the first Escape closes it and the second closes the line.
-    await send_keys("-k", "Escape");
-    await send_keys("-k", "Escape");
-    await sleep(300);
+    await close_cmdline();
     expect((await scroll_y()) === 0, "Escape moved the page");
-    expect((await scroll_delta_after("p6_headings_close", ["j"])) > 0, "keys did not work again after Escape");
+    expect((await scroll_delta_by_press("p6_headings_close", ["j"])) > 0, "keys did not work again after Escape");
   });
 
   await run_case(";# on a page with no headings opens the line with no rows, and Escape leaves it", async () => {
     await open_page("headings", "p6_headings_none", { new_tab: true });
     await in_active_tab(`document.querySelectorAll("h1, h2, h3, [role=heading]").forEach((heading) => heading.remove()); 0`);
-    await open_headings_line();
+    await open_headings_line(0);
     const mark = events.length;
-    await send_keys("j");
-    await sleep(500);
-    expect(!scrolled_since(mark, "p6_headings_none"), "j reached the page while the line was open");
-    await send_keys("-k", "Escape");
-    await send_keys("-k", "Escape");
-    await sleep(300);
-    expect((await scroll_delta_after("p6_headings_none", ["j"])) > 0, "keys did not work after the line closed");
+    await press_keys("j");
+    // The j in the line value is the proof that the key went to the line and not to the page.
+    await wait_cmdline((line) => line.open && line.value.endsWith("j"), "j to land in the command line");
+    expect(!find_event(mark, (event) => event.type === "scroll" && event.page_id === "p6_headings_none"), "j reached the page while the line was open");
+    await close_cmdline();
+    expect((await scroll_delta_by_press("p6_headings_none", ["j"])) > 0, "keys did not work after the line closed");
   });
 
   await run_case(";# then Escape drops the snapshot, so the next heading.go reads the page as it is now", async () => {
     await open_page("headings", "p6_headings_stale", { new_tab: true });
-    await open_headings_line();
-    await send_keys("-k", "Escape");
-    await send_keys("-k", "Escape");
-    await sleep(300);
+    await open_headings_line(4);
+    await close_cmdline();
     // A heading that came after the first list. A snapshot that survived the Escape would not know it.
     await in_active_tab(`document.body.insertAdjacentHTML("beforeend", '<h2 id="fresh">Fresh news</h2><div style="height:3000px"></div>'); 0`);
     await run_heading("Fresh news");
-    await sleep(500);
-    const top = await top_of("fresh");
-    expect(Math.abs(top) <= 2, `Fresh news sits ${top}px from the top, so the old snapshot answered`);
+    await poll_until("Fresh news to scroll to the top", async () => Math.abs(await top_of("fresh")) <= 2).catch(async (error) => { throw new Error(`Fresh news sits ${await top_of("fresh")}px from the top, so the old snapshot answered (${error.message})`); });
   });
 
   await run_case(";# then Enter on a heading the page removed since gives That heading is gone and does not move", async () => {
     await open_page("headings", "p6_headings_gone", { new_tab: true });
-    await open_headings_line();
+    await open_headings_line(4);
     await in_active_tab(`document.getElementById("below").remove(); 0`);
-    await send_keys(...tab_key, ...tab_key, ...tab_key);
-    await send_keys(...enter_key);
-    await sleep(500);
+    await tab_to_third_row();
+    await press_keys(...enter_key);
+    await poll_until("the notice that the heading is gone", async () => (await toast_text()).includes("That heading is gone")).catch(async (error) => { throw new Error(`the notice read "${await toast_text()}" (${error.message})`); });
     expect((await scroll_y()) === 0, "the page moved for a heading that is gone");
-    const toast = await toast_text();
-    expect(toast.includes("That heading is gone"), `the notice read "${toast}"`);
-    expect((await scroll_delta_after("p6_headings_gone", ["j"])) > 0, "keys did not work after the refusal");
+    expect((await scroll_delta_by_press("p6_headings_gone", ["j"])) > 0, "keys did not work after the refusal");
   });
 
   // The selector keeps the labels fixed: #card is "a", #other is "s".
-  const hover_pick = (label) => run_hint({ action: "hover", filter: "custom", selector: "#card, #other" }).then(() => sleep(400)).then(() => send_keys(label));
+  const hover_pick = async (label, selector = "#card, #other") => {
+    await run_hint({ action: "hover", filter: "custom", selector });
+    await wait_for_labels("the hover hint");
+    await press_keys(label);
+  };
   const hover_events = (mark, page_id) => events.slice(mark).filter((event) => event.page_id === page_id && event.type.startsWith("hover_")).map((event) => `${event.type}:${event.box}`);
+  const hover_in_of = (page_id, box) => (event) => event.type === "hover_in" && event.box === box && event.page_id === page_id;
 
   await run_case("hover opens a mouseenter-only preview and Escape closes it", async () => {
     await open_page("hoverbox", "p6_hover", { new_tab: true });
     const mark = events.length;
     await hover_pick("a");
-    await wait_event(mark, (event) => event.type === "hover_in" && event.page_id === "p6_hover", "mouseenter on the card");
-    await send_keys("-k", "Escape");
+    await wait_event(mark, hover_in_of("p6_hover", "card"), "mouseenter on the card");
+    await press_keys("-k", "Escape");
     await wait_event(mark, (event) => event.type === "hover_out" && event.page_id === "p6_hover", "mouseleave after Escape");
-    await sleep(300);
+    await barrier("p6_hover");
     expect(hover_events(mark, "p6_hover").join(",") === "hover_in:card,hover_out:card", `the page saw ${hover_events(mark, "p6_hover")}`);
   });
 
@@ -290,35 +309,35 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, open_p
     await open_page("hoverbox", "p6_hover_swap", { new_tab: true });
     const mark = events.length;
     await hover_pick("a");
+    await wait_event(mark, hover_in_of("p6_hover_swap", "card"), "mouseenter on the card");
     await hover_pick("s");
-    await wait_event(mark, (event) => event.type === "hover_in" && event.box === "other" && event.page_id === "p6_hover_swap", "mouseenter on the other box");
-    await sleep(300);
+    await wait_event(mark, hover_in_of("p6_hover_swap", "other"), "mouseenter on the other box");
+    await barrier("p6_hover_swap");
     expect(hover_events(mark, "p6_hover_swap").join(",") === "hover_in:card,hover_out:card,hover_in:other", `the page saw ${hover_events(mark, "p6_hover_swap")}`);
   });
 
   await run_case("hovering an item inside a hovered menu keeps the menu open", async () => {
     await open_page("hoverbox", "p6_hover_nested", { new_tab: true });
     const mark = events.length;
-    const pick_nested = (label) => run_hint({ action: "hover", filter: "custom", selector: "#menu, #item" }).then(() => sleep(400)).then(() => send_keys(label));
-    await pick_nested("a");
-    await pick_nested("s");
-    await wait_event(mark, (event) => event.type === "hover_in" && event.box === "item" && event.page_id === "p6_hover_nested", "mouseenter on the item");
-    await sleep(300);
+    await hover_pick("a", "#menu, #item");
+    await wait_event(mark, hover_in_of("p6_hover_nested", "menu"), "mouseenter on the menu");
+    await hover_pick("s", "#menu, #item");
+    await wait_event(mark, hover_in_of("p6_hover_nested", "item"), "mouseenter on the item");
+    await barrier("p6_hover_nested");
     expect(hover_events(mark, "p6_hover_nested").join(",") === "hover_in:menu,hover_in:item", `the page saw ${hover_events(mark, "p6_hover_nested")}`);
   });
 
   await run_case("Escape closes a hovered menu after a click on an item inside it", async () => {
     await open_page("hoverbox", "p6_hover_pick", { new_tab: true });
     const mark = events.length;
-    await run_hint({ action: "hover", filter: "custom", selector: "#menu, #item" });
-    await sleep(400);
-    await send_keys("a");
-    await wait_event(mark, (event) => event.type === "hover_in" && event.box === "menu" && event.page_id === "p6_hover_pick", "mouseenter on the menu");
+    await hover_pick("a", "#menu, #item");
+    await wait_event(mark, hover_in_of("p6_hover_pick", "menu"), "mouseenter on the menu");
     await run_hint({ action: "here", filter: "custom", selector: "#menu, #item" });
-    await sleep(400);
-    await send_keys("s");
-    await sleep(300);
-    await send_keys("-k", "Escape");
+    await wait_for_labels("the here hint");
+    await press_keys("s");
+    // The click runs in the key's handler, so the barrier key comes after it.
+    await barrier("p6_hover_pick");
+    await press_keys("-k", "Escape");
     await wait_event(mark, (event) => event.type === "hover_out" && event.box === "menu" && event.page_id === "p6_hover_pick", "mouseleave on the menu after Escape");
   });
 

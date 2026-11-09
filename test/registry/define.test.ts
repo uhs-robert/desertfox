@@ -257,3 +257,12 @@ test("a default is checked against min, pattern and strict", () => {
   rejects("a.b", with_param({ name: "n", type: "string", values: ["a"], strict: true, default: "z" }), /params\[0\]\.default: "z" is not one of a/);
   assert.doesNotThrow(() => create_registry().define("a.b", with_param({ name: "n", type: "int", min: 1, default: 1 })));
 });
+
+test("a background command has a run, and a content command has none", () => {
+  const { run: _run, ...no_run } = base;
+  rejects("t.neither", no_run as never, /run/);
+  rejects("t.background_bundle", { ...no_run, bundle: "hints" } as never, /bundle/);
+  rejects("t.content_run", { ...base, runs_in: "content" } as never, /run/);
+  assert.equal(create_registry().define("t.lazy", { ...no_run, runs_in: "content", bundle: "hints" }).bundle, "hints");
+  assert.equal(create_registry().define("t.in_page", { ...no_run, runs_in: "content" } as never).run, undefined);
+});

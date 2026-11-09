@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { close_drawer_on_escape, close_drawer_on_window_blur, render_help, reset_group_state, section_hash } from "../src/help/render.ts";
+import { close_drawer_on_escape, close_drawer_on_window_blur, render_help, reset_group_state, section_hash, update_config_source } from "../src/help/render.ts";
 import { parse_route } from "../src/help/route.ts";
 import type { Route } from "../src/help/route.ts";
 import type { Block } from "../src/help/blocks.ts";
@@ -88,7 +88,7 @@ function render(route: Route, keep_state = false, guide: Block[] = [], root = ne
   fake_document.body = root;
   fake_document.activeElement = null;
   if (!keep_state) reset_group_state();
-  render_help(root as never, { quick_start: QUICK_START, groups: GROUPS, warnings: [], settings: [], rebuild_steps: [], engines: [], tip: { kind: "tip", inlines: [] } } as never, route, guide);
+  render_help(root as never, { quick_start: QUICK_START, groups: GROUPS, warnings: [], config_source: "Config files", rebuild_steps: [], engines: [], tip: { kind: "tip", inlines: [] } } as never, route, guide);
   return root;
 }
 
@@ -101,8 +101,13 @@ const group_nodes = (root: FakeNode) => root.find_all(by_class("desertfox-help-n
 
 const links = (list: FakeNode) => (list.children as FakeNode[]).map((link) => link.attributes["href"]);
 
-test("every page has a group", () => {
-  assert.deepEqual(group_nodes(render({ page: "home" })).map((group) => group.page), ["Home", "Quick Start", "Commands", "Search Engines", "Styling"]);
+test("the settings group lists the setting groups as sections", () => {
+  const by_page = Object.fromEntries(group_nodes(render({ page: "home" })).map((group) => [group.page, links(group.list)]));
+  assert.deepEqual(by_page["Settings"]?.slice(0, 2), ["#section=settings/appearance", "#section=settings/new-tab"]);
+});
+
+test("every page with sections has a group, and Home has none", () => {
+  assert.deepEqual(group_nodes(render({ page: "home" })).map((group) => group.page), ["Settings", "Quick Start", "Commands", "Search Engines", "Styling"]);
 });
 
 test("the current page's group is open and the others are closed", () => {
@@ -121,20 +126,20 @@ test("the current page's group is open and the others are closed", () => {
 
 test("each toggle works alone and flips aria-expanded", () => {
   const groups = group_nodes(render({ page: "quick-start" }));
-  const [home, quick_start] = [groups[0]!, groups[1]!];
-  home.toggle.listeners["click"]!();
-  assert.equal(home.list.hidden, false);
-  assert.equal(home.toggle.attributes["aria-expanded"], "true");
+  const [settings, quick_start] = [groups[0]!, groups[1]!];
+  settings.toggle.listeners["click"]!();
+  assert.equal(settings.list.hidden, false);
+  assert.equal(settings.toggle.attributes["aria-expanded"], "true");
   assert.equal(quick_start.list.hidden, false);
   quick_start.toggle.listeners["click"]!();
   assert.equal(quick_start.list.hidden, true);
   assert.equal(quick_start.toggle.attributes["aria-expanded"], "false");
-  assert.equal(home.list.hidden, false);
+  assert.equal(settings.list.hidden, false);
 });
 
 test("each group lists its page's sections", () => {
   const by_page = Object.fromEntries(group_nodes(render({ page: "home" })).map((group) => [group.page, links(group.list)]));
-  assert.deepEqual(by_page["Home"], ["#section=home/warnings", "#section=home/settings", "#section=home/change-the-config"]);
+  assert.equal(by_page["Home"], undefined);
   assert.deepEqual(by_page["Styling"], ["#section=styling/variables", "#section=styling/classes"]);
   assert.deepEqual(by_page["Commands"], ["#section=commands/scroll", "#section=commands/tab"]);
   assert.deepEqual(by_page["Quick Start"], ["#section=quick-start/click-with-hints", "#section=quick-start/which-key", "#section=quick-start/which-key-2"]);
@@ -172,9 +177,9 @@ test("section routes parse for every page and reject an unknown page", () => {
 test("a toggle persists across renders, auto-opening does not, and a menu click reopens a closed group", () => {
   render({ page: "home" });
   group_nodes(render({ page: "home" }, true))[2]!.toggle.listeners["click"]!();
-  assert.deepEqual(group_nodes(render({ page: "home" }, true)).map((group) => !group.list.hidden), [true, false, true, false, false]);
+  assert.deepEqual(group_nodes(render({ page: "home" }, true)).map((group) => !group.list.hidden), [false, false, true, false, false]);
   assert.deepEqual(group_nodes(render({ page: "styling" }, true)).map((group) => !group.list.hidden), [false, false, true, false, true]);
-  // Home and Styling were only open by default, so they close, and the toggled Commands group stays open.
+  // Styling was only open by default, so it closes, and the toggled Commands group stays open.
   const on_commands = group_nodes(render({ page: "commands" }, true)).map((group) => !group.list.hidden);
   assert.deepEqual(on_commands, [false, false, true, false, false]);
 });
@@ -345,4 +350,27 @@ test("the window losing focus to the browser UI closes the drawer without taking
   assert.equal(is_open(), false);
   assert.equal(menu.attributes["aria-expanded"], "false");
   assert.equal(fake_document.activeElement, null);
+});
+
+test("Home shows the tip and the warnings, with no settings table and no config steps", () => {
+  const page = render({ page: "home" }).querySelector(".desertfox-help-page")!;
+  assert.deepEqual(page.find_all((node) => node.tag === "h2").map((node) => node.children[0]), ["Warnings"]);
+  assert.equal(page.find_all((node) => node.tag === "ol" || node.tag === "table").length, 0);
+});
+
+test("Settings shows the config source and the apply steps above the groups", () => {
+  const page = render({ page: "settings" }).querySelector(".desertfox-help-page")!;
+  const texts = page.find_all((node) => node.tag === "p").map((node) => node.children[0]);
+  assert.ok(texts.includes("Config source: Config files."));
+  const headings = page.find_all((node) => node.tag === "h2").map((node) => node.children[0]);
+  assert.equal(headings[0], "Apply a config file edit");
+  assert.ok(page.find_all((node) => node.tag === "ol").length === 1);
+  assert.equal(page.find_all(by_class("desertfox-settings-install")).length, 1);
+});
+
+test("a model change updates the Settings config source line in place", () => {
+  const root = render({ page: "settings" });
+  const line = root.querySelector(".desertfox-config-source")!;
+  update_config_source({ config_source: "Config files, read by config.reload" } as never);
+  assert.equal(line.textContent, "Config source: Config files, read by config.reload.");
 });

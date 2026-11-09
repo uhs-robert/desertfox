@@ -1,4 +1,3 @@
-import { caret_move } from "../content/handlers/lazy_bundle.ts";
 import { define } from "../shared/registry/builtin.ts";
 
 define("caret.move", {
@@ -44,5 +43,5 @@ define("caret.move", {
   runs_in: "content",
   count: "repeat",
   modes: ["caret", "visual", "visual_line"],
-  run: caret_move.run,
+  bundle: "caret",
 });

@@ -7,7 +7,8 @@ import type { ContentContextSource } from "../context.ts";
 // so each rule lives in one place.
 export type ContentHandler = {
   // Returns nothing for done, throws for failed, or returns an Outcome or a promise of one. A command that hands control to the user stays pending until the user finishes.
-  run: (args: CheckedArgs) => HandlerResult;
+  // `repeat` is true when an auto-repeat keydown started the run, false for every other source.
+  run: (args: CheckedArgs, repeat: boolean) => HandlerResult;
   // Params the handler fills from the page when the invocation leaves them out.
-  fill_from_page?: Record<string, ContentContextSource>;
+  fill_from_page_?: Record<string, ContentContextSource>;
 };

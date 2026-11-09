@@ -1,13 +1,13 @@
 // Every `storage.local` key the background owns. The compiled keymap key lives in `shared/prefix_tree.ts`, the theme and user CSS keys in `shared/theme/apply.ts`.
 
-// Phase 3 writes the merged config file here when the user imports it.
-export const IMPORTED_CONFIG_STORAGE_KEY = "desertfox_imported_config";
+// The config `config.reload` last built from the files. An import will land here too. `FILES_CONFIG_STORAGE_KEY`, defined in `shared/storage_watch.ts` because a reload ends with a write of it.
+export { FILES_CONFIG_STORAGE_KEY } from "../shared/storage_watch.ts";
 
 // Strings for the help page: config, keymap and shortcut slot problems from the last load.
 export const WARNINGS_STORAGE_KEY = "desertfox_warnings";
 
-// Where the config came from and the settings in force. Written at every startup. The hint script reads its letters from it.
-export const CONFIG_STATUS_STORAGE_KEY = "desertfox_config_status";
+// Where the config came from and the settings in force: `CONFIG_STATUS_STORAGE_KEY`, defined in `shared/storage_watch.ts` for the pages that follow it.
+export { CONFIG_STATUS_STORAGE_KEY } from "../shared/storage_watch.ts";
 
 // Setting name to the value a saved browser edit gave it (`:set`). Global, private windows included.
 export const SAVED_SETTINGS_STORAGE_KEY = "desertfox_saved_settings";
@@ -54,3 +54,6 @@ export const REPEAT_PRIVATE_STORAGE_KEY = "desertfox_last_repeat_private";
 
 // Prefix of one `storage.local` key per register, holding its text. Register `/` holds the last page search. Not written from a private window.
 export const REGISTER_STORAGE_PREFIX = "desertfox_register_";
+
+// Set while the user has turned DesertFox off from the toolbar or its shortcut. Absent means on, so a profile from before the switch stays on. Only the background writes it.
+export const DISABLED_STORAGE_KEY = "desertfox_disabled";

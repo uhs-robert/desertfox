@@ -4,7 +4,7 @@ import { collect_matches, compile_query, describe_match, describe_timeout, neare
 import type { Matches, ScanRegex, Slicing } from "../../../src/content/caret/find_match.ts";
 import { scan_regex } from "../../../src/background/regex_scan.ts";
 
-const never_stale: Slicing = { is_stale: () => false, yield_to_page: async () => {}, now: () => 0, slice_ms: 8 };
+const never_stale: Slicing = { is_stale_: () => false, yield_to_page_: async () => {}, now: () => 0, slice_ms_: 8 };
 // The background's scan, run in place of the Worker.
 const in_place: ScanRegex = async (text, { source, flags }) => ({ ok: true, ...scan_regex({ text, source, flags }) });
 const scan = async (text: string, query: string) => {
@@ -68,14 +68,14 @@ test("a scan that a newer keystroke made stale stops and returns nothing", async
   let newest = 1;
   let yields = 0;
   const slicing: Slicing = {
-    is_stale: () => newest !== 1,
-    yield_to_page: async () => {
+    is_stale_: () => newest !== 1,
+    yield_to_page_: async () => {
       yields++;
       // The next keystroke arrives while the first scan is paused.
       if (yields === 2) newest = 2;
     },
     now: () => (clock += 5),
-    slice_ms: 8,
+    slice_ms_: 8,
   };
   const result = await collect_matches("a ".repeat(100), { kind: "folded", regex: /a/gu }, slicing, in_place);
   assert.equal(result, undefined);
@@ -164,7 +164,7 @@ test("a costly pattern never reaches exec as a pattern, only as escaped text, an
   };
   let clock = 0;
   try {
-    const fake_clock: Slicing = { is_stale: () => false, yield_to_page: async () => {}, now: () => clock++, slice_ms: 8 };
+    const fake_clock: Slicing = { is_stale_: () => false, yield_to_page_: async () => {}, now: () => clock++, slice_ms_: 8 };
     const text = "a".repeat(40) + "!";
     for (const [pattern, search] of searches) {
       const before = sources.length;
@@ -197,7 +197,7 @@ test("a regex goes to the background scan, and its answer becomes the match list
   assert.equal(await collect_matches("ab", regex, never_stale, answer({ ok: false, reason: "superseded" })), undefined);
   await assert.rejects(collect_matches("ab", regex, never_stale, answer({ ok: false, reason: "failed", message: "out of memory" })), /out of memory/);
   // A newer keystroke while the scan ran drops even a good answer.
-  assert.equal(await collect_matches("ab", regex, { ...never_stale, is_stale: () => true }, answer({ ok: true, from: Int32Array.of(0), to: Int32Array.of(2) })), undefined);
+  assert.equal(await collect_matches("ab", regex, { ...never_stale, is_stale_: () => true }, answer({ ok: true, from: Int32Array.of(0), to: Int32Array.of(2) })), undefined);
 });
 
 test("the timeout line names the background's limit", async () => {
@@ -210,6 +210,6 @@ test("a background scan that fails to send is dropped when stale and thrown when
   const rejected: ScanRegex = async () => {
     throw new Error("Could not establish connection");
   };
-  assert.equal(await collect_matches("ab", regex, { ...never_stale, is_stale: () => true }, rejected), undefined);
+  assert.equal(await collect_matches("ab", regex, { ...never_stale, is_stale_: () => true }, rejected), undefined);
   await assert.rejects(collect_matches("ab", regex, never_stale, rejected), /Could not establish connection/);
 });

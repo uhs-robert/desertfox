@@ -1,5 +1,4 @@
-import { scroll_align } from "../content/handlers/align.ts";
-import { scroll_lines, scroll_pages, scroll_pixels, scroll_to, SCROLL_TO_DEFAULT_AXIS } from "../content/handlers/scroll.ts";
+import { SCROLL_TO_DEFAULT_AXIS } from "../content/handlers/scroll.ts";
 import { define } from "../shared/registry/builtin.ts";
 
 define("scroll.lines", {
@@ -9,7 +8,6 @@ define("scroll.lines", {
   params: [{ name: "count", type: "int", default: 1 }],
   runs_in: "content",
   count: "repeat",
-  run: scroll_lines.run,
 });
 
 define("scroll.pixels", {
@@ -21,16 +19,17 @@ define("scroll.pixels", {
   ],
   runs_in: "content",
   count: "repeat",
-  run: scroll_pixels.run,
 });
 
 define("scroll.pages", {
   label: "Scroll pages",
   intent: "Scroll the page by a fraction of the view. The fraction is of the visible height. A negative fraction scrolls up.",
-  params: [{ name: "fraction", type: "float", default: 1 }],
+  params: [
+    { name: "fraction", type: "float", default: 1, description: "Scroll this share of the view height." },
+    { name: "count", type: "int", default: 1, description: "Scroll this many fractions in one move." },
+  ],
   runs_in: "content",
-  count: "repeat",
-  run: scroll_pages.run,
+  count: { param: "count" },
 });
 
 define("scroll.to", {
@@ -41,7 +40,6 @@ define("scroll.to", {
     { name: "axis", type: "enum", values: ["x", "y"], default: SCROLL_TO_DEFAULT_AXIS, short: { x: "x" }, value_labels: { x: "horizontally" }, description: { x: "Jump along the horizontal axis." } },
   ],
   runs_in: "content",
-  run: scroll_to.run,
 });
 
 define("scroll.align", {
@@ -49,5 +47,5 @@ define("scroll.align", {
   intent: "Align the focused element in the view. It scrolls the focus to the top, center or bottom. The focus is the focused element, or else the selection.",
   params: [{ name: "position", type: "enum", values: ["top", "center", "bottom"], default: "center", short: { top: "t", bottom: "b" }, value_labels: { top: "to top", bottom: "to bottom" }, description: { top: "Align the focus to the top.", bottom: "Align the focus to the bottom." } }],
   runs_in: "content",
-  run: scroll_align.run,
+  bundle: "page",
 });

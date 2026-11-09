@@ -22,7 +22,7 @@ A note "(prompts)" means the binding sets a `prompt` for a param, so the command
 
 <!-- BEGIN generated -->
 
-bound: 281 (normal 146, hint 2, cmdline 18, caret 35, visual 37, visual_line 38, insert 1, ignore 1, browser 3) | later: 10 | dropped: 6
+bound: 287 (normal 152, hint 2, cmdline 18, caret 35, visual 37, visual_line 38, insert 1, ignore 1, browser 3) | later: 6 | dropped: 8
 
 ### normal
 
@@ -36,10 +36,10 @@ bound: 281 (normal 146, hint 2, cmdline 18, caret 35, visual 37, visual_line 38,
 | `G` | bound | `scroll.to 100` | Scroll to bottom |  |
 | `$` | bound | `scroll.to --x 100` | Scroll to right edge |  |
 | `^` | bound | `scroll.to --x 0` | Scroll to left edge |  |
-| `<C-d>` | bound | `scroll.pages 0.5` | Scroll half page down |  |
-| `<C-u>` | bound | `scroll.pages -0.5` | Scroll half page up |  |
+| `<C-d>` | bound | `scroll.pages --fraction=0.5` | Scroll half page down |  |
+| `<C-u>` | bound | `scroll.pages --fraction=-0.5` | Scroll half page up |  |
 | `<C-f>` | bound | `scroll.pages` | Scroll page down |  |
-| `<C-b>` | bound | `scroll.pages -1` | Scroll page up |  |
+| `<C-b>` | bound | `scroll.pages --fraction=-1` | Scroll page up |  |
 | `H` | bound | `page.back` | Back |  |
 | `L` | bound | `page.forward` | Forward |  |
 | `rr` | bound | `page.reload` | Reload |  |
@@ -48,6 +48,10 @@ bound: 281 (normal 146, hint 2, cmdline 18, caret 35, visual 37, visual_line 38,
 | `xp` | bound | `page.stop` | Stop loading |  |
 | `gh` | bound | `page.home` | Home page |  |
 | `gH` | bound | `page.home --tab` | Home page |  |
+| `]]` | bound | `page.follow --next` | Next page |  |
+| `[[` | bound | `page.follow --prev` | Previous page |  |
+| `]i` | bound | `page.focus_field --next` | Next form control |  |
+| `[i` | bound | `page.focus_field --prev` | Previous form control |  |
 | `.` | bound | `repeat` | Repeat |  |
 | `J` | bound | `tab.next` | Next tab |  |
 | `K` | bound | `tab.prev` | Previous tab |  |
@@ -102,6 +106,8 @@ bound: 281 (normal 146, hint 2, cmdline 18, caret 35, visual 37, visual_line 38,
 | `yo` | bound | `copy --org` | Copy URL |  |
 | `ys` | bound | `copy --short` | Copy URL |  |
 | `yt` | bound | `copy --title` | Copy URL |  |
+| `yL` | bound | `copylinks` | Copy page links |  |
+| `yl` | bound | `copylinks --viewport` | Copy links in view |  |
 | `gu` | bound | `url.parent` | Parent URL |  |
 | `gU` | bound | `url.root` | Root URL |  |
 | `<C-a>` | bound | `url.increment --up` | Change URL number |  |
@@ -176,14 +182,12 @@ bound: 281 (normal 146, hint 2, cmdline 18, caret 35, visual 37, visual_line 38,
 | `gV` | bound | `mode caret` | Set mode |  |
 | `m` | later | `mark.add` |  | phase 3, key param |
 | `M` | later | `quickmark.add` |  | phase 3, key param |
-| `[[` | later | `page.follow --direction=prev` |  | phase 3 |
-| `]]` | later | `page.follow --direction=next` |  | phase 3 |
 | `` ` `` | later | `mark.jump` |  | phase 3, key param |
 | `wi` | dropped |  |  | needs a shell |
 | `<C-o>` | later | `page.jump --step=-1` |  | phase 3 |
 | `<C-i>` | later | `page.jump --step=1` |  | phase 3 |
-| `yq` | later | `copy.qr` |  | phase 3 |
-| `gf` | later | `page.view_source` |  | phase 3 |
+| `yq` | dropped |  |  | no longer planned |
+| `gf` | dropped |  |  | no longer planned |
 | `g!` | dropped |  |  | joke binding |
 | `g;` | later | `page.change_jump` |  | phase 3 |
 | `;c` | dropped |  |  | needs a shell |

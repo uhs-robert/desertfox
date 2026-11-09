@@ -38,6 +38,10 @@ export const SETTINGS_TABLE = {
   which_key_border: { kind: "enum", values: ["square", "round", "chamfer"], default: "square" },
   hint_letters: { kind: "custom", schema: { type: "string", minLength: 2 }, default: "asdfghjkl" },
   ignore_sites: { kind: "text_list", expectation: "a list of match pattern strings", default: [] },
+  // Matched as lowercase text of a link or button, in order: an earlier entry wins. A 1 or 2 character entry must be the whole text.
+  // "back" stays out of the prev list: it would match a "Back to top" footer link on a page with no previous page.
+  next_patterns: { kind: "text_list", expectation: "a list of link texts", default: ["next", "more", "newer", ">", "\u203a", "\u2192", "\u00bb", "\u226b", ">>"] },
+  prev_patterns: { kind: "text_list", expectation: "a list of link texts", default: ["prev", "previous", "older", "<", "\u2039", "\u2190", "\u00ab", "\u226a", "<<"] },
   mode_indicator: { kind: "enum", values: ["always", "not_normal", "off"], default: "always" },
   // The theme names are examples, not an enum: a theme file in the config directory takes any name.
   palette: { kind: "custom", schema: { type: "string", minLength: 1, examples: BUILT_IN_THEME_NAMES }, default: "oasis_moonlight" },
@@ -52,6 +56,8 @@ export const SETTINGS_TABLE = {
   completion_all_windows: { kind: "boolean", default: false },
   cmdline_prompt: { kind: "line", min_length: 1, max_length: 8, suggestions: ["caret", "colon"], default: "caret" },
   open_completion: { kind: "enum_list", values: ["bookmarks", "history"], default: ["bookmarks", "history"] },
+  // List order is display order. An empty list hides the status area.
+  statusbar_widgets: { kind: "enum_list", values: ["url", "scroll", "tabs"], default: ["url", "scroll", "tabs"] },
   history_completion_max: { kind: "number", whole: true, min: 0, default: 10 },
   history_list_max: { kind: "number", whole: true, min: 0, default: 20 },
   // `true` means analog, as it did before the digital face.

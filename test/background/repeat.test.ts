@@ -70,7 +70,7 @@ test("a command that is not repeatable is skipped and keeps the older memory", a
 });
 
 test("content commands are not stored by the router", async () => {
-  const { fake, router } = repeat_setup({ "page.look": { ...echo, runs_in: "content", run: () => undefined } });
+  const { fake, router } = repeat_setup({ "page.look": { ...echo, runs_in: "content" } });
   await router.run({ invocations: [{ id: "page.look" }], mode: "normal" });
   assert.equal(fake.slots.normal, undefined);
 });
@@ -105,7 +105,7 @@ test("the session memory keeps the two slots apart", async () => {
 
 test("a page may record only a content command whose args pass the validator", () => {
   const { fake } = repeat_setup({
-    "hint.run": { label: "Hint", intent: "x", runs_in: "content", params: [{ name: "action", type: "enum", values: ["here", "tab"], default: "here" }], run: () => undefined },
+    "hint.run": { label: "Hint", intent: "x", runs_in: "content", params: [{ name: "action", type: "enum", values: ["here", "tab"], default: "here" }] },
   });
   const get = (id: string) => fake.registry.get(id);
   const record = (invocation: unknown) => page_record({ type: "record_repeat", invocation }, get, {});
@@ -137,6 +137,6 @@ test("a request marked skip_repeat runs and keeps the older memory", async () =>
 });
 
 test("a page may record only hint.run, not another content command", () => {
-  const { fake } = repeat_setup({ "page.look": { ...echo, runs_in: "content", run: () => undefined } });
+  const { fake } = repeat_setup({ "page.look": { ...echo, runs_in: "content" } });
   assert.equal(page_record({ invocation: { id: "page.look" } }, (id) => fake.registry.get(id), {}), undefined);
 });

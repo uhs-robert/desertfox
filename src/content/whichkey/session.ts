@@ -23,9 +23,9 @@ export function create_which_key_session(
   }
 
   return {
-    show_prefix: show,
+    show_prefix_: show,
     // The command lists the first keys of the normal keymap, with no prefix typed.
-    show_manual: (mode: Mode) => {
+    show_manual_: (mode: Mode) => {
       const mine = ++manual_epoch;
       return show({ mode, typed: [] }, () => mine === manual_epoch);
     },

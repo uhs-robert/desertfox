@@ -42,8 +42,8 @@ test("the letters setting is cleaned, and an unusable one falls back to the home
 
 test("narrow lists labels that still fit and reports a complete one", () => {
   const labels = ["a", "sa", "ss", "sd"];
-  assert.deepEqual(narrow(labels, ""), { still_possible: [0, 1, 2, 3], complete: undefined });
-  assert.deepEqual(narrow(labels, "s"), { still_possible: [1, 2, 3], complete: undefined });
-  assert.deepEqual(narrow(labels, "sd"), { still_possible: [3], complete: 3 });
-  assert.deepEqual(narrow(labels, "x"), { still_possible: [], complete: undefined });
+  assert.deepEqual(narrow(labels, ""), { still_possible_: [0, 1, 2, 3], complete: undefined });
+  assert.deepEqual(narrow(labels, "s"), { still_possible_: [1, 2, 3], complete: undefined });
+  assert.deepEqual(narrow(labels, "sd"), { still_possible_: [3], complete: 3 });
+  assert.deepEqual(narrow(labels, "x"), { still_possible_: [], complete: undefined });
 });

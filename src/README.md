@@ -11,9 +11,11 @@ The code map. Read a folder's README before you change or research code in it.
   - [`content/whichkey/`](content/whichkey/README.md): the which-key panel.
   - [`content/handlers/`](content/handlers/README.md): the content-side handler for each command group.
   - [`content/ui/`](content/ui/README.md): the `ui` bundle, the mode badge and the toast.
+  - [`content/page/`](content/page/README.md): the `page` bundle, `scroll.align` and `copy.url`.
 - [`help/`](help/README.md): the help page.
 - [`newtab/`](newtab/README.md): the new tab page.
-- `icons/`: the extension icon.
+- [`popup/`](popup/README.md): the toolbar popup.
+- `icons/`: the extension icon. The build writes the grey off copy (`tools/grey_svg.mjs`).
 - [`shared/`](shared/README.md): types and constants shared by all folders.
   - [`shared/keys/`](shared/keys/README.md): key notation, the prefix tree compiler and the matcher.
   - [`shared/config_build/`](shared/config_build/README.md): the pure config build from raw file text.

@@ -26,6 +26,8 @@ const OPENED = {
   prompt: ">> ",
   window_id: 10,
   all_windows: false,
+  statusbar_widgets: ["url", "scroll", "tabs"],
+  status: { url: "https://example.org/docs/page?q=1#top", tab_index: 1, tab_count: 4 },
 };
 
 const USER_CSS = ".desertfox-cmdline { --desertfox-bg-core: red; }";
@@ -52,13 +54,13 @@ function fake_element() {
 
 // Just enough DOM for the command line page. `head` records what is appended, `parent` what is posted to the web page.
 type StorageListener = (changes: Record<string, { newValue?: unknown }>, area: string) => void;
-type PageSetup = { keymap?: unknown; with_tab_command?: boolean; without_prompt?: boolean; prompt?: string };
+type PageSetup = { keymap?: unknown; with_tab_command?: boolean; without_prompt?: boolean; prompt?: string; widgets?: string[] };
 
-async function load_page(t: TestContext, tag: string, { keymap = KEYMAP, with_tab_command = false, without_prompt = false, prompt: configured }: PageSetup = {}) {
+async function load_page(t: TestContext, tag: string, { keymap = KEYMAP, with_tab_command = false, without_prompt = false, prompt: configured, widgets }: PageSetup = {}) {
   const window_listeners: ((event: unknown) => void)[] = [];
   const input_listeners: Record<string, (event: unknown) => void> = {};
   const to_parent: unknown[] = [];
-  const opened_answer = without_prompt ? { ...OPENED, prompt: undefined } : { ...OPENED, ...(configured !== undefined && { prompt: configured }) };
+  const opened_answer = { ...(without_prompt ? { ...OPENED, prompt: undefined } : { ...OPENED, ...(configured !== undefined && { prompt: configured }) }), ...(widgets && { statusbar_widgets: widgets }) };
   const head: { textContent: string }[] = [];
   const storage_listeners: StorageListener[] = [];
   // Every message the page sends to the background, in order.
@@ -95,6 +97,7 @@ async function load_page(t: TestContext, tag: string, { keymap = KEYMAP, with_ta
   const list = fake_element();
   const panel = fake_element();
   const note = fake_element();
+  const status = fake_element();
   // Starts with the default that cmdline.html holds.
   const prompt = Object.assign(fake_element(), { textContent: "> " });
   const page_window = {
@@ -104,7 +107,7 @@ async function load_page(t: TestContext, tag: string, { keymap = KEYMAP, with_ta
   Object.assign(globalThis, {
     window: page_window,
     document: {
-      querySelector: (selector: string) => (selector === "#line" ? input : selector === "#list" ? list : selector === "#note" ? note : selector === ".desertfox-cmdline" ? panel : selector === ".desertfox-cmdline-prompt" ? prompt : { textContent: "", hidden: true }),
+      querySelector: (selector: string) => (selector === "#line" ? input : selector === "#list" ? list : selector === "#note" ? note : selector === ".desertfox-cmdline" ? panel : selector === ".desertfox-cmdline-prompt" ? prompt : selector === "#status" ? status : { textContent: "", hidden: true }),
       // The page listens for keys on the document. The fake sends them through the input's table.
       addEventListener: (type: string, listener: (event: unknown) => void) => void (input_listeners[type] = listener),
       body: { classList: { toggle: () => {} } },
@@ -151,12 +154,12 @@ async function load_page(t: TestContext, tag: string, { keymap = KEYMAP, with_ta
   const ports: MessagePort[] = [];
   t.after(() => ports.forEach((port) => port.close()));
   // Posts a start the way the host does, or the way a page script can, and returns the end the sender keeps.
-  const post_start = (ticket: string | undefined, text: string, tokens: string[] = []) => {
+  const post_start = (ticket: string | undefined, text: string, tokens: string[] = [], extra: Record<string, unknown> = {}) => {
     const channel = new MessageChannel();
     ports.push(channel.port1, channel.port2);
     const received: unknown[] = [];
     channel.port1.onmessage = (event) => void received.push(event.data);
-    const data = { desertfox_cmdline: { kind: "start", ticket, text, tokens } };
+    const data = { desertfox_cmdline: { kind: "start", ticket, text, tokens, ...extra } };
     for (const listener of window_listeners) listener({ data, source: page_window.parent, ports: [channel.port2] });
     // Resolves once the page took this start and said `opened`.
     const opened = () => until(() => received.some((data) => (data as { desertfox_cmdline: { kind: string } }).desertfox_cmdline.kind === "opened"));
@@ -165,7 +168,7 @@ async function load_page(t: TestContext, tag: string, { keymap = KEYMAP, with_ta
   };
   const press_enter = () => input_listeners.keydown!({ isTrusted: true, isComposing: false, key: "Enter", code: "Enter", preventDefault: () => {} });
   const press = (key: string) => input_listeners.keydown!({ isTrusted: true, isComposing: false, key, code: key, preventDefault: () => {} });
-  return { input, list, panel, note, prompt, to_parent, to_background, sent, item_asks, model_ports, head, storage_listeners, post_start, press_enter, press };
+  return { input, list, panel, note, prompt, status, to_parent, to_background, sent, item_asks, model_ports, head, storage_listeners, post_start, press_enter, press };
 }
 
 // Port messages arrive on a later turn, and later still on a busy machine.
@@ -500,4 +503,43 @@ test("a press on the list keeps the focus in the input", async (t) => {
   let prevented = false;
   list.listeners.mousedown!({ preventDefault: () => void (prevented = true) });
   assert.equal(prevented, true);
+});
+
+// What the status area shows: the text of each child span, its title and its color class.
+type StatusSpan = { textContent: string; title?: string; className: string };
+const shown_widgets = (status: ReturnType<typeof fake_element>) => (status.children as StatusSpan[]).map((span) => [span.textContent, span.title, span.className]);
+
+test("the status area shows the widgets in the setting's order, from the snapshots of the open", async (t) => {
+  const { status, post_start } = await load_page(t, "status_order");
+  const host = post_start(TICKET, "", [], { scroll: { top: 300, max: 600 } });
+  await host.opened();
+  assert.deepEqual(shown_widgets(status), [
+    ["example.org/docs/page", "https://example.org/docs/page?q=1#top", "desertfox-cmdline-status-ok"],
+    ["50%", undefined, ""],
+    ["[2/4]", undefined, ""],
+  ]);
+  assert.equal(status.hidden, false);
+});
+
+test("a reordered setting reorders the widgets, and an empty one hides the area", async (t) => {
+  const reordered = await load_page(t, "status_reordered", { widgets: ["tabs", "scroll"] });
+  const first = reordered.post_start(TICKET, "", [], { scroll: { top: 0, max: 600 } });
+  await first.opened();
+  assert.deepEqual(shown_widgets(reordered.status).map(([text]) => text), ["[2/4]", "Top"]);
+
+  const empty = await load_page(t, "status_empty", { widgets: [] });
+  await empty.post_start(TICKET, "").opened();
+  assert.equal(empty.status.hidden, true);
+});
+
+test("a page with no scrolling element reads as All", async (t) => {
+  const { status, post_start } = await load_page(t, "status_all", { widgets: ["scroll"] });
+  await post_start(TICKET, "", [], { scroll: null }).opened();
+  assert.deepEqual(shown_widgets(status).map(([text]) => text), ["All"]);
+});
+
+test("a search line shows no widgets", async (t) => {
+  const { status, post_start } = await load_page(t, "status_search");
+  await post_start(TICKET, "", [], { search: "forward", scroll: { top: 1, max: 600 } }).opened();
+  assert.deepEqual(status.children, []);
 });

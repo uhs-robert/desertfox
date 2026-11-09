@@ -40,8 +40,8 @@ function model_with(runs: TreeRun[]): TextModel {
   const box_of = (index: number) => ({ x: 0, y: index < 5 ? 0 : 20, left: 0, top: index < 5 ? 0 : 20, width: 5, height: 10 });
   return {
     text: "aaaa\nbbbb\ncccc",
-    tree_runs: () => runs,
-    point_at: (index: number) => {
+    tree_runs_: () => runs,
+    point_at_: (index: number) => {
       const owner = { defaultView: { frameElement: null }, createRange: () => ({ setStart() {}, setEnd() {}, getBoundingClientRect: () => box_of(index) }) };
       return { node: { nodeType: 3, length: 14, ownerDocument: owner }, offset: index };
     },

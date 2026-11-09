@@ -67,8 +67,9 @@ export function create_tab_modes(storage: ModeStorage) {
   };
 }
 
-// In ignore mode a shortcut runs only if its commands can run there, which is how a binding leaves ignore mode.
-export function shortcut_allowed(mode: Mode, invocations: BoundInvocation[], get_command: (id: string) => Pick<CommandDef, "modes"> | undefined): boolean {
+// While DesertFox is off no shortcut runs (the toggle is not a slot). In ignore mode a shortcut runs only if its commands can run there, which is how a binding leaves ignore mode.
+export function shortcut_allowed(mode: Mode, invocations: BoundInvocation[], get_command: (id: string) => Pick<CommandDef, "modes"> | undefined, disabled: boolean): boolean {
+  if (disabled) return false;
   if (mode !== "ignore") return true;
   return invocations.every((invocation) => get_command(invocation.id)?.modes?.includes("ignore"));
 }

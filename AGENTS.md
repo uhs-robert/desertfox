@@ -28,6 +28,7 @@ If code and the design disagree, stop and ask the maintainer. Do not change the 
 - Keep the content script under 16 KB minified, with no runtime dependency. Load anything bigger on first use.
 - Do not evaluate strings. Snippets from the user's own config are the only exception.
 - Give the native host a fixed set of verbs. Never add a shell or eval verb.
+- Put no test hooks in `src/`. Tests drive the extension through its public surface. The one exception is the `data-desertfox-tree-read-ms` attribute on the document element, which the key test reads as the signal that the content script is ready.
 - Keep no state only in memory. Store it, so a later move to Manifest V3 stays small.
 - Set each command line name by hand. Never derive it from the id. The registry rejects duplicate names.
 - Express flags that exclude each other as one `enum` param with preset flags. `when`, the conditional `default` and `value_when` (which values of an enum a sibling's value allows) are the only conditions; the last two reuse the syntax of `when`. Split a command that needs more.
@@ -45,6 +46,7 @@ This repository is public.
 
 - Carry meaning in names. Comment only what a name cannot say: why this approach, a skipped obvious option, a trap.
 - Put the reasoning behind a change in the commit message, not in a comment.
+- The build shortens every object property whose name ends in `_`, in every bundle (background, help, popup and newtab included). Use the suffix only on a property that never leaves the extension scripts. Never put it on a name that crosses storage, a message or the native host. Never put it on a name in the DOM, the manifest, CSS, a page or browser API, or JSON. Do not put it on variables, functions or parameters. One exception: a variable or parameter that feeds a shorthand property, or comes from a destructure, keeps the suffix, because it shares the property's name.
 - Do not use emoji in code.
 
 ## Commands
@@ -56,7 +58,9 @@ just docs-gen    # regenerate the tables in docs/keymap.md
 just themes      # regenerate src/shared/themes.ts from themes/*.toml, then src/shared/setting_completion.ts
 just settings-defaults  # regenerate src/shared/default_settings.ts from src/shared/settings_table.ts and src/shared/setting_completion.ts from src/shared/settings_schema.ts
 just host-test   # Python unit tests of the native host and install.sh, with a temporary HOME and a stubbed curl
-just key-test    # real key presses in a nested Hyprland, about a minute
+just key-test    # real key presses in a nested Hyprland, about 34 s on 8 shards, one run at a time (the recipe takes /tmp/desertfox-key-test.lock itself, so never wrap it in `flock`)
+just key-test-flakes [n=10]    # loop key-test n times and append one line to ~/.local/state/desertfox/key-test-flakes.jsonl; run it when you suspect a flaky test
+just test-all    # `just test` and `just key-test` at once, about as long as key-test alone; exit 1 if either fails
 just sign        # sign as unlisted on addons.mozilla.org
 just install     # install through the Firefox policy file (needs sudo)
 just release     # from a clean non-main branch: bump the patch version, sign and install, commit and push the bump, create the GitHub release that carries the native host (needs a logged-in gh), reading the AMO key from rbw when unset
@@ -70,7 +74,9 @@ Reproduce a visual bug and record it, at 60 fps so flicker shows, before you ask
 
 `docs/keymap.md` is generated between its markers from `src/background/default_keymap.ts` and `docs/keymap_planned.toml` (keys that are `later` or `dropped`). Edit those two, then run `just docs-gen`. `just test` fails when the doc is stale.
 
-Run `just test` before every commit. Run `just key-test` after a change to keys, modes, the content script or config reload. It needs a nested Hyprland and a driver script: `SHADOW_SH`, or `~/dotfiles/.claude/skills/shadow/shadow.sh` when `SHADOW_SH` is unset. It runs on demand only. Read [`test/key/README.md`](test/key/README.md) before you run it.
+Run `just test` before every commit. Run `just key-test` after a change to keys, modes, the content script or config reload. `just test-all` runs both at once. It needs labwc, Hyprland, dbus-daemon and python3. `test/key/session.mjs` starts the nested session. It runs on demand only. Read [`test/key/README.md`](test/key/README.md) before you run it.
+
+While building, run `just key-test-changed [base]` or set `KEY_TEST_PIECES`, not the full suite. Run one full `just key-test` before you report. Run the serial reverse run (`KEY_TEST_ORDER=reverse`) only when the shared test machinery changes: the harness, run, session, server or keyboard files in `test/key/`.
 
 ## Planning
 
@@ -80,3 +86,4 @@ Run `just test` before every commit. Run `just key-test` after a change to keys,
 
 - Write commit messages as Conventional Commits, with a body that explains why.
 - Work on a branch, never on `main`.
+- Put worktrees under `/home/roberth/Development/personal/desertfox-worktrees/`.

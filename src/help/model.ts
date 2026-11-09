@@ -7,7 +7,6 @@ import type { SearchEngine } from "../shared/config.ts";
 import { search_engine_name } from "../commands/url_build.ts";
 import type { ConfigStatus } from "../background/config_load.ts";
 import { build_config_view } from "./config_view.ts";
-import type { SettingRow } from "./config_view.ts";
 import { ROLES } from "../shared/theme/roles.ts";
 import type { Role } from "../shared/theme/roles.ts";
 import { token_name } from "../shared/theme/tokens.ts";
@@ -66,9 +65,8 @@ export type EngineRow = {
 
 export type HelpModel = {
   warnings: string[];
-  // Where the settings came from, and the settings in force. Read-only: the page has no inputs.
+  // Where the settings came from.
   config_source: string;
-  settings: SettingRow[];
   // The commands to run after editing the config files.
   rebuild_steps: string[];
   groups: HelpGroup[];
@@ -208,7 +206,6 @@ export function build_help_model(commands: CommandMeta[], compiled: CompiledKeym
   return {
     warnings,
     config_source: config_view.source_text,
-    settings: config_view.settings,
     rebuild_steps: config_view.rebuild_steps,
     engines: engine_rows(engines, compiled, status?.settings.default_engine ?? DEFAULT_SETTINGS.default_engine),
     quick_start: quick_start_blocks(compiled, commands),

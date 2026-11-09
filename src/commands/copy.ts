@@ -1,4 +1,4 @@
-import { COPY_FORMATS, copy_url } from "../content/handlers/copy.ts";
+import { COPY_FORMATS } from "../content/handlers/copy.ts";
 import { define } from "../shared/registry/builtin.ts";
 
 define("copy.url", {
@@ -23,5 +23,33 @@ define("copy.url", {
     },
   ],
   runs_in: "content",
-  run: copy_url.run,
+  bundle: "page",
+});
+
+define("copy.links", {
+  name: "copylinks",
+  label: "Copy links",
+  intent: "Copy the web links of the page as a list. The clipboard gets one line per link, the whole page or only what is in view, as Markdown, Org or plain addresses.",
+  params: [
+    {
+      name: "scope",
+      type: "enum",
+      values: ["page", "viewport"],
+      default: "page",
+      short: { viewport: "v" },
+      value_labels: { viewport: "in view" },
+      description: { viewport: "Copy only the links in view." },
+    },
+    {
+      name: "format",
+      type: "enum",
+      values: ["markdown", "plain", "org"],
+      default: "markdown",
+      short: { plain: "u", org: "o" },
+      value_labels: { plain: "as plain addresses", org: "as an Org list" },
+      description: { plain: "Copy the addresses, one per line.", org: "Copy an Org list." },
+    },
+  ],
+  runs_in: "content",
+  bundle: "hints",
 });

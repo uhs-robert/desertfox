@@ -11,6 +11,6 @@ const page = window as unknown as UiWindow;
 // A second run would hold fresh badge and toast state and leave the first copy's surfaces on the page.
 if (!page.desertfox_ui_ready) {
   page.desertfox_ui_ready = true;
-  page.desertfox_host.register_handler("ui.toast", (args) => show_toast(args.message as string, args.kind as ToastKind | undefined));
-  page.desertfox_host.register_handler("ui.badge", (args) => show_mode_label(args.label as string | undefined, args.mode as string | undefined));
+  page.desertfox_host.register_handler_("ui.toast", (args) => show_toast(args.message as string, args.kind as ToastKind | undefined));
+  page.desertfox_host.register_handler_("ui.badge", (args) => show_mode_label(args.label as string | undefined, args.mode as string | undefined));
 }

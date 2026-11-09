@@ -7,7 +7,7 @@ import { always_default, arm_conditions, declared_default, find_param, is_contex
 import { is_setting_name } from "../settings_schema.ts";
 import { description_problem } from "./summary.ts";
 
-export type CommandInput = Omit<CommandDef, "id">;
+export type CommandInput = CommandDef extends infer D ? (D extends unknown ? Omit<D, "id"> : never) : never;
 
 export class DefineError extends Error {
   constructor(command_id: string, field: string, problem: string) {
@@ -24,6 +24,8 @@ export type Registry = {
   // Resolves a command line word: a name, an alias or a full id.
   find(word: string): CommandDef | undefined;
   list(): CommandDef[];
+  // Frees the id and its words. Only snippets leave the registry: a config reload replaces them.
+  remove(id: string): void;
 };
 
 export const COMMAND_ID_PATTERN = /^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$/;
@@ -63,6 +65,12 @@ export function create_registry(): Registry {
     get: (id) => commands_by_id.get(id),
     find: (word) => commands_by_word.get(word),
     list: () => [...commands_by_id.values()],
+    remove: (id) => {
+      const command = commands_by_id.get(id);
+      if (!command) return;
+      commands_by_id.delete(id);
+      for (const [word, owner] of commands_by_word) if (owner === command) commands_by_word.delete(word);
+    },
   };
 }
 
@@ -349,6 +357,9 @@ function check_when(input: CommandInput, param: ParamDef, at: string, fail: Fail
 
 function check_count_and_modes(input: CommandInput, fail: Fail): void {
   if (input.runs_in !== "background" && input.runs_in !== "content") fail("runs_in", "must be background or content");
+  if (input.bundle !== undefined && input.runs_in !== "content") fail("bundle", "belongs to a content command");
+  if (input.runs_in === "content" && input.run) fail("run", "belongs to a background command, since content code lives in the page");
+  if (input.runs_in === "background" && !input.run) fail("run", "is missing");
   if (typeof input.count === "object" && !find_param(input, input.count.param)) {
     fail("count", `names "${input.count.param}", which is not a param`);
   }

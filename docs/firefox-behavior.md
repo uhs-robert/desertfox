@@ -43,13 +43,14 @@ A second test checked whether Firefox reads `~/.mozilla/managed-storage/<extensi
 - Edits made while the extension ran were not visible, 12 s later or ever. Firefox sent no `storage.onChanged` event.
 - After the extension reloaded, it read the current file within about 1 s.
 - So the file is read once per extension load. A reload applies an edit. A Firefox restart is not needed.
+- This is why `config.reload` reads the files through the native host and does not restart the extension. Managed storage now only gives the config at startup, until the first `config.reload`.
 
 ## Phase 1 measurements
 
 `just key-test` (`test/key/`) ran the built extension as a temporary add-on in the same kind of nested session, with a managed storage config written before the install. Test pages report to a local server. Two measurements came out of that run, and two behaviors.
 
 - The content script reads the compiled keymap from `storage.local` and sets `data-desertfox-tree-read-ms` on the document element. Over 24 fresh loads the read took a minimum of 6 ms, a median of 8 ms and a maximum of 10 ms, counted from the start of the content script. Firefox rounds these times to whole milliseconds.
-- After `config.reload`, Firefox loaded the content script again into every open `http` tab. The background stored `already_loaded: 5, injected: 0, failed: 0`, so its own injection had nothing to do. A `j` after the reload scrolled by the same distance as before the reload, in the tab that took the reload key and in a tab that did not. So the old script does not act a second time. This is one run with a temporary add-on. A signed add-on has not been checked.
+- After an extension reload (then `config.reload`, now `debug.restart`), Firefox loaded the content script again into every open `http` tab. The background stored `already_loaded: 5, injected: 0, failed: 0`, so its own injection had nothing to do. A `j` after the reload scrolled by the same distance as before the reload, in the tab that took the reload key and in a tab that did not. So the old script does not act a second time. This is one run with a temporary add-on. A signed add-on has not been checked.
 - `browser.focus_page` works. With the address bar focused, the `<A-,>` chord ran it, and the next `j` scrolled the page.
 - A chord that the content script cancels does not also fire the Firefox shortcut. On a page that cancels every key in its own capture listener, and on a normal page, `<A-j>` and `<A-k>` switched tabs exactly once. Tab counts cannot show which side ran the action. The count shows no double action.
 - `<A-j>` and `<A-k>` also switch tabs from an `about:support` page, where no content script runs.
@@ -75,6 +76,18 @@ Question: does Firefox paint a caret for a collapsed selection in page text?
 Setup: Firefox 159 headless, one page, a screenshot after a script set the selection with `Selection.addRange`.
 
 Result: no. A collapsed range in plain text paints nothing. A one-character range paints as a highlighted block. So caret mode draws the caret as a one-character selection, which also makes `@selection` return that character. A caret on an empty line has no character and is not drawn.
+
+## Smooth scrolling from a content script
+
+Question: does `behavior: "smooth"` in `scrollBy` and `scrollTo` follow Firefox's own smooth-scrolling setting?
+
+Setup: Firefox 159.0.1 in the key-test nested session, a content-script call of 600 px on a 6087 px page, sampled with `requestAnimationFrame` for 500 ms, with `general.smoothScroll` toggled at runtime.
+
+Result: yes. With the pref true, `"smooth"` animated (about 30 distinct positions, not done at 500 ms). With the pref false, `"smooth"` jumped at once, even when the page CSS said `scroll-behavior: smooth`. `"instant"` always jumped. `"auto"` and an omitted behavior follow the page CSS. So DesertFox needs no smooth-scroll setting of its own. Firefox's default for the pref is true, and the key-test profile sets it false.
+
+A single smooth scroll takes about 460 ms to finish. A held key lags with `"smooth"` on every keydown. Firefox starts each smooth scroll from the current animated position, so each repeat restarts the animation. At 25 repeats a second the page moved 235 px while instant scrolling moved 960 px, then drifted 33 px after release. So the page scroll keys use `"smooth"` on the first press and `"instant"` on repeats, and line scroll stays instant.
+
+Smooth scrolls restart each other. Three `scrollBy` calls of 400 px in one tick with the pref true ended at 400 px, not 1200, and one call of 1200 px reached 1200. Two taps 50 ms apart ended at 472 px of 800, 150 ms apart at 667, 300 ms apart at 777 and 450 ms apart at 797. So a counted page scroll is one call for the whole distance.
 
 ## Firefox defaults (not measured)
 

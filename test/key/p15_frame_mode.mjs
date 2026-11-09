@@ -1,5 +1,6 @@
 // Key cases for the mode of the focused frame: the badge and the background's tab mode follow the frame that holds focus, not only the top frame.
 // /hidden_input_frame stands in for Google Docs: on load it focuses a contenteditable in an offscreen same-origin frame.
+export const areas = ["ui", "keys"];
 import { evaluate_in_background } from "./rdp.mjs";
 
 export async function run_cases({ rdp, extension_id, run_case, send_keys, open_page, expect, sleep }) {

@@ -9,8 +9,8 @@ type BoxStyle = { overflowX: string; overflowY: string };
 export function candidate_of(element: Element, style: BoxStyle = getComputedStyle(element)): ScrollCandidate<Element> {
   return {
     ref: element,
-    can_scroll_x: element.scrollWidth > element.clientWidth && is_scrolling_overflow(style.overflowX),
-    can_scroll_y: element.scrollHeight > element.clientHeight && is_scrolling_overflow(style.overflowY),
+    can_scroll_x_: element.scrollWidth > element.clientWidth && is_scrolling_overflow(style.overflowX),
+    can_scroll_y_: element.scrollHeight > element.clientHeight && is_scrolling_overflow(style.overflowY),
     area: element.clientWidth * element.clientHeight,
   };
 }
@@ -19,5 +19,5 @@ export function candidate_of(element: Element, style: BoxStyle = getComputedStyl
 export function is_scroll_box(element: Element, style?: BoxStyle): boolean {
   if (element === element.ownerDocument.documentElement || element === element.ownerDocument.body) return false;
   const candidate = candidate_of(element, style);
-  return candidate.can_scroll_x || candidate.can_scroll_y;
+  return candidate.can_scroll_x_ || candidate.can_scroll_y_;
 }

@@ -9,6 +9,9 @@ import type { DataKind } from "./source_files.ts";
 
 type Schema = Record<string, unknown>;
 
+// What `label_problem` accepts: not blank after trimming and no control characters.
+const ONE_LINE_TEXT: Schema = { type: "string", minLength: 1, pattern: "^(?!\\s*$)[^\\u0000-\\u001F\\u007F-\\u009F]*$" };
+
 const DRAFT = "http://json-schema.org/draft-07/schema#";
 
 // A binding is a command string, so the editor can offer the command names but
@@ -22,8 +25,8 @@ function keymap_schema(commands: CommandMeta[]): Schema {
   const command_list: Schema = { type: "array", minItems: 1, items: { type: "string", minLength: 1 } };
   const labeled_binding: Schema = {
     type: "object",
-    description: "A binding with the label which-key shows for it, instead of the label derived from the command",
-    properties: { run: { anyOf: [command_text, command_list] }, label: { type: "string", minLength: 1 } },
+    description: "A binding with the label and the hover text which-key shows for it, instead of those of the command",
+    properties: { run: { anyOf: [command_text, command_list] }, label: ONE_LINE_TEXT, intent: ONE_LINE_TEXT },
     required: ["run"],
     additionalProperties: false,
   };
@@ -48,7 +51,7 @@ function keymap_schema(commands: CommandMeta[]): Schema {
         description: "Key sequence of a modifier to the args it adds to a variant of each key in its group, for example ;r = { rapid = true }. label names the group",
         additionalProperties: {
           type: "object",
-          properties: { label: { type: "string", minLength: 1 } },
+          properties: { label: ONE_LINE_TEXT },
           additionalProperties: { type: ["string", "number", "boolean"] },
           minProperties: 1,
         },

@@ -17,7 +17,7 @@ addEventListener("scroll", () => {
     field_top: document.getElementById("field")?.getBoundingClientRect().top,
   }), 150);
 });
-addEventListener("keydown", (event) => send("keydown", { key: event.key }));
+addEventListener("keydown", (event) => send("keydown", { key: event.key, code: event.code }));
 document.addEventListener("selectionchange", () => send("selection", { text: String(getSelection()), scroll_y: scrollY, pane_top: document.getElementById("pane")?.scrollTop ?? null, top: getSelection().rangeCount ? getSelection().getRangeAt(0).getBoundingClientRect().top : null }));
 addEventListener("input", (event) => send("input", { value: event.target.value }));
 addEventListener("focus", () => send("window_focus"));
@@ -66,20 +66,63 @@ const page = (title, body = "", head = "") =>
 
 const tall_filler = '<div style="height:6000px;background:linear-gradient(#fff,#ccc)"></div>';
 
+// The page still reports each keydown it cancels, so the key probe of the harness works on it. `send` comes from the reporter, which runs later.
 const CANCEL_KEYS_IN_CAPTURE = `<script>
   for (const target of [window, document]) for (const type of ["keydown", "keypress", "keyup"])
-    target.addEventListener(type, (event) => { event.preventDefault(); event.stopImmediatePropagation(); }, true);
+    target.addEventListener(type, (event) => {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      if (target === window && type === "keydown" && typeof send === "function") send("keydown", { key: event.key, code: event.code });
+    }, true);
 </script>`;
 
-export function start_server() {
+// The reports in arrival order, and a wait that wakes on each new report. A waiter checks the reports and starts
+// listening in one synchronous step, and a report is pushed only between steps, so no report falls between the two.
+export function create_event_log() {
   const events = [];
+  const listeners = new Set();
+  function push(event) {
+    events.push(event);
+    for (const listener of [...listeners]) listener();
+  }
+  // Resolves with the first report from `mark` on that matches, or with undefined after timeout_ms. A predicate that
+  // throws rejects. Every end removes the listener and the timer.
+  function wait_for(mark, predicate, timeout_ms) {
+    return new Promise((resolve_wait, reject_wait) => {
+      let timer;
+      const finish = (settle, value) => {
+        clearTimeout(timer);
+        listeners.delete(look_for_match);
+        settle(value);
+      };
+      function look_for_match() {
+        let found;
+        try {
+          found = events.slice(mark).find(predicate);
+        } catch (error) {
+          finish(reject_wait, error);
+          return;
+        }
+        if (found) finish(resolve_wait, found);
+      }
+      listeners.add(look_for_match);
+      timer = setTimeout(() => finish(resolve_wait, undefined), timeout_ms);
+      look_for_match();
+    });
+  }
+  return { events, push, wait_for };
+}
+
+export function start_server() {
+  const event_log = create_event_log();
+  const { events } = event_log;
   const server = http.createServer((request, response) => {
     const url = new URL(request.url, "http://x");
     if (url.pathname === "/report" && request.method === "POST") {
       let text = "";
       request.on("data", (chunk) => (text += chunk));
       request.on("end", () => {
-        events.push({ at_ms: Date.now(), ...JSON.parse(text) });
+        event_log.push({ at_ms: Date.now(), ...JSON.parse(text) });
         if (process.env.KEY_TEST_LOG_REPORTS) { const { page_id, type } = events.at(-1); console.log(`report ${events.at(-1).at_ms} ${page_id} ${type}`); }
         response.writeHead(204).end();
       });
@@ -106,6 +149,24 @@ export function start_server() {
     }
     if (url.pathname === "/aligned") {
       return response.end(page(`aligned ${id}`, `${tall_filler}<input id="field">${tall_filler}`));
+    }
+    if (url.pathname === "/controls") {
+      // A text field and a checkbox up top, a control in a disabled fieldset that ]i skips, and a text field far below. The page reports each focus.
+      const controls = '<input id="first"><input type="checkbox" id="box"><fieldset disabled><input id="off"></fieldset>' + tall_filler + '<input id="last">';
+      return response.end(page(`controls ${id}`, controls, "<script>addEventListener('focusin', (event) => send('focused', { id: event.target.id }))</script>"));
+    }
+    if (url.pathname === "/closed_field") {
+      // A field inside a closed root and a plain button outside. F9 focuses the inner field and F2 the outer one (not F10, whose key-up moves Firefox focus to the menu bar), because the test cannot reach into a closed root. With autofocus in the id, the inner field takes the focus at load. A button sits after the field in the root, so Tab moves focus inside it; "open" in the id makes the root open.
+      const build = `<div id="host"></div><button id="outside">outside</button><script>
+        const inner = document.getElementById("host").attachShadow({ mode: location.search.includes("open") ? "open" : "closed" });
+        inner.innerHTML = '<input id="inner"><button id="inner_button">inner</button>';
+        addEventListener("keydown", (event) => {
+          if (event.key === "F9") inner.getElementById("inner").focus();
+          if (event.key === "F2") document.getElementById("outside").focus();
+        });
+        if (location.search.includes("autofocus")) addEventListener("load", () => inner.getElementById("inner").focus());
+      </script>`;
+      return response.end(page(`closed_field ${id}`, build));
     }
     if (url.pathname === "/framed") {
       const frame = '<iframe id="inner" src="/page?id=inner" style="width:300px;height:200px"></iframe>';
@@ -135,6 +196,16 @@ export function start_server() {
       const links = `<a href="/page?id=hint_hidden" style="display:none">hidden</a>${covered}<p><a href="/page?id=hint_one">one</a></p><p><a href="/page?id=hint_two">two</a></p>`;
       return response.end(page(`hints ${id}`, links + tall_filler));
     }
+    if (url.pathname === "/follow_rel") {
+      // The head link is the rel match. The visible text link would match a pattern too, so the test shows rel wins.
+      const head = '<link rel="next" href="/page?id=follow_rel_next"><link rel="prev" href="/page?id=follow_rel_prev">';
+      return response.end(page(`follow_rel ${id}`, '<a href="/page?id=follow_text_decoy">Next</a>' + tall_filler, head));
+    }
+    if (url.pathname === "/follow_text") {
+      // Both links sit below a tall filler, because a next link is usually off-screen.
+      const links = '<a href="/page?id=follow_text_prev">Previous</a> <a href="/page?id=follow_text_next">Next</a>';
+      return response.end(page(`follow_text ${id}`, tall_filler + links));
+    }
     if (url.pathname === "/media") {
       // A video in a player box of its own size, under an overlay that catches the pointer as a site's controls do, and a hidden audio.
       const player = '<div id="player" style="position:relative;width:320px;height:180px;background:#222"><video id="video" src="/tone.wav" loop style="width:320px;height:180px"></video><div style="position:absolute;inset:0"></div></div>';
@@ -157,10 +228,11 @@ document.addEventListener("fullscreenchange", () => send("media_fullscreen", { e
       return response.end(page(`hoverbox ${id}`, boxes + script));
     }
     if (url.pathname === "/chosen") {
-      // A custom dropdown that opens on mousedown, as Chosen does: mousedown cancels the default and focuses its own search field. Its click handler only cancels the default. The page reports each mouse event it receives.
+      // A custom dropdown that opens on mousedown, as Chosen does: mousedown cancels the default and focuses its own search field. Its click handler only cancels the default. The page reports each mouse event it receives and keeps their order in `chosen_order`, because reports sent within a millisecond can reach the server out of order.
       const widget = '<div id="c"><a id="single" href="javascript:void(0)" tabindex="-1">Select</a><ul id="drop" style="position:absolute;left:-9000px"><li><input id="search"></li></ul></div>';
       const script = `<script>const c = document.getElementById("c");
-for (const name of ["pointerdown", "mousedown", "mouseup", "click"]) c.addEventListener(name, (event) => { if (name === "click") event.preventDefault(); send("chosen_" + name); });
+window.chosen_order = [];
+for (const name of ["pointerdown", "mousedown", "mouseup", "click"]) c.addEventListener(name, (event) => { if (name === "click") event.preventDefault(); window.chosen_order.push("chosen_" + name); send("chosen_" + name); });
 c.addEventListener("mousedown", (event) => { event.preventDefault(); document.getElementById("drop").style.left = "0"; document.getElementById("search").focus(); send("chosen_open"); })</script>`;
       return response.end(page(`chosen ${id}`, widget + tall_filler + script));
     }
@@ -247,7 +319,9 @@ shadow.getElementById("panel").addEventListener("scroll", () => send("panel_scro
     }
     if (url.pathname === "/caret_tall_frame") {
       // A tall same-origin frame below a spacer, with the page scrolled so the frame's text sits on screen. In the frame's own coordinates that text is far below the page's viewport edge, so a wrong space shows as a scroll.
-      const inner = '<body style=\'margin:0\'><div style=\'height:1200px\'></div><p>target words</p></body>';
+      // The frame reports its keydowns only, as ${id}_frame, so the key probe of the harness can see that keys reach it.
+      const report_keys = `<script>addEventListener('keydown', (event) => fetch('/report', { method: 'POST', body: JSON.stringify({ page_id: '${id}_frame', type: 'keydown', key: event.key, code: event.code }) }))</script>`;
+      const inner = `<body style='margin:0'><div style='height:1200px'></div><p>target words</p>${report_keys}</body>`;
       const frame = `<div style="height:600px"></div><iframe id="tall" srcdoc="${inner}" style="width:400px;height:3000px;border:0;display:block"></iframe>`;
       return response.end(page(`caret_tall_frame ${id}`, frame, "<script>addEventListener('load', () => { scrollTo(0, 1500); document.getElementById('tall').contentWindow.focus(); })</script>"));
     }
@@ -359,7 +433,7 @@ shadow.getElementById("panel").addEventListener("scroll", () => send("panel_scro
   });
   return new Promise((resolve) => {
     server.listen(0, "127.0.0.1", () => {
-      resolve({ events, port: server.address().port, close: () => server.close() });
+      resolve({ events, wait_for_event: event_log.wait_for, port: server.address().port, close: () => server.close() });
     });
   });
 }

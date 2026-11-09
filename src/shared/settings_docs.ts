@@ -8,6 +8,8 @@ import type { SettingName } from "./settings_table.ts";
 export const SETTING_DOCS: Record<SettingName, string> = {
   which_key_delay_ms: "Milliseconds after a prefix key before the which-key panel shows",
   which_key_border: "Corner style of the which-key panel border",
+  next_patterns: "Link texts that \`page.follow\` takes for the next page, best first",
+  prev_patterns: "Link texts that \`page.follow\` takes for the previous page, best first",
   hint_letters: "The letters hint labels use, each once, at least two",
   ignore_sites: "Match patterns where DesertFox starts in ignore mode",
   mode_indicator: "When the mode badge shows: always (NORMAL too), not_normal, or off",
@@ -21,6 +23,7 @@ export const SETTING_DOCS: Record<SettingName, string> = {
   completion_all_windows: "Whether the tab completion lists the tabs of every window, not only the line's window",
   cmdline_prompt: 'Before the command line input: "caret" for a bold > , "colon" for a primary-colored :, or your own text (include the trailing space you want)',
   open_completion: "Groups that open completes from, in list order. A source left out is not read. Default is both",
+  statusbar_widgets: "Widgets on the right of the open command line, in list order: url (colored by security), scroll (Top, N%, Bot or All) and tabs ([n/m]). An empty list hides the area",
   history_completion_max: "History rows that open completion shows for an empty word",
   history_list_max: "History rows that the history command lists for an empty word",
   newtab_clock: 'The new tab page clock: false hides it, true or "analog" shows the analog face, "digital" shows the seven-segment digits',

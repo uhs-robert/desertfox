@@ -43,22 +43,23 @@ function make_page(delay_ms: number | undefined) {
   );
   const flow = create_key_flow({
     get_mode: state.get_mode,
-    take_pass_next: state.take_pass_next,
-    in_editable_field: () => false,
-    is_loading: () => false,
-    sink_of: () => undefined,
-    leave_insert: () => state.escape(),
-    run_leaf: (leaf, count) => void ran.push([leaf.steps[0]?.invocation.id, count]),
-    on_prefix: follow_prefix,
+    take_pass_next_: state.take_pass_next_,
+    in_editable_field_: () => false,
+    is_loading_: () => false,
+    loading_sink_bundles_: () => [],
+    sink_of_: () => undefined,
+    leave_insert_: () => state.escape(),
+    run_leaf_: (leaf, count) => void ran.push([leaf.steps[0]?.invocation.id, count]),
+    on_prefix_: follow_prefix,
   });
-  state.listen(() => flow.reset_sequence());
-  flow.set_matcher(create_matcher(keymap));
+  state.listen(() => flow.reset_sequence_());
+  flow.set_matcher_(create_matcher(keymap));
   return { state, flow, shown, hidden, ran, is_up: () => panel_up };
 }
 
 test("a prefix key starts the timer and the panel shows after the delay", async () => {
   const page = make_page(DELAY_MS);
-  page.flow.handle_token("g");
+  page.flow.handle_token_("g");
   assert.deepEqual(page.shown, []);
   await sleep(DELAY_MS + 40);
   assert.deepEqual(page.shown, ["normal:g"]);
@@ -66,19 +67,19 @@ test("a prefix key starts the timer and the panel shows after the delay", async 
 
 test("the next key cancels the timer before it fires", async () => {
   const page = make_page(DELAY_MS);
-  page.flow.handle_token("g");
+  page.flow.handle_token_("g");
   await sleep(DELAY_MS / 2);
-  page.flow.handle_token("g");
+  page.flow.handle_token_("g");
   await sleep(DELAY_MS + 40);
   assert.deepEqual(page.shown, []);
 });
 
 test("the next key hides a panel that is up, and a longer prefix shows again after a new pause", async () => {
   const page = make_page(DELAY_MS);
-  page.flow.handle_token("g");
+  page.flow.handle_token_("g");
   await sleep(DELAY_MS + 40);
   assert.equal(page.is_up(), true);
-  page.flow.handle_token("x");
+  page.flow.handle_token_("x");
   assert.equal(page.is_up(), false);
   await sleep(DELAY_MS + 40);
   assert.deepEqual(page.shown, ["normal:g", "normal:gx"]);
@@ -86,24 +87,24 @@ test("the next key hides a panel that is up, and a longer prefix shows again aft
 
 test("a mode change cancels the timer", async () => {
   const page = make_page(DELAY_MS);
-  page.flow.handle_token("g");
-  page.state.set_mode("ignore");
+  page.flow.handle_token_("g");
+  page.state.set_mode_("ignore");
   await sleep(DELAY_MS + 40);
   assert.deepEqual(page.shown, []);
 });
 
 test("a mode change hides a panel that is up", async () => {
   const page = make_page(DELAY_MS);
-  page.flow.handle_token("g");
+  page.flow.handle_token_("g");
   await sleep(DELAY_MS + 40);
-  page.state.set_mode("caret");
+  page.state.set_mode_("caret");
   assert.equal(page.is_up(), false);
 });
 
 test("a key that is not a prefix, or a bare count, starts no timer", async () => {
   const page = make_page(DELAY_MS);
-  page.flow.handle_token("j");
-  page.flow.handle_token("3");
+  page.flow.handle_token_("j");
+  page.flow.handle_token_("3");
   await sleep(DELAY_MS + 40);
   assert.deepEqual(page.shown, []);
 });
@@ -111,7 +112,7 @@ test("a key that is not a prefix, or a bare count, starts no timer", async () =>
 test("a delay of zero or none turns which-key off", async () => {
   for (const delay of [0, undefined] as const) {
     const page = make_page(delay);
-    page.flow.handle_token("g");
+    page.flow.handle_token_("g");
     await sleep(DELAY_MS + 40);
     assert.deepEqual(page.shown, []);
   }
@@ -130,73 +131,73 @@ test("an answer that arrives after the next key finds its prefix no longer curre
 
 test("Backspace drops the last key of the prefix and shows the parent group", async () => {
   const page = make_page(DELAY_MS);
-  page.flow.handle_token("g");
-  page.flow.handle_token("x");
+  page.flow.handle_token_("g");
+  page.flow.handle_token_("x");
   await sleep(DELAY_MS + 40);
-  assert.equal(page.flow.handle_token("<Backspace>"), "cancel");
+  assert.equal(page.flow.handle_token_("<Backspace>"), "cancel");
   assert.equal(page.is_up(), false);
   await sleep(DELAY_MS + 40);
   assert.deepEqual(page.shown, ["normal:gx", "normal:g"]);
   // The shorter prefix is live: `g` completes `gg`.
-  assert.equal(page.flow.handle_token("g"), "cancel");
+  assert.equal(page.flow.handle_token_("g"), "cancel");
 });
 
 test("Backspace at the first level closes the panel and clears the prefix", async () => {
   const page = make_page(DELAY_MS);
-  page.flow.handle_token("g");
+  page.flow.handle_token_("g");
   await sleep(DELAY_MS + 40);
   assert.equal(page.is_up(), true);
-  assert.equal(page.flow.handle_token("<Backspace>"), "cancel");
+  assert.equal(page.flow.handle_token_("<Backspace>"), "cancel");
   assert.equal(page.is_up(), false);
   await sleep(DELAY_MS + 40);
   assert.deepEqual(page.shown, ["normal:g"]);
   // No prefix is left: `x` alone is not the group's `x`, so it is not matched here.
-  assert.equal(page.flow.handle_token("x"), "pass");
+  assert.equal(page.flow.handle_token_("x"), "pass");
 });
 
 test("Escape closes the panel and clears the prefix at any depth", async () => {
   const page = make_page(DELAY_MS);
-  page.flow.handle_token("g");
-  page.flow.handle_token("x");
+  page.flow.handle_token_("g");
+  page.flow.handle_token_("x");
   await sleep(DELAY_MS + 40);
   assert.equal(page.is_up(), true);
-  page.flow.handle_token("<Escape>");
+  page.flow.handle_token_("<Escape>");
   assert.equal(page.is_up(), false);
-  assert.equal(page.flow.handle_token("x"), "pass");
+  assert.equal(page.flow.handle_token_("x"), "pass");
 });
 
 test("Backspace with no prefix pending goes to the page", () => {
   const page = make_page(DELAY_MS);
-  assert.equal(page.flow.handle_token("<Backspace>"), "pass");
+  assert.equal(page.flow.handle_token_("<Backspace>"), "pass");
 });
 
 test("Backspace keeps the count of a half-typed sequence", () => {
   const page = make_page(DELAY_MS);
-  for (const token of ["3", "g", "x", "<Backspace>", "t"]) page.flow.handle_token(token);
+  for (const token of ["3", "g", "x", "<Backspace>", "t"]) page.flow.handle_token_(token);
   assert.deepEqual(page.ran, [["tab", 3]]);
 });
 
 test("Backspace shows the parent panel at once, without the delay", async () => {
   const page = make_page(DELAY_MS);
-  page.flow.handle_token("g");
-  page.flow.handle_token("x");
+  page.flow.handle_token_("g");
+  page.flow.handle_token_("x");
   await sleep(DELAY_MS + 40);
-  page.flow.handle_token("<Backspace>");
+  page.flow.handle_token_("<Backspace>");
   await sleep(DELAY_MS / 3);
   assert.deepEqual(page.shown, ["normal:gx", "normal:g"]);
 });
 
 test("a new keymap cancels a pending panel and hides one that is up", async () => {
   const pending = make_page(DELAY_MS);
-  pending.flow.handle_token("g");
-  pending.flow.set_matcher(create_matcher(keymap));
+  pending.flow.handle_token_("g");
+  pending.flow.set_matcher_(create_matcher(keymap));
   await sleep(DELAY_MS + 40);
   assert.deepEqual(pending.shown, []);
 
   const up = make_page(DELAY_MS);
-  up.flow.handle_token("g");
+  up.flow.handle_token_("g");
   await sleep(DELAY_MS + 40);
   assert.equal(up.is_up(), true);
-  up.flow.set_matcher(create_matcher(keymap));
+  up.flow.set_matcher_(create_matcher(keymap));
   assert.equal(up.is_up(), false);
 });

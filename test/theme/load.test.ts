@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { derive_roles } from "../../src/shared/theme/derive.ts";
-import { built_in_theme_names, load_theme } from "../../src/shared/theme/load.ts";
+import { load_theme } from "../../src/shared/theme/load.ts";
+import { OASIS_THEMES } from "../../src/shared/themes.ts";
 
 const colors = derive_roles({ bg_core: "#101010", fg_core: "#eeeeee", primary: "#88aaff", accent: "#ffcc66" }, "dark");
 
@@ -43,9 +44,10 @@ test("a hand-edited local theme with a missing variant falls back instead of cra
   }
 });
 
+// Oasis themes only: a contributed built-in theme need not follow this rule.
 // The cursor color is also the normal color in oasis_desert dark, so only visual has to stand apart.
 test("every built-in theme gives visual mode its own color in both variants", () => {
-  for (const name of built_in_theme_names()) {
+  for (const name of Object.keys(OASIS_THEMES)) {
     const theme = load_theme(name, 3)!;
     for (const variant of ["dark", "light"] as const) {
       const colors_of = theme[variant];

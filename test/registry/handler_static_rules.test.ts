@@ -74,6 +74,7 @@ const STUB_ANSWERS: Record<string, unknown> = {
   "storage.local.get": {},
   "storage.managed.get": {},
   "runtime.getURL": "moz-extension://stub/home.html",
+  "runtime.sendNativeMessage": { ok: true, config_dir: "/stub/desertfox", config_dir_exists: true, files: {} },
 };
 
 // A `browser` whose calls answer from STUB_ANSWERS, so a handler runs past its first browser call into its own checks.
@@ -125,7 +126,7 @@ test("no background handler refuses args the schema accepts", async () => {
       if (command.runs_in !== "background") continue;
       for (const args of accepted_args(command)) {
         try {
-          await Promise.race([Promise.resolve(command.run(CTX, args)), new Promise((resolve) => setTimeout(resolve, 200))]);
+          await Promise.race([Promise.resolve(command.run!(CTX, args)), new Promise((resolve) => setTimeout(resolve, 200))]);
         } catch (error) {
           if ((error as Error).name === "RuntimeRefusal") {
             const index = (EXPECTED_REFUSALS[command.id] ?? []).findIndex((pattern) => pattern.test((error as Error).message));

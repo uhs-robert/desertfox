@@ -14,6 +14,8 @@ const EXPECTATIONS: Record<string, string> = {
   which_key_border: '"square", "round" or "chamfer"',
   hint_letters: "a string of 2 or more distinct letters",
   ignore_sites: "a list of match pattern strings",
+  next_patterns: "a list of link texts",
+  prev_patterns: "a list of link texts",
   mode_indicator: '"always", "not_normal" or "off"',
   palette: "a theme name",
   light_intensity: "a whole number from 1 to 5",
@@ -25,6 +27,7 @@ const EXPECTATIONS: Record<string, string> = {
   completion_all_windows: "true or false",
   cmdline_prompt: "a string of 1 to 8 characters on one line",
   open_completion: 'a list of "bookmarks" and "history" with no repeat',
+  statusbar_widgets: 'a list of "url", "scroll" and "tabs" with no repeat',
   history_completion_max: "a whole number, 0 or more",
   history_list_max: "a whole number, 0 or more",
   newtab_clock: 'true, false, "analog" or "digital"',
@@ -55,6 +58,7 @@ test("every setting keeps its listed values", () => {
     completion_all_windows: ["true", "false"],
     cmdline_prompt: ["caret", "colon"],
     open_completion: ["bookmarks", "history"],
+    statusbar_widgets: ["url", "scroll", "tabs"],
     newtab_clock: ["true", "false", "analog", "digital"],
     newtab_date: ["true", "false"],
     newtab_clock_format: ["12", "24"],
@@ -65,7 +69,7 @@ test("every setting keeps its listed values", () => {
 });
 
 test("the list, unsettable and toggle sets stay the same", () => {
-  assert.deepEqual(SETTING_NAMES.filter((name) => SETTING_SPECS[name].is_list), ["ignore_sites", "open_completion"]);
+  assert.deepEqual(SETTING_NAMES.filter((name) => SETTING_SPECS[name].is_list), ["ignore_sites", "next_patterns", "prev_patterns", "open_completion", "statusbar_widgets"]);
   assert.deepEqual(SETTING_NAMES.filter((name) => !SETTING_SPECS[name].settable), ["search_prefixes", "container_prefixes", "newtab_links"]);
   // A toggle flips the value in force, so an absent one flips from its default.
   const toggles = Object.fromEntries(SETTING_NAMES.filter((name) => SETTING_SPECS[name].is_toggle).map((name) => [name, DEFAULT_SETTINGS[name]]));
@@ -77,6 +81,8 @@ const ACCEPTS: Record<string, unknown[]> = {
   which_key_border: ["square", "round", "chamfer"],
   hint_letters: ["ab", "asdfghjkl", "12"],
   ignore_sites: [[], ["*://a.com/*", "x"]],
+  next_patterns: [[], ["next", ">"]],
+  prev_patterns: [[], ["prev", "<"]],
   mode_indicator: ["always", "not_normal", "off"],
   palette: ["oasis_moonlight", "no_such_theme"],
   light_intensity: [1, 5],
@@ -89,6 +95,7 @@ const ACCEPTS: Record<string, unknown[]> = {
   // Code points, not UTF-16 units: eight emoji are sixteen units.
   cmdline_prompt: ["c", "> ", "12345678", "\u{1F600}".repeat(8), "\t"],
   open_completion: [[], ["history"], ["history", "bookmarks"]],
+  statusbar_widgets: [[], ["tabs"], ["tabs", "url"]],
   history_completion_max: [0, 10],
   history_list_max: [0, 10],
   newtab_clock: [true, false, "analog", "digital"],
@@ -107,6 +114,8 @@ const REFUSES: Record<string, unknown[]> = {
   which_key_border: ["Square", "", 1],
   hint_letters: ["a", "aa", "aba", 12],
   ignore_sites: ["a.com", [""], [1]],
+  next_patterns: ["next", [""], [1]],
+  prev_patterns: ["prev", [""], [1]],
   mode_indicator: ["normal", true],
   palette: ["", 1],
   light_intensity: [0, 6, 2.5, "3"],
@@ -118,6 +127,7 @@ const REFUSES: Record<string, unknown[]> = {
   completion_all_windows: ["true", 1],
   cmdline_prompt: ["", "123456789", "\u{1F600}".repeat(9), "a\nb", "a\rb", 1, true],
   open_completion: [["bookmarks", "bookmarks"], ["tabs"], "history"],
+  statusbar_widgets: [["url", "url"], ["clock"], "url"],
   history_completion_max: [-1, 1.5, "10"],
   history_list_max: [-1, 1.5, "10"],
   newtab_clock: ["true", "Analog", 1],
@@ -175,6 +185,8 @@ test("the defaults stay the same", () => {
     which_key_border: "square",
     hint_letters: "asdfghjkl",
     ignore_sites: [],
+    next_patterns: ["next", "more", "newer", ">", "\u203a", "\u2192", "\u00bb", "\u226b", ">>"],
+    prev_patterns: ["prev", "previous", "older", "<", "\u2039", "\u2190", "\u00ab", "\u226a", "<<"],
     mode_indicator: "always",
     palette: "oasis_moonlight",
     light_intensity: 3,
@@ -185,6 +197,7 @@ test("the defaults stay the same", () => {
     completion_all_windows: false,
     cmdline_prompt: "caret",
     open_completion: ["bookmarks", "history"],
+    statusbar_widgets: ["url", "scroll", "tabs"],
     history_completion_max: 10,
     history_list_max: 20,
     newtab_clock: true,
@@ -230,5 +243,7 @@ test("the editor schema matches its output before #85, apart from the listed cha
     assert.equal(properties[name].description, undefined, name);
     properties[name].description = described_now[name]!.description;
   }
+  // Settings added since the fixture was taken.
+  for (const name of ["statusbar_widgets", "next_patterns", "prev_patterns"]) properties[name] = JSON.parse(JSON.stringify((settings_schema().properties as Record<string, unknown>)[name]));
   assert.deepEqual(JSON.parse(JSON.stringify(settings_schema())), JSON.parse(JSON.stringify(before)));
 });

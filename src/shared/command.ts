@@ -1,6 +1,7 @@
 // Command definition: the one shape the registry stores, the validator checks
 // and `commands.json` is cut from. Types, plus the list of runtime modes.
 
+import type { BundleName } from "./bundles.ts";
 import type { Outcome } from "./messages.ts";
 
 export type ParamType = "int" | "float" | "string" | "bool" | "enum";
@@ -93,7 +94,7 @@ export type CheckedArgs = Record<string, unknown>;
 // A content command may answer with an Outcome, or a promise of one that stays pending while it waits on the user. A background command returns nothing.
 export type CommandRun = (ctx: CommandContext, args: CheckedArgs) => Promise<void | Outcome> | void | Outcome;
 
-export type CommandDef = {
+type CommandCommon = {
   // `group.name`, lowercase with underscores.
   id: string;
   // Command line name, set by hand, never derived from the id.
@@ -102,7 +103,6 @@ export type CommandDef = {
   label: string;
   intent: string;
   params?: readonly ParamDef[];
-  runs_in: RunsIn;
   needs?: readonly Need[];
   // Absent means "ignore". The registry applies this default.
   count?: CountBehavior;
@@ -113,8 +113,19 @@ export type CommandDef = {
   completion?: "hidden" | readonly Mode[];
   // Absent means true. `.` replays only a repeatable background command, so false keeps a command out of the memory.
   repeatable?: boolean;
-  run: CommandRun;
 };
+
+export type BackgroundCommandDef = CommandCommon & { runs_in: "background"; run: CommandRun; bundle?: undefined };
+
+// The code of a content command lives in the page: `content_handlers` in the content script, or a lazy bundle named by `bundle`. The definition holds no `run`.
+export type ContentCommandDef = CommandCommon & {
+  runs_in: "content";
+  // The lazy bundle that holds the code. The content script loads it on the first run and asks it for the handler.
+  bundle?: BundleName;
+  run?: undefined;
+};
+
+export type CommandDef = BackgroundCommandDef | ContentCommandDef;
 
 // A `commands.json` entry: the definition without the handler and the router fields.
 export type CommandMeta = Pick<

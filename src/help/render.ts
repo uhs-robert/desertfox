@@ -4,12 +4,14 @@ import { copy_text } from "../content/caret/copy_text.ts";
 import type { Block, Inline } from "./blocks.ts";
 import type { CommandRow, EngineRow, HelpModel, KeyRow } from "./model.ts";
 import { STYLE_CLASSES, STYLE_VARIABLES } from "./model.ts";
+import { native_install_hash } from "../shared/native_host.ts";
+import { GROUPS } from "./settings_model.ts";
 import { PAGES } from "./route.ts";
 import type { PageId, Route } from "./route.ts";
 
-type Child = Node | string;
+export type Child = Node | string;
 
-function el(tag: string, class_name: string | undefined, ...children: Child[]): HTMLElement {
+export function el(tag: string, class_name: string | undefined, ...children: Child[]): HTMLElement {
   const node = document.createElement(tag);
   if (class_name) node.className = class_name;
   node.append(...children);
@@ -173,22 +175,10 @@ function home_keycap(): HTMLElement {
 }
 
 function home_page(model: HelpModel): HTMLElement[] {
-  const [warnings_section, settings_section, change_config_section] = HOME_SECTIONS as [Section, Section, Section];
   const warnings = model.warnings.length === 0
     ? el("p", "desertfox-help-muted", "No warnings.")
     : el("ul", "desertfox-help-warnings", ...model.warnings.map((warning) => el("li", undefined, warning)));
-  const settings = el("table", "desertfox-help-settings", ...model.settings.map((row) => el("tr", undefined, el("td", undefined, el("code", undefined, row.name)), el("td", undefined, el("code", undefined, row.value)), el("td", "desertfox-help-muted", row.tag ?? ""))));
-  return [
-    block_node(model.tip),
-    section_heading("home", warnings_section),
-    warnings,
-    section_heading("home", settings_section),
-    el("p", undefined, `Config source: ${model.config_source}. This list is read-only.`),
-    settings,
-    section_heading("home", change_config_section),
-    el("p", undefined, "Edit the config files, then:"),
-    el("ol", undefined, ...model.rebuild_steps.map((step) => el("li", undefined, el("code", undefined, step)))),
-  ];
+  return [block_node(model.tip), el("h2", undefined, "Warnings"), warnings];
 }
 
 function commands_page(model: HelpModel): HTMLElement[] {
@@ -210,9 +200,46 @@ function styling_page(): HTMLElement[] {
   ];
 }
 
+// Opens the panel `:native.install` opens, by the same hash. The nonce makes a tab already on the panel show it again.
+function install_native_host_button(): HTMLElement {
+  const button = el("button", "desertfox-settings-install", "Install native host") as HTMLButtonElement;
+  button.type = "button";
+  button.addEventListener("click", () => {
+    location.hash = native_install_hash(Date.now());
+  });
+  return el("p", undefined, button);
+}
+
+const CONFIG_SOURCE_CLASS = "desertfox-config-source";
+const config_source_text = (model: HelpModel): string => `Config source: ${model.config_source}.`;
+
+// The Settings page is not redrawn on a settings change, so a reload that changes the source updates this line in place and leaves the fields alone.
+export function update_config_source(model: HelpModel): void {
+  const line = document.querySelector(`.${CONFIG_SOURCE_CLASS}`);
+  if (line) line.textContent = config_source_text(model);
+}
+
+// Settings go in after the render: `main.ts` fills `.desertfox-settings` from the background.
+function settings_page(model: HelpModel): HTMLElement[] {
+  return [
+    el("p", undefined, "A change is saved at once, the same as ", el("code", undefined, ":set"), ". Each setting shows the layer that sets its value. Reset drops the saved and temp edit, so the config file value applies."),
+    el("p", CONFIG_SOURCE_CLASS, config_source_text(model)),
+    el("h2", undefined, "Apply a config file edit"),
+    el("p", undefined, "After you edit the config files, run:"),
+    el("ol", undefined, ...model.rebuild_steps.map((step) => el("li", undefined, el("code", undefined, step)))),
+    install_native_host_button(),
+    el("div", "desertfox-settings", ...page_sections("settings", []).flatMap((section, index) => {
+      const group = el("div", "desertfox-settings-group");
+      group.setAttribute("data-group", GROUPS[index]!.title);
+      return [section_heading("settings", section), group];
+    })),
+  ];
+}
+
 function page_body(route: Route, model: HelpModel, guide: Block[]): HTMLElement[] {
   switch (route.page) {
     case "home": return home_page(model);
+    case "settings": return settings_page(model);
     case "quick-start": return quick_start_page(model.quick_start);
     case "search-engines": return search_engines_page(guide, model);
     case "commands": return commands_page(model);
@@ -268,14 +295,14 @@ export function sections_from_titles(titles: string[]): Section[] {
   });
 }
 
-const HOME_SECTIONS = sections_from_titles(["Warnings", "Settings", "Change the config"]);
 const STYLING_SECTIONS = sections_from_titles(["Variables", "Classes"]);
 
 // The sections a page lists in the sidebar. Only Search Engines reads the guide.
 export function page_sections(page: PageId, source: HelpModel | Block[], guide: Block[] = []): Section[] {
   const quick_start = Array.isArray(source) ? source : source.quick_start;
   switch (page) {
-    case "home": return HOME_SECTIONS;
+    case "home": return [];
+    case "settings": return sections_from_titles(GROUPS.map((group) => group.title));
     case "quick-start": return sections_from_titles(quick_start.flatMap((block) => (block.kind === "heading" && block.level === 2 ? [block.text] : [])));
     case "commands": return Array.isArray(source) ? [] : sections_from_titles(source.groups.map((group) => group.name));
     case "search-engines": return sections_from_titles([...guide.flatMap((block) => (block.kind === "heading" && block.level === GUIDE_SUBSECTION_LEVEL ? [block.text] : [])), YOUR_ENGINES]);

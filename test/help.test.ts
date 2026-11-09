@@ -14,7 +14,6 @@ function sample() {
   registry.define("scroll.lines", {
     name: "scroll", label: "Scroll Lines", intent: "Scroll by lines.", runs_in: "content",
     params: [{ name: "count", type: "int", default: 1 }],
-    run: () => {},
   });
   registry.define("open.url", {
     name: "open", label: "Open URL", intent: "Open a URL.", runs_in: "background",
@@ -164,12 +163,12 @@ test("the styling page lists every theme role as a variable", () => {
   assert.ok(names.includes("--desertfox-font") && names.includes("--desertfox-radius"));
 });
 
-test("the model carries the settings and config source for the home page", () => {
+test("the model carries the config source and apply steps for the settings page", () => {
   const { commands, compiled } = sample();
   const status = { source: "managed" as const, settings: { ...DEFAULT_SETTINGS, palette: "x" }, managed_file_hint: "", saved: [], temp: [], configured: [] };
   const model = build_help_model(commands, compiled, [], {}, {}, status);
-  assert.equal(model.config_source, "Managed storage file");
-  assert.deepEqual(model.settings.find((row) => row.name === "palette"), { name: "palette", value: '"x"' });
+  assert.equal(model.config_source, "Managed storage file, until config.reload reads the files");
+  assert.match(model.rebuild_steps[1]!, /config\.reload/);
   assert.equal(build_help_model(commands, compiled, []).config_source, "Unknown, the background has not written a status yet");
 });
 
@@ -219,4 +218,11 @@ test("a conditional default reads as the value and its condition", () => {
   });
   const model = build_help_model(build_commands_file(registry).commands, undefined, []);
   assert.equal(model.groups[0]!.commands[0]!.params[0]!.default, '"" when where is tab, background or window');
+});
+
+test("the help home and new tab pages load page.js by tag, because executeScript is refused there", () => {
+  for (const file of ["../src/help/home.html", "../src/newtab/newtab.html"]) {
+    const html = readFileSync(new URL(file, import.meta.url), "utf8");
+    assert.ok(html.indexOf('<script src="page.js"></script>') > html.indexOf('<script src="content.js"></script>'), file);
+  }
 });

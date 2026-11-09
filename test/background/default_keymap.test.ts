@@ -185,6 +185,7 @@ test("a search binding on the selection opens the command line when nothing is s
     send_to_tab: async () => undefined,
     open_cmdline: async (_tab, _frame, text) => void log.push(text),
     show_refusal: async () => undefined,
+    is_disabled: async () => false,
     repeat_memory: no_repeat_memory,
   });
   const binding = { id: "open.search", args: { query: { from: "selection" } } };

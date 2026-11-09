@@ -11,8 +11,8 @@ function page_candidate(): ScrollCandidate<Element> | undefined {
   if (!root) return undefined;
   return {
     ref: root,
-    can_scroll_x: root.scrollWidth > root.clientWidth,
-    can_scroll_y: root.scrollHeight > root.clientHeight,
+    can_scroll_x_: root.scrollWidth > root.clientWidth,
+    can_scroll_y_: root.scrollHeight > root.clientHeight,
     area: root.clientWidth * root.clientHeight,
   };
 }
@@ -35,9 +35,34 @@ function scroll_target(axis: ScrollAxis): Element {
   return target ?? document.scrollingElement ?? document.documentElement;
 }
 
+// Firefox decides whether "smooth" animates (general.smoothScroll). A held key restarts the animation on every repeat and lags far behind the key, so repeats jump.
+const smooth_unless = (repeat: boolean): ScrollBehavior => (repeat ? "instant" : "smooth");
+
+// Firefox restarts a smooth scroll from the animated position, so a second tap would drop the distance the first still had to go. The end of the page scroll in flight is kept and the next tap adds to it.
+let in_flight: { target: Element; end: number } | undefined;
+let clear_in_flight_timer: ReturnType<typeof setTimeout> | undefined;
+const FLIGHT_MS = 600;
+
+const end_flight = () => {
+  clearTimeout(clear_in_flight_timer);
+  in_flight = undefined;
+};
+
+export const tapped_end = (flight_end: number | undefined, top: number, distance: number, max_top: number): number =>
+  Math.min(Math.max((flight_end ?? top) + distance, 0), max_top);
+
 const scroll_by = (dx: number, dy: number) => {
+  end_flight();
   const axis = dy !== 0 ? "y" : "x";
   scroll_target(axis).scrollBy({ left: dx, top: dy, behavior: "instant" });
+};
+
+const smooth_page_tap = (target: Element, distance: number) => {
+  const end = tapped_end(in_flight?.target === target ? in_flight.end : undefined, target.scrollTop, distance, target.scrollHeight - target.clientHeight);
+  clearTimeout(clear_in_flight_timer);
+  in_flight = { target, end };
+  clear_in_flight_timer = setTimeout(end_flight, FLIGHT_MS);
+  target.scrollTo({ top: end, behavior: "smooth" });
 };
 
 export const scroll_lines: ContentHandler = {
@@ -49,18 +74,25 @@ export const scroll_pixels: ContentHandler = {
 };
 
 export const scroll_pages: ContentHandler = {
-  run: (args) => scroll_by(0, Number(args.fraction) * scroll_target("y").clientHeight),
+  run: (args, repeat) => {
+    const target = scroll_target("y");
+    const distance = Number(args.fraction) * Number(args.count) * target.clientHeight;
+    if (repeat) scroll_by(0, distance);
+    else smooth_page_tap(target, distance);
+  },
 };
 
 export const scroll_to: ContentHandler = {
-  run: (args) => {
+  run: (args, repeat) => {
     const axis = args.axis as ScrollAxis;
+    const behavior = smooth_unless(repeat);
+    end_flight();
     const target = scroll_target(axis);
     const percent = Number(args.percent);
     if (axis === "x") {
-      target.scrollTo({ left: percent_to_offset(percent, target.scrollWidth, target.clientWidth), behavior: "instant" });
+      target.scrollTo({ left: percent_to_offset(percent, target.scrollWidth, target.clientWidth), behavior });
     } else {
-      target.scrollTo({ top: percent_to_offset(percent, target.scrollHeight, target.clientHeight), behavior: "instant" });
+      target.scrollTo({ top: percent_to_offset(percent, target.scrollHeight, target.clientHeight), behavior });
     }
   },
 };

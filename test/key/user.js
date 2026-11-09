@@ -21,3 +21,5 @@ user_pref("browser.urlbar.suggest.searches", false);
 user_pref("browser.search.suggest.enabled", false);
 user_pref("browser.urlbar.autoFill", false);
 user_pref("privacy.userContext.enabled", true);
+// The nested session runs no notification server, so the system backend drops every notification, and the refusal cases read none. Firefox's own alerts keep them.
+user_pref("alerts.useSystemBackend", false);

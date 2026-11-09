@@ -39,8 +39,10 @@ test("fg_comment stays at 3.9 or better on bg_core in every set", () => {
   for (const [name, colors] of sets) assert.ok(contrast(colors.fg_comment, colors.bg_core) >= 3.9, `${name}: ${contrast(colors.fg_comment, colors.bg_core).toFixed(2)}`);
 });
 
-// fg_dim colors the usage hint, on bg_core and the command line panel. Its worst case is 2.52 on bg_mantle (luna, light 5) and 2.98 on bg_core (night, light 3).
-// The floor is a guard against a drop, not a target.
-test("fg_dim stays at 2.5 or better on bg_mantle in every set", () => {
-  for (const [name, colors] of sets) assert.ok(contrast(colors.fg_dim, colors.bg_mantle) >= 2.5, `${name}: ${contrast(colors.fg_dim, colors.bg_mantle).toFixed(2)}`);
+// fg_dim colors the usage hint, on bg_core and the command line panel. tools/build_themes.ts raises it to 3:1 on both.
+test("fg_dim is 3:1 or better on bg_core and bg_mantle in every set", () => {
+  for (const [name, colors] of sets) {
+    assert.ok(contrast(colors.fg_dim, colors.bg_core) >= 3, `${name}: bg_core ${contrast(colors.fg_dim, colors.bg_core).toFixed(2)}`);
+    assert.ok(contrast(colors.fg_dim, colors.bg_mantle) >= 3, `${name}: bg_mantle ${contrast(colors.fg_dim, colors.bg_mantle).toFixed(2)}`);
+  }
 });

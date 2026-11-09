@@ -111,14 +111,14 @@ test("a badge draw queued while ui.js loads does not paint over a later draw", a
   let finish_load: (loaded: boolean) => void = () => {};
   bundles.connect({
     // ui.js registers its handler as it runs, a moment before the background answers the load.
-    request_bundle: () => new Promise((resolve) => (finish_load = resolve)),
-    on_idle: () => {},
-    show_error: (message) => assert.fail(message),
-    set_mode: () => {},
-    on_sink_missing: () => {},
+    request_bundle_: () => new Promise((resolve) => (finish_load = resolve)),
+    on_idle_: () => {},
+    show_error_: (message) => assert.fail(message),
+    set_mode_: () => {},
+    on_sink_missing_: () => {},
   });
   show_mode_label("NORMAL", "normal");
-  bundles.api.register_handler("ui.badge", (args) => void drawn.push(args.label));
+  bundles.api.register_handler_("ui.badge", (args) => void drawn.push(args.label));
   show_mode_label("INSERT", "insert");
   finish_load(true);
   await new Promise((resolve) => setTimeout(resolve, 0));
