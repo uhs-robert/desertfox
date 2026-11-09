@@ -1,8 +1,9 @@
 // What a picked hint does to its element.
 
 import { enter_for_click, hover, leave_toward } from "./hover.ts";
+import { selector_of } from "./selector_of.ts";
 
-export type HintAction = "here" | "tab" | "background" | "window" | "caret" | "visual" | "copy" | "copy_text" | "copy_image" | "download" | "delete" | "focus" | "hover" | "double_click" | "play_pause" | "mute" | "fullscreen";
+export type HintAction = "here" | "tab" | "background" | "window" | "caret" | "visual" | "copy" | "copy_text" | "copy_image" | "copy_selector" | "copy_html" | "download" | "delete" | "focus" | "hover" | "double_click" | "play_pause" | "mute" | "fullscreen";
 
 export type Place = "here" | "tab" | "background" | "window";
 
@@ -15,7 +16,8 @@ export const starts_caret = (action: HintAction): action is CaretMode => action 
 export type ActionDeps = {
   // A promise settles when the action is finished, so the sequence that started the hints goes on after it.
   open_link_: (url: string, place: Place) => void | Promise<unknown>;
-  copy: (text: string) => void | Promise<unknown>;
+  // The toast says `Copied <what>` where `what` is given, and quotes the text otherwise.
+  copy: (text: string, what?: string) => void | Promise<unknown>;
   // The background fetches the address. The content script never does, because the page's rules would block a picture from another site.
   image_action: (action: "copy_image" | "download", address: string) => Promise<unknown>;
   start_caret_: (target: Element, mode: CaretMode) => void;
@@ -251,6 +253,11 @@ export function perform(action: HintAction, target: Target, deps: ActionDeps, wi
   if (action === "copy") return address === undefined && (is_image_element(target) || is_media(target) || is_frame_element(target)) ? NO_WEB_ADDRESS : deps.copy(address ?? (target.textContent ?? "").trim());
   if (action === "copy_image" || action === "download") return address === undefined ? NO_WEB_ADDRESS : deps.image_action(action, address);
   if (action === "copy_text") return is_frame_element(target) ? { ok: false, message: "A frame has no text" } : deps.copy((target.textContent ?? "").trim());
+  if (action === "copy_selector") {
+    const element = target as unknown as Element;
+    return deps.copy(selector_of(element, (selector) => (element.getRootNode() as ParentNode).querySelectorAll(selector).length), "selector");
+  }
+  if (action === "copy_html") return deps.copy((target as unknown as Element).outerHTML, "HTML");
   if (action === "tab" || action === "background" || action === "window") {
     // A click on a frame does nothing, so it must not stand in for an open.
     if (address === undefined) return is_frame_element(target) ? NO_WEB_ADDRESS : click_like_a_mouse(target, pointer_from);

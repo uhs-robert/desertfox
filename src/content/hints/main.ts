@@ -143,11 +143,11 @@ async function follow_page_link(direction: FollowDirection, place: Place): Promi
 }
 
 // A refused copy answers failed and shows nothing here: the pick's answer carries it to the caller, which shows it once.
-function copy_to_clipboard(text: string): Promise<Outcome | undefined> {
+function copy_to_clipboard(text: string, what?: string): Promise<Outcome | undefined> {
   return copy_text(navigator.clipboard, text).then((copied) => {
     if (!copied) return { ok: false, message: "Could not copy to the clipboard" };
     // A view of its own, so the notice does not wipe the labels that rapid mode shows.
-    create_view().show_message_(`Copied ${text.length > 40 ? text.slice(0, 40) + "..." : text}`);
+    create_view().show_message_(`Copied ${what ?? (text.length > 40 ? text.slice(0, 40) + "..." : text)}`);
   });
 }
 

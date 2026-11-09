@@ -320,7 +320,7 @@ test("the default keymap reads as the wording draft says", () => {
     ["normal", [";", "V"], "Start visual mode at text"],
     ["normal", ["f"], "Click element"],
     ["normal", [";", "l"], "Click link"],
-    ["normal", [";", "y", "l"], "Link"],
+    ["normal", [";", "y", "l"], "Copy link URL"],
     ["normal", [";", "b", "I"], "Image"],
     ["normal", [";", "r", "a"], "Any element"],
     ["caret", ["w"], "Move caret by word"],
