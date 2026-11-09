@@ -4,6 +4,7 @@ import { compile_keymap, create_matcher } from "../src/shared/keys/index.ts";
 import type { KeymapConfig } from "../src/shared/index.ts";
 import { prune_tree, rule_frees } from "../src/shared/keys/prune_tree.ts";
 import type { CompiledKeymap } from "../src/shared/prefix_tree.ts";
+import { all_off_step } from "../src/content/site_rule.ts";
 import { list_keys } from "../src/background/list_keys.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY } from "../src/shared/prefix_tree.ts";
 
@@ -112,4 +113,29 @@ test("the browser chords and the shared tree are untouched, and a rule with a ba
 
 test("no rules leaves the key out", () => {
   assert.equal("site_rules" in compile([]).compiled, false);
+});
+
+test("a passed key the tree never binds still reaches the page", () => {
+  const { compiled } = compile_keymap(SLASH_KEYMAP, { site_rules: [{ site: "https://a.test/*", pass: "'" }] }, resolve);
+  const matcher = matcher_for(compiled, "https://a.test/");
+  assert.equal(matcher.feed("normal", "'").kind, "no_match");
+  assert.equal(matcher.passes_("normal", "'"), true);
+});
+
+test("only keeps the one-shot pass and the ways into and out of ignore mode", () => {
+  const keymap: KeymapConfig = { normal: { f: { id: "a.f" }, j: { id: "a.j" }, "<C-v>": { id: "a.v" }, "<S-Escape>": { id: "a.i" }, "<Escape>": { id: "a.e" } } };
+  const { compiled } = compile_keymap(keymap, { site_rules: [{ site: "https://a.test/*", only: "f" }] }, resolve);
+  const matcher = matcher_for(compiled, "https://a.test/");
+  for (const key of ["f", "<C-v>", "<S-Escape>", "<Escape>"]) assert.equal(matcher.feed("normal", key).kind, "match", key);
+  assert.equal(matcher.feed("normal", "j").kind, "no_match");
+  assert.equal(matcher.passes_("normal", "<Escape>"), false);
+});
+
+test("an unusable keymap never changes the mode, and a later usable one still enters ignore", () => {
+  assert.equal(all_off_step(true, true, false, "normal"), "enter");
+  assert.equal(all_off_step(false, false, true, "ignore"), "none");
+  // The page kept its ignore mode through the unusable install, and the state flag kept true with it.
+  assert.equal(all_off_step(true, false, true, "ignore"), "leave");
+  assert.equal(all_off_step(true, false, true, "normal"), "none");
+  assert.equal(all_off_step(true, false, false, "ignore"), "none");
 });

@@ -4,6 +4,7 @@
 import type { BackgroundToContent, CompiledKeymap, ContentToBackground, Mode, ModeIndicator, ReadTabAddress, RunResponse, TreeLeaf } from "../shared/index.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY, COMPILED_KEYMAP_VERSION, DEFAULT_MODE_INDICATOR, current_keymap } from "../shared/index.ts";
 import { create_matcher, event_to_token } from "../shared/keys/index.ts";
+import { all_off_step } from "./site_rule.ts";
 import { matches_any_address } from "../shared/match_pattern.ts";
 import { prune_tree, rule_frees } from "../shared/keys/prune_tree.ts";
 import { message_of } from "./bundle_host.ts";
@@ -196,12 +197,12 @@ function install_matcher(keymap: CompiledKeymap | undefined, tab_address: string
   const rule = usable?.site_rules?.find(({ regex }) => matches_any_address(regex, [location.href, tab_address]));
   const all_off = rule !== undefined && "all_off" in rule;
   const keyed_rule = rule !== undefined && !("all_off" in rule) ? rule : undefined;
-  // The rule's own ignore mode ends with the rule, so removing or rewriting it takes effect on the open page. A manual ignore mode on a page that no rule turned off stays.
-  const left_all_off = !all_off && was_all_off && page_mode.get_mode() === "ignore";
-  if (all_off && !was_all_off) page_mode.set_mode_("ignore");
+  // The rule's own ignore mode ends with the rule, so removing or rewriting it takes effect on the open page.
+  const step = all_off_step(usable !== undefined, all_off, was_all_off, page_mode.get_mode());
+  if (step === "enter") page_mode.set_mode_("ignore");
   else {
-    if (left_all_off) page_mode.set_mode_("normal");
-    if ((first_install || left_all_off) && is_editable_element(deepest_focused_element())) page_mode.focus_entered_editable_();
+    if (step === "leave") page_mode.set_mode_("normal");
+    if ((first_install || step === "leave") && is_editable_element(deepest_focused_element())) page_mode.focus_entered_editable_();
   }
   if (usable) was_all_off = all_off;
   refresh_mode_indicator();

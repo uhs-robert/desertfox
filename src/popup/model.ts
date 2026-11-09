@@ -2,14 +2,13 @@
 
 import type { SiteState } from "../background/toolbar.ts";
 import { PAGES } from "../help/route.ts";
-import { group_of } from "../help/settings_model.ts";
 
 const page_hash = (id: (typeof PAGES)[number]["id"]) => PAGES.find((page) => page.id === id)!.hash;
 
 export const HOME_HASH = page_hash("home");
 export const SETTINGS_HASH = page_hash("settings");
-// The settings group that lists `site_rules`, as its section slug.
-export const SITE_RULES_HASH = `${SETTINGS_HASH.replace("#/", "#section=")}/${group_of("site_rules").toLowerCase()}`;
+// `site_rules` sits in the General group. A test keeps the slug in step with the settings page, which this file cannot import.
+export const SITE_RULES_HASH = "#section=settings/general";
 // The Warnings heading on Home, where the count points.
 export const WARNINGS_HASH = "#section=home/warnings";
 
