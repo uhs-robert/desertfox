@@ -1,7 +1,11 @@
 // Every `storage.local` key the background owns. The compiled keymap key lives in `shared/prefix_tree.ts`, the theme and user CSS keys in `shared/theme/apply.ts`.
 
-// The config `config.reload` last built from the files. An import will land here too. `FILES_CONFIG_STORAGE_KEY`, defined in `shared/storage_watch.ts` because a reload ends with a write of it.
+// The raw files and the config the last `config.reload` or import built from them. `FILES_CONFIG_STORAGE_KEY`, defined in `shared/storage_watch.ts` because a reload ends with a write of it.
 export { FILES_CONFIG_STORAGE_KEY } from "../shared/storage_watch.ts";
+
+// The raw file text that config was built from, with its folder label, so an import can rebuild it with its own files on top.
+// A key of its own, written in the same `set` as the config: the pages read the config at every redraw and need none of the text.
+export const FILES_SOURCE_STORAGE_KEY = "desertfox_files_source";
 
 // Strings for the help page: config, keymap and shortcut slot problems from the last load.
 export const WARNINGS_STORAGE_KEY = "desertfox_warnings";

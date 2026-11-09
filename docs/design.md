@@ -268,7 +268,8 @@ Each setting is one row of data in `src/shared/settings_table.ts`: its kind (tru
 `config.reload` (key `qr`) asks the native host for the raw text of the files (`read_config`), builds the config in the background with `build_config` and swaps it in place. Nothing restarts, so the temp edits, the modes and open hints stay.
 
 - The swap runs in the same queue as `set`, `toggle` and `unset`, so a reload and an edit never publish over each other. It replaces the snippet commands (the old ones leave the registry first), compiles and publishes the keymap, tells open tabs (`tree_updated`) and replaces the config the background runs on. Commands that arrive during the swap wait for it to commit. The toast counts every warning Help shows.
-- The built config goes to `storage.local` (`desertfox_files_config`), with its build warnings, so Help still lists them after a restart. A restart, the help page and the new tab page all read what the last reload built. An import will land in the same slot.
+- The built config goes to `storage.local` (`desertfox_files_config`), with its build warnings, so Help still lists them after a restart. The raw file text goes beside it (`desertfox_files_source`) in the same write, so an import can rebuild it. A restart, the help page and the new tab page all read what the last reload or import built.
+- An import (a zip or a picked folder) goes through the same swap (`apply_files`) and the same slot. It passes the zip guards, drops one top folder that every path shares, and refuses an empty result. Its config files replace the ones in the slot, the installed snippets stay, and the browser edits stay on top. Each imported snippet is stored only when the user accepts its exact code. A later `config.reload` replaces the whole import.
 - A reload that cannot finish keeps the current config whole: config, snippets, keymap and stored files. Its toast names the cause and the fix: no permission or no host (run `:native.install`), a host error, a missing config folder, or the problems in the files (the first three, and a count).
 - The load checks every setting in the files against `SETTING_SPECS`. It drops a setting with an unknown name or a value the check refuses, warns, and lets the layer below apply. `build-config` refuses both, but a stored slot from an older version can still hold one.
 - Managed storage is removed. Firefox read its file once per extension load (see [firefox-behavior.md](firefox-behavior.md), "Managed storage"), which is why `config.reload` uses the host. A fresh install starts on the defaults until the first `qr`.
@@ -332,7 +333,7 @@ window.wrappedJSObject.my_app.toggle_ids(args.query);
 - A relative URL in `fetch` resolves against the extension, not the page. Build the address from `location.origin`, for example `fetch(location.origin + "/api/items")`.
 - Snippet ids cannot use a group name that DesertFox uses.
 
-The config file is code, so whoever can write it can run code on pages. The file lives in the user's home directory and only the user's own tools write it, so this adds no new access. An import through the help page shows the snippet ids and asks before it stores them.
+The config file is code, so whoever can write it can run code on pages. The file lives in the user's home directory and only the user's own tools write it, so this adds no new access. An import through the settings page shows each snippet's code, `matches` and `requires`, and stores only the snippets the user accepts. It asks on every import and remembers no trust.
 
 ## Routing
 

@@ -258,6 +258,27 @@ export async function read_zip(bytes: Uint8Array, limits: ZipLimits = DEFAULT_ZI
   return files;
 }
 
+// A folder the page read itself (`webkitdirectory`) passes the same path, junk, duplicate, count and size rules as an archive, so a folder is no softer way in.
+export function read_folder(entries: Iterable<{ path: string; text: string }>, limits: ZipLimits = DEFAULT_ZIP_LIMITS): Map<string, string> {
+  const listed = [...entries];
+  if (listed.length > limits.max_entries) throw new ZipError(`too many entries: ${listed.length} (limit ${limits.max_entries})`);
+  const files = new Map<string, string>();
+  let total = 0;
+  for (const entry of listed) {
+    if (typeof entry?.path !== "string" || typeof entry.text !== "string") throw new ZipError("a folder entry is not a path and a text");
+    if (entry.path.endsWith("/")) throw new ZipError(`not a file path: ${entry.path}`);
+    const path = check_path(entry.path, true);
+    if (is_ignored(path)) continue;
+    if (files.has(path)) throw new ZipError(`duplicate entry: ${path}`);
+    const size = utf8_encoder.encode(entry.text).length;
+    if (size > limits.max_entry_bytes) throw new ZipError(`entry too large: ${path} (limit ${limits.max_entry_bytes} bytes)`);
+    total += size;
+    if (total > limits.max_total_bytes) throw new ZipError(`archive too large (limit ${limits.max_total_bytes} bytes)`);
+    files.set(path, entry.text);
+  }
+  return files;
+}
+
 // Store-only: config text is small, and a stored archive needs no compressor. The output is deterministic (fixed timestamp, insertion order).
 export function write_zip(files: Map<string, string> | Record<string, string>, limits: ZipLimits = DEFAULT_ZIP_LIMITS): Uint8Array {
   const pairs = files instanceof Map ? [...files] : Object.entries(files);

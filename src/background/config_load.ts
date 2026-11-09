@@ -1,10 +1,11 @@
-// Picks the config the extension runs on: the files `config.reload` last built, kept in `storage.local`,
+// Picks the config the extension runs on: the files the last `config.reload` or import built, kept in `storage.local`,
 // then defaults.
 
 import { apply_edits, CONFIG_FORMAT_VERSION, effective_settings, NO_EDITS, with_fallback_engines } from "../shared/config.ts";
 import type { MergedConfig, SettingEdits, SettingOverrides, Settings, SnippetEntry } from "../shared/config.ts";
 import { is_setting_name, SETTING_SPECS } from "../shared/settings_schema.ts";
-import { FILES_CONFIG_STORAGE_KEY, SAVED_SETTINGS_STORAGE_KEY, TEMP_SETTINGS_STORAGE_KEY } from "./storage_keys.ts";
+import type { ConfigFiles } from "../shared/config_build/source_files.ts";
+import { FILES_CONFIG_STORAGE_KEY, FILES_SOURCE_STORAGE_KEY, SAVED_SETTINGS_STORAGE_KEY, TEMP_SETTINGS_STORAGE_KEY } from "./storage_keys.ts";
 
 export type ConfigSource = "files" | "defaults";
 
@@ -93,8 +94,11 @@ export function pick_config(files: unknown): LoadedConfig {
   return { config: empty_config(), source: "defaults", warnings };
 }
 
-// What the files slot holds. The build warnings go with the config, because a later load has no files to build them again.
+// What the files slot holds. The build warnings go with the config, because a start runs on the stored build and builds nothing.
 export type FilesSlot = { config: MergedConfig; warnings: string[] };
+
+// The raw files the slot's config was built from. `dir_label` prefixes the paths in problem messages.
+export type FilesSource = { files: ConfigFiles; dir_label: string };
 
 export async function load_config(): Promise<LoadedConfig> {
   const stored = await browser.storage.local.get(FILES_CONFIG_STORAGE_KEY);
@@ -102,6 +106,15 @@ export async function load_config(): Promise<LoadedConfig> {
   const loaded = pick_config(slot?.config);
   const build_warnings = Array.isArray(slot?.warnings) ? slot.warnings.filter((warning) => typeof warning === "string") : [];
   return loaded.source === "files" ? { ...loaded, warnings: [...build_warnings, ...loaded.warnings] } : loaded;
+}
+
+// The raw files of the slot's config, which an import builds on. Empty when nothing was reloaded or imported yet.
+export async function load_files_source(): Promise<FilesSource> {
+  const stored = await browser.storage.local.get(FILES_SOURCE_STORAGE_KEY);
+  const source = stored[FILES_SOURCE_STORAGE_KEY] as Partial<FilesSource> | undefined;
+  const raw = source?.files;
+  const is_file_map = typeof raw === "object" && raw !== null && !Array.isArray(raw) && Object.values(raw).every((text) => typeof text === "string");
+  return { files: is_file_map ? raw : {}, dir_label: typeof source?.dir_label === "string" ? source.dir_label : "" };
 }
 
 // Keeps what the schema accepts. A stored value that no longer passes, from an older version, is dropped rather than trusted.
