@@ -31,7 +31,7 @@ test("a typed value takes the type its setting accepts", () => {
 });
 
 test("a list takes one item per word", () => {
-  assert.deepEqual(parse_setting_words("ignore_sites", ["a.com", "b.com"]), { value: ["a.com", "b.com"] });
+  assert.deepEqual(parse_setting_words("next_patterns", ["a.com", "b.com"]), { value: ["a.com", "b.com"] });
   assert.deepEqual(parse_setting_words("open_completion", ["history"]), { value: ["history"] });
 });
 

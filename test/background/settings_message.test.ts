@@ -95,7 +95,7 @@ test("reset drops the saved and the temp edit and shows the file value", async (
 
 test("a value that fails the setting's check stores nothing", async () => {
   const { messages, local, session } = await make();
-  for (const [name, value] of [["light_intensity", 9], ["newtab_clock", "sundial"], ["which_key_delay_ms", "5"], ["ignore_sites", ["a.com", ""]]] as const) {
+  for (const [name, value] of [["light_intensity", 9], ["newtab_clock", "sundial"], ["which_key_delay_ms", "5"], ["next_patterns", ["a.com", ""]]] as const) {
     const answer = await messages.change({ type: "change_setting", name, action: "set", value });
     assert.equal(answer.ok, false, name);
   }

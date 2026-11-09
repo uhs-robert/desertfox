@@ -36,13 +36,13 @@ test("toggle flips a boolean from its value, or from what an absent setting read
 });
 
 test("a list takes one item per word", () => {
-  assert.deepEqual(plan_set("ignore_sites", "a.com  b.com", "saved", NO_EDITS, config()).next, saved({ ignore_sites: ["a.com", "b.com"] }));
+  assert.deepEqual(plan_set("next_patterns", "a.com  b.com", "saved", NO_EDITS, config()).next, saved({ next_patterns: ["a.com", "b.com"] }));
 });
 
 test("[] sets an empty list, and no value still shows the list", () => {
-  assert.deepEqual(plan_set("ignore_sites", "[]", "saved", NO_EDITS, config({ ignore_sites: ["a.com"] })).next, saved({ ignore_sites: [] }));
+  assert.deepEqual(plan_set("next_patterns", "[]", "saved", NO_EDITS, config({ next_patterns: ["a.com"] })).next, saved({ next_patterns: [] }));
   assert.deepEqual(plan_set("open_completion", "[]", "saved", NO_EDITS, config()).next, saved({ open_completion: [] }));
-  assert.equal(plan_set("ignore_sites", "", "saved", NO_EDITS, config({ ignore_sites: ["a.com"] })).next, undefined);
+  assert.equal(plan_set("next_patterns", "", "saved", NO_EDITS, config({ next_patterns: ["a.com"] })).next, undefined);
 });
 
 test("default_engine or palette naming nothing is kept with a warning", () => {
@@ -121,9 +121,9 @@ function checked(text: string) {
 }
 
 test("the command line fills the name, then the value, and the schema refuses what the old handler refused", () => {
-  const set = checked("set ignore_sites a.com b.com");
+  const set = checked("set next_patterns a.com b.com");
   assert.ok(set.ok);
-  assert.deepEqual(set.args, { temp: false, name: "ignore_sites", value: "a.com b.com" });
+  assert.deepEqual(set.args, { temp: false, name: "next_patterns", value: "a.com b.com" });
   assert.deepEqual(checked("set which_key_delay_ms").ok, true);
   assert.match(checked("set light_intensity 9").ok ? "" : (checked("set light_intensity 9") as { error: string }).error, /light_intensity: expected a whole number from 1 to 5/);
   for (const text of ["set nope 1", "set search_prefixes x", "set", "unset", "unset nope", "unset a b", "toggle which_key_delay_ms", "toggle"]) {

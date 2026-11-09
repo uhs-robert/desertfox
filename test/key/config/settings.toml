@@ -1,2 +1,14 @@
 # The which-key panel shows 100 ms after a prefix key, so the cases that wait out the timer sit out 100 ms and not the default 300 ms. p4_whichkey and p3_tab_keys read the panel.
 which_key_delay_ms = 100
+
+# Site rules for p19_site_rules. Each pattern names one test page by its id, so no other piece sees a rule.
+[[site_rules]]
+site = "*://127.0.0.1/page?id=rule_pass*"
+pass = "j"
+
+[[site_rules]]
+site = "*://127.0.0.1/page?id=rule_only*"
+only = "G"
+
+[[site_rules]]
+site = "*://127.0.0.1/page?id=rule_off*"

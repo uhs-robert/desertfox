@@ -42,11 +42,11 @@ export const SETTING_COMPLETION: readonly SettingCompletion[] = [
     "values": []
   },
   {
-    "name": "ignore_sites",
+    "name": "site_rules",
     "settable": true,
     "is_toggle": false,
-    "is_list": true,
-    "expectation": "a list of match pattern strings",
+    "is_list": false,
+    "expectation": "a list of tables with \"site\", an optional \"pass\" of key sequences and an optional \"only\" of key sequences",
     "values": []
   },
   {
