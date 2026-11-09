@@ -40,8 +40,8 @@ test("copy.url answers done after the write and failed, without its own toast, w
   bundles.connect({ request_bundle: async () => true, on_idle: () => {}, set_mode: () => {}, show_error: (message) => void toasts.push(message), on_sink_missing: () => {} });
   const { copy_url } = await import("../../src/content/handlers/copy.ts");
   Object.defineProperty(globalThis, "navigator", { value: { clipboard: { writeText: async () => {} } }, configurable: true });
-  assert.deepEqual(await copy_url.run({ format: "plain" }), undefined);
+  assert.deepEqual(await copy_url.run({ format: "plain" }, false), undefined);
   Object.defineProperty(globalThis, "navigator", { value: { clipboard: { writeText: () => Promise.reject(new Error("denied")) } }, configurable: true });
-  assert.deepEqual(await copy_url.run({ format: "plain" }), { ok: false, message: "Could not copy to the clipboard" });
+  assert.deepEqual(await copy_url.run({ format: "plain" }, false), { ok: false, message: "Could not copy to the clipboard" });
   assert.equal(toasts.some((message) => message.includes("Could not copy")), false);
 });

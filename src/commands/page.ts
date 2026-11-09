@@ -1,5 +1,4 @@
 import { get_config } from "../background/startup.ts";
-import { stop_page } from "../content/handlers/stop.ts";
 import { NEW_TAB_PAGE_FILE } from "../shared/config.ts";
 import { define } from "../shared/registry/builtin.ts";
 import { open_in, require_tab_id, typed_url_target, WHERE_PARAM } from "./open_target.ts";
@@ -35,7 +34,6 @@ define("page.stop", {
   label: "Stop loading",
   intent: "Stop the page from loading.",
   runs_in: "content",
-  run: stop_page.run,
 });
 
 define("page.home", {

@@ -20,7 +20,7 @@ export function build_registry(commands: CommandMeta[], snippets: SnippetEntry[]
   const define = (source: string, entry: CommandMeta & { runs_in: "background" | "content" }) => {
     const { id, ...input } = entry;
     try {
-      registry.define(id, { ...input, run: no_op });
+      registry.define(id, entry.runs_in === "background" ? { ...input, runs_in: "background", run: no_op } : { ...input, runs_in: "content" });
     } catch (error) {
       if (!(error instanceof DefineError)) throw error;
       problems.push(`${source}: ${error.message}`);

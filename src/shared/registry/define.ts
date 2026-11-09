@@ -7,7 +7,7 @@ import { always_default, arm_conditions, declared_default, find_param, is_contex
 import { is_setting_name } from "../settings_schema.ts";
 import { description_problem } from "./summary.ts";
 
-export type CommandInput = Omit<CommandDef, "id">;
+export type CommandInput = CommandDef extends infer D ? (D extends unknown ? Omit<D, "id"> : never) : never;
 
 export class DefineError extends Error {
   constructor(command_id: string, field: string, problem: string) {
@@ -357,8 +357,9 @@ function check_when(input: CommandInput, param: ParamDef, at: string, fail: Fail
 
 function check_count_and_modes(input: CommandInput, fail: Fail): void {
   if (input.runs_in !== "background" && input.runs_in !== "content") fail("runs_in", "must be background or content");
-  if (input.bundle !== undefined && (input.runs_in !== "content" || input.run)) fail("bundle", "belongs to a content command without a run");
-  if (!input.run && input.bundle === undefined) fail("run", "is missing");
+  if (input.bundle !== undefined && input.runs_in !== "content") fail("bundle", "belongs to a content command");
+  if (input.runs_in === "content" && input.run) fail("run", "belongs to a background command, since content code lives in the page");
+  if (input.runs_in === "background" && !input.run) fail("run", "is missing");
   if (typeof input.count === "object" && !find_param(input, input.count.param)) {
     fail("count", `names "${input.count.param}", which is not a param`);
   }

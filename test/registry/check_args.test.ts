@@ -65,7 +65,6 @@ test("a bool param left out is off, not missing", () => {
     label: "Toggle",
     intent: "Toggle.",
     runs_in: "content",
-    run: () => {},
     params: [{ name: "all", type: "bool" }],
   });
   assert.deepEqual(check_args(toggle, undefined), { ok: true, args: {} });
