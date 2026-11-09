@@ -46,7 +46,7 @@ This repository is public.
 
 - Carry meaning in names. Comment only what a name cannot say: why this approach, a skipped obvious option, a trap.
 - Put the reasoning behind a change in the commit message, not in a comment.
-- The build shortens every object property whose name ends in `_`, in every bundle (background, help, popup and newtab included). Use the suffix only on a property that never leaves the extension scripts, never on a name that crosses storage, a message, the native host, the DOM or JSON. Do not put it on variables, functions or parameters.
+- The build shortens every object property whose name ends in `_`, in every bundle (background, help, popup and newtab included). Use the suffix only on a property that never leaves the extension scripts. Never put it on a name that crosses storage, a message or the native host. Never put it on a name in the DOM, the manifest, CSS, a page or browser API, or JSON. Do not put it on variables, functions or parameters. One exception: a variable or parameter that feeds a shorthand property, or comes from a destructure, keeps the suffix, because it shares the property's name.
 - Do not use emoji in code.
 
 ## Commands
