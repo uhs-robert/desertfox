@@ -4,7 +4,7 @@ import { DEFAULT_COOKIE_STORE_ID } from "../shared/container_store.ts";
 import type { ToastKind } from "../shared/messages.ts";
 import { define } from "../shared/registry/builtin.ts";
 import { show_toast_on_tab } from "../background/browser_deps.ts";
-import { browser_session_storage, make_session_store, plan_restore } from "../background/session_store.ts";
+import { browser_session_storage, make_session_store, NEW_NAME_PATTERN, plan_restore } from "../background/session_store.ts";
 import type { ContainerRef, SessionStore, SessionTab } from "../background/session_store.ts";
 
 // A tab of the window being saved.
@@ -210,9 +210,6 @@ export const browser_session_deps: SessionDeps = {
 };
 
 const handlers = make_session_handlers(browser_session_deps);
-
-// The line reads a leading `-` as a flag and a leading `@` as a slot, so a name that starts so would not run again when picked from the list. The rule is on the params that give a name. The ones that look a name up take any text, so a stored name always resolves.
-const NEW_NAME_PATTERN = "^\\s*[^\\s@-]";
 
 const NAME_PARAM = { name: "name", type: "string", rest: true, main: true, values: { from: "sessions" } } as const;
 

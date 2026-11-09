@@ -135,3 +135,23 @@ test("a superseded pick cannot replace the newer review, and a cancel drops a pi
   assert.equal(session.state.review, undefined);
   assert.equal(session.state.busy, false);
 });
+
+test("the sessions export downloads the file text, and refuses when none is saved", async () => {
+  const full = session_with({ export_sessions: { ok: true, json: '{"version":1}', count: 2 } });
+  const file = await full.session.export_sessions();
+  assert.equal(file?.name, "desertfox-sessions.json");
+  assert.equal(new TextDecoder().decode(file!.bytes), '{"version":1}');
+  const empty = session_with({ export_sessions: { ok: true, json: "{}", count: 0 } });
+  assert.equal(await empty.session.export_sessions(), undefined);
+  assert.equal(empty.session.state.message?.ok, false);
+});
+
+test("the sessions import checks File.size first, then sends the text and shows the answer", async () => {
+  const { session, sent } = session_with({ import_sessions: { ok: true, message: "Imported 1 session" } });
+  await session.import_sessions(unread_file("big.json", 65 * 1024 * 1024));
+  assert.deepEqual(sent, []);
+  assert.match(session.state.message!.text, /too large/);
+  await session.import_sessions(text_file("desertfox-sessions.json", "{}"));
+  assert.deepEqual(sent, [{ type: "import_sessions", text: "{}" }]);
+  assert.deepEqual(session.state.message, { ok: true, text: "Imported 1 session" });
+});

@@ -1,11 +1,15 @@
 // No DOM: the state of the settings page's transfer section. It picks the files to import, holds the preview and the user's consent per snippet, and builds the export zips.
 // Nothing is sent to be stored until `commit`, and `commit` sends only the snippets the user ticked, with the code the preview showed.
 
-import type { CommitConfigImport, ConfigImportAnswer, ConfigImportPreview, ExportConfig, ExportConfigAnswer, ImportSource, InstalledSnippet, ListSnippets, ListSnippetsAnswer, PreviewConfigImport, RemoveSnippet } from "../shared/messages.ts";
+import type { CommitConfigImport, ConfigImportAnswer, ConfigImportPreview, ExportConfig, ExportConfigAnswer, ExportSessions, ExportSessionsAnswer, ImportSessions, ImportSource, InstalledSnippet, ListSnippets, ListSnippetsAnswer, PreviewConfigImport, RemoveSnippet } from "../shared/messages.ts";
 import { DEFAULT_ZIP_LIMITS, write_zip, ZipError, type ZipLimits } from "../shared/zip.ts";
 
 export const CONFIG_ZIP_NAME = "desertfox-config.zip";
 export const SNIPPETS_ZIP_NAME = "desertfox-snippets.zip";
+export const SESSIONS_FILE_NAME = "desertfox-sessions.json";
+
+// 400 sessions of 50 tabs are about 5 MB, so this leaves room and still stops a file that would fill memory.
+export const MAX_SESSIONS_FILE_BYTES = 64 * 1024 * 1024;
 
 export const SNIPPET_WARNING = "A snippet is code that runs in the pages it matches and can use every DesertFox permission: it can read and change any page it matches, open and close tabs, and read your bookmarks and history. Accept only snippets you have read and trust.";
 
@@ -49,11 +53,11 @@ export type TransferState = {
 };
 
 export type TransferDeps = {
-  send: (message: PreviewConfigImport | CommitConfigImport | ExportConfig | ListSnippets | RemoveSnippet) => Promise<unknown>;
+  send: (message: PreviewConfigImport | CommitConfigImport | ExportConfig | ListSnippets | RemoveSnippet | ExportSessions | ImportSessions) => Promise<unknown>;
   on_change: () => void;
 };
 
-export type ExportFile = { name: string; bytes: Uint8Array };
+export type ExportFile = { name: string; bytes: Uint8Array; mime?: string };
 
 const message_of = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
@@ -155,7 +159,37 @@ export function create_transfer_session(deps: TransferDeps) {
     }
   }
 
-  return { state, load_snippets, choose, accept, commit, cancel, remove, export_zip };
+  // The sessions file to download, or nothing with the reason in the message.
+  async function export_sessions(): Promise<ExportFile | undefined> {
+    const answer = (await deps.send({ type: "export_sessions" }).catch((error: unknown) => ({ ok: false, message: message_of(error) }))) as ExportSessionsAnswer;
+    if (!answer.ok) {
+      say(false, `Nothing exported: ${answer.message}`);
+      return undefined;
+    }
+    if (answer.count === 0) {
+      say(false, "Nothing exported: no session is saved.");
+      return undefined;
+    }
+    say(true, `Exported ${SESSIONS_FILE_NAME}.`);
+    return { name: SESSIONS_FILE_NAME, bytes: new TextEncoder().encode(answer.json), mime: "application/json" };
+  }
+
+  // Adds the sessions of the picked file at once: they are data, not code, and a name that is taken keeps both.
+  async function import_sessions(file: PickedFile): Promise<void> {
+    if (file.size > MAX_SESSIONS_FILE_BYTES) {
+      say(false, `Sessions not imported: ${file.name} is too large (${file.size} bytes, limit ${MAX_SESSIONS_FILE_BYTES}).`);
+      return;
+    }
+    set({ busy: true });
+    try {
+      const answer = (await deps.send({ type: "import_sessions", text: await file.text() })) as ConfigImportAnswer;
+      set({ busy: false, message: { ok: answer.ok, text: answer.message } });
+    } catch (error) {
+      set({ busy: false, message: { ok: false, text: `Sessions not imported: ${message_of(error)}` } });
+    }
+  }
+
+  return { state, load_snippets, choose, accept, commit, cancel, remove, export_zip, export_sessions, import_sessions };
 }
 
 export type TransferSession = ReturnType<typeof create_transfer_session>;

@@ -17,7 +17,7 @@ function button(label: string, on_click: () => void, disabled = false): HTMLButt
 
 function download(file: ExportFile): void {
   const link = document.createElement("a");
-  link.href = URL.createObjectURL(new Blob([file.bytes as BlobPart], { type: "application/zip" }));
+  link.href = URL.createObjectURL(new Blob([file.bytes as BlobPart], { type: file.mime ?? "application/zip" }));
   link.download = file.name;
   link.click();
   URL.revokeObjectURL(link.href);
@@ -113,7 +113,9 @@ export function mount_transfer(container: HTMLElement, send: TransferDeps["send"
   tools.append(
     export_button("Export config", "config"),
     export_button("Export snippets", "snippets"),
+    button("Export sessions", () => void session.export_sessions().then((file) => file && download(file))),
     picker("Import a zip", "import-zip", (files) => void session.choose(() => read_zip_file(files[0]!)), { accept: ".zip,application/zip" }),
+    picker("Import sessions", "import-sessions", (files) => void session.import_sessions(files[0]!), { accept: ".json,application/json" }),
     picker("Import a folder", "import-folder", (files) => void session.choose(() => read_folder_files(files)), { folder: true }),
   );
   container.replaceChildren(tools, message, review_box, installed_box);
