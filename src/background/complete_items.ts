@@ -4,13 +4,14 @@
 
 import type { SearchEngine } from "../shared/config.ts";
 import type { PageInfo } from "../shared/engines/index.ts";
-import type { BookmarkItem, CompleteItemsAnswer, EngineItem, HistoryItem, HistoryItems, OpenRow, TabContainer, TabItem, TabRowsAction, TabRowsActionAnswer, WindowItem } from "../shared/messages.ts";
+import type { BookmarkItem, CompleteItemsAnswer, EngineItem, HistoryItem, HistoryItems, OpenRow, SessionItem, TabContainer, TabItem, TabRowsAction, TabRowsActionAnswer, WindowItem } from "../shared/messages.ts";
 import { available_engine_names } from "./availability.ts";
 import { DEFAULT_COOKIE_STORE_ID } from "../shared/container_store.ts";
 import { close_tabs, reopen_tabs_in_container, set_muted, set_pinned } from "./tab_actions.ts";
 import type { TabActionDeps } from "./tab_actions.ts";
 import { describe_result, set_unloaded } from "./tab_discard.ts";
 import type { DiscardDeps } from "./tab_discard.ts";
+import { browser_session_storage, make_session_store } from "./session_store.ts";
 
 export type TabLike = {
   id?: number | undefined;
@@ -190,6 +191,7 @@ export const browser_complete_items_deps = {
   // `startTime: 0` reaches all history, since the default is the last day. The page ranks, so it needs more than it shows.
   search_history: async (): Promise<HistoryNode[]> => browser.history.search({ text: "", startTime: 0, maxResults: 1000 }),
   containers: (): Promise<ContainerMarks> => read_containers(() => browser.contextualIdentities.query({})),
+  sessions: (): Promise<SessionItem[]> => make_session_store(browser_session_storage).items(),
 };
 
 export type CompleteItemsDeps = typeof browser_complete_items_deps & {
@@ -229,11 +231,13 @@ export function create_complete_items(deps: CompleteItemsDeps) {
     max: await deps.history_list_max(),
   });
 
-  const fetch_items = async (kind: "bookmarks" | "engines" | "history" | "open" | "windows", asker: Asker): Promise<CompleteItemsAnswer["items"]> => {
+  const fetch_items = async (kind: "bookmarks" | "engines" | "history" | "open" | "windows" | "sessions", asker: Asker): Promise<CompleteItemsAnswer["items"]> => {
     // The set is read once per line. The line is modal over one tab, so the page cannot change under it.
     if (kind === "engines") return engine_items(await deps.search_engines(), await deps.page_of(asker.tab_id));
     if (kind === "open") return open_items(asker);
     if (kind === "history") return history_list(asker);
+    // A private line lists no sessions, as the commands refuse there.
+    if (kind === "sessions") return asker.incognito ? [] : deps.sessions();
     if (kind === "windows") return listed_windows(await deps.query_windows(), asker).map(({ number, title }) => ({ number, title }));
     return bookmark_items(await deps.all_bookmarks());
   };
@@ -279,7 +283,7 @@ export function create_complete_items(deps: CompleteItemsDeps) {
     // Undefined for a sender that is not a tab, for a tab that opened no line and for a tab that closed or navigated
     // while the lookup ran. A failed browser call gives an empty list.
     answer: async (kind: unknown, asker: Asker | undefined): Promise<CompleteItemsAnswer | undefined> => {
-      if ((kind !== "bookmarks" && kind !== "engines" && kind !== "history" && kind !== "open" && kind !== "windows") || !asker || !(await deps.is_opener(asker.tab_id, asker.frame_id))) return undefined;
+      if ((kind !== "bookmarks" && kind !== "engines" && kind !== "history" && kind !== "open" && kind !== "windows" && kind !== "sessions") || !asker || !(await deps.is_opener(asker.tab_id, asker.frame_id))) return undefined;
       const items = await fetch_items(kind, asker).catch(() => (kind === "open" ? { rows: [], history_max: 0 } : kind === "history" ? { rows: [], max: 0 } : []));
       return (await deps.is_opener(asker.tab_id, asker.frame_id)) ? { items } : undefined;
     },

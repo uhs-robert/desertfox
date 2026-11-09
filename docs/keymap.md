@@ -22,7 +22,7 @@ A note "(prompts)" means the binding sets a `prompt` for a param, so the command
 
 <!-- BEGIN generated -->
 
-bound: 287 (normal 152, hint 2, cmdline 18, caret 35, visual 37, visual_line 38, insert 1, ignore 1, browser 3) | later: 6 | dropped: 8
+bound: 289 (normal 154, hint 2, cmdline 18, caret 35, visual 37, visual_line 38, insert 1, ignore 1, browser 3) | later: 6 | dropped: 8
 
 ### normal
 
@@ -77,6 +77,8 @@ bound: 287 (normal 152, hint 2, cmdline 18, caret 35, visual 37, visual_line 38,
 | `<A-m>` | bound | `tab.mute` | Toggle mute |  |
 | `tt` | bound | `open --tab` (prompts) | Open URL |  |
 | `tT` | bound | `tab` (prompts) | Switch tab |  |
+| `ts` | bound | `session.save` (prompts) | Save tab session |  |
+| `tS` | bound | `session.open` (prompts) | Open tab session |  |
 | `td` | bound | `tab.duplicate` | Duplicate tab |  |
 | `tm` | bound | `tab.move` (prompts) | Move tab |  |
 | `tn` | bound | `tab.next` | Next tab |  |

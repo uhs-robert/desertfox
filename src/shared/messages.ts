@@ -103,7 +103,7 @@ export type RecordCmdline = {
 // sender is a tab whose line redeemed a ticket, and it holds only tabs and windows of the sender's own privacy (private or not).
 export type CompleteItems = {
   type: "complete_items";
-  kind: "bookmarks" | "engines" | "history" | "open" | "windows";
+  kind: "bookmarks" | "engines" | "history" | "open" | "windows" | "sessions";
 };
 
 // From the command line page when a row key acts on tabs of the list. `tab_ids` were captured at the key press, so a later change of the list does not change them. The answer is undefined unless the sender is a tab whose line
@@ -170,7 +170,10 @@ export type WindowItem = { number: number; title: string };
 // A heading of the page, from the host script. `level` is 1 to 6, `text` is the rendered text, trimmed.
 export type HeadingItem = { level: number; text: string };
 
-export type CompleteItemsAnswer = { items: BookmarkItem[] | EngineItem[] | HistoryItems | OpenItems | WindowItem[] | HeadingItem[] };
+// A saved tab session: its name, how many tabs it holds and when it was saved (milliseconds since the epoch).
+export type SessionItem = { name: string; tabs: number; saved_at: number };
+
+export type CompleteItemsAnswer = { items: BookmarkItem[] | EngineItem[] | HistoryItems | OpenItems | WindowItem[] | HeadingItem[] | SessionItem[] };
 
 // From the `hints` bundle at the start of a pick: what `.` shows again. The background checks it like any page message, because the sender is a page script.
 export type RecordRepeat = {

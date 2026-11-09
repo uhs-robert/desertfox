@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { bookmark_items, create_complete_items, engine_items, flatten_bookmarks, history_items, listed_favicon, listed_tabs, listed_windows, read_container_identities, read_containers } from "../../src/background/complete_items.ts";
 import type { TabActionDeps } from "../../src/background/tab_actions.ts";
+import type { SessionItem } from "../../src/shared/messages.ts";
 import type { DiscardDeps } from "../../src/background/tab_discard.ts";
 import type { BookmarkNode, ContainerMarks, HistoryNode, LineScope, OpenSettings, TabLike, WindowLike } from "../../src/background/complete_items.ts";
 
@@ -31,7 +32,7 @@ const window_of = (id: number, incognito: boolean, title: string, type = "normal
 // Two normal windows and one private window, in `windows.getAll` order.
 const WINDOWS = [window_of(10, false, "Mail"), window_of(20, true, "Secret"), window_of(11, false, "Docs\n tab")];
 
-function make({ openers = [1, 2], tabs = ALL_TABS, bookmarks = [] as BookmarkNode[], fail = false, page = undefined as { url: string } | undefined, history = [] as HistoryNode[], open = { sources: ["bookmarks", "history"], history_max: 10 } as OpenSettings, read_tab = (async () => undefined) as (id: number) => Promise<TabLike | undefined>, discard = {} as DiscardDeps, tab_actions = NO_ACTIONS as TabActions, containers = new Map() as ContainerMarks, on_containers = () => {}, list_max = 20 } = {}) {
+function make({ openers = [1, 2], tabs = ALL_TABS, bookmarks = [] as BookmarkNode[], fail = false, page = undefined as { url: string } | undefined, history = [] as HistoryNode[], open = { sources: ["bookmarks", "history"], history_max: 10 } as OpenSettings, read_tab = (async () => undefined) as (id: number) => Promise<TabLike | undefined>, discard = {} as DiscardDeps, tab_actions = NO_ACTIONS as TabActions, sessions = [] as SessionItem[], containers = new Map() as ContainerMarks, on_containers = () => {}, list_max = 20 } = {}) {
   const history_reads: number[] = [];
   const asked: (number | undefined)[] = [];
   const opened = new Set(openers);
@@ -44,6 +45,10 @@ function make({ openers = [1, 2], tabs = ALL_TABS, bookmarks = [] as BookmarkNod
     query_windows: async () => {
       if (fail) throw new Error("no windows");
       return WINDOWS;
+    },
+    sessions: async () => {
+      if (fail) throw new Error("no sessions");
+      return sessions;
     },
     all_bookmarks: async () => {
       if (fail) throw new Error("no bookmarks");
@@ -138,6 +143,7 @@ test("a tab that navigates or closes while the lookup runs gets nothing", async 
   const service = create_complete_items({
     query_tabs: async () => ALL_TABS,
     query_windows: async () => WINDOWS,
+    sessions: async () => [],
     all_bookmarks: async () => {
       opened.delete(1);
       return [];
@@ -275,6 +281,7 @@ test("the opener is checked before and after the history fetch", async () => {
   const service = create_complete_items({
     query_tabs: async () => [],
     query_windows: async () => [],
+    sessions: async () => [],
     all_bookmarks: async () => [],
     is_opener: async (tab_id) => opened.has(tab_id),
     containers: async () => new Map(),
@@ -299,6 +306,7 @@ test("a failed history read leaves the bookmarks, and a failed bookmark read lea
     create_complete_items({
       query_tabs: async () => [],
       query_windows: async () => [],
+      sessions: async () => [],
       all_bookmarks: async () => {
         if (failing === "bookmarks") throw new Error("no bookmarks");
         return MARKS;
@@ -355,6 +363,7 @@ test("a history read that finishes after the line closed gives nothing", async (
   const service = create_complete_items({
     query_tabs: async () => [],
     query_windows: async () => [],
+    sessions: async () => [],
     all_bookmarks: async () => [],
     is_opener: async (tab_id) => opened.has(tab_id),
     containers: async () => new Map(),
@@ -678,4 +687,13 @@ test("tab_rows_action refuses a reopen when the line loses its ticket during the
   close_line = () => opened.delete(NORMAL_LINE.tab_id);
   assert.equal(await service.tab_rows_action("reopen", [2], NORMAL_LINE, "firefox-container-1"), undefined);
   assert.deepEqual(fake.log, []);
+});
+
+test("the sessions list goes to a normal line only, and a failed read gives an empty list", async () => {
+  const sessions = [{ name: "work", tabs: 3, saved_at: 5 }];
+  const { service } = make({ sessions });
+  assert.deepEqual(await service.answer("sessions", NORMAL_LINE), { items: sessions });
+  assert.deepEqual(await service.answer("sessions", PRIVATE_LINE), { items: [] });
+  assert.deepEqual(await make({ sessions, fail: true }).service.answer("sessions", NORMAL_LINE), { items: [] });
+  assert.equal(await make({ sessions, openers: [] }).service.answer("sessions", NORMAL_LINE), undefined);
 });

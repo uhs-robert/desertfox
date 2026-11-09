@@ -5,6 +5,7 @@ import "../commands/scroll.ts";
 import "../commands/mode.ts";
 import "../commands/tab.ts";
 import "../commands/window.ts";
+import "../commands/session.ts";
 import "../commands/browser.ts";
 import "../commands/zoom.ts";
 import "../commands/bookmark.ts";
