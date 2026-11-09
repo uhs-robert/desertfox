@@ -92,16 +92,9 @@ export async function run_cases({ rdp, extension_id, take_shot, run_case, send_k
     await close_panel();
   });
 
-  await run_case("gx redraws the panel for the child menu without the which-key delay", async () => {
-    let mark = events.length;
-    await press_keys("g");
-    await panel_value(mark, (value) => value !== "" && !is_panel_of(2)(value), "the g panel");
-    mark = events.length;
-    const started = Date.now();
-    await press_keys("x");
-    await panel_value(mark, is_panel_of(2), "the gx panel");
-    // The press itself and the report take time, so the bound is the delay less a margin and not zero.
-    expect(Date.now() - started < which_key_delay_ms, `the gx panel took ${Date.now() - started} ms, as long as the ${which_key_delay_ms} ms delay`);
+  // The redraw timing is held by the timer unit test, with a controlled clock. Here the child panel must appear.
+  await run_case("gx shows the child panel after the g panel", async () => {
+    await open_gx_panel();
     await close_panel();
   });
 

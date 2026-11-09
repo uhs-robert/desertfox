@@ -9,7 +9,7 @@ import { create_which_key_session } from "./session.ts";
 type WhichKeyWindow = { desertfox_host: BundleHostApi; desertfox_whichkey_ready?: true };
 const page = window as unknown as WhichKeyWindow;
 
-type ShowArgs = { prefix?: PendingPrefix; is_current_: () => boolean };
+type ShowArgs = { prefix?: PendingPrefix; is_current_: () => boolean; drawn_: () => void };
 
 const session = create_which_key_session(
   (mode, typed) => browser.runtime.sendMessage({ type: "list_keys", mode, prefix: typed } satisfies ListKeys) as Promise<WhichKeyPanel>,
@@ -22,9 +22,9 @@ const ignore_failure = () => undefined;
 if (!page.desertfox_whichkey_ready) {
   page.desertfox_whichkey_ready = true;
   page.desertfox_host.register_handler_("whichkey", (args) => {
-    const { prefix, is_current_ } = args as ShowArgs;
+    const { prefix, is_current_, drawn_ } = args as ShowArgs;
     if (!prefix) return session.hide();
-    void session.show_prefix_(prefix, is_current_).catch(ignore_failure);
+    void session.show_prefix_(prefix, is_current_, drawn_).catch(ignore_failure);
   });
   page.desertfox_host.register_handler_("help.whichkey", () => void session.show_manual_(page.desertfox_host.get_mode()).catch(ignore_failure));
 }
