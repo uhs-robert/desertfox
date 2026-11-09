@@ -9,12 +9,20 @@ export type AskWhichKey = (prefix: PendingPrefix | undefined, is_current: () => 
 export function create_which_key_timer(get_delay_ms: () => number | undefined, ask: AskWhichKey): (prefix: PendingPrefix | undefined, at_once?: boolean) => void {
   let timer: ReturnType<typeof setTimeout> | undefined;
   let epoch = 0;
+  // True from the moment the panel is asked for until a key that leaves the prefix tree. The delay only keeps the panel from flashing at a fast typist, so a panel already up follows the next prefix key at once.
+  let shown = false;
   return (prefix, at_once) => {
     clearTimeout(timer);
+    const instant = at_once || shown;
+    shown = false;
     const mine = ++epoch;
     const is_current = () => mine === epoch;
     ask(undefined, is_current);
     const delay_ms = get_delay_ms();
-    if (prefix && delay_ms) timer = setTimeout(() => ask(prefix, is_current), at_once ? 0 : delay_ms);
+    if (prefix && delay_ms)
+      timer = setTimeout(() => {
+        shown = true;
+        ask(prefix, is_current);
+      }, instant ? 0 : delay_ms);
   };
 }

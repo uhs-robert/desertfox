@@ -74,15 +74,36 @@ test("the next key cancels the timer before it fires", async () => {
   assert.deepEqual(page.shown, []);
 });
 
-test("the next key hides a panel that is up, and a longer prefix shows again after a new pause", async () => {
+test("the next key hides a panel that is up, and the longer prefix redraws it without the delay", async () => {
   const page = make_page(DELAY_MS);
   page.flow.handle_token_("g");
   await sleep(DELAY_MS + 40);
   assert.equal(page.is_up(), true);
   page.flow.handle_token_("x");
   assert.equal(page.is_up(), false);
-  await sleep(DELAY_MS + 40);
+  await sleep(DELAY_MS / 3);
   assert.deepEqual(page.shown, ["normal:g", "normal:gx"]);
+});
+
+test("a prefix typed after the panel closed waits the full delay again", async () => {
+  const page = make_page(DELAY_MS);
+  page.flow.handle_token_("g");
+  await sleep(DELAY_MS + 40);
+  page.flow.handle_token_("<Escape>");
+  page.flow.handle_token_("g");
+  await sleep(DELAY_MS / 3);
+  assert.deepEqual(page.shown, ["normal:g"]);
+});
+
+test("a panel that never showed leaves the next prefix key on the full delay", async () => {
+  const page = make_page(DELAY_MS);
+  page.flow.handle_token_("g");
+  await sleep(DELAY_MS / 3);
+  page.flow.handle_token_("x");
+  await sleep(DELAY_MS / 3);
+  assert.deepEqual(page.shown, []);
+  await sleep(DELAY_MS + 40);
+  assert.deepEqual(page.shown, ["normal:gx"]);
 });
 
 test("a mode change cancels the timer", async () => {
