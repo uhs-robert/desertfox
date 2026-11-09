@@ -530,6 +530,8 @@ export async function create_session({ name: session_name, timings, sweep = true
     waiting_for = "qr to store the files config and publish the config status";
     for (let attempt = 0; attempt < 200; attempt++) {
       await sleep(50);
+      // The cleanup step presses qr on a page that has not proven it takes keys, and a young page drops them. A second qr is harmless, so the press repeats every 2 s.
+      if (attempt > 0 && attempt % 40 === 0) await send_keys("qr");
       // The background writes the status before the files config, so only the pair shows that this reload finished.
       if ((await has_local("desertfox_files_config")) && (await has_local("desertfox_config_status"))) return;
     }
