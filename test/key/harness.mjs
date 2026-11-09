@@ -530,8 +530,6 @@ export async function create_session({ name: session_name, timings, sweep = true
     waiting_for = "qr to store the files config and publish the config status";
     for (let attempt = 0; attempt < 200; attempt++) {
       await sleep(50);
-      // The cleanup step presses qr on a page that has not proven it takes keys, and a young page drops them. A second qr is harmless, so the press repeats every 2 s.
-      if (attempt > 0 && attempt % 40 === 0) await send_keys("qr");
       // The background writes the status before the files config, so only the pair shows that this reload finished.
       if ((await has_local("desertfox_files_config")) && (await has_local("desertfox_config_status"))) return;
     }
@@ -690,14 +688,15 @@ export async function create_session({ name: session_name, timings, sweep = true
     let target = await background_call(`(async () => {
       const test_pages = { url: "*://127.0.0.1/*" };
       const tab = (await browser.tabs.query({ ...test_pages, active: true, lastFocusedWindow: true }))[0] ?? (await browser.tabs.query(test_pages))[0];
-      return tab ? { id: tab.id, window_id: tab.windowId } : null;
+      return tab ? { id: tab.id, window_id: tab.windowId, url: tab.url } : null;
     })()`);
     if (!target) {
       const mark = events.length;
-      target = await background_call(`browser.tabs.create({ url: ${JSON.stringify(url_of("page", "home_cleanup"))}, active: true }).then((tab) => ({ id: tab.id, window_id: tab.windowId }))`);
+      target = await background_call(`browser.tabs.create({ url: ${JSON.stringify(url_of("page", "home_cleanup"))}, active: true }).then((tab) => ({ id: tab.id, window_id: tab.windowId, url: tab.url }))`);
       await wait_event(mark, (event) => event.type === "tree_read" && event.page_id === "home_cleanup", "content script ready on home_cleanup", 10000);
     }
     await confirm_page_focus(target.id, target.window_id);
+    return new URL(target.url).searchParams.get("id");
   }
 
   const temp_settings_pending = async () => (await read_config_status())?.temp?.length > 0;
@@ -775,7 +774,8 @@ export async function create_session({ name: session_name, timings, sweep = true
     // Only these two steps type keys, so a piece that left no config or temp edits skips the refocus.
     const restore_pending = config_restore_pending();
     const unset_pending = await temp_settings_pending();
-    if (restore_pending || unset_pending) await attempt("cleanup focus", refocus_any_tab);
+    // The page must take keys before qr and :unset, as in the reset. A lost qr after this probe is a real fault of the page, not a young page.
+    if (restore_pending || unset_pending) await attempt("cleanup focus", async () => wait_takes_keys(await refocus_any_tab()));
     if (restore_pending) await attempt("cleanup config restore", restore_config);
     if (unset_pending) await attempt("cleanup temp unset", clear_temp_settings);
   }
