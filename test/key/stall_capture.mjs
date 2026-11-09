@@ -81,7 +81,8 @@ async function second_connection_report(debug_port) {
   const step = async (name, run) => {
     const start = Date.now();
     try {
-      lines.push(`${name}: ok in ${Date.now() - start} ms: ${JSON.stringify(await run()).slice(0, 300)}`);
+      const value = await run();
+      lines.push(`${name}: ok in ${Date.now() - start} ms: ${JSON.stringify(value).slice(0, 300)}`);
     } catch (error) {
       lines.push(`${name}: FAIL in ${Date.now() - start} ms: ${error.message}`);
     }
@@ -101,7 +102,11 @@ async function second_connection_report(debug_port) {
 async function gdb_dump(parent, gdb_log) {
   const gdb_pid = process_table().get(parent)?.ppid;
   if (!gdb_pid || process_table().get(gdb_pid)?.comm !== "gdb") return `no gdb above pid ${parent}`;
-  process.kill(parent, "SIGINT");
+  try {
+    process.kill(parent, "SIGINT");
+  } catch (error) {
+    return `SIGINT to pid ${parent} failed (${error.code}): Firefox ended first\n${read_text(gdb_log) ?? "no gdb log"}`;
+  }
   const deadline = Date.now() + GDB_DUMP_WAIT_MS;
   while (existsSync(`/proc/${gdb_pid}`) && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 500));
   const finished = !existsSync(`/proc/${gdb_pid}`);

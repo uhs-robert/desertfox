@@ -11,8 +11,8 @@ echo "$HOME" > "$run_dir/session_home"
 export DESERTFOX_CONFIG_DIR="$run_dir/active_config"
 if [ "$mode" = gdb ]; then
   exec gdb -q -nx -batch -iex 'set debuginfod enabled off' -ex 'set startup-with-shell off' -ex 'set pagination off' \
-    -ex 'handle all nostop noprint pass' -ex 'handle SIGINT stop print nopass' \
-    -ex run -ex 'info threads' -ex 'thread apply all bt 60' -ex kill \
+    -ex 'set print thread-events off' -ex 'set print inferior-events off' -ex 'handle all nostop noprint pass' -ex 'handle SIGINT stop print nopass' \
+    -ex run -ex 'info sharedlibrary' -ex 'info threads' -ex 'thread apply all bt 60' -ex kill \
     --args /usr/lib/firefox/firefox -no-remote -profile "$profile_dir" -start-debugger-server "$debug_port" about:blank > "$run_dir/gdb.log" 2>&1
 fi
 exec firefox -no-remote -profile "$profile_dir" -start-debugger-server "$debug_port" about:blank

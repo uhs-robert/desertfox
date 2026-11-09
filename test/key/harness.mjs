@@ -133,7 +133,6 @@ export async function create_session({ name: session_name, timings, sweep = true
       try {
         // With the browser gone each case would wait out its own timeouts, so the rest of the piece fails at once.
         const lost_before = rdp?.lost_reason();
-        stall_capture?.note_lost(lost_before);
         if (lost_before) throw new Error(`connection to Firefox lost: ${lost_before}`);
         await within_case_cap(name, body);
         results.push({ name, pass: true, setup: !selected });
@@ -453,10 +452,7 @@ export async function create_session({ name: session_name, timings, sweep = true
         await sleep(500);
       }
     }
-    if (stall_capture) {
-      const timed_request = rdp.request;
-      rdp.request = (...args) => timed_request(...args).catch((error) => { stall_capture.note_lost(rdp.lost_reason()); throw error; });
-    }
+    if (stall_capture) rdp.on_close(() => stall_capture.note_lost(rdp.lost_reason()));
     // The padded bundles stand in for a 20 KB hints or caret bundle. They go into a copy, so dist/ stays as built.
     const extension_dir = join(work_dir, "extension");
     cpSync(dist_dir, extension_dir, { recursive: true });
