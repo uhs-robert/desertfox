@@ -102,10 +102,10 @@ export function make_session_store(storage: SessionStorage, now: () => number = 
   const list = async (): Promise<NamedSession[]> =>
     [...(await read_map(storage)).sessions].map(([name, session]) => ({ name, ...session })).toSorted((a, b) => b.saved_at - a.saved_at);
 
-  // The command line reads `-t` as a flag and `@selection` as a slot, so a picked name that holds one would not run as the session.
+  // The command line reads a leading `-t` as a flag and a leading `@selection` as a slot, so a picked name that starts so would not run as the session.
   const new_name = (text: string): string => {
     const name = checked_name(text);
-    if (/^[-@]| -/.test(name)) throw new RuntimeRefusal(`A session name cannot start with "-" or "@" or contain " -": "${name}"`);
+    if (/^[-@]/.test(name)) throw new RuntimeRefusal(`A session name cannot start with "-" or "@": "${name}"`);
     return name;
   };
 
