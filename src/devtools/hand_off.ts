@@ -27,7 +27,7 @@ export async function select_pick(evaluate: PageDeps["evaluate"]): Promise<void>
   }
 }
 
-export function run_page(deps: PageDeps): { settled: () => Promise<void> } {
+export function run_page(deps: PageDeps): void {
   // Picks run one after another, so the clear of one never takes the node of the next.
   let queue: Promise<void> = Promise.resolve();
   const connect = (): void => {
@@ -40,5 +40,4 @@ export function run_page(deps: PageDeps): { settled: () => Promise<void> } {
     port.onDisconnect.addListener(() => deps.schedule(connect, RECONNECT_MS));
   };
   connect();
-  return { settled: () => queue };
 }

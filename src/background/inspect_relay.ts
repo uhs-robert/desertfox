@@ -1,11 +1,9 @@
 // Hands a hint pick to the devtools page of the picked tab. A devtools page connects when its toolbox opens and names its tab, so the ports are kept by tab id. A pick that finds no port waits in `storage.session` and goes out when the page connects.
 
-import type { DevtoolsPick, Outcome } from "../shared/messages.ts";
+import type { DevtoolsPick } from "../shared/messages.ts";
+import { PICK_EXPIRY_MS } from "../shared/inspect.ts";
+import type { InspectAnswer } from "../shared/inspect.ts";
 import { INSPECT_PENDING_STORAGE_KEY } from "./storage_keys.ts";
-
-export const PICK_EXPIRY_MS = 60_000;
-
-export const TOOLBOX_CLOSED_MESSAGE = "DevTools is closed: press F12 within 60 s to inspect";
 
 export type RelayPort = { postMessage: (message: DevtoolsPick) => void };
 
@@ -37,7 +35,7 @@ export function create_inspect_relay(storage: SessionStorage, now: () => number)
 
   return {
     // Sends the pick to the tab's open toolbox, or keeps it for 60 s.
-    pick(tab_id: number): Promise<Outcome> {
+    pick(tab_id: number): Promise<InspectAnswer> {
       const port = ports.get(tab_id);
       if (port) {
         try {
@@ -47,7 +45,7 @@ export function create_inspect_relay(storage: SessionStorage, now: () => number)
           ports.delete(tab_id);
         }
       }
-      return update((pending) => ({ pending: { ...pending, [tab_id]: now() }, result: { ok: false, message: TOOLBOX_CLOSED_MESSAGE } as Outcome }));
+      return update((pending) => ({ pending: { ...pending, [tab_id]: now() }, result: { ok: true, waiting: true } as InspectAnswer }));
     },
 
     // The devtools page of `tab_id` is up. A fresh pick that waited goes out now, and an expired one is dropped.
@@ -72,7 +70,5 @@ export function create_inspect_relay(storage: SessionStorage, now: () => number)
     forget(tab_id: number): Promise<void> {
       return update((pending) => ({ pending: without(pending, tab_id), result: undefined }));
     },
-
-    settled: () => queue,
   };
 }

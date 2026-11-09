@@ -211,7 +211,7 @@ export type ImageAction = {
   address: string;
 };
 
-// From the `hints` bundle once it has set `window.__desertfox_pick` to the picked element. The background hands the pick to the devtools page of the sender's tab, which selects it in the Inspector. The answer is an `Outcome`: ok once a devtools page took it, a failure with the toast text when the pick waits for DevTools to open.
+// From the `hints` bundle once it has set `window.__desertfox_pick` to the picked element. The background hands the pick to the devtools page of the sender's tab, which selects it in the Inspector. The answer is an `InspectAnswer`: ok once a devtools page took it, ok with `waiting` when the pick waits for DevTools to open.
 export type InspectPick = {
   type: "inspect_pick";
 };

@@ -13,19 +13,32 @@ function make_port() {
   return { port, messages, handlers };
 }
 
+// `after_clears(n)` settles once the page has run the clear expression n times, which ends a pick whether its select worked or not.
 function make_page(evaluate: (expression: string) => Promise<unknown>) {
   const ports: ReturnType<typeof make_port>[] = [];
   const timers: (() => void)[] = [];
-  const page = run_page({
+  const waiting: { count: number; resolve: () => void }[] = [];
+  let clears = 0;
+  run_page({
     tab_id: 9,
     connect: () => {
       ports.push(make_port());
       return ports.at(-1)!.port;
     },
-    evaluate,
+    evaluate: async (expression) => {
+      try {
+        return await evaluate(expression);
+      } finally {
+        if (expression === CLEAR_EXPRESSION) {
+          clears += 1;
+          for (const wait of waiting) if (clears >= wait.count) wait.resolve();
+        }
+      }
+    },
     schedule: (action) => void timers.push(action),
   });
-  return { page, ports, timers };
+  const after_clears = (count: number) => (clears >= count ? Promise.resolve() : new Promise<void>((resolve) => waiting.push({ count, resolve })));
+  return { after_clears, ports, timers };
 }
 
 test("the two expressions are the constant strings the review reads", () => {
@@ -35,20 +48,22 @@ test("the two expressions are the constant strings the review reads", () => {
 
 test("the page names its tab on connect, then selects and clears on each pick", async () => {
   const evaluated: string[] = [];
-  const { page, ports } = make_page(async (expression) => void evaluated.push(expression));
+  const { after_clears, ports } = make_page(async (expression) => void evaluated.push(expression));
   assert.deepEqual(ports[0]!.messages, [{ type: "devtools_hello", tab_id: 9 }]);
   ports[0]!.handlers.message({ type: "devtools_pick" });
-  await page.settled();
+  await after_clears(1);
   assert.deepEqual(evaluated, [INSPECT_EXPRESSION, CLEAR_EXPRESSION]);
 });
 
 test("a message of another type evals nothing", async () => {
   const evaluated: string[] = [];
-  const { page, ports } = make_page(async (expression) => void evaluated.push(expression));
+  const { after_clears, ports } = make_page(async (expression) => void evaluated.push(expression));
   ports[0]!.handlers.message({ type: "something_else", expression: "alert(1)" });
   ports[0]!.handlers.message(undefined);
-  await page.settled();
-  assert.deepEqual(evaluated, []);
+  // A pick sent after them marks the end: if the others had queued an eval it would come before.
+  ports[0]!.handlers.message({ type: "devtools_pick" });
+  await after_clears(1);
+  assert.deepEqual(evaluated, [INSPECT_EXPRESSION, CLEAR_EXPRESSION]);
 });
 
 test("the property is cleared when the select throws", async () => {
@@ -71,7 +86,7 @@ test("a failed clear does not hide the result of the select", async () => {
 test("a failing pick does not stop the next pick, and each pick clears its own property", async () => {
   const evaluated: string[] = [];
   let fail_next = true;
-  const { page, ports } = make_page(async (expression) => {
+  const { after_clears, ports } = make_page(async (expression) => {
     evaluated.push(expression);
     if (expression === INSPECT_EXPRESSION && fail_next) {
       fail_next = false;
@@ -80,20 +95,20 @@ test("a failing pick does not stop the next pick, and each pick clears its own p
   });
   ports[0]!.handlers.message({ type: "devtools_pick" });
   ports[0]!.handlers.message({ type: "devtools_pick" });
-  await page.settled();
+  await after_clears(2);
   assert.deepEqual(evaluated, [INSPECT_EXPRESSION, CLEAR_EXPRESSION, INSPECT_EXPRESSION, CLEAR_EXPRESSION]);
 });
 
 test("two picks in a row run one after another", async () => {
   const order: string[] = [];
-  const { page, ports } = make_page(async (expression) => {
+  const { after_clears, ports } = make_page(async (expression) => {
     order.push(`start ${expression}`);
     await new Promise((resolve) => setImmediate(resolve));
     order.push(`end ${expression}`);
   });
   ports[0]!.handlers.message({ type: "devtools_pick" });
   ports[0]!.handlers.message({ type: "devtools_pick" });
-  await page.settled();
+  await after_clears(2);
   assert.deepEqual(order, [
     `start ${INSPECT_EXPRESSION}`, `end ${INSPECT_EXPRESSION}`, `start ${CLEAR_EXPRESSION}`, `end ${CLEAR_EXPRESSION}`,
     `start ${INSPECT_EXPRESSION}`, `end ${INSPECT_EXPRESSION}`, `start ${CLEAR_EXPRESSION}`, `end ${CLEAR_EXPRESSION}`,

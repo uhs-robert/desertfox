@@ -172,7 +172,7 @@ function start_caret_(target: Element, mode: CaretMode): void {
   page.desertfox_host.set_mode_(mode);
 }
 
-const inspect_ = (target: Element): Promise<Outcome> => hand_to_devtools(window as never, target, () => browser.runtime.sendMessage({ type: "inspect_pick" }), setTimeout);
+const inspect_ = (target: Element): Promise<Outcome> => hand_to_devtools(window as never, target, () => browser.runtime.sendMessage({ type: "inspect_pick" }), setTimeout, (message) => create_view().show_message_(message));
 
 const deps = { open_link_, copy: copy_to_clipboard, image_action, start_caret_, inspect_ };
 

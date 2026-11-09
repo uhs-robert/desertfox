@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { create_inspect_relay, PICK_EXPIRY_MS, TOOLBOX_CLOSED_MESSAGE } from "../../src/background/inspect_relay.ts";
+import { create_inspect_relay } from "../../src/background/inspect_relay.ts";
+import { PICK_EXPIRY_MS } from "../../src/shared/inspect.ts";
 import type { RelayPort } from "../../src/background/inspect_relay.ts";
 
 // One storage object stands for `storage.session`, so a second relay on it is a restarted background.
@@ -41,7 +42,7 @@ test("a pick with the toolbox open goes straight to its port and stores nothing"
 
 test("a pick before the devtools page connects waits in storage, answers with the toast, and drains on connect", async () => {
   const { relay, data } = make();
-  assert.deepEqual(await relay.pick(5), { ok: false, message: TOOLBOX_CLOSED_MESSAGE });
+  assert.deepEqual(await relay.pick(5), { ok: true, waiting: true });
   assert.deepEqual(Object.keys(data[PENDING] as object), ["5"]);
   const devtools = make_port();
   await relay.connected(5, devtools.port, devtools.on_disconnect);
@@ -84,7 +85,7 @@ test("after a disconnect a pick waits again, and a reconnect drains it", async (
   const first = make_port();
   await relay.connected(5, first.port, first.on_disconnect);
   first.disconnect();
-  assert.deepEqual(await relay.pick(5), { ok: false, message: TOOLBOX_CLOSED_MESSAGE });
+  assert.deepEqual(await relay.pick(5), { ok: true, waiting: true });
   assert.deepEqual(first.sent, []);
   const second = make_port();
   await relay.connected(5, second.port, second.on_disconnect);
@@ -108,7 +109,7 @@ test("a port that throws on send makes the pick wait instead of being lost", asy
   const { relay, data } = make();
   const dead = make_port(true);
   await relay.connected(5, dead.port, dead.on_disconnect);
-  assert.deepEqual(await relay.pick(5), { ok: false, message: TOOLBOX_CLOSED_MESSAGE });
+  assert.deepEqual(await relay.pick(5), { ok: true, waiting: true });
   assert.deepEqual(Object.keys(data[PENDING] as object), ["5"]);
   const live = make_port();
   await relay.connected(5, live.port, live.on_disconnect);
@@ -176,7 +177,7 @@ test("a restarted background has no ports until the pages reconnect, so a pick w
   const devtools = make_port();
   await before.relay.connected(5, devtools.port, devtools.on_disconnect);
   const restarted = create_inspect_relay(before.storage, () => before.clock.now);
-  assert.deepEqual(await restarted.pick(5), { ok: false, message: TOOLBOX_CLOSED_MESSAGE });
+  assert.deepEqual(await restarted.pick(5), { ok: true, waiting: true });
   const again = make_port();
   await restarted.connected(5, again.port, again.on_disconnect);
   assert.equal(again.sent.length, 1);
