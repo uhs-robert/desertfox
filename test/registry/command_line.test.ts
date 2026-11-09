@@ -396,3 +396,33 @@ test("the real hint command reads a selector with double quotes verbatim", () =>
   const result = parse_command_line(real_registry, `hint --custom a[href="x y"] > b`, search_sources);
   assert.deepEqual(result.kind === "invocation" ? result.invocation.args : result, { filter: "custom", selector: 'a[href="x y"] > b' });
 });
+
+test("a verbatim subject is never tokenized, so an open quote or a trailing backslash passes through", () => {
+  assert.deepEqual(verbatim_args(`pick a[title=it's]`), { selector: "a[title=it's]" });
+  assert.deepEqual(verbatim_args(`pick -r "x`), { rapid: true, selector: '"x' });
+  assert.deepEqual(verbatim_args(`pick .a\\`), { selector: ".a\\" });
+  assert.equal(error_of_verbatim(`pick -r='x`), "unterminated ' quote");
+  assert.equal(error_of(`open "oops`), 'unterminated " quote');
+});
+
+test("a verbatim subject starts at a UTF-16 offset, so wide characters before and inside it are kept", () => {
+  assert.deepEqual(verbatim_args(`pick -r 🦊 a[title="日本 🦊"]  b`), { rapid: true, selector: '🦊 a[title="日本 🦊"]  b' });
+  assert.deepEqual(verbatim_args(`pick   日本[x="é"]`), { selector: '日本[x="é"]' });
+});
+
+test("positional words come before a verbatim subject", () => {
+  const positional = create_registry();
+  positional.define("set.run", {
+    name: "set",
+    label: "L",
+    intent: "I.",
+    runs_in: "background",
+    run: () => {},
+    params: [
+      { name: "name", type: "string", values: ["a", "b"], strict: true },
+      { name: "value", type: "string", main: true, rest: true, verbatim: true },
+    ],
+  });
+  const result = parse_command_line(positional, `set a x "y  z`);
+  assert.deepEqual(result.kind === "invocation" ? result.invocation.args : result, { name: "a", value: 'x "y  z' });
+});
