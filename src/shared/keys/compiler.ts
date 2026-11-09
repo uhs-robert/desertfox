@@ -1,5 +1,6 @@
 // Compiles the merged keymap into the prefix tree the content script walks.
 
+import type { BundleName } from "../bundles.ts";
 import { MODES as RUNTIME_MODES } from "../command.ts";
 import type { CountBehavior, ParamDef, RunsIn } from "../command.ts";
 import { ignore_regex_source } from "../match_pattern.ts";
@@ -13,7 +14,7 @@ import { default_of, is_dynamic_values } from "../registry/params.ts";
 import { parse_sequence } from "./notation.ts";
 
 // `accepts_args` is the registry validator, passed in because the content bundle includes the keys index: importing the validator here grew content.js from 15.7 KB to 21 KB, over its 16 KB limit. Without it a modifier variant is never judged and always inserted.
-export type CommandInfo = { runs_in: RunsIn; label: string; count: CountBehavior; params?: readonly ParamDef[]; accepts_args?: (args: Record<string, unknown>, prompt?: Prompt) => boolean };
+export type CommandInfo = { runs_in: RunsIn; bundle?: BundleName; label: string; count: CountBehavior; params?: readonly ParamDef[]; accepts_args?: (args: Record<string, unknown>, prompt?: Prompt) => boolean };
 
 // Search engine name to the label the user gave it. A key that searches with an engine reads as that label.
 export type LabelSources = { engine_labels: Record<string, string> };
@@ -243,7 +244,7 @@ function to_steps(mode: KeymapMode, entry: Entry, resolve: ResolveCommand, setti
     }
     // The label is for the leaf. The steps stay the plain invocations the router runs.
     const { label: _label, intent: _intent, variant_label: _variant_label, ...plain } = invocation;
-    steps.push({ invocation: plain, runs_in: info.runs_in, count_rule: info.count });
+    steps.push({ invocation: plain, runs_in: info.runs_in, count_rule: info.count, ...(info.bundle && { bundle: info.bundle }) });
   }
   if (steps.length === 0) {
     warnings.push(`${mode}: skipped "${entry.sequence}": empty binding`);

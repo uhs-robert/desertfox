@@ -428,7 +428,7 @@ test("config.reload turns any other failure into a refusal that keeps the config
     return working(values);
   };
   const command = registry.get("config.reload")!;
-  await assert.rejects(Promise.resolve(command.run({ tab_id: undefined, window_id: 1, frame_id: 0, mode: "normal" }, {})), (error: Error) => {
+  await assert.rejects(Promise.resolve(command.run!({ tab_id: undefined, window_id: 1, frame_id: 0, mode: "normal" }, {})), (error: Error) => {
     assert.ok(error instanceof RuntimeRefusal, String(error));
     assert.match(error.message, /^Config not reloaded, the current one stays: disk full\. Run config\.reload again, and debug\.restart if it keeps failing\.$/);
     return true;

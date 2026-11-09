@@ -2,6 +2,7 @@
 // into this frame. It registers through `register_sink` and `register_handler` and enters its mode with `set_mode`.
 // main.ts puts all three on `window.desertfox_host`. The host counts every wait on a load, and key_flow holds keys until none is left.
 
+import { last_blurred_element } from "./handlers/page.ts";
 import { BUNDLE_FOR_MODE } from "../shared/bundles.ts";
 import type { BundleName } from "../shared/bundles.ts";
 import type { Mode } from "../shared/command.ts";
@@ -29,6 +30,8 @@ export type BundleHostApi = {
   // The answer is the handler's real outcome, and stays pending while the handler waits on the user. A missing handler or a failed load answers failed.
   run_command: (command_id: string, name: BundleName, args: Record<string, unknown>) => Promise<Outcome>;
   show_toast: (message: string) => void;
+  // The field the last Escape left, which a bundle cannot see.
+  last_blurred: () => Element | undefined;
 };
 
 export type BundleHostDeps = {
@@ -150,6 +153,7 @@ export function create_bundle_host() {
       get_mode: () => current_mode,
       run_command: (command_id, name, args) => run_command(command_id, name, args, `${name} has no ${command_id}`),
       show_toast: (message) => (deps.show_toast ?? deps.show_error)(message),
+      last_blurred: last_blurred_element,
     } satisfies BundleHostApi,
   };
 }

@@ -1,4 +1,3 @@
-import { help_whichkey } from "../content/handlers/lazy_bundle.ts";
 import { help_name_choices, help_name_url } from "../background/open_help.ts";
 import { HELP_PAGE_FILE } from "../help/route.ts";
 import { open_help_url } from "./help_tab.ts";
@@ -9,7 +8,7 @@ define("help.whichkey", {
   intent: "List the keys at the top of the keymap.",
   runs_in: "content",
   modes: ["normal", "caret", "visual", "visual_line"],
-  run: help_whichkey.run,
+  bundle: "whichkey",
 });
 
 // Defined after every other command module has run (see command_modules.ts), so the choices cover every command.

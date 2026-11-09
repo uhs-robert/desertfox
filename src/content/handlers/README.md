@@ -7,12 +7,11 @@ The content-side code of each command that runs in the page. One file per comman
 - `page.ts`: the page focus commands. It also holds `blur_focused_element` and remembers the last blurred field for `scroll.align`.
 - `mode.ts`, `stop.ts`, `copy.ts`: the mode, stop and copy commands.
 - `focus.ts`: a helper that has no handler object.
-- `lazy_bundle.ts`: handlers for commands whose code sits in a bundle (`hints`, `cmdline`, `caret`, `whichkey`). Each one asks `bundles` to load the bundle and run the command. If the bundle has no handler for the command yet, the handler refuses with a `NEEDS_*` message.
 
 How a handler is found and called:
 
 - `../handler_map.ts` maps a command id such as `scroll.lines` to its handler. It is the only id-to-code link in the content bundle.
-- `../run_content.ts` looks the id up and fails if there is none. It fills each missing param named in `fill_from_page`, then calls `run` once per args set that the count rule gives. A thrown error also becomes a failed outcome, which the caller shows as a toast.
+- `../run_content.ts` looks the id up. An id with no handler but with a `bundle` on the invocation runs through the bundle host, which loads the bundle first. Any other id fails. It fills each missing param named in `fill_from_page`, then calls `run` once per args set that the count rule gives. A thrown error also becomes a failed outcome, which the caller shows as a toast.
 - The args are already checked, with defaults filled in, by the background compiler.
 
 The definitions in `src/commands` import the same handler objects, so the count rule and `fill_from_page` live in one place.

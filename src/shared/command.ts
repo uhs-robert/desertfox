@@ -1,6 +1,7 @@
 // Command definition: the one shape the registry stores, the validator checks
 // and `commands.json` is cut from. Types, plus the list of runtime modes.
 
+import type { BundleName } from "./bundles.ts";
 import type { Outcome } from "./messages.ts";
 
 export type ParamType = "int" | "float" | "string" | "bool" | "enum";
@@ -113,7 +114,10 @@ export type CommandDef = {
   completion?: "hidden" | readonly Mode[];
   // Absent means true. `.` replays only a repeatable background command, so false keeps a command out of the memory.
   repeatable?: boolean;
-  run: CommandRun;
+  // The lazy bundle that holds the code of a content command. The content script loads it on the first run and asks it for the handler. Such a command has no `run`.
+  bundle?: BundleName;
+  // Absent only on a command with a `bundle`.
+  run?: CommandRun;
 };
 
 // A `commands.json` entry: the definition without the handler and the router fields.

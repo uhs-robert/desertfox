@@ -1,4 +1,3 @@
-import { hint_run } from "../content/handlers/lazy_bundle.ts";
 import { define } from "../shared/registry/builtin.ts";
 import { WHERE, WHERE_SHORT } from "./open_target.ts";
 
@@ -93,5 +92,5 @@ define("hint.run", {
     { name: "rapid", type: "bool", default: false, short: "r", description: "Keep hint mode open for more picks." },
   ],
   runs_in: "content",
-  run: hint_run.run,
+  bundle: "hints",
 });

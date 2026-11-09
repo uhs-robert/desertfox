@@ -151,7 +151,7 @@ export function create_router(deps: RouterDeps): Router {
 
     if (command.runs_in === "content") return run_in_content(command, final_args, counted.times, context);
     for (let time = 0; time < counted.times; time++) {
-      const result = outcome_of_reply(await command.run(time === 0 ? context : (await read_now(request, false)).context, final_args));
+      const result = outcome_of_reply(await command.run!(time === 0 ? context : (await read_now(request, false)).context, final_args));
       if (!result.ok) return result;
     }
     return done;
@@ -171,7 +171,7 @@ export function create_router(deps: RouterDeps): Router {
   async function run_in_content(command: CommandDef, args: CheckedArgs, times: number, context: CommandContext): Promise<Outcome> {
     const { tab_id, frame_id } = context;
     if (tab_id === undefined) return refuse(`${command.label} needs a tab`);
-    const invocations = Array.from({ length: times }, () => ({ id: command.id, args }));
+    const invocations = Array.from({ length: times }, () => ({ id: command.id, args, ...(command.bundle && { bundle: command.bundle }) }));
     try {
       return outcome_of_reply(await deps.send_to_tab(tab_id, { type: "run_in_content", invocations }, frame_id));
     } catch {

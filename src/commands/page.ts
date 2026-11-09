@@ -1,5 +1,4 @@
 import { get_config } from "../background/startup.ts";
-import { page_focus_field, page_follow } from "../content/handlers/lazy_bundle.ts";
 import { stop_page } from "../content/handlers/stop.ts";
 import { NEW_TAB_PAGE_FILE } from "../shared/config.ts";
 import { define } from "../shared/registry/builtin.ts";
@@ -56,7 +55,7 @@ define("page.follow", {
   intent: "Go to the next or previous page of a series. It takes a link marked rel next or prev first, then the link or button whose text best matches the next_patterns or prev_patterns setting: an earlier pattern wins, then a link over a button, then the shorter text.",
   params: [{ name: "direction", type: "enum", values: ["next", "prev"], value_labels: { next: "to next page", prev: "to previous page" }, description: { next: "Follow the link to the next page.", prev: "Follow the link to the previous page." } }, WHERE_PARAM],
   runs_in: "content",
-  run: page_follow.run,
+  bundle: "hints",
 });
 
 // Both keys start from the focused control, else the last one Escape left, else the top of the view. It stops at the ends and does not wrap.
@@ -69,5 +68,5 @@ define("page.focus_field", {
   ],
   runs_in: "content",
   count: { param: "steps" },
-  run: page_focus_field.run,
+  bundle: "hints",
 });
