@@ -211,12 +211,15 @@ export const browser_session_deps: SessionDeps = {
 
 const handlers = make_session_handlers(browser_session_deps);
 
+// The line reads a leading `-` as a flag and a leading `@` as a slot, so a name that starts so would not run again when picked from the list. The rule is on the params that give a name. The ones that look a name up take any text, so a stored name always resolves.
+const NEW_NAME_PATTERN = "^\\s*[^\\s@-]";
+
 const NAME_PARAM = { name: "name", type: "string", rest: true, main: true, values: { from: "sessions" } } as const;
 
 define("session.save", {
   label: "Save tab session",
   intent: "Save the tabs of this window under a name. An existing name is updated.",
-  params: [NAME_PARAM],
+  params: [{ ...NAME_PARAM, pattern: NEW_NAME_PATTERN }],
   runs_in: "background",
   run: (ctx, args) => handlers.save(ctx, args as { name: string }),
 });
@@ -251,7 +254,7 @@ define("session.delete", {
 define("session.rename", {
   label: "Rename tab session",
   intent: "Rename a saved tab session to the name given by to.",
-  params: [NAME_PARAM, { name: "to", type: "string", description: "Give the session this name." }],
+  params: [NAME_PARAM, { name: "to", type: "string", pattern: NEW_NAME_PATTERN, description: "Give the session this name." }],
   runs_in: "background",
   run: (ctx, args) => handlers.rename(ctx, args as { name: string; to: string }),
 });

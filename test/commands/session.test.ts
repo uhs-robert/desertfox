@@ -288,3 +288,18 @@ test("the registry accepts the session commands, with into defaulting to window"
   assert.equal(check_args(registry.get("session.rename")!, { name: "x", to: "y" }, {}).ok, true);
   assert.equal(check_args(registry.get("session.rename")!, { name: "x" }, {}).ok, false);
 });
+
+test("the validator refuses a new name that starts with - or @, and lookups take any text", () => {
+  const ok = (id: string, args: Record<string, unknown>) => check_args(registry.get(id)!, args, {}).ok;
+  for (const name of ["-t", "@selection", "-x y", "  -t"]) {
+    assert.equal(ok("session.save", { name }), false, name);
+    assert.equal(ok("session.rename", { name: "a", to: name }), false, name);
+  }
+  for (const name of ["work -t", "Q3 - plan", "a@b"]) {
+    assert.equal(ok("session.save", { name }), true, name);
+    assert.equal(ok("session.rename", { name: "a", to: name }), true, name);
+  }
+  assert.equal(ok("session.open", { name: "-t" }), true);
+  assert.equal(ok("session.delete", { name: "@x" }), true);
+  assert.equal(ok("session.rename", { name: "-old", to: "new" }), true);
+});
