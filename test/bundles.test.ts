@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { test } from "node:test";
-import { BUNDLE_FOR_MODE, BUNDLE_NAMES, is_bundle_name } from "../src/shared/bundles.ts";
+import { BUNDLE_FOR_MODE, BUNDLE_LABELS, BUNDLE_NAMES, is_bundle_name } from "../src/shared/bundles.ts";
 
 const read = (path: string) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 
@@ -24,4 +24,8 @@ test("each sink mode names a bundle and only real bundles load", () => {
   for (const name of Object.values(BUNDLE_FOR_MODE)) assert.ok(is_bundle_name(name));
   assert.deepEqual(Object.keys(BUNDLE_FOR_MODE).sort(), ["caret", "cmdline", "hint", "visual", "visual_line"]);
   assert.equal(is_bundle_name("../background"), false);
+});
+
+test("every bundle has a label for the refusal that names it", () => {
+  for (const name of BUNDLE_NAMES) assert.ok(BUNDLE_LABELS[name], name);
 });

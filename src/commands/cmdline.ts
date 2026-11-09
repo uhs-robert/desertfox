@@ -1,4 +1,3 @@
-import { cmdline_clear, cmdline_help, cmdline_history, cmdline_next_completion, cmdline_open, cmdline_prev_completion, cmdline_submit, list_act, list_select } from "../content/handlers/lazy_bundle.ts";
 import { define } from "../shared/registry/builtin.ts";
 
 define("cmdline.open", {
@@ -7,7 +6,7 @@ define("cmdline.open", {
   intent: "Open the command line, with text already typed if given.",
   params: [{ name: "text", type: "string", optional: true, description: "Put this text in the line." }],
   runs_in: "content",
-  run: cmdline_open.run,
+  bundle: "cmdline",
 });
 
 define("cmdline.next_completion", {
@@ -16,7 +15,7 @@ define("cmdline.next_completion", {
   intent: "Select the next completion in the command line.",
   runs_in: "content",
   modes: ["cmdline"],
-  run: cmdline_next_completion.run,
+  bundle: "cmdline",
 });
 
 define("cmdline.prev_completion", {
@@ -25,7 +24,7 @@ define("cmdline.prev_completion", {
   intent: "Select the previous completion in the command line.",
   runs_in: "content",
   modes: ["cmdline"],
-  run: cmdline_prev_completion.run,
+  bundle: "cmdline",
 });
 
 define("cmdline.submit", {
@@ -34,7 +33,7 @@ define("cmdline.submit", {
   intent: "Run the text typed in the command line.",
   runs_in: "content",
   modes: ["cmdline"],
-  run: cmdline_submit.run,
+  bundle: "cmdline",
 });
 
 define("cmdline.history", {
@@ -44,7 +43,7 @@ define("cmdline.history", {
   params: [{ name: "direction", type: "enum", values: ["prev", "next"], value_labels: { prev: "to older entry", next: "to newer entry" } }],
   runs_in: "content",
   modes: ["cmdline"],
-  run: cmdline_history.run,
+  bundle: "cmdline",
 });
 
 define("cmdline.clear", {
@@ -53,7 +52,7 @@ define("cmdline.clear", {
   intent: "Delete the text typed in the command line.",
   runs_in: "content",
   modes: ["cmdline"],
-  run: cmdline_clear.run,
+  bundle: "cmdline",
 });
 
 define("cmdline.help", {
@@ -62,7 +61,7 @@ define("cmdline.help", {
   intent: "Open help for the selected or typed command.",
   runs_in: "content",
   modes: ["cmdline"],
-  run: cmdline_help.run,
+  bundle: "cmdline",
 });
 
 define("list.act", {
@@ -85,7 +84,7 @@ define("list.act", {
   ],
   runs_in: "content",
   modes: ["cmdline"],
-  run: list_act.run,
+  bundle: "cmdline",
 });
 
 define("list.select", {
@@ -95,5 +94,5 @@ define("list.select", {
   params: [{ name: "action", type: "enum", values: ["toggle", "clear"], description: { toggle: "Mark or unmark the highlighted tab, then move down.", clear: "Unmark every tab." } }],
   runs_in: "content",
   modes: ["cmdline"],
-  run: list_select.run,
+  bundle: "cmdline",
 });

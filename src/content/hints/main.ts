@@ -272,7 +272,7 @@ function register(host: BundleHostApi): void {
 
   host.register_handler("page.follow", (args) => follow_page_link(args.direction as FollowDirection, args.where as Place));
   host.register_handler("page.focus_field", (args): Outcome => {
-    const message = focus_field(document, args.last_blurred as Element | undefined, args.direction as FieldDirection, args.steps as number);
+    const message = focus_field(document, host.last_blurred(), args.direction as FieldDirection, args.steps as number);
     return message === undefined ? done : { ok: false, message };
   });
   host.register_handler("copy.links", (args) => yank_links(args.scope as "page" | "viewport", args.format as LinkFormat, yank_deps()));

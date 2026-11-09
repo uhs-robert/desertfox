@@ -5,6 +5,9 @@ import type { Mode } from "./command.ts";
 export const BUNDLE_NAMES = ["hints", "caret", "whichkey", "cmdline", "ui"] as const;
 export type BundleName = (typeof BUNDLE_NAMES)[number];
 
+// How a refusal names a bundle that registers no handler for a command.
+export const BUNDLE_LABELS: Record<BundleName, string> = { hints: "hints", caret: "caret mode", whichkey: "the which-key panel", cmdline: "the command line", ui: "the badge and toast" };
+
 // The modes whose keys go to a sink, and the bundle that registers it.
 export const BUNDLE_FOR_MODE: Partial<Record<Mode, BundleName>> = { hint: "hints", caret: "caret", visual: "caret", visual_line: "caret", cmdline: "cmdline" };
 

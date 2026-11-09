@@ -357,6 +357,8 @@ function check_when(input: CommandInput, param: ParamDef, at: string, fail: Fail
 
 function check_count_and_modes(input: CommandInput, fail: Fail): void {
   if (input.runs_in !== "background" && input.runs_in !== "content") fail("runs_in", "must be background or content");
+  if (input.bundle !== undefined && (input.runs_in !== "content" || input.run)) fail("bundle", "belongs to a content command without a run");
+  if (!input.run && input.bundle === undefined) fail("run", "is missing");
   if (typeof input.count === "object" && !find_param(input, input.count.param)) {
     fail("count", `names "${input.count.param}", which is not a param`);
   }

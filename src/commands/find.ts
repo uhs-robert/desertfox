@@ -1,4 +1,3 @@
-import { find_next, find_open, find_prev } from "../content/handlers/lazy_bundle.ts";
 import { define } from "../shared/registry/builtin.ts";
 
 define("find.open", {
@@ -11,7 +10,7 @@ define("find.open", {
     { name: "source", type: "enum", values: ["typed", "word"], default: "typed", value_labels: { word: "word" }, description: { word: "Search the word or selection at the caret." } },
   ],
   runs_in: "content",
-  run: find_open.run,
+  bundle: "caret",
 });
 
 define("find.next", {
@@ -20,7 +19,7 @@ define("find.next", {
   label: "Next match",
   intent: "Go to the next match of the last search. It goes the way the search was started. In caret mode the caret goes to the match. In visual mode the caret end goes to the match and the anchor stays.",
   runs_in: "content",
-  run: find_next.run,
+  bundle: "caret",
 });
 
 define("find.prev", {
@@ -29,5 +28,5 @@ define("find.prev", {
   label: "Previous match",
   intent: "Go to the previous match of the last search. It goes against the way the search was started. In caret mode the caret goes to the match. In visual mode the caret end goes to the match and the anchor stays.",
   runs_in: "content",
-  run: find_prev.run,
+  bundle: "caret",
 });

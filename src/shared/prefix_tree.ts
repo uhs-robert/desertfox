@@ -1,6 +1,7 @@
 // Compiled keymap: the background writes it to `storage.local` under
 // COMPILED_KEYMAP_STORAGE_KEY and the content script reads it before the first key.
 
+import type { BundleName } from "./bundles.ts";
 import type { CountBehavior, RunsIn } from "./command.ts";
 import type { BoundInvocation } from "./invocation.ts";
 import type { ModeIndicator, WhichKeyBorder } from "./config.ts";
@@ -8,7 +9,7 @@ import type { KeymapMode } from "./keymap.ts";
 
 export const COMPILED_KEYMAP_STORAGE_KEY = "desertfox_compiled_keymap";
 
-export const COMPILED_KEYMAP_VERSION = 2;
+export const COMPILED_KEYMAP_VERSION = 3;
 
 // One step of a binding. The side that runs it and the count rule are resolved at compile time.
 export type LeafStep = {
@@ -16,6 +17,8 @@ export type LeafStep = {
   runs_in: RunsIn;
   // How a numeric prefix applies, copied from the registry because the content script has none.
   count_rule: CountBehavior;
+  // The lazy bundle that holds the command, copied from the registry.
+  bundle?: BundleName;
 };
 
 export type TreeLeaf = {

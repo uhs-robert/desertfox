@@ -90,7 +90,7 @@ export function make_router_deps(get_config: () => Promise<MergedConfig>, repeat
     read_clipboard: () => navigator.clipboard.readText(),
     has_permission: (permission) => browser.permissions.contains({ permissions: [permission as browser._manifest.OptionalPermission] }),
     send_to_tab,
-    open_cmdline: (tab_id, frame_id, text) => send_to_tab(tab_id, { type: "run_in_content", invocations: [{ id: "cmdline.open", args: { text } }] }, frame_id),
+    open_cmdline: (tab_id, frame_id, text) => send_to_tab(tab_id, { type: "run_in_content", invocations: [{ id: "cmdline.open", args: { text }, bundle: "cmdline" }] }, frame_id),
     show_refusal: (tab_id, refusal, frame_id) => deliver_refusal(channels, tab_id, refusal, frame_id),
     is_disabled: read_disabled,
     repeat_memory,

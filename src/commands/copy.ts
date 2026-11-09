@@ -1,5 +1,4 @@
 import { COPY_FORMATS, copy_url } from "../content/handlers/copy.ts";
-import { copy_links } from "../content/handlers/lazy_bundle.ts";
 import { define } from "../shared/registry/builtin.ts";
 
 define("copy.url", {
@@ -52,5 +51,5 @@ define("copy.links", {
     },
   ],
   runs_in: "content",
-  run: copy_links.run,
+  bundle: "hints",
 });

@@ -1,3 +1,4 @@
+import type { BundleName } from "./bundles.ts";
 import type { ContextSource } from "./command.ts";
 
 // The one shape every caller produces: keys, command line, native host, palette.
@@ -8,6 +9,8 @@ export type Invocation = {
   args?: Record<string, unknown>;
   // Numeric prefix. The router applies the command's `count` rule.
   count?: number;
+  // Set by the router and the key compiler for a command whose code sits in a lazy bundle. The content script runs the command through that bundle.
+  bundle?: BundleName;
 };
 
 // Only a key binding carries a prompt: other callers type the whole command line themselves.
