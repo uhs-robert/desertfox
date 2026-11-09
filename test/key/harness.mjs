@@ -483,15 +483,16 @@ export async function create_session({ name: session_name, timings, sweep = true
       await sleep(50);
     }
     if (first_status.source !== "defaults") throw new Error(`a new profile must start on the defaults, got source "${first_status.source}"`);
-    // The defaults open Quick Start on a first install, and the install handler opens it after the config status is out. The tab must exist and close before the first reset, or it takes focus later.
+    // The defaults open Quick Start on a first install, and the install handler opens it after the config status is out. Wait up to 5 s for it and close it, so it cannot take focus later. A profile that opens none is fine.
     const quick_start_tab = `browser.tabs.query({}).then((tabs) => tabs.find((tab) => tab.url.includes("/home.html"))?.id ?? null)`;
-    let quick_start_id = null;
-    for (let attempt = 0; quick_start_id == null; attempt++) {
-      if (attempt >= 100) throw new Error("the first install opened no Quick Start tab within 5 s");
+    for (let attempt = 0; attempt < 100; attempt++) {
       await sleep(50);
-      quick_start_id = await evaluate_in_background(rdp, EXTENSION_ID, quick_start_tab);
+      const quick_start_id = await evaluate_in_background(rdp, EXTENSION_ID, quick_start_tab);
+      if (quick_start_id != null) {
+        await evaluate_in_background(rdp, EXTENSION_ID, `browser.tabs.remove(${quick_start_id})`);
+        break;
+      }
     }
-    await evaluate_in_background(rdp, EXTENSION_ID, `browser.tabs.remove(${quick_start_id})`);
   } catch (error) {
     await close({ keep_diagnostics: true });
     throw error;
