@@ -52,6 +52,8 @@ function install_fake_browser(config_file: { value: unknown }) {
   Object.assign(globalThis, {
     browser: {
       runtime: { id: "test@desertfox" },
+      // No native permission, so the autoconfig mirror stays quiet and writes nothing.
+      permissions: { contains: async () => false },
       storage: {
         local: { ...local_area, get: async (key?: string | string[]) => ({ ...(await local_area.get(key)), ...files_slot(key) }) },
         session: { get: session_area.get, set: async (values: Record<string, unknown>) => (sets.session_writes++, session_area.set(values)) },
