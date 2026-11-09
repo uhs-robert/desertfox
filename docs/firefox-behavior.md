@@ -18,7 +18,7 @@ Phase 0 answered three questions before design work: where plain keys and Firefo
 | Page | `Shift+J` (content script) | `Alt+J` (Firefox shortcut) |
 | --- | --- | --- |
 | http page, about:blank | works | works |
-| about:addons, about:preferences, about:support | lost | works |
+| about:addons, about:preferences, about:support, about:license | lost | works |
 | view-source, reader view, PDF viewer | lost | works |
 | addons.mozilla.org | lost | works |
 | New tab page, or address bar focused | lost | works |
@@ -53,7 +53,7 @@ A second test checked whether Firefox reads `~/.mozilla/managed-storage/<extensi
 - After an extension reload (then `config.reload`, now `debug.restart`), Firefox loaded the content script again into every open `http` tab. The background stored `already_loaded: 5, injected: 0, failed: 0`, so its own injection had nothing to do. A `j` after the reload scrolled by the same distance as before the reload, in the tab that took the reload key and in a tab that did not. So the old script does not act a second time. This is one run with a temporary add-on. A signed add-on has not been checked.
 - `browser.focus_page` works. With the address bar focused, the `<A-,>` chord ran it, and the next `j` scrolled the page.
 - A chord that the content script cancels does not also fire the Firefox shortcut. On a page that cancels every key in its own capture listener, and on a normal page, `<A-j>` and `<A-k>` switched tabs exactly once. Tab counts cannot show which side ran the action. The count shows no double action.
-- `<A-j>` and `<A-k>` also switch tabs from an `about:support` page, where no content script runs.
+- `<A-j>` and `<A-k>` also switch tabs from an `about:license` page (the key test) and from `about:support`, where no content script runs.
 
 ## Extension pages and `tabs.sendMessage` (0.1.1)
 
