@@ -97,4 +97,21 @@ export async function run_cases({ run_case, on_teardown, expect, open_page, pres
     await wait_event(mark_load, badge("closed_field_autofocus", "INSERT"), "INSERT for the field in the closed root focused at load");
     await press_and_wait("F2", badge("closed_field_autofocus", "NORMAL"), "NORMAL after focus left the load-focused field");
   });
+
+  for (const root_kind of ["closed", "open"]) {
+    await run_case(`focus moving between a field and a button inside one ${root_kind} shadow root follows INSERT and NORMAL`, async () => {
+      const badge = (page_id, label) => (event) => event.type === "indicator" && event.page_id === page_id && event.label === label;
+      const press_and_wait = async (key, predicate, what) => {
+        const mark = events.length;
+        await press_keys("-k", key);
+        await wait_event(mark, predicate, what);
+      };
+      const page_id = `${root_kind}_root_move`;
+
+      await open_page("closed_field", page_id, { new_tab: true });
+      await press_and_wait("F9", badge(page_id, "INSERT"), "INSERT after the page focused the field in the root");
+      await press_and_wait("Tab", badge(page_id, "NORMAL"), "NORMAL after Tab moved focus to the button in the same root");
+      await press_and_wait("F9", badge(page_id, "INSERT"), "INSERT after the page focused the field in the root again");
+    });
+  }
 }

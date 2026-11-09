@@ -156,10 +156,10 @@ export function start_server() {
       return response.end(page(`controls ${id}`, controls, "<script>addEventListener('focusin', (event) => send('focused', { id: event.target.id }))</script>"));
     }
     if (url.pathname === "/closed_field") {
-      // A field inside a closed root and a plain button outside. F9 focuses the inner field and F2 the outer one (not F10, whose key-up moves Firefox focus to the menu bar), because the test cannot reach into a closed root. With autofocus in the id, the inner field takes the focus at load.
+      // A field inside a closed root and a plain button outside. F9 focuses the inner field and F2 the outer one (not F10, whose key-up moves Firefox focus to the menu bar), because the test cannot reach into a closed root. With autofocus in the id, the inner field takes the focus at load. A button sits after the field in the root, so Tab moves focus inside it; "open" in the id makes the root open.
       const build = `<div id="host"></div><button id="outside">outside</button><script>
-        const inner = document.getElementById("host").attachShadow({ mode: "closed" });
-        inner.innerHTML = '<input id="inner">';
+        const inner = document.getElementById("host").attachShadow({ mode: location.search.includes("open") ? "open" : "closed" });
+        inner.innerHTML = '<input id="inner"><button id="inner_button">inner</button>';
         addEventListener("keydown", (event) => {
           if (event.key === "F9") inner.getElementById("inner").focus();
           if (event.key === "F2") document.getElementById("outside").focus();
