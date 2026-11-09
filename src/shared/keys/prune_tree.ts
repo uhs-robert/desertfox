@@ -5,13 +5,17 @@ import type { TreeBranch, TreeNode } from "../prefix_tree.ts";
 type Sequences = readonly (readonly string[])[];
 
 // A listed sequence covers its whole subtree: passing `g` frees every `g` binding, passing `gg` frees that binding alone.
-// A branch left with no child goes too, so no prefix waits for a key that binds nothing.
+// A subtree no listed sequence names is shared with the input. A branch left with no child goes, so no prefix waits for a key that binds nothing.
 function without(node: TreeNode, sequences: Sequences): TreeNode | undefined {
   if (node.kind === "leaf") return node;
   const children: Record<string, TreeNode> = {};
   for (const [token, child] of Object.entries(node.children)) {
     const below = sequences.filter((sequence) => sequence[0] === token).map((sequence) => sequence.slice(1));
     if (below.some((rest) => rest.length === 0)) continue;
+    if (below.length === 0) {
+      children[token] = child;
+      continue;
+    }
     const kept = without(child, below);
     if (kept !== undefined) children[token] = kept;
   }
@@ -32,11 +36,14 @@ function only(node: TreeNode, sequences: Sequences): TreeNode | undefined {
 
 export type KeyRule = { pass: Sequences } | { only: Sequences };
 
+// `only` keeps these even when unlisted: the one-shot pass, the way into ignore mode and the way out of a mode.
+const ESCAPE_KEYS: Sequences = [["<C-v>"], ["<S-Escape>"], ["<Escape>"]];
+
 const EMPTY_ROOT: TreeBranch = { kind: "branch", children: {} };
 
 // Shares unchanged subtrees with the input and never mutates it. The result is empty when nothing is left.
 export function prune_tree(root: TreeBranch | undefined, rule: KeyRule): TreeBranch {
-  const pruned = root && ("pass" in rule ? without(root, rule.pass) : only(root, rule.only));
+  const pruned = root && ("pass" in rule ? without(root, rule.pass) : only(root, [...rule.only, ...ESCAPE_KEYS]));
   return pruned?.kind === "branch" ? pruned : EMPTY_ROOT;
 }
 
@@ -45,4 +52,4 @@ export const is_empty_tree = (branch: TreeBranch): boolean => Object.keys(branch
 // Whether the rule hands this single key to the page even where the tree never binds it: `/`, `'` and the digits, which the key flow would otherwise cancel or take as a count.
 // Under `only` every key but the first key of a listed sequence goes to the page.
 export const rule_frees = (rule: KeyRule, token: string): boolean =>
-  "pass" in rule ? rule.pass.some((sequence) => sequence.length === 1 && sequence[0] === token) : !rule.only.some((sequence) => sequence[0] === token);
+  "pass" in rule ? rule.pass.some((sequence) => sequence.length === 1 && sequence[0] === token) : ![...rule.only, ...ESCAPE_KEYS].some((sequence) => sequence[0] === token);
