@@ -26,7 +26,9 @@ export type HostToPage =
   // The line to show under a search line, such as "3 of 17". Empty clears it.
   | { kind: "find_status"; text: string }
   // The answer to `list_headings`: every heading of the page, in page order.
-  | { kind: "headings"; items: HeadingItem[] };
+  | { kind: "headings"; items: HeadingItem[] }
+  // The line ended and the host moved focus back to the page. The page answers `drained` once its window has lost the focus.
+  | { kind: "drain" };
 
 export type PageToHost =
   | { kind: "ready" }
@@ -42,7 +44,9 @@ export type PageToHost =
   | { kind: "find_commit" }
   // The completion list reads the headings of the page for the first time.
   | { kind: "list_headings" }
-  | { kind: "submit"; invocation: Invocation };
+  | { kind: "submit"; invocation: Invocation }
+  // The keys that reached the page after the line ended, in order, for the host to replay in its own frame.
+  | { kind: "drained"; tokens: string[] };
 
 export const MESSAGE_MARK = "desertfox_cmdline";
 

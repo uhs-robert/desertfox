@@ -17,6 +17,8 @@ const READY_TIMEOUT_MS = 3000;
 const BAR_HEIGHT = "5rem";
 // After each load of the frame, the page must answer a check within this time, or the frame went somewhere else.
 const CHECK_TIMEOUT_MS = 1000;
+// A line that ended holds the page's keys until its frame hands back the late ones, or this long. A dead frame never answers.
+const HAND_BACK_TIMEOUT_MS = 1000;
 
 type Open = {
   frame: HTMLIFrameElement;
@@ -49,6 +51,10 @@ type Open = {
   submitted: boolean;
   // The end of the page search, once the line has closed. Enter waits for it, so the next step sees the committed match.
   search_ended_?: Promise<Outcome>;
+  // Where the focus was when the line opened. It goes back there when the line ends.
+  focused_before_: Element | null;
+  // Set once the line ended. It takes the keys the frame got after the end and removes the frame.
+  hand_back_?: (tokens: readonly string[]) => void;
   // Settles the promise `cmdline.open` returned. The first call wins, so Enter settles it before `close` ends the line as cancelled.
   finish: (outcome: Outcome | Promise<Outcome>) => void;
   timer: ReturnType<typeof setTimeout>;
@@ -61,17 +67,35 @@ if (!page.desertfox_cmdline_ready) {
   const origin = new URL(browser.runtime.getURL("cmdline.html")).origin;
   let open: Open | undefined;
 
+  // Keys typed fast after Enter or Escape still reach the frame until Firefox moves the focus. So the focus goes back to the
+  // page first and the page's keys wait, the frame hands back its late keys, they replay, and only then the frame goes.
   const unmount = () => {
-    if (!open) return;
-    open.finish({ ok: true, cancelled: true });
-    clearTimeout(open.timer);
-    clearTimeout(open.check_timer_);
-    open.removal_watch_.disconnect();
-    if (open.asked_headings_ && !open.submitted) void host.run_command_("heading.clear", "hints", {});
-    if (open.search) open.search_ended_ = host.run_command_("find.end", "caret", { keep: open.committed });
-    open.port?.close();
-    open.holder.remove();
+    const current = open;
+    if (!current) return;
     open = undefined;
+    current.finish({ ok: true, cancelled: true });
+    clearTimeout(current.timer);
+    clearTimeout(current.check_timer_);
+    current.removal_watch_.disconnect();
+    if (current.asked_headings_ && !current.submitted) void host.run_command_("heading.clear", "hints", {});
+    if (current.search) current.search_ended_ = host.run_command_("find.end", "caret", { keep: current.committed });
+    host.hold_keys_until_(
+      new Promise((handed_back) => {
+        const finish_hand_back = (tokens: readonly string[]) => {
+          clearTimeout(timer);
+          current.port?.close();
+          current.holder.remove();
+          handed_back(tokens);
+        };
+        const timer = setTimeout(finish_hand_back, HAND_BACK_TIMEOUT_MS, []);
+        current.hand_back_ = finish_hand_back;
+        current.frame.blur();
+        (current.focused_before_ as HTMLElement | null)?.focus?.({ preventScroll: true });
+        // Until `opened` the host never focused the frame, and the page may not listen on its port yet.
+        if (current.page_opened_) send(current.port, { kind: "drain" });
+        else finish_hand_back([]);
+      }),
+    );
   };
 
   // Mode first: the exit hook then runs `unmount`, and the keys of the page return to the keymap.
@@ -109,6 +133,7 @@ if (!page.desertfox_cmdline_ready) {
       from_mode_,
       search,
       scroll: root && { top: root.scrollTop, max: root.scrollHeight - root.clientHeight },
+      focused_before_: document.activeElement,
       committed: false,
       asked_headings_: false,
       submitted: false,
@@ -159,6 +184,8 @@ if (!page.desertfox_cmdline_ready) {
     const tell = (message: HostToPage) => open === current && send(current.port, message);
     channel.port1.onmessage = (event: MessageEvent) => {
       const message = unwrap<PageToHost>(event.data);
+      // The line has ended by then, so `open` is no longer this line.
+      if (message?.kind === "drained") return current.hand_back_?.(message.tokens);
       if (open !== current || !message) return;
       // The page redeemed the ticket and can take keys itself. Until then the ready timer still runs.
       if (message.kind === "opened") {

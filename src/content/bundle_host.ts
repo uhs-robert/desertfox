@@ -32,6 +32,8 @@ export type BundleHostApi = {
   show_toast_: (message: string) => void;
   // The field the last Escape left, which a bundle cannot see.
   last_blurred_: () => Element | undefined;
+  // Holds the keys that can bind until `handed_back` settles, then replays its keys ahead of them. The command line hands back this way the keys its frame got after the line ended.
+  hold_keys_until_: (handed_back: Promise<readonly string[]>) => void;
 };
 
 export type BundleHostDeps = {
@@ -39,6 +41,8 @@ export type BundleHostDeps = {
   request_bundle_: (name: BundleName) => Promise<boolean>;
   // Runs after a load and everything that waited on it is done, so held keys can replay.
   on_idle_: () => void;
+  // Puts keys typed in another document ahead of the held ones, for the next `on_idle_` to replay.
+  hold_first_: (tokens: readonly string[]) => void;
   show_error_: (message: string) => void;
   // Without it a bundle's toast goes to show_error_.
   show_toast_?: (message: string) => void;
@@ -160,6 +164,14 @@ export function create_bundle_host() {
       run_command_: (command_id, name, args) => run_command_(command_id, name, args, `${name} has no ${command_id}`),
       show_toast_: (message) => (deps.show_toast_ ?? deps.show_error_)(message),
       last_blurred_: last_blurred_element,
+      hold_keys_until_: (handed_back) => {
+        waiting++;
+        void handed_back.catch(() => []).then((tokens) => {
+          deps.hold_first_(tokens);
+          waiting--;
+          deps.on_idle_();
+        });
+      },
     } satisfies BundleHostApi,
   };
 }
