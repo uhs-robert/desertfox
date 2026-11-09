@@ -48,7 +48,7 @@ async function until(condition: () => boolean): Promise<void> {
 // For a message that must not arrive: long enough for one that would.
 const settle = () => new Promise((resolve) => setTimeout(resolve, 50));
 
-async function load_host(t: TestContext, tag: string, { ticket_fails = false, run_answer = undefined as (() => Promise<unknown>) | undefined, search = undefined as ((finish: (outcome: unknown) => void) => void) | undefined, scrolling_element = undefined as unknown, command = undefined as ((id: string, args: Record<string, unknown>) => Promise<unknown>) | undefined } = {}) {
+async function load_host(t: TestContext, tag: string, { ticket_fails = false, run_answer = undefined as (() => Promise<unknown>) | undefined, search = undefined as ((finish: (outcome: unknown) => void) => void) | undefined, scrolling_element = undefined as unknown, command = undefined as ((id: string, args: Record<string, unknown>) => Promise<unknown>) | undefined, active_element = null as unknown } = {}) {
   const modes: string[] = [];
   const handlers = new Map<string, (args: Record<string, unknown>) => unknown>();
   const sinks = new Map<string, Sink>();
@@ -81,7 +81,7 @@ async function load_host(t: TestContext, tag: string, { ticket_fails = false, ru
         },
       },
     },
-    document: { activeElement: null, scrollingElement: scrolling_element, documentElement: { append: (child: { isConnected: boolean }) => void (child.isConnected = true) }, createElement: () => { const element = fake_element(); elements.push(element); return element; } },
+    document: { activeElement: active_element, scrollingElement: scrolling_element, documentElement: { append: (child: { isConnected: boolean }) => void (child.isConnected = true) }, createElement: () => { const element = fake_element(); elements.push(element); return element; } },
     window: {
       innerHeight: 600,
       desertfox_host: {
@@ -251,6 +251,17 @@ test("a line that ended moves the focus to the page first, and removes the frame
   await until(() => holder.removed);
   await settle();
   assert.deepEqual(handed_back, [["/", "f"]]);
+});
+
+test("a line that ended leaves the focus on the page, not on the link that had it before the line opened", async (t) => {
+  const link = fake_element();
+  link.focused = true;
+  const { frame, ready, page_opened_ } = await load_host(t, "focus_target", { active_element: link });
+  await ready();
+  await page_opened_();
+  frame.posted[0]!.transfer[0]!.postMessage({ desertfox_cmdline: { kind: "close" } });
+  await until(() => !frame.focused);
+  assert.deepEqual([frame.focused, link.focus_count], [false, 0]);
 });
 
 test("a line that ends before its page opened hands back nothing and goes at once, and a drained while the line is open does nothing", async (t) => {

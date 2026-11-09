@@ -51,8 +51,6 @@ type Open = {
   submitted: boolean;
   // The end of the page search, once the line has closed. Enter waits for it, so the next step sees the committed match.
   search_ended_?: Promise<Outcome>;
-  // Where the focus was when the line opened. It goes back there when the line ends.
-  focused_before_: Element | null;
   // Set once the line ended. It takes the keys the frame got after the end and removes the frame.
   hand_back_?: (tokens: readonly string[]) => void;
   // Settles the promise `cmdline.open` returned. The first call wins, so Enter settles it before `close` ends the line as cancelled.
@@ -67,7 +65,7 @@ if (!page.desertfox_cmdline_ready) {
   const origin = new URL(browser.runtime.getURL("cmdline.html")).origin;
   let open: Open | undefined;
 
-  // Keys typed fast after Enter or Escape still reach the frame until Firefox moves the focus. So the focus goes back to the
+  // Keys typed fast after Enter or Escape still reach the frame until Firefox moves the focus. So the focus moves to the
   // page first and the page's keys wait, the frame hands back its late keys, they replay, and only then the frame goes.
   const unmount = () => {
     const current = open;
@@ -89,8 +87,8 @@ if (!page.desertfox_cmdline_ready) {
         };
         const timer = setTimeout(finish_hand_back, HAND_BACK_TIMEOUT_MS, []);
         current.hand_back_ = finish_hand_back;
+        // The focus lands on the page itself, as a removed frame leaves it, and never back on a field or link: a field would turn the line's end into insert mode.
         current.frame.blur();
-        (current.focused_before_ as HTMLElement | null)?.focus?.({ preventScroll: true });
         // Until `opened` the host never focused the frame, and the page may not listen on its port yet.
         if (current.page_opened_) send(current.port, { kind: "drain" });
         else finish_hand_back([]);
@@ -133,7 +131,6 @@ if (!page.desertfox_cmdline_ready) {
       from_mode_,
       search,
       scroll: root && { top: root.scrollTop, max: root.scrollHeight - root.clientHeight },
-      focused_before_: document.activeElement,
       committed: false,
       asked_headings_: false,
       submitted: false,
