@@ -396,6 +396,27 @@ test("keys typed while rapid mode builds again wait and replay, also when the fi
   page.escape();
 });
 
+test("keys typed behind a non-rapid label pick reach normal mode", async () => {
+  const page = await page_with(["one", "two"]);
+  page.run({ action: "background" });
+  page.type("a");
+  page.type("j");
+  await settle();
+  assert.equal(page.sent.length, 1);
+  assert.equal(page.mode(), "normal");
+  assert.deepEqual(page.held_key_batches, [["j"]]);
+});
+
+test("Escape during the build drops the queued keys", async () => {
+  const page = await page_with(["one", "two"]);
+  page.run({ action: "background" });
+  page.type("j");
+  page.escape();
+  await settle();
+  assert.equal(page.sent.length, 0);
+  assert.deepEqual(page.held_key_batches, []);
+});
+
 // A click that focuses a textarea, as a "Search" link does. `inserted` is what `execCommand("insertText")` received.
 async function page_whose_link_focuses_a_field(focuses_field: boolean, field_focused_before = false) {
   const page = await page_with(["Search"]);
@@ -419,6 +440,16 @@ test("a text pick that focuses a field types the keys queued during the build in
   page.type("b");
   await settle();
   assert.deepEqual(inserted, ["a", "b"]);
+  assert.deepEqual(page.held_key_batches, []);
+});
+
+test("a label pick that focuses a field types the keys queued behind it into it", async () => {
+  const { page, inserted } = await page_whose_link_focuses_a_field(true);
+  page.run({ action: "here" });
+  page.type("a");
+  page.type("b");
+  await settle();
+  assert.deepEqual(inserted, ["b"]);
   assert.deepEqual(page.held_key_batches, []);
 });
 
