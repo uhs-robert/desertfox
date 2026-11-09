@@ -1,12 +1,10 @@
-// The settings page's export, snippet list and snippet removal, and the sessions export and import (`answer_sessions_transfer`). The page builds the zips itself, so this answers with raw files.
+// The settings page's export, snippet list and snippet removal. The page builds the zips itself, so this answers with raw files.
 
 import { stringify } from "smol-toml";
 import type { SettingOverrides } from "../shared/config.ts";
 import { parse_snippet } from "../shared/config_build/snippet.ts";
 import { AUTOCONFIG_FILE, type ConfigFiles } from "../shared/config_build/source_files.ts";
-import { RuntimeRefusal } from "../shared/command.ts";
-import type { SessionStore } from "./session_store.ts";
-import type { ConfigImportAnswer, ExportConfig, ExportSessions, ExportSessionsAnswer, ImportSessions, ExportConfigAnswer, InstalledSnippet, ListSnippets, ListSnippetsAnswer, RemoveSnippet } from "../shared/messages.ts";
+import type { ConfigImportAnswer, ExportConfig, ExportConfigAnswer, InstalledSnippet, ListSnippets, ListSnippetsAnswer, RemoveSnippet } from "../shared/messages.ts";
 import { ConfigRefusal } from "./config_reload.ts";
 
 const SNIPPETS_PREFIX = "snippets/";
@@ -60,20 +58,5 @@ export async function answer_config_transfer(request: ExportConfig | ListSnippet
     return { ok: true, message: `Removed ${request.path}${warnings === 0 ? "" : `, with ${warnings} warning(s) on the Help page`}. A config.reload brings it back while the file stays in the config folder.` };
   } catch (error) {
     return { ok: false, message: error instanceof ConfigRefusal ? error.message : message_of(error) };
-  }
-}
-
-const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? "" : "s"}`;
-
-export async function answer_sessions_transfer(request: ExportSessions | ImportSessions, store: Pick<SessionStore, "export_json" | "import_json">): Promise<ExportSessionsAnswer | ConfigImportAnswer> {
-  try {
-    if (request.type === "export_sessions") return { ok: true, ...(await store.export_json()) };
-    if (typeof request.text !== "string") return { ok: false, message: "Sessions not imported: the request has no file text." };
-    const { added, skipped } = await store.import_json(request.text);
-    const skipped_note = skipped.length === 0 ? "" : `, skipped ${plural(skipped.length, "entry")} (${skipped.map((name) => `"${name}"`).join(", ")}) that are no session or have a name that starts with - or @`;
-    if (added.length === 0) return { ok: false, message: `Sessions not imported: the file holds no session to add${skipped_note}.` };
-    return { ok: true, message: `Imported ${plural(added.length, "session")} (${added.map((name) => `"${name}"`).join(", ")})${skipped_note}.` };
-  } catch (error) {
-    return { ok: false, message: error instanceof RuntimeRefusal ? `Sessions not imported: ${error.message}.` : `Sessions not imported: ${message_of(error)}` };
   }
 }
