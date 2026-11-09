@@ -11,6 +11,7 @@ import type { HelpModel } from "./model.ts";
 import { close_drawer_on_escape, close_drawer_on_window_blur, command_anchor, engine_anchor, render_help, section_anchor, update_config_source } from "./render.ts";
 import { mount_native_install } from "./native_install.ts";
 import { mount_settings } from "./settings_page.ts";
+import { mount_transfer } from "./transfer_page.ts";
 import { parse_route } from "./route.ts";
 
 let stop_settings: (() => void) | undefined;
@@ -23,6 +24,8 @@ function show_route(model: HelpModel, guide: Block[], engines: string[], cause: 
   render_help(document.body, model, route, guide);
   const settings_box = route.page === "settings" ? document.querySelector<HTMLElement>(".desertfox-settings") : null;
   if (settings_box) stop_settings = mount_settings(settings_box, (message) => browser.runtime.sendMessage(message), engines, browser.storage.onChanged as never);
+  const transfer_box = route.page === "settings" ? document.querySelector<HTMLElement>(".desertfox-transfer") : null;
+  if (transfer_box) mount_transfer(transfer_box, (message) => browser.runtime.sendMessage(message));
   if (cause === "refresh") return;
   // The render removed the link that had focus. Not on first load, where focus belongs to the browser.
   const section_heading = route.section === undefined ? null : document.getElementById(section_anchor(route.page, route.section));

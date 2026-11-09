@@ -281,7 +281,19 @@ export type ConfigImportPreview =
 
 export type ConfigImportAnswer = { ok: true; message: string } | { ok: false; message: string };
 
-export type PageToBackground = ChangeSetting | ListSettings | ToolbarRequest | PreviewConfigImport | CommitConfigImport;
+// From an extension page: the files an export writes, raw. The page builds the two zips. `config_files` holds the config files and the saved browser edits as TOML, `snippet_files` the installed snippets, both keyed by their path in the zip.
+export type ExportConfig = { type: "export_config" };
+export type ExportConfigAnswer = { ok: true; config_files: Record<string, string>; snippet_files: Record<string, string> } | { ok: false; message: string };
+
+// From an extension page: the installed snippets for the list on the settings page. The header fields are absent when the header does not parse.
+export type ListSnippets = { type: "list_snippets" };
+export type InstalledSnippet = { path: string; problems: string[]; id?: string; label?: string; intent?: string; matches?: string[]; requires?: string[] };
+export type ListSnippetsAnswer = { ok: true; snippets: InstalledSnippet[] } | { ok: false; message: string };
+
+// From an extension page: removes one installed snippet and rebuilds the config without it. The answer is a ConfigImportAnswer.
+export type RemoveSnippet = { type: "remove_snippet"; path: string };
+
+export type PageToBackground = ChangeSetting | ListSettings | ToolbarRequest | PreviewConfigImport | CommitConfigImport | ExportConfig | ListSnippets | RemoveSnippet;
 
 export type ContentToBackground = RunRequest | ModeChanged | LoadBundle | ListKeys | IssueCmdlineTicket | OpenCmdline | RecordCmdline | CompleteItems | TabRowsActionRequest | OpenHelp | RecordRepeat | ReadTabAddress | FindScan | ImageAction;
 
