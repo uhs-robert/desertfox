@@ -1,6 +1,6 @@
 # test/key
 
-Key tests. Each run builds the extension, starts Firefox in its own nested, invisible session, sends real key presses and checks what the page and the background report. `session.mjs` starts the nested session, `keyboard.py` is its keyboard, `harness.mjs` holds the rest of a shard (`create_session`: Firefox, the page server, the helpers and `run_piece` with the piece lifecycle), `run.mjs` is the coordinator that splits the run across shards and prints the summary, `worker.mjs` runs one shard, `shards.mjs` orders the pieces by `piece_seconds.json` and tracks which shard holds which piece, `p<number>_*.mjs` are the pieces, `areas.mjs` maps src files to areas, `timings.mjs` measures where the time goes, `server.mjs` and `rdp.mjs` read the results (`rdp.mjs` is the debugger client: it queues requests per actor, treats untyped packets as replies and typed ones as events, follows the add-on's background page from the watcher's events, and also reads frames inside web pages; `rdp.test.ts` tests it against a fake debugger server), `launch_firefox.sh` starts Firefox, and `user.js` and `config/` set up the test profile.
+Key tests. Each run builds the extension, starts Firefox in its own nested, invisible session, sends real key presses and checks what the page and the background report. `session.mjs` starts the nested session, `keyboard.py` is its keyboard, `harness.mjs` holds the rest of a shard (`create_session`: Firefox, the page server, the helpers and `run_piece` with the piece lifecycle), `run.mjs` is the coordinator that splits the run across shards and prints the summary, `worker.mjs` runs one shard, `shards.mjs` orders the pieces by `piece_seconds.json` and tracks which shard holds which piece, `p<number>_*.mjs` are the pieces, `areas.mjs` maps src files to areas, `timings.mjs` measures where the time goes, `server.mjs` and `rdp.mjs` read the results (`rdp.mjs` is the debugger client: it queues requests per actor, treats untyped packets as replies and typed ones as events, follows the add-on's background page from the watcher's events, and also reads frames inside web pages; `rdp.test.ts` tests it against a fake debugger server), `launch_firefox.sh` starts Firefox, `stall_capture.mjs` records a Firefox stall (see Stall capture), and `user.js` and `config/` set up the test profile.
 
 ## Run
 
@@ -25,6 +25,16 @@ A full run takes about 34 s on 8 shards. It needs labwc, Hyprland, dbus-daemon a
 - `KEY_TEST_RENDER_NODE=/dev/dri/renderD<n>` picks the render node of the host compositor. By default it is the first node whose driver is not NVIDIA.
 - `KEY_TEST_PROBE=1 KEY_TEST_PIECES=p97_key_delivery KEY_TEST_DEADLINE_S=900 just key-test` runs the key-delivery probe. It presses every key the pieces use and checks each keydown's `key` and `code`, then counts lost F8 presses at 0, 30, 100 and 300 ms after a page loads. `KEY_TEST_PROBE_ROUNDS` sets the repeats (default 20). Without `KEY_TEST_PROBE` the piece does nothing.
 - One run at a time per machine, across worktrees: the recipe takes `/tmp/desertfox-key-test.lock` and a second run waits up to 900 s for it, after it prints the holders. Never wrap `just key-test` in `flock` on that file: the outer lock blocks the recipe's own for the whole wait. `just test-all` runs `just test` beside the key test, and the unit tests take no extra lock.
+
+## Stall capture
+
+`KEY_TEST_STALL_CAPTURE=1` catches the rare stall where Firefox stops answering the debugger. It is off by default, and a normal run loads no gdb and pays nothing. With it on, each shard runs Firefox as a child of gdb (ptrace_scope 1 blocks attaching later). On the first "Firefox stopped answering the debugger" of a shard, before the teardown, it writes one file `stall-<session>-<ms>.txt` and prints its path. The file holds: whether a second debugger connection gets a greeting and answers, the /proc state (threads, wchan, CPU) of the parent and its descendants before and after that probe, and a gdb `thread apply all bt` of every parent thread, taken through SIGINT. The file sits in the run's `*-diagnostics/s<n>/` folder. gdb ends Firefox after the dump. If gdb is missing, the run prints one warning per worker and goes on without the capture.
+
+```bash
+KEY_TEST_STALL_CAPTURE=1 just key-test-flakes 30
+```
+
+Look for `stall capture written to` in the `run-<n>.log` files under `.logs/key-test-flakes-*/`. Firefox is slower under gdb, so compare flake rates only between runs that both have the capture on.
 
 ## Lifecycle probes
 
