@@ -11,9 +11,7 @@ export type KeyOutcome =
   | { kind: "unbound" };
 
 export function run_token(matcher: TokenMatcher, session: Session, token: string): KeyOutcome {
-  let result = matcher.feed("cmdline", token);
-  // A token that ends a half-typed sequence starts over at the root, so Enter after a stray prefix key still submits.
-  if (result.kind === "no_match") result = matcher.feed("cmdline", token);
+  const result = matcher.feed("cmdline", token);
   if (result.kind === "no_match") return { kind: "unbound" };
   // Swallowed, and the matcher stays on the sequence for the next token.
   if (result.kind === "pending") return { kind: "effect", effect: { kind: "render" } };

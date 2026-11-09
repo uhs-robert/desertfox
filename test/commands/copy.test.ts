@@ -36,12 +36,11 @@ test("copy.url answers done after the write and failed, without its own toast, w
     location: { href: "https://a.com/" },
     document: { title: "A", querySelector: () => null },
   });
-  const { bundles } = await import("../../src/content/bundles.ts");
-  bundles.connect({ request_bundle: async () => true, on_idle: () => {}, set_mode: () => {}, show_error: (message) => void toasts.push(message), on_sink_missing: () => {} });
-  const { copy_url } = await import("../../src/content/handlers/copy.ts");
+  const { copy_page_url } = await import("../../src/content/handlers/copy.ts");
   Object.defineProperty(globalThis, "navigator", { value: { clipboard: { writeText: async () => {} } }, configurable: true });
-  assert.deepEqual(await copy_url.run({ format: "plain" }, false), undefined);
+  assert.deepEqual(await copy_page_url("plain", (message) => void toasts.push(message)), undefined);
+  assert.deepEqual(toasts, ["Copied https://a.com/"]);
   Object.defineProperty(globalThis, "navigator", { value: { clipboard: { writeText: () => Promise.reject(new Error("denied")) } }, configurable: true });
-  assert.deepEqual(await copy_url.run({ format: "plain" }, false), { ok: false, message: "Could not copy to the clipboard" });
-  assert.equal(toasts.some((message) => message.includes("Could not copy")), false);
+  assert.deepEqual(await copy_page_url("plain", (message) => void toasts.push(message)), { ok: false, message: "Could not copy to the clipboard" });
+  assert.deepEqual(toasts, ["Copied https://a.com/"]);
 });

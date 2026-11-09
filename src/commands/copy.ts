@@ -23,6 +23,7 @@ define("copy.url", {
     },
   ],
   runs_in: "content",
+  bundle: "page",
 });
 
 define("copy.links", {

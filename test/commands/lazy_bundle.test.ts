@@ -51,7 +51,7 @@ test("an id with no handler and no bundle field is failed", async () => {
 
 test("every command with a bundle field names a real bundle, has no run, and has no entry in the handler map", () => {
   const lazy = registry.list().filter((command) => command.bundle !== undefined);
-  assert.equal(lazy.length, 20);
+  assert.equal(lazy.length, 22);
   for (const command of lazy) {
     assert.equal(command.runs_in, "content", command.id);
     assert.equal(command.run, undefined, command.id);
@@ -78,6 +78,7 @@ test("the first key of a lazy command waits one bundle load, holds the keys type
     take_pass_next: state.take_pass_next,
     in_editable_field: () => false,
     is_loading: bundles.is_loading,
+    is_loading_sink_bundle: bundles.is_loading_sink_bundle,
     sink_of: bundles.sink_of,
     on_prefix: () => {},
     leave_insert: () => state.escape(),

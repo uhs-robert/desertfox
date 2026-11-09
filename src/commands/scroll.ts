@@ -47,4 +47,5 @@ define("scroll.align", {
   intent: "Align the focused element in the view. It scrolls the focus to the top, center or bottom. The focus is the focused element, or else the selection.",
   params: [{ name: "position", type: "enum", values: ["top", "center", "bottom"], default: "center", short: { top: "t", bottom: "b" }, value_labels: { top: "to top", bottom: "to bottom" }, description: { top: "Align the focus to the top.", bottom: "Align the focus to the bottom." } }],
   runs_in: "content",
+  bundle: "page",
 });

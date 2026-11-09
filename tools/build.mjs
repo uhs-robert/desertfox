@@ -11,6 +11,7 @@ const MAX_BYTES = {
   "whichkey.js": 8 * 1024,
   "cmdline.js": 4 * 1024,
   "ui.js": 8 * 1024,
+  "page.js": 4 * 1024,
   "cmdline_page.js": 44 * 1024,
   "find_worker.js": 2 * 1024,
 };
@@ -31,6 +32,7 @@ const minified_entries = {
   whichkey: "src/content/whichkey/main.ts",
   cmdline: "src/cmdline/host.ts",
   ui: "src/content/ui/main.ts",
+  page: "src/content/page/main.ts",
   cmdline_page: "src/cmdline/page.ts",
   // Not an injected bundle: the background starts it as a Worker for each regex page search (find_scan.ts).
   find_worker: "src/background/find_worker.ts",
