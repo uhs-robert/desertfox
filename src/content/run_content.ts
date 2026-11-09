@@ -16,7 +16,7 @@ const lazy_handler = ({ id, bundle }: Invocation): ContentHandler => {
 // Runs one invocation here and answers how it ended. Never rejects and shows nothing: the caller shows a failure once.
 // Its args are already checked, with defaults filled in, by the background compiler.
 // A count runs the handler in turn and stops at the first step that is not done.
-export const run_content_invocation = (invocation: Invocation, count_rule: CountBehavior): Promise<Outcome> =>
+export const run_content_invocation = (invocation: Invocation, count_rule: CountBehavior, repeat = false): Promise<Outcome> =>
   settle(async () => {
     const handler = content_handlers[invocation.id] ?? lazy_handler(invocation);
     const filled: Record<string, unknown> = { ...invocation.args };
@@ -25,7 +25,7 @@ export const run_content_invocation = (invocation: Invocation, count_rule: Count
     }
     for (const args of args_for_count(filled, invocation.count, count_rule)) {
       // A throw reaches the outer settle, which answers it as failed.
-      const outcome = (await handler.run(args)) as Outcome | undefined;
+      const outcome = (await handler.run(args, repeat)) as Outcome | undefined;
       if (outcome && (!outcome.ok || outcome.cancelled)) return outcome;
     }
   });
@@ -48,10 +48,10 @@ export const counted_invocations = (steps: readonly LeafStep[], count: number | 
 
 // Runs a leaf of content steps here. A step starts after the one before it has finished, and the first runs in the caller's turn.
 // Stops at the first step that is not done, so a wait the user leaves or a failure ends the leaf.
-export async function run_content_steps(steps: readonly LeafStep[], count: number | undefined): Promise<Outcome> {
+export async function run_content_steps(steps: readonly LeafStep[], count: number | undefined, repeat = false): Promise<Outcome> {
   const invocations = counted_invocations(steps, count);
   for (const [index, step] of steps.entries()) {
-    const outcome = await run_content_invocation(invocations[index]!, step.count_rule);
+    const outcome = await run_content_invocation(invocations[index]!, step.count_rule, repeat);
     if (!outcome.ok || outcome.cancelled) return outcome;
   }
   return { ok: true };

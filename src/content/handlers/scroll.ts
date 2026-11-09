@@ -35,9 +35,12 @@ function scroll_target(axis: ScrollAxis): Element {
   return target ?? document.scrollingElement ?? document.documentElement;
 }
 
-const scroll_by = (dx: number, dy: number) => {
+// Firefox decides whether "smooth" animates (general.smoothScroll). A held key restarts the animation on every repeat and lags far behind the key, so repeats jump.
+export const smooth_unless = (repeat: boolean): ScrollBehavior => (repeat ? "instant" : "smooth");
+
+const scroll_by = (dx: number, dy: number, behavior: ScrollBehavior = "instant") => {
   const axis = dy !== 0 ? "y" : "x";
-  scroll_target(axis).scrollBy({ left: dx, top: dy, behavior: "instant" });
+  scroll_target(axis).scrollBy({ left: dx, top: dy, behavior });
 };
 
 export const scroll_lines: ContentHandler = {
@@ -49,18 +52,19 @@ export const scroll_pixels: ContentHandler = {
 };
 
 export const scroll_pages: ContentHandler = {
-  run: (args) => scroll_by(0, Number(args.fraction) * scroll_target("y").clientHeight),
+  run: (args, repeat) => scroll_by(0, Number(args.fraction) * scroll_target("y").clientHeight, smooth_unless(repeat)),
 };
 
 export const scroll_to: ContentHandler = {
-  run: (args) => {
+  run: (args, repeat) => {
     const axis = args.axis as ScrollAxis;
+    const behavior = smooth_unless(repeat);
     const target = scroll_target(axis);
     const percent = Number(args.percent);
     if (axis === "x") {
-      target.scrollTo({ left: percent_to_offset(percent, target.scrollWidth, target.clientWidth), behavior: "instant" });
+      target.scrollTo({ left: percent_to_offset(percent, target.scrollWidth, target.clientWidth), behavior });
     } else {
-      target.scrollTo({ top: percent_to_offset(percent, target.scrollHeight, target.clientHeight), behavior: "instant" });
+      target.scrollTo({ top: percent_to_offset(percent, target.scrollHeight, target.clientHeight), behavior });
     }
   },
 };
