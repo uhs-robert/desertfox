@@ -11,9 +11,9 @@ export const area_names = ["hints", "caret", "find", "whichkey", "cmdline", "hel
 // Key path and command contract: any change here can break any piece.
 const shared_files = [
   "src/manifest.json",
-  "src/background/{availability,browser_deps,main,refusal,router,slots,startup}.ts",
+  "src/background/{availability,browser_deps,main,page_keymap,refusal,router,slots,startup}.ts",
   "src/commands/{command,copy,mode}.ts",
-  "src/content/{cancelled_keys,context,editable,handler_map,invocation_args,key_flow,link_escape,main,mode_state,page_mode,run_content,run_leaf,shadow,site_rule}.ts",
+  "src/content/{ask_keymap,cancelled_keys,context,editable,handler_map,invocation_args,key_flow,link_escape,main,mode_state,page_mode,run_content,run_leaf,shadow,site_rule}.ts",
   "src/content/handlers/{copy,focus,mode,stop,types}.ts",
   "src/shared/{command,index,load_commands,messages}.ts",
   "src/shared/registry/{builtin,define,index}.ts",

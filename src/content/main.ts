@@ -1,12 +1,11 @@
-// Content script entry: a capture listener on keydown, the compiled keymap from
-// storage, and the modes. Runs in every frame. A frame of another site starts on its first focus.
+// Content script entry: a capture listener on keydown, the keymap from
+// the background, and the modes. Runs in every frame. A frame of another site starts on its first focus.
 
-import type { BackgroundToContent, CompiledKeymap, ContentToBackground, Mode, ModeIndicator, ReadTabAddress, RunResponse, TreeLeaf } from "../shared/index.ts";
-import { COMPILED_KEYMAP_STORAGE_KEY, COMPILED_KEYMAP_VERSION, DEFAULT_MODE_INDICATOR, current_keymap } from "../shared/index.ts";
+import type { BackgroundToContent, CompiledKeymap, ContentToBackground, Mode, ModeIndicator, PageKeymap, ReadKeymap, RunResponse, TreeLeaf } from "../shared/index.ts";
+import { COMPILED_KEYMAP_VERSION, DEFAULT_MODE_INDICATOR, is_freed } from "../shared/index.ts";
 import { create_matcher, event_to_token } from "../shared/keys/index.ts";
 import { all_off_step } from "./site_rule.ts";
-import { matches_any_address } from "../shared/match_pattern.ts";
-import { prune_tree, rule_frees } from "../shared/keys/prune_tree.ts";
+import { create_keymap_asks } from "./ask_keymap.ts";
 import { message_of } from "./bundle_host.ts";
 import type { BundleHostApi } from "./bundle_host.ts";
 import { bundles } from "./bundles.ts";
@@ -209,47 +208,39 @@ let matcher_installed = false;
 // Whether the last install matched an all-off rule. An install enters ignore mode only on the change into all-off, so a manual `<Space>i` or `<S-Escape>` survives an unrelated edit.
 let was_all_off = false;
 
-// A frame of another site cannot read the tab's address, so it asks the background.
-function read_tab_address(): Promise<string | undefined> {
-  if (can_reach_top_document()) return Promise.resolve(window.top?.location.href);
-  return browser.runtime.sendMessage({ type: "read_tab_address" } satisfies ReadTabAddress).then((address) => address as string | undefined, () => undefined);
-}
-
-function install_matcher(keymap: CompiledKeymap | undefined, tab_address: string | undefined): void {
-  const usable = current_keymap(keymap);
+function install_matcher(reply: PageKeymap | undefined): void {
+  const keymap = reply?.keymap;
+  const all_off = reply?.all_off === true;
   // A tree stored before the setting existed has no value, which means the default.
-  mode_indicator = usable?.mode_indicator ?? DEFAULT_MODE_INDICATOR;
-  which_key_delay_ms = usable?.which_key_delay_ms;
+  mode_indicator = keymap?.mode_indicator ?? DEFAULT_MODE_INDICATOR;
+  which_key_delay_ms = keymap?.which_key_delay_ms;
   // The mode comes first, so keys held during the load replay in the right mode.
   const first_install = !matcher_installed;
   matcher_installed = true;
-  const rule = usable?.site_rules?.find(({ regex }) => matches_any_address(regex, [location.href, tab_address]));
-  const all_off = rule !== undefined && "all_off" in rule;
-  const keyed_rule = rule !== undefined && !("all_off" in rule) ? rule : undefined;
   // The rule's own ignore mode ends with the rule, so removing or rewriting it takes effect on the open page.
-  const step = all_off_step(usable !== undefined, all_off, was_all_off, page_mode.get_mode_());
+  const step = all_off_step(keymap !== undefined, all_off, was_all_off, page_mode.get_mode_());
   if (step === "enter") page_mode.set_mode_("ignore");
   else {
     if (step === "leave") page_mode.set_mode_("normal");
     if ((first_install || step === "leave") && is_editable_element(deepest_focused_element())) page_mode.focus_entered_editable_();
   }
-  if (usable) was_all_off = all_off;
+  if (keymap) was_all_off = all_off;
   refresh_mode_indicator();
-  // The rule's tree goes in before the matcher, so held keys replay against it.
-  const tree = usable ?? { format_version: COMPILED_KEYMAP_VERSION, modes: {}, mode_indicator: DEFAULT_MODE_INDICATOR, which_key_delay_ms: 0 };
-  const ruled_tree = keyed_rule ? { ...tree, modes: { ...tree.modes, normal: prune_tree(tree.modes.normal, keyed_rule) } } : tree;
-  key_flow.set_matcher_(create_matcher(ruled_tree, keyed_rule && ((token) => rule_frees(keyed_rule, token))), usable?.modes.browser);
-}
-
-async function read_keymap(): Promise<CompiledKeymap | undefined> {
-  const stored = await browser.storage.local.get(COMPILED_KEYMAP_STORAGE_KEY);
-  return stored[COMPILED_KEYMAP_STORAGE_KEY] as CompiledKeymap | undefined;
+  const frees = reply?.frees;
+  const tree = keymap ?? { format_version: COMPILED_KEYMAP_VERSION, modes: {}, mode_indicator: DEFAULT_MODE_INDICATOR, which_key_delay_ms: 0 };
+  key_flow.set_matcher_(create_matcher(tree, frees && ((token) => is_freed(frees, token))), keymap?.modes.browser);
+  // The key test's ready signal waits for the first matcher, not for a reply that a newer ask overtook.
+  if (first_install) publish_timing();
 }
 
 // The one test hook in src/: the key test reads this attribute as the content script's ready signal. Time is milliseconds.
 function publish_timing(): void {
   const root = document.documentElement;
   root?.setAttribute("data-desertfox-tree-read-ms", (performance.now() - script_started_ms).toFixed(2));
+}
+
+function read_page_keymap(): Promise<PageKeymap | undefined> {
+  return (browser.runtime.sendMessage({ type: "read_keymap" } satisfies ReadKeymap) as Promise<string | undefined>).then((reply) => (reply === undefined ? undefined : (JSON.parse(reply) as PageKeymap)));
 }
 
 function start(): void {
@@ -278,10 +269,7 @@ function start(): void {
 
   page_mode.listen_display_(refresh_mode_indicator);
 
-  // Both installs wait for the one tab address read, so a `tree_updated` that comes first cannot decide ignore mode on the frame address alone.
-  const tab_address_read = read_tab_address();
-  const install_after_tab_address = (keymap_read: Promise<CompiledKeymap | undefined>) =>
-    Promise.all([keymap_read, tab_address_read]).then(([keymap, tab_address]) => install_matcher(keymap, tab_address));
+  const ask_keymap = create_keymap_asks(read_page_keymap, install_matcher);
 
   browser.runtime.onMessage.addListener((raw: unknown) => {
     const message = raw as BackgroundToContent;
@@ -299,10 +287,10 @@ function start(): void {
       page_mode.set_mode_(message.mode);
       if (is_editable_element(deepest_focused_element())) page_mode.focus_entered_editable_();
     }
-    else if (message.type === "tree_updated") void install_after_tab_address(read_keymap());
+    else if (message.type === "tree_updated") void ask_keymap();
   });
 
-  void install_after_tab_address(read_keymap().catch(() => undefined)).then(publish_timing);
+  void ask_keymap();
 }
 
 start_content_once(start, window, can_reach_top_document() || document.hasFocus());

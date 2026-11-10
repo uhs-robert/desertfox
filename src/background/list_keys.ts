@@ -1,4 +1,4 @@
-// Answers which-key: the keys that can follow a typed prefix, read from the compiled keymap the content script also uses.
+// Answers which-key: the keys that can follow a typed prefix, read from the compiled keymap.
 
 import type { CommandMeta } from "../shared/command.ts";
 import type { PageInfo } from "../shared/engines/index.ts";
@@ -11,7 +11,7 @@ import type { CompiledKeymap, TreeBranch, TreeLeaf, TreeNode } from "../shared/p
 
 import { is_available } from "./availability.ts";
 import { prune_tree } from "../shared/keys/prune_tree.ts";
-import { matches_any_address } from "../shared/match_pattern.ts";
+import { site_rule_for } from "./page_keymap.ts";
 
 // The modes where the matcher reads `"` as the register prefix.
 const REGISTER_PREFIX_MODES: readonly string[] = ["normal", "caret", "visual", "visual_line"];
@@ -103,8 +103,8 @@ export async function list_keys(
     return { title: ["registers"], rows: items.map(({ name, description }) => ({ keys: name, command: description, description: "", more: false })), border: keymap?.which_key_border ?? "square" };
   }
   const mode_root = keymap?.modes[request.mode as keyof CompiledKeymap["modes"]];
-  // The panel lists what the page's rule leaves, the same tree the content script walks.
-  const rule = request.mode === "normal" ? keymap?.site_rules?.find(({ regex }) => matches_any_address(regex, addresses)) : undefined;
+  // The panel lists what the page's rule leaves, the same tree the page gets from `read_keymap`.
+  const rule = request.mode === "normal" ? site_rule_for(keymap, addresses) : undefined;
   const root = rule === undefined || "all_off" in rule ? mode_root : prune_tree(mode_root, rule);
   const shown = root && availability ? without_unavailable(root, availability) : root;
   return panel_after_prefix(shown, request.prefix, find_command, keymap?.which_key_border);

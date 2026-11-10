@@ -200,9 +200,9 @@ export type OpenHelp = {
   command_id: string;
 };
 
-// The tab's address, for the ignore sites check in a frame of another site. The answer is a string, or undefined when the sender has no tab.
-export type ReadTabAddress = {
-  type: "read_tab_address";
+// A page asks for its keymap at start and again on `tree_updated`. The answer is a PageKeymap as a JSON string, or undefined when no usable keymap is stored.
+export type ReadKeymap = {
+  type: "read_keymap";
 };
 
 // From the `caret` bundle: one regex page search, run in the background where it can be stopped. `source` and `flags` are of a regex the page already compiled.
@@ -330,7 +330,7 @@ export type ImportSessions = { type: "import_sessions"; text: string };
 
 export type PageToBackground = ChangeSetting | ListSettings | ToolbarRequest | PreviewConfigImport | CommitConfigImport | ExportConfig | ListSnippets | RemoveSnippet | ExportSessions | ImportSessions;
 
-export type ContentToBackground = RunRequest | ModeChanged | LoadBundle | ListKeys | IssueCmdlineTicket | OpenCmdline | RecordCmdline | CompleteItems | TabRowsActionRequest | OpenHelp | RecordStep | ReadTabAddress | FindScan | ImageAction | InspectPick | RegisterRequest;
+export type ContentToBackground = RunRequest | ModeChanged | LoadBundle | ListKeys | IssueCmdlineTicket | OpenCmdline | RecordCmdline | CompleteItems | TabRowsActionRequest | OpenHelp | RecordStep | ReadKeymap | FindScan | ImageAction | InspectPick | RegisterRequest;
 
 // How a command ended. Done is `{ ok: true }`. A handler that returns nothing is done, and one that throws is failed.
 // Cancelled means the user left a waiting step (Escape, an unrelated key, a page change), so the rest of a sequence does not run and nothing is shown.

@@ -1,6 +1,6 @@
-// Prunes a copy of a mode's tree for a site rule. The compiler runs it to learn whether a rule leaves any key, the content script to get the page's tree, and which-key to list only the keys that still run.
+// Prunes a copy of a mode's tree for a site rule. The compiler runs it to learn whether a rule leaves any key, the background to get a page's tree, and which-key to list only the keys that still run.
 
-import type { TreeBranch, TreeNode } from "../prefix_tree.ts";
+import type { PageFrees, TreeBranch, TreeNode } from "../prefix_tree.ts";
 
 type Sequences = readonly (readonly string[])[];
 
@@ -49,7 +49,9 @@ export function prune_tree(root: TreeBranch | undefined, rule: KeyRule): TreeBra
 
 export const is_empty_tree = (branch: TreeBranch): boolean => Object.keys(branch.children).length === 0;
 
-// Whether the rule hands this single key to the page even where the tree never binds it: `/`, `'` and the digits, which the key flow would otherwise cancel or take as a count.
-// Under `only` every key but the first key of a listed sequence goes to the page.
-export const rule_frees = (rule: KeyRule, token: string): boolean =>
-  "pass" in rule ? rule.pass.some((sequence) => sequence.length === 1 && sequence[0] === token) : ![...rule.only, ...ESCAPE_KEYS].some((sequence) => sequence[0] === token);
+// The single keys a rule hands to the page even where the tree never binds them: `/`, `'` and the digits, which the key flow would otherwise cancel or take as a count.
+// Under `pass`, `tokens` are the freed keys. Under `only`, `tokens` are the kept first keys, and `invert` frees every other key.
+export const frees_of = (rule: KeyRule): PageFrees =>
+  "pass" in rule
+    ? { tokens: rule.pass.filter((sequence) => sequence.length === 1).flat(), invert: false }
+    : { tokens: [...rule.only, ...ESCAPE_KEYS].flatMap((sequence) => sequence.slice(0, 1)), invert: true };

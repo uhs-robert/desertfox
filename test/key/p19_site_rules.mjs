@@ -4,7 +4,7 @@ import { SHIFT_ESCAPE } from "./harness.mjs";
 
 export const areas = ["keys", "config", "toolbar"];
 
-export async function run_cases({ run_case, open_page, press_keys, wait_event, events, expect, expect_no_scroll, scroll_delta_by_press, poll_until, in_background, url_of, sleep }) {
+export async function run_cases({ run_case, open_page, press_keys, wait_event, wait_takes_keys, events, expect, expect_no_scroll, hint_label_count, scroll_delta_by_press, poll_until, in_background, url_of, sleep }) {
   const badge_of = (page_id) => events.filter((event) => event.type === "indicator" && event.page_id === page_id).at(-1)?.label;
   // A passed `/` or `'` opens Firefox's Quick Find, which takes the keys after it, so the bar is closed before the next wait.
   const page_sees = async (page_id, key, what) => {
@@ -25,6 +25,17 @@ export async function run_cases({ run_case, open_page, press_keys, wait_event, e
     expect((await scroll_delta_by_press("rule_pass", ["G"])) > 0, "G did not scroll under a pass rule for j");
     // Quick Find keys are cancelled when no binding takes them, unless the rule frees them.
     await page_sees("rule_pass", "/", "the page to see the passed /");
+  });
+
+  await run_case("a cross-origin frame under a pass rule gets the rule through the tab address", async () => {
+    await open_page("frames", "rule_frames", { new_tab: true });
+    await press_keys(";f");
+    await poll_until("the hint labels", async () => (await hint_label_count()) > 0);
+    await press_keys("s");
+    await wait_event(0, (event) => event.type === "tree_read" && event.page_id === "rule_frames_cross", "the cross-origin frame to start on focus");
+    await wait_takes_keys("rule_frames_cross");
+    await page_sees("rule_frames_cross", "j", "the frame to see the passed j");
+    expect((await scroll_delta_by_press("rule_frames_cross", ["G"])) > 0, "G did not scroll the frame under a pass rule for j");
   });
 
   await run_case("an only rule keeps the listed key and sends the rest to the page", async () => {
@@ -74,7 +85,7 @@ export async function run_cases({ run_case, open_page, press_keys, wait_event, e
       await poll_until("IGNORE after the rule is added", async () => badge_of("rule_live") === "IGNORE");
       const answer = await site_request("rule_live", "enable");
       expect(answer.ok, `enable answered ${JSON.stringify(answer)}`);
-      await poll_until("the rule to leave", async () => (await in_background(`browser.storage.local.get("desertfox_compiled_keymap").then((got) => got.desertfox_compiled_keymap?.site_rules?.length ?? 0)`)) === 3);
+      await poll_until("the rule to leave", async () => (await in_background(`browser.storage.local.get("desertfox_compiled_keymap").then((got) => got.desertfox_compiled_keymap?.site_rules?.length ?? 0)`)) === 4);
       await poll_until("NORMAL once the rule that turned the page off is gone", async () => badge_of("rule_live") === "NORMAL");
       expect((await scroll_delta_by_press("rule_live", ["j"])) > 0, "j did not scroll after the all-off rule left");
       await site_request("rule_live", "disable");
