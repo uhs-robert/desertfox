@@ -148,6 +148,34 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, sleep,
     }
   });
 
+  await run_case("bookmark --folder= lists only the bookmarks in that folder and its subfolder, and labels each with its folder", async () => {
+    const folder_id = await make_folder("P9g Filter folder");
+    const sub_id = await background(`browser.bookmarks.create({ title: "P9g Sub folder", parentId: ${JSON.stringify(folder_id)} }).then((node) => node.id)`);
+    const file = (title, page_id, parent_id) => background(`browser.bookmarks.create({ title: ${JSON.stringify(title)}, url: ${JSON.stringify(url_of("page", page_id))}, parentId: ${JSON.stringify(parent_id)} })`);
+    await file("P9g top mark", "p9g_top", folder_id);
+    await file("P9g sub mark", "p9g_sub", sub_id);
+    await file("P9g out mark", "p9g_out", await make_folder("P9g Other folder"));
+    try {
+      await open_line();
+      const mark = events.length;
+      await type_in_line('bookmark -t --folder="Other Bookmarks / P9g Filter folder" P9g', { until: shows_row("P9g sub mark") });
+      await wait_cmdline(shows_row("P9g top mark"), "the folder's own bookmark in the list");
+      const rows = (await wait_cmdline(shows_row("P9g sub mark"), "the subfolder bookmark in the list")).row_texts;
+      expect(!rows.some((row) => row.includes("P9g out mark")), `a bookmark outside the folder is listed: ${JSON.stringify(rows)}`);
+      expect(rows.some((row) => row.includes("P9g sub mark") && row.includes("P9g Sub folder")), `the subfolder row lacks its folder: ${JSON.stringify(rows)}`);
+      await type_in_line(" sub");
+      await complete_in_line();
+      await press_keys("-k", "Return");
+      await wait_event(mark, (event) => event.type === "tree_read" && event.page_id === "p9g_sub", "the subfolder bookmark in a new tab");
+    } finally {
+      for (const url of ["p9g_top", "p9g_sub", "p9g_out"]) await remove_at(url_of("page", url));
+      await background(`browser.bookmarks.search({ title: "P9g Other folder" }).then((nodes) => Promise.all(nodes.map((node) => browser.bookmarks.removeTree(node.id))))`);
+      await remove_tree(folder_id);
+      await close_tabs_with("id=p9g_sub");
+      await close_cmdline().catch(() => {});
+    }
+  });
+
   await run_case("bf opens the folder's bookmarks in tabs, the first one active", async () => {
     const folder_id = await make_folder("P9f Open folder");
     const urls = ["p9f_first", "p9f_second"].map((page_id) => url_of("page", page_id));

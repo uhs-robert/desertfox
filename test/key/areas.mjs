@@ -35,7 +35,7 @@ export const area_rules = [
   { globs: ["src/commands/session.ts", "src/background/session_store.ts", "src/background/sessions_transfer.ts"], areas: ["cmdline", "tabs"] },
   { globs: ["src/commands/reload_clear.ts"], areas: ["keys", "cmdline"] },
   {
-    globs: ["src/cmdline/**", "src/commands/{cmdline,history,bookmark,open_target}.ts", "src/background/{cmdline_service,complete_items,bookmark_title}.ts", "src/shared/{setting_completion,score}.ts"],
+    globs: ["src/cmdline/**", "src/commands/{cmdline,history,bookmark,open_target}.ts", "src/background/{cmdline_service,complete_items,bookmark_title}.ts", "src/shared/{setting_completion,score,folder_pick}.ts"],
     areas: ["cmdline"],
   },
   {
