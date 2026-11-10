@@ -34,8 +34,8 @@ AUTOCONFIG_HEADER = (
 
 # The names the extension's config build knows (src/shared/config_build/source_files.ts). The reader below mirrors
 # tools/build-config/source_files.ts: a file outside these places is reported by name only, with empty text.
-KNOWN_FILES = {"keymap.toml", "search_engines.toml", "command_aliases.toml", "settings.toml", "style.css"}
-KNOWN_DIRS = {"keymap.d", "search_engines.d", "command_aliases.d", "settings.d", "snippets", "style.d", "themes"}
+KNOWN_FILES = {"keymap.toml", "search_engines.toml", "command_aliases.toml", "quickmarks.toml", "settings.toml", "style.css"}
+KNOWN_DIRS = {"keymap.d", "search_engines.d", "command_aliases.d", "quickmarks.d", "settings.d", "snippets", "style.d", "themes"}
 
 
 class HostError(Exception):

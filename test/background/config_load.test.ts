@@ -33,3 +33,9 @@ test("a snippet that cannot be run safely is dropped with a warning", () => {
   assert.deepEqual(picked.config.snippets, [good]);
   assert.equal(picked.warnings.length, 3);
 });
+
+test("a config stored before quickmarks has none, and a damaged entry is dropped", () => {
+  assert.deepEqual(pick_config({ format_version: CONFIG_FORMAT_VERSION, settings: {} }).config.quickmarks, {});
+  const picked = pick_config({ format_version: CONFIG_FORMAT_VERSION, quickmarks: { g: "https://github.com", gh: "https://x.test", e: "", n: 3 } });
+  assert.deepEqual(picked.config.quickmarks, { g: "https://github.com" });
+});

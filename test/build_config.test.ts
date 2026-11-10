@@ -169,6 +169,21 @@ test("settings, aliases, css and the format version come through", () => {
   assert.equal(config.css, "body { color: red; }\n\n:root { --desertfox-bg-core: black; }\n");
 });
 
+test("quickmarks merge from the main file and the .d files, and the later file wins", () => {
+  const dir = config_dir_with({ "quickmarks.toml": 'g = "https://github.com"\nw = "https://wiki.test"', "quickmarks.d/10-x.toml": 'g = "https://git.test"' }, join(FIXTURES, "full"));
+  assert.deepEqual(build_config(dir, commands).quickmarks, { g: "https://git.test", w: "https://wiki.test" });
+  assert.deepEqual(full().quickmarks, {});
+});
+
+test("a quickmark needs a one character key and a non-empty address", () => {
+  const dir = config_dir_with({ "quickmarks.toml": 'gh = "https://github.com"\n"!" = "https://bang.test"\ne = ""\nn = 5\nok = "https://ok.test"\nfine = 1' }, join(FIXTURES, "full"));
+  const text = problems_of(dir).join("\n");
+  assert.match(text, /quickmarks\.toml: gh: a quickmark key is one letter or digit/);
+  assert.match(text, /quickmarks\.toml: !: a quickmark key is one letter or digit/);
+  assert.match(text, /quickmarks\.toml: e: a quickmark maps to an address string/);
+  assert.match(text, /quickmarks\.toml: n: a quickmark maps to an address string/);
+});
+
 test("an unknown file is rejected with its path", () => {
   const dir = config_dir_with({ "keymapp.toml": "" });
   assert.match(problems_of(dir).join("\n"), /keymapp\.toml: unknown file/);
@@ -345,7 +360,7 @@ test("one schema per data file offers command names", () => {
   const dir = mkdtempSync(join(tmpdir(), "desertfox-schemas-"));
   write_schemas(dir, build_schemas(commands));
   assert.deepEqual(readdirSync(dir).sort(), [
-    "command_aliases.schema.json", "keymap.schema.json", "search_engines.schema.json", "settings.schema.json",
+    "command_aliases.schema.json", "keymap.schema.json", "quickmarks.schema.json", "search_engines.schema.json", "settings.schema.json",
   ]);
   const keymap_text = readFileSync(join(dir, "keymap.schema.json"), "utf8");
   assert.match(keymap_text, /"search"/);

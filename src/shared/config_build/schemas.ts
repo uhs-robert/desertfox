@@ -2,6 +2,7 @@
 // (Taplo reads them for TOML) completes command names and setting names.
 
 import type { CommandMeta } from "../command.ts";
+import { MAX_QUICKMARK_URL_CHARS, QUICKMARK_KEY } from "../quickmark_names.ts";
 import { SETTING_DOCS } from "../settings_docs.ts";
 import { SETTINGS_TABLE, type SettingName, type SettingRow } from "../settings_table.ts";
 import { KEYMAP_MODES } from "./merge.ts";
@@ -142,6 +143,13 @@ export function build_schemas(commands: CommandMeta[]): Record<DataKind, Schema>
       title: "DesertFox command aliases",
       type: "object",
       additionalProperties: { type: "string", examples: commands.map((command) => command.id) },
+    },
+    quickmarks: {
+      $schema: DRAFT,
+      title: "DesertFox quickmarks",
+      type: "object",
+      patternProperties: { [QUICKMARK_KEY.source]: { type: "string", minLength: 1, maxLength: MAX_QUICKMARK_URL_CHARS, description: "The address `go<key>` and `gn<key>` open" } },
+      additionalProperties: false,
     },
     settings: settings_schema(),
   };
