@@ -120,6 +120,17 @@ test("tab.move with a tab name takes the picked tab's place", async () => {
   assert.deepEqual(log, ["move 100 1", "move 103 1", "move 102 3"]);
 });
 
+test("tab.move keeps each tab on its own side of the pinned boundary", async () => {
+  const { handlers, log, deps } = make_fake(make_tabs(5, [{ pinned: true }, { pinned: true }]));
+  deps.listed_tabs = async () => [listed(100, 1, "Pinned")];
+  await handlers.move(ctx_at(103), move_args({ tab: "1" }));
+  await handlers.move(ctx_at(103), move_args({ tab: "pinned" }));
+  await handlers.move(ctx_at(103), move_args({ offset: -9 }));
+  await handlers.move(ctx_at(100), move_args({ tab: "-1" }));
+  await handlers.move(ctx_at(100), move_args({ offset: 9 }));
+  assert.deepEqual(log, ["move 103 2", "move 103 2", "move 103 2", "move 100 1", "move 100 1"]);
+});
+
 test("tab.move onto the current tab keeps its place", async () => {
   const { handlers, log, deps } = make_fake(make_tabs(3));
   deps.listed_tabs = async () => [listed(101, 2, "GitHub")];

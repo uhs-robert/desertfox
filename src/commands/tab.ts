@@ -124,7 +124,11 @@ export function make_tab_handlers(deps: TabDeps) {
     move: async (ctx: CommandContext, args: { tab: string; offset: number }) => {
       const { tabs, current } = await position_of(ctx);
       const target = await move_target(ctx, tabs, args);
-      await move_tabs(deps, [current.id], target ?? clamp_index(current.index + args.offset, tabs.length));
+      const wanted = target ?? clamp_index(current.index + args.offset, tabs.length);
+      // Firefox ignores a move across the pinned boundary, so land at the nearest place on the tab's own side.
+      const pinned_count = tabs.filter((tab) => tab.pinned).length;
+      const own_side = current.pinned ? { first: 0, last: pinned_count - 1 } : { first: pinned_count, last: tabs.length - 1 };
+      await move_tabs(deps, [current.id], Math.min(Math.max(wanted, own_side.first), own_side.last));
     },
     duplicate: async (ctx: CommandContext) => {
       const { current } = await position_of(ctx);
