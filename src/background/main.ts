@@ -196,14 +196,14 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
   if (request?.type === "record_cmdline") return cmdline.record(request.text, sender.tab?.incognito === true);
   if (request?.type === "record_step") {
     // The turn is entered before the first await, so records land in arrival order and a `.` that arrives next waits for this write.
-    return repeat_memory.in_turn(async (unqueued) => {
+    const origin = { is_private: sender.tab?.incognito === true, ...(request.pick === true && { from_pick: true }) };
+    const checked = repeat_memory.in_turn(async (unqueued) => {
       await get_config();
       const steps = page_steps(request, (id) => registry.get(id), { search_engines: await get_search_engine_names(), containers: await container_names() });
-      if (!steps) return;
-      const origin = { is_private: sender.tab?.incognito === true, ...(request.pick === true && { from_pick: true }) };
-      await create_step_recorder({ get_command: (id) => registry.get(id), repeat_memory: unqueued })(steps, page_outcome(request), origin);
-      await browser_macro_recorder.record(steps, page_outcome(request), origin);
+      if (steps) await create_step_recorder({ get_command: (id) => registry.get(id), repeat_memory: unqueued })(steps, page_outcome(request), origin);
+      return steps;
     });
+    return Promise.all([checked, browser_macro_recorder.record_page(checked, page_outcome(request), origin)]).then(() => undefined);
   }
   if (request?.type === "list_keys") {
     const tab = sender.tab;

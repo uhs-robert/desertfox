@@ -63,6 +63,9 @@ const follow_prefix = create_which_key_timer(
   (prefix, is_current_, drawn_) => (prefix || bundles.has_handler_("whichkey")) && bundles.run_command_("whichkey", "whichkey", { prefix, is_current_, drawn_ }, "", false),
 );
 
+// While a macro records, a leaf starts after the one before it has ended and sent its step, so a stop key cannot overtake a step still running.
+let last_leaf: Promise<unknown> = Promise.resolve();
+
 const key_flow = create_key_flow({
   on_prefix_: follow_prefix,
   get_mode_: page_mode.get_mode_,
@@ -70,7 +73,8 @@ const key_flow = create_key_flow({
   run_leaf_: (leaf, count, repeat) => {
     // A register paste joins the open insert session, so it must not end it.
     if (leaf.steps[0]?.invocation.id !== "register.paste") flush_typed_text();
-    const ran = run_leaf(leaf, count, repeat, send_to_background, page_mode.get_mode_, run_content_steps, show_toast);
+    const run = () => run_leaf(leaf, count, repeat, send_to_background, page_mode.get_mode_, run_content_steps, show_toast);
+    const ran = (last_leaf = recording === undefined ? run() : last_leaf.then(run));
     if (holds_keys_after(leaf, is_editable_element(document.activeElement))) bundles.api.hold_keys_until_(ran.then(() => []), true);
   },
   leave_insert_: () => {

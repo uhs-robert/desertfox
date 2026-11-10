@@ -3,7 +3,7 @@
 
 import { RuntimeRefusal } from "../shared/command.ts";
 import type { BoundInvocation } from "../shared/invocation.ts";
-import type { RecordStep } from "./record_step.ts";
+import type { RecordStep, StepOrigin, StepOutcome } from "./record_step.ts";
 import { as_stored } from "./repeat_memory.ts";
 import { MACRO_RECORDING_PRIVATE_STORAGE_KEY, MACRO_RECORDING_STORAGE_KEY } from "./storage_keys.ts";
 import { create_write_queue } from "./store_turns.ts";
@@ -35,19 +35,28 @@ export function create_macro_recorder(deps: MacroRecorderDeps) {
 
   const tell_tabs = () => deps.tell_tabs().catch(() => undefined);
 
-  const record: RecordStep = (steps, outcome, origin) =>
+  async function record_now(steps: readonly BoundInvocation[], outcome: StepOutcome, origin: StepOrigin): Promise<void> {
+    // A prompted step runs again, with its value, as the request the command line sends. A hint pick's address opens again when the pick does.
+    if (origin.prompted || origin.skip_repeat) return;
+    const recording = await read(origin.is_private);
+    if (!recording) return;
+    const reached = outcome.failed_step === undefined ? steps : steps.slice(0, outcome.failed_step + 1);
+    const kept = reached.filter((step) => !NEVER_RECORDED.has(step.id) && (step.id !== "hint.run" || origin.from_pick === true)).map(as_stored);
+    if (kept.length > 0) await deps.session().set({ [key_of(origin.is_private)]: { register: recording.register, steps: [...recording.steps, ...kept] } });
+  }
+
+  const record: RecordStep = (steps, outcome, origin) => in_turn(() => record_now(steps, outcome, origin));
+
+  // A step from a page takes its turn when the message arrives, while the checks on it still run. Without that, a stop that arrives after it could finish first and the step would be lost.
+  const record_page = (checked: Promise<readonly BoundInvocation[] | undefined>, outcome: StepOutcome, origin: StepOrigin): Promise<void> =>
     in_turn(async () => {
-      // A prompted step runs again, with its value, as the request the command line sends. A hint pick's address opens again when the pick does.
-      if (origin.prompted || origin.skip_repeat) return;
-      const recording = await read(origin.is_private);
-      if (!recording) return;
-      const reached = outcome.failed_step === undefined ? steps : steps.slice(0, outcome.failed_step + 1);
-      const kept = reached.filter((step) => !NEVER_RECORDED.has(step.id) && (step.id !== "hint.run" || origin.from_pick === true)).map(as_stored);
-      if (kept.length > 0) await deps.session().set({ [key_of(origin.is_private)]: { register: recording.register, steps: [...recording.steps, ...kept] } });
+      const steps = await checked.catch(() => undefined);
+      if (steps) await record_now(steps, outcome, origin);
     });
 
   return {
     record,
+    record_page,
     // The register being recorded into, or undefined.
     register_of: async (is_private: boolean) => (await read(is_private))?.register,
     start: (register: string, is_private: boolean) =>

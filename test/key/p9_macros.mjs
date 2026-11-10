@@ -12,11 +12,11 @@ export async function run_cases({ run_case, open_page, poll_until, press_keys, w
     let mark = events.length;
     await press_keys("q", "a");
     await wait_event(mark, badge_is("p9mac_one", "NORMAL recording @a"), "the recording badge after qa");
-    await press_keys("j", "k");
+    await press_keys("j", "G", "k");
     mark = events.length;
     await press_keys("q");
     await wait_event(mark, badge_is("p9mac_one", "NORMAL"), "the plain badge after q");
-    await poll_until("register a to hold the two scrolls", async () => JSON.stringify(await ids_of("a")) === JSON.stringify(["scroll.lines", "scroll.lines"]));
+    await poll_until("register a to hold the two scrolls", async () => JSON.stringify(await ids_of("a")) === JSON.stringify(["scroll.lines", "scroll.to", "scroll.lines"]));
   });
 
   await run_case("qA adds to macro a, and q q stores an empty macro", async () => {
