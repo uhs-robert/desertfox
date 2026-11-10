@@ -30,6 +30,8 @@ export type KeyFlowDeps = {
   run_leaf_: (leaf: TreeLeaf, count: number | undefined, repeat: boolean) => void;
   leave_insert_: () => void;
   in_editable_field_: () => boolean;
+  // Focus sits on a control that Space activates: a button, checkbox, radio, select or summary.
+  on_space_control_: () => boolean;
   // A bundle is loading or the command line is handing focus back, and the mode the keys replay in is not known yet.
   is_loading_: () => boolean;
   // The loading bundles that register a sink. Their mode may take keys on replay.
@@ -127,6 +129,8 @@ export function create_key_flow(deps: KeyFlowDeps) {
       deps.on_prefix_(kept.length > 0 ? { mode, typed: kept } : undefined, true);
       return "cancel";
     }
+    // Space starts the leader subtree, so a focused control keeps it. Mid-sequence, Space is a key like any other.
+    if (token === "<Space>" && mode === "normal" && !was_in_progress && deps.on_space_control_()) return "pass";
     const result = active.feed(mode, token);
     sequence_in_progress = result.kind === "pending";
     if (result.kind === "pending") ({ typed, count } = result);

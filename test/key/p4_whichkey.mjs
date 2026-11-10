@@ -3,7 +3,7 @@ import { evaluate_in_background } from "./rdp.mjs";
 
 export const areas = ["whichkey", "help"];
 
-export async function run_cases({ rdp, extension_id, take_shot, run_case, send_keys, press_keys, poll_until, open_page, wait_event, events, expect, sleep, settle_focus, which_key_delay_ms, scroll_delta_by_press, scroll_of, run_line }) {
+export async function run_cases({ rdp, extension_id, take_shot, run_case, send_keys, press_keys, poll_until, open_page, wait_event, events, expect, sleep, settle_focus, close_tabs_with, in_active_tab, which_key_delay_ms, scroll_delta_by_press, scroll_of, run_line }) {
   const whichkey_events = (mark, page_id) => events.slice(mark).filter((event) => event.type === "whichkey" && event.page_id === page_id);
 
   await open_page("page", "wk", { new_tab: true });
@@ -117,6 +117,43 @@ export async function run_cases({ rdp, extension_id, take_shot, run_case, send_k
     await panel_value(mark, (value) => value === "", "the panel to close");
     await sleep(which_key_delay_ms + 200);
     expect(whichkey_events(mark, "wk").every((event) => event.value === ""), "the panel came back after Escape");
+  });
+
+  await run_case("Space then a pause shows the DesertFox panel, and Space then j still scrolls", async () => {
+    let mark = events.length;
+    await press_keys(" ");
+    await panel_value(mark, (value) => value !== "", "the Space panel");
+    await close_panel();
+    expect(await scroll_delta_by_press("wk", [" j"]) > 0, "Space j did not scroll the page");
+  });
+
+  // Each control reports through its own side effect on the page, which only happens when the page gets the Space.
+  await run_case("Space reaches a focused button, checkbox, radio and summary,", async () => {
+    await open_page("page", "sp_controls", { new_tab: true });
+    await in_active_tab(`(() => {
+      document.body.insertAdjacentHTML("afterbegin", '<button id="sp_button">b</button><input type="checkbox" id="sp_box"><input type="radio" id="sp_radio"><select id="sp_select"><option>one</option></select><details id="sp_details"><summary id="sp_summary">s</summary>x</details>');
+      window.sp_clicks = 0;
+      document.getElementById("sp_button").addEventListener("click", () => window.sp_clicks++);
+    })()`);
+    const act = async (id, key) => {
+      await in_active_tab(`document.getElementById("${id}").focus()`);
+      await press_keys(key);
+    };
+    await act("sp_button", " ");
+    await poll_until("the button to get Space", async () => (await in_active_tab("window.sp_clicks")) === 1);
+    await act("sp_box", " ");
+    await poll_until("the checkbox to get Space", async () => await in_active_tab(`document.getElementById("sp_box").checked`));
+    await act("sp_radio", " ");
+    await poll_until("the radio to get Space", async () => await in_active_tab(`document.getElementById("sp_radio").checked`));
+    await act("sp_summary", " ");
+    await poll_until("the summary to get Space", async () => await in_active_tab(`document.getElementById("sp_details").open`));
+    // A select opens its list on Space, which takes focus from the page, so the test only checks that the leader did not start.
+    const mark = events.length;
+    await act("sp_select", " ");
+    await sleep(which_key_delay_ms + 200);
+    expect(whichkey_events(mark, "sp_controls").length === 0, "a panel showed for Space on a select");
+    await close_tabs_with("sp_");
+    await settle_focus();
   });
 
   // keymap.d binds ,w to help.whichkey in normal mode and _w in caret and visual mode, because caret and visual mode already use , to repeat a character find. It sits there so the keymap that config.reload writes keeps it. Each mode lists its own keys.
