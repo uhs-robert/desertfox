@@ -2,7 +2,7 @@
 # A search key on the selection with no engine named, for the prompt case: with nothing selected it opens the command line.
 "sd" = "search @selection"
 # Engines that need a page slot (see search_engines.toml in run.mjs).
-"sh" = "search keysite @selection"
+"sk" = "search keysite @selection"
 "sr" = "search keyrepo needle"
 "sf" = "search keysub @selection"
 # An engine on {query|url}: with nothing selected it searches the page address.

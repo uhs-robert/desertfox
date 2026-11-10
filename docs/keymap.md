@@ -24,7 +24,7 @@ A note "(prompts)" means the binding sets a `prompt` for a param, so the command
 
 <!-- BEGIN generated -->
 
-bound: 302 (normal 166, hint 2, cmdline 18, caret 35, visual 37, visual_line 38, insert 2, ignore 1, browser 3) | later: 6 | dropped: 7
+bound: 304 (normal 168, hint 2, cmdline 18, caret 35, visual 37, visual_line 38, insert 2, ignore 1, browser 3) | later: 6 | dropped: 7
 
 ### normal
 
@@ -54,6 +54,9 @@ bound: 302 (normal 166, hint 2, cmdline 18, caret 35, visual 37, visual_line 38,
 | `[[` | bound | `page.follow --prev` | Previous page |  |
 | `]i` | bound | `page.focus_field --next` | Next form control |  |
 | `[i` | bound | `page.focus_field --prev` | Previous form control |  |
+| `]h` | bound | `page.heading --next` | Next heading |  |
+| `[h` | bound | `page.heading --prev` | Previous heading |  |
+| `sh` | bound | `cmdline.open --text='heading '` | Search headings |  |
 | `.` | bound | `repeat` | Repeat |  |
 | `J` | bound | `tab.next` | Next tab |  |
 | `K` | bound | `tab.prev` | Previous tab |  |
@@ -167,7 +170,6 @@ bound: 302 (normal 166, hint 2, cmdline 18, caret 35, visual 37, visual_line 38,
 | `V` | bound | `mode visual` | Start visual mode |  |
 | `;v` | bound | `hint --caret --prose` | Start caret mode at text |  |
 | `;V` | bound | `hint --visual --prose` | Start visual mode at text |  |
-| `;#` | bound | `cmdline.open --text='heading '` | Jump to heading |  |
 | `;u` | bound | `cmdline.open --text='hint --custom '` | Hint a CSS selector |  |
 | `;;` | bound | `cmdline.open --text='hint '` | Open the command line with hint |  |
 | `;b` | bound | `hint --buttons` | Click button |  |

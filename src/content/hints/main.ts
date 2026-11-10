@@ -21,7 +21,8 @@ import type { HintView } from "./view.ts";
 import { follow_windows } from "./follow.ts";
 import { box_owners, boxes_with_fallback, uncovered_through_frames, viewport_size } from "./visible.ts";
 import type { PageProbe } from "./visible.ts";
-import { clear_snapshot, go_to_heading, keep_present_found, take_snapshot } from "./headings.ts";
+import { clear_snapshot, go_to_heading, keep_present_found, step_heading, take_snapshot } from "./headings.ts";
+import type { HeadingDirection } from "./headings.ts";
 import { all_links, yank_links } from "./yank_links.ts";
 import type { LinkFormat, YankDeps } from "./yank_links.ts";
 import { can_open_elsewhere, find_follow_link } from "./follow_links.ts";
@@ -287,6 +288,10 @@ function register(host: BundleHostApi): void {
     if (message !== undefined) return { ok: false, message };
     mark_text_entry({ id: "page.focus_field", args: { direction: args.direction, steps: args.steps } });
     return done;
+  });
+  host.register_handler_("page.heading", (args): Outcome => {
+    const message = step_heading(args.direction as HeadingDirection, args.steps as number);
+    return message === undefined ? done : { ok: false, message };
   });
   host.register_handler_("copy.links", (args) => yank_links(args.scope as "page" | "viewport", args.format as LinkFormat, yank_deps(args.register as string | undefined)));
   host.register_handler_("hint.unhover", () => unhover());

@@ -103,7 +103,10 @@ test("the keys of the new modes compile and resolve to their commands", () => {
   assert.equal(leaf_id("normal", ";", "v"), 'hint.run {"action":"caret","filter":"prose","text":"","rapid":false,"register":""}');
   assert.equal(leaf_id("normal", ";", "b"), 'hint.run {"filter":"buttons","action":"here","text":"","rapid":false,"register":""}');
   assert.equal(leaf_id("normal", ";", "V"), 'hint.run {"action":"visual","filter":"prose","text":"","rapid":false,"register":""}');
-  assert.equal(leaf_id("normal", ";", "#"), 'cmdline.open {"text":"heading "}');
+  assert.equal(leaf_id("normal", "s", "h"), 'cmdline.open {"text":"heading "}');
+  assert.equal(leaf_id("normal", ";", "#"), undefined);
+  assert.equal(leaf_id("normal", "]", "h"), 'page.heading {"direction":"next","steps":1}');
+  assert.equal(leaf_id("normal", "[", "h"), 'page.heading {"direction":"prev","steps":1}');
   assert.equal(leaf_id("normal", ";", ";"), 'cmdline.open {"text":"hint "}');
   assert.equal(leaf_id("normal", ";", "u"), 'cmdline.open {"text":"hint --custom "}');
   assert.equal(leaf_id("caret", "v"), 'mode.set {"mode":"visual"}');
@@ -167,9 +170,9 @@ test("every default group name labels a real group, so a typo cannot go quiet", 
   assert.ok(!compiled.modes.normal?.children.g || (compiled.modes.normal.children.g as TreeBranch).label === "Go");
 });
 
-test("no default key searches: search keys come from the user's engines", () => {
+test("no default key searches the web: search keys come from the user's engines, and `sh` is the one page search", () => {
   const normal = Object.keys(DEFAULT_KEYMAP.normal ?? {});
-  assert.deepEqual(normal.filter((key) => key.startsWith("s") || key === "ri"), []);
+  assert.deepEqual(normal.filter((key) => key.startsWith("s") || key === "ri"), ["sh"]);
   assert.equal(DEFAULT_KEYMAP.group_names?.sG, undefined);
 });
 

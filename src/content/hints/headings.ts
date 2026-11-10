@@ -87,6 +87,32 @@ export function scroll_to_top(element: Element, frames: readonly Element[]): voi
   for (const target of [element, ...[...frames].reverse()]) target.scrollIntoView({ block: "start", behavior: "instant" });
 }
 
+export type HeadingDirection = "next" | "prev";
+
+// A heading whose top is within this many pixels of the view top is the one the last jump put there, so the next move passes it.
+const AT_TOP_SLACK = 1;
+
+// `tops` are the heading tops in page order, relative to the view top. A count that runs past the end stops on the last heading, and `undefined` means there is none in that direction.
+export function pick_heading_step(tops: readonly number[], direction: HeadingDirection, steps: number): number | undefined {
+  const first = direction === "next" ? tops.findIndex((top) => top > AT_TOP_SLACK) : tops.findLastIndex((top) => top < -AT_TOP_SLACK);
+  if (first === -1) return undefined;
+  const index = direction === "next" ? first + steps - 1 : first - steps + 1;
+  return Math.min(Math.max(index, 0), tops.length - 1);
+}
+
+// A heading in a frame is placed by the frames that hold it, so its top is counted from the top view.
+const top_in_view = ({ element, frames }: Found): number => [element, ...frames].reduce((sum, target) => sum + target.getBoundingClientRect().top, 0);
+
+// Returns the notice when there is no heading that way. The move starts from the view and not from the last jump, so `.` keeps going.
+export function step_heading(direction: HeadingDirection, steps: number): string | undefined {
+  const found = keep_present_found(collect(document, { selector: HEADINGS, test: is_heading }));
+  const index = pick_heading_step(found.map(top_in_view), direction, steps);
+  if (index === undefined) return direction === "next" ? "No next heading" : "No previous heading";
+  const { element, frames } = found[index]!;
+  scroll_to_top(element, frames);
+  return undefined;
+}
+
 export type Snapshot = { found: Found[]; rows: HeadingItem[] };
 
 // The heading may have left the page since the list was read, with its frame or alone.
