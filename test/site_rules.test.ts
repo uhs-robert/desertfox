@@ -99,7 +99,7 @@ test("a passed or unlisted single key that the flow would cancel or count reache
 test("which-key lists only the keys the page's rule leaves", async () => {
   const { compiled } = compile([{ site: "https://a.test/*", pass: "gg" }]);
   const storage = { get: async () => ({ [COMPILED_KEYMAP_STORAGE_KEY]: compiled }) } as never;
-  const rows = async (address: string) => (await list_keys(storage, () => undefined, { mode: "normal", prefix: ["g"] }, undefined, [address, undefined])).rows.map((row) => row.keys);
+  const rows = async (address: string) => (await list_keys(storage, () => undefined, { mode: "normal", prefix: ["g"] }, { addresses: [address, undefined] })).rows.map((row) => row.keys);
   assert.deepEqual(await rows("https://a.test/"), ["i"]);
   assert.deepEqual(await rows("https://b.test/"), ["g", "i"]);
 });

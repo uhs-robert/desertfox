@@ -25,10 +25,12 @@ test("typed names are the dotted id except the family words and one-word command
     "help.open=help",
     "hint.run=hint",
     "history.open=history",
+    "mark.list=marks",
     "mode.set=mode",
     "open.clipboard=paste",
     "open.search=search",
     "open.url=open",
+    "quickmark.list=quickmarks",
     "register.list=registers",
     "scroll.lines=scroll",
     "settings.set=set",
@@ -53,8 +55,8 @@ test("only these commands opt out of `.`, so a new command repeats unless someon
   const opted_out = registry.list().filter((command) => command.repeatable === false).map((command) => command.id);
   assert.deepEqual(opted_out.sort(), [
     "browser.close_all", "browser.focus_page", "caret.move", "cmdline.clear", "cmdline.help", "cmdline.history", "cmdline.next_completion", "cmdline.open", "cmdline.prev_completion", "cmdline.submit",
-    "command.repeat", "config.reload", "debug.restart", "engine.show", "find.open", "frame.exit", "help.open", "help.whichkey", "list.act", "list.select", "macro.record", "macro.stop", "mark.add", "mark.jump", "mode.escape", "mode.insert", "mode.pass_next", "mode.set",
-    "native.install", "quickmark.add", "register.list", "register.paste", "settings.set", "settings.toggle", "settings.unset", "visual.act",
+    "command.repeat", "config.reload", "debug.restart", "engine.show", "find.open", "frame.exit", "help.open", "help.whichkey", "list.act", "list.select", "macro.record", "macro.stop", "mark.add", "mark.delete", "mark.jump", "mark.list", "mode.escape", "mode.insert", "mode.pass_next", "mode.set",
+    "native.install", "quickmark.add", "quickmark.delete", "quickmark.list", "register.list", "register.paste", "settings.set", "settings.toggle", "settings.unset", "visual.act",
   ]);
 });
 

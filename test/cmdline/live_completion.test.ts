@@ -36,6 +36,8 @@ const COMMANDS: CommandMeta[] = [
 ];
 COMMANDS.push({ id: "heading.go", name: "heading", label: "Go to heading", intent: "Go to a heading.", params: [{ name: "heading", type: "string", rest: true, main: true, values: { from: "headings" } }] });
 COMMANDS.push({ id: "session.open", name: "session.open", label: "Open tab session", intent: "Open a session.", params: [{ name: "name", type: "string", rest: true, main: true, values: { from: "sessions" } }] });
+COMMANDS.push({ id: "mark.list", name: "marks", label: "List marks", intent: "List marks.", params: [{ name: "mark", type: "string", rest: true, main: true, values: { from: "marks" } }] });
+COMMANDS.push({ id: "quickmark.list", name: "quickmarks", label: "List quickmarks", intent: "List quickmarks.", params: [{ name: "quickmark", type: "string", rest: true, main: true, values: { from: "quickmarks" } }] });
 COMMANDS.push({ id: "register.list", name: "registers", label: "List registers", intent: "List registers.", params: [{ name: "name", type: "string", rest: true, main: true, optional: true, values: { from: "registers" } }] });
 COMMANDS.push({ id: "bookmark.move", name: "bookmark.move", label: "Move bookmark", intent: "Move.", params: [{ name: "folder", type: "string", rest: true, main: true, values: { from: "folders" } }, { name: "bookmark", type: "string", optional: true, values: { from: "bookmarks" } }] });
 COMMANDS.push({ id: "history.open", name: "history", label: "Open history entry", intent: "Open history.", params: [{ name: "entry", type: "string", rest: true, main: true, values: { from: "history" } }] });
@@ -1030,6 +1032,21 @@ test("a register pick puts the name in the line, with the preview in the row", a
   session.edit("registers a");
   tab_key(session);
   assert.equal(session.get_text(), "registers a ");
+});
+
+test("the marks and quickmarks lists show the key with the same text as the which-key rows", async () => {
+  const { session, asks, settle } = make();
+  session.edit("marks ");
+  assert.deepEqual(asks.map((ask) => ask.kind), ["marks"]);
+  asks[0]!.answer([{ name: "a", description: "y 40" }, { name: "G", description: "github.com  y 7" }]);
+  await settle();
+  assert.deepEqual(names(session), ["a", "G"]);
+  assert.deepEqual(session.get_rows().map((row) => row.description), ["y 40", "github.com  y 7"]);
+  session.edit("quickmarks ");
+  assert.equal(asks.at(-1)!.kind, "quickmarks");
+  asks.at(-1)!.answer([{ name: "g", description: "github.com" }]);
+  await settle();
+  assert.deepEqual(names(session), ["g"]);
 });
 
 test("a folder pick quotes its path, in the main word and in a flag value", async () => {

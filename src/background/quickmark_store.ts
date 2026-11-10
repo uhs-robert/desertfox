@@ -37,6 +37,20 @@ export function create_quickmark_store(deps: QuickmarkStoreDeps) {
         const storage_key = is_private ? QUICKMARK_PRIVATE_STORAGE_KEY : QUICKMARK_STORAGE_KEY;
         await area.set({ [storage_key]: { ...(await read(area, storage_key)), [key]: url } });
       }),
+    // The entries a window may delete: the saved ones of its own layer. A private window never touches the normal layer.
+    saved: (is_private: boolean): Promise<QuickmarkTable> => (is_private ? read(deps.session(), QUICKMARK_PRIVATE_STORAGE_KEY) : read(deps.local(), QUICKMARK_STORAGE_KEY)),
+    // Drops the saved entry of a key from the window's own layer. An entry of quickmarks.toml stays until the file changes.
+    remove: (key: string, is_private: boolean) =>
+      in_turn(async () => {
+        const area = is_private ? deps.session() : deps.local();
+        const storage_key = is_private ? QUICKMARK_PRIVATE_STORAGE_KEY : QUICKMARK_STORAGE_KEY;
+        const { [key]: gone, ...kept } = await read(area, storage_key);
+        if (gone === undefined) {
+          const in_normal_window = is_private && (await read(deps.local(), QUICKMARK_STORAGE_KEY))[key] !== undefined;
+          throw new RuntimeRefusal(in_normal_window ? `Quickmark ${key} is saved in a normal window, delete it there` : `Quickmark ${key} is not saved, its key comes from quickmarks.toml and must be removed there`);
+        }
+        await area.set({ [storage_key]: kept });
+      }),
     // Drops every private quickmark unless a private window is open. The window check runs in the queue, so a write from a window that just opened is never deleted.
     clear_private_without_window: (has_private_window: () => Promise<boolean>) =>
       in_turn(async () => {
