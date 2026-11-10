@@ -339,9 +339,9 @@ Which-key group names:
 | `#` | bound | `find --backward --word` | Find word backward |  |
 | `n` | bound | `find.next` | Next match |  |
 | `N` | bound | `find.prev` | Previous match |  |
-| `y` | bound | `visual.act --yank` | Act on selection |  |
-| `o` | bound | `visual.act --swap` | Act on selection |  |
-| `s` | bound | `visual.act --search` | Act on selection |  |
+| `y` | bound | `visual.act yank` | Act on selection |  |
+| `o` | bound | `visual.act swap` | Act on selection |  |
+| `s` | bound | `visual.act search` | Act on selection |  |
 | `<Escape>` | bound | `mode.escape` | Escape |  |
 | `<C-[>` | bound | `mode.escape` | Escape |  |
 | `V` | bound | `mode visual_line` | Switch to line visual mode |  |
@@ -381,9 +381,9 @@ Which-key group names:
 | `#` | bound | `find --backward --word` | Find word backward |  |
 | `n` | bound | `find.next` | Next match |  |
 | `N` | bound | `find.prev` | Previous match |  |
-| `y` | bound | `visual.act --yank` | Act on selection |  |
-| `o` | bound | `visual.act --swap` | Act on selection |  |
-| `s` | bound | `visual.act --search` | Act on selection |  |
+| `y` | bound | `visual.act yank` | Act on selection |  |
+| `o` | bound | `visual.act swap` | Act on selection |  |
+| `s` | bound | `visual.act search` | Act on selection |  |
 | `<Escape>` | bound | `mode.escape` | Escape |  |
 | `<C-[>` | bound | `mode.escape` | Escape |  |
 | `v` | bound | `mode visual` | Switch to character visual mode |  |

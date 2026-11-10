@@ -240,6 +240,21 @@ test("key flow: Backspace inside a longer key keeps the prefix and the count", (
   assert.deepEqual(ran, ["test.yank:a:2"]);
 });
 
+test("key flow: Backspace drops the last typed key, a count digit after the register first", () => {
+  const { flow, ran, prefixes } = make_flow();
+  for (const key of ['"', "a", "3"]) flow.handle_token_(key);
+  flow.handle_token_("<Backspace>");
+  flow.handle_token_("y");
+  assert.deepEqual(ran, ["test.yank:a:"]);
+  assert.equal(prefixes.at(-1), undefined);
+  const again = make_flow();
+  for (const key of ["3", '"', "a"]) again.flow.handle_token_(key);
+  again.flow.handle_token_("<Backspace>");
+  again.flow.handle_token_("b");
+  again.flow.handle_token_("y");
+  assert.deepEqual(again.ran, ["test.yank:b:3"]);
+});
+
 test("key flow: a mode change between the register and the command drops the register", () => {
   const { flow, ran, state } = make_flow();
   flow.handle_token_('"');
@@ -268,6 +283,12 @@ test("which-key lists the stored registers under `\"`, and the tree under any ot
   assert.deepEqual((await list_keys(keymap_storage(tree()), () => undefined, { mode: "normal", prefix: ['"'] }, undefined, [], async () => Promise.reject(new Error("x")))).rows, []);
 });
 
+test("a user binding of `\"` keeps its own which-key tree", async () => {
+  const keymap = tree_of({ '"': { id: "test.down" }, y: { id: "test.yank" } });
+  const panel = await list_keys(keymap_storage(keymap), () => undefined, { mode: "normal", prefix: ['"'] }, undefined, [], async () => [{ name: "a", description: "one" }]);
+  assert.notDeepEqual(panel.title, ["registers"]);
+});
+
 function make_store() {
   const values = new Map<string, unknown>();
   const area = {
@@ -290,6 +311,12 @@ test("a yank fills the unnamed register and the named one, and the black hole dr
   assert.deepEqual([await store.read('"', false), await store.read("a", false)], ["+three", "two+three"]);
   await store.yank("_", "gone", false);
   assert.deepEqual([await store.read('"', false), await store.read("a", false)], ["+three", "two+three"]);
+});
+
+test("a yank into + leaves the clipboard to the content script and fills the unnamed register", async () => {
+  const { store, clipboard } = make_store();
+  await store.yank("+", "text", false);
+  assert.deepEqual([clipboard.text, await store.read('"', false)], ["", "text"]);
 });
 
 test("a yank into a macro register refuses and leaves the unnamed register as it was", async () => {

@@ -612,6 +612,15 @@ test("a hint copy leaves the text in the unnamed register, and in the named one 
   assert.deepEqual(named.yanked, [{ type: "register_yank", name: "b", text: "two" }]);
 });
 
+test("a hint copy into the black hole copies nothing and shows no message", async () => {
+  const page = await page_with(["one", "two"]);
+  const answer = page.run({ action: "copy", register: "_" });
+  await settle();
+  page.type(page.labels()[0]!.toLowerCase());
+  assert.deepEqual(await answer, { ok: true });
+  assert.deepEqual([page.copied, page.yanked, page.messages()], [[], [], []]);
+});
+
 test("a refused hint copy answers failed with one message, and a good copy answers done", async () => {
   const page = await page_with(["one", "two"]);
   page.refuse_clipboard();

@@ -16,7 +16,8 @@ test("caret and visual commands read as one-line command strings", () => {
   assert.deepEqual(args_of("caret.move --word --back"), { id: "caret.move", args: { unit: "word", direction: "back" } });
   assert.deepEqual(args_of("caret.move --word-end --big"), { id: "caret.move", args: { unit: "word_end", big: true } });
   assert.deepEqual(args_of("caret.move --line-start"), { id: "caret.move", args: { unit: "line_start" } });
-  assert.deepEqual(args_of("visual.act --yank"), { id: "visual.act", args: { action: "yank" } });
+  assert.deepEqual(args_of("visual.act yank"), { id: "visual.act", args: { action: "yank" } });
+  assert.deepEqual(args_of("visual.act yank --register=a"), { id: "visual.act", args: { action: "yank", register: "a" } });
   assert.deepEqual(args_of("cmdline.history prev"), { id: "cmdline.history", args: { direction: "prev" } });
 });
 

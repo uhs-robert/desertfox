@@ -30,7 +30,8 @@ if (!page.desertfox_text_ready) {
     const name = args.name as string;
     const value = (await browser.runtime.sendMessage({ type: "register_read", name } satisfies RegisterRead)) as string | unknown[] | undefined;
     if (typeof value !== "string" || value === "") throw new RuntimeRefusal(value === undefined || value === "" ? `Register ${name} is empty` : `Register ${name} holds a macro, not text`);
-    recorder.while_replaying(() => write_into_field(value, host.last_blurred_()));
+    // Outside `while_replaying`: the text joins the insert session that `.` repeats, as a paste from the keyboard would.
+    write_into_field(value, host.last_blurred_());
   });
   host.register_handler_("text.insert", (args) => recorder.while_replaying(() => write_into_field(args.text as string, host.last_blurred_())));
   // Escape and a click both blur the field. A tab that goes away flushes on the way out, as far as the message gets through.

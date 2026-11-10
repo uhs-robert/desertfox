@@ -45,3 +45,11 @@ test("copy.url answers done after the write and failed, without its own toast, w
   assert.deepEqual(await copy_page_url("plain", undefined, (message) => void toasts.push(message)), { ok: false, message: "Could not copy to the clipboard" });
   assert.deepEqual(toasts, ["Copied https://a.com/"]);
 });
+
+test("copy.url into the black hole shows no toast", async () => {
+  const toasts: string[] = [];
+  const { copy_page_url } = await import("../../src/content/handlers/copy.ts");
+  Object.defineProperty(globalThis, "navigator", { value: { clipboard: { writeText: async () => {} } }, configurable: true });
+  assert.deepEqual(await copy_page_url("plain", "_", (message) => void toasts.push(message)), undefined);
+  assert.deepEqual(toasts, []);
+});

@@ -52,6 +52,14 @@ export async function run_cases({ run_case, open_page, poll_until, rdp, in_backg
     await wait_event(mark, (event) => event.type === "input" && event.page_id === "p9r_paste" && event.value === "from register c", "the field to hold the register text");
   });
 
+  await run_case("Escape then . repeats the pasted text as typed text", async () => {
+    await press_keys("-k", "Escape");
+    await settle_focus();
+    const mark = events.length;
+    await press_keys(".");
+    await wait_event(mark, (event) => event.type === "input" && event.page_id === "p9r_paste" && event.value === "from register cfrom register c", "the field to hold the text twice");
+  });
+
   await run_case('a pause after " shows the stored registers, and Escape closes the panel', async () => {
     await open_page("page", "p9r_wk", { new_tab: true });
     await settle_focus();

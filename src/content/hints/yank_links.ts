@@ -2,6 +2,7 @@
 
 import { link_text, markdown_address, org_address } from "../link_escape.ts";
 import type { Outcome } from "../../shared/messages.ts";
+import type { Yanked } from "../caret/copy_text.ts";
 import { collect, query_for } from "./candidates.ts";
 import type { Found } from "./candidates.ts";
 import { rendered_text } from "./headings.ts";
@@ -72,7 +73,7 @@ export type YankDeps = {
   find: () => Found[];
   keep_present_: (found: Found[]) => Found[];
   keep_in_view_: (found: Found[]) => Promise<Found[]>;
-  copy: (text: string) => Promise<Outcome>;
+  copy: (text: string) => Promise<Yanked>;
   show_message_: (message: string) => void;
 };
 
@@ -84,6 +85,6 @@ export async function yank_links(scope: "page" | "viewport", format: LinkFormat,
   if (links.length === 0) return { ok: false, message: "No links on this page" };
   const copied = await deps.copy(format_links(links, format));
   if (!copied.ok) return copied;
-  deps.show_message_(`Copied ${links.length} ${links.length === 1 ? "link" : "links"}`);
+  if (!("dropped" in copied)) deps.show_message_(`Copied ${links.length} ${links.length === 1 ? "link" : "links"}`);
   return { ok: true };
 }

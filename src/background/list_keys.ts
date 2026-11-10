@@ -13,6 +13,9 @@ import { is_available } from "./availability.ts";
 import { prune_tree } from "../shared/keys/prune_tree.ts";
 import { matches_any_address } from "../shared/match_pattern.ts";
 
+// The modes where the matcher reads `"` as the register prefix.
+const REGISTER_PREFIX_MODES: readonly string[] = ["normal", "caret", "visual", "visual_line"];
+
 type KeymapStorage = Pick<typeof browser.storage.local, "get">;
 
 function row_of(token: string, node: TreeNode, find_command: (id: string) => CommandMeta | undefined): WhichKeyRow {
@@ -94,8 +97,8 @@ export async function list_keys(
 ): Promise<WhichKeyPanel> {
   const stored = await storage.get(COMPILED_KEYMAP_STORAGE_KEY);
   const keymap = stored[COMPILED_KEYMAP_STORAGE_KEY] as CompiledKeymap | undefined;
-  // `"` is no key of the tree: it waits for a register name, so the panel lists the registers that hold something.
-  if (registers && request.prefix.length === 1 && request.prefix[0] === UNNAMED_REGISTER) {
+  // The register prefix is no key of the tree: it waits for a register name, so the panel lists the registers that hold something. A user binding of `"` keeps its own tree.
+  if (registers && request.prefix.length === 1 && request.prefix[0] === UNNAMED_REGISTER && REGISTER_PREFIX_MODES.includes(request.mode) && !keymap?.modes[request.mode as keyof CompiledKeymap["modes"]]?.children[UNNAMED_REGISTER]) {
     const items = await registers().catch((): RegisterItem[] => []);
     return { title: ["registers"], rows: items.map(({ name, description }) => ({ keys: name, command: description, description: "", more: false })), border: keymap?.which_key_border ?? "square" };
   }

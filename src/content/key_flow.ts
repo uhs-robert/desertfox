@@ -77,6 +77,8 @@ export function create_key_flow(deps: KeyFlowDeps) {
   let typed: string[] = [];
   let count: number | undefined;
   let register: string | undefined;
+  // The last key of the sequence was a count digit, so Backspace drops that digit and not the register.
+  let ends_in_digit = false;
 
   // What which-key lists: the keys typed in the tree, or `"` while the register name is awaited.
   const listed = (keys: string[]) => (register === '"' ? [register] : keys);
@@ -134,11 +136,14 @@ export function create_key_flow(deps: KeyFlowDeps) {
     // Backspace drops the last key of a half-typed sequence. The matcher cannot step back, so the shorter prefix is typed again.
     if (was_in_progress && token === "<Backspace>") {
       const kept = typed.slice(0, -1);
-      // With no key in the tree, the last key of the register prefix goes.
-      const kept_register = typed.length === 0 ? register?.slice(0, -1) : register;
+      // With no key in the tree, the last typed key goes: the last count digit of a register prefix, else the last key of the prefix.
+      const in_prefix = typed.length === 0 && register !== undefined;
+      const digits = `${count ?? ""}`;
+      const kept_digits = in_prefix && ends_in_digit ? digits.slice(0, -1) : digits;
+      const kept_register = in_prefix && !ends_in_digit ? register.slice(0, -1) : register;
       reset_sequence_();
       // The count and the register go back in as their keys, ahead of the kept keys.
-      for (const key of [...`${count ?? ""}`, ...(kept_register ?? ""), ...kept]) step(active, key, false);
+      for (const key of [...kept_digits, ...(kept_register ?? ""), ...kept]) step(active, key, false);
       const shown = listed(kept);
       deps.on_prefix_(shown.length > 0 ? { mode, typed: shown } : undefined, true);
       return "cancel";
@@ -147,6 +152,7 @@ export function create_key_flow(deps: KeyFlowDeps) {
     const result = active.feed(mode, token);
     sequence_in_progress = result.kind === "pending";
     if (result.kind === "pending") ({ typed, count, register_keys: register } = result);
+    ends_in_digit = /^\d$/.test(token);
     // A bare count (`3`) has typed nothing yet, so no keys can be listed.
     const keys = listed(typed);
     deps.on_prefix_(result.kind === "pending" && keys.length > 0 ? { mode, typed: keys } : undefined);

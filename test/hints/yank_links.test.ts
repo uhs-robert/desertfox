@@ -117,3 +117,10 @@ test("a refused clipboard fails with the copy message and shows no toast", async
   assert.deepEqual(outcome, { ok: false, message: "Could not copy to the clipboard" });
   assert.deepEqual(messages, []);
 });
+
+test("a copy that drops the text into the black hole shows no message", async () => {
+  const messages: string[] = [];
+  const outcome = await yank_links("page", "plain", deps_with({ copy: async () => ({ ok: true, dropped: true }) }, [], messages));
+  assert.deepEqual(outcome, { ok: true });
+  assert.deepEqual(messages, []);
+});

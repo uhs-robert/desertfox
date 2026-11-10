@@ -19,6 +19,8 @@ define("register.paste", {
   intent: "Type the text of a register into a text field. It uses the focused field, else the one Escape left. A register that holds a macro has no text.",
   params: [{ name: "name", type: "key", pattern: REGISTER_KEY.source, description: "Paste this register." }],
   runs_in: "content",
-  modes: ["normal", "insert"],
+  modes: ["insert"],
+  // The pasted text is part of the insert session, so `text.insert` is what `.` repeats.
+  repeatable: false,
   bundle: "text",
 });

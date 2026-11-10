@@ -32,11 +32,24 @@ test("copy_yank copies to the clipboard, then asks the background to fill the re
   ]);
 });
 
-test("copy_yank to the black hole copies and stores nothing", async () => {
+test("copy_yank to the black hole copies and stores nothing, and says it dropped the text", async () => {
   const written: string[] = [];
   const sent = with_background({ ok: true });
-  assert.deepEqual(await copy_yank({ writeText: async (text) => void written.push(text) }, "abc", "_"), { ok: true });
+  assert.deepEqual(await copy_yank({ writeText: async (text) => void written.push(text) }, "abc", "_"), { ok: true, dropped: true });
   assert.deepEqual([written, sent], [[], []]);
+});
+
+test("yank_text to the black hole shows no toast and still leaves visual mode", async () => {
+  with_background({ ok: true });
+  const done: string[] = [];
+  const outcome = await yank_text({ writeText: async () => {} }, "abc", "_", { is_same_session_: () => true, toast: (message) => done.push(message), leave_visual_: () => done.push("leave") });
+  assert.deepEqual([outcome, done], [{ ok: true }, ["leave"]]);
+});
+
+test("the registers fill when the clipboard refuses, and the answer is still the refusal", async () => {
+  const sent = with_background({ ok: true });
+  assert.deepEqual(await copy_yank({ writeText: () => Promise.reject(new Error("denied")) }, "abc", "a"), { ok: false, message: "Could not copy to the clipboard" });
+  assert.equal(sent.length, 1);
 });
 
 test("copy_yank answers a refused register write, or no answer, as failed", async () => {
@@ -45,6 +58,7 @@ test("copy_yank answers a refused register write, or no answer, as failed", asyn
   assert.deepEqual(await copy_yank(clipboard, "abc", "A"), { ok: false, message: "Register a holds a macro, so text cannot join it" });
   with_background(undefined);
   assert.deepEqual(await copy_yank(clipboard, "abc", "a"), { ok: false, message: "DesertFox background did not answer" });
+  with_background({ ok: true });
   assert.deepEqual(await copy_yank(undefined, "abc", "a"), { ok: false, message: "Could not copy to the clipboard" });
 });
 

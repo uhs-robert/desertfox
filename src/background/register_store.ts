@@ -66,7 +66,8 @@ export function create_register_store(deps: RegisterStoreDeps) {
   // The named register first, so a refused one leaves the unnamed register as it was.
   async function yank_now(name: string, text: string, is_private: boolean): Promise<void> {
     if (name === BLACK_HOLE_REGISTER) return;
-    if (name !== "" && name !== UNNAMED_REGISTER) await write_now(name, text, is_private);
+    // The content script wrote the clipboard already.
+    if (name !== "" && name !== UNNAMED_REGISTER && name !== CLIPBOARD_REGISTER) await write_now(name, text, is_private);
     await write_now(UNNAMED_REGISTER, text, is_private);
   }
 

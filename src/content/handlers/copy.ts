@@ -42,5 +42,8 @@ export function copy_page_url(format: CopyFormat, register: string | undefined, 
     short_url_: link_href("shortlink"),
   });
   // The failure goes to the caller, which shows it once.
-  return copy_yank(navigator.clipboard, text, register).then((copied) => (copied.ok ? show_toast(`Copied ${text}`) : copied));
+  return copy_yank(navigator.clipboard, text, register).then((copied) => {
+    if (!copied.ok) return copied;
+    if (!("dropped" in copied)) show_toast(`Copied ${text}`);
+  });
 }

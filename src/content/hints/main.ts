@@ -144,13 +144,11 @@ async function follow_page_link(direction: FollowDirection, place: Place): Promi
   return result && typeof result === "object" && "ok" in result ? (result as Outcome) : done;
 }
 
-// The register of the `hint.run` that is picking. A pick copies after the run started, so the copy cannot read the session args.
-let yank_register: string | undefined;
-
 // A refused copy answers failed and shows nothing here: the pick's answer carries it to the caller, which shows it once.
-function copy_to_clipboard(text: string, what?: string): Promise<Outcome | undefined> {
-  return copy_yank(navigator.clipboard, text, yank_register).then((copied) => {
+function copy_to_clipboard(text: string, register: string | undefined, what?: string): Promise<Outcome | undefined> {
+  return copy_yank(navigator.clipboard, text, register).then((copied) => {
     if (!copied.ok) return copied;
+    if ("dropped" in copied) return;
     // A view of its own, so the notice does not wipe the labels that rapid mode shows.
     create_view().show_message_(`Copied ${what ?? (text.length > 40 ? text.slice(0, 40) + "..." : text)}`);
   });
@@ -178,7 +176,9 @@ function start_caret_(target: Element, mode: CaretMode): void {
 
 const inspect_ = (target: Element): Promise<Outcome> => hand_to_devtools(window as never, target, () => browser.runtime.sendMessage({ type: "inspect_pick" }), setTimeout, (message) => create_view().show_message_(message));
 
-const deps = { open_link_, copy: copy_to_clipboard, image_action, start_caret_, inspect_ };
+// A pick copies into the register its own `hint.run` was typed with.
+const pick_deps = (current: { args: Record<string, unknown> }) => ({ ...deps, copy: (text: string, what?: string) => copy_to_clipboard(text, current.args.register as string | undefined, what) });
+const deps = { open_link_, copy: (text: string, what?: string) => copy_to_clipboard(text, undefined, what), image_action, start_caret_, inspect_ };
 
 function register(host: BundleHostApi): void {
   let session: Session | undefined;
@@ -247,7 +247,7 @@ function register(host: BundleHostApi): void {
     // One match needs no label. Only the first build does this, so rapid mode cannot repeat the same pick.
     if (first_build && current.lower_text_ !== undefined && found.length === 1) {
       const performed = begin_pick(current);
-      leave_with_keys(current, () => performed(() => perform(current.action, found[0]!.element as HTMLElement, deps, current.with_background_)));
+      leave_with_keys(current, () => performed(() => perform(current.action, found[0]!.element as HTMLElement, pick_deps(current), current.with_background_)));
       return;
     }
     const view = create_view();
@@ -268,14 +268,14 @@ function register(host: BundleHostApi): void {
       const picked = element as HTMLElement;
       const performed = begin_pick(current);
       if (!current.rapid) {
-        leave_with_keys(current, () => performed(() => perform(current.action, picked, deps, current.with_background_)));
+        leave_with_keys(current, () => performed(() => perform(current.action, picked, pick_deps(current), current.with_background_)));
         return "handled";
       }
       // Rapid: the pick may delete or move elements, so drop these labels and label the page again.
       ready.stop_following_();
       ready.view.clear_labels_();
       delete current.ready;
-      performed(() => perform(current.action, picked, deps, current.with_background_));
+      performed(() => perform(current.action, picked, pick_deps(current), current.with_background_));
       if (!current.cancelled) void build(current, find_candidates(current.filter, current.custom_selector_, current.action), false);
     }
     return "handled";
@@ -309,7 +309,6 @@ function register(host: BundleHostApi): void {
 
   host.register_handler_("hint.run", (args): Outcome | Promise<Outcome> => {
     const action = args.action as HintAction;
-    yank_register = args.register as string | undefined;
     end_session();
     const filter = args.filter as HintFilter;
     const custom_selector_ = args.selector as string | undefined;
