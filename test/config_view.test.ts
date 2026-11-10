@@ -29,6 +29,6 @@ test("the steps to apply an edit name the host install and config.reload, whatev
   for (const source of ["files", "defaults"] as const) {
     const steps = build_config_view({ source, settings: DEFAULT_SETTINGS, ...NO_LAYERS }).rebuild_steps;
     assert.match(steps[0]!, /native\.install/);
-    assert.match(steps[1]!, /config\.reload.*<Space>r/);
+    assert.match(steps[1]!, /config\.reload.*,r/);
   }
 });

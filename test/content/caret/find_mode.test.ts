@@ -62,7 +62,6 @@ function make_page() {
     get_mode_: state.get_mode_,
     take_pass_next_: state.take_pass_next_,
     in_editable_field_: () => false,
-    on_space_control_: () => false,
     is_loading_: host.is_loading_,
     loading_sink_bundles_: host.loading_sink_bundles_,
     sink_of_: host.sink_of_,

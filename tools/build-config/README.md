@@ -25,6 +25,6 @@ node tools/build-config/cli.ts [dir] [flags]
 
 It prints config warnings to stderr and exits with 1 on a config error. A bare run writes no file.
 
-To apply an edit, run `config.reload` (`<Space>r`) in Firefox. That reads the files through the native host, which is optional: browser edits cover casual use, and only the config files (TOML, snippets and CSS) need the host.
+To apply an edit, run `config.reload` (`,r`) in Firefox. That reads the files through the native host, which is optional: browser edits cover casual use, and only the config files (TOML, snippets and CSS) need the host.
 
 Older versions wrote `~/.mozilla/managed-storage/desertfox@uhs-robert.json` and a `.engines.jsonl` beside it. Firefox now ignores that file. It is safe to delete.

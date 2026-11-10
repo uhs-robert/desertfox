@@ -523,11 +523,11 @@ export async function create_session({ name: session_name, timings, sweep = true
   const read_local = (key) => in_background(`(async () => (await browser.storage.local.get("${key}"))["${key}"])()`);
   // Whether the key holds a value. The test runs in the background, so a large value (a built config) never crosses the debugger.
   const has_local = (key) => in_background(`browser.storage.local.get("${key}").then((stored) => stored["${key}"] != null)`);
-  // Presses <Space>r and waits until the reload stores the files config. The key is removed first, so an earlier reload does not count.
+  // Presses ,r and waits until the reload stores the files config. The key is removed first, so an earlier reload does not count.
   async function reload_in_place() {
     await in_background(`browser.storage.local.remove(["desertfox_files_config", "desertfox_config_status"])`);
-    await send_keys(" r");
-    waiting_for = "<Space>r to store the files config and publish the config status";
+    await send_keys(",r");
+    waiting_for = ",r to store the files config and publish the config status";
     for (let attempt = 0; attempt < 200; attempt++) {
       await sleep(50);
       // The background writes the status before the files config, so only the pair shows that this reload finished.
@@ -535,7 +535,7 @@ export async function create_session({ name: session_name, timings, sweep = true
     }
     // The host call made by hand tells a missing permission or host from a refused build.
     const probe = await in_background(`(async () => ({ granted: await browser.permissions.contains({ permissions: ["nativeMessaging"] }), host: await browser.runtime.sendNativeMessage("desertfox_host", { cmd: "read_config" }).then((reply) => ({ ok: reply.ok, error: reply.error, files: Object.keys(reply.files ?? {}).length }), (error) => String(error)) }))()`);
-    throw new Error(`<Space>r stored no files config after 10 s: ${JSON.stringify(probe)}`);
+    throw new Error(`,r stored no files config after 10 s: ${JSON.stringify(probe)}`);
   }
   // Waits for the restart that debug.restart starts: the new background writes its tab repair report.
   async function wait_reinject_report() {
@@ -553,13 +553,13 @@ export async function create_session({ name: session_name, timings, sweep = true
   // The pages are extension pages, so the test reads them through the background's view list.
   const extension_view = (name) => `(browser.extension.getViews({ type: "tab" }).find((view) => view.location.pathname === "/${name}"))`;
 
-  // Points the native host at a config folder and reloads it in place with <Space>r. The which-key shots use it to show a copy of the user config.
+  // Points the native host at a config folder and reloads it in place with ,r. The which-key shots use it to show a copy of the user config.
   // Null until the first reset loads config_dir: a new profile starts on defaults, and the files config reaches the extension only through the host.
   let linked_config_dir = null;
   const load_config_dir = async (dir) => {
     rmSync(active_config);
     symlinkSync(dir, active_config);
-    // Moving away is recorded at once, so a failed reload still gets restored. Moving back counts only once the reload worked, so a lost <Space>r is retried by the next reset.
+    // Moving away is recorded at once, so a failed reload still gets restored. Moving back counts only once the reload worked, so a lost ,r is retried by the next reset.
     if (dir !== config_dir) linked_config_dir = dir;
     await reload_in_place();
     linked_config_dir = dir;
@@ -713,7 +713,7 @@ export async function create_session({ name: session_name, timings, sweep = true
 
   const config_restore_pending = () => linked_config_dir !== config_dir;
 
-  // Puts the config link on config_dir and reloads it in place. The first reset calls it for the initial load. A debug.restart may still be starting the new background, and a <Space>r sent to it is lost, so the status key comes first.
+  // Puts the config link on config_dir and reloads it in place. The first reset calls it for the initial load. A debug.restart may still be starting the new background, and a ,r sent to it is lost, so the status key comes first.
   // Returns whether it typed keys.
   async function restore_config() {
     if (!config_restore_pending()) return false;
@@ -740,7 +740,7 @@ export async function create_session({ name: session_name, timings, sweep = true
     await wait_for_tabs("the home tab to be the active tab", `browser.tabs.query({ active: true, lastFocusedWindow: true }).then(([tab]) => tab?.id)`, home.tab_id);
     await wait_event(mark, (event) => event.type === "tree_read" && event.page_id === home_id, `content script ready on ${home_id}`, 10000);
     await confirm_page_focus(home.tab_id, home.window_id);
-    // A page drops the keys of its first moments, and restore_config types <Space>r, so a pending load waits for the key probe first.
+    // A page drops the keys of its first moments, and restore_config types ,r, so a pending load waits for the key probe first.
     if (config_restore_pending()) await wait_takes_keys(home_id);
     const restored = await restore_config();
     const unset = await clear_temp_settings();
@@ -776,7 +776,7 @@ export async function create_session({ name: session_name, timings, sweep = true
     // Only these two steps type keys, so a piece that left no config or temp edits skips the refocus.
     const restore_pending = config_restore_pending();
     const unset_pending = await temp_settings_pending();
-    // The page must take keys before <Space>r and :unset, as in the reset. A lost <Space>r after this probe is a real fault of the page, not a young page.
+    // The page must take keys before ,r and :unset, as in the reset. A lost ,r after this probe is a real fault of the page, not a young page.
     if (restore_pending || unset_pending) await attempt("cleanup focus", async () => wait_takes_keys(await refocus_any_tab()));
     if (restore_pending) await attempt("cleanup config restore", restore_config);
     if (unset_pending) await attempt("cleanup temp unset", clear_temp_settings);

@@ -24,7 +24,7 @@ A note "(prompts)" means the binding sets a `prompt` for a param, so the command
 
 <!-- BEGIN generated -->
 
-bound: 305 (normal 169, hint 2, cmdline 18, caret 35, visual 37, visual_line 38, insert 2, ignore 1, browser 3) | later: 4 | dropped: 8
+bound: 305 (normal 169, hint 2, cmdline 18, caret 35, visual 37, visual_line 38, insert 2, ignore 1, browser 3) | later: 4 | dropped: 7
 
 ### normal
 
@@ -149,14 +149,14 @@ bound: 305 (normal 169, hint 2, cmdline 18, caret 35, visual 37, visual_line 38,
 | `<C-[>` | bound | `mode.escape` | Escape |  |
 | `<C-v>` | bound | `mode.pass_next` | Pass next key |  |
 | `<F1>` | bound | `help` | Help |  |
-| `<Space>r` | bound | `config.reload` | Reload config |  |
-| `<Space>h` | bound | `help` | Help |  |
-| `<Space>s` | bound | `help settings` | Settings page |  |
-| `<Space>t` | bound | `toggle` (prompts) | Toggle a setting |  |
-| `<Space>i` | bound | `mode ignore` | Set mode |  |
-| `<Space>b` | bound | `page.blur` | Blur |  |
-| `<Space>?` | bound | `help.whichkey` | Which key |  |
-| `<Space>"` | bound | `registers` (prompts) | List registers |  |
+| `,r` | bound | `config.reload` | Reload config |  |
+| `,h` | bound | `help` | Help |  |
+| `,s` | bound | `help settings` | Settings page |  |
+| `,t` | bound | `toggle` (prompts) | Toggle a setting |  |
+| `,i` | bound | `mode ignore` | Set mode |  |
+| `,b` | bound | `page.blur` | Blur |  |
+| `,?` | bound | `help.whichkey` | Which key |  |
+| `,"` | bound | `registers` (prompts) | List registers |  |
 | `m` | bound | `mark.add` | Set mark |  |
 | `'` | bound | `mark.jump` | Jump to mark |  |
 | `` ` `` | bound | `mark.jump` | Jump to mark |  |
@@ -210,7 +210,6 @@ bound: 305 (normal 169, hint 2, cmdline 18, caret 35, visual 37, visual_line 38,
 | `;c` | dropped |  |  | needs a shell |
 | `;x` | dropped |  |  | needs a shell |
 | `;:` | dropped |  |  | needs a shell |
-| `,r` | dropped |  |  | no config file to reload |
 
 Which-key group names:
 
@@ -225,7 +224,7 @@ Which-key group names:
 - `y`: Copy
 - `b`: Bookmark
 - `z`: Zoom and scroll
-- `<Space>`: DesertFox
+- `,`: DesertFox
 - `;`: Hints
 - `;y`: Yank
 - `s`: Search here

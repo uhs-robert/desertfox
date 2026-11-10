@@ -75,7 +75,7 @@ export const DEFAULT_KEYMAP: KeymapConfig = {
     y: "Copy",
     b: "Bookmark",
     z: "Zoom and scroll",
-    "<Space>": "DesertFox",
+    ",": "DesertFox",
     ";": "Hints",
     ";y": "Yank",
     s: "Search here",
@@ -217,15 +217,15 @@ export const DEFAULT_KEYMAP: KeymapConfig = {
     "<C-v>": { id: "mode.pass_next" },
     "<F1>": { id: "help.open" },
 
-    // <Space> is the built-in leader for DesertFox's own commands. `,` stays free as a user leader.
-    "<Space>r": { id: "config.reload" },
-    "<Space>h": { id: "help.open" },
-    "<Space>s": { id: "help.open", args: { name: "settings" }, label: "Settings page" },
-    "<Space>t": { id: "settings.toggle", prompt: { param: "name" } },
-    "<Space>i": { id: "mode.set", args: { mode: "ignore" } },
-    "<Space>b": { id: "page.blur" },
-    "<Space>?": { id: "help.whichkey" },
-    "<Space>\"": { id: "register.list", prompt: { param: "name" }, label: "List registers" },
+    // `,` is the built-in leader for DesertFox's own commands. Space stays with the page. A lone `,` no longer reaches pages; `pass = ","` gives it back to one site.
+    ",r": { id: "config.reload" },
+    ",h": { id: "help.open" },
+    ",s": { id: "help.open", args: { name: "settings" }, label: "Settings page" },
+    ",t": { id: "settings.toggle", prompt: { param: "name" } },
+    ",i": { id: "mode.set", args: { mode: "ignore" } },
+    ",b": { id: "page.blur" },
+    ",?": { id: "help.whichkey" },
+    ",\"": { id: "register.list", prompt: { param: "name" }, label: "List registers" },
 
     m: { id: "mark.add" },
     "'": { id: "mark.jump" },

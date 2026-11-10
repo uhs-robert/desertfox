@@ -71,9 +71,3 @@ mode = "normal"
 key = ";:"
 status = "dropped"
 note = "needs a shell"
-
-[[row]]
-mode = "normal"
-key = ",r"
-status = "dropped"
-note = "no config file to reload"
