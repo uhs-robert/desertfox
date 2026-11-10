@@ -65,6 +65,8 @@ export function create_bundle_host() {
   const sinks = new Map<Mode, Sink>();
   const handlers = new Map<string, BundleHandler>();
   const loads = new Map<BundleName, Promise<boolean>>();
+  // A bundle registers its handlers as its script runs, a little before its load answers. Calls queued on the load run when it answers, so until then a new call queues behind them.
+  const unanswered = new Set<BundleName>();
   let deps: BundleHostDeps;
   let waiting = 0;
   const waiting_on_sink_bundle = new Map<BundleName, number>();
@@ -78,7 +80,9 @@ export function create_bundle_host() {
     if (!started) {
       started = deps.request_bundle_(name);
       loads.set(name, started);
-      void started.then((loaded) => loaded || loads.delete(name));
+      unanswered.add(name);
+      // Registered ahead of every `after`, so the calls queued on the load run before a new call can take the fast path.
+      void started.then((loaded) => (unanswered.delete(name), loaded || loads.delete(name)));
     }
     const sink_bundle = hold && Object.values(BUNDLE_FOR_MODE).includes(name);
     if (hold) waiting++;
@@ -100,7 +104,7 @@ export function create_bundle_host() {
   // `args` reaches the handler as given. Nothing validates it, so it holds whatever the caller and the handler agree on, functions included. Take it only from bundle code, never from keymap or command-line input, which the registry validates first.
   // `hold` false is for drawing, which nobody awaits, so a failure there goes to `show_error_`.
   function run_command_(command_id: string, name: BundleName, args: Record<string, unknown>, missing: string, hold = true): Promise<Outcome> {
-    const run = handlers.get(command_id);
+    const run = !unanswered.has(name) && handlers.get(command_id);
     const answer = run
       ? settle(() => run(args))
       : new Promise<Outcome>((resolve) =>

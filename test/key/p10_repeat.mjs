@@ -124,6 +124,18 @@ export async function run_cases({ rdp, extension_id, run_case, press_keys, poll_
     await close_tabs_with("rp_text");
   });
 
+  // The first text in a page loads the text bundle, and the `.` pressed right after Escape must wait until that text is recorded.
+  await run_case("Escape then . with no step between types the text again", async () => {
+    await open_page("caret", "rp_quick", { new_tab: true });
+    await press_keys("gi");
+    await wait_for_field_focus();
+    await press_keys("ab");
+    await poll_until("the field to hold ab", async () => (await field_value()) === "ab");
+    await press_keys("-k", "Escape", ".");
+    await poll_until("the replay to make abab", async () => (await field_value()) === "abab");
+    await close_tabs_with("rp_quick");
+  });
+
   // The recorder compares the field before and after, so an edit that is not a typed character still lands as the field shows it.
   await run_case("a word deleted with Ctrl+Backspace is not in the text that . types", async () => {
     await open_page("caret", "rp_word", { new_tab: true });

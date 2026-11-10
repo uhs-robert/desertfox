@@ -185,10 +185,28 @@ test("an edit before the bundle loads is recorded, and a flush queued behind it 
   field_a.text = "go!";
   assert.deepEqual(recorded, []);
   host.api.register_handler_("text.input", (args) => void recorder.on_input(args.field_ as Element, args.before_ as string));
-  host.api.register_handler_("text.flush", recorder.flush);
+  host.api.register_handler_("text.flush", (args) => recorder.flush(args.after_ as string | undefined));
   finish_load();
   await Promise.all(pending);
   assert.deepEqual(recorded, [[text_step("go!")]]);
+});
+
+// The content script reads the field when the session ends, so a page script that clears the field while the bundle loads does not change what `.` types.
+test("a flush records the text the field held when it was asked for, not the text when the bundle ran it", async () => {
+  const host = create_bundle_host();
+  let finish_load!: () => void;
+  const load = new Promise<boolean>((resolve) => (finish_load = () => resolve(true)));
+  host.connect({ request_bundle_: () => load, on_idle_: () => undefined, hold_first_: () => undefined, show_error_: (message) => assert.fail(message), set_mode_: () => undefined, on_sink_missing_: () => undefined });
+  const { recorded, recorder } = setup();
+  const pending = [host.run_command_("text.input", "text", { field_: as_element(field_a), before_: "" }, "", false)];
+  field_a.text = "ab";
+  host.api.register_handler_("text.input", (args) => void recorder.on_input(args.field_ as Element, args.before_ as string));
+  host.api.register_handler_("text.flush", (args) => recorder.flush(args.after_ as string | undefined));
+  pending.push(host.run_command_("text.flush", "text", { after_: field_a.text }, ""));
+  field_a.text = "";
+  finish_load();
+  await Promise.all(pending);
+  assert.deepEqual(recorded, [[text_step("ab")]]);
 });
 
 test("a field that was a password at the edit is not recorded, though it reads as text by the time the bundle runs", () => {
