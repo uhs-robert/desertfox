@@ -20,6 +20,8 @@ export type MacroReplayDeps = {
   // Runs one step through the router with no command line and with instant scrolls. The router shows a failure itself.
   run_step: (step: BoundInvocation, place: StepPlace) => Promise<RunResponse>;
   active_tab_id: () => Promise<number | undefined>;
+  // The tab's status reads `loading`.
+  is_loading: (tab_id: number) => Promise<boolean>;
   watch: (tab_id: number) => PageWatch;
   // Sends `replay_hold` to every frame of the tab.
   hold_keys: (tab_id: number) => Promise<unknown>;
@@ -46,23 +48,49 @@ export function create_macro_replay(deps: MacroReplayDeps) {
     return false;
   };
 
+  // Ends the wait at once when Escape came before the wait began.
+  function wait_for(replay: Replay, watch: PageWatch): Promise<PageReady> {
+    replay.end_wait = watch.stop;
+    if (replay.stopped) watch.stop();
+    return watch.done(PAGE_READY_TIMEOUT_MS);
+  }
+
   // A tab switch waits for the new tab, a navigation for the new page. Anything else runs the next step at once.
   async function settle_page(replay: Replay, before: number | undefined, watch: PageWatch | undefined): Promise<PageReady | undefined> {
     const after = await deps.active_tab_id();
     replay.tab_id = after;
-    if (after === before && watch?.navigated()) {
-      replay.end_wait = watch.stop;
-      return watch.done(PAGE_READY_TIMEOUT_MS);
-    }
+    // A link the step clicked starts loading in a later task, so its `loading` event can come after the step's answer. The tab's own status catches most of those.
+    if (after === before && watch && (watch.navigated() || (await deps.is_loading(after!)))) return wait_for(replay, watch);
     watch?.stop();
     if (after === before) return undefined;
     if (after === undefined) return "gone";
     // A tab that is still loading may have its page script already, so it holds keys from the switch on. The hold after the wait covers a page that came later.
     await deps.hold_keys(after).catch(() => undefined);
     // The watch on the old tab saw nothing of the new one, so the new tab gets a watch of its own. It answers at once when that tab is already loaded.
-    const waited = deps.watch(after);
-    replay.end_wait = waited.stop;
-    return waited.done(PAGE_READY_TIMEOUT_MS);
+    return wait_for(replay, deps.watch(after));
+  }
+
+  async function play_step(replay: Replay, step: BoundInvocation, start: ReplayStart): Promise<boolean> {
+    const before = await deps.active_tab_id();
+    // The user can switch tabs during a wait. The replay follows, so a pick there opens its link at once and the tab holds its keys.
+    if (before !== replay.tab_id) {
+      replay.tab_id = before;
+      if (before !== undefined) await deps.hold_keys(before).catch(() => undefined);
+    }
+    // Started before the step, because a navigation's `loading` can arrive before the step answers.
+    const watch = before === undefined ? undefined : deps.watch(before);
+    try {
+      const answer = await deps.run_step(step, { tab_id: before, frame_id: before === start.tab_id ? (start.frame_id ?? 0) : 0, mode: start.mode });
+      if (!answer.ok || answer.cancelled) return false;
+      const ready = await settle_page(replay, before, watch);
+      // `gone` is Escape or a tab closed during the wait. Either way the macro has no page to go on in.
+      if (replay.stopped || ready === "gone") return false;
+      if (ready === "timeout") return refuse(`The page did not load within ${PAGE_READY_TIMEOUT_MS / 1000} seconds, so the macro stopped`);
+      if (ready === "ready") await deps.hold_keys(replay.tab_id!).catch(() => undefined);
+      return true;
+    } finally {
+      watch?.stop();
+    }
   }
 
   // False at the first step that failed, was cancelled or was stopped. A failure the router saw is shown already, and so is one refused here.
@@ -78,18 +106,7 @@ export function create_macro_replay(deps: MacroReplayDeps) {
         if (!(await play_steps(replay, nested, depth + 1, start))) return false;
         continue;
       }
-      const before = await deps.active_tab_id();
-      // Started before the step, because a navigation's `loading` can arrive before the step answers.
-      const watch = before === undefined ? undefined : deps.watch(before);
-      const answer = await deps.run_step(step, { tab_id: before, frame_id: before === start.tab_id ? (start.frame_id ?? 0) : 0, mode: start.mode });
-      if (!answer.ok || answer.cancelled) {
-        watch?.stop();
-        return false;
-      }
-      const ready = await settle_page(replay, before, watch);
-      if (replay.stopped) return false;
-      if (ready === "timeout") return refuse(`The page did not load within ${PAGE_READY_TIMEOUT_MS / 1000} seconds, so the macro stopped`);
-      if (ready === "ready") await deps.hold_keys(replay.tab_id!).catch(() => undefined);
+      if (!(await play_step(replay, step, start))) return false;
     }
     return true;
   }

@@ -16,6 +16,7 @@ function make(macros: Record<string, BoundInvocation[]>) {
   const log: string[] = [];
   const watches: FakeWatch[] = [];
   let active = 1;
+  const loading = new Set<number>();
   // What each step does when it runs: by default it is done at once.
   const effects: Record<string, (place: StepPlace) => RunResponse | Promise<RunResponse> | void> = {};
   const deps: MacroReplayDeps = {
@@ -25,6 +26,7 @@ function make(macros: Record<string, BoundInvocation[]>) {
       return (await effects[step.id]?.(place)) ?? { ok: true };
     },
     active_tab_id: async () => active,
+    is_loading: async (tab_id) => loading.has(tab_id),
     watch: (tab_id) => {
       let navigated = false;
       let answer!: (ready: PageReady) => void;
@@ -49,7 +51,7 @@ function make(macros: Record<string, BoundInvocation[]>) {
   };
   const replay = create_macro_replay(deps);
   const start: ReplayStart = { register: "a", tab_id: 1, frame_id: 3, mode: "normal", is_private: false };
-  return { replay, log, watches, effects, start, switch_to: (tab_id: number) => (active = tab_id) };
+  return { replay, log, watches, effects, start, loading, switch_to: (tab_id: number) => (active = tab_id) };
 }
 
 test("a replay holds keys in its tab, runs each step in the sender frame, and its end answers ok", async () => {
@@ -251,4 +253,61 @@ test("the recorder keeps none of a replay's steps, and keeps the macro.play that
   await replay.play({ ...start, register: "b" });
   await recorder.record([{ id: "macro.play", args: { reg: "b" } }], { ok: true }, origin);
   assert.deepEqual((await recorder.stop(false)).steps, [{ id: "macro.play", args: { reg: "b" } }]);
+});
+
+test("a tab switch by the user during a wait moves the replay there, so a pick in that tab opens its link and the tab holds its keys", async () => {
+  const { replay, log, watches, effects, start, switch_to } = make({ a: [{ id: "open.url" }, { id: "hint.run" }] });
+  effects["open.url"] = () => void watches.at(-1)!.navigate();
+  // The pick opens its link with a run from its own tab, and only ends when that run answers.
+  effects["hint.run"] = async (place) => (await replay.wait_unless_from(place.tab_id), { ok: true });
+  const played = replay.play(start);
+  await settle();
+  switch_to(2);
+  watches[0]!.answer("ready");
+  const stalled = new Promise((resolve) => setTimeout(() => resolve("stalled"), 200));
+  assert.equal(await Promise.race([played, stalled]), true);
+  assert.deepEqual(log, ["hold 1", "run open.url in 1:3", "wait 1", "hold 1", "hold 2", "run hint.run in 2:0"]);
+});
+
+test("a tab closed during its page-ready wait stops the replay", async () => {
+  const { replay, log, watches, effects, start } = make({ a: [{ id: "open.url" }, { id: "after" }] });
+  effects["open.url"] = () => void watches.at(-1)!.navigate();
+  const played = replay.play(start);
+  await settle();
+  watches[0]!.answer("gone");
+  assert.equal(await played, false);
+  assert.ok(!log.includes("run after in 1:3"));
+});
+
+test("a step whose load the watch has not seen yet still waits when the tab reads loading", async () => {
+  const { replay, log, watches, effects, start, loading } = make({ a: [{ id: "hint.run" }, { id: "scroll.lines" }] });
+  effects["hint.run"] = () => void loading.add(1);
+  const played = replay.play(start);
+  await settle();
+  assert.deepEqual(log, ["hold 1", "run hint.run in 1:3", "wait 1"]);
+  loading.delete(1);
+  watches[0]!.answer("ready");
+  assert.equal(await played, true);
+  assert.equal(log.at(-1), "run scroll.lines in 1:3");
+});
+
+test("Escape that comes before the page-ready wait begins still ends it at once", async () => {
+  const { replay, log, watches, effects, start } = make({ a: [{ id: "open.url" }, { id: "after" }] });
+  effects["open.url"] = () => {
+    watches.at(-1)!.navigate();
+    replay.stop();
+  };
+  assert.equal(await replay.play(start), false);
+  assert.ok(watches[0]!.stopped);
+  assert.ok(!log.includes("run after in 1:3"));
+});
+
+test("a step that throws leaves no page watch behind", async () => {
+  const { replay, watches, effects, start } = make({ a: [{ id: "boom" }] });
+  effects.boom = () => {
+    throw new Error("boom");
+  };
+  await assert.rejects(replay.play(start), /boom/);
+  assert.ok(watches.every((watch) => watch.stopped));
+  assert.equal(replay.is_playing(), false);
 });

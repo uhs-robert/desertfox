@@ -66,7 +66,7 @@ const follow_prefix = create_which_key_timer(
   (prefix, is_current_, drawn_) => (prefix || bundles.has_handler_("whichkey")) && bundles.run_command_("whichkey", "whichkey", { prefix, is_current_, drawn_ }, "", false),
 );
 
-// While a macro records, a leaf starts after the one before it has ended and sent its step, so a stop key cannot overtake a step still running. A hint pick waits on the user and sends its step when it begins, so the next leaf, which may be the Escape that ends the pick, never waits for it.
+// While a macro records, a leaf starts after the one before it has ended and sent its step, so a stop key cannot overtake a step still running. A hint pick waits on the user and sends its step when it begins, so the next leaf, which may be the Escape that ends the pick, never waits for it. A replay can wait on a pick too, and its own hold keeps a later stop key behind it.
 let last_leaf: Promise<unknown> = Promise.resolve();
 
 const key_flow = create_key_flow({
@@ -78,7 +78,7 @@ const key_flow = create_key_flow({
     if (leaf.steps[0]?.invocation.id !== "register.paste") flush_typed_text();
     const run = () => run_leaf(leaf, count, repeat, send_to_background, page_mode.get_mode_, run_content_steps, show_toast);
     const ran = recording === undefined ? run() : last_leaf.then(run);
-    if (!leaf.steps.some((step) => step.invocation.id === "hint.run")) last_leaf = ran;
+    if (!leaf.steps.some((step) => /^(hint\.run|macro\.play)$/.test(step.invocation.id))) last_leaf = ran;
     if (holds_keys_after(leaf, is_editable_element(document.activeElement))) bundles.api.hold_keys_until_(ran.then(() => []), true);
   },
   leave_insert_: () => {

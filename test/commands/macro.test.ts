@@ -90,6 +90,7 @@ function make_replay(steps: Record<string, (() => Promise<RunResponse>) | undefi
     read_macro: async (register) => (register === "a" ? Object.keys(steps).map((id) => ({ id })) : undefined),
     run_step: async (step) => (played.push(step.id), (await steps[step.id]?.()) ?? { ok: true }),
     active_tab_id: async () => 1,
+    is_loading: async () => false,
     watch: () => ({ navigated: () => false, done: async () => "ready", stop: () => undefined }),
     hold_keys: async () => undefined,
     show_refusal: async () => undefined,

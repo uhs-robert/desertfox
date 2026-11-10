@@ -89,6 +89,7 @@ const macro_replay = create_macro_replay({
   // No command line opens: the recorder stored each prompted step with its value.
   run_step: (step, { tab_id, frame_id, mode }) => router.run({ invocations: [step], mode, frame_id, instant: true, ...(tab_id === undefined ? {} : { sender_tab_id: tab_id }) }),
   active_tab_id: async () => (await router_deps.active_tab())?.tab_id,
+  is_loading: async (tab_id) => (await browser.tabs.get(tab_id).catch(() => undefined))?.status === "loading",
   watch: watch_tab,
   hold_keys: (tab_id) => send_to_tab(tab_id, { type: "replay_hold" }),
   show_refusal: (tab_id, message) => router_deps.show_refusal(tab_id, { id: "macro.play", message }),

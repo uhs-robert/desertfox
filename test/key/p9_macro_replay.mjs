@@ -79,6 +79,48 @@ export async function run_cases({ run_case, open_page, poll_until, press_keys, h
     await close_tabs_with("mr_pick");
   });
 
+  await run_case("while another macro records, Escape at a replayed pick ends the pick and the replay, and q then stops", async () => {
+    await open_page("hints", "mr_rec", { new_tab: true });
+    let mark = events.length;
+    await press_keys("q", "b");
+    await wait_event(mark, badge_is("mr_rec", "NORMAL recording @b"), "the recording badge after qb");
+    await press_keys("@", "a");
+    await poll_until("the replayed pick to show its labels", async () => (await hint_label_count()) > 0);
+    await press_keys("-k", "Escape");
+    await poll_until("the labels to go after Escape", async () => (await hint_label_count()) === 0);
+    mark = events.length;
+    await press_keys("q");
+    await wait_event(mark, badge_is("mr_rec", "NORMAL"), "the plain badge after q");
+    expect((await scroll_y()) === 0, "the macro's G ran after Escape");
+    await close_tabs_with("mr_rec");
+  });
+
+  await run_case("a replayed pick that follows a link in the same tab waits for the new page before the next step", async () => {
+    await open_page("hints", "mr_follow", { new_tab: true });
+    let mark = events.length;
+    await press_keys("q", "c");
+    await wait_event(mark, badge_is("mr_follow", "NORMAL recording @c"), "the recording badge after qc");
+    await press_keys("f");
+    await poll_until("the hint labels after f", async () => (await hint_label_count()) > 0);
+    mark = events.length;
+    await press_keys("a");
+    await wait_event(mark, loaded("hint_one"), "the link to load in this tab while recording");
+    await settle_focus();
+    await press_keys("G");
+    await poll_until("G to reach the bottom while recording", async () => (await scroll_y()) === (await bottom_y()));
+    mark = events.length;
+    await press_keys("q");
+    await wait_event(mark, badge_is("hint_one", "NORMAL"), "the plain badge after q");
+    await open_page("hints", "mr_follow", { new_tab: false });
+    mark = events.length;
+    await press_keys("@", "c");
+    await poll_until("the replayed pick to show its labels", async () => (await hint_label_count()) > 0);
+    await press_keys("a");
+    await wait_event(mark, loaded("hint_one"), "the replayed pick to load the link in this tab");
+    await poll_until("the macro's G to scroll the new page", async () => (await scroll_y()) > 0 && (await scroll_y()) === (await bottom_y()));
+    await close_tabs_with("hint_one");
+  });
+
   await run_case("Escape during a page-ready wait stops the replay and drops the key typed during it", async () => {
     await open_page("aligned", "mr_wait", { new_tab: true });
     await store_macro("w", [{ id: "open.url", args: { url: slow_url("/hang"), where: "here" } }, { id: "scroll.to", args: { percent: 100 } }]);
