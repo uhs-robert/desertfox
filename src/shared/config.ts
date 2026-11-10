@@ -23,6 +23,8 @@ export type SearchEngine = {
   fallback?: string;
   // Host names of the sites the engine belongs to. Only the generated `s/` and `S/` keys read it: they offer the engine on these sites alone. Absent means every site.
   hosts?: string[];
+  // One to eight lower case letters or digits, unique across engines. When the first word of a query equals it, that engine is the one to search. Never inherited by a child engine.
+  keyword?: string;
   // Where each field came from, for `engine.show`: field name to "file [level]".
   origins?: Record<string, string>;
 };

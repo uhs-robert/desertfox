@@ -2,8 +2,8 @@
 // so the extension stores and reads finished engines.
 //
 // An engine is a TOML table. A table inside it is a child, unless it is `params` or holds only `only` (a narrowing).
-// A child inherits every field of its parent and overrides by name. `hosts` is a list of host names, the sites the engine belongs to. `label` is the one field that does not inherit:
-// the label of an engine is the chain of the labels on its path.
+// A child inherits every field of its parent and overrides by name. `hosts` is a list of host names, the sites the engine belongs to. `label` and `keyword` do not inherit:
+// the label of an engine is the chain of the labels on its path, and a keyword names one engine.
 
 import type { SearchEngine } from "../config.ts";
 import { expressions_of, page_requirements, SLOT_EXPRESSION } from "./fill.ts";
@@ -13,10 +13,11 @@ import { is_slot_name, SLOT_NAMES } from "./slots.ts";
 export type EngineNode = { path: string; file: string; fields: Record<string, unknown> };
 
 // A child table cannot take these names. Slot names are free for children (github.repo) but not for vars and params.
-const RESERVED_CHILD_NAMES = new Set(["url", "label", "params", "fallback", "hosts"]);
+const RESERVED_CHILD_NAMES = new Set(["url", "label", "params", "fallback", "hosts", "keyword"]);
 const RESERVED_NAMES = new Set([...RESERVED_CHILD_NAMES, ...SLOT_NAMES]);
 const PARAM_KEYS = new Set(["default", "values", "children"]);
 const HOST_NAME = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$/;
+export const ENGINE_KEYWORD = /^[a-z0-9]{1,8}$/;
 const QUERY_PAIR_WITH_ONE_NAME = /^[^=]*=\{([a-z_][a-z0-9_]*)\}$/;
 
 const is_table = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
@@ -56,6 +57,7 @@ type Level = {
   url?: Origined;
   fallback?: Origined;
   hosts?: { value: string[]; origin: string };
+  keyword?: Origined;
   vars: Record<string, Origined>;
   params: Record<string, ParamDecl>;
   allowed: Record<string, string[]>;
@@ -134,6 +136,9 @@ export function resolve_engines(nodes: EngineNode[]): Resolved {
         level.url = { value, origin };
       } else if (key === "fallback") {
         level.fallback = { value, origin };
+      } else if (key === "keyword") {
+        if (ENGINE_KEYWORD.test(value)) level.keyword = { value, origin };
+        else problems.push(`${where}: keyword must be one to eight lower case letters or digits, such as "g"`);
       } else if (key === "label") {
         if (value === "") problems.push(`${where}: label cannot be empty`);
         else {
@@ -222,6 +227,7 @@ export function resolve_engines(nodes: EngineNode[]): Resolved {
     const origins: Record<string, string> = { url: level.url.origin, label: level.label_origin ?? `${path} (labels on the path)` };
     if (level.fallback) origins.fallback = level.fallback.origin;
     if (level.hosts) origins.hosts = level.hosts.origin;
+    if (level.keyword) origins.keyword = level.keyword.origin;
     for (const [name, found] of Object.entries(level.vars)) origins[name] = found.origin;
     for (const [name, found] of Object.entries(level.assigned)) origins[name] = found.origin;
     engines[path] = {
@@ -231,6 +237,7 @@ export function resolve_engines(nodes: EngineNode[]): Resolved {
       ...(slots.length === 0 ? {} : { slots }),
       ...(level.fallback ? { fallback: level.fallback.value } : {}),
       ...(level.hosts ? { hosts: level.hosts.value } : {}),
+      ...(level.keyword ? { keyword: level.keyword.value } : {}),
     };
   };
 
@@ -239,6 +246,7 @@ export function resolve_engines(nodes: EngineNode[]): Resolved {
     visited.add(path);
     const level = copy_level(parent);
     delete level.label_origin;
+    delete level.keyword;
     const name = path.slice(path.lastIndexOf(".") + 1);
     level.labels.push(generated ? generated.value : name);
     if (generated) level.assigned[generated.param] = { value: generated.value, origin: generated.origin };
