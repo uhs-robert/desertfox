@@ -41,7 +41,7 @@ COMMANDS.push({ id: "quickmark.list", name: "quickmarks", label: "List quickmark
 COMMANDS.push({ id: "register.list", name: "registers", label: "List registers", intent: "List registers.", params: [{ name: "name", type: "string", rest: true, main: true, optional: true, values: { from: "registers" } }] });
 COMMANDS.push({ id: "bookmark.move", name: "bookmark.move", label: "Move bookmark", intent: "Move.", params: [{ name: "folder", type: "string", rest: true, main: true, values: { from: "folders" } }, { name: "bookmark", type: "string", optional: true, values: { from: "bookmarks" } }] });
 COMMANDS.push({ id: "history.open", name: "history", label: "Open history entry", intent: "Open history.", params: [{ name: "entry", type: "string", rest: true, main: true, values: { from: "history" } }] });
-COMMANDS.push({ id: "open.url", name: "open", label: "Open URL", intent: "Open a URL.", params: [{ name: "url", type: "string", main: true, values: { from: "open" } }] });
+COMMANDS.push({ id: "open.url", name: "open", label: "Open URL", intent: "Open a URL.", params: [{ name: "url", type: "string", rest: true, main: true, values: { from: "open" } }] });
 const ENGINES: EngineItem[] = [
   { name: "duck", label: "DuckDuckGo", available: true },
   { name: "github.repo", label: "GitHub: this repo", available: false },
@@ -91,6 +91,7 @@ function make(containers: { name: string; cookie_store_id: string }[] = STORES, 
       }
       return tab_items;
     },
+    all_tabs: () => tab_items,
     on_ready: () => session.source_ready(),
   });
   const session = create_session({
@@ -369,6 +370,17 @@ test("open shows 20 bookmarks and the history cap on an empty word, in the order
   const rows = session.get_rows();
   assert.equal(rows.length, 22);
   assert.deepEqual([rows[0]!.tag, rows[19]!.tag, rows[20]!.tag, rows[21]!.name], ["bm", "bm", "hist", "Visit 1"]);
+});
+
+test("open keeps its list and its matches after a space, as the words after the first are more search terms", async () => {
+  for (const text of ["open patient ", "open patient c"]) {
+    const { session, asks, settle } = make();
+    session.edit(text);
+    assert.equal(asks.length, 1, text);
+    asks[0]!.answer({ history_max: 5, rows: [{ title: "Patient chart", url: "https://chart.test/", tag: "bm" }, { title: "Patient list", url: "https://list.test/", tag: "bm" }, { title: "Unrelated", url: "https://x.test/", tag: "bm" }] });
+    await settle();
+    assert.deepEqual(session.get_rows().map((row) => row.name).sort(), text.endsWith("c") ? ["Patient chart"] : ["Patient chart", "Patient list"], text);
+  }
 });
 
 test("a typed word ranks every row, keeps the groups in the order given, and a pick inserts the address", async () => {
