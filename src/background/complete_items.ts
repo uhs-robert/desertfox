@@ -208,7 +208,7 @@ export function open_rows(sources: readonly OpenSource[], bookmarks: readonly Bo
 // Every engine in config order. The flag says whether the page can fill it, so the list can mark the rest. The page URL is read here and goes no further.
 export function engine_items(engines: Record<string, SearchEngine>, page: PageInfo | undefined): EngineItem[] {
   const available = new Set(available_engine_names(engines, page));
-  return Object.entries(engines).map(([name, engine]) => ({ name, label: engine.label, available: available.has(name) }));
+  return Object.entries(engines).map(([name, engine]) => ({ name, label: engine.label, available: available.has(name), ...(engine.keyword === undefined ? {} : { keyword: engine.keyword }) }));
 }
 
 export type TabQuery = (window_id: number | undefined) => Promise<TabLike[]>;

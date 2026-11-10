@@ -213,6 +213,13 @@ test("a page that cannot fill a slot marks the engine, a fallback engine stays a
   assert.ok(!JSON.stringify(items).includes("example.com"));
 });
 
+test("an engine row carries the keyword only when the engine has one", () => {
+  const keyed = { ...ENGINES, duck: { ...ENGINES.duck!, keyword: "d" } };
+  const items = engine_items(keyed, undefined);
+  assert.equal(items.find((item) => item.name === "duck")?.keyword, "d");
+  assert.ok(!("keyword" in items.find((item) => item.name === "github.repo")!));
+});
+
 test("a line with no page offers only the engines that need no slot or have a fallback", () => {
   assert.deepEqual(engine_items(ENGINES, undefined).filter((item) => item.available).map((item) => item.name), ["duck", "github.repo.fb"]);
 });

@@ -154,7 +154,7 @@ export type BookmarkRow = BookmarkItem & { folders: number[] };
 export type BookmarkRows = { rows: BookmarkRow[]; folders: string[] };
 
 // `label` is the config's resolved chain. `available` is whether the line's page can fill the engine's slots. The page URL itself never leaves the background.
-export type EngineItem = { name: string; label: string; available: boolean };
+export type EngineItem = { name: string; label: string; available: boolean; keyword?: string };
 
 // A history entry as the background reads it. It never goes to the page on its own: `open` answers with `OpenRow`.
 export type HistoryItem = { title: string; url: string };

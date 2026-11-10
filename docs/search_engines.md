@@ -50,6 +50,14 @@ fallback = "reddit"
 
 Here `search reddit.sub rust` searches the current subreddit, or all of Reddit on any other page.
 
+### Keywords
+
+Add `keyword = "g"` to an engine to give it a short word. A keyword is one to eight lower case letters or digits and is unique across engines. A child does not inherit it, so each engine that wants one sets its own. `just build-config` rejects a bad or repeated keyword. The open-anything finder reads the field to search an engine from a query such as `g rust`.
+
+```toml
+google = { url = "https://www.google.com/search?q=%s", label = "Google", keyword = "g" }
+```
+
 ### Trees
 
 A table inside an engine is a child, named with a dot. `search github.repo.issues foo` runs the `issues` child of `github.repo`.
@@ -58,7 +66,7 @@ A table inside an engine is a child, named with a dot. `search github.repo.issue
 - A label is the chain of labels on the path, such as "GitHub: this repo: issues".
 - A param declared on the parent with `children = true` makes one child per value. The example builds `github.issues`, `github.prs` and the rest from one `type` param.
 - A value can name a slot with `{name}`, so a scope can say `repo:{repo} `.
-- A child cannot be named `url`, `label`, `params` or `fallback`, or like a field or param of its parent.
+- A child cannot be named `url`, `label`, `params`, `fallback`, `hosts` or `keyword`, or like a field or param of its parent.
 
 ```toml
 [github]

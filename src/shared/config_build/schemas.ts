@@ -127,6 +127,7 @@ function search_engines_schema(): Schema {
       url: { type: "string", minLength: 1, description: "URL template. {query} is the typed or selected text, %s is the same. Page slots: {url}, {host}, {title}, {repo}, {subreddit}, {channel}. {a|b} takes the first that has a value, {name:raw} skips escaping" },
       label: { type: "string", minLength: 1 },
       fallback: { type: "string", minLength: 1, description: "Engine to use when the page cannot fill the slots" },
+      keyword: { type: "string", pattern: "^[a-z0-9]{1,8}$", description: "Short word, unique across engines. A query that starts with it and a space searches this engine. Children do not inherit it" },
       params: { type: "object", description: "Params declared here, each { default, values, children }" },
     },
     additionalProperties: true,
