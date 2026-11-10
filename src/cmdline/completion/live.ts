@@ -3,8 +3,8 @@
 
 import type { BookmarkItem, CompleteItemsAnswer, EngineItem, HeadingItem, HistoryItems, OpenItems, FolderItem, RegisterItem, SessionItem, TabItem, WindowItem } from "../../shared/messages.ts";
 
-export type LiveKind = "tabs" | "bookmarks" | "engines" | "history" | "open" | "windows" | "headings" | "sessions" | "registers" | "folders" | "marks" | "quickmarks";
-export type LiveItems = { tabs: TabItem[]; bookmarks: BookmarkItem[]; engines: EngineItem[]; history: HistoryItems; open: OpenItems; windows: WindowItem[]; headings: HeadingItem[]; sessions: SessionItem[]; registers: RegisterItem[]; folders: FolderItem[]; marks: RegisterItem[]; quickmarks: RegisterItem[] };
+export type LiveKind = "tabs" | "bookmarks" | "engines" | "history" | "open" | "windows" | "headings" | "sessions" | "registers" | "folders" | "marks" | "quickmarks" | "saved_quickmarks";
+export type LiveItems = { tabs: TabItem[]; bookmarks: BookmarkItem[]; engines: EngineItem[]; history: HistoryItems; open: OpenItems; windows: WindowItem[]; headings: HeadingItem[]; sessions: SessionItem[]; registers: RegisterItem[]; folders: FolderItem[]; marks: RegisterItem[]; quickmarks: RegisterItem[]; saved_quickmarks: RegisterItem[] };
 export type LiveRead<Kind extends LiveKind> = { loading: true } | { loading: false; items: LiveItems[Kind] };
 
 type FetchedKind = Exclude<LiveKind, "tabs">;

@@ -14,7 +14,7 @@ import type { Asker } from "./complete_items.ts";
 import { browser_tab_action_deps } from "./tab_actions.ts";
 import { create_open_help } from "./open_help.ts";
 import { requirement_lookup, site_engine_for, with_site_engines } from "./availability.ts";
-import { listed_marks, mark_text, shorten_address } from "../shared/mark_text.ts";
+import { mark_list_rows, quickmark_list_rows } from "../shared/mark_text.ts";
 import { list_keys } from "./list_keys.ts";
 import { rule_addresses_of, read_keymap_reply } from "./page_keymap.ts";
 import { create_bundle_loader } from "./bundle_loader.ts";
@@ -117,8 +117,9 @@ const complete_items = create_complete_items({
   is_opener: cmdline.is_opener,
   search_engines: async () => (await get_config()).search_engines,
   page_of,
-  marks: async (url, is_private) => (url === undefined ? [] : listed_marks(await browser_mark_store.items(url, is_private))).map((item) => ({ name: item.key, description: mark_text(item) })),
-  quickmarks: async (is_private) => Object.entries(await browser_quickmark_store.table((await get_config()).quickmarks, is_private)).sort(([left], [right]) => (left < right ? -1 : 1)).map(([key, url]) => ({ name: key, description: shorten_address(url) })),
+  marks: async (url, is_private) => (url === undefined ? [] : mark_list_rows(await browser_mark_store.items(url, is_private))),
+  quickmarks: async (is_private) => quickmark_list_rows(await browser_quickmark_store.table((await get_config()).quickmarks, is_private)),
+  saved_quickmarks: async (is_private) => quickmark_list_rows(await browser_quickmark_store.saved(is_private)),
   read_tab: (tab_id) => browser.tabs.get(tab_id).catch(() => undefined),
   discard: { ...browser_discard_deps, alternate_of: previous_tabs.previous_of },
   tab_actions: browser_tab_action_deps,

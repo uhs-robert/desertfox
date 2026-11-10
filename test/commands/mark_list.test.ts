@@ -20,14 +20,7 @@ function make(items: MarkItem[] = ITEMS) {
   return { calls, handlers };
 }
 
-test("list with no key names the marks in one toast and leaves the previous position out", async () => {
-  const { calls, handlers } = make();
-  await handlers.list(ctx, {});
-  assert.deepEqual(calls, ["toast info a y 40   G github.com/x  x 5 y 7"]);
-  await assert.rejects(make([]).handlers.list(ctx, {}), /No marks/);
-});
-
-test("list with a key jumps there, and refuses a key with no mark or the previous position", async () => {
+test("list jumps to the picked mark, and refuses a key with no mark or the previous position", async () => {
   const { calls, handlers } = make();
   await handlers.list(ctx, { mark: "G" });
   assert.deepEqual(calls, ["jump G"]);
@@ -44,7 +37,7 @@ test("delete removes the key and says so", async () => {
 test("the schema takes one mark letter and the delete needs it", () => {
   const list = registry.get("mark.list");
   const remove = registry.get("mark.delete");
-  assert.equal(check_args(list!, {}).ok, true);
+  assert.equal(check_args(list!, {}).ok, false);
   assert.equal(check_args(list!, { mark: "A" }).ok, true);
   assert.equal(check_args(list!, { mark: "ab" }).ok, false);
   assert.equal(check_args(remove!, {}).ok, false);

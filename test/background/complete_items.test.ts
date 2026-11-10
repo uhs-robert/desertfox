@@ -60,6 +60,7 @@ function make({ openers = [1, 2], tabs = ALL_TABS, bookmarks = [] as BookmarkNod
       return [{ name: is_private ? "p" : "m", description: String(url) }];
     },
     quickmarks: async (is_private) => (is_private ? [{ name: "p", description: "private.test" }] : [{ name: "g", description: "github.com" }]),
+    saved_quickmarks: async (is_private) => (is_private ? [{ name: "p", description: "private.test" }] : [{ name: "s", description: "saved.test" }]),
     all_bookmarks: async () => {
       if (fail) throw new Error("no bookmarks");
       return bookmarks;
@@ -157,6 +158,7 @@ test("a tab that navigates or closes while the lookup runs gets nothing", async 
     registers: async () => [],
     marks: async () => [],
     quickmarks: async () => [],
+    saved_quickmarks: async () => [],
     folders: async () => [],
     all_bookmarks: async () => {
       opened.delete(1);
@@ -299,6 +301,7 @@ test("the opener is checked before and after the history fetch", async () => {
     registers: async () => [],
     marks: async () => [],
     quickmarks: async () => [],
+    saved_quickmarks: async () => [],
     folders: async () => [],
     all_bookmarks: async () => [],
     is_opener: async (tab_id) => opened.has(tab_id),
@@ -328,6 +331,7 @@ test("a failed history read leaves the bookmarks, and a failed bookmark read lea
       registers: async () => [],
       marks: async () => [],
       quickmarks: async () => [],
+      saved_quickmarks: async () => [],
       folders: async () => [],
       all_bookmarks: async () => {
         if (failing === "bookmarks") throw new Error("no bookmarks");
@@ -389,6 +393,7 @@ test("a history read that finishes after the line closed gives nothing", async (
     registers: async () => [],
     marks: async () => [],
     quickmarks: async () => [],
+    saved_quickmarks: async () => [],
     folders: async () => [],
     all_bookmarks: async () => [],
     is_opener: async (tab_id) => opened.has(tab_id),
@@ -769,6 +774,8 @@ test("the marks list reads the page of the line's tab and follows its privacy", 
   assert.deepEqual(await service.answer("marks", PRIVATE_LINE), { items: [{ name: "p", description: "https://w.test/" }] });
   assert.deepEqual(await service.answer("quickmarks", NORMAL_LINE), { items: [{ name: "g", description: "github.com" }] });
   assert.deepEqual(await service.answer("quickmarks", PRIVATE_LINE), { items: [{ name: "p", description: "private.test" }] });
+  assert.deepEqual(await service.answer("saved_quickmarks", NORMAL_LINE), { items: [{ name: "s", description: "saved.test" }] });
+  assert.deepEqual(await service.answer("saved_quickmarks", PRIVATE_LINE), { items: [{ name: "p", description: "private.test" }] });
   assert.deepEqual(await make({ fail: true }).service.answer("marks", NORMAL_LINE), { items: [] });
   assert.equal(await make({ openers: [] }).service.answer("quickmarks", NORMAL_LINE), undefined);
 });

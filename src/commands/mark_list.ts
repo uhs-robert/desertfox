@@ -4,7 +4,7 @@ import { show_toast_on_tab, send_to_tab } from "../background/browser_deps.ts";
 import { browser_mark_store } from "../background/mark_store.ts";
 import { is_private_context } from "../background/register_store.ts";
 import { MARK_ADD_KEY } from "../shared/mark_names.ts";
-import { listed_marks, mark_text } from "../shared/mark_text.ts";
+import { listed_marks } from "../shared/mark_text.ts";
 import type { MarkItem, ToastKind } from "../shared/messages.ts";
 import { define } from "../shared/registry/builtin.ts";
 import { current_tab_url } from "./open_target.ts";
@@ -20,14 +20,9 @@ export type MarkListDeps = {
 
 export function make_mark_list_handlers(deps: MarkListDeps) {
   return {
-    // With no key, one toast names every mark. With a key, the page scrolls there, or the tab of a global mark comes up.
-    list: async (ctx: CommandContext, args: { mark?: string }) => {
-      const key = args.mark?.trim();
-      if (key === undefined || key === "") {
-        const items = listed_marks(await deps.items(ctx));
-        if (items.length === 0) throw new RuntimeRefusal("No marks");
-        return deps.toast(ctx, "info", items.map((item) => `${item.key} ${mark_text(item)}`).join("   "));
-      }
+    // Scrolls to the mark, or brings up the tab of a global mark. The command line list is the overview.
+    list: async (ctx: CommandContext, args: { mark: string }) => {
+      const key = args.mark.trim();
       if (!listed_marks(await deps.items(ctx)).some((item) => item.key === key)) throw new RuntimeRefusal(`No mark ${key}`);
       await deps.jump(ctx, key);
     },
@@ -56,11 +51,11 @@ const MARK_PARAM_NAME = "mark";
 define("mark.list", {
   name: "marks",
   label: "List marks",
-  intent: "List the marks of this page, then the global marks. With a mark, jump to it.",
-  params: [{ name: MARK_PARAM_NAME, type: "string", rest: true, main: true, optional: true, values: { from: "marks" }, pattern: MARK_ADD_KEY.source, description: "Jump to this mark, a-z or A-Z." }],
+  intent: "Pick a mark of this page, or a global mark, from the list and jump to it.",
+  params: [{ name: MARK_PARAM_NAME, type: "string", rest: true, main: true, values: { from: "marks" }, pattern: MARK_ADD_KEY.source, description: "Jump to this mark, a-z or A-Z." }],
   runs_in: "background",
   repeatable: false,
-  run: (ctx, args) => handlers.list(ctx, args as { mark?: string }),
+  run: (ctx, args) => handlers.list(ctx, args as { mark: string }),
 });
 
 define("mark.delete", {

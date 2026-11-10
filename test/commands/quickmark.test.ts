@@ -45,14 +45,7 @@ test("open gives an address written without a scheme to the typed-address rule",
   assert.deepEqual(calls, ["open tab https://github.com"]);
 });
 
-test("list with no key names every quickmark in one toast, and refuses when there are none", async () => {
-  const { calls, handlers } = make({ g: "https://github.com/a/b", a: "https://a.test" });
-  await handlers.list(ctx, {});
-  assert.deepEqual(calls, ["toast info a a.test   g github.com/a/b"]);
-  await assert.rejects(make().handlers.list(ctx, {}), /No quickmarks/);
-});
-
-test("list with a key opens it in this tab, and refuses an unknown key", async () => {
+test("list opens the picked quickmark in this tab, and refuses an unknown key", async () => {
   const { calls, handlers } = make({ g: "https://github.com" });
   await handlers.list(ctx, { quickmark: "g" });
   assert.deepEqual(calls, ["open here https://github.com"]);
@@ -63,4 +56,10 @@ test("delete removes the key and says so", async () => {
   const { calls, handlers } = make();
   await handlers.delete(ctx, { quickmark: "g" });
   assert.deepEqual(calls, ["remove g", "toast success Quickmark g deleted"]);
+});
+
+test("delete says what the key opens now when an address of quickmarks.toml shows through", async () => {
+  const { calls, handlers } = make({ g: "https://github.com/a/b" });
+  await handlers.delete(ctx, { quickmark: "g" });
+  assert.deepEqual(calls, ["remove g", "toast success Quickmark g deleted, it now opens github.com/a/b"]);
 });
