@@ -113,6 +113,9 @@ export function dispatch_mouse_event(target: Target, type: MouseEventName, relat
   if (!target.dispatchEvent) return true;
   const stays_inside = /(enter|leave)$/.test(type);
   const init = { bubbles: !stays_inside, cancelable: true, composed: !stays_inside, button: 0, buttons: type.endsWith("down") ? 1 : 0, relatedTarget: related_target, clientX: at.x, clientY: at.y };
+  // A browser sends `click` as a PointerEvent too, so the synthetic one is built the same way.
+  // The other pointer events carry no click count, so only the click gets `detail`.
+  if (type === "click") return target.dispatchEvent(new PointerEvent(type, { ...init, detail, pointerType: "mouse", isPrimary: true }));
   return target.dispatchEvent(type.startsWith("pointer") ? new PointerEvent(type, { ...init, pointerType: "mouse", isPrimary: true }) : new MouseEvent(type, { ...init, detail }));
 }
 
