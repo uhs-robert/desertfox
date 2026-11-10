@@ -11,7 +11,7 @@ import { always_default, bare_word_param, default_of, flag_params, is_dynamic_va
 import { rank } from "../../shared/score.ts";
 import { completion_of, is_setting_name, SETTING_COMPLETION, type SettingCompletion } from "../../shared/setting_completion.ts";
 import type { Ranked } from "../../shared/score.ts";
-import type { BookmarkItem, EngineItem, FolderItem, HeadingItem, HistoryItems, OpenItems, OpenRow, SessionItem, TabContainer, TabItem, WindowItem } from "../../shared/messages.ts";
+import type { BookmarkItem, EngineItem, HeadingItem, HistoryItems, OpenItems, OpenRow, SessionItem, TabContainer, TabItem, WindowItem } from "../../shared/messages.ts";
 import type { LiveKind, LiveSource } from "./live.ts";
 import { cursor_context } from "./tokenize.ts";
 import type { CursorContext } from "./tokenize.ts";
@@ -252,7 +252,7 @@ function window_rows(windows: readonly WindowItem[], usage: string): Row[] {
 function session_rows(sessions: readonly SessionItem[], usage: string): Row[] {
   return sessions.map((session) => ({
     name: session.name,
-    insert: `${/["'\\]/.test(session.name) ? quote_word(session.name) : session.name} `,
+    insert: `${quote_word(session.name)} `,
     description: session.description,
     args: "",
     also_named: [],
@@ -275,10 +275,6 @@ function heading_rows(headings: readonly HeadingItem[], usage: string): Row[] {
     usage,
     indent: heading.level - top_level,
   }));
-}
-
-function folder_rows(folders: readonly FolderItem[], usage: string): Row[] {
-  return folders.map((folder) => ({ name: folder.name, insert: `${quote_word(folder.name)} `, description: folder.description, args: "", also_named: [], keywords: [], usage }));
 }
 
 function bookmark_rows(bookmarks: readonly BookmarkItem[], usage: string): Row[] {
@@ -359,11 +355,9 @@ export function create_completer(
               ? window_rows(read.items as WindowItem[], usage)
               : kind === "headings"
                 ? heading_rows(read.items as HeadingItem[], usage)
-                : kind === "sessions" || kind === "registers"
+                : kind === "sessions" || kind === "registers" || kind === "folders"
                   ? session_rows(read.items as SessionItem[], usage)
-                  : kind === "folders"
-                    ? folder_rows(read.items as FolderItem[], usage)
-                    : bookmark_rows(read.items as BookmarkItem[], usage);
+                  : bookmark_rows(read.items as BookmarkItem[], usage);
       const ranked = rank(context.word, rows);
       return { ...span, usage, rows: kind === "bookmarks" && context.word.trim() === "" ? ranked.slice(0, RECENT_BOOKMARKS) : ranked, listing: true };
     }

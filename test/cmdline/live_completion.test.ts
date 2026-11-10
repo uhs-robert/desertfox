@@ -300,7 +300,7 @@ test("a session pick puts the name in the line, and the rows show the tab count 
   assert.deepEqual(session.get_rows().map((row) => row.description), ["12 tabs, 3d ago", "1 tab, just now"]);
   session.edit("session.open wor");
   tab_key(session);
-  assert.equal(session.get_text(), "session.open work day ");
+  assert.equal(session.get_text(), 'session.open "work day" ');
 });
 
 const OPEN: OpenItems = {

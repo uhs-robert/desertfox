@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { FolderNode } from "../../src/background/complete_items.ts";
 import { make_bookmark_handlers, pick_bookmark, pick_folder } from "../../src/commands/bookmark.ts";
+import { open_many } from "../../src/commands/open_target.ts";
 import { make_browser_handlers } from "../../src/commands/browser.ts";
 import { clamp_zoom, make_zoom_handlers } from "../../src/commands/zoom.ts";
 import { check_args } from "../../src/shared/registry/check_args.ts";
@@ -132,9 +133,10 @@ test("bookmark.open opens the picked address where the flag says, and opens noth
 });
 
 const FOLDERS: FolderNode[] = [
-  { id: "f1", path: "Bookmarks Toolbar", bookmarks: [] },
-  { id: "f2", path: "Bookmarks Toolbar / Work", bookmarks: [{ url: "https://w1.test/" }, { url: "place:sort=8" }, { url: "javascript:void(0)" }, { url: "https://w2.test/" }] },
-  { id: "f3", path: "Other Bookmarks / Work", bookmarks: [] },
+  { id: "f1", path: "Bookmarks Toolbar", managed: false, bookmarks: [] },
+  { id: "f2", path: "Bookmarks Toolbar / Work", managed: false, bookmarks: [{ url: "https://w1.test/" }, { url: "place:sort=8" }, { url: "javascript:void(0)" }, { url: "https://w2.test/" }] },
+  { id: "f3", path: "Other Bookmarks / Work", managed: false, bookmarks: [] },
+  { id: "f4", path: "Managed", managed: true, bookmarks: [{ url: "https://m.test/" }, { url: "about:config" }, { url: "about:blank" }] },
 ];
 
 type FakeNode = { id: string; url?: string; type?: string; unmodifiable?: string };
@@ -387,7 +389,7 @@ test("bookmark.add with a folder on a bookmarked page points to bm, and an unkno
 });
 
 test("a folder path that two folders share, and a fuzzy tie, are refused naming the folders", async () => {
-  const twins: FolderNode[] = [{ id: "x", path: "Docs", bookmarks: [] }, { id: "y", path: "Docs", bookmarks: [] }];
+  const twins: FolderNode[] = [{ id: "x", path: "Docs", managed: false, bookmarks: [] }, { id: "y", path: "Docs", managed: false, bookmarks: [] }];
   assert.throws(() => pick_folder(twins, "Docs"), /Two folders match "Docs"/);
   assert.throws(() => pick_folder(FOLDERS, "work"), /"work" matches "Bookmarks Toolbar \/ Work" and "Other Bookmarks \/ Work" equally/);
   assert.equal(pick_folder(FOLDERS, "toolbar work").id, "f2");
@@ -414,7 +416,7 @@ test("bookmark.move with a picked bookmark moves the ones at its address, and re
 test("bookmark.open_folder opens the folder's own bookmarks, skipping smart queries and script addresses", async () => {
   const fixture = remove_fixture([]);
   await fixture.handlers.open_folder(ctx, { folder: "Bookmarks Toolbar / Work", where: "window" });
-  assert.deepEqual(fixture.log, ["open window https://w1.test/ https://w2.test/"]);
+  assert.deepEqual(fixture.log, ["warning Opening 2 of 4 bookmarks: 2 cannot be opened", "open window https://w1.test/ https://w2.test/"]);
 });
 
 test("bookmark.open_folder refuses an empty folder and an unknown one", async () => {
@@ -425,7 +427,7 @@ test("bookmark.open_folder refuses an empty folder and an unknown one", async ()
 });
 
 test("bookmark.open_folder opens the first 25 and the toast says the cap cut the list", async () => {
-  const many: FolderNode = { id: "big", path: "Big", bookmarks: Array.from({ length: 30 }, (_, index) => ({ url: `https://p${index}.test/` })) };
+  const many: FolderNode = { id: "big", path: "Big", managed: false, bookmarks: Array.from({ length: 30 }, (_, index) => ({ url: `https://p${index}.test/` })) };
   const log: string[] = [];
   const handlers = make_bookmark_handlers({
     ...UNUSED_REMOVE,
@@ -438,5 +440,35 @@ test("bookmark.open_folder opens the first 25 and the toast says the cap cut the
     toast: async (_ctx, kind, message) => void log.push(`${kind} ${message}`),
   });
   await handlers.open_folder(ctx, { folder: "Big", where: "tab" });
-  assert.deepEqual(log, ["open tab 25 https://p24.test/ undefined", "warning Opened the first 25 of 30 bookmarks"]);
+  // The toast comes before the open, since the open moves the focus off the asking tab.
+  assert.deepEqual(log, ["warning Opening 25 of 30 bookmarks: the cap is 25", "open tab 25 https://p24.test/ undefined"]);
+});
+
+test("bookmark.open_folder skips browser pages that would stop the rest, and the toast counts them", async () => {
+  const fixture = remove_fixture([]);
+  await fixture.handlers.open_folder(ctx, { folder: "Managed", where: "tab" });
+  assert.deepEqual(fixture.log, ["warning Opening 2 of 3 bookmarks: 1 cannot be opened", "open tab https://m.test/ about:blank"]);
+});
+
+test("a managed folder is refused as a target for add and move, and still opens", async () => {
+  const fixture = remove_fixture([{ id: "x", type: "bookmark" }]);
+  await assert.rejects(fixture.handlers.move(ctx, { folder: "Managed", bookmark: "" }), /Managed is managed and cannot be changed/);
+  await assert.rejects(remove_fixture([]).handlers.add(ctx, { url: "https://n.test/", folder: "Managed" }), /Managed is managed and cannot be changed/);
+});
+
+test("open_many opens the first address active and the rest in the background, in order, each from the asking tab", async () => {
+  const calls: unknown[] = [];
+  (globalThis as unknown as { browser: unknown }).browser = { tabs: { create: async (props: unknown) => void calls.push(props) }, windows: { create: async (props: unknown) => void calls.push(props) } };
+  try {
+    await open_many({ tab_id: 5, window_id: 2, frame_id: 0, mode: "normal" }, ["https://a.test/", "https://b.test/", "https://c.test/"], "tab");
+    await open_many({ tab_id: 5, window_id: 2, frame_id: 0, mode: "normal" }, ["https://a.test/", "https://b.test/"], "window");
+  } finally {
+    delete (globalThis as unknown as { browser?: unknown }).browser;
+  }
+  assert.deepEqual(calls, [
+    { url: "https://a.test/", active: true, openerTabId: 5, windowId: 2 },
+    { url: "https://b.test/", active: false, openerTabId: 5, windowId: 2 },
+    { url: "https://c.test/", active: false, openerTabId: 5, windowId: 2 },
+    { url: ["https://a.test/", "https://b.test/"] },
+  ]);
 });

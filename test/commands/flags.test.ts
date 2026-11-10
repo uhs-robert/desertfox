@@ -7,8 +7,7 @@ import { registry } from "../../src/shared/registry/builtin.ts";
 test("-t -b -w mean where and -c means container on every command that has the param", () => {
   for (const command of registry.list()) {
     for (const param of command.params ?? []) {
-      // A where that leaves a value out (a folder never opens `here`) keeps the letters of the values it has.
-      if (param.name === "where") for (const [value, letter] of Object.entries(param.short as object)) assert.equal(letter, ({ tab: "t", background: "b", window: "w" } as Record<string, string>)[value], command.id);
+      if (param.name === "where") assert.deepEqual(param.short, { tab: "t", background: "b", window: "w" }, command.id);
       if (param.name === "container" && !param.main) assert.equal(param.short, "c", command.id);
     }
   }

@@ -119,14 +119,22 @@ export async function open_many(ctx: CommandContext, urls: readonly string[], wh
   for (const [place, url] of urls.entries()) await open_in(ctx, url, place === 0 ? where : "background");
 }
 
+export type Pickable = { key: string; name: string; description: string };
+
+// An exact key wins. Other text is a fuzzy match on name and description, and an equal tie is refused. `describe` writes an entry in the tie refusal and `hint` says what to type instead.
+// `noun` names the list in the refusals ("bookmark", "folder").
+export function pick_by<Entry>(entries: readonly Entry[], text: string, noun: string, parts: (entry: Entry) => Pickable, describe: (entry: Entry) => string, hint: string): Entry {
+  const typed = text.trim();
+  const exact = entries.find((entry) => parts(entry).key === typed);
+  if (exact) return exact;
+  const match = best_match(typed, entries, (entry) => ({ name: parts(entry).name, description: parts(entry).description }));
+  if (match.found === "none") throw new RuntimeRefusal(`no ${noun} matches "${typed}"`);
+  if (match.found === "tie") throw new RuntimeRefusal(`"${typed}" matches ${describe(match.first)} and ${describe(match.second)} equally, use ${hint}`);
+  return match.item;
+}
+
 // An exact address wins, since a completion pick puts the address in the line. Other text is a fuzzy match on title and address, and an equal tie is refused.
 // `noun` names the list in the refusals ("bookmark", "history entry").
 export function pick_entry<Entry extends { title: string; url: string }>(entries: readonly Entry[], text: string, noun: string): Entry {
-  const typed = text.trim();
-  const exact = entries.find((entry) => entry.url === typed);
-  if (exact) return exact;
-  const match = best_match(typed, entries, (entry) => ({ name: entry.title, description: entry.url }));
-  if (match.found === "none") throw new RuntimeRefusal(`no ${noun} matches "${typed}"`);
-  if (match.found === "tie") throw new RuntimeRefusal(`"${typed}" matches "${match.first.title}" (${match.first.url}) and "${match.second.title}" (${match.second.url}) equally, use the address`);
-  return match.item;
+  return pick_by(entries, text, noun, (entry) => ({ key: entry.url, name: entry.title, description: entry.url }), (entry) => `"${entry.title}" (${entry.url})`, "the address");
 }

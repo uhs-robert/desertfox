@@ -126,7 +126,7 @@ bound: 307 (normal 171, hint 2, cmdline 18, caret 35, visual 37, visual_line 38,
 | `be` | bound | `bookmark.edit_url` (prompts) | Edit bookmark address |  |
 | `br` | bound | `bookmark.rename` (prompts) | Rename bookmark |  |
 | `bm` | bound | `bookmark.move` (prompts) | Move bookmark to folder |  |
-| `bf` | bound | `bookmark.open_folder` (prompts) | Open folder in tabs |  |
+| `bf` | bound | `bookmark.open_folder --tab` (prompts) | Open folder in tabs |  |
 | `bF` | bound | `bookmark.open_folder --window` (prompts) | Open folder in a new window |  |
 | `bd` | bound | `bookmark.remove` | Remove bookmark |  |
 | `bD` | bound | `bookmark.remove` (prompts) | Remove bookmark, pick from list |  |

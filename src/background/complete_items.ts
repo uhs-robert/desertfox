@@ -60,7 +60,7 @@ export type WindowLike = {
 // A window the line can offer. The page gets `WindowItem` only.
 export type NumberedWindow = WindowItem & { id: number; incognito: boolean; last_used: number };
 
-export type BookmarkNode = { id?: string | undefined; type?: string | undefined; title?: string | undefined; url?: string | undefined; dateAdded?: number | undefined; children?: BookmarkNode[] | undefined };
+export type BookmarkNode = { id?: string | undefined; unmodifiable?: string | undefined; type?: string | undefined; title?: string | undefined; url?: string | undefined; dateAdded?: number | undefined; children?: BookmarkNode[] | undefined };
 
 const one_line = (text: string) => text.replace(/\s+/g, " ").trim();
 
@@ -121,7 +121,7 @@ export function flatten_bookmarks(roots: readonly BookmarkNode[]): BookmarkNode[
 }
 
 // A folder of the tree with its path from the root, and the bookmarks directly inside it (no subfolders). The titles are display text Firefox localizes, so two folders can share a path.
-export type FolderNode = { id: string; path: string; bookmarks: BookmarkNode[] };
+export type FolderNode = { id: string; path: string; managed: boolean; bookmarks: BookmarkNode[] };
 
 export const FOLDER_PATH_SEPARATOR = " / ";
 
@@ -133,7 +133,7 @@ export function folder_nodes(roots: readonly BookmarkNode[]): FolderNode[] {
       if (!node.children || node.id === undefined) continue;
       const title = one_line(node.title ?? "");
       const path = parent_path === "" ? title : `${parent_path}${FOLDER_PATH_SEPARATOR}${title}`;
-      folders.push({ id: node.id, path, bookmarks: node.children.filter((child) => child.type === undefined || child.type === "bookmark").filter((child) => child.url) });
+      folders.push({ id: node.id, path, managed: node.unmodifiable !== undefined, bookmarks: node.children.filter(is_bookmark_node) });
       walk(node.children, path);
     }
   };
@@ -144,12 +144,15 @@ export function folder_nodes(roots: readonly BookmarkNode[]): FolderNode[] {
 export const folder_items = (folders: readonly FolderNode[]): FolderItem[] =>
   folders.map((folder) => ({ name: folder.path, description: `${folder.bookmarks.length} ${folder.bookmarks.length === 1 ? "bookmark" : "bookmarks"}` }));
 
+// A bookmark proper: not a folder or a separator, and it has an address.
+export const is_bookmark_node = (node: BookmarkNode): node is BookmarkNode & { url: string } => (node.type === undefined || node.type === "bookmark") && !!node.url;
+
 // Newest first, as `flatten_bookmarks` gives them. Folders, separators and a repeated address drop out.
 export function bookmark_items(nodes: readonly BookmarkNode[]): BookmarkItem[] {
   const seen = new Set<string>();
   const items: BookmarkItem[] = [];
   for (const node of nodes) {
-    if ((node.type !== undefined && node.type !== "bookmark") || !node.url || seen.has(node.url)) continue;
+    if (!is_bookmark_node(node) || seen.has(node.url)) continue;
     seen.add(node.url);
     items.push({ title: one_line(node.title || node.url), url: node.url });
   }

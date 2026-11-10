@@ -177,7 +177,7 @@ export type SessionItem = { name: string; description: string };
 export type RegisterItem = { name: string; description: string };
 
 // A bookmark folder: its path from the root ("Bookmarks Toolbar / Work") and a short count of the bookmarks directly inside.
-export type FolderItem = { name: string; description: string };
+export type FolderItem = SessionItem;
 
 export type CompleteItemsAnswer = { items: BookmarkItem[] | EngineItem[] | HistoryItems | OpenItems | WindowItem[] | HeadingItem[] | SessionItem[] | RegisterItem[] | FolderItem[] };
 
