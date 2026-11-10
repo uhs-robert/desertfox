@@ -1,6 +1,6 @@
 // Decides, for one key token, whether the page keeps the key. Holds keys that
 // arrive before the compiled keymap is read, while a bundle loads or while the command line hands focus back, and replays them in order once they can run.
-// During a load only keys that can bind wait. Every other key reaches the page at once, because a replayed key arrives after its keydown was cancelled.
+// A replayed key the keymap does not take goes back to the page through its `on_replay_pass_`, as a synthetic event that loses its default action. During a load only keys that can bind wait, so every other key keeps its default action.
 
 import type { Mode, TreeBranch, TreeLeaf } from "../shared/index.ts";
 import type { MatchResult } from "../shared/keys/index.ts";
@@ -11,6 +11,12 @@ import { is_caret_mode } from "../shared/command.ts";
 import { is_chord } from "../shared/keys/token.ts";
 
 export type KeyDecision = "cancel" | "pass";
+
+// Runs when a held key is replayed and the keymap does not take it, so the page can still get the key.
+export type OnReplayPass = () => void;
+
+// A key waiting for replay. Keys handed back by the command line have no way to reach the page again.
+type HeldKey = { token: string; on_replay_pass_?: OnReplayPass | undefined };
 
 // The keys typed so far in a half-typed sequence. Which-key reads it.
 export type PendingPrefix = { mode: Mode; typed: string[] };
@@ -70,7 +76,7 @@ export const cancels_unbound_key = (mode: Mode, token: string, in_field: boolean
 export function create_key_flow(deps: KeyFlowDeps) {
   let matcher: Matcher | undefined;
   let browser_chords: TreeBranch | undefined;
-  const held_tokens: string[] = [];
+  const held_keys: HeldKey[] = [];
   let sequence_in_progress = false;
   let typed: string[] = [];
   let keys: string[] = [];
@@ -97,27 +103,29 @@ export function create_key_flow(deps: KeyFlowDeps) {
     return true;
   };
 
+  const held_tokens = () => held_keys.map((held) => held.token);
+
   // The held keys are not fed yet, so the check reads ahead through them. It cannot read through Backspace, which edits the sequence, or an insert mode Escape, which leaves the mode on replay, so those keys and every key after them wait.
   const waits_for_replay = (active: Matcher, mode: Mode, token: string): boolean =>
-    deps.loading_sink_bundles_().some((bundle) => bundle_may_take(active, held_tokens, bundle, token)) ||
+    deps.loading_sink_bundles_().some((bundle) => bundle_may_take(active, held_tokens(), bundle, token)) ||
     !!deps.sink_of_(mode) ||
     token === "<Backspace>" ||
     (mode === "insert" && token === "<Escape>") ||
-    held_tokens.some((held) => held === "<Backspace>" || held === "<Escape>") ||
-    active.binds_after_(mode, held_tokens, token);
+    held_keys.some((held) => held.token === "<Backspace>" || held.token === "<Escape>") ||
+    active.binds_after_(mode, held_tokens(), token);
 
-  const hold = (token: string): KeyDecision => {
+  const hold = (token: string, on_replay_pass_?: OnReplayPass): KeyDecision => {
     // Chords and keys in a field never wait. A waiting key is cancelled, so the page does not act on it twice.
     if (is_chord(token) || deps.in_editable_field_()) return "pass";
     const mode = deps.get_mode_();
     // Before the keymap is read nothing is known to bind, so every plain key waits.
     if (!matcher || waits_for_replay(matcher, mode, token)) {
-      held_tokens.push(token);
+      held_keys.push({ token, on_replay_pass_ });
       return "cancel";
     }
-    const last_held = held_tokens.at(-1);
+    const last_held = held_keys.at(-1)?.token;
     if (last_held === undefined) reset_sequence_();
-    else if (last_held !== SEQUENCE_BREAK) held_tokens.push(SEQUENCE_BREAK);
+    else if (last_held !== SEQUENCE_BREAK) held_keys.push({ token: SEQUENCE_BREAK });
     return !matcher.passes_(mode, token) && cancels_unbound_key(mode, token, false) ? "cancel" : "pass";
   };
 
@@ -160,20 +168,20 @@ export function create_key_flow(deps: KeyFlowDeps) {
 
   // A replayed key can start another load, and the keys behind it wait for that load too.
   const replay = () => {
-    while (matcher && held_tokens.length > 0 && !deps.is_loading_()) {
-      const entry = held_tokens.shift()!;
-      if (entry === SEQUENCE_BREAK) reset_sequence_();
-      else decide(matcher, entry, false);
+    while (matcher && held_keys.length > 0 && !deps.is_loading_()) {
+      const { token, on_replay_pass_ } = held_keys.shift()!;
+      if (token === SEQUENCE_BREAK) reset_sequence_();
+      else if (decide(matcher, token, false) === "pass") on_replay_pass_?.();
     }
   };
 
   return {
-    handle_token_: (token: string, repeat = false): KeyDecision => {
+    handle_token_: (token: string, repeat = false, on_replay_pass_?: OnReplayPass): KeyDecision => {
       if (deps.take_pass_next_()) {
         reset_sequence_();
         return "pass";
       }
-      if (!matcher || deps.is_loading_()) return hold(token);
+      if (!matcher || deps.is_loading_()) return hold(token, on_replay_pass_);
       return decide(matcher, token, repeat);
     },
     reset_sequence_,
@@ -187,6 +195,6 @@ export function create_key_flow(deps: KeyFlowDeps) {
     },
     release: replay,
     // Keys typed before the ones held, which reached another document: the command line frame hands back the keys it got after the line ended.
-    hold_first_: (tokens: readonly string[]) => void held_tokens.unshift(...tokens),
+    hold_first_: (tokens: readonly string[]) => void held_keys.unshift(...tokens.map((token) => ({ token }))),
   };
 }

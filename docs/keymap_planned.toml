@@ -4,13 +4,6 @@
 
 [[row]]
 mode = "normal"
-key = "M"
-status = "later"
-command = "quickmark.add"
-note = "phase 3, key param"
-
-[[row]]
-mode = "normal"
 key = "wi"
 status = "dropped"
 note = "needs a shell"

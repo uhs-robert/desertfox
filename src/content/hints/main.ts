@@ -199,7 +199,7 @@ function register(host: BundleHostApi): void {
     const first = !current.picked;
     current.picked = true;
     current.finish(new Promise<Outcome>((resolve) => (answer = resolve)));
-    void browser.runtime.sendMessage({ type: "record_step", invocations: [{ id: "hint.run", args: current.args }], outcome: done });
+    void browser.runtime.sendMessage({ type: "record_step", invocations: [{ id: "hint.run", args: current.args }], outcome: done, pick: true });
     const ended = (result: unknown) => {
       let outcome = (result as Outcome | undefined) ?? done;
       // A refused open comes back as a RunResponse with no message. The background already showed it, so it only stops the sequence.

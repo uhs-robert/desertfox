@@ -497,14 +497,14 @@ test("caret with one text match starts at once at that link", async () => {
   assert.equal(page.mode(), "caret");
 });
 
-test("a hint start tells the background what `.` shows again, and a pick that opens a link is marked from_hints", async () => {
+test("a hint pick tells the background what `.` shows again and a macro keeps, and a pick that opens a link is marked from_hints", async () => {
   const page = await page_with(["one", "two"]);
   const args = { action: "tab", filter: "links", text: "", rapid: true };
   page.run(args);
   await settle();
   page.type(page.labels()[0]!.toLowerCase());
   await settle();
-  const record = { type: "record_step", invocations: [{ id: "hint.run", args }], outcome: { ok: true } };
+  const record = { type: "record_step", invocations: [{ id: "hint.run", args }], outcome: { ok: true }, pick: true };
   assert.deepEqual(page.repeat_records, [record]);
   assert.equal((page.sent.at(-1) as { from_hints?: boolean }).from_hints, true);
 });

@@ -11,8 +11,9 @@ import type { BundleHostApi } from "./bundle_host.ts";
 import { bundles } from "./bundles.ts";
 import { deepest_focused_element, is_editable_element } from "./editable.ts";
 import { shadow_root_of } from "./shadow.ts";
-import { create_cancelled_keys } from "./cancelled_keys.ts";
+import { create_cancelled_keys, type HeldPress } from "./cancelled_keys.ts";
 import { create_key_flow } from "./key_flow.ts";
+import { cancels_keypress, cancels_keyup, press_target, replay_key_to_page } from "./replay_key.ts";
 import { create_which_key_timer } from "./which_key_timer.ts";
 import { mode_label } from "./mode_label.ts";
 import { show_mode_label, show_toast } from "./ui_proxy.ts";
@@ -27,11 +28,12 @@ import { blur_focused_element } from "./handlers/page.ts";
 
 // Until the tree is read the setting is unknown, and the default applies.
 let mode_indicator: ModeIndicator = DEFAULT_MODE_INDICATOR;
+let recording: string | undefined;
 
 function refresh_mode_indicator(): void {
   const mode = page_mode.get_mode_();
   const pass_next_armed = page_mode.is_pass_next_armed_();
-  show_mode_label(mode_label(mode, pass_next_armed, mode_indicator), pass_next_armed ? undefined : mode);
+  show_mode_label(mode_label(mode, pass_next_armed, mode_indicator, recording), pass_next_armed ? undefined : mode);
 }
 
 const script_started_ms = performance.now();
@@ -62,6 +64,9 @@ const follow_prefix = create_which_key_timer(
   (prefix, is_current_, drawn_) => (prefix || bundles.has_handler_("whichkey")) && bundles.run_command_("whichkey", "whichkey", { prefix, is_current_, drawn_ }, "", false),
 );
 
+// While a macro records, a leaf starts after the one before it has ended and sent its step, so a stop key cannot overtake a step still running. A hint pick waits on the user and sends its step when it begins, so the next leaf, which may be the Escape that ends the pick, never waits for it.
+let last_leaf: Promise<unknown> = Promise.resolve();
+
 const key_flow = create_key_flow({
   on_prefix_: follow_prefix,
   get_mode_: page_mode.get_mode_,
@@ -69,7 +74,9 @@ const key_flow = create_key_flow({
   run_leaf_: (leaf, count, repeat) => {
     // A register paste joins the open insert session, so it must not end it.
     if (leaf.steps[0]?.invocation.id !== "register.paste") flush_typed_text();
-    const ran = run_leaf(leaf, count, repeat, send_to_background, page_mode.get_mode_, run_content_steps, show_toast);
+    const run = () => run_leaf(leaf, count, repeat, send_to_background, page_mode.get_mode_, run_content_steps, show_toast);
+    const ran = recording === undefined ? run() : last_leaf.then(run);
+    if (!leaf.steps.some((step) => step.invocation.id === "hint.run")) last_leaf = ran;
     if (holds_keys_after(leaf, is_editable_element(document.activeElement))) bundles.api.hold_keys_until_(ran.then(() => []), true);
   },
   leave_insert_: () => {
@@ -136,17 +143,19 @@ function on_keydown(event: KeyboardEvent): void {
   if (!event.isTrusted || event.isComposing) return;
   const token = event_to_token(event);
   if (token === null) return;
-  const decision = key_flow.handle_token_(token, event.repeat);
-  cancelled_keys.record_keydown_(event.code, decision);
+  const target = press_target(event);
+  const press: HeldPress = { keyup_seen: false };
+  const decision = key_flow.handle_token_(token, event.repeat, () => target && replay_key_to_page(event, target, press, cancelled_keys, (type, init) => new KeyboardEvent(type, init)));
+  cancelled_keys.record_keydown_(event.code, decision, press);
   if (decision === "cancel") cancel(event);
 }
 
 function on_keypress(event: KeyboardEvent): void {
-  if (cancelled_keys.cancels_keypress_(event.code)) cancel(event);
+  if (cancels_keypress(event, cancelled_keys)) cancel(event);
 }
 
 function on_keyup(event: KeyboardEvent): void {
-  if (cancelled_keys.take_keyup_(event.code)) cancel(event);
+  if (cancels_keyup(event, cancelled_keys)) cancel(event);
 }
 
 const on_focusin = (event: Event) => follow_focus(true, event);
@@ -215,6 +224,7 @@ function install_matcher(reply: PageKeymap | undefined): void {
   // A tree stored before the setting existed has no value, which means the default.
   mode_indicator = keymap?.mode_indicator ?? DEFAULT_MODE_INDICATOR;
   which_key_delay_ms = keymap?.which_key_delay_ms;
+  recording = reply?.recording;
   // The mode comes first, so keys held during the load replay in the right mode.
   const first_install = !matcher_installed;
   matcher_installed = true;

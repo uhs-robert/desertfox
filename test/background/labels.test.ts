@@ -295,8 +295,11 @@ function leaf_label(compiled: CompiledKeymap, mode: keyof CompiledKeymap["modes"
 test("the default keymap reads as the wording draft says", () => {
   const compiled = compile_real(empty_config(), (id) => registry.get(id));
   const expected: [string, string[], string][] = [
-    ["normal", ["g", "o"], "Open URL"],
-    ["normal", ["g", "O"], "Open URL in new tab"],
+    ["normal", ["g", "e"], "Open URL"],
+    ["normal", ["g", "E"], "Open URL in new tab"],
+    ["normal", ["g", "o"], "Open quickmark"],
+    ["normal", ["g", "n"], "Open quickmark in new tab"],
+    ["normal", ["M"], "Add quickmark"],
     ["normal", ["y", "y"], "Copy URL"],
     ["normal", ["y", "c"], "Copy URL in canonical form"],
     ["normal", ["y", "m"], "Copy URL as Markdown link"],

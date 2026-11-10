@@ -65,6 +65,8 @@ export const DEFAULT_KEYMAP: KeymapConfig = {
   // What which-key calls each group. `s S c C` name the groups that the search and container keys of a user config fill.
   group_names: {
     g: "Go",
+    go: "Open quickmark",
+    gn: "Open quickmark in new tab",
     gx: "Close tabs",
     d: "Close",
     x: "Stop or close",
@@ -76,6 +78,7 @@ export const DEFAULT_KEYMAP: KeymapConfig = {
     b: "Bookmark",
     z: "Zoom and scroll",
     ",": "DesertFox",
+    q: "Record macro",
     ";": "Hints",
     ";y": "Yank",
     s: "Search here",
@@ -236,13 +239,17 @@ export const DEFAULT_KEYMAP: KeymapConfig = {
     ",\"": { id: "register.list", prompt: { param: "name" }, label: "List registers" },
 
     m: { id: "mark.add" },
+    q: { id: "macro.record" },
     "'": { id: "mark.jump" },
     "`": { id: "mark.jump" },
 
     o: { id: "open.url", args: { where: "here" }, prompt: { param: "url" } },
     O: { id: "open.url", args: { where: "tab" }, prompt: { param: "url" } },
-    go: { id: "open.url", args: { where: "here" }, prompt: { param: "url", prefill: { from: "current_url" } } },
-    gO: { id: "open.url", args: { where: "tab" }, prompt: { param: "url", prefill: { from: "current_url" } } },
+    ge: { id: "open.url", args: { where: "here" }, prompt: { param: "url", prefill: { from: "current_url" } } },
+    gE: { id: "open.url", args: { where: "tab" }, prompt: { param: "url", prefill: { from: "current_url" } } },
+    M: { id: "quickmark.add" },
+    go: { id: "quickmark.open", args: { where: "here" } },
+    gn: { id: "quickmark.open", args: { where: "tab" } },
     f: { id: "hint.run", args: { action: "here" }, label: "Click element" },
     F: { id: "hint.run", args: { action: "background" }, label: "Click element in background tab" },
     v: { id: "mode.set", args: { mode: "caret" }, label: "Start caret mode" },

@@ -8,6 +8,7 @@ import type { SearchEngine, Settings } from "../config.ts";
 import { nodes_of_file, resolve_engines } from "../engines/index.ts";
 import type { EngineNode } from "../engines/index.ts";
 import type { KeymapConfig, ModeBindings } from "../keymap.ts";
+import { MAX_QUICKMARK_URL_CHARS, QUICKMARK_KEY } from "../quickmark_names.ts";
 import { is_plain_object } from "./errors.ts";
 import { is_setting_name, SETTING_NAMES, SETTING_SPECS } from "../settings_schema.ts";
 import type { DataLayer } from "./source_files.ts";
@@ -21,6 +22,7 @@ export type MergedData = {
   keymap: KeymapConfig;
   search_engines: Record<string, SearchEngine>;
   command_aliases: Record<string, string>;
+  quickmarks: Record<string, string>;
   settings: Partial<Settings>;
   origins: Origins;
 };
@@ -145,6 +147,16 @@ function merge_command_aliases(layers: DataLayer[], origins: Origins, problems: 
   }) as Record<string, string>;
 }
 
+function merge_quickmarks(layers: DataLayer[], origins: Origins, problems: string[]) {
+  return merge_map_layers(layers, "quickmarks", origins, problems, (value, where, key) => {
+    const valid_key = QUICKMARK_KEY.test(key);
+    if (!valid_key) problems.push(`${where}: a quickmark key is one letter or digit`);
+    const valid_url = typeof value === "string" && value !== "" && value.length <= MAX_QUICKMARK_URL_CHARS;
+    if (valid_key && !valid_url) problems.push(`${where}: a quickmark maps to an address string of at most ${MAX_QUICKMARK_URL_CHARS} characters`);
+    return valid_key && valid_url;
+  }) as Record<string, string>;
+}
+
 function merge_settings(layers: DataLayer[], origins: Origins, problems: string[]) {
   return merge_map_layers(layers, "settings", origins, problems, (value, where, name) => {
     if (!is_setting_name(name)) {
@@ -169,6 +181,7 @@ export function merge_layers(layers: Record<string, DataLayer[]>, problems: stri
     keymap,
     search_engines: merge_search_engines(layers.search_engines ?? [], origins, problems),
     command_aliases: merge_command_aliases(layers.command_aliases ?? [], origins, problems),
+    quickmarks: merge_quickmarks(layers.quickmarks ?? [], origins, problems),
     settings,
     origins,
   };
