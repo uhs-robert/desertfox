@@ -28,8 +28,6 @@ export async function remember_tab_mode(storage: ModeStorage, tab_id: number, mo
 // Only the top frame sets the tab's mode: a field focused in an iframe must not hide ignore mode.
 export async function remember_reported_mode(storage: ModeStorage, tab_id: number, frame_id: number | undefined, mode: Mode): Promise<boolean> {
   if (frame_id !== TOP_FRAME) return false;
-  // The top frame leaving insert by any route (Escape, the toolbar, ignore mode) ends the manual hold.
-  if (mode !== "insert") await storage.remove(manual_insert_key_of(tab_id));
   await remember_tab_mode(storage, tab_id, mode);
   return true;
 }

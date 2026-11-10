@@ -60,13 +60,8 @@ test("while off no shortcut runs, ignore-capable ones included", () => {
   assert.equal(shortcut_allowed("ignore", [{ id: "mode.leave" }], get, true), false);
 });
 
-test("the insert hold ends when the top frame leaves insert, not when a child frame does, and on a navigation", async () => {
+test("a navigation ends the insert hold", async () => {
   const storage = fake_storage();
-  await write_insert_hold(storage, 4, [0, 2]);
-  await remember_reported_mode(storage, 4, 2, "normal");
-  assert.deepEqual(await read_insert_hold(storage, 4), [0, 2]);
-  await remember_reported_mode(storage, 4, 0, "normal");
-  assert.equal(await read_insert_hold(storage, 4), undefined);
   await write_insert_hold(storage, 4, [0]);
   await forget_mode_on_navigation(storage, 4, { status: "loading" });
   assert.equal(await read_insert_hold(storage, 4), undefined);

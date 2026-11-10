@@ -1,6 +1,8 @@
 // i enters insert mode with no field focused, in every frame of the tab, so the page gets every unbound key until Escape. I focuses the first field like gi.
 // The mode badge shows on the top frame only, so a child frame's mode shows in whether j scrolls it.
 
+import { CTRL } from "./harness.mjs";
+
 export const areas = ["keys"];
 
 export async function run_cases({ run_case, open_page, press_keys, wait_event, wait_takes_keys, events, expect, expect_no_scroll, poll_until, hint_label_count, scroll_delta_by_press, scroll_of, in_active_tab, in_background }) {
@@ -57,7 +59,8 @@ export async function run_cases({ run_case, open_page, press_keys, wait_event, w
   });
 
   // A page with no content script reports no mode, so only the navigation clear can end the hold there.
-  const holds = () => in_background(`browser.storage.local.get(null).then((all) => Object.keys(all).filter((key) => key.startsWith("desertfox_tab_mode_insert_")).length)`);
+  // Only this tab's hold counts: the tab of an earlier case stays open and keeps its own.
+  const holds = () => in_background(`browser.tabs.query({ active: true, lastFocusedWindow: true }).then(([tab]) => browser.storage.local.get("desertfox_tab_mode_insert_" + tab.id)).then((stored) => Object.keys(stored).length)`);
   await run_case("a navigation to a page without a content script ends the hold of i", async () => {
     await open_page("page", "p22_nav", { new_tab: true });
     const mark = events.length;
@@ -109,6 +112,34 @@ export async function run_cases({ run_case, open_page, press_keys, wait_event, w
     await press_keys("-k", "Escape");
     await wait_badge(mark, "p22_top", "NORMAL");
     await frame_scrolls_on_j("p22_top_same");
+  });
+
+  await run_case("i and Escape on the top page return a frame to normal", async () => {
+    await open_page("frames", "p22_top_esc", { new_tab: true });
+    await wait_event(0, (event) => event.type === "tree_read" && event.page_id === "p22_top_esc_same", "the same-origin frame to start");
+    let mark = events.length;
+    await press_keys("i");
+    await wait_badge(mark, "p22_top_esc", "INSERT");
+    await focus_frame(mark, "p22_top_esc_same", "same");
+    await frame_passes_j("p22_top_esc_same");
+    await in_active_tab(`document.getElementById("same").blur(); window.focus(); 0`);
+    await wait_takes_keys("p22_top_esc");
+    mark = events.length;
+    await press_keys("-k", "Escape");
+    await wait_badge(mark, "p22_top_esc", "NORMAL");
+    await focus_frame(mark, "p22_top_esc_same", "same");
+    await frame_scrolls_on_j("p22_top_esc_same");
+  });
+
+  await run_case("Ctrl+R in a field in an open shadow root pastes a register and does not reload", async () => {
+    await open_page("page", "p22_shadow", { new_tab: true });
+    await in_active_tab(`browser.runtime.sendMessage({ type: "register_write", name: "c", text: "from c" })`);
+    const mark = events.length;
+    await in_active_tab(`const host = document.createElement("div"); document.body.prepend(host); host.attachShadow({ mode: "open" }).innerHTML = '<input id="p22_shadow_input">'; host.shadowRoot.getElementById("p22_shadow_input").focus(); 0`);
+    await wait_badge(mark, "p22_shadow", "INSERT");
+    await wait_takes_keys("p22_shadow");
+    await press_keys(...CTRL("r"), "c");
+    await poll_until("the shadow field to hold the register text", async () => (await in_active_tab(`document.body.firstElementChild.shadowRoot?.getElementById("p22_shadow_input")?.value ?? ""`)) === "from c");
   });
 
   await run_case("a frame that loads after i joins insert mode", async () => {
