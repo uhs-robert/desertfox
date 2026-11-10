@@ -24,7 +24,7 @@ export async function run_cases({ run_case, press_keys, poll_until, rdp, extensi
 
   await run_case("help sidebar: a menu entry opens its group and a child link scrolls to its section", async () => {
     await close_help_tabs();
-    await press_keys("qh");
+    await press_keys(" h");
     await poll_until("the help page to render", () => in_help(`return !!view && !!view.document.querySelector("h1");`).catch(() => false), { timeout_ms: 10000 });
 
     const entry = (title) => `[...view.document.querySelectorAll(".desertfox-help-nav-row a")].find((link) => link.textContent === ${JSON.stringify(title)})`;

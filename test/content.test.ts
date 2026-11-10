@@ -31,11 +31,12 @@ const keymap: CompiledKeymap = {
   },
 };
 
-function make_flow(in_field = false) {
+function make_flow(in_field = false, on_control = false) {
   const state = create_mode_state();
   const ran: string[] = [];
   const flow = create_key_flow({
     in_editable_field_: () => in_field,
+    on_space_control_: () => on_control,
     get_mode: state.get_mode,
     take_pass_next_: state.take_pass_next_,
     run_leaf_: (matched, count, repeat) => ran.push(`${matched.steps[0]?.invocation.id}${count ?? ""}${repeat ? "!" : ""}`),
@@ -233,6 +234,50 @@ test("startup holds plain keys outside fields and drops what matches nothing", (
   assert.deepEqual(ran, ["down"]);
   const in_field = make_flow(true);
   assert.equal(in_field.flow.handle_token_("j"), "pass");
+});
+
+const space_keymap: CompiledKeymap = {
+  ...keymap,
+  modes: { ...keymap.modes, normal: { kind: "branch", children: { "<Space>": { kind: "branch", children: { r: leaf("reload") } }, j: leaf("down") } } },
+};
+
+test("Space starts the leader unless a control has focus, and only as the first key", () => {
+  const free = make_flow();
+  free.flow.set_matcher_(create_matcher(space_keymap));
+  assert.equal(free.flow.handle_token_("<Space>"), "cancel");
+  assert.equal(free.flow.handle_token_("r"), "cancel");
+  assert.deepEqual(free.ran, ["reload"]);
+  const on_control = make_flow(false, true);
+  on_control.flow.set_matcher_(create_matcher(space_keymap));
+  assert.equal(on_control.flow.handle_token_("<Space>"), "pass");
+  assert.deepEqual(on_control.ran, []);
+  assert.equal(on_control.flow.handle_token_("j"), "cancel");
+});
+
+test("Space on a control reaches the page before the keymap loads, but queued keys still wait", () => {
+  const early = make_flow(false, true);
+  assert.equal(early.flow.handle_token_("<Space>"), "pass");
+  assert.equal(early.flow.handle_token_("j"), "cancel");
+  assert.equal(early.flow.handle_token_("<Space>"), "cancel");
+  const plain = make_flow();
+  assert.equal(plain.flow.handle_token_("<Space>"), "cancel");
+});
+
+test("Space does not yield mid-sequence, after a count or outside normal mode", () => {
+  const mid = make_flow(false, true);
+  mid.flow.set_matcher_(create_matcher({ ...space_keymap, modes: { ...space_keymap.modes, normal: { kind: "branch", children: { g: { kind: "branch", children: { "<Space>": leaf("gap") } } } } } }));
+  assert.equal(mid.flow.handle_token_("g"), "cancel");
+  assert.equal(mid.flow.handle_token_("<Space>"), "cancel");
+  assert.deepEqual(mid.ran, ["gap"]);
+  const counted = make_flow(false, true);
+  counted.flow.set_matcher_(create_matcher(space_keymap));
+  assert.equal(counted.flow.handle_token_("3"), "cancel");
+  assert.equal(counted.flow.handle_token_("<Space>"), "cancel");
+  // Caret mode blocks Space, so a yield there would show as "pass".
+  const caret = make_flow(false, true);
+  caret.flow.set_matcher_(create_matcher(space_keymap));
+  caret.state.set_mode_("caret");
+  assert.equal(caret.flow.handle_token_("<Space>"), "cancel");
 });
 
 test("startup replay uses the mode set before the keymap", () => {

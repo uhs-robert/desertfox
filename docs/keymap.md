@@ -22,7 +22,7 @@ A note "(prompts)" means the binding sets a `prompt` for a param, so the command
 
 <!-- BEGIN generated -->
 
-bound: 297 (normal 162, hint 2, cmdline 18, caret 35, visual 37, visual_line 38, insert 1, ignore 1, browser 3) | later: 6 | dropped: 8
+bound: 300 (normal 165, hint 2, cmdline 18, caret 35, visual 37, visual_line 38, insert 1, ignore 1, browser 3) | later: 6 | dropped: 8
 
 ### normal
 
@@ -119,11 +119,11 @@ bound: 297 (normal 162, hint 2, cmdline 18, caret 35, visual 37, visual_line 38,
 | `gi` | bound | `page.focus_input` | Focus input |  |
 | `p` | bound | `paste` | Open clipboard |  |
 | `P` | bound | `paste --tab` | Open clipboard |  |
-| `aa` | bound | `bookmark.add` | Add bookmark |  |
-| `ab` | bound | `bookmark.add` (prompts) | Add bookmark, edit URL |  |
-| `ad` | bound | `bookmark.remove` | Remove bookmark |  |
-| `aD` | bound | `bookmark.remove` (prompts) | Remove bookmark, pick from list |  |
-| `b` | bound | `bookmark` (prompts) | Open bookmark |  |
+| `ba` | bound | `bookmark.add` | Add bookmark |  |
+| `be` | bound | `bookmark.add` (prompts) | Add bookmark, edit URL |  |
+| `bd` | bound | `bookmark.remove` | Remove bookmark |  |
+| `bD` | bound | `bookmark.remove` (prompts) | Remove bookmark, pick from list |  |
+| `bb` | bound | `bookmark` (prompts) | Open bookmark |  |
 | `B` | bound | `bookmark --tab` (prompts) | Open bookmark |  |
 | `zi` | bound | `zoom.by 0.1` | Zoom in |  |
 | `z+` | bound | `zoom.by 0.1` | Zoom in |  |
@@ -147,10 +147,13 @@ bound: 297 (normal 162, hint 2, cmdline 18, caret 35, visual 37, visual_line 38,
 | `<C-[>` | bound | `mode.escape` | Escape |  |
 | `<C-v>` | bound | `mode.pass_next` | Pass next key |  |
 | `<F1>` | bound | `help` | Help |  |
-| `qr` | bound | `config.reload` | Reload config |  |
-| `qh` | bound | `help` | Help |  |
-| `qi` | bound | `mode ignore` | Set mode |  |
-| `qb` | bound | `page.blur` | Blur |  |
+| `<Space>r` | bound | `config.reload` | Reload config |  |
+| `<Space>h` | bound | `help` | Help |  |
+| `<Space>s` | bound | `help settings` | Settings page |  |
+| `<Space>t` | bound | `toggle` (prompts) | Toggle a setting |  |
+| `<Space>i` | bound | `mode ignore` | Set mode |  |
+| `<Space>b` | bound | `page.blur` | Blur |  |
+| `<Space>?` | bound | `help.whichkey` | Which key |  |
 | `o` | bound | `open` (prompts) | Open URL |  |
 | `O` | bound | `open --tab` (prompts) | Open URL |  |
 | `go` | bound | `open` (prompts) | Open URL |  |
@@ -216,9 +219,9 @@ Which-key group names:
 - `t`: Tabs
 - `w`: Windows
 - `y`: Copy
-- `a`: Bookmark
+- `b`: Bookmark
 - `z`: Zoom and scroll
-- `q`: DesertFox
+- `<Space>`: DesertFox
 - `;`: Hints
 - `;y`: Yank
 - `s`: Search here
