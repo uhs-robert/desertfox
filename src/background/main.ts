@@ -22,7 +22,7 @@ import { repair_tabs_after_reload } from "./reload.ts";
 import { browser_tab_model_deps, create_tab_model } from "./tab_model.ts";
 import { browser_find_scan_deps, create_find_scan, is_scan_request } from "./find_scan.ts";
 import { create_router } from "./router.ts";
-import { answer_register_request, browser_register_store, forget_private_registers_without_window } from "./register_store.ts";
+import { answer_register_request, browser_register_store, wire_private_register_cleanup } from "./register_store.ts";
 import { create_repeat_memory, page_record } from "./repeat_memory.ts";
 import { wire_repeat } from "../commands/command.ts";
 import { DISABLED_STORAGE_KEY, SLOT_TABLE_STORAGE_KEY } from "./storage_keys.ts";
@@ -235,10 +235,7 @@ browser.tabs.onUpdated.addListener((tab_id, change) => {
   return forget_mode_on_navigation(browser.storage.local, tab_id, change);
 });
 
-// The last private window is gone once `getAll` lists none. A start with no private window also drops what a crash left.
-const has_private_window = async () => (await browser.windows.getAll()).some((window) => window.incognito);
-browser.windows.onRemoved.addListener(() => void forget_private_registers_without_window(browser_register_store, has_private_window));
-void forget_private_registers_without_window(browser_register_store, has_private_window);
+wire_private_register_cleanup(browser_register_store, browser.windows);
 
 browser.tabs.onActivated.addListener(({ windowId, previousTabId }) => previous_tabs.activated(windowId, previousTabId));
 

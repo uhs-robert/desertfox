@@ -11,7 +11,7 @@ export type RegisterValue = string | BoundInvocation[];
 
 export type RegisterArea = Pick<typeof browser.storage.local, "get" | "set" | "remove">;
 
-export type RegisterDeps = {
+export type RegisterStoreDeps = {
   local: () => RegisterArea;
   session: () => RegisterArea;
   clipboard: { read: () => Promise<string>; write: (text: string) => Promise<void> };
@@ -32,7 +32,7 @@ export function describe_value(value: RegisterValue): string {
   return line.length > PREVIEW_CHARS ? `${line.slice(0, PREVIEW_CHARS - 1)}…` : line;
 }
 
-export function create_register_store(deps: RegisterDeps) {
+export function create_register_store(deps: RegisterStoreDeps) {
   const area_of = (is_private: boolean) => (is_private ? deps.session() : deps.local());
   const key_of = (name: string, is_private: boolean) => (is_private ? REGISTER_PRIVATE_STORAGE_PREFIX : REGISTER_STORAGE_PREFIX) + storage_name(name);
 
@@ -97,9 +97,10 @@ export function create_register_store(deps: RegisterDeps) {
     read,
     write: (name: string, value: RegisterValue, is_private: boolean) => in_turn(() => write_now(name, value, is_private)),
     items,
-    // Drops every private register. A private window cannot leave one behind for the next to read.
-    clear_private: () =>
+    // Drops every private register unless a private window is open. The window check runs in the queue, so a write from a window that just opened is never deleted.
+    clear_private_without_window: (has_private_window: () => Promise<boolean>) =>
       in_turn(async () => {
+        if (await has_private_window()) return;
         const area = deps.session();
         const private_keys = Object.keys(await area.get(null)).filter((key) => key.startsWith(REGISTER_PRIVATE_STORAGE_PREFIX));
         if (private_keys.length > 0) await area.remove(private_keys);
@@ -117,8 +118,14 @@ export const browser_register_store = create_register_store({
 });
 
 // The last private window closed, or none was open when the background started: nothing private may stay.
-export async function forget_private_registers_without_window(store: RegisterStore, has_private_window: () => Promise<boolean>): Promise<void> {
-  if (!(await has_private_window())) await store.clear_private();
+export const forget_private_registers_without_window = (store: RegisterStore, has_private_window: () => Promise<boolean>): Promise<void> => store.clear_private_without_window(has_private_window);
+
+// Cleans up at start and after every window closes. A failed cleanup only leaves private values until the next one, so it warns and goes on.
+export function wire_private_register_cleanup(store: RegisterStore, windows: { onRemoved: { addListener: (listener: () => void) => void }; getAll: () => Promise<{ incognito: boolean }[]> }): void {
+  const has_private_window = async () => (await windows.getAll()).some((window) => window.incognito);
+  const clean = () => void forget_private_registers_without_window(store, has_private_window).catch((error: unknown) => console.warn("desertfox: could not clear the private registers", error));
+  windows.onRemoved.addListener(clean);
+  clean();
 }
 
 // A register message from a content script. The page's privacy is the sender tab's, never the message's. Only a tab sends these.

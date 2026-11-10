@@ -7,7 +7,7 @@ import { browser_register_store, describe_value } from "../background/register_s
 import type { RegisterStore } from "../background/register_store.ts";
 import type { ToastKind } from "../shared/messages.ts";
 
-export type RegisterDeps = {
+export type RegisterCommandDeps = {
   store: RegisterStore;
   is_private: (ctx: CommandContext) => Promise<boolean>;
   toast: (ctx: CommandContext, kind: ToastKind, message: string) => Promise<void>;
@@ -15,7 +15,7 @@ export type RegisterDeps = {
 
 const LONG_PREVIEW_CHARS = 200;
 
-export function make_register_handlers(deps: RegisterDeps) {
+export function make_register_handlers(deps: RegisterCommandDeps) {
   return {
     // With no name, one toast names every register that holds something. With a name, it shows that register.
     list: async (ctx: CommandContext, args: { name?: string }) => {

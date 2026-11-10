@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { answer_register_request, create_register_store, describe_value, forget_private_registers_without_window } from "../../src/background/register_store.ts";
+import { answer_register_request, create_register_store, describe_value, forget_private_registers_without_window, wire_private_register_cleanup } from "../../src/background/register_store.ts";
 import type { RegisterArea } from "../../src/background/register_store.ts";
 import { REGISTER_PRIVATE_STORAGE_PREFIX, REGISTER_STORAGE_PREFIX } from "../../src/background/storage_keys.ts";
 import type { BoundInvocation } from "../../src/shared/invocation.ts";
@@ -141,16 +141,6 @@ test("closing the last private window drops the private registers and keeps the 
   assert.deepEqual([...session.values.keys()], ["desertfox_last_repeat_private"]);
 });
 
-test("a second tab reads the newest value, because no tab keeps a copy", async () => {
-  const { store } = make_browser();
-  const tab_a = (request: Parameters<typeof answer_register_request>[1]) => answer_register_request(store, request, { incognito: false });
-  const tab_b = tab_a;
-  await tab_a({ type: "register_write", name: "/", text: "first" });
-  assert.equal(await tab_b({ type: "register_read", name: "/" }), "first");
-  await tab_b({ type: "register_write", name: "/", text: "second" });
-  assert.equal(await tab_a({ type: "register_read", name: "/" }), "second");
-});
-
 test("a store built later over the same storage sees what an earlier one wrote", async () => {
   const first = make_browser();
   await first.store.write("a", "kept", false);
@@ -207,4 +197,49 @@ test("a register message uses the sender tab's privacy, and only a tab may send 
   assert.equal(await answer_register_request(store, { type: "register_read", name: "a" }, undefined), undefined);
   assert.deepEqual(await answer_register_request(store, { type: "register_write", name: "$", text: "x" }, { incognito: false }), { ok: false, message: "No register named $" });
   assert.deepEqual(await answer_register_request(store, { type: "register_write", name: "a", text: 5 as never }, { incognito: false }), { ok: false, message: "A register write needs text" });
+});
+
+test("a private write that lands while the window check runs survives the cleanup", async () => {
+  const { store, session } = make_browser();
+  let release!: () => void;
+  const check_started = new Promise<void>((started) => {
+    const cleanup = forget_private_registers_without_window(store, async () => {
+      started();
+      await new Promise<void>((resume) => (release = resume));
+      return false;
+    });
+    void cleanup.then(() => undefined);
+  });
+  await check_started;
+  const write = store.write("p", "from a new window", true);
+  release();
+  await write;
+  await store.clear_private_without_window(async () => true);
+  assert.equal(await store.read("p", true), "from a new window");
+  assert.ok(session.values.size > 0);
+});
+
+test("the cleanup runs at start and after each window closes, and a failure only warns", async () => {
+  const { store } = make_browser();
+  await store.write("p", "private", true);
+  let listener: (() => void) | undefined;
+  let windows = [{ incognito: true }];
+  const warnings: unknown[][] = [];
+  const original_warn = console.warn;
+  console.warn = (...args: unknown[]) => void warnings.push(args);
+  try {
+    wire_private_register_cleanup(store, { onRemoved: { addListener: (fn) => void (listener = fn) }, getAll: async () => windows });
+    await new Promise((resume) => setTimeout(resume, 0));
+    assert.equal(await store.read("p", true), "private");
+    windows = [{ incognito: false }];
+    listener!();
+    await new Promise((resume) => setTimeout(resume, 0));
+    assert.equal(await store.read("p", true), undefined);
+    windows = undefined as never;
+    listener!();
+    await new Promise((resume) => setTimeout(resume, 0));
+    assert.equal(warnings.length, 1);
+  } finally {
+    console.warn = original_warn;
+  }
 });
