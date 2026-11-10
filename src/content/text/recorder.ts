@@ -31,11 +31,12 @@ export function create_text_recorder(deps: TextRecorderDeps) {
   let session: Session | undefined;
   let replaying = false;
 
-  function flush(): void {
+  // `after` is the field's text when the session ended, for a caller that read it before the flush ran. Without it the field is read now.
+  function flush(after?: string): void {
     const ended = session;
     session = undefined;
     if (!ended || deps.is_secret(ended.field)) return;
-    const text = inserted_text(ended.before, deps.read_text(ended.field));
+    const text = inserted_text(ended.before, after ?? deps.read_text(ended.field));
     if (text !== "") deps.record([...(ended.entry ? [ended.entry] : []), { id: "text.insert", args: { text } }]);
   }
 

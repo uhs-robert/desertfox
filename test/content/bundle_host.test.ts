@@ -424,6 +424,48 @@ test("a registered handler runs in the caller's turn, and a pending handler does
   assert.deepEqual(await waiting, { ok: true });
 });
 
+// The bundle script registers its handlers as it runs, and the load's answer comes a little later. A call in that gap must not overtake the calls queued on the load.
+test("a call made after the bundle registered but before its load answered runs after the calls queued on the load", async () => {
+  const page = make_page();
+  const ran: string[] = [];
+  const first = page.host.run_command_("text.input", "text", {}, "", false);
+  page.host.api.register_handler_("text.input", () => void ran.push("input"));
+  page.host.api.register_handler_("text.flush", () => void ran.push("flush"));
+  const second = page.host.run_command_("text.flush", "text", {}, "");
+  assert.deepEqual(ran, []);
+  assert.equal(page.host.is_loading_(), true);
+  page.loads[0]!.finish(true);
+  assert.deepEqual([await first, await second], [{ ok: true }, { ok: true }]);
+  assert.deepEqual(ran, ["input", "flush"]);
+  assert.equal(page.loads.length, 1);
+  assert.equal(page.host.is_loading_(), false);
+  // Once the load answered, a call runs in the caller's turn again.
+  void page.host.run_command_("text.flush", "text", {}, "");
+  assert.deepEqual(ran, ["input", "flush", "flush"]);
+});
+
+test("a load that never answers keeps the calls made in the gap waiting, and once it fails the next call runs at once", async () => {
+  const page = make_page();
+  const ran: string[] = [];
+  const queued = page.host.run_command_("text.input", "text", {}, "");
+  page.host.api.register_handler_("text.input", () => void ran.push("input"));
+  const in_gap = page.host.run_command_("text.input", "text", {}, "");
+  page.press("x");
+  await page.settle();
+  assert.deepEqual(ran, []);
+  assert.deepEqual(page.events, []);
+  assert.equal(page.host.is_loading_(), true);
+  // The script ran, so the handlers it registered answer even though the load reports a failure.
+  page.loads[0]!.finish(false);
+  assert.deepEqual([await queued, await in_gap], [{ ok: true }, { ok: true }]);
+  await page.settle();
+  assert.deepEqual(page.events, ["run log_x"]);
+  void page.host.run_command_("text.input", "text", {}, "");
+  assert.deepEqual(ran, ["input", "input", "input"]);
+  assert.equal(page.loads.length, 1);
+  assert.equal(page.host.is_loading_(), false);
+});
+
 test("keys are held for the load only, not while the loaded handler still waits", async () => {
   const page = make_page();
   let release!: () => void;
