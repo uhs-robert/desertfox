@@ -1,5 +1,6 @@
 import { SETTABLE_MODES } from "../content/handlers/mode.ts";
 import { define } from "../shared/registry/builtin.ts";
+import { require_tab_id } from "./open_target.ts";
 
 const mode_in_words = (mode: string) => (mode === "visual_line" ? "line visual" : mode);
 
@@ -18,6 +19,19 @@ define("mode.set", {
   runs_in: "content",
   repeatable: false,
   modes: ["normal", "insert", "ignore", "caret", "visual", "visual_line"],
+});
+
+// `main.ts` wires the background half after it builds the tab state.
+let enter_tab_insert: ((tab_id: number) => Promise<void>) | undefined;
+export const wire_tab_insert = (enter: (tab_id: number) => Promise<void>) => void (enter_tab_insert = enter);
+
+define("mode.insert", {
+  label: "Insert mode",
+  intent: "Give every key to the page in all frames. No field is needed. Escape leaves it. A frame under an all-off site rule stays in ignore mode.",
+  runs_in: "background",
+  repeatable: false,
+  modes: ["normal", "caret", "visual", "visual_line"],
+  run: (ctx) => enter_tab_insert?.(require_tab_id(ctx)),
 });
 
 define("mode.escape", {

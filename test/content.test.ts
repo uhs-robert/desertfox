@@ -232,6 +232,14 @@ test("a mode change drops a pending sequence and count", () => {
   assert.deepEqual(ran, ["down"]);
 });
 
+test("an insert chord runs while a field is focused", () => {
+  const { state, ran, flow } = make_flow(true);
+  flow.set_matcher_(create_matcher(keymap), browser_chords);
+  state.set_mode_("insert");
+  assert.equal(flow.handle_token_("<C-x>"), "cancel");
+  assert.deepEqual(ran, ["insert_chord"]);
+});
+
 test("browser chords run in normal and insert mode and are cancelled", () => {
   const { state, ran, flow } = make_flow();
   flow.set_matcher_(create_matcher(keymap), browser_chords);

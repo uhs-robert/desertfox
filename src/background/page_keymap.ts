@@ -31,9 +31,9 @@ function with_stop_for_record(node: TreeBranch): TreeBranch {
 }
 
 // `recording` is the register a macro is being recorded into, or undefined.
-export async function page_keymap_for(storage: KeymapStorage, addresses: readonly (string | undefined)[], recording?: string, insert = false): Promise<PageKeymap | undefined> {
+export async function page_keymap_for(storage: KeymapStorage, addresses: readonly (string | undefined)[], recording?: string, join_insert?: () => Promise<boolean>): Promise<PageKeymap | undefined> {
   const trimmed = await trimmed_keymap_for(storage, addresses);
-  const reply = trimmed && insert ? { ...trimmed, insert: true as const } : trimmed;
+  const reply = trimmed && !trimmed.all_off && (await join_insert?.()) ? { ...trimmed, insert: true as const } : trimmed;
   if (!reply || recording === undefined) return reply;
   const normal = reply.keymap.modes.normal;
   return { ...reply, keymap: normal ? { ...reply.keymap, modes: { ...reply.keymap.modes, normal: with_stop_for_record(normal) } } : reply.keymap, recording };
@@ -51,7 +51,7 @@ async function trimmed_keymap_for(storage: KeymapStorage, addresses: readonly (s
 }
 
 // A string, not the object: the structured clone of the whole tree cost the page about 11 ms, and `JSON.parse` of the string costs a few.
-export const read_keymap_reply = async (storage: KeymapStorage, addresses: readonly (string | undefined)[], recording?: string, insert = false): Promise<string | undefined> => {
-  const reply = await page_keymap_for(storage, addresses, recording, insert);
+export const read_keymap_reply = async (storage: KeymapStorage, addresses: readonly (string | undefined)[], recording?: string, join_insert?: () => Promise<boolean>): Promise<string | undefined> => {
+  const reply = await page_keymap_for(storage, addresses, recording, join_insert);
   return reply && JSON.stringify(reply);
 };

@@ -123,7 +123,7 @@ bound: 318 (normal 182, hint 2, cmdline 18, caret 35, visual 37, visual_line 38,
 | `[c` | bound | `url.increment --down` | Change URL number |  |
 | `gi` | bound | `page.focus_input` | Focus input |  |
 | `I` | bound | `page.focus_input` | Focus input |  |
-| `i` | bound | `mode insert` | Insert mode, keys go to the page |  |
+| `i` | bound | `mode.insert` | Insert mode |  |
 | `p` | bound | `paste` | Open clipboard |  |
 | `P` | bound | `paste --tab` | Open clipboard |  |
 | `ba` | bound | `bookmark.add` (prompts) | Add bookmark, edit URL |  |

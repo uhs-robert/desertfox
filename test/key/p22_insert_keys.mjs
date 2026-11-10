@@ -3,7 +3,7 @@
 
 export const areas = ["keys"];
 
-export async function run_cases({ run_case, open_page, press_keys, wait_event, wait_takes_keys, events, expect, expect_no_scroll, poll_until, hint_label_count, scroll_delta_by_press, scroll_of, in_active_tab }) {
+export async function run_cases({ run_case, open_page, press_keys, wait_event, wait_takes_keys, events, expect, expect_no_scroll, poll_until, hint_label_count, scroll_delta_by_press, scroll_of, in_active_tab, in_background }) {
   const wait_badge = (mark, page_id, label) => wait_event(mark, (event) => event.type === "indicator" && event.page_id === page_id && event.label === label, `${label} on ${page_id}`);
   const page_sees = (mark, page_id, key) => wait_event(mark, (event) => event.type === "keydown" && event.key === key && event.page_id === page_id, `${page_id} to see ${key}`);
   const focus_frame = async (mark, frame_id, element_id) => {
@@ -48,20 +48,24 @@ export async function run_cases({ run_case, open_page, press_keys, wait_event, w
     await press_keys("i");
     await wait_badge(mark, "p22_stays", "INSERT");
     await in_active_tab(`document.getElementById("p22_stays_input").focus(); document.getElementById("p22_stays_input").blur(); 0`);
-    await in_active_tab(`new Promise((resolve) => setTimeout(resolve, 300))`);
-    expect(events.filter((event) => event.type === "indicator" && event.page_id === "p22_stays").at(-1)?.label === "INSERT", "focus leaving a field ended the insert mode of i");
+    // A page that sees j and does not scroll is still in insert mode, whatever the badge reports late.
+    await wait_takes_keys("p22_stays");
+    const mark_j = events.length;
+    await press_keys("j");
+    await page_sees(mark_j, "p22_stays", "j");
+    await expect_no_scroll(mark_j, "p22_stays");
   });
 
-  await run_case("a navigation ends the insert mode of i", async () => {
+  // A page with no content script reports no mode, so only the navigation clear can end the hold there.
+  const holds = () => in_background(`browser.storage.local.get(null).then((all) => Object.keys(all).filter((key) => key.startsWith("desertfox_tab_mode_insert_")).length)`);
+  await run_case("a navigation to a page without a content script ends the hold of i", async () => {
     await open_page("page", "p22_nav", { new_tab: true });
-    let mark = events.length;
+    const mark = events.length;
     await press_keys("i");
     await wait_badge(mark, "p22_nav", "INSERT");
-    mark = events.length;
-    await in_active_tab(`location.reload()`);
-    await wait_event(mark, (event) => event.type === "tree_read" && event.page_id === "p22_nav", "the page to load again");
-    await wait_takes_keys("p22_nav");
-    expect((await scroll_delta_by_press("p22_nav", ["G"])) > 0, "G did not scroll after a reload");
+    await poll_until("the hold to be stored", async () => (await holds()) === 1);
+    await in_active_tab(`location.href = "about:blank"; 0`);
+    await poll_until("the navigation to clear the hold", async () => (await holds()) === 0);
   });
 
   await run_case("I focuses the first field and enters insert mode", async () => {
