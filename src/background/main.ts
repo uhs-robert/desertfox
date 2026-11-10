@@ -14,6 +14,7 @@ import type { Asker } from "./complete_items.ts";
 import { browser_tab_action_deps } from "./tab_actions.ts";
 import { create_open_help } from "./open_help.ts";
 import { requirement_lookup, site_engine_for, with_site_engines } from "./availability.ts";
+import { mark_list_rows, quickmark_list_rows } from "../shared/mark_text.ts";
 import { list_keys } from "./list_keys.ts";
 import { rule_addresses_of, read_keymap_reply } from "./page_keymap.ts";
 import { create_bundle_loader } from "./bundle_loader.ts";
@@ -116,6 +117,9 @@ const complete_items = create_complete_items({
   is_opener: cmdline.is_opener,
   search_engines: async () => (await get_config()).search_engines,
   page_of,
+  marks: async (url, is_private) => (url === undefined ? [] : mark_list_rows(await browser_mark_store.items(url, is_private))),
+  quickmarks: async (is_private) => quickmark_list_rows(await browser_quickmark_store.table((await get_config()).quickmarks, is_private)),
+  saved_quickmarks: async (is_private) => quickmark_list_rows(await browser_quickmark_store.saved(is_private)),
   read_tab: (tab_id) => browser.tabs.get(tab_id).catch(() => undefined),
   discard: { ...browser_discard_deps, alternate_of: previous_tabs.previous_of },
   tab_actions: browser_tab_action_deps,
@@ -210,10 +214,17 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
     const tab = sender.tab;
     const page = tab?.url ? { url: tab.url, ...(tab.title ? { title: tab.title } : {}) } : undefined;
     return get_config().then((config) => list_keys(browser.storage.local, (id) => registry.get(id), request, {
-      page,
-      requirement_of: requirement_lookup(config),
-      site_engine_label_of: (invocation) => config.search_engines[site_engine_for(config.search_engines, invocation.site_search?.engines ?? [], page) ?? ""]?.label,
-    }, rule_addresses_of(sender), () => browser_register_store.items(tab?.incognito === true), () => browser_mark_store.items(sender.url ?? "", tab?.incognito === true), () => browser_quickmark_store.table(config.quickmarks, tab?.incognito === true), () => browser_register_store.macro_items(tab?.incognito === true)));
+      availability: {
+        page,
+        requirement_of: requirement_lookup(config),
+        site_engine_label_of: (invocation) => config.search_engines[site_engine_for(config.search_engines, invocation.site_search?.engines ?? [], page) ?? ""]?.label,
+      },
+      addresses: rule_addresses_of(sender),
+      registers: () => browser_register_store.items(tab?.incognito === true),
+      marks: () => browser_mark_store.items(sender.url ?? "", tab?.incognito === true),
+      quickmarks: () => browser_quickmark_store.table(config.quickmarks, tab?.incognito === true),
+      macros: () => browser_register_store.macro_items(tab?.incognito === true),
+    }));
   }
   if ((message as SnippetCall)?.type === "snippet_run") {
     return get_config().then(() => snippets.handle_call(message as SnippetCall, { tab_id: sender.tab?.id, frame_id: sender.frameId }));

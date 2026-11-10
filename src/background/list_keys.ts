@@ -6,6 +6,7 @@ import type { BoundInvocation } from "../shared/invocation.ts";
 import type { WhichKeyBorder } from "../shared/config.ts";
 import type { ListKeys, MarkItem, RegisterItem, WhichKeyPanel, WhichKeyRow } from "../shared/messages.ts";
 import { PREVIOUS_MARK } from "../shared/mark_names.ts";
+import { mark_text, shorten_address } from "../shared/mark_text.ts";
 import type { QuickmarkTable } from "../shared/quickmark_names.ts";
 import { UNNAMED_REGISTER } from "../shared/register_names.ts";
 import { ANY_KEY, COMPILED_KEYMAP_STORAGE_KEY, token_label } from "../shared/prefix_tree.ts";
@@ -89,16 +90,21 @@ export function without_unavailable(node: TreeBranch, availability: PageAvailabi
   return Object.keys(children).length === 0 ? undefined : { ...node, children };
 }
 
+// Everything beyond the request is optional: the page the keys are for, and one reader per stored list that fills a capture row.
+export type ListKeysOptions = {
+  availability?: PageAvailability;
+  addresses?: readonly (string | undefined)[];
+  registers?: () => Promise<RegisterItem[]>;
+  marks?: () => Promise<MarkItem[]>;
+  quickmarks?: () => Promise<QuickmarkTable>;
+  macros?: () => Promise<RegisterItem[]>;
+};
+
 export async function list_keys(
   storage: KeymapStorage,
   find_command: (id: string) => CommandMeta | undefined,
   request: Pick<ListKeys, "mode" | "prefix">,
-  availability?: PageAvailability,
-  addresses: readonly (string | undefined)[] = [],
-  registers?: () => Promise<RegisterItem[]>,
-  marks?: () => Promise<MarkItem[]>,
-  quickmarks?: () => Promise<QuickmarkTable>,
-  macros?: () => Promise<RegisterItem[]>,
+  { availability, addresses = [], registers, marks, quickmarks, macros }: ListKeysOptions = {},
 ): Promise<WhichKeyPanel> {
   const stored = await storage.get(COMPILED_KEYMAP_STORAGE_KEY);
   const keymap = stored[COMPILED_KEYMAP_STORAGE_KEY] as CompiledKeymap | undefined;
@@ -152,17 +158,6 @@ async function with_page_marks(panel: WhichKeyPanel, root: TreeBranch | undefine
   return { ...panel, rows: [...rows_of(shown_items.filter((item) => item.url === undefined)), ...rows_of(shown_items.filter((item) => item.url !== undefined))] };
 }
 
-const GLOBAL_ADDRESS_CHARS = 36;
-
-// The scheme is dropped: it is nearly always https.
-function shorten_address(url: string): string {
-  const address = url.replace(/^https?:\/\//, "");
-  return address.length > GLOBAL_ADDRESS_CHARS ? `${address.slice(0, GLOBAL_ADDRESS_CHARS - 1)}…` : address;
-}
-
-// A global mark leads with its address, which tells two marks apart.
-function mark_row({ key, x, y, url }: MarkItem): WhichKeyRow {
-  const offset = x === 0 ? `y ${y}` : `x ${x} y ${y}`;
-  const shown = url === undefined ? undefined : shorten_address(url);
-  return { keys: key, command: shown === undefined ? offset : `${shown}  ${offset}`, description: "", more: false };
+function mark_row({ key, ...position }: MarkItem): WhichKeyRow {
+  return { keys: key, command: mark_text(position), description: "", more: false };
 }

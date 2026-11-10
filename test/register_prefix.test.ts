@@ -272,19 +272,19 @@ test("which-key lists the stored registers under `\"`, and the tree under any ot
     { name: '"', description: "last" },
     { name: "a", description: "one" },
   ];
-  const panel = await list_keys(keymap_storage(tree()), () => undefined, { mode: "normal", prefix: ['"'] }, undefined, [], items);
+  const panel = await list_keys(keymap_storage(tree()), () => undefined, { mode: "normal", prefix: ['"'] }, { registers: items });
   assert.deepEqual(panel.title, ["registers"]);
   assert.deepEqual(panel.rows, [
     { keys: '"', command: "last", description: "", more: false },
     { keys: "a", command: "one", description: "", more: false },
   ]);
-  assert.deepEqual((await list_keys(keymap_storage(tree()), () => undefined, { mode: "normal", prefix: ["g"] }, undefined, [], items)).title, ["+g"]);
-  assert.deepEqual((await list_keys(keymap_storage(tree()), () => undefined, { mode: "normal", prefix: ['"'] }, undefined, [], async () => Promise.reject(new Error("x")))).rows, []);
+  assert.deepEqual((await list_keys(keymap_storage(tree()), () => undefined, { mode: "normal", prefix: ["g"] }, { registers: items })).title, ["+g"]);
+  assert.deepEqual((await list_keys(keymap_storage(tree()), () => undefined, { mode: "normal", prefix: ['"'] }, { registers: async () => Promise.reject(new Error("x")) })).rows, []);
 });
 
 test("a user binding of `\"` keeps its own which-key tree", async () => {
   const keymap = tree_of({ '"': { id: "test.down" }, y: { id: "test.yank" } });
-  const panel = await list_keys(keymap_storage(keymap), () => undefined, { mode: "normal", prefix: ['"'] }, undefined, [], async () => [{ name: "a", description: "one" }]);
+  const panel = await list_keys(keymap_storage(keymap), () => undefined, { mode: "normal", prefix: ['"'] }, { registers: async () => [{ name: "a", description: "one" }] });
   assert.notDeepEqual(panel.title, ["registers"]);
 });
 

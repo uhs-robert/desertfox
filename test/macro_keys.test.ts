@@ -54,7 +54,7 @@ test("a site rule that passes q leaves the page to the key, and the badge still 
 
 test("which-key under q lists the stored macros, and the tree when there are none", async () => {
   const storage = storage_of(compiled());
-  const ask = (macros?: () => Promise<{ name: string; description: string }[]>) => list_keys(storage, (id) => registry.get(id), { mode: "normal", prefix: ["q"] }, undefined, [], undefined, undefined, undefined, macros);
+  const ask = (macros?: () => Promise<{ name: string; description: string }[]>) => list_keys(storage, (id) => registry.get(id), { mode: "normal", prefix: ["q"] }, macros ? { macros } : {});
   const rows = (await ask(async () => [{ name: "a", description: "3 steps" }, { name: "c", description: "1 step" }])).rows;
   assert.deepEqual(rows.map((row) => [row.keys, row.command]), [["a", "3 steps"], ["c", "1 step"]]);
   const bare = (await ask(async () => [])).rows;

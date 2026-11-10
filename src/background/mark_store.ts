@@ -110,6 +110,17 @@ export function create_mark_store(deps: MarkStoreDeps) {
         .sort(by_key);
       return [...local, ...global];
     },
+    // Drops one mark: a global one by its key, a local one from the page of `url`. A key with no mark refuses.
+    remove: (key: string, url: string, is_private: boolean) =>
+      in_turn(async () => {
+        if (typeof key !== "string" || !MARK_ADD_KEY.test(key)) throw new RuntimeRefusal(MARK_KEYS_TEXT);
+        const all = await read_all(is_private);
+        const page = all.pages[mark_page_url(url)];
+        if (is_global_mark(key) ? !all.globals[key] : !page?.marks[key]) throw new RuntimeRefusal(`No mark ${key}`);
+        if (is_global_mark(key)) delete all.globals[key];
+        else if (page) delete page.marks[key];
+        await area_of(is_private).set({ [key_of(is_private)]: all });
+      }),
     // The global mark of one key, or nothing.
     global_of: async (key: string, is_private: boolean): Promise<GlobalMark | undefined> => (await read_all(is_private)).globals[key],
     // Drops every private mark unless a private window is open. The window check runs in the queue, so a write from a window that just opened is never deleted.
