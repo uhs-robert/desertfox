@@ -32,7 +32,9 @@ import { create_repeat_memory } from "./repeat_memory.ts";
 import { create_step_recorder, page_outcome, page_steps } from "./record_step.ts";
 import type { RecordStep } from "./record_step.ts";
 import { browser_macro_recorder } from "./macro_recorder.ts";
+import { browser_last_played } from "./macro_last_played.ts";
 import { create_macro_replay, wire_macro_replay } from "./macro_replay.ts";
+import { check_play_step } from "../commands/macro.ts";
 import { wire_repeat } from "../commands/command.ts";
 import { wire_tab_insert } from "../commands/mode.ts";
 import { create_tab_insert } from "./tab_insert.ts";
@@ -93,6 +95,8 @@ const macro_replay = create_macro_replay({
   watch: watch_tab,
   hold_keys: (tab_id) => send_to_tab(tab_id, { type: "replay_hold" }),
   show_refusal: (tab_id, message) => router_deps.show_refusal(tab_id, { id: "macro.play", message }),
+  last_played: browser_last_played,
+  check_play: check_play_step,
 });
 wire_macro_replay(macro_replay);
 const global_mark_jump = create_global_mark_jump({
@@ -312,7 +316,7 @@ browser.tabs.onUpdated.addListener((tab_id, change) => {
 });
 
 browser.windows.onRemoved.addListener(() => void repeat_memory.clear_private_without_window().catch(() => undefined));
-wire_private_cleanup([browser_register_store, browser_mark_store, browser_quickmark_store, browser_macro_recorder], browser.windows);
+wire_private_cleanup([browser_register_store, browser_mark_store, browser_quickmark_store, browser_macro_recorder, browser_last_played], browser.windows);
 
 browser.tabs.onActivated.addListener(({ windowId, previousTabId }) => previous_tabs.activated(windowId, previousTabId));
 

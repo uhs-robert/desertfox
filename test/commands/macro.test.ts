@@ -2,11 +2,12 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { create_macro_recorder } from "../../src/background/macro_recorder.ts";
 import { create_register_store } from "../../src/background/register_store.ts";
-import { make_macro_handlers } from "../../src/commands/macro.ts";
+import { check_play_step, make_macro_handlers } from "../../src/commands/macro.ts";
 import { create_macro_replay } from "../../src/background/macro_replay.ts";
 import type { MacroReplay } from "../../src/background/macro_replay.ts";
 import type { RunResponse } from "../../src/shared/messages.ts";
 import type { CommandContext } from "../../src/shared/command.ts";
+import { apply_count } from "../../src/background/count.ts";
 import { check_args } from "../../src/shared/registry/check_args.ts";
 import { registry } from "../../src/shared/registry/builtin.ts";
 
@@ -94,27 +95,50 @@ function make_replay(steps: Record<string, (() => Promise<RunResponse>) | undefi
     watch: () => ({ navigated: () => false, done: async () => "ready", stop: () => undefined }),
     hold_keys: async () => undefined,
     show_refusal: async () => undefined,
+    check_play: check_play_step,
+    last_played: { read: async () => undefined, write: async () => undefined },
   });
   return { replay, played };
 }
 
 test("@A plays macro a, and a replay that stops ends quietly as cancelled, since the failed step showed its own refusal", async () => {
   const { replay, played } = make_replay({ "tab.next": undefined });
-  assert.equal(await make(replay).handlers.play(CTX, { reg: "A" }), undefined);
+  assert.equal(await make(replay).handlers.play(CTX, { reg: "A", count: 1 }), undefined);
   assert.deepEqual(played, ["tab.next"]);
   const failing = make_replay({ "tab.next": async () => ({ ok: false, refusal: { id: "tab.next", message: "no" } }) });
-  assert.deepEqual(await make(failing.replay).handlers.play(CTX, { reg: "a" }), { ok: true, cancelled: true });
-  await assert.rejects(make(replay).handlers.play(CTX, { reg: "b" }), /Register b holds no macro/);
+  assert.deepEqual(await make(failing.replay).handlers.play(CTX, { reg: "a", count: 1 }), { ok: true, cancelled: true });
+  await assert.rejects(make(replay).handlers.play(CTX, { reg: "b", count: 1 }), /Register b holds no macro/);
 });
 
 test("recording refuses while a macro plays", async () => {
   let finish!: (response: RunResponse) => void;
   const { replay } = make_replay({ slow: () => new Promise((resolve) => (finish = resolve)) });
   const { handlers, recorder } = make(replay);
-  const played = handlers.play(CTX, { reg: "a" });
+  const played = handlers.play(CTX, { reg: "a", count: 1 });
   await new Promise((resolve) => setImmediate(resolve));
   await assert.rejects(handlers.record(CTX, { reg: "b" }), /A macro is playing/);
   assert.equal(await recorder.register_of(false), undefined);
   finish({ ok: true });
   await played;
+});
+
+test("the count reaches macro.play as a param, so the router starts one play and not one per count", () => {
+  const command = registry.get("macro.play")!;
+  assert.deepEqual(command.count, { param: "count" });
+  assert.deepEqual(apply_count(command, { id: "macro.play", args: { reg: "q" }, count: 5 }), { args: { reg: "q", count: 5 }, times: 1 });
+  assert.ok(check_args(command, { reg: "q", count: 5 }, {}).ok);
+  assert.ok(!check_args(command, { reg: "q", count: 0 }, {}).ok);
+  assert.ok(!check_args(command, { reg: "q", count: -2 }, {}).ok);
+});
+
+test("macro.play takes @ for the last register played, and still refuses the other special registers", () => {
+  const command = registry.get("macro.play")!;
+  for (const reg of ["a", "Z", "@"]) assert.ok(check_args(command, { reg }, {}).ok, reg);
+  for (const reg of ['"', "+", "_", "/", "1"]) assert.ok(!check_args(command, { reg }, {}).ok, reg);
+});
+
+test("the handler hands the count on, so 3@a plays the macro three times in one replay", async () => {
+  const { replay, played } = make_replay({ "tab.next": undefined });
+  await make(replay).handlers.play(CTX, { reg: "a", count: 3 });
+  assert.deepEqual(played, ["tab.next", "tab.next", "tab.next"]);
 });
