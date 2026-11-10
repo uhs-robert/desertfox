@@ -101,6 +101,76 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, sleep,
     }
   });
 
+  // The folder cases make their own folder, so the lists hold one row with "P9f" in it. A folder the case made goes at its end.
+  const make_folder = (title) => background(`browser.bookmarks.create({ title: ${JSON.stringify(title)} }).then((node) => node.id)`);
+  const parent_of = (url) => background(`browser.bookmarks.search({ url: ${JSON.stringify(url)} }).then((nodes) => nodes[0]?.parentId)`);
+  const remove_tree = (folder_id) => background(`browser.bookmarks.removeTree(${JSON.stringify(folder_id)}).catch(() => {})`);
+  const remove_at = (url) => background(`browser.bookmarks.search({ url: ${JSON.stringify(url)} }).then((nodes) => Promise.all(nodes.map((node) => browser.bookmarks.remove(node.id))))`);
+
+  await run_case("bA opens the line on the folder flag, and a pick files the new bookmark in that folder", async () => {
+    await open_page("page", "p9f_add", { new_tab: true });
+    const url = url_of("page", "p9f_add");
+    const folder_id = await make_folder("P9f Add folder");
+    try {
+      await settle_focus();
+      await press_keys("b", "A");
+      await wait_cmdline((line) => line.open && line.value === "bookmark.add --folder=", "bA to open the line with the folder flag and the caret after it");
+      await wait_cmdline(shows_row("P9f Add folder"), "the folder in the list");
+      await type_in_line("p9f");
+      await complete_in_line();
+      await press_keys("-k", "Return");
+      await poll_until("the bookmark to sit in the folder", async () => (await parent_of(url)) === folder_id);
+    } finally {
+      await remove_at(url);
+      await remove_tree(folder_id);
+      await close_tabs_with("id=p9f_add");
+    }
+  });
+
+  await run_case("bm moves the page's bookmark to the picked folder", async () => {
+    await open_page("page", "p9f_move", { new_tab: true });
+    const url = url_of("page", "p9f_move");
+    const folder_id = await make_folder("P9f Move folder");
+    await background(`browser.bookmarks.create({ title: "P9f moving", url: ${JSON.stringify(url)} })`);
+    try {
+      await settle_focus();
+      await press_keys("b", "m");
+      await wait_cmdline((line) => line.open && line.value === "bookmark.move ", "bm to open the line with bookmark.move");
+      await wait_cmdline(shows_row("P9f Move folder"), "the folder in the list");
+      await type_in_line("p9f move");
+      await complete_in_line();
+      await press_keys("-k", "Return");
+      await poll_until("the bookmark to sit in the folder", async () => (await parent_of(url)) === folder_id);
+    } finally {
+      await remove_at(url);
+      await remove_tree(folder_id);
+      await close_tabs_with("id=p9f_move");
+    }
+  });
+
+  await run_case("bf opens the folder's bookmarks in tabs, the first one active", async () => {
+    const folder_id = await make_folder("P9f Open folder");
+    const urls = ["p9f_first", "p9f_second"].map((page_id) => url_of("page", page_id));
+    for (const url of urls) await background(`browser.bookmarks.create({ title: "P9f open", url: ${JSON.stringify(url)}, parentId: ${JSON.stringify(folder_id)} })`);
+    try {
+      await settle_focus();
+      const mark = events.length;
+      await press_keys("b", "f");
+      await wait_cmdline((line) => line.open && line.value === "bookmark.open_folder ", "bf to open the line with bookmark.open_folder");
+      await wait_cmdline(shows_row("P9f Open folder"), "the folder in the list");
+      await type_in_line("p9f open");
+      await complete_in_line();
+      await press_keys("-k", "Return");
+      await wait_event(mark, (event) => event.type === "tree_read" && event.page_id === "p9f_first", "the first bookmark in a tab");
+      await wait_event(mark, (event) => event.type === "tree_read" && event.page_id === "p9f_second", "the second bookmark in a tab");
+      await wait_active_tab("p9f_first", "the first bookmark of the folder");
+    } finally {
+      await remove_tree(folder_id);
+      await close_tabs_with("id=p9f_first");
+      await close_tabs_with("id=p9f_second");
+    }
+  });
+
   // Set DESERTFOX_SHOT_DIR to also save a screenshot of the tab list: a pinned tab with a favicon, a container tab, a muted tab and a discarded tab.
   const shot_dir = process.env.DESERTFOX_SHOT_DIR;
   if (shot_dir) {

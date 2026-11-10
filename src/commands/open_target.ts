@@ -110,6 +110,15 @@ async function open_in_unchecked(ctx: CommandContext, url: string, where: Where,
   await browser.tabs.create({ url, active: where === "tab", ...opener, ...store });
 }
 
+// Opens several addresses at once. A tab opens the first one active and the rest in the background, so the first page is the one the user lands on. A window holds them all.
+export async function open_many(ctx: CommandContext, urls: readonly string[], where: Exclude<Where, "here">): Promise<void> {
+  if (where === "window") {
+    await browser.windows.create({ url: [...urls] });
+    return;
+  }
+  for (const [place, url] of urls.entries()) await open_in(ctx, url, place === 0 ? where : "background");
+}
+
 // An exact address wins, since a completion pick puts the address in the line. Other text is a fuzzy match on title and address, and an equal tie is refused.
 // `noun` names the list in the refusals ("bookmark", "history entry").
 export function pick_entry<Entry extends { title: string; url: string }>(entries: readonly Entry[], text: string, noun: string): Entry {

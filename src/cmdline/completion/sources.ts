@@ -11,7 +11,7 @@ import { always_default, bare_word_param, default_of, flag_params, is_dynamic_va
 import { rank } from "../../shared/score.ts";
 import { completion_of, is_setting_name, SETTING_COMPLETION, type SettingCompletion } from "../../shared/setting_completion.ts";
 import type { Ranked } from "../../shared/score.ts";
-import type { BookmarkItem, EngineItem, HeadingItem, HistoryItems, OpenItems, OpenRow, SessionItem, TabContainer, TabItem, WindowItem } from "../../shared/messages.ts";
+import type { BookmarkItem, EngineItem, FolderItem, HeadingItem, HistoryItems, OpenItems, OpenRow, SessionItem, TabContainer, TabItem, WindowItem } from "../../shared/messages.ts";
 import type { LiveKind, LiveSource } from "./live.ts";
 import { cursor_context } from "./tokenize.ts";
 import type { CursorContext } from "./tokenize.ts";
@@ -277,6 +277,10 @@ function heading_rows(headings: readonly HeadingItem[], usage: string): Row[] {
   }));
 }
 
+function folder_rows(folders: readonly FolderItem[], usage: string): Row[] {
+  return folders.map((folder) => ({ name: folder.name, insert: `${quote_word(folder.name)} `, description: folder.description, args: "", also_named: [], keywords: [], usage }));
+}
+
 function bookmark_rows(bookmarks: readonly BookmarkItem[], usage: string): Row[] {
   return bookmarks.map((bookmark) => ({ name: bookmark.title, insert: `${quote_word(bookmark.url)} `, description: bookmark.url, args: "", also_named: [], keywords: [], usage }));
 }
@@ -303,7 +307,7 @@ function engine_rows(engines: readonly EngineItem[], usage: string, marks_unavai
 const live_kind_of = (param: ParamDef | undefined): LiveKind | undefined => {
   if (!param || !is_dynamic_values(param.values)) return undefined;
   const from = param.values.from;
-  return from === "tabs" || from === "bookmarks" || from === "history" || from === "open" || from === "windows" || from === "headings" || from === "sessions" || from === "registers" ? from : from === "search_engines" ? "engines" : undefined;
+  return from === "tabs" || from === "bookmarks" || from === "history" || from === "open" || from === "windows" || from === "headings" || from === "sessions" || from === "registers" || from === "folders" ? from : from === "search_engines" ? "engines" : undefined;
 };
 
 // The engine takes the first word of `search`, ahead of the query that follows it.
@@ -357,7 +361,9 @@ export function create_completer(
                 ? heading_rows(read.items as HeadingItem[], usage)
                 : kind === "sessions" || kind === "registers"
                   ? session_rows(read.items as SessionItem[], usage)
-                  : bookmark_rows(read.items as BookmarkItem[], usage);
+                  : kind === "folders"
+                    ? folder_rows(read.items as FolderItem[], usage)
+                    : bookmark_rows(read.items as BookmarkItem[], usage);
       const ranked = rank(context.word, rows);
       return { ...span, usage, rows: kind === "bookmarks" && context.word.trim() === "" ? ranked.slice(0, RECENT_BOOKMARKS) : ranked, listing: true };
     }
