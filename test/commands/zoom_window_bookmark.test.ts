@@ -155,7 +155,10 @@ function remove_fixture(nodes: FakeNode[], tab_url: string | null = "https://a.t
     update: async (id, changes) => void log.push(`update ${id} ${JSON.stringify(changes)}`),
     move: async (id, parent_id) => void log.push(`move ${id} ${parent_id}`),
     folders: async () => FOLDERS,
-    open_many: async (_ctx, urls, where) => void log.push(`open ${where} ${urls.join(" ")}`),
+    open_many: async (_ctx, urls, where, report) => {
+      await report(0);
+      log.push(`open ${where} ${urls.join(" ")}`);
+    },
     toast: async (_ctx, kind, message) => void log.push(`${kind} ${message}`),
   });
   return { handlers, log, asked };
@@ -416,7 +419,7 @@ test("bookmark.move with a picked bookmark moves the ones at its address, and re
 test("bookmark.open_folder opens the folder's own bookmarks, skipping smart queries and script addresses", async () => {
   const fixture = remove_fixture([]);
   await fixture.handlers.open_folder(ctx, { folder: "Bookmarks Toolbar / Work", where: "window" });
-  assert.deepEqual(fixture.log, ["warning Opening 2 of 4 bookmarks: 2 cannot be opened", "open window https://w1.test/ https://w2.test/"]);
+  assert.deepEqual(fixture.log, ["warning Opened 2 of 4 bookmarks: 2 cannot be opened", "open window https://w1.test/ https://w2.test/"]);
 });
 
 test("bookmark.open_folder refuses an empty folder and an unknown one", async () => {
@@ -436,18 +439,21 @@ test("bookmark.open_folder opens the first 25 and the toast says the cap cut the
     create: async () => {},
     bookmarks: async () => [],
     open: async () => {},
-    open_many: async (_ctx, urls, where) => void log.push(`open ${where} ${urls.length} ${urls[24]} ${urls[25]}`),
+    open_many: async (_ctx, urls, where, report) => {
+      await report(0);
+      log.push(`open ${where} ${urls.length} ${urls[24]} ${urls[25]}`);
+    },
     toast: async (_ctx, kind, message) => void log.push(`${kind} ${message}`),
   });
   await handlers.open_folder(ctx, { folder: "Big", where: "tab" });
   // The toast comes before the open, since the open moves the focus off the asking tab.
-  assert.deepEqual(log, ["warning Opening 25 of 30 bookmarks: the cap is 25", "open tab 25 https://p24.test/ undefined"]);
+  assert.deepEqual(log, ["warning Opened 25 of 30 bookmarks: the cap is 25", "open tab 25 https://p24.test/ undefined"]);
 });
 
 test("bookmark.open_folder skips browser pages that would stop the rest, and the toast counts them", async () => {
   const fixture = remove_fixture([]);
   await fixture.handlers.open_folder(ctx, { folder: "Managed", where: "tab" });
-  assert.deepEqual(fixture.log, ["warning Opening 2 of 3 bookmarks: 1 cannot be opened", "open tab https://m.test/ about:blank"]);
+  assert.deepEqual(fixture.log, ["warning Opened 2 of 3 bookmarks: 1 cannot be opened", "open tab https://m.test/ about:blank"]);
 });
 
 test("a managed folder is refused as a target for add and move, and still opens", async () => {
@@ -456,19 +462,80 @@ test("a managed folder is refused as a target for add and move, and still opens"
   await assert.rejects(remove_fixture([]).handlers.add(ctx, { url: "https://n.test/", folder: "Managed" }), /Managed is managed and cannot be changed/);
 });
 
-test("open_many opens the first address active and the rest in the background, in order, each from the asking tab", async () => {
-  const calls: unknown[] = [];
-  (globalThis as unknown as { browser: unknown }).browser = { tabs: { create: async (props: unknown) => void calls.push(props) }, windows: { create: async (props: unknown) => void calls.push(props) } };
+const ASKER: CommandContext = { tab_id: 5, window_id: 2, frame_id: 0, mode: "normal" };
+
+// A fake browser that numbers the tabs it makes and refuses the addresses in `refused`.
+function fake_browser(refused: string[], calls: string[]) {
+  let next_id = 10;
+  const refuse = (url: string) => {
+    if (refused.includes(url)) throw new Error("Illegal URL");
+  };
+  (globalThis as unknown as { browser: unknown }).browser = {
+    tabs: {
+      create: async (props: { url: string; active: boolean; openerTabId?: number; windowId?: number }) => {
+        refuse(props.url);
+        calls.push(`tab ${props.url} active=${props.active} opener=${props.openerTabId ?? "-"} window=${props.windowId}`);
+        return { id: next_id++ };
+      },
+      update: async (id: number, props: object) => void calls.push(`update ${id} ${JSON.stringify(props)}`),
+    },
+    windows: {
+      create: async (props: { url: string }) => {
+        refuse(props.url);
+        calls.push(`window ${props.url}`);
+        return { id: 99 };
+      },
+    },
+  };
+}
+
+test("open_many opens every tab in the background in order, then activates the first, so the strip keeps folder order", async () => {
+  const calls: string[] = [];
+  fake_browser([], calls);
   try {
-    await open_many({ tab_id: 5, window_id: 2, frame_id: 0, mode: "normal" }, ["https://a.test/", "https://b.test/", "https://c.test/"], "tab");
-    await open_many({ tab_id: 5, window_id: 2, frame_id: 0, mode: "normal" }, ["https://a.test/", "https://b.test/"], "window");
+    await open_many(ASKER, ["https://a.test/", "https://b.test/", "https://c.test/"], "tab", async (failed) => void calls.push(`report ${failed}`));
   } finally {
     delete (globalThis as unknown as { browser?: unknown }).browser;
   }
-  assert.deepEqual(calls, [
-    { url: "https://a.test/", active: true, openerTabId: 5, windowId: 2 },
-    { url: "https://b.test/", active: false, openerTabId: 5, windowId: 2 },
-    { url: "https://c.test/", active: false, openerTabId: 5, windowId: 2 },
-    { url: ["https://a.test/", "https://b.test/"] },
-  ]);
+  assert.deepEqual(calls, ["tab https://a.test/ active=false opener=5 window=2", "tab https://b.test/ active=false opener=5 window=2", "tab https://c.test/ active=false opener=5 window=2", "report 0", 'update 10 {"active":true}']);
+});
+
+test("open_many in the background never activates a tab, and a window holds the tabs that open", async () => {
+  const calls: string[] = [];
+  fake_browser([], calls);
+  try {
+    await open_many(ASKER, ["https://a.test/", "https://b.test/"], "background", async () => {});
+    await open_many(ASKER, ["https://a.test/", "https://b.test/"], "window", async () => {});
+  } finally {
+    delete (globalThis as unknown as { browser?: unknown }).browser;
+  }
+  assert.deepEqual(calls, ["tab https://a.test/ active=false opener=5 window=2", "tab https://b.test/ active=false opener=5 window=2", "window https://a.test/", "tab https://b.test/ active=false opener=- window=99"]);
+});
+
+test("open_many skips an address the browser refuses, counts it, and still opens the window and the later tabs", async () => {
+  const tabs: string[] = [];
+  fake_browser(["file:///x.html"], tabs);
+  const reports: number[] = [];
+  try {
+    await open_many(ASKER, ["file:///x.html", "https://b.test/", "https://c.test/"], "tab", async (failed) => void reports.push(failed));
+    await open_many(ASKER, ["file:///x.html", "https://b.test/", "file:///x.html", "https://c.test/"], "window", async (failed) => void reports.push(failed));
+  } finally {
+    delete (globalThis as unknown as { browser?: unknown }).browser;
+  }
+  assert.deepEqual(reports, [1, 2]);
+  assert.deepEqual(tabs.filter((call) => call.startsWith("window")), ["window https://b.test/"]);
+  assert.ok(tabs.includes('update 10 {"active":true}'));
+});
+
+test("bookmark.open_folder refuses when the browser refuses every address", async () => {
+  const handlers = make_bookmark_handlers({
+    ...UNUSED_REMOVE,
+    folders: async () => [{ id: "z", path: "Z", managed: false, bookmarks: [{ url: "https://z.test/" }] }],
+    tab_title_for_url: async () => undefined,
+    create: async () => {},
+    bookmarks: async () => [],
+    open: async () => {},
+    open_many: async (_ctx, urls, _where, report) => report(urls.length),
+  });
+  await assert.rejects(handlers.open_folder(ctx, { folder: "Z", where: "tab" }), /None of the bookmarks in Z could be opened/);
 });

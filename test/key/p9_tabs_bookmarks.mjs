@@ -164,6 +164,10 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, sleep,
       await wait_event(mark, (event) => event.type === "tree_read" && event.page_id === "p9f_first", "the first bookmark in a tab");
       await wait_event(mark, (event) => event.type === "tree_read" && event.page_id === "p9f_second", "the second bookmark in a tab");
       await wait_active_tab("p9f_first", "the first bookmark of the folder");
+      // The strip must read in folder order right after the tab that pressed the key.
+      const strip = await background(`browser.tabs.query({ currentWindow: true }).then((tabs) => tabs.sort((a, b) => a.index - b.index).map((tab) => tab.url))`);
+      const place = (page_id) => strip.findIndex((url) => url.includes(page_id));
+      expect(place("p9f_second") === place("p9f_first") + 1, `the folder tabs are out of order in the strip: ${JSON.stringify(strip)}`);
     } finally {
       await remove_tree(folder_id);
       await close_tabs_with("id=p9f_first");

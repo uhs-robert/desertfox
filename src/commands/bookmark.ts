@@ -23,7 +23,7 @@ export type BookmarkDeps = {
   update: (id: string, changes: { title?: string; url?: string }) => Promise<void>;
   move: (id: string, parent_id: string) => Promise<void>;
   folders: () => Promise<FolderNode[]>;
-  open_many: (ctx: CommandContext, urls: readonly string[], where: Exclude<Where, "here">) => Promise<void>;
+  open_many: (ctx: CommandContext, urls: readonly string[], where: Exclude<Where, "here">, report: (failed: number) => Promise<void>) => Promise<void>;
   toast: (ctx: CommandContext, kind: ToastKind, message: string) => Promise<void>;
 };
 
@@ -33,7 +33,7 @@ export const pick_bookmark = (bookmarks: readonly BookmarkItem[], text: string):
 export const OPEN_FOLDER_CAP = 25;
 
 // Addresses that cannot open as a page from an extension: a smart-bookmark query, script, and the browser's own pages. Opening one would stop the rest of the folder.
-const UNOPENABLE_URL = /^(place|javascript|chrome|resource):|^about:(?!(blank|home|newtab)([?#]|$))/i;
+const UNOPENABLE_URL = /^(place|javascript|chrome|resource|file|data|view-source):|^about:(?!(blank|home|newtab)([?#]|$))/i;
 
 // An exact path wins. Other text is a fuzzy match on the path. A path two folders share is refused, because the text cannot say which one is meant.
 export function pick_folder(folders: readonly FolderNode[], text: string): FolderNode {
@@ -88,10 +88,14 @@ export function make_bookmark_handlers(deps: BookmarkDeps) {
       const openable = folder.bookmarks.flatMap((node) => (node.url && !UNOPENABLE_URL.test(node.url) ? [node.url] : []));
       if (openable.length === 0) throw new RuntimeRefusal(`No bookmarks to open in ${folder.path}`);
       const urls = openable.slice(0, OPEN_FOLDER_CAP);
-      // The toast comes first: once a tab or window opens, the focus leaves the tab that pressed the key.
-      const notes = [total > openable.length ? `${total - openable.length} cannot be opened` : "", openable.length > urls.length ? `the cap is ${OPEN_FOLDER_CAP}` : ""].filter(Boolean);
-      if (notes.length > 0) await deps.toast(ctx, "warning", `Opening ${urls.length} of ${total} bookmarks: ${notes.join(", ")}`);
-      await deps.open_many(ctx, urls, args.where);
+      // The browser may still refuse an address the filter let through. open_many counts those and calls back before it moves the focus, so one toast carries every count.
+      const report = async (failed: number) => {
+        if (failed === urls.length) throw new RuntimeRefusal(`None of the bookmarks in ${folder.path} could be opened`);
+        const skipped = total - openable.length + failed;
+        const notes = [skipped > 0 ? `${skipped} cannot be opened` : "", openable.length > urls.length ? `the cap is ${OPEN_FOLDER_CAP}` : ""].filter(Boolean);
+        if (notes.length > 0) await deps.toast(ctx, "warning", `Opened ${urls.length - failed} of ${total} bookmarks: ${notes.join(", ")}`);
+      };
+      await deps.open_many(ctx, urls, args.where, report);
     },
     open: async (ctx: CommandContext, args: { bookmark: string; where: Where }) => {
       const picked = pick_bookmark(await deps.bookmarks(), args.bookmark);

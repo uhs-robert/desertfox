@@ -249,7 +249,7 @@ function window_rows(windows: readonly WindowItem[], usage: string): Row[] {
 }
 
 // The name is the whole subject, so the handler matches it as typed. Newest first is the order the background sends, and an empty word keeps it.
-function session_rows(sessions: readonly SessionItem[], usage: string): Row[] {
+function name_rows(sessions: readonly SessionItem[], usage: string): Row[] {
   return sessions.map((session) => ({
     name: session.name,
     insert: `${quote_word(session.name)} `,
@@ -356,7 +356,7 @@ export function create_completer(
               : kind === "headings"
                 ? heading_rows(read.items as HeadingItem[], usage)
                 : kind === "sessions" || kind === "registers" || kind === "folders"
-                  ? session_rows(read.items as SessionItem[], usage)
+                  ? name_rows(read.items as SessionItem[], usage)
                   : bookmark_rows(read.items as BookmarkItem[], usage);
       const ranked = rank(context.word, rows);
       return { ...span, usage, rows: kind === "bookmarks" && context.word.trim() === "" ? ranked.slice(0, RECENT_BOOKMARKS) : ranked, listing: true };
