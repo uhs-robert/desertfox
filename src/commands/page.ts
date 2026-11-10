@@ -68,3 +68,16 @@ define("page.focus_field", {
   count: { param: "steps" },
   bundle: "hints",
 });
+
+// Both keys start from the last heading they jumped to while it is on screen, else from the top of the view. They stop at the ends and do not wrap.
+define("page.heading", {
+  label: "Go to heading",
+  intent: "Scroll the next or previous heading to the top of the view. It counts h1 to h6 and role=heading, in page order, from the last heading it jumped to while that is on screen, else from the top of the view. A count prefix moves that many headings. It stops with a notice past the last or before the first heading.",
+  params: [
+    { name: "direction", type: "enum", values: ["next", "prev"], value_labels: { next: "to next heading", prev: "to previous heading" }, description: { next: "Scroll the next heading to the top.", prev: "Scroll the previous heading to the top." } },
+    { name: "steps", type: "int", default: 1, min: 1, description: "Move this many headings." },
+  ],
+  runs_in: "content",
+  count: { param: "steps" },
+  bundle: "hints",
+});
