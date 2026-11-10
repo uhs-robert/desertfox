@@ -13,6 +13,8 @@ export async function run_cases({ run_case, open_page, press_keys, poll_until, e
     expect(near(last_scroll_y(page_id)), `${what}: at ${last_scroll_y(page_id)}, wanted ${y}`);
   };
 
+  const stored_y = (page_id, key) => in_background(`browser.storage.local.get("desertfox_marks").then((stored) => Object.entries(stored.desertfox_marks?.pages ?? {}).filter(([url]) => url.includes("id=${page_id}")).map(([, page]) => page.marks["${key}"]?.[1])[0])`);
+
   const set_mark = (key) => press_keys("m", key);
 
   // G scrolls smoothly, so the first report can come mid-way. The bottom is where the last report equals the page's maximum.
@@ -72,6 +74,8 @@ export async function run_cases({ run_case, open_page, press_keys, poll_until, e
     await open_page("scrollbox", "p9m_box", { new_tab: true });
     const bottom = await go_to_bottom("p9m_box");
     await set_mark("b");
+    // The box goes only after the mark has read it.
+    await poll_until("the mark to be stored", async () => (await stored_y("p9m_box", "b")) != null);
     await in_active_tab(`document.getElementById("panel").remove(); scrollTo(0, 0)`);
     await poll_until("the page to reach the top", async () => last_scroll_y("p9m_box") === 0);
     await to_y("p9m_box", ["'", "b"], bottom, "'b to scroll the page");
@@ -89,14 +93,12 @@ export async function run_cases({ run_case, open_page, press_keys, poll_until, e
     expect(after < 1, `the page moved on after the jump, to ${after}`);
   });
 
-  const stored_y = (page_id, key) => in_background(`browser.storage.local.get("desertfox_marks").then((stored) => Object.entries(stored.desertfox_marks?.pages ?? {}).filter(([url]) => url.includes("id=${page_id}")).map(([, page]) => page.marks["${key}"]?.[1])[0])`);
-
   await run_case("m a g g typed back to back stores the position from before gg", async () => {
     await open_page("aligned", "p9m_fast", { new_tab: true });
     const bottom = await go_to_bottom("p9m_fast");
     await press_keys("m", "a", "g", "g");
     await poll_until("the page to reach the top", async () => (await in_active_tab(`scrollY`)) < 1);
-    await poll_until("the mark to be stored", async () => (await stored_y("p9m_fast", "a")) !== undefined);
+    await poll_until("the mark to be stored", async () => (await stored_y("p9m_fast", "a")) != null);
     const stored = await stored_y("p9m_fast", "a");
     expect(Math.abs(stored - bottom) <= 1, `the mark stored ${stored}, the page was at ${bottom}`);
   });
