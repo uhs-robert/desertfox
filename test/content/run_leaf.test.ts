@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { run_leaf } from "../../src/content/run_leaf.ts";
+import { holds_keys_after, run_leaf } from "../../src/content/run_leaf.ts";
 import type { Outcome, TreeLeaf } from "../../src/shared/index.ts";
 
 const step = (id: string, runs_in: "content" | "background") => ({ invocation: { id }, runs_in, count_rule: "ignore" as const });
@@ -38,4 +38,14 @@ test("a leaf with a background step goes to the router whole and records nothing
   const { sent, run_leaf } = setup();
   await run_leaf(leaf_of(step("scroll.lines", "content"), step("tab.next", "background")), 2, false);
   assert.deepEqual(sent, [{ type: "run", invocations: [{ id: "scroll.lines", count: 2 }, { id: "tab.next", count: 2 }], mode: "normal" }]);
+});
+
+test("only a leaf made of captured-key steps holds the keys after it, and never in a field", () => {
+  const captured = { ...step("mark.add", "background"), capture: "key" };
+  const hint = step("hint.open", "content");
+  assert.equal(holds_keys_after(leaf_of(captured), false), true);
+  assert.equal(holds_keys_after(leaf_of(captured, { ...captured }), false), true);
+  assert.equal(holds_keys_after(leaf_of(captured, hint), false), false);
+  assert.equal(holds_keys_after(leaf_of(hint), false), false);
+  assert.equal(holds_keys_after(leaf_of(captured), true), false);
 });

@@ -240,6 +240,45 @@ test("a hand-back that fails still releases the keys the page held", async () =>
   assert.deepEqual(page.events, ["run log_x"]);
 });
 
+test("a hold that drops on hide ends with its reply, with a failure, or when the page goes away, and only once", async () => {
+  const succeeded = make_page();
+  let reply!: (tokens: readonly string[]) => void;
+  succeeded.host.api.hold_keys_until_(new Promise((resolve) => (reply = resolve)), true);
+  succeeded.press("x");
+  assert.deepEqual(succeeded.events, []);
+  reply([]);
+  await succeeded.settle();
+  assert.deepEqual(succeeded.events, ["run log_x"]);
+  assert.equal(succeeded.host.is_loading_(), false);
+
+  const refused = make_page();
+  refused.host.api.hold_keys_until_(Promise.reject(new Error("refused")), true);
+  refused.press("x");
+  await refused.settle();
+  assert.deepEqual(refused.events, ["run log_x"]);
+
+  const hidden = make_page();
+  let late!: (tokens: readonly string[]) => void;
+  hidden.host.api.hold_keys_until_(new Promise((resolve) => (late = resolve)), true);
+  hidden.press("x");
+  hidden.host.page_hidden_();
+  await hidden.settle();
+  assert.deepEqual(hidden.events, ["run log_x"]);
+  assert.equal(hidden.host.is_loading_(), false);
+  // The lost reply arrives after the page returns: it neither replays keys nor releases a second time.
+  late(["j"]);
+  await hidden.settle();
+  assert.deepEqual(hidden.events, ["run log_x"]);
+  assert.equal(hidden.host.is_loading_(), false);
+});
+
+test("a hold without drop on hide survives the page going away, as the command line hand-back does", async () => {
+  const page = make_page();
+  page.host.api.hold_keys_until_(new Promise(() => {}));
+  page.host.page_hidden_();
+  assert.equal(page.host.is_loading_(), true);
+});
+
 test("chords and keys typed in a field pass through while a bundle loads", async () => {
   const page = make_page();
   page.press("f");

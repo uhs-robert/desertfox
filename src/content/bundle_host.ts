@@ -36,7 +36,8 @@ export type BundleHostApi = {
   // The box the vertical scroll keys move now. Ends a smooth scroll in flight first, because the flight state lives in content.js and a copy in a bundle could not cancel it.
   scroll_box_: () => Element;
   // Holds the keys that can bind until `handed_back` settles, then replays its keys ahead of them. The command line hands back this way the keys its frame got after the line ended.
-  hold_keys_until_: (handed_back: Promise<readonly string[]>) => void;
+  // `drop_on_hide` ends the hold, with no keys handed back, when the page goes away, so a reply lost to the page cache cannot leave the keys held.
+  hold_keys_until_: (handed_back: Promise<readonly string[]>, drop_on_hide?: boolean) => void;
 };
 
 export type BundleHostDeps = {
@@ -74,6 +75,8 @@ export function create_bundle_host() {
   let waiting = 0;
   const waiting_on_sink_bundle = new Map<BundleName, number>();
   let current_mode: Mode = "normal";
+  // The holds that `page_hidden_` ends: a lost reply must not leave the keys held after the page returns from the page cache.
+  const ending_on_hide = new Set<(tokens: readonly string[]) => void>();
 
   // A second call joins the first load. A failed load is forgotten, so the next call tries again.
   // Keys stay held until `after` has run, because `after` may change the mode they replay in.
@@ -103,7 +106,7 @@ export function create_bundle_host() {
   }
 
   // Runs a command whose code sits in a bundle, loading the bundle first if needed. `missing` is the failure for a bundle that registers nothing.
-  // Keys are held for the load only, never while the handler's promise is pending.
+  // This call holds keys for the load only, never while the handler's promise is pending. A captured-key leaf holds them itself, through `hold_keys_until_`.
   // `args` reaches the handler as given. Nothing validates it, so it holds whatever the caller and the handler agree on, functions included. Take it only from bundle code, never from keymap or command-line input, which the registry validates first.
   // `hold` false is for drawing, which nobody awaits, so a failure there goes to `show_error_`.
   function run_command_(command_id: string, name: BundleName, args: Record<string, unknown>, missing: string, hold = true): Promise<Outcome> {
@@ -156,6 +159,7 @@ export function create_bundle_host() {
     },
     // The tab or page went away. A mode with a sink ends and the page returns to normal mode.
     page_hidden_: (): void => {
+      for (const release of [...ending_on_hide]) release([]);
       const sink = sinks.get(current_mode);
       if (!sink) return;
       current_mode = "normal";
@@ -172,13 +176,17 @@ export function create_bundle_host() {
       show_toast_: (message) => (deps.show_toast_ ?? deps.show_error_)(message),
       last_blurred_: last_blurred_element,
       scroll_box_: () => (end_flight(), scroll_target("y")),
-      hold_keys_until_: (handed_back) => {
+      hold_keys_until_: (handed_back, drop_on_hide) => {
         waiting++;
-        void handed_back.catch(() => []).then((tokens) => {
+        const release = (tokens: readonly string[]) => {
+          // A hold ends once, by its reply or by the page going away, whichever comes first.
+          if (!ending_on_hide.delete(release) && drop_on_hide) return;
           deps.hold_first_(tokens);
           waiting--;
           deps.on_idle_();
-        });
+        };
+        if (drop_on_hide) ending_on_hide.add(release);
+        void handed_back.catch(() => []).then(release);
       },
     } satisfies BundleHostApi,
   };

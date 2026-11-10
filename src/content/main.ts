@@ -19,7 +19,7 @@ import { show_mode_label, show_toast } from "./ui_proxy.ts";
 import { wire_mode_reports } from "./mode_report.ts";
 import { page_mode } from "./page_mode.ts";
 import { run_content_steps, run_in_order } from "./run_content.ts";
-import { run_leaf } from "./run_leaf.ts";
+import { holds_keys_after, run_leaf } from "./run_leaf.ts";
 import { read_context_source } from "./context.ts";
 import { focus_page_content, start_content_once } from "./handlers/focus.ts";
 import { read_field_text } from "./text/field_text.ts";
@@ -70,8 +70,7 @@ const key_flow = create_key_flow({
     // A register paste joins the open insert session, so it must not end it.
     if (leaf.steps[0]?.invocation.id !== "register.paste") flush_typed_text();
     const ran = run_leaf(leaf, count, repeat, send_to_background, page_mode.get_mode_, run_content_steps, show_toast);
-    // A captured key goes through the router, so the keys after it wait until it has run. In a field the keys go to the page unprocessed, so a hold would skip the Escape that leaves insert mode.
-    if (leaf.steps.some((step) => step.capture) && !is_editable_element(document.activeElement)) bundles.api.hold_keys_until_(ran.then(() => []));
+    if (holds_keys_after(leaf, is_editable_element(document.activeElement))) bundles.api.hold_keys_until_(ran.then(() => []), true);
   },
   leave_insert_: () => {
     page_mode.escape();
