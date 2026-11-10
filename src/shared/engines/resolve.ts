@@ -17,7 +17,7 @@ const RESERVED_CHILD_NAMES = new Set(["url", "label", "params", "fallback", "hos
 const RESERVED_NAMES = new Set([...RESERVED_CHILD_NAMES, ...SLOT_NAMES]);
 const PARAM_KEYS = new Set(["default", "values", "children"]);
 const HOST_NAME = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$/;
-const KEYWORD = /^[a-z0-9]{1,8}$/;
+export const ENGINE_KEYWORD = /^[a-z0-9]{1,8}$/;
 const QUERY_PAIR_WITH_ONE_NAME = /^[^=]*=\{([a-z_][a-z0-9_]*)\}$/;
 
 const is_table = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
@@ -137,7 +137,7 @@ export function resolve_engines(nodes: EngineNode[]): Resolved {
       } else if (key === "fallback") {
         level.fallback = { value, origin };
       } else if (key === "keyword") {
-        if (KEYWORD.test(value)) level.keyword = { value, origin };
+        if (ENGINE_KEYWORD.test(value)) level.keyword = { value, origin };
         else problems.push(`${where}: keyword must be one to eight lower case letters or digits, such as "g"`);
       } else if (key === "label") {
         if (value === "") problems.push(`${where}: label cannot be empty`);
