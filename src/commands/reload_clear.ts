@@ -89,11 +89,7 @@ export function make_reload_clear(deps: ReloadClearDeps) {
           stayed = [];
         } else {
           await clear_site(target);
-          // A database the page holds open blocks its own delete, so ask the browser for the host's.
-          if (stayed.includes(INDEXED_DB)) {
-            await deps.remove_data({ hostnames: [target.host], cookie_store_id: target.store }, { indexedDB: true });
-            stayed = stayed.filter((name) => name !== INDEXED_DB);
-          }
+          // A database the page holds open blocks its own delete, so it stays in `stayed`. browsingData `indexedDB` with `hostnames` does not clear it either (measured, see docs/firefox-behavior.md).
         }
       } catch (error) {
         if (error instanceof RuntimeRefusal) throw error;
@@ -133,14 +129,17 @@ export const browser_reload_clear_deps: ReloadClearDeps = {
   remove_data: (options, types) =>
     browser.browsingData.remove({ ...(options.hostnames && { hostnames: options.hostnames }), ...(options.cookie_store_id && { cookieStoreId: options.cookie_store_id }) }, types),
   clear_page_storage: async (tab_id) => {
-    const timer = new Promise<undefined>((resolve) => setTimeout(resolve, SCRIPT_TIMEOUT_MS));
+    let timer: number | undefined;
+    const backstop = new Promise<undefined>((resolve) => (timer = setTimeout(resolve, SCRIPT_TIMEOUT_MS)));
     try {
       // A page the browser does not let us script (addons.mozilla.org, an error page) rejects.
-      const answer = await Promise.race([browser.tabs.executeScript(tab_id, { code: PAGE_STORAGE_CLEAR }), timer]);
+      const answer = await Promise.race([browser.tabs.executeScript(tab_id, { code: PAGE_STORAGE_CLEAR }), backstop]);
       const stayed = answer?.[0];
       return Array.isArray(stayed) ? (stayed as string[]) : PAGE_STEPS;
     } catch {
       return PAGE_STEPS;
+    } finally {
+      clearTimeout(timer);
     }
   },
   notify: (message) => notify({ id: "reload_clear", message }),

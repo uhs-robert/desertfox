@@ -49,6 +49,10 @@ test("prefills use the short flags", () => {
   assert.equal(print_command(registry.get("scroll.to")!, { percent: 50, axis: "x" }), "scroll.to -x 50");
 });
 
+test("only page.reload decides `.` by its args", () => {
+  assert.deepEqual(registry.list().filter((command) => typeof command.repeatable === "function").map((command) => command.id), ["page.reload"]);
+});
+
 test("only these commands opt out of `.`, so a new command repeats unless someone decides otherwise", () => {
   const opted_out = registry.list().filter((command) => command.repeatable === false).map((command) => command.id);
   assert.deepEqual(opted_out.sort(), [

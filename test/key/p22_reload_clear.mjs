@@ -39,6 +39,19 @@ export async function run_cases({ rdp, extension_id, run_case, setup, expect, op
 
   await setup("open page d_clear", () => open_page("page", "d_clear", { new_tab: true }));
 
+  await run_case("a database the page holds open blocks its delete, and browsingData hostnames does not clear it", async () => {
+    await set_site_data();
+    const databases = () => in_active_tab(`(async () => JSON.stringify((await indexedDB.databases()).map((db) => db.name)))()`);
+    const delete_result = await in_active_tab(`new Promise((done) => { const request = indexedDB.deleteDatabase("kt_db"); request.onblocked = () => done("blocked"); request.onsuccess = () => done("success"); setTimeout(() => done("timeout"), 2000); })`);
+    expect(delete_result === "blocked", `the delete was ${delete_result}, so the page cannot hold a database open`);
+    await background(`browser.browsingData.remove({ hostnames: ["127.0.0.1"], cookieStoreId: "firefox-default" }, { indexedDB: true })`);
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    expect((await databases()).includes("kt_db"), "browsingData indexedDB with hostnames cleared a held database, so the notice for it can go");
+    // Closing the connection lets the pending delete finish. This is also what a reload does.
+    await in_active_tab(`self.kt_connection.close(); true`);
+    await poll_until("the pending delete to finish", async () => !(await databases()).includes("kt_db"));
+  });
+
   for (const [name, keys, confirm] of [["rc", ["r", "c"], false], ["rC", ["r", "C"], true]]) {
     await run_case(`${name} clears cookies, storage and the cache, then reloads`, async () => {
       await set_site_data();

@@ -145,3 +145,8 @@ Result:
 - localStorage is not cleared by `hostnames`, with or without `cookieStoreId`: the call returns ok and the value survives, even after a reload.
 - A `cookieStoreId` with `cache` rejects the whole call.
 - Not measured: Firefox 140, a real public host name, `serviceWorkers` and `indexedDB` with `hostnames`.
+
+Follow-up on `indexedDB` (Firefox 160, same setup):
+- `browsingData.remove({ hostnames, cookieStoreId }, { indexedDB: true })` returns ok but clears nothing: a database with no open connection stayed too. So `hostnames` is ignored for IndexedDB as well, and it cannot stand in for the page's own delete.
+- `indexedDB.deleteDatabase` from a page that holds a connection to the database fires `blocked`. The delete stays pending and finishes once the connection closes, which a reload does.
+- So `rc` leaves a held database to that pending delete and names IndexedDB as stayed in its notice.

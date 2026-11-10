@@ -90,11 +90,11 @@ test("a page that cannot clear its storage still reloads and a notice names what
   assert.match(log.at(-1)!, /^notify .*storage, service workers stayed/);
 });
 
-test("a database the page holds open falls back to the host's IndexedDB through the browser", async () => {
+test("a database the page holds open stays in the notice, and browsingData is not asked for it", async () => {
   const { deps, log, data_calls } = make_fake({ stayed: ["IndexedDB"] });
   await make_reload_clear(deps).run(7, "site");
-  assert.deepEqual(data_calls.at(-1), { options: { hostnames: ["www.example.com"], cookie_store_id: "firefox-container-2" }, types: ["indexedDB"] });
-  assert.ok(!log.some((entry) => entry.startsWith("notify")));
+  assert.ok(data_calls.every((call) => !call.types.includes("indexedDB")));
+  assert.match(log.at(-1)!, /^notify .*IndexedDB stayed/);
 });
 
 test("the clear param takes site and all, and leaves a plain reload alone", () => {
