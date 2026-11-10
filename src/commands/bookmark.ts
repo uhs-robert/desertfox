@@ -1,11 +1,12 @@
 import { RuntimeRefusal } from "../shared/command.ts";
 import type { CommandContext, ParamDef } from "../shared/command.ts";
-import { bookmark_items, browser_complete_items_deps } from "../background/complete_items.ts";
-import type { FolderNode } from "../background/complete_items.ts";
+import { browser_complete_items_deps } from "../background/complete_items.ts";
+import type { BookmarkView, FolderNode } from "../background/complete_items.ts";
 import { show_toast_on_tab } from "../background/browser_deps.ts";
 import type { BookmarkItem, ToastKind } from "../shared/messages.ts";
+import { in_folder, pick_filter_folder, pick_folder, rows_in_folder } from "../shared/folder_pick.ts";
 import { define } from "../shared/registry/builtin.ts";
-import { open_in, open_many, pick_by, pick_entry, WHERE_PARAM, WHERE_SHORT } from "./open_target.ts";
+import { open_in, open_many, pick_entry, WHERE_PARAM, WHERE_SHORT } from "./open_target.ts";
 import type { Where } from "./open_target.ts";
 
 export type BookmarkDeps = {
@@ -14,10 +15,11 @@ export type BookmarkDeps = {
   // `parent_id` is a folder id. Without it Firefox files the bookmark in its default folder.
   create: (bookmark: { url: string; title: string; parent_id?: string }) => Promise<void>;
   // Newest first, the same list the completion shows.
-  bookmarks: () => Promise<BookmarkItem[]>;
+  // One read of the tree, so the rows and the folder ids a command filters by cannot disagree.
+  bookmarks: () => Promise<BookmarkView>;
   open: (ctx: CommandContext, url: string, where: Where) => Promise<void>;
   // The nodes Firefox finds for `url`. It ignores case and a trailing slash, so the handler checks the address again.
-  nodes_for_url: (url: string) => Promise<{ id: string; url?: string | undefined; type?: string | undefined; unmodifiable?: string | undefined }[]>;
+  nodes_for_url: (url: string) => Promise<{ id: string; parentId?: string | undefined; url?: string | undefined; type?: string | undefined; unmodifiable?: string | undefined }[]>;
   tab_url: (tab_id: number | undefined) => Promise<string | undefined>;
   remove: (id: string) => Promise<void>;
   update: (id: string, changes: { title?: string; url?: string }) => Promise<void>;
@@ -35,12 +37,7 @@ export const OPEN_FOLDER_CAP = 25;
 // Addresses that cannot open as a page from an extension: a smart-bookmark query, script, and the browser's own pages. Opening one would stop the rest of the folder.
 const UNOPENABLE_URL = /^(place|javascript|chrome|resource|file|data|view-source):|^about:(?!(blank|home|newtab)([?#]|$))/i;
 
-// An exact path wins. Other text is a fuzzy match on the path. A path two folders share is refused, because the text cannot say which one is meant.
-export function pick_folder(folders: readonly FolderNode[], text: string): FolderNode {
-  const typed = text.trim();
-  if (folders.filter((folder) => folder.path === typed).length > 1) throw new RuntimeRefusal(`Two folders match "${typed}", rename one of them`);
-  return pick_by(folders, typed, "folder", (folder) => ({ key: folder.path, name: folder.path, description: "" }), (folder) => `"${folder.path}"`, "the full path");
-}
+export { pick_folder };
 
 export function make_bookmark_handlers(deps: BookmarkDeps) {
   const bookmarks_at = async (url: string | undefined) => {
@@ -48,11 +45,22 @@ export function make_bookmark_handlers(deps: BookmarkDeps) {
     return nodes.filter((node) => node.url === url && (node.type === undefined || node.type === "bookmark"));
   };
 
+  // The rows a command picks from and, with a `folder` text, the folder it names. An unknown or tied folder is refused here. Rows keep to that folder and its subfolders.
+  async function scoped_view(folder_text: string) {
+    const view = await deps.bookmarks();
+    const folder = folder_text.trim() === "" ? undefined : pick_filter_folder(view.folders, folder_text);
+    return { view, folder, rows: folder ? rows_in_folder(view.rows, folder.path) : view.rows.rows };
+  }
+
   // The unmanaged bookmarks a command acts on. An empty `bookmark` means the current page. Completion lists one row per address, so a picked row stands for every bookmark with that address.
-  async function editable_bookmarks(ctx: CommandContext, bookmark: string, verb: string): Promise<{ id: string }[]> {
-    const url = bookmark.trim() === "" ? await deps.tab_url(ctx.tab_id) : pick_bookmark(await deps.bookmarks(), bookmark).url;
-    const found = await bookmarks_at(url);
-    if (found.length === 0) throw new RuntimeRefusal("No bookmark for this page");
+  // With a `folder`, only the copies filed in it or below it count, so a bookmark kept in two folders loses just the copy there.
+  async function editable_bookmarks(ctx: CommandContext, bookmark: string, verb: string, folder_text = ""): Promise<{ id: string }[]> {
+    const { view, folder, rows } = folder_text.trim() === "" && bookmark.trim() === "" ? { view: undefined, folder: undefined, rows: [] } : await scoped_view(folder_text);
+    const url = bookmark.trim() === "" ? await deps.tab_url(ctx.tab_id) : pick_bookmark(rows, bookmark).url;
+    const copies = await bookmarks_at(url);
+    const inside = folder && view ? new Set(view.folders.filter((candidate) => in_folder(candidate.path, folder.path)).map((candidate) => candidate.id)) : undefined;
+    const found = inside ? copies.filter((node) => node.parentId !== undefined && inside.has(node.parentId)) : copies;
+    if (found.length === 0) throw new RuntimeRefusal(folder ? `No bookmark for this page in ${folder.path}` : "No bookmark for this page");
     // A managed bookmark rejects a change, so it is left out before the first one runs.
     const matches = found.filter((node) => node.unmodifiable === undefined);
     if (matches.length === 0) throw new RuntimeRefusal(`This page's bookmarks are managed and cannot be ${verb}`);
@@ -97,12 +105,12 @@ export function make_bookmark_handlers(deps: BookmarkDeps) {
       };
       await deps.open_many(ctx, urls, args.where, report);
     },
-    open: async (ctx: CommandContext, args: { bookmark: string; where: Where }) => {
-      const picked = pick_bookmark(await deps.bookmarks(), args.bookmark);
+    open: async (ctx: CommandContext, args: { bookmark: string; folder: string; where: Where }) => {
+      const picked = pick_bookmark((await scoped_view(args.folder)).rows, args.bookmark);
       await deps.open(ctx, picked.url, args.where);
     },
-    remove: async (ctx: CommandContext, args: { bookmark: string }) => {
-      const matches = await editable_bookmarks(ctx, args.bookmark, "removed");
+    remove: async (ctx: CommandContext, args: { bookmark: string; folder: string }) => {
+      const matches = await editable_bookmarks(ctx, args.bookmark, "removed", args.folder);
       for (const { id } of matches) await deps.remove(id);
       await deps.toast(ctx, "success", `Removed ${count_of(matches.length)}`);
     },
@@ -129,7 +137,7 @@ export const browser_bookmark_deps: BookmarkDeps = {
     return tab.url === url ? tab.title : undefined;
   },
   create: async ({ url, title, parent_id }) => void (await browser.bookmarks.create({ url, title, ...(parent_id === undefined ? {} : { parentId: parent_id }) })),
-  bookmarks: async () => bookmark_items(await browser_complete_items_deps.all_bookmarks()),
+  bookmarks: browser_complete_items_deps.bookmark_view,
   open: (ctx, url, where) => open_in(ctx, url, where),
   nodes_for_url: (url) => browser.bookmarks.search({ url }),
   tab_url: async (tab_id) => (tab_id === undefined ? undefined : (await browser.tabs.get(tab_id)).url),
@@ -157,18 +165,25 @@ define("bookmark.add", {
 define("bookmark.open", {
   name: "bookmark",
   label: "Open bookmark",
-  intent: "Open a bookmark chosen by title or address.",
-  params: [{ name: "bookmark", type: "string", rest: true, main: true, values: { from: "bookmarks" } }, WHERE_PARAM],
+  intent: "Open a bookmark chosen by title or address. With a folder, choose among the bookmarks filed in it or in its subfolders. The folder matches as bookmark.add does.",
+  params: [
+    { name: "bookmark", type: "string", rest: true, main: true, values: { from: "bookmarks" } },
+    { name: "folder", type: "string", optional: true, values: { from: "folders" }, description: "Only bookmarks in this folder or its subfolders." },
+    WHERE_PARAM,
+  ],
   runs_in: "background",
-  run: (ctx, args) => handlers.open(ctx, args as { bookmark: string; where: Where }),
+  run: (ctx, args) => handlers.open(ctx, args as { bookmark: string; folder: string; where: Where }),
 });
 
 define("bookmark.remove", {
   label: "Remove bookmark",
-  intent: "Remove the current page's bookmarks. With an argument, remove the bookmark chosen by title or address.",
-  params: [{ name: "bookmark", type: "string", rest: true, main: true, optional: true, values: { from: "bookmarks" } }],
+  intent: "Remove the current page's bookmarks. With an argument, remove the bookmark chosen by title or address. With a folder, remove only the copies filed in it or in its subfolders.",
+  params: [
+    { name: "bookmark", type: "string", rest: true, main: true, optional: true, values: { from: "bookmarks" } },
+    { name: "folder", type: "string", optional: true, values: { from: "folders" }, description: "Only copies in this folder or its subfolders." },
+  ],
   runs_in: "background",
-  run: (ctx, args) => handlers.remove(ctx, args as { bookmark: string }),
+  run: (ctx, args) => handlers.remove(ctx, args as { bookmark: string; folder: string }),
 });
 
 define("bookmark.rename", {
