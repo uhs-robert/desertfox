@@ -96,6 +96,7 @@ export async function list_keys(
   addresses: readonly (string | undefined)[] = [],
   registers?: () => Promise<RegisterItem[]>,
   marks?: () => Promise<MarkItem[]>,
+  macros?: () => Promise<RegisterItem[]>,
 ): Promise<WhichKeyPanel> {
   const stored = await storage.get(COMPILED_KEYMAP_STORAGE_KEY);
   const keymap = stored[COMPILED_KEYMAP_STORAGE_KEY] as CompiledKeymap | undefined;
@@ -110,7 +111,18 @@ export async function list_keys(
   const root = rule === undefined || "all_off" in rule ? mode_root : prune_tree(mode_root, rule);
   const shown = root && availability ? without_unavailable(root, availability) : root;
   const panel = panel_after_prefix(shown, request.prefix, find_command, keymap?.which_key_border);
-  return marks ? with_page_marks(panel, shown, request.prefix, marks) : panel;
+  const with_marks = marks ? await with_page_marks(panel, shown, request.prefix, marks) : panel;
+  return macros ? with_stored_macros(with_marks, shown, request.prefix, macros) : with_marks;
+}
+
+// The capture row under `q` says a register key is expected. Once a macro is stored the rows name the macros, with their step counts.
+async function with_stored_macros(panel: WhichKeyPanel, root: TreeBranch | undefined, prefix: string[], macros: () => Promise<RegisterItem[]>): Promise<WhichKeyPanel> {
+  let node: TreeNode | undefined = root;
+  for (const token of prefix) node = node?.kind === "branch" ? node.children[token] : undefined;
+  const capture = node?.kind === "branch" && Object.keys(node.children).length === 1 ? node.children[ANY_KEY] : undefined;
+  if (capture?.kind !== "leaf" || !capture.steps.every((step) => step.invocation.id === "macro.record")) return panel;
+  const items = await macros().catch((): RegisterItem[] => []);
+  return items.length === 0 ? panel : { ...panel, rows: items.map(({ name, description }) => ({ keys: name, command: description, description: "", more: false })) };
 }
 
 // The capture row `<key>` under a mark key says a key is expected. Once the page has marks the rows name them instead, with the scroll offset. Global marks follow with their address.

@@ -27,11 +27,12 @@ import { blur_focused_element } from "./handlers/page.ts";
 
 // Until the tree is read the setting is unknown, and the default applies.
 let mode_indicator: ModeIndicator = DEFAULT_MODE_INDICATOR;
+let recording: string | undefined;
 
 function refresh_mode_indicator(): void {
   const mode = page_mode.get_mode_();
   const pass_next_armed = page_mode.is_pass_next_armed_();
-  show_mode_label(mode_label(mode, pass_next_armed, mode_indicator), pass_next_armed ? undefined : mode);
+  show_mode_label(mode_label(mode, pass_next_armed, mode_indicator, recording), pass_next_armed ? undefined : mode);
 }
 
 const script_started_ms = performance.now();
@@ -215,6 +216,7 @@ function install_matcher(reply: PageKeymap | undefined): void {
   // A tree stored before the setting existed has no value, which means the default.
   mode_indicator = keymap?.mode_indicator ?? DEFAULT_MODE_INDICATOR;
   which_key_delay_ms = keymap?.which_key_delay_ms;
+  recording = reply?.recording;
   // The mode comes first, so keys held during the load replay in the right mode.
   const first_install = !matcher_installed;
   matcher_installed = true;

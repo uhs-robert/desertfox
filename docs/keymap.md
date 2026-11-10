@@ -24,7 +24,7 @@ A note "(prompts)" means the binding sets a `prompt` for a param, so the command
 
 <!-- BEGIN generated -->
 
-bound: 312 (normal 176, hint 2, cmdline 18, caret 35, visual 37, visual_line 38, insert 2, ignore 1, browser 3) | later: 4 | dropped: 7
+bound: 313 (normal 177, hint 2, cmdline 18, caret 35, visual 37, visual_line 38, insert 2, ignore 1, browser 3) | later: 4 | dropped: 7
 
 ### normal
 
@@ -166,6 +166,7 @@ bound: 312 (normal 176, hint 2, cmdline 18, caret 35, visual 37, visual_line 38,
 | `,?` | bound | `help.whichkey` | Which key |  |
 | `,"` | bound | `registers` (prompts) | List registers |  |
 | `m` | bound | `mark.add` | Set mark |  |
+| `q` | bound | `macro.record` | Record macro |  |
 | `'` | bound | `mark.jump` | Jump to mark |  |
 | `` ` `` | bound | `mark.jump` | Jump to mark |  |
 | `o` | bound | `open` (prompts) | Open URL |  |
@@ -232,6 +233,7 @@ Which-key group names:
 - `b`: Bookmark
 - `z`: Zoom and scroll
 - `,`: DesertFox
+- `q`: Record macro
 - `;`: Hints
 - `;y`: Yank
 - `s`: Search here
