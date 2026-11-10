@@ -97,7 +97,7 @@ test("the keys of the new modes compile and resolve to their commands", () => {
   assert.equal(leaf_id("normal", "v"), 'mode.set {"mode":"caret"}');
   assert.equal(leaf_id("normal", "V"), 'mode.set {"mode":"visual"}');
   assert.equal(leaf_id("normal", ";", "v"), 'hint.run {"action":"caret","filter":"prose","text":"","rapid":false}');
-  assert.equal(leaf_id("normal", ";", "B"), 'hint.run {"filter":"buttons","action":"here","text":"","rapid":false}');
+  assert.equal(leaf_id("normal", ";", "b"), 'hint.run {"filter":"buttons","action":"here","text":"","rapid":false}');
   assert.equal(leaf_id("normal", ";", "V"), 'hint.run {"action":"visual","filter":"prose","text":"","rapid":false}');
   assert.equal(leaf_id("normal", ";", "#"), 'cmdline.open {"text":"heading "}');
   assert.equal(leaf_id("normal", ";", ";"), 'cmdline.open {"text":"hint "}');
@@ -236,8 +236,8 @@ test("hint modifier variants whose action needs another filter are not bound", (
     for (const key of keys) node = node?.children?.[key] as TreeBranch | undefined;
     return node !== undefined;
   };
-  const hidden = [";bB", ";bp", ";bi", ";wB", ";wp", ";wi", ";yB", ";yp", ";YI", ";Yf", ";Ym", ";Yi", ";Yl", ";Yp", ";Ya"];
-  const valid = [";bl", ";bI", ";bf", ";bm", ";wl", ";yl", ";yI", ";yi", ";yf", ";ym", ";yt", ";yc", ";yh", ";rB", ";hB", ";xi"];
+  const hidden = [";Bb", ";Bp", ";Bi", ";Wb", ";Wp", ";Wi", ";yB", ";yp", ";YI", ";Yf", ";Ym", ";Yi", ";Yl", ";Yp", ";Ya"];
+  const valid = [";Bl", ";BI", ";Bf", ";Bm", ";Wl", ";yl", ";yI", ";yi", ";yf", ";ym", ";yt", ";yc", ";yh", ";rb", ";hb", ";xi"];
   for (const keys of hidden) assert.equal(is_bound(keys), false, `${keys} is bound`);
   for (const keys of valid) assert.equal(is_bound(keys), true, `${keys} is missing`);
 });
