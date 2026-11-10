@@ -16,7 +16,7 @@ const clipboard_text = `(async () => {
 
 export async function run_cases({ run_case, open_page, poll_until, rdp, in_background, in_active_tab, press_keys, wait_event, events, expect, settle_focus }) {
   const send = (message) => in_active_tab(`browser.runtime.sendMessage(${JSON.stringify(message)})`);
-  const read_register = async (name) => (await send({ type: "register_read", name }))?.[0] ?? (await send({ type: "register_read", name }));
+  const read_register = (name) => send({ type: "register_read", name });
   await run_case("a register_write to + from a page reaches the system clipboard", async () => {
     await open_page("page", "p9r_one", { new_tab: true });
     await evaluate_in_chrome(rdp, `Services.clipboard.emptyClipboard(Services.clipboard.kGlobalClipboard)`);
@@ -30,7 +30,7 @@ export async function run_cases({ run_case, open_page, poll_until, rdp, in_backg
     await settle_focus();
     await press_keys('"ayy');
     await poll_until("register a to hold the address", async () => String(await read_register("a")).includes("id=p9r_yank"));
-    expect(String(await read_register('"')).includes("id=p9r_yank"), "the unnamed register did not get the yank");
+    await poll_until("the unnamed register to hold the address", async () => String(await read_register('"')).includes("id=p9r_yank"));
   });
 
   await run_case('"bp opens register b as a URL here', async () => {
@@ -50,5 +50,17 @@ export async function run_cases({ run_case, open_page, poll_until, rdp, in_backg
     const mark = events.length;
     await press_keys(...CTRL("r"), "c");
     await wait_event(mark, (event) => event.type === "input" && event.page_id === "p9r_paste" && event.value === "from register c", "the field to hold the register text");
+  });
+
+  await run_case('a pause after " shows the stored registers, and Escape closes the panel', async () => {
+    await open_page("page", "p9r_wk", { new_tab: true });
+    await settle_focus();
+    await send({ type: "register_write", name: "d", text: "listed" });
+    const mark = events.length;
+    await press_keys('"');
+    await wait_event(mark, (event) => event.type === "whichkey" && event.page_id === "p9r_wk" && event.value !== "", "the register panel");
+    const closed = events.length;
+    await press_keys("-k", "Escape");
+    await wait_event(closed, (event) => event.type === "whichkey" && event.page_id === "p9r_wk" && event.value === "", "the panel to close");
   });
 }
