@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { anything_ranked } from "../../src/cmdline/completion/anything.ts";
+import { create_model_client } from "../../src/cmdline/completion/model_client.ts";
 import { create_live_source } from "../../src/cmdline/completion/live.ts";
 import { create_completer } from "../../src/cmdline/completion/sources.ts";
 import { create_session } from "../../src/cmdline/session.ts";
@@ -190,4 +191,21 @@ test("speed: ranking 1000 history rows, 3000 bookmarks and 300 tabs per key", as
   const per_key = (performance.now() - started) / runs;
   console.log(`finder per-key rank time: ${per_key.toFixed(2)} ms`);
   assert.ok(per_key < 100, `${per_key} ms per key`);
+});
+
+test("empty query: only the line's own tab is left out, not the active tab of another window", async () => {
+  const base = { favicon_url: "", site: "", pinned: false, muted: false, audible: false, discarded: false, previous: false, container: "", container_name: "", container_color: "", container_icon: "" };
+  const row = (id: number, window_id: number, active: boolean) => ({ ...base, id, window_id, index: 0, title: `Tab ${id}`, url: `https://t${id}.test/`, active, window_number: window_id === 10 ? 1 : 2 });
+  const client = create_model_client({ line_window_id: 10, all_windows: false, request_resync: () => {}, on_change: () => {} });
+  client.receive({ type: "snapshot", rev: 0, tabs: [row(1, 10, true), row(2, 11, true), row(3, 11, false)] });
+  const live = create_live_source({
+    ask: async (kind): Promise<CompleteItemsAnswer | undefined> => ({ items: (kind === "engines" ? [] : { ...ITEMS, quickmarks: [], bookmarks: [], history: [], closed: [] }) as CompleteItemsAnswer["items"] }),
+    tabs: () => client.items(),
+    all_tabs: () => client.all_items(),
+    on_ready: () => {},
+  });
+  const complete = create_completer(lookup, COMMANDS, {}, { search_engines: [], containers: [] }, "normal", live);
+  complete("anything ", 9);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.deepEqual(complete("anything ", 9).rows.map((found) => found.tab?.id).sort(), [2, 3]);
 });
