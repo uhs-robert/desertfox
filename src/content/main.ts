@@ -109,7 +109,9 @@ function on_beforeinput(event: Event): void {
   const field = deepest_focused_element();
   if (!field) return;
   typed_in_a_field = true;
-  void bundles.run_command_("text.input", "text", { field_: field, before_: read_field_text(field) }, "", false);
+  void bundles.run_command_("text.input", "text", { field_: field, before_: read_field_text(field) }, "", false).then((outcome) => {
+    if (outcome.ok && outcome.cancelled) typed_in_a_field = false;
+  });
 }
 
 // A command typed from the field never blurs it, so the text step is stored before the command is sent, and `.` finds the command last.
