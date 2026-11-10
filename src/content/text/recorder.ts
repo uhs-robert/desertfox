@@ -1,7 +1,7 @@
 import type { Invocation } from "../../shared/invocation.ts";
 
 export type TextRecorderDeps = {
-  is_secret: (field: Element | null) => boolean;
+  is_secret: (field: Element | null, type?: string, autocomplete?: string) => boolean;
   take_entry: (field: Element | null) => Invocation | undefined;
   read_text: (field: Element) => string;
   // Gets the steps of one finished insert session: the entry, if a command focused the field, then `text.insert`.
@@ -40,10 +40,11 @@ export function create_text_recorder(deps: TextRecorderDeps) {
   }
 
   // `before` is the field's text before the edit that fired this call. It answers whether a session took the edit, so the caller does not wait on a session that never opened.
-  function on_input(field: Element, before: string): boolean {
+  // `type` and `autocomplete` are the field's at the edit, which count even when the field has changed since.
+  function on_input(field: Element, before: string, type?: string, autocomplete?: string): boolean {
     if (replaying) return false;
     if (session && session.field !== field) flush();
-    if (deps.is_secret(field)) return false;
+    if (deps.is_secret(field, type, autocomplete)) return false;
     session ??= { field, before, entry: deps.take_entry(field) };
     return true;
   }
