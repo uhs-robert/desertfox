@@ -128,7 +128,7 @@ export async function run_cases({ rdp, extension_id, take_shot, run_case, send_k
   });
 
   // Each control reports through its own side effect on the page, which only happens when the page gets the Space.
-  await run_case("Space reaches a focused button, checkbox, radio and summary,", async () => {
+  await run_case("Space reaches a focused button, checkbox, radio and summary", async () => {
     await open_page("page", "sp_controls", { new_tab: true });
     await in_active_tab(`(() => {
       document.body.insertAdjacentHTML("afterbegin", '<button id="sp_button">b</button><input type="checkbox" id="sp_box"><input type="radio" id="sp_radio"><select id="sp_select"><option>one</option></select><details id="sp_details"><summary id="sp_summary">s</summary>x</details>');
@@ -147,6 +147,16 @@ export async function run_cases({ rdp, extension_id, take_shot, run_case, send_k
     await poll_until("the radio to get Space", async () => await in_active_tab(`document.getElementById("sp_radio").checked`));
     await act("sp_summary", " ");
     await poll_until("the summary to get Space", async () => await in_active_tab(`document.getElementById("sp_details").open`));
+    // A control inside an open shadow root shows as its host in document.activeElement.
+    await in_active_tab(`(() => {
+      const host = document.createElement("div");
+      host.id = "sp_host";
+      host.attachShadow({ mode: "open" }).innerHTML = '<input type="checkbox" id="sp_inner_box">';
+      document.body.prepend(host);
+    })()`);
+    await in_active_tab(`document.getElementById("sp_host").shadowRoot.getElementById("sp_inner_box").focus()`);
+    await press_keys(" ");
+    await poll_until("the checkbox in the shadow root to get Space", async () => await in_active_tab(`document.getElementById("sp_host").shadowRoot.getElementById("sp_inner_box").checked`));
     // A select opens its list on Space, which takes focus from the page, so the test only checks that the leader did not start.
     const mark = events.length;
     await act("sp_select", " ");

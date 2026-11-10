@@ -254,6 +254,23 @@ test("Space starts the leader unless a control has focus, and only as the first 
   assert.equal(on_control.flow.handle_token_("j"), "cancel");
 });
 
+test("Space does not yield mid-sequence, after a count or outside normal mode", () => {
+  const mid = make_flow(false, true);
+  mid.flow.set_matcher_(create_matcher({ ...space_keymap, modes: { ...space_keymap.modes, normal: { kind: "branch", children: { g: { kind: "branch", children: { "<Space>": leaf("gap") } } } } } }));
+  assert.equal(mid.flow.handle_token_("g"), "cancel");
+  assert.equal(mid.flow.handle_token_("<Space>"), "cancel");
+  assert.deepEqual(mid.ran, ["gap"]);
+  const counted = make_flow(false, true);
+  counted.flow.set_matcher_(create_matcher(space_keymap));
+  assert.equal(counted.flow.handle_token_("3"), "cancel");
+  assert.equal(counted.flow.handle_token_("<Space>"), "cancel");
+  // Caret mode blocks Space, so a yield there would show as "pass".
+  const caret = make_flow(false, true);
+  caret.flow.set_matcher_(create_matcher(space_keymap));
+  caret.state.set_mode_("caret");
+  assert.equal(caret.flow.handle_token_("<Space>"), "cancel");
+});
+
 test("startup replay uses the mode set before the keymap", () => {
   const { state, ran, flow } = make_flow();
   assert.equal(flow.handle_token_("j"), "cancel");
