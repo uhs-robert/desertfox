@@ -254,6 +254,15 @@ test("Space starts the leader unless a control has focus, and only as the first 
   assert.equal(on_control.flow.handle_token_("j"), "cancel");
 });
 
+test("Space on a control reaches the page before the keymap loads, but queued keys still wait", () => {
+  const early = make_flow(false, true);
+  assert.equal(early.flow.handle_token_("<Space>"), "pass");
+  assert.equal(early.flow.handle_token_("j"), "cancel");
+  assert.equal(early.flow.handle_token_("<Space>"), "cancel");
+  const plain = make_flow();
+  assert.equal(plain.flow.handle_token_("<Space>"), "cancel");
+});
+
 test("Space does not yield mid-sequence, after a count or outside normal mode", () => {
   const mid = make_flow(false, true);
   mid.flow.set_matcher_(create_matcher({ ...space_keymap, modes: { ...space_keymap.modes, normal: { kind: "branch", children: { g: { kind: "branch", children: { "<Space>": leaf("gap") } } } } } }));

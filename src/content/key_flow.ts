@@ -102,10 +102,16 @@ export function create_key_flow(deps: KeyFlowDeps) {
     held_tokens.some((held) => held === "<Backspace>" || held === "<Escape>") ||
     active.binds_after_(mode, held_tokens, token);
 
+  // Space starts the leader subtree, so a focused control keeps it. Mid-sequence, Space is a key like any other.
+  const space_stays_with_control = (mode: Mode, token: string): boolean =>
+    token === "<Space>" && mode === "normal" && !sequence_in_progress && deps.on_space_control_();
+
   const hold = (token: string): KeyDecision => {
     // Chords and keys in a field never wait. A waiting key is cancelled, so the page does not act on it twice.
     if (is_chord(token) || deps.in_editable_field_()) return "pass";
     const mode = deps.get_mode();
+    // Held keys ahead mean a sequence may be pending, so only the first held key can yield.
+    if (held_tokens.length === 0 && space_stays_with_control(mode, token)) return "pass";
     // Before the keymap is read nothing is known to bind, so every plain key waits.
     if (!matcher || waits_for_replay(matcher, mode, token)) {
       held_tokens.push(token);
@@ -129,8 +135,7 @@ export function create_key_flow(deps: KeyFlowDeps) {
       deps.on_prefix_(kept.length > 0 ? { mode, typed: kept } : undefined, true);
       return "cancel";
     }
-    // Space starts the leader subtree, so a focused control keeps it. Mid-sequence, Space is a key like any other.
-    if (token === "<Space>" && mode === "normal" && !was_in_progress && deps.on_space_control_()) return "pass";
+    if (space_stays_with_control(mode, token)) return "pass";
     const result = active.feed(mode, token);
     sequence_in_progress = result.kind === "pending";
     if (result.kind === "pending") ({ typed, count } = result);
