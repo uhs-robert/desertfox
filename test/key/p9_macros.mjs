@@ -27,7 +27,7 @@ export async function run_cases({ run_case, open_page, poll_until, press_keys, w
     mark = events.length;
     await press_keys("q");
     await wait_event(mark, badge_is("p9mac_one", "NORMAL"), "the plain badge after q");
-    await poll_until("register a to hold three scrolls", async () => (await ids_of("a"))?.length === 3);
+    await poll_until("register a to hold four scrolls", async () => (await ids_of("a"))?.length === 4);
     // The stop key arrives with the tree that the badge comes from, so each q waits for the badge.
     mark = events.length;
     await press_keys("q", "b");
