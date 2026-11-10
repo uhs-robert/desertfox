@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { addresses_of, page_keymap, read_keymap_reply } from "../src/background/page_keymap.ts";
+import { rule_addresses_of, page_keymap_for, read_keymap_reply } from "../src/background/page_keymap.ts";
 import { create_keymap_asks } from "../src/content/ask_keymap.ts";
 import { create_key_flow } from "../src/content/key_flow.ts";
 import { create_mode_state } from "../src/content/mode_state.ts";
@@ -18,7 +18,7 @@ const KEYMAP: KeymapConfig = {
 };
 const compile = (site_rules: { site: string; pass?: string; only?: string }[]) => compile_keymap(KEYMAP, { site_rules }, resolve).compiled;
 const storage_of = (stored: unknown) => ({ get: async () => ({ [COMPILED_KEYMAP_STORAGE_KEY]: stored }) }) as never;
-const ask = async (compiled: CompiledKeymap | undefined, ...addresses: string[]) => page_keymap(storage_of(compiled), addresses);
+const ask = async (compiled: CompiledKeymap | undefined, ...addresses: string[]) => page_keymap_for(storage_of(compiled), addresses);
 
 test("a page with no rule gets the whole keymap and no frees", async () => {
   const compiled = compile([{ site: "https://a.test/*", pass: "j" }]);
@@ -71,15 +71,15 @@ test("no stored keymap and an old format version both answer undefined", async (
 
 test("the top frame matches on its own address, never on a tab address that lags", async () => {
   const compiled = compile([{ site: "https://old.test/*", pass: "j" }]);
-  const top = addresses_of({ frameId: 0, url: "https://new.test/", tab: { url: "https://old.test/" } });
+  const top = rule_addresses_of({ frameId: 0, url: "https://new.test/", tab: { url: "https://old.test/" } });
   assert.deepEqual(top, ["https://new.test/"]);
-  assert.equal((await page_keymap(storage_of(compiled), top))!.frees, undefined);
+  assert.equal((await page_keymap_for(storage_of(compiled), top))!.frees, undefined);
 });
 
 test("a subframe also matches on the tab address", async () => {
   const compiled = compile([{ site: "https://top.test/*", pass: "j" }]);
-  const frame = addresses_of({ frameId: 7, url: "https://embed.test/", tab: { url: "https://top.test/page" } });
-  assert.deepEqual((await page_keymap(storage_of(compiled), frame))!.frees?.tokens, ["j"]);
+  const frame = rule_addresses_of({ frameId: 7, url: "https://embed.test/", tab: { url: "https://top.test/page" } });
+  assert.deepEqual((await page_keymap_for(storage_of(compiled), frame))!.frees?.tokens, ["j"]);
 });
 
 // What the content script did before the background took over, kept here as the reference the new shape must equal.
@@ -207,7 +207,7 @@ test("an ask that a newer one overtook stops retrying", async () => {
   fail = false;
   await run();
   await first;
-  assert.ok(sends.length < 30, `sent ${sends.length}`);
+  assert.equal(sends.length, 2);
 });
 
 test("the reply crosses as a JSON string that parses back to the page's keymap", async () => {

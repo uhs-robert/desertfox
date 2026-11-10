@@ -15,7 +15,7 @@ import { browser_tab_action_deps } from "./tab_actions.ts";
 import { create_open_help } from "./open_help.ts";
 import { requirement_lookup, site_engine_for, with_site_engines } from "./availability.ts";
 import { list_keys } from "./list_keys.ts";
-import { addresses_of, read_keymap_reply } from "./page_keymap.ts";
+import { rule_addresses_of, read_keymap_reply } from "./page_keymap.ts";
 import { create_bundle_loader } from "./bundle_loader.ts";
 import { track_window_focus } from "./window_focus.ts";
 import { create_inspect_relay } from "./inspect_relay.ts";
@@ -168,7 +168,7 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
   if (request?.type === "tab_rows_action") return complete_items.tab_rows_action(request.action, request.tab_ids, asker_of(sender), request.cookie_store_id);
   if (request?.type === "image_action") return run_image_action(image_deps, request, { incognito: sender.tab?.incognito === true, cookie_store_id: sender.tab?.cookieStoreId });
   if (request?.type === "inspect_pick") return sender.tab?.id === undefined ? Promise.resolve({ ok: false, message: "No tab to inspect" }) : inspect_relay.pick(sender.tab.id);
-  if (request?.type === "read_keymap") return read_keymap_reply(browser.storage.local, addresses_of(sender));
+  if (request?.type === "read_keymap") return read_keymap_reply(browser.storage.local, rule_addresses_of(sender));
   if (request?.type === "open_help") return open_help.open(request.command_id, sender.tab?.id, sender.frameId);
   if (request?.type === "record_cmdline") return cmdline.record(request.text, sender.tab?.incognito === true);
   if (request?.type === "record_step") {
@@ -186,7 +186,7 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
       page,
       requirement_of: requirement_lookup(config),
       site_engine_label_of: (invocation) => config.search_engines[site_engine_for(config.search_engines, invocation.site_search?.engines ?? [], page) ?? ""]?.label,
-    }, addresses_of(sender), () => browser_register_store.items(tab?.incognito === true)));
+    }, rule_addresses_of(sender), () => browser_register_store.items(tab?.incognito === true)));
   }
   if ((message as SnippetCall)?.type === "snippet_run") {
     return get_config().then(() => snippets.handle_call(message as SnippetCall, { tab_id: sender.tab?.id, frame_id: sender.frameId }));

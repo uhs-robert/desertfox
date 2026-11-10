@@ -200,7 +200,7 @@ export type OpenHelp = {
   command_id: string;
 };
 
-// A page asks for its keymap at start and again on `tree_updated`. The answer is a PageKeymap as a JSON string, or undefined when no usable keymap is stored. A string, because the structured clone of the tree cost the page about 11 ms.
+// A page asks for its keymap at start and again on `tree_updated`. The answer is a PageKeymap as a JSON string, or undefined when no usable keymap is stored.
 export type ReadKeymap = {
   type: "read_keymap";
 };

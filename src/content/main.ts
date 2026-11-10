@@ -1,5 +1,5 @@
-// Content script entry: a capture listener on keydown, the compiled keymap from
-// storage, and the modes. Runs in every frame. A frame of another site starts on its first focus.
+// Content script entry: a capture listener on keydown, the keymap from
+// the background, and the modes. Runs in every frame. A frame of another site starts on its first focus.
 
 import type { BackgroundToContent, CompiledKeymap, ContentToBackground, Mode, ModeIndicator, PageKeymap, ReadKeymap, RunResponse, TreeLeaf } from "../shared/index.ts";
 import { COMPILED_KEYMAP_VERSION, DEFAULT_MODE_INDICATOR, is_freed } from "../shared/index.ts";
@@ -209,32 +209,38 @@ let matcher_installed = false;
 let was_all_off = false;
 
 function install_matcher(reply: PageKeymap | undefined): void {
-  const usable = reply?.keymap;
+  const keymap = reply?.keymap;
   const all_off = reply?.all_off === true;
   // A tree stored before the setting existed has no value, which means the default.
-  mode_indicator = usable?.mode_indicator ?? DEFAULT_MODE_INDICATOR;
-  which_key_delay_ms = usable?.which_key_delay_ms;
+  mode_indicator = keymap?.mode_indicator ?? DEFAULT_MODE_INDICATOR;
+  which_key_delay_ms = keymap?.which_key_delay_ms;
   // The mode comes first, so keys held during the load replay in the right mode.
   const first_install = !matcher_installed;
   matcher_installed = true;
   // The rule's own ignore mode ends with the rule, so removing or rewriting it takes effect on the open page.
-  const step = all_off_step(usable !== undefined, all_off, was_all_off, page_mode.get_mode_());
+  const step = all_off_step(keymap !== undefined, all_off, was_all_off, page_mode.get_mode_());
   if (step === "enter") page_mode.set_mode_("ignore");
   else {
     if (step === "leave") page_mode.set_mode_("normal");
     if ((first_install || step === "leave") && is_editable_element(deepest_focused_element())) page_mode.focus_entered_editable_();
   }
-  if (usable) was_all_off = all_off;
+  if (keymap) was_all_off = all_off;
   refresh_mode_indicator();
   const frees = reply?.frees;
-  const tree = usable ?? { modes: {}, mode_indicator: DEFAULT_MODE_INDICATOR, which_key_delay_ms: 0 };
-  key_flow.set_matcher_(create_matcher({ format_version: COMPILED_KEYMAP_VERSION, ...tree }, frees && ((token) => is_freed(frees, token))), usable?.modes.browser);
+  const tree = keymap ?? { format_version: COMPILED_KEYMAP_VERSION, modes: {}, mode_indicator: DEFAULT_MODE_INDICATOR, which_key_delay_ms: 0 };
+  key_flow.set_matcher_(create_matcher(tree, frees && ((token) => is_freed(frees, token))), keymap?.modes.browser);
+  // The key test's ready signal waits for the first matcher, not for a reply that a newer ask overtook.
+  if (first_install) publish_timing();
 }
 
 // The one test hook in src/: the key test reads this attribute as the content script's ready signal. Time is milliseconds.
 function publish_timing(): void {
   const root = document.documentElement;
   root?.setAttribute("data-desertfox-tree-read-ms", (performance.now() - script_started_ms).toFixed(2));
+}
+
+function read_page_keymap(): Promise<PageKeymap | undefined> {
+  return (browser.runtime.sendMessage({ type: "read_keymap" } satisfies ReadKeymap) as Promise<string | undefined>).then((reply) => (reply === undefined ? undefined : (JSON.parse(reply) as PageKeymap)));
 }
 
 function start(): void {
@@ -263,7 +269,7 @@ function start(): void {
 
   page_mode.listen_display_(refresh_mode_indicator);
 
-  const ask_keymap = create_keymap_asks(() => (browser.runtime.sendMessage({ type: "read_keymap" } satisfies ReadKeymap) as Promise<string | undefined>).then((reply) => (reply === undefined ? undefined : (JSON.parse(reply) as PageKeymap))), install_matcher);
+  const ask_keymap = create_keymap_asks(read_page_keymap, install_matcher);
 
   browser.runtime.onMessage.addListener((raw: unknown) => {
     const message = raw as BackgroundToContent;
@@ -284,7 +290,7 @@ function start(): void {
     else if (message.type === "tree_updated") void ask_keymap();
   });
 
-  void ask_keymap().then(publish_timing);
+  void ask_keymap();
 }
 
 start_content_once(start, window, can_reach_top_document() || document.hasFocus());
