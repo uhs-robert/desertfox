@@ -1,5 +1,6 @@
 // The Firefox side of the router and the startup: each function wraps one browser call.
 
+import { title_for_address } from "./bookmark_title.ts";
 import type { MergedConfig } from "../shared/config.ts";
 import type { PageInfo } from "../shared/engines/index.ts";
 import { DEFAULT_CONTAINER_NAME, DEFAULT_COOKIE_STORE_ID } from "../shared/container_store.ts";
@@ -88,7 +89,7 @@ export function make_router_deps(get_config: () => Promise<MergedConfig>, repeat
     },
     runs_with_empty: async (command_id, args, param, context) => runs_with_empty(await get_config(), command_id, args, param, await page_of(context.tab_id)),
     read_clipboard: () => navigator.clipboard.readText(),
-    bookmark_title: async (url) => (url === undefined ? undefined : (await browser.bookmarks.search({ url })).find((node) => node.url === url && node.type !== "folder")?.title),
+    bookmark_title: async (url) => (url === undefined ? undefined : title_for_address(await browser.bookmarks.search({ url }), url)),
     has_permission: (permission) => browser.permissions.contains({ permissions: [permission as browser._manifest.OptionalPermission] }),
     send_to_tab,
     open_cmdline: (tab_id, frame_id, text) => send_to_tab(tab_id, { type: "run_in_content", invocations: [{ id: "cmdline.open", args: { text }, bundle: "cmdline" }] }, frame_id),

@@ -342,3 +342,10 @@ test("bookmark.edit_url refuses an address another bookmark has, and managed boo
   const managed = remove_fixture([{ id: "m", type: "bookmark", unmodifiable: "managed" }]);
   await assert.rejects(managed.handlers.edit_url(ctx, { bookmark: "", url: "https://c.test/" }), /managed and cannot be changed/);
 });
+
+test("bookmark.add and bookmark.edit_url refuse text that is no address before they call Firefox", async () => {
+  const fixture = remove_fixture([{ id: "a", type: "bookmark" }]);
+  await assert.rejects(fixture.handlers.edit_url(ctx, { bookmark: "", url: "example.com" }), /"example.com" is not an address/);
+  await assert.rejects(fixture.handlers.add(ctx, { url: "example.com" }), /is not an address/);
+  assert.deepEqual(fixture.log, []);
+});

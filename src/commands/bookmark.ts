@@ -24,6 +24,11 @@ export type BookmarkDeps = {
 
 export const pick_bookmark = (bookmarks: readonly BookmarkItem[], text: string): BookmarkItem => pick_entry(bookmarks, text, "bookmark");
 
+// Firefox throws a raw error for text that is no address, so the handler refuses it first.
+function require_address(url: string): void {
+  if (!URL.canParse(url)) throw new RuntimeRefusal(`"${url}" is not an address`);
+}
+
 export function make_bookmark_handlers(deps: BookmarkDeps) {
   const bookmarks_at = async (url: string | undefined) => {
     const nodes = url === undefined ? [] : await deps.nodes_for_url(url);
@@ -45,6 +50,7 @@ export function make_bookmark_handlers(deps: BookmarkDeps) {
 
   return {
     add: async (ctx: CommandContext, args: { url: string }) => {
+      require_address(args.url);
       if ((await bookmarks_at(args.url)).length > 0) throw new RuntimeRefusal("Already bookmarked");
       const title = (await deps.tab_title_for_url(ctx.tab_id, args.url)) || args.url;
       await deps.create({ url: args.url, title });
@@ -64,6 +70,7 @@ export function make_bookmark_handlers(deps: BookmarkDeps) {
       await deps.toast(ctx, "success", `Renamed ${count_of(matches.length)}`);
     },
     edit_url: async (ctx: CommandContext, args: { bookmark: string; url: string }) => {
+      require_address(args.url);
       const matches = await editable_bookmarks(ctx, args.bookmark, "changed");
       // Moving a bookmark onto an address that has one would make the duplicate that add refuses. The same address is a no-op, not a clash.
       const taken = (await bookmarks_at(args.url)).some((node) => !matches.some((match) => match.id === node.id));
