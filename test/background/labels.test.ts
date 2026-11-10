@@ -322,7 +322,7 @@ test("the default keymap reads as the wording draft says", () => {
     ["normal", [";", "l"], "Click link"],
     ["normal", [";", "y", "l"], "Copy link URL"],
     ["normal", [";", "B", "I"], "Image"],
-    ["normal", [";", "r", "a"], "Any element"],
+    ["normal", [";", "r", "a"], "Every element"],
     ["caret", ["w"], "Move caret by word"],
     ["caret", ["e"], "Move caret to word end"],
     ["caret", ["k"], "Move caret by line backward"],
