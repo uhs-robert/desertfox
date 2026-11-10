@@ -1,4 +1,4 @@
-// The `+` register writes the system clipboard from the background, which only a real Firefox can confirm. The `"<reg>` prefix, `"ap` and `<C-r><reg>` need real keys.
+// The `+` register writes the system clipboard from the background, which only a real Firefox can confirm. The `"<reg>` prefix, `"app` and `<C-r><reg>` need real keys.
 import { evaluate_in_chrome } from "./rdp.mjs";
 import { CTRL } from "./harness.mjs";
 
@@ -33,13 +33,13 @@ export async function run_cases({ run_case, open_page, poll_until, rdp, in_backg
     await poll_until("the unnamed register to hold the address", async () => String(await read_register('"')).includes("id=p9r_yank"));
   });
 
-  await run_case('"bp opens register b as a URL here', async () => {
+  await run_case('"bpp opens register b as a URL here', async () => {
     await open_page("page", "p9r_open", { new_tab: true });
     await settle_focus();
     const target = await in_active_tab(`location.origin + "/page?id=p9r_target"`);
     await send({ type: "register_write", name: "b", text: target });
     const mark = events.length;
-    await press_keys('"bp');
+    await press_keys('"bpp');
     await wait_event(mark, (event) => event.type === "tree_read" && event.page_id === "p9r_target", "the page of register b to load");
   });
 

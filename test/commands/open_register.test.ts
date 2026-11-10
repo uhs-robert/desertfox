@@ -1,4 +1,4 @@
-// `"ap` and `"aP`: open.clipboard reads the register the prefix names, and the clipboard when none is named.
+// `"app` and `"aP`: open.clipboard reads the register the prefix names, and the clipboard when none is named.
 
 import assert from "node:assert/strict";
 import { test } from "node:test";

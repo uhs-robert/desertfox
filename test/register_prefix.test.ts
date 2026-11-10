@@ -56,7 +56,7 @@ test("the default keymap flags the yanks and the open, and the insert paste has 
     assert.equal(leaf?.kind, "leaf", `${mode} ${path.join("")}`);
     return leaf?.kind === "leaf" && leaf.steps[0]!.register === true;
   };
-  for (const path of [["y", "y"], ["y", "l"], ["y", "L"], ["p"], ["P"], [";", "y", "l"], [";", "y", "t"]]) assert.equal(flag_at("normal", path), true, path.join(""));
+  for (const path of [["y", "y"], ["y", "l"], ["y", "L"], ["p", "p"], ["p", "t"], ["p", "w"], ["P"], [";", "y", "l"], [";", "y", "t"]]) assert.equal(flag_at("normal", path), true, path.join(""));
   assert.equal(flag_at("visual", ["y"]), true);
   assert.equal(flag_at("normal", ["j"]), false);
   assert.equal(flag_at("insert", ["<Escape>"]), false);
