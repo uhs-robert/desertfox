@@ -12,6 +12,7 @@ import type { Role } from "../shared/theme/roles.ts";
 import { token_name } from "../shared/theme/tokens.ts";
 import type { KeymapMode } from "../shared/keymap.ts";
 import type { Prompt } from "../shared/invocation.ts";
+import { token_label } from "../shared/prefix_tree.ts";
 import type { CompiledKeymap, TreeNode } from "../shared/prefix_tree.ts";
 import { describe_default, is_dynamic_values, positional_params } from "../shared/registry/params.ts";
 import type { EnumSources } from "../shared/registry/check_args.ts";
@@ -107,7 +108,7 @@ function describe_args(sources: EnumSources, command: CommandMeta | undefined, a
 // Every leaf lists under each command it runs, so a two-step binding shows on both.
 function collect_keys(node: TreeNode, path: string[], mode: KeymapMode, into: Map<string, KeyRow[]>, printing: Printing): void {
   if (node.kind === "branch") {
-    for (const [token, child] of Object.entries(node.children)) collect_keys(child, [...path, token], mode, into, printing);
+    for (const [token, child] of Object.entries(node.children)) collect_keys(child, [...path, token_label(token)], mode, into, printing);
     return;
   }
   for (const step of node.steps) {

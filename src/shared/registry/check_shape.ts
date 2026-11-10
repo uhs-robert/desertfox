@@ -109,8 +109,9 @@ function coerce(param: ParamDef, given: unknown, sources: EnumSources): Coerced 
   if (param.optional && typeof given === "string" && given.trim() === "") return { ok: true, value: "" };
 
   switch (param.type) {
+    case "key":
     case "string": {
-      if (typeof given !== "string") return bad("text");
+      if (typeof given !== "string" || (param.type === "key" && [...given].length !== 1)) return bad(param.type === "key" ? "one key" : "text");
       const allowed = param.strict ? static_values(param) : undefined;
       if (allowed && !allowed.includes(given)) return bad(`one of ${allowed.join(", ")}`);
       if (param.pattern !== undefined && !new RegExp(param.pattern).test(given)) return bad(`text matching ${param.pattern}`);

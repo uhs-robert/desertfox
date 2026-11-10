@@ -118,9 +118,19 @@ export function subject_param(command: Pick<CommandDef, "params">): ParamDef | u
   return bare && !is_dynamic_values(bare.values) ? bare : undefined;
 }
 
-// The required `strict` string params that are not the subject. The command line fills them from the bare words in schema order, ahead of the subject: `set hint_letters asdf` gives `name` then `value`.
+// The required `strict` string params and the required key param that are not the subject. The command line fills them from the bare words in schema order, ahead of the subject: `set hint_letters asdf` gives `name` then `value`.
 export function positional_params(command: Pick<CommandDef, "params">): ParamDef[] {
-  return (command.params ?? []).filter((param) => param.type === "string" && param.strict === true && !param.main && !param.when && declared_default(param) === undefined);
+  return (command.params ?? []).filter((param) => (param.type === "key" || (param.type === "string" && param.strict === true)) && !param.main && !param.when && declared_default(param) === undefined);
+}
+
+// The `key` param a binding leaves out: the key press after the binding fills it.
+export function captured_key_param(command: Pick<CommandDef, "params">, args: Record<string, unknown> | undefined): ParamDef | undefined {
+  return (command.params ?? []).find((param) => param.type === "key" && args?.[param.name] === undefined && default_of(command, param, args ?? {}) === undefined);
+}
+
+// The command without the captured key param, so the rest of a binding's args can be checked before the key exists.
+export function without_param<T extends Pick<CommandDef, "params">>(command: T, name: string): T {
+  return { ...command, params: (command.params ?? []).filter((param) => param.name !== name) };
 }
 
 // The params typed as flags: all but the subject, the positional words and the engine that takes the first bare word.
