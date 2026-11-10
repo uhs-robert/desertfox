@@ -115,6 +115,7 @@ function coerce(param: ParamDef, given: unknown, sources: EnumSources): Coerced 
       const allowed = param.strict ? static_values(param) : undefined;
       if (allowed && !allowed.includes(given)) return bad(`one of ${allowed.join(", ")}`);
       if (param.pattern !== undefined && !new RegExp(param.pattern).test(given)) return bad(`text matching ${param.pattern}`);
+      if (param.format === "url" && !URL.canParse(given)) return bad("an address");
       return { ok: true, value: given };
     }
     case "int": {

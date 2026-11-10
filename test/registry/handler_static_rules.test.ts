@@ -30,6 +30,9 @@ const EXPECTED_REFUSALS: Record<string, RegExp[]> = {
   "bookmark.open": [/no bookmark matches/],
   "history.open": [/no history entry matches/],
   "bookmark.remove": [/no bookmark matches/, /No bookmark for this page/],
+  "bookmark.add": [/Already bookmarked/],
+  "bookmark.rename": [/no bookmark matches/, /No bookmark for this page/],
+  "bookmark.edit_url": [/no bookmark matches/, /No bookmark for this page/],
   "page.home": [/set home_page in settings.toml/],
   "open.url": [/No container named/],
   "open.search": [/No search engine named/],
@@ -106,7 +109,8 @@ function candidates(param: ParamDef): readonly unknown[] {
     case "string":
       // A named register is empty on the stub, which is a runtime refusal of its own and would hide what the other params do.
       if (param.name === "register") return [""];
-      return ["", " ", "1", "x", "1 x", ...(static_values(param) ?? []).slice(0, 2), ...(static_values(param) ?? []).slice(-1)];
+      // An address param refuses the other texts in the schema, so it needs one address to reach the handler.
+      return ["", " ", "1", "x", "1 x", ...(param.format === "url" ? ["https://example.org/m"] : []), ...(static_values(param) ?? []).slice(0, 2), ...(static_values(param) ?? []).slice(-1)];
   }
 }
 

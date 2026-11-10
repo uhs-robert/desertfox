@@ -74,6 +74,7 @@ const UNUSED_REMOVE = {
   nodes_for_url: async () => [],
   tab_url: async () => undefined,
   remove: async () => {},
+  update: async () => {},
   toast: async () => {},
 };
 
@@ -139,6 +140,7 @@ function remove_fixture(nodes: FakeNode[], tab_url: string | null = "https://a.t
     tab_url: async () => tab_url ?? undefined,
     nodes_for_url: async (url) => (asked.push(url), nodes.map((node) => ({ url, ...node }))),
     remove: async (id) => void log.push(`remove ${id}`),
+    update: async (id, changes) => void log.push(`update ${id} ${JSON.stringify(changes)}`),
     toast: async (_ctx, kind, message) => void log.push(`${kind} ${message}`),
   });
   return { handlers, log, asked };
@@ -285,4 +287,58 @@ test("the schema refuses a tab.attach pick with no leading number, and lets an e
   assert.equal(check_args(attach, { window: "Old" }, {}).ok, false);
   for (const window of ["", "  ", "2", "2 GitHub", " 2 GitHub"]) assert.equal(check_args(attach, { window }, {}).ok, true, window);
   assert.deepEqual(check_args(attach, undefined, {}), { ok: true, args: { window: "" } });
+});
+
+test("bookmark.add refuses an address that already has a bookmark, and creates nothing", async () => {
+  const created: unknown[] = [];
+  const handlers = make_bookmark_handlers({
+    ...UNUSED_REMOVE,
+    tab_title_for_url: async () => "A",
+    create: async (bookmark) => void created.push(bookmark),
+    bookmarks: async () => [],
+    open: async () => {},
+    nodes_for_url: async (url) => [{ id: "a", url, type: "bookmark" }],
+  });
+  await assert.rejects(handlers.add(ctx, { url: "https://a.test/" }), /Already bookmarked/);
+  assert.deepEqual(created, []);
+});
+
+test("bookmark.rename renames every bookmark with the page's address and toasts the count", async () => {
+  const fixture = remove_fixture([{ id: "a", type: "bookmark" }, { id: "b", type: "bookmark" }, { id: "m", type: "bookmark", unmodifiable: "managed" }]);
+  await fixture.handlers.rename(ctx, { bookmark: "", title: "New name" });
+  assert.deepEqual(fixture.log, ['update a {"title":"New name"}', 'update b {"title":"New name"}', "success Renamed 2 bookmarks"]);
+});
+
+test("bookmark.rename with a picked bookmark renames the ones at its address, and refuses managed-only and none", async () => {
+  const picked = remove_fixture([{ id: "x", type: "bookmark" }]);
+  await picked.handlers.rename(ctx, { bookmark: "arch", title: "Wiki" });
+  assert.deepEqual([picked.asked, picked.log], [["https://wiki.archlinux.org/"], ['update x {"title":"Wiki"}', "success Renamed 1 bookmark"]]);
+  const managed = remove_fixture([{ id: "m", type: "bookmark", unmodifiable: "managed" }]);
+  await assert.rejects(managed.handlers.rename(ctx, { bookmark: "", title: "x" }), /managed and cannot be renamed/);
+  await assert.rejects(remove_fixture([]).handlers.rename(ctx, { bookmark: "", title: "x" }), /No bookmark for this page/);
+  assert.deepEqual(managed.log, []);
+});
+
+test("bookmark.edit_url changes the address of every bookmark at the page's address", async () => {
+  const fixture = remove_fixture([{ id: "a", type: "bookmark" }, { id: "b", type: "bookmark" }]);
+  await fixture.handlers.edit_url(ctx, { bookmark: "", url: "https://c.test/" });
+  assert.deepEqual(fixture.log, ['update a {"url":"https://c.test/"}', 'update b {"url":"https://c.test/"}', "success Changed the address of 2 bookmarks"]);
+});
+
+test("bookmark.edit_url refuses an address another bookmark has, and managed bookmarks", async () => {
+  const log: string[] = [];
+  const handlers = make_bookmark_handlers({
+    ...UNUSED_REMOVE,
+    tab_title_for_url: async () => undefined,
+    create: async () => {},
+    bookmarks: async () => [],
+    open: async () => {},
+    tab_url: async () => "https://a.test/",
+    nodes_for_url: async (url) => [{ id: url === "https://a.test/" ? "a" : "other", url, type: "bookmark" }],
+    update: async (id) => void log.push(id),
+  });
+  await assert.rejects(handlers.edit_url(ctx, { bookmark: "", url: "https://b.test/" }), /Already bookmarked/);
+  assert.deepEqual(log, []);
+  const managed = remove_fixture([{ id: "m", type: "bookmark", unmodifiable: "managed" }]);
+  await assert.rejects(managed.handlers.edit_url(ctx, { bookmark: "", url: "https://c.test/" }), /managed and cannot be changed/);
 });

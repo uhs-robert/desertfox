@@ -3,7 +3,7 @@
 
 import type { CommandDef, ContextSource, DefaultArm, DynamicValues, ParamDef, ParamValue } from "../command.ts";
 
-export const CONTEXT_SOURCE_NAMES = ["current_url", "selection", "clipboard"] as const;
+export const CONTEXT_SOURCE_NAMES = ["current_url", "selection", "clipboard", "bookmark_title"] as const;
 
 export function is_context_source(value: unknown): value is ContextSource {
   if (typeof value !== "object" || value === null) return false;

@@ -25,6 +25,8 @@ export type RouterDeps = {
   // True when the command runs with the param empty on this tab, so an empty selection runs it instead of opening the command line.
   runs_with_empty: (command_id: string, args: CheckedArgs, param: string, context: CommandContext) => Promise<boolean>;
   read_clipboard: () => Promise<string>;
+  // The title of the bookmark at this address, undefined when there is none.
+  bookmark_title: (url: string | undefined) => Promise<string | undefined>;
   has_permission: (permission: string) => Promise<boolean>;
   send_to_tab: (tab_id: number, message: BackgroundToContent, frame_id?: number) => Promise<unknown>;
   // Opens the command line in the frame with the text typed in. Rejects when the tab has no content script.
@@ -234,6 +236,7 @@ export function create_router(deps: RouterDeps): Router {
   async function read_source(source: ContextSourceName, context: CommandContext, active: ActiveTab | undefined) {
     if (source === "current_url") return active?.url;
     if (source === "clipboard") return deps.read_clipboard();
+    if (source === "bookmark_title") return deps.bookmark_title(active?.url);
     const selection = context.tab_id === undefined ? undefined : await deps.ask_selection(context.tab_id, context.frame_id ?? 0);
     return selection === "" ? undefined : selection;
   }
