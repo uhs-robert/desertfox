@@ -13,7 +13,7 @@ define("mark.add", {
 
 define("mark.jump", {
   label: "Jump to mark",
-  intent: "Scroll to a mark of this page, or for an uppercase letter go to the tab with the marked address. The position you left becomes the mark `'`, so `''` jumps back and forth. Only mark jumps set it.",
+  intent: "Scroll to a mark, or go to the tab of a global mark. The position you left becomes the mark `'`, so `''` jumps back and forth. Only mark jumps set it.",
   params: [{ name: "key", type: "key", pattern: MARK_JUMP_KEY.source, description: "Jump to this mark, a-z or A-Z. `'` is the last position." }],
   runs_in: "content",
   bundle: "page",
