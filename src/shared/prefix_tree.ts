@@ -35,6 +35,9 @@ export type TreeLeaf = {
 // The child key of a branch whose leaf waits for one key press. The press is the leaf's `key` param, so the branch binds no token of its own.
 export const ANY_KEY = "";
 
+// How a key listing writes a token: the capture child reads `<key>`, so `m` then any key lists as `m<key>`.
+export const token_label = (token: string): string => (token === ANY_KEY ? "<key>" : token);
+
 export type TreeBranch = {
   kind: "branch";
   // The group name which-key shows. Without one it shows the prefix key.

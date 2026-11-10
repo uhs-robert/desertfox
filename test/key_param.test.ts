@@ -8,7 +8,10 @@ import { panel_after_prefix } from "../src/background/list_keys.ts";
 import { create_key_flow } from "../src/content/key_flow.ts";
 import { create_mode_state } from "../src/content/mode_state.ts";
 import type { CommandMeta } from "../src/shared/command.ts";
-import { ANY_KEY } from "../src/shared/prefix_tree.ts";
+import { create_router } from "../src/background/router.ts";
+import { build_help_model } from "../src/help/model.ts";
+import { key_labels } from "../src/cmdline/completion/keys.ts";
+import { ANY_KEY, token_label } from "../src/shared/prefix_tree.ts";
 import type { CompiledKeymap, TreeBranch, TreeLeaf } from "../src/shared/prefix_tree.ts";
 import { create_matcher } from "../src/shared/keys/index.ts";
 import { check_args } from "../src/shared/registry/check_args.ts";
@@ -223,4 +226,37 @@ test("which-key shows one row that names the wait", () => {
   assert.deepEqual(panel.title, ["+Add mark"]);
   assert.deepEqual(panel.rows, [{ keys: "<key>", command: "Add mark", description: "Save a mark under the next key.", more: false }]);
   assert.deepEqual(panel_after_prefix(tree, ["j"], (id) => commands[id]).rows, []);
+});
+
+test("the help page and the command line hints write a capture binding as m<key>", () => {
+  const { compiled: tree } = compiled({ m: { id: "test.mark" } });
+  const metas = registry.list().map((command) => ({ id: command.id, name: command.name, label: command.label, intent: command.intent, params: command.params }));
+  const model = build_help_model(metas as CommandMeta[], tree, []);
+  const row = model.groups.flatMap((group) => group.commands).find((command) => command.id === "test.mark")!;
+  assert.deepEqual(row.keys.map((keys) => keys.keys), ["m<key>"]);
+  assert.equal(key_labels(tree, metas as CommandMeta[], "normal").get("test.mark"), undefined);
+  assert.equal(token_label(ANY_KEY), "<key>");
+});
+
+test("the router refuses a key the pattern rejects, repeats a content command by the count and hands it to the tab", async () => {
+  const { registry: reg, deps, log } = make_fake({
+    "test.mark": mark_input,
+    "test.paint": { label: "Paint", intent: "Paint.", params: [{ name: "slot", type: "key" as const, pattern: "^[a-z]$" }], runs_in: "content" as const, count: "repeat" as const },
+  });
+  const config = { ...empty_config(), keymap: { normal: { m: { id: "test.mark" }, p: { id: "test.paint" } } } as never };
+  const { compiled: tree } = compile_config({ config, default_keymap: {}, get_command: (id) => reg.get(id), enum_sources: {} });
+  const run = async (keys: string[]) => {
+    const matcher = create_matcher(tree);
+    const results = keys.map((key) => matcher.feed("normal", key));
+    const last = results.at(-1)!;
+    assert.equal(last.kind, "match");
+    const match = last as Extract<typeof last, { kind: "match" }>;
+    return create_router(deps).run({ invocations: match.leaf.steps.map((step) => ({ ...step.invocation, ...(match.count === undefined ? {} : { count: match.count }) })), mode: "normal" });
+  };
+  assert.equal((await run(["m", "1"])).ok, false);
+  assert.deepEqual(log, ['refuse 7 slot expects text matching ^[a-zA-Z]$, got "1"']);
+  assert.equal((await run(["3", "p", "x"])).ok, true);
+  const one = { id: "test.paint", args: { slot: "x" } };
+  assert.deepEqual(log.slice(1), [`send 7 ${JSON.stringify({ type: "run_in_content", invocations: [one, one, one] })}`]);
+  assert.equal((await run(["p", "X"])).ok, false);
 });
