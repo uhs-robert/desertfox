@@ -1,8 +1,11 @@
 // The macro being recorded. The state lives in `storage.session`, so a background restart keeps it and every tab can show it. A normal window and the private windows each have one, apart.
 // It listens at the same `record_step` seam as `.`, but takes every step, failed ones too: a step that fails when recorded fails again on replay and stops the macro.
 
+import { registry } from "../shared/registry/builtin.ts";
 import { RuntimeRefusal } from "../shared/command.ts";
+import type { CommandDef } from "../shared/command.ts";
 import type { BoundInvocation } from "../shared/invocation.ts";
+import { can_repeat } from "./record_step.ts";
 import type { RecordStep, StepOrigin, StepOutcome } from "./record_step.ts";
 import { as_stored } from "./repeat_memory.ts";
 import { MACRO_RECORDING_PRIVATE_STORAGE_KEY, MACRO_RECORDING_STORAGE_KEY } from "./storage_keys.ts";
@@ -16,6 +19,7 @@ export type MacroRecorderDeps = {
   session: () => SessionArea;
   // Every tab reads its keymap again, because recording swaps the record key for the stop key and shows the badge.
   tell_tabs: () => Promise<void>;
+  get_command?: (id: string) => CommandDef | undefined;
 };
 
 const key_of = (is_private: boolean) => (is_private ? MACRO_RECORDING_PRIVATE_STORAGE_KEY : MACRO_RECORDING_STORAGE_KEY);
@@ -28,6 +32,12 @@ const NEVER_RECORDED = new Set(["macro.record", "macro.stop", "command.repeat"])
 
 export function create_macro_recorder(deps: MacroRecorderDeps) {
   const in_turn = create_write_queue();
+
+  // Only a command whose args decide (`page.reload --all`) stays out. A command that is simply not repeatable still records, because a macro replays more than `.` does.
+  const refuses_replay = (step: BoundInvocation): boolean => {
+    const command = deps.get_command?.(step.id);
+    return typeof command?.repeatable === "function" && !can_repeat(command, step);
+  };
 
   async function read(is_private: boolean): Promise<Recording | undefined> {
     const stored = (await deps.session().get(key_of(is_private)))[key_of(is_private)];
@@ -42,7 +52,7 @@ export function create_macro_recorder(deps: MacroRecorderDeps) {
     const recording = await read(origin.is_private);
     if (!recording) return;
     const reached = outcome.failed_step === undefined ? steps : steps.slice(0, outcome.failed_step + 1);
-    const kept = reached.filter((step) => !NEVER_RECORDED.has(step.id) && (step.id !== "hint.run" || origin.from_pick === true)).map(as_stored);
+    const kept = reached.filter((step) => !NEVER_RECORDED.has(step.id) && !refuses_replay(step) && (step.id !== "hint.run" || origin.from_pick === true)).map(as_stored);
     if (kept.length > 0) await deps.session().set({ [key_of(origin.is_private)]: { register: recording.register, steps: [...recording.steps, ...kept] } });
   }
 
@@ -93,6 +103,7 @@ export type MacroRecorder = ReturnType<typeof create_macro_recorder>;
 // Calls the browser at use, so the command modules load in Node for the commands.json build.
 export const browser_macro_recorder = create_macro_recorder({
   session: () => browser.storage.session,
+  get_command: (id) => registry.get(id),
   tell_tabs: async () => {
     const tabs = await browser.tabs.query({});
     await Promise.all(tabs.map((tab) => (tab.id === undefined ? undefined : browser.tabs.sendMessage(tab.id, { type: "tree_updated" }).catch(() => undefined))));

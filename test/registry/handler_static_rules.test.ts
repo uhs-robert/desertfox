@@ -75,6 +75,7 @@ const STUB_ANSWERS: Record<string, unknown> = {
   "tabs.move": [STUB_TAB],
   "tabs.getZoom": 1,
   "tabs.executeScript": [null],
+  "cookies.getAll": [],
   "windows.getAll": STUB_WINDOWS,
   "windows.get": STUB_WINDOWS[0],
   "windows.create": STUB_WINDOWS[0],
