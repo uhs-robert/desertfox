@@ -298,6 +298,62 @@ test("a bound Quick Find key runs its command", () => {
   assert.deepEqual(ran, ["find2"]);
 });
 
+test("a held key the keymap does not bind goes back to the page on replay, and a bound one stays swallowed", () => {
+  const { ran, flow } = make_flow();
+  const to_page: string[] = [];
+  for (const token of ["<Space>", "j", "x", "g", "<Tab>"]) assert.equal(flow.handle_token_(token, false, () => to_page.push(token)), "cancel");
+  flow.set_matcher_(create_matcher(keymap));
+  // g waits for a second key, so the Tab breaks the sequence and both reach the page in order.
+  assert.deepEqual([to_page, ran], [["<Space>", "x", "<Tab>"], ["down"]]);
+});
+
+test("a held Quick Find key stays swallowed on replay while a plain key goes to the page", () => {
+  const { flow } = make_flow();
+  const to_page: string[] = [];
+  flow.handle_token_("/", false, () => to_page.push("/"));
+  flow.handle_token_("e", false, () => to_page.push("e"));
+  flow.set_matcher_(create_matcher(keymap));
+  assert.deepEqual(to_page, ["e"]);
+});
+
+test("keys handed back by the command line are replayed to the keymap but not to the page", () => {
+  const { ran, flow } = make_flow();
+  flow.hold_first_(["j", "x"]);
+  flow.set_matcher_(create_matcher(keymap));
+  assert.deepEqual(ran, ["down"]);
+});
+
+test("a held key replayed to the page clears its cancelled code, and the real keyup then reaches the page", () => {
+  const keys = create_cancelled_keys();
+  const press = { keyup_seen: false };
+  keys.record_keydown_("Space", "cancel", press);
+  assert.equal(keys.release_for_replay_("Space", press), false);
+  assert.equal(keys.cancels_keypress_("Space"), false);
+  assert.equal(keys.take_keyup_("Space"), false);
+});
+
+test("a keyup that came before the replay was swallowed, so replay reports it and leaves no state", () => {
+  const keys = create_cancelled_keys();
+  const press = { keyup_seen: false };
+  keys.record_keydown_("Space", "cancel", press);
+  assert.equal(keys.take_keyup_("Space"), true);
+  assert.equal(keys.release_for_replay_("Space", press), true);
+  assert.equal(keys.cancels_keypress_("Space"), false);
+});
+
+test("replaying an early press does not clear the code of a later press of the same key that is still down", () => {
+  const keys = create_cancelled_keys();
+  const first = { keyup_seen: false };
+  const second = { keyup_seen: false };
+  keys.record_keydown_("Space", "cancel", first);
+  keys.take_keyup_("Space");
+  keys.record_keydown_("Space", "cancel", second);
+  assert.equal(keys.release_for_replay_("Space", first), true);
+  assert.equal(keys.cancels_keypress_("Space"), true);
+  assert.equal(keys.release_for_replay_("Space", second), false);
+  assert.equal(keys.take_keyup_("Space"), false);
+});
+
 test("a stale cancelled code does not eat a later typed letter", () => {
   const keys = create_cancelled_keys();
   keys.record_keydown_("KeyJ", "cancel");
