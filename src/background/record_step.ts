@@ -14,6 +14,8 @@ export type StepOrigin = {
   prompted?: boolean;
   // A hint pick that opens a link. `.` shows hints again and does not reopen the address.
   skip_repeat?: boolean;
+  // The page sent this step when a hint pick began. A macro keeps its `hint.run` only from here, because the leaf that ends later repeats the same step.
+  from_pick?: boolean;
 };
 
 // `failed_step` is the index of the step that failed or was cancelled, so a recorder that takes every step can stop there. The page does not know it.

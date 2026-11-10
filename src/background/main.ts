@@ -29,6 +29,8 @@ import { browser_quickmark_store } from "./quickmark_store.ts";
 import { answer_register_request, browser_register_store } from "./register_store.ts";
 import { create_repeat_memory } from "./repeat_memory.ts";
 import { create_step_recorder, page_outcome, page_steps } from "./record_step.ts";
+import type { RecordStep } from "./record_step.ts";
+import { browser_macro_recorder } from "./macro_recorder.ts";
 import { wire_repeat } from "../commands/command.ts";
 import { DISABLED_STORAGE_KEY, SLOT_TABLE_STORAGE_KEY } from "./storage_keys.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY } from "../shared/prefix_tree.ts";
@@ -58,7 +60,12 @@ const built_in_ids = new Set(registry.list().map((command) => command.id));
 
 const has_private_window = async () => (await browser.windows.getAll()).some((window) => window.incognito);
 const repeat_memory = create_repeat_memory(browser.storage.session, has_private_window);
-const router_deps = make_router_deps(get_config, repeat_memory);
+// `.` and the macro recorder both read every finished request.
+const record_step: RecordStep = async (steps, outcome, origin) => {
+  await create_step_recorder({ get_command: (id) => registry.get(id), repeat_memory })(steps, outcome, origin);
+  await browser_macro_recorder.record(steps, outcome, origin);
+};
+const router_deps = { ...make_router_deps(get_config, repeat_memory), record_step };
 const router = create_router(router_deps);
 const global_mark_jump = create_global_mark_jump({
   store: browser_mark_store,
@@ -185,16 +192,19 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
   if (request?.type === "tab_rows_action") return complete_items.tab_rows_action(request.action, request.tab_ids, asker_of(sender), request.cookie_store_id);
   if (request?.type === "image_action") return run_image_action(image_deps, request, { incognito: sender.tab?.incognito === true, cookie_store_id: sender.tab?.cookieStoreId });
   if (request?.type === "inspect_pick") return sender.tab?.id === undefined ? Promise.resolve({ ok: false, message: "No tab to inspect" }) : inspect_relay.pick(sender.tab.id);
-  if (request?.type === "read_keymap") return read_keymap_reply(browser.storage.local, rule_addresses_of(sender));
+  if (request?.type === "read_keymap") return browser_macro_recorder.register_of(sender.tab?.incognito === true).catch(() => undefined).then((recording) => read_keymap_reply(browser.storage.local, rule_addresses_of(sender), recording));
   if (request?.type === "open_help") return open_help.open(request.command_id, sender.tab?.id, sender.frameId);
   if (request?.type === "record_cmdline") return cmdline.record(request.text, sender.tab?.incognito === true);
   if (request?.type === "record_step") {
     // The turn is entered before the first await, so records land in arrival order and a `.` that arrives next waits for this write.
-    return repeat_memory.in_turn(async (unqueued) => {
+    const origin = { is_private: sender.tab?.incognito === true, ...(request.pick === true && { from_pick: true }) };
+    const checked = repeat_memory.in_turn(async (unqueued) => {
       await get_config();
       const steps = page_steps(request, (id) => registry.get(id), { search_engines: await get_search_engine_names(), containers: await container_names() });
-      if (steps) await create_step_recorder({ get_command: (id) => registry.get(id), repeat_memory: unqueued })(steps, page_outcome(request), { is_private: sender.tab?.incognito === true });
+      if (steps) await create_step_recorder({ get_command: (id) => registry.get(id), repeat_memory: unqueued })(steps, page_outcome(request), origin);
+      return steps;
     });
+    return Promise.all([checked, browser_macro_recorder.record_page(checked, page_outcome(request), origin)]).then(() => undefined);
   }
   if (request?.type === "list_keys") {
     const tab = sender.tab;
@@ -203,7 +213,7 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
       page,
       requirement_of: requirement_lookup(config),
       site_engine_label_of: (invocation) => config.search_engines[site_engine_for(config.search_engines, invocation.site_search?.engines ?? [], page) ?? ""]?.label,
-    }, rule_addresses_of(sender), () => browser_register_store.items(tab?.incognito === true), () => browser_mark_store.items(sender.url ?? "", tab?.incognito === true), () => browser_quickmark_store.table(config.quickmarks, tab?.incognito === true)));
+    }, rule_addresses_of(sender), () => browser_register_store.items(tab?.incognito === true), () => browser_mark_store.items(sender.url ?? "", tab?.incognito === true), () => browser_quickmark_store.table(config.quickmarks, tab?.incognito === true), () => browser_register_store.macro_items(tab?.incognito === true)));
   }
   if ((message as SnippetCall)?.type === "snippet_run") {
     return get_config().then(() => snippets.handle_call(message as SnippetCall, { tab_id: sender.tab?.id, frame_id: sender.frameId }));
@@ -258,7 +268,7 @@ browser.tabs.onUpdated.addListener((tab_id, change) => {
 });
 
 browser.windows.onRemoved.addListener(() => void repeat_memory.clear_private_without_window().catch(() => undefined));
-wire_private_cleanup([browser_register_store, browser_mark_store, browser_quickmark_store], browser.windows);
+wire_private_cleanup([browser_register_store, browser_mark_store, browser_quickmark_store, browser_macro_recorder], browser.windows);
 
 browser.tabs.onActivated.addListener(({ windowId, previousTabId }) => previous_tabs.activated(windowId, previousTabId));
 

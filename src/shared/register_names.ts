@@ -26,6 +26,8 @@ export const storage_name = (name: string): string => name.toLowerCase();
 
 // The only names a macro may record into or play from. The special registers are reserved, and so is `@`, which `@@` will use for the last macro played.
 export const is_macro_register = (name: string): boolean => /^[a-zA-Z]$/.test(name);
+// The same set as a param pattern. `macro.record` takes it.
+export const MACRO_REGISTER_PATTERN = "^[a-zA-Z]$";
 
 // For a param of the register commands, which check names in the schema.
 export const REGISTER_NAME_PATTERN = '^\\s*(?:[A-Za-z"+_/]|/:direction)\\s*$';

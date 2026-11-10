@@ -78,6 +78,7 @@ export const DEFAULT_KEYMAP: KeymapConfig = {
     b: "Bookmark",
     z: "Zoom and scroll",
     ",": "DesertFox",
+    q: "Record macro",
     ";": "Hints",
     ";y": "Yank",
     s: "Search here",
@@ -240,6 +241,7 @@ export const DEFAULT_KEYMAP: KeymapConfig = {
     ",\"": { id: "register.list", prompt: { param: "name" }, label: "List registers" },
 
     m: { id: "mark.add" },
+    q: { id: "macro.record" },
     "'": { id: "mark.jump" },
     "`": { id: "mark.jump" },
 
