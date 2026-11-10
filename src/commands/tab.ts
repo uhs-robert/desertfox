@@ -359,7 +359,7 @@ define("tab.undo_close", {
 
 define("tab.move", {
   label: "Move tab",
-  intent: "Move the tab to a place in the strip. Name a place number, where 1 is first and -1 last, or a tab, whose place it takes. --offset moves it along the strip, positive later and negative earlier. With both, the place wins. A count prefix repeats it.",
+  intent: "Move the tab to a place in the strip. Name a place number, where 1 is first and -1 last, or a tab, whose place it takes. --offset moves it along the strip, positive later and negative earlier. With both, the place wins. A move stops at the edge of the pinned tabs, so a pinned tab stays pinned-side and an unpinned tab stays after them. A count prefix repeats it.",
   params: [
     { name: "tab", type: "string", rest: true, main: true, optional: true, values: { from: "tabs" }, description: "Take this place number, or the place of this tab." },
     { name: "offset", type: "int", default: 0, description: "Move this many places, positive later and negative earlier." },
