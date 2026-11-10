@@ -24,7 +24,7 @@ A note "(prompts)" means the binding sets a `prompt` for a param, so the command
 
 <!-- BEGIN generated -->
 
-bound: 315 (normal 179, hint 2, cmdline 18, caret 35, visual 37, visual_line 38, insert 2, ignore 1, browser 3) | later: 3 | dropped: 7
+bound: 317 (normal 181, hint 2, cmdline 18, caret 35, visual 37, visual_line 38, insert 2, ignore 1, browser 3) | later: 3 | dropped: 7
 
 ### normal
 
@@ -122,6 +122,8 @@ bound: 315 (normal 179, hint 2, cmdline 18, caret 35, visual 37, visual_line 38,
 | `]c` | bound | `url.increment --up` | Change URL number |  |
 | `[c` | bound | `url.increment --down` | Change URL number |  |
 | `gi` | bound | `page.focus_input` | Focus input |  |
+| `I` | bound | `page.focus_input` | Focus input |  |
+| `i` | bound | `mode insert` | Insert mode, keys go to the page |  |
 | `p` | bound | `paste` | Open clipboard |  |
 | `P` | bound | `paste --tab` | Open clipboard |  |
 | `ba` | bound | `bookmark.add` (prompts) | Add bookmark, edit URL |  |

@@ -62,6 +62,12 @@ test("the approved keys are all bound", () => {
   assert.deepEqual(DEFAULT_KEYMAP.ignore?.["<S-Escape>"], { id: "mode.set", args: { mode: "normal" } });
 });
 
+test("i enters insert mode with no field and I focuses the first field", () => {
+  assert.deepEqual(DEFAULT_KEYMAP.normal?.i, { id: "mode.set", args: { mode: "insert" }, label: "Insert mode, keys go to the page" });
+  assert.deepEqual(DEFAULT_KEYMAP.normal?.I, DEFAULT_KEYMAP.normal?.gi);
+  assert.deepEqual(DEFAULT_KEYMAP.insert?.["<Escape>"], { id: "mode.escape" });
+});
+
 test("the , group holds the DesertFox commands", () => {
   const { warnings, compiled } = compile(DEFAULT_KEYMAP);
   assert.deepEqual(warnings, []);
