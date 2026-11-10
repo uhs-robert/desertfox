@@ -147,6 +147,12 @@ export type TabItem = {
 // Newest first.
 export type BookmarkItem = { title: string; url: string };
 
+// A bookmark row of the `bookmark` list. `folders` indexes `BookmarkRows.folders`, the newest copy's folder first.
+export type BookmarkRow = BookmarkItem & { folders: number[] };
+
+// The `bookmark` list: one row per address, and the folder paths sent once for the rows to point at.
+export type BookmarkRows = { rows: BookmarkRow[]; folders: string[] };
+
 // `label` is the config's resolved chain. `available` is whether the line's page can fill the engine's slots. The page URL itself never leaves the background.
 export type EngineItem = { name: string; label: string; available: boolean };
 
@@ -179,7 +185,7 @@ export type RegisterItem = { name: string; description: string };
 // A bookmark folder: its path from the root ("Bookmarks Toolbar / Work") and a short count of the bookmarks directly inside.
 export type FolderItem = SessionItem;
 
-export type CompleteItemsAnswer = { items: BookmarkItem[] | EngineItem[] | HistoryItems | OpenItems | WindowItem[] | HeadingItem[] | SessionItem[] | RegisterItem[] | FolderItem[] };
+export type CompleteItemsAnswer = { items: BookmarkRows | BookmarkItem[] | EngineItem[] | HistoryItems | OpenItems | WindowItem[] | HeadingItem[] | SessionItem[] | RegisterItem[] | FolderItem[] };
 
 // A mark that a which-key row lists: its key and the scroll offset it keeps, in px. A global mark also carries its address.
 export type MarkItem = { key: string; x: number; y: number; url?: string };

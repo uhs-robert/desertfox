@@ -19,7 +19,8 @@ export type CursorContext =
   | ({ kind: "flag_value"; command: Command; param: ParamDef } & Span)
   // `position` counts the unmarked words before this one, so 0 is the first. A subject that picks by whole text is always 0, and its span runs from its first word to the end of the line.
   // `engine_settled`: a `--` or an `--engine=` flag came first, so the first word is the query and no engine.
-  | ({ kind: "subject"; command: Command; position: number; engine_settled: boolean } & Span)
+  // `typed` holds the flags already on the line, so a list can narrow by them (`bookmark --folder=Work`).
+  | ({ kind: "subject"; command: Command; position: number; engine_settled: boolean; typed: Record<string, unknown> } & Span)
   | { kind: "none" };
 
 const NUMBER_WORD = /^-?\d+(\.\d+)?$/;
@@ -78,7 +79,7 @@ export function cursor_context(text: string, caret: number, find: CommandLookup[
   const { starts, in_word, quote_open } = word_starts(head);
   // A verbatim subject is raw text to the end of the line, so a quote inside it never groups. The parser says where it starts. A lone dash is still a flag being typed.
   const { command: verbatim, subject_start: verbatim_start } = parse_line({ find }, head);
-  if (verbatim && verbatim_start !== undefined && head.slice(verbatim_start) !== "-") return { kind: "subject", command: verbatim, position: 0, engine_settled: false, word: head.slice(verbatim_start), start: lead + verbatim_start, end: text.length };
+  if (verbatim && verbatim_start !== undefined && head.slice(verbatim_start) !== "-") return { kind: "subject", command: verbatim, position: 0, engine_settled: false, typed: {}, word: head.slice(verbatim_start), start: lead + verbatim_start, end: text.length };
   const word_start = quote_open ? null : in_word ? (starts.at(-1) as number) : head.length;
   const tokens = word_start === null ? undefined : tokenize(head);
   if (word_start === null || !tokens || "error" in tokens) return { kind: "none" };
@@ -126,7 +127,7 @@ export function cursor_context(text: string, caret: number, find: CommandLookup[
     const from = subject_start === undefined ? start : lead + subject_start;
     // The span replaces the raw text, but ranking reads the subject as the parser does: quotes removed, one space between words.
     const subject_words = [...rest.slice(subject_first ?? rest.length), ...(cursor ? [cursor] : [])].map((token) => token.text);
-    return { kind: "subject", command, position: 0, engine_settled, word: subject_words.join(" "), start: from, end: text.length };
+    return { kind: "subject", command, position: 0, engine_settled, typed, word: subject_words.join(" "), start: from, end: text.length };
   }
-  return { kind: "subject", command, position, engine_settled, word, start, end };
+  return { kind: "subject", command, position, engine_settled, typed, word, start, end };
 }
