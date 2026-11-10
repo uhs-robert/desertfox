@@ -17,7 +17,7 @@ export const is_caret_mode = (mode: Mode): boolean => CARET_MODES.includes(mode)
 
 export type RunsIn = "background" | "content";
 
-export type ContextSourceName = "current_url" | "selection" | "clipboard";
+export type ContextSourceName = "current_url" | "selection" | "clipboard" | "bookmark_title";
 
 export type ContextSource = { from: ContextSourceName };
 

@@ -30,6 +30,8 @@ const EXPECTED_REFUSALS: Record<string, RegExp[]> = {
   "bookmark.open": [/no bookmark matches/],
   "history.open": [/no history entry matches/],
   "bookmark.remove": [/no bookmark matches/, /No bookmark for this page/],
+  "bookmark.rename": [/no bookmark matches/, /No bookmark for this page/],
+  "bookmark.edit_url": [/no bookmark matches/, /No bookmark for this page/],
   "page.home": [/set home_page in settings.toml/],
   "open.url": [/No container named/],
   "open.search": [/No search engine named/],

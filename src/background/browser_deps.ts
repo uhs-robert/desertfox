@@ -88,6 +88,7 @@ export function make_router_deps(get_config: () => Promise<MergedConfig>, repeat
     },
     runs_with_empty: async (command_id, args, param, context) => runs_with_empty(await get_config(), command_id, args, param, await page_of(context.tab_id)),
     read_clipboard: () => navigator.clipboard.readText(),
+    bookmark_title: async (url) => (url === undefined ? undefined : (await browser.bookmarks.search({ url })).find((node) => node.url === url && node.type !== "folder")?.title),
     has_permission: (permission) => browser.permissions.contains({ permissions: [permission as browser._manifest.OptionalPermission] }),
     send_to_tab,
     open_cmdline: (tab_id, frame_id, text) => send_to_tab(tab_id, { type: "run_in_content", invocations: [{ id: "cmdline.open", args: { text }, bundle: "cmdline" }] }, frame_id),

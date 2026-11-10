@@ -186,8 +186,9 @@ export const DEFAULT_KEYMAP: KeymapConfig = {
 
     p: { id: "open.clipboard", args: { where: "here" } },
     P: { id: "open.clipboard", args: { where: "tab" } },
-    ba: { id: "bookmark.add" },
-    be: { id: "bookmark.add", prompt: { param: "url", prefill: { from: "current_url" } }, label: "Add bookmark, edit URL" },
+    ba: { id: "bookmark.add", prompt: { param: "url", prefill: { from: "current_url" } }, label: "Add bookmark, edit URL" },
+    be: { id: "bookmark.edit_url", prompt: { param: "url", prefill: { from: "current_url" } }, label: "Edit bookmark address" },
+    br: { id: "bookmark.rename", prompt: { param: "title", prefill: { from: "bookmark_title" } }, label: "Rename bookmark" },
     bd: { id: "bookmark.remove" },
     bD: { id: "bookmark.remove", prompt: { param: "bookmark" }, label: "Remove bookmark, pick from list" },
     bb: { id: "bookmark.open", args: { where: "here" }, prompt: { param: "bookmark" } },
