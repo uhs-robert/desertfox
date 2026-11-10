@@ -122,9 +122,8 @@ function on_beforeinput(event: Event): void {
 // Keys wait for the flush, so a `.` right after Escape repeats this session and not the step before it.
 function flush_typed_text(): void {
   if (!read_session_text) return;
-  const after_ = read_session_text();
+  void bundles.run_command_("text.flush", "text", { after_: read_session_text() }, "");
   read_session_text = undefined;
-  void bundles.run_command_("text.flush", "text", { after_ }, "");
 }
 
 function cancel(event: Event): void {
