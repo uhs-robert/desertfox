@@ -3,13 +3,16 @@ import { test } from "node:test";
 import { create_macro_recorder } from "../../src/background/macro_recorder.ts";
 import { create_register_store } from "../../src/background/register_store.ts";
 import { make_macro_handlers } from "../../src/commands/macro.ts";
+import { create_macro_replay } from "../../src/background/macro_replay.ts";
+import type { MacroReplay } from "../../src/background/macro_replay.ts";
+import type { RunResponse } from "../../src/shared/messages.ts";
 import type { CommandContext } from "../../src/shared/command.ts";
 import { check_args } from "../../src/shared/registry/check_args.ts";
 import { registry } from "../../src/shared/registry/builtin.ts";
 
 const CTX: CommandContext = { tab_id: 1, window_id: 1, frame_id: 0, mode: "normal" };
 
-function make() {
+function make(replay?: MacroReplay) {
   const values = new Map<string, unknown>();
   const area = {
     get: async (keys?: string | string[] | null) => Object.fromEntries([keys ?? []].flat().filter((key) => values.has(key as string)).map((key) => [key, structuredClone(values.get(key as string))])),
@@ -19,7 +22,7 @@ function make() {
   const store = create_register_store({ local: () => area, session: () => area, clipboard: { read: async () => "", write: async () => undefined } });
   const recorder = create_macro_recorder({ session: () => area, tell_tabs: async () => undefined });
   const toasts: string[] = [];
-  const handlers = make_macro_handlers({ recorder, store, is_private: async () => false, toast: async (_ctx, _kind, message) => void toasts.push(message) });
+  const handlers = make_macro_handlers({ recorder, store, is_private: async () => false, toast: async (_ctx, _kind, message) => void toasts.push(message), replay: () => replay });
   const press = (id: string) => recorder.record([{ id }], { ok: true }, { is_private: false });
   return { handlers, store, recorder, toasts, press };
 }
@@ -78,4 +81,39 @@ test("the register key takes a letter and refuses the special registers", () => 
 test("the macro commands stay out of the dot slot", () => {
   assert.equal(registry.get("macro.record")!.repeatable, false);
   assert.equal(registry.get("macro.stop")!.repeatable, false);
+  assert.equal(registry.get("macro.play")!.repeatable, false);
+});
+
+function make_replay(steps: Record<string, (() => Promise<RunResponse>) | undefined>) {
+  const played: string[] = [];
+  const replay = create_macro_replay({
+    read_macro: async (register) => (register === "a" ? Object.keys(steps).map((id) => ({ id })) : undefined),
+    run_step: async (step) => (played.push(step.id), (await steps[step.id]?.()) ?? { ok: true }),
+    active_tab_id: async () => 1,
+    watch: () => ({ navigated: () => false, done: async () => "ready", stop: () => undefined }),
+    hold_keys: async () => undefined,
+    show_refusal: async () => undefined,
+  });
+  return { replay, played };
+}
+
+test("@A plays macro a, and a replay that stops ends quietly as cancelled, since the failed step showed its own refusal", async () => {
+  const { replay, played } = make_replay({ "tab.next": undefined });
+  assert.equal(await make(replay).handlers.play(CTX, { reg: "A" }), undefined);
+  assert.deepEqual(played, ["tab.next"]);
+  const failing = make_replay({ "tab.next": async () => ({ ok: false, refusal: { id: "tab.next", message: "no" } }) });
+  assert.deepEqual(await make(failing.replay).handlers.play(CTX, { reg: "a" }), { ok: true, cancelled: true });
+  await assert.rejects(make(replay).handlers.play(CTX, { reg: "b" }), /Register b holds no macro/);
+});
+
+test("recording refuses while a macro plays", async () => {
+  let finish!: (response: RunResponse) => void;
+  const { replay } = make_replay({ slow: () => new Promise((resolve) => (finish = resolve)) });
+  const { handlers, recorder } = make(replay);
+  const played = handlers.play(CTX, { reg: "a" });
+  await new Promise((resolve) => setImmediate(resolve));
+  await assert.rejects(handlers.record(CTX, { reg: "b" }), /A macro is playing/);
+  assert.equal(await recorder.register_of(false), undefined);
+  finish({ ok: true });
+  await played;
 });

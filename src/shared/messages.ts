@@ -231,6 +231,16 @@ export type ReadKeymap = {
   type: "read_keymap";
 };
 
+// Sent by a page held for a macro replay. Answered when the outermost replay ends: ok when it finished, not ok when a step failed, a pick was cancelled or Escape stopped it. Answered at once when no replay runs.
+export type ReplayEnd = {
+  type: "replay_end";
+};
+
+// Escape while a macro replays: the replay stops before its next step and drops the keys typed during it.
+export type ReplayStop = {
+  type: "replay_stop";
+};
+
 // From the `caret` bundle: one regex page search, run in the background where it can be stopped. `source` and `flags` are of a regex the page already compiled.
 export type FindScan = {
   type: "find_scan";
@@ -356,7 +366,7 @@ export type ImportSessions = { type: "import_sessions"; text: string };
 
 export type PageToBackground = ChangeSetting | ListSettings | ToolbarRequest | PreviewConfigImport | CommitConfigImport | ExportConfig | ListSnippets | RemoveSnippet | ExportSessions | ImportSessions;
 
-export type ContentToBackground = RunRequest | ModeChanged | LeaveTabInsert | LoadBundle | ListKeys | IssueCmdlineTicket | OpenCmdline | RecordCmdline | CompleteItems | TabRowsActionRequest | OpenHelp | RecordStep | ReadKeymap | FindScan | ImageAction | InspectPick | RegisterRequest | MarkRequest;
+export type ContentToBackground = RunRequest | ModeChanged | LeaveTabInsert | LoadBundle | ListKeys | IssueCmdlineTicket | OpenCmdline | RecordCmdline | CompleteItems | TabRowsActionRequest | OpenHelp | RecordStep | ReadKeymap | ReplayEnd | ReplayStop | FindScan | ImageAction | InspectPick | RegisterRequest | MarkRequest;
 
 // How a command ended. Done is `{ ok: true }`. A handler that returns nothing is done, and one that throws is failed.
 // Cancelled means the user left a waiting step (Escape, an unrelated key, a page change), so the rest of a sequence does not run and nothing is shown.
@@ -369,6 +379,13 @@ export type RunResponse = { ok: true; cancelled?: true } | { ok: false; refusal:
 export type RunInContent = {
   type: "run_in_content";
   invocations: Invocation[];
+  // Set for a macro replay: the steps run as a held key's repeats do, so a scroll jumps and the next step reads where it ended.
+  repeat?: true;
+};
+
+// A macro replay reached this page: hold its keys until the replay ends. The page asks when with `replay_end`.
+export type ReplayHold = {
+  type: "replay_hold";
 };
 
 // One toast on the page. A refusal leaves `kind` out and shows as an error.
@@ -405,7 +422,7 @@ export type Ping = {
   type: "ping";
 };
 
-export type BackgroundToContent = RunInContent | ShowRefusal | SetMode | TreeUpdated | GetSelection | FocusPage | Ping;
+export type BackgroundToContent = RunInContent | ReplayHold | ShowRefusal | SetMode | TreeUpdated | GetSelection | FocusPage | Ping;
 
 // Background to tab-model clients, over the port `desertfox_tab_model`
 

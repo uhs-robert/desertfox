@@ -79,6 +79,7 @@ export const DEFAULT_KEYMAP: KeymapConfig = {
     z: "Zoom and scroll",
     ",": "DesertFox",
     q: "Record macro",
+    "@": "Play macro",
     ";": "Hints",
     ";y": "Yank",
     s: "Search here",
@@ -245,6 +246,7 @@ export const DEFAULT_KEYMAP: KeymapConfig = {
 
     m: { id: "mark.add" },
     q: { id: "macro.record" },
+    "@": { id: "macro.play" },
     "'": { id: "mark.jump" },
     "`": { id: "mark.jump" },
 
