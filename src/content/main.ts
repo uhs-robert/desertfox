@@ -15,6 +15,7 @@ import { create_cancelled_keys, type HeldPress } from "./cancelled_keys.ts";
 import { create_key_flow } from "./key_flow.ts";
 import { cancels_keypress, cancels_keyup, press_target, replay_key_to_page } from "./replay_key.ts";
 import { create_which_key_timer } from "./which_key_timer.ts";
+import { badge_state } from "./badge_state.ts";
 import { show_mode_label, show_toast } from "./ui_proxy.ts";
 import { wire_mode_reports } from "./mode_report.ts";
 import { page_mode } from "./page_mode.ts";
@@ -32,9 +33,7 @@ let recording: string | undefined;
 function refresh_mode_indicator(): void {
   const mode = page_mode.get_mode_();
   const pass_next_armed = page_mode.is_pass_next_armed_();
-  // The ui bundle words the label. Content only skips it where nothing shows, so a first hint press or a quiet page loads no bundle.
-  const quiet = mode === "hint" || mode === "cmdline" || (recording === undefined && (mode_indicator === "off" || (mode === "normal" && !pass_next_armed && mode_indicator === "not_normal")));
-  show_mode_label(quiet ? undefined : { mode, pass_next: pass_next_armed, setting: mode_indicator, recording });
+  show_mode_label(badge_state(mode, pass_next_armed, mode_indicator, recording));
 }
 
 const script_started_ms = performance.now();
