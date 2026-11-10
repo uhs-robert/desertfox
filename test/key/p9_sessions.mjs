@@ -70,7 +70,7 @@ export async function run_cases({ rdp, extension_id, run_case, press_keys, settl
     await wait_cmdline(shows_row("kt work"), "the session in the list");
     await type_in_line("kt");
     await complete_in_line();
-    await wait_cmdline((line) => line.value === "session.open kt work ", "the pick to put the session name in the line");
+    await wait_cmdline((line) => line.value === "session.open \"kt work\" ", "the pick to put the session name in the line");
     await close_cmdline();
   });
 }

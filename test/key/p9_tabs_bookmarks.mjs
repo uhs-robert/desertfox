@@ -156,7 +156,7 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, sleep,
       await settle_focus();
       const mark = events.length;
       await press_keys("b", "f");
-      await wait_cmdline((line) => line.open && line.value === "bookmark.open_folder ", "bf to open the line with bookmark.open_folder");
+      await wait_cmdline((line) => line.open && line.value === "bookmark.open_folder -t ", "bf to open the line with bookmark.open_folder");
       await wait_cmdline(shows_row("P9f Open folder"), "the folder in the list");
       await type_in_line("p9f open");
       await complete_in_line();
