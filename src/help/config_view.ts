@@ -16,7 +16,7 @@ const SOURCE_TEXT: Record<ConfigSource, string> = {
 const UNKNOWN_SOURCE_TEXT = "Unknown config source, it updates when the background next loads the config";
 
 // The same for every source: `config.reload` reads the files whatever source gave the config at startup.
-const RELOAD_STEPS = ["native.install (once, to set up the native host)", "config.reload (key qr)"];
+const RELOAD_STEPS = ["native.install (once, to set up the native host)", "config.reload (key <Space>r)"];
 
 export function build_config_view(status: ConfigStatus | undefined): ConfigView {
   return {

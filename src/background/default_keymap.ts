@@ -73,9 +73,9 @@ export const DEFAULT_KEYMAP: KeymapConfig = {
     t: "Tabs",
     w: "Windows",
     y: "Copy",
-    a: "Bookmark",
+    b: "Bookmark",
     z: "Zoom and scroll",
-    q: "DesertFox",
+    "<Space>": "DesertFox",
     ";": "Hints",
     ";y": "Yank",
     s: "Search here",
@@ -186,11 +186,11 @@ export const DEFAULT_KEYMAP: KeymapConfig = {
 
     p: { id: "open.clipboard", args: { where: "here" } },
     P: { id: "open.clipboard", args: { where: "tab" } },
-    aa: { id: "bookmark.add" },
-    ab: { id: "bookmark.add", prompt: { param: "url", prefill: { from: "current_url" } }, label: "Add bookmark, edit URL" },
-    ad: { id: "bookmark.remove" },
-    aD: { id: "bookmark.remove", prompt: { param: "bookmark" }, label: "Remove bookmark, pick from list" },
-    b: { id: "bookmark.open", args: { where: "here" }, prompt: { param: "bookmark" } },
+    ba: { id: "bookmark.add" },
+    be: { id: "bookmark.add", prompt: { param: "url", prefill: { from: "current_url" } }, label: "Add bookmark, edit URL" },
+    bd: { id: "bookmark.remove" },
+    bD: { id: "bookmark.remove", prompt: { param: "bookmark" }, label: "Remove bookmark, pick from list" },
+    bb: { id: "bookmark.open", args: { where: "here" }, prompt: { param: "bookmark" } },
     B: { id: "bookmark.open", args: { where: "tab" }, prompt: { param: "bookmark" } },
 
     zi: { id: "zoom.by", args: { delta: 0.1 }, label: "Zoom in" },
@@ -217,11 +217,14 @@ export const DEFAULT_KEYMAP: KeymapConfig = {
     "<C-v>": { id: "mode.pass_next" },
     "<F1>": { id: "help.open" },
 
-    // The q group holds DesertFox's own commands. `,` stays free as a user leader.
-    qr: { id: "config.reload" },
-    qh: { id: "help.open" },
-    qi: { id: "mode.set", args: { mode: "ignore" } },
-    qb: { id: "page.blur" },
+    // <Space> is the built-in leader for DesertFox's own commands. `,` stays free as a user leader.
+    "<Space>r": { id: "config.reload" },
+    "<Space>h": { id: "help.open" },
+    "<Space>s": { id: "help.open", args: { name: "settings" }, label: "Settings page" },
+    "<Space>t": { id: "settings.toggle", prompt: { param: "name" } },
+    "<Space>i": { id: "mode.set", args: { mode: "ignore" } },
+    "<Space>b": { id: "page.blur" },
+    "<Space>?": { id: "help.whichkey" },
     "<Space>\"": { id: "register.list", prompt: { param: "name" }, label: "List registers" },
 
     o: { id: "open.url", args: { where: "here" }, prompt: { param: "url" } },
