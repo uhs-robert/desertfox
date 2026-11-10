@@ -43,7 +43,7 @@ const handlers = make_macro_handlers({
 
 define("macro.record", {
   label: "Record macro",
-  intent: "Record the commands and typed text that follow into a register. A lowercase letter replaces the macro, an uppercase letter adds to it. Press q again to stop.",
+  intent: "Record commands and typed text into a register. A lowercase letter replaces the macro, an uppercase letter adds to it. Press q again to stop.",
   params: [{ name: "reg", type: "key", pattern: MACRO_REGISTER_PATTERN, description: "Record into this register, a-z or A-Z." }],
   runs_in: "background",
   repeatable: false,
