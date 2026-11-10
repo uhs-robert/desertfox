@@ -299,3 +299,23 @@ test("m accepts a capital letter and refuses a digit", async () => {
   await store.run(set("Q", 1), false);
   await assert.rejects(store.run(set("1", 1), false), /a to z/);
 });
+
+test("remove drops a local mark of its page and a global mark, and refuses a key with no mark", async () => {
+  const { store } = make();
+  await store.run(set("a", 10), false);
+  await store.run(set("b", 20), false);
+  await store.run(set("G", 30, "https://g.test/"), false);
+  await store.remove("a", "https://a.test/p#frag", false);
+  await store.remove("G", "https://a.test/p", false);
+  assert.deepEqual(await store.items("https://a.test/p", false), [{ key: "b", x: 0, y: 20 }]);
+  await assert.rejects(store.remove("a", "https://a.test/p", false), /No mark a/);
+  await assert.rejects(store.remove("G", "https://a.test/p", false), /No mark G/);
+  await assert.rejects(store.remove("'", "https://a.test/p", false), /Marks use/);
+});
+
+test("remove in a private window leaves the normal marks alone", async () => {
+  const { store } = make();
+  await store.run(set("a", 10), false);
+  await assert.rejects(store.remove("a", "https://a.test/p", true), /No mark a/);
+  assert.equal((await store.items("https://a.test/p", false)).length, 1);
+});

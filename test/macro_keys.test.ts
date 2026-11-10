@@ -63,7 +63,7 @@ test("the badge adds the register to the mode, even where the setting hides the 
 
 test("which-key under q lists the stored macros, and the tree when there are none", async () => {
   const storage = storage_of(compiled());
-  const ask = (macros?: () => Promise<{ name: string; description: string }[]>) => list_keys(storage, (id) => registry.get(id), { mode: "normal", prefix: ["q"] }, { macros });
+  const ask = (macros?: () => Promise<{ name: string; description: string }[]>) => list_keys(storage, (id) => registry.get(id), { mode: "normal", prefix: ["q"] }, macros ? { macros } : {});
   const rows = (await ask(async () => [{ name: "a", description: "3 steps" }, { name: "c", description: "1 step" }])).rows;
   assert.deepEqual(rows.map((row) => [row.keys, row.command]), [["a", "3 steps"], ["c", "1 step"]]);
   const bare = (await ask(async () => [])).rows;

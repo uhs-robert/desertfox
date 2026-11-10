@@ -37,6 +37,19 @@ export function create_quickmark_store(deps: QuickmarkStoreDeps) {
         const storage_key = is_private ? QUICKMARK_PRIVATE_STORAGE_KEY : QUICKMARK_STORAGE_KEY;
         await area.set({ [storage_key]: { ...(await read(area, storage_key)), [key]: url } });
       }),
+    // Drops the saved entry of a key, from the private set too in a private window. A key with no saved entry refuses: an entry of quickmarks.toml stays until the file changes.
+    remove: (key: string, is_private: boolean) =>
+      in_turn(async () => {
+        const areas = [{ area: deps.local(), storage_key: QUICKMARK_STORAGE_KEY }, ...(is_private ? [{ area: deps.session(), storage_key: QUICKMARK_PRIVATE_STORAGE_KEY }] : [])];
+        let removed = false;
+        for (const { area, storage_key } of areas) {
+          const { [key]: gone, ...kept } = await read(area, storage_key);
+          if (gone === undefined) continue;
+          await area.set({ [storage_key]: kept });
+          removed = true;
+        }
+        if (!removed) throw new RuntimeRefusal(`No saved quickmark ${key}, an entry of quickmarks.toml changes in the file`);
+      }),
     // Drops every private quickmark unless a private window is open. The window check runs in the queue, so a write from a window that just opened is never deleted.
     clear_private_without_window: (has_private_window: () => Promise<boolean>) =>
       in_turn(async () => {

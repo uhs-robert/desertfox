@@ -303,7 +303,7 @@ function engine_rows(engines: readonly EngineItem[], usage: string, marks_unavai
 const live_kind_of = (param: ParamDef | undefined): LiveKind | undefined => {
   if (!param || !is_dynamic_values(param.values)) return undefined;
   const from = param.values.from;
-  return from === "tabs" || from === "bookmarks" || from === "history" || from === "open" || from === "windows" || from === "headings" || from === "sessions" || from === "registers" || from === "folders" ? from : from === "search_engines" ? "engines" : undefined;
+  return from === "tabs" || from === "bookmarks" || from === "history" || from === "open" || from === "windows" || from === "headings" || from === "sessions" || from === "registers" || from === "folders" || from === "marks" || from === "quickmarks" ? from : from === "search_engines" ? "engines" : undefined;
 };
 
 // The engine takes the first word of `search`, ahead of the query that follows it.
@@ -355,7 +355,7 @@ export function create_completer(
               ? window_rows(read.items as WindowItem[], usage)
               : kind === "headings"
                 ? heading_rows(read.items as HeadingItem[], usage)
-                : kind === "sessions" || kind === "registers" || kind === "folders"
+                : kind === "sessions" || kind === "registers" || kind === "folders" || kind === "marks" || kind === "quickmarks"
                   ? name_rows(read.items as SessionItem[], usage)
                   : bookmark_rows(read.items as BookmarkItem[], usage);
       const ranked = rank(context.word, rows);

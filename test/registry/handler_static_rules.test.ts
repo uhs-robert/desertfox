@@ -47,6 +47,10 @@ const EXPECTED_REFUSALS: Record<string, RegExp[]> = {
   "register.list": [/is empty/],
   "macro.stop": [/Not recording a macro/],
   "quickmark.open": [/No quickmark/],
+  "quickmark.list": [/No quickmark/],
+  "quickmark.delete": [/No saved quickmark/],
+  "mark.list": [/No marks?/],
+  "mark.delete": [/No mark/],
 };
 
 const SOURCES: EnumSources = { search_engines: ["stub_engine"], containers: ["stub_container"] };

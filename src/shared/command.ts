@@ -32,9 +32,9 @@ export type DefaultArm = { value: ParamValue; when: ParamWhen };
 // A plain value, a context source, or an ordered list of arms with an optional plain value last. The first arm that holds wins, else the last value applies, else the param has no default and is required.
 export type ParamDefault = ParamValue | ContextSource | readonly (DefaultArm | ParamValue)[];
 
-// Value lists filled at run time from the user's config or from Firefox. `tabs`, `bookmarks`, `history`, `windows`, `headings`, `sessions`, `registers` and `folders` go on a string param and
+// Value lists filled at run time from the user's config or from Firefox. `tabs`, `bookmarks`, `history`, `windows`, `headings`, `sessions`, `registers`, `folders`, `marks` and `quickmarks` go on a string param and
 // only feed the completion list. The page asks the background for the first three (`complete_items`) and the host script for the headings, nobody checks a typed value against them.
-export type DynamicValues = { from: "search_engines" | "containers" | "tabs" | "bookmarks" | "history" | "open" | "windows" | "headings" | "sessions" | "registers" | "folders" };
+export type DynamicValues = { from: "search_engines" | "containers" | "tabs" | "bookmarks" | "history" | "open" | "windows" | "headings" | "sessions" | "registers" | "folders" | "marks" | "quickmarks" };
 
 export type ParamDef = {
   name: string;

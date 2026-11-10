@@ -121,3 +121,21 @@ test("which-key lists the quickmarks under go and gn with their addresses, and k
   assert.deepEqual((await rows(["g", "o"], async () => Promise.reject(new Error("x")))).map((row) => row.keys), ["<key>"]);
   assert.ok((await rows(["g"])).length > 3);
 });
+
+test("remove drops the saved entry, and the config entry of that key shows again", async () => {
+  const { store } = make();
+  await store.add("g", "https://git.test", false);
+  await store.remove("g", false);
+  assert.deepEqual(await store.table(CONFIGURED, false), CONFIGURED);
+});
+
+test("remove refuses a key with no saved entry, and a private remove also reaches the normal entries", async () => {
+  const { store } = make();
+  await assert.rejects(store.remove("g", false), /No saved quickmark g/);
+  await store.add("a", "https://normal.test", false);
+  await store.add("b", "https://private.test", true);
+  await store.remove("a", true);
+  await store.remove("b", true);
+  assert.deepEqual(await store.table({}, true), {});
+  await assert.rejects(store.remove("a", false), /No saved quickmark a/);
+});

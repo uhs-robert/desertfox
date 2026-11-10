@@ -4,6 +4,7 @@ import { get_config } from "../background/startup.ts";
 import { show_toast_on_tab } from "../background/browser_deps.ts";
 import { browser_quickmark_store } from "../background/quickmark_store.ts";
 import { is_private_context } from "../background/register_store.ts";
+import { shorten_address } from "../shared/mark_text.ts";
 import { QUICKMARK_KEY } from "../shared/quickmark_names.ts";
 import type { QuickmarkTable } from "../shared/quickmark_names.ts";
 import type { ToastKind } from "../shared/messages.ts";
@@ -15,6 +16,7 @@ export type QuickmarkDeps = {
   // The quickmarks this window opens: config table, saved ones, and private ones in a private window.
   table: (ctx: CommandContext) => Promise<QuickmarkTable>;
   save: (ctx: CommandContext, key: string, url: string) => Promise<void>;
+  remove: (ctx: CommandContext, key: string) => Promise<void>;
   tab_url: (ctx: CommandContext) => Promise<string>;
   // Turns an address written without a scheme into one that opens, as `o` does.
   target: (text: string) => Promise<string>;
@@ -34,12 +36,30 @@ export function make_quickmark_handlers(deps: QuickmarkDeps) {
       if (url === undefined) throw new RuntimeRefusal(`No quickmark ${args.key}`);
       await deps.open(ctx, await deps.target(url), args.where);
     },
+    // With no key, one toast names every quickmark. With a key, it opens in this tab.
+    list: async (ctx: CommandContext, args: { quickmark?: string }) => {
+      const key = args.quickmark?.trim();
+      const table = await deps.table(ctx);
+      if (key === undefined || key === "") {
+        const keys = Object.keys(table).sort();
+        if (keys.length === 0) throw new RuntimeRefusal("No quickmarks");
+        return deps.toast(ctx, "info", keys.map((each) => `${each} ${shorten_address(table[each] as string)}`).join("   "));
+      }
+      const url = table[key];
+      if (url === undefined) throw new RuntimeRefusal(`No quickmark ${key}`);
+      await deps.open(ctx, await deps.target(url), "here");
+    },
+    delete: async (ctx: CommandContext, args: { quickmark: string }) => {
+      await deps.remove(ctx, args.quickmark.trim());
+      await deps.toast(ctx, "success", `Quickmark ${args.quickmark.trim()} deleted`);
+    },
   };
 }
 
 export const browser_quickmark_deps: QuickmarkDeps = {
   table: async (ctx) => browser_quickmark_store.table((await get_config()).quickmarks, await is_private_context(ctx)),
   save: async (ctx, key, url) => browser_quickmark_store.add(key, url, await is_private_context(ctx)),
+  remove: async (ctx, key) => browser_quickmark_store.remove(key, await is_private_context(ctx)),
   tab_url: current_tab_url,
   target: typed_url_target,
   open: (ctx, url, where) => open_in(ctx, url, where),
@@ -65,4 +85,23 @@ define("quickmark.open", {
   params: [{ name: "key", type: "key", pattern: KEY_PARAM_SOURCE, description: "Open the quickmark under this letter or digit." }, WHERE_PARAM],
   runs_in: "background",
   run: (ctx, args) => handlers.open(ctx, args as { key: string; where: Where }),
+});
+
+define("quickmark.list", {
+  name: "quickmarks",
+  label: "List quickmarks",
+  intent: "List the quickmarks. With a key, open that quickmark in this tab.",
+  params: [{ name: "quickmark", type: "string", rest: true, main: true, optional: true, values: { from: "quickmarks" }, pattern: KEY_PARAM_SOURCE, description: "Open the quickmark under this letter or digit." }],
+  runs_in: "background",
+  repeatable: false,
+  run: (ctx, args) => handlers.list(ctx, args as { quickmark?: string }),
+});
+
+define("quickmark.delete", {
+  label: "Delete quickmark",
+  intent: "Delete a quickmark saved with `M`. An entry of quickmarks.toml stays until the file changes.",
+  params: [{ name: "quickmark", type: "string", rest: true, main: true, values: { from: "quickmarks" }, pattern: KEY_PARAM_SOURCE, description: "Delete the quickmark under this letter or digit." }],
+  runs_in: "background",
+  repeatable: false,
+  run: (ctx, args) => handlers.delete(ctx, args as { quickmark: string }),
 });
