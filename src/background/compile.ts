@@ -77,6 +77,7 @@ function keep_node(node: TreeNode, path: string[], mode: string, input: CompileI
   for (const step of node.steps) {
     const command = input.get_command(step.invocation.id);
     if (!command) continue;
+    if (find_param(command, "register")?.type === "string") step.register = true;
     const mode_error = mode_problem(mode, command);
     if (mode_error) {
       warnings.push(`${mode}: skipped "${path.join("")}": ${mode_error}`);

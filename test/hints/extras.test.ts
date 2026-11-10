@@ -71,6 +71,7 @@ async function page_with(texts: string[]) {
   const active_listeners = new Set<string>();
   const sent: unknown[] = [];
   const repeat_records: unknown[] = [];
+  const yanked: unknown[] = [];
   const copied: string[] = [];
   const modes: string[] = [];
   const held_key_batches: string[][] = [];
@@ -151,6 +152,7 @@ async function page_with(texts: string[]) {
     disconnect = () => {};
   };
   globals.browser = { storage: { local: { get: async () => ({}) }, onChanged: { addListener: () => {} } }, runtime: { sendMessage: async (message: unknown) => {
+    if ((message as { type?: string }).type === "register_yank") return void yanked.push(message), { ok: true };
     const is_record = (message as { type?: string }).type === "record_step";
     (is_record ? repeat_records : sent).push(message);
     return is_record ? undefined : sends_held?.();
@@ -172,6 +174,7 @@ async function page_with(texts: string[]) {
     links,
     sent,
     repeat_records,
+    yanked,
     copied,
     modes,
     // Each batch of keys that hint mode handed back to the keymap, in order.
@@ -356,7 +359,7 @@ test("an invalid custom selector shows a notice instead of throwing", async () =
 
 test("hint.run needs no text: it defaults to empty, which filters nothing", () => {
   const checked = check_args(registry.get("hint.run")!, { action: "here" });
-  assert.deepEqual(checked, { ok: true, args: { action: "here", filter: "clickable", text: "", rapid: false } });
+  assert.deepEqual(checked, { ok: true, args: { action: "here", filter: "clickable", text: "", rapid: false, register: "" } });
   assert.equal(check_args(registry.get("hint.run")!, { action: "copy_text", text: "x", rapid: true }).ok, true);
 });
 
@@ -592,6 +595,21 @@ test("hint.run answers done only after the picked link has been opened", async (
   assert.equal(await peek(answer), undefined);
   opened({ ok: true });
   assert.deepEqual(await answer, { ok: true });
+});
+
+test("a hint copy leaves the text in the unnamed register, and in the named one a register arg names", async () => {
+  const page = await page_with(["one", "two"]);
+  const plain = page.run({ action: "copy" });
+  await settle();
+  page.type(page.labels()[0]!.toLowerCase());
+  await plain;
+  const named = await page_with(["one", "two"]);
+  const answer = named.run({ action: "copy_text", register: "b" });
+  await settle();
+  named.type(named.labels()[1]!.toLowerCase());
+  assert.deepEqual(await answer, { ok: true });
+  assert.deepEqual(page.yanked, [{ type: "register_yank", name: "", text: "https://example.com/one" }]);
+  assert.deepEqual(named.yanked, [{ type: "register_yank", name: "b", text: "two" }]);
 });
 
 test("a refused hint copy answers failed with one message, and a good copy answers done", async () => {

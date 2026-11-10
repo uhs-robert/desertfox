@@ -3,7 +3,7 @@ import type { CommandContext } from "../shared/command.ts";
 import { define } from "../shared/registry/builtin.ts";
 import { REGISTER_NAME_PATTERN } from "../shared/register_names.ts";
 import { show_toast_on_tab } from "../background/browser_deps.ts";
-import { browser_register_store, describe_value } from "../background/register_store.ts";
+import { browser_register_store, describe_value, is_private_context } from "../background/register_store.ts";
 import type { RegisterStore } from "../background/register_store.ts";
 import type { ToastKind } from "../shared/messages.ts";
 
@@ -36,7 +36,7 @@ export function make_register_handlers(deps: RegisterCommandDeps) {
 
 const handlers = make_register_handlers({
   store: browser_register_store,
-  is_private: async (ctx) => ctx.window_id !== undefined && (await browser.windows.get(ctx.window_id)).incognito,
+  is_private: is_private_context,
   toast: (ctx, kind, message) => show_toast_on_tab(ctx, "register", message, kind),
 });
 

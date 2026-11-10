@@ -8,7 +8,7 @@ import { unhover } from "./hover.ts";
 import { has_usable_address, is_inside_link, is_media, OPEN_PLACES, perform, starts_caret } from "./actions.ts";
 import type { CaretMode, HintAction, Place } from "./actions.ts";
 import { hand_to_devtools } from "./inspect.ts";
-import { copy_text } from "../caret/copy_text.ts";
+import { copy_yank } from "../caret/copy_text.ts";
 import { collect, keep_text_matches, keep_visible_deduplicated, query_for, scroll_clips_in_page, weak_test_for, window_of } from "./candidates.ts";
 import type { Found, HintFilter } from "./candidates.ts";
 import { clean_letters, make_labels } from "./labels.ts";
@@ -105,11 +105,11 @@ async function keep_visible_ones(candidates: Found[], filter: HintFilter, skips_
   return keep_visible_deduplicated(candidates, probe);
 }
 
-const yank_deps = (): YankDeps => ({
+const yank_deps = (register: string | undefined): YankDeps => ({
   find: all_links,
   keep_present_: keep_present_found,
   keep_in_view_: (found) => keep_visible_ones(found, "links"),
-  copy: (text) => copy_text(navigator.clipboard, text),
+  copy: (text) => copy_yank(navigator.clipboard, text, register),
   show_message_: (message) => create_view().show_message_(message),
 });
 
@@ -144,10 +144,13 @@ async function follow_page_link(direction: FollowDirection, place: Place): Promi
   return result && typeof result === "object" && "ok" in result ? (result as Outcome) : done;
 }
 
+// The register of the `hint.run` that is picking. A pick copies after the run started, so the copy cannot read the session args.
+let yank_register: string | undefined;
+
 // A refused copy answers failed and shows nothing here: the pick's answer carries it to the caller, which shows it once.
 function copy_to_clipboard(text: string, what?: string): Promise<Outcome | undefined> {
-  return copy_text(navigator.clipboard, text).then((copied) => {
-    if (!copied) return { ok: false, message: "Could not copy to the clipboard" };
+  return copy_yank(navigator.clipboard, text, yank_register).then((copied) => {
+    if (!copied.ok) return copied;
     // A view of its own, so the notice does not wipe the labels that rapid mode shows.
     create_view().show_message_(`Copied ${what ?? (text.length > 40 ? text.slice(0, 40) + "..." : text)}`);
   });
@@ -285,7 +288,7 @@ function register(host: BundleHostApi): void {
     mark_text_entry({ id: "page.focus_field", args: { direction: args.direction, steps: args.steps } });
     return done;
   });
-  host.register_handler_("copy.links", (args) => yank_links(args.scope as "page" | "viewport", args.format as LinkFormat, yank_deps()));
+  host.register_handler_("copy.links", (args) => yank_links(args.scope as "page" | "viewport", args.format as LinkFormat, yank_deps(args.register as string | undefined)));
   host.register_handler_("hint.unhover", () => unhover());
 
   // The command line asks for the list and `report` hands it back, so the answer does not go through the background.
@@ -306,6 +309,7 @@ function register(host: BundleHostApi): void {
 
   host.register_handler_("hint.run", (args): Outcome | Promise<Outcome> => {
     const action = args.action as HintAction;
+    yank_register = args.register as string | undefined;
     end_session();
     const filter = args.filter as HintFilter;
     const custom_selector_ = args.selector as string | undefined;

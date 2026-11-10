@@ -1,4 +1,5 @@
 import type { Outcome } from "../../shared/messages.ts";
+import { copy_yank } from "../caret/copy_text.ts";
 import { link_text, markdown_address, org_address } from "../link_escape.ts";
 
 export const COPY_FORMATS = ["plain", "canonical", "short", "title", "markdown", "org"] as const;
@@ -33,7 +34,7 @@ function link_href(rel: string): string | undefined {
   return document.querySelector<HTMLLinkElement>(`link[rel~="${rel}"][href]`)?.href || undefined;
 }
 
-export function copy_page_url(format: CopyFormat, show_toast: (message: string) => void): Promise<Outcome | void> {
+export function copy_page_url(format: CopyFormat, register: string | undefined, show_toast: (message: string) => void): Promise<Outcome | void> {
   const text = format_page_link(format, {
     url: location.href,
     title: document.title,
@@ -41,8 +42,5 @@ export function copy_page_url(format: CopyFormat, show_toast: (message: string) 
     short_url_: link_href("shortlink"),
   });
   // The failure goes to the caller, which shows it once.
-  return navigator.clipboard.writeText(text).then(
-    () => show_toast(`Copied ${text}`),
-    (): Outcome => ({ ok: false, message: "Could not copy to the clipboard" }),
-  );
+  return copy_yank(navigator.clipboard, text, register).then((copied) => (copied.ok ? show_toast(`Copied ${text}`) : copied));
 }

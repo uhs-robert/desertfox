@@ -9,7 +9,7 @@ import type { KeymapMode } from "./keymap.ts";
 
 export const COMPILED_KEYMAP_STORAGE_KEY = "desertfox_compiled_keymap";
 
-export const COMPILED_KEYMAP_VERSION = 4;
+export const COMPILED_KEYMAP_VERSION = 5;
 
 // One step of a binding. The side that runs it and the count rule are resolved at compile time.
 export type LeafStep = {
@@ -21,6 +21,8 @@ export type LeafStep = {
   bundle?: BundleName;
   // The name of the `key` param this step waits on: the key press after the leaf fills it. The matcher fills it from the key that reaches the leaf, which sits under `ANY_KEY`.
   capture?: string;
+  // The command has a `register` param, so the matcher fills it from a `"<reg>` typed before the leaf.
+  register?: true;
 };
 
 export type TreeLeaf = {

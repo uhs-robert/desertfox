@@ -160,7 +160,7 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
   }
   if (request?.type === "load_bundle") return bundle_loader.answer(sender, request.name);
   if (request?.type === "find_scan" && is_scan_request(request)) return find_scan.answer(request, `${sender.tab?.id}:${sender.frameId}`);
-  if (request?.type === "register_read" || request?.type === "register_write") return answer_register_request(browser_register_store, request, sender.tab);
+  if (request?.type === "register_read" || request?.type === "register_write" || request?.type === "register_yank") return answer_register_request(browser_register_store, request, sender.tab);
   if (request?.type === "issue_cmdline_ticket") return cmdline.issue_ticket(sender.tab?.id);
   if (request?.type === "open_cmdline") return get_config().then(() => cmdline.open(request.ticket, sender.tab?.id, sender.frameId, sender.tab?.windowId, sender.tab, sender.tab?.incognito === true));
   if (request?.type === "complete_items") return complete_items.answer(request.kind, asker_of(sender));
@@ -185,7 +185,7 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
       page,
       requirement_of: requirement_lookup(config),
       site_engine_label_of: (invocation) => config.search_engines[site_engine_for(config.search_engines, invocation.site_search?.engines ?? [], page) ?? ""]?.label,
-    }, [sender.url, tab?.url]));
+    }, [sender.url, tab?.url], () => browser_register_store.items(tab?.incognito === true)));
   }
   if ((message as SnippetCall)?.type === "snippet_run") {
     return get_config().then(() => snippets.handle_call(message as SnippetCall, { tab_id: sender.tab?.id, frame_id: sender.frameId }));

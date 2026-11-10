@@ -72,7 +72,7 @@ export type YankDeps = {
   find: () => Found[];
   keep_present_: (found: Found[]) => Found[];
   keep_in_view_: (found: Found[]) => Promise<Found[]>;
-  copy: (text: string) => Promise<boolean>;
+  copy: (text: string) => Promise<Outcome>;
   show_message_: (message: string) => void;
 };
 
@@ -82,7 +82,8 @@ export async function yank_links(scope: "page" | "viewport", format: LinkFormat,
   const kept = scope === "page" ? deps.keep_present_(found) : await deps.keep_in_view_(found);
   const links = links_of(kept);
   if (links.length === 0) return { ok: false, message: "No links on this page" };
-  if (!(await deps.copy(format_links(links, format)))) return { ok: false, message: "Could not copy to the clipboard" };
+  const copied = await deps.copy(format_links(links, format));
+  if (!copied.ok) return copied;
   deps.show_message_(`Copied ${links.length} ${links.length === 1 ? "link" : "links"}`);
   return { ok: true };
 }

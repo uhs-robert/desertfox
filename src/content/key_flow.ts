@@ -76,9 +76,14 @@ export function create_key_flow(deps: KeyFlowDeps) {
   let sequence_in_progress = false;
   let typed: string[] = [];
   let count: number | undefined;
+  let register: string | undefined;
+
+  // What which-key lists: the keys typed in the tree, or `"` while the register name is awaited.
+  const listed = (keys: string[]) => (register === '"' ? [register] : keys);
 
   const reset_sequence_ = () => {
     matcher?.reset();
+    register = undefined;
     sequence_in_progress = false;
     deps.on_prefix_(undefined);
   };
@@ -129,18 +134,22 @@ export function create_key_flow(deps: KeyFlowDeps) {
     // Backspace drops the last key of a half-typed sequence. The matcher cannot step back, so the shorter prefix is typed again.
     if (was_in_progress && token === "<Backspace>") {
       const kept = typed.slice(0, -1);
+      // With no key in the tree, the last key of the register prefix goes.
+      const kept_register = typed.length === 0 ? register?.slice(0, -1) : register;
       reset_sequence_();
-      // The count goes back in as its digits, ahead of the kept keys.
-      for (const key of [...`${count ?? ""}`, ...kept]) step(active, key, false);
-      deps.on_prefix_(kept.length > 0 ? { mode, typed: kept } : undefined, true);
+      // The count and the register go back in as their keys, ahead of the kept keys.
+      for (const key of [...`${count ?? ""}`, ...(kept_register ?? ""), ...kept]) step(active, key, false);
+      const shown = listed(kept);
+      deps.on_prefix_(shown.length > 0 ? { mode, typed: shown } : undefined, true);
       return "cancel";
     }
     if (space_stays_with_control(mode, token)) return "pass";
     const result = active.feed(mode, token);
     sequence_in_progress = result.kind === "pending";
-    if (result.kind === "pending") ({ typed, count } = result);
+    if (result.kind === "pending") ({ typed, count, register_keys: register } = result);
     // A bare count (`3`) has typed nothing yet, so no keys can be listed.
-    deps.on_prefix_(result.kind === "pending" && result.typed.length > 0 ? { mode, typed: result.typed } : undefined);
+    const keys = listed(typed);
+    deps.on_prefix_(result.kind === "pending" && keys.length > 0 ? { mode, typed: keys } : undefined);
     if (result.kind === "match") {
       deps.run_leaf_(result.leaf, result.count, repeat);
       return "cancel";

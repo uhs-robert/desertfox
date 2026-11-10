@@ -100,9 +100,9 @@ test("the keys of the new modes compile and resolve to their commands", () => {
   assert.equal(leaf_id("normal", "g", "V"), 'mode.set {"mode":"caret"}');
   assert.equal(leaf_id("normal", "v"), 'mode.set {"mode":"caret"}');
   assert.equal(leaf_id("normal", "V"), 'mode.set {"mode":"visual"}');
-  assert.equal(leaf_id("normal", ";", "v"), 'hint.run {"action":"caret","filter":"prose","text":"","rapid":false}');
-  assert.equal(leaf_id("normal", ";", "b"), 'hint.run {"filter":"buttons","action":"here","text":"","rapid":false}');
-  assert.equal(leaf_id("normal", ";", "V"), 'hint.run {"action":"visual","filter":"prose","text":"","rapid":false}');
+  assert.equal(leaf_id("normal", ";", "v"), 'hint.run {"action":"caret","filter":"prose","text":"","rapid":false,"register":""}');
+  assert.equal(leaf_id("normal", ";", "b"), 'hint.run {"filter":"buttons","action":"here","text":"","rapid":false,"register":""}');
+  assert.equal(leaf_id("normal", ";", "V"), 'hint.run {"action":"visual","filter":"prose","text":"","rapid":false,"register":""}');
   assert.equal(leaf_id("normal", ";", "#"), 'cmdline.open {"text":"heading "}');
   assert.equal(leaf_id("normal", ";", ";"), 'cmdline.open {"text":"hint "}');
   assert.equal(leaf_id("normal", ";", "u"), 'cmdline.open {"text":"hint --custom "}');
@@ -111,8 +111,8 @@ test("the keys of the new modes compile and resolve to their commands", () => {
   assert.equal(leaf_id("visual", "V"), 'mode.set {"mode":"visual_line"}');
   assert.equal(leaf_id("visual_line", "v"), 'mode.set {"mode":"visual"}');
   assert.equal(leaf_id("visual_line", "V"), 'mode.set {"mode":"caret"}');
-  assert.equal(leaf_id("visual_line", "y"), 'visual.act {"action":"yank"}');
-  assert.equal(leaf_id("visual_line", "o"), 'visual.act {"action":"swap"}');
+  assert.equal(leaf_id("visual_line", "y"), 'visual.act {"action":"yank","register":""}');
+  assert.equal(leaf_id("visual_line", "o"), 'visual.act {"action":"swap","register":""}');
   assert.equal(leaf_id("visual_line", "/"), leaf_id("visual", "/"));
   assert.equal(leaf_id("visual_line", "n"), "find.next {}");
   assert.equal(leaf_id("visual_line", "j"), leaf_id("visual", "j"));

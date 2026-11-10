@@ -1,9 +1,12 @@
 import { RuntimeRefusal } from "../shared/command.ts";
+import type { CommandContext } from "../shared/command.ts";
 import { get_config } from "../background/startup.ts";
 import { define } from "../shared/registry/builtin.ts";
+import { OPEN_REGISTER_PARAM } from "./register_param.ts";
 import { CONTAINER_PARAM, current_page, open_in, typed_url_target, WHERE_PARAM } from "./open_target.ts";
 import type { Where } from "./open_target.ts";
 import { BUILT_IN_PAGE, DEFAULT_SETTINGS, NEW_TAB_PAGE_FILE } from "../shared/config.ts";
+import { browser_register_store, is_private_context } from "../background/register_store.ts";
 import { engine_url, home_page_url, search_engine_name } from "./url_build.ts";
 
 const container_of = (args: Record<string, unknown>) => (typeof args.container === "string" ? args.container : undefined);
@@ -46,14 +49,24 @@ define("open.search", {
   },
 });
 
+// A register that holds a macro has no text to open.
+async function text_to_open(ctx: CommandContext, register: string): Promise<string> {
+  if (register.trim() === "") return navigator.clipboard.readText();
+  const name = register.trim();
+  const value = await browser_register_store.read(name, await is_private_context(ctx));
+  if (value === undefined || value === "") throw new RuntimeRefusal(`Register ${name} is empty`);
+  if (typeof value !== "string") throw new RuntimeRefusal(`Register ${name} holds a macro, not text`);
+  return value;
+}
+
 define("open.clipboard", {
   name: "paste",
   label: "Open clipboard",
-  intent: "Open the URL on the clipboard. Text that is not a URL is searched with the default_engine setting.",
-  params: [WHERE_PARAM, CONTAINER_PARAM],
+  intent: "Open the URL on the clipboard or in a register. Text that is not a URL is searched with the default_engine setting.",
+  params: [WHERE_PARAM, CONTAINER_PARAM, OPEN_REGISTER_PARAM],
   runs_in: "background",
   run: async (ctx, args) => {
-    const target = await typed_url_target(await navigator.clipboard.readText());
+    const target = await typed_url_target(await text_to_open(ctx, args.register as string));
     await open_in(ctx, target, args.where as Where, container_of(args));
   },
 });

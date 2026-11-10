@@ -181,7 +181,9 @@ export type CompleteItemsAnswer = { items: BookmarkItem[] | EngineItem[] | Histo
 // From the `caret` bundle: one register read or write. The background answers by the sender tab's privacy. A read answers the value, or nothing for an empty register and a refused name. A write answers an `Outcome`. A content script writes text only.
 export type RegisterRead = { type: "register_read"; name: string };
 export type RegisterWrite = { type: "register_write"; name: string; text: string };
-export type RegisterRequest = RegisterRead | RegisterWrite;
+// A yank: the text goes to the named register, if any (`""` names none), and to the unnamed one. A black hole name drops it.
+export type RegisterYank = { type: "register_yank"; name: string; text: string };
+export type RegisterRequest = RegisterRead | RegisterWrite | RegisterYank;
 
 // From the content script when a leaf of content commands ends: the steps and how they ended. The background checks it like any page message,
 // because the sender is a page script, then hands it to `record_step`. A held key sends the first press only.

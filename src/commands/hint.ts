@@ -1,5 +1,6 @@
 import { define } from "../shared/registry/builtin.ts";
 import { WHERE, WHERE_SHORT } from "./open_target.ts";
+import { YANK_REGISTER_PARAM } from "./register_param.ts";
 
 // Filters whose elements have an address to open or copy. The mixed filters stay because some of their elements have one.
 const HAS_ADDRESS = ["all", "clickable", "links", "images", "frames", "media", "custom"];
@@ -97,6 +98,7 @@ define("hint.run", {
     { name: "selector", type: "string", main: true, rest: true, verbatim: true, when: { filter: ["custom"] }, description: "Label the elements that match this CSS selector." },
     { name: "text", type: "string", optional: true, description: "Keep only the links whose text holds this." },
     { name: "rapid", type: "bool", default: false, short: "r", description: "Keep hint mode open for more picks." },
+    YANK_REGISTER_PARAM,
   ],
   runs_in: "content",
   bundle: "hints",

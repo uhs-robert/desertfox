@@ -20,5 +20,5 @@ if (!page.desertfox_page_ready) {
     focus_first_input();
     mark_text_entry({ id: "page.focus_input" });
   });
-  host.register_handler_("copy.url", (args) => copy_page_url(args.format as CopyFormat, host.show_toast_));
+  host.register_handler_("copy.url", (args) => copy_page_url(args.format as CopyFormat, args.register as string | undefined, host.show_toast_));
 }

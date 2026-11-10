@@ -315,6 +315,7 @@ export const DEFAULT_KEYMAP: KeymapConfig = {
   },
   insert: {
     "<Escape>": { id: "mode.escape" },
+    "<C-r>": { id: "register.paste", label: "Paste register" },
   },
   ignore: {
     "<S-Escape>": { id: "mode.set", args: { mode: "normal" } },

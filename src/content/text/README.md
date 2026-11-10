@@ -8,6 +8,6 @@ The `text` bundle (`text.js`, 4 KB limit). It records the text typed in one inse
 - `field_text.ts`: what a field holds now.
 - `secret_field.ts`: `is_secret_field`, the one test for a field whose text is never recorded: a password input, or an `autocomplete` of `current-password`, `new-password` or `one-time-code`. A field seen as secret stays secret, so a show-password toggle does not expose it. Register writes and the macro recorder call it too.
 - `field_writer.ts`: `write_into_field`, the one writer of text into a field, through `execCommand("insertText")` so React and Vue fields see a real input event. It refuses with `RuntimeRefusal` when no field is focused and none was left. Hint keys and `<C-r>` paste use it through `type_at_caret`.
-- `main.ts`: registers `text.input`, `text.flush` and `text.insert`. A replay runs under `while_replaying`, so its own input events do not record themselves.
+- `main.ts`: registers `text.input`, `text.flush`, `text.insert` and `register.paste` (`<C-r><reg>`, which reads the register from the background and types it). A replay or a paste runs under `while_replaying`, so its own input events do not record themselves. Pasting into a password field works, because only reading a field into a register is blocked.
 
 The text goes to `storage.session` only (the `.` slot, which a private window has its own copy of), never `storage.local`. Rich editors that ignore `execCommand` are not recorded.

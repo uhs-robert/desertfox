@@ -29,3 +29,6 @@ export const is_macro_register = (name: string): boolean => /^[a-zA-Z]$/.test(na
 
 // For a param of the register commands, which check names in the schema.
 export const REGISTER_NAME_PATTERN = '^\\s*(?:[A-Za-z"+_/]|/:direction)\\s*$';
+
+// The one key that names a register after `"` or `<C-r>`.
+export const REGISTER_KEY = /^[A-Za-z"+_/]$/;

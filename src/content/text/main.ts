@@ -1,6 +1,8 @@
 // The `text` bundle: records the text typed in an insert session and writes it back for `.`. It loads on the first input event in a text field.
 
 import type { BundleHostApi } from "../bundle_host.ts";
+import { RuntimeRefusal } from "../../shared/command.ts";
+import type { RegisterRead } from "../../shared/messages.ts";
 import { write_into_field } from "./field_writer.ts";
 import { take_text_entry } from "./entry.ts";
 import { read_field_text } from "./field_text.ts";
@@ -24,6 +26,12 @@ if (!page.desertfox_text_ready) {
     recorder.on_input(args.field_ as Element, args.before_ as string);
   });
   host.register_handler_("text.flush", recorder.flush);
+  host.register_handler_("register.paste", async (args) => {
+    const name = args.name as string;
+    const value = (await browser.runtime.sendMessage({ type: "register_read", name } satisfies RegisterRead)) as string | unknown[] | undefined;
+    if (typeof value !== "string" || value === "") throw new RuntimeRefusal(value === undefined || value === "" ? `Register ${name} is empty` : `Register ${name} holds a macro, not text`);
+    recorder.while_replaying(() => write_into_field(value, host.last_blurred_()));
+  });
   host.register_handler_("text.insert", (args) => recorder.while_replaying(() => write_into_field(args.text as string, host.last_blurred_())));
   // Escape and a click both blur the field. A tab that goes away flushes on the way out, as far as the message gets through.
   window.addEventListener("focusout", recorder.flush, true);

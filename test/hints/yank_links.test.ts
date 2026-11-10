@@ -80,7 +80,7 @@ function deps_with(overrides: Partial<YankDeps>, copied: string[] = [], messages
     keep_in_view_: async (found) => found.filter((item) => item.element.getAttribute("href") === "/in-view"),
     copy: async (text) => {
       copied.push(text);
-      return true;
+      return { ok: true };
     },
     show_message_: (message) => void messages.push(message),
     ...overrides,
@@ -113,7 +113,7 @@ test("no links refuses and copies nothing", async () => {
 
 test("a refused clipboard fails with the copy message and shows no toast", async () => {
   const messages: string[] = [];
-  const outcome = await yank_links("page", "plain", deps_with({ copy: async () => false }, [], messages));
+  const outcome = await yank_links("page", "plain", deps_with({ copy: async () => ({ ok: false, message: "Could not copy to the clipboard" }) }, [], messages));
   assert.deepEqual(outcome, { ok: false, message: "Could not copy to the clipboard" });
   assert.deepEqual(messages, []);
 });

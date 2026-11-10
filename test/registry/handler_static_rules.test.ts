@@ -104,6 +104,8 @@ function candidates(param: ParamDef): readonly unknown[] {
     case "key":
       return ["", "a", "Z", "1", "x"];
     case "string":
+      // A named register is empty on the stub, which is a runtime refusal of its own and would hide what the other params do.
+      if (param.name === "register") return [""];
       return ["", " ", "1", "x", "1 x", ...(static_values(param) ?? []).slice(0, 2), ...(static_values(param) ?? []).slice(-1)];
   }
 }

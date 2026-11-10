@@ -17,8 +17,9 @@ test("a pending yank still counts as the same session after a rebuild, so visual
   const open = { model_: old_model, cursor: { anchor: 0, caret: 2 }, mode: "visual", goal_x_: undefined, painted_: [] };
   const session: { current: object } = { current: open };
   let left_visual = false;
+  Object.defineProperty(globalThis, "browser", { value: { runtime: { sendMessage: async () => ({ ok: true }) } }, configurable: true });
   const clipboard = { writeText: () => new Promise<void>((done) => setTimeout(done, 5)) };
-  const pending = yank_text(clipboard as unknown as Clipboard, "old", {
+  const pending = yank_text(clipboard as unknown as Clipboard, "old", undefined, {
     is_same_session_: () => session.current === open,
     toast: () => {},
     leave_visual_: () => (left_visual = true),
