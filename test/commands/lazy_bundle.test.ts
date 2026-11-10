@@ -52,7 +52,7 @@ test("an id with no handler and no bundle field is failed", async () => {
 
 test("every command with a bundle field names a real bundle, has no run, and has no entry in the handler map", () => {
   const lazy = registry.list().filter((command) => command.bundle !== undefined);
-  assert.equal(lazy.length, 22);
+  assert.equal(lazy.length, 23);
   for (const command of lazy) {
     assert.equal(command.runs_in, "content", command.id);
     assert.equal(command.run, undefined, command.id);
@@ -75,7 +75,7 @@ test("the first key of a lazy command waits one bundle load, holds the keys type
   };
   content_handlers["t.plain"] = { run: () => void events.push("plain x") };
   const flow = create_key_flow({
-    get_mode: state.get_mode,
+    get_mode_: state.get_mode_,
     take_pass_next_: state.take_pass_next_,
     in_editable_field_: () => false,
     on_space_control_: () => false,

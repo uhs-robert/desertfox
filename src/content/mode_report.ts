@@ -3,7 +3,7 @@
 
 import type { Mode } from "../shared/command.ts";
 
-export function wire_mode_reports(state: { get_mode: () => Mode; listen: (listener: (mode: Mode) => void) => void }, report: (mode: Mode) => void): void {
+export function wire_mode_reports(state: { get_mode_: () => Mode; listen: (listener: (mode: Mode) => void) => void }, report: (mode: Mode) => void): void {
   state.listen(report);
-  report(state.get_mode());
+  report(state.get_mode_());
 }

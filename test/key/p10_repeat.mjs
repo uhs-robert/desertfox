@@ -82,4 +82,16 @@ export async function run_cases({ rdp, extension_id, run_case, press_keys, poll_
     await poll_until("the second half page after .", async () => (await scroll_y()) >= 2 * half - 2);
     await close_tabs_with("rp_scroll");
   });
+
+  // page.stop stays in content.js, so it works on a page stuck loading, where a bundle injection can go unanswered. The stub sits on the content script's window, which executeScript shares.
+  await run_case("xp then . stops the page twice from the content script", async () => {
+    await open_page("aligned", "rp_stop", { new_tab: true });
+    const in_page = async (code) => (await in_background(`browser.tabs.query({ active: true, lastFocusedWindow: true }).then(([tab]) => browser.tabs.executeScript(tab.id, { code: ${JSON.stringify(code)} }))`))[0];
+    await in_page(`window.__stops = 0; window.stop = () => { window.__stops++; }; 0`);
+    await press_keys("xp");
+    await poll_until("the first xp to stop the page", async () => (await in_page(`window.__stops`)) === 1);
+    await press_keys(".");
+    await poll_until("the . to stop the page again", async () => (await in_page(`window.__stops`)) === 2);
+    await close_tabs_with("rp_stop");
+  });
 }
