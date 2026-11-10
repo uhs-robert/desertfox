@@ -204,6 +204,8 @@ export type RecordStep = {
   type: "record_step";
   invocations: Invocation[];
   outcome: Outcome;
+  // Sent by the hints bundle when a pick begins, ahead of the leaf's own message.
+  pick?: true;
 };
 
 // From the command line page when the user asks for help on a command, by link or by key. The background opens the help page

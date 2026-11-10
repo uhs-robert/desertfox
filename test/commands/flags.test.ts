@@ -53,7 +53,7 @@ test("only these commands opt out of `.`, so a new command repeats unless someon
   const opted_out = registry.list().filter((command) => command.repeatable === false).map((command) => command.id);
   assert.deepEqual(opted_out.sort(), [
     "browser.close_all", "browser.focus_page", "caret.move", "cmdline.clear", "cmdline.help", "cmdline.history", "cmdline.next_completion", "cmdline.open", "cmdline.prev_completion", "cmdline.submit",
-    "command.repeat", "config.reload", "debug.restart", "engine.show", "find.open", "frame.exit", "help.open", "help.whichkey", "list.act", "list.select", "mark.add", "mark.jump", "mode.escape", "mode.pass_next", "mode.set",
+    "command.repeat", "config.reload", "debug.restart", "engine.show", "find.open", "frame.exit", "help.open", "help.whichkey", "list.act", "list.select", "macro.record", "macro.stop", "mark.add", "mark.jump", "mode.escape", "mode.pass_next", "mode.set",
     "native.install", "quickmark.add", "register.list", "register.paste", "settings.set", "settings.toggle", "settings.unset", "visual.act",
   ]);
 });

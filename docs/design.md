@@ -473,6 +473,15 @@ Caret mode puts a text cursor in the page, so the user can move through text wit
 - `"ap` and `"aP` are `open.clipboard` with a register: the text of register `a` opens as a URL, here or in a new tab, and text that is no URL is searched. The empty register and a macro refuse.
 - `<C-r><reg>` in insert mode is `register.paste`. It types the register through the shared field writer. The text joins the insert session, so `.` repeats it as typed text, and `register.paste` itself stays out of the `.` slot. It costs Firefox's Ctrl+R reload while a field has focus. Pasting into a password field works. Only recording from one is blocked.
 
+### Macros
+
+- Recording is built. Replay (`@<reg>`, `@@`, counts) is not. `q<reg>` is `macro.record`: `qa` replaces macro `a`, `qA` adds steps to it, and any other key refuses. Pressing `q` again is `macro.stop`, which stores the steps in the register as a list of invocations (the register store keeps the macro like any register value).
+- The recorder (`src/background/macro_recorder.ts`) reads the same `record_step` call as `.`, so it sees every finished request and every leaf of content commands, including failed ones. A step that fails when recorded fails again on replay and stops the macro. It keeps the steps up to a failed or cancelled one, and drops `macro.record` and `macro.stop`. It skips a step that opened the command line for a value (the line sends the finished command as its own request) and the address a hint pick opens (the pick repeats it). A `hint.run` is kept from the message sent when the pick begins and not from the message of the leaf that ends later, which carries the same step.
+- The recording state, `{ register, steps }`, lives in `storage.session`, and a private window has a key of its own. Every step is stored as it comes, so a background restart keeps the recording and no page buffers it. A held key sends its first press only, so a held `j` is one step.
+- While a macro records, the background answers each page's `read_keymap` with the tree that has `macro.stop` where `macro.record` sat, and with the register name. Starting and stopping tell every tab to read its keymap again. The badge in every tab then adds `recording @a`, whatever the mode indicator setting says. No page code watches the key.
+- Typed text is recorded as the `text.insert` step, led by the entry command, as for `.`. The same text lands in two places: in the `.` slot it stays in `storage.session`, and in a macro it is a register value in `storage.local`, so it survives a restart. A normal window and the private windows keep their own, as registers do. Text from a password field is never recorded, because the text recorder drops it before any step exists.
+- Which-key under `q` lists the stored macros with their step counts when no recording runs. It reads the stored tree, so during a recording `q` is a leaf and shows no panel.
+
 ### Help and palette
 
 The help page is generated from `commands.json` and the live keymap: every command, its params, its keys and the keymap warnings. The palette is the command line with an empty prompt.
