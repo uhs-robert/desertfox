@@ -112,7 +112,7 @@ test("the default keys capture one key after go, gn and M, and ge and gE keep th
 
 test("which-key lists the quickmarks under go and gn with their addresses, and keeps the <key> row with none", async () => {
   const table = async (): Promise<Record<string, string>> => ({ w: "https://wiki.test/a/very/long/path/that/goes/on/and/on/and/on", G: "https://github.com", 3: "http://x.test" });
-  const rows = async (prefix: string[], quickmarks: () => Promise<Record<string, string>> = table) => (await list_keys(normal_keymap(), () => undefined, { mode: "normal", prefix }, undefined, [], undefined, undefined, quickmarks)).rows;
+  const rows = async (prefix: string[], quickmarks: () => Promise<Record<string, string>> = table) => (await list_keys(normal_keymap(), () => undefined, { mode: "normal", prefix }, { quickmarks })).rows;
   assert.deepEqual((await rows(["g", "o"])).map((row) => row.keys), ["G", "w", "3"]);
   assert.equal((await rows(["g", "n"]))[0]!.command, "github.com");
   assert.equal((await rows(["g", "o"]))[1]!.command, "wiki.test/a/very/long/path/that/goe…");
@@ -120,4 +120,30 @@ test("which-key lists the quickmarks under go and gn with their addresses, and k
   assert.deepEqual((await rows(["g", "o"], async () => ({}))).map((row) => row.keys), ["<key>"]);
   assert.deepEqual((await rows(["g", "o"], async () => Promise.reject(new Error("x")))).map((row) => row.keys), ["<key>"]);
   assert.ok((await rows(["g"])).length > 3);
+});
+
+test("remove drops the saved entry, and the config entry of that key shows again", async () => {
+  const { store } = make();
+  await store.add("g", "https://git.test", false);
+  await store.remove("g", false);
+  assert.deepEqual(await store.table(CONFIGURED, false), CONFIGURED);
+});
+
+test("remove refuses a key with no saved entry, and a normal window leaves private entries alone", async () => {
+  const { store } = make();
+  await assert.rejects(store.remove("g", false), /Quickmark g is not saved/);
+  await store.add("b", "https://private.test", true);
+  await assert.rejects(store.remove("b", false), /Quickmark b is not saved/);
+});
+
+test("a private window deletes only private entries, and a normal entry refuses with where to delete it", async () => {
+  const { store, local } = make();
+  await store.add("a", "https://normal.test", false);
+  await store.add("b", "https://private.test", true);
+  assert.deepEqual(await store.saved(true), { b: "https://private.test" });
+  assert.deepEqual(await store.saved(false), { a: "https://normal.test" });
+  await assert.rejects(store.remove("a", true), /saved in a normal window, delete it there/);
+  await store.remove("b", true);
+  assert.deepEqual(await store.table({}, false), { a: "https://normal.test" });
+  assert.deepEqual(local.values.get(QUICKMARK_STORAGE_KEY), { a: "https://normal.test" });
 });

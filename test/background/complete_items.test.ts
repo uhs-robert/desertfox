@@ -59,6 +59,12 @@ function make({ openers = [1, 2], tabs = ALL_TABS, bookmarks = [] as BookmarkNod
       if (fail) throw new Error("no registers");
       return is_private ? registers.private : registers.normal;
     },
+    marks: async (url, is_private) => {
+      if (fail) throw new Error("no marks");
+      return [{ name: is_private ? "p" : "m", description: String(url) }];
+    },
+    quickmarks: async (is_private) => (is_private ? [{ name: "p", description: "private.test" }] : [{ name: "g", description: "github.com" }]),
+    saved_quickmarks: async (is_private) => (is_private ? [{ name: "p", description: "private.test" }] : [{ name: "s", description: "saved.test" }]),
     all_bookmarks: async () => {
       if (fail) throw new Error("no bookmarks");
       return bookmarks;
@@ -154,6 +160,9 @@ test("a tab that navigates or closes while the lookup runs gets nothing", async 
     query_windows: async () => WINDOWS,
     sessions: async () => [],
     registers: async () => [],
+    marks: async () => [],
+    quickmarks: async () => [],
+    saved_quickmarks: async () => [],
     folders: async () => [],
     bookmark_view: async () => {
       opened.delete(1);
@@ -295,6 +304,9 @@ test("the opener is checked before and after the history fetch", async () => {
     query_windows: async () => [],
     sessions: async () => [],
     registers: async () => [],
+    marks: async () => [],
+    quickmarks: async () => [],
+    saved_quickmarks: async () => [],
     folders: async () => [],
     bookmark_view: async () => ({ rows: { rows: [], folders: [] }, folders: [] }),
     all_bookmarks: async () => [],
@@ -323,6 +335,9 @@ test("a failed history read leaves the bookmarks, and a failed bookmark read lea
       query_windows: async () => [],
       sessions: async () => [],
       registers: async () => [],
+      marks: async () => [],
+      quickmarks: async () => [],
+      saved_quickmarks: async () => [],
       folders: async () => [],
       bookmark_view: async () => ({ rows: { rows: [], folders: [] }, folders: [] }),
       all_bookmarks: async () => {
@@ -383,6 +398,9 @@ test("a history read that finishes after the line closed gives nothing", async (
     query_windows: async () => [],
     sessions: async () => [],
     registers: async () => [],
+    marks: async () => [],
+    quickmarks: async () => [],
+    saved_quickmarks: async () => [],
     folders: async () => [],
     bookmark_view: async () => ({ rows: { rows: [], folders: [] }, folders: [] }),
     all_bookmarks: async () => [],
@@ -756,6 +774,18 @@ test("the folders kind answers the folder rows for an opener, and nothing for a 
   const folders = folder_nodes(TREE);
   assert.deepEqual((await make({ folders }).service.answer("folders", NORMAL_LINE))?.items, folder_items(folders));
   assert.equal(await make({ folders, openers: [] }).service.answer("folders", NORMAL_LINE), undefined);
+});
+
+test("the marks list reads the page of the line's tab and follows its privacy", async () => {
+  const { service } = make({ page: { url: "https://w.test/" } });
+  assert.deepEqual(await service.answer("marks", NORMAL_LINE), { items: [{ name: "m", description: "https://w.test/" }] });
+  assert.deepEqual(await service.answer("marks", PRIVATE_LINE), { items: [{ name: "p", description: "https://w.test/" }] });
+  assert.deepEqual(await service.answer("quickmarks", NORMAL_LINE), { items: [{ name: "g", description: "github.com" }] });
+  assert.deepEqual(await service.answer("quickmarks", PRIVATE_LINE), { items: [{ name: "p", description: "private.test" }] });
+  assert.deepEqual(await service.answer("saved_quickmarks", NORMAL_LINE), { items: [{ name: "s", description: "saved.test" }] });
+  assert.deepEqual(await service.answer("saved_quickmarks", PRIVATE_LINE), { items: [{ name: "p", description: "private.test" }] });
+  assert.deepEqual(await make({ fail: true }).service.answer("marks", NORMAL_LINE), { items: [] });
+  assert.equal(await make({ openers: [] }).service.answer("quickmarks", NORMAL_LINE), undefined);
 });
 
 test("bookmark_rows lists each address once with its folders newest copy first, and the folder paths once", () => {

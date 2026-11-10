@@ -180,7 +180,7 @@ test("which-key lists the stored tree through list_keys with the page fit", asyn
   const { compiled } = compile_config({ config, default_keymap: DEFAULT_KEYMAP, get_command: (id) => registry.get(id), enum_sources: { search_engines: Object.keys(config.search_engines), containers: [] } });
   const storage = { get: async () => ({ [COMPILED_KEYMAP_STORAGE_KEY]: compiled }) } as never;
   const availability = { page: OTHER_PAGE, requirement_of: requirement_lookup(config), site_engine_label_of: () => "Site" };
-  const panel = await list_keys(storage, (id) => registry.get(id), { mode: "normal", prefix: ["s", "/"] }, availability);
+  const panel = await list_keys(storage, (id) => registry.get(id), { mode: "normal", prefix: ["s", "/"] }, { availability });
   assert.deepEqual(panel.title, ["+Search here", "+Site search"]);
 });
 

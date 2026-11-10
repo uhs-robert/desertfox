@@ -11,6 +11,7 @@ function make(table: Record<string, string> = {}) {
   const deps: QuickmarkDeps = {
     table: async () => table,
     save: async (_ctx, key, url) => void calls.push(`save ${key} ${url}`),
+    remove: async (_ctx, key) => void calls.push(`remove ${key}`),
     tab_url: async () => "https://here.test/page",
     target: async (text) => (/^[a-z]+:/.test(text) ? text : `https://${text}`),
     open: async (_ctx, url, where) => void calls.push(`open ${where} ${url}`),
@@ -42,4 +43,23 @@ test("open gives an address written without a scheme to the typed-address rule",
   const { calls, handlers } = make({ g: "github.com" });
   await handlers.open(ctx, { key: "g", where: "tab" });
   assert.deepEqual(calls, ["open tab https://github.com"]);
+});
+
+test("list opens the picked quickmark in this tab, and refuses an unknown key", async () => {
+  const { calls, handlers } = make({ g: "https://github.com" });
+  await handlers.list(ctx, { quickmark: "g" });
+  assert.deepEqual(calls, ["open here https://github.com"]);
+  await assert.rejects(handlers.list(ctx, { quickmark: "x" }), /No quickmark x/);
+});
+
+test("delete removes the key and says so", async () => {
+  const { calls, handlers } = make();
+  await handlers.delete(ctx, { quickmark: "g" });
+  assert.deepEqual(calls, ["remove g", "toast success Quickmark g deleted"]);
+});
+
+test("delete says what the key opens now when an address of quickmarks.toml shows through", async () => {
+  const { calls, handlers } = make({ g: "https://github.com/a/b" });
+  await handlers.delete(ctx, { quickmark: "g" });
+  assert.deepEqual(calls, ["remove g", "toast success Quickmark g deleted, it now opens github.com/a/b"]);
 });
