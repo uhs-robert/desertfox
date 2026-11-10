@@ -709,3 +709,35 @@ test("while the cmdline and hints bundles load together every key waits", () => 
   assert.deepEqual(page.loads.map((load) => load.name), ["hints", "cmdline"]);
   assert.deepEqual(page.decisions, ["<Tab>:cancel", "<F5>:cancel", "j:cancel"]);
 });
+
+// A mode change that is not a held key (focus entering a field, a set_mode message) reaches the host while the bundle loads.
+const sink_calls = (page: ReturnType<typeof make_page>) => page.events.filter((event) => event.includes("enter") || event.includes("exit"));
+
+test("leave and re-enter a sink mode before its first load ends: the sink sees enter, exit, enter", async () => {
+  const page = make_page();
+  page.state.set_mode_("caret");
+  page.state.set_mode_("normal");
+  page.state.set_mode_("caret");
+  page.loads[0]!.finish(true, () => page.host.api.register_sink_("caret", page.recording_sink("caret", [])));
+  await page.settle();
+  assert.deepEqual(sink_calls(page), ["caret sink enter", "caret sink exit to normal", "caret sink enter"]);
+});
+
+test("a mode left after its sink registered but before the load answers still sees enter, exit, enter in key order", async () => {
+  const page = make_page();
+  page.state.set_mode_("caret");
+  page.host.api.register_sink_("caret", page.recording_sink("caret", []));
+  page.state.set_mode_("normal");
+  page.state.set_mode_("caret");
+  page.loads[0]!.finish(true);
+  await page.settle();
+  assert.deepEqual(sink_calls(page), ["caret sink enter", "caret sink exit to normal", "caret sink enter"]);
+});
+
+test("keys pressed in the same order are safe: the sink bundle load holds Escape and V, so the sink sees enter, exit, enter", async () => {
+  const page = make_page();
+  page.press("V", "<Escape>", "V");
+  page.loads[0]!.finish(true, () => page.host.api.register_sink_("caret", page.recording_sink("caret", [])));
+  await page.settle();
+  assert.deepEqual(sink_calls(page), ["caret sink enter", "caret sink exit to normal", "caret sink enter"]);
+});
