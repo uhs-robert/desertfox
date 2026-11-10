@@ -153,4 +153,27 @@ export async function run_cases({ run_case, open_page, press_keys, wait_event, w
     await focus_frame(mark, "p22_late_new", "late");
     await frame_passes_j("p22_late_new");
   });
+
+  await run_case("i leaves a frame under an all-off rule in ignore mode, and Escape keeps it there", async () => {
+    await open_page("frames", "p22_off", { new_tab: true });
+    await wait_event(0, (event) => event.type === "tree_read" && event.page_id === "p22_off_same", "the all-off frame to start");
+    let mark = events.length;
+    await press_keys("i");
+    await wait_badge(mark, "p22_off", "INSERT");
+    // Another frame took the hold, so the hold reached the tab and skipped only the all-off one.
+    await focus_frame(mark, "p22_off_same", "same");
+    await frame_passes_j("p22_off_same");
+    await focus_frame(mark, "p22_off_cross", "cross");
+    await frame_passes_j("p22_off_cross");
+    await in_active_tab(`document.getElementById("cross").blur(); window.focus(); 0`);
+    await wait_takes_keys("p22_off");
+    mark = events.length;
+    await press_keys("-k", "Escape");
+    await wait_badge(mark, "p22_off", "NORMAL");
+    await focus_frame(mark, "p22_off_cross", "cross");
+    await frame_scrolls_on_j("p22_off_cross");
+    // The all-off frame is still in ignore mode, so j still reaches its page and scrolls nothing.
+    await focus_frame(mark, "p22_off_same", "same");
+    await frame_passes_j("p22_off_same");
+  });
 }

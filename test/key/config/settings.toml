@@ -11,6 +11,9 @@ site = "*://127.0.0.1/frames?id=rule_frames*"  # the cross-origin frame matches 
 pass = "j"
 
 [[site_rules]]
+site = "*://127.0.0.1/frame_inner?id=p22_off_same"  # p22_insert_keys: the same-origin frame is all off
+
+[[site_rules]]
 site = "*://127.0.0.1/page?id=rule_only*"
 only = "G"
 
