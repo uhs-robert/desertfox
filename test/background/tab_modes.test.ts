@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { forget_all_tab_modes, forget_mode_on_navigation, forget_tab_mode, recall_tab_mode, remember_reported_mode, remember_tab_mode, shortcut_allowed } from "../../src/background/tab_modes.ts";
+import { forget_all_tab_modes, forget_mode_on_navigation, forget_tab_mode, recall_tab_mode, manual_insert_held, relay_mode, remember_reported_mode, remember_tab_mode, shortcut_allowed } from "../../src/background/tab_modes.ts";
 
 function fake_storage() {
   const data: Record<string, unknown> = {};
@@ -58,4 +58,24 @@ test("while off no shortcut runs, ignore-capable ones included", () => {
   const get = () => ({ modes: ["normal", "ignore"] as const });
   assert.equal(shortcut_allowed("normal", [{ id: "tab.next" }], get, true), false);
   assert.equal(shortcut_allowed("ignore", [{ id: "mode.leave" }], get, true), false);
+});
+
+test("a relayed insert reaches every frame, is held for late frames, and the top frame leaving insert or a navigation ends it", async () => {
+  const storage = fake_storage();
+  const sent: string[] = [];
+  const send = async (tab_id: number, mode: string) => void sent.push(`${tab_id}:${mode}`);
+  await relay_mode(storage, 4, "insert", send);
+  assert.equal(await manual_insert_held(storage, 4), true);
+  assert.equal(await manual_insert_held(storage, 5), false);
+  await remember_reported_mode(storage, 4, 3, "normal");
+  assert.equal(await manual_insert_held(storage, 4), true);
+  await remember_reported_mode(storage, 4, 0, "normal");
+  assert.equal(await manual_insert_held(storage, 4), false);
+  await relay_mode(storage, 4, "insert", send);
+  await forget_mode_on_navigation(storage, 4, { status: "loading" });
+  assert.equal(await manual_insert_held(storage, 4), false);
+  await relay_mode(storage, 4, "insert", send);
+  await relay_mode(storage, 4, "normal", send);
+  assert.equal(await manual_insert_held(storage, 4), false);
+  assert.deepEqual(sent, ["4:insert", "4:insert", "4:insert", "4:normal"]);
 });

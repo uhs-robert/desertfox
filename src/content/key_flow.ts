@@ -131,6 +131,8 @@ export function create_key_flow(deps: KeyFlowDeps) {
 
   const step = (active: Matcher, token: string, repeat: boolean): KeyDecision => {
     const mode = deps.get_mode_();
+    // With no field focused, insert mode is only a pass-through: the other insert keys (`<C-r>`) are the browser's.
+    if (mode === "insert" && token !== "<Escape>" && !deps.in_editable_field_()) return "pass";
     const was_in_progress = sequence_in_progress;
     // Backspace drops the last key of a half-typed sequence. The matcher cannot step back, so the shorter prefix is typed again.
     if (was_in_progress && token === "<Backspace>") {

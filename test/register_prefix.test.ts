@@ -195,6 +195,15 @@ test("key flow runs `3\"ay` and `\"a3y` the same, and lists the registers only w
   assert.equal(prefixes.at(-1), undefined);
 });
 
+test("key flow: insert mode with no field handles Escape only and passes the other insert keys", () => {
+  const { flow, ran, state } = make_flow();
+  state.set_mode_("insert");
+  assert.equal(flow.handle_token_("j"), "pass");
+  assert.deepEqual(ran, []);
+  flow.handle_token_("<Escape>");
+  assert.deepEqual(ran, ["test.down::"]);
+});
+
 test("key flow: Escape ends a pending prefix, hides the panel and runs the Escape binding", () => {
   const { flow, ran, prefixes } = make_flow();
   flow.handle_token_('"');

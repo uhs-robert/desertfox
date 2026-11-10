@@ -48,7 +48,7 @@ import { answer_sessions_transfer } from "./sessions_transfer.ts";
 import { create_settings_messages, is_extension_page } from "./settings_message.ts";
 import { command_meta } from "../shared/registry/index.ts";
 import { registry } from "../shared/registry/builtin.ts";
-import { forget_all_tab_modes, forget_mode_on_navigation, forget_tab_mode, recall_tab_mode, remember_reported_mode, shortcut_allowed } from "./tab_modes.ts";
+import { forget_all_tab_modes, forget_mode_on_navigation, forget_tab_mode, recall_tab_mode, manual_insert_held, relay_mode, remember_reported_mode, shortcut_allowed } from "./tab_modes.ts";
 import type { SlotTable } from "./slots.ts";
 import type { SnippetCall } from "./snippets.ts";
 
@@ -182,6 +182,7 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
     const tab_id = sender.tab.id;
     return modes_cleared.then(() => remember_reported_mode(browser.storage.local, tab_id, sender.frameId, request.mode));
   }
+  if (request?.type === "relay_mode" && sender.tab?.id !== undefined) return relay_mode(browser.storage.local, sender.tab.id, request.mode, (tab_id, mode) => send_to_tab(tab_id, { type: "set_mode", mode }));
   if (request?.type === "load_bundle") return bundle_loader.answer(sender, request.name);
   if (request?.type === "find_scan" && is_scan_request(request)) return find_scan.answer(request, `${sender.tab?.id}:${sender.frameId}`);
   if (request?.type === "register_read" || request?.type === "register_write" || request?.type === "register_yank") return answer_register_request(browser_register_store, request, sender.tab);
@@ -192,7 +193,7 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
   if (request?.type === "tab_rows_action") return complete_items.tab_rows_action(request.action, request.tab_ids, asker_of(sender), request.cookie_store_id);
   if (request?.type === "image_action") return run_image_action(image_deps, request, { incognito: sender.tab?.incognito === true, cookie_store_id: sender.tab?.cookieStoreId });
   if (request?.type === "inspect_pick") return sender.tab?.id === undefined ? Promise.resolve({ ok: false, message: "No tab to inspect" }) : inspect_relay.pick(sender.tab.id);
-  if (request?.type === "read_keymap") return browser_macro_recorder.register_of(sender.tab?.incognito === true).catch(() => undefined).then((recording) => read_keymap_reply(browser.storage.local, rule_addresses_of(sender), recording));
+  if (request?.type === "read_keymap") return browser_macro_recorder.register_of(sender.tab?.incognito === true).catch(() => undefined).then(async (recording) => read_keymap_reply(browser.storage.local, rule_addresses_of(sender), recording, sender.tab?.id !== undefined && (await manual_insert_held(browser.storage.local, sender.tab.id))));
   if (request?.type === "open_help") return open_help.open(request.command_id, sender.tab?.id, sender.frameId);
   if (request?.type === "record_cmdline") return cmdline.record(request.text, sender.tab?.incognito === true);
   if (request?.type === "record_step") {

@@ -9,6 +9,20 @@ type ModeStorage = Pick<typeof browser.storage.local, "get" | "set" | "remove">;
 const TOP_FRAME = 0;
 
 const key_of = (tab_id: number): string => TAB_MODE_STORAGE_PREFIX + tab_id;
+// Under the tab-mode prefix, so a restart clears it with the modes.
+const manual_insert_key_of = (tab_id: number): string => `${TAB_MODE_STORAGE_PREFIX}insert_${tab_id}`;
+
+// Whether `i` holds the tab in insert mode. A frame that loads later reads it to join.
+export async function manual_insert_held(storage: ModeStorage, tab_id: number): Promise<boolean> {
+  return (await storage.get(manual_insert_key_of(tab_id)))[manual_insert_key_of(tab_id)] === true;
+}
+
+// `i` or Escape in one frame: the tab keeps the answer for late frames and every frame gets the mode.
+export async function relay_mode(storage: ModeStorage, tab_id: number, mode: "insert" | "normal", send_to_frames: (tab_id: number, mode: "insert" | "normal") => Promise<unknown>): Promise<void> {
+  if (mode === "insert") await storage.set({ [manual_insert_key_of(tab_id)]: true });
+  else await storage.remove(manual_insert_key_of(tab_id));
+  await send_to_frames(tab_id, mode).catch(() => undefined);
+}
 
 export async function remember_tab_mode(storage: ModeStorage, tab_id: number, mode: Mode): Promise<void> {
   await storage.set({ [key_of(tab_id)]: mode });
@@ -17,6 +31,8 @@ export async function remember_tab_mode(storage: ModeStorage, tab_id: number, mo
 // Only the top frame sets the tab's mode: a field focused in an iframe must not hide ignore mode.
 export async function remember_reported_mode(storage: ModeStorage, tab_id: number, frame_id: number | undefined, mode: Mode): Promise<boolean> {
   if (frame_id !== TOP_FRAME) return false;
+  // The top frame leaving insert by any route (Escape, the toolbar, ignore mode) ends the manual hold.
+  if (mode !== "insert") await storage.remove(manual_insert_key_of(tab_id));
   await remember_tab_mode(storage, tab_id, mode);
   return true;
 }
@@ -34,7 +50,7 @@ export async function forget_all_tab_modes(storage: ModeStorage): Promise<void> 
 }
 
 export async function forget_tab_mode(storage: ModeStorage, tab_id: number): Promise<void> {
-  await storage.remove(key_of(tab_id));
+  await storage.remove([key_of(tab_id), manual_insert_key_of(tab_id)]);
 }
 
 // A tab that never reported a mode is in normal mode, for example an about: page where no content script runs.

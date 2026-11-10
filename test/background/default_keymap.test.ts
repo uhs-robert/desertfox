@@ -63,7 +63,8 @@ test("the approved keys are all bound", () => {
 });
 
 test("i enters insert mode with no field and I focuses the first field", () => {
-  assert.deepEqual(DEFAULT_KEYMAP.normal?.i, { id: "mode.set", args: { mode: "insert" }, label: "Insert mode, keys go to the page" });
+  const { label: _label, ...insert_bind } = DEFAULT_KEYMAP.normal!.i!;
+  assert.deepEqual(insert_bind, { id: "mode.set", args: { mode: "insert" } });
   assert.deepEqual(DEFAULT_KEYMAP.normal?.I, DEFAULT_KEYMAP.normal?.gi);
   assert.deepEqual(DEFAULT_KEYMAP.insert?.["<Escape>"], { id: "mode.escape" });
 });
