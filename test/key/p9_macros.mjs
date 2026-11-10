@@ -20,10 +20,16 @@ export async function run_cases({ run_case, open_page, poll_until, press_keys, w
   });
 
   await run_case("qA adds to macro a, and q q stores an empty macro", async () => {
-    await press_keys("q", "A", "j", "q");
+    let mark = events.length;
+    await press_keys("q", "A");
+    await wait_event(mark, badge_is("p9mac_one", "NORMAL recording @A"), "the recording badge after qA");
+    await press_keys("j");
+    mark = events.length;
+    await press_keys("q");
+    await wait_event(mark, badge_is("p9mac_one", "NORMAL"), "the plain badge after q");
     await poll_until("register a to hold three scrolls", async () => (await ids_of("a"))?.length === 3);
-    // The stop key arrives with the tree that the badge comes from, so q waits for the badge.
-    const mark = events.length;
+    // The stop key arrives with the tree that the badge comes from, so each q waits for the badge.
+    mark = events.length;
     await press_keys("q", "b");
     await wait_event(mark, badge_is("p9mac_one", "NORMAL recording @b"), "the recording badge after qb");
     await press_keys("q");
