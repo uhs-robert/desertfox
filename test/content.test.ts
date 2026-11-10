@@ -238,10 +238,11 @@ test("browser chords run in normal and insert mode and are cancelled", () => {
   assert.equal(flow.handle_token_("<A-j>"), "cancel");
   state.set_mode_("insert");
   assert.equal(flow.handle_token_("<A-j>"), "cancel");
-  assert.equal(flow.handle_token_("<C-x>"), "cancel");
+  // With no field focused, an insert chord is the browser's.
+  assert.equal(flow.handle_token_("<C-x>"), "pass");
   state.set_mode_("ignore");
   assert.equal(flow.handle_token_("<A-j>"), "pass");
-  assert.deepEqual(ran, ["next_tab", "next_tab", "insert_chord"]);
+  assert.deepEqual(ran, ["next_tab", "next_tab"]);
 });
 
 test("startup holds plain keys outside fields and, with no page callback, lets what matches nothing go", () => {
