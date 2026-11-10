@@ -151,6 +151,7 @@ async function press(text: string, selection: string): Promise<{ lines: string[]
     ask_selection: async () => selection,
     runs_with_empty: async (id, args, param) => runs_with_empty(await get_config(), id, args, param, page),
     read_clipboard: async () => "",
+    bookmark_title: async () => undefined,
     has_permission: async () => true,
     send_to_tab: async () => undefined,
     open_cmdline: async (_tab, _frame, line) => void lines.push(line),

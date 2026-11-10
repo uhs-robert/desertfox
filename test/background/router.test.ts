@@ -640,3 +640,15 @@ test("while off nothing runs: a slot chord, a snippet call or a replay is refuse
   assert.deepEqual(response, { ok: false, refusal: { id: "desertfox.off", message: "DesertFox is off" } });
   assert.deepEqual(seen, []);
 });
+
+test("a bookmark_title prefill types the title of the page's bookmark, and nothing when the page has none", async () => {
+  const commands = { "bookmark.rename": { label: "Rename", intent: "x", params: [{ name: "title", type: "string", rest: true, main: true }], runs_in: "background", run: () => assert.fail() } } as const;
+  const binding = { id: "bookmark.rename", prompt: { param: "title", prefill: { from: "bookmark_title" } as const } };
+  const asked: (string | undefined)[] = [];
+  const titled = make_fake(commands, { bookmark_title: async (url) => (asked.push(url), "Saved title") });
+  await create_router(titled.deps).run({ invocations: [binding], mode: "normal", may_prompt: true });
+  assert.deepEqual([titled.log, asked], [["cmdline 7 0 bookmark.rename Saved title"], ["https://example.org/"]]);
+  const none = make_fake(commands, { bookmark_title: async () => undefined });
+  await create_router(none.deps).run({ invocations: [binding], mode: "normal", may_prompt: true });
+  assert.deepEqual(none.log, ["cmdline 7 0 bookmark.rename "]);
+});

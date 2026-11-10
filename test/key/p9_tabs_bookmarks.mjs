@@ -83,6 +83,24 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, sleep,
     await close_tabs_with("id=p9e_mark");
   });
 
+  await run_case("br opens the line filled with the page's bookmark title, and Enter renames it", async () => {
+    await open_page("page", "p9e_rename", { new_tab: true });
+    const url = url_of("page", "p9e_rename");
+    await background(`browser.bookmarks.create({ title: "P9e Old title", url: ${JSON.stringify(url)} })`);
+    try {
+      await settle_focus();
+      await press_keys("br");
+      await wait_cmdline((line) => line.open && line.value === "bookmark.rename P9e Old title", "the line to open with the bookmark title");
+      await press_keys(...CTRL("u"));
+      await type_in_line("bookmark.rename P9e New title");
+      await press_keys("-k", "Return");
+      await poll_until("the bookmark to take the new title", async () => (await background(`browser.bookmarks.search({ url: ${JSON.stringify(url)} })`))[0]?.title === "P9e New title");
+    } finally {
+      await background(`browser.bookmarks.search({ url: ${JSON.stringify(url)} }).then((nodes) => Promise.all(nodes.map((node) => browser.bookmarks.remove(node.id))))`);
+      await close_tabs_with("id=p9e_rename");
+    }
+  });
+
   // Set DESERTFOX_SHOT_DIR to also save a screenshot of the tab list: a pinned tab with a favicon, a container tab, a muted tab and a discarded tab.
   const shot_dir = process.env.DESERTFOX_SHOT_DIR;
   if (shot_dir) {

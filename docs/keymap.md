@@ -24,7 +24,7 @@ A note "(prompts)" means the binding sets a `prompt` for a param, so the command
 
 <!-- BEGIN generated -->
 
-bound: 302 (normal 166, hint 2, cmdline 18, caret 35, visual 37, visual_line 38, insert 2, ignore 1, browser 3) | later: 6 | dropped: 7
+bound: 303 (normal 167, hint 2, cmdline 18, caret 35, visual 37, visual_line 38, insert 2, ignore 1, browser 3) | later: 6 | dropped: 7
 
 ### normal
 
@@ -121,8 +121,9 @@ bound: 302 (normal 166, hint 2, cmdline 18, caret 35, visual 37, visual_line 38,
 | `gi` | bound | `page.focus_input` | Focus input |  |
 | `p` | bound | `paste` | Open clipboard |  |
 | `P` | bound | `paste --tab` | Open clipboard |  |
-| `ba` | bound | `bookmark.add` | Add bookmark |  |
-| `be` | bound | `bookmark.add` (prompts) | Add bookmark, edit URL |  |
+| `ba` | bound | `bookmark.add` (prompts) | Add bookmark, edit URL |  |
+| `be` | bound | `bookmark.edit_url` (prompts) | Edit bookmark address |  |
+| `br` | bound | `bookmark.rename` (prompts) | Rename bookmark |  |
 | `bd` | bound | `bookmark.remove` | Remove bookmark |  |
 | `bD` | bound | `bookmark.remove` (prompts) | Remove bookmark, pick from list |  |
 | `bb` | bound | `bookmark` (prompts) | Open bookmark |  |
