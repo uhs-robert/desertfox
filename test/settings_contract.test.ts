@@ -257,6 +257,6 @@ test("the editor schema matches its output before #85, apart from the listed cha
   // Removed: no setting can turn the first-install Quick Start page off.
   delete properties.open_quick_start_on_install;
   // Settings added since the fixture was taken.
-  for (const name of ["statusbar_widgets", "next_patterns", "prev_patterns"]) properties[name] = JSON.parse(JSON.stringify((settings_schema().properties as Record<string, unknown>)[name]));
+  for (const name of ["statusbar_widgets", "next_patterns", "prev_patterns", "ui"]) properties[name] = JSON.parse(JSON.stringify((settings_schema().properties as Record<string, unknown>)[name]));
   assert.deepEqual(JSON.parse(JSON.stringify(settings_schema())), JSON.parse(JSON.stringify(before)));
 });
