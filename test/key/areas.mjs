@@ -14,7 +14,7 @@ const shared_files = [
   "src/background/{availability,browser_deps,main,refusal,router,slots,startup}.ts",
   "src/commands/{command,copy,mode}.ts",
   "src/content/{cancelled_keys,context,editable,handler_map,invocation_args,key_flow,link_escape,main,mode_state,page_mode,run_content,run_leaf,shadow,site_rule}.ts",
-  "src/content/handlers/{copy,focus,mode,stop,types}.ts",
+  "src/content/handlers/{copy,focus,mode,types}.ts",
   "src/shared/{command,index,load_commands,messages}.ts",
   "src/shared/registry/{builtin,define,index}.ts",
 ];
@@ -25,7 +25,7 @@ export const area_rules = [
   { globs: ["src/**/README.md", "src/icons/**"], areas: [] },
   // The schema validates the settings the help page edits and the config reads.
   { globs: shared_files, areas: area_names },
-  { globs: ["src/content/hints/**", "src/commands/{hint,heading,page}.ts", "src/background/image_actions.ts", "src/content/handlers/page.ts", "src/background/inspect_relay.ts", "src/devtools/**", "src/shared/inspect.ts"], areas: ["hints"] },
+  { globs: ["src/content/hints/**", "src/commands/{hint,heading,page}.ts", "src/background/image_actions.ts", "src/content/handlers/{page,focus_input}.ts", "src/background/inspect_relay.ts", "src/devtools/**", "src/shared/inspect.ts"], areas: ["hints"] },
   { globs: ["src/content/run_content.ts", "src/commands/{caret,cmdline,copy,find,heading,help,hint,page,visual}.ts", "src/background/{bundle_loader,command_modules}.ts", "src/content/{bundle_host,bundles}.ts", "src/content/page/**", "src/shared/bundles.ts"], areas: ["bundles"] },
   { globs: ["src/content/caret/find_*.ts", "src/commands/find.ts", "src/background/{find_scan,find_worker,regex_scan}.ts"], areas: ["find"] },
   { globs: ["src/content/caret/**", "src/commands/{caret,visual}.ts"], areas: ["caret"] },

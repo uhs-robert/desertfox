@@ -37,7 +37,7 @@ function make_flow(in_field = false, on_control = false) {
   const flow = create_key_flow({
     in_editable_field_: () => in_field,
     on_space_control_: () => on_control,
-    get_mode: state.get_mode,
+    get_mode_: state.get_mode_,
     take_pass_next_: state.take_pass_next_,
     run_leaf_: (matched, count, repeat) => ran.push(`${matched.steps[0]?.invocation.id}${count ?? ""}${repeat ? "!" : ""}`),
     leave_insert_: () => state.escape(),
@@ -69,9 +69,9 @@ for (const mode of ["caret", "visual"] as const) {
     const state = create_mode_state();
     state.set_mode_(mode);
     state.focus_entered_editable_();
-    assert.equal(state.get_mode(), "insert");
+    assert.equal(state.get_mode_(), "insert");
     state.focus_left_editable_();
-    assert.equal(state.get_mode(), "normal");
+    assert.equal(state.get_mode_(), "normal");
   });
 }
 
@@ -80,7 +80,7 @@ for (const mode of ["ignore", "hint", "cmdline"] as const) {
     const state = create_mode_state();
     state.set_mode_(mode);
     state.focus_entered_editable_();
-    assert.equal(state.get_mode(), mode);
+    assert.equal(state.get_mode_(), mode);
   });
 }
 
@@ -96,10 +96,10 @@ test("typing in a field after focus from caret mode passes through the key flow"
 test("escape leaves insert but not ignore", () => {
   const state = create_mode_state("insert");
   state.escape();
-  assert.equal(state.get_mode(), "normal");
+  assert.equal(state.get_mode_(), "normal");
   state.set_mode_("ignore");
   state.escape();
-  assert.equal(state.get_mode(), "ignore");
+  assert.equal(state.get_mode_(), "ignore");
 });
 
 test("pass_next fires once", () => {
@@ -179,7 +179,7 @@ test("key flow in insert mode leaves on Escape and passes letters", () => {
   state.set_mode_("insert");
   assert.equal(flow.handle_token_("j"), "pass");
   assert.equal(flow.handle_token_("<Escape>"), "pass");
-  assert.equal(state.get_mode(), "normal");
+  assert.equal(state.get_mode_(), "normal");
 });
 
 test("pass_next passes one key that would match", () => {

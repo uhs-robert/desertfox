@@ -20,7 +20,7 @@ import { show_mode_label, show_toast } from "./ui_proxy.ts";
 import { wire_mode_reports } from "./mode_report.ts";
 import { page_mode } from "./page_mode.ts";
 import { run_content_steps, run_in_order } from "./run_content.ts";
-import { create_run_leaf } from "./run_leaf.ts";
+import { run_leaf } from "./run_leaf.ts";
 import { read_context_source } from "./context.ts";
 import { focus_page_content, start_content_once } from "./handlers/focus.ts";
 import { blur_focused_element } from "./handlers/page.ts";
@@ -29,7 +29,7 @@ import { blur_focused_element } from "./handlers/page.ts";
 let mode_indicator: ModeIndicator = DEFAULT_MODE_INDICATOR;
 
 function refresh_mode_indicator(): void {
-  const mode = page_mode.get_mode();
+  const mode = page_mode.get_mode_();
   const pass_next_armed = page_mode.is_pass_next_armed_();
   show_mode_label(mode_label(mode, pass_next_armed, mode_indicator), pass_next_armed ? undefined : mode);
 }
@@ -54,8 +54,6 @@ async function send_to_background(message: ContentToBackground): Promise<RunResp
   }
 }
 
-const run_leaf = create_run_leaf({ send: send_to_background, get_mode: page_mode.get_mode, run_steps: run_content_steps, show_toast });
-
 // Zero turns which-key off.
 let which_key_delay_ms: number | undefined;
 // Hiding asks only once the bundle has loaded, because before that there is no panel.
@@ -66,9 +64,9 @@ const follow_prefix = create_which_key_timer(
 
 const key_flow = create_key_flow({
   on_prefix_: follow_prefix,
-  get_mode: page_mode.get_mode,
+  get_mode_: page_mode.get_mode_,
   take_pass_next_: page_mode.take_pass_next_,
-  run_leaf_: (leaf, count, repeat) => void run_leaf(leaf, count, repeat),
+  run_leaf_: (leaf, count, repeat) => void run_leaf(leaf, count, repeat, send_to_background, page_mode.get_mode_, run_content_steps, show_toast),
   leave_insert_: () => {
     page_mode.escape();
     blur_focused_element();
@@ -133,6 +131,10 @@ function extension_context_alive(): boolean {
 
 const page_listeners = new AbortController();
 
+// Listens until `stop_listening`. Capture is the default because the key and focus listeners must run before the page's own.
+const listen = (target: EventTarget, type: string, handler: (event: never) => void, capture = true) =>
+  target.addEventListener(type, handler as EventListener, { capture, signal: page_listeners.signal });
+
 function stop_listening(): void {
   page_listeners.abort();
 }
@@ -153,11 +155,10 @@ function follow_focus(entered: boolean, event: Event): void {
 
 // A focus move between two nodes of one root retargets both ends to the host, so the window never sees it. A listener on the root itself does. Roots are watched lazily, once focus sits in them. The shared handlers make a repeat add a no-op.
 function watch_roots_around_focus(): void {
-  const { signal } = page_listeners;
   let element = document.activeElement;
   for (let root = element && shadow_root_of(element); root; root = element && shadow_root_of(element)) {
-    root.addEventListener("focusin", on_focusin, { capture: true, signal });
-    root.addEventListener("focusout", on_focusout, { capture: true, signal });
+    listen(root, "focusin", on_focusin);
+    listen(root, "focusout", on_focusout);
     element = root.activeElement;
   }
 }
@@ -190,7 +191,7 @@ function install_matcher(keymap: CompiledKeymap | undefined, tab_address: string
   const all_off = rule !== undefined && "all_off" in rule;
   const keyed_rule = rule !== undefined && !("all_off" in rule) ? rule : undefined;
   // The rule's own ignore mode ends with the rule, so removing or rewriting it takes effect on the open page.
-  const step = all_off_step(usable !== undefined, all_off, was_all_off, page_mode.get_mode());
+  const step = all_off_step(usable !== undefined, all_off, was_all_off, page_mode.get_mode_());
   if (step === "enter") page_mode.set_mode_("ignore");
   else {
     if (step === "leave") page_mode.set_mode_("normal");
@@ -217,15 +218,14 @@ function publish_timing(): void {
 
 function start(): void {
   (window as unknown as { desertfox_host: BundleHostApi }).desertfox_host = bundles.api;
-  const { signal } = page_listeners;
-  window.addEventListener("keydown", on_keydown, { capture: true, signal });
-  window.addEventListener("keypress", on_keypress, { capture: true, signal });
-  window.addEventListener("keyup", on_keyup, { capture: true, signal });
-  window.addEventListener("focusin", on_focusin, { capture: true, signal });
-  window.addEventListener("focusout", on_focusout, { capture: true, signal });
+  listen(window, "keydown", on_keydown);
+  listen(window, "keypress", on_keypress);
+  listen(window, "keyup", on_keyup);
+  listen(window, "focusin", on_focusin);
+  listen(window, "focusout", on_focusout);
   watch_roots_around_focus();
-  addEventListener("pagehide", bundles.page_hidden_, { signal });
-  document.addEventListener("visibilitychange", on_visibility_change, { signal });
+  listen(window, "pagehide", bundles.page_hidden_, false);
+  listen(document, "visibilitychange", on_visibility_change, false);
 
   wire_mode_reports(page_mode, (mode) => {
     if (!extension_context_alive()) return stop_listening();
@@ -236,7 +236,7 @@ function start(): void {
 
   // Coming back from the back-forward cache runs no start-up, and the background's per-tab mode is stale.
   window.addEventListener("pageshow", (event) => {
-    if (event.persisted) void send_to_background({ type: "mode_changed", mode: page_mode.get_mode() });
+    if (event.persisted) void send_to_background({ type: "mode_changed", mode: page_mode.get_mode_() });
   });
 
   page_mode.listen_display_(refresh_mode_indicator);

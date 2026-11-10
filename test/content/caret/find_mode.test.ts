@@ -59,7 +59,7 @@ function make_page() {
   });
   let armed = false;
   const flow = create_key_flow({
-    get_mode: state.get_mode,
+    get_mode_: state.get_mode_,
     take_pass_next_: state.take_pass_next_,
     in_editable_field_: () => false,
     on_space_control_: () => false,
@@ -194,7 +194,7 @@ test("Escape ends the find, is spent and leaves the mode", async () => {
   assert.deepEqual(page.press("<Escape>"), ["cancel"]);
   await page.settle();
   assert.deepEqual(page.log, ["hide"]);
-  assert.equal(page.state.get_mode(), "caret");
+  assert.equal(page.state.get_mode_(), "caret");
 });
 
 test("a mode change ends the find once", async () => {

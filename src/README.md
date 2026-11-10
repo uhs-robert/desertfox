@@ -11,7 +11,7 @@ The code map. Read a folder's README before you change or research code in it.
   - [`content/whichkey/`](content/whichkey/README.md): the which-key panel.
   - [`content/handlers/`](content/handlers/README.md): the content-side handler for each command group.
   - [`content/ui/`](content/ui/README.md): the `ui` bundle, the mode badge and the toast.
-  - [`content/page/`](content/page/README.md): the `page` bundle, `scroll.align` and `copy.url`.
+  - [`content/page/`](content/page/README.md): the `page` bundle: `scroll.align`, `copy.url`, `page.focus_input` and `page.stop`.
 - [`devtools/`](devtools/README.md): the devtools page, which selects a hint pick in the Inspector.
 - [`help/`](help/README.md): the help page.
 - [`newtab/`](newtab/README.md): the new tab page.

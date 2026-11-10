@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { create_run_leaf } from "../../src/content/run_leaf.ts";
+import { run_leaf } from "../../src/content/run_leaf.ts";
 import type { Outcome, TreeLeaf } from "../../src/shared/index.ts";
 
 const step = (id: string, runs_in: "content" | "background") => ({ invocation: { id }, runs_in, count_rule: "ignore" as const });
@@ -9,13 +9,10 @@ const leaf_of = (...steps: ReturnType<typeof step>[]): TreeLeaf => ({ kind: "lea
 function setup(outcome: Outcome = { ok: true }) {
   const sent: unknown[] = [];
   const toasts: string[] = [];
-  const run_leaf = create_run_leaf({
-    send: async (message) => (sent.push(message), { ok: true }),
-    get_mode: () => "normal",
-    run_steps: async () => outcome,
-    show_toast: (message) => void toasts.push(message),
-  });
-  return { sent, toasts, run_leaf };
+  const send = async (message: unknown) => (sent.push(message), { ok: true as const });
+  const run_with = (leaf: TreeLeaf, count: number | undefined, repeat: boolean) =>
+    run_leaf(leaf, count, repeat, send, () => "normal", async () => outcome, (message) => void toasts.push(message));
+  return { sent, toasts, run_leaf: run_with };
 }
 
 test("a leaf of content steps sends its counted steps and outcome once", async () => {

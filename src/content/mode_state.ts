@@ -17,7 +17,7 @@ export function create_mode_state(initial: Mode = "normal") {
   };
 
   return {
-    get_mode: () => mode,
+    get_mode_: () => mode,
     set_mode_,
     listen: (listener: (mode: Mode) => void) => {
       on_change = listener;

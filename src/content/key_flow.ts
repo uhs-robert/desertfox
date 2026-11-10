@@ -24,7 +24,7 @@ export type Matcher = {
 };
 
 export type KeyFlowDeps = {
-  get_mode: () => Mode;
+  get_mode_: () => Mode;
   take_pass_next_: () => boolean;
   // `repeat` is true for an auto-repeat keydown of a held key.
   run_leaf_: (leaf: TreeLeaf, count: number | undefined, repeat: boolean) => void;
@@ -85,7 +85,7 @@ export function create_key_flow(deps: KeyFlowDeps) {
 
   // The `browser` chords also have a Firefox shortcut. Cancelling the key stops the shortcut from firing too.
   const run_browser_chord = (token: string): boolean => {
-    const mode = deps.get_mode();
+    const mode = deps.get_mode_();
     const node = browser_chords?.children[token];
     if (node?.kind !== "leaf" || (mode !== "normal" && mode !== "insert")) return false;
     reset_sequence_();
@@ -109,7 +109,7 @@ export function create_key_flow(deps: KeyFlowDeps) {
   const hold = (token: string): KeyDecision => {
     // Chords and keys in a field never wait. A waiting key is cancelled, so the page does not act on it twice.
     if (is_chord(token) || deps.in_editable_field_()) return "pass";
-    const mode = deps.get_mode();
+    const mode = deps.get_mode_();
     // Held keys ahead mean a sequence may be pending, so only the first held key can yield.
     if (held_tokens.length === 0 && space_stays_with_control(mode, token)) return "pass";
     // Before the keymap is read nothing is known to bind, so every plain key waits.
@@ -124,7 +124,7 @@ export function create_key_flow(deps: KeyFlowDeps) {
   };
 
   const step = (active: Matcher, token: string, repeat: boolean): KeyDecision => {
-    const mode = deps.get_mode();
+    const mode = deps.get_mode_();
     const was_in_progress = sequence_in_progress;
     // Backspace drops the last key of a half-typed sequence. The matcher cannot step back, so the shorter prefix is typed again.
     if (was_in_progress && token === "<Backspace>") {
@@ -153,7 +153,7 @@ export function create_key_flow(deps: KeyFlowDeps) {
 
   const decide = (active: Matcher, token: string, repeat: boolean): KeyDecision => {
     // A sink takes the token before the keymap, and "pass" lets the keymap see it.
-    if (deps.sink_of_(deps.get_mode())?.on_token_(token) === "handled") {
+    if (deps.sink_of_(deps.get_mode_())?.on_token_(token) === "handled") {
       reset_sequence_();
       return "cancel";
     }

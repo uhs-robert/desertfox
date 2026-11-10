@@ -43,6 +43,7 @@ define("page.focus_input", {
   label: "Focus input",
   intent: "Focus the first text field on the page. It takes the first visible field and prefers one in view.",
   runs_in: "content",
+  bundle: "page",
 });
 
 define("page.blur", {

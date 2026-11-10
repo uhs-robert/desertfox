@@ -45,7 +45,7 @@ function make_page() {
   let in_field = false;
 
   const flow = create_key_flow({
-    get_mode: state.get_mode,
+    get_mode_: state.get_mode_,
     take_pass_next_: state.take_pass_next_,
     in_editable_field_: () => in_field,
     on_space_control_: () => false,
@@ -114,7 +114,7 @@ test("keys typed while a bundle loads are held and replay in order once its sink
   await page.settle();
   // The handler put the page in hint mode before the held keys replayed, so the sink saw a, s and d. The sink passed j to the keymap, which has no j in hint mode.
   assert.deepEqual(page.events, ["hint sink enter", "hint sink a", "hint sink s", "hint sink d", "hint sink j"]);
-  assert.equal(page.state.get_mode(), "hint");
+  assert.equal(page.state.get_mode_(), "hint");
   assert.equal(page.host.is_loading_(), false);
 });
 
@@ -162,11 +162,11 @@ test("a bundle that registers no handler refuses with the reason and the held ke
 test("entering a sink mode loads its bundle, and a bundle without the sink returns the page to normal mode", async () => {
   const page = make_page();
   page.press("V", "x", "j");
-  assert.equal(page.state.get_mode(), "caret");
+  assert.equal(page.state.get_mode_(), "caret");
   assert.equal(page.loads[0]!.name, "caret");
   page.loads[0]!.finish(true);
   await page.settle();
-  assert.equal(page.state.get_mode(), "normal");
+  assert.equal(page.state.get_mode_(), "normal");
   assert.deepEqual(page.events, ["sink missing for caret", "run log_x", "run log_j"]);
   assert.equal(page.host.is_loading_(), false);
 });
@@ -176,9 +176,9 @@ test("entering a sink mode with the sink in place loads nothing, and leaving it 
   page.host.api.register_sink_("caret", page.recording_sink("caret", []));
   page.press("V");
   assert.equal(page.loads.length, 0);
-  assert.equal(page.state.get_mode(), "caret");
+  assert.equal(page.state.get_mode_(), "caret");
   page.press("<Escape>");
-  assert.equal(page.state.get_mode(), "normal");
+  assert.equal(page.state.get_mode_(), "normal");
   assert.deepEqual(page.events, ["caret sink enter", "caret sink <Escape>", "caret sink exit to normal"]);
 });
 
@@ -192,7 +192,7 @@ test("mode caret and visual share one bundle load", async () => {
     page.host.api.register_sink_("visual", page.recording_sink("visual", []));
   });
   await page.settle();
-  assert.equal(page.state.get_mode(), "visual");
+  assert.equal(page.state.get_mode_(), "visual");
   // Caret mode was left before its sink existed, so only visual mode is entered.
   assert.deepEqual(page.events, ["visual sink enter"]);
 });
@@ -262,7 +262,7 @@ test("a replayed key that starts another load keeps the keys behind it waiting f
   page.loads[1]!.finish(true, () => page.host.api.register_sink_("caret", page.recording_sink("caret", ["j"])));
   await page.settle();
   assert.deepEqual(page.events, ["hint.run", "run log_x", "caret sink enter", "caret sink j"]);
-  assert.equal(page.state.get_mode(), "caret");
+  assert.equal(page.state.get_mode_(), "caret");
 });
 
 test("a sink that handles a token keeps it from the keymap", () => {
@@ -271,7 +271,7 @@ test("a sink that handles a token keeps it from the keymap", () => {
   page.state.set_mode_("hint");
   page.press("a", "<Escape>");
   assert.deepEqual(page.decisions, ["a:cancel", "<Escape>:cancel"]);
-  assert.equal(page.state.get_mode(), "normal");
+  assert.equal(page.state.get_mode_(), "normal");
 });
 
 test("toasts and badge updates requested before the ui bundle loads are kept and run in order, without holding keys", async () => {
@@ -309,11 +309,11 @@ test("a bundle enters hint mode with set_mode_, its sink gets the keys, and set_
   const page = make_page();
   page.host.api.register_sink_("hint", page.recording_sink("hint", ["a"]));
   page.host.api.set_mode_("hint");
-  assert.equal(page.state.get_mode(), "hint");
+  assert.equal(page.state.get_mode_(), "hint");
   page.press("a");
   assert.deepEqual(page.events, ["hint sink enter", "hint sink a"]);
   page.host.api.set_mode_("normal");
-  assert.equal(page.state.get_mode(), "normal");
+  assert.equal(page.state.get_mode_(), "normal");
   assert.deepEqual(page.events, ["hint sink enter", "hint sink a", "hint sink exit to normal"]);
 });
 
@@ -354,7 +354,7 @@ test("a page that hides leaves the mode with exit page_hidden_, once, and return
   page.press("V");
   page.host.page_hidden_();
   page.host.page_hidden_();
-  assert.equal(page.state.get_mode(), "normal");
+  assert.equal(page.state.get_mode_(), "normal");
   assert.deepEqual(page.events, ["caret sink enter", "caret sink exit to page_hidden"]);
   page.press("V");
   assert.deepEqual(page.events.slice(2), ["caret sink enter"]);
@@ -364,7 +364,7 @@ test("a page that hides in a mode without a sink is left alone", () => {
   const page = make_page();
   page.state.set_mode_("insert");
   page.host.page_hidden_();
-  assert.equal(page.state.get_mode(), "insert");
+  assert.equal(page.state.get_mode_(), "insert");
 });
 
 test("a bundle shows a toast through the host, and the error path takes it when the page gave no toast", () => {
@@ -447,11 +447,11 @@ test("a waiting handler is cancelled by Escape, which the sink passes to the key
       return new Promise((resolve) => (finish = resolve));
     });
     const waiting = page.host.api.run_command_("hint.run", "hints", {});
-    assert.equal(page.state.get_mode(), "hint");
+    assert.equal(page.state.get_mode_(), "hint");
     if (leave === "page_hidden") page.host.page_hidden_();
     else page.press(leave);
     assert.deepEqual(await waiting, { ok: true, cancelled: true }, leave);
-    assert.equal(page.state.get_mode(), "normal");
+    assert.equal(page.state.get_mode_(), "normal");
   }
 });
 
@@ -585,9 +585,9 @@ test("during a load, insert mode outside a field passes unbound keys and holds E
   void page.host.run_command_("page.align", "whichkey", {}, "needs page");
   page.press("q", "<Escape>", "j");
   assert.deepEqual(page.decisions, ["q:pass", "<Escape>:cancel", "j:cancel"]);
-  assert.equal(page.state.get_mode(), "insert");
+  assert.equal(page.state.get_mode_(), "insert");
   await finish_page_load(page);
-  assert.equal(page.state.get_mode(), "normal");
+  assert.equal(page.state.get_mode_(), "normal");
   assert.deepEqual(page.events, ["align", "run log_j"]);
   page.set_in_field(true);
   page.state.set_mode_("insert");
