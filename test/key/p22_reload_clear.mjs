@@ -5,7 +5,7 @@ import { evaluate_in_background } from "./rdp.mjs";
 
 export const areas = ["keys", "cmdline"];
 
-export async function run_cases({ rdp, extension_id, run_case, setup, expect, open_page, press_keys, settle_focus, events, wait_event, wait_cmdline, in_active_tab, poll_until }) {
+export async function run_cases({ rdp, extension_id, run_case, setup, expect, open_page, press_keys, settle_focus, events, wait_event, wait_cmdline, in_active_tab, poll_until, in_background, clear_notices }) {
   const background = (code) => evaluate_in_background(rdp, extension_id, code);
   const loaded = (page_id, mark) => wait_event(mark, (event) => event.type === "tree_read" && event.page_id === page_id, `${page_id} to load again`);
 
@@ -41,24 +41,35 @@ export async function run_cases({ rdp, extension_id, run_case, setup, expect, op
 
   for (const [name, keys, confirm] of [["rc", ["r", "c"], false], ["rC", ["r", "C"], true]]) {
     await run_case(`${name} clears cookies, storage and the cache, then reloads`, async () => {
-      await set_site_data();
-      const before = await read_site_data();
-      expect(before.cookie.includes("kt_cookie") && before.dbs.includes("kt_db") && before.caches.includes("kt_cache"), `the site data was not set: ${JSON.stringify(before)}`);
-      await reaches_server();
-      expect(!(await reaches_server()), "the cache did not serve the second fetch, so the check proves nothing");
-      const mark = events.length;
-      await press_keys(...keys);
-      if (confirm) {
-        await wait_cmdline((line) => line.open && line.value === "page.reload --all", "rC to open the line with page.reload --all");
-        await press_keys("-k", "Return");
+      try {
+        await set_site_data();
+        const before = await read_site_data();
+        expect(before.cookie.includes("kt_cookie") && before.dbs.includes("kt_db") && before.caches.includes("kt_cache"), `the site data was not set: ${JSON.stringify(before)}`);
+        await reaches_server();
+        expect(!(await reaches_server()), "the cache did not serve the second fetch, so the check proves nothing");
+        const mark = events.length;
+        await press_keys(...keys);
+        if (confirm) {
+          await wait_cmdline((line) => line.open && line.value === "page.reload --all", "rC to open the line with page.reload --all");
+          await press_keys("-k", "Return");
+        }
+        // The marker lives in the old document, so it is gone only once the reload has replaced it. A late report from before the key cannot pass this.
+        await poll_until("the old document to be replaced", async () => (await in_active_tab(`document.documentElement.getAttribute("data-kt-before-reload")`).catch(() => "navigating")) === null);
+        await loaded("d_clear", mark);
+        // rc raises the notice at once, and its window takes the keyboard focus, so settle_focus cannot be trusted while it is up. The test page holds kt_db open, which is why the notice is expected.
+        if (!confirm) {
+          let notices = {};
+          await poll_until("the IndexedDB stayed notice", async () => Object.keys((notices = await in_background(`browser.notifications.getAll()`) ?? {})).length > 0, { timeout_ms: 3000 });
+          expect(Object.values(notices).some((notice) => /IndexedDB stayed/.test(notice.message)), `notices: ${JSON.stringify(notices)}`);
+        }
+        await clear_notices();
+        await settle_focus();
+        const after = await read_site_data();
+        expect(is_clear(after), `${name} left site data: ${JSON.stringify(after)}`);
+        expect(await reaches_server(), `${name} left the cache in place`);
+      } finally {
+        await clear_notices();
       }
-      // The marker lives in the old document, so it is gone only once the reload has replaced it. A late report from before the key cannot pass this.
-      await poll_until("the old document to be replaced", async () => (await in_active_tab(`document.documentElement.getAttribute("data-kt-before-reload")`).catch(() => "navigating")) === null);
-      await loaded("d_clear", mark);
-      await settle_focus();
-      const after = await read_site_data();
-      expect(is_clear(after), `${name} left site data: ${JSON.stringify(after)}`);
-      expect(await reaches_server(), `${name} left the cache in place`);
     });
   }
 
