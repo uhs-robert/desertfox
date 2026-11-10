@@ -24,7 +24,7 @@ A note "(prompts)" means the binding sets a `prompt` for a param, so the command
 
 <!-- BEGIN generated -->
 
-bound: 324 (normal 188, hint 2, cmdline 18, caret 35, visual 37, visual_line 38, insert 2, ignore 1, browser 3) | later: 3 | dropped: 7
+bound: 326 (normal 189, hint 2, cmdline 19, caret 35, visual 37, visual_line 38, insert 2, ignore 1, browser 3) | later: 3 | dropped: 7
 
 ### normal
 
@@ -170,6 +170,7 @@ bound: 324 (normal 188, hint 2, cmdline 18, caret 35, visual 37, visual_line 38,
 | `,s` | bound | `help settings` | Settings page |  |
 | `,t` | bound | `toggle` (prompts) | Toggle a setting |  |
 | `,i` | bound | `mode ignore` | Set mode |  |
+| `,,` | bound | `anything` (prompts) | Find anything |  |
 | `,b` | bound | `page.blur` | Blur |  |
 | `,?` | bound | `help.whichkey` | Which key |  |
 | `,"` | bound | `registers` (prompts) | List registers |  |
@@ -275,6 +276,7 @@ Which-key group names:
 | `<C-p>` | bound | `cmdline.prev_completion` | Previous completion |  |
 | `<A-ArrowUp>` | bound | `cmdline.prev_completion` | Previous completion |  |
 | `<Enter>` | bound | `cmdline.submit` | Submit |  |
+| `<S-Enter>` | bound | `cmdline.submit --tab` | Run and open in a new tab |  |
 | `<ArrowUp>` | bound | `cmdline.history prev` | History |  |
 | `<ArrowDown>` | bound | `cmdline.history next` | History |  |
 | `<C-u>` | bound | `cmdline.clear` | Clear line |  |

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { bookmark_items, bookmark_rows, create_complete_items, engine_items, flatten_bookmarks, folder_items, folder_nodes, history_items, listed_favicon, listed_tabs, listed_windows, read_container_identities, read_containers } from "../../src/background/complete_items.ts";
 import type { TabActionDeps } from "../../src/background/tab_actions.ts";
-import type { SessionItem } from "../../src/shared/messages.ts";
+import type { AnythingItems, SessionItem } from "../../src/shared/messages.ts";
 import type { DiscardDeps } from "../../src/background/tab_discard.ts";
 import type { BookmarkNode, ContainerMarks, FolderNode, HistoryNode, LineScope, OpenSettings, TabLike, WindowLike } from "../../src/background/complete_items.ts";
 
@@ -32,7 +32,7 @@ const window_of = (id: number, incognito: boolean, title: string, type = "normal
 // Two normal windows and one private window, in `windows.getAll` order.
 const WINDOWS = [window_of(10, false, "Mail"), window_of(20, true, "Secret"), window_of(11, false, "Docs\n tab")];
 
-function make({ openers = [1, 2], tabs = ALL_TABS, bookmarks = [] as BookmarkNode[], fail = false, page = undefined as { url: string } | undefined, history = [] as HistoryNode[], open = { sources: ["bookmarks", "history"], history_max: 10 } as OpenSettings, read_tab = (async () => undefined) as (id: number) => Promise<TabLike | undefined>, discard = {} as DiscardDeps, tab_actions = NO_ACTIONS as TabActions, sessions = [] as SessionItem[], folders = [] as FolderNode[], registers = { normal: [], private: [] } as { normal: SessionItem[]; private: SessionItem[] }, containers = new Map() as ContainerMarks, on_containers = () => {}, list_max = 20 } = {}) {
+function make({ openers = [1, 2], tabs = ALL_TABS, bookmarks = [] as BookmarkNode[], fail = false, page = undefined as { url: string } | undefined, history = [] as HistoryNode[], open = { sources: ["bookmarks", "history"], history_max: 10 } as OpenSettings, read_tab = (async () => undefined) as (id: number) => Promise<TabLike | undefined>, discard = {} as DiscardDeps, tab_actions = NO_ACTIONS as TabActions, sessions = [] as SessionItem[], folders = [] as FolderNode[], registers = { normal: [], private: [] } as { normal: SessionItem[]; private: SessionItem[] }, containers = new Map() as ContainerMarks, on_containers = () => {}, list_max = 20, closed = [] as { session_id: string; title: string; url: string }[], quickmark_urls = {} as Record<string, string> } = {}) {
   const history_reads: number[] = [];
   const asked: (number | undefined)[] = [];
   const opened = new Set(openers);
@@ -87,6 +87,8 @@ function make({ openers = [1, 2], tabs = ALL_TABS, bookmarks = [] as BookmarkNod
     },
     open_settings: async () => open,
     history_list_max: async () => list_max,
+    closed_tabs: async () => closed,
+    quickmark_table: async () => quickmark_urls,
   });
   return { service, asked, opened, history_reads };
 }
@@ -180,6 +182,8 @@ test("a tab that navigates or closes while the lookup runs gets nothing", async 
     search_history: async () => [],
     open_settings: async () => ({ sources: ["bookmarks", "history"], history_max: 10 }),
     history_list_max: async () => 20,
+    closed_tabs: async () => [],
+    quickmark_table: async () => ({}),
   });
   assert.equal(await service.answer("bookmarks", NORMAL_LINE), undefined);
 });
@@ -331,6 +335,8 @@ test("the opener is checked before and after the history fetch", async () => {
     },
     open_settings: async () => ({ sources: ["history"], history_max: 10 }),
     history_list_max: async () => 20,
+    closed_tabs: async () => [],
+    quickmark_table: async () => ({}),
   });
   assert.equal(await service.answer("open", NORMAL_LINE), undefined);
 });
@@ -365,6 +371,8 @@ test("a failed history read leaves the bookmarks, and a failed bookmark read lea
       },
       open_settings: async () => ({ sources: ["bookmarks", "history"], history_max: 10 }),
       history_list_max: async () => 20,
+      closed_tabs: async () => [],
+      quickmark_table: async () => ({}),
     });
   const tags = async (failing: "history" | "bookmarks") => ((await service(failing).answer("open", NORMAL_LINE))?.items as { rows: { tag: string }[] }).rows.map((row) => row.tag);
   assert.deepEqual(await tags("history"), ["bm", "bm"]);
@@ -425,6 +433,8 @@ test("a history read that finishes after the line closed gives nothing", async (
     },
     open_settings: async () => ({ sources: ["history"], history_max: 10 }),
     history_list_max: async () => 20,
+    closed_tabs: async () => [],
+    quickmark_table: async () => ({}),
   });
   assert.equal(await service.answer("history", NORMAL_LINE), undefined);
 });
@@ -821,4 +831,31 @@ test("bookmark_rows orders each row's folders newest copy first and lists a fold
   ];
   const { rows } = bookmark_rows([{ type: "bookmark", url: "https://x.test/", title: "X", dateAdded: 9 }], folders);
   assert.deepEqual(rows, [{ title: "X", url: "https://x.test/", folders: [1, 2, 0] }]);
+});
+
+test("the finder list holds quickmarks, bookmarks, history, closed tabs and the tab use times, and a private line gets quickmarks and bookmarks only", async () => {
+  const closed = [{ session_id: "s1", title: "Closed", url: "https://closed.test/" }];
+  const used_tabs = [
+    { id: 1, index: 0, windowId: 10, incognito: false, lastAccessed: 500 },
+    { id: 2, index: 0, windowId: 20, incognito: true, lastAccessed: 700 },
+  ];
+  const { service } = make({
+    tabs: used_tabs,
+    closed,
+    quickmark_urls: { b: "https://b.test/", a: "https://a.test/" },
+    bookmarks: [{ type: "bookmark", title: "Mark", url: "https://mark.test/" }],
+    history: [{ title: "Seen", url: "https://seen.test/" }],
+  });
+  const normal = (await service.answer("anything", NORMAL_LINE))?.items as AnythingItems;
+  assert.deepEqual(normal.quickmarks, [{ key: "a", url: "https://a.test/" }, { key: "b", url: "https://b.test/" }]);
+  assert.deepEqual(normal.bookmarks, [{ title: "Mark", url: "https://mark.test/" }]);
+  assert.deepEqual(normal.history, [{ title: "Seen", url: "https://seen.test/" }]);
+  assert.deepEqual(normal.closed, closed);
+  assert.deepEqual(normal.tab_used, { 1: 500 });
+  assert.equal(normal.history_max, 10);
+  const private_items = (await service.answer("anything", { ...NORMAL_LINE, incognito: true }))?.items as AnythingItems;
+  assert.equal(private_items.quickmarks.length, 2);
+  assert.equal(private_items.bookmarks.length, 1);
+  assert.deepEqual([private_items.history, private_items.closed], [[], []]);
+  assert.deepEqual(private_items.tab_used, { 2: 700 });
 });

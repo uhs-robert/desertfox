@@ -34,7 +34,7 @@ export type ParamDefault = ParamValue | ContextSource | readonly (DefaultArm | P
 
 // Value lists filled at run time from the user's config or from Firefox. `tabs`, `bookmarks`, `history`, `windows`, `headings`, `sessions`, `registers`, `folders`, `marks`, `quickmarks` and `saved_quickmarks` go on a string param and
 // only feed the completion list. The page asks the background for the first three (`complete_items`) and the host script for the headings, nobody checks a typed value against them.
-export type DynamicValues = { from: "search_engines" | "containers" | "tabs" | "bookmarks" | "history" | "open" | "windows" | "headings" | "sessions" | "registers" | "folders" | "marks" | "quickmarks" | "saved_quickmarks" };
+export type DynamicValues = { from: "search_engines" | "containers" | "tabs" | "bookmarks" | "history" | "open" | "windows" | "headings" | "sessions" | "registers" | "folders" | "marks" | "quickmarks" | "saved_quickmarks" | "anything" };
 
 export type ParamDef = {
   name: string;

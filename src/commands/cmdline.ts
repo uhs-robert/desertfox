@@ -1,4 +1,5 @@
 import { define } from "../shared/registry/builtin.ts";
+import { WHERE, WHERE_SHORT } from "./open_target.ts";
 
 define("cmdline.open", {
   completion: "hidden",
@@ -33,7 +34,8 @@ define("cmdline.prev_completion", {
 define("cmdline.submit", {
   completion: "hidden",
   label: "Submit",
-  intent: "Run the text typed in the command line.",
+  intent: "Run the text typed in the command line. With where, a command that opens a page opens it there instead of where the text says.",
+  params: [{ name: "where", type: "enum", values: WHERE, optional: true, short: WHERE_SHORT, description: { here: "Open here.", tab: "Open in a new tab.", background: "Open in a background tab.", window: "Open in a new window." } }],
   runs_in: "content",
   repeatable: false,
   modes: ["cmdline"],
