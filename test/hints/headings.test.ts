@@ -127,3 +127,20 @@ test("there is no wrap: past the last or before the first is undefined", () => {
   assert.equal(pick_heading_step([-1, 0, 50], "prev", 1), undefined);
   assert.equal(pick_heading_step([], "next", 1), undefined);
 });
+
+test("from a remembered heading the move steps by index, so a heading that cannot reach the top is passed", () => {
+  // The page ends: the heading at index 2 sits 300px down and cannot scroll to the top. The view-top rule alone picks it again.
+  const near_end = [-900, -400, 300, 700];
+  assert.equal(pick_heading_step(near_end, "next", 1), 2);
+  assert.equal(pick_heading_step(near_end, "next", 1, 2), 3);
+  assert.equal(pick_heading_step(near_end, "prev", 1, 2), 1);
+});
+
+test("a count from the remembered heading moves that many and clamps, and the ends have no wrap", () => {
+  const five = [-500, -200, 0, 200, 500];
+  assert.equal(pick_heading_step(five, "next", 2, 1), 3);
+  assert.equal(pick_heading_step(five, "next", 9, 1), 4);
+  assert.equal(pick_heading_step(five, "prev", 9, 3), 0);
+  assert.equal(pick_heading_step(five, "next", 1, 4), undefined);
+  assert.equal(pick_heading_step(five, "prev", 1, 0), undefined);
+});
