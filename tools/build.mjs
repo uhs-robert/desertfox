@@ -32,12 +32,14 @@ async function build_with_cache(options) {
   mangle_cache = result.mangleCache;
 }
 
+// content.js builds first, on the empty cache: esbuild gives the shortest names to the first build's most used names, so content.js then depends on its own source alone. Any build before it makes a bundle's edit move content.js's size.
+const content_options = { entryPoints: { content: "src/content/main.ts" }, outdir: "dist", minify: true };
+await build_with_cache(content_options);
 await build_with_cache({ entryPoints: { background: "src/background/main.ts" }, outdir: "dist", sourcemap: true });
 await build_with_cache({ entryPoints: { help: "src/help/main.ts" }, outdir: "dist", sourcemap: true });
 await build_with_cache({ entryPoints: { newtab: "src/newtab/main.ts" }, outdir: "dist", sourcemap: true });
 await build_with_cache({ entryPoints: { popup: "src/popup/main.ts" }, outdir: "dist", sourcemap: true });
 const minified_entries = {
-  content: "src/content/main.ts",
   hints: "src/content/hints/main.ts",
   caret: "src/content/caret/main.ts",
   whichkey: "src/content/whichkey/main.ts",
@@ -74,6 +76,13 @@ await copyFile("docs/images/desertfox-keycap.svg", "dist/icons/desertfox-keycap.
 const { parse_markdown } = await import("./render_docs.ts");
 const guide_blocks = parse_markdown("docs/search_engines.md", await readFile("docs/search_engines.md", "utf8"));
 await writeFile("dist/search_engines_guide.json", `${JSON.stringify(guide_blocks)}\n`);
+
+// Rebuild content.js on an empty cache. A different result means something built before it.
+const content_alone = await build({ ...common, ...content_options, write: false, mangleCache: {} });
+if (!Buffer.from(content_alone.outputFiles[0].contents).equals(await readFile("dist/content.js"))) {
+  console.error("dist/content.js differs from a build on an empty mangle cache: content.js must be the first build in tools/build.mjs");
+  process.exit(1);
+}
 
 const command_count = await write_commands_json("dist");
 
