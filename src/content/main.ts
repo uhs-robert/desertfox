@@ -11,8 +11,9 @@ import type { BundleHostApi } from "./bundle_host.ts";
 import { bundles } from "./bundles.ts";
 import { deepest_focused_element, is_editable_element } from "./editable.ts";
 import { shadow_root_of } from "./shadow.ts";
-import { create_cancelled_keys } from "./cancelled_keys.ts";
+import { create_cancelled_keys, type HeldPress } from "./cancelled_keys.ts";
 import { create_key_flow } from "./key_flow.ts";
+import { cancels_keypress, cancels_keyup, press_target, replay_key_to_page } from "./replay_key.ts";
 import { create_which_key_timer } from "./which_key_timer.ts";
 import { mode_label } from "./mode_label.ts";
 import { show_mode_label, show_toast } from "./ui_proxy.ts";
@@ -142,17 +143,19 @@ function on_keydown(event: KeyboardEvent): void {
   if (!event.isTrusted || event.isComposing) return;
   const token = event_to_token(event);
   if (token === null) return;
-  const decision = key_flow.handle_token_(token, event.repeat);
-  cancelled_keys.record_keydown_(event.code, decision);
+  const target = press_target(event);
+  const press: HeldPress = { keyup_seen: false };
+  const decision = key_flow.handle_token_(token, event.repeat, () => target && replay_key_to_page(event, target, press, cancelled_keys, (type, init) => new KeyboardEvent(type, init)));
+  cancelled_keys.record_keydown_(event.code, decision, press);
   if (decision === "cancel") cancel(event);
 }
 
 function on_keypress(event: KeyboardEvent): void {
-  if (cancelled_keys.cancels_keypress_(event.code)) cancel(event);
+  if (cancels_keypress(event, cancelled_keys)) cancel(event);
 }
 
 function on_keyup(event: KeyboardEvent): void {
-  if (cancelled_keys.take_keyup_(event.code)) cancel(event);
+  if (cancels_keyup(event, cancelled_keys)) cancel(event);
 }
 
 const on_focusin = (event: Event) => follow_focus(true, event);
