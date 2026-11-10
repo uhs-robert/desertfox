@@ -29,6 +29,7 @@ test("typed names are the dotted id except the family words and one-word command
     "open.clipboard=paste",
     "open.search=search",
     "open.url=open",
+    "register.list=registers",
     "scroll.lines=scroll",
     "settings.set=set",
     "settings.toggle=toggle",
@@ -53,7 +54,7 @@ test("only these commands opt out of `.`, so a new command repeats unless someon
   assert.deepEqual(opted_out.sort(), [
     "browser.close_all", "browser.focus_page", "caret.move", "cmdline.clear", "cmdline.help", "cmdline.history", "cmdline.next_completion", "cmdline.open", "cmdline.prev_completion", "cmdline.submit",
     "command.repeat", "config.reload", "debug.restart", "engine.show", "find.open", "frame.exit", "help.open", "help.whichkey", "list.act", "list.select", "mode.escape", "mode.pass_next", "mode.set",
-    "native.install", "settings.set", "settings.toggle", "settings.unset", "visual.act",
+    "native.install", "register.list", "settings.set", "settings.toggle", "settings.unset", "visual.act",
   ]);
 });
 

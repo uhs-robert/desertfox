@@ -39,6 +39,7 @@ const EXPECTED_REFUSALS: Record<string, RegExp[]> = {
   "session.rename": [/No session named/],
   "command.repeat": [/Nothing to repeat/],
   "url.increment": [/has no number/],
+  "register.list": [/is empty/],
 };
 
 const SOURCES: EnumSources = { search_engines: ["stub_engine"], containers: ["stub_container"] };

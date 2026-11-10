@@ -35,6 +35,7 @@ const COMMANDS: CommandMeta[] = [
 ];
 COMMANDS.push({ id: "heading.go", name: "heading", label: "Go to heading", intent: "Go to a heading.", params: [{ name: "heading", type: "string", rest: true, main: true, values: { from: "headings" } }] });
 COMMANDS.push({ id: "session.open", name: "session.open", label: "Open tab session", intent: "Open a session.", params: [{ name: "name", type: "string", rest: true, main: true, values: { from: "sessions" } }] });
+COMMANDS.push({ id: "register.list", name: "registers", label: "List registers", intent: "List registers.", params: [{ name: "name", type: "string", rest: true, main: true, optional: true, values: { from: "registers" } }] });
 COMMANDS.push({ id: "history.open", name: "history", label: "Open history entry", intent: "Open history.", params: [{ name: "entry", type: "string", rest: true, main: true, values: { from: "history" } }] });
 COMMANDS.push({ id: "open.url", name: "open", label: "Open URL", intent: "Open a URL.", params: [{ name: "url", type: "string", main: true, values: { from: "open" } }] });
 const ENGINES: EngineItem[] = [
@@ -969,4 +970,17 @@ test("a private line's empty history lists no rows and the line stays usable", a
   await settle();
   assert.deepEqual(names(session), []);
   assert.notEqual(session.get_hint(), "loading");
+});
+
+test("a register pick puts the name in the line, with the preview in the row", async () => {
+  const { session, asks, settle } = make();
+  session.edit("registers ");
+  assert.deepEqual(asks.map((ask) => ask.kind), ["registers"]);
+  asks[0]!.answer([{ name: '"', description: "last yank" }, { name: "a", description: "3 steps" }]);
+  await settle();
+  assert.deepEqual(names(session), ['"', "a"]);
+  assert.deepEqual(session.get_rows().map((row) => row.description), ["last yank", "3 steps"]);
+  session.edit("registers a");
+  tab_key(session);
+  assert.equal(session.get_text(), "registers a ");
 });

@@ -225,6 +225,7 @@ export const DEFAULT_KEYMAP: KeymapConfig = {
     "<Space>i": { id: "mode.set", args: { mode: "ignore" } },
     "<Space>b": { id: "page.blur" },
     "<Space>?": { id: "help.whichkey" },
+    "<Space>\"": { id: "register.list", prompt: { param: "name" }, label: "List registers" },
 
     o: { id: "open.url", args: { where: "here" }, prompt: { param: "url" } },
     O: { id: "open.url", args: { where: "tab" }, prompt: { param: "url" } },

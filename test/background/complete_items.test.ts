@@ -32,7 +32,7 @@ const window_of = (id: number, incognito: boolean, title: string, type = "normal
 // Two normal windows and one private window, in `windows.getAll` order.
 const WINDOWS = [window_of(10, false, "Mail"), window_of(20, true, "Secret"), window_of(11, false, "Docs\n tab")];
 
-function make({ openers = [1, 2], tabs = ALL_TABS, bookmarks = [] as BookmarkNode[], fail = false, page = undefined as { url: string } | undefined, history = [] as HistoryNode[], open = { sources: ["bookmarks", "history"], history_max: 10 } as OpenSettings, read_tab = (async () => undefined) as (id: number) => Promise<TabLike | undefined>, discard = {} as DiscardDeps, tab_actions = NO_ACTIONS as TabActions, sessions = [] as SessionItem[], containers = new Map() as ContainerMarks, on_containers = () => {}, list_max = 20 } = {}) {
+function make({ openers = [1, 2], tabs = ALL_TABS, bookmarks = [] as BookmarkNode[], fail = false, page = undefined as { url: string } | undefined, history = [] as HistoryNode[], open = { sources: ["bookmarks", "history"], history_max: 10 } as OpenSettings, read_tab = (async () => undefined) as (id: number) => Promise<TabLike | undefined>, discard = {} as DiscardDeps, tab_actions = NO_ACTIONS as TabActions, sessions = [] as SessionItem[], registers = { normal: [], private: [] } as { normal: SessionItem[]; private: SessionItem[] }, containers = new Map() as ContainerMarks, on_containers = () => {}, list_max = 20 } = {}) {
   const history_reads: number[] = [];
   const asked: (number | undefined)[] = [];
   const opened = new Set(openers);
@@ -49,6 +49,10 @@ function make({ openers = [1, 2], tabs = ALL_TABS, bookmarks = [] as BookmarkNod
     sessions: async () => {
       if (fail) throw new Error("no sessions");
       return sessions;
+    },
+    registers: async (is_private) => {
+      if (fail) throw new Error("no registers");
+      return is_private ? registers.private : registers.normal;
     },
     all_bookmarks: async () => {
       if (fail) throw new Error("no bookmarks");
@@ -144,6 +148,7 @@ test("a tab that navigates or closes while the lookup runs gets nothing", async 
     query_tabs: async () => ALL_TABS,
     query_windows: async () => WINDOWS,
     sessions: async () => [],
+    registers: async () => [],
     all_bookmarks: async () => {
       opened.delete(1);
       return [];
@@ -282,6 +287,7 @@ test("the opener is checked before and after the history fetch", async () => {
     query_tabs: async () => [],
     query_windows: async () => [],
     sessions: async () => [],
+    registers: async () => [],
     all_bookmarks: async () => [],
     is_opener: async (tab_id) => opened.has(tab_id),
     containers: async () => new Map(),
@@ -307,6 +313,7 @@ test("a failed history read leaves the bookmarks, and a failed bookmark read lea
       query_tabs: async () => [],
       query_windows: async () => [],
       sessions: async () => [],
+    registers: async () => [],
       all_bookmarks: async () => {
         if (failing === "bookmarks") throw new Error("no bookmarks");
         return MARKS;
@@ -364,6 +371,7 @@ test("a history read that finishes after the line closed gives nothing", async (
     query_tabs: async () => [],
     query_windows: async () => [],
     sessions: async () => [],
+    registers: async () => [],
     all_bookmarks: async () => [],
     is_opener: async (tab_id) => opened.has(tab_id),
     containers: async () => new Map(),
@@ -696,4 +704,13 @@ test("the sessions list goes to a normal line only, and a failed read gives an e
   assert.deepEqual(await service.answer("sessions", PRIVATE_LINE), { items: [] });
   assert.deepEqual(await make({ sessions, fail: true }).service.answer("sessions", NORMAL_LINE), { items: [] });
   assert.equal(await make({ sessions, openers: [] }).service.answer("sessions", NORMAL_LINE), undefined);
+});
+
+test("the registers list follows the privacy of the line, and a failed read gives an empty list", async () => {
+  const registers = { normal: [{ name: "a", description: "hello" }], private: [{ name: "b", description: "secret" }] };
+  const { service } = make({ registers });
+  assert.deepEqual(await service.answer("registers", NORMAL_LINE), { items: registers.normal });
+  assert.deepEqual(await service.answer("registers", PRIVATE_LINE), { items: registers.private });
+  assert.deepEqual(await make({ registers, fail: true }).service.answer("registers", NORMAL_LINE), { items: [] });
+  assert.equal(await make({ registers, openers: [] }).service.answer("registers", NORMAL_LINE), undefined);
 });
