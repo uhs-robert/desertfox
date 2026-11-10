@@ -11,7 +11,10 @@ class FakeMouseEvent {
     Object.assign(this, init);
   }
 }
-Object.assign(globalThis, { MouseEvent: FakeMouseEvent, PointerEvent: FakeMouseEvent });
+class FakePointerEvent extends FakeMouseEvent {
+  kind = "pointer";
+}
+Object.assign(globalThis, { MouseEvent: FakeMouseEvent, PointerEvent: FakePointerEvent });
 
 function fixture(local: string, extra: Record<string, unknown> = {}) {
   const calls: string[] = [];
@@ -32,6 +35,19 @@ test("here sends the mouse events a real click sends, with click last", () => {
   page.run("here");
   assert.deepEqual(page.calls, MOUSE_SEQUENCE);
   assert.deepEqual(page.opened, []);
+});
+
+test("here clicks an SVG element, which has no click(), with a click event", () => {
+  const sent: unknown[] = [];
+  const page = fixture("circle", { click: undefined });
+  const dispatch = page.element.dispatchEvent;
+  page.element.dispatchEvent = (event: { type: string }) => (event.type === "click" && sent.push(event), dispatch(event));
+  page.run("here");
+  assert.deepEqual(page.calls, MOUSE_SEQUENCE);
+  assert.equal(sent.length, 1);
+  assert.equal((sent[0] as FakePointerEvent).kind, "pointer");
+  assert.equal((sent[0] as { pointerType?: string }).pointerType, "mouse");
+  assert.equal((sent[0] as { detail?: number }).detail, 1);
 });
 
 test("a cancelled mousedown keeps the focus where the page put it", () => {

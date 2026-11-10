@@ -113,6 +113,9 @@ export function dispatch_mouse_event(target: Target, type: MouseEventName, relat
   if (!target.dispatchEvent) return true;
   const stays_inside = /(enter|leave)$/.test(type);
   const init = { bubbles: !stays_inside, cancelable: true, composed: !stays_inside, button: 0, buttons: type.endsWith("down") ? 1 : 0, relatedTarget: related_target, clientX: at.x, clientY: at.y };
+  // A browser sends `click` as a PointerEvent too, so the synthetic one is built the same way.
+  // The other pointer events carry no click count, so only the click gets `detail`.
+  if (type === "click") return target.dispatchEvent(new PointerEvent(type, { ...init, detail, pointerType: "mouse", isPrimary: true }));
   return target.dispatchEvent(type.startsWith("pointer") ? new PointerEvent(type, { ...init, pointerType: "mouse", isPrimary: true }) : new MouseEvent(type, { ...init, detail }));
 }
 
@@ -124,11 +127,12 @@ function press_and_release(target: Target, detail: number): void {
   if (pointer_pressed) dispatch_mouse_event(target, "mouseup", null, undefined, detail);
 }
 
-// The events a real click gives, so a widget that opens on mousedown or pointerdown opens. The click comes last, from click(), so a link or button acts once.
+// The events a real click gives, so a widget that opens on mousedown or pointerdown opens. The click comes last, from click(), so a link or button acts once. An SVG element has no click(), so it gets a click event.
 function click_like_a_mouse(target: Target, pointer_from: Target | undefined): void {
   enter_for_click(target, pointer_from);
   press_and_release(target, 1);
-  target.click();
+  if (typeof target.click === "function") target.click();
+  else dispatch_mouse_event(target, "click", null, undefined, 1);
 }
 
 // A link is no target: its first click would navigate away before the second press. The climb covers the children of a link, across shadow roots, because their click bubbles to it.

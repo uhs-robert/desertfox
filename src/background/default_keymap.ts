@@ -51,7 +51,7 @@ const VISUAL_KEYS: ModeBindings = {
 export const DEFAULT_KEYMAP: KeymapConfig = {
   // `s//` and `S//`: search the current site with the built-in `site` engine. Only the shipped keymap may use the letter `/`: the build refuses it in a user file.
   site_keys: { "/": ["site"] },
-  // Each key adds its args to a variant of every key in the `;` group that accepts them: `;Bl` opens a link in a background tab, `;da` saves the file of any element. The label names the group.
+  // Each key adds its args to a variant of every key in the `;` group that accepts them: `;Bl` opens a link in a background tab, `;xa` deletes every element. The label names the group.
   modifiers: {
     ";r": { rapid: true, label: "Rapid" },
     ";B": { action: "background", label: "Background tab" },
@@ -237,7 +237,7 @@ export const DEFAULT_KEYMAP: KeymapConfig = {
     ";u": { id: "cmdline.open", args: { text: "hint --custom " }, label: "Hint a CSS selector" },
     ";;": { id: "cmdline.open", args: { text: "hint " }, label: "Open the command line with hint" },
     ";b": { id: "hint.run", args: { filter: "buttons" }, label: "Click button", variant_label: "Button" },
-    ";a": { id: "hint.run", args: { filter: "all" }, label: "Click any element", variant_label: "Any element" },
+    ";a": { id: "hint.run", args: { filter: "every" }, label: "Click every element", variant_label: "Every element" },
     ";p": { id: "hint.run", args: { filter: "prose" }, label: "Click text", variant_label: "Text" },
     ";s": { id: "hint.run", args: { action: "focus", filter: "scrollable" }, label: "Focus scroll box" },
     ";i": { id: "hint.run", args: { filter: "inputs" }, label: "Click input", variant_label: "Input" },

@@ -14,7 +14,7 @@ Which-key shows a group as `+Name`, for example `g` as `+Go`. A `group_names` se
 
 A key shows the command label plus a phrase for each arg its binding sets, for example `gO` as "Open URL in new tab". Keys that set numbers carry a `label` in the default keymap, such as `h` as "Scroll left". The Label column shows that `label` or the command label. The rule is in [design.md](design.md#which-key).
 
-The hint keys `;r ;B ;W ;d ;o ;h ;x ;2` are modifiers, so no row lists their variants. A `[modifiers]` section in `keymap.toml` holds them. Each adds its args to a variant of every key in the `;` group: `;Bl` opens a link in a background tab, `;da` saves the file of any element, `;oa` selects a clickable, heading, paragraph, list item, image, table cell or code element in the DevTools Inspector (`:hint -o -e` takes any visible element), `;ha` hovers any element, `;2a` double-clicks any element but a link, `;rl` opens links in background tabs and keeps picking. A variant exists only when the `hint` param schema accepts the combination. Keys that set their own `action` (`;s`, `;v`, `;V` and the `;y` yank keys) get none, and modifiers do not stack.
+The hint keys `;r ;B ;W ;d ;o ;h ;x ;2` are modifiers, so no row lists their variants. A `[modifiers]` section in `keymap.toml` holds them. Each adds its args to a variant of every key in the `;` group: `;Bl` opens a link in a background tab, `;oa` selects any visible element in the DevTools Inspector, `;ha` hovers any element, `;2a` double-clicks any element but a link, `;xa` deletes any element, `;rl` opens links in background tabs and keeps picking. A variant exists only when the `hint` param schema accepts the combination. Keys that set their own `action` (`;s`, `;v`, `;V` and the `;y` yank keys) get none, and modifiers do not stack.
 
 The `caret`, `visual` and `cmdline` rows bind placeholder commands that refuse until their piece builds them.
 
@@ -165,7 +165,7 @@ bound: 297 (normal 162, hint 2, cmdline 18, caret 35, visual 37, visual_line 38,
 | `;u` | bound | `cmdline.open --text='hint --custom '` | Hint a CSS selector |  |
 | `;;` | bound | `cmdline.open --text='hint '` | Open the command line with hint |  |
 | `;b` | bound | `hint --buttons` | Click button |  |
-| `;a` | bound | `hint --all` | Click any element |  |
+| `;a` | bound | `hint --every` | Click every element |  |
 | `;p` | bound | `hint --prose` | Click text |  |
 | `;s` | bound | `hint --focus --scrollable` | Focus scroll box |  |
 | `;i` | bound | `hint --inputs` | Click input |  |

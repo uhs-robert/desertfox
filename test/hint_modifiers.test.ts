@@ -118,9 +118,10 @@ test("the ;o modifier derives an inspect variant of the filter keys and none of 
   const { compiled, warnings } = compile(DEFAULT_KEYMAP);
   assert.deepEqual(warnings, []);
   assert.equal((node_at(compiled, ";", "o") as TreeBranch).label, "Inspect");
-  for (const [key, filter] of [["a", "all"], ["l", "links"], ["p", "prose"], ["I", "images"], ["i", "inputs"], ["b", "buttons"]] as const) {
+  for (const [key, filter] of [["a", "every"], ["l", "links"], ["p", "prose"], ["I", "images"], ["i", "inputs"], ["b", "buttons"]] as const) {
     assert.deepEqual([args_at(compiled, ";", "o", key)?.action, args_at(compiled, ";", "o", key)?.filter], ["inspect", filter], key);
   }
+  for (const keys of [["B", "a"], ["W", "a"], ["d", "a"]]) assert.equal(node_at(compiled, ";", ...keys), undefined, keys.join(""));
   for (const keys of [["o", "s"], ["o", "v"], ["o", ";"], ["o", "o"], ["o", "y"], ["o", "B"]]) assert.equal(node_at(compiled, ";", ...keys), undefined, keys.join(""));
 });
 
@@ -138,12 +139,13 @@ test("the yank keys are eight plain leaves, each with a fixed action and filter"
   assert.equal(DEFAULT_KEYMAP.modifiers![";Y"], undefined);
 });
 
-test("the default picture keys: ;d reaches images, links, media and all", () => {
+test("the default picture keys: ;d reaches images, links and media", () => {
   const { compiled, warnings } = compile(DEFAULT_KEYMAP);
   assert.deepEqual(warnings, []);
   assert.equal(args_at(compiled, ";", "I")?.action, "tab");
-  for (const [key, filter] of [["I", "images"], ["l", "links"], ["m", "media"], ["a", "all"]] as const) {
+  for (const [key, filter] of [["I", "images"], ["l", "links"], ["m", "media"]] as const) {
     assert.deepEqual([args_at(compiled, ";", "d", key)?.action, args_at(compiled, ";", "d", key)?.filter], ["download", filter], key);
   }
-  for (const key of ["B", "i", "p", "f"]) assert.equal(node_at(compiled, ";", "d", key), undefined, key);
+  // `;a` labels every element, most of which have no address to save, and `;Ba` and `;Wa` likewise.
+  for (const key of ["B", "i", "p", "f", "a"]) assert.equal(node_at(compiled, ";", "d", key), undefined, key);
 });
