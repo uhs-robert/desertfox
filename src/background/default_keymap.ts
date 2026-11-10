@@ -107,6 +107,9 @@ export const DEFAULT_KEYMAP: KeymapConfig = {
     rr: { id: "page.reload" },
     rh: { id: "page.reload", args: { hard: true }, label: "Hard reload" },
     R: { id: "page.reload", args: { hard: true }, label: "Hard reload" },
+    rc: { id: "page.reload", args: { clear: "site" }, label: "Clear site data, reload" },
+    // The command line opens with the flag typed, and Enter confirms: this one logs you out of every site.
+    rC: { id: "page.reload", args: { clear: "all" }, prompt: { param: "clear" }, label: "Clear all data, reload" },
     xp: { id: "page.stop" },
     gh: { id: "page.home" },
     gH: { id: "page.home", args: { where: "tab" } },

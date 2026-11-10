@@ -5,6 +5,7 @@ import type { CommandMeta } from "../command.ts";
 import { MAX_QUICKMARK_URL_CHARS, QUICKMARK_KEY } from "../quickmark_names.ts";
 import { SETTING_DOCS } from "../settings_docs.ts";
 import { SETTINGS_TABLE, type SettingName, type SettingRow } from "../settings_table.ts";
+import { ENGINE_KEYWORD } from "../engines/resolve.ts";
 import { KEYMAP_MODES } from "./merge.ts";
 import type { DataKind } from "./source_files.ts";
 
@@ -127,6 +128,7 @@ function search_engines_schema(): Schema {
       url: { type: "string", minLength: 1, description: "URL template. {query} is the typed or selected text, %s is the same. Page slots: {url}, {host}, {title}, {repo}, {subreddit}, {channel}. {a|b} takes the first that has a value, {name:raw} skips escaping" },
       label: { type: "string", minLength: 1 },
       fallback: { type: "string", minLength: 1, description: "Engine to use when the page cannot fill the slots" },
+      keyword: { type: "string", pattern: ENGINE_KEYWORD.source, description: "Short word, unique across engines. The open-anything finder will use it. Until then it is only checked. Children do not inherit it" },
       params: { type: "object", description: "Params declared here, each { default, values, children }" },
     },
     additionalProperties: true,

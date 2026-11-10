@@ -25,6 +25,8 @@ export const area_rules = [
   { globs: ["src/**/README.md", "src/icons/**"], areas: [] },
   // The schema validates the settings the help page edits and the config reads.
   { globs: shared_files, areas: area_names },
+  // page.ts holds the reload-clear command, which p22 tests, so it also selects the keys and cmdline pieces.
+  { globs: ["src/commands/{page,reload_clear}.ts"], areas: ["keys", "cmdline", "hints"] },
   { globs: ["src/content/hints/**", "src/commands/{hint,heading,page}.ts", "src/background/image_actions.ts", "src/content/handlers/{page,focus_input}.ts", "src/background/inspect_relay.ts", "src/devtools/**", "src/shared/inspect.ts"], areas: ["hints"] },
   { globs: ["src/content/run_content.ts", "src/commands/{caret,cmdline,copy,find,heading,help,hint,page,visual}.ts", "src/background/{bundle_loader,command_modules}.ts", "src/content/{bundle_host,bundles}.ts", "src/content/page/**", "src/content/text/**", "src/commands/text.ts", "src/shared/bundles.ts"], areas: ["bundles"] },
   { globs: ["src/content/caret/find_*.ts", "src/commands/find.ts", "src/background/{find_scan,find_worker,regex_scan}.ts"], areas: ["find"] },

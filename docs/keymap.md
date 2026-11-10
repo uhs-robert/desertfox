@@ -47,6 +47,8 @@ bound: 318 (normal 182, hint 2, cmdline 18, caret 35, visual 37, visual_line 38,
 | `rr` | bound | `page.reload` | Reload |  |
 | `rh` | bound | `page.reload --hard` | Hard reload |  |
 | `R` | bound | `page.reload --hard` | Hard reload |  |
+| `rc` | bound | `page.reload --site` | Clear site data, reload |  |
+| `rC` | bound | `page.reload --all` (prompts) | Clear all data, reload |  |
 | `xp` | bound | `page.stop` | Stop loading |  |
 | `gh` | bound | `page.home` | Home page |  |
 | `gH` | bound | `page.home --tab` | Home page |  |
