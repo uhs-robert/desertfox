@@ -187,14 +187,14 @@ function register(host: BundleHostApi): void {
     session = undefined;
   }
 
-  // A pick records what `.` repeats, so Escape or a failed filter stores nothing. The wait ends when the returned function gets the
+  // A pick records what `.` repeats at its start, not at the end of the leaf, because a pick that opens the link in this tab can end the page first. Escape or a failed filter stores nothing. The wait ends when the returned function gets the
   // action's result, so a later step sees the opened tab or the copied text. Call it before `set_mode_`, which ends the session as cancelled.
   function begin_pick(current: Session): (run: () => unknown) => void {
     let answer!: (outcome: Outcome) => void;
     const first = !current.picked;
     current.picked = true;
     current.finish(new Promise<Outcome>((resolve) => (answer = resolve)));
-    void browser.runtime.sendMessage({ type: "record_repeat", invocation: { id: "hint.run", args: current.args } });
+    void browser.runtime.sendMessage({ type: "record_step", invocations: [{ id: "hint.run", args: current.args }], outcome: done });
     const ended = (result: unknown) => {
       let outcome = (result as Outcome | undefined) ?? done;
       // A refused open comes back as a RunResponse with no message. The background already showed it, so it only stops the sequence.

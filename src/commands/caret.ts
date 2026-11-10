@@ -41,6 +41,7 @@ define("caret.move", {
     { name: "big", type: "bool", default: false, description: "Read a word as any run of non-blank characters." },
   ],
   runs_in: "content",
+  repeatable: false,
   count: "repeat",
   modes: ["caret", "visual", "visual_line"],
   bundle: "caret",

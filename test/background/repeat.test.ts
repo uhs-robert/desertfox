@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { create_router } from "../../src/background/router.ts";
-import { create_repeat_memory, no_repeat_memory, page_record } from "../../src/background/repeat_memory.ts";
+import { create_repeat_memory, no_repeat_memory } from "../../src/background/repeat_memory.ts";
+import { create_step_recorder, page_outcome, page_steps } from "../../src/background/record_step.ts";
 import { make_repeat_handler, type RepeatDeps } from "../../src/commands/command.ts";
 import type { BoundInvocation } from "../../src/shared/invocation.ts";
 import { make_fake } from "./fakes.ts";
@@ -69,10 +70,12 @@ test("a command that is not repeatable is skipped and keeps the older memory", a
   assert.deepEqual(fake.slots.normal, [{ id: "tab.echo", count: 2 }]);
 });
 
-test("content commands are not stored by the router", async () => {
-  const { fake, router } = repeat_setup({ "page.look": { ...echo, runs_in: "content" } });
-  await router.run({ invocations: [{ id: "page.look" }], mode: "normal" });
+test("a content command the router ran is stored, and one that opted out is not", async () => {
+  const { fake, router } = repeat_setup({ "page.look": { ...echo, runs_in: "content" }, "page.mute": { ...echo, runs_in: "content", repeatable: false } });
+  await router.run({ invocations: [{ id: "page.mute" }], mode: "normal" });
   assert.equal(fake.slots.normal, undefined);
+  await router.run({ invocations: [{ id: "page.look" }], mode: "normal" });
+  assert.deepEqual(fake.slots.normal, [{ id: "page.look" }]);
 });
 
 test("a private tab has its own slot", async () => {
@@ -96,25 +99,36 @@ test("with nothing stored the repeat says so", async () => {
 
 test("the session memory keeps the two slots apart", async () => {
   const store: Record<string, unknown> = {};
-  const memory = create_repeat_memory({ get: async (key) => ({ [key as string]: store[key as string] }), set: async (items) => void Object.assign(store, items) });
+  const memory = create_repeat_memory({ get: async (key) => ({ [key as string]: store[key as string] }), set: async (items) => void Object.assign(store, items), remove: async (key) => void delete store[key as string] });
   const batch: BoundInvocation[] = [{ id: "tab.echo" }];
   await memory.save(batch, true);
   assert.equal(await memory.load(false), undefined);
   assert.deepEqual(await memory.load(true), batch);
 });
 
-test("a page may record only a content command whose args pass the validator", () => {
+test("a page may record only content commands whose args and count pass the validator", () => {
   const { fake } = repeat_setup({
     "hint.run": { label: "Hint", intent: "x", runs_in: "content", params: [{ name: "action", type: "enum", values: ["here", "tab"], default: "here" }] },
   });
   const get = (id: string) => fake.registry.get(id);
-  const record = (invocation: unknown) => page_record({ type: "record_repeat", invocation }, get, {});
-  assert.deepEqual(record({ id: "hint.run", args: { action: "tab" } }), { id: "hint.run", args: { action: "tab" } });
+  const record = (...invocations: unknown[]) => page_steps({ type: "record_step", invocations }, get, {});
+  assert.deepEqual(record({ id: "hint.run", args: { action: "tab" }, count: 3, bundle: "hints" }), [{ id: "hint.run", args: { action: "tab" }, count: 3 }]);
   assert.equal(record({ id: "hint.run", args: { action: "nope" } }), undefined);
   assert.equal(record({ id: "hint.run", args: [] }), undefined);
+  assert.equal(record({ id: "hint.run", count: 0 }), undefined);
+  assert.equal(record({ id: "hint.run", count: 1.5 }), undefined);
   assert.equal(record({ id: "tab.echo" }), undefined);
-  assert.equal(record({ id: "missing.one" }), undefined);
-  assert.equal(record(undefined), undefined);
+  assert.equal(record({ id: "hint.run" }, { id: "missing.one" }), undefined);
+  assert.equal(record(), undefined);
+  assert.equal(record(...Array.from({ length: 17 }, () => ({ id: "hint.run" }))), undefined);
+  assert.equal(page_steps(undefined, get, {}), undefined);
+});
+
+test("the page outcome is a success only when it says so", () => {
+  assert.deepEqual(page_outcome({ outcome: { ok: true } }), { ok: true });
+  assert.deepEqual(page_outcome({ outcome: { ok: true, cancelled: true } }), { ok: true, cancelled: true });
+  assert.equal(page_outcome({ outcome: { ok: false, message: "x" } }).ok, false);
+  assert.equal(page_outcome({}).ok, false);
 });
 
 test("the slot is the one of the tab that was active before the steps ran", async () => {
@@ -136,7 +150,153 @@ test("a request marked skip_repeat runs and keeps the older memory", async () =>
   assert.deepEqual(fake.slots.normal, [{ id: "tab.echo", count: 2 }]);
 });
 
-test("a page may record only hint.run, not another content command", () => {
-  const { fake } = repeat_setup({ "page.look": { ...echo, runs_in: "content" } });
-  assert.equal(page_record({ invocation: { id: "page.look" } }, (id) => fake.registry.get(id), {}), undefined);
+const scroll = { label: "Scroll", intent: "x", runs_in: "content", params: [{ name: "n", type: "int", default: 1 }] } as const;
+
+function recorder_setup() {
+  const fake = make_fake({
+    "tab.echo": { ...echo, run: () => undefined },
+    "page.scroll": scroll,
+    "page.mode": { ...scroll, repeatable: false },
+  });
+  return { fake, record_step: create_step_recorder(fake.deps) };
+}
+
+test("a content step is stored like a background one, and a command that opted out is not", async () => {
+  const { fake, record_step } = recorder_setup();
+  await record_step([{ id: "page.scroll", args: { n: 2 }, count: 3 }], { ok: true }, { is_private: false });
+  assert.deepEqual(fake.slots.normal, [{ id: "page.scroll", args: { n: 2 }, count: 3 }]);
+  await record_step([{ id: "page.mode" }], { ok: true }, { is_private: false });
+  assert.deepEqual(fake.slots.normal, [{ id: "page.scroll", args: { n: 2 }, count: 3 }]);
+});
+
+test("a failed, cancelled, prompted or skipped step leaves the slot as it was", async () => {
+  const { fake, record_step } = recorder_setup();
+  await record_step([{ id: "page.scroll", args: { n: 1 } }], { ok: true }, { is_private: false });
+  const kept = [{ id: "page.scroll", args: { n: 1 } }];
+  const other = [{ id: "tab.echo", count: 9 }];
+  await record_step(other, { ok: false, message: "no" }, { is_private: false });
+  await record_step(other, { ok: true, cancelled: true }, { is_private: false });
+  await record_step(other, { ok: true }, { is_private: false, prompted: true });
+  await record_step(other, { ok: true }, { is_private: false, skip_repeat: true });
+  assert.deepEqual(fake.slots.normal, kept);
+});
+
+test("a refused or cancelled request does not overwrite the slot", async () => {
+  const { fake, router } = repeat_setup({ "page.pick": { ...echo, runs_in: "content" } }, { send_to_tab: async () => ({ ok: true, cancelled: true }) });
+  await router.run({ invocations: [{ id: "tab.echo", count: 2 }], mode: "normal" });
+  await router.run({ invocations: [{ id: "tab.fail" }], mode: "normal" });
+  await router.run({ invocations: [{ id: "page.pick" }], mode: "normal" });
+  await router.run({ invocations: [{ id: "missing.one" }], mode: "normal" });
+  assert.deepEqual(fake.slots.normal, [{ id: "tab.echo", count: 2 }]);
+});
+
+test("a replay of the slot goes through the recorder and keeps the slot, and the repeat itself is never stored", async () => {
+  const { fake, router, repeat, ctx } = repeat_setup();
+  await router.run({ invocations: [{ id: "tab.echo", count: 4 }], mode: "normal" });
+  await repeat(ctx, { count: 2 });
+  assert.deepEqual(fake.slots.normal, [{ id: "tab.echo", count: 2 }]);
+});
+
+test("the router stores the request before it answers, so a repeat typed next finds it", async () => {
+  const order: string[] = [];
+  const { fake } = repeat_setup();
+  const router = create_router({ ...fake.deps, repeat_memory: { load: fake.deps.repeat_memory.load, save: async (steps, is_private) => { order.push("save"); await fake.deps.repeat_memory.save(steps, is_private); } } });
+  await router.run({ invocations: [{ id: "tab.echo" }], mode: "normal" });
+  order.push("answered");
+  assert.deepEqual(order, ["save", "answered"]);
+});
+
+function memory_setup(has_private_window: () => Promise<boolean> = async () => true) {
+  const store: Record<string, unknown> = {};
+  const memory = create_repeat_memory(
+    { get: async (key) => ({ [key as string]: store[key as string] }), set: async (items) => void Object.assign(store, items), remove: async (key) => void delete store[key as string] },
+    has_private_window,
+  );
+  return { store, memory };
+}
+
+const later = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+test("page records land in arrival order, so the last key press wins even when the first is slower", async () => {
+  const { memory } = memory_setup();
+  const first = memory.in_turn(async (slot) => {
+    await later(15);
+    await slot.save([{ id: "page.scroll", args: { n: 1 } }], false);
+  });
+  const second = memory.in_turn((slot) => slot.save([{ id: "page.scroll", args: { n: 2 } }], false));
+  await Promise.all([first, second]);
+  assert.deepEqual(await memory.load(false), [{ id: "page.scroll", args: { n: 2 } }]);
+});
+
+test("a load waits for a page record that is still on its way to the slot", async () => {
+  const { memory } = memory_setup();
+  void memory.in_turn(async (slot) => {
+    await later(10);
+    await slot.save([{ id: "page.scroll" }], false);
+  });
+  assert.deepEqual(await memory.load(false), [{ id: "page.scroll" }]);
+});
+
+test("a router save waits behind a page record in flight, so the later request wins", async () => {
+  const { memory } = memory_setup();
+  void memory.in_turn(async (slot) => {
+    await later(10);
+    await slot.save([{ id: "page.scroll" }], false);
+  });
+  await memory.save([{ id: "tab.echo" }], false);
+  assert.deepEqual(await memory.load(false), [{ id: "tab.echo" }]);
+});
+
+test("closing the last private window clears the private slot and keeps the normal one", async () => {
+  let private_open = true;
+  const { memory } = memory_setup(async () => private_open);
+  await memory.save([{ id: "tab.echo" }], false);
+  await memory.save([{ id: "tab.echo", count: 2 }], true);
+  await memory.clear_private_without_window();
+  assert.deepEqual(await memory.load(true), [{ id: "tab.echo", count: 2 }]);
+  private_open = false;
+  await memory.clear_private_without_window();
+  assert.equal(await memory.load(true), undefined);
+  assert.deepEqual(await memory.load(false), [{ id: "tab.echo" }]);
+});
+
+test("a private write that is still in flight when the last window closes does not survive the clear", async () => {
+  let private_open = true;
+  const { memory } = memory_setup(async () => private_open);
+  const write = memory.in_turn(async (slot) => {
+    await later(10);
+    await slot.save([{ id: "tab.echo" }], true);
+  });
+  private_open = false;
+  await memory.clear_private_without_window();
+  await write;
+  assert.equal(await memory.load(true), undefined);
+});
+
+test("a private save that finishes after its window closed is dropped, as when the command closed that window", async () => {
+  let private_open = true;
+  const { fake } = repeat_setup(
+    { "window.shut": { ...echo, run: () => void (private_open = false) } },
+    { active_tab: async () => ({ tab_id: 7, window_id: 1, url: undefined, incognito: true }) },
+  );
+  const { memory } = memory_setup(async () => private_open);
+  const closing = create_router({ ...fake.deps, repeat_memory: memory });
+  await closing.run({ invocations: [{ id: "window.shut" }], mode: "normal" });
+  assert.equal(await memory.load(true), undefined);
+});
+
+test("a window that opened before the clear check keeps its slot", async () => {
+  const { memory } = memory_setup(async () => true);
+  await memory.save([{ id: "tab.echo" }], true);
+  await memory.clear_private_without_window();
+  assert.deepEqual(await memory.load(true), [{ id: "tab.echo" }]);
+});
+
+test("the recorder gets the index of the step that failed or was cancelled", async () => {
+  const seen: unknown[] = [];
+  const { fake } = repeat_setup();
+  const with_spy = create_router({ ...fake.deps, record_step: async (_steps, outcome) => void seen.push(outcome) });
+  await with_spy.run({ invocations: [{ id: "tab.echo" }, { id: "tab.fail" }], mode: "normal" });
+  await with_spy.run({ invocations: [{ id: "tab.echo" }], mode: "normal" });
+  assert.deepEqual(seen, [{ ok: false, message: "no", failed_step: 1 }, { ok: true }]);
 });

@@ -183,10 +183,12 @@ export type RegisterRead = { type: "register_read"; name: string };
 export type RegisterWrite = { type: "register_write"; name: string; text: string };
 export type RegisterRequest = RegisterRead | RegisterWrite;
 
-// From the `hints` bundle at the start of a pick: what `.` shows again. The background checks it like any page message, because the sender is a page script.
-export type RecordRepeat = {
-  type: "record_repeat";
-  invocation: BoundInvocation;
+// From the content script when a leaf of content commands ends: the steps and how they ended. The background checks it like any page message,
+// because the sender is a page script, then hands it to `record_step`. A held key sends the first press only.
+export type RecordStep = {
+  type: "record_step";
+  invocations: Invocation[];
+  outcome: Outcome;
 };
 
 // From the command line page when the user asks for help on a command, by link or by key. The background opens the help page
@@ -326,7 +328,7 @@ export type ImportSessions = { type: "import_sessions"; text: string };
 
 export type PageToBackground = ChangeSetting | ListSettings | ToolbarRequest | PreviewConfigImport | CommitConfigImport | ExportConfig | ListSnippets | RemoveSnippet | ExportSessions | ImportSessions;
 
-export type ContentToBackground = RunRequest | ModeChanged | LoadBundle | ListKeys | IssueCmdlineTicket | OpenCmdline | RecordCmdline | CompleteItems | TabRowsActionRequest | OpenHelp | RecordRepeat | ReadTabAddress | FindScan | ImageAction | InspectPick | RegisterRequest;
+export type ContentToBackground = RunRequest | ModeChanged | LoadBundle | ListKeys | IssueCmdlineTicket | OpenCmdline | RecordCmdline | CompleteItems | TabRowsActionRequest | OpenHelp | RecordStep | ReadTabAddress | FindScan | ImageAction | InspectPick | RegisterRequest;
 
 // How a command ended. Done is `{ ok: true }`. A handler that returns nothing is done, and one that throws is failed.
 // Cancelled means the user left a waiting step (Escape, an unrelated key, a page change), so the rest of a sequence does not run and nothing is shown.

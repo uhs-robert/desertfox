@@ -13,7 +13,7 @@ const shared_files = [
   "src/manifest.json",
   "src/background/{availability,browser_deps,main,refusal,router,slots,startup}.ts",
   "src/commands/{command,copy,mode}.ts",
-  "src/content/{cancelled_keys,context,editable,handler_map,invocation_args,key_flow,link_escape,main,mode_state,page_mode,run_content,shadow,site_rule}.ts",
+  "src/content/{cancelled_keys,context,editable,handler_map,invocation_args,key_flow,link_escape,main,mode_state,page_mode,run_content,run_leaf,shadow,site_rule}.ts",
   "src/content/handlers/{copy,focus,mode,stop,types}.ts",
   "src/shared/{command,index,load_commands,messages}.ts",
   "src/shared/registry/{builtin,define,index}.ts",
@@ -64,7 +64,7 @@ export const area_rules = [
     areas: ["config"],
   },
   { globs: ["src/shared/engines/**", "src/commands/engine.ts"], areas: ["engines"] },
-  { globs: ["src/background/{default_keymap,keymap_merge,compile,repeat_memory}.ts", "src/shared/{keys/**,keymap,prefix_tree,layers,invocation}.ts"], areas: ["keys"] },
+  { globs: ["src/background/{default_keymap,keymap_merge,compile,repeat_memory,record_step}.ts", "src/shared/{keys/**,keymap,prefix_tree,layers,invocation}.ts"], areas: ["keys"] },
   { globs: ["src/popup/**", "src/background/toolbar.ts"], areas: ["toolbar"] },
   { globs: ["src/content/{ui/**,toast,ui_proxy,surface,mode_indicator,mode_label,mode_report,badge_hosts}.ts"], areas: ["ui"] },
 ];
