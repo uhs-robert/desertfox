@@ -25,7 +25,7 @@ function focus_chain(): ScrollCandidate<Element>[] {
   return chain;
 }
 
-function scroll_target(axis: ScrollAxis): Element {
+export function scroll_target(axis: ScrollAxis): Element {
   const target = pick_scroll_target(
     focus_chain(),
     page_candidate(),
@@ -43,7 +43,7 @@ let in_flight: { target: Element; end: number } | undefined;
 let clear_in_flight_timer: ReturnType<typeof setTimeout> | undefined;
 const FLIGHT_MS = 600;
 
-const end_flight = () => {
+export const end_flight = () => {
   clearTimeout(clear_in_flight_timer);
   in_flight = undefined;
 };

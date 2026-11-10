@@ -23,3 +23,6 @@ export async function run_leaf(
   // A held key sends its first press only.
   if (!repeat) void send({ type: "record_step", invocations: counted_invocations(leaf.steps, count), outcome });
 }
+
+// A captured key goes through the router, so the keys after it wait until the leaf has run. Only a leaf made of captured-key steps holds: a step that waits on the user (a hint pick) would never see its keys. In a field the held keys go to the page unprocessed, so a hold there skips the Escape that leaves insert mode.
+export const holds_keys_after = (leaf: TreeLeaf, in_field: boolean): boolean => !in_field && leaf.steps.every((step) => step.capture !== undefined);

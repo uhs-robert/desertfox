@@ -228,6 +228,10 @@ export const DEFAULT_KEYMAP: KeymapConfig = {
     ",?": { id: "help.whichkey" },
     ",\"": { id: "register.list", prompt: { param: "name" }, label: "List registers" },
 
+    m: { id: "mark.add" },
+    "'": { id: "mark.jump" },
+    "`": { id: "mark.jump" },
+
     o: { id: "open.url", args: { where: "here" }, prompt: { param: "url" } },
     O: { id: "open.url", args: { where: "tab" }, prompt: { param: "url" } },
     go: { id: "open.url", args: { where: "here" }, prompt: { param: "url", prefill: { from: "current_url" } } },
