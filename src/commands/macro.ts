@@ -7,18 +7,23 @@ import { browser_macro_recorder } from "../background/macro_recorder.ts";
 import type { MacroRecorder } from "../background/macro_recorder.ts";
 import { browser_register_store, is_private_context } from "../background/register_store.ts";
 import type { RegisterStore } from "../background/register_store.ts";
-import type { ToastKind } from "../shared/messages.ts";
+import type { Outcome, ToastKind } from "../shared/messages.ts";
+import { wired_macro_replay } from "../background/macro_replay.ts";
+import type { MacroReplay } from "../background/macro_replay.ts";
 
 export type MacroCommandDeps = {
   recorder: MacroRecorder;
   store: RegisterStore;
   is_private: (ctx: CommandContext) => Promise<boolean>;
   toast: (ctx: CommandContext, kind: ToastKind, message: string) => Promise<void>;
+  // Undefined until the background wires the replay.
+  replay: () => MacroReplay | undefined;
 };
 
 export function make_macro_handlers(deps: MacroCommandDeps) {
   return {
     record: async (ctx: CommandContext, args: { reg: string }) => {
+      if (deps.replay()?.is_playing()) throw new RuntimeRefusal("A macro is playing, so recording cannot start");
       const is_private = await deps.is_private(ctx);
       // An uppercase name appends, and steps cannot join text. Checked now so the refusal comes before a recording that could not be stored.
       if (args.reg !== storage_name(args.reg) && typeof (await deps.store.read(args.reg, is_private)) === "string") throw new RuntimeRefusal(`Register ${storage_name(args.reg)} holds text, so a macro cannot join it`);
@@ -31,6 +36,13 @@ export function make_macro_handlers(deps: MacroCommandDeps) {
       const count = `${steps.length} ${steps.length === 1 ? "step" : "steps"}`;
       await deps.toast(ctx, "info", `Recorded ${count} into ${storage_name(register)}`);
     },
+    // A failed step showed its own refusal, so the play ends quietly, as a cancelled pick does.
+    play: async (ctx: CommandContext, args: { reg: string }): Promise<Outcome | undefined> => {
+      const replay = deps.replay();
+      if (!replay) throw new RuntimeRefusal("Macro replay is not ready yet");
+      const finished = await replay.play({ register: storage_name(args.reg), tab_id: ctx.tab_id, frame_id: ctx.frame_id, mode: ctx.mode, is_private: await deps.is_private(ctx) });
+      return finished ? undefined : { ok: true, cancelled: true };
+    },
   };
 }
 
@@ -39,6 +51,7 @@ const handlers = make_macro_handlers({
   store: browser_register_store,
   is_private: is_private_context,
   toast: (ctx, kind, message) => show_toast_on_tab(ctx, "macro", message, kind),
+  replay: wired_macro_replay,
 });
 
 define("macro.record", {
@@ -56,4 +69,14 @@ define("macro.stop", {
   runs_in: "background",
   repeatable: false,
   run: (ctx) => handlers.stop(ctx),
+});
+
+// PR 3's count belongs on this command as `count: { param: "count" }`, so one replay plays all its passes: the router's own repeat would start each pass as a replay of its own.
+define("macro.play", {
+  label: "Play macro",
+  intent: "Play the macro in a register. Keys typed meanwhile wait and run after it. A failed step, a cancelled hint pick or Escape stops it and drops those keys.",
+  params: [{ name: "reg", type: "key", pattern: MACRO_REGISTER_PATTERN, description: "Play the macro in this register, a-z or A-Z." }],
+  runs_in: "background",
+  repeatable: false,
+  run: (ctx, args) => handlers.play(ctx, args as { reg: string }),
 });

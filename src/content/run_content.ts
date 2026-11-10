@@ -31,9 +31,9 @@ export const run_content_invocation = (invocation: Invocation, count_rule: Count
   });
 
 // Runs the invocations one after another and answers with the first outcome that is not done, or done when all are.
-export async function run_in_order(invocations: Invocation[]): Promise<Outcome> {
+export async function run_in_order(invocations: Invocation[], repeat?: boolean): Promise<Outcome> {
   for (const invocation of invocations) {
-    const outcome = await run_content_invocation(invocation, "ignore");
+    const outcome = await run_content_invocation(invocation, "ignore", repeat);
     if (!outcome.ok || outcome.cancelled) return outcome;
   }
   return { ok: true };

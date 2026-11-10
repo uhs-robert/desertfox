@@ -134,12 +134,12 @@ async function with_quickmarks(panel: WhichKeyPanel, root: TreeBranch | undefine
   return rows.length === 0 ? panel : { ...panel, rows };
 }
 
-// The capture row under `q` says a register key is expected. Once a macro is stored the rows name the macros, with their step counts.
+// The capture row under `q` or `@` says a register key is expected. Once a macro is stored the rows name the macros, with their step counts.
 async function with_stored_macros(panel: WhichKeyPanel, root: TreeBranch | undefined, prefix: string[], macros: () => Promise<RegisterItem[]>): Promise<WhichKeyPanel> {
   let node: TreeNode | undefined = root;
   for (const token of prefix) node = node?.kind === "branch" ? node.children[token] : undefined;
   const capture = node?.kind === "branch" && Object.keys(node.children).length === 1 ? node.children[ANY_KEY] : undefined;
-  if (capture?.kind !== "leaf" || !capture.steps.every((step) => step.invocation.id === "macro.record")) return panel;
+  if (capture?.kind !== "leaf" || !capture.steps.every((step) => step.invocation.id === "macro.record" || step.invocation.id === "macro.play")) return panel;
   const items = await macros().catch((): RegisterItem[] => []);
   return items.length === 0 ? panel : { ...panel, rows: items.map(({ name, description }) => ({ keys: name, command: description, description: "", more: false })) };
 }
