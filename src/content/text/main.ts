@@ -22,7 +22,7 @@ if (!page.desertfox_text_ready) {
   });
   host.register_handler_("text.input", (args) => {
     // A cancelled answer tells the content script that no session is open, so the next edit comes through.
-    return recorder.on_input(args.field_ as Element, args.before_ as string) ? undefined : { ok: true, cancelled: true };
+    return recorder.on_input(args.field_ as Element, args.before_ as string, args.secret_ === true) ? undefined : { ok: true, cancelled: true };
   });
   host.register_handler_("text.flush", recorder.flush);
   host.register_handler_("text.insert", (args) => recorder.while_replaying(() => write_into_field(args.text as string, host.last_blurred_())));

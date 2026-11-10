@@ -190,3 +190,11 @@ test("an edit before the bundle loads is recorded, and a flush queued behind it 
   await Promise.all(pending);
   assert.deepEqual(recorded, [[text_step("go!")]]);
 });
+
+test("a field the content script read as secret is not recorded, though it reads as text by the time the bundle runs", () => {
+  const { recorded, recorder } = setup();
+  assert.equal(recorder.on_input(as_element(field_a), "", true), false);
+  field_a.text = "pw";
+  recorder.flush();
+  assert.deepEqual(recorded, []);
+});
