@@ -1,9 +1,10 @@
 // Local marks: m<a-z> sets, '<key> and the backtick jump, '' toggles with the position the last jump left, and which-key lists the page's marks.
-// A private window keeps its marks apart from the normal ones. The harness has no private window, so only the unit tests cover that.
+// Global marks: m<A-Z> keeps an address, and '<A-Z> switches to the tab on it or opens it in the current tab, then scrolls.
+// A private window keeps its marks apart from the normal ones, and the harness has no private window or second window helper, so only the unit tests cover those and the tab order across windows.
 
-export const areas = ["scroll", "keys", "whichkey"];
+export const areas = ["scroll", "keys", "whichkey", "tabs"];
 
-export async function run_cases({ run_case, open_page, press_keys, poll_until, events, wait_event, scroll_of, last_scroll_y, scroll_delta_by_press, expect, expect_no_scroll, in_active_tab, in_background, which_key_delay_ms, sleep, settle_focus }) {
+export async function run_cases({ run_case, open_page, press_keys, poll_until, events, wait_event, wait_active_tab, scroll_of, last_scroll_y, scroll_delta_by_press, expect, expect_no_scroll, in_active_tab, in_background, which_key_delay_ms, sleep, settle_focus }) {
   const to_y = async (page_id, keys, y, what) => {
     const mark = events.length;
     await press_keys(...keys);
@@ -59,9 +60,9 @@ export async function run_cases({ run_case, open_page, press_keys, poll_until, e
     await to_y("p9m_jump", ["'", "a"], bottom, "'a after a reload");
   });
 
-  await run_case("a mark that is not set toasts and does not scroll, and so does a key outside a to z", async () => {
+  await run_case("a mark that is not set toasts and does not scroll, and so does a key outside a to z and A to Z", async () => {
     await open_page("aligned", "p9m_missing", { new_tab: true });
-    for (const keys of [["'", "q"], ["m", "A"], ["m", "1"]]) {
+    for (const keys of [["'", "q"], ["'", "Q"], ["m", "1"]]) {
       const mark = events.length;
       await press_keys(...keys);
       await wait_event(mark, (event) => event.type === "toast" && event.page_id === "p9m_missing", `a toast after ${keys.join("")}`);
@@ -122,6 +123,81 @@ export async function run_cases({ run_case, open_page, press_keys, poll_until, e
     expect(shown.value.endsWith(":2"), `the panel does not list both marks: ${shown.value}`);
     await press_keys("-k", "Escape");
     await wait_event(mark, (event) => event.type === "whichkey" && event.page_id === "p9m_wk" && event.value === "", "the panel to close");
+    await sleep(which_key_delay_ms);
+  });
+
+  const tab_count = () => in_background(`browser.tabs.query({}).then((tabs) => tabs.length)`);
+  const global_url = (key) => in_background(`browser.storage.local.get("desertfox_marks").then((stored) => stored.desertfox_marks?.globals?.["${key}"]?.url)`);
+  const close_tabs_on = (page_id) => in_background(`(async () => { for (const tab of await browser.tabs.query({})) if (tab.url.includes("id=${page_id}")) await browser.tabs.remove(tab.id); })()`);
+  const tab_of = (page_id) => in_background(`browser.tabs.query({}).then((tabs) => tabs.find((tab) => tab.url.includes("id=${page_id}"))?.id)`);
+
+  // The first tab is scrolled to the top after the mark, so the jump has to scroll it.
+  await run_case("mA, then 'A from another tab switches back to the first tab without a new tab and scrolls to the mark", async () => {
+    await open_page("aligned", "p9g_a", { new_tab: true });
+    const bottom = await go_to_bottom("p9g_a");
+    await set_mark("A");
+    await poll_until("the global mark to be stored", async () => (await global_url("A")) != null);
+    await scroll_delta_by_press("p9g_a", ["g", "g"]);
+    await poll_until("the page to reach the top", async () => last_scroll_y("p9g_a") === 0);
+    await open_page("aligned", "p9g_b", { new_tab: true });
+    const tabs_before = await tab_count();
+    const mark = events.length;
+    await press_keys("'", "A");
+    await wait_active_tab("p9g_a", "the first tab to be active after 'A");
+    await wait_event(mark, (event) => scroll_of("p9g_a")(event) && Math.abs(event.y - bottom) <= 1, "the first tab to scroll to the mark");
+    expect((await tab_count()) === tabs_before, "'A opened a tab");
+  });
+
+  await run_case("keys typed in the old tab right after a 'A that switched away still run when the user is back there", async () => {
+    const second = await tab_of("p9g_b");
+    await in_background(`browser.tabs.update(${second}, { active: true })`);
+    await wait_active_tab("p9g_b", "the second tab to be active");
+    await settle_focus();
+    expect(last_scroll_y("p9g_b") === 0, "the second tab did not start at the top");
+    await press_keys("'", "A");
+    await wait_active_tab("p9g_a", "the first tab after 'A from the second");
+    await in_background(`browser.tabs.update(${second}, { active: true })`);
+    await wait_active_tab("p9g_b", "the second tab to be active again");
+    await settle_focus();
+    await scroll_delta_by_press("p9g_b", ["j"]);
+    expect(last_scroll_y("p9g_b") > 0, "j did not scroll the old tab after 'A switched away");
+  });
+
+  await run_case("a hash change on the marked tab still matches it", async () => {
+    await in_background(`(async () => { const id = ${await tab_of("p9g_a")}; await browser.tabs.executeScript(id, { code: "location.hash = 'other'; scrollTo(0, 0)" }); })()`);
+    const back = await tab_of("p9g_b");
+    await in_background(`browser.tabs.update(${back}, { active: true })`);
+    await wait_active_tab("p9g_b", "the second tab");
+    await settle_focus();
+    const tabs_before = await tab_count();
+    await press_keys("'", "A");
+    await wait_active_tab("p9g_a", "the first tab after 'A with a hash on its address");
+    expect((await tab_count()) === tabs_before, "'A opened a tab although the hash only differs");
+  });
+
+  await run_case("with the marked tab closed, 'A opens the address in the current tab and scrolls after the load", async () => {
+    await close_tabs_on("p9g_a");
+    await wait_active_tab((page_id) => page_id !== "p9g_a", "another tab to be active");
+    await settle_focus();
+    const tabs_before = await tab_count();
+    const mark = events.length;
+    await press_keys("'", "A");
+    await wait_event(mark, (event) => event.type === "tree_read" && event.page_id === "p9g_a", "the marked address to load in the current tab");
+    await wait_event(mark, (event) => scroll_of("p9g_a")(event) && event.y > 0, "the loaded page to scroll to the mark");
+    expect((await tab_count()) === tabs_before, "'A opened a new tab");
+  });
+
+  await run_case("a pause after ' lists the global mark with its address after the page's marks", async () => {
+    await open_page("aligned", "p9g_wk", { new_tab: true });
+    await set_mark("a");
+    await poll_until("the mark to be stored", async () => (await stored_y("p9g_wk", "a")) != null);
+    const mark = events.length;
+    await press_keys("'");
+    const shown = await wait_event(mark, (event) => event.type === "whichkey" && event.page_id === "p9g_wk" && event.value !== "", "the which-key panel");
+    // One local row and the global A.
+    expect(shown.value.endsWith(":2"), `the panel does not list the page mark and the global mark: ${shown.value}`);
+    await press_keys("-k", "Escape");
+    await wait_event(mark, (event) => event.type === "whichkey" && event.page_id === "p9g_wk" && event.value === "", "the panel to close");
     await sleep(which_key_delay_ms);
   });
 }

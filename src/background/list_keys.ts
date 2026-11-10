@@ -113,7 +113,7 @@ export async function list_keys(
   return marks ? with_page_marks(panel, shown, request.prefix, marks) : panel;
 }
 
-// The capture row `<key>` under a mark key says a key is expected. Once the page has marks the rows name them instead, with the scroll offset.
+// The capture row `<key>` under a mark key says a key is expected. Once the page has marks the rows name them instead, with the scroll offset. Global marks follow with their address.
 async function with_page_marks(panel: WhichKeyPanel, root: TreeBranch | undefined, prefix: string[], marks: () => Promise<MarkItem[]>): Promise<WhichKeyPanel> {
   let node: TreeNode | undefined = root;
   for (const token of prefix) node = node?.kind === "branch" ? node.children[token] : undefined;
@@ -122,5 +122,17 @@ async function with_page_marks(panel: WhichKeyPanel, root: TreeBranch | undefine
   const stored = await marks().catch((): MarkItem[] => []);
   const shown_items = capture.steps[0]?.invocation.id === "mark.add" ? stored.filter((item) => item.key !== PREVIOUS_MARK) : stored;
   if (shown_items.length === 0) return panel;
-  return { ...panel, rows: shown_items.map(({ key, x, y }) => ({ keys: key, command: x === 0 ? `y ${y}` : `x ${x} y ${y}`, description: "", more: false })).sort(compare_rows) };
+  const rows_of = (items: MarkItem[]) => items.map(mark_row).sort(compare_rows);
+  // The page's own marks first, then the global ones, each in key order.
+  return { ...panel, rows: [...rows_of(shown_items.filter((item) => item.url === undefined)), ...rows_of(shown_items.filter((item) => item.url !== undefined))] };
+}
+
+const GLOBAL_ADDRESS_CHARS = 36;
+
+// A global mark leads with its address, which tells two marks apart. The scheme is dropped: it is nearly always https.
+function mark_row({ key, x, y, url }: MarkItem): WhichKeyRow {
+  const offset = x === 0 ? `y ${y}` : `x ${x} y ${y}`;
+  const address = url?.replace(/^https?:\/\//, "");
+  const shown = address !== undefined && address.length > GLOBAL_ADDRESS_CHARS ? `${address.slice(0, GLOBAL_ADDRESS_CHARS - 1)}…` : address;
+  return { keys: key, command: shown === undefined ? offset : `${shown}  ${offset}`, description: "", more: false };
 }

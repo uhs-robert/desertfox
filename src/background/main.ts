@@ -32,7 +32,9 @@ import { wire_repeat } from "../commands/command.ts";
 import { DISABLED_STORAGE_KEY, SLOT_TABLE_STORAGE_KEY } from "./storage_keys.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY } from "../shared/prefix_tree.ts";
 import type { CompiledKeymap } from "../shared/prefix_tree.ts";
-import { send_to_tab } from "./browser_deps.ts";
+import { has_content_script, send_to_tab } from "./browser_deps.ts";
+import { create_global_mark_jump } from "./global_mark_jump.ts";
+import { watch_page_ready } from "./page_ready.ts";
 import { change_edits, get_config, get_search_engine_names, import_config, preview_config_import, reload_config, remove_snippet, republish, snippets } from "./startup.ts";
 import { answer_config_import } from "./config_import.ts";
 import { answer_toolbar_request, create_toolbar, TOGGLE_COMMAND } from "./toolbar.ts";
@@ -57,6 +59,17 @@ const has_private_window = async () => (await browser.windows.getAll()).some((wi
 const repeat_memory = create_repeat_memory(browser.storage.session, has_private_window);
 const router_deps = make_router_deps(get_config, repeat_memory);
 const router = create_router(router_deps);
+const global_mark_jump = create_global_mark_jump({
+  store: browser_mark_store,
+  list_tabs: async () => (await browser.tabs.query({})).flatMap((tab) => (tab.id === undefined || tab.windowId === undefined || tab.url === undefined ? [] : [{ id: tab.id, window_id: tab.windowId, index: tab.index, url: tab.url, incognito: tab.incognito, last_accessed: tab.lastAccessed ?? 0, discarded: tab.discarded === true }])),
+  activate_tab: (tab_id) => browser.tabs.update(tab_id, { active: true }),
+  focus_window: (window_id) => browser.windows.update(window_id, { focused: true }),
+  navigate: (tab_id, url) => browser.tabs.update(tab_id, { url }),
+  watch: (tab_id) =>
+    watch_page_ready({ get_tab: (id) => browser.tabs.get(id).catch(() => undefined), on_updated: browser.tabs.onUpdated, on_removed: browser.tabs.onRemoved, has_content_script, set_timer: (callback, ms) => setTimeout(callback, ms), clear_timer: (timer) => clearTimeout(timer as number) }, tab_id),
+  push_jump: (tab_id, key) => send_to_tab(tab_id, { type: "run_in_content", invocations: [{ id: "mark.jump", args: { key }, bundle: "page" }] }, 0),
+  show_refusal: (tab_id, message) => router_deps.show_refusal(tab_id, { id: "mark.jump", message }, 0),
+});
 const is_private_tab = async (tab_id: number | undefined) => tab_id !== undefined && (await browser.tabs.get(tab_id).catch(() => undefined))?.incognito === true;
 // A replay is a request like any other: it stores itself again, so `3.` keeps its count for the next `.`.
 wire_repeat({
@@ -164,7 +177,7 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
   if (request?.type === "load_bundle") return bundle_loader.answer(sender, request.name);
   if (request?.type === "find_scan" && is_scan_request(request)) return find_scan.answer(request, `${sender.tab?.id}:${sender.frameId}`);
   if (request?.type === "register_read" || request?.type === "register_write" || request?.type === "register_yank") return answer_register_request(browser_register_store, request, sender.tab);
-  if (request?.type === "mark_set" || request?.type === "mark_jump") return answer_mark_request(browser_mark_store, request, sender.tab);
+  if (request?.type === "mark_set" || request?.type === "mark_jump") return answer_mark_request(browser_mark_store, request, sender.tab && { incognito: sender.tab.incognito, id: sender.tab.id, window_id: sender.tab.windowId, url: sender.tab.url, frame_id: sender.frameId }, global_mark_jump);
   if (request?.type === "issue_cmdline_ticket") return cmdline.issue_ticket(sender.tab?.id);
   if (request?.type === "open_cmdline") return get_config().then(() => cmdline.open(request.ticket, sender.tab?.id, sender.frameId, sender.tab?.windowId, sender.tab, sender.tab?.incognito === true));
   if (request?.type === "complete_items") return complete_items.answer(request.kind, asker_of(sender));
