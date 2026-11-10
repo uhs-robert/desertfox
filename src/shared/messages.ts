@@ -103,7 +103,7 @@ export type RecordCmdline = {
 // sender is a tab whose line redeemed a ticket, and it holds only tabs and windows of the sender's own privacy (private or not).
 export type CompleteItems = {
   type: "complete_items";
-  kind: "bookmarks" | "engines" | "history" | "open" | "windows" | "sessions" | "registers";
+  kind: "bookmarks" | "engines" | "history" | "open" | "windows" | "sessions" | "registers" | "folders";
 };
 
 // From the command line page when a row key acts on tabs of the list. `tab_ids` were captured at the key press, so a later change of the list does not change them. The answer is undefined unless the sender is a tab whose line
@@ -176,7 +176,10 @@ export type SessionItem = { name: string; description: string };
 // A register that holds something: its name and a short preview of the value.
 export type RegisterItem = { name: string; description: string };
 
-export type CompleteItemsAnswer = { items: BookmarkItem[] | EngineItem[] | HistoryItems | OpenItems | WindowItem[] | HeadingItem[] | SessionItem[] | RegisterItem[] };
+// A bookmark folder: its path from the root ("Bookmarks Toolbar / Work") and a short count of the bookmarks directly inside.
+export type FolderItem = SessionItem;
+
+export type CompleteItemsAnswer = { items: BookmarkItem[] | EngineItem[] | HistoryItems | OpenItems | WindowItem[] | HeadingItem[] | SessionItem[] | RegisterItem[] | FolderItem[] };
 
 // A mark of the page that a which-key row lists: its key and the scroll offset it keeps, in px.
 export type MarkItem = { key: string; x: number; y: number };

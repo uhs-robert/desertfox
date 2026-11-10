@@ -249,10 +249,10 @@ function window_rows(windows: readonly WindowItem[], usage: string): Row[] {
 }
 
 // The name is the whole subject, so the handler matches it as typed. Newest first is the order the background sends, and an empty word keeps it.
-function session_rows(sessions: readonly SessionItem[], usage: string): Row[] {
+function name_rows(sessions: readonly SessionItem[], usage: string): Row[] {
   return sessions.map((session) => ({
     name: session.name,
-    insert: `${/["'\\]/.test(session.name) ? quote_word(session.name) : session.name} `,
+    insert: `${quote_word(session.name)} `,
     description: session.description,
     args: "",
     also_named: [],
@@ -303,7 +303,7 @@ function engine_rows(engines: readonly EngineItem[], usage: string, marks_unavai
 const live_kind_of = (param: ParamDef | undefined): LiveKind | undefined => {
   if (!param || !is_dynamic_values(param.values)) return undefined;
   const from = param.values.from;
-  return from === "tabs" || from === "bookmarks" || from === "history" || from === "open" || from === "windows" || from === "headings" || from === "sessions" || from === "registers" ? from : from === "search_engines" ? "engines" : undefined;
+  return from === "tabs" || from === "bookmarks" || from === "history" || from === "open" || from === "windows" || from === "headings" || from === "sessions" || from === "registers" || from === "folders" ? from : from === "search_engines" ? "engines" : undefined;
 };
 
 // The engine takes the first word of `search`, ahead of the query that follows it.
@@ -355,8 +355,8 @@ export function create_completer(
               ? window_rows(read.items as WindowItem[], usage)
               : kind === "headings"
                 ? heading_rows(read.items as HeadingItem[], usage)
-                : kind === "sessions" || kind === "registers"
-                  ? session_rows(read.items as SessionItem[], usage)
+                : kind === "sessions" || kind === "registers" || kind === "folders"
+                  ? name_rows(read.items as SessionItem[], usage)
                   : bookmark_rows(read.items as BookmarkItem[], usage);
       const ranked = rank(context.word, rows);
       return { ...span, usage, rows: kind === "bookmarks" && context.word.trim() === "" ? ranked.slice(0, RECENT_BOOKMARKS) : ranked, listing: true };

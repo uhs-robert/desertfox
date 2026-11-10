@@ -30,7 +30,7 @@ function stub(values: Record<string, unknown>, incognito = false) {
     "contextualIdentities.query": () => [],
     "tabs.query": () => [],
     "tabs.update": (id: number, options: unknown) => void opened.push({ call: `update ${id}`, options }),
-    "tabs.create": (options: unknown) => void opened.push({ call: "create", options }),
+    "tabs.create": (options: unknown) => (opened.push({ call: "create", options }), { id: 1 }),
   });
   Object.defineProperty(globalThis, "navigator", { value: { clipboard: { readText: async () => "https://clip.example/" } }, configurable: true });
   return opened;

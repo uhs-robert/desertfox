@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { bookmark_items, create_complete_items, engine_items, flatten_bookmarks, history_items, listed_favicon, listed_tabs, listed_windows, read_container_identities, read_containers } from "../../src/background/complete_items.ts";
+import { bookmark_items, create_complete_items, engine_items, flatten_bookmarks, folder_items, folder_nodes, history_items, listed_favicon, listed_tabs, listed_windows, read_container_identities, read_containers } from "../../src/background/complete_items.ts";
 import type { TabActionDeps } from "../../src/background/tab_actions.ts";
 import type { SessionItem } from "../../src/shared/messages.ts";
 import type { DiscardDeps } from "../../src/background/tab_discard.ts";
-import type { BookmarkNode, ContainerMarks, HistoryNode, LineScope, OpenSettings, TabLike, WindowLike } from "../../src/background/complete_items.ts";
+import type { BookmarkNode, ContainerMarks, FolderNode, HistoryNode, LineScope, OpenSettings, TabLike, WindowLike } from "../../src/background/complete_items.ts";
 
 type TabActions = Pick<TabActionDeps, "set_muted" | "set_pinned" | "remove" | "open_tab">;
 const NO_ACTIONS: TabActions = { set_muted: async () => {}, set_pinned: async () => {}, remove: async () => {}, open_tab: async () => {} };
@@ -32,7 +32,7 @@ const window_of = (id: number, incognito: boolean, title: string, type = "normal
 // Two normal windows and one private window, in `windows.getAll` order.
 const WINDOWS = [window_of(10, false, "Mail"), window_of(20, true, "Secret"), window_of(11, false, "Docs\n tab")];
 
-function make({ openers = [1, 2], tabs = ALL_TABS, bookmarks = [] as BookmarkNode[], fail = false, page = undefined as { url: string } | undefined, history = [] as HistoryNode[], open = { sources: ["bookmarks", "history"], history_max: 10 } as OpenSettings, read_tab = (async () => undefined) as (id: number) => Promise<TabLike | undefined>, discard = {} as DiscardDeps, tab_actions = NO_ACTIONS as TabActions, sessions = [] as SessionItem[], registers = { normal: [], private: [] } as { normal: SessionItem[]; private: SessionItem[] }, containers = new Map() as ContainerMarks, on_containers = () => {}, list_max = 20 } = {}) {
+function make({ openers = [1, 2], tabs = ALL_TABS, bookmarks = [] as BookmarkNode[], fail = false, page = undefined as { url: string } | undefined, history = [] as HistoryNode[], open = { sources: ["bookmarks", "history"], history_max: 10 } as OpenSettings, read_tab = (async () => undefined) as (id: number) => Promise<TabLike | undefined>, discard = {} as DiscardDeps, tab_actions = NO_ACTIONS as TabActions, sessions = [] as SessionItem[], folders = [] as FolderNode[], registers = { normal: [], private: [] } as { normal: SessionItem[]; private: SessionItem[] }, containers = new Map() as ContainerMarks, on_containers = () => {}, list_max = 20 } = {}) {
   const history_reads: number[] = [];
   const asked: (number | undefined)[] = [];
   const opened = new Set(openers);
@@ -50,6 +50,7 @@ function make({ openers = [1, 2], tabs = ALL_TABS, bookmarks = [] as BookmarkNod
       if (fail) throw new Error("no sessions");
       return sessions;
     },
+    folders: async () => folders,
     registers: async (is_private) => {
       if (fail) throw new Error("no registers");
       return is_private ? registers.private : registers.normal;
@@ -149,6 +150,7 @@ test("a tab that navigates or closes while the lookup runs gets nothing", async 
     query_windows: async () => WINDOWS,
     sessions: async () => [],
     registers: async () => [],
+    folders: async () => [],
     all_bookmarks: async () => {
       opened.delete(1);
       return [];
@@ -288,6 +290,7 @@ test("the opener is checked before and after the history fetch", async () => {
     query_windows: async () => [],
     sessions: async () => [],
     registers: async () => [],
+    folders: async () => [],
     all_bookmarks: async () => [],
     is_opener: async (tab_id) => opened.has(tab_id),
     containers: async () => new Map(),
@@ -313,7 +316,8 @@ test("a failed history read leaves the bookmarks, and a failed bookmark read lea
       query_tabs: async () => [],
       query_windows: async () => [],
       sessions: async () => [],
-    registers: async () => [],
+      registers: async () => [],
+      folders: async () => [],
       all_bookmarks: async () => {
         if (failing === "bookmarks") throw new Error("no bookmarks");
         return MARKS;
@@ -372,6 +376,7 @@ test("a history read that finishes after the line closed gives nothing", async (
     query_windows: async () => [],
     sessions: async () => [],
     registers: async () => [],
+    folders: async () => [],
     all_bookmarks: async () => [],
     is_opener: async (tab_id) => opened.has(tab_id),
     containers: async () => new Map(),
@@ -713,4 +718,34 @@ test("the registers list follows the privacy of the line, and a failed read give
   assert.deepEqual(await service.answer("registers", PRIVATE_LINE), { items: registers.private });
   assert.deepEqual(await make({ registers, fail: true }).service.answer("registers", NORMAL_LINE), { items: [] });
   assert.equal(await make({ registers, openers: [] }).service.answer("registers", NORMAL_LINE), undefined);
+});
+
+const TREE: BookmarkNode[] = [
+  {
+    id: "root",
+    title: "",
+    children: [
+      { id: "toolbar", title: "Bookmarks Toolbar", children: [{ id: "work", title: "Work", children: [{ id: "docs", title: "Docs", children: [{ id: "d1", type: "bookmark", url: "https://d.test/" }] }, { id: "w1", type: "bookmark", url: "https://w.test/", title: "W" }, { id: "sep", type: "separator" }] }] },
+      { id: "other", title: "Other Bookmarks", children: [{ id: "o1", type: "bookmark", url: "https://o.test/" }] },
+    ],
+  },
+];
+
+test("folder_nodes lists every folder below the tree root with its path and its own bookmarks only", () => {
+  assert.deepEqual(
+    folder_nodes(TREE).map((folder) => [folder.id, folder.path, folder.bookmarks.map((node) => node.id)]),
+    [
+      ["toolbar", "Bookmarks Toolbar", []],
+      ["work", "Bookmarks Toolbar / Work", ["w1"]],
+      ["docs", "Bookmarks Toolbar / Work / Docs", ["d1"]],
+      ["other", "Other Bookmarks", ["o1"]],
+    ],
+  );
+  assert.deepEqual(folder_items(folder_nodes(TREE)).map((item) => [item.name, item.description]).slice(1, 3), [["Bookmarks Toolbar / Work", "1 bookmark"], ["Bookmarks Toolbar / Work / Docs", "1 bookmark"]]);
+});
+
+test("the folders kind answers the folder rows for an opener, and nothing for a stranger", async () => {
+  const folders = folder_nodes(TREE);
+  assert.deepEqual((await make({ folders }).service.answer("folders", NORMAL_LINE))?.items, folder_items(folders));
+  assert.equal(await make({ folders, openers: [] }).service.answer("folders", NORMAL_LINE), undefined);
 });

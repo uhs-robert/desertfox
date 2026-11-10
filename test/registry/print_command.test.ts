@@ -80,6 +80,9 @@ test("an open param prints without a value", () => {
   assert.equal(print_command(command_of("open.search"), { engine: "arch" }, { open_param: "query" }), "search arch ");
   assert.equal(print_command(command_of("open.url"), { where: "tab" }, { open_param: "url" }), "open -t ");
   assert.equal(print_command(command_of("open.url"), { where: "tab" }, { open_param: "container" }), "open -c= -t");
+  // A flag as the open param ends the text right after its `=`, where the caret lands.
+  assert.equal(print_command(real_registry.get("bookmark.add")!, {}, { open_param: "folder" }), "bookmark.add --folder=");
+  assert.equal(print_command(real_registry.get("bookmark.open_folder")!, { where: "window" }, { open_param: "folder" }), "bookmark.open_folder -w ");
 });
 
 test("a context source prints as its marker", () => {

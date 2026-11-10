@@ -36,6 +36,7 @@ const COMMANDS: CommandMeta[] = [
 COMMANDS.push({ id: "heading.go", name: "heading", label: "Go to heading", intent: "Go to a heading.", params: [{ name: "heading", type: "string", rest: true, main: true, values: { from: "headings" } }] });
 COMMANDS.push({ id: "session.open", name: "session.open", label: "Open tab session", intent: "Open a session.", params: [{ name: "name", type: "string", rest: true, main: true, values: { from: "sessions" } }] });
 COMMANDS.push({ id: "register.list", name: "registers", label: "List registers", intent: "List registers.", params: [{ name: "name", type: "string", rest: true, main: true, optional: true, values: { from: "registers" } }] });
+COMMANDS.push({ id: "bookmark.move", name: "bookmark.move", label: "Move bookmark", intent: "Move.", params: [{ name: "folder", type: "string", rest: true, main: true, values: { from: "folders" } }, { name: "bookmark", type: "string", optional: true, values: { from: "bookmarks" } }] });
 COMMANDS.push({ id: "history.open", name: "history", label: "Open history entry", intent: "Open history.", params: [{ name: "entry", type: "string", rest: true, main: true, values: { from: "history" } }] });
 COMMANDS.push({ id: "open.url", name: "open", label: "Open URL", intent: "Open a URL.", params: [{ name: "url", type: "string", main: true, values: { from: "open" } }] });
 const ENGINES: EngineItem[] = [
@@ -299,7 +300,7 @@ test("a session pick puts the name in the line, and the rows show the tab count 
   assert.deepEqual(session.get_rows().map((row) => row.description), ["12 tabs, 3d ago", "1 tab, just now"]);
   session.edit("session.open wor");
   tab_key(session);
-  assert.equal(session.get_text(), "session.open work day ");
+  assert.equal(session.get_text(), 'session.open "work day" ');
 });
 
 const OPEN: OpenItems = {
@@ -983,4 +984,16 @@ test("a register pick puts the name in the line, with the preview in the row", a
   session.edit("registers a");
   tab_key(session);
   assert.equal(session.get_text(), "registers a ");
+});
+
+test("a folder pick quotes its path, in the main word and in a flag value", async () => {
+  const { session, asks, settle } = make();
+  session.edit("bookmark.move ");
+  assert.deepEqual(asks.map((ask) => ask.kind), ["folders"]);
+  asks[0]!.answer([{ name: "Bookmarks Toolbar / Work", description: "2 bookmarks" }, { name: "Other Bookmarks", description: "0 bookmarks" }]);
+  await settle();
+  assert.deepEqual(names(session), ["Bookmarks Toolbar / Work", "Other Bookmarks"]);
+  session.edit("bookmark.move toolbar work");
+  tab_key(session);
+  assert.equal(session.get_text(), 'bookmark.move "Bookmarks Toolbar / Work" ');
 });

@@ -1,16 +1,18 @@
 import { RuntimeRefusal } from "../shared/command.ts";
-import type { CommandContext } from "../shared/command.ts";
+import type { CommandContext, ParamDef } from "../shared/command.ts";
 import { bookmark_items, browser_complete_items_deps } from "../background/complete_items.ts";
+import type { FolderNode } from "../background/complete_items.ts";
 import { show_toast_on_tab } from "../background/browser_deps.ts";
 import type { BookmarkItem, ToastKind } from "../shared/messages.ts";
 import { define } from "../shared/registry/builtin.ts";
-import { open_in, pick_entry, WHERE_PARAM } from "./open_target.ts";
+import { open_in, open_many, pick_by, pick_entry, WHERE_PARAM, WHERE_SHORT } from "./open_target.ts";
 import type { Where } from "./open_target.ts";
 
 export type BookmarkDeps = {
   // The title of the tab when it shows this url.
   tab_title_for_url: (tab_id: number | undefined, url: string) => Promise<string | undefined>;
-  create: (bookmark: { url: string; title: string }) => Promise<void>;
+  // `parent_id` is a folder id. Without it Firefox files the bookmark in its default folder.
+  create: (bookmark: { url: string; title: string; parent_id?: string }) => Promise<void>;
   // Newest first, the same list the completion shows.
   bookmarks: () => Promise<BookmarkItem[]>;
   open: (ctx: CommandContext, url: string, where: Where) => Promise<void>;
@@ -19,10 +21,26 @@ export type BookmarkDeps = {
   tab_url: (tab_id: number | undefined) => Promise<string | undefined>;
   remove: (id: string) => Promise<void>;
   update: (id: string, changes: { title?: string; url?: string }) => Promise<void>;
+  move: (id: string, parent_id: string) => Promise<void>;
+  folders: () => Promise<FolderNode[]>;
+  open_many: (ctx: CommandContext, urls: readonly string[], where: Exclude<Where, "here">, report: (failed: number) => Promise<void>) => Promise<void>;
   toast: (ctx: CommandContext, kind: ToastKind, message: string) => Promise<void>;
 };
 
 export const pick_bookmark = (bookmarks: readonly BookmarkItem[], text: string): BookmarkItem => pick_entry(bookmarks, text, "bookmark");
+
+// The most tabs one `bookmark.open_folder` opens. A bigger folder opens its first tabs and the toast says so.
+export const OPEN_FOLDER_CAP = 25;
+
+// Addresses that cannot open as a page from an extension: a smart-bookmark query, script, and the browser's own pages. Opening one would stop the rest of the folder.
+const UNOPENABLE_URL = /^(place|javascript|chrome|resource|file|data|view-source):|^about:(?!(blank|home|newtab)([?#]|$))/i;
+
+// An exact path wins. Other text is a fuzzy match on the path. A path two folders share is refused, because the text cannot say which one is meant.
+export function pick_folder(folders: readonly FolderNode[], text: string): FolderNode {
+  const typed = text.trim();
+  if (folders.filter((folder) => folder.path === typed).length > 1) throw new RuntimeRefusal(`Two folders match "${typed}", rename one of them`);
+  return pick_by(folders, typed, "folder", (folder) => ({ key: folder.path, name: folder.path, description: "" }), (folder) => `"${folder.path}"`, "the full path");
+}
 
 export function make_bookmark_handlers(deps: BookmarkDeps) {
   const bookmarks_at = async (url: string | undefined) => {
@@ -41,13 +59,43 @@ export function make_bookmark_handlers(deps: BookmarkDeps) {
     return matches;
   }
 
+  // A managed folder rejects a new or moved bookmark, so it is refused before anything runs. Opening it is fine.
+  async function writable_folder(text: string): Promise<FolderNode> {
+    const folder = pick_folder(await deps.folders(), text);
+    if (folder.managed) throw new RuntimeRefusal(`${folder.path} is managed and cannot be changed`);
+    return folder;
+  }
+
   const count_of = (count: number) => `${count} ${count === 1 ? "bookmark" : "bookmarks"}`;
 
   return {
-    add: async (ctx: CommandContext, args: { url: string }) => {
-      if ((await bookmarks_at(args.url)).length > 0) throw new RuntimeRefusal("Already bookmarked");
+    add: async (ctx: CommandContext, args: { url: string; folder: string }) => {
+      const filed = args.folder.trim() !== "";
+      if ((await bookmarks_at(args.url)).length > 0) throw new RuntimeRefusal(filed ? "Already bookmarked, use bm to move" : "Already bookmarked");
+      const parent = filed ? { parent_id: (await writable_folder(args.folder)).id } : {};
       const title = (await deps.tab_title_for_url(ctx.tab_id, args.url)) || args.url;
-      await deps.create({ url: args.url, title });
+      await deps.create({ url: args.url, title, ...parent });
+    },
+    move: async (ctx: CommandContext, args: { folder: string; bookmark: string }) => {
+      const folder = await writable_folder(args.folder);
+      const matches = await editable_bookmarks(ctx, args.bookmark, "moved");
+      for (const { id } of matches) await deps.move(id, folder.id);
+      await deps.toast(ctx, "success", `Moved ${count_of(matches.length)} to ${folder.path}`);
+    },
+    open_folder: async (ctx: CommandContext, args: { folder: string; where: Exclude<Where, "here"> }) => {
+      const folder = pick_folder(await deps.folders(), args.folder);
+      const total = folder.bookmarks.length;
+      const openable = folder.bookmarks.flatMap((node) => (node.url && !UNOPENABLE_URL.test(node.url) ? [node.url] : []));
+      if (openable.length === 0) throw new RuntimeRefusal(`No bookmarks to open in ${folder.path}`);
+      const urls = openable.slice(0, OPEN_FOLDER_CAP);
+      // The browser may still refuse an address the filter let through. open_many counts those and calls back before it moves the focus, so one toast carries every count.
+      const report = async (failed: number) => {
+        if (failed === urls.length) throw new RuntimeRefusal(`None of the bookmarks in ${folder.path} could be opened`);
+        const skipped = total - openable.length + failed;
+        const notes = [skipped > 0 ? `${skipped} cannot be opened` : "", openable.length > urls.length ? `the cap is ${OPEN_FOLDER_CAP}` : ""].filter(Boolean);
+        if (notes.length > 0) await deps.toast(ctx, "warning", `Opened ${urls.length - failed} of ${total} bookmarks: ${notes.join(", ")}`);
+      };
+      await deps.open_many(ctx, urls, args.where, report);
     },
     open: async (ctx: CommandContext, args: { bookmark: string; where: Where }) => {
       const picked = pick_bookmark(await deps.bookmarks(), args.bookmark);
@@ -80,13 +128,16 @@ export const browser_bookmark_deps: BookmarkDeps = {
     const tab = await browser.tabs.get(tab_id);
     return tab.url === url ? tab.title : undefined;
   },
-  create: async ({ url, title }) => void (await browser.bookmarks.create({ url, title })),
+  create: async ({ url, title, parent_id }) => void (await browser.bookmarks.create({ url, title, ...(parent_id === undefined ? {} : { parentId: parent_id }) })),
   bookmarks: async () => bookmark_items(await browser_complete_items_deps.all_bookmarks()),
   open: (ctx, url, where) => open_in(ctx, url, where),
   nodes_for_url: (url) => browser.bookmarks.search({ url }),
   tab_url: async (tab_id) => (tab_id === undefined ? undefined : (await browser.tabs.get(tab_id)).url),
   remove: (id) => browser.bookmarks.remove(id),
   update: async (id, changes) => void (await browser.bookmarks.update(id, changes)),
+  move: async (id, parent_id) => void (await browser.bookmarks.move(id, { parentId: parent_id })),
+  folders: browser_complete_items_deps.folders,
+  open_many,
   toast: (ctx, kind, message) => show_toast_on_tab(ctx, "bookmark", message, kind),
 };
 
@@ -94,10 +145,13 @@ const handlers = make_bookmark_handlers(browser_bookmark_deps);
 
 define("bookmark.add", {
   label: "Add bookmark",
-  intent: "Bookmark a page. The url defaults to the current page, titled with the page title.",
-  params: [{ name: "url", type: "string", main: true, format: "url", default: { from: "current_url" } }],
+  intent: "Bookmark a page. The url defaults to the current page, titled with the page title. Without a folder Firefox files it in its default folder. A page that already has a bookmark refuses with a folder too, so move it with bookmark.move.",
+  params: [
+    { name: "url", type: "string", main: true, format: "url", default: { from: "current_url" } },
+    { name: "folder", type: "string", optional: true, values: { from: "folders" }, description: "File the bookmark in this folder." },
+  ],
   runs_in: "background",
-  run: (ctx, args) => handlers.add(ctx, args as { url: string }),
+  run: (ctx, args) => handlers.add(ctx, args as { url: string; folder: string }),
 });
 
 define("bookmark.open", {
@@ -137,4 +191,36 @@ define("bookmark.edit_url", {
   ],
   runs_in: "background",
   run: (ctx, args) => handlers.edit_url(ctx, args as { bookmark: string; url: string }),
+});
+
+define("bookmark.move", {
+  label: "Move bookmark to folder",
+  intent: "Move the current page's bookmarks into a folder. With a bookmark, move the one chosen by title or address. Every bookmark with that address moves.",
+  params: [
+    { name: "folder", type: "string", rest: true, main: true, values: { from: "folders" } },
+    { name: "bookmark", type: "string", optional: true, values: { from: "bookmarks" }, description: "Move this bookmark, not the current page's." },
+  ],
+  runs_in: "background",
+  run: (ctx, args) => handlers.move(ctx, args as { folder: string; bookmark: string }),
+});
+
+// `here` is left out, since a folder is many pages. There is no default: no one value fits, and the shared -t -b -w letters stay.
+const OPEN_FOLDER_WHERE_PARAM: ParamDef = {
+  name: "where",
+  type: "enum",
+  values: ["tab", "background", "window"],
+  short: WHERE_SHORT,
+  value_labels: { tab: "in new tabs", background: "in background tabs", window: "in new window" },
+  description: { tab: "Open in new tabs, the first one active.", background: "Open all in background tabs.", window: "Open all in a new window." },
+};
+
+define("bookmark.open_folder", {
+  label: "Open bookmark folder",
+  intent: `Open the bookmarks of a folder, not those of its subfolders. In a tab, the first one is active and the rest open in the background. At most ${OPEN_FOLDER_CAP} open.`,
+  params: [
+    { name: "folder", type: "string", rest: true, main: true, values: { from: "folders" } },
+    OPEN_FOLDER_WHERE_PARAM,
+  ],
+  runs_in: "background",
+  run: (ctx, args) => handlers.open_folder(ctx, args as { folder: string; where: Exclude<Where, "here"> }),
 });
