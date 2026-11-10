@@ -149,8 +149,9 @@ function on_keyup(event: KeyboardEvent): void {
 }
 
 const on_focusin = (event: Event) => follow_focus(true, event);
+// A focus move inside one shadow root never reaches the window listener of the bundle, so this one ends the text session too. The flush is a no-op once the session is closed, so a second focusout for the same move does nothing.
 const on_focusout = (event: Event) => {
-  open_session = 0;
+  flush_typed_text();
   follow_focus(false, event);
 };
 

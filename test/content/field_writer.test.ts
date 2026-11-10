@@ -13,9 +13,11 @@ class FakeHTMLElement {
   }
 }
 class FakeHTMLInputElement extends FakeHTMLElement {}
+class FakeHTMLTextAreaElement extends FakeHTMLElement {}
 const globals = globalThis as Record<string, unknown>;
 globals.HTMLElement = FakeHTMLElement;
 globals.HTMLInputElement = FakeHTMLInputElement;
+globals.HTMLTextAreaElement = FakeHTMLTextAreaElement;
 const { write_into_field } = await import("../../src/content/text/field_writer.ts");
 const { is_secret_field } = await import("../../src/content/text/secret_field.ts");
 
@@ -75,6 +77,12 @@ test("on real input elements: password type, the three autocomplete tokens, and 
   assert.equal(is_secret_field(shown as unknown as Element), true);
   shown.type = "text";
   assert.equal(is_secret_field(shown as unknown as Element), true);
+});
+
+test("a textarea with a secret autocomplete is secret too", () => {
+  const area = Object.assign(new FakeHTMLTextAreaElement(), { autocomplete: "one-time-code" }) as unknown as Element;
+  assert.equal(is_secret_field(area), true);
+  assert.equal(is_secret_field(Object.assign(new FakeHTMLTextAreaElement(), { autocomplete: "off" }) as unknown as Element), false);
 });
 
 test("only a password input is secret", () => {
