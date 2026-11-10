@@ -16,7 +16,7 @@ A key shows the command label plus a phrase for each arg its binding sets, for e
 
 The hint keys `;r ;B ;W ;d ;o ;h ;x ;2` are modifiers, so no row lists their variants. A `[modifiers]` section in `keymap.toml` holds them. Each adds its args to a variant of every key in the `;` group: `;Bl` opens a link in a background tab, `;oa` selects any visible element in the DevTools Inspector, `;ha` hovers any element, `;2a` double-clicks any element but a link, `;xa` deletes any element, `;rl` opens links in background tabs and keeps picking. A variant exists only when the `hint` param schema accepts the combination. Keys that set their own `action` (`;s`, `;v`, `;V` and the `;y` yank keys) get none, and modifiers do not stack.
 
-A register prefix `"<reg>` and a count go before any command in normal, caret, visual and visual line mode, so `"ay` yanks into register `a` and `"ap` opens it. The prefix is no row below, because it is no key of the tree. In insert mode `<C-r><reg>` pastes a register.
+A register prefix `"<reg>` and a count go before any command in normal, caret, visual and visual line mode, so `"ay` yanks into register `a` and `"app` opens it. The prefix is no row below, because it is no key of the tree. In insert mode `<C-r><reg>` pastes a register.
 
 The `caret`, `visual` and `cmdline` rows bind placeholder commands that refuse until their piece builds them.
 
@@ -24,7 +24,7 @@ A note "(prompts)" means the binding sets a `prompt` for a param, so the command
 
 <!-- BEGIN generated -->
 
-bound: 320 (normal 184, hint 2, cmdline 18, caret 35, visual 37, visual_line 38, insert 2, ignore 1, browser 3) | later: 3 | dropped: 7
+bound: 324 (normal 188, hint 2, cmdline 18, caret 35, visual 37, visual_line 38, insert 2, ignore 1, browser 3) | later: 3 | dropped: 7
 
 ### normal
 
@@ -126,8 +126,12 @@ bound: 320 (normal 184, hint 2, cmdline 18, caret 35, visual 37, visual_line 38,
 | `gi` | bound | `page.focus_input` | Focus input |  |
 | `I` | bound | `page.focus_input` | Focus input |  |
 | `i` | bound | `mode.insert` | Insert mode |  |
-| `p` | bound | `paste` | Open clipboard |  |
+| `pp` | bound | `paste` | Open clipboard |  |
+| `pt` | bound | `paste --tab` | Open clipboard |  |
+| `pw` | bound | `paste --window` | Open clipboard |  |
 | `P` | bound | `paste --tab` | Open clipboard |  |
+| `pr` | bound | `page.print` | Print |  |
+| `ps` | bound | `page.save_pdf` | Save as PDF |  |
 | `ba` | bound | `bookmark.add` (prompts) | Add bookmark, edit URL |  |
 | `bA` | bound | `bookmark.add` (prompts) | Add bookmark, pick folder |  |
 | `be` | bound | `bookmark.edit_url` (prompts) | Edit bookmark address |  |
@@ -234,6 +238,7 @@ Which-key group names:
 - `d`: Close
 - `x`: Stop or close
 - `r`: Reload
+- `p`: Page
 - `>`: Move tab
 - `t`: Tabs
 - `w`: Windows

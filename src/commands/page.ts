@@ -3,6 +3,7 @@ import { NEW_TAB_PAGE_FILE } from "../shared/config.ts";
 import { define } from "../shared/registry/builtin.ts";
 import { open_in, require_tab_id, typed_url_target, WHERE_PARAM } from "./open_target.ts";
 import type { Where } from "./open_target.ts";
+import { RuntimeRefusal } from "../shared/command.ts";
 import { home_page_url } from "./url_build.ts";
 import { browser_reload_clear_deps, make_reload_clear } from "./reload_clear.ts";
 import type { ClearScope } from "./reload_clear.ts";
@@ -46,6 +47,28 @@ define("page.reload", {
     const tab_id = require_tab_id(ctx);
     if (args.clear === "site" || args.clear === "all") return reload_clear.run(tab_id, args.clear as ClearScope);
     return browser.tabs.reload(tab_id, { bypassCache: args.hard === true });
+  },
+});
+
+// Firefox gives tabs.print no tab id and no result: it opens the print window on the active tab, which a key press always targets. `.` and a macro never replay a dialog.
+define("page.print", {
+  label: "Print",
+  intent: "Open the Firefox print window for the active tab.",
+  runs_in: "background",
+  repeatable: false,
+  run: async () => {
+    browser.tabs.print();
+  },
+});
+
+define("page.save_pdf", {
+  label: "Save as PDF",
+  intent: "Ask for a file name and save the active tab as a PDF. Cancelling the file picker does nothing.",
+  runs_in: "background",
+  repeatable: false,
+  run: async () => {
+    const status = await browser.tabs.saveAsPDF({});
+    if (status === "not_saved" || status === "not_replaced") throw new RuntimeRefusal("Could not save the page as PDF");
   },
 });
 
