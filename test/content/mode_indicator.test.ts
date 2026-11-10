@@ -87,10 +87,10 @@ test("a page element that carries the mode attribute survives the cleanup", asyn
   assert.equal(root.children.length, 2);
 });
 
-test("a new instance with no label to show still removes the orphan, without loading the ui bundle", async () => {
+test("a new instance with no badge to show still removes the orphan, without loading the ui bundle", async () => {
   const { root } = page_with_orphan_badge();
   const { show_mode_label } = await import("../../src/content/ui_proxy.ts");
-  show_mode_label(undefined);
+  show_mode_label();
 
   assert.equal(root.children.length, 0);
 });

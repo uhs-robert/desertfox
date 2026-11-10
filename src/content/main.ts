@@ -2,7 +2,7 @@
 // the background, and the modes. Runs in every frame. A frame of another site starts on its first focus.
 
 import type { BackgroundToContent, CompiledKeymap, ContentToBackground, Mode, ModeIndicator, PageKeymap, ReadKeymap, RunResponse, TreeLeaf } from "../shared/index.ts";
-import { COMPILED_KEYMAP_VERSION, DEFAULT_MODE_INDICATOR, is_freed } from "../shared/index.ts";
+import { DEFAULT_MODE_INDICATOR, is_freed } from "../shared/index.ts";
 import { create_matcher, event_to_token } from "../shared/keys/index.ts";
 import { all_off_step } from "./site_rule.ts";
 import { create_keymap_asks } from "./ask_keymap.ts";
@@ -15,7 +15,7 @@ import { create_cancelled_keys, type HeldPress } from "./cancelled_keys.ts";
 import { create_key_flow } from "./key_flow.ts";
 import { cancels_keypress, cancels_keyup, press_target, replay_key_to_page } from "./replay_key.ts";
 import { create_which_key_timer } from "./which_key_timer.ts";
-import { mode_label } from "./mode_label.ts";
+import { badge_state } from "./badge_state.ts";
 import { show_mode_label, show_toast } from "./ui_proxy.ts";
 import { wire_mode_reports } from "./mode_report.ts";
 import { page_mode } from "./page_mode.ts";
@@ -33,7 +33,7 @@ let recording: string | undefined;
 function refresh_mode_indicator(): void {
   const mode = page_mode.get_mode_();
   const pass_next_armed = page_mode.is_pass_next_armed_();
-  show_mode_label(mode_label(mode, pass_next_armed, mode_indicator, recording), pass_next_armed ? undefined : mode);
+  show_mode_label(badge_state(mode, pass_next_armed, mode_indicator, recording));
 }
 
 const script_started_ms = performance.now();
@@ -239,7 +239,7 @@ function install_matcher(reply: PageKeymap | undefined): void {
   if (keymap) was_all_off = all_off;
   refresh_mode_indicator();
   const frees = reply?.frees;
-  const tree = keymap ?? { format_version: COMPILED_KEYMAP_VERSION, modes: {}, mode_indicator: DEFAULT_MODE_INDICATOR, which_key_delay_ms: 0 };
+  const tree = keymap ?? ({ modes: {} } as CompiledKeymap);
   key_flow.set_matcher_(create_matcher(tree, frees && ((token) => is_freed(frees, token))), keymap?.modes.browser);
   // The key test's ready signal waits for the first matcher, not for a reply that a newer ask overtook.
   if (first_install) publish_timing();

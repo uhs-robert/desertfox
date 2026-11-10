@@ -68,7 +68,7 @@ export const area_rules = [
   { globs: ["src/shared/engines/**", "src/commands/engine.ts"], areas: ["engines"] },
   { globs: ["src/background/{default_keymap,keymap_merge,compile,repeat_memory,record_step}.ts", "src/shared/{keys/**,keymap,prefix_tree,layers,invocation}.ts"], areas: ["keys"] },
   { globs: ["src/popup/**", "src/background/toolbar.ts"], areas: ["toolbar"] },
-  { globs: ["src/content/{ui/**,toast,ui_proxy,surface,mode_indicator,mode_label,mode_report,badge_hosts}.ts"], areas: ["ui"] },
+  { globs: ["src/content/{ui/**,toast,ui_proxy,surface,mode_indicator,badge_state,mode_report,badge_hosts}.ts"], areas: ["ui"] },
 ];
 
 // Supports ** (any depth), * (within one path part) and {a,b}. Nothing else is special.

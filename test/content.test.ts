@@ -6,7 +6,6 @@ import { create_cancelled_keys } from "../src/content/cancelled_keys.ts";
 import { cancels_keypress, cancels_keyup, press_target, replay_key_to_page } from "../src/content/replay_key.ts";
 import { cancels_unbound_key, create_key_flow } from "../src/content/key_flow.ts";
 import { match_regex_source, matches_any_address, matches_pattern } from "../src/shared/match_pattern.ts";
-import { mode_label } from "../src/content/mode_label.ts";
 import { wire_mode_reports } from "../src/content/mode_report.ts";
 import { create_mode_state } from "../src/content/mode_state.ts";
 import { percent_to_offset, pick_scroll_target } from "../src/content/scroll_target.ts";
@@ -557,23 +556,6 @@ test("percent offsets clamp", () => {
   assert.equal(percent_to_offset(50, 1000, 400), 300);
   assert.equal(percent_to_offset(-5, 1000, 400), 0);
   assert.equal(percent_to_offset(100, 300, 400), 0);
-});
-
-test("mode label follows the mode_indicator setting", () => {
-  assert.equal(mode_label("normal", false, "always"), "NORMAL");
-  assert.equal(mode_label("normal", false, "not_normal"), undefined);
-  assert.equal(mode_label("insert", false, "always"), "INSERT");
-  assert.equal(mode_label("insert", false, "not_normal"), "INSERT");
-  assert.equal(mode_label("ignore", false, "not_normal"), "IGNORE");
-  assert.equal(mode_label("normal", true, "always"), "PASS");
-  assert.equal(mode_label("normal", true, "not_normal"), "PASS");
-  assert.equal(mode_label("hint", false, "always"), undefined);
-  assert.equal(mode_label("cmdline", false, "always"), undefined);
-  assert.equal(mode_label("caret", false, "always"), "CARET");
-  assert.equal(mode_label("visual", false, "not_normal"), "VISUAL");
-  assert.equal(mode_label("visual_line", false, "not_normal"), "V-LINE");
-  assert.equal(mode_label("insert", false, "off"), undefined);
-  assert.equal(mode_label("normal", true, "off"), undefined);
 });
 
 test("display listener fires on mode changes and on pass-next arming and use", () => {
