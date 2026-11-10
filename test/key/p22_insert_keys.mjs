@@ -2,8 +2,7 @@
 
 export const areas = ["keys"];
 
-export async function run_cases({ run_case, open_page, press_keys, wait_event, events, expect, expect_no_scroll, poll_until, scroll_delta_by_press, in_active_tab }) {
-  const badge_of = (page_id) => events.filter((event) => event.type === "indicator" && event.page_id === page_id).at(-1)?.label;
+export async function run_cases({ run_case, open_page, press_keys, wait_event, events, expect, expect_no_scroll, poll_until, scroll_delta_by_press, scroll_of, in_active_tab }) {
   const wait_badge = (mark, page_id, label) => wait_event(mark, (event) => event.type === "indicator" && event.page_id === page_id && event.label === label, `${label} on ${page_id}`);
   const page_sees = async (mark, page_id, key) => wait_event(mark, (event) => event.type === "keydown" && event.key === key && event.page_id === page_id, `${page_id} to see ${key}`);
 
@@ -40,16 +39,15 @@ export async function run_cases({ run_case, open_page, press_keys, wait_event, e
     await poll_until("the hint labels", async () => events.length > mark);
     await press_keys("a");
     await wait_event(mark, (event) => event.type === "window_focus" && event.page_id === "p22_frames_same", "the frame to take the focus");
-    mark = events.length;
+    // Only the top frame shows the mode badge, so the frame's mode shows in whether j scrolls it.
     await press_keys("i");
-    await wait_badge(mark, "p22_frames_same", "INSERT");
     mark = events.length;
     await press_keys("j");
     await page_sees(mark, "p22_frames_same", "j");
     await expect_no_scroll(mark, "p22_frames_same");
-    mark = events.length;
     await press_keys("-k", "Escape");
-    await wait_badge(mark, "p22_frames_same", "NORMAL");
-    expect(badge_of("p22_frames_same") === "NORMAL", "the frame did not return to normal mode");
+    mark = events.length;
+    await press_keys("j");
+    await wait_event(mark, scroll_of("p22_frames_same"), "j to scroll the frame after Escape");
   });
 }
