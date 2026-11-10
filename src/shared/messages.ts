@@ -103,7 +103,7 @@ export type RecordCmdline = {
 // sender is a tab whose line redeemed a ticket, and it holds only tabs and windows of the sender's own privacy (private or not).
 export type CompleteItems = {
   type: "complete_items";
-  kind: "bookmarks" | "engines" | "history" | "open" | "windows" | "sessions";
+  kind: "bookmarks" | "engines" | "history" | "open" | "windows" | "sessions" | "registers";
 };
 
 // From the command line page when a row key acts on tabs of the list. `tab_ids` were captured at the key press, so a later change of the list does not change them. The answer is undefined unless the sender is a tab whose line
@@ -173,7 +173,15 @@ export type HeadingItem = { level: number; text: string };
 // A saved tab session: its name and the text of the description column (tab count and age), which the background writes.
 export type SessionItem = { name: string; description: string };
 
-export type CompleteItemsAnswer = { items: BookmarkItem[] | EngineItem[] | HistoryItems | OpenItems | WindowItem[] | HeadingItem[] | SessionItem[] };
+// A register that holds something: its name and a short preview of the value.
+export type RegisterItem = { name: string; description: string };
+
+export type CompleteItemsAnswer = { items: BookmarkItem[] | EngineItem[] | HistoryItems | OpenItems | WindowItem[] | HeadingItem[] | SessionItem[] | RegisterItem[] };
+
+// From the `caret` bundle: one register read or write. The background answers by the sender tab's privacy. A read answers the value, or nothing for an empty register and a refused name. A write answers an `Outcome`. A content script writes text only.
+export type RegisterRead = { type: "register_read"; name: string };
+export type RegisterWrite = { type: "register_write"; name: string; text: string };
+export type RegisterRequest = RegisterRead | RegisterWrite;
 
 // From the `hints` bundle at the start of a pick: what `.` shows again. The background checks it like any page message, because the sender is a page script.
 export type RecordRepeat = {
@@ -318,7 +326,7 @@ export type ImportSessions = { type: "import_sessions"; text: string };
 
 export type PageToBackground = ChangeSetting | ListSettings | ToolbarRequest | PreviewConfigImport | CommitConfigImport | ExportConfig | ListSnippets | RemoveSnippet | ExportSessions | ImportSessions;
 
-export type ContentToBackground = RunRequest | ModeChanged | LoadBundle | ListKeys | IssueCmdlineTicket | OpenCmdline | RecordCmdline | CompleteItems | TabRowsActionRequest | OpenHelp | RecordRepeat | ReadTabAddress | FindScan | ImageAction | InspectPick;
+export type ContentToBackground = RunRequest | ModeChanged | LoadBundle | ListKeys | IssueCmdlineTicket | OpenCmdline | RecordCmdline | CompleteItems | TabRowsActionRequest | OpenHelp | RecordRepeat | ReadTabAddress | FindScan | ImageAction | InspectPick | RegisterRequest;
 
 // How a command ended. Done is `{ ok: true }`. A handler that returns nothing is done, and one that throws is failed.
 // Cancelled means the user left a waiting step (Escape, an unrelated key, a page change), so the rest of a sequence does not run and nothing is shown.
