@@ -17,17 +17,20 @@ function show_external_or_panel(panel: WhichKeyPanel): void {
   external_up = panel.external === true;
   if (!external_up) show_panel(panel);
 }
-function hide_panel_and_tell(): void {
-  hide_panel();
-  if (!external_up) return;
+function tell_background_panel_gone(): void {
   external_up = false;
   void browser.runtime.sendMessage({ type: "whichkey_hidden" } satisfies WhichKeyHidden).catch(() => undefined);
+}
+function hide_panel_and_tell(): void {
+  hide_panel();
+  if (external_up) tell_background_panel_gone();
 }
 
 const session = create_which_key_session(
   (mode, typed) => browser.runtime.sendMessage({ type: "list_keys", mode, prefix: typed } satisfies ListKeys) as Promise<WhichKeyPanel>,
   show_external_or_panel,
   hide_panel_and_tell,
+  tell_background_panel_gone,
 );
 const ignore_failure = () => undefined;
 

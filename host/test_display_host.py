@@ -1,6 +1,7 @@
 """Tests of the display host: the state file, the port lifecycle and bad input. Real processes, a temporary XDG_RUNTIME_DIR."""
 import json
 import os
+import select
 import signal
 import struct
 import subprocess
@@ -26,6 +27,11 @@ class Host:
     def __init__(self, runtime_dir):
         env = dict(os.environ, XDG_RUNTIME_DIR=runtime_dir)
         self.process = subprocess.Popen([sys.executable, HOST_PATH], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env)
+        # A host that never says ready fails the test instead of hanging the suite.
+        waiting, _, _ = select.select([self.process.stdout], [], [], 10)
+        if not waiting:
+            self.kill()
+            raise AssertionError("the host did not say ready within 10 s")
         (length,) = struct.unpack("=I", self.process.stdout.read(4))
         self.ready = json.loads(self.process.stdout.read(length))
 
@@ -293,7 +299,6 @@ class DisplayHostTest(unittest.TestCase):
         host.send(dict(SHOW, rows=[{"keys": "a"}]))
         host.send(dict(SHOW, rows="nope"))
         host.send(dict(SHOW, title="nope"))
-        host.send(dict(SHOW, rows=[ROWS[0]] * 501))
         host.send(MODE)
         state = self.wait_for(lambda s: True)
         self.assertEqual(state["mode"]["id"], "insert")
@@ -301,6 +306,17 @@ class DisplayHostTest(unittest.TestCase):
         self.assertIsNone(host.process.poll())
         host.close_stdin()
         self.assertEqual(host.wait(), 0)
+
+    def test_a_panel_over_the_limits_is_cut_not_dropped(self):
+        host = self.start()
+        host.send(MODE)
+        rows = [{"keys": "k", "command": "c" * 2000, "description": "", "more": False}] * 600
+        host.send(dict(SHOW, title=["t" * 2000] * 40, rows=rows))
+        state = self.wait_for(lambda s: s["whichkey"] is not None)
+        self.assertEqual(len(state["whichkey"]["rows"]), 500)
+        self.assertEqual(len(state["whichkey"]["rows"][0]["command"]), 512)
+        self.assertEqual(len(state["whichkey"]["title"]), 32)
+        self.assertEqual(len(state["whichkey"]["title"][0]), 512)
 
     def test_a_frame_cut_off_at_eof_ends_the_host_clean(self):
         host = self.start()

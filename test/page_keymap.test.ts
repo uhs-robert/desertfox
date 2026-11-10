@@ -216,3 +216,22 @@ test("the reply crosses as a JSON string that parses back to the page's keymap",
   assert.deepEqual(JSON.parse(sent!), await ask(compiled, "https://a.test/"));
   assert.equal(await read_keymap_reply(storage_of(undefined), ["https://a.test/"]), undefined);
 });
+
+import { set_badge_hidden } from "../src/background/display_ui.ts";
+
+test("the page reply never carries ui, and the badge goes off only while the display host is up", async () => {
+  const compiled = { ...compile([]), ui: "quickshell" as const, mode_indicator: "always" as const };
+  set_badge_hidden(false);
+  const without_host = (await ask(compiled, "https://a.test/"))!;
+  assert.equal("ui" in without_host.keymap, false);
+  assert.equal(without_host.keymap.mode_indicator, "always");
+  set_badge_hidden(true);
+  try {
+    assert.equal((await ask(compiled, "https://a.test/"))!.keymap.mode_indicator, "off");
+    const browser_ui = { ...compiled, ui: "browser" as const };
+    assert.equal("ui" in (await ask(browser_ui, "https://a.test/"))!.keymap, false);
+  } finally {
+    set_badge_hidden(false);
+  }
+  assert.equal((await ask({ ...compiled, ui: "browser" }, "https://a.test/"))!.keymap.mode_indicator, "always");
+});

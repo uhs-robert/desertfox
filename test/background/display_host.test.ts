@@ -334,3 +334,35 @@ test("a panel is hidden when focus leaves Firefox, moves to another window or th
     assert.equal(port.posted.filter((message) => message.verb === "whichkey_hide").length, 1);
   }
 });
+
+test("a private window's panel stays in the page and its mode is still published", async () => {
+  const test_case = make();
+  test_case.windows.set(1, { id: 1, focused: true, fullscreen: false, private: true });
+  await test_case.connect_and_ready();
+  const port = test_case.port();
+  assert.equal(modes_posted(port)[0]!.private, true);
+  port.posted.length = 0;
+  const answer = test_case.display.whichkey_panel(PANEL, { id: 11, active: true, incognito: true });
+  assert.equal(answer, PANEL);
+  assert.deepEqual(port.posted, []);
+});
+
+test("focusing a fullscreen window brings the in-page badge back and focusing a normal one takes it off, each with a page refresh", async () => {
+  const test_case = make();
+  test_case.windows.set(2, { id: 2, focused: false, fullscreen: true, private: false });
+  await test_case.connect_and_ready();
+  assert.equal(badge_hidden(), true);
+  const refreshes = test_case.counts.refreshes;
+  test_case.windows.set(1, { id: 1, focused: false, fullscreen: false, private: false });
+  test_case.windows.set(2, { id: 2, focused: true, fullscreen: true, private: false });
+  await test_case.display.window_focused(2);
+  assert.equal(badge_hidden(), false);
+  assert.equal(test_case.counts.refreshes, refreshes + 1);
+  test_case.windows.set(2, { id: 2, focused: false, fullscreen: true, private: false });
+  test_case.windows.set(1, { id: 1, focused: true, fullscreen: false, private: false });
+  await test_case.display.window_focused(1);
+  assert.equal(badge_hidden(), true);
+  assert.equal(test_case.counts.refreshes, refreshes + 2);
+  await test_case.display.tab_activated(1);
+  assert.equal(test_case.counts.refreshes, refreshes + 2, "no change, no refresh");
+});

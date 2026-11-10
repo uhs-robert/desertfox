@@ -96,12 +96,18 @@ export function create_display_host(deps: DisplayDeps) {
   }
   const publish_window = (window: DisplayWindow | undefined) => enqueue(() => publish_now(window));
 
+  // Pages learn the badge flag by reading their keymap again, so every change of it must refresh them.
+  async function follow_focused_fullscreen(fullscreen: boolean, force_refresh = false): Promise<void> {
+    const changed = fullscreen !== focused_fullscreen;
+    focused_fullscreen = fullscreen;
+    sync_page_state();
+    if (changed || force_refresh) await deps.refresh_pages().catch(() => undefined);
+  }
+
   async function poll_fullscreen(): Promise<void> {
     const window = await deps.last_focused_window();
     if (window?.focused && window.fullscreen !== focused_fullscreen) {
-      focused_fullscreen = window.fullscreen;
-      sync_page_state();
-      await deps.refresh_pages().catch(() => undefined);
+      await follow_focused_fullscreen(window.fullscreen);
       await publish_window(window);
     }
   }
@@ -117,9 +123,7 @@ export function create_display_host(deps: DisplayDeps) {
     up_since_ms = deps.now_ms();
     // Every message sent while the port was down is gone, so the host gets the full state now.
     void deps.last_focused_window().then(async (window) => {
-      focused_fullscreen = window?.focused === true && window.fullscreen;
-      sync_page_state();
-      await deps.refresh_pages().catch(() => undefined);
+      await follow_focused_fullscreen(window?.focused === true && window.fullscreen, true);
       await publish_window(window);
     });
     schedule_poll();
@@ -214,8 +218,7 @@ export function create_display_host(deps: DisplayDeps) {
         if (!ready || window_id < 0) return;
         const window = await deps.window_of(window_id);
         if (!window?.focused) return;
-        focused_fullscreen = window.fullscreen;
-        sync_page_state();
+        await follow_focused_fullscreen(window.fullscreen);
         await publish_now(window);
       });
     },
@@ -224,7 +227,9 @@ export function create_display_host(deps: DisplayDeps) {
       return enqueue(async () => {
         if (!ready) return;
         const window = await deps.window_of(window_id);
-        if (window?.focused) await publish_now(window);
+        if (!window?.focused) return;
+        await follow_focused_fullscreen(window.fullscreen);
+        await publish_now(window);
       });
     },
     // A tab that navigates or closes takes its panel with it, and its bundle cannot say so.
@@ -233,8 +238,9 @@ export function create_display_host(deps: DisplayDeps) {
     },
     whichkey_hidden: () => hide_whichkey(),
     // Called with the answer to a page's `list_keys`. Returns what the page may draw: the same panel marked `external` when the host shows it.
-    whichkey_panel: (panel: WhichKeyPanel, tab: { id?: number | undefined; active?: boolean | undefined } | undefined): WhichKeyPanel => {
-      if (!ready || !wants_port()) return panel;
+    // A private window's panel never leaves the page: register and clipboard previews and mark addresses must not reach the state file.
+    whichkey_panel: (panel: WhichKeyPanel, tab: { id?: number | undefined; active?: boolean | undefined; incognito?: boolean | undefined } | undefined): WhichKeyPanel => {
+      if (!ready || !wants_port() || tab?.incognito === true) return panel;
       if (panel.rows.length === 0 || tab?.active !== true) {
         hide_whichkey();
         return panel;
