@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { parse_command_line, print_command } from "../../src/shared/registry/index.ts";
 import { registry as real_registry } from "../../src/shared/registry/builtin.ts";
+import "../../src/background/command_modules.ts";
 import "../../src/commands/hint.ts";
 import { grammar_registry, search_sources } from "./grammar_registry.ts";
 
@@ -133,4 +134,11 @@ test("a verbatim subject prints raw and reads back as typed", () => {
   }
   const guarded = print_command(hint, { filter: "custom", selector: "-x[a]" }, { flags: "long" });
   assert.equal(guarded, "hint --custom -- -x[a]");
+});
+
+test("tab.move prints its offset as a flag and tm opens the tab picker", () => {
+  const move = real_registry.get("tab.move")!;
+  assert.equal(print_command(move, { offset: -1 }), "tab.move --offset=-1");
+  assert.equal(print_command(move, {}, { open_param: "tab" }), "tab.move ");
+  assert.equal(print_command(move, { tab: "-1" }), "tab.move -- -1");
 });

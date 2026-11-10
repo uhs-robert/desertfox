@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { parse_binding } from "../../src/shared/registry/parse_binding.ts";
 import { registry as real_registry } from "../../src/shared/registry/builtin.ts";
+import "../../src/background/command_modules.ts";
 import "../../src/commands/hint.ts";
 import { grammar_registry } from "./grammar_registry.ts";
 
@@ -83,4 +84,9 @@ test("a bare number binds the only number param, negative included", () => {
 test("a binding keeps the double quotes of a verbatim selector", () => {
   const result = parse_binding(real_registry, `hint --custom a[href="x"]`);
   assert.deepEqual(result.kind === "binding" ? result.binding : result, { id: "hint.run", args: { filter: "custom", selector: 'a[href="x"]' } });
+});
+
+test("tab.move reads a bare number as a place and --offset as a move", () => {
+  assert.deepEqual(parse_binding(real_registry, "tab.move -1"), { kind: "binding", binding: { id: "tab.move", args: { tab: "-1" } } });
+  assert.deepEqual(parse_binding(real_registry, "tab.move --offset=-1"), { kind: "binding", binding: { id: "tab.move", args: { offset: "-1" } } });
 });

@@ -63,8 +63,8 @@ bound: 297 (normal 162, hint 2, cmdline 18, caret 35, visual 37, visual_line 38,
 | `g^` | bound | `tab.goto 1` | First tab |  |
 | `g$` | bound | `tab.goto -1` | Last tab |  |
 | `T` | bound | `tab` (prompts) | Switch tab |  |
-| `<<` | bound | `tab.move -1` | Move tab left |  |
-| `>>` | bound | `tab.move 1` | Move tab right |  |
+| `<<` | bound | `tab.move --offset=-1` | Move tab left |  |
+| `>>` | bound | `tab.move --offset=1` | Move tab right |  |
 | `xx` | bound | `tab.close` | Close tab |  |
 | `dd` | bound | `tab.close` | Close tab |  |
 | `D` | bound | `tab.close --focus-previous` | Close tab |  |
