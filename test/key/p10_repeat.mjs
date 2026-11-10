@@ -1,9 +1,10 @@
 // Key test cases of `.` (repeat). run.mjs calls run_cases with its helpers.
 import { evaluate_in_background } from "./rdp.mjs";
+import { SHIFT_ESCAPE } from "./harness.mjs";
 
 export const areas = ["keys", "scroll", "bundles"];
 
-export async function run_cases({ rdp, extension_id, run_case, press_keys, poll_until, settle_focus, barrier, in_background, hint_label_count, open_page, wait_event, find_event, events, expect, wait_active_tab, tab_switch_mark, expect_no_tab_shown }) {
+export async function run_cases({ rdp, extension_id, run_case, press_keys, poll_until, settle_focus, barrier, in_background, hint_label_count, badge_is, open_page, wait_event, find_event, events, expect, wait_active_tab, tab_switch_mark, expect_no_tab_shown }) {
   const tab_count = () => evaluate_in_background(rdp, extension_id, `(async () => (await browser.tabs.query({})).length)()`);
   const close_tabs_with = (text) => evaluate_in_background(rdp, extension_id, `(async () => { for (const tab of await browser.tabs.query({})) if (tab.url.includes(${JSON.stringify(text)})) await browser.tabs.remove(tab.id); })()`);
   const loaded = (page_id) => (event) => event.type === "tree_read" && event.page_id === page_id;
@@ -83,8 +84,8 @@ export async function run_cases({ rdp, extension_id, run_case, press_keys, poll_
     await close_tabs_with("rp_scroll");
   });
 
-  // page.stop sits in the lazy page bundle: the first xp loads it, and the replay by . runs the registered handler. The stub sits on the content script's window, which executeScript shares.
-  await run_case("xp then . stops the page twice through the page bundle", async () => {
+  // page.stop stays in content.js, so it works on a page stuck loading, where a bundle injection can go unanswered. The stub sits on the content script's window, which executeScript shares.
+  await run_case("xp then . stops the page twice from the content script", async () => {
     await open_page("aligned", "rp_stop", { new_tab: true });
     const in_page = async (code) => (await in_background(`browser.tabs.query({ active: true, lastFocusedWindow: true }).then(([tab]) => browser.tabs.executeScript(tab.id, { code: ${JSON.stringify(code)} }))`))[0];
     await in_page(`window.__stops = 0; window.stop = () => { window.__stops++; }; 0`);
@@ -96,24 +97,79 @@ export async function run_cases({ rdp, extension_id, run_case, press_keys, poll_
   });
   const in_active_page = async (code) => (await in_background(`browser.tabs.query({ active: true, lastFocusedWindow: true }).then(([tab]) => browser.tabs.executeScript(tab.id, { code: ${JSON.stringify(code)} }))`))[0];
   const field_value = () => in_active_page(`document.getElementById("paste_target").value`);
+  const focused_id = () => in_active_page(`document.activeElement.id`);
+  const clear_field = () => in_active_page(`document.getElementById("paste_target").value = ""; 0`);
+  const wait_for_field_focus = () => poll_until("the field to take focus", async () => (await focused_id()) === "paste_target");
+  const escape_from_field = async (what) => {
+    await press_keys("-k", "Escape");
+    await poll_until(`Escape to leave the field (${what})`, async () => (await focused_id()) !== "paste_target");
+  };
+  const toast_on = (page_id) => (event) => event.type === "toast" && event.page_id === page_id;
 
   // The text recorder lives in the lazy text bundle. gi is the entry, so the replay focuses the field again, and a count types the text that many times.
   await run_case("gi, typed text and Escape, then . and 3. type the text again into the field", async () => {
     await open_page("caret", "rp_text", { new_tab: true });
     await press_keys("gi");
-    await poll_until("gi to focus the field", async () => (await in_active_page(`document.activeElement.id`)) === "paste_target");
+    await wait_for_field_focus();
     await press_keys("ab");
     await poll_until("the field to hold ab", async () => (await field_value()) === "ab");
-    await press_keys("-k", "Escape");
-    await poll_until("Escape to leave the field", async () => (await in_active_page(`document.activeElement.id`)) !== "paste_target");
-    await in_active_page(`document.getElementById("paste_target").value = ""; 0`);
+    await escape_from_field("first");
+    await clear_field();
     await press_keys(".");
     await poll_until("the replay to type ab", async () => (await field_value()) === "ab");
-    await press_keys("-k", "Escape");
-    await in_active_page(`document.getElementById("paste_target").value = ""; 0`);
+    await escape_from_field("replay");
+    await clear_field();
     await press_keys("3.");
     await poll_until("3. to type ab three times, and not nine", async () => (await field_value()) === "ababab");
     await close_tabs_with("rp_text");
+  });
+
+  // The recorder compares the field before and after, so an edit that is not a typed character still lands as the field shows it.
+  await run_case("a word deleted with Ctrl+Backspace is not in the text that . types", async () => {
+    await open_page("caret", "rp_word", { new_tab: true });
+    await press_keys("gi");
+    await wait_for_field_focus();
+    await press_keys("keep drop");
+    await poll_until("the field to hold the typed text", async () => (await field_value()) === "keep drop");
+    await press_keys("-M", "ctrl", "-k", "BackSpace", "-m", "ctrl");
+    await poll_until("the word to go", async () => (await field_value()) === "keep ");
+    await escape_from_field("word");
+    await clear_field();
+    await press_keys(".");
+    await poll_until("the replay to type the text without the deleted word", async () => (await field_value()) === "keep ");
+    await close_tabs_with("rp_word");
+  });
+
+  // A field focused by script has no entry command, so the replay types into the field the last Escape left. A contenteditable takes the text the same way.
+  await run_case("text typed in a contenteditable is typed again by . into the field Escape left", async () => {
+    await open_page("caret", "rp_editable", { new_tab: true });
+    await in_active_page(`document.body.insertAdjacentHTML("beforeend", '<div id="rp_ce" contenteditable="true"></div>'); document.getElementById("rp_ce").focus(); 0`);
+    await poll_until("the contenteditable to take focus", async () => (await focused_id()) === "rp_ce");
+    await press_keys("hi");
+    await poll_until("the contenteditable to hold hi", async () => (await in_active_page(`document.getElementById("rp_ce").innerText`)) === "hi");
+    await press_keys("-k", "Escape");
+    await poll_until("Escape to leave the contenteditable", async () => (await focused_id()) !== "rp_ce");
+    await in_active_page(`document.getElementById("rp_ce").innerText = ""; 0`);
+    await press_keys(".");
+    await poll_until("the replay to type hi", async () => (await in_active_page(`document.getElementById("rp_ce").innerText`)) === "hi");
+    await close_tabs_with("rp_editable");
+  });
+
+  // A script blur leaves no field for the replay, so the refusal is the whole answer.
+  await run_case(". with no field to type into refuses with a notice and types nothing", async () => {
+    await open_page("caret", "rp_nofield", { new_tab: true });
+    await in_active_page(`document.getElementById("paste_target").focus(); 0`);
+    await wait_for_field_focus();
+    await press_keys("ab");
+    await poll_until("the field to hold ab", async () => (await field_value()) === "ab");
+    await in_active_page(`document.getElementById("paste_target").blur(); document.getElementById("paste_target").value = ""; 0`);
+    await poll_until("the blur to leave the field", async () => (await focused_id()) !== "paste_target");
+    await settle_focus();
+    const mark = events.length;
+    await press_keys(".");
+    await wait_event(mark, toast_on("rp_nofield"), "the refusal notice");
+    expect((await field_value()) === "", "the replay typed into a field it should not have found");
+    await close_tabs_with("rp_nofield");
   });
 
   // A password field is never recorded, so . keeps the earlier command.
@@ -121,13 +177,31 @@ export async function run_cases({ rdp, extension_id, run_case, press_keys, poll_
     await open_page("caret", "rp_secret", { new_tab: true });
     await in_active_page(`document.getElementById("paste_target").type = "password"; 0`);
     await press_keys("gi");
-    await poll_until("gi to focus the field", async () => (await in_active_page(`document.activeElement.id`)) === "paste_target");
+    await wait_for_field_focus();
     await press_keys("hunter2");
     await poll_until("the field to hold the password", async () => (await field_value()) === "hunter2");
-    await press_keys("-k", "Escape");
+    await escape_from_field("password");
+    await barrier("rp_secret");
     const stored = await in_background(`browser.storage.session.get().then((all) => JSON.stringify(all))`);
     expect(!stored.includes("hunter2"), "the password reached storage.session");
     await close_tabs_with("rp_secret");
+  });
+
+  // Ignore mode passes every key to the page, so DesertFox records nothing there.
+  await run_case("text typed in ignore mode is not recorded", async () => {
+    await open_page("caret", "rp_ignore", { new_tab: true });
+    const mark = events.length;
+    await press_keys(...SHIFT_ESCAPE);
+    await wait_event(mark, badge_is("rp_ignore", "IGNORE"), "the IGNORE badge");
+    await in_active_page(`document.getElementById("paste_target").focus(); 0`);
+    await wait_for_field_focus();
+    await press_keys("zebra");
+    await poll_until("the field to hold zebra", async () => (await field_value()) === "zebra");
+    await in_active_page(`document.getElementById("paste_target").blur(); 0`);
+    await barrier("rp_ignore");
+    const stored = await in_background(`browser.storage.session.get().then((all) => JSON.stringify(all))`);
+    expect(!stored.includes("zebra"), "ignore mode typing reached storage.session");
+    await close_tabs_with("rp_ignore");
   });
 
   // A command typed from the field never blurs it. The text must be stored before the command, so . repeats the command.
@@ -135,7 +209,7 @@ export async function run_cases({ rdp, extension_id, run_case, press_keys, poll_
     await open_page("page", "rp_order_a", { new_tab: true });
     await open_page("caret", "rp_order_b", { new_tab: true });
     await press_keys("gi");
-    await poll_until("gi to focus the field", async () => (await in_active_page(`document.activeElement.id`)) === "paste_target");
+    await wait_for_field_focus();
     await press_keys("xy");
     await poll_until("the field to hold xy", async () => (await field_value()) === "xy");
     await press_keys("-M", "alt", "k", "-m", "alt");

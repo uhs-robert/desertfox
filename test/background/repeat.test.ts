@@ -329,3 +329,13 @@ test("a text step with a missing or non-string text is refused", async () => {
   assert.equal(page_steps({ invocations: [{ id: "text.insert", args: { text: 5 } }] }, get, {}), undefined);
   assert.equal(page_steps({ invocations: [{ id: "text.insert" }] }, get, {}), undefined);
 });
+
+test("a count on `.` after typed text goes to the text step only, never to the entry that focused the field", async () => {
+  const seen: unknown[] = [];
+  const handler = make_repeat_handler(() => ({
+    load: async () => [{ id: "page.focus_field", args: { direction: "next", steps: 1 } }, { id: "text.insert", args: { text: "hi" } }],
+    run_batch: async (invocations) => void seen.push(invocations),
+  }) satisfies RepeatDeps);
+  await handler({ tab_id: 7, window_id: 1, frame_id: 0, mode: "normal" }, { count: 3 });
+  assert.deepEqual(seen, [[{ id: "page.focus_field", args: { direction: "next", steps: 1 } }, { id: "text.insert", args: { text: "hi" }, count: 3 }]]);
+});

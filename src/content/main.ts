@@ -23,6 +23,7 @@ import { run_content_steps, run_in_order } from "./run_content.ts";
 import { run_leaf } from "./run_leaf.ts";
 import { read_context_source } from "./context.ts";
 import { focus_page_content, start_content_once } from "./handlers/focus.ts";
+import { read_field_text } from "./text/field_text.ts";
 import { blur_focused_element } from "./handlers/page.ts";
 
 // Until the tree is read the setting is unknown, and the default applies.
@@ -97,19 +98,23 @@ bundles.connect({
 
 const cancelled_keys = create_cancelled_keys();
 
-// The recorder bundle loads on the first input in a text field. Each call waits on that load in order, so the first characters after `gi` are not lost.
+// The recorder bundle loads on the first edit in insert mode. Each call waits on that load in order, so the first edit after `gi` is not lost.
+// `beforeinput` fires ahead of the edit, so the field's text then is what the recorder compares the end of the session with.
 let typed_in_a_field = false;
 
-function on_input(event: InputEvent): void {
+function on_beforeinput(event: Event): void {
+  if (!extension_context_alive()) return stop_listening();
   const field = deepest_focused_element();
-  if (!event.isTrusted || !is_editable_element(field)) return;
+  if (!event.isTrusted || !field || page_mode.get_mode_() !== "insert") return;
   typed_in_a_field = true;
-  void bundles.run_command_("text.input", "text", { event_: event, field_: field }, "", false);
+  void bundles.run_command_("text.input", "text", { field_: field, before_: read_field_text(field) }, "", false);
 }
 
 // A command typed from the field never blurs it, so the text step is stored before the command is sent, and `.` finds the command last.
 function flush_typed_text(): void {
-  if (typed_in_a_field) void bundles.run_command_("text.flush", "text", {}, "", false);
+  if (!typed_in_a_field) return;
+  typed_in_a_field = false;
+  void bundles.run_command_("text.flush", "text", {}, "", false);
 }
 
 function cancel(event: Event): void {
@@ -239,7 +244,7 @@ function start(): void {
   listen(window, "keydown", on_keydown);
   listen(window, "keypress", on_keypress);
   listen(window, "keyup", on_keyup);
-  listen(window, "input", on_input);
+  listen(window, "beforeinput", on_beforeinput);
   listen(window, "focusin", on_focusin);
   listen(window, "focusout", on_focusout);
   watch_roots_around_focus();

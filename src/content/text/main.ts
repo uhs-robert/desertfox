@@ -3,6 +3,7 @@
 import type { BundleHostApi } from "../bundle_host.ts";
 import { write_into_field } from "./field_writer.ts";
 import { take_text_entry } from "./entry.ts";
+import { read_field_text } from "./field_text.ts";
 import { create_text_recorder } from "./recorder.ts";
 import { is_secret_field } from "./secret_field.ts";
 
@@ -16,11 +17,11 @@ if (!page.desertfox_text_ready) {
   const recorder = create_text_recorder({
     is_secret: is_secret_field,
     take_entry: take_text_entry,
+    read_text: read_field_text,
     record: (invocations) => void browser.runtime.sendMessage({ type: "record_step", invocations, outcome: { ok: true } }),
   });
   host.register_handler_("text.input", (args) => {
-    const { inputType, data } = args.event_ as InputEvent;
-    recorder.on_input({ input_type: inputType, data, field: args.field_ as Element });
+    recorder.on_input(args.field_ as Element, args.before_ as string);
   });
   host.register_handler_("text.flush", recorder.flush);
   host.register_handler_("text.insert", (args) => recorder.while_replaying(() => write_into_field(args.text as string, host.last_blurred_())));

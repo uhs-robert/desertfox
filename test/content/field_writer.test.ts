@@ -55,6 +55,17 @@ test("a field that does not take the text refuses", () => {
   assert.throws(() => write_into_field("x", undefined), { name: "RuntimeRefusal" });
 });
 
+test("an autocomplete of a password or a one-time code is secret, and a field once secret stays secret", () => {
+  for (const autocomplete of ["current-password", "new-password", "one-time-code", "username current-password"]) {
+    assert.equal(is_secret_field(Object.assign(field(), { autocomplete }) as unknown as Element), true, autocomplete);
+  }
+  assert.equal(is_secret_field(Object.assign(field(), { autocomplete: "email" }) as unknown as Element), false);
+  const toggled = field("password");
+  assert.equal(is_secret_field(toggled as unknown as Element), true);
+  toggled.type = "text";
+  assert.equal(is_secret_field(toggled as unknown as Element), true);
+});
+
 test("only a password input is secret", () => {
   assert.equal(is_secret_field(field("password") as unknown as Element), true);
   assert.equal(is_secret_field(field("text") as unknown as Element), false);

@@ -1,4 +1,4 @@
-// The `page` bundle: registers `scroll.align`, `copy.url`, `page.focus_input` and `page.stop`, which are rare enough to stay out of content.js.
+// The `page` bundle: registers `scroll.align`, `copy.url`, and `page.focus_input`, which are rare enough to stay out of content.js.
 
 import type { BundleHostApi } from "../bundle_host.ts";
 import type { AlignPosition } from "../align_target.ts";
@@ -20,6 +20,5 @@ if (!page.desertfox_page_ready) {
     focus_first_input();
     mark_text_entry({ id: "page.focus_input" });
   });
-  host.register_handler_("page.stop", () => window.stop());
   host.register_handler_("copy.url", (args) => copy_page_url(args.format as CopyFormat, host.show_toast_));
 }
