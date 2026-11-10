@@ -117,3 +117,18 @@ Result:
 - `tabs.create({ discarded: true, title })` keeps the title and the tab stays discarded. `tabs.create({ pinned: true })` alone works.
 - Creating the tab discarded and then `tabs.update(id, { pinned: true })` gives a pinned, still discarded tab that keeps its title.
 - `tabs.create` rejects `about:config` and `file:///...` with "Illegal URL".
+
+## DevTools Inspector handoff (devtools-inspect)
+
+Question: can a hint pick select its element in the native Inspector, and where does focus go?
+
+Setup: Firefox 159.0.1 in the key test session. A throwaway add-on with a `devtools_page`, a background relay keyed by tab id and a content script. The content script set `window.wrappedJSObject.__spike_pick` to the node. The devtools page ran `inspectedWindow.eval("inspect(window.__spike_pick)")`, then deleted the property. Toolbox state came from chrome code over the debugger.
+
+Result:
+- The node handoff works. `inspect()` selected the node in a plain page, an open shadow root, a closed shadow root (the content script reads it with `openOrClosedShadowRoot`), a same-origin iframe and an element under a transparent overlay. After the `delete`, the property was gone from the page.
+- A cross-origin iframe gives no node: `contentDocument` is null. The only answer is a refusal.
+- `inspect()` switches the toolbox from the Console tab to the Inspector. It does not open the split console, and it leaves an open split console open.
+- After `inspect()`, keyboard focus is in the Inspector panel and the page reports `document.hasFocus() === false`. So the native Inspector keys work at once. This holds from the Console tab, the Inspector tab and with the split console open.
+- Back to the page takes two keys: F6 then Escape, or F6 twice. Escape alone opens the split console. Ctrl+Shift+C leaves focus in the Inspector. Ctrl+Shift+I was not tried.
+- `devtools.panels.elements.onSelectionChanged` fires once per `inspect()` call. Only Firefox 159 was run, so the 140 boundary is untested.
+- Not measured: whether the Ctrl+Shift+C picker reaches an element under an overlay, in a closed shadow root or in an iframe. The key test cannot assert toolbox state either, so it checks the page property and the toast.

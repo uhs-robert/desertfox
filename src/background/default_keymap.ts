@@ -57,6 +57,7 @@ export const DEFAULT_KEYMAP: KeymapConfig = {
     ";b": { action: "background", label: "Background tab" },
     ";w": { action: "window", label: "New window" },
     ";d": { action: "download", label: "Download" },
+    ";o": { action: "inspect", label: "Inspect" },
     ";h": { action: "hover", label: "Hover" },
     ";x": { action: "delete", label: "Delete" },
     ";2": { action: "double_click", label: "Double-click" },
