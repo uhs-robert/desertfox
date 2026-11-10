@@ -1,6 +1,6 @@
 // Key test cases of array bindings (awaitable commands, routing). The harness calls run_cases with the piece context.
-// The bindings live in config/keymap.toml: ,n = [tab.next, scroll.to 0], ,h = [hint.run background, scroll 300],
-// ,f = [find.next, scroll 300], ,o = [cmdline.open, scroll 300], ,p = [:scroll.pixels, scroll 300], ,t = [hint.run background, tab.next].
+// The bindings live in config/keymap.toml: ,n = [tab.next, scroll.to 0], \h = [hint.run background, scroll 300],
+// ,f = [find.next, scroll 300], ,o = [cmdline.open, scroll 300], ,p = [:scroll.pixels, scroll 300], \t = [hint.run background, tab.next].
 
 export const areas = ["keys", "tabs", "hints", "find", "cmdline", "scroll"];
 
@@ -41,8 +41,8 @@ export async function run_cases({ close_tabs_with, run_case, press_keys, poll_un
   await run_case("[hint.run, scroll]: a pick resumes the sequence, Escape cancels the rest", async () => {
     await open_page("hints", "sq_hints", { new_tab: true });
     let mark = events.length;
-    await press_keys(",h");
-    await wait_for_labels(",h");
+    await press_keys("\\h");
+    await wait_for_labels("\\h");
     await let_a_wrong_step_show();
     expect(!find_event(mark, scroll_of("sq_hints")), "the page scrolled while the hint labels were up");
     await press_keys("s");
@@ -53,8 +53,8 @@ export async function run_cases({ close_tabs_with, run_case, press_keys, poll_un
     // The scroll step moved the links off screen, where they get no label. Back at the top the labels show, so Escape has something to cancel.
     await scroll_delta_by_press("sq_hints", ["gg"]);
     mark = events.length;
-    await press_keys(",h");
-    await wait_for_labels(",h again");
+    await press_keys("\\h");
+    await wait_for_labels("\\h again");
     await press_keys(...ESCAPE);
     await wait_for_no_labels("Escape");
     await expect_absent(mark, "sq_hints", scroll_of("sq_hints"), "the page scrolled after Escape left the hints", { report_delay_ms: scroll_report_wait_ms });
@@ -113,8 +113,8 @@ export async function run_cases({ close_tabs_with, run_case, press_keys, poll_un
   await run_case("[hint.run, tab.next]: a pick switches tab, Escape does not", async () => {
     await open_page("hints", "sq_tabhint", { new_tab: true });
     const switch_mark = await tab_switch_mark();
-    await press_keys(",t");
-    await wait_for_labels(",t");
+    await press_keys("\\t");
+    await wait_for_labels("\\t");
     await let_a_wrong_step_show();
     await expect_no_tab_shown(switch_mark, "a tab switched while the hint labels were up");
     await press_keys("s");
@@ -123,8 +123,8 @@ export async function run_cases({ close_tabs_with, run_case, press_keys, poll_un
     await close_tabs_with("sq_tabhint");
     await open_page("hints", "sq_tabhint2", { new_tab: true });
     const mark = events.length;
-    await press_keys(",t");
-    await wait_for_labels(",t again");
+    await press_keys("\\t");
+    await wait_for_labels("\\t again");
     await press_keys(...ESCAPE);
     await wait_for_no_labels("Escape");
     await expect_absent(mark, "sq_tabhint2", became_any_visible, "a tab switched after Escape left the hints");

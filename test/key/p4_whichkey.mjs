@@ -119,51 +119,16 @@ export async function run_cases({ rdp, extension_id, take_shot, run_case, send_k
     expect(whichkey_events(mark, "wk").every((event) => event.value === ""), "the panel came back after Escape");
   });
 
-  await run_case("Space then a pause shows the DesertFox panel, and Space then j still scrolls", async () => {
+  await run_case("a comma then a pause shows the DesertFox panel, and comma then j still scrolls", async () => {
     let mark = events.length;
-    await press_keys(" ");
-    await panel_value(mark, (value) => value !== "", "the Space panel");
+    await press_keys(",");
+    await panel_value(mark, (value) => value !== "", "the comma panel");
     await close_panel();
-    expect(await scroll_delta_by_press("wk", [" j"]) > 0, "Space j did not scroll the page");
+    expect(await scroll_delta_by_press("wk", [",j"]) > 0, ",j did not scroll the page");
   });
 
-  // Each control reports through its own side effect on the page, which only happens when the page gets the Space.
-  await run_case("Space reaches a focused button, checkbox, radio and summary", async () => {
-    await open_page("page", "sp_controls", { new_tab: true });
-    await in_active_tab(`(() => {
-      document.body.insertAdjacentHTML("afterbegin", '<button id="sp_button">b</button><input type="checkbox" id="sp_box"><input type="radio" id="sp_radio"><select id="sp_select"><option>one</option></select><details id="sp_details"><summary id="sp_summary">s</summary>x</details>');
-      window.sp_clicks = 0;
-      document.getElementById("sp_button").addEventListener("click", () => window.sp_clicks++);
-    })()`);
-    const act = async (id, key) => {
-      await in_active_tab(`document.getElementById("${id}").focus()`);
-      await press_keys(key);
-    };
-    await act("sp_button", " ");
-    await poll_until("the button to get Space", async () => (await in_active_tab("window.sp_clicks")) === 1);
-    await act("sp_box", " ");
-    await poll_until("the checkbox to get Space", async () => await in_active_tab(`document.getElementById("sp_box").checked`));
-    await act("sp_radio", " ");
-    await poll_until("the radio to get Space", async () => await in_active_tab(`document.getElementById("sp_radio").checked`));
-    await act("sp_summary", " ");
-    await poll_until("the summary to get Space", async () => await in_active_tab(`document.getElementById("sp_details").open`));
-    // A control inside an open shadow root shows as its host in document.activeElement.
-    await in_active_tab(`(() => {
-      const host = document.createElement("div");
-      host.id = "sp_host";
-      host.attachShadow({ mode: "open" }).innerHTML = '<input type="checkbox" id="sp_inner_box">';
-      document.body.prepend(host);
-    })()`);
-    await in_active_tab(`document.getElementById("sp_host").shadowRoot.getElementById("sp_inner_box").focus()`);
-    await press_keys(" ");
-    await poll_until("the checkbox in the shadow root to get Space", async () => await in_active_tab(`document.getElementById("sp_host").shadowRoot.getElementById("sp_inner_box").checked`));
-    // A select opens its list on Space, which takes focus from the page, so the test only checks that the leader did not start.
-    const mark = events.length;
-    await act("sp_select", " ");
-    await sleep(which_key_delay_ms + 200);
-    expect(whichkey_events(mark, "sp_controls").length === 0, "a panel showed for Space on a select");
-    await close_tabs_with("sp_");
-    await settle_focus();
+  await run_case("Space reaches the page in normal mode and scrolls it", async () => {
+    expect(await scroll_delta_by_press("wk", [" "]) > 0, "Space did not scroll the page");
   });
 
   // keymap.d binds ,w to help.whichkey in normal mode and _w in caret and visual mode, because caret and visual mode already use , to repeat a character find. It sits there so the keymap that config.reload writes keeps it. Each mode lists its own keys.
