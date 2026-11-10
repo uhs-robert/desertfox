@@ -318,6 +318,27 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, press_
     await poll_until("the notice past the last heading", async () => (await toast_text()).includes("No next heading"));
   });
 
+  await run_case("]h passes headings the page cannot scroll to the top, because it steps from the last heading it jumped to", async () => {
+    await open_page("headings_end", "p6_heading_end", { new_tab: true });
+    await press_keys("2]h");
+    await poll_until("A at the top", async () => Math.abs(await top_of("a")) <= 2);
+    await press_keys("]h");
+    await poll_until("B scrolled as far as the page goes", async () => (await scroll_y()) > 1000);
+    expect((await top_of("b")) > 5, "B reached the top, so the page is too short for this case");
+    expect((await top_of("c")) > (await top_of("b")), "C is not below B");
+    await press_keys("]h");
+    const at_c = await scroll_y();
+    await press_keys("]h");
+    await press_keys("]h");
+    await poll_until("the notice past D", async () => (await toast_text()).includes("No next heading"));
+    // From D the key goes back one heading, C, which cannot reach the top either, so the page stays put.
+    await press_keys("[h");
+    await sleep(400);
+    expect((await scroll_y()) === at_c, `[h from D moved the page from ${at_c} to ${await scroll_y()}`);
+    await press_keys("2[h");
+    await poll_until("A at the top again", async () => Math.abs(await top_of("a")) <= 2);
+  });
+
   await run_case("sh jumps to a heading in a same-origin frame, skips one in a hidden frame, and scrolls the frame too", async () => {
     await open_page("headings_frames", "p6_headings_frames", { new_tab: true });
     await open_headings_line(3);

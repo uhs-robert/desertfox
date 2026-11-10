@@ -251,6 +251,11 @@ shadow.getElementById("panel").addEventListener("scroll", () => send("panel_scro
       const body = `<h2 id="intro">Intro</h2>${dropped}${filler}<div id="below" role="heading" aria-level="2">Below the fold</div>${filler}<h3 id="last">Last</h3>${filler}`;
       return response.end(page(`headings ${id}`, body));
     }
+    if (url.pathname === "/headings_end") {
+      // Headings b, c and d sit in the last 260px, so the page cannot scroll them to the top of the view. In page order: title, a, b, c, d.
+      const gap = '<div style="height:60px"></div>';
+      return response.end(page(`headings_end ${id}`, `<h2 id="a">A</h2><div style="height:3000px"></div><h2 id="b">B</h2>${gap}<h2 id="c">C</h2>${gap}<h2 id="d">D</h2>${gap}`));
+    }
     if (url.pathname === "/headings_many") {
       // Sixty headings, more than the panel shows. "Section 59" is the last row, so its label is below the panel's edge.
       const sections = Array.from({ length: 60 }, (_, index) => `<h2 id="section_${index}">Section ${index}</h2><div style="height:200px"></div>`).join("");
