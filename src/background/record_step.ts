@@ -23,6 +23,12 @@ export type StepOutcome = Outcome & { failed_step?: number };
 
 export type RecordStep = (steps: readonly BoundInvocation[], outcome: StepOutcome, origin: StepOrigin) => Promise<void>;
 
+// Whether `.` and a macro may run this step again.
+export function can_repeat(command: CommandDef | undefined, step: Pick<BoundInvocation, "args">): boolean {
+  const rule = command?.repeatable;
+  return typeof rule === "function" ? rule((step.args ?? {}) as CheckedArgs) : rule !== false;
+}
+
 export type StepRecorderDeps = {
   get_command: (id: string) => CommandDef | undefined;
   repeat_memory: RepeatMemory;
@@ -32,7 +38,7 @@ export type StepRecorderDeps = {
 export function create_step_recorder(deps: StepRecorderDeps): RecordStep {
   return async function record_step(steps, outcome, origin) {
     if (!outcome.ok || outcome.cancelled || origin.prompted || origin.skip_repeat) return;
-    const repeatable = steps.filter((step) => deps.get_command(step.id)?.repeatable !== false);
+    const repeatable = steps.filter((step) => can_repeat(deps.get_command(step.id), step));
     if (repeatable.length === 0) return;
     await deps.repeat_memory.save(repeatable.map(as_stored), origin.is_private).catch(() => undefined);
   };

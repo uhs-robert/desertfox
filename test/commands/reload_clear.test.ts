@@ -9,7 +9,7 @@ import { check_args } from "../../src/shared/registry/check_args.ts";
 
 const cookie = (domain: string, name: string): PageCookie => ({ name, domain, path: "/", secure: true, store_id: "firefox-container-2", first_party_domain: "", partition_key: undefined });
 
-function make_fake({ url = "https://www.example.com/a", store = "firefox-container-2", cookies = [] as PageCookie[], fail_on = "" } = {}) {
+function make_fake({ url = "https://www.example.com/a", store = "firefox-container-2", cookies = [] as PageCookie[], fail_on = "", stayed = [] as string[] } = {}) {
   const log: string[] = [];
   const data_calls: { options: unknown; types: string[] }[] = [];
   const deps: ReloadClearDeps = {
@@ -30,7 +30,11 @@ function make_fake({ url = "https://www.example.com/a", store = "firefox-contain
       data_calls.push({ options, types: Object.keys(types) });
       log.push("data");
     },
-    clear_page_storage: async () => void log.push("page_storage"),
+    clear_page_storage: async () => {
+      log.push("page_storage");
+      return stayed;
+    },
+    notify: async (message) => void log.push(`notify ${message}`),
     reload_bypassing_cache: async () => void log.push("reload"),
   };
   return { deps, log, data_calls };
@@ -68,6 +72,29 @@ test("a page that is not on the web refuses a site clear", async () => {
   const { deps, log } = make_fake({ url: "about:config" });
   await assert.rejects(make_reload_clear(deps).run(7, "site"), RuntimeRefusal);
   assert.ok(!log.includes("reload"));
+  assert.ok(!log.includes("page_storage") && data_calls_empty(log), "nothing was cleared before the refusal");
+});
+
+const data_calls_empty = (log: string[]) => !log.some((entry) => entry === "data" || entry.startsWith("remove_cookie"));
+
+test("a file page refuses before anything is cleared", async () => {
+  const { deps, log } = make_fake({ url: "file:///tmp/a.html" });
+  await assert.rejects(make_reload_clear(deps).run(7, "site"), RuntimeRefusal);
+  assert.deepEqual(log, []);
+});
+
+test("a page that cannot clear its storage still reloads and a notice names what stayed", async () => {
+  const { deps, log } = make_fake({ stayed: ["storage", "service workers"] });
+  await make_reload_clear(deps).run(7, "site");
+  assert.equal(log.at(-2), "reload");
+  assert.match(log.at(-1)!, /^notify .*storage, service workers stayed/);
+});
+
+test("a database the page holds open falls back to the host's IndexedDB through the browser", async () => {
+  const { deps, log, data_calls } = make_fake({ stayed: ["IndexedDB"] });
+  await make_reload_clear(deps).run(7, "site");
+  assert.deepEqual(data_calls.at(-1), { options: { hostnames: ["www.example.com"], cookie_store_id: "firefox-container-2" }, types: ["indexedDB"] });
+  assert.ok(!log.some((entry) => entry.startsWith("notify")));
 });
 
 test("the clear param takes site and all, and leaves a plain reload alone", () => {
@@ -77,4 +104,36 @@ test("the clear param takes site and all, and leaves a plain reload alone", () =
   assert.equal(check_args(command, { clear: "nothing" }, {}).ok, false);
   const plain = check_args(command, {}, {});
   assert.ok(plain.ok && plain.args.clear === "");
+});
+
+test(". and a macro never replay page.reload --all, but replay --site", async () => {
+  const { can_repeat } = await import("../../src/background/record_step.ts");
+  const command = registry.get("page.reload")!;
+  assert.equal(can_repeat(command, { args: { clear: "all" } }), false);
+  assert.equal(can_repeat(command, { args: { clear: "site" } }), true);
+  assert.equal(can_repeat(command, { args: { hard: true } }), true);
+  assert.equal(can_repeat(command, {}), true);
+});
+
+test("a macro and the repeat memory both drop page.reload --all and keep the rest", async () => {
+  const { create_macro_recorder } = await import("../../src/background/macro_recorder.ts");
+  const { create_step_recorder } = await import("../../src/background/record_step.ts");
+  const values = new Map<string, unknown>();
+  const session = {
+    get: async (key: string) => (values.has(key) ? { [key]: structuredClone(values.get(key)) } : {}),
+    set: async (items: Record<string, unknown>) => void Object.entries(items).forEach(([key, value]) => values.set(key, structuredClone(value))),
+    remove: async (key: string) => void values.delete(key),
+  } as never;
+  const macro = create_macro_recorder({ session: () => session, tell_tabs: async () => undefined, get_command: (id) => registry.get(id) });
+  await macro.start("a", false);
+  const steps = [{ id: "page.reload", args: { clear: "all" } }, { id: "page.reload", args: { clear: "site" } }];
+  await macro.record(steps, { ok: true }, { is_private: false });
+  assert.deepEqual((await macro.stop(false)).steps, [steps[1]]);
+
+  const saved: unknown[][] = [];
+  const record = create_step_recorder({ get_command: (id) => registry.get(id), repeat_memory: { save: async (kept: unknown[]) => void saved.push(kept) } as never });
+  await record([steps[0]!], { ok: true }, { is_private: false });
+  assert.deepEqual(saved, [], "`.` would repeat the clear of every site");
+  await record(steps, { ok: true }, { is_private: false });
+  assert.deepEqual(saved, [[steps[1]]]);
 });

@@ -117,7 +117,8 @@ type CommandCommon = {
   // makes no sense typed. A list of modes means only when the line was opened from one of them. Typing the name still runs it.
   completion?: "hidden" | readonly Mode[];
   // Absent means true. `.` replays only a repeatable background command, so false keeps a command out of the memory.
-  repeatable?: boolean;
+  // A function decides per call from the checked args, for one command whose args differ in danger (`page.reload --all` must never replay).
+  repeatable?: boolean | ((args: CheckedArgs) => boolean);
 };
 
 export type BackgroundCommandDef = CommandCommon & { runs_in: "background"; run: CommandRun; bundle?: undefined };

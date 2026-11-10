@@ -40,6 +40,8 @@ define("page.reload", {
     },
   ],
   runs_in: "background",
+  // `page.reload --all` logs you out everywhere, so `.` and a macro never replay it.
+  repeatable: (args) => args.clear !== "all",
   run: async (ctx, args) => {
     const tab_id = require_tab_id(ctx);
     if (args.clear === "site" || args.clear === "all") return reload_clear.run(tab_id, args.clear as ClearScope);

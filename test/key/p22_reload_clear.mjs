@@ -5,7 +5,7 @@ import { evaluate_in_background } from "./rdp.mjs";
 
 export const areas = ["keys", "cmdline"];
 
-export async function run_cases({ rdp, extension_id, run_case, setup, expect, open_page, press_keys, settle_focus, events, wait_event, wait_cmdline, in_active_tab }) {
+export async function run_cases({ rdp, extension_id, run_case, setup, expect, open_page, press_keys, settle_focus, events, wait_event, wait_cmdline, in_active_tab, poll_until }) {
   const background = (code) => evaluate_in_background(rdp, extension_id, code);
   const loaded = (page_id, mark) => wait_event(mark, (event) => event.type === "tree_read" && event.page_id === page_id, `${page_id} to load again`);
 
@@ -16,6 +16,7 @@ export async function run_cases({ rdp, extension_id, run_case, setup, expect, op
     response.end("x");
   });
   await new Promise((resolve) => cached_server.listen(0, "127.0.0.1", resolve));
+  try {
   const { port } = cached_server.address();
   // True when the fetch reached the server, false when the cache answered.
   const reaches_server = async () => {
@@ -27,8 +28,9 @@ export async function run_cases({ rdp, extension_id, run_case, setup, expect, op
   const set_site_data = () =>
     in_active_tab(`(async () => {
       document.cookie = "kt_cookie=1; path=/"; localStorage.setItem("kt", "1"); sessionStorage.setItem("kt", "1");
-      await new Promise((done) => { const request = indexedDB.open("kt_db"); request.onsuccess = () => { request.result.close(); done(); }; request.onerror = done; });
+      await new Promise((done) => { const request = indexedDB.open("kt_db"); request.onsuccess = () => { self.kt_connection = request.result; done(); }; request.onerror = done; });
       await caches.open("kt_cache");
+      document.documentElement.setAttribute("data-kt-before-reload", "1");
       return true;
     })()`);
   const read_site_data = () =>
@@ -50,6 +52,8 @@ export async function run_cases({ rdp, extension_id, run_case, setup, expect, op
         await wait_cmdline((line) => line.open && line.value === "page.reload --all", "rC to open the line with page.reload --all");
         await press_keys("-k", "Return");
       }
+      // The marker lives in the old document, so it is gone only once the reload has replaced it. A late report from before the key cannot pass this.
+      await poll_until("the old document to be replaced", async () => (await in_active_tab(`document.documentElement.getAttribute("data-kt-before-reload")`).catch(() => "navigating")) === null);
       await loaded("d_clear", mark);
       await settle_focus();
       const after = await read_site_data();
@@ -58,5 +62,7 @@ export async function run_cases({ rdp, extension_id, run_case, setup, expect, op
     });
   }
 
-  cached_server.close();
+  } finally {
+    cached_server.close();
+  }
 }
