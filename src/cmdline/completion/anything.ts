@@ -44,15 +44,14 @@ function keyword_engine(word: string, engines: readonly EngineItem[]): { engine:
   return engine && { engine, query };
 }
 
-function search_rows(word: string, engines: readonly EngineItem[], usage: string): Row[] {
+function search_rows(word: string, engines: readonly EngineItem[], usage: string): { keyword?: Row; fallback: Row } {
   const typed = word.trim();
-  if (typed === "") return [];
   const keyword = keyword_engine(word.trimStart(), engines);
   const base = { insert: word, args: "", also_named: [], keywords: [], usage, tag: "search" };
-  return [
-    ...(keyword ? [{ ...base, name: `${keyword.engine.label}: ${keyword.query}`, description: keyword.engine.name, ref: encode_ref({ kind: "engine", engine: keyword.engine.name, query: keyword.query }) }] : []),
-    { ...base, name: `Search: ${typed}`, description: "default engine", ref: encode_ref({ kind: "web", query: typed }) },
-  ];
+  return {
+    ...(keyword ? { keyword: { ...base, name: `${keyword.engine.label}: ${keyword.query}`, description: keyword.engine.name, ref: encode_ref({ kind: "engine", engine: keyword.engine.name, query: keyword.query }) } } : {}),
+    fallback: { ...base, name: `Search: ${typed}`, description: "default engine", ref: encode_ref({ kind: "web", query: typed }) },
+  };
 }
 
 export function anything_ranked({ word, usage, tabs, items, engines }: FinderInput): Ranked<Row>[] {
@@ -61,8 +60,9 @@ export function anything_ranked({ word, usage, tabs, items, engines }: FinderInp
   const fresh = <Entry extends { url: string }>(entries: readonly Entry[]): Entry[] => entries.filter((entry) => !seen.has(entry.url) && seen.add(entry.url));
   const quickmarks = fresh(items.quickmarks).map((mark) => url_row(mark.key, mark.url, "qm", { kind: "page", url: mark.url }, usage));
   const bookmarks = fresh(items.bookmarks).map((bookmark) => url_row(bookmark.title, bookmark.url, "bm", { kind: "page", url: bookmark.url }, usage));
-  const history = fresh(items.history).map((entry) => url_row(entry.title, entry.url, "hist", { kind: "page", url: entry.url }, usage));
+  // A closed tab wins over the history row of its address, because Enter restores the tab with its state. History is deduped after it.
   const closed = fresh(items.closed).map((entry) => url_row(entry.title, entry.url, "closed", { kind: "closed", session_id: entry.session_id }, usage));
+  const history = fresh(items.history).map((entry) => url_row(entry.title, entry.url, "hist", { kind: "page", url: entry.url }, usage));
   const as_ranked = (rows: Row[]): Ranked<Row>[] => rows.map((row) => ({ ...row, positions: [] }));
 
   if (word.trim() === "") {
@@ -70,5 +70,7 @@ export function anything_ranked({ word, usage, tabs, items, engines }: FinderInp
     return as_ranked([...quickmarks, ...recent_tabs.map((tab) => ({ ...tab.row, ref: encode_ref({ kind: "tab", id: tab.id }) })), ...history.slice(0, items.history_max), ...closed.slice(0, RECENT_CLOSED)]);
   }
   const tab_rows = tabs.map((tab) => ({ ...tab.row, ref: encode_ref({ kind: "tab", id: tab.id }) }));
-  return [...rank(word, tab_rows), ...rank(word, quickmarks), ...rank(word, bookmarks), ...rank(word, history), ...rank(word, closed), ...as_ranked(search_rows(word, engines, usage))];
+  // The keyword row goes first, so the highlighted row and Enter search the engine the user named.
+  const { keyword, fallback } = search_rows(word, engines, usage);
+  return [...as_ranked(keyword ? [keyword] : []), ...rank(word, tab_rows), ...rank(word, quickmarks), ...rank(word, bookmarks), ...rank(word, history), ...rank(word, closed), ...as_ranked([fallback])];
 }

@@ -209,3 +209,52 @@ test("empty query: only the line's own tab is left out, not the active tab of an
   await new Promise((resolve) => setTimeout(resolve, 0));
   assert.deepEqual(complete("anything ", 9).rows.map((found) => found.tab?.id).sort(), [2, 3]);
 });
+
+test("a closed tab wins over the history row of its address, in the empty list and with a query", () => {
+  const items: AnythingItems = {
+    ...ITEMS,
+    quickmarks: [],
+    bookmarks: [],
+    history: [
+      { title: "Closed notes", url: "https://closed.test/" },
+      { title: "Other history", url: "https://other-history.test/" },
+    ],
+    history_max: 5,
+  };
+  for (const word of ["", "notes"]) {
+    const rows = anything_ranked({ word, usage: "", tabs: [], items, engines: [] });
+    const closed = rows.filter((row) => row.tag === "closed");
+    assert.equal(closed.length, 1, word);
+    assert.deepEqual(ref_of(closed[0]), { kind: "closed", session_id: "s9" });
+    assert.equal(rows.filter((row) => row.tag === "hist" && row.description === "https://closed.test/").length, 0, word);
+  }
+});
+
+test("a keyword query puts the engine row first and highlighted, ahead of a tab and a bookmark that also match", async () => {
+  const items: AnythingItems = { ...ITEMS, bookmarks: [{ title: "gh rust bookmark", url: "https://rust-mark.test/" }] };
+  const live_tabs = [...TABS, tab(4, "gh rust tab", "https://rust-tab.test/")];
+  const live = create_live_source({
+    ask: async (kind): Promise<CompleteItemsAnswer | undefined> => ({ items: (kind === "engines" ? ENGINES : items) as CompleteItemsAnswer["items"] }),
+    tabs: () => live_tabs,
+    all_tabs: () => live_tabs,
+    on_ready: () => {},
+  });
+  const session = create_session({
+    history: [],
+    parse: (text) => parse_command_line(lookup, text, { search_engines: [], containers: [] }),
+    complete: create_completer(lookup, COMMANDS, {}, { search_engines: [], containers: [] }, "normal", live),
+    has_param: () => true,
+    precheck: () => undefined,
+  });
+  session.open("anything ");
+  session.edit("anything gh rust");
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  session.source_ready();
+  const rows = session.get_rows();
+  assert.ok(rows.some((row) => row.tab?.id === 4) && rows.some((row) => row.tag === "bm"), "the tab and the bookmark also match");
+  assert.deepEqual(ref_of(rows[0]), { kind: "engine", engine: "github", query: "rust" });
+  assert.equal(session.get_selected(), 0);
+  const effect = session.run("cmdline.submit", undefined) as { invocation: { args: Record<string, string> } };
+  assert.deepEqual(decode_ref(effect.invocation.args[FINDER_PARAM] as string), { kind: "engine", engine: "github", query: "rust" });
+  assert.deepEqual(ref_of(rows.at(-1)), { kind: "web", query: "gh rust" });
+});
