@@ -76,7 +76,7 @@ const key_flow = create_key_flow({
     if (leaf.steps[0]?.invocation.id !== "register.paste") flush_typed_text();
     const run = () => run_leaf(leaf, count, repeat, send_to_background, page_mode.get_mode_, run_content_steps, show_toast);
     const ran = recording === undefined ? run() : last_leaf.then(run);
-    last_leaf = leaf.steps.some((step) => step.invocation.id === "hint.run") ? Promise.resolve() : ran;
+    if (!leaf.steps.some((step) => step.invocation.id === "hint.run")) last_leaf = ran;
     if (holds_keys_after(leaf, is_editable_element(document.activeElement))) bundles.api.hold_keys_until_(ran.then(() => []), true);
   },
   leave_insert_: () => {
