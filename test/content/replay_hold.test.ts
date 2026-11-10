@@ -51,7 +51,6 @@ function make_page() {
     hold_first_: flow.hold_first_,
     set_mode_: state.set_mode_,
     show_error_: (message) => events.push(`error ${message}`),
-    on_sink_missing_: () => {},
   });
   flow.set_matcher_(create_matcher(keymap));
   const sink = (mode: Mode): Sink => ({ on_token_: (token) => (events.push(`${mode} sink ${token}`), "handled"), exit: () => {} });
@@ -88,11 +87,15 @@ test("the keys held before a pick do not drain into it when the hint bundle's lo
   const page = make_page();
   const end = page.replay_hold();
   page.press("j");
-  page.state.set_mode_("hint");
+  // As `hint.run` does: the hints bundle enters hint mode once its sink is in.
+  void page.host.run_command_("hint.run", "hints", {}, "needs hints");
   // A key typed while the bundle loads waits too, because no sink is there to take it.
   page.press("a");
   assert.equal(page.loads.length, 1);
-  page.loads[0]!.finish(() => page.host.api.register_sink_("hint", page.sink("hint")));
+  page.loads[0]!.finish(() => {
+    page.host.api.register_sink_("hint", page.sink("hint"));
+    page.host.api.register_handler_("hint.run", () => page.host.api.set_mode_("hint"));
+  });
   await page.settle();
   assert.deepEqual(page.events, []);
   // Once the sink is in, a new key reaches it at once.

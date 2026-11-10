@@ -98,6 +98,11 @@ async function page_with(texts: string[]) {
         if (left_hint) sink?.exit();
       },
       get_mode: () => mode,
+      // The caret bundle's `caret.mode` sets the caret mode it is asked for.
+      run_command_: async (id: string, _name: string, args: Record<string, unknown>) => {
+        if (id === "caret.mode") win.desertfox_host.set_mode_(args.mode as string);
+        return { ok: true };
+      },
       show_toast_: () => {},
       hold_keys_until_: (handed_back: Promise<string[]>) => void handed_back.then((tokens) => held_key_batches.push(tokens)),
     },

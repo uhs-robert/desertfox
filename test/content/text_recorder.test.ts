@@ -176,7 +176,7 @@ test("an edit before the bundle loads is recorded, and a flush queued behind it 
   const host = create_bundle_host();
   let finish_load!: () => void;
   const load = new Promise<boolean>((resolve) => (finish_load = () => resolve(true)));
-  host.connect({ request_bundle_: () => load, on_idle_: () => undefined, hold_first_: () => undefined, show_error_: (message) => assert.fail(message), set_mode_: () => undefined, on_sink_missing_: () => undefined });
+  host.connect({ request_bundle_: () => load, on_idle_: () => undefined, hold_first_: () => undefined, show_error_: (message) => assert.fail(message), set_mode_: () => undefined });
   const { recorded, recorder } = setup();
   const pending = [
     host.run_command_("text.input", "text", { field_: as_element(field_a), before_: "" }, "", false),
@@ -196,7 +196,7 @@ test("a flush records the text the field held when it was asked for, not the tex
   const host = create_bundle_host();
   let finish_load!: () => void;
   const load = new Promise<boolean>((resolve) => (finish_load = () => resolve(true)));
-  host.connect({ request_bundle_: () => load, on_idle_: () => undefined, hold_first_: () => undefined, show_error_: (message) => assert.fail(message), set_mode_: () => undefined, on_sink_missing_: () => undefined });
+  host.connect({ request_bundle_: () => load, on_idle_: () => undefined, hold_first_: () => undefined, show_error_: (message) => assert.fail(message), set_mode_: () => undefined });
   const { recorded, recorder } = setup();
   const pending = [host.run_command_("text.input", "text", { field_: as_element(field_a), before_: "" }, "", false)];
   field_a.text = "ab";

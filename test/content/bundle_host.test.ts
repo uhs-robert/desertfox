@@ -59,14 +59,18 @@ function make_page() {
       if (id === "hint.run") void host.run_command_("hint.run", "hints", {}, "needs hints").then((outcome) => outcome.ok || errors.push(outcome.message));
       // The which-key bundle stands in for any bundle without a sink.
       else if (id === "page.align") void host.run_command_("page.align", "whichkey", {}, "needs page");
-      else if (id === "mode.set") state.set_mode_(args?.mode as Mode);
+      // As main.ts does: the mode.set handler answers the outcome, and the caller shows a failure.
+      else if (id === "mode.set") void Promise.resolve(host.set_mode_(args?.mode as Mode)).then((outcome) => outcome?.ok === false && errors.push(outcome.message));
       else if (id === "mode.escape") state.escape();
       else events.push(`run ${id}${count ?? ""}`);
     },
   });
+  // What main.ts sends the background as mode_changed, one per mode change.
+  const reports: Mode[] = [];
   state.listen((mode) => {
     flow.reset_sequence_();
     host.enter_mode_(mode);
+    reports.push(mode);
   });
   host.connect({
     request_bundle_: (name) => new Promise<boolean>((resolve) => loads.push({ name, finish: (loaded, register) => (register?.(), resolve(loaded)) })),
@@ -75,10 +79,6 @@ function make_page() {
     set_mode_: state.set_mode_,
     show_error_: (message) => errors.push(message),
     show_toast_: (message) => toasts.push(message),
-    on_sink_missing_: (mode) => {
-      events.push(`sink missing for ${mode}`);
-      state.set_mode_("normal");
-    },
   });
   flow.set_matcher_(create_matcher(keymap));
 
@@ -94,7 +94,12 @@ function make_page() {
     enter: () => events.push(`${mode} sink enter`),
     exit: (destination) => events.push(`${mode} sink exit to ${destination}`),
   });
-  return { state, host, flow, events, loads, errors, toasts, decisions, press, settle, recording_sink, set_in_field: (value: boolean) => (in_field = value) };
+  // What caret.js registers: a recording sink per caret mode, then the handler that sets a caret mode.
+  const register_caret = (modes: readonly Mode[] = ["caret"], handled: string[] = []) => {
+    for (const mode of modes) host.api.register_sink_(mode, recording_sink(mode, handled));
+    host.api.register_handler_("caret.mode", (args) => host.api.set_mode_(args.mode as Mode));
+  };
+  return { state, host, flow, events, loads, errors, reports, toasts, decisions, press, settle, recording_sink, register_caret, set_in_field: (value: boolean) => (in_field = value) };
 }
 
 test("keys typed while a bundle loads are held and replay in order once its sink is in", async () => {
@@ -158,16 +163,32 @@ test("a bundle that registers no handler refuses with the reason and the held ke
   assert.deepEqual(page.events, ["run log_x"]);
 });
 
-test("entering a sink mode loads its bundle, and a bundle without the sink returns the page to normal mode", async () => {
+test("entering a caret mode loads its bundle first, and a bundle that cannot set it leaves the page in normal mode", async () => {
   const page = make_page();
   page.press("V", "x", "j");
-  assert.equal(page.state.get_mode_(), "caret");
+  assert.equal(page.state.get_mode_(), "normal");
   assert.equal(page.loads[0]!.name, "caret");
   page.loads[0]!.finish(true);
   await page.settle();
   assert.equal(page.state.get_mode_(), "normal");
-  assert.deepEqual(page.events, ["sink missing for caret", "run log_x", "run log_j"]);
+  assert.deepEqual(page.errors, ["needs caret mode"]);
+  assert.deepEqual(page.events, ["run log_x", "run log_j"]);
   assert.equal(page.host.is_loading_(), false);
+});
+
+test("a caret mode whose bundle fails to load stays unset, the keys replay in normal mode, and the next try loads again", async () => {
+  const page = make_page();
+  page.press("V", "x");
+  page.loads[0]!.finish(false);
+  await page.settle();
+  assert.equal(page.state.get_mode_(), "normal");
+  assert.deepEqual(page.errors, ["DesertFox could not load caret"]);
+  assert.deepEqual(page.events, ["run log_x"]);
+  page.press("V");
+  page.loads[1]!.finish(true, () => page.register_caret());
+  await page.settle();
+  assert.equal(page.state.get_mode_(), "caret");
+  assert.deepEqual(page.events, ["run log_x", "caret sink enter"]);
 });
 
 test("entering a sink mode with the sink in place loads nothing, and leaving it calls exit", async () => {
@@ -184,16 +205,12 @@ test("entering a sink mode with the sink in place loads nothing, and leaving it 
 test("mode caret and visual share one bundle load", async () => {
   const page = make_page();
   page.press("V");
-  page.state.set_mode_("visual");
+  page.host.set_mode_("visual");
   assert.deepEqual(page.loads.map((load) => load.name), ["caret"]);
-  page.loads[0]!.finish(true, () => {
-    page.host.api.register_sink_("caret", page.recording_sink("caret", []));
-    page.host.api.register_sink_("visual", page.recording_sink("visual", []));
-  });
+  page.loads[0]!.finish(true, () => page.register_caret(["caret", "visual"]));
   await page.settle();
   assert.equal(page.state.get_mode_(), "visual");
-  // Caret mode was left before its sink existed, so only visual mode is entered.
-  assert.deepEqual(page.events, ["visual sink enter"]);
+  assert.deepEqual(page.events, ["caret sink enter", "caret sink exit to visual", "visual sink enter"]);
 });
 
 test("a leaving page mid-load strands nothing: the held keys are gone with the page and a new page starts clean", async () => {
@@ -297,7 +314,7 @@ test("a replayed key that starts another load keeps the keys behind it waiting f
   assert.deepEqual(page.events, ["hint.run", "run log_x"]);
   assert.equal(page.loads[1]?.name, "caret");
   assert.equal(page.host.is_loading_(), true);
-  page.loads[1]!.finish(true, () => page.host.api.register_sink_("caret", page.recording_sink("caret", ["j"])));
+  page.loads[1]!.finish(true, () => page.register_caret(["caret"], ["j"]));
   await page.settle();
   assert.deepEqual(page.events, ["hint.run", "run log_x", "caret sink enter", "caret sink j"]);
   assert.equal(page.state.get_mode_(), "caret");
@@ -358,7 +375,7 @@ test("a bundle enters hint mode with set_mode_, its sink gets the keys, and set_
 test("a sink is entered once when its bundle finishes loading, and keys held for the load see the entered mode", async () => {
   const page = make_page();
   page.press("V");
-  page.loads[0]!.finish(true, () => page.host.api.register_sink_("caret", page.recording_sink("caret", [])));
+  page.loads[0]!.finish(true, () => page.register_caret());
   await page.settle();
   assert.deepEqual(page.events, ["caret sink enter"]);
 });
@@ -411,7 +428,7 @@ test("a bundle shows a toast through the host, and the error path takes it when 
   assert.deepEqual(page.toasts, ["Copied x"]);
   const bare = create_bundle_host();
   const shown: string[] = [];
-  bare.connect({ request_bundle_: async () => true, on_idle_: () => {}, hold_first_: () => {}, show_error_: (message) => shown.push(message), set_mode_: () => {}, on_sink_missing_: () => {} });
+  bare.connect({ request_bundle_: async () => true, on_idle_: () => {}, hold_first_: () => {}, show_error_: (message) => shown.push(message), set_mode_: () => {} });
   bare.api.show_toast_("hello");
   assert.deepEqual(shown, ["hello"]);
 });
@@ -419,8 +436,8 @@ test("a bundle shows a toast through the host, and the error path takes it when 
 test("get_mode follows the mode the host entered", () => {
   const page = make_page();
   assert.equal(page.host.api.get_mode(), "normal");
-  page.state.set_mode_("caret");
-  assert.equal(page.host.api.get_mode(), "caret");
+  page.state.set_mode_("insert");
+  assert.equal(page.host.api.get_mode(), "insert");
   page.state.escape();
   assert.equal(page.host.api.get_mode(), "normal");
 });
@@ -685,12 +702,13 @@ test("keys the hints mode ignores pass at once while the hints bundle loads", ()
   assert.deepEqual(page.events, []);
 });
 
+// The page stays in normal mode until caret.js sets the caret mode, so the read-ahead runs in normal mode, as for hints. A held key that binds there (`j`) would hold every key after it.
 test("keys the caret modes never take pass at once while the caret bundle loads", () => {
   const page = make_page();
-  page.press("V", "j", "<Tab>", "<S-Tab>", "<PageDown>", "<Home>", "<End>", "<F5>", "<Escape>");
+  page.press("V", "q", "<Tab>", "<S-Tab>", "<PageDown>", "<Home>", "<End>", "<F5>", "<Escape>");
   assert.equal(page.loads[0]!.name, "caret");
   assert.deepEqual(page.decisions, [
-    "V:cancel", "j:cancel", "<Tab>:pass", "<S-Tab>:pass", "<PageDown>:pass", "<Home>:pass", "<End>:pass", "<F5>:pass", "<Escape>:cancel",
+    "V:cancel", "q:cancel", "<Tab>:pass", "<S-Tab>:pass", "<PageDown>:pass", "<Home>:pass", "<End>:pass", "<F5>:pass", "<Escape>:cancel",
   ]);
   assert.deepEqual(page.events, []);
 });
@@ -710,25 +728,25 @@ test("while the cmdline and hints bundles load together every key waits", () => 
   assert.deepEqual(page.decisions, ["<Tab>:cancel", "<F5>:cancel", "j:cancel"]);
 });
 
-// A mode change that is not a held key (focus entering a field, a set_mode message) reaches the host while the bundle loads.
+// A mode change that is not a held key (focus entering a field, a set_mode message, a bundle's set_mode_) reaches the host while the bundle loads.
 const sink_calls = (page: ReturnType<typeof make_page>) => page.events.filter((event) => event.includes("enter") || event.includes("exit"));
 
 test("leave and re-enter a sink mode before its first load ends: the sink sees enter, exit, enter", async () => {
   const page = make_page();
-  page.state.set_mode_("caret");
-  page.state.set_mode_("normal");
-  page.state.set_mode_("caret");
-  page.loads[0]!.finish(true, () => page.host.api.register_sink_("caret", page.recording_sink("caret", [])));
+  page.host.set_mode_("caret");
+  page.host.set_mode_("normal");
+  page.host.set_mode_("caret");
+  page.loads[0]!.finish(true, () => page.register_caret());
   await page.settle();
   assert.deepEqual(sink_calls(page), ["caret sink enter", "caret sink exit to normal", "caret sink enter"]);
 });
 
 test("a mode left after its sink registered but before the load answers still sees enter, exit, enter in key order", async () => {
   const page = make_page();
-  page.state.set_mode_("caret");
-  page.host.api.register_sink_("caret", page.recording_sink("caret", []));
-  page.state.set_mode_("normal");
-  page.state.set_mode_("caret");
+  page.host.set_mode_("caret");
+  page.register_caret();
+  page.host.set_mode_("normal");
+  page.host.set_mode_("caret");
   page.loads[0]!.finish(true);
   await page.settle();
   assert.deepEqual(sink_calls(page), ["caret sink enter", "caret sink exit to normal", "caret sink enter"]);
@@ -737,7 +755,94 @@ test("a mode left after its sink registered but before the load answers still se
 test("keys pressed in the same order are safe: the sink bundle load holds Escape and V, so the sink sees enter, exit, enter", async () => {
   const page = make_page();
   page.press("V", "<Escape>", "V");
-  page.loads[0]!.finish(true, () => page.host.api.register_sink_("caret", page.recording_sink("caret", [])));
+  page.loads[0]!.finish(true, () => page.register_caret());
   await page.settle();
   assert.deepEqual(sink_calls(page), ["caret sink enter", "caret sink exit to normal", "caret sink enter"]);
+});
+
+test("focus entering a field while caret.js loads waits behind the caret mode, so the page ends in insert mode", async () => {
+  const page = make_page();
+  page.press("V");
+  page.host.in_mode_order_(page.state.focus_entered_editable_);
+  assert.equal(page.state.get_mode_(), "normal");
+  page.loads[0]!.finish(true, () => page.register_caret());
+  await page.settle();
+  assert.equal(page.state.get_mode_(), "insert");
+  assert.deepEqual(sink_calls(page), ["caret sink enter", "caret sink exit to insert"]);
+  assert.deepEqual(page.reports, ["caret", "insert"]);
+});
+
+test("a set_mode message for normal mode while caret.js loads ends in normal mode, and a key typed after it replays in normal mode", async () => {
+  const page = make_page();
+  page.press("V");
+  page.host.api.set_mode_("normal");
+  page.press("x");
+  page.loads[0]!.finish(true, () => page.register_caret());
+  await page.settle();
+  assert.equal(page.state.get_mode_(), "normal");
+  assert.deepEqual(page.events, ["caret sink enter", "caret sink exit to normal", "run log_x"]);
+  assert.deepEqual(page.reports, ["caret", "normal"]);
+  assert.deepEqual(page.errors, []);
+});
+
+test("a bundle's set_mode_ into visual mode loads caret.js and enters visual mode once", async () => {
+  const page = make_page();
+  page.host.api.set_mode_("visual");
+  page.host.api.set_mode_("visual");
+  assert.equal(page.state.get_mode_(), "normal");
+  page.loads[0]!.finish(true, () => page.register_caret(["caret", "visual"]));
+  await page.settle();
+  assert.deepEqual(sink_calls(page), ["visual sink enter"]);
+  assert.deepEqual(page.reports, ["visual"]);
+});
+
+test("a hint pick into caret mode answers failed when caret.js does not load, and the page stays in normal mode", async () => {
+  const page = make_page();
+  const picked = page.host.api.run_command_("caret.mode", "caret", { mode: "caret" });
+  page.loads[0]!.finish(false);
+  assert.deepEqual(await picked, { ok: false, message: "DesertFox could not load caret" });
+  assert.equal(page.state.get_mode_(), "normal");
+  assert.deepEqual(page.reports, []);
+});
+
+test("changes made during the load replay in order with no exit before enter: caret, visual, normal, visual_line", async () => {
+  const page = make_page();
+  page.host.set_mode_("caret");
+  page.register_caret(["caret", "visual", "visual_line"]);
+  page.host.set_mode_("visual");
+  page.host.in_mode_order_(page.state.escape);
+  page.host.set_mode_("visual_line");
+  assert.deepEqual(page.reports, []);
+  page.loads[0]!.finish(true);
+  await page.settle();
+  assert.deepEqual(sink_calls(page), [
+    "caret sink enter", "caret sink exit to visual", "visual sink enter", "visual sink exit to normal", "visual_line sink enter",
+  ]);
+  assert.deepEqual(page.reports, ["caret", "visual", "normal", "visual_line"]);
+  // Once caret.js is in, a caret mode is set at once.
+  page.host.set_mode_("caret");
+  assert.equal(page.state.get_mode_(), "caret");
+  assert.equal(page.loads.length, 1);
+});
+
+test("a page that hides while caret.js loads still enters the caret mode once when the load answers", async () => {
+  const page = make_page();
+  page.press("V");
+  page.host.page_hidden_();
+  page.loads[0]!.finish(true, () => page.register_caret());
+  await page.settle();
+  assert.equal(page.state.get_mode_(), "caret");
+  assert.deepEqual(sink_calls(page), ["caret sink enter"]);
+  page.host.page_hidden_();
+  assert.deepEqual(sink_calls(page), ["caret sink enter", "caret sink exit to page_hidden"]);
+  assert.deepEqual(page.reports, ["caret", "normal"]);
+});
+
+test("with no caret load running a mode change runs at once", () => {
+  const page = make_page();
+  page.host.in_mode_order_(page.state.focus_entered_editable_);
+  assert.equal(page.state.get_mode_(), "insert");
+  void page.host.run_command_("page.align", "whichkey", {}, "needs page");
+  page.host.set_mode_("normal");
+  assert.equal(page.state.get_mode_(), "normal");
 });

@@ -6,6 +6,7 @@ import { last_blurred_element } from "./handlers/page.ts";
 import { end_flight, scroll_target } from "./handlers/scroll.ts";
 import { BUNDLE_FOR_MODE } from "../shared/bundles.ts";
 import type { BundleName } from "../shared/bundles.ts";
+import { is_caret_mode } from "../shared/command.ts";
 import type { Mode } from "../shared/command.ts";
 import type { Outcome } from "../shared/messages.ts";
 
@@ -51,8 +52,6 @@ export type BundleHostDeps = {
   // Without it a bundle's toast goes to show_error_.
   show_toast_?: (message: string) => void;
   set_mode_: (mode: Mode) => void;
-  // A mode with a sink ended its load without one, so nothing would take its keys.
-  on_sink_missing_: (mode: Mode) => void;
 };
 
 export const message_of = (error: unknown) => String((error as Error)?.message ?? error);
@@ -131,6 +130,18 @@ export function create_bundle_host() {
     return answer;
   }
 
+  // Runs a mode change now, or after caret.js has loaded if it is loading: a caret mode set meanwhile waits on that load, and a later change must not overtake it. A load for a caret command such as a search holds the changes too, for a few ms at most.
+  // Keys need no such wait, because key_flow holds them while a sink bundle loads.
+  function in_mode_order_(change: () => void): void {
+    if (unanswered.has("caret")) after_load("caret", change);
+    else change();
+  }
+
+  // A caret mode is set by the caret bundle's `caret.mode`, after its sink is in, as hint and cmdline mode are set by their own bundles. Its sink then sees enter and exit in the order of the changes, however slowly caret.js loads.
+  // Only a caret mode that waits on caret.js answers a promise, failed when caret.js does not load or registers no `caret.mode`.
+  const set_mode_ = (mode: Mode): void | Promise<Outcome> =>
+    is_caret_mode(mode) && !sinks.has(mode) ? run_command_("caret.mode", "caret", { mode }, "needs caret mode") : in_mode_order_(() => deps.set_mode_(mode));
+
   return {
     connect: (next: BundleHostDeps) => {
       deps = next;
@@ -142,21 +153,14 @@ export function create_bundle_host() {
     sink_of_: (mode: Mode) => sinks.get(mode),
     has_handler_: (command_id: string) => handlers.has(command_id),
     run_command_,
-    // Called on every mode change: the mode left exits its sink, and a mode with a sink loads its bundle and enters it.
+    set_mode_,
+    in_mode_order_,
+    // Called on every mode change: the mode left exits its sink and the mode entered enters its own. `set_mode_` sets a mode with a sink only once its sink is in.
     enter_mode_: (next: Mode): void => {
       const left = current_mode;
       current_mode = next;
       sinks.get(left)?.exit(next);
-      const name = BUNDLE_FOR_MODE[next];
-      if (!name) return;
-      const enter = () => {
-        if (current_mode !== next) return;
-        const sink = sinks.get(next);
-        if (sink) sink.enter?.();
-        else deps.on_sink_missing_(next);
-      };
-      if (sinks.has(next)) enter();
-      else after_load(name, enter);
+      sinks.get(next)?.enter?.();
     },
     // The tab or page went away. A mode with a sink ends and the page returns to normal mode.
     page_hidden_: (): void => {
@@ -171,7 +175,7 @@ export function create_bundle_host() {
     api: {
       register_sink_: (mode, sink) => void sinks.set(mode, sink),
       register_handler_: (command_id, handler) => void handlers.set(command_id, handler),
-      set_mode_: (mode) => deps.set_mode_(mode),
+      set_mode_,
       get_mode: () => current_mode,
       run_command_: (command_id, name, args) => run_command_(command_id, name, args, `${name} has no ${command_id}`),
       show_toast_: (message) => (deps.show_toast_ ?? deps.show_error_)(message),
