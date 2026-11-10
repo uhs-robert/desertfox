@@ -31,13 +31,13 @@ function keymap_with(normal: Record<string, unknown>, modifiers: NonNullable<Key
 }
 
 test("a modifier derives a variant of each key in its group, with its args added and the sibling label kept", () => {
-  const { compiled, warnings } = compile(keymap_with({}, { ";b": { action: "background", label: "Background tab" } }));
+  const { compiled, warnings } = compile(keymap_with({}, { ";B": { action: "background", label: "Background tab" } }));
   assert.deepEqual(warnings, []);
-  assert.deepEqual(args_at(compiled, ";", "b", "l"), { action: "background", filter: "links", text: "", rapid: false });
-  assert.deepEqual(args_at(compiled, ";", "b", "I")?.action, "background");
-  const variant = node_at(compiled, ";", "b", "l");
+  assert.deepEqual(args_at(compiled, ";", "B", "l"), { action: "background", filter: "links", text: "", rapid: false });
+  assert.deepEqual(args_at(compiled, ";", "B", "I")?.action, "background");
+  const variant = node_at(compiled, ";", "B", "l");
   assert.equal(variant?.kind === "leaf" && variant.label, "Link");
-  assert.equal((node_at(compiled, ";", "b") as TreeBranch).label, "Background tab");
+  assert.equal((node_at(compiled, ";", "B") as TreeBranch).label, "Background tab");
 });
 
 test("rapid on links backgrounds, and rapid on other filters clicks", () => {
@@ -48,9 +48,9 @@ test("rapid on links backgrounds, and rapid on other filters clicks", () => {
 });
 
 test("a key that sets its own action gets no variants, and no warning", () => {
-  const { compiled, warnings } = compile(keymap_with({ ";s": hint({ action: "focus", filter: "scrollable" }) }, { ";b": { action: "background" }, ";r": { rapid: true } }));
+  const { compiled, warnings } = compile(keymap_with({ ";s": hint({ action: "focus", filter: "scrollable" }) }, { ";B": { action: "background" }, ";r": { rapid: true } }));
   assert.deepEqual(warnings, []);
-  assert.equal(node_at(compiled, ";", "b", "s"), undefined);
+  assert.equal(node_at(compiled, ";", "B", "s"), undefined);
   assert.equal(node_at(compiled, ";", "r", "s"), undefined);
   assert.ok(node_at(compiled, ";", "s"));
 });
@@ -74,24 +74,24 @@ test("a user key at the modifier key wins over the modifier, with a warning", ()
 });
 
 test("a user key under the modifier wins over the variant, with no warning", () => {
-  const { compiled, warnings } = compile(keymap_with({ ";bl": hint({ filter: "images" }) }, { ";b": { action: "background" } }));
+  const { compiled, warnings } = compile(keymap_with({ ";Bl": hint({ filter: "images" }) }, { ";B": { action: "background" } }));
   assert.deepEqual(warnings, []);
-  assert.equal(args_at(compiled, ";", "b", "l")?.filter, "images");
-  assert.equal(args_at(compiled, ";", "b", "I")?.action, "background");
+  assert.equal(args_at(compiled, ";", "B", "l")?.filter, "images");
+  assert.equal(args_at(compiled, ";", "B", "I")?.action, "background");
 });
 
 test("a null under a modifier removes that variant and leaves its siblings", () => {
-  const { compiled, warnings } = compile(keymap_with({ ";bl": null }, { ";b": { action: "background" } }));
+  const { compiled, warnings } = compile(keymap_with({ ";Bl": null }, { ";B": { action: "background" } }));
   assert.deepEqual(warnings, []);
-  assert.equal(node_at(compiled, ";", "b", "l"), undefined);
-  assert.ok(node_at(compiled, ";", "b", "I"));
+  assert.equal(node_at(compiled, ";", "B", "l"), undefined);
+  assert.ok(node_at(compiled, ";", "B", "I"));
 });
 
 test("a null on a modifier key drops that modifier and all its variants", () => {
-  const { compiled, warnings } = compile(keymap_with({ ";r": null }, { ";r": { rapid: true }, ";b": { action: "background" } }));
+  const { compiled, warnings } = compile(keymap_with({ ";r": null }, { ";r": { rapid: true }, ";B": { action: "background" } }));
   assert.deepEqual(warnings, []);
   assert.equal(node_at(compiled, ";", "r"), undefined);
-  assert.ok(node_at(compiled, ";", "b", "l"));
+  assert.ok(node_at(compiled, ";", "B", "l"));
 });
 
 test("a key whose required param comes from a prompt still gets variants", () => {
@@ -106,22 +106,22 @@ test("a key whose required param comes from a prompt still gets variants", () =>
 test("the default modifiers give the owner's keys and no stacked or refused ones", () => {
   const { compiled, warnings } = compile(DEFAULT_KEYMAP);
   assert.deepEqual(warnings, []);
-  for (const keys of [["r", "l"], ["b", "l"], ["w", "l"], ["h", "a"], ["x", "a"], ["2", "a"], ["b", "I"]]) assert.ok(node_at(compiled, ";", ...keys), keys.join(""));
+  for (const keys of [["r", "l"], ["B", "l"], ["W", "l"], ["h", "a"], ["x", "a"], ["2", "a"], ["B", "I"]]) assert.ok(node_at(compiled, ";", ...keys), keys.join(""));
   assert.equal(args_at(compiled, ";", "h", "a")?.action, "hover");
   assert.equal(args_at(compiled, ";", "2", "a")?.action, "double_click");
   assert.equal(node_at(compiled, ";", "2", "l"), undefined);
   // Keys that set their own action, the cmdline keys and stacked modifiers do not exist.
-  for (const keys of [["b", "B"], ["b", "t"], ["h", "s"], ["r", "v"], ["r", "V"], ["b", ";"], ["r", "b"], ["t"], ["R"]]) assert.equal(node_at(compiled, ";", ...keys), undefined, keys.join(""));
+  for (const keys of [["B", "b"], ["B", "t"], ["h", "s"], ["r", "v"], ["r", "V"], ["B", ";"], ["r", "B"], ["t"], ["R"]]) assert.equal(node_at(compiled, ";", ...keys), undefined, keys.join(""));
 });
 
 test("the ;o modifier derives an inspect variant of the filter keys and none of the keys with their own action", () => {
   const { compiled, warnings } = compile(DEFAULT_KEYMAP);
   assert.deepEqual(warnings, []);
   assert.equal((node_at(compiled, ";", "o") as TreeBranch).label, "Inspect");
-  for (const [key, filter] of [["a", "all"], ["l", "links"], ["p", "prose"], ["I", "images"], ["i", "inputs"], ["B", "buttons"]] as const) {
+  for (const [key, filter] of [["a", "all"], ["l", "links"], ["p", "prose"], ["I", "images"], ["i", "inputs"], ["b", "buttons"]] as const) {
     assert.deepEqual([args_at(compiled, ";", "o", key)?.action, args_at(compiled, ";", "o", key)?.filter], ["inspect", filter], key);
   }
-  for (const keys of [["o", "s"], ["o", "v"], ["o", ";"], ["o", "o"], ["o", "y"], ["o", "b"]]) assert.equal(node_at(compiled, ";", ...keys), undefined, keys.join(""));
+  for (const keys of [["o", "s"], ["o", "v"], ["o", ";"], ["o", "o"], ["o", "y"], ["o", "B"]]) assert.equal(node_at(compiled, ";", ...keys), undefined, keys.join(""));
 });
 
 test("the yank keys are eight plain leaves, each with a fixed action and filter", () => {
