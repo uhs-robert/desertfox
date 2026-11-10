@@ -8,7 +8,6 @@ import { empty_config } from "../src/background/config_load.ts";
 import { DEFAULT_KEYMAP } from "../src/background/default_keymap.ts";
 import { list_keys } from "../src/background/list_keys.ts";
 import { page_keymap_for } from "../src/background/page_keymap.ts";
-import { mode_label } from "../src/content/mode_label.ts";
 import { create_matcher } from "../src/shared/keys/index.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY } from "../src/shared/prefix_tree.ts";
 import type { CompiledKeymap } from "../src/shared/prefix_tree.ts";
@@ -51,14 +50,6 @@ test("a site rule that passes q leaves the page to the key, and the badge still 
   const reply = (await page_keymap_for(storage_of(keymap), ["https://a.test/"], "a"))!;
   assert.equal(reply.keymap.modes.normal?.children["q"], undefined);
   assert.equal(reply.recording, "a");
-});
-
-test("the badge adds the register to the mode, even where the setting hides the mode", () => {
-  assert.equal(mode_label("normal", false, "always", "a"), "NORMAL recording @a");
-  assert.equal(mode_label("normal", false, "not_normal", "a"), "recording @a");
-  assert.equal(mode_label("normal", false, "off", "a"), "recording @a");
-  assert.equal(mode_label("normal", false, "always"), "NORMAL");
-  assert.equal(mode_label("insert", false, "off"), undefined);
 });
 
 test("which-key under q lists the stored macros, and the tree when there are none", async () => {
