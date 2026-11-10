@@ -78,6 +78,17 @@ export const SETTING_COMPLETION: readonly SettingCompletion[] = [
     ]
   },
   {
+    "name": "ui",
+    "settable": true,
+    "is_toggle": false,
+    "is_list": false,
+    "expectation": "\"browser\" or \"quickshell\"",
+    "values": [
+      "browser",
+      "quickshell"
+    ]
+  },
+  {
     "name": "palette",
     "settable": true,
     "is_toggle": false,

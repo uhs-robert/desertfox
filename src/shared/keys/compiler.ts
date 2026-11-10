@@ -344,6 +344,7 @@ export function compile_keymap(keymap: KeymapConfig, settings: Partial<Settings>
     modes,
     ...(site_rules.length > 0 ? { site_rules } : {}),
     mode_indicator: settings.mode_indicator ?? DEFAULT_SETTINGS.mode_indicator,
+    ui: settings.ui ?? DEFAULT_SETTINGS.ui,
     which_key_border: settings.which_key_border ?? DEFAULT_SETTINGS.which_key_border,
     which_key_delay_ms: settings.which_key_delay_ms ?? DEFAULT_SETTINGS.which_key_delay_ms,
   };

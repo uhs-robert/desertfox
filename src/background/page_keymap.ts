@@ -5,6 +5,7 @@ import { ANY_KEY } from "../shared/prefix_tree.ts";
 import type { CompiledKeymap, PageKeymap, SiteRule, TreeBranch, TreeLeaf } from "../shared/prefix_tree.ts";
 import { frees_of, prune_tree } from "../shared/keys/prune_tree.ts";
 import { matches_any_address } from "../shared/match_pattern.ts";
+import { badge_hidden } from "./display_ui.ts";
 
 type KeymapStorage = Pick<typeof browser.storage.local, "get">;
 
@@ -43,7 +44,9 @@ async function trimmed_keymap_for(storage: KeymapStorage, addresses: readonly (s
   const stored = await storage.get(COMPILED_KEYMAP_STORAGE_KEY);
   const keymap = current_keymap(stored[COMPILED_KEYMAP_STORAGE_KEY] as CompiledKeymap | undefined);
   if (keymap === undefined) return undefined;
-  const { site_rules: _, ...keymap_without_rules } = keymap;
+  const { site_rules: _, ui: _ui, ...stored_keymap } = keymap;
+  // The display host draws the badge, so the page draws none.
+  const keymap_without_rules = badge_hidden() ? { ...stored_keymap, mode_indicator: "off" as const } : stored_keymap;
   const rule = site_rule_for(keymap, addresses);
   if (rule === undefined) return { keymap: keymap_without_rules, all_off: false };
   if ("all_off" in rule) return { keymap: keymap_without_rules, all_off: true };

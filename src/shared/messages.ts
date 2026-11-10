@@ -50,7 +50,11 @@ export type ListKeys = {
 };
 
 // What the panel shows: the chain of group names that leads here (empty when there is no panel) and the keys that can follow.
-export type WhichKeyPanel = { title: string[]; rows: WhichKeyRow[]; border: WhichKeyBorder };
+// `external` is set when the display host shows the panel, so the page must not draw it.
+export type WhichKeyPanel = { title: string[]; rows: WhichKeyRow[]; border: WhichKeyBorder; external?: true };
+
+// The page took down a panel the display host shows.
+export type WhichKeyHidden = { type: "whichkey_hidden" };
 
 // One key that can follow a prefix. A key that starts a longer sequence has `more` and no description.
 export type WhichKeyRow = {
@@ -356,7 +360,7 @@ export type ImportSessions = { type: "import_sessions"; text: string };
 
 export type PageToBackground = ChangeSetting | ListSettings | ToolbarRequest | PreviewConfigImport | CommitConfigImport | ExportConfig | ListSnippets | RemoveSnippet | ExportSessions | ImportSessions;
 
-export type ContentToBackground = RunRequest | ModeChanged | LeaveTabInsert | LoadBundle | ListKeys | IssueCmdlineTicket | OpenCmdline | RecordCmdline | CompleteItems | TabRowsActionRequest | OpenHelp | RecordStep | ReadKeymap | FindScan | ImageAction | InspectPick | RegisterRequest | MarkRequest;
+export type ContentToBackground = RunRequest | ModeChanged | LeaveTabInsert | LoadBundle | ListKeys | WhichKeyHidden | IssueCmdlineTicket | OpenCmdline | RecordCmdline | CompleteItems | TabRowsActionRequest | OpenHelp | RecordStep | ReadKeymap | FindScan | ImageAction | InspectPick | RegisterRequest | MarkRequest;
 
 // How a command ended. Done is `{ ok: true }`. A handler that returns nothing is done, and one that throws is failed.
 // Cancelled means the user left a waiting step (Escape, an unrelated key, a page change), so the rest of a sequence does not run and nothing is shown.

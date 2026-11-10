@@ -4,7 +4,7 @@
 import type { BundleName } from "./bundles.ts";
 import type { CountBehavior, RunsIn } from "./command.ts";
 import type { BoundInvocation } from "./invocation.ts";
-import type { ModeIndicator, WhichKeyBorder } from "./config.ts";
+import type { ModeIndicator, Ui, WhichKeyBorder } from "./config.ts";
 import type { KeymapMode } from "./keymap.ts";
 
 export const COMPILED_KEYMAP_STORAGE_KEY = "desertfox_compiled_keymap";
@@ -65,6 +65,8 @@ export type CompiledKeymap = {
   which_key_delay_ms: number;
   // A tree stored before this setting has none, and the panel keeps square corners.
   which_key_border?: WhichKeyBorder;
+  // A tree stored before this setting has none, which means the browser.
+  ui?: Ui;
 };
 
 // What the background sends a page: the keymap without `site_rules`, its normal tree already trimmed when the page's rule lists keys.

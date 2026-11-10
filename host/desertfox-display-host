@@ -1,0 +1,290 @@
+#!/usr/bin/env python3
+"""Display host for the DesertFox Firefox extension.
+
+Firefox starts it over `connectNative` and keeps it alive while the extension holds the port. Frames are a 4-byte
+native-endian length and UTF-8 JSON, both ways. The host answers once, with {"ready": true, "host_version": 1}, when it
+starts. It takes three verbs and no others:
+
+  {"verb": "mode", "id", "label", "tab_id", "window_id", "fullscreen", "private"}
+  {"verb": "whichkey_show", "title", "border", "rows"}
+  {"verb": "whichkey_hide"}
+
+It keeps the latest of each and writes one snapshot, $XDG_RUNTIME_DIR/desertfox/state.json, for a desktop shell to read
+(the shape is in host/README.md). Every write goes to a temp file in the same folder and is renamed over the state file,
+so a reader never sees a partial file. Stdout carries only protocol bytes. The host never runs anything it is sent.
+
+A newer host (one with a later process start time) owns the file. An older host that is still alive stops writing when
+it sees that, and on exit it deletes the file only when the file still names its own pid and start.
+"""
+import json
+import os
+import signal
+import struct
+import sys
+import tempfile
+
+HOST_VERSION = 1
+STATE_VERSION = 1
+# A message above this size is skipped, not parsed. A real panel is a few KiB.
+MAX_MESSAGE_BYTES = 1024 * 1024
+# A frame that claims more than this cannot be skipped in reasonable time, so the host ends instead.
+MAX_SKIPPED_BYTES = 256 * 1024 * 1024
+MAX_ROWS = 500
+MAX_TITLE_PARTS = 32
+MAX_TEXT_CHARS = 512
+
+
+class StopHost(Exception):
+    """Raised to end the main loop cleanly: EOF, SIGTERM or a frame the host cannot skip."""
+
+
+def log(text):
+    sys.stderr.write("desertfox-display-host: %s\n" % text)
+    sys.stderr.flush()
+
+
+def state_path():
+    runtime_dir = os.environ.get("XDG_RUNTIME_DIR", "")
+    if not os.path.isabs(runtime_dir):
+        raise OSError("XDG_RUNTIME_DIR is not set to an absolute path")
+    return os.path.join(runtime_dir, "desertfox", "state.json")
+
+
+def process_start(pid):
+    """Field 22 of /proc/<pid>/stat as a string, the same probe the shell reader uses. The name field may hold spaces and
+    parentheses, so the fields count from the last closing parenthesis."""
+    with open("/proc/%d/stat" % pid, "rb") as stat_file:
+        text = stat_file.read().decode("utf-8", "replace")
+    return text[text.rindex(")") + 2 :].split()[19]
+
+
+def read_state(path):
+    try:
+        with open(path, "r", encoding="utf-8") as state_file:
+            state = json.load(state_file)
+    except (OSError, ValueError):
+        return None
+    return state if isinstance(state, dict) else None
+
+
+def owner_of(state):
+    """(pid, start) the file names as its host, or None."""
+    host = state.get("host") if isinstance(state, dict) else None
+    if not isinstance(host, dict) or not isinstance(host.get("pid"), int) or not isinstance(host.get("start"), str):
+        return None
+    return host["pid"], host["start"]
+
+
+def start_is_newer(start, other):
+    try:
+        return int(start) > int(other)
+    except ValueError:
+        return False
+
+
+def is_text(value, limit=MAX_TEXT_CHARS):
+    return isinstance(value, str) and len(value) <= limit
+
+
+def is_int(value):
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
+def checked_mode(message):
+    if not (is_text(message.get("id"), 64) and is_text(message.get("label"), 64)):
+        return None
+    if not all(is_int(message.get(name)) for name in ("tab_id", "window_id")):
+        return None
+    if not all(isinstance(message.get(name), bool) for name in ("fullscreen", "private")):
+        return None
+    return {"id": message["id"], "label": message["label"], "tab_id": message["tab_id"]}, {
+        "window_id": message["window_id"],
+        "fullscreen": message["fullscreen"],
+        "private": message["private"],
+    }
+
+
+def checked_whichkey(message):
+    title, border, rows = message.get("title"), message.get("border"), message.get("rows")
+    if not isinstance(title, list) or len(title) > MAX_TITLE_PARTS or not all(is_text(part) for part in title):
+        return None
+    if not is_text(border, 32) or not isinstance(rows, list) or len(rows) > MAX_ROWS:
+        return None
+    clean_rows = []
+    for row in rows:
+        if not isinstance(row, dict) or not all(is_text(row.get(name)) for name in ("keys", "command", "description")):
+            return None
+        if not isinstance(row.get("more"), bool):
+            return None
+        clean_rows.append({"keys": row["keys"], "command": row["command"], "description": row["description"], "more": row["more"]})
+    return {"title": title, "border": border, "rows": clean_rows}
+
+
+class DisplayState:
+    def __init__(self, path, pid, start):
+        self.path = path
+        self.pid = pid
+        self.start = start
+        self.seq = 0
+        self.whichkey_seq = 0
+        self.firefox = None
+        self.mode = None
+        self.whichkey = None
+        # Set once a newer host owns the file. This host then writes and deletes nothing.
+        self.superseded = False
+
+    def apply(self, message):
+        """Takes one decoded message. Returns True when the file must be written."""
+        verb = message.get("verb") if isinstance(message, dict) else None
+        if verb == "mode":
+            checked = checked_mode(message)
+            if checked is None:
+                return False
+            self.mode, self.firefox = checked
+            return True
+        if verb == "whichkey_show":
+            checked = checked_whichkey(message)
+            if checked is None:
+                return False
+            self.whichkey_seq += 1
+            self.whichkey = dict(checked, seq=self.whichkey_seq)
+            return True
+        if verb == "whichkey_hide":
+            changed = self.whichkey is not None
+            self.whichkey = None
+            return changed
+        return False
+
+    def snapshot(self, seq):
+        return {
+            "version": STATE_VERSION,
+            "seq": seq,
+            "host": {"pid": self.pid, "start": self.start},
+            "firefox": self.firefox,
+            "mode": self.mode,
+            "whichkey": self.whichkey,
+        }
+
+    def write(self):
+        # Nothing is written before the first mode, because a reader needs `firefox` and `mode` to be objects.
+        if self.superseded or self.mode is None:
+            return
+        existing = read_state(self.path)
+        owner = owner_of(existing)
+        if owner is not None and owner != (self.pid, self.start) and start_is_newer(owner[1], self.start):
+            self.superseded = True
+            return
+        # The sequence continues from whatever the file holds, so a reader never sees it go back across a host change.
+        previous_seq = existing.get("seq") if existing else None
+        self.seq = max(self.seq, previous_seq if is_int(previous_seq) else 0) + 1
+        write_atomically(self.path, self.snapshot(self.seq))
+
+    def remove_own_file(self):
+        if self.superseded:
+            return
+        if owner_of(read_state(self.path)) != (self.pid, self.start):
+            return
+        try:
+            os.unlink(self.path)
+        except OSError:
+            pass
+
+
+def write_atomically(path, state):
+    directory = os.path.dirname(path)
+    os.makedirs(directory, mode=0o700, exist_ok=True)
+    descriptor, temp_path = tempfile.mkstemp(prefix=".state.", suffix=".tmp", dir=directory)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as temp_file:
+            json.dump(state, temp_file, separators=(",", ":"))
+        os.replace(temp_path, path)
+    except BaseException:
+        try:
+            os.unlink(temp_path)
+        except OSError:
+            pass
+        raise
+
+
+def read_exactly(stream, count):
+    data = b""
+    while len(data) < count:
+        chunk = stream.read(count - len(data))
+        if not chunk:
+            raise StopHost()
+        data += chunk
+    return data
+
+
+def skip(stream, count):
+    while count > 0:
+        chunk = stream.read(min(count, 65536))
+        if not chunk:
+            raise StopHost()
+        count -= len(chunk)
+
+
+def read_message(stream):
+    """The next decoded message, None for a frame that is too large or not JSON. Raises StopHost at end of input."""
+    (length,) = struct.unpack("=I", read_exactly(stream, 4))
+    if length > MAX_MESSAGE_BYTES:
+        if length > MAX_SKIPPED_BYTES:
+            raise StopHost()
+        skip(stream, length)
+        log("skipped a message of %d bytes" % length)
+        return None
+    try:
+        return json.loads(read_exactly(stream, length).decode("utf-8"))
+    except (ValueError, RecursionError):
+        log("skipped a message that is not JSON")
+        return None
+
+
+def send_message(stream, message):
+    payload = json.dumps(message, separators=(",", ":")).encode("utf-8")
+    stream.write(struct.pack("=I", len(payload)) + payload)
+    stream.flush()
+
+
+def serve(stdin, stdout, state):
+    send_message(stdout, {"ready": True, "host_version": HOST_VERSION})
+    while True:
+        message = read_message(stdin)
+        if message is None:
+            continue
+        try:
+            if state.apply(message):
+                state.write()
+        except OSError as error:
+            log("could not write the state file: %s" % error)
+
+
+def raise_stop(_signal_number, _frame):
+    raise StopHost()
+
+
+def main():
+    try:
+        path = state_path()
+        pid = os.getpid()
+        state = DisplayState(path, pid, process_start(pid))
+    except (OSError, ValueError, IndexError) as error:
+        log("cannot start: %s" % error)
+        return 1
+    signal.signal(signal.SIGTERM, raise_stop)
+    signal.signal(signal.SIGINT, raise_stop)
+    try:
+        serve(sys.stdin.buffer, sys.stdout.buffer, state)
+    except StopHost:
+        pass
+    except BrokenPipeError:
+        pass
+    finally:
+        # A second signal during cleanup must not skip the delete.
+        signal.signal(signal.SIGTERM, signal.SIG_IGN)
+        state.remove_own_file()
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

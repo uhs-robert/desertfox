@@ -13,6 +13,7 @@ export const SETTING_DOCS: Record<SettingName, string> = {
   hint_letters: "The letters hint labels use, each once, at least two",
   site_rules: "Per-site key rules. The first row whose site (a match pattern) fits the page wins. pass lists keys that go to the page, only lists the only keys that stay on besides <C-v> and <S-Escape>, and a row with neither turns every normal-mode key off and starts the page in ignore mode. A row may not set both pass and only",
   mode_indicator: "When the mode badge shows: always (NORMAL too), not_normal, or off",
+  ui: "Where the mode badge and which-key panel show: browser (in the page) or quickshell (a desktop shell through the display host)",
   palette: "Theme name: themes/<name>.toml in the config directory first, then a built-in theme. Light or dark follows the system theme",
   light_intensity: "Which of the five light sets of an Oasis theme the light variant uses, 1 (lightest) to 5",
   search_prefixes: "Prefixes of the keys made from search_keys: here searches in this tab, tab in a new tab",
