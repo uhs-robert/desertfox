@@ -10,6 +10,7 @@ import "../commands/register.ts";
 import "../commands/macro.ts";
 import "../commands/browser.ts";
 import "../commands/zoom.ts";
+import "../commands/media.ts";
 import "../commands/bookmark.ts";
 import "../commands/history.ts";
 import "../commands/page.ts";

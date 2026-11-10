@@ -89,6 +89,7 @@ export const DEFAULT_KEYMAP: KeymapConfig = {
     "S/": "Site search in new tab",
     c: "Reopen in container",
     C: "Open in container",
+    a: "Media",
   },
   normal: {
     h: { id: "scroll.pixels", args: { dx: -50 }, label: "Scroll left" },
@@ -147,6 +148,19 @@ export const DEFAULT_KEYMAP: KeymapConfig = {
     u: { id: "tab.undo_close" },
     "<A-p>": { id: "tab.pin" },
     "<A-m>": { id: "tab.mute" },
+
+    // The a group works on the page's video and audio, in every frame. `A` types the rest of a media command.
+    am: { id: "tab.mute" },
+    ap: { id: "media.act", args: { action: "play_pause" }, label: "Play or pause" },
+    as: { id: "media.act", args: { action: "speed", value: "up" }, label: "Speed up" },
+    aS: { id: "media.act", args: { action: "speed", value: "down" }, label: "Slow down" },
+    ar: { id: "media.act", args: { action: "speed", value: "reset" }, label: "Reset speed" },
+    av: { id: "media.act", args: { action: "volume", value: "up" }, label: "Volume up" },
+    aV: { id: "media.act", args: { action: "volume", value: "down" }, label: "Volume down" },
+    al: { id: "media.act", args: { action: "seek", value: "up" }, label: "Seek forward" },
+    ah: { id: "media.act", args: { action: "seek", value: "down" }, label: "Seek back" },
+    aP: { id: "media.act", args: { action: "pip" }, label: "Toggle picture-in-picture" },
+    A: { id: "cmdline.open", args: { text: "media " }, label: "Media command" },
 
     // The t group works on tabs. Plain `t` is only a prefix.
     tt: { id: "open.url", args: { where: "tab" }, prompt: { param: "url" } },

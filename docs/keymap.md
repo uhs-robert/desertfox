@@ -24,7 +24,7 @@ A note "(prompts)" means the binding sets a `prompt` for a param, so the command
 
 <!-- BEGIN generated -->
 
-bound: 327 (normal 190, hint 2, cmdline 19, caret 35, visual 37, visual_line 38, insert 2, ignore 1, browser 3) | later: 3 | dropped: 7
+bound: 338 (normal 201, hint 2, cmdline 19, caret 35, visual 37, visual_line 38, insert 2, ignore 1, browser 3) | later: 3 | dropped: 7
 
 ### normal
 
@@ -82,6 +82,17 @@ bound: 327 (normal 190, hint 2, cmdline 19, caret 35, visual 37, visual_line 38,
 | `u` | bound | `tab.undo_close` | Reopen closed tab |  |
 | `<A-p>` | bound | `tab.pin` | Toggle pin |  |
 | `<A-m>` | bound | `tab.mute` | Toggle mute |  |
+| `am` | bound | `tab.mute` | Toggle mute |  |
+| `ap` | bound | `media play_pause` | Play or pause |  |
+| `as` | bound | `media speed up` | Speed up |  |
+| `aS` | bound | `media speed down` | Slow down |  |
+| `ar` | bound | `media speed reset` | Reset speed |  |
+| `av` | bound | `media volume up` | Volume up |  |
+| `aV` | bound | `media volume down` | Volume down |  |
+| `al` | bound | `media seek up` | Seek forward |  |
+| `ah` | bound | `media seek down` | Seek back |  |
+| `aP` | bound | `media pip` | Toggle picture-in-picture |  |
+| `A` | bound | `cmdline.open --text='media '` | Media command |  |
 | `tt` | bound | `open --tab` (prompts) | Open URL |  |
 | `tT` | bound | `tab` (prompts) | Switch tab |  |
 | `ts` | bound | `session.save` (prompts) | Save tab session |  |
@@ -258,6 +269,7 @@ Which-key group names:
 - `S/`: Site search in new tab
 - `c`: Reopen in container
 - `C`: Open in container
+- `a`: Media
 
 ### hint
 
