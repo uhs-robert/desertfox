@@ -33,6 +33,7 @@ export const area_rules = [
   // The last search sits in register `/`, and `:registers` completes through the command line.
   { globs: ["src/commands/register.ts", "src/commands/register_param.ts", "src/background/register_store.ts", "src/shared/register_names.ts"], areas: ["find", "cmdline"] },
   { globs: ["src/commands/session.ts", "src/background/session_store.ts", "src/background/sessions_transfer.ts"], areas: ["cmdline", "tabs"] },
+  { globs: ["src/commands/reload_clear.ts"], areas: ["keys", "cmdline"] },
   {
     globs: ["src/cmdline/**", "src/commands/{cmdline,history,bookmark,open_target}.ts", "src/background/{cmdline_service,complete_items,bookmark_title}.ts", "src/shared/{setting_completion,score}.ts"],
     areas: ["cmdline"],
