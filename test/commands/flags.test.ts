@@ -26,6 +26,7 @@ test("typed names are the dotted id except the family words and one-word command
     "hint.run=hint",
     "history.open=history",
     "mark.list=marks",
+    "media.act=media",
     "mode.set=mode",
     "open.anything=anything",
     "open.clipboard=paste",

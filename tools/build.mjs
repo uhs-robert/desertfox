@@ -14,6 +14,7 @@ const MAX_BYTES = {
   "ui.js": 8 * 1024,
   "page.js": 4 * 1024,
   "text.js": 4 * 1024,
+  "media.js": 4 * 1024,
   // 52 KB: the verbatim subject needs a lazy tokenizer and its completion path. The key-capture matcher and the registry validator ship in this lazy bundle, and the registers and macros pieces add to them.
   "cmdline_page.js": 52 * 1024,
   "find_worker.js": 2 * 1024,
@@ -44,6 +45,8 @@ const minified_entries = {
   ui: "src/content/ui/main.ts",
   page: "src/content/page/main.ts",
   text: "src/content/text/main.ts",
+  // Not loaded by the content script: the background injects it into every frame for each media command (background/media_actions.ts).
+  media: "src/content/media/main.ts",
   cmdline_page: "src/cmdline/page.ts",
   // Not an injected bundle: the background starts it as a Worker for each regex page search (find_scan.ts).
   find_worker: "src/background/find_worker.ts",

@@ -13,6 +13,7 @@ Types and constants that fix the hand-off formats between the background page, t
 - `mark_names.ts`: the local mark keys (`a-z`, and `'` or the backtick for the previous position), the limits of the mark store and the one rule that cuts the hash off a page address.
 - `mark_text.ts`: the text of a mark or quickmark in a list (address without scheme, scroll offset), which the which-key rows and the command line list share.
 - `quickmark_names.ts`: the quickmark key rule (one letter or digit), the address cap and the `QuickmarkTable` type.
+- `media.ts`: the messages between the background and the `media` bundle, the media actions and the step rules of speed, volume and seek.
 - `bundles.ts`: the names of the scripts loaded on first use, and which mode loads which.
 - `registry/`: the command registry, the one validator and the command line parser. See its README.
 - `engines/`: search engines as URL templates with slots, and the tree resolver. Outside the barrel. See its README.
