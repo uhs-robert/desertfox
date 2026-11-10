@@ -191,9 +191,10 @@ test("an edit before the bundle loads is recorded, and a flush queued behind it 
   assert.deepEqual(recorded, [[text_step("go!")]]);
 });
 
-test("a field the content script read as secret is not recorded, though it reads as text by the time the bundle runs", () => {
-  const { recorded, recorder } = setup();
-  assert.equal(recorder.on_input(as_element(field_a), "", true), false);
+test("a field that was a password at the edit is not recorded, though it reads as text by the time the bundle runs", () => {
+  const recorded: Invocation[][] = [];
+  const recorder = create_text_recorder({ is_secret: (_field, type) => type === "password", take_entry: () => undefined, read_text: () => field_a.text, record: (steps) => void recorded.push(steps) });
+  assert.equal(recorder.on_input(as_element(field_a), "", "password"), false);
   field_a.text = "pw";
   recorder.flush();
   assert.deepEqual(recorded, []);

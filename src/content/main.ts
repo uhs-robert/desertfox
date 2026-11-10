@@ -24,8 +24,6 @@ import { run_leaf } from "./run_leaf.ts";
 import { read_context_source } from "./context.ts";
 import { focus_page_content, start_content_once } from "./handlers/focus.ts";
 import { read_field_text } from "./text/field_text.ts";
-import { is_secret_field } from "./text/secret_field.ts";
-import { create_session_flag } from "./text/session_flag.ts";
 import { blur_focused_element } from "./handlers/page.ts";
 
 // Until the tree is read the setting is unknown, and the default applies.
@@ -102,25 +100,28 @@ const cancelled_keys = create_cancelled_keys();
 
 // The recorder bundle loads on the first edit in insert mode. Each call waits on that load in order, so the first edit after `gi` is not lost.
 // `beforeinput` fires ahead of the edit, so the field's text then is what the recorder compares the end of the session with.
-const session_flag = create_session_flag();
+// The generation of the open insert session, or 0 when none is open. The recorder's answer to an edit comes after the bundle loads, and an answer from an older session must not close a newer one.
+let open_session = 0;
+let sessions_started = 0;
 
 function on_beforeinput(event: Event): void {
   if (!extension_context_alive()) return stop_listening();
   // Only the first edit of a session is sent, because the recorder keeps that one's text. A flush or a focusout ends the session.
-  if (session_flag.is_open_() || !event.isTrusted || page_mode.get_mode_() !== "insert") return;
+  if (open_session || !event.isTrusted || page_mode.get_mode_() !== "insert") return;
   const field = deepest_focused_element();
   if (!field) return;
-  const generation = session_flag.open_();
-  // The field may change type while the bundle loads, so its status at this edit goes along.
-  void bundles.run_command_("text.input", "text", { field_: field, before_: read_field_text(field), secret_: is_secret_field(field) }, "", false).then((outcome) => {
-    if (outcome.ok && outcome.cancelled) session_flag.close_if_current_(generation);
+  const generation = (open_session = ++sessions_started);
+  // The field may change type while the bundle loads, so the facts that make it secret at this edit go along.
+  const { type, autocomplete } = field as HTMLInputElement;
+  void bundles.run_command_("text.input", "text", { field_: field, before_: read_field_text(field), type_: type, autocomplete_: autocomplete }, "", false).then((outcome) => {
+    if (outcome.ok && outcome.cancelled && open_session === generation) open_session = 0;
   });
 }
 
 // A command typed from the field never blurs it, so the text step is stored before the command is sent, and `.` finds the command last.
 function flush_typed_text(): void {
-  if (!session_flag.is_open_()) return;
-  session_flag.close_();
+  if (!open_session) return;
+  open_session = 0;
   void bundles.run_command_("text.flush", "text", {}, "", false);
 }
 
@@ -149,7 +150,7 @@ function on_keyup(event: KeyboardEvent): void {
 
 const on_focusin = (event: Event) => follow_focus(true, event);
 const on_focusout = (event: Event) => {
-  session_flag.close_();
+  open_session = 0;
   follow_focus(false, event);
 };
 
