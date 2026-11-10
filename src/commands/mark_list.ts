@@ -51,7 +51,7 @@ const MARK_PARAM_NAME = "mark";
 define("mark.list", {
   name: "marks",
   label: "List marks",
-  intent: "Pick a mark of this page, or a global mark, from the list and jump to it.",
+  intent: "Pick a mark from the list and jump to it.",
   params: [{ name: MARK_PARAM_NAME, type: "string", rest: true, main: true, values: { from: "marks" }, pattern: MARK_ADD_KEY.source, description: "Jump to this mark, a-z or A-Z." }],
   runs_in: "background",
   repeatable: false,

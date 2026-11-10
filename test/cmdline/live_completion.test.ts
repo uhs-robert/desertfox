@@ -4,7 +4,7 @@ import { create_live_source } from "../../src/cmdline/completion/live.ts";
 import { create_completer } from "../../src/cmdline/completion/sources.ts";
 import { create_session } from "../../src/cmdline/session.ts";
 import type { CommandMeta } from "../../src/shared/command.ts";
-import type { BookmarkItem, EngineItem, HeadingItem, HistoryItems, OpenItems, SessionItem, WindowItem, TabItem } from "../../src/shared/messages.ts";
+import type { BookmarkItem, BookmarkRows, EngineItem, HeadingItem, HistoryItems, OpenItems, SessionItem, WindowItem, TabItem } from "../../src/shared/messages.ts";
 import { parse_command_line } from "../../src/shared/registry/index.ts";
 import { create_word_lookup } from "../../src/cmdline/word_lookup.ts";
 
@@ -18,6 +18,7 @@ const COMMANDS: CommandMeta[] = [
     intent: "Open bookmark.",
     params: [
       { name: "bookmark", type: "string", rest: true, main: true, values: { from: "bookmarks" } },
+      { name: "folder", type: "string", optional: true, values: { from: "folders" } },
       { name: "where", type: "enum", values: ["here", "tab"], default: "here", short: { tab: "t" }, description: { tab: "Open in a new tab." } },
     ],
   },
@@ -64,11 +65,14 @@ const TABS: TabItem[] = [
   { id: 13, number: 3, title: "GitHub Gist", url: "https://gist.github.com/" },
   { id: 14, number: 4, title: "Bob's \"page\"", url: "https://bob.test/" },
 ];
-const BOOKMARKS: BookmarkItem[] = Array.from({ length: 30 }, (_, index) => ({ title: `Mark ${index}`, url: `https://m${index}.test/` }));
+const BOOKMARKS: BookmarkRows = {
+  rows: Array.from({ length: 30 }, (_, index) => ({ title: `Mark ${index}`, url: `https://m${index}.test/`, folders: [index % 3 === 0 ? 1 : 0] })),
+  folders: ["Bookmarks Toolbar", "Bookmarks Toolbar / Work", "Other Bookmarks / Work"],
+};
 
 // The background answers when the test says so.
 function make(containers: { name: string; cookie_store_id: string }[] = STORES, history: string[] = []) {
-  const asks: { kind: string; answer: (items: TabItem[] | BookmarkItem[] | EngineItem[] | HistoryItems | OpenItems | WindowItem[] | HeadingItem[] | SessionItem[]) => void }[] = [];
+  const asks: { kind: string; answer: (items: TabItem[] | BookmarkRows | BookmarkItem[] | EngineItem[] | HistoryItems | OpenItems | WindowItem[] | HeadingItem[] | SessionItem[]) => void }[] = [];
   // The tab model has no reply to await. The first read is its cue to connect, and `answer` is the snapshot arriving.
   let tab_items: TabItem[] | undefined;
   let tabs_asked = false;
@@ -151,6 +155,48 @@ test("bookmarks show the 20 newest on an empty word, rank every bookmark for a t
   assert.deepEqual(names(session), ["Mark 27"]);
   tab_key(session);
   assert.equal(session.get_text(), "bookmark -t https://m27.test/ ");
+});
+
+const tag_of = (session: ReturnType<typeof make>["session"], name: string) => session.get_rows().find((row) => row.name === name)?.tag;
+
+test("bookmark --folder= keeps the rows in that folder and below, and a row shows its newest folder with +N for more", async () => {
+  const { session, asks, settle } = make();
+  session.edit("bookmark --folder=\"Bookmarks Toolbar\" ");
+  asks[0]!.answer({
+    rows: [
+      { title: "Both", url: "https://both.test/", folders: [2, 1] },
+      { title: "Work", url: "https://work.test/", folders: [1] },
+      { title: "Plain", url: "https://plain.test/", folders: [0] },
+      { title: "Elsewhere", url: "https://else.test/", folders: [2] },
+    ],
+    folders: BOOKMARKS.folders,
+  });
+  await settle();
+  // The exact path picks "Bookmarks Toolbar", which holds "Bookmarks Toolbar / Work" too.
+  assert.deepEqual(names(session), ["Both", "Work", "Plain"]);
+  // Under the filter the tag names the newest folder inside it, so "Both" shows Work, not the newer Other Bookmarks / Work.
+  assert.equal(tag_of(session, "Both"), "Work +1");
+  assert.equal(tag_of(session, "Work"), "Work");
+  assert.equal(tag_of(session, "Plain"), "Bookmarks Toolbar");
+  session.edit("bookmark --folder=zzzz ");
+  assert.deepEqual(names(session), []);
+  session.edit("bookmark --folder=work ");
+  assert.deepEqual(names(session), [], "a tie lists no row");
+  session.edit("bookmark --folder=\"Other Bookmarks / Work\" Both");
+  assert.deepEqual(names(session), ["Both"]);
+});
+
+test("bookmark --folder= with text that matches a folder and its subfolder keeps the folder, and its tag skips copies outside it", async () => {
+  const { session, asks, settle } = make();
+  session.edit("bookmark --folder=toolbar ");
+  asks[0]!.answer({
+    rows: [{ title: "Both", url: "https://both.test/", folders: [2, 0, 1] }, { title: "Sub", url: "https://sub.test/", folders: [1] }],
+    folders: BOOKMARKS.folders,
+  });
+  await settle();
+  assert.deepEqual(names(session), ["Both", "Sub"]);
+  assert.equal(tag_of(session, "Both"), "Bookmarks Toolbar +2");
+  assert.equal(tag_of(session, "Sub"), "Work");
 });
 
 test("Escape while the fetch is pending closes the line, and the reply that lands after the close changes nothing", async () => {

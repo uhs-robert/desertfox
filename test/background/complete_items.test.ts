@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { bookmark_items, create_complete_items, engine_items, flatten_bookmarks, folder_items, folder_nodes, history_items, listed_favicon, listed_tabs, listed_windows, read_container_identities, read_containers } from "../../src/background/complete_items.ts";
+import { bookmark_items, bookmark_rows, create_complete_items, engine_items, flatten_bookmarks, folder_items, folder_nodes, history_items, listed_favicon, listed_tabs, listed_windows, read_container_identities, read_containers } from "../../src/background/complete_items.ts";
 import type { TabActionDeps } from "../../src/background/tab_actions.ts";
 import type { SessionItem } from "../../src/shared/messages.ts";
 import type { DiscardDeps } from "../../src/background/tab_discard.ts";
@@ -51,6 +51,10 @@ function make({ openers = [1, 2], tabs = ALL_TABS, bookmarks = [] as BookmarkNod
       return sessions;
     },
     folders: async () => folders,
+    bookmark_view: async () => {
+      if (fail) throw new Error("no bookmarks");
+      return { rows: bookmark_rows(bookmarks, folders), folders };
+    },
     registers: async (is_private) => {
       if (fail) throw new Error("no registers");
       return is_private ? registers.private : registers.normal;
@@ -141,12 +145,12 @@ test("bookmarks drop folders and separators, merge equal addresses and keep the 
     { title: "https://b.test/", url: "https://b.test/" },
   ]);
   const { service } = make({ bookmarks });
-  assert.deepEqual(((await service.answer("bookmarks", PRIVATE_LINE))?.items as unknown[]).length, 2);
+  assert.deepEqual(((await service.answer("bookmarks", PRIVATE_LINE))?.items as { rows: unknown[] }).rows.length, 2);
 });
 
 test("a failed browser call gives an empty list, not an error", async () => {
   const { service } = make({ fail: true });
-  assert.deepEqual(await service.answer("bookmarks", NORMAL_LINE), { items: [] });
+  assert.deepEqual(await service.answer("bookmarks", NORMAL_LINE), { items: { rows: [], folders: [] } });
 });
 
 test("a tab that navigates or closes while the lookup runs gets nothing", async () => {
@@ -160,10 +164,11 @@ test("a tab that navigates or closes while the lookup runs gets nothing", async 
     quickmarks: async () => [],
     saved_quickmarks: async () => [],
     folders: async () => [],
-    all_bookmarks: async () => {
+    bookmark_view: async () => {
       opened.delete(1);
-      return [];
+      return { rows: { rows: [], folders: [] }, folders: [] };
     },
+    all_bookmarks: async () => [],
     is_opener: async (tab_id) => opened.has(tab_id),
     containers: async () => new Map(),
     previous_tab: async () => undefined,
@@ -303,6 +308,7 @@ test("the opener is checked before and after the history fetch", async () => {
     quickmarks: async () => [],
     saved_quickmarks: async () => [],
     folders: async () => [],
+    bookmark_view: async () => ({ rows: { rows: [], folders: [] }, folders: [] }),
     all_bookmarks: async () => [],
     is_opener: async (tab_id) => opened.has(tab_id),
     containers: async () => new Map(),
@@ -333,6 +339,7 @@ test("a failed history read leaves the bookmarks, and a failed bookmark read lea
       quickmarks: async () => [],
       saved_quickmarks: async () => [],
       folders: async () => [],
+      bookmark_view: async () => ({ rows: { rows: [], folders: [] }, folders: [] }),
       all_bookmarks: async () => {
         if (failing === "bookmarks") throw new Error("no bookmarks");
         return MARKS;
@@ -395,6 +402,7 @@ test("a history read that finishes after the line closed gives nothing", async (
     quickmarks: async () => [],
     saved_quickmarks: async () => [],
     folders: async () => [],
+    bookmark_view: async () => ({ rows: { rows: [], folders: [] }, folders: [] }),
     all_bookmarks: async () => [],
     is_opener: async (tab_id) => opened.has(tab_id),
     containers: async () => new Map(),
@@ -778,4 +786,32 @@ test("the marks list reads the page of the line's tab and follows its privacy", 
   assert.deepEqual(await service.answer("saved_quickmarks", PRIVATE_LINE), { items: [{ name: "p", description: "private.test" }] });
   assert.deepEqual(await make({ fail: true }).service.answer("marks", NORMAL_LINE), { items: [] });
   assert.equal(await make({ openers: [] }).service.answer("quickmarks", NORMAL_LINE), undefined);
+});
+
+test("bookmark_rows lists each address once with its folders newest copy first, and the folder paths once", () => {
+  const folders: FolderNode[] = [
+    { id: "a", path: "A", managed: false, bookmarks: [{ url: "https://x.test/", dateAdded: 1 }, { url: "https://y.test/", dateAdded: 5 }] },
+    { id: "b", path: "A / B", managed: false, bookmarks: [{ url: "https://x.test/", dateAdded: 9, title: "X" }] },
+  ];
+  const nodes: BookmarkNode[] = [{ url: "https://x.test/", dateAdded: 9, title: "X" }, { url: "https://y.test/", dateAdded: 5, title: "Y" }, { url: "https://x.test/", dateAdded: 1 }];
+  assert.deepEqual(bookmark_rows(nodes, folders), {
+    rows: [{ title: "X", url: "https://x.test/", folders: [1, 0] }, { title: "Y", url: "https://y.test/", folders: [0] }],
+    folders: ["A", "A / B"],
+  });
+});
+
+test("the bookmarks kind answers rows with folder indexes", async () => {
+  const folders: FolderNode[] = [{ id: "a", path: "A", managed: false, bookmarks: [{ url: "https://x.test/", dateAdded: 1 }] }];
+  const { service } = make({ bookmarks: [{ type: "bookmark", url: "https://x.test/", title: "X", dateAdded: 1 }], folders });
+  assert.deepEqual((await service.answer("bookmarks", NORMAL_LINE))?.items, { rows: [{ title: "X", url: "https://x.test/", folders: [0] }], folders: ["A"] });
+});
+
+test("bookmark_rows orders each row's folders newest copy first and lists a folder once", () => {
+  const folders: FolderNode[] = [
+    { id: "a", path: "A", managed: false, bookmarks: [{ url: "https://x.test/", dateAdded: 5 }] },
+    { id: "b", path: "B", managed: false, bookmarks: [{ url: "https://x.test/", dateAdded: 9 }, { url: "https://x.test/", dateAdded: 1 }] },
+    { id: "c", path: "C", managed: false, bookmarks: [{ url: "https://x.test/", dateAdded: 7 }] },
+  ];
+  const { rows } = bookmark_rows([{ type: "bookmark", url: "https://x.test/", title: "X", dateAdded: 9 }], folders);
+  assert.deepEqual(rows, [{ title: "X", url: "https://x.test/", folders: [1, 2, 0] }]);
 });
