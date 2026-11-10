@@ -47,7 +47,7 @@ export function create_quickmark_store(deps: QuickmarkStoreDeps) {
         const { [key]: gone, ...kept } = await read(area, storage_key);
         if (gone === undefined) {
           const in_normal_window = is_private && (await read(deps.local(), QUICKMARK_STORAGE_KEY))[key] !== undefined;
-          throw new RuntimeRefusal(in_normal_window ? `Quickmark ${key} is saved in a normal window, delete it there` : `Quickmark ${key} is not saved, an entry of quickmarks.toml changes in the file`);
+          throw new RuntimeRefusal(in_normal_window ? `Quickmark ${key} is saved in a normal window, delete it there` : `Quickmark ${key} is not saved, its key comes from quickmarks.toml and must be removed there`);
         }
         await area.set({ [storage_key]: kept });
       }),

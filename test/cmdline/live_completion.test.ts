@@ -36,8 +36,8 @@ const COMMANDS: CommandMeta[] = [
 ];
 COMMANDS.push({ id: "heading.go", name: "heading", label: "Go to heading", intent: "Go to a heading.", params: [{ name: "heading", type: "string", rest: true, main: true, values: { from: "headings" } }] });
 COMMANDS.push({ id: "session.open", name: "session.open", label: "Open tab session", intent: "Open a session.", params: [{ name: "name", type: "string", rest: true, main: true, values: { from: "sessions" } }] });
-COMMANDS.push({ id: "mark.list", name: "marks", label: "List marks", intent: "List marks.", params: [{ name: "mark", type: "string", rest: true, main: true, optional: true, values: { from: "marks" } }] });
-COMMANDS.push({ id: "quickmark.list", name: "quickmarks", label: "List quickmarks", intent: "List quickmarks.", params: [{ name: "quickmark", type: "string", rest: true, main: true, optional: true, values: { from: "quickmarks" } }] });
+COMMANDS.push({ id: "mark.list", name: "marks", label: "List marks", intent: "List marks.", params: [{ name: "mark", type: "string", rest: true, main: true, values: { from: "marks" } }] });
+COMMANDS.push({ id: "quickmark.list", name: "quickmarks", label: "List quickmarks", intent: "List quickmarks.", params: [{ name: "quickmark", type: "string", rest: true, main: true, values: { from: "quickmarks" } }] });
 COMMANDS.push({ id: "register.list", name: "registers", label: "List registers", intent: "List registers.", params: [{ name: "name", type: "string", rest: true, main: true, optional: true, values: { from: "registers" } }] });
 COMMANDS.push({ id: "bookmark.move", name: "bookmark.move", label: "Move bookmark", intent: "Move.", params: [{ name: "folder", type: "string", rest: true, main: true, values: { from: "folders" } }, { name: "bookmark", type: "string", optional: true, values: { from: "bookmarks" } }] });
 COMMANDS.push({ id: "history.open", name: "history", label: "Open history entry", intent: "Open history.", params: [{ name: "entry", type: "string", rest: true, main: true, values: { from: "history" } }] });
