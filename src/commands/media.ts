@@ -20,7 +20,7 @@ define("media.act", {
   name: "media",
   label: "Control media",
   intent:
-    "Control the video and audio of the page. Play or pause, change the speed, volume or position, or toggle picture-in-picture. It acts on every playing video or audio in every frame, else on the largest visible video. For speed, volume and seek, up and down move one step (0.25x, 10% or 10 s), reset goes back to 1x, 100% or the start, a signed number moves by it and a bare number sets it. Without a value it shows the current one. A count prefix repeats an up or down step.",
+    "Control the video and audio of the page. Play or pause, change the speed, volume or position, or toggle picture-in-picture. It acts on the video and audio that play with sound in every frame, else on all that play, else on the largest visible video. For speed, volume and seek, up and down move one step (0.25x, 10% or 10 s), reset goes back to 1x, 100% or the start, a signed number moves by it and a bare number sets it. Speed stays within 0.25x to 4x, volume within 0 to 100 and seek within the media: a value outside is set to the nearest end. Without a value it shows the current one. A count prefix repeats an up or down step.",
   params: [
     // A strict string, not an enum: the line reads a required strict string from the first bare word and leaves `value` the subject, so `media speed 1.5` parses.
     { name: "action", type: "string", values: MEDIA_ACTIONS, strict: true },

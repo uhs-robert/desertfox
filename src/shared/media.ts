@@ -12,15 +12,15 @@ export const SPEED_RULE: LevelRule = { step: 0.25, min: 0.25, max: 4, reset: 1 }
 export const VOLUME_RULE: LevelRule = { step: 10, min: 0, max: 100, reset: 100 };
 export const SEEK_RULE: LevelRule = { step: 10, min: 0, max: Infinity, reset: 0 };
 
-// `playing` acts on every element that plays in the frame. `largest` acts on the one largest visible video, else the first media element.
-export type MediaTarget = "playing" | "largest";
+// `audible` acts on every element that plays with sound in the frame, `playing` on every element that plays. `largest` acts on the one largest visible video, else the first media element.
+export type MediaTarget = "audible" | "playing" | "largest";
 
 export type MediaRequest =
   | { type: "media_scan" }
   | { type: "media_apply"; target: MediaTarget; action: MediaAction; value: string | undefined; times: number };
 
 // One frame's media. The areas are in CSS pixels inside the frame's own viewport, videos only.
-export type MediaScan = { count: number; playing: number; video_area: number; playing_video_area: number; pip_open: boolean };
+export type MediaScan = { count: number; playing: number; audible: number; video_area: number; playing_video_area: number; audible_video_area: number; pip_open: boolean };
 
 // The first acted-on element after the change. `duration` is null for a live stream.
 export type MediaState = { rate: number; volume: number; muted: boolean; position: number; duration: number | null; paused: boolean; pip: boolean };

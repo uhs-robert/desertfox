@@ -51,16 +51,20 @@ function largest_by(scans: FrameScan[], measure: (scan: FrameScan) => number): F
   return best;
 }
 
-// Every frame with playing media acts on all of it, so two players that play together move together. With nothing playing, the largest visible video acts, else the first frame with any media. Picture-in-picture takes one video: the open one, else the largest playing, else the largest visible.
+// Media that plays with sound acts first, then any playing media, so a muted autoplay preview yields to the video the user hears. Every frame with such media acts on all of it, so two players that play together move together. With nothing playing, the largest visible video acts, else the first frame with any media. Picture-in-picture takes one video: the open one, else the largest audible, else the largest playing, else the largest visible.
 export function choose_frames(scans: FrameScan[], action: MediaAction): FramePlan[] {
   if (action === "pip") {
     const open = scans.find((scan) => scan.pip_open);
     if (open) return [{ frame_id: open.frame_id, target: "largest" }];
+    const audible = largest_by(scans, (scan) => scan.audible_video_area);
+    if (audible) return [{ frame_id: audible.frame_id, target: "audible" }];
     const playing = largest_by(scans, (scan) => scan.playing_video_area);
     if (playing) return [{ frame_id: playing.frame_id, target: "playing" }];
     const shown = largest_by(scans, (scan) => scan.video_area);
     return shown ? [{ frame_id: shown.frame_id, target: "largest" }] : [];
   }
+  const audible = scans.filter((scan) => scan.audible > 0);
+  if (audible.length > 0) return audible.map((scan) => ({ frame_id: scan.frame_id, target: "audible" }));
   const playing = scans.filter((scan) => scan.playing > 0);
   if (playing.length > 0) return playing.map((scan) => ({ frame_id: scan.frame_id, target: "playing" }));
   const shown = largest_by(scans, (scan) => scan.video_area) ?? scans.find((scan) => scan.count > 0);

@@ -159,8 +159,8 @@ Checked by hand on Linux on 2026-11-10: `ps` saves a PDF, and replace and cancel
 
 Measured in the key test (`test/key/p23_media_keys.mjs`, Firefox 160), with the key pressed in the top frame and the command routed through the background, which injects `media.js` into each frame and messages it:
 
-- `play()` with sound works in a frame from another origin. Firefox's autoplay rule reads the sticky activation of the top page, and the key press gives it that.
-- `requestPictureInPicture()` works on a video in the top frame, so the key's transient activation outlasts the round trip through the background. In a frame from another origin it rejects with `NotAllowedError`: the activation stays in the frame that took the key. The command refuses with "This frame allows picture-in-picture only from a click in it".
+- `play()` with sound works in a frame from another origin. Firefox's autoplay rule reads the sticky activation of the top page, which any earlier key press there gives. In the test the harness's own probe key gives it before `ap`, so this case does not show that the `ap` press alone would.
+- `requestPictureInPicture()` works on a video in the top frame, where the last key press is the `aP` the extension handles, so that key's transient activation outlasts the round trip through the background. In a frame from another origin it rejects with `NotAllowedError`: the activation stays in the frame that took the key. The command refuses with "This frame allows picture-in-picture only from a click in it".
 - `requestPictureInPicture()` rejects with `InvalidStateError` on a `<video>` with sound and no picture.
 - `tabs.executeScript` into a `sandbox` frame without `allow-scripts` rejects with "Missing host permission for the tab or frames". An `about:blank` frame takes the script with `matchAboutBlank`.
 - In the nested test session the picture-in-picture window takes the keyboard focus. A desktop compositor may not.

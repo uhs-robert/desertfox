@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { apply_in_frame, media_in, next_level, scan_frame, type FrameView, type Player } from "../../src/content/media/frame_media.ts";
+import { apply_in_frame, media_in, next_level, scan_frame, visible_area, type FrameView, type Player } from "../../src/content/media/frame_media.ts";
 import { SEEK_RULE, SPEED_RULE, VOLUME_RULE, type MediaRequest } from "../../src/shared/media.ts";
 
 type Apply = Extract<MediaRequest, { type: "media_apply" }>;
@@ -72,7 +72,7 @@ test("the scan counts playing media and the largest video areas, audio aside", (
     { player: ended_video, area: 2000 },
     { player: playing_audio, area: 0 },
   ]);
-  assert.deepEqual(scan_frame(view), { count: 4, playing: 2, video_area: 2000, playing_video_area: 100, pip_open: false });
+  assert.deepEqual(scan_frame(view), { count: 4, playing: 2, audible: 2, video_area: 2000, playing_video_area: 100, audible_video_area: 100, pip_open: false });
 });
 
 test("a playing target changes every playing element and leaves the paused ones", async () => {
@@ -86,6 +86,48 @@ test("a playing target changes every playing element and leaves the paused ones"
   assert.deepEqual([one.playbackRate, two.playbackRate, idle.playbackRate], [1.5, 2.5, 1]);
   assert.equal(result.acted, 2);
   assert.equal(result.state?.rate, 1.5);
+});
+
+test("an audible target changes the element with sound and leaves a muted one that also plays", async () => {
+  const [muted, heard, silent] = [player({ paused: false, muted: true }), player({ paused: false }), player({ paused: false, volume: 0 })];
+  const view = frame([
+    { player: muted, area: 900 },
+    { player: heard, area: 10 },
+    { player: silent, area: 10 },
+  ]);
+  assert.equal(scan_frame(view).audible, 1);
+  const result = await apply_in_frame(view, apply({ target: "audible", action: "play_pause" }));
+  assert.deepEqual([muted.calls, heard.calls, silent.calls], [[], ["pause"], []]);
+  assert.equal(result.acted, 1);
+});
+
+test("a muted preview that plays beside a paused main video takes the playing target, so the main video is not touched", async () => {
+  const [preview, main] = [player({ paused: false, muted: true }), player()];
+  const view = frame([
+    { player: preview, area: 100 },
+    { player: main, area: 5000 },
+  ]);
+  assert.deepEqual(scan_frame(view), { count: 2, playing: 1, audible: 0, video_area: 5000, playing_video_area: 100, audible_video_area: 0, pip_open: false });
+});
+
+test("speed, volume and seek with no value write nothing, since even an equal currentTime seeks", async () => {
+  const writes: string[] = [];
+  const video = player({ volume: 0.333, currentTime: 12 });
+  const watched = new Proxy(video, { set: (target, key, value) => (writes.push(String(key)), Reflect.set(target, key, value)) });
+  const view = frame([{ player: watched, area: 5 }]);
+  for (const action of ["speed", "volume", "seek"] as const) {
+    const result = await apply_in_frame(view, apply({ action, value: undefined }));
+    assert.equal(result.acted, 1);
+  }
+  assert.deepEqual(writes, []);
+  assert.equal(video.volume, 0.333);
+});
+
+test("a play() that has not settled within the grace counts as started, and a quick refusal still refuses", async () => {
+  const pending = player({ play: function (this: Player) { this.paused = false; return new Promise<void>(() => {}); } });
+  const result = await apply_in_frame(frame([{ player: pending, area: 5 }]), apply({ action: "play_pause" }));
+  assert.equal(result.acted, 1);
+  assert.equal(result.state?.paused, false);
 });
 
 test("the largest target is found again at apply time, so a video removed since the scan is not touched", async () => {
@@ -140,6 +182,22 @@ test("picture-in-picture takes the largest video, never audio, and the next pres
   const closed = await apply_in_frame(view, apply({ action: "pip" }));
   assert.equal(pip.element, null);
   assert.equal(closed.state?.pip, false);
+});
+
+test("picture-in-picture reads as on when the document names the shadow host, not the video", async () => {
+  const host = { localName: "x-player" };
+  const pip = { element: null as unknown };
+  const video = player({ requestPictureInPicture: async () => void (pip.element = host) });
+  const opened = await apply_in_frame(frame([{ player: video, area: 50 }], pip), apply({ action: "pip" }));
+  assert.equal(opened.state?.pip, true);
+});
+
+test("the visible area clips the box to the viewport and counts a hidden element as 0", () => {
+  const element = (box: { left: number; top: number; right: number; bottom: number }, visible = true) => ({ getBoundingClientRect: () => box, checkVisibility: () => visible }) as unknown as Element;
+  assert.equal(visible_area(element({ left: 0, top: 0, right: 100, bottom: 50 }), 800, 600), 5000);
+  assert.equal(visible_area(element({ left: -50, top: 580, right: 50, bottom: 640 }), 800, 600), 50 * 20);
+  assert.equal(visible_area(element({ left: 0, top: 700, right: 100, bottom: 800 }), 800, 600), 0);
+  assert.equal(visible_area(element({ left: 0, top: 0, right: 100, bottom: 50 }, false), 800, 600), 0);
 });
 
 test("a second injection into the same frame adds no second listener", async () => {

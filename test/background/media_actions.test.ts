@@ -5,7 +5,7 @@ import type { CommandContext } from "../../src/shared/command.ts";
 import type { MediaRequest, MediaResult, MediaScan, MediaState } from "../../src/shared/media.ts";
 
 const ctx: CommandContext = { tab_id: 4, window_id: 1, frame_id: 0, mode: "normal" };
-const empty: MediaScan = { count: 0, playing: 0, video_area: 0, playing_video_area: 0, pip_open: false };
+const empty: MediaScan = { count: 0, playing: 0, audible: 0, video_area: 0, playing_video_area: 0, audible_video_area: 0, pip_open: false };
 const scan = (frame_id: number, fields: Partial<MediaScan>): FrameScan => ({ ...empty, count: 1, ...fields, frame_id });
 const state: MediaState = { rate: 1.25, volume: 0.6, muted: false, position: 85, duration: 220, paused: false, pip: false };
 
@@ -15,6 +15,13 @@ test("every frame with playing media acts, even beside a larger idle video", () 
     { frame_id: 3, target: "playing" },
     { frame_id: 5, target: "playing" },
   ]);
+});
+
+test("media with sound acts before a muted preview that also plays, in another frame or the same", () => {
+  const preview_beside_main = [scan(0, { playing: 1, playing_video_area: 90_000, video_area: 90_000 }), scan(4, { playing: 1, audible: 1, playing_video_area: 400, audible_video_area: 400 })];
+  assert.deepEqual(choose_frames(preview_beside_main, "speed"), [{ frame_id: 4, target: "audible" }]);
+  assert.deepEqual(choose_frames(preview_beside_main, "pip"), [{ frame_id: 4, target: "audible" }]);
+  assert.deepEqual(choose_frames([scan(0, { playing: 2, audible: 1 })], "volume"), [{ frame_id: 0, target: "audible" }]);
 });
 
 test("with nothing playing the largest visible video acts, else the first frame with media", () => {
