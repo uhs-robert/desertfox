@@ -290,6 +290,7 @@ function check_rules(param: ParamDef, at: string, fail: Fail): void {
       fail(`${at}.pattern`, `${JSON.stringify(param.pattern)} is not a regular expression`);
     }
   }
+  if (param.format !== undefined && (param.type !== "string" || param.format !== "url")) fail(`${at}.format`, 'only a string param takes the format "url"');
   if (param.value_of !== undefined && param.type !== "string") fail(`${at}.value_of`, "only a string param can hold a setting value");
   if (param.strict !== undefined && (param.type !== "string" || !static_values(param))) {
     fail(`${at}.strict`, "only a string param with a fixed value list can be strict");
@@ -342,6 +343,7 @@ function value_problem(param: ParamDef, value: unknown): string | null {
   }
   if (param.type === "int" && param.min !== undefined && (value as number) < param.min) return `${JSON.stringify(value)} is below the minimum ${param.min}`;
   if ((param.type === "string" || param.type === "key") && param.pattern !== undefined && !new RegExp(param.pattern).test(value as string)) return `${JSON.stringify(value)} does not match ${param.pattern}`;
+  if (param.type === "string" && param.format === "url" && !URL.canParse(value as string)) return `${JSON.stringify(value)} is not an address`;
   if (param.type === "string" && param.strict && list && !list.includes(value as string)) return `${JSON.stringify(value)} is not one of ${list.join(", ")}`;
   return null;
 }

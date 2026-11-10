@@ -24,11 +24,6 @@ export type BookmarkDeps = {
 
 export const pick_bookmark = (bookmarks: readonly BookmarkItem[], text: string): BookmarkItem => pick_entry(bookmarks, text, "bookmark");
 
-// Firefox throws a raw error for text that is no address, so the handler refuses it first.
-function require_address(url: string): void {
-  if (!URL.canParse(url)) throw new RuntimeRefusal(`"${url}" is not an address`);
-}
-
 export function make_bookmark_handlers(deps: BookmarkDeps) {
   const bookmarks_at = async (url: string | undefined) => {
     const nodes = url === undefined ? [] : await deps.nodes_for_url(url);
@@ -50,7 +45,6 @@ export function make_bookmark_handlers(deps: BookmarkDeps) {
 
   return {
     add: async (ctx: CommandContext, args: { url: string }) => {
-      require_address(args.url);
       if ((await bookmarks_at(args.url)).length > 0) throw new RuntimeRefusal("Already bookmarked");
       const title = (await deps.tab_title_for_url(ctx.tab_id, args.url)) || args.url;
       await deps.create({ url: args.url, title });
@@ -70,7 +64,6 @@ export function make_bookmark_handlers(deps: BookmarkDeps) {
       await deps.toast(ctx, "success", `Renamed ${count_of(matches.length)}`);
     },
     edit_url: async (ctx: CommandContext, args: { bookmark: string; url: string }) => {
-      require_address(args.url);
       const matches = await editable_bookmarks(ctx, args.bookmark, "changed");
       // Moving a bookmark onto an address that has one would make the duplicate that add refuses. The same address is a no-op, not a clash.
       const taken = (await bookmarks_at(args.url)).some((node) => !matches.some((match) => match.id === node.id));
@@ -102,7 +95,7 @@ const handlers = make_bookmark_handlers(browser_bookmark_deps);
 define("bookmark.add", {
   label: "Add bookmark",
   intent: "Bookmark a page. The url defaults to the current page, titled with the page title.",
-  params: [{ name: "url", type: "string", main: true, default: { from: "current_url" } }],
+  params: [{ name: "url", type: "string", main: true, format: "url", default: { from: "current_url" } }],
   runs_in: "background",
   run: (ctx, args) => handlers.add(ctx, args as { url: string }),
 });
@@ -139,7 +132,7 @@ define("bookmark.edit_url", {
   label: "Edit bookmark address",
   intent: "Change the address of the current page's bookmarks. With a bookmark, change the one chosen by title or address.",
   params: [
-    { name: "url", type: "string", main: true },
+    { name: "url", type: "string", main: true, format: "url" },
     { name: "bookmark", type: "string", optional: true, values: { from: "bookmarks" }, description: "Change this bookmark, not the current page's." },
   ],
   runs_in: "background",

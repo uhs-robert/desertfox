@@ -229,6 +229,7 @@ test("the rule kinds are rejected on a param that cannot carry them", () => {
   rejects("a.b", with_param({ name: "n", type: "string", min: 1 }), /params\[0\]\.min: only an int param takes a minimum/);
   rejects("a.b", with_param({ name: "n", type: "int", min: 1.5 }), /params\[0\]\.min: must be a whole number/);
   rejects("a.b", with_param({ name: "n", type: "int", pattern: "x" }), /params\[0\]\.pattern: only a string or key param takes a pattern/);
+  rejects("a.b", with_param({ name: "n", type: "int", format: "url" }), /params\[0\]\.format: only a string param/);
   rejects("a.b", with_param({ name: "n", type: "string", pattern: "(" }), /params\[0\]\.pattern: .* is not a regular expression/);
   rejects("a.b", with_param({ name: "n", type: "string", strict: true }), /params\[0\]\.strict: only a string param with a fixed value list/);
   rejects("a.b", with_param({ name: "n", type: "int", optional: true }), /params\[0\]\.optional: only a string or enum param/);
