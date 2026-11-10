@@ -23,7 +23,8 @@ if (!page.desertfox_text_ready) {
     record: (invocations) => void browser.runtime.sendMessage({ type: "record_step", invocations, outcome: { ok: true } }),
   });
   host.register_handler_("text.input", (args) => {
-    recorder.on_input(args.field_ as Element, args.before_ as string);
+    // A cancelled answer tells the content script that no session is open, so the next edit comes through.
+    return recorder.on_input(args.field_ as Element, args.before_ as string) ? undefined : { ok: true, cancelled: true };
   });
   host.register_handler_("text.flush", recorder.flush);
   host.register_handler_("register.paste", async (args) => {

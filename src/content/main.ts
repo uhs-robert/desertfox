@@ -104,10 +104,14 @@ let typed_in_a_field = false;
 
 function on_beforeinput(event: Event): void {
   if (!extension_context_alive()) return stop_listening();
+  // Only the first edit of a session is sent, because the recorder keeps that one's text. A flush or a focusout ends the session.
+  if (typed_in_a_field || !event.isTrusted || page_mode.get_mode_() !== "insert") return;
   const field = deepest_focused_element();
-  if (!event.isTrusted || !field || page_mode.get_mode_() !== "insert") return;
+  if (!field) return;
   typed_in_a_field = true;
-  void bundles.run_command_("text.input", "text", { field_: field, before_: read_field_text(field) }, "", false);
+  void bundles.run_command_("text.input", "text", { field_: field, before_: read_field_text(field) }, "", false).then((outcome) => {
+    if (outcome.ok && outcome.cancelled) typed_in_a_field = false;
+  });
 }
 
 // A command typed from the field never blurs it, so the text step is stored before the command is sent, and `.` finds the command last.
@@ -141,7 +145,10 @@ function on_keyup(event: KeyboardEvent): void {
 }
 
 const on_focusin = (event: Event) => follow_focus(true, event);
-const on_focusout = (event: Event) => follow_focus(false, event);
+const on_focusout = (event: Event) => {
+  typed_in_a_field = false;
+  follow_focus(false, event);
+};
 
 // After the extension reloads, the old script's listeners still fire but its runtime is gone.
 function extension_context_alive(): boolean {

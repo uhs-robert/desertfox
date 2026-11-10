@@ -50,6 +50,12 @@ test("inserted_text keeps what an edit put in, for every kind of edit", () => {
   assert.equal(inserted_text("same", "same"), "");
 });
 
+test("an emoji typed before an equal-looking one is recorded whole", () => {
+  assert.equal(inserted_text("\u{1F600}", "\u{1F601}\u{1F600}"), "\u{1F601}");
+  assert.equal(inserted_text("\u{1F600}", "\u{1F600}\u{1F601}"), "\u{1F601}");
+  assert.equal(inserted_text("a\u{1F600}b", "a\u{1F601}\u{1F600}b"), "\u{1F601}");
+});
+
 test("the text typed in one session is one text.insert step", () => {
   const { recorded, recorder, edit } = setup();
   edit(field_a, "h");
@@ -145,6 +151,18 @@ test("the replay's own input events do not start a session", () => {
   assert.equal(recorded.length, 1);
 });
 
+test("an event the recorder ignores answers false, so typing after a replay opens a session and is recorded", () => {
+  const { recorded, recorder } = setup();
+  let answer: boolean | undefined;
+  recorder.while_replaying(() => void (answer = recorder.on_input(as_element(field_a), "")));
+  assert.equal(answer, false);
+  field_a.text = "replayed";
+  assert.equal(recorder.on_input(as_element(field_a), field_a.text), true);
+  field_a.text = "replayed new";
+  recorder.flush();
+  assert.deepEqual(recorded, [[text_step(" new")]]);
+});
+
 test("a replay that throws still lets the next typing record", () => {
   const { recorded, recorder, edit } = setup();
   assert.throws(() => recorder.while_replaying(() => { throw new Error("no field"); }));
@@ -166,7 +184,7 @@ test("an edit before the bundle loads is recorded, and a flush queued behind it 
   ];
   field_a.text = "go!";
   assert.deepEqual(recorded, []);
-  host.api.register_handler_("text.input", (args) => recorder.on_input(args.field_ as Element, args.before_ as string));
+  host.api.register_handler_("text.input", (args) => void recorder.on_input(args.field_ as Element, args.before_ as string));
   host.api.register_handler_("text.flush", recorder.flush);
   finish_load();
   await Promise.all(pending);
