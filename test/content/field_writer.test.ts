@@ -66,6 +66,17 @@ test("an autocomplete of a password or a one-time code is secret, and a field on
   assert.equal(is_secret_field(toggled as unknown as Element), true);
 });
 
+test("on real input elements: password type, the three autocomplete tokens, and a toggle back to text stays secret", () => {
+  const input = (attributes: Record<string, string>) => Object.assign(new FakeHTMLInputElement(), attributes) as unknown as Element;
+  assert.equal(is_secret_field(input({ type: "password" })), true);
+  for (const autocomplete of ["current-password", "new-password", "one-time-code"]) assert.equal(is_secret_field(input({ type: "text", autocomplete })), true, autocomplete);
+  assert.equal(is_secret_field(input({ type: "text", autocomplete: "name" })), false);
+  const shown = input({ type: "password" }) as unknown as FakeHTMLInputElement;
+  assert.equal(is_secret_field(shown as unknown as Element), true);
+  shown.type = "text";
+  assert.equal(is_secret_field(shown as unknown as Element), true);
+});
+
 test("only a password input is secret", () => {
   assert.equal(is_secret_field(field("password") as unknown as Element), true);
   assert.equal(is_secret_field(field("text") as unknown as Element), false);
