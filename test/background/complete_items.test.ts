@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { bookmark_items, create_complete_items, engine_items, flatten_bookmarks, folder_items, folder_nodes, history_items, listed_favicon, listed_tabs, listed_windows, read_container_identities, read_containers } from "../../src/background/complete_items.ts";
+import { bookmark_items, bookmark_rows, create_complete_items, engine_items, flatten_bookmarks, folder_items, folder_nodes, history_items, listed_favicon, listed_tabs, listed_windows, read_container_identities, read_containers } from "../../src/background/complete_items.ts";
 import type { TabActionDeps } from "../../src/background/tab_actions.ts";
 import type { SessionItem } from "../../src/shared/messages.ts";
 import type { DiscardDeps } from "../../src/background/tab_discard.ts";
@@ -135,12 +135,12 @@ test("bookmarks drop folders and separators, merge equal addresses and keep the 
     { title: "https://b.test/", url: "https://b.test/" },
   ]);
   const { service } = make({ bookmarks });
-  assert.deepEqual(((await service.answer("bookmarks", PRIVATE_LINE))?.items as unknown[]).length, 2);
+  assert.deepEqual(((await service.answer("bookmarks", PRIVATE_LINE))?.items as { rows: unknown[] }).rows.length, 2);
 });
 
 test("a failed browser call gives an empty list, not an error", async () => {
   const { service } = make({ fail: true });
-  assert.deepEqual(await service.answer("bookmarks", NORMAL_LINE), { items: [] });
+  assert.deepEqual(await service.answer("bookmarks", NORMAL_LINE), { items: { rows: [], folders: [] } });
 });
 
 test("a tab that navigates or closes while the lookup runs gets nothing", async () => {
@@ -748,4 +748,22 @@ test("the folders kind answers the folder rows for an opener, and nothing for a 
   const folders = folder_nodes(TREE);
   assert.deepEqual((await make({ folders }).service.answer("folders", NORMAL_LINE))?.items, folder_items(folders));
   assert.equal(await make({ folders, openers: [] }).service.answer("folders", NORMAL_LINE), undefined);
+});
+
+test("bookmark_rows lists each address once with its folders newest copy first, and the folder paths once", () => {
+  const folders: FolderNode[] = [
+    { id: "a", path: "A", managed: false, bookmarks: [{ url: "https://x.test/", dateAdded: 1 }, { url: "https://y.test/", dateAdded: 5 }] },
+    { id: "b", path: "A / B", managed: false, bookmarks: [{ url: "https://x.test/", dateAdded: 9, title: "X" }] },
+  ];
+  const nodes: BookmarkNode[] = [{ url: "https://x.test/", dateAdded: 9, title: "X" }, { url: "https://y.test/", dateAdded: 5, title: "Y" }, { url: "https://x.test/", dateAdded: 1 }];
+  assert.deepEqual(bookmark_rows(nodes, folders), {
+    rows: [{ title: "X", url: "https://x.test/", folders: [1, 0] }, { title: "Y", url: "https://y.test/", folders: [0] }],
+    folders: ["A", "A / B"],
+  });
+});
+
+test("the bookmarks kind answers rows with folder indexes", async () => {
+  const folders: FolderNode[] = [{ id: "a", path: "A", managed: false, bookmarks: [{ url: "https://x.test/", dateAdded: 1 }] }];
+  const { service } = make({ bookmarks: [{ type: "bookmark", url: "https://x.test/", title: "X", dateAdded: 1 }], folders });
+  assert.deepEqual((await service.answer("bookmarks", NORMAL_LINE))?.items, { rows: [{ title: "X", url: "https://x.test/", folders: [0] }], folders: ["A"] });
 });

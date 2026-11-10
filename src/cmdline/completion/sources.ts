@@ -8,10 +8,11 @@ import type { CommandLookup } from "../../shared/registry/command_line.ts";
 import { first_sentence } from "../../shared/registry/summary.ts";
 import { flag_alternatives, usage_line } from "../../shared/registry/usage.ts";
 import { always_default, bare_word_param, default_of, flag_params, is_dynamic_values, positional_params, static_values, subject_param } from "../../shared/registry/params.ts";
+import { FOLDER_PATH_SEPARATOR, pick_folder, rows_in_folder } from "../../shared/folder_pick.ts";
 import { rank } from "../../shared/score.ts";
 import { completion_of, is_setting_name, SETTING_COMPLETION, type SettingCompletion } from "../../shared/setting_completion.ts";
 import type { Ranked } from "../../shared/score.ts";
-import type { BookmarkItem, EngineItem, HeadingItem, HistoryItems, OpenItems, OpenRow, SessionItem, TabContainer, TabItem, WindowItem } from "../../shared/messages.ts";
+import type { BookmarkItem, BookmarkRows, EngineItem, HeadingItem, HistoryItems, OpenItems, OpenRow, SessionItem, TabContainer, TabItem, WindowItem } from "../../shared/messages.ts";
 import type { LiveKind, LiveSource } from "./live.ts";
 import { cursor_context } from "./tokenize.ts";
 import type { CursorContext } from "./tokenize.ts";
@@ -277,8 +278,27 @@ function heading_rows(headings: readonly HeadingItem[], usage: string): Row[] {
   }));
 }
 
-function bookmark_rows(bookmarks: readonly BookmarkItem[], usage: string): Row[] {
-  return bookmarks.map((bookmark) => ({ name: bookmark.title, insert: `${quote_word(bookmark.url)} `, description: bookmark.url, args: "", also_named: [], keywords: [], usage }));
+const bookmark_row = (bookmark: BookmarkItem, usage: string): Row => ({ name: bookmark.title, insert: `${quote_word(bookmark.url)} `, description: bookmark.url, args: "", also_named: [], keywords: [], usage });
+
+const bookmark_rows = (bookmarks: readonly BookmarkItem[], usage: string): Row[] => bookmarks.map((bookmark) => bookmark_row(bookmark, usage));
+
+// The dim cell of a bookmark row: the last part of its newest folder, and how many more folders hold the address.
+function folder_tag(answer: BookmarkRows, folders: readonly number[]): string {
+  const newest = folders[0] === undefined ? undefined : answer.folders[folders[0]]?.split(FOLDER_PATH_SEPARATOR).at(-1);
+  return newest === undefined ? "" : folders.length > 1 ? `${newest} +${folders.length - 1}` : newest;
+}
+
+// A typed `--folder=` keeps the rows in that folder or below. Text that picks no folder lists no row, so a typo never looks like a filter that worked. The handler refuses it the same way.
+function bookmark_folder_rows(answer: BookmarkRows, folder_text: unknown, usage: string): Row[] {
+  const kept = (() => {
+    if (typeof folder_text !== "string" || folder_text.trim() === "") return answer.rows;
+    try {
+      return rows_in_folder(answer, pick_folder(answer.folders.map((path) => ({ path })), folder_text).path);
+    } catch {
+      return [];
+    }
+  })();
+  return kept.map((row) => ({ ...bookmark_row(row, usage), tag: folder_tag(answer, row.folders) }));
 }
 
 // `engine.show` works on any engine, so only a search marks the ones the page cannot fill.
@@ -357,7 +377,7 @@ export function create_completer(
                 ? heading_rows(read.items as HeadingItem[], usage)
                 : kind === "sessions" || kind === "registers" || kind === "folders"
                   ? name_rows(read.items as SessionItem[], usage)
-                  : bookmark_rows(read.items as BookmarkItem[], usage);
+                  : bookmark_folder_rows(read.items as BookmarkRows, context.kind === "subject" ? context.typed.folder : undefined, usage);
       const ranked = rank(context.word, rows);
       return { ...span, usage, rows: kind === "bookmarks" && context.word.trim() === "" ? ranked.slice(0, RECENT_BOOKMARKS) : ranked, listing: true };
     }

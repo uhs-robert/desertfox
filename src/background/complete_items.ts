@@ -4,8 +4,9 @@
 
 import type { SearchEngine } from "../shared/config.ts";
 import type { PageInfo } from "../shared/engines/index.ts";
-import type { BookmarkItem, CompleteItemsAnswer, EngineItem, FolderItem, HistoryItem, HistoryItems, OpenRow, RegisterItem, SessionItem, TabContainer, TabItem, TabRowsAction, TabRowsActionAnswer, WindowItem } from "../shared/messages.ts";
+import type { BookmarkItem, BookmarkRows, CompleteItemsAnswer, EngineItem, FolderItem, HistoryItem, HistoryItems, OpenRow, RegisterItem, SessionItem, TabContainer, TabItem, TabRowsAction, TabRowsActionAnswer, WindowItem } from "../shared/messages.ts";
 import { available_engine_names } from "./availability.ts";
+import { FOLDER_PATH_SEPARATOR } from "../shared/folder_pick.ts";
 import { DEFAULT_COOKIE_STORE_ID } from "../shared/container_store.ts";
 import { close_tabs, reopen_tabs_in_container, set_muted, set_pinned } from "./tab_actions.ts";
 import type { TabActionDeps } from "./tab_actions.ts";
@@ -123,8 +124,6 @@ export function flatten_bookmarks(roots: readonly BookmarkNode[]): BookmarkNode[
 // A folder of the tree with its path from the root, and the bookmarks directly inside it (no subfolders). The titles are display text Firefox localizes, so two folders can share a path.
 export type FolderNode = { id: string; path: string; managed: boolean; bookmarks: BookmarkNode[] };
 
-export const FOLDER_PATH_SEPARATOR = " / ";
-
 // Every folder below the tree's own root, in tree order. The root has no title and holds the four toolbar, menu, other and mobile folders, which are folders too.
 export function folder_nodes(roots: readonly BookmarkNode[]): FolderNode[] {
   const folders: FolderNode[] = [];
@@ -157,6 +156,19 @@ export function bookmark_items(nodes: readonly BookmarkNode[]): BookmarkItem[] {
     items.push({ title: one_line(node.title || node.url), url: node.url });
   }
   return items;
+}
+
+// The `bookmark` list: `bookmark_items` rows, each with the folders that hold a copy of its address, newest copy first. Every folder is listed, so a row's index is its place in `folders`.
+export function bookmark_rows(nodes: readonly BookmarkNode[], folders: readonly FolderNode[]): BookmarkRows {
+  const copies = new Map<string, { added: number; folder: number }[]>();
+  folders.forEach((folder, index) => {
+    for (const node of folder.bookmarks) copies.set(node.url as string, [...(copies.get(node.url as string) ?? []), { added: node.dateAdded ?? 0, folder: index }]);
+  });
+  const rows = bookmark_items(nodes).map((item) => ({
+    ...item,
+    folders: [...new Set((copies.get(item.url) ?? []).sort((a, b) => b.added - a.added).map((copy) => copy.folder))],
+  }));
+  return { rows, folders: folders.map((folder) => folder.path) };
 }
 
 // A visit to these is no page the user would open from the line.
@@ -271,7 +283,7 @@ export function create_complete_items(deps: CompleteItemsDeps) {
     if (kind === "registers") return deps.registers(asker.incognito);
     if (kind === "folders") return folder_items(await deps.folders());
     if (kind === "windows") return listed_windows(await deps.query_windows(), asker).map(({ number, title }) => ({ number, title }));
-    return bookmark_items(await deps.all_bookmarks());
+    return bookmark_rows(await deps.all_bookmarks(), await deps.folders());
   };
 
   return {
@@ -316,7 +328,7 @@ export function create_complete_items(deps: CompleteItemsDeps) {
     // while the lookup ran. A failed browser call gives an empty list.
     answer: async (kind: unknown, asker: Asker | undefined): Promise<CompleteItemsAnswer | undefined> => {
       if ((kind !== "bookmarks" && kind !== "engines" && kind !== "history" && kind !== "open" && kind !== "windows" && kind !== "sessions" && kind !== "registers" && kind !== "folders") || !asker || !(await deps.is_opener(asker.tab_id, asker.frame_id))) return undefined;
-      const items = await fetch_items(kind, asker).catch(() => (kind === "open" ? { rows: [], history_max: 0 } : kind === "history" ? { rows: [], max: 0 } : []));
+      const items = await fetch_items(kind, asker).catch(() => (kind === "open" ? { rows: [], history_max: 0 } : kind === "history" ? { rows: [], max: 0 } : kind === "bookmarks" ? { rows: [], folders: [] } : []));
       return (await deps.is_opener(asker.tab_id, asker.frame_id)) ? { items } : undefined;
     },
   };

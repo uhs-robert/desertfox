@@ -9,6 +9,7 @@ Types and constants that fix the hand-off formats between the background page, t
 - `messages.ts`: messages between content script and background.
 - `container_store.ts`: the name and cookie store id of the container-less store, shared by the background and the `open` commands.
 - `tab_model_port.ts`: the port names of the live tab model, the plain one and its `:normal` and `:private` forms.
+- `folder_pick.ts`: `pick_by` (exact key, then best fuzzy match, a tie refused), `pick_folder` (the filing rule for a folder path), `in_folder` and `rows_in_folder` (the subtree test). The `bookmark` handlers and the command line page share them, so a typed `--folder=` filters by the rule that filing uses.
 - `mark_names.ts`: the local mark keys (`a-z`, and `'` or the backtick for the previous position), the limits of the mark store and the one rule that cuts the hash off a page address.
 - `bundles.ts`: the names of the scripts loaded on first use, and which mode loads which.
 - `registry/`: the command registry, the one validator and the command line parser. See its README.
