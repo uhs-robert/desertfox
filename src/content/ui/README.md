@@ -9,6 +9,6 @@ The drawing code is in `../toast.ts` and `../mode_indicator.ts`. Both draw in a 
 Other code does not import the bundle. It calls `../ui_proxy.ts`:
 
 - `show_toast(message, kind?)`: shows a toast.
-- `show_mode_label(label, mode?)`: sets the badge text and the mode that picks its theme color, and a label of `undefined` removes the badge. Only the top frame draws it.
+- `show_mode_label(state?)`: shows the badge for a mode, pass-next flag, setting and recording name, and no state removes the badge. Only the top frame draws it.
 
 Both calls load the bundle if needed. A call made before the load finishes waits and runs after it. The proxy holds no keys while it waits. `copy.ts` in `../handlers/` is an example of a caller. The mode wiring in `../main.ts` sets the badge.
