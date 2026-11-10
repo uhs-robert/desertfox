@@ -6,6 +6,7 @@ import type { CommandContext } from "../shared/command.ts";
 import type { BoundInvocation } from "../shared/invocation.ts";
 import type { RegisterItem, RegisterRequest } from "../shared/messages.ts";
 import { BLACK_HOLE_REGISTER, CLIPBOARD_REGISTER, register_kind, SEARCH_DIRECTION_REGISTER, SEARCH_QUERY_REGISTER, storage_name, UNNAMED_REGISTER } from "../shared/register_names.ts";
+import { create_write_queue } from "./store_turns.ts";
 import { REGISTER_PRIVATE_STORAGE_PREFIX, REGISTER_STORAGE_PREFIX } from "./storage_keys.ts";
 
 export type RegisterValue = string | BoundInvocation[];
@@ -47,13 +48,7 @@ export function create_register_store(deps: RegisterStoreDeps) {
     return is_register_value(stored) ? stored : undefined;
   }
 
-  // Each write reads, edits and writes one key, so two appends from two tabs must not interleave.
-  let queue: Promise<unknown> = Promise.resolve();
-  const in_turn = <Result>(job: () => Promise<Result>): Promise<Result> => {
-    const turn = queue.then(job, job);
-    queue = turn.catch(() => undefined);
-    return turn;
-  };
+  const in_turn = create_write_queue();
 
   async function read(name: string, is_private: boolean): Promise<RegisterValue | undefined> {
     const kind = register_kind(name);
@@ -129,17 +124,6 @@ export const browser_register_store = create_register_store({
 
 // Whether the window a command runs in is private, which picks the area its registers live in.
 export const is_private_context = async (ctx: CommandContext): Promise<boolean> => ctx.window_id !== undefined && (await browser.windows.get(ctx.window_id)).incognito;
-
-// The last private window closed, or none was open when the background started: nothing private may stay.
-export const forget_private_registers_without_window = (store: RegisterStore, has_private_window: () => Promise<boolean>): Promise<void> => store.clear_private_without_window(has_private_window);
-
-// Cleans up at start and after every window closes. A failed cleanup only leaves private values until the next one, so it warns and goes on.
-export function wire_private_register_cleanup(store: RegisterStore, windows: { onRemoved: { addListener: (listener: () => void) => void }; getAll: () => Promise<{ incognito: boolean }[]> }): void {
-  const has_private_window = async () => (await windows.getAll()).some((window) => window.incognito);
-  const clean = () => void forget_private_registers_without_window(store, has_private_window).catch((error: unknown) => console.warn("desertfox: could not clear the private registers", error));
-  windows.onRemoved.addListener(clean);
-  clean();
-}
 
 // A register message from a content script. The page's privacy is the sender tab's, never the message's. Only a tab sends these.
 export async function answer_register_request(store: RegisterStore, request: RegisterRequest, tab: { incognito: boolean } | undefined): Promise<RegisterValue | undefined | { ok: boolean; message?: string }> {
