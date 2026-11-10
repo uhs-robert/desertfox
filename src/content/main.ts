@@ -13,6 +13,7 @@ import { deepest_focused_element, is_editable_element } from "./editable.ts";
 import { shadow_root_of } from "./shadow.ts";
 import { create_cancelled_keys, type HeldPress } from "./cancelled_keys.ts";
 import { create_key_flow } from "./key_flow.ts";
+import { cancels_keypress, cancels_keyup, press_target, replay_key_to_page } from "./replay_key.ts";
 import { create_which_key_timer } from "./which_key_timer.ts";
 import { mode_label } from "./mode_label.ts";
 import { show_mode_label, show_toast } from "./ui_proxy.ts";
@@ -131,38 +132,24 @@ function cancel(event: Event): void {
   event.stopImmediatePropagation();
 }
 
-// Hands a held key back to the page: a synthetic keydown on the element it was pressed on, and a keyup when the real one was already swallowed. Our listeners ignore it because it is untrusted. It cannot start a default action such as scrolling. An element that left the page by now cannot receive it, and no other element is a better target.
-function replay_to_page(event: KeyboardEvent, target: EventTarget, press: HeldPress): void {
-  const keyup_swallowed = cancelled_keys.release_for_replay_(event.code, press);
-  if (target instanceof Node && !target.isConnected) return;
-  const init: KeyboardEventInit = {
-    key: event.key, code: event.code, location: event.location, repeat: event.repeat, keyCode: event.keyCode,
-    ctrlKey: event.ctrlKey, shiftKey: event.shiftKey, altKey: event.altKey, metaKey: event.metaKey,
-    bubbles: true, cancelable: true, composed: true,
-  };
-  target.dispatchEvent(new KeyboardEvent("keydown", init));
-  if (keyup_swallowed) target.dispatchEvent(new KeyboardEvent("keyup", init));
-}
-
 function on_keydown(event: KeyboardEvent): void {
   if (!extension_context_alive()) return stop_listening();
   if (!event.isTrusted || event.isComposing) return;
   const token = event_to_token(event);
   if (token === null) return;
-  // The path is empty once the event has finished, so the target is read now. A shadow tree makes event.target its host.
-  const target = event.composedPath()[0] ?? event.target;
+  const target = press_target(event);
   const press: HeldPress = { keyup_seen: false };
-  const decision = key_flow.handle_token_(token, event.repeat, () => target && replay_to_page(event, target, press));
+  const decision = key_flow.handle_token_(token, event.repeat, () => target && replay_key_to_page(event, target, press, cancelled_keys, (type, init) => new KeyboardEvent(type, init)));
   cancelled_keys.record_keydown_(event.code, decision, press);
   if (decision === "cancel") cancel(event);
 }
 
 function on_keypress(event: KeyboardEvent): void {
-  if (event.isTrusted && cancelled_keys.cancels_keypress_(event.code)) cancel(event);
+  if (cancels_keypress(event, cancelled_keys)) cancel(event);
 }
 
 function on_keyup(event: KeyboardEvent): void {
-  if (event.isTrusted && cancelled_keys.take_keyup_(event.code)) cancel(event);
+  if (cancels_keyup(event, cancelled_keys)) cancel(event);
 }
 
 const on_focusin = (event: Event) => follow_focus(true, event);

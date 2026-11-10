@@ -3,6 +3,7 @@ import { test } from "node:test";
 import { takes_typing } from "../src/content/editable.ts";
 import { args_for_count } from "../src/content/invocation_args.ts";
 import { create_cancelled_keys } from "../src/content/cancelled_keys.ts";
+import { cancels_keypress, cancels_keyup, press_target, replay_key_to_page } from "../src/content/replay_key.ts";
 import { cancels_unbound_key, create_key_flow } from "../src/content/key_flow.ts";
 import { match_regex_source, matches_any_address, matches_pattern } from "../src/shared/match_pattern.ts";
 import { mode_label } from "../src/content/mode_label.ts";
@@ -224,7 +225,7 @@ test("browser chords run in normal and insert mode and are cancelled", () => {
   assert.deepEqual(ran, ["next_tab", "next_tab", "insert_chord"]);
 });
 
-test("startup holds plain keys outside fields and drops what matches nothing", () => {
+test("startup holds plain keys outside fields and, with no page callback, lets what matches nothing go", () => {
   const { ran, flow } = make_flow();
   assert.equal(flow.handle_token_("<A-j>"), "pass");
   assert.equal(flow.handle_token_("x"), "cancel");
@@ -303,7 +304,7 @@ test("a held key the keymap does not bind goes back to the page on replay, and a
   const to_page: string[] = [];
   for (const token of ["<Space>", "j", "x", "g", "<Tab>"]) assert.equal(flow.handle_token_(token, false, () => to_page.push(token)), "cancel");
   flow.set_matcher_(create_matcher(keymap));
-  // g waits for a second key, so the Tab breaks the sequence and both reach the page in order.
+  // g waits for a second key and is lost with the sequence that Tab breaks. Space, x and Tab reach the page in order.
   assert.deepEqual([to_page, ran], [["<Space>", "x", "<Tab>"], ["down"]]);
 });
 
@@ -352,6 +353,71 @@ test("replaying an early press does not clear the code of a later press of the s
   assert.equal(keys.cancels_keypress_("Space"), true);
   assert.equal(keys.release_for_replay_("Space", second), false);
   assert.equal(keys.take_keyup_("Space"), false);
+});
+
+const key_fields = { key: " ", code: "Space", location: 0, repeat: false, keyCode: 32, ctrlKey: false, shiftKey: true, altKey: false, metaKey: false };
+
+function make_target(isConnected = true) {
+  const seen: { type: string; init: KeyboardEventInit }[] = [];
+  return { seen, target: { isConnected, dispatchEvent: (event: Event) => (seen.push(event as unknown as { type: string; init: KeyboardEventInit }), true) } };
+}
+const make_event = (type: string, init: KeyboardEventInit) => ({ type, init }) as unknown as Event;
+
+test("a replayed key goes to the target as a keydown with every field of the press", () => {
+  const keys = create_cancelled_keys();
+  const press = { keyup_seen: false };
+  keys.record_keydown_("Space", "cancel", press);
+  const { seen, target } = make_target();
+  replay_key_to_page(key_fields, target, press, keys, make_event);
+  assert.deepEqual(seen.map((event) => event.type), ["keydown"]);
+  assert.deepEqual(seen[0]!.init, { ...key_fields, bubbles: true, cancelable: true, composed: true });
+});
+
+test("a replayed key also gets a keyup when the real keyup was swallowed", () => {
+  const keys = create_cancelled_keys();
+  const press = { keyup_seen: false };
+  keys.record_keydown_("Space", "cancel", press);
+  keys.take_keyup_("Space");
+  const { seen, target } = make_target();
+  replay_key_to_page(key_fields, target, press, keys, make_event);
+  assert.deepEqual(seen.map((event) => event.type), ["keydown", "keyup"]);
+});
+
+test("a replayed key to an element that left the page sends nothing and still clears the cancelled code", () => {
+  const keys = create_cancelled_keys();
+  const press = { keyup_seen: false };
+  keys.record_keydown_("Space", "cancel", press);
+  const { seen, target } = make_target(false);
+  replay_key_to_page(key_fields, target, press, keys, make_event);
+  assert.deepEqual(seen, []);
+  assert.equal(keys.cancels_keypress_("Space"), false);
+});
+
+test("auto-repeat during the hold gives one keydown per press and a single keyup", () => {
+  const keys = create_cancelled_keys();
+  const presses = [{ keyup_seen: false }, { keyup_seen: false }, { keyup_seen: false }];
+  for (const press of presses) keys.record_keydown_("Space", "cancel", press);
+  keys.take_keyup_("Space");
+  const { seen, target } = make_target();
+  for (const press of presses) replay_key_to_page(key_fields, target, press, keys, make_event);
+  assert.deepEqual(seen.map((event) => event.type), ["keydown", "keydown", "keydown", "keyup"]);
+});
+
+test("the press target is the first element of the composed path, else the event target", () => {
+  const host = {} as EventTarget;
+  const inner = {} as EventTarget;
+  assert.equal(press_target({ target: host, composedPath: () => [inner, host] }), inner);
+  assert.equal(press_target({ target: host, composedPath: () => [] }), host);
+});
+
+test("keypress and keyup guards ignore untrusted events and leave the cancelled code alone", () => {
+  const keys = create_cancelled_keys();
+  keys.record_keydown_("Space", "cancel", { keyup_seen: false });
+  assert.equal(cancels_keypress({ isTrusted: false, code: "Space" }, keys), false);
+  assert.equal(cancels_keyup({ isTrusted: false, code: "Space" }, keys), false);
+  assert.equal(cancels_keypress({ isTrusted: true, code: "Space" }, keys), true);
+  assert.equal(cancels_keyup({ isTrusted: true, code: "Space" }, keys), true);
+  assert.equal(cancels_keypress({ isTrusted: true, code: "Space" }, keys), false);
 });
 
 test("a stale cancelled code does not eat a later typed letter", () => {

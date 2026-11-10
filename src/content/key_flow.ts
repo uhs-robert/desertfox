@@ -1,6 +1,6 @@
 // Decides, for one key token, whether the page keeps the key. Holds keys that
 // arrive before the compiled keymap is read, while a bundle loads or while the command line hands focus back, and replays them in order once they can run.
-// A replayed key the keymap does not take goes back to the page through its `on_replay_pass_`, because its keydown was cancelled. During a load only keys that can bind wait. Every other key reaches the page at once.
+// A replayed key the keymap does not take goes back to the page through its `on_replay_pass_`, as a synthetic event that loses its default action. During a load only keys that can bind wait, so every other key keeps its default action.
 
 import type { Mode, TreeBranch, TreeLeaf } from "../shared/index.ts";
 import type { MatchResult } from "../shared/keys/index.ts";
