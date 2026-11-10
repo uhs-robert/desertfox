@@ -2,6 +2,7 @@
 
 import { COMPILED_KEYMAP_STORAGE_KEY, current_keymap } from "../shared/prefix_tree.ts";
 import type { CompiledKeymap } from "../shared/prefix_tree.ts";
+import type { Mode } from "../shared/command.ts";
 import { rule_addresses_of, site_rule_for } from "./page_keymap.ts";
 import { clear_insert_hold, read_insert_hold, write_insert_hold } from "./tab_modes.ts";
 
@@ -36,6 +37,14 @@ export function create_tab_insert(deps: TabInsertDeps) {
     return result;
   };
 
+  // Only the frames the hold switched go back to normal.
+  const leave = (tab_id: number): Promise<void> =>
+    in_turn(tab_id, async () => {
+      const switched = await read_insert_hold(deps.storage, tab_id);
+      await clear_insert_hold(deps.storage, tab_id);
+      if (switched) await send_to_all(tab_id, switched, "normal");
+    });
+
   return {
     // Frames under an all-off rule stay in ignore mode.
     enter: (tab_id: number): Promise<void> =>
@@ -46,15 +55,10 @@ export function create_tab_insert(deps: TabInsertDeps) {
         await write_insert_hold(deps.storage, tab_id, switched);
         await send_to_all(tab_id, switched, "insert");
       }),
-    // Only the frames the hold switched go back to normal.
-    leave: (tab_id: number): Promise<void> =>
-      in_turn(tab_id, async () => {
-        const switched = await read_insert_hold(deps.storage, tab_id);
-        await clear_insert_hold(deps.storage, tab_id);
-        if (switched) await send_to_all(tab_id, switched, "normal");
-      }),
-    // The top frame left insert by another route (the toolbar, ignore mode), so the hold ends without switching the frames. Escape sends leave before its report, so leave reads the list first.
-    end_by_report: (tab_id: number): Promise<void> => in_turn(tab_id, () => clear_insert_hold(deps.storage, tab_id)),
+    leave,
+    // While the tab is held, the top frame reports normal only when the whole tab goes to normal (Escape, mode.set, the toolbar), so the report returns the frames itself. Its leave_tab_insert message may arrive before or after the report: the first of the two returns the frames and the second finds no hold.
+    // Any other mode (ignore from the toolbar or ,i) only ends the hold, so the frames keep the mode they were sent.
+    top_frame_left_insert: (tab_id: number, mode: Mode): Promise<void> => (mode === "normal" ? leave(tab_id) : in_turn(tab_id, () => clear_insert_hold(deps.storage, tab_id))),
     // A frame that loads while the tab is held starts in insert mode, unless its page's rule is all-off, and then it is not switched.
     join: (tab_id: number, frame_id: number): Promise<boolean> =>
       in_turn(tab_id, async () => {

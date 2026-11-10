@@ -16,7 +16,6 @@ export const mode_escape: ContentHandler = {
     // After a search, Escape takes the highlights off. Without the bundle there are none.
     if (bundles.has_handler_("find.clear")) bundles.run_command_("find.clear", "caret", {}, "", false);
     if (bundles.has_handler_("hint.unhover")) bundles.run_command_("hint.unhover", "hints", {}, "", false);
-    // Sent before the mode report that escape fires, so the background reads the hold before the report ends it.
     if (page_mode.is_manual_insert_()) void browser.runtime.sendMessage({ type: "leave_tab_insert" } satisfies LeaveTabInsert).catch(() => undefined);
     page_mode.escape();
     blur_focused_element();

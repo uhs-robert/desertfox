@@ -194,8 +194,8 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
   }
   if (request?.type === "mode_changed" && sender.tab?.id !== undefined) {
     const tab_id = sender.tab.id;
-    // The top frame leaving insert by any route ends the hold. It takes its turn now, so a leave sent just before this report reads the hold first.
-    if (sender.frameId === 0 && request.mode !== "insert") void tab_insert.end_by_report(tab_id).catch(() => undefined);
+    // The top frame leaving insert by any route ends the hold.
+    if (sender.frameId === 0 && request.mode !== "insert") void tab_insert.top_frame_left_insert(tab_id, request.mode).catch(() => undefined);
     return modes_cleared.then(() => remember_reported_mode(browser.storage.local, tab_id, sender.frameId, request.mode));
   }
   if (request?.type === "leave_tab_insert" && sender.tab?.id !== undefined) return tab_insert.leave(sender.tab.id);

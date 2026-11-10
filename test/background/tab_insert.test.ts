@@ -93,19 +93,23 @@ test("two frames that join at once both enter the hold", async () => {
   assert.deepEqual(sent.sort(), ["4:0:normal", "4:2:normal", "4:5:normal", "4:6:normal"]);
 });
 
-test("Escape on the top page: leave sent before the report still returns every frame", async () => {
-  const { tab_insert, sent } = make();
-  await tab_insert.enter(4);
-  sent.length = 0;
-  await Promise.all([tab_insert.leave(4), tab_insert.end_by_report(4)]);
-  assert.deepEqual(sent.sort(), ["4:0:normal", "4:2:normal"]);
+test("Escape on the top page returns every frame whichever of leave and the report arrives first", async () => {
+  for (const order of ["leave first", "report first"]) {
+    const { tab_insert, sent } = make();
+    await tab_insert.enter(4);
+    sent.length = 0;
+    const steps = [() => tab_insert.leave(4), () => tab_insert.top_frame_left_insert(4, "normal")];
+    if (order === "report first") steps.reverse();
+    await Promise.all(steps.map((step) => step()));
+    assert.deepEqual(sent.sort(), ["4:0:normal", "4:2:normal"], order);
+  }
 });
 
-test("a report that the top frame left insert ends the hold without switching frames", async () => {
+test("a top frame report of ignore ends the hold without switching frames", async () => {
   const { tab_insert, sent } = make();
   await tab_insert.enter(4);
   sent.length = 0;
-  await tab_insert.end_by_report(4);
+  await tab_insert.top_frame_left_insert(4, "ignore");
   assert.equal(await tab_insert.join(4, 5), false);
   await tab_insert.leave(4);
   assert.deepEqual(sent, []);
