@@ -387,12 +387,17 @@ export type FocusPage = {
   type: "focus_page";
 };
 
+// Empties the sessionStorage of the page, which only its own frame can reach. Sent to every frame of a tab before a clearing reload.
+export type ClearSessionStorage = {
+  type: "clear_session_storage";
+};
+
 // Presence check before the background injects the content script. Any truthy answer counts.
 export type Ping = {
   type: "ping";
 };
 
-export type BackgroundToContent = RunInContent | ShowRefusal | SetMode | TreeUpdated | GetSelection | FocusPage | Ping;
+export type BackgroundToContent = RunInContent | ShowRefusal | SetMode | TreeUpdated | GetSelection | FocusPage | ClearSessionStorage | Ping;
 
 // Background to tab-model clients, over the port `desertfox_tab_model`
 

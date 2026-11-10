@@ -4,6 +4,10 @@ import { define } from "../shared/registry/builtin.ts";
 import { open_in, require_tab_id, typed_url_target, WHERE_PARAM } from "./open_target.ts";
 import type { Where } from "./open_target.ts";
 import { home_page_url } from "./url_build.ts";
+import { browser_reload_clear_deps, make_reload_clear } from "./reload_clear.ts";
+import type { ClearScope } from "./reload_clear.ts";
+
+const reload_clear = make_reload_clear(browser_reload_clear_deps);
 
 define("page.back", {
   label: "Back",
@@ -23,10 +27,24 @@ define("page.forward", {
 
 define("page.reload", {
   label: "Reload",
-  intent: "Reload the page. With hard on, skip the cache.",
-  params: [{ name: "hard", type: "bool", default: false, description: "Skip the cache." }],
+  intent: "Reload the page. With hard on, skip the cache. With clear set to site, first clear the cookies, cache, local storage, IndexedDB, service workers and session storage of this page's host in its container, plus the cookies a parent domain sets for it. With clear set to all, first clear them for every site and container.",
+  params: [
+    { name: "hard", type: "bool", default: false, description: "Skip the cache." },
+    {
+      name: "clear",
+      type: "enum",
+      values: ["site", "all"],
+      optional: true,
+      value_labels: { site: "after clearing this site", all: "after clearing every site" },
+      description: { site: "Clear this host first, and keep other subdomains.", all: "Clear every site and container first." },
+    },
+  ],
   runs_in: "background",
-  run: async (ctx, args) => browser.tabs.reload(require_tab_id(ctx), { bypassCache: args.hard === true }),
+  run: async (ctx, args) => {
+    const tab_id = require_tab_id(ctx);
+    if (args.clear === "site" || args.clear === "all") return reload_clear.run(tab_id, args.clear as ClearScope);
+    return browser.tabs.reload(tab_id, { bypassCache: args.hard === true });
+  },
 });
 
 // Firefox has no stop call for the tabs API, so the page itself stops.

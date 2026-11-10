@@ -283,6 +283,13 @@ function start(): void {
       focus_page_content();
       return Promise.resolve(true);
     }
+    if (message.type === "clear_session_storage") {
+      // A page that blocks storage throws on access.
+      try {
+        sessionStorage.clear();
+      } catch {}
+      return Promise.resolve(true);
+    }
     if (message.type === "run_in_content") {
       // The router already applied the count, so each invocation runs once. The router shows a failure.
       return run_in_order(message.invocations);

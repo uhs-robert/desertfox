@@ -24,7 +24,7 @@ A note "(prompts)" means the binding sets a `prompt` for a param, so the command
 
 <!-- BEGIN generated -->
 
-bound: 315 (normal 179, hint 2, cmdline 18, caret 35, visual 37, visual_line 38, insert 2, ignore 1, browser 3) | later: 3 | dropped: 7
+bound: 317 (normal 181, hint 2, cmdline 18, caret 35, visual 37, visual_line 38, insert 2, ignore 1, browser 3) | later: 3 | dropped: 7
 
 ### normal
 
@@ -47,6 +47,8 @@ bound: 315 (normal 179, hint 2, cmdline 18, caret 35, visual 37, visual_line 38,
 | `rr` | bound | `page.reload` | Reload |  |
 | `rh` | bound | `page.reload --hard` | Hard reload |  |
 | `R` | bound | `page.reload --hard` | Hard reload |  |
+| `rc` | bound | `page.reload --site` | Clear site data, reload |  |
+| `rC` | bound | `page.reload --all` (prompts) | Clear all data, reload |  |
 | `xp` | bound | `page.stop` | Stop loading |  |
 | `gh` | bound | `page.home` | Home page |  |
 | `gH` | bound | `page.home --tab` | Home page |  |
