@@ -105,7 +105,7 @@ export function bare_word_param(command: Pick<CommandDef, "params">): ParamDef |
   // An optional param is a flag and leaves the one required value its bare word (`visual.act yank` beside `--register=a`).
   const [only, ...others] = params.filter((param) => !param.optional);
   const required = only !== undefined && declared_default(only) === undefined && only.when === undefined;
-  return others.length === 0 && params.every((param) => param === only || param.optional) && required && only.type === "enum" && static_values(only) ? only : undefined;
+  return others.length === 0 && required && only.type === "enum" && static_values(only) ? only : undefined;
 }
 
 // The param typed last and bare: the main text, else the one number, else the one required value.

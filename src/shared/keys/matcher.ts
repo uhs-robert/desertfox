@@ -7,7 +7,7 @@ import { REGISTER_KEY } from "../register_names.ts";
 export type MatchResult =
   | { kind: "match"; leaf: TreeLeaf; count?: number }
   // `register_keys` is `"` while the register name is awaited and `"a` once it is typed. It sits beside `typed` and not in it, so a count can follow it.
-  | { kind: "pending"; node: TreeBranch; typed: string[]; count?: number; register_keys?: string }
+  | { kind: "pending"; node: TreeBranch; typed: string[]; count?: number; register_keys?: string; keys: string[] }
   | { kind: "no_match" };
 
 const MAX_COUNT_DIGITS = 6;
@@ -22,10 +22,12 @@ export function create_matcher(keymap: CompiledKeymap, frees?: (token: string) =
   let typed: string[] = [];
   let count_digits = "";
   let register_keys = "";
+  // Every key of the sequence under way, in the order typed. The key flow types all but the last again on Backspace.
+  let keys: string[] = [];
 
   const reset = () => {
     node = undefined;
-    typed = [];
+    keys = typed = [];
     count_digits = register_keys = "";
   };
 
@@ -42,7 +44,8 @@ export function create_matcher(keymap: CompiledKeymap, frees?: (token: string) =
     node ??= root;
     if (passes_(mode, token)) return reset(), { kind: "no_match" };
 
-    const progress = () => ({ ...(count_digits && { count: Number(count_digits) }), ...(register_keys && { register_keys }) });
+    keys = [...keys, token];
+    const progress = () => ({ ...(count_digits && { count: Number(count_digits) }), ...(register_keys && { register_keys }), keys });
     // `"` and a register name go before a command, and a count may stand on either side of them.
     const awaiting_name = register_keys === '"';
     if (awaiting_name || (token === '"' && !register_keys && COUNT_MODES.includes(mode) && typed.length === 0 && !root.children[token])) {
@@ -94,13 +97,13 @@ export function create_matcher(keymap: CompiledKeymap, frees?: (token: string) =
   // Whether `token` binds after the keys in `ahead`: it adds a count digit or starts, continues or ends a binding. The walk is left as it was.
   // A completed binding in `ahead` can change the mode the later keys replay in, so every key after it counts as binding.
   const binds_after_ = (mode: string, ahead: readonly string[], token: string): boolean => {
-    const saved = [walk_mode, node, typed, count_digits, register_keys] as const;
+    const saved = [walk_mode, node, typed, count_digits, register_keys, keys] as const;
     let result: MatchResult = { kind: "no_match" };
     for (const key of [...ahead, token]) {
       if (result.kind === "match") break;
       result = feed(mode, key);
     }
-    [walk_mode, node, typed, count_digits, register_keys] = saved;
+    [walk_mode, node, typed, count_digits, register_keys, keys] = saved;
     return result.kind !== "no_match";
   };
 
