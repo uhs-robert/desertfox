@@ -31,6 +31,11 @@ export type ModeChanged = {
   mode: Mode;
 };
 
+// Escape in a frame that holds insert mode from `i`: the background returns the tab's switched frames to normal.
+export type LeaveTabInsert = {
+  type: "leave_tab_insert";
+};
+
 // Asks the background to inject a bundle into the sender's frame. The answer is a RunResponse: ok once the script has run.
 export type LoadBundle = {
   type: "load_bundle";
@@ -357,7 +362,7 @@ export type ImportSessions = { type: "import_sessions"; text: string };
 
 export type PageToBackground = ChangeSetting | ListSettings | ToolbarRequest | PreviewConfigImport | CommitConfigImport | ExportConfig | ListSnippets | RemoveSnippet | ExportSessions | ImportSessions;
 
-export type ContentToBackground = RunRequest | ModeChanged | LoadBundle | ListKeys | IssueCmdlineTicket | OpenCmdline | RecordCmdline | CompleteItems | TabRowsActionRequest | OpenHelp | RecordStep | ReadKeymap | FindScan | ImageAction | InspectPick | RegisterRequest | MarkRequest;
+export type ContentToBackground = RunRequest | ModeChanged | LeaveTabInsert | LoadBundle | ListKeys | IssueCmdlineTicket | OpenCmdline | RecordCmdline | CompleteItems | TabRowsActionRequest | OpenHelp | RecordStep | ReadKeymap | FindScan | ImageAction | InspectPick | RegisterRequest | MarkRequest;
 
 // How a command ended. Done is `{ ok: true }`. A handler that returns nothing is done, and one that throws is failed.
 // Cancelled means the user left a waiting step (Escape, an unrelated key, a page change), so the rest of a sequence does not run and nothing is shown.

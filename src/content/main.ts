@@ -83,7 +83,7 @@ const key_flow = create_key_flow({
     page_mode.escape();
     blur_focused_element();
   },
-  in_editable_field_: () => is_editable_element(document.activeElement),
+  in_editable_field_: () => is_editable_element(deepest_focused_element()),
   is_loading_: bundles.is_loading_,
   loading_sink_bundles_: bundles.loading_sink_bundles_,
   sink_of_: bundles.sink_of_,
@@ -231,6 +231,7 @@ function install_matcher(reply: PageKeymap | undefined): void {
   // The rule's own ignore mode ends with the rule, so removing or rewriting it takes effect on the open page.
   const step = all_off_step(keymap !== undefined, all_off, was_all_off, page_mode.get_mode_());
   if (step === "enter") page_mode.set_mode_("ignore");
+  else if (first_install && reply?.insert) page_mode.set_mode_("insert");
   else {
     if (step === "leave") page_mode.set_mode_("normal");
     if ((first_install || step === "leave") && is_editable_element(deepest_focused_element())) page_mode.focus_entered_editable_();

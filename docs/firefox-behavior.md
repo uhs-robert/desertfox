@@ -150,3 +150,7 @@ Follow-up on `indexedDB` (Firefox 160, same setup):
 - `browsingData.remove({ hostnames, cookieStoreId }, { indexedDB: true })` returns ok but clears nothing: a database with no open connection stayed too. So `hostnames` is ignored for IndexedDB as well, and it cannot stand in for the page's own delete.
 - `indexedDB.deleteDatabase` from a page that holds a connection to the database fires `blocked`. The delete stays pending and finishes once the connection closes, which a reload does.
 - So `rc` leaves a held database to that pending delete and names IndexedDB as stayed in its notice.
+
+## tabs.saveAsPDF (page-group)
+
+Not measured on Linux. The key test session cannot exercise it: `tabs.saveAsPDF` opens a GTK file picker that steals focus from the nested session and needs a person to answer. Firefox's source has no platform gate, and the call resolves to `saved`, `replaced`, `canceled`, `not_saved` or `not_replaced`. `ps` treats `canceled` as success and the two `not_` results as a refusal with a notice. `tabs.print` returns nothing, so `pr` has no result to check.

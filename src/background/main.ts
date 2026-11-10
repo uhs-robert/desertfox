@@ -33,6 +33,8 @@ import { create_step_recorder, page_outcome, page_steps } from "./record_step.ts
 import type { RecordStep } from "./record_step.ts";
 import { browser_macro_recorder } from "./macro_recorder.ts";
 import { wire_repeat } from "../commands/command.ts";
+import { wire_tab_insert } from "../commands/mode.ts";
+import { create_tab_insert } from "./tab_insert.ts";
 import { DISABLED_STORAGE_KEY, SLOT_TABLE_STORAGE_KEY } from "./storage_keys.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY } from "../shared/prefix_tree.ts";
 import type { CompiledKeymap } from "../shared/prefix_tree.ts";
@@ -55,6 +57,14 @@ import type { SnippetCall } from "./snippets.ts";
 
 // Mode reports wait for this, so the clear never removes a fresh report.
 const modes_cleared = forget_all_tab_modes(browser.storage.local);
+const tab_insert = create_tab_insert({
+  storage: browser.storage.local,
+  modes_cleared,
+  frames: async (tab_id) => ((await browser.webNavigation.getAllFrames({ tabId: tab_id })) ?? []).map(({ frameId, url }) => ({ frame_id: frameId, url })),
+  tab_url: async (tab_id) => (await browser.tabs.get(tab_id).catch(() => undefined))?.url,
+  send_mode: (tab_id, frame_id, mode) => send_to_tab(tab_id, { type: "set_mode", mode }, frame_id),
+});
+wire_tab_insert(tab_insert.enter);
 
 // Taken before the config loads, so it holds the built-in commands only, which are the ones the help page has cards for.
 const built_in_ids = new Set(registry.list().map((command) => command.id));
@@ -185,8 +195,11 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
   }
   if (request?.type === "mode_changed" && sender.tab?.id !== undefined) {
     const tab_id = sender.tab.id;
+    // The top frame leaving insert by any route ends the hold.
+    if (sender.frameId === 0 && request.mode !== "insert") void tab_insert.top_frame_left_insert(tab_id, request.mode).catch(() => undefined);
     return modes_cleared.then(() => remember_reported_mode(browser.storage.local, tab_id, sender.frameId, request.mode));
   }
+  if (request?.type === "leave_tab_insert" && sender.tab?.id !== undefined) return tab_insert.leave(sender.tab.id);
   if (request?.type === "load_bundle") return bundle_loader.answer(sender, request.name);
   if (request?.type === "find_scan" && is_scan_request(request)) return find_scan.answer(request, `${sender.tab?.id}:${sender.frameId}`);
   if (request?.type === "register_read" || request?.type === "register_write" || request?.type === "register_yank") return answer_register_request(browser_register_store, request, sender.tab);
@@ -197,7 +210,7 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
   if (request?.type === "tab_rows_action") return complete_items.tab_rows_action(request.action, request.tab_ids, asker_of(sender), request.cookie_store_id);
   if (request?.type === "image_action") return run_image_action(image_deps, request, { incognito: sender.tab?.incognito === true, cookie_store_id: sender.tab?.cookieStoreId });
   if (request?.type === "inspect_pick") return sender.tab?.id === undefined ? Promise.resolve({ ok: false, message: "No tab to inspect" }) : inspect_relay.pick(sender.tab.id);
-  if (request?.type === "read_keymap") return browser_macro_recorder.register_of(sender.tab?.incognito === true).catch(() => undefined).then((recording) => read_keymap_reply(browser.storage.local, rule_addresses_of(sender), recording));
+  if (request?.type === "read_keymap") return browser_macro_recorder.register_of(sender.tab?.incognito === true).catch(() => undefined).then((recording) => read_keymap_reply(browser.storage.local, rule_addresses_of(sender), recording, sender.tab?.id === undefined || sender.frameId === undefined ? undefined : () => tab_insert.join(sender.tab!.id!, sender.frameId!)));
   if (request?.type === "open_help") return open_help.open(request.command_id, sender.tab?.id, sender.frameId);
   if (request?.type === "record_cmdline") return cmdline.record(request.text, sender.tab?.incognito === true);
   if (request?.type === "record_step") {

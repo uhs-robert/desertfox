@@ -577,6 +577,8 @@ export async function create_session({ name: session_name, timings, sweep = true
     if (value?.error) throw new Error(`background call failed: ${value.error}`);
     return value;
   };
+  // Firefox shows a notice in a window of its own (user.js), which holds the keyboard focus until it closes.
+  const clear_notices = () => in_background(`(async () => { for (const id of Object.keys(await browser.notifications.getAll())) await browser.notifications.clear(id); })()`);
   const close_tabs_with = (text) => in_background(`(async () => { for (const tab of await browser.tabs.query({})) if (tab.url.includes(${JSON.stringify(text)})) await browser.tabs.remove(tab.id); })()`);
 
   // Polls until the check holds. `what` names the wait in the error. A probe whose timeout is the normal path and that the caller absorbs passes `expected_timeout`, so the timeout is not counted as a lost-key suspect.
@@ -918,7 +920,7 @@ export async function create_session({ name: session_name, timings, sweep = true
     // The cases of a piece file in test/key/p<number>_*.mjs get these helpers.
     const context = { config_dir, config_copy, load_config_dir, take_shot: (path) => timings.time("driver", () => session.shot(path)), run_case: run_piece_case, setup, on_teardown, expect, open_page, open_page_by_keys, send_keys, press_keys, settle_focus, wait_takes_keys, poll_until, wait_tab_quiet, barrier, expect_absent, read_cmdline_state, wait_cmdline, close_cmdline, open_cmdline, type_in_line, complete_in_line, run_line, type_in_address_bar, scroll_report_wait_ms: SCROLL_REPORT_DELAY_MS + 100, which_key_delay_ms: WHICH_KEY_DELAY_MS, sleep, events, wait_event, since, find_event, url_of, rdp, extension_id: EXTENSION_ID, scroll_delta_after, scroll_delta_by_press, wait_active_tab, tab_switch_mark, tabs_shown_since, expect_no_tab_shown, scroll_of, last_scroll_y,
       // Moved out of the run.mjs cases. Pieces may use them too.
-      in_background, read_local, reload_in_place, wait_reinject_report, injections_of, settled_injection_count, expect_no_scroll, expect_exactly_one_visible, hint_label_count, in_active_tab, badge_is, is_selection_of, press_and_wait_for_move, escape_to_normal, extension_view, close_tabs_with, record };
+      in_background, clear_notices, read_local, reload_in_place, wait_reinject_report, injections_of, settled_injection_count, expect_no_scroll, expect_exactly_one_visible, hint_label_count, in_active_tab, badge_is, is_selection_of, press_and_wait_for_move, escape_to_normal, extension_view, close_tabs_with, record };
     return { context, state, piece_file };
   }
 
