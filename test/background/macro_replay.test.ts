@@ -311,3 +311,11 @@ test("a step that throws leaves no page watch behind", async () => {
   assert.ok(watches.every((watch) => watch.stopped));
   assert.equal(replay.is_playing(), false);
 });
+
+test("a step on a page still loading from before it runs the next step at once, with no wait", async () => {
+  const { replay, log, start, loading } = make({ a: [{ id: "scroll.lines" }, { id: "scroll.lines" }] });
+  loading.add(1);
+  const stalled = new Promise((resolve) => setTimeout(() => resolve("stalled"), 200));
+  assert.equal(await Promise.race([replay.play(start), stalled]), true);
+  assert.deepEqual(log, ["hold 1", "run scroll.lines in 1:3", "run scroll.lines in 1:3"]);
+});
