@@ -192,6 +192,8 @@ export const DEFAULT_KEYMAP: KeymapConfig = {
     "]c": { id: "url.increment", args: { direction: "up" } },
     "[c": { id: "url.increment", args: { direction: "down" } },
     gi: { id: "page.focus_input" },
+    I: { id: "page.focus_input" },
+    i: { id: "mode.insert" },
 
     p: { id: "open.clipboard", args: { where: "here" } },
     P: { id: "open.clipboard", args: { where: "tab" } },

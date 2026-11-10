@@ -63,6 +63,25 @@ test("mode state follows focus into a field from normal, caret and visual only",
   assert.deepEqual(seen, ["insert", "normal", "ignore"]);
 });
 
+test("insert set by a mode set outlasts focus leaving a field, and Escape ends it", () => {
+  const state = create_mode_state();
+  state.set_mode_("insert");
+  assert.equal(state.is_manual_insert_(), true);
+  state.focus_entered_editable_();
+  state.focus_left_editable_();
+  assert.equal(state.get_mode_(), "insert");
+  state.escape();
+  assert.deepEqual([state.get_mode_(), state.is_manual_insert_()], ["normal", false]);
+});
+
+test("insert from focus is not manual, so leaving the field ends it", () => {
+  const state = create_mode_state();
+  state.focus_entered_editable_();
+  assert.equal(state.is_manual_insert_(), false);
+  state.focus_left_editable_();
+  assert.equal(state.get_mode_(), "normal");
+});
+
 for (const mode of ["caret", "visual"] as const) {
   test(`focus in a field leaves ${mode} mode for insert, and leaving the field returns to normal`, () => {
     const state = create_mode_state();
@@ -212,16 +231,25 @@ test("a mode change drops a pending sequence and count", () => {
   assert.deepEqual(ran, ["down"]);
 });
 
+test("an insert chord runs while a field is focused", () => {
+  const { state, ran, flow } = make_flow(true);
+  flow.set_matcher_(create_matcher(keymap), browser_chords);
+  state.set_mode_("insert");
+  assert.equal(flow.handle_token_("<C-x>"), "cancel");
+  assert.deepEqual(ran, ["insert_chord"]);
+});
+
 test("browser chords run in normal and insert mode and are cancelled", () => {
   const { state, ran, flow } = make_flow();
   flow.set_matcher_(create_matcher(keymap), browser_chords);
   assert.equal(flow.handle_token_("<A-j>"), "cancel");
   state.set_mode_("insert");
   assert.equal(flow.handle_token_("<A-j>"), "cancel");
-  assert.equal(flow.handle_token_("<C-x>"), "cancel");
+  // With no field focused, an insert chord is the browser's.
+  assert.equal(flow.handle_token_("<C-x>"), "pass");
   state.set_mode_("ignore");
   assert.equal(flow.handle_token_("<A-j>"), "pass");
-  assert.deepEqual(ran, ["next_tab", "next_tab", "insert_chord"]);
+  assert.deepEqual(ran, ["next_tab", "next_tab"]);
 });
 
 test("startup holds plain keys outside fields and, with no page callback, lets what matches nothing go", () => {

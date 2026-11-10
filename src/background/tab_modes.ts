@@ -9,6 +9,17 @@ type ModeStorage = Pick<typeof browser.storage.local, "get" | "set" | "remove">;
 const TOP_FRAME = 0;
 
 const key_of = (tab_id: number): string => TAB_MODE_STORAGE_PREFIX + tab_id;
+// Under the tab-mode prefix, so a restart clears it with the modes.
+const manual_insert_key_of = (tab_id: number): string => `${TAB_MODE_STORAGE_PREFIX}insert_${tab_id}`;
+
+// The frames that `i` switched to insert, or undefined when the tab is not held. The background owns this tab-wide state, and a frame that loads later joins it.
+export async function read_insert_hold(storage: ModeStorage, tab_id: number): Promise<number[] | undefined> {
+  return (await storage.get(manual_insert_key_of(tab_id)))[manual_insert_key_of(tab_id)] as number[] | undefined;
+}
+
+export const write_insert_hold = (storage: ModeStorage, tab_id: number, frame_ids: number[]): Promise<void> => storage.set({ [manual_insert_key_of(tab_id)]: frame_ids });
+
+export const clear_insert_hold = (storage: ModeStorage, tab_id: number): Promise<void> => storage.remove(manual_insert_key_of(tab_id));
 
 export async function remember_tab_mode(storage: ModeStorage, tab_id: number, mode: Mode): Promise<void> {
   await storage.set({ [key_of(tab_id)]: mode });
@@ -34,7 +45,7 @@ export async function forget_all_tab_modes(storage: ModeStorage): Promise<void> 
 }
 
 export async function forget_tab_mode(storage: ModeStorage, tab_id: number): Promise<void> {
-  await storage.remove(key_of(tab_id));
+  await storage.remove([key_of(tab_id), manual_insert_key_of(tab_id)]);
 }
 
 // A tab that never reported a mode is in normal mode, for example an about: page where no content script runs.

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { forget_all_tab_modes, forget_mode_on_navigation, forget_tab_mode, recall_tab_mode, remember_reported_mode, remember_tab_mode, shortcut_allowed } from "../../src/background/tab_modes.ts";
+import { forget_all_tab_modes, forget_mode_on_navigation, forget_tab_mode, recall_tab_mode, remember_reported_mode, remember_tab_mode, shortcut_allowed, read_insert_hold, write_insert_hold } from "../../src/background/tab_modes.ts";
 
 function fake_storage() {
   const data: Record<string, unknown> = {};
@@ -58,4 +58,11 @@ test("while off no shortcut runs, ignore-capable ones included", () => {
   const get = () => ({ modes: ["normal", "ignore"] as const });
   assert.equal(shortcut_allowed("normal", [{ id: "tab.next" }], get, true), false);
   assert.equal(shortcut_allowed("ignore", [{ id: "mode.leave" }], get, true), false);
+});
+
+test("a navigation ends the insert hold", async () => {
+  const storage = fake_storage();
+  await write_insert_hold(storage, 4, [0]);
+  await forget_mode_on_navigation(storage, 4, { status: "loading" });
+  assert.equal(await read_insert_hold(storage, 4), undefined);
 });
