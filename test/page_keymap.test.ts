@@ -13,7 +13,7 @@ import type { CompiledKeymap, PageKeymap } from "../src/shared/prefix_tree.ts";
 
 const resolve = () => ({ runs_in: "content" as const, label: "x", count: "ignore" as const });
 const KEYMAP: KeymapConfig = {
-  normal: { j: { id: "a.j" }, k: { id: "a.k" }, gg: { id: "a.gg" }, "<Space>i": { id: "a.ignore" }, "<S-Escape>": { id: "a.leave" }, "<C-v>": { id: "a.v" } },
+  normal: { j: { id: "a.j" }, k: { id: "a.k" }, gg: { id: "a.gg" }, ",i": { id: "a.ignore" }, "<S-Escape>": { id: "a.leave" }, "<C-v>": { id: "a.v" } },
   browser: { "<A-j>": { id: "a.tab" } },
 };
 const compile = (site_rules: { site: string; pass?: string; only?: string }[]) => compile_keymap(KEYMAP, { site_rules }, resolve).compiled;
@@ -50,13 +50,13 @@ test("an only rule keeps the listed keys and frees every other key", async () =>
   assert.equal(is_freed(reply.frees!, "j"), false);
 });
 
-test("an all-off page keeps the whole normal tree, so <Space>i and the way out stay", async () => {
+test("an all-off page keeps the whole normal tree, so ,i and the way out stay", async () => {
   const compiled = compile([{ site: "https://a.test/*" }]);
   const reply = (await ask(compiled, "https://a.test/"))!;
   assert.equal(reply.all_off, true);
   assert.equal(reply.frees, undefined);
   assert.deepEqual(reply.keymap.modes.normal, compiled.modes.normal);
-  assert.ok((reply.keymap.modes.normal?.children["<Space>"] as { children: Record<string, unknown> }).children["i"]);
+  assert.ok((reply.keymap.modes.normal?.children[","] as { children: Record<string, unknown> }).children["i"]);
 });
 
 test("the first matching rule wins", async () => {
@@ -97,7 +97,6 @@ function make_flow() {
   const ran: string[] = [];
   const flow = create_key_flow({
     in_editable_field_: () => false,
-    on_space_control_: () => false,
     get_mode_: state.get_mode_,
     take_pass_next_: state.take_pass_next_,
     run_leaf_: (matched) => ran.push(String(matched.steps[0]?.invocation.id)),

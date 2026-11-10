@@ -171,7 +171,6 @@ function make_flow() {
   const prefixes: (string[] | undefined)[] = [];
   const flow = create_key_flow({
     in_editable_field_: () => false,
-    on_space_control_: () => false,
     get_mode_: state.get_mode_,
     take_pass_next_: state.take_pass_next_,
     run_leaf_: (leaf, count) => ran.push(`${leaf.steps[0]?.invocation.id}:${leaf.steps[0]?.invocation.args?.slot ?? ""}:${count ?? ""}`),

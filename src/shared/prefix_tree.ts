@@ -68,7 +68,7 @@ export type CompiledKeymap = {
 };
 
 // What the background sends a page: the keymap without `site_rules`, its normal tree already trimmed when the page's rule lists keys.
-// `all_off` keeps the whole tree so `<Space>i` can leave ignore mode. `frees` is set only for a listed-keys rule.
+// `all_off` keeps the whole tree so `,i` can leave ignore mode. `frees` is set only for a listed-keys rule.
 export type PageFrees = { tokens: string[]; invert: boolean };
 export const is_freed = ({ tokens, invert }: PageFrees, token: string): boolean => tokens.includes(token) !== invert;
 export type PageKeymap = { keymap: Omit<CompiledKeymap, "site_rules">; all_off: boolean; frees?: PageFrees };
