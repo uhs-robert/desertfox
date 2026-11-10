@@ -63,6 +63,8 @@ async function run_leaf(leaf: TreeLeaf, count: number | undefined, repeat: boole
   }
   const outcome = await run_content_steps(leaf.steps, count, repeat);
   if (!outcome.ok) show_toast(outcome.message);
+  // A held key sends its first press only.
+  if (!repeat) void send_to_background({ type: "record_step", invocations: counted_invocations(leaf.steps, count), outcome });
 }
 
 // Zero turns which-key off.

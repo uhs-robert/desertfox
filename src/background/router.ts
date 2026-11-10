@@ -8,7 +8,8 @@ import type { EnumSources } from "../shared/registry/check_args.ts";
 import { is_context_source } from "../shared/registry/params.ts";
 import { print_command } from "../shared/registry/print_command.ts";
 import { apply_count } from "./count.ts";
-import { as_stored, type RepeatMemory } from "./repeat_memory.ts";
+import type { RepeatMemory } from "./repeat_memory.ts";
+import { create_step_recorder } from "./record_step.ts";
 
 export type ActiveTab = { tab_id: number; window_id: number; url: string | undefined; incognito?: boolean };
 
@@ -64,6 +65,8 @@ function outcome_of_reply(reply: unknown): Outcome {
 }
 
 export function create_router(deps: RouterDeps): Router {
+  const record_step = create_step_recorder(deps);
+
   // Read at run time: an earlier step or repeat can change which tab is active. The first step is pinned to the sender, because
   // the active tab can change between the key press and this read. A sender that is gone falls back to the active tab.
   async function read_now(request: RouteRequest, pin_to_sender: boolean): Promise<Now> {
@@ -87,27 +90,20 @@ export function create_router(deps: RouterDeps): Router {
       const is_first = index === 0;
       const outcome = await run_one(invocation, request, prompted, is_first).catch((error: unknown) => refuse(error instanceof Error ? error.message : String(error)));
       // The user left a waiting step: the rest of the sequence does not run, and nothing is repeated.
-      if (outcome.ok && outcome.cancelled) return { ok: true, cancelled: true };
+      if (outcome.ok && outcome.cancelled) {
+        await record_step(request.invocations, outcome, { is_private });
+        return { ok: true, cancelled: true };
+      }
       if (outcome.ok) continue;
+      await record_step(request.invocations, outcome, { is_private });
       const refusal: Refusal = { id: invocation.id, message: outcome.message };
       const { context } = await read_now(request, is_first);
       await deps.show_refusal(context.tab_id, refusal, context.frame_id);
       return { ok: false, refusal };
     }
-    // A line the user filled in stores itself when it runs, and this request still holds the missing param.
-    if (prompted.size === 0) await remember(request, is_private);
+    // Before the reply, so a `.` typed next finds the slot written.
+    await record_step(request.invocations, done, { is_private, prompted: prompted.size > 0, skip_repeat: request.skip_repeat === true });
     return { ok: true };
-  }
-
-  // Only a request that ran to the end counts. Content commands do not repeat here: the hint start records itself.
-  async function remember(request: RouteRequest, is_private: boolean): Promise<void> {
-    if (request.skip_repeat) return;
-    const repeatable = request.invocations.filter((invocation) => {
-      const command = deps.get_command(invocation.id);
-      return command?.runs_in === "background" && command.repeatable !== false;
-    });
-    if (repeatable.length === 0) return;
-    await deps.repeat_memory.save(repeatable.map(as_stored), is_private).catch(() => undefined);
   }
 
   async function run_one(invocation: BoundInvocation, request: RouteRequest, prompted: Set<BoundInvocation>, is_first: boolean): Promise<Outcome> {

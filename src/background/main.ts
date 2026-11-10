@@ -22,7 +22,8 @@ import { repair_tabs_after_reload } from "./reload.ts";
 import { browser_tab_model_deps, create_tab_model } from "./tab_model.ts";
 import { browser_find_scan_deps, create_find_scan, is_scan_request } from "./find_scan.ts";
 import { create_router } from "./router.ts";
-import { create_repeat_memory, page_record } from "./repeat_memory.ts";
+import { create_repeat_memory, forget_private_slot_when_last_window_closes } from "./repeat_memory.ts";
+import { create_step_recorder, page_outcome, page_steps } from "./record_step.ts";
 import { wire_repeat } from "../commands/command.ts";
 import { DISABLED_STORAGE_KEY, SLOT_TABLE_STORAGE_KEY } from "./storage_keys.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY } from "../shared/prefix_tree.ts";
@@ -49,6 +50,7 @@ const modes_cleared = forget_all_tab_modes(browser.storage.local);
 const built_in_ids = new Set(registry.list().map((command) => command.id));
 
 const repeat_memory = create_repeat_memory(browser.storage.session);
+const record_step = create_step_recorder({ get_command: (id) => registry.get(id), repeat_memory });
 const router_deps = make_router_deps(get_config, repeat_memory);
 const router = create_router(router_deps);
 const is_private_tab = async (tab_id: number | undefined) => tab_id !== undefined && (await browser.tabs.get(tab_id).catch(() => undefined))?.incognito === true;
@@ -166,11 +168,14 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
   if (request?.type === "read_tab_address") return Promise.resolve(sender.tab?.url);
   if (request?.type === "open_help") return open_help.open(request.command_id, sender.tab?.id, sender.frameId);
   if (request?.type === "record_cmdline") return cmdline.record(request.text, sender.tab?.incognito === true);
-  if (request?.type === "record_repeat") {
-    return get_config().then(async () => {
-      const invocation = page_record(request, (id) => registry.get(id), { search_engines: await get_search_engine_names(), containers: await container_names() });
-      if (invocation) await repeat_memory.save([invocation], sender.tab?.incognito === true);
+  if (request?.type === "record_step") {
+    // Tracked before the first await, so a `.` that arrives next waits for this write.
+    const recorded = get_config().then(async () => {
+      const steps = page_steps(request, (id) => registry.get(id), { search_engines: await get_search_engine_names(), containers: await container_names() });
+      if (steps) await record_step(steps, page_outcome(request), { is_private: sender.tab?.incognito === true });
     });
+    repeat_memory.track(recorded);
+    return recorded;
   }
   if (request?.type === "list_keys") {
     const tab = sender.tab;
@@ -232,6 +237,8 @@ browser.tabs.onUpdated.addListener((tab_id, change) => {
   if (change.status === "loading") void inspect_relay.forget(tab_id);
   return forget_mode_on_navigation(browser.storage.local, tab_id, change);
 });
+
+browser.windows.onRemoved.addListener(() => void forget_private_slot_when_last_window_closes(repeat_memory, browser.windows).catch(() => undefined));
 
 browser.tabs.onActivated.addListener(({ windowId, previousTabId }) => previous_tabs.activated(windowId, previousTabId));
 

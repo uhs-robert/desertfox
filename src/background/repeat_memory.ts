@@ -1,26 +1,34 @@
-// The request `.` replays, in `storage.session` so a background restart keeps it. A private window has its own slot.
+// The request `.` replays, in `storage.session` so a background restart keeps it. A private window has its own slot, cleared when the last private window closes.
 
-import type { CommandDef } from "../shared/command.ts";
 import type { BoundInvocation } from "../shared/invocation.ts";
-import type { CheckedArgs } from "../shared/command.ts";
-import { check_args, type EnumSources } from "../shared/registry/check_args.ts";
 import { REPEAT_PRIVATE_STORAGE_KEY, REPEAT_STORAGE_KEY } from "./storage_keys.ts";
 
-type SessionStorage = Pick<typeof browser.storage.session, "get" | "set">;
+type SessionStorage = Pick<typeof browser.storage.session, "get" | "set" | "remove">;
 
 export type RepeatMemory = {
   save: (invocations: BoundInvocation[], is_private: boolean) => Promise<void>;
   load: (is_private: boolean) => Promise<BoundInvocation[] | undefined>;
 };
 
+// `track` lets a caller register a write that has not reached `save` yet, so a `load` right after it waits for the write.
+export type TrackedRepeatMemory = RepeatMemory & { track: (write: Promise<unknown>) => void; clear_private: () => Promise<void> };
+
 export const no_repeat_memory: RepeatMemory = { save: async () => undefined, load: async () => undefined };
 
 const slot_key = (is_private: boolean) => (is_private ? REPEAT_PRIVATE_STORAGE_KEY : REPEAT_STORAGE_KEY);
 
-export function create_repeat_memory(storage: SessionStorage): RepeatMemory {
+export function create_repeat_memory(storage: SessionStorage): TrackedRepeatMemory {
+  // A page record is sent after the command ran and can still be in flight when the next key asks for the slot.
+  let pending: Promise<unknown> = Promise.resolve();
   return {
+    track: (write) => void (pending = Promise.all([pending, write.catch(() => undefined)])),
     save: (invocations, is_private) => storage.set({ [slot_key(is_private)]: invocations }),
+    clear_private: async () => {
+      await pending;
+      await storage.remove(REPEAT_PRIVATE_STORAGE_KEY);
+    },
     load: async (is_private) => {
+      await pending;
       const stored = (await storage.get(slot_key(is_private)))[slot_key(is_private)];
       return Array.isArray(stored) ? (stored as BoundInvocation[]) : undefined;
     },
@@ -30,15 +38,11 @@ export function create_repeat_memory(storage: SessionStorage): RepeatMemory {
 // A key binding's prompt and label are not part of what ran.
 export const as_stored = ({ id, args, count }: BoundInvocation): BoundInvocation => ({ id, ...(args === undefined ? {} : { args }), ...(count === undefined ? {} : { count }) });
 
-// What a page script may record: the hint start (`hint.run`) with checked args. The page already
-// sends `run` messages, so this adds no reach, but the slot must hold only what the router would accept.
-export function page_record(message: unknown, get_command: (id: string) => CommandDef | undefined, sources: EnumSources): BoundInvocation | undefined {
-  const invocation = (message as { invocation?: { id?: unknown; args?: unknown } } | undefined)?.invocation;
-  if (typeof invocation?.id !== "string") return undefined;
-  const command = get_command(invocation.id);
-  if (command?.id !== "hint.run" || command.runs_in !== "content" || command.repeatable === false) return undefined;
-  const args = invocation.args;
-  if (args !== undefined && (typeof args !== "object" || args === null || Array.isArray(args))) return undefined;
-  const checked = check_args(command, args as Record<string, unknown> | undefined, sources);
-  return checked.ok ? { id: command.id, args: checked.args as CheckedArgs } : undefined;
+// A private command must not outlive the private session. Firefox deletes private data when the last private window closes, so the slot goes with it.
+export async function forget_private_slot_when_last_window_closes(
+  memory: Pick<TrackedRepeatMemory, "clear_private">,
+  windows: { getAll: () => Promise<{ incognito: boolean }[]> },
+): Promise<void> {
+  if ((await windows.getAll()).some((window) => window.incognito)) return;
+  await memory.clear_private();
 }

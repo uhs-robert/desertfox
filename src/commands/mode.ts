@@ -16,6 +16,7 @@ define("mode.set", {
     },
   ],
   runs_in: "content",
+  repeatable: false,
   modes: ["normal", "insert", "ignore", "caret", "visual", "visual_line"],
 });
 
@@ -24,6 +25,7 @@ define("mode.escape", {
   label: "Escape",
   intent: "Return to normal mode. It works from insert, hint, command line, caret and both visual modes, and drops the focus from the field.",
   runs_in: "content",
+  repeatable: false,
   modes: ["normal", "insert", "hint", "cmdline", "caret", "visual", "visual_line"],
 });
 
@@ -32,6 +34,7 @@ define("mode.pass_next", {
   label: "Pass next key",
   intent: "Give the next key to the page instead of DesertFox.",
   runs_in: "content",
+  repeatable: false,
 });
 
 // Defined here with the mode commands because both change what has the focus.

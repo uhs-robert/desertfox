@@ -1,9 +1,9 @@
 // Key test cases of `.` (repeat). run.mjs calls run_cases with its helpers.
 import { evaluate_in_background } from "./rdp.mjs";
 
-export const areas = ["keys"];
+export const areas = ["keys", "scroll"];
 
-export async function run_cases({ rdp, extension_id, run_case, press_keys, poll_until, settle_focus, barrier, hint_label_count, open_page, wait_event, find_event, events, expect, wait_active_tab, tab_switch_mark, expect_no_tab_shown }) {
+export async function run_cases({ rdp, extension_id, run_case, press_keys, poll_until, settle_focus, barrier, in_background, hint_label_count, open_page, wait_event, find_event, events, expect, wait_active_tab, tab_switch_mark, expect_no_tab_shown }) {
   const tab_count = () => evaluate_in_background(rdp, extension_id, `(async () => (await browser.tabs.query({})).length)()`);
   const close_tabs_with = (text) => evaluate_in_background(rdp, extension_id, `(async () => { for (const tab of await browser.tabs.query({})) if (tab.url.includes(${JSON.stringify(text)})) await browser.tabs.remove(tab.id); })()`);
   const loaded = (page_id) => (event) => event.type === "tree_read" && event.page_id === page_id;
@@ -69,5 +69,17 @@ export async function run_cases({ rdp, extension_id, run_case, press_keys, poll_
     expect(!find_event(mark, loaded("hint_one")), ". reopened the address instead of showing hints");
     await close_tabs_with("hint_two");
     await close_tabs_with("rp_here");
+  });
+
+  // A page command is recorded by the content script when its leaf ends, and the `.` that follows must find it.
+  await run_case("C-d then . scrolls another half page", async () => {
+    await open_page("aligned", "rp_scroll", { new_tab: true });
+    const scroll_y = async () => (await in_background(`browser.tabs.query({ active: true, lastFocusedWindow: true }).then(([tab]) => browser.tabs.executeScript(tab.id, { code: "Math.round(scrollY)" }))`))[0];
+    const half = (await in_background(`browser.tabs.query({ active: true, lastFocusedWindow: true }).then(([tab]) => browser.tabs.executeScript(tab.id, { code: "Math.round(innerHeight / 2)" }))`))[0];
+    await press_keys("-M", "ctrl", "d", "-m", "ctrl");
+    await poll_until("the first half page", async () => (await scroll_y()) >= half - 1);
+    await press_keys(".");
+    await poll_until("the second half page after .", async () => (await scroll_y()) >= 2 * half - 2);
+    await close_tabs_with("rp_scroll");
   });
 }

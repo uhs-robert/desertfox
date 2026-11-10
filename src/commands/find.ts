@@ -10,6 +10,7 @@ define("find.open", {
     { name: "source", type: "enum", values: ["typed", "word"], default: "typed", value_labels: { word: "word" }, description: { word: "Search the word or selection at the caret." } },
   ],
   runs_in: "content",
+  repeatable: false,
   bundle: "caret",
 });
 

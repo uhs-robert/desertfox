@@ -151,7 +151,7 @@ async function page_with(texts: string[]) {
     disconnect = () => {};
   };
   globals.browser = { storage: { local: { get: async () => ({}) }, onChanged: { addListener: () => {} } }, runtime: { sendMessage: async (message: unknown) => {
-    const is_record = (message as { type?: string }).type === "record_repeat";
+    const is_record = (message as { type?: string }).type === "record_step";
     (is_record ? repeat_records : sent).push(message);
     return is_record ? undefined : sends_held?.();
   } } };
@@ -501,7 +501,7 @@ test("a hint start tells the background what `.` shows again, and a pick that op
   await settle();
   page.type(page.labels()[0]!.toLowerCase());
   await settle();
-  const record = { type: "record_repeat", invocation: { id: "hint.run", args } };
+  const record = { type: "record_step", invocations: [{ id: "hint.run", args }], outcome: { ok: true } };
   assert.deepEqual(page.repeat_records, [record]);
   assert.equal((page.sent.at(-1) as { from_hints?: boolean }).from_hints, true);
 });
