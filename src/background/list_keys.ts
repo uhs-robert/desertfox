@@ -5,7 +5,7 @@ import type { PageInfo } from "../shared/engines/index.ts";
 import type { BoundInvocation } from "../shared/invocation.ts";
 import type { WhichKeyBorder } from "../shared/config.ts";
 import type { ListKeys, WhichKeyPanel, WhichKeyRow } from "../shared/messages.ts";
-import { COMPILED_KEYMAP_STORAGE_KEY } from "../shared/prefix_tree.ts";
+import { COMPILED_KEYMAP_STORAGE_KEY, token_label } from "../shared/prefix_tree.ts";
 import type { CompiledKeymap, TreeBranch, TreeLeaf, TreeNode } from "../shared/prefix_tree.ts";
 
 import { is_available } from "./availability.ts";
@@ -18,7 +18,7 @@ function row_of(token: string, node: TreeNode, find_command: (id: string) => Com
   if (node.kind === "branch") return { keys: token, command: `+${node.label ?? token}`, description: "", more: true };
   const first = node.steps[0];
   const command = first && find_command(first.invocation.id);
-  return { keys: token, command: node.label ?? command?.label ?? first?.invocation.id ?? "", description: node.intent ?? command?.intent ?? "", more: false };
+  return { keys: token_label(token), command: node.label ?? command?.label ?? first?.invocation.id ?? "", description: node.intent ?? command?.intent ?? "", more: false };
 }
 
 // Display order: letters (case-blind, so `t` before `T`), other plain keys, keys with a modifier, groups, Escape last.

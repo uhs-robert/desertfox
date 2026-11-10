@@ -4,7 +4,8 @@
 import type { BundleName } from "./bundles.ts";
 import type { Outcome } from "./messages.ts";
 
-export type ParamType = "int" | "float" | "string" | "bool" | "enum";
+// `key` is one key press. A key binding that leaves a required `key` param out captures the next key into it.
+export type ParamType = "int" | "float" | "string" | "bool" | "enum" | "key";
 
 // Runtime modes. `browser` is not here: it is a keymap section, see KeymapMode.
 export const MODES = ["normal", "insert", "ignore", "hint", "cmdline", "caret", "visual", "visual_line"] as const;
@@ -60,7 +61,7 @@ export type ParamDef = {
   optional?: boolean;
   // Smallest value of an `int` param.
   min?: number;
-  // A `string` param whose text must match this regular expression (source text, so it travels in `commands.json`). An optional param may still be empty.
+  // A `string` or `key` param whose text must match this regular expression (source text, so it travels in `commands.json`). An optional param may still be empty.
   pattern?: string;
   // A `string` param with a static `values` list accepts only those values, compared exactly like an enum value. Without it the list is for completion only.
   strict?: boolean;

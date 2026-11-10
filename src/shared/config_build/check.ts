@@ -6,7 +6,7 @@
 import type { CommandMeta, Mode } from "../command.ts";
 import { DEFAULT_SETTINGS, with_fallback_engines, type SnippetEntry } from "../config.ts";
 import { intent_problem, label_problem, to_firefox_shortcut, parse_sequence } from "../keys/index.ts";
-import { find_param } from "../registry/params.ts";
+import { captured_key_param, find_param, without_param } from "../registry/params.ts";
 import { check_args, create_registry, DefineError, type Registry } from "../registry/index.ts";
 import { parse_binding } from "../registry/parse_binding.ts";
 import type { BoundInvocation, Prompt } from "../invocation.ts";
@@ -53,7 +53,9 @@ function check_invocation(invocation: BoundInvocation, registry: Registry, engin
   const allowed = command.modes ?? ["normal"];
   if (!allowed.includes(runtime_mode as Mode)) errors.push(`${command.id} runs in ${allowed.join(", ")} mode, not ${runtime_mode}`);
 
-  const result = check_args(command, invocation.args, { search_engines: engine_names });
+  // A key param the binding leaves out is captured from the key press, so the rest is checked without it.
+  const captured = captured_key_param(command, invocation.args);
+  const result = check_args(captured ? without_param(command, captured.name) : command, invocation.args, { search_engines: engine_names });
   // With a prompt, the prompted param may be left out.
   if (!result.ok && !(invocation.prompt !== undefined && result.missing_param !== undefined)) errors.push(result.error);
   if (invocation.prompt !== undefined) errors.push(...check_prompt(invocation.prompt, command));

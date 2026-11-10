@@ -33,7 +33,7 @@ const PARAM_NAME_PATTERN = /^[a-z][a-z0-9_]*$/;
 const COMMAND_WORD_PATTERN = /^[^\s'"\\-][^\s'"\\]*$/;
 const FLAG_WORD_PATTERN = /^[a-z][a-z0-9_]*$/;
 const SHORT_FLAG_PATTERN = /^[A-Za-z]$/;
-const PARAM_TYPES = ["int", "float", "string", "bool", "enum"];
+const PARAM_TYPES = ["int", "float", "string", "bool", "enum", "key"];
 
 export function create_registry(): Registry {
   const commands_by_id = new Map<string, CommandDef>();
@@ -168,6 +168,8 @@ function check_params(input: CommandInput, fail: Fail): void {
   });
   check_default_cycles(input, fail);
 
+  const keys = params.filter((param) => param.type === "key");
+  if (keys.length > 1) fail("params.key", `only one param can be a key, found ${keys.map((param) => param.name).join(", ")}, because a binding captures one key press`);
   const mains = params.filter((param) => param.main);
   if (mains.length > 1) fail("params.main", `only one param can be main, found ${mains.map((param) => param.name).join(", ")}`);
   const main = mains[0];
@@ -281,7 +283,7 @@ function check_rules(param: ParamDef, at: string, fail: Fail): void {
     else if (!Number.isInteger(param.min)) fail(`${at}.min`, "must be a whole number");
   }
   if (param.pattern !== undefined) {
-    if (param.type !== "string") fail(`${at}.pattern`, "only a string param takes a pattern");
+    if (param.type !== "string" && param.type !== "key") fail(`${at}.pattern`, "only a string or key param takes a pattern");
     try {
       new RegExp(param.pattern);
     } catch {
@@ -331,14 +333,15 @@ function value_problem(param: ParamDef, value: unknown): string | null {
     (param.type === "int" && Number.isInteger(value)) ||
     (param.type === "float" && typeof value === "number" && Number.isFinite(value)) ||
     (param.type === "bool" && typeof value === "boolean") ||
-    ((param.type === "string" || param.type === "enum") && typeof value === "string");
+    ((param.type === "string" || param.type === "enum") && typeof value === "string") ||
+    (param.type === "key" && typeof value === "string" && [...value].length === 1);
   if (!type_ok) return `${JSON.stringify(value)} is not a ${param.type}`;
   const list = static_values(param);
   if (param.type === "enum" && list && !list.includes(value as string)) {
     return `${JSON.stringify(value)} is not one of ${list.join(", ")}`;
   }
   if (param.type === "int" && param.min !== undefined && (value as number) < param.min) return `${JSON.stringify(value)} is below the minimum ${param.min}`;
-  if (param.type === "string" && param.pattern !== undefined && !new RegExp(param.pattern).test(value as string)) return `${JSON.stringify(value)} does not match ${param.pattern}`;
+  if ((param.type === "string" || param.type === "key") && param.pattern !== undefined && !new RegExp(param.pattern).test(value as string)) return `${JSON.stringify(value)} does not match ${param.pattern}`;
   if (param.type === "string" && param.strict && list && !list.includes(value as string)) return `${JSON.stringify(value)} is not one of ${list.join(", ")}`;
   return null;
 }

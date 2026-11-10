@@ -101,6 +101,8 @@ function candidates(param: ParamDef): readonly unknown[] {
       return [false, true];
     case "enum":
       return static_values(param) ?? (is_dynamic_values(param.values) ? (SOURCES[param.values.from] ?? ["x"]) : ["x"]);
+    case "key":
+      return ["", "a", "Z", "1", "x"];
     case "string":
       return ["", " ", "1", "x", "1 x", ...(static_values(param) ?? []).slice(0, 2), ...(static_values(param) ?? []).slice(-1)];
   }
