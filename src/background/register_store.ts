@@ -2,9 +2,10 @@
 // go stale. A normal window keeps its registers in `storage.local`. A private window keeps its own in `storage.session`, apart from the normal ones, and loses them with its last window.
 
 import { RuntimeRefusal } from "../shared/command.ts";
+import type { CommandContext } from "../shared/command.ts";
 import type { BoundInvocation } from "../shared/invocation.ts";
 import type { RegisterItem, RegisterRequest } from "../shared/messages.ts";
-import { CLIPBOARD_REGISTER, register_kind, SEARCH_DIRECTION_REGISTER, SEARCH_QUERY_REGISTER, storage_name, UNNAMED_REGISTER } from "../shared/register_names.ts";
+import { BLACK_HOLE_REGISTER, CLIPBOARD_REGISTER, register_kind, SEARCH_DIRECTION_REGISTER, SEARCH_QUERY_REGISTER, storage_name, UNNAMED_REGISTER } from "../shared/register_names.ts";
 import { REGISTER_PRIVATE_STORAGE_PREFIX, REGISTER_STORAGE_PREFIX } from "./storage_keys.ts";
 
 export type RegisterValue = string | BoundInvocation[];
@@ -62,6 +63,14 @@ export function create_register_store(deps: RegisterStoreDeps) {
     return read_stored(name, is_private);
   }
 
+  // The named register first, so a refused one leaves the unnamed register as it was.
+  async function yank_now(name: string, text: string, is_private: boolean): Promise<void> {
+    if (name === BLACK_HOLE_REGISTER) return;
+    // The content script wrote the clipboard already.
+    if (name !== "" && name !== UNNAMED_REGISTER && name !== CLIPBOARD_REGISTER) await write_now(name, text, is_private);
+    await write_now(UNNAMED_REGISTER, text, is_private);
+  }
+
   async function write_now(name: string, value: RegisterValue, is_private: boolean): Promise<void> {
     const kind = register_kind(name);
     if (kind === undefined) return refuse_unknown(name);
@@ -96,6 +105,7 @@ export function create_register_store(deps: RegisterStoreDeps) {
   return {
     read,
     write: (name: string, value: RegisterValue, is_private: boolean) => in_turn(() => write_now(name, value, is_private)),
+    yank: (name: string, text: string, is_private: boolean) => in_turn(() => yank_now(name, text, is_private)),
     items,
     // Drops every private register unless a private window is open. The window check runs in the queue, so a write from a window that just opened is never deleted.
     clear_private_without_window: (has_private_window: () => Promise<boolean>) =>
@@ -117,6 +127,9 @@ export const browser_register_store = create_register_store({
   clipboard: { read: () => navigator.clipboard.readText(), write: (text) => navigator.clipboard.writeText(text) },
 });
 
+// Whether the window a command runs in is private, which picks the area its registers live in.
+export const is_private_context = async (ctx: CommandContext): Promise<boolean> => ctx.window_id !== undefined && (await browser.windows.get(ctx.window_id)).incognito;
+
 // The last private window closed, or none was open when the background started: nothing private may stay.
 export const forget_private_registers_without_window = (store: RegisterStore, has_private_window: () => Promise<boolean>): Promise<void> => store.clear_private_without_window(has_private_window);
 
@@ -133,7 +146,8 @@ export async function answer_register_request(store: RegisterStore, request: Reg
   if (!tab || typeof request.name !== "string") return undefined;
   if (request.type === "register_read") return store.read(request.name, tab.incognito).catch(() => undefined);
   if (typeof request.text !== "string") return { ok: false, message: "A register write needs text" };
-  return store.write(request.name, request.text, tab.incognito).then(
+  const writing = request.type === "register_yank" ? store.yank(request.name, request.text, tab.incognito) : store.write(request.name, request.text, tab.incognito);
+  return writing.then(
     () => ({ ok: true }),
     (error: unknown) => ({ ok: false, message: error instanceof Error ? error.message : String(error) }),
   );

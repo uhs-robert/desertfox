@@ -4,13 +4,17 @@ import type { CommandMeta } from "../shared/command.ts";
 import type { PageInfo } from "../shared/engines/index.ts";
 import type { BoundInvocation } from "../shared/invocation.ts";
 import type { WhichKeyBorder } from "../shared/config.ts";
-import type { ListKeys, WhichKeyPanel, WhichKeyRow } from "../shared/messages.ts";
+import type { ListKeys, RegisterItem, WhichKeyPanel, WhichKeyRow } from "../shared/messages.ts";
+import { UNNAMED_REGISTER } from "../shared/register_names.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY, token_label } from "../shared/prefix_tree.ts";
 import type { CompiledKeymap, TreeBranch, TreeLeaf, TreeNode } from "../shared/prefix_tree.ts";
 
 import { is_available } from "./availability.ts";
 import { prune_tree } from "../shared/keys/prune_tree.ts";
 import { matches_any_address } from "../shared/match_pattern.ts";
+
+// The modes where the matcher reads `"` as the register prefix.
+const REGISTER_PREFIX_MODES: readonly string[] = ["normal", "caret", "visual", "visual_line"];
 
 type KeymapStorage = Pick<typeof browser.storage.local, "get">;
 
@@ -89,9 +93,15 @@ export async function list_keys(
   request: Pick<ListKeys, "mode" | "prefix">,
   availability?: PageAvailability,
   addresses: readonly (string | undefined)[] = [],
+  registers?: () => Promise<RegisterItem[]>,
 ): Promise<WhichKeyPanel> {
   const stored = await storage.get(COMPILED_KEYMAP_STORAGE_KEY);
   const keymap = stored[COMPILED_KEYMAP_STORAGE_KEY] as CompiledKeymap | undefined;
+  // The register prefix is no key of the tree: it waits for a register name, so the panel lists the registers that hold something. A user binding of `"` keeps its own tree.
+  if (registers && request.prefix.length === 1 && request.prefix[0] === UNNAMED_REGISTER && REGISTER_PREFIX_MODES.includes(request.mode) && !keymap?.modes[request.mode as keyof CompiledKeymap["modes"]]?.children[UNNAMED_REGISTER]) {
+    const items = await registers().catch((): RegisterItem[] => []);
+    return { title: ["registers"], rows: items.map(({ name, description }) => ({ keys: name, command: description, description: "", more: false })), border: keymap?.which_key_border ?? "square" };
+  }
   const mode_root = keymap?.modes[request.mode as keyof CompiledKeymap["modes"]];
   // The panel lists what the page's rule leaves, the same tree the content script walks.
   const rule = request.mode === "normal" ? keymap?.site_rules?.find(({ regex }) => matches_any_address(regex, addresses)) : undefined;

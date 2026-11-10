@@ -343,7 +343,7 @@ const handle_act = (args: Record<string, unknown>): Outcome | Promise<Outcome> |
   }
   const run = visual_runs;
   // Visual mode stays until the copy is done, so a refused copy leaves the selection to retry.
-  return yank_text(navigator.clipboard, text, {
+  return yank_text(navigator.clipboard, text, args.register as string | undefined, {
     is_same_session_: () => visual_runs === run && session === open && is_visual(open.mode),
     toast: page.desertfox_host.show_toast_,
     leave_visual_: () => page.desertfox_host.set_mode_("caret"),
