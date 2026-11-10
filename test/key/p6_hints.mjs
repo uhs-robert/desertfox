@@ -94,8 +94,8 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, press_
     await wait_for_label_count(2, "on the two visible links under body");
   });
 
-  // The selector is the main rest param, so the words of a typed list or attribute selector join back into one string. The line reads quotes like a shell, so a selector with double quotes needs single quotes around it.
-  for (const [what, selector, count] of [["a selector list", "a[href*=one], a[href*=two]", 2], ["an attribute selector with quotes, inside single quotes", `'a[href="/page?id=hint_one"]'`, 1]]) {
+  // The selector is a verbatim main param: the line hands it over exactly as typed, quotes included.
+  for (const [what, selector, count] of [["a selector list", "a[href*=one], a[href*=two]", 2], ["an attribute selector with double quotes", `a[href="/page?id=hint_one"]`, 1]]) {
     await run_case(`;u takes ${what}`, async () => {
       await open_page("hints", "p6_selector_form", { new_tab: true });
       await press_keys(";u");

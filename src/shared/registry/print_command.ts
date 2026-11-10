@@ -93,7 +93,8 @@ function assemble(command: Printable, args: Record<string, unknown>, options: Pr
     else if (empty) words.push("");
     else {
       if (plan.subject === "guard") words.push("--");
-      words.push(plan.subject === "quoted" && !is_context_source(value) ? quoted(String(value)) : unquoted_text(value));
+      // A verbatim subject reads back as typed, so quoting it would change the value.
+      words.push(plan.subject === "quoted" && !is_context_source(value) && !subject.verbatim ? quoted(String(value)) : unquoted_text(value));
     }
   }
   return words.join(" ");

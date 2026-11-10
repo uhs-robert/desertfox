@@ -2,7 +2,7 @@
 // or the subject. Pure: it reads the text and a lookup, never the DOM.
 
 import type { ParamDef } from "../../shared/command.ts";
-import { read_flag, tokenize } from "../../shared/registry/command_line.ts";
+import { parse_line, read_flag, tokenize } from "../../shared/registry/command_line.ts";
 import type { CommandLookup } from "../../shared/registry/command_line.ts";
 import { bare_word_param, find_param, is_dynamic_values, subject_param } from "../../shared/registry/params.ts";
 
@@ -76,6 +76,9 @@ export function cursor_context(text: string, caret: number, find: CommandLookup[
   if (caret < lead) return { kind: "none" };
   const head = text.slice(lead, caret);
   const { starts, in_word, quote_open } = word_starts(head);
+  // A verbatim subject is raw text to the end of the line, so a quote inside it never groups. The parser says where it starts. A lone dash is still a flag being typed.
+  const { command: verbatim, subject_start: verbatim_start } = parse_line({ find }, head);
+  if (verbatim && verbatim_start !== undefined && head.slice(verbatim_start) !== "-") return { kind: "subject", command: verbatim, position: 0, engine_settled: false, word: head.slice(verbatim_start), start: lead + verbatim_start, end: text.length };
   const word_start = quote_open ? null : in_word ? (starts.at(-1) as number) : head.length;
   const tokens = word_start === null ? undefined : tokenize(head);
   if (word_start === null || !tokens || "error" in tokens) return { kind: "none" };

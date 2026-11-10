@@ -52,6 +52,8 @@ export type ParamDef = {
   rest?: boolean;
   // The one free-text param that config and the command line take as a bare word. At most one per command, `string` only.
   main?: boolean;
+  // On the `main` param: it takes the raw typed text from its first word to the end of the line, end-trimmed, with quotes and backslashes kept. Flags must come before it, and a value that starts with `-` needs `--` first. For text the shell rules would mangle, such as a CSS selector.
+  verbatim?: boolean;
   // A param with no default that applies, no `optional` and no `when` is required.
   default?: ParamDefault;
   // A `string` or `enum` param that may be left out or empty: it then reads as "". Stands for `default: ""`.
