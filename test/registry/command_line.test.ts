@@ -3,6 +3,7 @@ import { test } from "node:test";
 import { check_args, create_registry, parse_command_line, tokenize, usage_line } from "../../src/shared/registry/index.ts";
 import type { EnumSources, Token } from "../../src/shared/registry/index.ts";
 import "../../src/commands/hint.ts";
+import "../../src/background/command_modules.ts";
 import { registry as real_registry } from "../../src/shared/registry/builtin.ts";
 import { grammar_registry, search_sources } from "./grammar_registry.ts";
 
@@ -189,7 +190,8 @@ test("bare number edge cases", () => {
 
 test("a number goes to the main value when the command has no number param", () => {
   assert.deepEqual(parsed("open 5 text").args, { url: "5 text" });
-  assert.match(error_of("open -5"), /unknown flag "-5"/);
+  assert.deepEqual(parsed("open -5").args, { url: "-5" });
+  assert.match(error_of("open -5x"), /unknown flag "-5x"/);
   assert.deepEqual(parsed("open -- -5").args, { url: "-5" });
 });
 
@@ -426,4 +428,18 @@ test("positional words come before a verbatim subject", () => {
   });
   const result = parse_command_line(positional, `set a x "y  z`);
   assert.deepEqual(result.kind === "invocation" ? result.invocation.args : result, { name: "a", value: 'x "y  z' });
+});
+
+test("a leading number belongs to the main value when the command has one", () => {
+  const unload = (text: string) => {
+    const result = parse_command_line(real_registry, text, {});
+    assert.equal(result.kind, "invocation", JSON.stringify(result));
+    return result.kind === "invocation" ? result.invocation.args : never();
+  };
+  assert.deepEqual(unload("tab.unload 3 GitHub"), { tab: "3 GitHub" });
+  assert.deepEqual(unload("tab.unload 3"), { tab: "3" });
+  assert.deepEqual(unload("tab.unload -1"), { tab: "-1" });
+  assert.deepEqual(unload("tab.load 3 GitHub"), { tab: "3 GitHub" });
+  assert.deepEqual(unload("tab.unload --count=2 3 GitHub"), { count: "2", tab: "3 GitHub" });
+  assert.deepEqual(unload("tab.unload --count=2"), { count: "2" });
 });

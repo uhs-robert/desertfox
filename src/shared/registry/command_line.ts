@@ -121,7 +121,8 @@ function parse_words(command: ParsedCommand, pull: () => Read, text: string, sou
   const error = (message: string): ParseResult => ({ kind: "error", error: message });
   const main = params.find((param) => param.main);
   const number_params = params.filter((param) => param.type === "int" || param.type === "float");
-  const only_number = number_params.length === 1 ? number_params[0] : undefined;
+  // A main param owns a leading number: `tab.unload 3 GitHub` is one picker text, not a count.
+  const only_number = number_params.length === 1 && !main ? number_params[0] : undefined;
   const bare_param = bare_word_param(command);
   const positional = positional_params(command);
   let options_ended = false;
@@ -147,7 +148,8 @@ function parse_words(command: ParsedCommand, pull: () => Read, text: string, sou
     }
 
     const number_param = only_number !== undefined && NUMBER_WORD.test(word.text) ? only_number : undefined;
-    if (!options_ended && !number_param && looks_like_flag(word)) {
+    const main_number = main !== undefined && unquoted && NUMBER_WORD.test(word.text);
+    if (!options_ended && !number_param && !main_number && looks_like_flag(word)) {
       const flag = read_flag(command_word, params, word);
       if ("error" in flag) return error(flag.error);
       if (Object.hasOwn(args, flag.param.name)) return error(`${flag.param.name} is set twice`);
