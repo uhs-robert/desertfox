@@ -35,6 +35,8 @@ if (!page.desertfox_text_ready) {
     if (typeof value !== "string" || value === "") throw new RuntimeRefusal(value === undefined || value === "" ? `Register ${name} is empty` : `Register ${name} holds a macro, not text`);
     // The read is async and keys are not held, so focus may have moved on to a field the user did not paste into.
     if (deepest_focused_element() !== target) throw new RuntimeRefusal("Focus moved while the register was read");
+    // Escape in a contenteditable body leaves it focused, so the same-field check passes after insert mode ended.
+    if (host.get_mode() !== "insert") throw new RuntimeRefusal("Insert mode ended while the register was read");
     // Outside `while_replaying`: the text joins the insert session that `.` repeats, as a paste from the keyboard would.
     write_into_field(value, host.last_blurred_());
   });

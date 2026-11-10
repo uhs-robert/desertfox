@@ -14,6 +14,7 @@ const globals = globalThis as Record<string, unknown>;
 globals.HTMLElement = FakeHTMLElement;
 globals.HTMLInputElement = FakeHTMLInputElement;
 
+let mode = "insert";
 const typed: string[] = [];
 const asked: unknown[] = [];
 let stored: unknown;
@@ -21,7 +22,7 @@ const handlers = new Map<string, (args: Record<string, unknown>) => unknown>();
 globals.document = { activeElement: new FakeHTMLInputElement(), execCommand: (_command: string, _ui: boolean, text: string) => (typed.push(text), true) };
 globals.browser = { runtime: { sendMessage: async (message: unknown) => (asked.push(message), stored) } };
 globals.window = {
-  desertfox_host: { register_handler_: (id: string, handler: (args: Record<string, unknown>) => unknown) => handlers.set(id, handler), last_blurred_: () => undefined },
+  desertfox_host: { register_handler_: (id: string, handler: (args: Record<string, unknown>) => unknown) => handlers.set(id, handler), last_blurred_: () => undefined, get_mode: () => mode },
   addEventListener: () => {},
 };
 await import("../../src/content/text/main.ts");
@@ -52,4 +53,13 @@ test("a paste refuses when focus moved to another field during the register read
   await assert.rejects(paste("a"), /Focus moved/);
   assert.deepEqual(typed, []);
   doc.activeElement = first;
+});
+
+test("a paste refuses when insert mode ended during the register read", async () => {
+  typed.length = 0;
+  const runtime = (globals.browser as { runtime: { sendMessage: unknown } }).runtime;
+  runtime.sendMessage = async () => ((mode = "normal"), "late");
+  await assert.rejects(paste("a"), /Insert mode ended/);
+  assert.deepEqual(typed, []);
+  mode = "insert";
 });
