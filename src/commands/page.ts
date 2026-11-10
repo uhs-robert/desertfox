@@ -27,7 +27,7 @@ define("page.forward", {
 
 define("page.reload", {
   label: "Reload",
-  intent: "Reload the page. With hard on, skip the cache. With clear set to site, first clear the cookies, cache, local storage, IndexedDB, service workers and session storage of this page's host in its container, plus the cookies a parent domain sets for it. With clear set to all, first clear them for every site and container.",
+  intent: "Reload the page. With hard on, skip the cache. With clear set to site, first clear the cookies of this page's host in its container, plus the cookies a parent domain sets for it, the page's own storage and service workers, and the whole cache. With clear set to all, first clear them for every site and container.",
   params: [
     { name: "hard", type: "bool", default: false, description: "Skip the cache." },
     {
@@ -36,7 +36,7 @@ define("page.reload", {
       values: ["site", "all"],
       optional: true,
       value_labels: { site: "after clearing this site", all: "after clearing every site" },
-      description: { site: "Clear this host first, and keep other subdomains.", all: "Clear every site and container first." },
+      description: { site: "Clear this host first.", all: "Clear every site and container first." },
     },
   ],
   runs_in: "background",

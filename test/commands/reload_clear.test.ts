@@ -30,7 +30,7 @@ function make_fake({ url = "https://www.example.com/a", store = "firefox-contain
       data_calls.push({ options, types: Object.keys(types) });
       log.push("data");
     },
-    clear_session_storage: async () => void log.push("session_storage"),
+    clear_page_storage: async () => void log.push("page_storage"),
     reload_bypassing_cache: async () => void log.push("reload"),
   };
   return { deps, log, data_calls };
@@ -39,14 +39,14 @@ function make_fake({ url = "https://www.example.com/a", store = "firefox-contain
 test("site clear names the exact host, keeps the store off the cache call and clears before it reloads", async () => {
   const { deps, log, data_calls } = make_fake({ cookies: [cookie("www.example.com", "host_only"), cookie(".example.com", "login")] });
   await make_reload_clear(deps).run(7, "site");
-  assert.deepEqual(data_calls[0], { options: { hostnames: ["www.example.com"], cookie_store_id: "firefox-container-2" }, types: ["cookies", "localStorage", "indexedDB"] });
-  assert.deepEqual(data_calls[1], { options: { hostnames: ["www.example.com"] }, types: ["serviceWorkers", "cache"] });
+  assert.deepEqual(data_calls[0], { options: { hostnames: ["www.example.com"], cookie_store_id: "firefox-container-2" }, types: ["cookies"] });
+  assert.deepEqual(data_calls[1], { options: {}, types: ["cache"] });
   assert.equal(log.at(-1), "reload");
   assert.equal(log.filter((entry) => entry === "reload").length, 1);
   assert.ok(log.indexOf("data") < log.indexOf("reload"));
   assert.ok(log.includes("remove_cookie login https://example.com/"));
   assert.ok(!log.some((entry) => entry.includes("host_only")), "the host's own cookies go with the storage call");
-  assert.ok(log.indexOf("session_storage") < log.indexOf("reload"));
+  assert.ok(log.indexOf("page_storage") < log.indexOf("reload"));
 });
 
 test("all clear sends no hostnames and no store", async () => {
