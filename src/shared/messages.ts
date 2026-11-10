@@ -178,14 +178,15 @@ export type RegisterItem = { name: string; description: string };
 
 export type CompleteItemsAnswer = { items: BookmarkItem[] | EngineItem[] | HistoryItems | OpenItems | WindowItem[] | HeadingItem[] | SessionItem[] | RegisterItem[] };
 
-// A mark of the page that a which-key row lists: its key and the scroll offset it keeps, in px.
-export type MarkItem = { key: string; x: number; y: number };
+// A mark that a which-key row lists: its key and the scroll offset it keeps, in px. A global mark also carries its address.
+export type MarkItem = { key: string; x: number; y: number; url?: string };
 
 // From the `page` bundle. `x` and `y` are the scroll offset now. A set stores them under `key`. A jump answers the offset stored under `key` and stores the offset now as the previous position (`'`), unless the mark is missing. The page's privacy is the sender tab's.
 export type MarkSet = { type: "mark_set"; key: string; url: string; x: number; y: number };
 export type MarkJump = { type: "mark_jump"; key: string; url: string; x: number; y: number };
 export type MarkRequest = MarkSet | MarkJump;
-export type MarkAnswer = { ok: true; x: number; y: number } | { ok: false; message: string };
+// Without `x` the background does the scroll itself, after it switched to or opened the tab of a global mark.
+export type MarkAnswer = { ok: true; x: number; y: number } | { ok: true; x?: undefined; y?: undefined } | { ok: false; message: string };
 
 // From the `caret` bundle: one register read or write. The background answers by the sender tab's privacy. A read answers the value, or nothing for an empty register and a refused name. A write answers an `Outcome`. A content script writes text only.
 export type RegisterRead = { type: "register_read"; name: string };

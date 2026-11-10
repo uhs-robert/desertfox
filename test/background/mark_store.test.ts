@@ -61,9 +61,8 @@ test("only a jump sets the previous position, and a set cannot name it", async (
   const { store } = make();
   await store.run(set("a", 100), false);
   await assert.rejects(store.run(jump("'", 5), false), /No mark '/);
-  await assert.rejects(store.run(set("'", 5), false), /a to z/);
-  await assert.rejects(store.run(set("A", 5), false), /a to z/);
-  await assert.rejects(store.run(set("1", 5), false), /a to z/);
+  await assert.rejects(store.run(set("'", 5), false), /a to z and A to Z/);
+  await assert.rejects(store.run(set("1", 5), false), /a to z and A to Z/);
 });
 
 test("rapid sets from several tabs all land, in order", async () => {
@@ -191,4 +190,111 @@ test("a user binding of m to another command keeps its own tree", async () => {
   const keymap = normal_keymap({ ...DEFAULT_KEYMAP, normal: { ...(DEFAULT_KEYMAP as { normal: object }).normal, m: { id: "tab.next" } } });
   const panel = await list_keys(keymap, () => undefined, { mode: "normal", prefix: ["m"] }, undefined, [], undefined, async () => [{ key: "a", x: 0, y: 1 }]);
   assert.deepEqual(panel.rows, []);
+});
+
+test("a value stored before global marks has no globals and keeps its local marks", async () => {
+  const { store, local } = make();
+  local.values.set(MARK_STORAGE_KEY, { v: 1, pages: { "https://a.test/p": { at: 3, marks: { a: [0, 80] } } } });
+  assert.deepEqual(await store.run(jump("a", 5), false), { ok: true, x: 0, y: 80 });
+  assert.equal(await store.global_of("A", false), undefined);
+  await store.run(set("A", 9, "https://b.test/q"), false);
+  assert.deepEqual(await store.global_of("A", false), { url: "https://b.test/q", x: 0, y: 9 });
+  assert.deepEqual(await store.run(jump("a", 5), false), { ok: true, x: 0, y: 80 });
+});
+
+test("a damaged globals field reads the whole value as damaged", async () => {
+  const { store, local } = make();
+  local.values.set(MARK_STORAGE_KEY, { v: 1, pages: {}, globals: { A: { url: 3 } } });
+  assert.equal(await store.global_of("A", false), undefined);
+});
+
+test("a global mark keeps its address and position, and a set of the same key replaces it", async () => {
+  const { store } = make();
+  assert.deepEqual(await store.run(set("A", 120.4, "https://a.test/p#frag", 7), false), { ok: true, x: 7, y: 120 });
+  assert.deepEqual(await store.global_of("A", false), { url: "https://a.test/p", x: 7, y: 120 });
+  await store.run(set("A", 5, "https://b.test/"), false);
+  assert.deepEqual(await store.global_of("A", false), { url: "https://b.test/", x: 0, y: 5 });
+  await assert.rejects(store.run(set("A", 1, `https://a.test/${"x".repeat(2048)}`), false), /too long/);
+});
+
+test("a global jump answers the stored position and keeps the page's previous position", async () => {
+  const { store } = make();
+  await store.run(set("A", 300, "https://a.test/p"), false);
+  assert.deepEqual(await store.run(jump("A", 40, "https://c.test/other"), false), { ok: true, x: 0, y: 300 });
+  assert.deepEqual(await store.run(jump("'", 0, "https://c.test/other"), false), { ok: true, x: 0, y: 40 });
+  await assert.rejects(store.run(jump("B", 0), false), /No mark B/);
+});
+
+test("normal and private global marks are two sets", async () => {
+  const { store, local, session } = make();
+  await store.run(set("A", 50, "https://a.test/p"), true);
+  assert.deepEqual([...local.values.keys()], []);
+  assert.deepEqual([...session.values.keys()], [MARK_PRIVATE_STORAGE_KEY]);
+  assert.equal(await store.global_of("A", false), undefined);
+  await assert.rejects(store.run(jump("A", 0), false), /No mark A/);
+  await store.run(set("B", 60, "https://b.test/"), false);
+  assert.equal(await store.global_of("B", true), undefined);
+  assert.deepEqual((await store.items("https://z.test/", true)).map((item) => item.key), ["A"]);
+  await store.clear_private_without_window(async () => false);
+  assert.equal(await store.global_of("A", true), undefined);
+  assert.deepEqual(await store.global_of("B", false), { url: "https://b.test/", x: 0, y: 60 });
+});
+
+test("items list the page's marks first, then the global marks with their address", async () => {
+  const { store } = make();
+  await store.run(set("b", 2, "https://a.test/p"), false);
+  await store.run(set("a", 1, "https://a.test/p"), false);
+  await store.run(set("Z", 9, "https://z.test/"), false);
+  await store.run(set("A", 8, "https://a.test/other"), false);
+  assert.deepEqual(await store.items("https://a.test/p", false), [
+    { key: "a", x: 0, y: 1 },
+    { key: "b", x: 0, y: 2 },
+    { key: "A", x: 0, y: 8, url: "https://a.test/other" },
+    { key: "Z", x: 0, y: 9, url: "https://z.test/" },
+  ]);
+});
+
+const top_tab = { incognito: false, id: 4, window_id: 1, url: "https://a.test/p#x", frame_id: 0 };
+
+test("a global set takes the tab's address from the tab, never from the page", async () => {
+  const { store } = make();
+  assert.deepEqual(await answer_mark_request(store, set("A", 5, "https://frame.test/"), top_tab), { ok: true, x: 0, y: 5 });
+  assert.equal((await store.global_of("A", false))?.url, "https://a.test/p");
+});
+
+test("a global set from a frame, or on a page that is not http or https, is refused", async () => {
+  const { store, local } = make();
+  assert.deepEqual(await answer_mark_request(store, set("A", 5), { ...top_tab, frame_id: 3 }), { ok: false, message: "Global marks need the top frame" });
+  for (const url of ["file:///tmp/a.html", "about:blank", "moz-extension://x/help.html", undefined]) {
+    assert.deepEqual(await answer_mark_request(store, set("A", 5), { ...top_tab, url }), { ok: false, message: "Global marks need a web page" }, String(url));
+  }
+  assert.equal(local.values.size, 0);
+});
+
+test("a global jump goes through the global jump, and a local key does not", async () => {
+  const { store } = make();
+  const seen: string[] = [];
+  const global_jump = async (request: { key: string }) => (seen.push(request.key), { ok: true as const });
+  assert.deepEqual(await answer_mark_request(store, jump("A", 1), top_tab, global_jump), { ok: true });
+  assert.deepEqual(await answer_mark_request(store, jump("a", 1), top_tab, global_jump), { ok: false, message: "No mark a" });
+  assert.deepEqual(seen, ["A"]);
+});
+
+test("which-key lists the page's marks, then the global marks with the address and the offset", async () => {
+  const items = async () => [
+    { key: "b", x: 0, y: 1240 },
+    { key: "a", x: 15, y: 7 },
+    { key: "B", x: 0, y: 5, url: "https://www.example.org/a/very/long/path/that/goes/on/and/on" },
+    { key: "A", x: 0, y: 6, url: "http://github.com/foo/bar" },
+  ];
+  const { rows } = await list_keys(normal_keymap(), () => undefined, { mode: "normal", prefix: ["'"] }, undefined, [], undefined, items);
+  assert.deepEqual(rows.map((row) => row.keys), ["a", "b", "A", "B"]);
+  assert.equal(rows[2]!.command, "github.com/foo/bar  y 6");
+  assert.equal(rows[3]!.command, "www.example.org/a/very/long/path/th\u2026  y 5");
+});
+
+test("m accepts a capital letter and refuses a digit", async () => {
+  const { store } = make();
+  await store.run(set("Q", 1), false);
+  await assert.rejects(store.run(set("1", 1), false), /a to z/);
 });

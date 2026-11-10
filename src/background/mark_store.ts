@@ -1,15 +1,18 @@
-// The local marks: a scroll position kept per page address. The background owns them and every tab reaches them by message.
+// The marks: a scroll position kept per page address (local, a to z), and a few global ones (A to Z) that keep an address and a position. The background owns them and every tab reaches them by message.
 // A normal window keeps them in `storage.local`. A private window keeps its own in `storage.session`, apart from the normal ones, and loses them with its last window.
 // All pages sit in one value, so one queue orders the writes and evicting the oldest page is one edit.
 
 import { RuntimeRefusal } from "../shared/command.ts";
-import type { MarkAnswer, MarkItem, MarkRequest } from "../shared/messages.ts";
-import { MARK_ADD_KEY, MARK_JUMP_KEY, mark_page_url, mark_slot, MAX_MARK_PAGES, MAX_MARK_URL_CHARS, PREVIOUS_MARK } from "../shared/mark_names.ts";
+import type { MarkAnswer, MarkItem, MarkJump, MarkRequest } from "../shared/messages.ts";
+import { is_global_mark, MARK_ADD_KEY, MARK_JUMP_KEY, mark_page_url, mark_slot, MAX_MARK_PAGES, MAX_MARK_URL_CHARS, PREVIOUS_MARK } from "../shared/mark_names.ts";
 import { create_write_queue } from "./store_turns.ts";
 import { MARK_PRIVATE_STORAGE_KEY, MARK_STORAGE_KEY } from "./storage_keys.ts";
 
 type MarkPage = { at: number; marks: Record<string, [number, number]> };
-type MarksValue = { v: 1; pages: Record<string, MarkPage> };
+type GlobalMark = { url: string; x: number; y: number };
+// `globals` is missing in a value stored before global marks, and reads as none.
+type StoredMarks = { v: 1; pages: Record<string, MarkPage>; globals?: Record<string, GlobalMark> };
+type MarksValue = { v: 1; pages: Record<string, MarkPage>; globals: Record<string, GlobalMark> };
 
 export type MarkArea = Pick<typeof browser.storage.local, "get" | "set" | "remove">;
 
@@ -21,15 +24,24 @@ export type MarkStoreDeps = {
 
 const is_position = (value: unknown): boolean => Array.isArray(value) && value.length === 2 && value.every((part) => Number.isFinite(part));
 
-const is_marks_value = (value: unknown): value is MarksValue => {
-  const pages = (value as MarksValue | undefined)?.pages;
+const is_global_mark_value = (value: unknown): boolean => {
+  const mark = value as GlobalMark | undefined;
+  return typeof mark?.url === "string" && Number.isFinite(mark.x) && Number.isFinite(mark.y);
+};
+
+const is_marks_value = (value: unknown): value is StoredMarks => {
+  const stored = value as StoredMarks | undefined;
+  const pages = stored?.pages;
   return (
-    (value as MarksValue | undefined)?.v === 1 &&
+    stored?.v === 1 &&
     typeof pages === "object" &&
     pages !== null &&
-    Object.values(pages).every((page) => Number.isFinite(page?.at) && typeof page.marks === "object" && page.marks !== null && Object.values(page.marks).every(is_position))
+    Object.values(pages).every((page) => Number.isFinite(page?.at) && typeof page.marks === "object" && page.marks !== null && Object.values(page.marks).every(is_position)) &&
+    (stored.globals === undefined || (typeof stored.globals === "object" && stored.globals !== null && Object.values(stored.globals).every(is_global_mark_value)))
   );
 };
+
+const MARK_KEYS_TEXT = "Marks use a to z and A to Z";
 
 export function create_mark_store(deps: MarkStoreDeps) {
   const area_of = (is_private: boolean) => (is_private ? deps.session() : deps.local());
@@ -38,7 +50,7 @@ export function create_mark_store(deps: MarkStoreDeps) {
   // A damaged value reads as no marks.
   async function read_all(is_private: boolean): Promise<MarksValue> {
     const stored = (await area_of(is_private).get(key_of(is_private)))[key_of(is_private)];
-    return is_marks_value(stored) ? stored : { v: 1, pages: {} };
+    return is_marks_value(stored) ? { v: 1, pages: stored.pages, globals: stored.globals ?? {} } : { v: 1, pages: {}, globals: {} };
   }
 
   const in_turn = create_write_queue();
@@ -65,17 +77,19 @@ export function create_mark_store(deps: MarkStoreDeps) {
   }
 
   async function run_now(request: MarkRequest, is_private: boolean): Promise<MarkAnswer> {
-    if (typeof request.key !== "string" || !MARK_JUMP_KEY.test(request.key)) throw new RuntimeRefusal("Marks use a to z");
+    if (typeof request.key !== "string" || !MARK_JUMP_KEY.test(request.key)) throw new RuntimeRefusal(MARK_KEYS_TEXT);
     const address = address_of(request.url);
     const here = check_position(request.x, request.y);
     const all = await read_all(is_private);
-    const target = all.pages[address]?.marks[mark_slot(request.key)];
+    const global = all.globals[request.key];
+    const target: [number, number] | undefined = is_global_mark(request.key) ? global && [global.x, global.y] : all.pages[address]?.marks[mark_slot(request.key)];
     if (request.type === "mark_jump") {
       if (!target) throw new RuntimeRefusal(`No mark ${request.key}`);
       put(all, address, { [PREVIOUS_MARK]: here });
     } else {
-      if (!MARK_ADD_KEY.test(request.key)) throw new RuntimeRefusal("Marks use a to z");
-      put(all, address, { [request.key]: here });
+      if (!MARK_ADD_KEY.test(request.key)) throw new RuntimeRefusal(MARK_KEYS_TEXT);
+      if (is_global_mark(request.key)) all.globals[request.key] = { url: address, x: here[0], y: here[1] };
+      else put(all, address, { [request.key]: here });
     }
     await area_of(is_private).set({ [key_of(is_private)]: all });
     return { ok: true, x: (target ?? here)[0], y: (target ?? here)[1] };
@@ -84,13 +98,20 @@ export function create_mark_store(deps: MarkStoreDeps) {
   return {
     // A jump answers the stored offset and keeps the offset it left as the previous position, in one turn, so `''` toggles even when two presses race.
     run: (request: MarkRequest, is_private: boolean) => in_turn(() => run_now(request, is_private)),
-    // The marks of one page, in key order, for the which-key rows.
+    // The marks of one page in key order, then the global marks in key order, for the which-key rows. Only a global mark carries its address.
     items: async (url: string, is_private: boolean): Promise<MarkItem[]> => {
-      const page = (await read_all(is_private)).pages[mark_page_url(url)];
-      return Object.entries(page?.marks ?? {})
+      const all = await read_all(is_private);
+      const by_key = (left: MarkItem, right: MarkItem) => (left.key < right.key ? -1 : 1);
+      const local = Object.entries(all.pages[mark_page_url(url)]?.marks ?? {})
         .map(([key, [x, y]]) => ({ key, x, y }))
-        .sort((left, right) => (left.key < right.key ? -1 : 1));
+        .sort(by_key);
+      const global = Object.entries(all.globals)
+        .map(([key, mark]) => ({ key, x: mark.x, y: mark.y, url: mark.url }))
+        .sort(by_key);
+      return [...local, ...global];
     },
+    // The global mark of one key, or nothing.
+    global_of: async (key: string, is_private: boolean): Promise<GlobalMark | undefined> => (await read_all(is_private)).globals[key],
     // Drops every private mark unless a private window is open. The window check runs in the queue, so a write from a window that just opened is never deleted.
     clear_private_without_window: (has_private_window: () => Promise<boolean>) =>
       in_turn(async () => {
@@ -105,8 +126,22 @@ export type MarkStore = ReturnType<typeof create_mark_store>;
 // Calls the browser at use, so the command modules load in Node.
 export const browser_mark_store = create_mark_store({ local: () => browser.storage.local, session: () => browser.storage.session, now: () => Date.now() });
 
+// The tab a mark message came from. `frame_id` is the sender frame.
+export type MarkSender = { incognito: boolean; id?: number | undefined; window_id?: number | undefined; url?: string | undefined; frame_id?: number | undefined };
+
+// The jump of a global mark, which moves between tabs and so is not the store's business.
+export type GlobalJump = (request: MarkJump, tab: MarkSender) => Promise<MarkAnswer>;
+
 // A mark message from a content script. The page's privacy is the sender tab's, never the message's. Only a tab sends these.
-export async function answer_mark_request(store: MarkStore, request: MarkRequest, tab: { incognito: boolean } | undefined): Promise<MarkAnswer> {
+export async function answer_mark_request(store: MarkStore, request: MarkRequest, tab: MarkSender | undefined, global_jump?: GlobalJump): Promise<MarkAnswer> {
   if (!tab || typeof request.url !== "string") return { ok: false, message: "No page to mark" };
-  return store.run(request, tab.incognito).catch((error: unknown) => ({ ok: false, message: error instanceof Error ? error.message : String(error) }));
+  const answer = async (): Promise<MarkAnswer> => {
+    if (typeof request.key !== "string" || !is_global_mark(request.key)) return store.run(request, tab.incognito);
+    if (request.type === "mark_jump") return global_jump ? global_jump(request, tab) : { ok: false, message: "No global marks here" };
+    if (tab.frame_id !== 0) throw new RuntimeRefusal("Global marks need the top frame");
+    if (!/^https?:\/\//.test(tab.url ?? "")) throw new RuntimeRefusal("Global marks need a web page");
+    // The tab's address, never the page's: a frame sends its own.
+    return store.run({ ...request, url: tab.url as string }, tab.incognito);
+  };
+  return answer().catch((error: unknown) => ({ ok: false, message: error instanceof Error ? error.message : String(error) }));
 }

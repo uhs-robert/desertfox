@@ -18,7 +18,7 @@ async function mark_at_scroll(host: BundleHostApi, type: MarkRequest["type"], ke
   const box = host.scroll_box_();
   const answer = (await browser.runtime.sendMessage({ type, key, url: location.href, x: box.scrollLeft, y: box.scrollTop } as MarkRequest)) as MarkAnswer;
   if (!answer.ok) throw new RuntimeRefusal(answer.message);
-  if (type === "mark_jump") box.scrollTo({ left: answer.x, top: answer.y, behavior: "instant" });
+  if (type === "mark_jump" && answer.x !== undefined) box.scrollTo({ left: answer.x, top: answer.y, behavior: "instant" });
 }
 
 // A second run would register the handlers again for nothing.
