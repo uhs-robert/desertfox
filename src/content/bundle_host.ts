@@ -176,7 +176,7 @@ export function create_bundle_host() {
       show_toast_: (message) => (deps.show_toast_ ?? deps.show_error_)(message),
       last_blurred_: last_blurred_element,
       scroll_box_: () => (end_flight(), scroll_target("y")),
-      hold_keys_until_: (handed_back, drop_on_hide) => {
+      hold_keys_until_: (handed_back, drop_on_hide?: boolean) => {
         waiting++;
         const release = (tokens: readonly string[]) => {
           // A hold ends once, by its reply or by the page going away, whichever comes first.
