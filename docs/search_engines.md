@@ -52,7 +52,7 @@ Here `search reddit.sub rust` searches the current subreddit, or all of Reddit o
 
 ### Keywords
 
-Add `keyword = "g"` to an engine to give it a short word. A keyword is one to eight lower case letters or digits and is unique across engines. A child does not inherit it, so each engine that wants one sets its own. `just build-config` rejects a bad or repeated keyword. The `,,` finder will use the keyword to search an engine from a query such as `g rust`. Until the finder lands the field is only checked and has no effect: `search g rust` still searches the default engine.
+Add `keyword = "g"` to an engine to give it a short word. A keyword is one to eight lower case letters or digits and is unique across engines. A child does not inherit it, so each engine that wants one sets its own. `just build-config` rejects a bad or repeated keyword. The `,,` finder uses the keyword: when the first word of the query is a keyword and a space and more text follow, the first search row searches that engine with the rest, so `g rust` searches Google for `rust`. The match is case-sensitive, and an engine the page cannot fill (see the page slots above) gets no keyword row. `search g rust` still searches the default engine, because the keyword works in the finder only.
 
 ```toml
 google = { url = "https://www.google.com/search?q=%s", label = "Google", keyword = "g" }

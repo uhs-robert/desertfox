@@ -131,3 +131,6 @@ export function cursor_context(text: string, caret: number, find: CommandLookup[
   }
   return { kind: "subject", command, position, engine_settled, typed, word, start, end };
 }
+
+// A value with a space or a quote would split into two words, so it goes in double quotes.
+export const quote_word = (value: string) => (/[\s"'\\]/.test(value) ? `"${value.replace(/(["\\$`])/g, "\\$1")}"` : value);

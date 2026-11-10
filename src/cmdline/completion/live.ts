@@ -1,10 +1,10 @@
 // The tabs, bookmarks, engines and headings the list offers. The background hands out the bookmarks, engines, open rows and windows and the host script the headings, once per kind, and the line keeps them, so
 // ranking a keystroke never waits. The tabs are not fetched: the live tab model keeps them current. Pure: the page passes in the asking and the redraw.
 
-import type { BookmarkRows, CompleteItemsAnswer, EngineItem, HeadingItem, HistoryItems, OpenItems, FolderItem, RegisterItem, SessionItem, TabItem, WindowItem } from "../../shared/messages.ts";
+import type { AnythingItems, BookmarkRows, CompleteItemsAnswer, EngineItem, HeadingItem, HistoryItems, OpenItems, FolderItem, RegisterItem, SessionItem, TabItem, WindowItem } from "../../shared/messages.ts";
 
-export type LiveKind = "tabs" | "bookmarks" | "engines" | "history" | "open" | "windows" | "headings" | "sessions" | "registers" | "folders" | "marks" | "quickmarks" | "saved_quickmarks";
-export type LiveItems = { tabs: TabItem[]; bookmarks: BookmarkRows; engines: EngineItem[]; history: HistoryItems; open: OpenItems; windows: WindowItem[]; headings: HeadingItem[]; sessions: SessionItem[]; registers: RegisterItem[]; folders: FolderItem[]; marks: RegisterItem[]; quickmarks: RegisterItem[]; saved_quickmarks: RegisterItem[] };
+export type LiveKind = "tabs" | "bookmarks" | "engines" | "history" | "open" | "windows" | "headings" | "sessions" | "registers" | "folders" | "marks" | "quickmarks" | "saved_quickmarks" | "anything";
+export type LiveItems = { tabs: TabItem[]; bookmarks: BookmarkRows; engines: EngineItem[]; history: HistoryItems; open: OpenItems; windows: WindowItem[]; headings: HeadingItem[]; sessions: SessionItem[]; registers: RegisterItem[]; folders: FolderItem[]; marks: RegisterItem[]; quickmarks: RegisterItem[]; saved_quickmarks: RegisterItem[]; anything: AnythingItems };
 export type LiveRead<Kind extends LiveKind> = { loading: true } | { loading: false; items: LiveItems[Kind] };
 
 type FetchedKind = Exclude<LiveKind, "tabs">;
@@ -13,6 +13,8 @@ export type LiveDeps = {
   ask: (kind: FetchedKind) => Promise<CompleteItemsAnswer | undefined>;
   // The model's tab rows, undefined until its first snapshot. The first call is the page's cue to connect.
   tabs: () => TabItem[] | undefined;
+  // The tab rows of every window of the line's privacy, whatever `completion_all_windows` says. Undefined until the first snapshot.
+  all_tabs: () => TabItem[] | undefined;
   // A fetch landed and the list can rank it.
   on_ready: () => void;
 };
@@ -53,6 +55,8 @@ export function create_live_source(deps: LiveDeps) {
       if (!pending.has(kind as FetchedKind)) start(kind as FetchedKind);
       return { loading: true };
     },
+    // The finder lists every window. `tabs` is not fetched, so this is not a kind.
+    read_all_tabs: (): TabItem[] | undefined => deps.all_tabs(),
     // The line closed: a reply still on its way lands nowhere.
     close: () => {
       pending.clear();

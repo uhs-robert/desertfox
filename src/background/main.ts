@@ -120,6 +120,7 @@ const complete_items = create_complete_items({
   marks: async (url, is_private) => (url === undefined ? [] : mark_list_rows(await browser_mark_store.items(url, is_private))),
   quickmarks: async (is_private) => quickmark_list_rows(await browser_quickmark_store.table((await get_config()).quickmarks, is_private)),
   saved_quickmarks: async (is_private) => quickmark_list_rows(await browser_quickmark_store.saved(is_private)),
+  quickmark_table: async (is_private) => browser_quickmark_store.table((await get_config()).quickmarks, is_private),
   read_tab: (tab_id) => browser.tabs.get(tab_id).catch(() => undefined),
   discard: { ...browser_discard_deps, alternate_of: previous_tabs.previous_of },
   tab_actions: browser_tab_action_deps,

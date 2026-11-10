@@ -1,6 +1,7 @@
 // The state of one open command line, apart from the DOM: the text, the inline message, the completion list and the
 // history walk. A key from the keymap arrives as a command id and becomes an effect for the page to carry out.
 
+import { FINDER_PARAM } from "../shared/anything_ref.ts";
 import type { Invocation } from "../shared/invocation.ts";
 import type { ContainerStore, TabItem, TabRowsAction } from "../shared/messages.ts";
 import type { ParseResult } from "../shared/registry/index.ts";
@@ -36,6 +37,8 @@ export type SessionDeps = {
   tabs?: () => readonly TabItem[] | undefined;
   // The containers a tab list can reopen tabs in. Empty on a private line, which has none.
   containers?: readonly ContainerStore[];
+  // Whether a command takes a param of this name. Shift+Enter sets `where` on the commands that have one.
+  has_param?: (command_id: string, name: string) => boolean;
   // The id of the command a typed word names, for help when no row is selected.
   command_id_of?: (word: string) => string | undefined;
   // Whether the help page has a card for a command. Snippets have none. Without it every command has one.
@@ -82,6 +85,9 @@ export function create_session(deps: SessionDeps) {
     (deps.containers ?? []).map((container) => ({ name: container.name, insert: container.name, description: "", args: "", also_named: [], keywords: [], usage: `reopen in ${container.name}`, cookie_store_id: container.cookie_store_id }));
 
   const rows = () => (completion && list_shown ? completion.rows : NO_ROWS);
+
+  // The previewed row, else the finder's first row while a query is typed. -1 when no row is highlighted.
+  const highlighted = () => (selected >= 0 ? selected : completion?.highlight_first && rows().length > 0 ? 0 : -1);
 
   // New typed text ends any preview: the list ranks what is now in the line.
   const refresh = () => {
@@ -136,7 +142,7 @@ export function create_session(deps: SessionDeps) {
   // Shown under a search line in place of the usage.
   let status = "";
 
-  const submit = (): Effect => {
+  const submit = (where?: unknown): Effect => {
     if (picking) return choose_container();
     if (deps.search) return text === "" ? { kind: "close" } : { kind: "find_commit" };
     const line = text.replace(/^[\s:]+/, "").trim();
@@ -150,12 +156,18 @@ export function create_session(deps: SessionDeps) {
       message = parsed.usage;
       return { kind: "render" };
     }
-    const problem = deps.precheck?.(parsed.invocation);
+    let invocation = parsed.invocation;
+    // The finder acts on the highlighted row, not on the text: a repeated title or address cannot pick the wrong one.
+    const finder_row = completion?.highlight_first ? rows()[highlighted()] : undefined;
+    if (finder_row?.ref !== undefined) invocation = { ...invocation, args: { ...invocation.args, [FINDER_PARAM]: finder_row.ref } };
+    // Shift+Enter: where the page opens replaces the command's own, on a command that has one.
+    if (typeof where === "string" && deps.has_param?.(invocation.id, "where")) invocation = { ...invocation, args: { ...invocation.args, where } };
+    const problem = deps.precheck?.(invocation);
     if (problem !== undefined) {
       message = problem;
       return { kind: "render" };
     }
-    return { kind: "submit", invocation: parsed.invocation, text: line };
+    return { kind: "submit", invocation, text: line };
   };
 
   // Tab and Shift-Tab wrap around. A single match goes into the line at once, and then the list ranks the new text.
@@ -176,13 +188,14 @@ export function create_session(deps: SessionDeps) {
   const step_selection = (direction: unknown): Effect => {
     cursor_after_close = undefined;
     const count = rows().length;
-    preview(direction === "next" ? Math.min(selected + 1, count - 1) : selected < 0 ? count - 1 : Math.max(selected - 1, 0));
+    const at = highlighted();
+    preview(direction === "next" ? Math.min(at + 1, count - 1) : at < 0 ? count - 1 : Math.max(at - 1, 0));
     return { kind: "render" };
   };
 
   // The selected row decides. With none selected, the command word already typed does.
   const help = (): Effect => {
-    const row = completion?.rows[selected];
+    const row = completion?.rows[highlighted()];
     const word = text.replace(/^[\s:]+/, "").split(/\s/, 1)[0] ?? "";
     // A history recall leaves `selected` set with no row behind it, so the row decides, not the index.
     const command_id = row ? row.id : deps.command_id_of?.(word);
@@ -197,16 +210,17 @@ export function create_session(deps: SessionDeps) {
 
   const acted_tabs = (): TabMarks[] => {
     if (selection.size > 0 && on_tab_list()) return (deps.tabs?.() ?? []).filter((tab) => selection.has(tab.id)).map(marks_of);
-    const marks = rows()[selected]?.tab;
+    const marks = rows()[highlighted()]?.tab;
     return marks ? [marks] : [];
   };
 
   // The first row below the highlight that stays, else the first one above it.
   const row_to_keep = (closing: ReadonlySet<number>): number | undefined => {
     const stays = (index: number) => rows()[index]?.tab && !closing.has(rows()[index]!.tab!.id);
-    if (selected < 0) return undefined;
+    const at = highlighted();
+    if (at < 0) return undefined;
     const indexes = rows().map((_, index) => index);
-    const kept = indexes.slice(selected).find(stays) ?? indexes.slice(0, selected).findLast(stays);
+    const kept = indexes.slice(at).find(stays) ?? indexes.slice(0, at).findLast(stays);
     return kept === undefined ? undefined : rows()[kept]!.tab!.id;
   };
 
@@ -215,7 +229,7 @@ export function create_session(deps: SessionDeps) {
       message = "this line has no containers";
       return { kind: "render" };
     }
-    picking = { back: saved ?? { text, caret }, highlighted_tab: rows()[selected]?.tab?.id, marked: selection.size > 0 };
+    picking = { back: saved ?? { text, caret }, highlighted_tab: rows()[highlighted()]?.tab?.id, marked: selection.size > 0 };
     fresh = false;
     replace_text("");
     caret = 0;
@@ -268,8 +282,8 @@ export function create_session(deps: SessionDeps) {
     const without = (flag: "muted" | "pinned") => tabs.some((tab) => !tab.flags.includes(flag));
     if (action === "close") {
       const closing = new Set(ids(tabs));
-      const highlighted = rows()[selected]?.tab?.id;
-      cursor_after_close = highlighted !== undefined && closing.has(highlighted) ? row_to_keep(closing) : undefined;
+      const highlighted_tab = rows()[highlighted()]?.tab?.id;
+      cursor_after_close = highlighted_tab !== undefined && closing.has(highlighted_tab) ? row_to_keep(closing) : undefined;
       return { kind: "tab_rows_action", action, tab_ids: ids(tabs) };
     }
     if (action === "mute") return { kind: "tab_rows_action", action: without("muted") ? "mute" : "unmute", tab_ids: ids(tabs) };
@@ -281,7 +295,7 @@ export function create_session(deps: SessionDeps) {
 
   // Marks or unmarks the highlighted tab row, then moves down so a run of keys marks a run of rows.
   const toggle_selected = (): Effect => {
-    const id = rows()[selected]?.tab?.id;
+    const id = rows()[highlighted()]?.tab?.id;
     if (id === undefined) {
       message = "select a tab row first";
       return { kind: "render" };
@@ -312,13 +326,13 @@ export function create_session(deps: SessionDeps) {
     get_prompt: (): string | undefined => (picking ? "container: " : undefined),
     // The rows to draw: none while the list is closed.
     get_rows: rows,
-    get_selected: () => selected,
+    get_selected: highlighted,
     // The ids of the marked tabs, which the list draws on their rows.
     get_marked: (): ReadonlySet<number> => selection,
     // For the note row: the selected row's usage, else "no match" for an empty list, else the typed command's usage.
     get_hint: (): string | undefined => {
       if (deps.search) return status;
-      const row = completion?.rows[selected];
+      const row = completion?.rows[highlighted()];
       if (row) return row.usage;
       if (completion?.loading) return "loading";
       return completion?.listing && completion.rows.length === 0 ? "no match" : completion?.usage;
@@ -397,7 +411,7 @@ export function create_session(deps: SessionDeps) {
     run: (command_id: string, args: Record<string, unknown> | undefined): Effect => {
       switch (command_id) {
         case "cmdline.submit":
-          return submit();
+          return submit(args?.where);
         case "cmdline.history":
           return walk_history(args?.direction);
         case "cmdline.next_completion":

@@ -41,18 +41,20 @@ export function create_model_client(deps: ModelClientDeps) {
 
 
   // Undefined until the first snapshot. The line's window first, then by window and place, as `listed_tabs` orders them.
-  const listed_items = (): TabItem[] | undefined =>
+  const listed_items = (all_windows = deps.all_windows): TabItem[] | undefined =>
     rev < 0
       ? undefined
       : [...rows.values()]
-          .filter((row) => deps.all_windows || row.window_id === deps.line_window_id)
+          .filter((row) => all_windows || row.window_id === deps.line_window_id)
           .sort((a, b) => Number(b.window_id === deps.line_window_id) - Number(a.window_id === deps.line_window_id) || a.window_id - b.window_id || a.index - b.index)
           .map(item_of);
 
   // A patch for a tab the list does not show, or one that changes nothing shown, must not rank the list again: that would reset its scroll position.
   let reported: string | undefined;
+  // The finder lists every window, so a change in any window is a change of its list.
+  let watches_all = false;
   const report_change = () => {
-    const key = JSON.stringify(listed_items());
+    const key = JSON.stringify(listed_items(watches_all || undefined));
     if (key === reported) return;
     reported = key;
     deps.on_change();
@@ -80,6 +82,11 @@ export function create_model_client(deps: ModelClientDeps) {
       report_change();
     },
     items: listed_items,
+    // Every window's rows, and a change in any of them reports.
+    all_items: (): TabItem[] | undefined => {
+      watches_all = true;
+      return listed_items(true);
+    },
   };
 }
 
