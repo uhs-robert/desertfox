@@ -34,7 +34,7 @@ export const area_rules = [
   { globs: ["src/commands/register.ts", "src/commands/register_param.ts", "src/background/register_store.ts", "src/shared/register_names.ts"], areas: ["find", "cmdline"] },
   { globs: ["src/commands/session.ts", "src/background/session_store.ts", "src/background/sessions_transfer.ts"], areas: ["cmdline", "tabs"] },
   {
-    globs: ["src/cmdline/**", "src/commands/{cmdline,history,bookmark,open_target}.ts", "src/background/{cmdline_service,complete_items}.ts", "src/shared/{setting_completion,score}.ts"],
+    globs: ["src/cmdline/**", "src/commands/{cmdline,history,bookmark,open_target}.ts", "src/background/{cmdline_service,complete_items,bookmark_title}.ts", "src/shared/{setting_completion,score}.ts"],
     areas: ["cmdline"],
   },
   {
@@ -53,6 +53,7 @@ export const area_rules = [
     globs: ["src/background/{tab_*,previous_tab,window_focus,count}.ts", "src/commands/{tab,window,url,url_build,browser,open}.ts", "src/shared/{tab_model_port,container_store}.ts"],
     areas: ["tabs"],
   },
+  { globs: ["src/background/{mark_store,store_turns}.ts", "src/commands/mark.ts", "src/shared/mark_names.ts"], areas: ["scroll", "keys", "whichkey"] },
   { globs: ["src/content/{scroll_*,align_target}.ts", "src/content/handlers/{scroll,align}.ts", "src/commands/{scroll,zoom}.ts"], areas: ["scroll"] },
   {
     globs: [

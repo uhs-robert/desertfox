@@ -17,7 +17,7 @@ export const is_caret_mode = (mode: Mode): boolean => CARET_MODES.includes(mode)
 
 export type RunsIn = "background" | "content";
 
-export type ContextSourceName = "current_url" | "selection" | "clipboard";
+export type ContextSourceName = "current_url" | "selection" | "clipboard" | "bookmark_title";
 
 export type ContextSource = { from: ContextSourceName };
 
@@ -65,6 +65,8 @@ export type ParamDef = {
   pattern?: string;
   // A `string` param with a static `values` list accepts only those values, compared exactly like an enum value. Without it the list is for completion only.
   strict?: boolean;
+  // A `string` param whose text must be an absolute address, as `URL.canParse` reads it. An optional param may still be empty.
+  format?: "url";
   // A `string` param that holds the value of the setting named by the sibling param of this name. `check_args` checks it with that setting's entry in `SETTING_SPECS`. An empty value passes.
   value_of?: string;
   // Exactly one key, so `{ param: [values] }`.

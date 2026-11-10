@@ -178,6 +178,15 @@ export type RegisterItem = { name: string; description: string };
 
 export type CompleteItemsAnswer = { items: BookmarkItem[] | EngineItem[] | HistoryItems | OpenItems | WindowItem[] | HeadingItem[] | SessionItem[] | RegisterItem[] };
 
+// A mark of the page that a which-key row lists: its key and the scroll offset it keeps, in px.
+export type MarkItem = { key: string; x: number; y: number };
+
+// From the `page` bundle. `x` and `y` are the scroll offset now. A set stores them under `key`. A jump answers the offset stored under `key` and stores the offset now as the previous position (`'`), unless the mark is missing. The page's privacy is the sender tab's.
+export type MarkSet = { type: "mark_set"; key: string; url: string; x: number; y: number };
+export type MarkJump = { type: "mark_jump"; key: string; url: string; x: number; y: number };
+export type MarkRequest = MarkSet | MarkJump;
+export type MarkAnswer = { ok: true; x: number; y: number } | { ok: false; message: string };
+
 // From the `caret` bundle: one register read or write. The background answers by the sender tab's privacy. A read answers the value, or nothing for an empty register and a refused name. A write answers an `Outcome`. A content script writes text only.
 export type RegisterRead = { type: "register_read"; name: string };
 export type RegisterWrite = { type: "register_write"; name: string; text: string };
@@ -330,7 +339,7 @@ export type ImportSessions = { type: "import_sessions"; text: string };
 
 export type PageToBackground = ChangeSetting | ListSettings | ToolbarRequest | PreviewConfigImport | CommitConfigImport | ExportConfig | ListSnippets | RemoveSnippet | ExportSessions | ImportSessions;
 
-export type ContentToBackground = RunRequest | ModeChanged | LoadBundle | ListKeys | IssueCmdlineTicket | OpenCmdline | RecordCmdline | CompleteItems | TabRowsActionRequest | OpenHelp | RecordStep | ReadKeymap | FindScan | ImageAction | InspectPick | RegisterRequest;
+export type ContentToBackground = RunRequest | ModeChanged | LoadBundle | ListKeys | IssueCmdlineTicket | OpenCmdline | RecordCmdline | CompleteItems | TabRowsActionRequest | OpenHelp | RecordStep | ReadKeymap | FindScan | ImageAction | InspectPick | RegisterRequest | MarkRequest;
 
 // How a command ended. Done is `{ ok: true }`. A handler that returns nothing is done, and one that throws is failed.
 // Cancelled means the user left a waiting step (Escape, an unrelated key, a page change), so the rest of a sequence does not run and nothing is shown.

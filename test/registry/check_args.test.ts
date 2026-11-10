@@ -204,6 +204,7 @@ const rules_input: CommandInput = {
   params: [
     { name: "count", type: "int", min: 1, default: 1 },
     { name: "pick", type: "string", pattern: "^\\d+$", optional: true },
+    { name: "link", type: "string", format: "url", optional: true },
     { name: "page", type: "string", values: ["home", "help"], strict: true, optional: true },
     { name: "engine", type: "enum", values: { from: "search_engines" }, optional: true },
   ],
@@ -222,13 +223,18 @@ test("pattern refuses text that does not match, and an optional param may be emp
   for (const pick of ["", "  "]) assert.deepEqual(check_args(rules_command, { pick }).ok, true);
 });
 
+test("the url format refuses text that is no address, and an optional param may be empty", () => {
+  assert.match(error_of(check_args(rules_command, { link: "example.com" })), /link expects an address, got "example.com"/);
+  for (const link of ["https://example.com/", "about:blank", ""]) assert.deepEqual(check_args(rules_command, { link }).ok, true);
+});
+
 test("strict refuses a string outside its values", () => {
   assert.match(error_of(check_args(rules_command, { page: "nope" })), /page expects one of home, help, got "nope"/);
   assert.deepEqual(check_args(rules_command, { page: "help" }).ok, true);
 });
 
 test("an optional param reads as empty text when left out", () => {
-  assert.deepEqual(check_args(rules_command, {}), { ok: true, args: { count: 1, pick: "", page: "", engine: "" } });
+  assert.deepEqual(check_args(rules_command, {}), { ok: true, args: { count: 1, pick: "", link: "", page: "", engine: "" } });
 });
 
 test("value_of checks the value with the named setting's spec", () => {
