@@ -80,6 +80,10 @@ export const MARK_PRIVATE_STORAGE_KEY = "desertfox_private_marks";
 // The macro being recorded, `{ register, steps }`, in `storage.session`. Absent means no recording. A private window has a key of its own, so a private recording never shows in or reaches a normal window. Only `macro_recorder.ts` reads and writes them.
 export const MACRO_RECORDING_STORAGE_KEY = "desertfox_macro_recording";
 export const MACRO_RECORDING_PRIVATE_STORAGE_KEY = "desertfox_private_macro_recording";
+
+// The register `@@` plays, a one-letter string in `storage.session`, with a key of its own for the private windows. Only `macro_last_played.ts` reads and writes them.
+export const MACRO_LAST_PLAYED_STORAGE_KEY = "desertfox_macro_last_played";
+export const MACRO_LAST_PLAYED_PRIVATE_STORAGE_KEY = "desertfox_private_macro_last_played";
 // The quickmarks added with `M`: `{ [key]: url }`, laid over the config table. Only `quickmark_store.ts` reads and writes it. A private window reads it but never writes it.
 export const QUICKMARK_STORAGE_KEY = "desertfox_quickmarks";
 

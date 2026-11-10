@@ -12,8 +12,11 @@ type FakeWatch = PageWatch & { tab_id: number; stopped: boolean; navigate: () =>
 
 const settle = () => new Promise((resolve) => setImmediate(resolve));
 
-function make(macros: Record<string, BoundInvocation[]>) {
+function make(macros: Record<string, BoundInvocation[]>, options: { real_timer?: boolean } = {}) {
   const log: string[] = [];
+  const steps_run: BoundInvocation[] = [];
+  const pointers = new Map<boolean, string>();
+  const turns: Array<() => void> = [];
   const watches: FakeWatch[] = [];
   let active = 1;
   const loading = new Set<number>();
@@ -23,6 +26,7 @@ function make(macros: Record<string, BoundInvocation[]>) {
     read_macro: async (register) => macros[register],
     run_step: async (step, place) => {
       log.push(`run ${step.id} in ${place.tab_id}:${place.frame_id}`);
+      steps_run.push(step);
       return (await effects[step.id]?.(place)) ?? { ok: true };
     },
     active_tab_id: async () => active,
@@ -48,10 +52,15 @@ function make(macros: Record<string, BoundInvocation[]>) {
     },
     hold_keys: async (tab_id) => void log.push(`hold ${tab_id}`),
     show_refusal: async (tab_id, message) => void log.push(`refuse ${tab_id} ${message}`),
+    last_played: { read: async (is_private) => pointers.get(is_private), write: async (register, is_private) => void pointers.set(is_private, register) },
+    // With `gate.held`, a pass waits here until the test lets it go, so Escape can come between two runs.
+    ...(options.real_timer ? {} : { next_turn: () => new Promise<void>((resolve) => (gate.held ? turns.push(resolve) : setImmediate(resolve))) }),
   };
+  const gate = { held: false };
+  const release_turns = () => turns.splice(0).forEach((resolve) => resolve());
   const replay = create_macro_replay(deps);
   const start: ReplayStart = { register: "a", tab_id: 1, frame_id: 3, mode: "normal", is_private: false };
-  return { replay, log, watches, effects, start, loading, switch_to: (tab_id: number) => (active = tab_id) };
+  return { replay, log, watches, effects, start, loading, steps_run, pointers, macros, turns, gate, release_turns, switch_to: (tab_id: number) => (active = tab_id) };
 }
 
 test("a replay holds keys in its tab, runs each step in the sender frame, and its end answers ok", async () => {
@@ -318,4 +327,175 @@ test("a step on a page still loading from before it runs the next step at once, 
   const stalled = new Promise((resolve) => setTimeout(() => resolve("stalled"), 200));
   assert.equal(await Promise.race([replay.play(start), stalled]), true);
   assert.deepEqual(log, ["hold 1", "run scroll.lines in 1:3", "run scroll.lines in 1:3"]);
+});
+
+const runs = (log: string[], id: string) => log.filter((line) => line.startsWith(`run ${id} `)).length;
+
+test("a count plays the whole macro that many times in one replay: one hold, one end, and run 2 does not refuse itself", async () => {
+  const { replay, log, start } = make({ a: [{ id: "one" }, { id: "two" }] });
+  const ended = replay.ended();
+  assert.equal(await replay.play({ ...start, count: 3 }), true);
+  assert.deepEqual(log, ["hold 1", ...Array<string[]>(3).fill(["run one in 1:3", "run two in 1:3"]).flat()]);
+  assert.deepEqual(await ended, { ok: true });
+  assert.equal(replay.is_playing(), false);
+});
+
+test("the default timer between passes plays a count and leaves nothing pending", async () => {
+  const { replay, log, watches, start } = make({ a: [{ id: "one" }] }, { real_timer: true });
+  assert.equal(await replay.play({ ...start, count: 3 }), true);
+  assert.equal(runs(log, "one"), 3);
+  assert.ok(watches.every((watch) => watch.stopped));
+});
+
+test("a count stops at the first failed or cancelled pass", async () => {
+  for (const effect of [{ ok: false, refusal: { id: "x", message: "no" } }, { ok: true, cancelled: true }] as RunResponse[]) {
+    const { replay, log, effects, start } = make({ a: [{ id: "x" }] });
+    let pass = 0;
+    effects.x = () => (++pass === 2 ? effect : { ok: true });
+    assert.equal(await replay.play({ ...start, count: 5 }), false);
+    assert.equal(runs(log, "x"), 2);
+  }
+});
+
+test("Escape between two runs stops the whole count: no more runs, queued keys dropped through ended not ok, no timer or watch left", async () => {
+  const { replay, log, watches, start, turns, gate, release_turns } = make({ a: [{ id: "x" }] });
+  gate.held = true;
+  const played = replay.play({ ...start, count: 5 });
+  const ended = replay.ended();
+  while (turns.length === 0) await settle();
+  assert.equal(runs(log, "x"), 1);
+  replay.stop();
+  release_turns();
+  assert.equal(await played, false);
+  assert.equal(runs(log, "x"), 1);
+  assert.deepEqual(await ended, { ok: false });
+  assert.equal(replay.is_playing(), false);
+  assert.equal(turns.length, 0);
+  gate.held = false;
+  assert.ok(watches.every((watch) => watch.stopped));
+  // The next play is free to start.
+  assert.equal(await replay.play(start), true);
+});
+
+test("Escape during a run of a count lets that step end and starts no further run", async () => {
+  const { replay, log, effects, start } = make({ a: [{ id: "x" }, { id: "y" }] });
+  let done!: (response: RunResponse) => void;
+  effects.x = () => new Promise((resolve) => (done = resolve));
+  const played = replay.play({ ...start, count: 4 });
+  await settle();
+  replay.stop();
+  done({ ok: true });
+  assert.equal(await played, false);
+  assert.deepEqual(log, ["hold 1", "run x in 1:3"]);
+});
+
+test("a huge count never hangs: Escape stops it, and a huge count on an empty macro ends at once", async () => {
+  const huge = make({ a: [{ id: "x" }] });
+  const played = huge.replay.play({ ...huge.start, count: 1e9 });
+  for (let tick = 0; tick < 20; tick++) await settle();
+  huge.replay.stop();
+  assert.equal(await played, false);
+  assert.ok(runs(huge.log, "x") >= 1 && runs(huge.log, "x") < 1000);
+  const empty = make({ a: [] });
+  assert.equal(await empty.replay.play({ ...empty.start, count: 1e9 }), true);
+  assert.deepEqual(empty.log, ["hold 1"]);
+});
+
+test("a count typed inside a macro stays on its own step on every pass", async () => {
+  const { replay, steps_run, start } = make({ a: [{ id: "scroll.lines", count: 3 }, { id: "tab.next" }] });
+  await replay.play({ ...start, count: 2 });
+  assert.deepEqual(steps_run, [{ id: "scroll.lines", count: 3 }, { id: "tab.next" }, { id: "scroll.lines", count: 3 }, { id: "tab.next" }]);
+});
+
+test("a nested counted play runs its macro that many times inside the one replay", async () => {
+  const { replay, log, start } = make({ a: [{ id: "macro.play", args: { reg: "b" }, count: 3 }, { id: "after" }], b: [{ id: "x" }] });
+  assert.equal(await replay.play(start), true);
+  assert.equal(runs(log, "x"), 3);
+  assert.equal(log.filter((line) => line.startsWith("hold")).length, 1);
+  assert.equal(runs(log, "after"), 1);
+  // The count of a stored step may also sit in its args, as the router fills it.
+  const args = make({ a: [{ id: "macro.play", args: { reg: "b", count: 2 } }], b: [{ id: "x" }] });
+  await args.replay.play(args.start);
+  assert.equal(runs(args.log, "x"), 2);
+});
+
+test("a counted nested play and a macro that plays itself with @@ still stop at the depth limit", async () => {
+  const counted = make({ a: [{ id: "macro.play", args: { reg: "b" }, count: 2 }], b: [{ id: "x" }, { id: "macro.play", args: { reg: "a" }, count: 2 }] });
+  assert.equal(await counted.replay.play({ ...counted.start, count: 1 }), false);
+  assert.ok(counted.log.includes(`refuse 1 Macros nest more than ${MAX_MACRO_DEPTH} deep`));
+  const looping = make({ a: [{ id: "x" }, { id: "macro.play", args: { reg: "@" } }] });
+  assert.equal(await looping.replay.play(looping.start), false);
+  assert.equal(runs(looping.log, "x"), MAX_MACRO_DEPTH);
+  assert.deepEqual(looping.log.at(-1), `refuse 1 Macros nest more than ${MAX_MACRO_DEPTH} deep`);
+  assert.equal(looping.replay.is_playing(), false);
+});
+
+test("@@ plays the last register played, and refuses when nothing was played", async () => {
+  const { replay, log, start, pointers } = make({ a: [{ id: "x" }] });
+  await assert.rejects(replay.play({ ...start, register: "@" }), /No macro has been played yet/);
+  assert.deepEqual(log, []);
+  assert.equal(replay.is_playing(), false);
+  await replay.play(start);
+  assert.equal(pointers.get(false), "a");
+  assert.equal(await replay.play({ ...start, register: "@", count: 2 }), true);
+  assert.equal(runs(log, "x"), 3);
+});
+
+test("the pointer is set at the start of a play, so @@ after a failed @a plays a again", async () => {
+  const { replay, log, effects, start } = make({ a: [{ id: "x" }] });
+  effects.x = () => ({ ok: false, refusal: { id: "x", message: "no" } });
+  assert.equal(await replay.play(start), false);
+  effects.x = undefined as never;
+  delete (effects as Record<string, unknown>).x;
+  assert.equal(await replay.play({ ...start, register: "@" }), true);
+  assert.equal(runs(log, "x"), 2);
+});
+
+test("after an @a that plays @b, @@ plays b, as in vim", async () => {
+  const { replay, log, start, pointers } = make({ a: [{ id: "macro.play", args: { reg: "b" } }, { id: "in_a" }], b: [{ id: "in_b" }] });
+  await replay.play(start);
+  assert.equal(pointers.get(false), "b");
+  log.length = 0;
+  await replay.play({ ...start, register: "@" });
+  assert.deepEqual(log.filter((line) => line.startsWith("run")), ["run in_b in 1:3"]);
+});
+
+test("the pointer in a private window stays apart from the normal one", async () => {
+  const { replay, start, pointers, log } = make({ a: [{ id: "x" }] });
+  await replay.play({ ...start, is_private: true });
+  assert.equal(pointers.get(true), "a");
+  assert.equal(pointers.has(false), false);
+  await assert.rejects(replay.play({ ...start, register: "@" }), /No macro has been played yet/);
+  assert.equal(await replay.play({ ...start, register: "@", is_private: true }), true);
+  assert.equal(runs(log, "x"), 2);
+});
+
+test("@@ plays what the pointed register holds now: new content plays, a cleared register refuses cleanly", async () => {
+  const { replay, log, start, macros } = make({ a: [{ id: "old" }] });
+  await replay.play(start);
+  macros.a = [{ id: "new" }];
+  await replay.play({ ...start, register: "@" });
+  assert.deepEqual(log.filter((line) => line.startsWith("run")), ["run old in 1:3", "run new in 1:3"]);
+  delete macros.a;
+  await assert.rejects(replay.play({ ...start, register: "@" }), /Register a holds no macro/);
+  assert.equal(replay.is_playing(), false);
+  const nested = make({ a: [{ id: "macro.play", args: { reg: "b" } }], b: [{ id: "x" }] });
+  await nested.replay.play(nested.start);
+  delete nested.macros.b;
+  await assert.rejects(nested.replay.play({ ...nested.start, register: "@" }), /Register b holds no macro/);
+});
+
+test("5@a recorded inside another macro is one macro.play step with its count", async () => {
+  const values = new Map<string, unknown>();
+  const area = {
+    get: async (key: string) => (values.has(key) ? { [key]: structuredClone(values.get(key)) } : {}),
+    set: async (items: Record<string, unknown>) => void Object.entries(items).forEach(([key, value]) => values.set(key, structuredClone(value))),
+    remove: async (key: string) => void values.delete(key),
+  } as never;
+  const { replay } = make({});
+  const recorder = create_macro_recorder({ session: () => area, tell_tabs: async () => undefined, is_replaying: replay.is_playing });
+  await recorder.start("z", false);
+  await recorder.record([{ id: "macro.play", args: { reg: "a" }, count: 5 }], { ok: true }, { is_private: false });
+  await recorder.record([{ id: "macro.play", args: { reg: "@" } }], { ok: true }, { is_private: false });
+  assert.deepEqual((await recorder.stop(false)).steps, [{ id: "macro.play", args: { reg: "a" }, count: 5 }, { id: "macro.play", args: { reg: "@" } }]);
 });

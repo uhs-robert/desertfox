@@ -6,6 +6,7 @@ import { RuntimeRefusal } from "../shared/command.ts";
 import type { Mode } from "../shared/command.ts";
 import type { BoundInvocation } from "../shared/invocation.ts";
 import type { RunResponse } from "../shared/messages.ts";
+import { LAST_PLAYED_REGISTER } from "../shared/register_names.ts";
 import { PAGE_READY_TIMEOUT_MS, type PageReady, type PageWatch } from "./page_ready.ts";
 
 // How deep `@a` inside a macro may nest before the replay refuses, so a macro that plays itself ends.
@@ -26,9 +27,16 @@ export type MacroReplayDeps = {
   // Sends `replay_hold` to every frame of the tab.
   hold_keys: (tab_id: number) => Promise<unknown>;
   show_refusal: (tab_id: number | undefined, message: string) => Promise<unknown>;
+  // The register `@@` plays. A play writes it, so it outlives a background restart.
+  last_played: { read: (is_private: boolean) => Promise<string | undefined>; write: (register: string, is_private: boolean) => Promise<unknown> };
+  // Lets the background answer other messages, Escape above all, between the passes of a count.
+  next_turn?: () => Promise<void>;
 };
 
-export type ReplayStart = { register: string; tab_id: number | undefined; frame_id: number | undefined; mode: Mode; is_private: boolean };
+const timer_turn = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+// `register` may be `@`, for the last one played. `count` is how many times the whole macro runs, one run after another.
+export type ReplayStart = { register: string; count?: number; tab_id: number | undefined; frame_id: number | undefined; mode: Mode; is_private: boolean };
 
 type Replay = {
   // The tab the replay is in now. A run from another tab waits for the end.
@@ -95,17 +103,48 @@ export function create_macro_replay(deps: MacroReplayDeps) {
     }
   }
 
+  // `@` names the register the last play named. Every play, nested ones too, names its register before its first step, so `@@` after a failed `@a` still plays `a`, and after an `@a` that played `@b` it plays `b`, as in vim.
+  async function resolve_register(register: string, is_private: boolean): Promise<string> {
+    const resolved = register === LAST_PLAYED_REGISTER ? await deps.last_played.read(is_private) : register;
+    if (resolved === undefined) throw new RuntimeRefusal("No macro has been played yet");
+    await deps.last_played.write(resolved, is_private);
+    return resolved;
+  }
+
+  // A nested play: false at its first refusal or failed pass. The depth limit counts nested plays only, so a count never deepens it.
+  async function play_nested(replay: Replay, step: BoundInvocation, depth: number, start: ReplayStart): Promise<boolean> {
+    if (depth >= MAX_MACRO_DEPTH) return refuse(`Macros nest more than ${MAX_MACRO_DEPTH} deep`);
+    let register: string;
+    try {
+      register = await resolve_register(String(step.args?.reg), start.is_private);
+    } catch (error) {
+      if (error instanceof RuntimeRefusal) return refuse(error.message);
+      throw error;
+    }
+    const nested = await deps.read_macro(register, start.is_private);
+    if (!nested) return refuse(`Register ${register} holds no macro`);
+    return play_passes(replay, nested, count_of(step), depth + 1, start);
+  }
+
+  const count_of = (step: BoundInvocation): number => Math.max(1, Number(step.count ?? step.args?.count ?? 1));
+
+  // The whole macro `count` times, stopping at the first failed pass. An empty macro has nothing to repeat, so a huge count on it ends at once.
+  async function play_passes(replay: Replay, steps: readonly BoundInvocation[], count: number, depth: number, start: ReplayStart): Promise<boolean> {
+    if (steps.length === 0) return true;
+    for (let pass = 0; pass < count; pass++) {
+      if (pass > 0) await (deps.next_turn ?? timer_turn)();
+      if (!(await play_steps(replay, steps, depth, start))) return false;
+    }
+    return true;
+  }
+
   // False at the first step that failed, was cancelled or was stopped. A failure the router saw is shown already, and so is one refused here.
   async function play_steps(replay: Replay, steps: readonly BoundInvocation[], depth: number, start: ReplayStart): Promise<boolean> {
     for (const step of steps) {
       if (replay.stopped) return false;
       // A nested macro plays inside this replay, so it shares the one hold and the one end.
       if (step.id === "macro.play") {
-        if (depth >= MAX_MACRO_DEPTH) return refuse(`Macros nest more than ${MAX_MACRO_DEPTH} deep`);
-        const register = String(step.args?.reg);
-        const nested = await deps.read_macro(register, start.is_private);
-        if (!nested) return refuse(`Register ${register} holds no macro`);
-        if (!(await play_steps(replay, nested, depth + 1, start))) return false;
+        if (!(await play_nested(replay, step, depth, start))) return false;
         continue;
       }
       if (!(await play_step(replay, step, start))) return false;
@@ -123,10 +162,11 @@ export function create_macro_replay(deps: MacroReplayDeps) {
       current = replay;
       let finished = false;
       try {
-        const steps = await deps.read_macro(start.register, start.is_private);
-        if (!steps) throw new RuntimeRefusal(`Register ${start.register} holds no macro`);
+        const register = await resolve_register(start.register, start.is_private);
+        const steps = await deps.read_macro(register, start.is_private);
+        if (!steps) throw new RuntimeRefusal(`Register ${register} holds no macro`);
         if (start.tab_id !== undefined) await deps.hold_keys(start.tab_id).catch(() => undefined);
-        finished = await play_steps(replay, steps, 1, start);
+        finished = await play_passes(replay, steps, start.count ?? 1, 1, start);
       } finally {
         current = undefined;
         finish(finished);
