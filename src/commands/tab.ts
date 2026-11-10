@@ -64,6 +64,18 @@ export function make_tab_handlers(deps: TabDeps) {
     if (target) await deps.activate(target.id);
   }
 
+  // A whole number is a place in this window and counts from the end when negative. Other text names a tab, which takes the place of the picked tab, so the tabs between shift like a drag. No text means the offset decides.
+  async function move_target(ctx: CommandContext, tabs: TabInfo[], args: { tab: string }): Promise<number | undefined> {
+    const text = args.tab.trim();
+    if (text === "") return undefined;
+    if (WHOLE_NUMBER.test(text)) return goto_target_index(Number(text), tabs.length);
+    const picked = pick_tab(await deps.listed_tabs(ctx), text, ctx.window_id);
+    if (picked.window_id !== ctx.window_id) throw new RuntimeRefusal("the picked tab is in another window");
+    const index = tabs.find((tab) => tab.id === picked.id)?.index;
+    if (index === undefined) throw new RuntimeRefusal("the picked tab is gone");
+    return index;
+  }
+
   // The subject is the tab named by `tab`, else the line's own tab. A side acts on the neighbors and leaves the subject, except `site`, which acts on the subject too. A count adds neighbors after the subject. Neighbors skip pinned tabs, the subject never does.
   async function change_loaded(ctx: CommandContext, args: { tab: string; side: UnloadSide; count: number }, unloaded: boolean): Promise<void> {
     const named = args.tab.trim() === "" ? undefined : pick_tab(await deps.listed_tabs(ctx), args.tab, ctx.window_id);
@@ -109,9 +121,14 @@ export function make_tab_handlers(deps: TabDeps) {
       if (args.index === NEXT_TAB_INDEX) return activate_at(tabs, wrap_index(current.index + 1, tabs.length));
       await activate_at(tabs, goto_target_index(args.index, tabs.length));
     },
-    move: async (ctx: CommandContext, args: { offset: number }) => {
+    move: async (ctx: CommandContext, args: { tab: string; offset: number }) => {
       const { tabs, current } = await position_of(ctx);
-      await move_tabs(deps, [current.id], clamp_index(current.index + args.offset, tabs.length));
+      const target = await move_target(ctx, tabs, args);
+      const wanted = target ?? clamp_index(current.index + args.offset, tabs.length);
+      // Firefox ignores a move across the pinned boundary, so land at the nearest place on the tab's own side.
+      const pinned_count = tabs.filter((tab) => tab.pinned).length;
+      const own_side = current.pinned ? { first: 0, last: pinned_count - 1 } : { first: pinned_count, last: tabs.length - 1 };
+      await move_tabs(deps, [current.id], Math.min(Math.max(wanted, own_side.first), own_side.last));
     },
     duplicate: async (ctx: CommandContext) => {
       const { current } = await position_of(ctx);
@@ -176,6 +193,7 @@ export function make_tab_handlers(deps: TabDeps) {
   };
 }
 
+const WHOLE_NUMBER = /^-?\d+$/;
 const NUMBER_PICK = /^(\d+)(?:\s+(.*))?$/s;
 
 // `3 GitHub` is what a completion pick puts in the line: the tab at place 3 of the tab bar, then its title. The number
@@ -341,11 +359,14 @@ define("tab.undo_close", {
 
 define("tab.move", {
   label: "Move tab",
-  intent: "Move the tab along the strip. A positive offset moves it later and a negative one earlier. A count prefix repeats it.",
-  params: [{ name: "offset", type: "int" }],
+  intent: "Move the tab to a place in the strip. Name a place number, where 1 is first and -1 last, or a tab, whose place it takes. --offset moves it along the strip, positive later and negative earlier. With both, the place wins. A move stops at the edge of the pinned tabs, so a pinned tab stays pinned-side and an unpinned tab stays after them. A count prefix repeats it.",
+  params: [
+    { name: "tab", type: "string", rest: true, main: true, optional: true, values: { from: "tabs" }, description: "Take this place number, or the place of this tab." },
+    { name: "offset", type: "int", default: 0, description: "Move this many places, positive later and negative earlier." },
+  ],
   runs_in: "background",
   count: "repeat",
-  run: (ctx, args) => handlers.move(ctx, args as { offset: number }),
+  run: (ctx, args) => handlers.move(ctx, args as { tab: string; offset: number }),
 });
 
 define("tab.duplicate", {

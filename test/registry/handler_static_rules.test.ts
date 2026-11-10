@@ -22,6 +22,7 @@ const VALID_SETTING_TEXT: Record<string, string> = { which_key_delay_ms: "500", 
 const EXPECTED_REFUSALS: Record<string, RegExp[]> = {
   "tab.goto_audible": [/no tab is playing sound/],
   "tab.switch": [/matches .* equally, use a number/],
+  "tab.move": [/matches .* equally/],
   "tab.unload": [/matches .* equally/, /unloaded 0 tabs/],
   "tab.load": [/matches .* equally/, /loaded 0 tabs/],
   "tab.reopen_in_container": [/No container named/],

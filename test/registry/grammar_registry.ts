@@ -13,7 +13,7 @@ export function grammar_registry(): Registry {
   define(registry, "tab.close", {
     params: [{ name: "focus", type: "enum", values: ["right", "left"], default: "right" }],
   });
-  define(registry, "tab.move", { params: [{ name: "offset", type: "int" }] });
+  define(registry, "tab.slide", { params: [{ name: "offset", type: "int" }] });
   define(registry, "tab.next", {});
   define(registry, "tab.goto", { params: [{ name: "index", type: "int", default: -1 }] });
   define(registry, "zoom.set", { params: [{ name: "level", type: "float" }] });

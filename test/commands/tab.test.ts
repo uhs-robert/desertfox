@@ -91,12 +91,64 @@ test("next and prev wrap", async () => {
   assert.deepEqual(log, ["activate 100", "activate 102"]);
 });
 
-test("tab.move clamps at both ends", async () => {
+const move_args = (over: Partial<{ tab: string; offset: number }> = {}) => ({ tab: "", offset: 0, ...over });
+
+test("tab.move --offset clamps at both ends", async () => {
   const { handlers, log } = make_fake(make_tabs(4));
-  await handlers.move(ctx_at(102), { offset: 5 });
-  await handlers.move(ctx_at(101), { offset: -5 });
-  await handlers.move(ctx_at(101), { offset: 1 });
+  await handlers.move(ctx_at(102), move_args({ offset: 5 }));
+  await handlers.move(ctx_at(101), move_args({ offset: -5 }));
+  await handlers.move(ctx_at(101), move_args({ offset: 1 }));
   assert.deepEqual(log, ["move 102 3", "move 101 0", "move 101 2"]);
+});
+
+test("tab.move with a place number takes that place, negative counts from the end, out of range clamps", async () => {
+  const { handlers, log } = make_fake(make_tabs(4));
+  await handlers.move(ctx_at(100), move_args({ tab: "3" }));
+  await handlers.move(ctx_at(100), move_args({ tab: "-1" }));
+  await handlers.move(ctx_at(103), move_args({ tab: "-2" }));
+  await handlers.move(ctx_at(100), move_args({ tab: "9" }));
+  await handlers.move(ctx_at(103), move_args({ tab: "-9" }));
+  assert.deepEqual(log, ["move 100 2", "move 100 3", "move 103 2", "move 100 3", "move 103 0"]);
+});
+
+test("tab.move with a tab name takes the picked tab's place", async () => {
+  const { handlers, log, deps } = make_fake(make_tabs(4));
+  deps.listed_tabs = async () => [listed(100, 1, "Mail"), listed(101, 2, "GitHub"), listed(103, 4, "Docs")];
+  await handlers.move(ctx_at(100), move_args({ tab: "github" }));
+  await handlers.move(ctx_at(103), move_args({ tab: "2 GitHub" }));
+  await handlers.move(ctx_at(102), move_args({ tab: "docs" }));
+  assert.deepEqual(log, ["move 100 1", "move 103 1", "move 102 3"]);
+});
+
+test("tab.move keeps each tab on its own side of the pinned boundary", async () => {
+  const { handlers, log, deps } = make_fake(make_tabs(5, [{ pinned: true }, { pinned: true }]));
+  deps.listed_tabs = async () => [listed(100, 1, "Pinned")];
+  await handlers.move(ctx_at(103), move_args({ tab: "1" }));
+  await handlers.move(ctx_at(103), move_args({ tab: "pinned" }));
+  await handlers.move(ctx_at(103), move_args({ offset: -9 }));
+  await handlers.move(ctx_at(100), move_args({ tab: "-1" }));
+  await handlers.move(ctx_at(100), move_args({ offset: 9 }));
+  assert.deepEqual(log, ["move 103 2", "move 103 2", "move 103 2", "move 100 1", "move 100 1"]);
+});
+
+test("tab.move onto the current tab keeps its place", async () => {
+  const { handlers, log, deps } = make_fake(make_tabs(3));
+  deps.listed_tabs = async () => [listed(101, 2, "GitHub")];
+  await handlers.move(ctx_at(101), move_args({ tab: "github" }));
+  assert.deepEqual(log, ["move 101 1"]);
+});
+
+test("tab.move refuses a picked tab in another window", async () => {
+  const { handlers, log, deps } = make_fake(make_tabs(3));
+  deps.listed_tabs = async () => [{ ...listed(200, 1, "Elsewhere"), window_id: 2 }];
+  await assert.rejects(handlers.move(ctx_at(100), move_args({ tab: "elsewhere" })), /another window/);
+  assert.deepEqual(log, []);
+});
+
+test("tab.move with a tab and an offset uses the tab", async () => {
+  const { handlers, log } = make_fake(make_tabs(4));
+  await handlers.move(ctx_at(100), move_args({ tab: "4", offset: 1 }));
+  assert.deepEqual(log, ["move 100 3"]);
 });
 
 test("focus after close follows the direction and falls back at the edges", () => {
