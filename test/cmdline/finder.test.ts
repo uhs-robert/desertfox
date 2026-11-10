@@ -258,3 +258,25 @@ test("a keyword query puts the engine row first and highlighted, ahead of a tab 
   assert.deepEqual(decode_ref(effect.invocation.args[FINDER_PARAM] as string), { kind: "engine", engine: "github", query: "rust" });
   assert.deepEqual(ref_of(rows.at(-1)), { kind: "web", query: "gh rust" });
 });
+
+test("empty query: a recent page that a hidden group also holds still shows", () => {
+  // Ten tabs, so two fall past the 8 shown. The bookmark group is not shown with no query.
+  const tabs = Array.from({ length: 10 }, (_, index) => {
+    const url = `https://tab${index}.test/`;
+    return { row: { name: `${index}`, insert: "", description: url, args: "", also_named: [], keywords: [], usage: "" }, url, id: index + 1, last_used: 100 - index, current: false };
+  });
+  const items: AnythingItems = {
+    ...ITEMS,
+    quickmarks: [],
+    closed: [],
+    bookmarks: [{ title: "Bookmarked", url: "https://bookmarked.test/" }],
+    history: [
+      { title: "Bookmarked page", url: "https://bookmarked.test/" },
+      { title: "Hidden tab page", url: "https://tab9.test/" },
+    ],
+    history_max: 5,
+  };
+  const rows = anything_ranked({ word: "", usage: "", tabs, items, engines: [] });
+  assert.deepEqual(rows.filter((row) => row.tag === "hist").map((row) => row.description), ["https://bookmarked.test/", "https://tab9.test/"]);
+  assert.equal(rows.filter((row) => row.ref && decode_ref(row.ref)?.kind === "tab").length, 8);
+});

@@ -54,23 +54,45 @@ function search_rows(word: string, engines: readonly EngineItem[], usage: string
   };
 }
 
+const tab_with_ref = (tab: FinderTab): Row => ({ ...tab.row, ref: encode_ref({ kind: "tab", id: tab.id }) });
+const closed_row = (entry: AnythingItems["closed"][number], usage: string) => url_row(entry.title, entry.url, "closed", { kind: "closed", session_id: entry.session_id }, usage);
+const history_row = (entry: AnythingItems["history"][number], usage: string) => url_row(entry.title, entry.url, "hist", { kind: "page", url: entry.url }, usage);
+const quickmark_row = (mark: AnythingItems["quickmarks"][number], usage: string) => url_row(mark.key, mark.url, "qm", { kind: "page", url: mark.url }, usage);
+
+// Only the rows the list shows claim an address, so a page that a hidden group also holds still shows. The line's own tab claims its address, so its page is not offered again.
+// A closed tab claims its address before history, so it wins over the history row.
+function recent_rows({ usage, tabs, items }: Omit<FinderInput, "word" | "engines">): Row[] {
+  const seen = new Set(tabs.filter((tab) => tab.current).map((tab) => tab.url));
+  // Stops at `limit`, so a row past the cap claims nothing.
+  const shown = <Entry extends { url: string }>(entries: readonly Entry[], limit: number): Entry[] => {
+    const kept: Entry[] = [];
+    for (const entry of entries) {
+      if (kept.length >= limit) break;
+      if (!seen.has(entry.url)) kept.push(entry) && seen.add(entry.url);
+    }
+    return kept;
+  };
+  const claim = <Entry extends { url: string }>(entries: readonly Entry[]) => entries.forEach((entry) => seen.add(entry.url));
+  const recent_tabs = tabs.filter((tab) => !tab.current).sort((left, right) => right.last_used - left.last_used).slice(0, RECENT_TABS);
+  claim(recent_tabs);
+  const quickmarks = shown(items.quickmarks, Infinity);
+  const closed = shown(items.closed, RECENT_CLOSED);
+  const history = shown(items.history, items.history_max);
+  return [...quickmarks.map((mark) => quickmark_row(mark, usage)), ...recent_tabs.map(tab_with_ref), ...history.map((entry) => history_row(entry, usage)), ...closed.map((entry) => closed_row(entry, usage))];
+}
+
 export function anything_ranked({ word, usage, tabs, items, engines }: FinderInput): Ranked<Row>[] {
-  // An address shows once, in the first group that holds it. The line's own tab keeps its address in the set, so its page is not offered again.
+  const as_ranked = (rows: Row[]): Ranked<Row>[] => rows.map((row) => ({ ...row, positions: [] }));
+  if (word.trim() === "") return as_ranked(recent_rows({ usage, tabs, items }));
+
+  // An address shows once, in the first group that holds it. A closed tab wins over the history row of its address, because Enter restores the tab with its state.
   const seen = new Set(tabs.map((tab) => tab.url));
   const fresh = <Entry extends { url: string }>(entries: readonly Entry[]): Entry[] => entries.filter((entry) => !seen.has(entry.url) && seen.add(entry.url));
-  const quickmarks = fresh(items.quickmarks).map((mark) => url_row(mark.key, mark.url, "qm", { kind: "page", url: mark.url }, usage));
+  const quickmarks = fresh(items.quickmarks).map((mark) => quickmark_row(mark, usage));
   const bookmarks = fresh(items.bookmarks).map((bookmark) => url_row(bookmark.title, bookmark.url, "bm", { kind: "page", url: bookmark.url }, usage));
-  // A closed tab wins over the history row of its address, because Enter restores the tab with its state. History is deduped after it.
-  const closed = fresh(items.closed).map((entry) => url_row(entry.title, entry.url, "closed", { kind: "closed", session_id: entry.session_id }, usage));
-  const history = fresh(items.history).map((entry) => url_row(entry.title, entry.url, "hist", { kind: "page", url: entry.url }, usage));
-  const as_ranked = (rows: Row[]): Ranked<Row>[] => rows.map((row) => ({ ...row, positions: [] }));
-
-  if (word.trim() === "") {
-    const recent_tabs = tabs.filter((tab) => !tab.current).sort((left, right) => right.last_used - left.last_used).slice(0, RECENT_TABS);
-    return as_ranked([...quickmarks, ...recent_tabs.map((tab) => ({ ...tab.row, ref: encode_ref({ kind: "tab", id: tab.id }) })), ...history.slice(0, items.history_max), ...closed.slice(0, RECENT_CLOSED)]);
-  }
-  const tab_rows = tabs.map((tab) => ({ ...tab.row, ref: encode_ref({ kind: "tab", id: tab.id }) }));
+  const closed = fresh(items.closed).map((entry) => closed_row(entry, usage));
+  const history = fresh(items.history).map((entry) => history_row(entry, usage));
   // The keyword row goes first, so the highlighted row and Enter search the engine the user named.
   const { keyword, fallback } = search_rows(word, engines, usage);
-  return [...as_ranked(keyword ? [keyword] : []), ...rank(word, tab_rows), ...rank(word, quickmarks), ...rank(word, bookmarks), ...rank(word, history), ...rank(word, closed), ...as_ranked([fallback])];
+  return [...as_ranked(keyword ? [keyword] : []), ...rank(word, tabs.map(tab_with_ref)), ...rank(word, quickmarks), ...rank(word, bookmarks), ...rank(word, history), ...rank(word, closed), ...as_ranked([fallback])];
 }
