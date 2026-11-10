@@ -38,8 +38,9 @@ const cookie_url = (cookie: PageCookie): string => `${cookie.secure ? "https" : 
 
 // A fixed code string run from the background, not a content-script message: the content script is at its size limit.
 // Each step runs alone with its own timer, because a page can block or stall one store and the rest must still clear. The answer is the names of the steps that failed or timed out.
+// Cache Storage and service workers exist only on a secure page, so on a plain http: page their steps are skipped instead of reported as stayed.
 // A database delete that fires `blocked` is held open by the page, so it counts as stayed.
-const PAGE_STORAGE_CLEAR = `(async () => {
+export const PAGE_STORAGE_CLEAR = `(async () => {
   const stayed = [];
   const attempt = async (name, step) => {
     const timeout = new Promise((_, fail) => setTimeout(fail, ${STEP_TIMEOUT_MS}));
@@ -52,8 +53,8 @@ const PAGE_STORAGE_CLEAR = `(async () => {
         await new Promise((done, fail) => { const request = indexedDB.deleteDatabase(name); request.onsuccess = () => done(); request.onerror = request.onblocked = () => fail(); });
       }
     }),
-    attempt("Cache Storage", async () => { for (const key of await caches.keys()) await caches.delete(key); }),
-    attempt("service workers", async () => { for (const registration of await navigator.serviceWorker.getRegistrations()) await registration.unregister(); }),
+    typeof caches === "undefined" || attempt("Cache Storage", async () => { for (const key of await caches.keys()) await caches.delete(key); }),
+    typeof navigator.serviceWorker === "undefined" || attempt("service workers", async () => { for (const registration of await navigator.serviceWorker.getRegistrations()) await registration.unregister(); }),
   ]);
   return stayed;
 })()`;

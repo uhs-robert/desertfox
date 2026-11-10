@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { make_reload_clear } from "../../src/commands/reload_clear.ts";
+import vm from "node:vm";
+import { make_reload_clear, PAGE_STORAGE_CLEAR } from "../../src/commands/reload_clear.ts";
 import type { PageCookie, ReloadClearDeps } from "../../src/commands/reload_clear.ts";
 import { RuntimeRefusal } from "../../src/shared/command.ts";
 import "../../src/background/command_modules.ts";
@@ -136,4 +137,11 @@ test("a macro and the repeat memory both drop page.reload --all and keep the res
   assert.deepEqual(saved, [], "`.` would repeat the clear of every site");
   await record(steps, { ok: true }, { is_private: false });
   assert.deepEqual(saved, [[steps[1]]]);
+});
+
+test("the page script skips Cache Storage and service workers where the page has no secure-context APIs", async () => {
+  const empty_storage = { clear: () => {} };
+  const page = { sessionStorage: empty_storage, localStorage: empty_storage, indexedDB: { databases: async () => [] }, navigator: {}, setTimeout };
+  const stayed = await vm.runInNewContext(PAGE_STORAGE_CLEAR, page);
+  assert.deepEqual([...stayed], []);
 });
