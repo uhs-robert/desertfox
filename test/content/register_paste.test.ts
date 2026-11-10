@@ -42,3 +42,14 @@ test("an empty register or one that holds a macro refuses and types nothing", as
   }
   assert.deepEqual(typed, []);
 });
+
+test("a paste refuses when focus moved to another field during the register read", async () => {
+  typed.length = 0;
+  stored = "late";
+  const doc = globals.document as { activeElement: unknown };
+  const first = doc.activeElement;
+  (globals.browser as { runtime: { sendMessage: unknown } }).runtime.sendMessage = async () => ((doc.activeElement = new FakeHTMLInputElement()), "late");
+  await assert.rejects(paste("a"), /Focus moved/);
+  assert.deepEqual(typed, []);
+  doc.activeElement = first;
+});

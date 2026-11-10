@@ -3,6 +3,7 @@
 import type { BundleHostApi } from "../bundle_host.ts";
 import { RuntimeRefusal } from "../../shared/command.ts";
 import type { RegisterRead } from "../../shared/messages.ts";
+import { deepest_focused_element } from "../editable.ts";
 import { write_into_field } from "./field_writer.ts";
 import { take_text_entry } from "./entry.ts";
 import { read_field_text } from "./field_text.ts";
@@ -29,8 +30,11 @@ if (!page.desertfox_text_ready) {
   host.register_handler_("text.flush", recorder.flush);
   host.register_handler_("register.paste", async (args) => {
     const name = args.name as string;
+    const target = deepest_focused_element();
     const value = (await browser.runtime.sendMessage({ type: "register_read", name } satisfies RegisterRead)) as string | unknown[] | undefined;
     if (typeof value !== "string" || value === "") throw new RuntimeRefusal(value === undefined || value === "" ? `Register ${name} is empty` : `Register ${name} holds a macro, not text`);
+    // The read is async and keys are not held, so focus may have moved on to a field the user did not paste into.
+    if (deepest_focused_element() !== target) throw new RuntimeRefusal("Focus moved while the register was read");
     // Outside `while_replaying`: the text joins the insert session that `.` repeats, as a paste from the keyboard would.
     write_into_field(value, host.last_blurred_());
   });
