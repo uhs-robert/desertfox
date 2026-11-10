@@ -1,5 +1,5 @@
 // Key test cases of piece P2 (prompts). run.mjs calls run_cases with its helpers.
-// `go = ":open"` in the test keymap carries an explicit prompt, so the router opens the command line with `open ` typed in.
+// `ge = ":open"` in the test keymap carries an explicit prompt, so the router opens the command line with `open ` typed in.
 import { evaluate_in_background } from "./rdp.mjs";
 
 const CTRL = (key) => ["-M", "ctrl", key, "-m", "ctrl"];
@@ -31,16 +31,16 @@ export async function run_cases({ rdp, extension_id, run_case, press_keys, open_
 
   await open_page("page", "p2_start", { new_tab: true });
 
-  await run_case("go opens the command line with open typed in, and the key did not run", async () => {
-    await press_keys("go");
+  await run_case("ge opens the command line with open typed in, and the key did not run", async () => {
+    await press_keys("ge");
     const mark = await type_in_open_line("open ");
     // The cleared line lists every command, so the first Escape closes the list and the second closes the line.
     await close_cmdline();
     await expect_absent(mark, "p2_start", scrolled("p2_start"), "j scrolled the page while the line was open", { report_delay_ms: scroll_report_wait_ms });
   });
 
-  await run_case("Enter on a typed value after go runs once and records the line", async () => {
-    await press_keys("go");
+  await run_case("Enter on a typed value after ge runs once and records the line", async () => {
+    await press_keys("ge");
     await wait_cmdline((line) => line.open && line.value === "open ", "the line to open with open typed in");
     const mark = events.length;
     await type_in_line(url_of("page", "p2_target"));

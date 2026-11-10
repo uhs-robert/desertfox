@@ -25,6 +25,7 @@ import { browser_find_scan_deps, create_find_scan, is_scan_request } from "./fin
 import { create_router } from "./router.ts";
 import { wire_private_cleanup } from "./store_turns.ts";
 import { answer_mark_request, browser_mark_store } from "./mark_store.ts";
+import { browser_quickmark_store } from "./quickmark_store.ts";
 import { answer_register_request, browser_register_store } from "./register_store.ts";
 import { create_repeat_memory } from "./repeat_memory.ts";
 import { create_step_recorder, page_outcome, page_steps } from "./record_step.ts";
@@ -212,7 +213,7 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
       page,
       requirement_of: requirement_lookup(config),
       site_engine_label_of: (invocation) => config.search_engines[site_engine_for(config.search_engines, invocation.site_search?.engines ?? [], page) ?? ""]?.label,
-    }, rule_addresses_of(sender), () => browser_register_store.items(tab?.incognito === true), () => browser_mark_store.items(sender.url ?? "", tab?.incognito === true), () => browser_register_store.macro_items(tab?.incognito === true)));
+    }, rule_addresses_of(sender), () => browser_register_store.items(tab?.incognito === true), () => browser_mark_store.items(sender.url ?? "", tab?.incognito === true), () => browser_quickmark_store.table(config.quickmarks, tab?.incognito === true), () => browser_register_store.macro_items(tab?.incognito === true)));
   }
   if ((message as SnippetCall)?.type === "snippet_run") {
     return get_config().then(() => snippets.handle_call(message as SnippetCall, { tab_id: sender.tab?.id, frame_id: sender.frameId }));
@@ -267,7 +268,7 @@ browser.tabs.onUpdated.addListener((tab_id, change) => {
 });
 
 browser.windows.onRemoved.addListener(() => void repeat_memory.clear_private_without_window().catch(() => undefined));
-wire_private_cleanup([browser_register_store, browser_mark_store, browser_macro_recorder], browser.windows);
+wire_private_cleanup([browser_register_store, browser_mark_store, browser_quickmark_store, browser_macro_recorder], browser.windows);
 
 browser.tabs.onActivated.addListener(({ windowId, previousTabId }) => previous_tabs.activated(windowId, previousTabId));
 

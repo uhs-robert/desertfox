@@ -5,7 +5,7 @@
 
 import { parse, TomlError } from "smol-toml";
 
-export const DATA_KINDS = ["keymap", "search_engines", "command_aliases", "settings"] as const;
+export const DATA_KINDS = ["keymap", "search_engines", "command_aliases", "quickmarks", "settings"] as const;
 export type DataKind = (typeof DATA_KINDS)[number];
 
 export type DataLayer = { file: string; data: Record<string, unknown> };

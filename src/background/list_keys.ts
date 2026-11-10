@@ -6,6 +6,7 @@ import type { BoundInvocation } from "../shared/invocation.ts";
 import type { WhichKeyBorder } from "../shared/config.ts";
 import type { ListKeys, MarkItem, RegisterItem, WhichKeyPanel, WhichKeyRow } from "../shared/messages.ts";
 import { PREVIOUS_MARK } from "../shared/mark_names.ts";
+import type { QuickmarkTable } from "../shared/quickmark_names.ts";
 import { UNNAMED_REGISTER } from "../shared/register_names.ts";
 import { ANY_KEY, COMPILED_KEYMAP_STORAGE_KEY, token_label } from "../shared/prefix_tree.ts";
 import type { CompiledKeymap, TreeBranch, TreeLeaf, TreeNode } from "../shared/prefix_tree.ts";
@@ -96,6 +97,7 @@ export async function list_keys(
   addresses: readonly (string | undefined)[] = [],
   registers?: () => Promise<RegisterItem[]>,
   marks?: () => Promise<MarkItem[]>,
+  quickmarks?: () => Promise<QuickmarkTable>,
   macros?: () => Promise<RegisterItem[]>,
 ): Promise<WhichKeyPanel> {
   const stored = await storage.get(COMPILED_KEYMAP_STORAGE_KEY);
@@ -111,8 +113,19 @@ export async function list_keys(
   const root = rule === undefined || "all_off" in rule ? mode_root : prune_tree(mode_root, rule);
   const shown = root && availability ? without_unavailable(root, availability) : root;
   const panel = panel_after_prefix(shown, request.prefix, find_command, keymap?.which_key_border);
-  const with_marks = marks ? await with_page_marks(panel, shown, request.prefix, marks) : panel;
-  return macros ? with_stored_macros(with_marks, shown, request.prefix, macros) : with_marks;
+  const marked = marks ? await with_page_marks(panel, shown, request.prefix, marks) : panel;
+  const quickmarked = quickmarks ? await with_quickmarks(marked, shown, request.prefix, quickmarks) : marked;
+  return macros ? with_stored_macros(quickmarked, shown, request.prefix, macros) : quickmarked;
+}
+
+// The capture row `<key>` under `go` and `gn` says a key is expected. Once a quickmark exists the rows name the keys with their addresses.
+async function with_quickmarks(panel: WhichKeyPanel, root: TreeBranch | undefined, prefix: string[], quickmarks: () => Promise<QuickmarkTable>): Promise<WhichKeyPanel> {
+  let node: TreeNode | undefined = root;
+  for (const token of prefix) node = node?.kind === "branch" ? node.children[token] : undefined;
+  const capture = node?.kind === "branch" && Object.keys(node.children).length === 1 ? node.children[ANY_KEY] : undefined;
+  if (capture?.kind !== "leaf" || !capture.steps.every((step) => step.invocation.id === "quickmark.open" || step.invocation.id === "quickmark.add")) return panel;
+  const rows = Object.entries(await quickmarks().catch((): QuickmarkTable => ({}))).map(([key, url]) => ({ keys: key, command: shorten_address(url), description: "", more: false })).sort(compare_rows);
+  return rows.length === 0 ? panel : { ...panel, rows };
 }
 
 // The capture row under `q` says a register key is expected. Once a macro is stored the rows name the macros, with their step counts.
@@ -141,10 +154,15 @@ async function with_page_marks(panel: WhichKeyPanel, root: TreeBranch | undefine
 
 const GLOBAL_ADDRESS_CHARS = 36;
 
-// A global mark leads with its address, which tells two marks apart. The scheme is dropped: it is nearly always https.
+// The scheme is dropped: it is nearly always https.
+function shorten_address(url: string): string {
+  const address = url.replace(/^https?:\/\//, "");
+  return address.length > GLOBAL_ADDRESS_CHARS ? `${address.slice(0, GLOBAL_ADDRESS_CHARS - 1)}…` : address;
+}
+
+// A global mark leads with its address, which tells two marks apart.
 function mark_row({ key, x, y, url }: MarkItem): WhichKeyRow {
   const offset = x === 0 ? `y ${y}` : `x ${x} y ${y}`;
-  const address = url?.replace(/^https?:\/\//, "");
-  const shown = address !== undefined && address.length > GLOBAL_ADDRESS_CHARS ? `${address.slice(0, GLOBAL_ADDRESS_CHARS - 1)}…` : address;
+  const shown = url === undefined ? undefined : shorten_address(url);
   return { keys: key, command: shown === undefined ? offset : `${shown}  ${offset}`, description: "", more: false };
 }

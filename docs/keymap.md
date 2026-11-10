@@ -24,7 +24,7 @@ A note "(prompts)" means the binding sets a `prompt` for a param, so the command
 
 <!-- BEGIN generated -->
 
-bound: 313 (normal 177, hint 2, cmdline 18, caret 35, visual 37, visual_line 38, insert 2, ignore 1, browser 3) | later: 4 | dropped: 7
+bound: 316 (normal 180, hint 2, cmdline 18, caret 35, visual 37, visual_line 38, insert 2, ignore 1, browser 3) | later: 3 | dropped: 7
 
 ### normal
 
@@ -171,8 +171,11 @@ bound: 313 (normal 177, hint 2, cmdline 18, caret 35, visual 37, visual_line 38,
 | `` ` `` | bound | `mark.jump` | Jump to mark |  |
 | `o` | bound | `open` (prompts) | Open URL |  |
 | `O` | bound | `open --tab` (prompts) | Open URL |  |
-| `go` | bound | `open` (prompts) | Open URL |  |
-| `gO` | bound | `open --tab` (prompts) | Open URL |  |
+| `ge` | bound | `open` (prompts) | Open URL |  |
+| `gE` | bound | `open --tab` (prompts) | Open URL |  |
+| `M` | bound | `quickmark.add` | Add quickmark |  |
+| `go` | bound | `quickmark.open` | Open quickmark |  |
+| `gn` | bound | `quickmark.open --tab` | Open quickmark |  |
 | `f` | bound | `hint` | Click element |  |
 | `F` | bound | `hint --background` | Click element in background tab |  |
 | `v` | bound | `mode caret` | Start caret mode |  |
@@ -207,7 +210,6 @@ bound: 313 (normal 177, hint 2, cmdline 18, caret 35, visual 37, visual_line 38,
 | `N` | bound | `find.prev` | Previous match |  |
 | `g?` | bound | `help` | Help |  |
 | `gV` | bound | `mode caret` | Set mode |  |
-| `M` | later | `quickmark.add` |  | phase 3, key param |
 | `wi` | dropped |  |  | needs a shell |
 | `<C-o>` | later | `page.jump --step=-1` |  | phase 3 |
 | `<C-i>` | later | `page.jump --step=1` |  | phase 3 |
@@ -222,6 +224,8 @@ bound: 313 (normal 177, hint 2, cmdline 18, caret 35, visual 37, visual_line 38,
 Which-key group names:
 
 - `g`: Go
+- `go`: Open quickmark
+- `gn`: Open quickmark in new tab
 - `gx`: Close tabs
 - `d`: Close
 - `x`: Stop or close

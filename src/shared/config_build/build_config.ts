@@ -76,6 +76,7 @@ export function build_config(files: ConfigFiles, commands: CommandMeta[], warnin
     keymap: merged.keymap,
     search_engines: merged.search_engines,
     command_aliases: merged.command_aliases,
+    quickmarks: merged.quickmarks,
     settings: merged.settings,
     snippets,
     css: sources.css_files.map((file) => file.text).join("\n"),
