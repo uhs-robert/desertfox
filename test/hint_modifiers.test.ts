@@ -31,7 +31,7 @@ function keymap_with(normal: Record<string, unknown>, modifiers: NonNullable<Key
 }
 
 test("a modifier derives a variant of each key in its group, with its args added and the sibling label kept", () => {
-  const { compiled, warnings } = compile(keymap_with({}, { ";b": { action: "background", label: "Background tab" } }));
+  const { compiled, warnings } = compile(keymap_with({}, { ";B": { action: "background", label: "Background tab" } }));
   assert.deepEqual(warnings, []);
   assert.deepEqual(args_at(compiled, ";", "b", "l"), { action: "background", filter: "links", text: "", rapid: false });
   assert.deepEqual(args_at(compiled, ";", "b", "I")?.action, "background");
@@ -48,7 +48,7 @@ test("rapid on links backgrounds, and rapid on other filters clicks", () => {
 });
 
 test("a key that sets its own action gets no variants, and no warning", () => {
-  const { compiled, warnings } = compile(keymap_with({ ";s": hint({ action: "focus", filter: "scrollable" }) }, { ";b": { action: "background" }, ";r": { rapid: true } }));
+  const { compiled, warnings } = compile(keymap_with({ ";s": hint({ action: "focus", filter: "scrollable" }) }, { ";B": { action: "background" }, ";r": { rapid: true } }));
   assert.deepEqual(warnings, []);
   assert.equal(node_at(compiled, ";", "b", "s"), undefined);
   assert.equal(node_at(compiled, ";", "r", "s"), undefined);
@@ -74,14 +74,14 @@ test("a user key at the modifier key wins over the modifier, with a warning", ()
 });
 
 test("a user key under the modifier wins over the variant, with no warning", () => {
-  const { compiled, warnings } = compile(keymap_with({ ";bl": hint({ filter: "images" }) }, { ";b": { action: "background" } }));
+  const { compiled, warnings } = compile(keymap_with({ ";Bl": hint({ filter: "images" }) }, { ";B": { action: "background" } }));
   assert.deepEqual(warnings, []);
   assert.equal(args_at(compiled, ";", "b", "l")?.filter, "images");
   assert.equal(args_at(compiled, ";", "b", "I")?.action, "background");
 });
 
 test("a null under a modifier removes that variant and leaves its siblings", () => {
-  const { compiled, warnings } = compile(keymap_with({ ";bl": null }, { ";b": { action: "background" } }));
+  const { compiled, warnings } = compile(keymap_with({ ";Bl": null }, { ";B": { action: "background" } }));
   assert.deepEqual(warnings, []);
   assert.equal(node_at(compiled, ";", "b", "l"), undefined);
   assert.ok(node_at(compiled, ";", "b", "I"));
