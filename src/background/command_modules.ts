@@ -13,6 +13,7 @@ import "../commands/bookmark.ts";
 import "../commands/history.ts";
 import "../commands/page.ts";
 import "../commands/text.ts";
+import "../commands/mark.ts";
 import "../commands/url.ts";
 import "../commands/open.ts";
 import "../commands/copy.ts";

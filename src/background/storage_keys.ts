@@ -70,3 +70,9 @@ export const DISABLED_STORAGE_KEY = "desertfox_disabled";
 
 // Tab id to the time (ms) of the pick that waits for its devtools page, in `storage.session`. One pick per tab: a newer one replaces it. Dropped after 60 s, on navigation and when the tab closes.
 export const INSPECT_PENDING_STORAGE_KEY = "desertfox_inspect_pending";
+
+// The local marks: `{ v: 1, pages: { [url without hash]: { at, marks: { [key]: [x, y] } } } }`. Only `mark_store.ts` reads and writes it. A private window never reaches it.
+export const MARK_STORAGE_KEY = "desertfox_marks";
+
+// The same shape for the private windows, in `storage.session`. Cleared when the last private window closes.
+export const MARK_PRIVATE_STORAGE_KEY = "desertfox_private_marks";

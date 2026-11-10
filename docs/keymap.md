@@ -24,7 +24,7 @@ A note "(prompts)" means the binding sets a `prompt` for a param, so the command
 
 <!-- BEGIN generated -->
 
-bound: 302 (normal 166, hint 2, cmdline 18, caret 35, visual 37, visual_line 38, insert 2, ignore 1, browser 3) | later: 6 | dropped: 8
+bound: 305 (normal 169, hint 2, cmdline 18, caret 35, visual 37, visual_line 38, insert 2, ignore 1, browser 3) | later: 4 | dropped: 8
 
 ### normal
 
@@ -157,6 +157,9 @@ bound: 302 (normal 166, hint 2, cmdline 18, caret 35, visual 37, visual_line 38,
 | `<Space>b` | bound | `page.blur` | Blur |  |
 | `<Space>?` | bound | `help.whichkey` | Which key |  |
 | `<Space>"` | bound | `registers` (prompts) | List registers |  |
+| `m` | bound | `mark.add` | Set mark |  |
+| `'` | bound | `mark.jump` | Jump to mark |  |
+| `` ` `` | bound | `mark.jump` | Jump to mark |  |
 | `o` | bound | `open` (prompts) | Open URL |  |
 | `O` | bound | `open --tab` (prompts) | Open URL |  |
 | `go` | bound | `open` (prompts) | Open URL |  |
@@ -196,9 +199,7 @@ bound: 302 (normal 166, hint 2, cmdline 18, caret 35, visual 37, visual_line 38,
 | `N` | bound | `find.prev` | Previous match |  |
 | `g?` | bound | `help` | Help |  |
 | `gV` | bound | `mode caret` | Set mode |  |
-| `m` | later | `mark.add` |  | phase 3, key param |
 | `M` | later | `quickmark.add` |  | phase 3, key param |
-| `` ` `` | later | `mark.jump` |  | phase 3, key param |
 | `wi` | dropped |  |  | needs a shell |
 | `<C-o>` | later | `page.jump --step=-1` |  | phase 3 |
 | `<C-i>` | later | `page.jump --step=1` |  | phase 3 |

@@ -3,6 +3,7 @@
 // main.ts puts all three on `window.desertfox_host`. The host counts every wait on a load, and key_flow holds keys until none is left.
 
 import { last_blurred_element } from "./handlers/page.ts";
+import { end_flight, scroll_target } from "./handlers/scroll.ts";
 import { BUNDLE_FOR_MODE } from "../shared/bundles.ts";
 import type { BundleName } from "../shared/bundles.ts";
 import type { Mode } from "../shared/command.ts";
@@ -32,6 +33,8 @@ export type BundleHostApi = {
   show_toast_: (message: string) => void;
   // The field the last Escape left, which a bundle cannot see.
   last_blurred_: () => Element | undefined;
+  // The box the vertical scroll keys move now. Ends a smooth scroll in flight first, because the flight state lives in content.js and a copy in a bundle could not cancel it.
+  scroll_box_: () => Element;
   // Holds the keys that can bind until `handed_back` settles, then replays its keys ahead of them. The command line hands back this way the keys its frame got after the line ended.
   hold_keys_until_: (handed_back: Promise<readonly string[]>) => void;
 };
@@ -168,6 +171,7 @@ export function create_bundle_host() {
       run_command_: (command_id, name, args) => run_command_(command_id, name, args, `${name} has no ${command_id}`),
       show_toast_: (message) => (deps.show_toast_ ?? deps.show_error_)(message),
       last_blurred_: last_blurred_element,
+      scroll_box_: () => (end_flight(), scroll_target("y")),
       hold_keys_until_: (handed_back) => {
         waiting++;
         void handed_back.catch(() => []).then((tokens) => {

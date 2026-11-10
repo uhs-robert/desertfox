@@ -23,6 +23,7 @@ import { repair_tabs_after_reload } from "./reload.ts";
 import { browser_tab_model_deps, create_tab_model } from "./tab_model.ts";
 import { browser_find_scan_deps, create_find_scan, is_scan_request } from "./find_scan.ts";
 import { create_router } from "./router.ts";
+import { answer_mark_request, browser_mark_store, wire_private_mark_cleanup } from "./mark_store.ts";
 import { answer_register_request, browser_register_store, wire_private_register_cleanup } from "./register_store.ts";
 import { create_repeat_memory } from "./repeat_memory.ts";
 import { create_step_recorder, page_outcome, page_steps } from "./record_step.ts";
@@ -162,6 +163,7 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
   if (request?.type === "load_bundle") return bundle_loader.answer(sender, request.name);
   if (request?.type === "find_scan" && is_scan_request(request)) return find_scan.answer(request, `${sender.tab?.id}:${sender.frameId}`);
   if (request?.type === "register_read" || request?.type === "register_write" || request?.type === "register_yank") return answer_register_request(browser_register_store, request, sender.tab);
+  if (request?.type === "mark_set" || request?.type === "mark_jump") return answer_mark_request(browser_mark_store, request, sender.tab);
   if (request?.type === "issue_cmdline_ticket") return cmdline.issue_ticket(sender.tab?.id);
   if (request?.type === "open_cmdline") return get_config().then(() => cmdline.open(request.ticket, sender.tab?.id, sender.frameId, sender.tab?.windowId, sender.tab, sender.tab?.incognito === true));
   if (request?.type === "complete_items") return complete_items.answer(request.kind, asker_of(sender));
@@ -186,7 +188,7 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
       page,
       requirement_of: requirement_lookup(config),
       site_engine_label_of: (invocation) => config.search_engines[site_engine_for(config.search_engines, invocation.site_search?.engines ?? [], page) ?? ""]?.label,
-    }, rule_addresses_of(sender), () => browser_register_store.items(tab?.incognito === true)));
+    }, rule_addresses_of(sender), () => browser_register_store.items(tab?.incognito === true), () => browser_mark_store.items(sender.url ?? "", tab?.incognito === true)));
   }
   if ((message as SnippetCall)?.type === "snippet_run") {
     return get_config().then(() => snippets.handle_call(message as SnippetCall, { tab_id: sender.tab?.id, frame_id: sender.frameId }));
@@ -242,6 +244,7 @@ browser.tabs.onUpdated.addListener((tab_id, change) => {
 
 browser.windows.onRemoved.addListener(() => void repeat_memory.clear_private_without_window().catch(() => undefined));
 wire_private_register_cleanup(browser_register_store, browser.windows);
+wire_private_mark_cleanup(browser_mark_store, browser.windows);
 
 browser.tabs.onActivated.addListener(({ windowId, previousTabId }) => previous_tabs.activated(windowId, previousTabId));
 

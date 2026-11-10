@@ -4,9 +4,10 @@ import type { CommandMeta } from "../shared/command.ts";
 import type { PageInfo } from "../shared/engines/index.ts";
 import type { BoundInvocation } from "../shared/invocation.ts";
 import type { WhichKeyBorder } from "../shared/config.ts";
-import type { ListKeys, RegisterItem, WhichKeyPanel, WhichKeyRow } from "../shared/messages.ts";
+import type { ListKeys, MarkItem, RegisterItem, WhichKeyPanel, WhichKeyRow } from "../shared/messages.ts";
+import { PREVIOUS_MARK } from "../shared/mark_names.ts";
 import { UNNAMED_REGISTER } from "../shared/register_names.ts";
-import { COMPILED_KEYMAP_STORAGE_KEY, token_label } from "../shared/prefix_tree.ts";
+import { ANY_KEY, COMPILED_KEYMAP_STORAGE_KEY, token_label } from "../shared/prefix_tree.ts";
 import type { CompiledKeymap, TreeBranch, TreeLeaf, TreeNode } from "../shared/prefix_tree.ts";
 
 import { is_available } from "./availability.ts";
@@ -94,6 +95,7 @@ export async function list_keys(
   availability?: PageAvailability,
   addresses: readonly (string | undefined)[] = [],
   registers?: () => Promise<RegisterItem[]>,
+  marks?: () => Promise<MarkItem[]>,
 ): Promise<WhichKeyPanel> {
   const stored = await storage.get(COMPILED_KEYMAP_STORAGE_KEY);
   const keymap = stored[COMPILED_KEYMAP_STORAGE_KEY] as CompiledKeymap | undefined;
@@ -107,5 +109,18 @@ export async function list_keys(
   const rule = request.mode === "normal" ? site_rule_for(keymap, addresses) : undefined;
   const root = rule === undefined || "all_off" in rule ? mode_root : prune_tree(mode_root, rule);
   const shown = root && availability ? without_unavailable(root, availability) : root;
-  return panel_after_prefix(shown, request.prefix, find_command, keymap?.which_key_border);
+  const panel = panel_after_prefix(shown, request.prefix, find_command, keymap?.which_key_border);
+  return marks ? with_page_marks(panel, shown, request.prefix, marks) : panel;
+}
+
+// The capture row `<key>` under a mark key says a key is expected. Once the page has marks the rows name them instead, with the scroll offset.
+async function with_page_marks(panel: WhichKeyPanel, root: TreeBranch | undefined, prefix: string[], marks: () => Promise<MarkItem[]>): Promise<WhichKeyPanel> {
+  let node: TreeNode | undefined = root;
+  for (const token of prefix) node = node?.kind === "branch" ? node.children[token] : undefined;
+  const capture = node?.kind === "branch" && Object.keys(node.children).length === 1 ? node.children[ANY_KEY] : undefined;
+  if (capture?.kind !== "leaf" || !capture.steps.every((step) => step.invocation.id === "mark.add" || step.invocation.id === "mark.jump")) return panel;
+  const items = await marks().catch((): MarkItem[] => []);
+  if (items.length === 0) return panel;
+  const shown_keys = capture.steps[0]?.invocation.id === "mark.add" ? items.filter((item) => item.key !== PREVIOUS_MARK) : items;
+  return { ...panel, rows: shown_keys.map(({ key, x, y }) => ({ keys: key, command: x === 0 ? `y ${y}` : `x ${x} y ${y}`, description: "", more: false })).sort(compare_rows) };
 }
