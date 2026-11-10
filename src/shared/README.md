@@ -10,6 +10,7 @@ Types and constants that fix the hand-off formats between the background page, t
 - `container_store.ts`: the name and cookie store id of the container-less store, shared by the background and the `open` commands.
 - `tab_model_port.ts`: the port names of the live tab model, the plain one and its `:normal` and `:private` forms.
 - `mark_names.ts`: the local mark keys (`a-z`, and `'` or the backtick for the previous position), the limits of the mark store and the one rule that cuts the hash off a page address.
+- `quickmark_names.ts`: the quickmark key rule (one letter or digit), the address cap and the `QuickmarkTable` type.
 - `bundles.ts`: the names of the scripts loaded on first use, and which mode loads which.
 - `registry/`: the command registry, the one validator and the command line parser. See its README.
 - `engines/`: search engines as URL templates with slots, and the tree resolver. Outside the barrel. See its README.

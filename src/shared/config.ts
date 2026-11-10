@@ -87,6 +87,8 @@ export type MergedConfig = {
   search_engines: Record<string, SearchEngine>;
   // Extra command line name to command id.
   command_aliases: Record<string, string>;
+  // Quickmark key to address. `M` adds entries in storage on top of these.
+  quickmarks: Record<string, string>;
   // Absent keys take the value in DEFAULT_SETTINGS.
   settings: Partial<Settings>;
   snippets: SnippetEntry[];

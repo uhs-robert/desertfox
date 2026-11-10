@@ -7,7 +7,7 @@
 # Array bindings: one key, several steps run in order.
 [normal]
 # A prompt in the binding: the command line opens with `open ` typed in (p2_prompts).
-"go" = ":open"
+"ge" = ":open"
 # The second step scrolls the tab that tab.next made active.
 ",n" = ["tab.next", "scroll.to --percent=0"]
 # A waiting step: the pick resumes the sequence, so the scroll runs after the pick, and Escape cancels the rest.

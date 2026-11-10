@@ -1,5 +1,6 @@
 // Local marks: m<a-z> sets, '<key> and the backtick jump, '' toggles with the position the last jump left, and which-key lists the page's marks.
 // Global marks: m<A-Z> keeps an address, and '<A-Z> switches to the tab on it or opens it in the current tab, then scrolls.
+// Quickmarks: M<key> saves the address, go<key> and gn<key> open it here and in a new tab.
 // A private window keeps its marks apart from the normal ones, and the harness has no private window or second window helper, so only the unit tests cover those and the tab order across windows.
 
 export const areas = ["scroll", "keys", "whichkey", "tabs"];
@@ -198,6 +199,33 @@ export async function run_cases({ run_case, open_page, press_keys, poll_until, e
     expect(shown.value.endsWith(":2"), `the panel does not list the page mark and the global mark: ${shown.value}`);
     await press_keys("-k", "Escape");
     await wait_event(mark, (event) => event.type === "whichkey" && event.page_id === "p9g_wk" && event.value === "", "the panel to close");
+    await sleep(which_key_delay_ms);
+  });
+
+  const quickmark_url = (key) => in_background(`browser.storage.local.get("desertfox_quickmarks").then((stored) => stored.desertfox_quickmarks?.["${key}"])`);
+
+  await run_case("Mq saves the address, gnq opens it in a new tab, goq opens it in this tab, and a pause after go lists it", async () => {
+    await open_page("aligned", "p9q_a", { new_tab: true });
+    await press_keys("M", "q");
+    await poll_until("the quickmark to be stored", async () => (await quickmark_url("q"))?.includes("id=p9q_a"));
+    await open_page("aligned", "p9q_b", { new_tab: true });
+    const tabs_before = await tab_count();
+    let mark = events.length;
+    await press_keys("g", "n", "q");
+    await wait_event(mark, (event) => event.type === "tree_read" && event.page_id === "p9q_a", "the quickmark to load in a new tab");
+    expect((await tab_count()) === tabs_before + 1, "gnq did not open exactly one tab");
+    await close_tabs_on("p9q_a");
+    await open_page("aligned", "p9q_c", { new_tab: true });
+    mark = events.length;
+    await press_keys("g", "o", "q");
+    await wait_event(mark, (event) => event.type === "tree_read" && event.page_id === "p9q_a", "the quickmark to load in this tab");
+    await open_page("aligned", "p9q_wk", { new_tab: true });
+    mark = events.length;
+    await press_keys("g", "o");
+    const shown = await wait_event(mark, (event) => event.type === "whichkey" && event.page_id === "p9q_wk" && event.value !== "", "the which-key panel under go");
+    expect(shown.value.endsWith(":1"), `the panel does not list the one quickmark: ${shown.value}`);
+    await press_keys("-k", "Escape");
+    await wait_event(mark, (event) => event.type === "whichkey" && event.page_id === "p9q_wk" && event.value === "", "the panel to close");
     await sleep(which_key_delay_ms);
   });
 }
