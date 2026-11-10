@@ -160,8 +160,8 @@ export function create_session(deps: SessionDeps) {
     // The finder acts on the highlighted row, not on the text: a repeated title or address cannot pick the wrong one.
     const finder_row = completion?.highlight_first ? rows()[highlighted()] : undefined;
     if (finder_row?.ref !== undefined) invocation = { ...invocation, args: { ...invocation.args, [FINDER_PARAM]: finder_row.ref } };
-    // Shift+Enter: where the page opens replaces the command's own, on a command that has one.
-    if (typeof where === "string" && deps.has_param?.(invocation.id, "where")) invocation = { ...invocation, args: { ...invocation.args, where } };
+    // Shift+Enter: where the page opens replaces the command's own, on a command that has one. The compiled keymap fills an optional enum with "", so plain Enter arrives with an empty where.
+    if (typeof where === "string" && where !== "" && deps.has_param?.(invocation.id, "where")) invocation = { ...invocation, args: { ...invocation.args, where } };
     const problem = deps.precheck?.(invocation);
     if (problem !== undefined) {
       message = problem;

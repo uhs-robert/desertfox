@@ -127,6 +127,9 @@ test("Shift+Enter sets where on a command that has it, and Enter keeps the typed
   await type("notes");
   const shifted = session.run("cmdline.submit", { where: "tab" });
   assert.equal((shifted as { invocation: { args: Record<string, string> } }).invocation.args.where, "tab");
+  // The compiled keymap gives plain Enter an empty where.
+  const empty = session.run("cmdline.submit", { where: "" });
+  assert.equal((empty as { invocation: { args: Record<string, string> } }).invocation.args.where, undefined);
   const plain = session.run("cmdline.submit", undefined);
   assert.equal((plain as { invocation: { args: Record<string, string> } }).invocation.args.where, undefined);
   session.edit("tab.close");
