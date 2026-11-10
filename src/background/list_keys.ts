@@ -89,16 +89,21 @@ export function without_unavailable(node: TreeBranch, availability: PageAvailabi
   return Object.keys(children).length === 0 ? undefined : { ...node, children };
 }
 
+// Everything beyond the request is optional: the page the keys are for, and one reader per stored list that fills a capture row.
+export type ListKeysOptions = {
+  availability?: PageAvailability;
+  addresses?: readonly (string | undefined)[];
+  registers?: () => Promise<RegisterItem[]>;
+  marks?: () => Promise<MarkItem[]>;
+  quickmarks?: () => Promise<QuickmarkTable>;
+  macros?: () => Promise<RegisterItem[]>;
+};
+
 export async function list_keys(
   storage: KeymapStorage,
   find_command: (id: string) => CommandMeta | undefined,
   request: Pick<ListKeys, "mode" | "prefix">,
-  availability?: PageAvailability,
-  addresses: readonly (string | undefined)[] = [],
-  registers?: () => Promise<RegisterItem[]>,
-  marks?: () => Promise<MarkItem[]>,
-  quickmarks?: () => Promise<QuickmarkTable>,
-  macros?: () => Promise<RegisterItem[]>,
+  { availability, addresses = [], registers, marks, quickmarks, macros }: ListKeysOptions = {},
 ): Promise<WhichKeyPanel> {
   const stored = await storage.get(COMPILED_KEYMAP_STORAGE_KEY);
   const keymap = stored[COMPILED_KEYMAP_STORAGE_KEY] as CompiledKeymap | undefined;

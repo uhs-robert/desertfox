@@ -174,7 +174,7 @@ test("which-key lists the page's marks with their offsets, and keeps the <key> r
     { key: "b", x: 0, y: 1240 },
     { key: "a", x: 15, y: 7 },
   ];
-  const rows = async (prefix: string[], marks = items) => (await list_keys(normal_keymap(), () => undefined, { mode: "normal", prefix }, undefined, [], undefined, marks)).rows;
+  const rows = async (prefix: string[], marks = items) => (await list_keys(normal_keymap(), () => undefined, { mode: "normal", prefix }, { marks })).rows;
   assert.deepEqual(await rows(["'"]), [
     { keys: "a", command: "x 15 y 7", description: "", more: false },
     { keys: "b", command: "y 1240", description: "", more: false },
@@ -189,7 +189,7 @@ test("which-key lists the page's marks with their offsets, and keeps the <key> r
 
 test("a user binding of m to another command keeps its own tree", async () => {
   const keymap = normal_keymap({ ...DEFAULT_KEYMAP, normal: { ...(DEFAULT_KEYMAP as { normal: object }).normal, m: { id: "tab.next" } } });
-  const panel = await list_keys(keymap, () => undefined, { mode: "normal", prefix: ["m"] }, undefined, [], undefined, async () => [{ key: "a", x: 0, y: 1 }]);
+  const panel = await list_keys(keymap, () => undefined, { mode: "normal", prefix: ["m"] }, { marks: async () => [{ key: "a", x: 0, y: 1 }] });
   assert.deepEqual(panel.rows, []);
 });
 
@@ -288,7 +288,7 @@ test("which-key lists the page's marks, then the global marks with the address a
     { key: "B", x: 0, y: 5, url: "https://www.example.org/a/very/long/path/that/goes/on/and/on" },
     { key: "A", x: 0, y: 6, url: "http://github.com/foo/bar" },
   ];
-  const { rows } = await list_keys(normal_keymap(), () => undefined, { mode: "normal", prefix: ["'"] }, undefined, [], undefined, items);
+  const { rows } = await list_keys(normal_keymap(), () => undefined, { mode: "normal", prefix: ["'"] }, { marks: items });
   assert.deepEqual(rows.map((row) => row.keys), ["a", "b", "A", "B"]);
   assert.equal(rows[2]!.command, "github.com/foo/bar  y 6");
   assert.equal(rows[3]!.command, "www.example.org/a/very/long/path/th\u2026  y 5");

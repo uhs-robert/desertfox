@@ -112,7 +112,7 @@ test("the default keys capture one key after go, gn and M, and ge and gE keep th
 
 test("which-key lists the quickmarks under go and gn with their addresses, and keeps the <key> row with none", async () => {
   const table = async (): Promise<Record<string, string>> => ({ w: "https://wiki.test/a/very/long/path/that/goes/on/and/on/and/on", G: "https://github.com", 3: "http://x.test" });
-  const rows = async (prefix: string[], quickmarks: () => Promise<Record<string, string>> = table) => (await list_keys(normal_keymap(), () => undefined, { mode: "normal", prefix }, undefined, [], undefined, undefined, quickmarks)).rows;
+  const rows = async (prefix: string[], quickmarks: () => Promise<Record<string, string>> = table) => (await list_keys(normal_keymap(), () => undefined, { mode: "normal", prefix }, { quickmarks })).rows;
   assert.deepEqual((await rows(["g", "o"])).map((row) => row.keys), ["G", "w", "3"]);
   assert.equal((await rows(["g", "n"]))[0]!.command, "github.com");
   assert.equal((await rows(["g", "o"]))[1]!.command, "wiki.test/a/very/long/path/that/goe…");
