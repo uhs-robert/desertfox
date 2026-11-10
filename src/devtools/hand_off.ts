@@ -1,7 +1,7 @@
-// The devtools page: selects each pick the background relays in the Inspector. Both expressions are constants and carry no page data. The picked node never travels as text: the hints bundle left it on the page window, and `inspect()` takes it from there.
+// The devtools page: selects each pick the background relays in the Inspector. The expression is a constant and carries no page data. The picked node never travels as text: the hints bundle left it on the page window, and `inspect()` takes it from there.
 
-export const INSPECT_EXPRESSION = "inspect(window.__desertfox_pick)";
-export const CLEAR_EXPRESSION = "delete window.__desertfox_pick";
+// Read and delete in one eval: page script runs between two evals, so a second pick written there would be deleted unseen. The delete comes first, so a failing `inspect` still leaves nothing on the page.
+export const INSPECT_EXPRESSION = "(p => { delete window.__desertfox_pick; inspect(p) })(window.__desertfox_pick)";
 
 const RECONNECT_MS = 1000;
 
@@ -18,17 +18,12 @@ export type PageDeps = {
   schedule: (action: () => void, ms: number) => void;
 };
 
-// The property goes whether the select worked or not, so a failed pick leaves nothing on the page.
 export async function select_pick(evaluate: PageDeps["evaluate"]): Promise<void> {
-  try {
-    await evaluate(INSPECT_EXPRESSION);
-  } finally {
-    await evaluate(CLEAR_EXPRESSION).catch(() => {});
-  }
+  await evaluate(INSPECT_EXPRESSION);
 }
 
 export function run_page(deps: PageDeps): void {
-  // Picks run one after another, so the clear of one never takes the node of the next.
+  // Picks run one after another, so the evals never overlap.
   let queue: Promise<void> = Promise.resolve();
   const connect = (): void => {
     const port = deps.connect();
