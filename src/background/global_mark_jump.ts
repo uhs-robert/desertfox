@@ -8,7 +8,7 @@ import type { MarkAnswer, MarkJump } from "../shared/messages.ts";
 import type { GlobalJump, MarkSender, MarkStore } from "./mark_store.ts";
 import { PAGE_READY_TIMEOUT_MS, type PageReady, type PageWatch } from "./page_ready.ts";
 
-export type MarkTab = { id: number; window_id: number; index: number; url: string; incognito: boolean; last_accessed: number };
+export type MarkTab = { id: number; window_id: number; index: number; url: string; incognito: boolean; last_accessed: number; discarded: boolean };
 
 // Same privacy and the same address with the hash ignored. The container does not matter. Order: the tab itself, then its window by the newest access (then the lowest index), then the other windows by the newest access (then the lowest id).
 export function find_mark_tab(tabs: readonly MarkTab[], mark_url: string, from: { id: number; window_id: number; incognito: boolean }): MarkTab | undefined {
@@ -47,13 +47,22 @@ export function create_global_mark_jump(deps: GlobalJumpDeps): GlobalJump {
       const result = await watch.done(PAGE_READY_TIMEOUT_MS, { requires_navigation });
       if (result === "gone" || arrivals.get(tab_id) !== arrival) return;
       if (result !== "ready") return void (await deps.show_refusal(tab_id, problem_of_page[result]));
+      await push(tab_id, arrival);
+    } finally {
+      watch.stop();
+      if (arrivals.get(tab_id) === arrival) arrivals.delete(tab_id);
+    }
+  }
+
+  // Arms the entry and runs `mark.jump` in the top frame, which asks the background again and scrolls.
+  async function push(tab_id: number, arrival: Arrival): Promise<void> {
+    try {
       arrival.armed = true;
       const reply = (await deps.push_jump(tab_id, arrival.key)) as { ok?: boolean; message?: string } | undefined;
       if (reply?.ok === false) await deps.show_refusal(tab_id, reply.message ?? "Mark jump failed");
     } catch (error) {
       await deps.show_refusal(tab_id, error instanceof Error ? error.message : String(error)).catch(() => undefined);
     } finally {
-      watch.stop();
       // A newer jump of the tab owns its own entry.
       if (arrivals.get(tab_id) === arrival) arrivals.delete(tab_id);
     }
@@ -61,7 +70,6 @@ export function create_global_mark_jump(deps: GlobalJumpDeps): GlobalJump {
 
   return async (request: MarkJump, tab: MarkSender): Promise<MarkAnswer> => {
     if (tab.id === undefined || tab.window_id === undefined) throw new RuntimeRefusal("No tab to jump from");
-    if (tab.frame_id !== 0) throw new RuntimeRefusal("Global marks need the top frame");
     const { id: tab_id, window_id } = tab;
     // The page that was sent here by an earlier jump asks again, and gets the stored position whatever address it ended on. Without this a redirect would match no tab and open the address again, in a loop.
     const arrival = arrivals.get(tab_id);
@@ -75,7 +83,12 @@ export function create_global_mark_jump(deps: GlobalJumpDeps): GlobalJump {
     // The tab you are on: the scroll is the page's, as for a local mark.
     if (found?.id === tab_id) {
       arrivals.delete(tab_id);
-      return deps.store.run(request, tab.incognito);
+      if (tab.frame_id === 0) return deps.store.run(request, tab.incognito);
+      // The frame would scroll its own box and keep its own address, so the top frame jumps instead.
+      const own: Arrival = { key: request.key, armed: false };
+      arrivals.set(tab_id, own);
+      void push(tab_id, own);
+      return { ok: true };
     }
     const target_id = found?.id ?? tab_id;
     const next: Arrival = { key: request.key, armed: false };
@@ -99,7 +112,8 @@ export function create_global_mark_jump(deps: GlobalJumpDeps): GlobalJump {
       if (arrivals.get(target_id) === next) arrivals.delete(target_id);
       throw error;
     }
-    void arrive(target_id, next, watch, !found);
+    // A discarded tab reads `complete` until it loads, so it waits for the load like a navigation.
+    void arrive(target_id, next, watch, !found || found.discarded);
     return { ok: true };
   };
 }

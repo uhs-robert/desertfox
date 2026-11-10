@@ -148,15 +148,17 @@ export async function run_cases({ run_case, open_page, press_keys, poll_until, e
     expect((await tab_count()) === tabs_before, "'A opened a tab");
   });
 
-  await run_case("keys typed right after 'A in the old tab are not held once the user is back there", async () => {
-    await settle_focus();
-    await press_keys("'", "A");
-    await wait_active_tab("p9g_a", "the first tab after 'A");
-    const back = await tab_of("p9g_b");
-    await in_background(`browser.tabs.update(${back}, { active: true })`);
-    await wait_active_tab("p9g_b", "the second tab to be active again");
+  await run_case("keys typed in the old tab right after a 'A that switched away still run when the user is back there", async () => {
+    const second = await tab_of("p9g_b");
+    await in_background(`browser.tabs.update(${second}, { active: true })`);
+    await wait_active_tab("p9g_b", "the second tab to be active");
     await settle_focus();
     expect(last_scroll_y("p9g_b") === 0, "the second tab did not start at the top");
+    await press_keys("'", "A");
+    await wait_active_tab("p9g_a", "the first tab after 'A from the second");
+    await in_background(`browser.tabs.update(${second}, { active: true })`);
+    await wait_active_tab("p9g_b", "the second tab to be active again");
+    await settle_focus();
     await scroll_delta_by_press("p9g_b", ["j"]);
     expect(last_scroll_y("p9g_b") > 0, "j did not scroll the old tab after 'A switched away");
   });

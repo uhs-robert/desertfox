@@ -133,11 +133,11 @@ export type MarkSender = { incognito: boolean; id?: number | undefined; window_i
 export type GlobalJump = (request: MarkJump, tab: MarkSender) => Promise<MarkAnswer>;
 
 // A mark message from a content script. The page's privacy is the sender tab's, never the message's. Only a tab sends these.
-export async function answer_mark_request(store: MarkStore, request: MarkRequest, tab: MarkSender | undefined, global_jump?: GlobalJump): Promise<MarkAnswer> {
+export async function answer_mark_request(store: MarkStore, request: MarkRequest, tab: MarkSender | undefined, global_jump: GlobalJump): Promise<MarkAnswer> {
   if (!tab || typeof request.url !== "string") return { ok: false, message: "No page to mark" };
   const answer = async (): Promise<MarkAnswer> => {
     if (typeof request.key !== "string" || !is_global_mark(request.key)) return store.run(request, tab.incognito);
-    if (request.type === "mark_jump") return global_jump ? global_jump(request, tab) : { ok: false, message: "No global marks here" };
+    if (request.type === "mark_jump") return global_jump(request, tab);
     if (tab.frame_id !== 0) throw new RuntimeRefusal("Global marks need the top frame");
     if (!/^https?:\/\//.test(tab.url ?? "")) throw new RuntimeRefusal("Global marks need a web page");
     // The tab's address, never the page's: a frame sends its own.

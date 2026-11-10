@@ -61,7 +61,7 @@ const router_deps = make_router_deps(get_config, repeat_memory);
 const router = create_router(router_deps);
 const global_mark_jump = create_global_mark_jump({
   store: browser_mark_store,
-  list_tabs: async () => (await browser.tabs.query({})).flatMap((tab) => (tab.id === undefined || tab.windowId === undefined || tab.url === undefined ? [] : [{ id: tab.id, window_id: tab.windowId, index: tab.index, url: tab.url, incognito: tab.incognito, last_accessed: tab.lastAccessed ?? 0 }])),
+  list_tabs: async () => (await browser.tabs.query({})).flatMap((tab) => (tab.id === undefined || tab.windowId === undefined || tab.url === undefined ? [] : [{ id: tab.id, window_id: tab.windowId, index: tab.index, url: tab.url, incognito: tab.incognito, last_accessed: tab.lastAccessed ?? 0, discarded: tab.discarded === true }])),
   activate_tab: (tab_id) => browser.tabs.update(tab_id, { active: true }),
   focus_window: (window_id) => browser.windows.update(window_id, { focused: true }),
   navigate: (tab_id, url) => browser.tabs.update(tab_id, { url }),

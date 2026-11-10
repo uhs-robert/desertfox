@@ -7,7 +7,7 @@ import type { MarkArea } from "../../src/background/mark_store.ts";
 import type { PageReady, PageWatch } from "../../src/background/page_ready.ts";
 import type { MarkJump } from "../../src/shared/messages.ts";
 
-const tab = (id: number, url: string, extra: Partial<MarkTab> = {}): MarkTab => ({ id, window_id: 1, index: id, url, incognito: false, last_accessed: id, ...extra });
+const tab = (id: number, url: string, extra: Partial<MarkTab> = {}): MarkTab => ({ id, window_id: 1, index: id, url, incognito: false, last_accessed: id, discarded: false, ...extra });
 const from = { id: 1, window_id: 1, incognito: false };
 
 test("find_mark_tab prefers the tab itself, then its window by newest access, then other windows", () => {
@@ -222,10 +222,28 @@ test("an address Firefox refuses, and a tab that cannot be activated, refuse the
   assert.equal(gone.watches[0]!.stopped, true);
 });
 
-test("a jump from a frame is refused, and a private jump never sees a normal mark or tab", async () => {
+test("a jump to a discarded tab waits for its load, like a navigation", async () => {
+  const fakes = make([tab(1, "https://sender.test/"), tab(2, MARK_URL, { discarded: true })]);
+  await fakes.set_mark();
+  await fakes.global_jump(fakes.jump(), fakes.sender());
+  assert.equal(fakes.watches[0]!.requires_navigation, true);
+});
+
+test("a jump from a frame still switches tabs and opens pages, and on the same tab the top frame does the jump", async () => {
+  const other = make([tab(1, "https://sender.test/"), tab(2, MARK_URL)]);
+  await other.set_mark();
+  assert.deepEqual(await other.global_jump(other.jump(), other.sender(1, { frame_id: 2 })), { ok: true });
+  assert.deepEqual(other.log, ["watch 2", "activate 2"]);
+  const same = make([tab(1, MARK_URL)]);
+  await same.set_mark();
+  assert.deepEqual(await same.global_jump(same.jump(), same.sender(1, { url: MARK_URL, frame_id: 2 })), { ok: true });
+  await same.flush();
+  assert.deepEqual(same.log, ["push 1 A"]);
+});
+
+test("a private jump never sees a normal mark or tab", async () => {
   const fakes = make([tab(1, "https://sender.test/", { incognito: true }), tab(2, MARK_URL)]);
   await fakes.set_mark();
-  await assert.rejects(fakes.global_jump(fakes.jump(), fakes.sender(1, { frame_id: 2 })), /top frame/);
   await assert.rejects(fakes.global_jump(fakes.jump(), fakes.sender(1, { incognito: true })), /No mark A/);
   await fakes.set_mark("A", true);
   fakes.state.tabs = [tab(1, "https://sender.test/", { incognito: true }), tab(2, MARK_URL)];

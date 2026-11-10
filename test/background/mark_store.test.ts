@@ -33,6 +33,7 @@ function make(delay = false) {
   return { local, session, store: create_mark_store({ local: () => local.area, session: () => session.area, now: () => ++clock }) };
 }
 
+const no_global = async () => ({ ok: true as const });
 const set = (key: string, y: number, url = "https://a.test/p", x = 0): MarkRequest => ({ type: "mark_set", key, url, x, y });
 const jump = (key: string, y: number, url = "https://a.test/p", x = 0): MarkRequest => ({ type: "mark_jump", key, url, x, y });
 
@@ -144,11 +145,11 @@ test("a damaged stored value reads as no marks", async () => {
 
 test("the answer takes its privacy from the sender tab, and a message with no tab is refused", async () => {
   const { store, local, session } = make();
-  assert.deepEqual(await answer_mark_request(store, set("a", 1), { incognito: true }), { ok: true, x: 0, y: 1 });
+  assert.deepEqual(await answer_mark_request(store, set("a", 1), { incognito: true }, no_global), { ok: true, x: 0, y: 1 });
   assert.equal(local.values.size, 0);
   assert.equal(session.values.size, 1);
-  assert.equal((await answer_mark_request(store, set("a", 1), undefined)).ok, false);
-  assert.deepEqual(await answer_mark_request(store, jump("q", 1), { incognito: false }), { ok: false, message: "No mark q" });
+  assert.equal((await answer_mark_request(store, set("a", 1), undefined, no_global)).ok, false);
+  assert.deepEqual(await answer_mark_request(store, jump("q", 1), { incognito: false }, no_global), { ok: false, message: "No mark q" });
 });
 
 function normal_keymap(default_keymap: object = DEFAULT_KEYMAP) {
@@ -258,15 +259,15 @@ const top_tab = { incognito: false, id: 4, window_id: 1, url: "https://a.test/p#
 
 test("a global set takes the tab's address from the tab, never from the page", async () => {
   const { store } = make();
-  assert.deepEqual(await answer_mark_request(store, set("A", 5, "https://frame.test/"), top_tab), { ok: true, x: 0, y: 5 });
+  assert.deepEqual(await answer_mark_request(store, set("A", 5, "https://frame.test/"), top_tab, no_global), { ok: true, x: 0, y: 5 });
   assert.equal((await store.global_of("A", false))?.url, "https://a.test/p");
 });
 
 test("a global set from a frame, or on a page that is not http or https, is refused", async () => {
   const { store, local } = make();
-  assert.deepEqual(await answer_mark_request(store, set("A", 5), { ...top_tab, frame_id: 3 }), { ok: false, message: "Global marks need the top frame" });
+  assert.deepEqual(await answer_mark_request(store, set("A", 5), { ...top_tab, frame_id: 3 }, no_global), { ok: false, message: "Global marks need the top frame" });
   for (const url of ["file:///tmp/a.html", "about:blank", "moz-extension://x/help.html", undefined]) {
-    assert.deepEqual(await answer_mark_request(store, set("A", 5), { ...top_tab, url }), { ok: false, message: "Global marks need a web page" }, String(url));
+    assert.deepEqual(await answer_mark_request(store, set("A", 5), { ...top_tab, url }, no_global), { ok: false, message: "Global marks need a web page" }, String(url));
   }
   assert.equal(local.values.size, 0);
 });
