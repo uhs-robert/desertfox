@@ -9,7 +9,7 @@ import { is_context_source } from "../shared/registry/params.ts";
 import { print_command } from "../shared/registry/print_command.ts";
 import { apply_count } from "./count.ts";
 import type { RepeatMemory } from "./repeat_memory.ts";
-import { create_step_recorder } from "./record_step.ts";
+import { create_step_recorder, type RecordStep } from "./record_step.ts";
 
 export type ActiveTab = { tab_id: number; window_id: number; url: string | undefined; incognito?: boolean };
 
@@ -34,6 +34,8 @@ export type RouterDeps = {
   is_disabled: () => Promise<boolean>;
   // What `.` replays. A nested snippet router gets a no-op, so only the outermost request counts.
   repeat_memory: RepeatMemory;
+  // Replaces the `.` recorder, for a caller that records every step.
+  record_step?: RecordStep;
 };
 
 export type RouteRequest = {
@@ -65,7 +67,7 @@ function outcome_of_reply(reply: unknown): Outcome {
 }
 
 export function create_router(deps: RouterDeps): Router {
-  const record_step = create_step_recorder(deps);
+  const record_step = deps.record_step ?? create_step_recorder(deps);
 
   // Read at run time: an earlier step or repeat can change which tab is active. The first step is pinned to the sender, because
   // the active tab can change between the key press and this read. A sender that is gone falls back to the active tab.
@@ -91,11 +93,11 @@ export function create_router(deps: RouterDeps): Router {
       const outcome = await run_one(invocation, request, prompted, is_first).catch((error: unknown) => refuse(error instanceof Error ? error.message : String(error)));
       // The user left a waiting step: the rest of the sequence does not run, and nothing is repeated.
       if (outcome.ok && outcome.cancelled) {
-        await record_step(request.invocations, outcome, { is_private });
+        await record_step(request.invocations, { ...outcome, failed_step: index }, { is_private });
         return { ok: true, cancelled: true };
       }
       if (outcome.ok) continue;
-      await record_step(request.invocations, outcome, { is_private });
+      await record_step(request.invocations, { ...outcome, failed_step: index }, { is_private });
       const refusal: Refusal = { id: invocation.id, message: outcome.message };
       const { context } = await read_now(request, is_first);
       await deps.show_refusal(context.tab_id, refusal, context.frame_id);

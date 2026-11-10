@@ -19,7 +19,8 @@ import { mode_label } from "./mode_label.ts";
 import { show_mode_label, show_toast } from "./ui_proxy.ts";
 import { wire_mode_reports } from "./mode_report.ts";
 import { page_mode } from "./page_mode.ts";
-import { counted_invocations, run_content_steps, run_in_order } from "./run_content.ts";
+import { run_content_steps, run_in_order } from "./run_content.ts";
+import { create_run_leaf } from "./run_leaf.ts";
 import { read_context_source } from "./context.ts";
 import { focus_page_content, start_content_once } from "./handlers/focus.ts";
 import { blur_focused_element } from "./handlers/page.ts";
@@ -53,19 +54,7 @@ async function send_to_background(message: ContentToBackground): Promise<RunResp
   }
 }
 
-// A leaf with a background step goes to the router whole: it reads the active tab at each step, so a step after tab.next runs in the new tab.
-// A leaf of content steps runs here and shows its own failure.
-async function run_leaf(leaf: TreeLeaf, count: number | undefined, repeat: boolean): Promise<void> {
-  if (leaf.steps.some((step) => step.runs_in === "background")) {
-    // The background shows a refusal itself.
-    await send_to_background({ type: "run", invocations: counted_invocations(leaf.steps, count), mode: page_mode.get_mode() });
-    return;
-  }
-  const outcome = await run_content_steps(leaf.steps, count, repeat);
-  if (!outcome.ok) show_toast(outcome.message);
-  // A held key sends its first press only.
-  if (!repeat) void send_to_background({ type: "record_step", invocations: counted_invocations(leaf.steps, count), outcome });
-}
+const run_leaf = create_run_leaf({ send: send_to_background, get_mode: page_mode.get_mode, run_steps: run_content_steps, show_toast });
 
 // Zero turns which-key off.
 let which_key_delay_ms: number | undefined;

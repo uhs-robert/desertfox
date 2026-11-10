@@ -16,14 +16,19 @@ export type StepOrigin = {
   skip_repeat?: boolean;
 };
 
+// `failed_step` is the index of the step that failed or was cancelled, so a recorder that takes every step can stop there. The page does not know it.
+export type StepOutcome = Outcome & { failed_step?: number };
+
+export type RecordStep = (steps: readonly BoundInvocation[], outcome: StepOutcome, origin: StepOrigin) => Promise<void>;
+
 export type StepRecorderDeps = {
   get_command: (id: string) => CommandDef | undefined;
   repeat_memory: RepeatMemory;
 };
 
 // `steps` are the steps of one request or leaf, which `.` replays together. Called for every outcome, so a recorder that takes failed steps sees them.
-export function create_step_recorder(deps: StepRecorderDeps) {
-  return async function record_step(steps: readonly BoundInvocation[], outcome: Outcome, origin: StepOrigin): Promise<void> {
+export function create_step_recorder(deps: StepRecorderDeps): RecordStep {
+  return async function record_step(steps, outcome, origin) {
     if (!outcome.ok || outcome.cancelled || origin.prompted || origin.skip_repeat) return;
     const repeatable = steps.filter((step) => deps.get_command(step.id)?.repeatable !== false);
     if (repeatable.length === 0) return;

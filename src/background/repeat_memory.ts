@@ -10,39 +10,47 @@ export type RepeatMemory = {
   load: (is_private: boolean) => Promise<BoundInvocation[] | undefined>;
 };
 
-// `track` lets a caller register a write that has not reached `save` yet, so a `load` right after it waits for the write.
-export type TrackedRepeatMemory = RepeatMemory & { track: (write: Promise<unknown>) => void; clear_private: () => Promise<void> };
+// `in_turn` runs a job in the queue that owns every write to the slot. The job gets the memory without its own queueing, because a write inside a job must not wait for the job itself.
+export type QueuedRepeatMemory = RepeatMemory & {
+  in_turn: <Result>(job: (unqueued: RepeatMemory) => Promise<Result>) => Promise<Result>;
+  clear_private_without_window: () => Promise<void>;
+};
 
 export const no_repeat_memory: RepeatMemory = { save: async () => undefined, load: async () => undefined };
 
 const slot_key = (is_private: boolean) => (is_private ? REPEAT_PRIVATE_STORAGE_KEY : REPEAT_STORAGE_KEY);
 
-export function create_repeat_memory(storage: SessionStorage): TrackedRepeatMemory {
-  // A page record is sent after the command ran and can still be in flight when the next key asks for the slot.
-  let pending: Promise<unknown> = Promise.resolve();
-  return {
-    track: (write) => void (pending = Promise.all([pending, write.catch(() => undefined)])),
-    save: (invocations, is_private) => storage.set({ [slot_key(is_private)]: invocations }),
-    clear_private: async () => {
-      await pending;
-      await storage.remove(REPEAT_PRIVATE_STORAGE_KEY);
+// Every write goes through one queue, entered before the job's first await. So the last key press wins, a `.` typed next waits for the write,
+// and a private write cannot land after the clear. The window check runs inside the job, so a window that just opened keeps its slot.
+export function create_repeat_memory(storage: SessionStorage, has_private_window: () => Promise<boolean> = async () => true): QueuedRepeatMemory {
+  let queue: Promise<unknown> = Promise.resolve();
+  const in_turn = <Result>(job: () => Promise<Result>): Promise<Result> => {
+    const turn = queue.then(job, job);
+    queue = turn.catch(() => undefined);
+    return turn;
+  };
+  const unqueued: RepeatMemory = {
+    save: async (invocations, is_private) => {
+      // A private command that finishes after its last window closed must not outlive it.
+      if (is_private && !(await has_private_window())) return;
+      await storage.set({ [slot_key(is_private)]: invocations });
     },
     load: async (is_private) => {
-      await pending;
       const stored = (await storage.get(slot_key(is_private)))[slot_key(is_private)];
       return Array.isArray(stored) ? (stored as BoundInvocation[]) : undefined;
     },
+  };
+  return {
+    in_turn: (job) => in_turn(() => job(unqueued)),
+    save: (invocations, is_private) => in_turn(() => unqueued.save(invocations, is_private)),
+    load: (is_private) => in_turn(() => unqueued.load(is_private)),
+    clear_private_without_window: () =>
+      in_turn(async () => {
+        if (await has_private_window()) return;
+        await storage.remove(REPEAT_PRIVATE_STORAGE_KEY);
+      }),
   };
 }
 
 // A key binding's prompt and label are not part of what ran.
 export const as_stored = ({ id, args, count }: BoundInvocation): BoundInvocation => ({ id, ...(args === undefined ? {} : { args }), ...(count === undefined ? {} : { count }) });
-
-// A private command must not outlive the private session. Firefox deletes private data when the last private window closes, so the slot goes with it.
-export async function forget_private_slot_when_last_window_closes(
-  memory: Pick<TrackedRepeatMemory, "clear_private">,
-  windows: { getAll: () => Promise<{ incognito: boolean }[]> },
-): Promise<void> {
-  if ((await windows.getAll()).some((window) => window.incognito)) return;
-  await memory.clear_private();
-}
