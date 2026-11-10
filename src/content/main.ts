@@ -74,6 +74,7 @@ const key_flow = create_key_flow({
     blur_focused_element();
   },
   in_editable_field_: () => is_editable_element(document.activeElement),
+  on_space_control_: () => !!deepest_focused_element()?.matches("button,select,summary,input:is([type=checkbox],[type=radio],[type=button],[type=submit],[type=reset])"),
   is_loading_: bundles.is_loading_,
   loading_sink_bundles_: bundles.loading_sink_bundles_,
   sink_of_: bundles.sink_of_,
@@ -168,7 +169,7 @@ function sync_mode_to_focus(): void {
 }
 
 let matcher_installed = false;
-// Whether the last install matched an all-off rule. An install enters ignore mode only on the change into all-off, so a manual `qi` or `<S-Escape>` survives an unrelated edit.
+// Whether the last install matched an all-off rule. An install enters ignore mode only on the change into all-off, so a manual `<Space>i` or `<S-Escape>` survives an unrelated edit.
 let was_all_off = false;
 
 // A frame of another site cannot read the tab's address, so it asks the background.

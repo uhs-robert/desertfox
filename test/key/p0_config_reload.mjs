@@ -38,7 +38,7 @@ export async function run_cases({ config_copy, load_config_dir, run_case, setup,
 
     await in_background(`browser.storage.local.remove("desertfox_reinject_report")`);
     await load_config_dir(reduced_config);
-    expect((await read_local("desertfox_reinject_report")) == null, "qr restarted the extension: a tab repair report was written");
+    expect((await read_local("desertfox_reinject_report")) == null, "<Space>r restarted the extension: a tab repair report was written");
     const status = await read_local("desertfox_config_status");
     expect(status?.source === "files", `the config source is ${status?.source}, expected files`);
     expect(status?.temp?.includes("which_key_delay_ms") && status?.settings?.which_key_delay_ms === 777, `the temp edit did not survive the reload: ${JSON.stringify(status?.temp)} ${status?.settings?.which_key_delay_ms}`);
