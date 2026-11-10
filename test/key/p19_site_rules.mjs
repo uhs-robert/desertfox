@@ -4,7 +4,7 @@ import { SHIFT_ESCAPE } from "./harness.mjs";
 
 export const areas = ["keys", "config", "toolbar"];
 
-export async function run_cases({ run_case, open_page, press_keys, wait_event, events, expect, expect_no_scroll, hint_label_count, scroll_delta_by_press, poll_until, in_background, url_of, sleep }) {
+export async function run_cases({ run_case, open_page, press_keys, wait_event, wait_takes_keys, events, expect, expect_no_scroll, hint_label_count, scroll_delta_by_press, poll_until, in_background, url_of, sleep }) {
   const badge_of = (page_id) => events.filter((event) => event.type === "indicator" && event.page_id === page_id).at(-1)?.label;
   // A passed `/` or `'` opens Firefox's Quick Find, which takes the keys after it, so the bar is closed before the next wait.
   const page_sees = async (page_id, key, what) => {
@@ -33,6 +33,7 @@ export async function run_cases({ run_case, open_page, press_keys, wait_event, e
     await poll_until("the hint labels", async () => (await hint_label_count()) > 0);
     await press_keys("s");
     await wait_event(0, (event) => event.type === "tree_read" && event.page_id === "rule_frames_cross", "the cross-origin frame to start on focus");
+    await wait_takes_keys("rule_frames_cross");
     await page_sees("rule_frames_cross", "j", "the frame to see the passed j");
     expect((await scroll_delta_by_press("rule_frames_cross", ["G"])) > 0, "G did not scroll the frame under a pass rule for j");
   });
