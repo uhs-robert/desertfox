@@ -4,7 +4,7 @@
 
 import type { SearchEngine } from "../shared/config.ts";
 import type { PageInfo } from "../shared/engines/index.ts";
-import type { BookmarkItem, BookmarkRows, CompleteItemsAnswer, EngineItem, FolderItem, HistoryItem, HistoryItems, OpenRow, RegisterItem, SessionItem, TabContainer, TabItem, TabRowsAction, TabRowsActionAnswer, WindowItem } from "../shared/messages.ts";
+import type { AnythingItems, BookmarkItem, BookmarkRows, ClosedTabRow, CompleteItemsAnswer, EngineItem, FolderItem, HistoryItem, HistoryItems, OpenRow, RegisterItem, SessionItem, TabContainer, TabItem, TabRowsAction, TabRowsActionAnswer, WindowItem } from "../shared/messages.ts";
 import { available_engine_names } from "./availability.ts";
 import { FOLDER_PATH_SEPARATOR } from "../shared/folder_pick.ts";
 import { DEFAULT_COOKIE_STORE_ID } from "../shared/container_store.ts";
@@ -29,6 +29,7 @@ export type TabLike = {
   audible?: boolean | undefined;
   mutedInfo?: { muted?: boolean | undefined } | undefined;
   discarded?: boolean | undefined;
+  lastAccessed?: number | undefined;
 };
 
 // The containers by cookie store id, as `contextualIdentities` names them.
@@ -191,6 +192,17 @@ export function history_items(nodes: readonly HistoryNode[]): HistoryItem[] {
     .map((node) => ({ title: one_line(node.title || node.url), url: node.url }));
 }
 
+// A tab of a closed-tab session with an address worth opening again. Newest first, as `getRecentlyClosed` gives them. Windows and tabs with no session id drop out.
+export type ClosedSession = { tab?: { sessionId?: string | undefined; title?: string | undefined; url?: string | undefined } | undefined };
+
+export function closed_tab_rows(sessions: readonly ClosedSession[]): ClosedTabRow[] {
+  return sessions.flatMap(({ tab }) => (tab?.sessionId && tab.url && !SKIPPED_SCHEMES.test(tab.url) ? [{ session_id: tab.sessionId, title: one_line(tab.title || tab.url), url: tab.url }] : []));
+}
+
+// Each tab of the privacy asked for, with the time it was last active.
+export const tab_use_times = (tabs: readonly TabLike[], incognito: boolean): Record<number, number> =>
+  Object.fromEntries(tabs.filter((tab) => tab.id !== undefined && tab.incognito === incognito).map((tab) => [tab.id as number, tab.lastAccessed ?? 0]));
+
 export type OpenSource = "bookmarks" | "history";
 
 export type OpenSettings = { sources: readonly OpenSource[]; history_max: number };
@@ -243,6 +255,7 @@ export const browser_complete_items_deps = {
   containers: (): Promise<ContainerMarks> => read_containers(() => browser.contextualIdentities.query({})),
   sessions: (): Promise<SessionItem[]> => make_session_store(browser_session_storage).items(),
   registers: (is_private: boolean): Promise<RegisterItem[]> => browser_register_store.items(is_private),
+  closed_tabs: async (): Promise<ClosedTabRow[]> => closed_tab_rows(await browser.sessions.getRecentlyClosed()),
 };
 
 export type CompleteItemsDeps = typeof browser_complete_items_deps & {
@@ -258,6 +271,8 @@ export type CompleteItemsDeps = typeof browser_complete_items_deps & {
   quickmarks: (is_private: boolean) => Promise<RegisterItem[]>;
   // Only the quickmarks this window may delete.
   saved_quickmarks: (is_private: boolean) => Promise<RegisterItem[]>;
+  // The quickmarks this window opens, key to full address.
+  quickmark_table: (is_private: boolean) => Promise<Record<string, string>>;
   open_settings: () => Promise<OpenSettings>;
   history_list_max: () => Promise<number>;
   read_tab: (tab_id: number) => Promise<TabLike | undefined>;
@@ -287,10 +302,32 @@ export function create_complete_items(deps: CompleteItemsDeps) {
     max: await deps.history_list_max(),
   });
 
-  const fetch_items = async (kind: "bookmarks" | "engines" | "history" | "open" | "windows" | "sessions" | "registers" | "folders" | "marks" | "quickmarks" | "saved_quickmarks", asker: Asker): Promise<CompleteItemsAnswer["items"]> => {
+  // Everything the finder lists but the open tabs, which the page takes from the tab model. Each source that fails leaves the others.
+  // A private line gets quickmarks and bookmarks only: Firefox records no private visit, and the closed tabs and sessions are hidden there as in `session`.
+  const anything_items = async (asker: Asker): Promise<AnythingItems> => {
+    const [quickmarks, bookmarks, history, closed, tabs, history_max] = await Promise.all([
+      deps.quickmark_table(asker.incognito).catch((): Record<string, string> => ({})),
+      deps.all_bookmarks().then(bookmark_items, () => []),
+      asker.incognito ? [] : deps.search_history().then(history_items, () => []),
+      asker.incognito ? [] : deps.closed_tabs().catch((): ClosedTabRow[] => []),
+      deps.query_tabs(undefined).catch((): TabLike[] => []),
+      deps.open_settings().then(({ history_max }) => history_max, () => 0),
+    ]);
+    return {
+      tab_used: tab_use_times(tabs, asker.incognito),
+      quickmarks: Object.entries(quickmarks).sort(([left], [right]) => (left < right ? -1 : 1)).map(([key, url]) => ({ key, url })),
+      bookmarks,
+      history,
+      closed,
+      history_max,
+    };
+  };
+
+  const fetch_items = async (kind: "bookmarks" | "engines" | "history" | "open" | "windows" | "sessions" | "registers" | "folders" | "marks" | "quickmarks" | "saved_quickmarks" | "anything", asker: Asker): Promise<CompleteItemsAnswer["items"]> => {
     // The set is read once per line. The line is modal over one tab, so the page cannot change under it.
     if (kind === "engines") return engine_items(await deps.search_engines(), await deps.page_of(asker.tab_id));
     if (kind === "open") return open_items(asker);
+    if (kind === "anything") return anything_items(asker);
     if (kind === "history") return history_list(asker);
     // A private line lists no sessions, as the commands refuse there.
     if (kind === "sessions") return asker.incognito ? [] : deps.sessions();
@@ -344,8 +381,8 @@ export function create_complete_items(deps: CompleteItemsDeps) {
     // Undefined for a sender that is not a tab, for a tab that opened no line and for a tab that closed or navigated
     // while the lookup ran. A failed browser call gives an empty list.
     answer: async (kind: unknown, asker: Asker | undefined): Promise<CompleteItemsAnswer | undefined> => {
-      if ((kind !== "bookmarks" && kind !== "engines" && kind !== "history" && kind !== "open" && kind !== "windows" && kind !== "sessions" && kind !== "registers" && kind !== "folders" && kind !== "marks" && kind !== "quickmarks" && kind !== "saved_quickmarks") || !asker || !(await deps.is_opener(asker.tab_id, asker.frame_id))) return undefined;
-      const items = await fetch_items(kind, asker).catch(() => (kind === "open" ? { rows: [], history_max: 0 } : kind === "history" ? { rows: [], max: 0 } : kind === "bookmarks" ? { rows: [], folders: [] } : []));
+      if ((kind !== "bookmarks" && kind !== "engines" && kind !== "history" && kind !== "open" && kind !== "windows" && kind !== "sessions" && kind !== "registers" && kind !== "folders" && kind !== "marks" && kind !== "quickmarks" && kind !== "saved_quickmarks" && kind !== "anything") || !asker || !(await deps.is_opener(asker.tab_id, asker.frame_id))) return undefined;
+      const items = await fetch_items(kind, asker).catch(() => (kind === "open" ? { rows: [], history_max: 0 } : kind === "history" ? { rows: [], max: 0 } : kind === "bookmarks" ? { rows: [], folders: [] } : kind === "anything" ? { tab_used: {}, quickmarks: [], bookmarks: [], history: [], closed: [], history_max: 0 } : []));
       return (await deps.is_opener(asker.tab_id, asker.frame_id)) ? { items } : undefined;
     },
   };

@@ -133,6 +133,7 @@ async function open_line(start: Start, port: MessagePort): Promise<void> {
   const live = create_live_source({
     ask: (kind) => (kind === "headings" ? ask_headings() : ask_background<CompleteItemsAnswer | undefined>({ type: "complete_items", kind })),
     tabs: () => (model ??= connect_model()).items() ?? (model_lost ? [] : undefined),
+    all_tabs: () => (model ??= connect_model()).all_items() ?? (model_lost ? [] : undefined),
     on_ready: () => {
       session.source_ready();
       render();
@@ -148,7 +149,8 @@ async function open_line(start: Start, port: MessagePort): Promise<void> {
     parse: (text) => parse_command_line(lookup, text, opened.sources),
     has_help,
     command_id_of: (word) => lookup.find(word)?.id,
-    tabs: () => model?.items(),
+    has_param: (command_id, name) => lookup.find(command_id)?.params?.some((param) => param.name === name) === true,
+    tabs: () => model?.items(true),
     containers: opened.container_stores,
     complete: start.search ? undefined : create_completer(lookup, opened.commands, opened.command_aliases, opened.sources, opened_from, live),
     // Only a missing value is caught here. The router still checks everything else when it runs the command.

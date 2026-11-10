@@ -112,7 +112,7 @@ export type RecordCmdline = {
 // sender is a tab whose line redeemed a ticket, and it holds only tabs and windows of the sender's own privacy (private or not).
 export type CompleteItems = {
   type: "complete_items";
-  kind: "bookmarks" | "engines" | "history" | "open" | "windows" | "sessions" | "registers" | "folders" | "marks" | "quickmarks" | "saved_quickmarks";
+  kind: "bookmarks" | "engines" | "history" | "open" | "windows" | "sessions" | "registers" | "folders" | "marks" | "quickmarks" | "saved_quickmarks" | "anything";
 };
 
 // From the command line page when a row key acts on tabs of the list. `tab_ids` were captured at the key press, so a later change of the list does not change them. The answer is undefined unless the sender is a tab whose line
@@ -194,7 +194,13 @@ export type RegisterItem = { name: string; description: string };
 // A bookmark folder: its path from the root ("Bookmarks Toolbar / Work") and a short count of the bookmarks directly inside.
 export type FolderItem = SessionItem;
 
-export type CompleteItemsAnswer = { items: BookmarkRows | BookmarkItem[] | EngineItem[] | HistoryItems | OpenItems | WindowItem[] | HeadingItem[] | SessionItem[] | RegisterItem[] | FolderItem[] };
+// What the finder lists besides the open tabs, which come from the tab model. `quickmarks` hold the full address, in key order. Bookmarks, history and closed tabs are newest first.
+// A private line gets quickmarks and bookmarks only: the history and the closed tabs of a normal window stay out of it.
+export type ClosedTabRow = { session_id: string; title: string; url: string };
+// `tab_used` maps a tab id to its `lastAccessed` (ms), read once when the line opens, for the empty-query order. The tab model's rows hold no such time.
+export type AnythingItems = { tab_used: Record<number, number>; quickmarks: { key: string; url: string }[]; bookmarks: BookmarkItem[]; history: HistoryItem[]; closed: ClosedTabRow[]; history_max: number };
+
+export type CompleteItemsAnswer = { items: AnythingItems | BookmarkRows | BookmarkItem[] | EngineItem[] | HistoryItems | OpenItems | WindowItem[] | HeadingItem[] | SessionItem[] | RegisterItem[] | FolderItem[] };
 
 // A mark that a which-key row lists: its key and the scroll offset it keeps, in px. A global mark also carries its address.
 export type MarkItem = { key: string; x: number; y: number; url?: string };
@@ -233,6 +239,16 @@ export type OpenHelp = {
 // A page asks for its keymap at start and again on `tree_updated`. The answer is a PageKeymap as a JSON string, or undefined when no usable keymap is stored.
 export type ReadKeymap = {
   type: "read_keymap";
+};
+
+// Sent by a page held for a macro replay. Answered when the outermost replay ends: ok when it finished, not ok when a step failed, a pick was cancelled or Escape stopped it. Answered at once when no replay runs.
+export type ReplayEnd = {
+  type: "replay_end";
+};
+
+// Escape while a macro replays: the replay stops before its next step and drops the keys typed during it.
+export type ReplayStop = {
+  type: "replay_stop";
 };
 
 // From the `caret` bundle: one regex page search, run in the background where it can be stopped. `source` and `flags` are of a regex the page already compiled.
@@ -360,7 +376,7 @@ export type ImportSessions = { type: "import_sessions"; text: string };
 
 export type PageToBackground = ChangeSetting | ListSettings | ToolbarRequest | PreviewConfigImport | CommitConfigImport | ExportConfig | ListSnippets | RemoveSnippet | ExportSessions | ImportSessions;
 
-export type ContentToBackground = RunRequest | ModeChanged | LeaveTabInsert | LoadBundle | ListKeys | WhichKeyHidden | IssueCmdlineTicket | OpenCmdline | RecordCmdline | CompleteItems | TabRowsActionRequest | OpenHelp | RecordStep | ReadKeymap | FindScan | ImageAction | InspectPick | RegisterRequest | MarkRequest;
+export type ContentToBackground = RunRequest | ModeChanged | LeaveTabInsert | LoadBundle | ListKeys | WhichKeyHidden | IssueCmdlineTicket | OpenCmdline | RecordCmdline | CompleteItems | TabRowsActionRequest | OpenHelp | RecordStep | ReadKeymap | ReplayEnd | ReplayStop | FindScan | ImageAction | InspectPick | RegisterRequest | MarkRequest;
 
 // How a command ended. Done is `{ ok: true }`. A handler that returns nothing is done, and one that throws is failed.
 // Cancelled means the user left a waiting step (Escape, an unrelated key, a page change), so the rest of a sequence does not run and nothing is shown.
@@ -373,6 +389,13 @@ export type RunResponse = { ok: true; cancelled?: true } | { ok: false; refusal:
 export type RunInContent = {
   type: "run_in_content";
   invocations: Invocation[];
+  // Set for a macro replay: the steps run as a held key's repeats do, so a scroll jumps and the next step reads where it ended.
+  repeat?: true;
+};
+
+// A macro replay reached this page: hold its keys until the replay ends. The page asks when with `replay_end`.
+export type ReplayHold = {
+  type: "replay_hold";
 };
 
 // One toast on the page. A refusal leaves `kind` out and shows as an error.
@@ -409,7 +432,7 @@ export type Ping = {
   type: "ping";
 };
 
-export type BackgroundToContent = RunInContent | ShowRefusal | SetMode | TreeUpdated | GetSelection | FocusPage | Ping;
+export type BackgroundToContent = RunInContent | ReplayHold | ShowRefusal | SetMode | TreeUpdated | GetSelection | FocusPage | Ping;
 
 // Background to tab-model clients, over the port `desertfox_tab_model`
 

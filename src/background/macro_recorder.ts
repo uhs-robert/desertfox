@@ -10,6 +10,7 @@ import type { RecordStep, StepOrigin, StepOutcome } from "./record_step.ts";
 import { as_stored } from "./repeat_memory.ts";
 import { MACRO_RECORDING_PRIVATE_STORAGE_KEY, MACRO_RECORDING_STORAGE_KEY } from "./storage_keys.ts";
 import { create_write_queue } from "./store_turns.ts";
+import { is_replaying } from "./macro_replay.ts";
 
 export type Recording = { register: string; steps: BoundInvocation[] };
 
@@ -20,6 +21,7 @@ export type MacroRecorderDeps = {
   // Every tab reads its keymap again, because recording swaps the record key for the stop key and shows the badge.
   tell_tabs: () => Promise<void>;
   get_command?: (id: string) => CommandDef | undefined;
+  is_replaying?: () => boolean;
 };
 
 const key_of = (is_private: boolean) => (is_private ? MACRO_RECORDING_PRIVATE_STORAGE_KEY : MACRO_RECORDING_STORAGE_KEY);
@@ -39,6 +41,9 @@ export function create_macro_recorder(deps: MacroRecorderDeps) {
     return typeof command?.repeatable === "function" && !can_repeat(command, step);
   };
 
+  // A replay's own steps stay out. The `macro.play` that started it ends after the replay, so it is recorded and plays the macro again.
+  const replay_running = (): boolean => deps.is_replaying?.() === true;
+
   async function read(is_private: boolean): Promise<Recording | undefined> {
     const stored = (await deps.session().get(key_of(is_private)))[key_of(is_private)];
     return is_recording(stored) ? stored : undefined;
@@ -56,11 +61,11 @@ export function create_macro_recorder(deps: MacroRecorderDeps) {
     if (kept.length > 0) await deps.session().set({ [key_of(origin.is_private)]: { register: recording.register, steps: [...recording.steps, ...kept] } });
   }
 
-  const record: RecordStep = (steps, outcome, origin) => in_turn(() => record_now(steps, outcome, origin));
+  const record: RecordStep = (steps, outcome, origin) => (replay_running() ? Promise.resolve() : in_turn(() => record_now(steps, outcome, origin)));
 
   // A step from a page takes its turn when the message arrives, while the checks on it still run. Without that, a stop that arrives after it could finish first and the step would be lost.
   const record_page = (checked: Promise<readonly BoundInvocation[] | undefined>, outcome: StepOutcome, origin: StepOrigin): Promise<void> =>
-    in_turn(async () => {
+    replay_running() ? Promise.resolve() : in_turn(async () => {
       const steps = await checked.catch(() => undefined);
       if (steps) await record_now(steps, outcome, origin);
     });
@@ -104,6 +109,7 @@ export type MacroRecorder = ReturnType<typeof create_macro_recorder>;
 export const browser_macro_recorder = create_macro_recorder({
   session: () => browser.storage.session,
   get_command: (id) => registry.get(id),
+  is_replaying,
   tell_tabs: async () => {
     const tabs = await browser.tabs.query({});
     await Promise.all(tabs.map((tab) => (tab.id === undefined ? undefined : browser.tabs.sendMessage(tab.id, { type: "tree_updated" }).catch(() => undefined))));

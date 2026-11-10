@@ -152,6 +152,12 @@ test("a content command goes to the tab with count repeated", async () => {
   assert.deepEqual(log, [`send 7 ${JSON.stringify({ type: "run_in_content", invocations: [one, one] })}`]);
 });
 
+test("a macro replay's content step runs as a held key's repeat, so a scroll jumps", async () => {
+  const { deps, log } = make_fake({ "scroll.to": { label: "Scroll", intent: "x", runs_in: "content" } });
+  await create_router(deps).run({ invocations: [{ id: "scroll.to" }], mode: "normal", instant: true });
+  assert.deepEqual(log, [`send 7 ${JSON.stringify({ type: "run_in_content", invocations: [{ id: "scroll.to", args: {} }], repeat: true })}`]);
+});
+
 test("a content command into a tab without a script refuses and stops the chain", async () => {
   const { deps, log } = make_fake(
     {

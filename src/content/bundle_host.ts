@@ -135,7 +135,8 @@ export function create_bundle_host() {
     connect: (next: BundleHostDeps) => {
       deps = next;
     },
-    is_loading_: () => waiting > 0,
+    // A new key in a hint pick skips the captured-key holds, because a macro replay holds keys while its pick waits for its labels. Held keys still wait, so none drains into the pick.
+    is_loading_: (taking?: boolean) => waiting > (taking && current_mode == "hint" ? ending_on_hide.size : 0),
     // The bundles loading now that register a sink, so their mode may take keys once the load is done.
     loading_sink_bundles_: (): BundleName[] => [...waiting_on_sink_bundle].filter(([, count]) => count > 0).map(([name]) => name),
     sink_of_: (mode: Mode) => sinks.get(mode),

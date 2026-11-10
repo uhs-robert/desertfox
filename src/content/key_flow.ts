@@ -37,7 +37,8 @@ export type KeyFlowDeps = {
   leave_insert_: () => void;
   in_editable_field_: () => boolean;
   // A bundle is loading or the command line is handing focus back, and the mode the keys replay in is not known yet.
-  is_loading_: () => boolean;
+  // `taking` is true for a key just typed, false for a held key about to replay.
+  is_loading_: (taking?: boolean) => boolean;
   // The loading bundles that register a sink. Their mode may take keys on replay.
   loading_sink_bundles_: () => readonly BundleName[];
   sink_of_: (mode: Mode) => Sink | undefined;
@@ -183,7 +184,7 @@ export function create_key_flow(deps: KeyFlowDeps) {
         reset_sequence_();
         return "pass";
       }
-      if (!matcher || deps.is_loading_()) return hold(token, on_replay_pass_);
+      if (!matcher || deps.is_loading_(true)) return hold(token, on_replay_pass_);
       return decide(matcher, token, repeat);
     },
     reset_sequence_,
@@ -198,5 +199,7 @@ export function create_key_flow(deps: KeyFlowDeps) {
     release: replay,
     // Keys typed before the ones held, which reached another document: the command line frame hands back the keys it got after the line ended.
     hold_first_: (tokens: readonly string[]) => void held_keys.unshift(...tokens.map((token) => ({ token }))),
+    // A macro replay failed or was stopped, so the keys typed during it never run, as vim flushes typeahead.
+    drop_held_: () => void (held_keys.length = 0),
   };
 }
