@@ -97,8 +97,20 @@ export function create_register_store(deps: RegisterStoreDeps) {
     return clipboard === "" ? rows : [...rows, { name: CLIPBOARD_REGISTER, description: describe_value(clipboard) }];
   }
 
+  // The letters that hold a macro, for which-key under the macro keys. A text register is not listed.
+  async function macro_items(is_private: boolean): Promise<RegisterItem[]> {
+    const letters = [..."abcdefghijklmnopqrstuvwxyz"];
+    const keys = letters.map((name) => key_of(name, is_private));
+    const stored = await area_of(is_private).get(keys);
+    return letters.flatMap((name, index) => {
+      const value = stored[keys[index] as string];
+      return Array.isArray(value) && is_register_value(value) ? [{ name, description: describe_value(value) }] : [];
+    });
+  }
+
   return {
     read,
+    macro_items,
     write: (name: string, value: RegisterValue, is_private: boolean) => in_turn(() => write_now(name, value, is_private)),
     yank: (name: string, text: string, is_private: boolean) => in_turn(() => yank_now(name, text, is_private)),
     items,

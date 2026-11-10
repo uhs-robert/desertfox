@@ -71,7 +71,8 @@ export type CompiledKeymap = {
 // `all_off` keeps the whole tree so `,i` can leave ignore mode. `frees` is set only for a listed-keys rule.
 export type PageFrees = { tokens: string[]; invert: boolean };
 export const is_freed = ({ tokens, invert }: PageFrees, token: string): boolean => tokens.includes(token) !== invert;
-export type PageKeymap = { keymap: Omit<CompiledKeymap, "site_rules">; all_off: boolean; frees?: PageFrees };
+// `recording` is the register a macro is being recorded into. The tree then holds `macro.stop` where the record key was, and the badge says so.
+export type PageKeymap = { keymap: Omit<CompiledKeymap, "site_rules">; all_off: boolean; frees?: PageFrees; recording?: string };
 
 // A tree stored by an older build has another shape, and the page then gets no keymap until the background recompiles.
 export const current_keymap = (stored: CompiledKeymap | undefined): CompiledKeymap | undefined =>

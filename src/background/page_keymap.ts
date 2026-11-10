@@ -1,7 +1,8 @@
 // Answers a page's `read_keymap`: the stored keymap trimmed for the page's site rule, so the content script holds no rule logic.
 
 import { COMPILED_KEYMAP_STORAGE_KEY, current_keymap } from "../shared/prefix_tree.ts";
-import type { CompiledKeymap, PageKeymap, SiteRule } from "../shared/prefix_tree.ts";
+import { ANY_KEY } from "../shared/prefix_tree.ts";
+import type { CompiledKeymap, PageKeymap, SiteRule, TreeBranch, TreeLeaf } from "../shared/prefix_tree.ts";
 import { frees_of, prune_tree } from "../shared/keys/prune_tree.ts";
 import { matches_any_address } from "../shared/match_pattern.ts";
 
@@ -15,7 +16,29 @@ export const rule_addresses_of = (sender: { frameId?: number | undefined; url?: 
 export const site_rule_for = (keymap: CompiledKeymap | undefined, addresses: readonly (string | undefined)[]): SiteRule | undefined =>
   keymap?.site_rules?.find(({ regex }) => matches_any_address(regex, addresses));
 
-export async function page_keymap_for(storage: KeymapStorage, addresses: readonly (string | undefined)[]): Promise<PageKeymap | undefined> {
+const STOP_LEAF: TreeLeaf = { kind: "leaf", label: "Stop recording", steps: [{ invocation: { id: "macro.stop" }, runs_in: "background", count_rule: "ignore" }] };
+
+// While a macro records, the key that started it stops it, as in vim. The key waits for a register name, so it is a branch whose one child is the capture leaf. Where the user put the key does not matter.
+function with_stop_for_record(node: TreeBranch): TreeBranch {
+  const children = Object.fromEntries(
+    Object.entries(node.children).map(([token, child]) => {
+      if (child.kind === "leaf") return [token, child];
+      const capture = child.children[ANY_KEY];
+      return [token, capture?.kind === "leaf" && capture.steps[0]?.invocation.id === "macro.record" ? STOP_LEAF : with_stop_for_record(child)];
+    }),
+  );
+  return { ...node, children };
+}
+
+// `recording` is the register a macro is being recorded into, or undefined.
+export async function page_keymap_for(storage: KeymapStorage, addresses: readonly (string | undefined)[], recording?: string): Promise<PageKeymap | undefined> {
+  const reply = await trimmed_keymap_for(storage, addresses);
+  if (!reply || recording === undefined) return reply;
+  const normal = reply.keymap.modes.normal;
+  return { ...reply, keymap: normal ? { ...reply.keymap, modes: { ...reply.keymap.modes, normal: with_stop_for_record(normal) } } : reply.keymap, recording };
+}
+
+async function trimmed_keymap_for(storage: KeymapStorage, addresses: readonly (string | undefined)[]): Promise<PageKeymap | undefined> {
   const stored = await storage.get(COMPILED_KEYMAP_STORAGE_KEY);
   const keymap = current_keymap(stored[COMPILED_KEYMAP_STORAGE_KEY] as CompiledKeymap | undefined);
   if (keymap === undefined) return undefined;
@@ -27,7 +50,7 @@ export async function page_keymap_for(storage: KeymapStorage, addresses: readonl
 }
 
 // A string, not the object: the structured clone of the whole tree cost the page about 11 ms, and `JSON.parse` of the string costs a few.
-export const read_keymap_reply = async (storage: KeymapStorage, addresses: readonly (string | undefined)[]): Promise<string | undefined> => {
-  const reply = await page_keymap_for(storage, addresses);
+export const read_keymap_reply = async (storage: KeymapStorage, addresses: readonly (string | undefined)[], recording?: string): Promise<string | undefined> => {
+  const reply = await page_keymap_for(storage, addresses, recording);
   return reply && JSON.stringify(reply);
 };
