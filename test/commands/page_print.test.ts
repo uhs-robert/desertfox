@@ -40,6 +40,6 @@ test("page.save_pdf refuses when Firefox could not write the file", async () => 
   }
 });
 
-test("neither command is repeatable, so a dialog never replays", () => {
+test("neither command is repeatable, so `.` skips them", () => {
   for (const id of ["page.print", "page.save_pdf"]) assert.equal(registry.get(id)!.repeatable, false, id);
 });

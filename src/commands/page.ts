@@ -50,7 +50,7 @@ define("page.reload", {
   },
 });
 
-// Firefox gives tabs.print no tab id and no result: it opens the print window on the active tab, which a key press always targets. `.` and a macro never replay a dialog.
+// Firefox gives tabs.print no tab id and no result: it opens the print window on the active tab, which a key press always targets. `.` skips it, but a macro records and replays it like any command.
 define("page.print", {
   label: "Print",
   intent: "Open the Firefox print window for the active tab.",
