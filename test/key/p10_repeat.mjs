@@ -1,7 +1,7 @@
 // Key test cases of `.` (repeat). run.mjs calls run_cases with its helpers.
 import { evaluate_in_background } from "./rdp.mjs";
 
-export const areas = ["keys", "scroll"];
+export const areas = ["keys", "scroll", "bundles"];
 
 export async function run_cases({ rdp, extension_id, run_case, press_keys, poll_until, settle_focus, barrier, in_background, hint_label_count, open_page, wait_event, find_event, events, expect, wait_active_tab, tab_switch_mark, expect_no_tab_shown }) {
   const tab_count = () => evaluate_in_background(rdp, extension_id, `(async () => (await browser.tabs.query({})).length)()`);
@@ -93,5 +93,56 @@ export async function run_cases({ rdp, extension_id, run_case, press_keys, poll_
     await press_keys(".");
     await poll_until("the . to stop the page again", async () => (await in_page(`window.__stops`)) === 2);
     await close_tabs_with("rp_stop");
+  });
+  const in_active_page = async (code) => (await in_background(`browser.tabs.query({ active: true, lastFocusedWindow: true }).then(([tab]) => browser.tabs.executeScript(tab.id, { code: ${JSON.stringify(code)} }))`))[0];
+  const field_value = () => in_active_page(`document.getElementById("paste_target").value`);
+
+  // The text recorder lives in the lazy text bundle. gi is the entry, so the replay focuses the field again, and a count types the text that many times.
+  await run_case("gi, typed text and Escape, then . and 3. type the text again into the field", async () => {
+    await open_page("caret", "rp_text", { new_tab: true });
+    await press_keys("gi");
+    await poll_until("gi to focus the field", async () => (await in_active_page(`document.activeElement.id`)) === "paste_target");
+    await press_keys("ab");
+    await poll_until("the field to hold ab", async () => (await field_value()) === "ab");
+    await press_keys("-k", "Escape");
+    await poll_until("Escape to leave the field", async () => (await in_active_page(`document.activeElement.id`)) !== "paste_target");
+    await in_active_page(`document.getElementById("paste_target").value = ""; 0`);
+    await press_keys(".");
+    await poll_until("the replay to type ab", async () => (await field_value()) === "ab");
+    await press_keys("-k", "Escape");
+    await in_active_page(`document.getElementById("paste_target").value = ""; 0`);
+    await press_keys("3.");
+    await poll_until("3. to type ab three times, and not nine", async () => (await field_value()) === "ababab");
+    await close_tabs_with("rp_text");
+  });
+
+  // A password field is never recorded, so . keeps the earlier command.
+  await run_case("text typed into a password field is not what . repeats", async () => {
+    await open_page("caret", "rp_secret", { new_tab: true });
+    await in_active_page(`document.getElementById("paste_target").type = "password"; 0`);
+    await press_keys("gi");
+    await poll_until("gi to focus the field", async () => (await in_active_page(`document.activeElement.id`)) === "paste_target");
+    await press_keys("hunter2");
+    await poll_until("the field to hold the password", async () => (await field_value()) === "hunter2");
+    await press_keys("-k", "Escape");
+    const stored = await in_background(`browser.storage.session.get().then((all) => JSON.stringify(all))`);
+    expect(!stored.includes("hunter2"), "the password reached storage.session");
+    await close_tabs_with("rp_secret");
+  });
+
+  // A command typed from the field never blurs it. The text must be stored before the command, so . repeats the command.
+  await run_case("a tab key typed from the field comes after the text, so . repeats the key", async () => {
+    await open_page("page", "rp_order_a", { new_tab: true });
+    await open_page("caret", "rp_order_b", { new_tab: true });
+    await press_keys("gi");
+    await poll_until("gi to focus the field", async () => (await in_active_page(`document.activeElement.id`)) === "paste_target");
+    await press_keys("xy");
+    await poll_until("the field to hold xy", async () => (await field_value()) === "xy");
+    await press_keys("-M", "alt", "k", "-m", "alt");
+    await wait_active_tab("rp_order_a", "rp_order_a after A-k");
+    await settle_focus();
+    await press_keys(".");
+    await wait_active_tab((page_id) => page_id !== "rp_order_a", "the tab key repeated off rp_order_a");
+    await close_tabs_with("rp_order");
   });
 }

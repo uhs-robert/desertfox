@@ -66,7 +66,10 @@ const key_flow = create_key_flow({
   on_prefix_: follow_prefix,
   get_mode_: page_mode.get_mode_,
   take_pass_next_: page_mode.take_pass_next_,
-  run_leaf_: (leaf, count, repeat) => void run_leaf(leaf, count, repeat, send_to_background, page_mode.get_mode_, run_content_steps, show_toast),
+  run_leaf_: (leaf, count, repeat) => {
+    flush_typed_text();
+    void run_leaf(leaf, count, repeat, send_to_background, page_mode.get_mode_, run_content_steps, show_toast);
+  },
   leave_insert_: () => {
     page_mode.escape();
     blur_focused_element();
@@ -93,6 +96,21 @@ bundles.connect({
 });
 
 const cancelled_keys = create_cancelled_keys();
+
+// The recorder bundle loads on the first input in a text field. Each call waits on that load in order, so the first characters after `gi` are not lost.
+let typed_in_a_field = false;
+
+function on_input(event: InputEvent): void {
+  const field = deepest_focused_element();
+  if (!event.isTrusted || !is_editable_element(field)) return;
+  typed_in_a_field = true;
+  void bundles.run_command_("text.input", "text", { event_: event, field_: field }, "", false);
+}
+
+// A command typed from the field never blurs it, so the text step is stored before the command is sent, and `.` finds the command last.
+function flush_typed_text(): void {
+  if (typed_in_a_field) void bundles.run_command_("text.flush", "text", {}, "", false);
+}
 
 function cancel(event: Event): void {
   event.preventDefault();
@@ -221,6 +239,7 @@ function start(): void {
   listen(window, "keydown", on_keydown);
   listen(window, "keypress", on_keypress);
   listen(window, "keyup", on_keyup);
+  listen(window, "input", on_input);
   listen(window, "focusin", on_focusin);
   listen(window, "focusout", on_focusout);
   watch_roots_around_focus();

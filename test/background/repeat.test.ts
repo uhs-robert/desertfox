@@ -300,3 +300,32 @@ test("the recorder gets the index of the step that failed or was cancelled", asy
   await with_spy.run({ invocations: [{ id: "tab.echo" }], mode: "normal" });
   assert.deepEqual(seen, [{ ok: false, message: "no", failed_step: 1 }, { ok: true }]);
 });
+
+// The recorder sends the entry and the text as one request. The real definitions decide what the page may record.
+test("typed text is recorded in the slot of the window it came from, and `.` replays the entry then the text with the count", async () => {
+  await import("../../src/background/command_modules.ts");
+  const { registry } = await import("../../src/shared/registry/builtin.ts");
+  const fake = make_fake({
+    "page.focus_input": { label: "Focus input", intent: "x", runs_in: "content", bundle: "page" },
+    "text.insert": { label: "Insert text", intent: "x", runs_in: "content", bundle: "text", count: "repeat", params: [{ name: "text", type: "string", main: true }] },
+  });
+  const steps = page_steps({ type: "record_step", invocations: [{ id: "page.focus_input" }, { id: "text.insert", args: { text: "hi" } }] }, (id) => registry.get(id), {});
+  assert.deepEqual(steps, [{ id: "page.focus_input", args: {} }, { id: "text.insert", args: { text: "hi" } }]);
+  const slots: Record<string, BoundInvocation[]> = {};
+  const memory = { save: async (invocations: BoundInvocation[], is_private: boolean) => void (slots[is_private ? "private" : "normal"] = invocations), load: async (is_private: boolean) => slots[is_private ? "private" : "normal"] };
+  await create_step_recorder({ get_command: (id) => registry.get(id), repeat_memory: memory })(steps!, { ok: true }, { is_private: true });
+  assert.equal(slots.normal, undefined);
+  const router = create_router({ ...fake.deps, repeat_memory: memory });
+  const repeat = make_repeat_handler(() => ({ load: async () => memory.load(true), run_batch: (invocations) => router.run({ invocations, mode: "normal" }) }) satisfies RepeatDeps);
+  await repeat({ tab_id: 7, window_id: 1, frame_id: 0, mode: "normal" }, { count: 2 });
+  const sent = fake.log.filter((line) => line.startsWith("send")).map((line) => JSON.parse(line.slice("send 7 ".length)).invocations);
+  assert.deepEqual(sent.map((batch: { id: string }[]) => batch.map((invocation) => invocation.id)), [["page.focus_input"], ["text.insert", "text.insert"]]);
+});
+
+test("a text step with a missing or non-string text is refused", async () => {
+  await import("../../src/background/command_modules.ts");
+  const { registry } = await import("../../src/shared/registry/builtin.ts");
+  const get = (id: string) => registry.get(id);
+  assert.equal(page_steps({ invocations: [{ id: "text.insert", args: { text: 5 } }] }, get, {}), undefined);
+  assert.equal(page_steps({ invocations: [{ id: "text.insert" }] }, get, {}), undefined);
+});

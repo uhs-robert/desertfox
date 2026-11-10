@@ -15,6 +15,7 @@ import { clean_letters, make_labels } from "./labels.ts";
 import { create_picker } from "./pick.ts";
 import { is_hint_char } from "./hint_keys.ts";
 import { insert_into_focused_field } from "./insert_text.ts";
+import { mark_text_entry } from "../text/entry.ts";
 import { create_view } from "./view.ts";
 import type { HintView } from "./view.ts";
 import { follow_windows } from "./follow.ts";
@@ -221,7 +222,9 @@ function register(host: BundleHostApi): void {
     const keys = current.waiting_tokens_.splice(0);
     host.set_mode_("normal");
     after_leaving?.();
-    const left = after_leaving && host.get_mode() === "insert" ? insert_into_focused_field(keys) : keys;
+    const focused_a_field = after_leaving && host.get_mode() === "insert";
+    if (focused_a_field) mark_text_entry({ id: "hint.run", args: current.args });
+    const left = focused_a_field ? insert_into_focused_field(keys) : keys;
     if (left.length > 0) host.hold_keys_until_(Promise.resolve(left));
   }
 
@@ -278,7 +281,9 @@ function register(host: BundleHostApi): void {
   host.register_handler_("page.follow", (args) => follow_page_link(args.direction as FollowDirection, args.where as Place));
   host.register_handler_("page.focus_field", (args): Outcome => {
     const message = focus_field(document, host.last_blurred_(), args.direction as FieldDirection, args.steps as number);
-    return message === undefined ? done : { ok: false, message };
+    if (message !== undefined) return { ok: false, message };
+    mark_text_entry({ id: "page.focus_field", args: { direction: args.direction, steps: args.steps } });
+    return done;
   });
   host.register_handler_("copy.links", (args) => yank_links(args.scope as "page" | "viewport", args.format as LinkFormat, yank_deps()));
   host.register_handler_("hint.unhover", () => unhover());
