@@ -601,3 +601,13 @@ test("bookmark.remove with a folder refuses when the copy inside it is managed, 
   await assert.rejects(fixture.handlers.remove(ctx, { bookmark: "", folder: "Bookmarks Toolbar / Work" }), /managed and cannot be removed/);
   assert.deepEqual(fixture.log, []);
 });
+
+test("the filter tie rule takes a folder over several child siblings, and refuses when the tie has no single ancestor", () => {
+  const folder = (id: string, path: string): FolderNode => ({ id, path, managed: false, bookmarks: [] });
+  const with_siblings = [folder("w", "Work"), folder("a", "Work / A"), folder("b", "Work / B")];
+  assert.equal(pick_filter_folder(with_siblings, "work").id, "w");
+  // A / Work is no ancestor of B / Work, so the tie has no single ancestor.
+  assert.throws(() => pick_filter_folder([folder("a", "A / Work"), folder("b", "B / Work"), folder("c", "B / Work / C")], "work"), /equally/);
+  // Two folders that share the ancestor's path are refused, because the text cannot say which one is meant.
+  assert.throws(() => pick_filter_folder([folder("w1", "Work"), folder("w2", "Work"), folder("a", "Work / A")], "work"), /equally/);
+});
