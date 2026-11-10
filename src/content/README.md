@@ -1,6 +1,6 @@
 # content
 
-The content script. It runs at `document_start` in every frame. A frame that cannot reach the top document (another site) starts on its first focus (`start_content_once` in `handlers/focus.ts`). Such a frame asks the background for the tab address, so its ignore sites check sees the page it sits on.
+The content script. It runs at `document_start` in every frame. A frame that cannot reach the top document (another site) starts on its first focus (`start_content_once` in `handlers/focus.ts`). Every frame asks the background for its keymap (`ask_keymap.ts`), already trimmed for the page's site rule, so the content script holds no rule logic. The reply is a JSON string because the structured clone of the tree was slow. A rejected ask is retried (30 times, 100 ms apart) and the newest answer wins.
 
 A property name that ends in `_` is internal, and the build (`tools/build.mjs`, esbuild `mangleProps`) shortens it in every bundle with one shared cache. Add the `_` only to a name that stays inside the extension scripts. Never to one that crosses storage, a runtime message, a port, the manifest, a DOM attribute or CSS, a page or browser API, or a file on disk. The key test reads `desertfox_host.get_mode()` through the debugger, so that one method of the bundle API, `get_mode`, stays unmarked.
 

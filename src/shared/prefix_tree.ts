@@ -1,5 +1,5 @@
 // Compiled keymap: the background writes it to `storage.local` under
-// COMPILED_KEYMAP_STORAGE_KEY and the content script reads it before the first key.
+// COMPILED_KEYMAP_STORAGE_KEY. A page gets it from the background as a PageKeymap, trimmed for its site, before the first key.
 
 import type { BundleName } from "./bundles.ts";
 import type { CountBehavior, RunsIn } from "./command.ts";
@@ -50,7 +50,7 @@ export type TreeBranch = {
 
 export type TreeNode = TreeLeaf | TreeBranch;
 
-// `pass` and `only` hold parsed key sequences, one token array each. The content script prunes the normal tree with them, so the stored keymap does not grow a tree per rule.
+// `pass` and `only` hold parsed key sequences, one token array each. The background prunes the normal tree with them for each page, so the stored keymap does not grow a tree per rule.
 // `all_off` is a rule with no keys, or whose keys leave no normal binding: every normal key goes to the page.
 export type SiteRule = { regex: string } & ({ pass: string[][] } | { only: string[][] } | { all_off: true });
 
@@ -67,6 +67,12 @@ export type CompiledKeymap = {
   which_key_border?: WhichKeyBorder;
 };
 
-// A tree stored by an older build has another shape, and the content script then treats it as absent until the background recompiles.
+// What the background sends a page: the keymap without `site_rules`, its normal tree already trimmed when the page's rule lists keys.
+// `all_off` keeps the whole tree so `<Space>i` can leave ignore mode. `frees` is set only for a listed-keys rule.
+export type PageFrees = { tokens: string[]; invert: boolean };
+export const is_freed = ({ tokens, invert }: PageFrees, token: string): boolean => tokens.includes(token) !== invert;
+export type PageKeymap = { keymap: Omit<CompiledKeymap, "site_rules">; all_off: boolean; frees?: PageFrees };
+
+// A tree stored by an older build has another shape, and the page then gets no keymap until the background recompiles.
 export const current_keymap = (stored: CompiledKeymap | undefined): CompiledKeymap | undefined =>
   stored?.format_version === COMPILED_KEYMAP_VERSION ? stored : undefined;

@@ -7,6 +7,10 @@ site = "*://127.0.0.1/page?id=rule_pass*"
 pass = "j /"
 
 [[site_rules]]
+site = "*://127.0.0.1/frames?id=rule_frames*"  # the cross-origin frame matches on the tab address
+pass = "j"
+
+[[site_rules]]
 site = "*://127.0.0.1/page?id=rule_only*"
 only = "G"
 

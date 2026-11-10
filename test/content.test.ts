@@ -10,9 +10,9 @@ import { wire_mode_reports } from "../src/content/mode_report.ts";
 import { create_mode_state } from "../src/content/mode_state.ts";
 import { percent_to_offset, pick_scroll_target } from "../src/content/scroll_target.ts";
 import { create_matcher } from "../src/shared/keys/index.ts";
-import { COMPILED_KEYMAP_VERSION, current_keymap } from "../src/shared/index.ts";
+import { COMPILED_KEYMAP_VERSION, current_keymap, is_freed } from "../src/shared/index.ts";
 import { compile_keymap } from "../src/shared/keys/index.ts";
-import { prune_tree, rule_frees } from "../src/shared/keys/prune_tree.ts";
+import { frees_of, prune_tree } from "../src/shared/keys/prune_tree.ts";
 import type { CompiledKeymap, TreeLeaf } from "../src/shared/index.ts";
 
 const leaf = (id: string): TreeLeaf => ({ kind: "leaf", steps: [{ invocation: { id }, runs_in: "content", count_rule: "ignore" }] });
@@ -150,13 +150,13 @@ test("a rule hands Quick Find keys and digits to the page", () => {
   const { ran, flow } = make_flow();
   const rule = { pass: [["/"], ["j"]] };
   const ruled = { ...keymap, modes: { ...keymap.modes, normal: prune_tree(keymap.modes.normal, rule) } };
-  flow.set_matcher_(create_matcher(ruled, (token) => rule_frees(rule, token)));
+  flow.set_matcher_(create_matcher(ruled, (token) => is_freed(frees_of(rule), token)));
   assert.equal(flow.handle_token_("/"), "pass");
   assert.equal(flow.handle_token_("j"), "pass");
   assert.equal(flow.handle_token_("'"), "cancel");
   const only = { only: [["g", "g"]] };
   const only_flow = make_flow();
-  only_flow.flow.set_matcher_(create_matcher({ ...keymap, modes: { ...keymap.modes, normal: prune_tree(keymap.modes.normal, only) } }, (token) => rule_frees(only, token)));
+  only_flow.flow.set_matcher_(create_matcher({ ...keymap, modes: { ...keymap.modes, normal: prune_tree(keymap.modes.normal, only) } }, (token) => is_freed(frees_of(only), token)));
   assert.equal(only_flow.flow.handle_token_("'"), "pass");
   assert.equal(only_flow.flow.handle_token_("4"), "pass");
   assert.equal(only_flow.flow.handle_token_("g"), "cancel");

@@ -2,11 +2,11 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { compile_keymap, create_matcher } from "../src/shared/keys/index.ts";
 import type { KeymapConfig } from "../src/shared/index.ts";
-import { prune_tree, rule_frees } from "../src/shared/keys/prune_tree.ts";
+import { frees_of, prune_tree } from "../src/shared/keys/prune_tree.ts";
 import type { CompiledKeymap } from "../src/shared/prefix_tree.ts";
 import { all_off_step } from "../src/content/site_rule.ts";
 import { list_keys } from "../src/background/list_keys.ts";
-import { COMPILED_KEYMAP_STORAGE_KEY } from "../src/shared/prefix_tree.ts";
+import { COMPILED_KEYMAP_STORAGE_KEY, is_freed } from "../src/shared/prefix_tree.ts";
 
 const resolve = () => ({ runs_in: "content" as const, label: "x", count: "ignore" as const });
 
@@ -22,7 +22,7 @@ function matcher_for(compiled: CompiledKeymap, url: string) {
   const rule = compiled.site_rules?.find((candidate) => new RegExp(candidate.regex).test(url));
   if (rule === undefined || "all_off" in rule) return create_matcher(compiled);
   const tree = { ...compiled, modes: { ...compiled.modes, normal: prune_tree(compiled.modes.normal, rule) } };
-  return create_matcher(tree, (token) => rule_frees(rule, token));
+  return create_matcher(tree, (token) => is_freed(frees_of(rule), token));
 }
 
 function feed_keys(compiled: CompiledKeymap, url: string, keys: string[]): string {
