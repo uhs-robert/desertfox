@@ -282,7 +282,6 @@ test("a private save that finishes after its window closed is dropped, as when t
   const { memory } = memory_setup(async () => private_open);
   const closing = create_router({ ...fake.deps, repeat_memory: memory });
   await closing.run({ invocations: [{ id: "window.shut" }], mode: "normal" });
-  await memory.clear_private_without_window();
   assert.equal(await memory.load(true), undefined);
 });
 
