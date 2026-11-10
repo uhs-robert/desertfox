@@ -76,6 +76,16 @@ const CANCEL_KEYS_IN_CAPTURE = `<script>
     }, true);
 </script>`;
 
+const CLIP_WEBM_BASE64 = "GkXfo59ChoEBQveBAULygQRC84EIQoKEd2VibUKHgQJChYECGFOAZwEAAAAAAAL2EU2bdLpNu4tTq4QVSalmU6yBoU27i1OrhBZUrmtTrIHWTbuMU6uEElTDZ1OsggEzTbuMU6uEHFO7a1OsggLg7AEAAAAAAABZAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAVSalmsCrXsYMPQkBNgIxMYXZmNjMuMS4xMDJXQYxMYXZmNjMuMS4xMDJEiYhA3UwAAAAAABZUrmvYrgEAAAAAAABP14EBc8WIHDcjzCbgU4ucgQAitZyDdW5kiIEAhoVWX1ZQOIOBASPjg4UBKgXyAOCQsIEQuoEQmoECVbCEVbmBAVXugQDsAQAAAAAAAAIAABJUw2f6c3OfY8CAZ8iZRaOHRU5DT0RFUkSHjExhdmY2My4xLjEwMnNz1WPAi2PFiBw3I8wm4FOLZ8igRaOHRU5DT0RFUkSHk0xhdmM2My4xLjEwMiBsaWJ2cHhnyKFFo4hEVVJBVElPTkSHkzAwOjAwOjMwLjAwMDAwMDAwMAAfQ7Z1QSjngQCjvYEAAIDwAgCdASoQABAAAEcIhYWImYSIAgICdaoD+AP6Ag1NtgD+++j//+mTV7YaD/9Mnf/rzAQu4d/660CjrIETiACxAQABEBAAGAAwP/QMAMIA/vvo///pk1e2Gg//TJ3/68wELuHf+utAo6yBJxAAsQEAARAQABgAMD/0DADCAP776P//6ZNXthoP/0yd/+vMBC7h3/rrQKOsgTqYALEBAAEQEAAYADA/9AwAwgD+++j//+mTV7YaD/9Mnf/rzAQu4d/660CjrIFOIACxAQABEBAAGAAwP/QMAMIA/vvo///pk1e2Gg//TJ3/68wELuHf+utAo6yBYagAsQEAARAQABgAMD/0DADCAP776P//6ZNXthoP/0yd/+vMBC7h3/rrQBxTu2uRu4+zgQC3iveBAfGCAbLwgQM=";
+
+// Reports what the media keys change on one video: play and pause, rate, volume, position and picture-in-picture.
+const MEDIA_REPORTER = `<script>
+function report_media(video, send) {
+  const state = () => ({ rate: video.playbackRate, volume: video.volume, muted: video.muted, time: video.currentTime, paused: video.paused });
+  for (const type of ["play", "pause", "ratechange", "volumechange", "seeked", "enterpictureinpicture", "leavepictureinpicture"]) video.addEventListener(type, () => send("media_" + type, state()));
+}
+</script>`;
+
 // The reports in arrival order, and a wait that wakes on each new report. A waiter checks the reports and starts
 // listening in one synchronous step, and a report is pushed only between steps, so no report falls between the two.
 export function create_event_log() {
@@ -142,6 +152,11 @@ export function start_server() {
       response.writeHead(200, { "content-type": "audio/wav" });
       return response.end(Buffer.concat([header, Buffer.alloc(samples, 0x80)]));
     }
+    if (url.pathname === "/clip.webm") {
+      // Thirty seconds of a 16 px orange square, one frame per 5 s and no sound: a video track for picture-in-picture, which refuses audio alone. Made with ffmpeg from the lavfi color source.
+      response.writeHead(200, { "content-type": "video/webm" });
+      return response.end(Buffer.from(CLIP_WEBM_BASE64, "base64"));
+    }
     response.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" });
     const id = url.searchParams.get("id") ?? "none";
     if (url.pathname === "/field") {
@@ -205,6 +220,26 @@ video.addEventListener("pause", () => send("media_pause"));
 video.addEventListener("volumechange", () => send("media_volume", { muted: video.muted }));
 document.addEventListener("fullscreenchange", () => send("media_fullscreen", { element: document.fullscreenElement ? document.fullscreenElement.id : "" }));</script>`;
       return response.end(page(`media ${id}`, player + hidden_audio + script));
+    }
+    if (url.pathname === "/media_frames") {
+      // A large paused video on top, and a frame from another origin (localhost is not 127.0.0.1) whose small muted video plays in a closed shadow root. Beside them a sandboxed frame and an about:blank frame, where a script may be refused.
+      // "audible" or "clip" in the id leaves out the top video and makes the framed one paused, with sound or with a picture.
+      const framed_only = id.includes("audible") || id.includes("clip");
+      const top_video = framed_only ? "" : '<video id="video" src="/clip.webm" loop style="display:block;width:320px;height:180px"></video>';
+      const frame = `<iframe id="frame" src="http://localhost:${request.socket.localPort}/media_inner?id=${id}_inner" style="display:block;width:220px;height:240px"></iframe>`;
+      const refusing = '<iframe sandbox srcdoc="<video src=/tone.wav></video>" style="width:50px;height:30px"></iframe><iframe src="about:blank" style="width:50px;height:30px"></iframe>';
+      const watch_top = framed_only ? "" : '<script>addEventListener("DOMContentLoaded", () => report_media(document.getElementById("video"), send));</script>';
+      return response.end(page(`media_frames ${id}`, top_video + frame + refusing, MEDIA_REPORTER + watch_top));
+    }
+    if (url.pathname === "/media_inner") {
+      const attributes = id.includes("audible") ? 'src="/tone.wav"' : id.includes("clip") ? 'src="/clip.webm"' : 'src="/tone.wav" muted autoplay';
+      // `send` comes from the reporter, which runs after this script, so the call looks it up at each event.
+      const build = `<div id="host"></div><script>
+        const closed_root = document.getElementById("host").attachShadow({ mode: "closed" });
+        closed_root.innerHTML = '<video ${attributes} loop style="width:160px;height:90px"></video>';
+        report_media(closed_root.querySelector("video"), (type, data) => send(type, data));
+      </script>`;
+      return response.end(page(`media_inner ${id}`, build, MEDIA_REPORTER));
     }
     if (url.pathname === "/hoverbox") {
       // Plain divs with a mouseenter listener only, no click role and no CSS :hover rule. The page reports each enter and leave.

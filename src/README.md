@@ -12,6 +12,7 @@ The code map. Read a folder's README before you change or research code in it.
   - [`content/handlers/`](content/handlers/README.md): the content-side handler for each command group.
   - [`content/ui/`](content/ui/README.md): the `ui` bundle, the mode badge and the toast.
   - [`content/page/`](content/page/README.md): the `page` bundle: `scroll.align`, `copy.url`, and `page.focus_input`.
+  - [`content/media/`](content/media/README.md): the `media` bundle, which the background injects into every frame for the `media` command.
   - [`content/text/`](content/text/README.md): the `text` bundle: the typed-text recorder for `.`, the shared field writer and `is_secret_field`.
 - [`devtools/`](devtools/README.md): the devtools page, which selects a hint pick in the Inspector.
 - [`help/`](help/README.md): the help page.

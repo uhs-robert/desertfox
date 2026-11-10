@@ -29,6 +29,8 @@ import { blur_focused_element } from "./handlers/page.ts";
 // Until the tree is read the setting is unknown, and the default applies.
 let mode_indicator: ModeIndicator = DEFAULT_MODE_INDICATOR;
 let recording: string | undefined;
+// A macro replay holds this page's keys. Escape then stops the replay.
+let replaying = false;
 
 function refresh_mode_indicator(): void {
   const mode = page_mode.get_mode_();
@@ -64,7 +66,7 @@ const follow_prefix = create_which_key_timer(
   (prefix, is_current_, drawn_) => (prefix || bundles.has_handler_("whichkey")) && bundles.run_command_("whichkey", "whichkey", { prefix, is_current_, drawn_ }, "", false),
 );
 
-// While a macro records, a leaf starts after the one before it has ended and sent its step, so a stop key cannot overtake a step still running. A hint pick waits on the user and sends its step when it begins, so the next leaf, which may be the Escape that ends the pick, never waits for it.
+// While a macro records, a leaf starts after the one before it has ended and sent its step, so a stop key cannot overtake a step still running. A hint pick waits on the user and sends its step when it begins, so the next leaf, which may be the Escape that ends the pick, never waits for it. A replay can wait on a pick too, and its own hold keeps a later stop key behind it.
 let last_leaf: Promise<unknown> = Promise.resolve();
 
 const key_flow = create_key_flow({
@@ -76,7 +78,7 @@ const key_flow = create_key_flow({
     if (leaf.steps[0]?.invocation.id !== "register.paste") flush_typed_text();
     const run = () => run_leaf(leaf, count, repeat, send_to_background, page_mode.get_mode_, run_content_steps, show_toast);
     const ran = recording === undefined ? run() : last_leaf.then(run);
-    if (!leaf.steps.some((step) => step.invocation.id === "hint.run")) last_leaf = ran;
+    if (!leaf.steps.some((step) => /^(hint\.run|macro\.play)$/.test(step.invocation.id))) last_leaf = ran;
     if (holds_keys_after(leaf, is_editable_element(document.activeElement))) bundles.api.hold_keys_until_(ran.then(() => []), true);
   },
   leave_insert_: () => {
@@ -143,6 +145,7 @@ function on_keydown(event: KeyboardEvent): void {
   if (!event.isTrusted || event.isComposing) return;
   const token = event_to_token(event);
   if (token === null) return;
+  if (replaying && token == "<Escape>") void send_to_background({ type: "replay_stop" });
   const target = press_target(event);
   const press: HeldPress = { keyup_seen: false };
   const decision = key_flow.handle_token_(token, event.repeat, () => target && replay_key_to_page(event, target, press, cancelled_keys, (type, init) => new KeyboardEvent(type, init)));
@@ -293,7 +296,11 @@ function start(): void {
     }
     if (message.type === "run_in_content") {
       // The router already applied the count, so each invocation runs once. The router shows a failure.
-      return run_in_order(message.invocations);
+      return run_in_order(message.invocations, message.repeat);
+    } else if (message.type === "replay_hold") {
+      // The keys wait the whole replay, in the mode the macro leaves. They are dropped when the replay fails or stops, or when the background is gone.
+      replaying = true;
+      bundles.api.hold_keys_until_(send_to_background({ type: "replay_end" }).then((ended) => ((replaying = false), ended.ok || key_flow.drop_held_(), [])), true);
     } else if (message.type === "refusal") show_toast(message.refusal.message, message.kind);
     else if (message.type === "set_mode") {
       page_mode.set_mode_(message.mode);

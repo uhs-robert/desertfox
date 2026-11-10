@@ -388,4 +388,49 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, sleep,
     expect(moved.in_other_window, "the tab did not reach the other window");
     expect(moved.pinned, "the moved tab lost its pin");
   });
+
+  const open_finder = async () => {
+    await settle_focus();
+    await press_keys(",", ",");
+    await wait_cmdline((line) => line.ready, "the finder to open");
+  };
+
+  await run_case("the finder: ,, opens it, the first row is highlighted as the user types, and Enter switches to that tab", async () => {
+    await open_finder();
+    await type_in_line("p9e_two", { until: shows_row("p9e_two") });
+    await wait_cmdline((line) => line.selected !== null && shows_row("p9e_two")(line), "the first finder row to be highlighted");
+    await press_keys("-k", "Return");
+    await wait_active_tab("p9e_two", "the p9e_two tab after Enter in the finder");
+  });
+
+  await run_case("the finder: Shift+Enter on a bookmark row opens it in a new tab, Enter on the same row would open it here", async () => {
+    const url = url_of("page", "p9z_finder");
+    await background(`browser.bookmarks.create({ title: "P9z Finder mark", url: ${JSON.stringify(url)} })`);
+    try {
+      await open_finder();
+      const mark = events.length;
+      await type_in_line("p9z finder mark", { until: shows_row("P9z Finder mark") });
+      await press_keys("-M", "shift", "-k", "Return", "-m", "shift");
+      await wait_event(mark, (event) => event.type === "tree_read" && event.page_id === "p9z_finder", "the bookmarked page in a new tab");
+      await wait_active_tab("p9z_finder", "the new tab of Shift+Enter");
+    } finally {
+      await close_tabs_with("id=p9z_finder");
+      await background(`browser.bookmarks.search({ url: ${JSON.stringify(url)} }).then((nodes) => Promise.all(nodes.map((node) => browser.bookmarks.remove(node.id))))`);
+    }
+  });
+
+  await run_case("the finder: A-x closes the highlighted tab row", async () => {
+    const ids = await create_tabs(["p9y_one"]);
+    const open_count = () => background(`browser.tabs.query({}).then((tabs) => tabs.filter((tab) => ${JSON.stringify(ids)}.includes(tab.id)).length)`);
+    try {
+      await open_finder();
+      await type_in_line("p9y_one", { until: shows_row("p9y_one") });
+      await wait_cmdline((line) => line.selected !== null && shows_row("p9y_one")(line), "the p9y_one row to be highlighted");
+      await press_keys(...ALT("x"));
+      await poll_until("A-x to close the highlighted finder tab", async () => (await open_count()) === 0);
+    } finally {
+      await background(`browser.tabs.remove(${JSON.stringify(ids)}).catch(() => {})`);
+      await close_cmdline().catch((error) => console.log(`cleanup: the command line stayed open: ${error.message}`));
+    }
+  });
 }

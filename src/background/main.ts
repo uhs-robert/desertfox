@@ -32,6 +32,9 @@ import { create_repeat_memory } from "./repeat_memory.ts";
 import { create_step_recorder, page_outcome, page_steps } from "./record_step.ts";
 import type { RecordStep } from "./record_step.ts";
 import { browser_macro_recorder } from "./macro_recorder.ts";
+import { browser_last_played } from "./macro_last_played.ts";
+import { create_macro_replay, wire_macro_replay } from "./macro_replay.ts";
+import { check_play_step } from "../commands/macro.ts";
 import { wire_repeat } from "../commands/command.ts";
 import { wire_tab_insert } from "../commands/mode.ts";
 import { create_tab_insert } from "./tab_insert.ts";
@@ -78,14 +81,31 @@ const record_step: RecordStep = async (steps, outcome, origin) => {
 };
 const router_deps = { ...make_router_deps(get_config, repeat_memory), record_step };
 const router = create_router(router_deps);
+const watch_tab = (tab_id: number) =>
+  watch_page_ready({ get_tab: (id) => browser.tabs.get(id).catch(() => undefined), on_updated: browser.tabs.onUpdated, on_removed: browser.tabs.onRemoved, has_content_script, set_timer: (callback, ms) => setTimeout(callback, ms), clear_timer: (timer) => clearTimeout(timer as number) }, tab_id);
+const macro_replay = create_macro_replay({
+  read_macro: async (register, is_private) => {
+    const value = await browser_register_store.read(register, is_private);
+    return Array.isArray(value) ? value : undefined;
+  },
+  // No command line opens: the recorder stored each prompted step with its value.
+  run_step: (step, { tab_id, frame_id, mode }) => router.run({ invocations: [step], mode, frame_id, instant: true, ...(tab_id === undefined ? {} : { sender_tab_id: tab_id }) }),
+  active_tab_id: async () => (await router_deps.active_tab())?.tab_id,
+  is_loading: async (tab_id) => (await browser.tabs.get(tab_id).catch(() => undefined))?.status === "loading",
+  watch: watch_tab,
+  hold_keys: (tab_id) => send_to_tab(tab_id, { type: "replay_hold" }),
+  show_refusal: (tab_id, message) => router_deps.show_refusal(tab_id, { id: "macro.play", message }),
+  last_played: browser_last_played,
+  check_play: check_play_step,
+});
+wire_macro_replay(macro_replay);
 const global_mark_jump = create_global_mark_jump({
   store: browser_mark_store,
   list_tabs: async () => (await browser.tabs.query({})).flatMap((tab) => (tab.id === undefined || tab.windowId === undefined || tab.url === undefined ? [] : [{ id: tab.id, window_id: tab.windowId, index: tab.index, url: tab.url, incognito: tab.incognito, last_accessed: tab.lastAccessed ?? 0, discarded: tab.discarded === true }])),
   activate_tab: (tab_id) => browser.tabs.update(tab_id, { active: true }),
   focus_window: (window_id) => browser.windows.update(window_id, { focused: true }),
   navigate: (tab_id, url) => browser.tabs.update(tab_id, { url }),
-  watch: (tab_id) =>
-    watch_page_ready({ get_tab: (id) => browser.tabs.get(id).catch(() => undefined), on_updated: browser.tabs.onUpdated, on_removed: browser.tabs.onRemoved, has_content_script, set_timer: (callback, ms) => setTimeout(callback, ms), clear_timer: (timer) => clearTimeout(timer as number) }, tab_id),
+  watch: watch_tab,
   push_jump: (tab_id, key) => send_to_tab(tab_id, { type: "run_in_content", invocations: [{ id: "mark.jump", args: { key }, bundle: "page" }] }, 0),
   show_refusal: (tab_id, message) => router_deps.show_refusal(tab_id, { id: "mark.jump", message }, 0),
 });
@@ -130,6 +150,7 @@ const complete_items = create_complete_items({
   marks: async (url, is_private) => (url === undefined ? [] : mark_list_rows(await browser_mark_store.items(url, is_private))),
   quickmarks: async (is_private) => quickmark_list_rows(await browser_quickmark_store.table((await get_config()).quickmarks, is_private)),
   saved_quickmarks: async (is_private) => quickmark_list_rows(await browser_quickmark_store.saved(is_private)),
+  quickmark_table: async (is_private) => browser_quickmark_store.table((await get_config()).quickmarks, is_private),
   read_tab: (tab_id) => browser.tabs.get(tab_id).catch(() => undefined),
   discard: { ...browser_discard_deps, alternate_of: previous_tabs.previous_of },
   tab_actions: browser_tab_action_deps,
@@ -198,6 +219,8 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
     if (sender.frameId === 0 && request.mode !== "insert") void tab_insert.top_frame_left_insert(tab_id, request.mode).catch(() => undefined);
     return modes_cleared.then(() => remember_reported_mode(browser.storage.local, tab_id, sender.frameId, request.mode));
   }
+  if (request?.type === "replay_end") return macro_replay.ended();
+  if (request?.type === "replay_stop") return void macro_replay.stop();
   if (request?.type === "leave_tab_insert" && sender.tab?.id !== undefined) return tab_insert.leave(sender.tab.id);
   if (request?.type === "load_bundle") return bundle_loader.answer(sender, request.name);
   if (request?.type === "find_scan" && is_scan_request(request)) return find_scan.answer(request, `${sender.tab?.id}:${sender.frameId}`);
@@ -244,6 +267,7 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
   }
   if (request?.type !== "run") return undefined;
   return get_config().then(async (config) => {
+    await macro_replay.wait_unless_from(sender.tab?.id);
     const page = sender.tab?.url ? { url: sender.tab.url, ...(sender.tab.title ? { title: sender.tab.title } : {}) } : undefined;
     const settled = with_site_engines(request.invocations, config.search_engines, page);
     if ("unfit_letter" in settled) {
@@ -292,7 +316,7 @@ browser.tabs.onUpdated.addListener((tab_id, change) => {
 });
 
 browser.windows.onRemoved.addListener(() => void repeat_memory.clear_private_without_window().catch(() => undefined));
-wire_private_cleanup([browser_register_store, browser_mark_store, browser_quickmark_store, browser_macro_recorder], browser.windows);
+wire_private_cleanup([browser_register_store, browser_mark_store, browser_quickmark_store, browser_macro_recorder, browser_last_played], browser.windows);
 
 browser.tabs.onActivated.addListener(({ windowId, previousTabId }) => previous_tabs.activated(windowId, previousTabId));
 

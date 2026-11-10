@@ -6,7 +6,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 const key_test_dir = dirname(fileURLToPath(import.meta.url));
 
-export const area_names = ["hints", "caret", "find", "whichkey", "cmdline", "help", "newtab", "tabs", "scroll", "config", "engines", "bundles", "keys", "ui", "toolbar"];
+export const area_names = ["hints", "caret", "find", "whichkey", "cmdline", "help", "newtab", "tabs", "scroll", "config", "engines", "bundles", "keys", "ui", "toolbar", "media"];
 
 // Key path and command contract: any change here can break any piece.
 const shared_files = [
@@ -36,7 +36,7 @@ export const area_rules = [
   { globs: ["src/commands/register.ts", "src/commands/register_param.ts", "src/background/register_store.ts", "src/shared/register_names.ts"], areas: ["find", "cmdline"] },
   { globs: ["src/commands/session.ts", "src/background/session_store.ts", "src/background/sessions_transfer.ts"], areas: ["cmdline", "tabs"] },
   {
-    globs: ["src/cmdline/**", "src/commands/{cmdline,history,bookmark,open_target}.ts", "src/background/{cmdline_service,complete_items,bookmark_title}.ts", "src/shared/{setting_completion,score,folder_pick}.ts"],
+    globs: ["src/cmdline/**", "src/commands/{cmdline,history,bookmark,open_target}.ts", "src/background/{cmdline_service,complete_items,bookmark_title}.ts", "src/shared/{anything_ref,setting_completion,score,folder_pick}.ts"],
     areas: ["cmdline"],
   },
   {
@@ -56,7 +56,8 @@ export const area_rules = [
     areas: ["tabs"],
   },
   { globs: ["src/background/{mark_store,store_turns,global_mark_jump,page_ready}.ts", "src/commands/mark.ts", "src/shared/mark_names.ts", "src/background/quickmark_store.ts", "src/commands/quickmark.ts", "src/commands/mark_list.ts", "src/shared/mark_text.ts", "src/shared/quickmark_names.ts"], areas: ["scroll", "keys", "whichkey", "tabs"] },
-  { globs: ["src/background/macro_recorder.ts", "src/commands/macro.ts"], areas: ["keys", "whichkey"] },
+  { globs: ["src/background/macro_recorder.ts", "src/background/macro_last_played.ts", "src/commands/macro.ts"], areas: ["keys", "whichkey"] },
+  { globs: ["src/background/macro_replay.ts"], areas: ["keys", "hints", "tabs"] },
   { globs: ["src/content/{scroll_*,align_target}.ts", "src/content/handlers/{scroll,align}.ts", "src/commands/{scroll,zoom}.ts"], areas: ["scroll"] },
   {
     globs: [
@@ -70,6 +71,7 @@ export const area_rules = [
   { globs: ["src/shared/engines/**", "src/commands/engine.ts"], areas: ["engines"] },
   { globs: ["src/background/{default_keymap,keymap_merge,compile,repeat_memory,record_step}.ts", "src/shared/{keys/**,keymap,prefix_tree,layers,invocation}.ts"], areas: ["keys"] },
   { globs: ["src/popup/**", "src/background/toolbar.ts"], areas: ["toolbar"] },
+  { globs: ["src/content/media/**", "src/commands/media.ts", "src/background/media_actions.ts", "src/shared/media.ts"], areas: ["media"] },
   { globs: ["src/content/{ui/**,toast,ui_proxy,surface,mode_indicator,badge_state,mode_report,badge_hosts}.ts"], areas: ["ui"] },
 ];
 

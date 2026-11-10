@@ -440,7 +440,7 @@ define("tab.close", {
 define("tab.reopen_in_container", {
   label: "Reopen in container",
   intent: "Reopen the page in a container. It opens in the same place and closes the old tab. The container default means none.",
-  params: [{ name: "container", type: "string", main: true, values: { from: "containers" } }],
+  params: [{ name: "container", type: "string", rest: true, main: true, values: { from: "containers" } }],
   runs_in: "background",
   run: (ctx, args) => handlers.reopen_in_container(ctx, args as { container: string }),
 });

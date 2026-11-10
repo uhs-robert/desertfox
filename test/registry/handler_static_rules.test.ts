@@ -46,11 +46,14 @@ const EXPECTED_REFUSALS: Record<string, RegExp[]> = {
   "url.increment": [/has no number/],
   "register.list": [/is empty/],
   "macro.stop": [/Not recording a macro/],
+  // The background wires the replay after it builds the router, which this test does not.
+  "macro.play": [/Macro replay is not ready yet/],
   "quickmark.open": [/No quickmark/],
   "quickmark.list": [/No quickmark/],
   "quickmark.delete": [/is not saved/],
   "mark.list": [/No marks?/],
   "mark.delete": [/No mark/],
+  "media.act": [/No video or audio on this page/, /needs Firefox 153 or newer/],
 };
 
 const SOURCES: EnumSources = { search_engines: ["stub_engine"], containers: ["stub_container"] };

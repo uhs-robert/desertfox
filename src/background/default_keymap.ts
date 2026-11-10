@@ -80,6 +80,7 @@ export const DEFAULT_KEYMAP: KeymapConfig = {
     z: "Zoom and scroll",
     ",": "DesertFox",
     q: "Record macro",
+    "@": "Play macro",
     ";": "Hints",
     ";y": "Yank",
     s: "Search here",
@@ -88,6 +89,7 @@ export const DEFAULT_KEYMAP: KeymapConfig = {
     "S/": "Site search in new tab",
     c: "Reopen in container",
     C: "Open in container",
+    a: "Media",
   },
   normal: {
     h: { id: "scroll.pixels", args: { dx: -50 }, label: "Scroll left" },
@@ -146,6 +148,19 @@ export const DEFAULT_KEYMAP: KeymapConfig = {
     u: { id: "tab.undo_close" },
     "<A-p>": { id: "tab.pin" },
     "<A-m>": { id: "tab.mute" },
+
+    // The a group works on the page's video and audio, in every frame. `A` types the rest of a media command.
+    am: { id: "tab.mute" },
+    ap: { id: "media.act", args: { action: "play_pause" }, label: "Play or pause" },
+    as: { id: "media.act", args: { action: "speed", value: "up" }, label: "Speed up" },
+    aS: { id: "media.act", args: { action: "speed", value: "down" }, label: "Slow down" },
+    ar: { id: "media.act", args: { action: "speed", value: "reset" }, label: "Reset speed" },
+    av: { id: "media.act", args: { action: "volume", value: "up" }, label: "Volume up" },
+    aV: { id: "media.act", args: { action: "volume", value: "down" }, label: "Volume down" },
+    al: { id: "media.act", args: { action: "seek", value: "up" }, label: "Seek forward" },
+    ah: { id: "media.act", args: { action: "seek", value: "down" }, label: "Seek back" },
+    aP: { id: "media.act", args: { action: "pip" }, label: "Toggle picture-in-picture" },
+    A: { id: "cmdline.open", args: { text: "media " }, label: "Media command" },
 
     // The t group works on tabs. Plain `t` is only a prefix.
     tt: { id: "open.url", args: { where: "tab" }, prompt: { param: "url" } },
@@ -244,12 +259,14 @@ export const DEFAULT_KEYMAP: KeymapConfig = {
     ",s": { id: "help.open", args: { name: "settings" }, label: "Settings page" },
     ",t": { id: "settings.toggle", prompt: { param: "name" } },
     ",i": { id: "mode.set", args: { mode: "ignore" } },
+    ",,": { id: "open.anything", prompt: { param: "query" }, label: "Find anything" },
     ",b": { id: "page.blur" },
     ",?": { id: "help.whichkey" },
     ",\"": { id: "register.list", prompt: { param: "name" }, label: "List registers" },
 
     m: { id: "mark.add" },
     q: { id: "macro.record" },
+    "@": { id: "macro.play" },
     "'": { id: "mark.jump" },
     "`": { id: "mark.jump" },
 
@@ -308,6 +325,7 @@ export const DEFAULT_KEYMAP: KeymapConfig = {
     "<C-p>": { id: "cmdline.prev_completion" },
     "<A-ArrowUp>": { id: "cmdline.prev_completion" },
     "<Enter>": { id: "cmdline.submit" },
+    "<S-Enter>": { id: "cmdline.submit", args: { where: "tab" }, label: "Run and open in a new tab" },
     "<ArrowUp>": { id: "cmdline.history", args: { direction: "prev" } },
     "<ArrowDown>": { id: "cmdline.history", args: { direction: "next" } },
     "<C-u>": { id: "cmdline.clear" },
