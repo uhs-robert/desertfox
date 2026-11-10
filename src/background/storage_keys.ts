@@ -77,7 +77,7 @@ export const MARK_STORAGE_KEY = "desertfox_marks";
 // The same shape for the private windows, in `storage.session`. Cleared when the last private window closes.
 export const MARK_PRIVATE_STORAGE_KEY = "desertfox_private_marks";
 
-// The quickmarks added with `M`: `{ [key]: url }`, laid over the config table. Only `quickmark_store.ts` reads and writes it. A private window never reaches it.
+// The quickmarks added with `M`: `{ [key]: url }`, laid over the config table. Only `quickmark_store.ts` reads and writes it. A private window reads it but never writes it.
 export const QUICKMARK_STORAGE_KEY = "desertfox_quickmarks";
 
 // The same shape for the private windows, in `storage.session`. Cleared when the last private window closes.

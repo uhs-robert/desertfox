@@ -3,7 +3,7 @@
 // A private window still reads the normal entries: they are addresses the user filed outside it, and the private ones win over them.
 
 import { RuntimeRefusal } from "../shared/command.ts";
-import { MAX_QUICKMARK_URL_CHARS, QUICKMARK_KEY } from "../shared/quickmark_names.ts";
+import { MAX_QUICKMARK_URL_CHARS, QUICKMARK_KEY, valid_quickmark_entries } from "../shared/quickmark_names.ts";
 import type { QuickmarkTable } from "../shared/quickmark_names.ts";
 import { create_write_queue } from "./store_turns.ts";
 import { QUICKMARK_PRIVATE_STORAGE_KEY, QUICKMARK_STORAGE_KEY } from "./storage_keys.ts";
@@ -15,14 +15,9 @@ export type QuickmarkStoreDeps = {
   session: () => QuickmarkArea;
 };
 
-// A damaged value, or a damaged entry in it, reads as no quickmark.
-const valid_entries = (stored: unknown): QuickmarkTable => {
-  if (typeof stored !== "object" || stored === null || Array.isArray(stored)) return {};
-  return Object.fromEntries(Object.entries(stored).filter(([key, url]) => QUICKMARK_KEY.test(key) && typeof url === "string" && url !== ""));
-};
-
 export function create_quickmark_store(deps: QuickmarkStoreDeps) {
-  const read = async (area: QuickmarkArea, key: string): Promise<QuickmarkTable> => valid_entries((await area.get(key))[key]);
+  // A damaged value, or a damaged entry in it, reads as no quickmark.
+  const read = async (area: QuickmarkArea, key: string): Promise<QuickmarkTable> => valid_quickmark_entries((await area.get(key))[key]);
 
   const in_turn = create_write_queue();
 

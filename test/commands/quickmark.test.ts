@@ -12,6 +12,7 @@ function make(table: Record<string, string> = {}) {
     table: async () => table,
     save: async (_ctx, key, url) => void calls.push(`save ${key} ${url}`),
     tab_url: async () => "https://here.test/page",
+    target: async (text) => (/^[a-z]+:/.test(text) ? text : `https://${text}`),
     open: async (_ctx, url, where) => void calls.push(`open ${where} ${url}`),
     toast: async (_ctx, kind, message) => void calls.push(`toast ${kind} ${message}`),
   };
@@ -35,4 +36,10 @@ test("open refuses a key with no quickmark and opens nothing", async () => {
   const { calls, handlers } = make({ g: "https://github.com" });
   await assert.rejects(handlers.open(ctx, { key: "x", where: "here" }), /No quickmark x/);
   assert.deepEqual(calls, []);
+});
+
+test("open gives an address written without a scheme to the typed-address rule", async () => {
+  const { calls, handlers } = make({ g: "github.com" });
+  await handlers.open(ctx, { key: "g", where: "tab" });
+  assert.deepEqual(calls, ["open tab https://github.com"]);
 });

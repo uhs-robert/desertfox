@@ -8,7 +8,7 @@ import { QUICKMARK_KEY } from "../shared/quickmark_names.ts";
 import type { QuickmarkTable } from "../shared/quickmark_names.ts";
 import type { ToastKind } from "../shared/messages.ts";
 import { define } from "../shared/registry/builtin.ts";
-import { current_tab_url, open_in, WHERE_PARAM } from "./open_target.ts";
+import { current_tab_url, open_in, typed_url_target, WHERE_PARAM } from "./open_target.ts";
 import type { Where } from "./open_target.ts";
 
 export type QuickmarkDeps = {
@@ -16,6 +16,8 @@ export type QuickmarkDeps = {
   table: (ctx: CommandContext) => Promise<QuickmarkTable>;
   save: (ctx: CommandContext, key: string, url: string) => Promise<void>;
   tab_url: (ctx: CommandContext) => Promise<string>;
+  // Turns an address written without a scheme into one that opens, as `o` does.
+  target: (text: string) => Promise<string>;
   open: (ctx: CommandContext, url: string, where: Where) => Promise<void>;
   toast: (ctx: CommandContext, kind: ToastKind, message: string) => Promise<void>;
 };
@@ -30,7 +32,7 @@ export function make_quickmark_handlers(deps: QuickmarkDeps) {
     open: async (ctx: CommandContext, args: { key: string; where: Where }) => {
       const url = (await deps.table(ctx))[args.key];
       if (url === undefined) throw new RuntimeRefusal(`No quickmark ${args.key}`);
-      await deps.open(ctx, url, args.where);
+      await deps.open(ctx, await deps.target(url), args.where);
     },
   };
 }
@@ -39,6 +41,7 @@ export const browser_quickmark_deps: QuickmarkDeps = {
   table: async (ctx) => browser_quickmark_store.table((await get_config()).quickmarks, await is_private_context(ctx)),
   save: async (ctx, key, url) => browser_quickmark_store.add(key, url, await is_private_context(ctx)),
   tab_url: current_tab_url,
+  target: typed_url_target,
   open: (ctx, url, where) => open_in(ctx, url, where),
   toast: (ctx, kind, message) => show_toast_on_tab(ctx, "quickmark", message, kind),
 };

@@ -3,7 +3,7 @@
 
 import { apply_edits, CONFIG_FORMAT_VERSION, effective_settings, NO_EDITS, with_fallback_engines } from "../shared/config.ts";
 import type { MergedConfig, SettingEdits, SettingOverrides, Settings, SnippetEntry } from "../shared/config.ts";
-import { QUICKMARK_KEY } from "../shared/quickmark_names.ts";
+import { valid_quickmark_entries } from "../shared/quickmark_names.ts";
 import { is_setting_name, SETTING_SPECS } from "../shared/settings_schema.ts";
 import type { ConfigFiles } from "../shared/config_build/source_files.ts";
 import { FILES_CONFIG_STORAGE_KEY, FILES_SOURCE_STORAGE_KEY, SAVED_SETTINGS_STORAGE_KEY, TEMP_SETTINGS_STORAGE_KEY } from "./storage_keys.ts";
@@ -70,17 +70,11 @@ function checked_file_settings(stored: unknown, source: ConfigSource, warnings: 
   return Object.fromEntries(kept) as Partial<Settings>;
 }
 
-// A config stored before quickmarks has none, and a hand-edited one can hold a bad entry. Dropping it is all a read needs.
-function checked_file_quickmarks(stored: unknown): Record<string, string> {
-  if (typeof stored !== "object" || stored === null || Array.isArray(stored)) return {};
-  return Object.fromEntries(Object.entries(stored).filter(([key, url]) => QUICKMARK_KEY.test(key) && typeof url === "string" && url !== ""));
-}
-
 // Fills sections the file left out, so later code never checks for undefined.
 function with_all_sections(raw: Record<string, unknown>, source: ConfigSource, warnings: string[]): MergedConfig {
   const merged = { ...empty_config(), ...raw, format_version: CONFIG_FORMAT_VERSION } as MergedConfig;
   merged.settings = checked_file_settings(raw.settings, source, warnings);
-  merged.quickmarks = checked_file_quickmarks(raw.quickmarks);
+  merged.quickmarks = valid_quickmark_entries(raw.quickmarks);
   const default_engine = merged.settings?.default_engine;
   merged.search_engines = with_fallback_engines(merged.search_engines ?? {}, default_engine);
   const default_needs_page = default_engine !== undefined && (merged.search_engines[default_engine]?.slots ?? []).length > 0;
