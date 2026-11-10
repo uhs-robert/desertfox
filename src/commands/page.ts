@@ -34,7 +34,6 @@ define("page.stop", {
   label: "Stop loading",
   intent: "Stop the page from loading.",
   runs_in: "content",
-  bundle: "page",
 });
 
 define("page.home", {
