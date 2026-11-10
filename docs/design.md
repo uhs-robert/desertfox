@@ -477,7 +477,7 @@ Caret mode puts a text cursor in the page, so the user can move through text wit
 - The recording state, `{ register, steps }`, lives in `storage.session`, and a private window has a key of its own. Every step is stored as it comes, so a background restart keeps the recording and no page buffers it. A held key sends its first press only, so a held `j` is one step.
 - While a macro records, the background answers each page's `read_keymap` with the tree that has `macro.stop` where `macro.record` sat, and with the register name. Starting and stopping tell every tab to read its keymap again. The badge in every tab then adds `recording @a`, whatever the mode indicator setting says. No page code watches the key.
 - Typed text is recorded as the `text.insert` step, led by the entry command, as for `.`. The same text lands in two places: in the `.` slot it stays in `storage.session`, and in a macro it is a register value in `storage.local`, so it survives a restart. A normal window and the private windows keep their own, as registers do. Text from a password field is never recorded, because the text recorder drops it before any step exists.
-- While a macro records, which-key under `q` lists the stored macros with their step counts.
+- Which-key under `q` lists the stored macros with their step counts when no recording runs. It reads the stored tree, so during a recording `q` is a leaf and shows no panel.
 
 ### Help and palette
 

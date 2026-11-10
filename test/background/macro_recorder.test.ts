@@ -124,3 +124,12 @@ test("steps that arrive together are all kept", async () => {
   await Promise.all(["a", "b", "c", "d"].map((id) => recorder.record([step(id)], { ok: true }, NORMAL)));
   assert.deepEqual((await recorder.stop(false)).steps.map((kept) => kept.id), ["a", "b", "c", "d"]);
 });
+
+test("a dot repeat keeps the steps it ran and not command.repeat, so replay does not double them", async () => {
+  const { recorder } = make();
+  await recorder.start("a", false);
+  await recorder.record([step("tab.close")], { ok: true }, NORMAL);
+  await recorder.record([step("tab.close")], { ok: true }, NORMAL);
+  await recorder.record([step("command.repeat")], { ok: true }, NORMAL);
+  assert.deepEqual((await recorder.stop(false)).steps.map((kept) => kept.id), ["tab.close", "tab.close"]);
+});

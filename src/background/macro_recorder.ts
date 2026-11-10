@@ -23,7 +23,8 @@ const key_of = (is_private: boolean) => (is_private ? MACRO_RECORDING_PRIVATE_ST
 const is_recording = (value: unknown): value is Recording => typeof (value as Recording | undefined)?.register === "string" && Array.isArray((value as Recording).steps);
 
 // Starting and stopping a recording are the macro's own business, and a nested `macro.play` stays so macros can call macros.
-const NEVER_RECORDED = new Set(["macro.record", "macro.stop"]);
+// `command.repeat` runs the saved steps through the router, which records them. Keeping it too would replay them twice.
+const NEVER_RECORDED = new Set(["macro.record", "macro.stop", "command.repeat"]);
 
 export function create_macro_recorder(deps: MacroRecorderDeps) {
   const in_turn = create_write_queue();

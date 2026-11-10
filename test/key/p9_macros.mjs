@@ -2,7 +2,7 @@
 
 export const areas = ["keys", "whichkey"];
 
-export async function run_cases({ run_case, open_page, poll_until, press_keys, wait_event, events, in_active_tab, badge_is, settle_focus }) {
+export async function run_cases({ run_case, open_page, poll_until, press_keys, hint_label_count, wait_event, events, in_active_tab, badge_is, settle_focus }) {
   const read_register = (name) => in_active_tab(`browser.runtime.sendMessage({ type: "register_read", name: ${JSON.stringify(name)} })`);
   const ids_of = async (name) => (await read_register(name))?.map?.((step) => step.id);
 
@@ -34,5 +34,21 @@ export async function run_cases({ run_case, open_page, poll_until, press_keys, w
     await wait_event(mark, badge_is("p9mac_one", "NORMAL recording @b"), "the recording badge after qb");
     await press_keys("q");
     await poll_until("register b to hold an empty macro", async () => JSON.stringify(await read_register("b")) === "[]");
+  });
+
+  await run_case("Escape ends a hint pick that began while recording, and q still stops", async () => {
+    await open_page("hints", "p9mac_hint", { new_tab: true });
+    await settle_focus();
+    let mark = events.length;
+    await press_keys("q", "c");
+    await wait_event(mark, badge_is("p9mac_hint", "NORMAL recording @c"), "the recording badge after qc");
+    await press_keys("f");
+    await poll_until("the hint labels after f", async () => (await hint_label_count()) > 0);
+    await press_keys("-k", "Escape");
+    await poll_until("the hint labels to go after Escape", async () => (await hint_label_count()) === 0);
+    mark = events.length;
+    await settle_focus();
+    await press_keys("q");
+    await wait_event(mark, badge_is("p9mac_hint", "NORMAL"), "the plain badge after q");
   });
 }
