@@ -51,6 +51,10 @@ function make({ openers = [1, 2], tabs = ALL_TABS, bookmarks = [] as BookmarkNod
       return sessions;
     },
     folders: async () => folders,
+    bookmark_view: async () => {
+      if (fail) throw new Error("no bookmarks");
+      return { rows: bookmark_rows(bookmarks, folders), folders };
+    },
     registers: async (is_private) => {
       if (fail) throw new Error("no registers");
       return is_private ? registers.private : registers.normal;
@@ -151,10 +155,11 @@ test("a tab that navigates or closes while the lookup runs gets nothing", async 
     sessions: async () => [],
     registers: async () => [],
     folders: async () => [],
-    all_bookmarks: async () => {
+    bookmark_view: async () => {
       opened.delete(1);
-      return [];
+      return { rows: { rows: [], folders: [] }, folders: [] };
     },
+    all_bookmarks: async () => [],
     is_opener: async (tab_id) => opened.has(tab_id),
     containers: async () => new Map(),
     previous_tab: async () => undefined,
@@ -291,6 +296,7 @@ test("the opener is checked before and after the history fetch", async () => {
     sessions: async () => [],
     registers: async () => [],
     folders: async () => [],
+    bookmark_view: async () => ({ rows: { rows: [], folders: [] }, folders: [] }),
     all_bookmarks: async () => [],
     is_opener: async (tab_id) => opened.has(tab_id),
     containers: async () => new Map(),
@@ -318,6 +324,7 @@ test("a failed history read leaves the bookmarks, and a failed bookmark read lea
       sessions: async () => [],
       registers: async () => [],
       folders: async () => [],
+      bookmark_view: async () => ({ rows: { rows: [], folders: [] }, folders: [] }),
       all_bookmarks: async () => {
         if (failing === "bookmarks") throw new Error("no bookmarks");
         return MARKS;
@@ -377,6 +384,7 @@ test("a history read that finishes after the line closed gives nothing", async (
     sessions: async () => [],
     registers: async () => [],
     folders: async () => [],
+    bookmark_view: async () => ({ rows: { rows: [], folders: [] }, folders: [] }),
     all_bookmarks: async () => [],
     is_opener: async (tab_id) => opened.has(tab_id),
     containers: async () => new Map(),
@@ -766,4 +774,14 @@ test("the bookmarks kind answers rows with folder indexes", async () => {
   const folders: FolderNode[] = [{ id: "a", path: "A", managed: false, bookmarks: [{ url: "https://x.test/", dateAdded: 1 }] }];
   const { service } = make({ bookmarks: [{ type: "bookmark", url: "https://x.test/", title: "X", dateAdded: 1 }], folders });
   assert.deepEqual((await service.answer("bookmarks", NORMAL_LINE))?.items, { rows: [{ title: "X", url: "https://x.test/", folders: [0] }], folders: ["A"] });
+});
+
+test("bookmark_rows orders each row's folders newest copy first and lists a folder once", () => {
+  const folders: FolderNode[] = [
+    { id: "a", path: "A", managed: false, bookmarks: [{ url: "https://x.test/", dateAdded: 5 }] },
+    { id: "b", path: "B", managed: false, bookmarks: [{ url: "https://x.test/", dateAdded: 9 }, { url: "https://x.test/", dateAdded: 1 }] },
+    { id: "c", path: "C", managed: false, bookmarks: [{ url: "https://x.test/", dateAdded: 7 }] },
+  ];
+  const { rows } = bookmark_rows([{ type: "bookmark", url: "https://x.test/", title: "X", dateAdded: 9 }], folders);
+  assert.deepEqual(rows, [{ title: "X", url: "https://x.test/", folders: [1, 2, 0] }]);
 });

@@ -172,6 +172,7 @@ test("bookmark --folder= keeps the rows in that folder and below, and a row show
   await settle();
   // The exact path picks "Bookmarks Toolbar", which holds "Bookmarks Toolbar / Work" too.
   assert.deepEqual(names(session), ["Both", "Work", "Plain"]);
+  // Under the filter the tag names the newest folder inside it, so "Both" shows Work, not the newer Other Bookmarks / Work.
   assert.equal(tag_of(session, "Both"), "Work +1");
   assert.equal(tag_of(session, "Work"), "Work");
   assert.equal(tag_of(session, "Plain"), "Bookmarks Toolbar");
@@ -181,6 +182,19 @@ test("bookmark --folder= keeps the rows in that folder and below, and a row show
   assert.deepEqual(names(session), [], "a tie lists no row");
   session.edit("bookmark --folder=\"Other Bookmarks / Work\" Both");
   assert.deepEqual(names(session), ["Both"]);
+});
+
+test("bookmark --folder= with text that matches a folder and its subfolder keeps the folder, and its tag skips copies outside it", async () => {
+  const { session, asks, settle } = make();
+  session.edit("bookmark --folder=toolbar ");
+  asks[0]!.answer({
+    rows: [{ title: "Both", url: "https://both.test/", folders: [2, 0, 1] }, { title: "Sub", url: "https://sub.test/", folders: [1] }],
+    folders: BOOKMARKS.folders,
+  });
+  await settle();
+  assert.deepEqual(names(session), ["Both", "Sub"]);
+  assert.equal(tag_of(session, "Both"), "Bookmarks Toolbar +2");
+  assert.equal(tag_of(session, "Sub"), "Work");
 });
 
 test("Escape while the fetch is pending closes the line, and the reply that lands after the close changes nothing", async () => {

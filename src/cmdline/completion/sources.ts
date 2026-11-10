@@ -8,7 +8,7 @@ import type { CommandLookup } from "../../shared/registry/command_line.ts";
 import { first_sentence } from "../../shared/registry/summary.ts";
 import { flag_alternatives, usage_line } from "../../shared/registry/usage.ts";
 import { always_default, bare_word_param, default_of, flag_params, is_dynamic_values, positional_params, static_values, subject_param } from "../../shared/registry/params.ts";
-import { FOLDER_PATH_SEPARATOR, pick_folder, rows_in_folder } from "../../shared/folder_pick.ts";
+import { FOLDER_PATH_SEPARATOR, in_folder, pick_filter_folder, rows_in_folder } from "../../shared/folder_pick.ts";
 import { rank } from "../../shared/score.ts";
 import { completion_of, is_setting_name, SETTING_COMPLETION, type SettingCompletion } from "../../shared/setting_completion.ts";
 import type { Ranked } from "../../shared/score.ts";
@@ -282,23 +282,26 @@ const bookmark_row = (bookmark: BookmarkItem, usage: string): Row => ({ name: bo
 
 const bookmark_rows = (bookmarks: readonly BookmarkItem[], usage: string): Row[] => bookmarks.map((bookmark) => bookmark_row(bookmark, usage));
 
-// The dim cell of a bookmark row: the last part of its newest folder, and how many more folders hold the address.
-function folder_tag(answer: BookmarkRows, folders: readonly number[]): string {
-  const newest = folders[0] === undefined ? undefined : answer.folders[folders[0]]?.split(FOLDER_PATH_SEPARATOR).at(-1);
-  return newest === undefined ? "" : folders.length > 1 ? `${newest} +${folders.length - 1}` : newest;
+// The dim cell of a bookmark row: the last part of its newest folder, and how many more folders hold the address. Under a filter the newest folder inside it is the one named.
+function folder_tag(answer: BookmarkRows, folders: readonly number[], root_path: string | undefined): string {
+  const shown = root_path === undefined ? folders[0] : folders.find((index) => in_folder(answer.folders[index] ?? "", root_path));
+  const name = shown === undefined ? undefined : answer.folders[shown]?.split(FOLDER_PATH_SEPARATOR).at(-1);
+  return name === undefined ? "" : folders.length > 1 ? `${name} +${folders.length - 1}` : name;
 }
 
 // A typed `--folder=` keeps the rows in that folder or below. Text that picks no folder lists no row, so a typo never looks like a filter that worked. The handler refuses it the same way.
 function bookmark_folder_rows(answer: BookmarkRows, folder_text: unknown, usage: string): Row[] {
-  const kept = (() => {
-    if (typeof folder_text !== "string" || folder_text.trim() === "") return answer.rows;
+  const root_path = (() => {
+    if (typeof folder_text !== "string" || folder_text.trim() === "") return undefined;
     try {
-      return rows_in_folder(answer, pick_folder(answer.folders.map((path) => ({ path })), folder_text).path);
+      return pick_filter_folder(answer.folders.map((path) => ({ path })), folder_text).path;
     } catch {
-      return [];
+      return null;
     }
   })();
-  return kept.map((row) => ({ ...bookmark_row(row, usage), tag: folder_tag(answer, row.folders) }));
+  if (root_path === null) return [];
+  const kept = root_path === undefined ? answer.rows : rows_in_folder(answer, root_path);
+  return kept.map((row) => ({ ...bookmark_row(row, usage), tag: folder_tag(answer, row.folders, root_path) }));
 }
 
 // `engine.show` works on any engine, so only a search marks the ones the page cannot fill.

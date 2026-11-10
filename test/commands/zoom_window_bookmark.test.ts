@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { FolderNode } from "../../src/background/complete_items.ts";
 import { make_bookmark_handlers, pick_bookmark, pick_folder } from "../../src/commands/bookmark.ts";
+import { pick_filter_folder } from "../../src/shared/folder_pick.ts";
 import { open_many } from "../../src/commands/open_target.ts";
 import { make_browser_handlers } from "../../src/commands/browser.ts";
 import { clamp_zoom, make_zoom_handlers } from "../../src/commands/zoom.ts";
@@ -88,7 +89,7 @@ test("bookmark.add uses the tab title only when the tab shows that url", async (
   const handlers = make_bookmark_handlers({
     tab_title_for_url: async (_id, url) => (url === "https://a.test/" ? "A" : undefined),
     create: async (bookmark) => void created.push(bookmark),
-    bookmarks: async () => ({ rows: [], folders: [] }),
+    bookmarks: async () => ({ rows: { rows: [], folders: [] }, folders: [] }),
     open: async () => {},
     ...UNUSED_REMOVE,
   });
@@ -123,7 +124,7 @@ test("bookmark.open opens the picked address where the flag says, and opens noth
   const handlers = make_bookmark_handlers({
     tab_title_for_url: async () => undefined,
     create: async () => {},
-    bookmarks: async () => BOOKMARK_ROWS,
+    bookmarks: async () => ({ rows: BOOKMARK_ROWS, folders: FOLDERS }),
     open: async (_ctx, url, where) => void opened.push(`${where} ${url}`),
     ...UNUSED_REMOVE,
   });
@@ -158,7 +159,7 @@ function remove_fixture(nodes: FakeNode[], tab_url: string | null = "https://a.t
     tab_title_for_url: async () => undefined,
     create: async () => {},
     open: async () => {},
-    bookmarks: async () => BOOKMARK_ROWS,
+    bookmarks: async () => ({ rows: BOOKMARK_ROWS, folders: FOLDERS }),
     tab_url: async () => tab_url ?? undefined,
     nodes_for_url: async (url) => (asked.push(url), nodes.map((node) => ({ url, ...node }))),
     remove: async (id) => void log.push(`remove ${id}`),
@@ -323,7 +324,7 @@ test("bookmark.add refuses an address that already has a bookmark, and creates n
     ...UNUSED_REMOVE,
     tab_title_for_url: async () => "A",
     create: async (bookmark) => void created.push(bookmark),
-    bookmarks: async () => ({ rows: [], folders: [] }),
+    bookmarks: async () => ({ rows: { rows: [], folders: [] }, folders: [] }),
     open: async () => {},
     nodes_for_url: async (url) => [{ id: "a", url, type: "bookmark" }],
   });
@@ -359,7 +360,7 @@ test("bookmark.edit_url refuses an address another bookmark has, and managed boo
     ...UNUSED_REMOVE,
     tab_title_for_url: async () => undefined,
     create: async () => {},
-    bookmarks: async () => ({ rows: [], folders: [] }),
+    bookmarks: async () => ({ rows: { rows: [], folders: [] }, folders: [] }),
     open: async () => {},
     tab_url: async () => "https://a.test/",
     nodes_for_url: async (url) => [{ id: url === "https://a.test/" ? "a" : "other", url, type: "bookmark" }],
@@ -378,7 +379,7 @@ test("bookmark.add with a folder files the bookmark there, and an exact path win
     folders: async () => FOLDERS,
     tab_title_for_url: async () => "A",
     create: async (bookmark) => void created.push(bookmark),
-    bookmarks: async () => ({ rows: [], folders: [] }),
+    bookmarks: async () => ({ rows: { rows: [], folders: [] }, folders: [] }),
     open: async () => {},
   });
   await handlers.add(ctx, { url: "https://a.test/", folder: "Bookmarks Toolbar" });
@@ -393,7 +394,7 @@ test("bookmark.add with a folder files the bookmark there, and an exact path win
 
 test("bookmark.add with a folder on a bookmarked page points to bm, and an unknown folder creates nothing", async () => {
   const created: unknown[] = [];
-  const base = { ...UNUSED_REMOVE, folders: async () => FOLDERS, tab_title_for_url: async () => "A", create: async (bookmark: unknown) => void created.push(bookmark), bookmarks: async () => ({ rows: [], folders: [] }), open: async () => {} };
+  const base = { ...UNUSED_REMOVE, folders: async () => FOLDERS, tab_title_for_url: async () => "A", create: async (bookmark: unknown) => void created.push(bookmark), bookmarks: async () => ({ rows: { rows: [], folders: [] }, folders: [] }), open: async () => {} };
   const bookmarked = make_bookmark_handlers({ ...base, nodes_for_url: async (url) => [{ id: "a", url, type: "bookmark" }] });
   await assert.rejects(bookmarked.add(ctx, { url: "https://a.test/", folder: "Bookmarks Toolbar" }), /Already bookmarked, use bm to move/);
   const fresh = make_bookmark_handlers(base);
@@ -447,7 +448,7 @@ test("bookmark.open_folder opens the first 25 and the toast says the cap cut the
     folders: async () => [many],
     tab_title_for_url: async () => undefined,
     create: async () => {},
-    bookmarks: async () => ({ rows: [], folders: [] }),
+    bookmarks: async () => ({ rows: { rows: [], folders: [] }, folders: [] }),
     open: async () => {},
     open_many: async (_ctx, urls, where, report) => {
       await report(0);
@@ -543,7 +544,7 @@ test("bookmark.open_folder refuses when the browser refuses every address", asyn
     folders: async () => [{ id: "z", path: "Z", managed: false, bookmarks: [{ url: "https://z.test/" }] }],
     tab_title_for_url: async () => undefined,
     create: async () => {},
-    bookmarks: async () => ({ rows: [], folders: [] }),
+    bookmarks: async () => ({ rows: { rows: [], folders: [] }, folders: [] }),
     open: async () => {},
     open_many: async (_ctx, urls, _where, report) => report(urls.length),
   });
@@ -557,7 +558,7 @@ test("bookmark.open with a folder picks among the rows filed there or in a subfo
     folders: async () => FOLDERS,
     tab_title_for_url: async () => undefined,
     create: async () => {},
-    bookmarks: async () => BOOKMARK_ROWS,
+    bookmarks: async () => ({ rows: BOOKMARK_ROWS, folders: FOLDERS }),
     open: async (_ctx, url) => void opened.push(url),
   });
   await handlers.open(ctx, { bookmark: "rust", folder: "Other Bookmarks / Work", where: "here" });
@@ -580,4 +581,23 @@ test("bookmark.remove with a folder removes only the copies in it and below it",
   await assert.rejects(outside.handlers.remove(ctx, { bookmark: "", folder: "Bookmarks Toolbar" }), /No bookmark for this page in Bookmarks Toolbar/);
   await assert.rejects(outside.handlers.remove(ctx, { bookmark: "", folder: "zzzz" }), /no folder matches "zzzz"/);
   assert.deepEqual(outside.log, []);
+});
+
+test("the filter prefers a folder over its own subfolders on a fuzzy tie, and filing still refuses the tie", () => {
+  const tree: FolderNode[] = [
+    { id: "r", path: "Other Bookmarks", managed: false, bookmarks: [] },
+    { id: "w", path: "Other Bookmarks / Work", managed: false, bookmarks: [] },
+    { id: "x", path: "Other Bookmarks / Work / Reports", managed: false, bookmarks: [] },
+  ];
+  assert.equal(pick_filter_folder(tree, "work").id, "w");
+  assert.equal(pick_filter_folder(tree, "other").id, "r");
+  assert.throws(() => pick_folder(tree, "work"), /equally/);
+  // Siblings of one name stay a tie, since neither holds the other.
+  assert.throws(() => pick_filter_folder(FOLDERS, "work"), /equally/);
+});
+
+test("bookmark.remove with a folder refuses when the copy inside it is managed, and never touches the unmanaged copy outside", async () => {
+  const fixture = remove_fixture([{ id: "managed_in", parentId: "f2", type: "bookmark", unmodifiable: "managed" }, { id: "plain_out", parentId: "f3", type: "bookmark" }]);
+  await assert.rejects(fixture.handlers.remove(ctx, { bookmark: "", folder: "Bookmarks Toolbar / Work" }), /managed and cannot be removed/);
+  assert.deepEqual(fixture.log, []);
 });

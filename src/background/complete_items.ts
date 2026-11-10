@@ -171,6 +171,14 @@ export function bookmark_rows(nodes: readonly BookmarkNode[], folders: readonly 
   return { rows, folders: folders.map((folder) => folder.path) };
 }
 
+// What a `bookmark` command and the list both read from one `getTree`: the rows with their folder indexes, and the folder nodes (ids included) those indexes point into.
+export type BookmarkView = { rows: BookmarkRows; folders: FolderNode[] };
+
+export function bookmark_view(roots: readonly BookmarkNode[]): BookmarkView {
+  const folders = folder_nodes(roots);
+  return { rows: bookmark_rows(flatten_bookmarks(roots), folders), folders };
+}
+
 // A visit to these is no page the user would open from the line.
 const SKIPPED_SCHEMES = /^(about|moz-extension|data):/i;
 
@@ -229,6 +237,7 @@ export const browser_complete_items_deps = {
   query_windows: (async () => browser.windows.getAll({ populate: true })) as () => Promise<WindowLike[]>,
   all_bookmarks: async (): Promise<BookmarkNode[]> => flatten_bookmarks(await browser.bookmarks.getTree()),
   folders: async (): Promise<FolderNode[]> => folder_nodes(await browser.bookmarks.getTree()),
+  bookmark_view: async (): Promise<BookmarkView> => bookmark_view(await browser.bookmarks.getTree()),
   // `startTime: 0` reaches all history, since the default is the last day. The page ranks, so it needs more than it shows.
   search_history: async (): Promise<HistoryNode[]> => browser.history.search({ text: "", startTime: 0, maxResults: 1000 }),
   containers: (): Promise<ContainerMarks> => read_containers(() => browser.contextualIdentities.query({})),
@@ -283,7 +292,7 @@ export function create_complete_items(deps: CompleteItemsDeps) {
     if (kind === "registers") return deps.registers(asker.incognito);
     if (kind === "folders") return folder_items(await deps.folders());
     if (kind === "windows") return listed_windows(await deps.query_windows(), asker).map(({ number, title }) => ({ number, title }));
-    return bookmark_rows(await deps.all_bookmarks(), await deps.folders());
+    return (await deps.bookmark_view()).rows;
   };
 
   return {
