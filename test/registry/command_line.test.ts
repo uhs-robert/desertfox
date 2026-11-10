@@ -66,7 +66,7 @@ test("--name=value works for any param, with the first = as the split", () => {
   assert.deepEqual(parsed("open --where=tab --url=https://a.example/?x=1").args, { where: "tab", url: "https://a.example/?x=1" });
   assert.deepEqual(parsed(`hint --selector=".post a"`).args, { selector: ".post a" });
   assert.deepEqual(parsed(`hint --selector='a[href="x"]'`).args, { selector: 'a[href="x"]' });
-  assert.deepEqual(parsed("tab.move --offset=-1").args, { offset: "-1" });
+  assert.deepEqual(parsed("tab.slide --offset=-1").args, { offset: "-1" });
   assert.deepEqual(parsed("hint --rapid=false").args, { rapid: "false" });
   assert.equal(check_args(registry.get("hint.run")!, parsed("hint --rapid=false").args).ok, true);
   assert.equal(error_of("open --nope=1"), 'unknown param "nope" for open');
@@ -165,11 +165,11 @@ test("a command whose only argument is a required value takes it as the bare sub
 
 test("a command with one number param takes a bare number, negative included", () => {
   assert.deepEqual(parsed("tab.goto 1").args, { index: "1" });
-  assert.deepEqual(parsed("tab.move -1").args, { offset: "-1" });
+  assert.deepEqual(parsed("tab.slide -1").args, { offset: "-1" });
   assert.deepEqual(parsed("zoom.set 1.5").args, { level: "1.5" });
   assert.deepEqual(parsed("zoom.set -0.5").args, { level: "-0.5" });
-  assert.deepEqual(parsed("tab.move -5").args, { offset: "-5" });
-  assert.deepEqual(check_args(registry.get("tab.move")!, parsed("tab.move -1").args), { ok: true, args: { offset: -1 } });
+  assert.deepEqual(parsed("tab.slide -5").args, { offset: "-5" });
+  assert.deepEqual(check_args(registry.get("tab.slide")!, parsed("tab.slide -1").args), { ok: true, args: { offset: -1 } });
 });
 
 test("a negative number is a value even next to a switch", () => {
@@ -180,12 +180,12 @@ test("a negative number is a value even next to a switch", () => {
 test("bare number edge cases", () => {
   assert.match(error_of("scroll.by 5"), /"5" is not a flag or subject of scroll\.by, a bare number needs a command with one number param/);
   assert.deepEqual(parsed("scroll.by --dx=5 --dy=-5").args, { dx: "5", dy: "-5" });
-  assert.equal(error_of("tab.move 1 2"), '"2" is not a flag or subject of tab.move');
-  assert.equal(error_of("tab.move --offset=1 2"), '"2" is not a flag or subject of tab.move');
-  assert.equal(error_of(`tab.move "1"`), '"1" is not a flag or subject of tab.move');
-  assert.match(error_of("tab.move -x"), /unknown flag "-x"/);
-  assert.match(error_of("tab.move 1.2.3"), /"1.2.3" is not a flag or subject/);
-  assert.equal(check_args(registry.get("tab.move")!, parsed("tab.move 1.5").args).ok, false);
+  assert.equal(error_of("tab.slide 1 2"), '"2" is not a flag or subject of tab.slide');
+  assert.equal(error_of("tab.slide --offset=1 2"), '"2" is not a flag or subject of tab.slide');
+  assert.equal(error_of(`tab.slide "1"`), '"1" is not a flag or subject of tab.slide');
+  assert.match(error_of("tab.slide -x"), /unknown flag "-x"/);
+  assert.match(error_of("tab.slide 1.2.3"), /"1.2.3" is not a flag or subject/);
+  assert.equal(check_args(registry.get("tab.slide")!, parsed("tab.slide 1.5").args).ok, false);
 });
 
 test("a number goes to the main value when the command has no number param", () => {

@@ -76,9 +76,9 @@ test("runtime lists reach the grammar", () => {
 });
 
 test("a bare number binds the only number param, negative included", () => {
-  assert.deepEqual(binding_of("tab.move -1"), { id: "tab.move", args: { offset: "-1" } });
+  assert.deepEqual(binding_of("tab.slide -1"), { id: "tab.slide", args: { offset: "-1" } });
   assert.deepEqual(binding_of("tab.goto 1"), { id: "tab.goto", args: { index: "1" } });
-  assert.deepEqual(binding_of(":tab.move -1").prompt, { param: "offset" });
+  assert.deepEqual(binding_of(":tab.slide -1").prompt, { param: "offset" });
 });
 
 test("a binding keeps the double quotes of a verbatim selector", () => {

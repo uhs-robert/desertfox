@@ -34,7 +34,7 @@ test("lines parse, print and parse to the same invocation", () => {
     "hint -r -b",
     "hint --custom --selector='a[href]'",
     "tab.shift --wrap 3",
-    "tab.move -3",
+    "tab.slide -3",
     "zoom.set 1.5",
     "mode ignore",
     "open '@not_a_source'",
@@ -76,7 +76,7 @@ test("a value that would be misread gets the -- guard, quotes or a named flag", 
 
 test("an open param prints without a value", () => {
   assert.equal(print_command(command_of("open.url"), {}, { open_param: "url" }), "open ");
-  assert.equal(print_command(command_of("tab.move"), {}, { open_param: "offset" }), "tab.move ");
+  assert.equal(print_command(command_of("tab.slide"), {}, { open_param: "offset" }), "tab.slide ");
   assert.equal(print_command(command_of("open.search"), { engine: "arch" }, { open_param: "query" }), "search arch ");
   assert.equal(print_command(command_of("open.url"), { where: "tab" }, { open_param: "url" }), "open -t ");
   assert.equal(print_command(command_of("open.url"), { where: "tab" }, { open_param: "container" }), "open -c= -t");
