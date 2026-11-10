@@ -18,7 +18,7 @@ test("the hints bundle registers a hint sink and hint.run, and registers once", 
   const bundle_url = new URL("../../src/content/hints/main.ts", import.meta.url).href;
   await import(`${bundle_url}?first`);
   await import(`${bundle_url}?second`);
-  assert.deepEqual(registered, ["page.follow", "page.focus_field", "copy.links", "hint.unhover", "heading.list", "heading.go", "heading.clear", "hint.run"]);
+  assert.deepEqual(registered, ["page.follow", "page.focus_field", "page.heading", "copy.links", "hint.unhover", "heading.list", "heading.go", "heading.clear", "hint.run"]);
   assert.deepEqual([...sinks.keys()], ["hint"]);
   assert.deepEqual(modes, []);
   assert.equal(sinks.get("hint")!.on_token_("a"), "pass");

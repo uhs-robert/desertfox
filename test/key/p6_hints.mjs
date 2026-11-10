@@ -1,4 +1,4 @@
-// Key cases of piece P6 (hint extras): copy, rapid mode, the text filter and the `;#` headings list. run.mjs calls run_cases with its helpers.
+// Key cases of piece P6 (hint extras): copy, rapid mode, the text filter and the `sh` headings list. run.mjs calls run_cases with its helpers.
 // The fixture page /hints has a hidden link and a covered link before the visible links "one" and "two", labelled "a" and "s".
 // There is no key for the text filter yet, so its cases send the same `run` message a key sends, from the active tab.
 import { evaluate_in_background } from "./rdp.mjs";
@@ -245,7 +245,7 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, press_
     expect((await scroll_delta_by_press("p6_no_match", ["j"])) > 0, "keys did not work after a text with no match");
   });
 
-  // `;#` opens the command line with `heading ` typed. The list lives in the extension's frame, which the page cannot read, so these cases check what a pick does to the page.
+  // `sh` opens the command line with `heading ` typed. The list lives in the extension's frame, which the page cannot read, so these cases check what a pick does to the page.
   const toast_layer = 2147483647 - 2;
   const toast_text = async () => await in_active_tab(`(() => { const host = [...document.documentElement.children].find((child) => child.style.zIndex === "${toast_layer}"); return host?.openOrClosedShadowRoot?.textContent ?? ""; })()`);
   const scroll_y = async () => await in_active_tab(`Math.round(scrollY)`);
@@ -254,7 +254,7 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, press_
   const enter_key = ["-k", "Return"];
   // A Tab before the list holds its rows is lost, so the line counts as open once the rows are in.
   const open_headings_line = async (row_count) => {
-    await press_keys(";#");
+    await press_keys("sh");
     await wait_cmdline((line) => line.open && line.rows === row_count, `the headings line to open with ${row_count} rows`);
   };
   // The third Tab selects the third row, which is the row index 2.
@@ -265,7 +265,7 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, press_
   // The /headings page lists the title, Intro, Below the fold and Last. The hidden, closed and screen-reader-only headings are not rows.
   const run_heading = (heading) => in_active_tab(`browser.runtime.sendMessage({ type: "run", invocations: [{ id: "heading.go", args: { heading: ${JSON.stringify(heading)} } }], mode: "normal" }); 0`);
 
-  await run_case(";# lists the headings in page order and Tab then Enter scrolls to one below the screen", async () => {
+  await run_case("sh lists the headings in page order and Tab then Enter scrolls to one below the screen", async () => {
     await open_page("headings", "p6_headings", { new_tab: true });
     await open_headings_line(4);
     // With no text typed the rows keep page order: the third row is "Below the fold".
@@ -277,7 +277,7 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, press_
     expect((await scroll_delta_by_press("p6_headings", ["j"])) > 0, "keys did not work again after the jump");
   });
 
-  await run_case(";# typing narrows the list and Enter with text takes the best match", async () => {
+  await run_case("sh typing narrows the list and Enter with text takes the best match", async () => {
     await open_page("headings", "p6_headings_typed", { new_tab: true });
     await open_headings_line(4);
     await press_keys("last");
@@ -288,7 +288,7 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, press_
     expect(Math.abs(top) <= 2, `Last sits ${top}px from the top`);
   });
 
-  await run_case(";# reaches a heading above the screen", async () => {
+  await run_case("sh reaches a heading above the screen", async () => {
     await open_page("headings", "p6_headings_up", { new_tab: true });
     await scroll_delta_by_press("p6_headings_up", ["G"]);
     await open_headings_line(4);
@@ -299,7 +299,47 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, press_
     expect(Math.abs(top) <= 2, `Intro sits ${top}px from the top`);
   });
 
-  await run_case(";# jumps to a heading in a same-origin frame, skips one in a hidden frame, and scrolls the frame too", async () => {
+  await run_case("]h and [h move heading by heading from the view, 3]h takes a count, and the ends show a notice", async () => {
+    await open_page("headings", "p6_heading_steps", { new_tab: true });
+    // 3]h from the top is the third heading in page order: the title, Intro, then Below the fold.
+    await press_keys("3]h");
+    await poll_until("Below the fold at the top", async () => Math.abs(await top_of("below")) <= 2);
+    await press_keys("]h");
+    await poll_until("Last at the top", async () => Math.abs(await top_of("last")) <= 2);
+    await press_keys("[h");
+    await poll_until("Below the fold at the top again", async () => Math.abs(await top_of("below")) <= 2);
+    await press_keys("2[h");
+    await poll_until("the title at the top, which is a little below the page top for its margin", async () => (await scroll_y()) < 100 && (await top_of("intro")) > 0);
+    await press_keys("[h");
+    await poll_until("the notice before the first heading", async () => (await toast_text()).includes("No previous heading"));
+    await press_keys("9]h");
+    await poll_until("Last at the top after a count past the end", async () => Math.abs(await top_of("last")) <= 2);
+    await press_keys("]h");
+    await poll_until("the notice past the last heading", async () => (await toast_text()).includes("No next heading"));
+  });
+
+  await run_case("]h passes headings the page cannot scroll to the top, because it steps from the last heading it jumped to", async () => {
+    await open_page("headings_end", "p6_heading_end", { new_tab: true });
+    await press_keys("2]h");
+    await poll_until("A at the top", async () => Math.abs(await top_of("a")) <= 2);
+    await press_keys("]h");
+    await poll_until("B scrolled as far as the page goes", async () => (await scroll_y()) > 1000);
+    expect((await top_of("b")) > 5, "B reached the top, so the page is too short for this case");
+    expect((await top_of("c")) > (await top_of("b")), "C is not below B");
+    await press_keys("]h");
+    const at_c = await scroll_y();
+    await press_keys("]h");
+    await press_keys("]h");
+    await poll_until("the notice past D", async () => (await toast_text()).includes("No next heading"));
+    // From D the key goes back one heading, C, which cannot reach the top either, so the page stays put.
+    await press_keys("[h");
+    await sleep(400);
+    expect((await scroll_y()) === at_c, `[h from D moved the page from ${at_c} to ${await scroll_y()}`);
+    await press_keys("2[h");
+    await poll_until("A at the top again", async () => Math.abs(await top_of("a")) <= 2);
+  });
+
+  await run_case("sh jumps to a heading in a same-origin frame, skips one in a hidden frame, and scrolls the frame too", async () => {
     await open_page("headings_frames", "p6_headings_frames", { new_tab: true });
     await open_headings_line(3);
     // The rows are the title, Top and "In frame". The heading in the hidden frame is no row.
@@ -310,7 +350,7 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, press_
     expect(Math.abs(top) <= 2, `the heading in the frame sits ${top}px from the top of the view`);
   });
 
-  await run_case(";# closes on Escape without moving, and keys work again", async () => {
+  await run_case("sh closes on Escape without moving, and keys work again", async () => {
     await open_page("headings", "p6_headings_close", { new_tab: true });
     await open_headings_line(4);
     await press_keys(...tab_key);
@@ -321,7 +361,7 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, press_
     expect((await scroll_delta_by_press("p6_headings_close", ["j"])) > 0, "keys did not work again after Escape");
   });
 
-  await run_case(";# on a page with no headings opens the line with no rows, and Escape leaves it", async () => {
+  await run_case("sh on a page with no headings opens the line with no rows, and Escape leaves it", async () => {
     await open_page("headings", "p6_headings_none", { new_tab: true });
     await in_active_tab(`document.querySelectorAll("h1, h2, h3, [role=heading]").forEach((heading) => heading.remove()); 0`);
     await open_headings_line(0);
@@ -334,7 +374,7 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, press_
     expect((await scroll_delta_by_press("p6_headings_none", ["j"])) > 0, "keys did not work after the line closed");
   });
 
-  await run_case(";# then Escape drops the snapshot, so the next heading.go reads the page as it is now", async () => {
+  await run_case("sh then Escape drops the snapshot, so the next heading.go reads the page as it is now", async () => {
     await open_page("headings", "p6_headings_stale", { new_tab: true });
     await open_headings_line(4);
     await close_cmdline();
@@ -344,7 +384,7 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, press_
     await poll_until("Fresh news to scroll to the top", async () => Math.abs(await top_of("fresh")) <= 2).catch(async (error) => { throw new Error(`Fresh news sits ${await top_of("fresh")}px from the top, so the old snapshot answered (${error.message})`); });
   });
 
-  await run_case(";# then Enter on a heading the page removed since gives That heading is gone and does not move", async () => {
+  await run_case("sh then Enter on a heading the page removed since gives That heading is gone and does not move", async () => {
     await open_page("headings", "p6_headings_gone", { new_tab: true });
     await open_headings_line(4);
     await in_active_tab(`document.getElementById("below").remove(); 0`);
@@ -427,7 +467,7 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, press_
 
     await run_case("screenshot of the headings list", async () => {
       await open_page("headings", "p6_shot_headings", { new_tab: true });
-      await send_keys(";#");
+      await send_keys("sh");
       await sleep(900);
       await take_shot(`${shot_dir}/p6_headings_list.png`);
       await send_keys("-k", "Escape");

@@ -1,6 +1,6 @@
 // Key test cases of the engines piece. run.mjs calls run_cases with its helpers.
 // The test page has a host but is not a GitHub repo or a subreddit, so `{host}` engines are available there and `{repo}` ones are not.
-// The engines and the sd, sh, sr, sf, sp keys come from run.mjs and config/keymap.d/70-engines.toml. The s/ keys come from the 80-site.toml that run.mjs writes.
+// The engines and the sd, sk, sr, sf, sp keys come from run.mjs and config/keymap.d/70-engines.toml. The s/ keys come from the 80-site.toml that run.mjs writes.
 
 import { evaluate_in_background } from "./rdp.mjs";
 
@@ -22,8 +22,8 @@ export async function run_cases({ rdp, extension_id, run_case, press_keys, settl
     const mark = events.length;
     await press_keys("s");
     const shown = await wait_event(mark, panel_event(), "the s panel");
-    // sd, sh, sf and sp, and the s/ group. Without the filter the panel would also list sr.
-    expect(/:5$/.test(shown.value), `the panel reported "${shown.value}", expected 5 rows`);
+    // sd, sk, sf and sp, sh (the headings search) and the s/ group. Without the filter the panel would also list sr.
+    expect(/:6$/.test(shown.value), `the panel reported "${shown.value}", expected 6 rows`);
     await close_panel();
   });
 
@@ -127,8 +127,8 @@ export async function run_cases({ rdp, extension_id, run_case, press_keys, settl
 
   await run_case("a search key on the selection with nothing selected opens the command line", async () => {
     await open_page("page", "eng_prompt", { new_tab: false });
-    await press_keys("sh");
-    await wait_cmdline((line) => line.open, "the command line to open for sh");
+    await press_keys("sk");
+    await wait_cmdline((line) => line.open, "the command line to open for sk");
     const mark = events.length;
     await press_keys("j");
     // The j in the line value is the proof that the key went to the line and not to the page.
