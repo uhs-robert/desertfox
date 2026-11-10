@@ -29,9 +29,14 @@ export type MacroReplayDeps = {
   show_refusal: (tab_id: number | undefined, message: string) => Promise<unknown>;
   // The register `@@` plays. A play writes it, so it outlives a background restart.
   last_played: { read: (is_private: boolean) => Promise<string | undefined>; write: (register: string, is_private: boolean) => Promise<unknown> };
+  // The step's args and count through the one validator, as the router checks a typed `@a`. A recorded step may have failed it when it was typed.
+  check_play: (step: BoundInvocation) => { ok: true; register: string; count: number } | { ok: false; error: string };
   // Lets the background answer other messages, Escape above all, between the passes of a count.
   next_turn?: () => Promise<void>;
 };
+
+// The most passes one play runs, nested plays and counts together, so nested counts cannot run for hours. A stop at the limit reads as a failed step.
+export const MAX_MACRO_PASSES = 10000;
 
 const timer_turn = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
@@ -44,6 +49,7 @@ type Replay = {
   stopped: boolean;
   // Ends the page-ready wait in progress, so Escape does not wait up to the timeout.
   end_wait: () => void;
+  passes: number;
   // True when every step finished.
   ended: Promise<boolean>;
 };
@@ -107,31 +113,33 @@ export function create_macro_replay(deps: MacroReplayDeps) {
   async function resolve_register(register: string, is_private: boolean): Promise<string> {
     const resolved = register === LAST_PLAYED_REGISTER ? await deps.last_played.read(is_private) : register;
     if (resolved === undefined) throw new RuntimeRefusal("No macro has been played yet");
-    await deps.last_played.write(resolved, is_private);
+    // The pointer is bookkeeping for `@@`, so a failed write does not stop this play.
+    await deps.last_played.write(resolved, is_private).catch(() => undefined);
     return resolved;
   }
 
   // A nested play: false at its first refusal or failed pass. The depth limit counts nested plays only, so a count never deepens it.
   async function play_nested(replay: Replay, step: BoundInvocation, depth: number, start: ReplayStart): Promise<boolean> {
     if (depth >= MAX_MACRO_DEPTH) return refuse(`Macros nest more than ${MAX_MACRO_DEPTH} deep`);
+    const checked = deps.check_play(step);
+    if (!checked.ok) return refuse(checked.error);
     let register: string;
     try {
-      register = await resolve_register(String(step.args?.reg), start.is_private);
+      register = await resolve_register(checked.register, start.is_private);
     } catch (error) {
       if (error instanceof RuntimeRefusal) return refuse(error.message);
       throw error;
     }
     const nested = await deps.read_macro(register, start.is_private);
     if (!nested) return refuse(`Register ${register} holds no macro`);
-    return play_passes(replay, nested, count_of(step), depth + 1, start);
+    return play_passes(replay, nested, checked.count, depth + 1, start);
   }
-
-  const count_of = (step: BoundInvocation): number => Math.max(1, Number(step.count ?? step.args?.count ?? 1));
 
   // The whole macro `count` times, stopping at the first failed pass. An empty macro has nothing to repeat, so a huge count on it ends at once.
   async function play_passes(replay: Replay, steps: readonly BoundInvocation[], count: number, depth: number, start: ReplayStart): Promise<boolean> {
     if (steps.length === 0) return true;
     for (let pass = 0; pass < count; pass++) {
+      if (++replay.passes > MAX_MACRO_PASSES) return refuse(`The macro ran ${MAX_MACRO_PASSES} passes, so it stopped`);
       if (pass > 0) await (deps.next_turn ?? timer_turn)();
       if (!(await play_steps(replay, steps, depth, start))) return false;
     }
@@ -158,7 +166,7 @@ export function create_macro_replay(deps: MacroReplayDeps) {
       // A snippet or a shortcut can ask while a replay runs. Waiting would deadlock a snippet that the replay itself runs.
       if (current) throw new RuntimeRefusal("A macro is already playing");
       let finish!: (finished: boolean) => void;
-      const replay: Replay = { tab_id: start.tab_id, stopped: false, end_wait: () => undefined, ended: new Promise((resolve) => (finish = resolve)) };
+      const replay: Replay = { tab_id: start.tab_id, stopped: false, passes: 0, end_wait: () => undefined, ended: new Promise((resolve) => (finish = resolve)) };
       current = replay;
       let finished = false;
       try {

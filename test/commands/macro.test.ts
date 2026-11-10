@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { create_macro_recorder } from "../../src/background/macro_recorder.ts";
 import { create_register_store } from "../../src/background/register_store.ts";
-import { make_macro_handlers } from "../../src/commands/macro.ts";
+import { check_play_step, make_macro_handlers } from "../../src/commands/macro.ts";
 import { create_macro_replay } from "../../src/background/macro_replay.ts";
 import type { MacroReplay } from "../../src/background/macro_replay.ts";
 import type { RunResponse } from "../../src/shared/messages.ts";
@@ -95,6 +95,7 @@ function make_replay(steps: Record<string, (() => Promise<RunResponse>) | undefi
     watch: () => ({ navigated: () => false, done: async () => "ready", stop: () => undefined }),
     hold_keys: async () => undefined,
     show_refusal: async () => undefined,
+    check_play: check_play_step,
     last_played: { read: async () => undefined, write: async () => undefined },
   });
   return { replay, played };

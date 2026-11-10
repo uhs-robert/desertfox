@@ -34,6 +34,7 @@ import type { RecordStep } from "./record_step.ts";
 import { browser_macro_recorder } from "./macro_recorder.ts";
 import { browser_last_played } from "./macro_last_played.ts";
 import { create_macro_replay, wire_macro_replay } from "./macro_replay.ts";
+import { check_play_step } from "../commands/macro.ts";
 import { wire_repeat } from "../commands/command.ts";
 import { wire_tab_insert } from "../commands/mode.ts";
 import { create_tab_insert } from "./tab_insert.ts";
@@ -95,6 +96,7 @@ const macro_replay = create_macro_replay({
   hold_keys: (tab_id) => send_to_tab(tab_id, { type: "replay_hold" }),
   show_refusal: (tab_id, message) => router_deps.show_refusal(tab_id, { id: "macro.play", message }),
   last_played: browser_last_played,
+  check_play: check_play_step,
 });
 wire_macro_replay(macro_replay);
 const global_mark_jump = create_global_mark_jump({

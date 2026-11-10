@@ -1,6 +1,9 @@
+import { check_args } from "../shared/registry/check_args.ts";
+import { apply_count } from "../background/count.ts";
+import type { BoundInvocation } from "../shared/invocation.ts";
 import { RuntimeRefusal } from "../shared/command.ts";
 import type { CommandContext } from "../shared/command.ts";
-import { define } from "../shared/registry/builtin.ts";
+import { define, registry } from "../shared/registry/builtin.ts";
 import { MACRO_PLAY_PATTERN, MACRO_REGISTER_PATTERN, storage_name } from "../shared/register_names.ts";
 import { show_toast_on_tab } from "../background/browser_deps.ts";
 import { browser_macro_recorder } from "../background/macro_recorder.ts";
@@ -84,3 +87,10 @@ define("macro.play", {
   repeatable: false,
   run: (ctx, args) => handlers.play(ctx, args as { reg: string; count: number }),
 });
+
+// A recorded `macro.play` step through the same checks as a typed one: the register name, the count and the count's own limits.
+export function check_play_step(step: BoundInvocation): { ok: true; register: string; count: number } | { ok: false; error: string } {
+  const command = registry.get("macro.play")!;
+  const checked = check_args(command, apply_count(command, step).args);
+  return checked.ok ? { ok: true, register: storage_name(String(checked.args.reg)), count: Number(checked.args.count) } : { ok: false, error: checked.error };
+}
