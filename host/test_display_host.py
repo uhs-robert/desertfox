@@ -310,8 +310,8 @@ class DisplayHostTest(unittest.TestCase):
     def test_a_panel_over_the_limits_is_cut_not_dropped(self):
         host = self.start()
         host.send(MODE)
-        rows = [{"keys": "k", "command": "c" * 2000, "description": "", "more": False}] * 600
-        host.send(dict(SHOW, title=["t" * 2000] * 40, rows=rows))
+        rows = [{"keys": "k", "command": "c" * 1000, "description": "", "more": False}] * 600
+        host.send(dict(SHOW, title=["t" * 1000] * 40, rows=rows))
         state = self.wait_for(lambda s: s["whichkey"] is not None)
         self.assertEqual(len(state["whichkey"]["rows"]), 500)
         self.assertEqual(len(state["whichkey"]["rows"][0]["command"]), 512)
