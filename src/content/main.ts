@@ -23,6 +23,7 @@ import { run_content_steps, run_in_order } from "./run_content.ts";
 import { run_leaf } from "./run_leaf.ts";
 import { read_context_source } from "./context.ts";
 import { focus_page_content, start_content_once } from "./handlers/focus.ts";
+import { read_field_text } from "./text/field_text.ts";
 import { blur_focused_element } from "./handlers/page.ts";
 
 // Until the tree is read the setting is unknown, and the default applies.
@@ -66,7 +67,10 @@ const key_flow = create_key_flow({
   on_prefix_: follow_prefix,
   get_mode_: page_mode.get_mode_,
   take_pass_next_: page_mode.take_pass_next_,
-  run_leaf_: (leaf, count, repeat) => void run_leaf(leaf, count, repeat, send_to_background, page_mode.get_mode_, run_content_steps, show_toast),
+  run_leaf_: (leaf, count, repeat) => {
+    flush_typed_text();
+    void run_leaf(leaf, count, repeat, send_to_background, page_mode.get_mode_, run_content_steps, show_toast);
+  },
   leave_insert_: () => {
     page_mode.escape();
     blur_focused_element();
@@ -94,6 +98,33 @@ bundles.connect({
 
 const cancelled_keys = create_cancelled_keys();
 
+// The recorder bundle loads on the first edit in insert mode. Each call waits on that load in order, so the first edit after `gi` is not lost.
+// `beforeinput` fires ahead of the edit, so the field's text then is what the recorder compares the end of the session with.
+// The generation of the open insert session, or 0 when none is open. The recorder's answer to an edit comes after the bundle loads, and an answer from an older session must not close a newer one.
+let open_session = 0;
+let sessions_started = 0;
+
+function on_beforeinput(event: Event): void {
+  if (!extension_context_alive()) return stop_listening();
+  // Only the first edit of a session is sent, because the recorder keeps that one's text. A flush or a focusout ends the session.
+  if (open_session || !event.isTrusted || page_mode.get_mode_() !== "insert") return;
+  const field = deepest_focused_element();
+  if (!field) return;
+  const generation = (open_session = ++sessions_started);
+  // The field may change type while the bundle loads, so the facts that make it secret at this edit go along.
+  const { type, autocomplete } = field as HTMLInputElement;
+  void bundles.run_command_("text.input", "text", { field_: field, before_: read_field_text(field), type_: type, autocomplete_: autocomplete }, "", false).then((outcome) => {
+    if (outcome.ok && outcome.cancelled && open_session === generation) open_session = 0;
+  });
+}
+
+// A command typed from the field never blurs it, so the text step is stored before the command is sent, and `.` finds the command last.
+function flush_typed_text(): void {
+  if (!open_session) return;
+  open_session = 0;
+  void bundles.run_command_("text.flush", "text", {}, "", false);
+}
+
 function cancel(event: Event): void {
   event.preventDefault();
   event.stopImmediatePropagation();
@@ -118,7 +149,11 @@ function on_keyup(event: KeyboardEvent): void {
 }
 
 const on_focusin = (event: Event) => follow_focus(true, event);
-const on_focusout = (event: Event) => follow_focus(false, event);
+// A focus move inside one shadow root never reaches the window listener of the bundle, so this one ends the text session too. The flush is a no-op once the session is closed, so a second focusout for the same move does nothing.
+const on_focusout = (event: Event) => {
+  flush_typed_text();
+  follow_focus(false, event);
+};
 
 // After the extension reloads, the old script's listeners still fire but its runtime is gone.
 function extension_context_alive(): boolean {
@@ -221,6 +256,7 @@ function start(): void {
   listen(window, "keydown", on_keydown);
   listen(window, "keypress", on_keypress);
   listen(window, "keyup", on_keyup);
+  listen(window, "beforeinput", on_beforeinput);
   listen(window, "focusin", on_focusin);
   listen(window, "focusout", on_focusout);
   watch_roots_around_focus();

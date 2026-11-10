@@ -20,7 +20,9 @@ export function make_repeat_handler(get_deps: () => RepeatDeps | undefined) {
     const stored = deps && (await deps.load(ctx));
     if (!deps || !stored?.length) throw new RuntimeRefusal("Nothing to repeat");
     const count = typeof args.count === "number" && args.count > 0 ? args.count : undefined;
-    await deps.run_batch(count === undefined ? stored : stored.map((invocation) => ({ ...invocation, count })), ctx);
+    // The steps before the text are the entry that focused the field. A count types the text that many times and never repeats the entry.
+    const counted_from = stored.at(-1)?.id === "text.insert" ? stored.length - 1 : 0;
+    await deps.run_batch(count === undefined ? stored : stored.map((invocation, index) => (index < counted_from ? invocation : { ...invocation, count })), ctx);
   };
 }
 
