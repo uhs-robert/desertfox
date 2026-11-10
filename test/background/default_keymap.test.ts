@@ -62,17 +62,17 @@ test("the approved keys are all bound", () => {
   assert.deepEqual(DEFAULT_KEYMAP.ignore?.["<S-Escape>"], { id: "mode.set", args: { mode: "normal" } });
 });
 
-test("the <Space> group holds the DesertFox commands", () => {
+test("the , group holds the DesertFox commands", () => {
   const { warnings, compiled } = compile(DEFAULT_KEYMAP);
   assert.deepEqual(warnings, []);
-  assert.deepEqual(DEFAULT_KEYMAP.normal?.["<Space>r"], { id: "config.reload" });
-  assert.deepEqual(DEFAULT_KEYMAP.normal?.["<Space>h"], { id: "help.open" });
-  assert.deepEqual(DEFAULT_KEYMAP.normal?.["<Space>i"], { id: "mode.set", args: { mode: "ignore" } });
-  assert.deepEqual(DEFAULT_KEYMAP.normal?.["<Space>b"], { id: "page.blur" });
-  assert.deepEqual(DEFAULT_KEYMAP.normal?.["<Space>s"], { id: "help.open", args: { name: "settings" }, label: "Settings page" });
-  assert.deepEqual(DEFAULT_KEYMAP.normal?.["<Space>t"], { id: "settings.toggle", prompt: { param: "name" } });
-  assert.deepEqual(DEFAULT_KEYMAP.normal?.["<Space>?"], { id: "help.whichkey" });
-  assert.equal(DEFAULT_KEYMAP.normal?.["<Space>"], undefined);
+  assert.deepEqual(DEFAULT_KEYMAP.normal?.[",r"], { id: "config.reload" });
+  assert.deepEqual(DEFAULT_KEYMAP.normal?.[",h"], { id: "help.open" });
+  assert.deepEqual(DEFAULT_KEYMAP.normal?.[",i"], { id: "mode.set", args: { mode: "ignore" } });
+  assert.deepEqual(DEFAULT_KEYMAP.normal?.[",b"], { id: "page.blur" });
+  assert.deepEqual(DEFAULT_KEYMAP.normal?.[",s"], { id: "help.open", args: { name: "settings" }, label: "Settings page" });
+  assert.deepEqual(DEFAULT_KEYMAP.normal?.[",t"], { id: "settings.toggle", prompt: { param: "name" } });
+  assert.deepEqual(DEFAULT_KEYMAP.normal?.[",?"], { id: "help.whichkey" });
+  assert.equal(DEFAULT_KEYMAP.normal?.[","], undefined);
   assert.ok(compiled.modes.normal);
 });
 

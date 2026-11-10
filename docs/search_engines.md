@@ -6,7 +6,7 @@ A search engine is a named URL template. You type `search arch pacman mirrors` o
 
 - Copy `examples/engines.toml` from the DesertFox repository to `~/.config/desertfox/search_engines.toml`. It holds 66 engines, including GitHub and YouTube trees.
 - Run `just build-config`. The tool only checks the file and prints problems.
-- Run `config.reload` (`<Space>r` by default) in Firefox. That loads the file through the native host.
+- Run `config.reload` (`,r` by default) in Firefox. That loads the file through the native host.
 - Check the table below this guide. Your engines show there with the file that set each field.
 
 An entry named `duck` in your file replaces the built-in one. A `search_engines.d/` directory next to the file can hold later files. A later file replaces the table at the same dotted path.

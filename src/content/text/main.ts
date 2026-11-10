@@ -27,7 +27,7 @@ if (!page.desertfox_text_ready) {
     // A cancelled answer tells the content script that no session is open, so the next edit comes through.
     return recorder.on_input(args.field_ as Element, args.before_ as string, args.type_ as string, args.autocomplete_ as string) ? undefined : { ok: true, cancelled: true };
   });
-  host.register_handler_("text.flush", recorder.flush);
+  host.register_handler_("text.flush", (args) => recorder.flush(args.after_ as string | undefined));
   host.register_handler_("register.paste", async (args) => {
     const name = args.name as string;
     const target = deepest_focused_element();
@@ -42,6 +42,8 @@ if (!page.desertfox_text_ready) {
   });
   host.register_handler_("text.insert", (args) => recorder.while_replaying(() => write_into_field(args.text as string, host.last_blurred_())));
   // Escape and a click both blur the field. A tab that goes away flushes on the way out, as far as the message gets through.
-  window.addEventListener("focusout", recorder.flush, true);
-  window.addEventListener("pagehide", recorder.flush);
+  // Not `recorder.flush` itself, which would take the event as the field's text.
+  const flush_now = () => recorder.flush();
+  window.addEventListener("focusout", flush_now, true);
+  window.addEventListener("pagehide", flush_now);
 }

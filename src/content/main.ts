@@ -76,7 +76,6 @@ const key_flow = create_key_flow({
     blur_focused_element();
   },
   in_editable_field_: () => is_editable_element(document.activeElement),
-  on_space_control_: () => !!deepest_focused_element()?.matches("button,select,summary,input:is([type=checkbox],[type=radio],[type=button],[type=submit],[type=reset])"),
   is_loading_: bundles.is_loading_,
   loading_sink_bundles_: bundles.loading_sink_bundles_,
   sink_of_: bundles.sink_of_,
@@ -100,29 +99,30 @@ const cancelled_keys = create_cancelled_keys();
 
 // The recorder bundle loads on the first edit in insert mode. Each call waits on that load in order, so the first edit after `gi` is not lost.
 // `beforeinput` fires ahead of the edit, so the field's text then is what the recorder compares the end of the session with.
-// The generation of the open insert session, or 0 when none is open. The recorder's answer to an edit comes after the bundle loads, and an answer from an older session must not close a newer one.
-let open_session = 0;
-let sessions_started = 0;
+// Reads the open insert session's field, or undefined when none is open. Each session gets its own function, because the recorder's answer to an edit comes after the bundle loads, and an answer from an older session must not close a newer one.
+let read_session_text: (() => string) | undefined;
 
 function on_beforeinput(event: Event): void {
   if (!extension_context_alive()) return stop_listening();
   // Only the first edit of a session is sent, because the recorder keeps that one's text. A flush or a focusout ends the session.
-  if (open_session || !event.isTrusted || page_mode.get_mode_() !== "insert") return;
+  if (read_session_text || !event.isTrusted || page_mode.get_mode_() !== "insert") return;
   const field = deepest_focused_element();
   if (!field) return;
-  const generation = (open_session = ++sessions_started);
+  const read_text = (read_session_text = () => read_field_text(field));
   // The field may change type while the bundle loads, so the facts that make it secret at this edit go along.
   const { type, autocomplete } = field as HTMLInputElement;
-  void bundles.run_command_("text.input", "text", { field_: field, before_: read_field_text(field), type_: type, autocomplete_: autocomplete }, "", false).then((outcome) => {
-    if (outcome.ok && outcome.cancelled && open_session === generation) open_session = 0;
+  void bundles.run_command_("text.input", "text", { field_: field, before_: read_text(), type_: type, autocomplete_: autocomplete }, "", false).then((outcome) => {
+    if (outcome.ok && outcome.cancelled && read_session_text === read_text) read_session_text = undefined;
   });
 }
 
 // A command typed from the field never blurs it, so the text step is stored before the command is sent, and `.` finds the command last.
+// The text is read now, at the blur or the key, because the flush may wait on the load while a page script edits the field.
+// Keys wait for the flush, so a `.` right after Escape repeats this session and not the step before it.
 function flush_typed_text(): void {
-  if (!open_session) return;
-  open_session = 0;
-  void bundles.run_command_("text.flush", "text", {}, "", false);
+  if (!read_session_text) return;
+  void bundles.run_command_("text.flush", "text", { after_: read_session_text() }, "");
+  read_session_text = undefined;
 }
 
 function cancel(event: Event): void {
@@ -205,7 +205,7 @@ function sync_mode_to_focus(): void {
 }
 
 let matcher_installed = false;
-// Whether the last install matched an all-off rule. An install enters ignore mode only on the change into all-off, so a manual `<Space>i` or `<S-Escape>` survives an unrelated edit.
+// Whether the last install matched an all-off rule. An install enters ignore mode only on the change into all-off, so a manual `,i` or `<S-Escape>` survives an unrelated edit.
 let was_all_off = false;
 
 function install_matcher(reply: PageKeymap | undefined): void {
