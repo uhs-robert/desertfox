@@ -321,3 +321,16 @@ test("changing ui to browser closes the port and stops retrying, and back to qui
   await test_case.display.settings_changed();
   assert.equal(test_case.ports.length, 2);
 });
+
+test("a panel is hidden when focus leaves Firefox, moves to another window or the tab changes, and the file then holds no panel", async () => {
+  for (const leave of [(display: ReturnType<typeof make>["display"]) => display.window_focused(-1), (display: ReturnType<typeof make>["display"]) => display.window_focused(2), (display: ReturnType<typeof make>["display"]) => display.tab_activated(2)]) {
+    const test_case = make();
+    await test_case.connect_and_ready();
+    const port = test_case.port();
+    test_case.display.whichkey_panel(PANEL, { id: 11, active: true });
+    port.posted.length = 0;
+    await leave(test_case.display);
+    assert.equal(port.posted[0]?.verb, "whichkey_hide");
+    assert.equal(port.posted.filter((message) => message.verb === "whichkey_hide").length, 1);
+  }
+});

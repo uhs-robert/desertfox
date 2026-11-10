@@ -207,24 +207,26 @@ export function create_display_host(deps: DisplayDeps) {
         const window = await deps.window_of(tab.windowId);
         if (window?.focused) send(mode_message({ mode, tab_id: tab.id, window }));
       }),
-    window_focused: (window_id: number) =>
-      enqueue(async () => {
+    // Any focus move closes the panel, including focus leaving Firefox: the shell reopens a panel the file still holds when Firefox is focused again.
+    window_focused: (window_id: number) => {
+      hide_whichkey();
+      return enqueue(async () => {
         if (!ready || window_id < 0) return;
         const window = await deps.window_of(window_id);
         if (!window?.focused) return;
-        hide_whichkey();
         focused_fullscreen = window.fullscreen;
         sync_page_state();
         await publish_now(window);
-      }),
-    tab_activated: (window_id: number) =>
-      enqueue(async () => {
+      });
+    },
+    tab_activated: (window_id: number) => {
+      hide_whichkey();
+      return enqueue(async () => {
         if (!ready) return;
         const window = await deps.window_of(window_id);
-        if (!window?.focused) return;
-        hide_whichkey();
-        await publish_now(window);
-      }),
+        if (window?.focused) await publish_now(window);
+      });
+    },
     // A tab that navigates or closes takes its panel with it, and its bundle cannot say so.
     tab_gone: (tab_id: number) => {
       if (tab_id === whichkey_tab) hide_whichkey();
