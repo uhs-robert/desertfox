@@ -5,6 +5,7 @@
 import { RuntimeRefusal } from "../shared/command.ts";
 import type { MarkAnswer, MarkItem, MarkRequest } from "../shared/messages.ts";
 import { MARK_ADD_KEY, MARK_JUMP_KEY, mark_page_url, mark_slot, MAX_MARK_PAGES, MAX_MARK_URL_CHARS, PREVIOUS_MARK } from "../shared/mark_names.ts";
+import { create_write_queue } from "./store_turns.ts";
 import { MARK_PRIVATE_STORAGE_KEY, MARK_STORAGE_KEY } from "./storage_keys.ts";
 
 type MarkPage = { at: number; marks: Record<string, [number, number]> };
@@ -40,13 +41,7 @@ export function create_mark_store(deps: MarkStoreDeps) {
     return is_marks_value(stored) ? stored : { v: 1, pages: {} };
   }
 
-  // Each write reads, edits and writes the one value, so two writes from two tabs must not interleave.
-  let queue: Promise<unknown> = Promise.resolve();
-  const in_turn = <Result>(job: () => Promise<Result>): Promise<Result> => {
-    const turn = queue.then(job, job);
-    queue = turn.catch(() => undefined);
-    return turn;
-  };
+  const in_turn = create_write_queue();
 
   const address_of = (url: string): string => {
     const address = mark_page_url(url);
@@ -69,7 +64,7 @@ export function create_mark_store(deps: MarkStoreDeps) {
     all.pages[address] = { at: deps.now(), marks: { ...kept?.marks, ...slots } };
   }
 
-  async function set_now(request: MarkRequest, is_private: boolean): Promise<MarkAnswer> {
+  async function run_now(request: MarkRequest, is_private: boolean): Promise<MarkAnswer> {
     if (typeof request.key !== "string" || !MARK_JUMP_KEY.test(request.key)) throw new RuntimeRefusal("Marks use a to z");
     const address = address_of(request.url);
     const here = check_position(request.x, request.y);
@@ -88,7 +83,7 @@ export function create_mark_store(deps: MarkStoreDeps) {
 
   return {
     // A jump answers the stored offset and keeps the offset it left as the previous position, in one turn, so `''` toggles even when two presses race.
-    run: (request: MarkRequest, is_private: boolean) => in_turn(() => set_now(request, is_private)),
+    run: (request: MarkRequest, is_private: boolean) => in_turn(() => run_now(request, is_private)),
     // The marks of one page, in key order, for the which-key rows.
     items: async (url: string, is_private: boolean): Promise<MarkItem[]> => {
       const page = (await read_all(is_private)).pages[mark_page_url(url)];
@@ -109,14 +104,6 @@ export type MarkStore = ReturnType<typeof create_mark_store>;
 
 // Calls the browser at use, so the command modules load in Node.
 export const browser_mark_store = create_mark_store({ local: () => browser.storage.local, session: () => browser.storage.session, now: () => Date.now() });
-
-// Cleans up at start and after every window closes. A failed cleanup only leaves private marks until the next one, so it warns and goes on.
-export function wire_private_mark_cleanup(store: MarkStore, windows: { onRemoved: { addListener: (listener: () => void) => void }; getAll: () => Promise<{ incognito: boolean }[]> }): void {
-  const has_private_window = async () => (await windows.getAll()).some((window) => window.incognito);
-  const clean = () => void store.clear_private_without_window(has_private_window).catch((error: unknown) => console.warn("desertfox: could not clear the private marks", error));
-  windows.onRemoved.addListener(clean);
-  clean();
-}
 
 // A mark message from a content script. The page's privacy is the sender tab's, never the message's. Only a tab sends these.
 export async function answer_mark_request(store: MarkStore, request: MarkRequest, tab: { incognito: boolean } | undefined): Promise<MarkAnswer> {

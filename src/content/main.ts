@@ -69,7 +69,9 @@ const key_flow = create_key_flow({
   run_leaf_: (leaf, count, repeat) => {
     // A register paste joins the open insert session, so it must not end it.
     if (leaf.steps[0]?.invocation.id !== "register.paste") flush_typed_text();
-    void run_leaf(leaf, count, repeat, send_to_background, page_mode.get_mode_, run_content_steps, show_toast);
+    const ran = run_leaf(leaf, count, repeat, send_to_background, page_mode.get_mode_, run_content_steps, show_toast);
+    // A captured key goes through the router, so the keys after it wait until it has run. In a field the keys go to the page unprocessed, so a hold would skip the Escape that leaves insert mode.
+    if (leaf.steps.some((step) => step.capture) && !is_editable_element(document.activeElement)) bundles.api.hold_keys_until_(ran.then(() => []));
   },
   leave_insert_: () => {
     page_mode.escape();

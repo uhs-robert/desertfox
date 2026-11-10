@@ -5,7 +5,8 @@ import { compile_config } from "../../src/background/compile.ts";
 import { empty_config } from "../../src/background/config_load.ts";
 import { DEFAULT_KEYMAP } from "../../src/background/default_keymap.ts";
 import { list_keys } from "../../src/background/list_keys.ts";
-import { answer_mark_request, create_mark_store, wire_private_mark_cleanup } from "../../src/background/mark_store.ts";
+import { answer_mark_request, create_mark_store } from "../../src/background/mark_store.ts";
+import { wire_private_cleanup } from "../../src/background/store_turns.ts";
 import type { MarkArea } from "../../src/background/mark_store.ts";
 import { MARK_PRIVATE_STORAGE_KEY, MARK_STORAGE_KEY } from "../../src/background/storage_keys.ts";
 import { MAX_MARK_PAGES } from "../../src/shared/mark_names.ts";
@@ -108,7 +109,7 @@ test("the wiring cleans at start and when a window closes", async () => {
   await store.run(set("a", 50), true);
   let on_removed = () => {};
   let private_open = true;
-  wire_private_mark_cleanup(store, { onRemoved: { addListener: (listener) => void (on_removed = listener) }, getAll: async () => [{ incognito: private_open }] });
+  wire_private_cleanup([store], { onRemoved: { addListener: (listener) => void (on_removed = listener) }, getAll: async () => [{ incognito: private_open }] });
   await store.clear_private_without_window(async () => true);
   assert.equal(session.values.size, 1);
   private_open = false;

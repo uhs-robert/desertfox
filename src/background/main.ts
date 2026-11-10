@@ -23,8 +23,9 @@ import { repair_tabs_after_reload } from "./reload.ts";
 import { browser_tab_model_deps, create_tab_model } from "./tab_model.ts";
 import { browser_find_scan_deps, create_find_scan, is_scan_request } from "./find_scan.ts";
 import { create_router } from "./router.ts";
-import { answer_mark_request, browser_mark_store, wire_private_mark_cleanup } from "./mark_store.ts";
-import { answer_register_request, browser_register_store, wire_private_register_cleanup } from "./register_store.ts";
+import { wire_private_cleanup } from "./store_turns.ts";
+import { answer_mark_request, browser_mark_store } from "./mark_store.ts";
+import { answer_register_request, browser_register_store } from "./register_store.ts";
 import { create_repeat_memory } from "./repeat_memory.ts";
 import { create_step_recorder, page_outcome, page_steps } from "./record_step.ts";
 import { wire_repeat } from "../commands/command.ts";
@@ -243,8 +244,7 @@ browser.tabs.onUpdated.addListener((tab_id, change) => {
 });
 
 browser.windows.onRemoved.addListener(() => void repeat_memory.clear_private_without_window().catch(() => undefined));
-wire_private_register_cleanup(browser_register_store, browser.windows);
-wire_private_mark_cleanup(browser_mark_store, browser.windows);
+wire_private_cleanup([browser_register_store, browser_mark_store], browser.windows);
 
 browser.tabs.onActivated.addListener(({ windowId, previousTabId }) => previous_tabs.activated(windowId, previousTabId));
 

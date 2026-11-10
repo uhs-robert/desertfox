@@ -13,12 +13,7 @@ export async function run_cases({ run_case, open_page, press_keys, poll_until, e
     expect(near(last_scroll_y(page_id)), `${what}: at ${last_scroll_y(page_id)}, wanted ${y}`);
   };
 
-  // A mark is set when the background has stored it. A key sent in the same instant can move the page before the set reads it, which a typist never does, so the test waits for the store.
-  const set_mark = async (key, page_id) => {
-    await press_keys("m", key);
-    const stored_on_page = `browser.storage.local.get("desertfox_marks").then((stored) => Object.entries(stored.desertfox_marks?.pages ?? {}).some(([url, page]) => url.includes("id=${page_id}") && "${key}" in page.marks))`;
-    await poll_until(`the mark ${key} to be stored`, () => in_background(stored_on_page));
-  };
+  const set_mark = (key) => press_keys("m", key);
 
   // G scrolls smoothly, so the first report can come mid-way. The bottom is where the last report equals the page's maximum.
   const go_to_bottom = async (page_id) => {
@@ -33,7 +28,7 @@ export async function run_cases({ run_case, open_page, press_keys, poll_until, e
   await run_case("ma, a scroll away and 'a come back, and the backtick does the same", async () => {
     await open_page("aligned", "p9m_jump", { new_tab: true });
     const bottom = await go_to_bottom("p9m_jump");
-    await set_mark("a", "p9m_jump");
+    await set_mark("a");
     await scroll_delta_by_press("p9m_jump", ["g", "g"]);
     await poll_until("the page to reach the top", async () => last_scroll_y("p9m_jump") === 0);
     await to_y("p9m_jump", ["'", "a"], bottom, "'a to return to the mark");
@@ -76,7 +71,7 @@ export async function run_cases({ run_case, open_page, press_keys, poll_until, e
   await run_case("a mark in a box that left the page still jumps, in the box that scrolls now", async () => {
     await open_page("scrollbox", "p9m_box", { new_tab: true });
     const bottom = await go_to_bottom("p9m_box");
-    await set_mark("b", "p9m_box");
+    await set_mark("b");
     await in_active_tab(`document.getElementById("panel").remove(); scrollTo(0, 0)`);
     await poll_until("the page to reach the top", async () => last_scroll_y("p9m_box") === 0);
     await to_y("p9m_box", ["'", "b"], bottom, "'b to scroll the page");
@@ -84,7 +79,7 @@ export async function run_cases({ run_case, open_page, press_keys, poll_until, e
 
   await run_case("a jump during a smooth scroll ends it and lands on the mark", async () => {
     await open_page("aligned", "p9m_flight", { new_tab: true });
-    await set_mark("t", "p9m_flight");
+    await set_mark("t");
     await press_keys("G");
     await poll_until("the smooth scroll to start", async () => (await in_active_tab(`scrollY`)) > 0);
     await press_keys("'", "t");
@@ -94,11 +89,30 @@ export async function run_cases({ run_case, open_page, press_keys, poll_until, e
     expect(after < 1, `the page moved on after the jump, to ${after}`);
   });
 
+  const stored_y = (page_id, key) => in_background(`browser.storage.local.get("desertfox_marks").then((stored) => Object.entries(stored.desertfox_marks?.pages ?? {}).filter(([url]) => url.includes("id=${page_id}")).map(([, page]) => page.marks["${key}"]?.[1])[0])`);
+
+  await run_case("m a g g typed back to back stores the position from before gg", async () => {
+    await open_page("aligned", "p9m_fast", { new_tab: true });
+    const bottom = await go_to_bottom("p9m_fast");
+    await press_keys("m", "a", "g", "g");
+    await poll_until("the page to reach the top", async () => (await in_active_tab(`scrollY`)) < 1);
+    await poll_until("the mark to be stored", async () => (await stored_y("p9m_fast", "a")) !== undefined);
+    const stored = await stored_y("p9m_fast", "a");
+    expect(Math.abs(stored - bottom) <= 1, `the mark stored ${stored}, the page was at ${bottom}`);
+  });
+
+  await run_case("'a then gg typed back to back ends at the top", async () => {
+    await press_keys("'", "a", "g", "g");
+    await sleep(900);
+    const after = await in_active_tab(`scrollY`);
+    expect(after < 1, `the page ended at ${after}, not the top`);
+  });
+
   await run_case("a pause after ' lists the marks of the page with their offsets", async () => {
     await open_page("aligned", "p9m_wk", { new_tab: true });
-    await set_mark("a", "p9m_wk");
+    await set_mark("a");
     await go_to_bottom("p9m_wk");
-    await set_mark("b", "p9m_wk");
+    await set_mark("b");
     const mark = events.length;
     await press_keys("'");
     const shown = await wait_event(mark, (event) => event.type === "whichkey" && event.page_id === "p9m_wk" && event.value !== "", "the which-key panel");

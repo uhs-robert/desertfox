@@ -119,8 +119,8 @@ async function with_page_marks(panel: WhichKeyPanel, root: TreeBranch | undefine
   for (const token of prefix) node = node?.kind === "branch" ? node.children[token] : undefined;
   const capture = node?.kind === "branch" && Object.keys(node.children).length === 1 ? node.children[ANY_KEY] : undefined;
   if (capture?.kind !== "leaf" || !capture.steps.every((step) => step.invocation.id === "mark.add" || step.invocation.id === "mark.jump")) return panel;
-  const items = await marks().catch((): MarkItem[] => []);
-  if (items.length === 0) return panel;
-  const shown_keys = capture.steps[0]?.invocation.id === "mark.add" ? items.filter((item) => item.key !== PREVIOUS_MARK) : items;
-  return { ...panel, rows: shown_keys.map(({ key, x, y }) => ({ keys: key, command: x === 0 ? `y ${y}` : `x ${x} y ${y}`, description: "", more: false })).sort(compare_rows) };
+  const stored = await marks().catch((): MarkItem[] => []);
+  const shown_items = capture.steps[0]?.invocation.id === "mark.add" ? stored.filter((item) => item.key !== PREVIOUS_MARK) : stored;
+  if (shown_items.length === 0) return panel;
+  return { ...panel, rows: shown_items.map(({ key, x, y }) => ({ keys: key, command: x === 0 ? `y ${y}` : `x ${x} y ${y}`, description: "", more: false })).sort(compare_rows) };
 }

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { answer_register_request, create_register_store, describe_value, forget_private_registers_without_window, wire_private_register_cleanup } from "../../src/background/register_store.ts";
+import { answer_register_request, create_register_store, describe_value } from "../../src/background/register_store.ts";
+import { wire_private_cleanup } from "../../src/background/store_turns.ts";
 import type { RegisterArea } from "../../src/background/register_store.ts";
 import { REGISTER_PRIVATE_STORAGE_PREFIX, REGISTER_STORAGE_PREFIX } from "../../src/background/storage_keys.ts";
 import type { BoundInvocation } from "../../src/shared/invocation.ts";
@@ -132,10 +133,10 @@ test("closing the last private window drops the private registers and keeps the 
   let private_windows = 2;
   const has_private_window = async () => private_windows > 0;
   private_windows = 1;
-  await forget_private_registers_without_window(store, has_private_window);
+  await store.clear_private_without_window(has_private_window);
   assert.equal(await store.read("p", true), "private");
   private_windows = 0;
-  await forget_private_registers_without_window(store, has_private_window);
+  await store.clear_private_without_window(has_private_window);
   assert.equal(await store.read("p", true), undefined);
   assert.equal(await store.read("a", false), "normal");
   assert.deepEqual([...session.values.keys()], ["desertfox_last_repeat_private"]);
@@ -203,7 +204,7 @@ test("a private write that lands while the window check runs survives the cleanu
   const { store, session } = make_browser();
   let release!: () => void;
   const check_started = new Promise<void>((started) => {
-    const cleanup = forget_private_registers_without_window(store, async () => {
+    const cleanup = store.clear_private_without_window(async () => {
       started();
       await new Promise<void>((resume) => (release = resume));
       return false;
@@ -228,7 +229,7 @@ test("the cleanup runs at start and after each window closes, and a failure only
   const original_warn = console.warn;
   console.warn = (...args: unknown[]) => void warnings.push(args);
   try {
-    wire_private_register_cleanup(store, { onRemoved: { addListener: (fn) => void (listener = fn) }, getAll: async () => windows });
+    wire_private_cleanup([store], { onRemoved: { addListener: (fn) => void (listener = fn) }, getAll: async () => windows });
     await new Promise((resume) => setTimeout(resume, 0));
     assert.equal(await store.read("p", true), "private");
     windows = [{ incognito: false }];
