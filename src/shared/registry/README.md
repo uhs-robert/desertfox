@@ -10,7 +10,7 @@ The command registry and everything that reads a command definition. Pure TypeSc
 - `usage.ts`: the usage line shown for `-h`, in the words the grammar reads, and `flag_alternatives`, the flags of one param that the help page lists.
 - `summary.ts`: the summary rule. `first_sentence` cuts the text that lists show out of an `intent`. `summary_problem` and `description_problem` check it, and `summary_problems` audits one command, including a flag that has no description. The define-time check runs `description_problem` on a description that is present. A test runs `summary_problems` over every built-in command, because snippets from the user's config go through `define` and need not meet the rule.
 - `commands_file.ts`: the `commands.json` content.
-- `params.ts`: small readers over params shared by the files above, including which param is the subject and which takes the first bare word.
+- `params.ts`: small readers over params shared by the files above, including which param is the subject and which takes the first bare word. `captured_key_param` finds the `key` param a binding leaves out, and `without_param` lets the rest of the args be checked before the key press.
 - `index.ts`: the exports of types and helpers, and nothing else. It runs nothing at import, so a bundle that imports a helper pays only for that helper.
 - `builtin.ts`: the shared `registry` and `define`. Command modules, the background page, Node tools and tests that need the singleton import it. Never import it from a page, the content script or help: the call at import keeps `define.ts` and the setting rules in the bundle. `test/registry/bundle_free.test.ts` bundles each non-background entry and fails when one reaches `builtin` or `define`.
 

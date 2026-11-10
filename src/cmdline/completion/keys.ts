@@ -3,6 +3,7 @@
 
 import type { CommandMeta } from "../../shared/command.ts";
 import type { KeymapMode } from "../../shared/keymap.ts";
+import { token_label } from "../../shared/prefix_tree.ts";
 import type { CompiledKeymap, TreeNode } from "../../shared/prefix_tree.ts";
 import { default_of, flag_params } from "../../shared/registry/params.ts";
 
@@ -42,7 +43,7 @@ type Sequences = { none: Set<string>; flags: Set<string> };
 
 function collect(node: TreeNode, path: string, commands: ReadonlyMap<string, CommandMeta>, into: Map<string, Sequences>): void {
   if (node.kind === "branch") {
-    for (const [token, child] of Object.entries(node.children)) collect(child, path + token, commands, into);
+    for (const [token, child] of Object.entries(node.children)) collect(child, path + token_label(token), commands, into);
     return;
   }
   for (const { invocation } of node.steps) {

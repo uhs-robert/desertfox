@@ -1,6 +1,7 @@
 // Walks the compiled prefix tree one key token at a time. Ships in the content script.
 
-import type { CompiledKeymap, TreeBranch, TreeLeaf } from "../prefix_tree.ts";
+import { ANY_KEY } from "../prefix_tree.ts";
+import type { CompiledKeymap, LeafStep, TreeBranch, TreeLeaf } from "../prefix_tree.ts";
 
 export type MatchResult =
   | { kind: "match"; leaf: TreeLeaf; count?: number }
@@ -50,7 +51,8 @@ export function create_matcher(keymap: CompiledKeymap, frees?: (token: string) =
       return { kind: "pending", node: root, typed, count: Number(count_digits) };
     }
 
-    const next = node.children[token];
+    // A branch with an `ANY_KEY` child waits for one printable key. Any other token breaks the sequence, as a stray key would.
+    const next = node.children[token] ?? ([...token].length === 1 ? node.children[ANY_KEY] : undefined);
     const count = count_digits === "" ? {} : { count: Number(count_digits) };
     if (!next) {
       reset();
@@ -58,7 +60,8 @@ export function create_matcher(keymap: CompiledKeymap, frees?: (token: string) =
     }
     if (next.kind === "leaf") {
       reset();
-      return { kind: "match", leaf: next, ...count };
+      const fill = (step: LeafStep): LeafStep => (step.capture ? { ...step, invocation: { ...step.invocation, args: { ...step.invocation.args, [step.capture]: token } } } : step);
+      return { kind: "match", leaf: { ...next, steps: next.steps.map(fill) }, ...count };
     }
     node = next;
     typed = [...typed, token];
