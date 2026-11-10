@@ -34,6 +34,12 @@ test("here sends the mouse events a real click sends, with click last", () => {
   assert.deepEqual(page.opened, []);
 });
 
+test("here clicks an SVG element, which has no click(), with a click event", () => {
+  const page = fixture("circle", { click: undefined });
+  page.run("here");
+  assert.deepEqual(page.calls, MOUSE_SEQUENCE);
+});
+
 test("a cancelled mousedown keeps the focus where the page put it", () => {
   const page = fixture("a", { href: "https://example.com/", cancel: ["mousedown"] });
   page.run("here");
