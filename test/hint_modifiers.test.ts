@@ -114,6 +114,16 @@ test("the default modifiers give the owner's keys and no stacked or refused ones
   for (const keys of [["b", "B"], ["b", "t"], ["h", "s"], ["r", "v"], ["r", "V"], ["b", ";"], ["r", "b"], ["t"], ["R"]]) assert.equal(node_at(compiled, ";", ...keys), undefined, keys.join(""));
 });
 
+test("the ;o modifier derives an inspect variant of the filter keys and none of the keys with their own action", () => {
+  const { compiled, warnings } = compile(DEFAULT_KEYMAP);
+  assert.deepEqual(warnings, []);
+  assert.equal((node_at(compiled, ";", "o") as TreeBranch).label, "Inspect");
+  for (const [key, filter] of [["a", "all"], ["l", "links"], ["p", "prose"], ["I", "images"], ["i", "inputs"], ["B", "buttons"]] as const) {
+    assert.deepEqual([args_at(compiled, ";", "o", key)?.action, args_at(compiled, ";", "o", key)?.filter], ["inspect", filter], key);
+  }
+  for (const keys of [["o", "s"], ["o", "v"], ["o", ";"], ["o", "o"], ["o", "y"], ["o", "b"]]) assert.equal(node_at(compiled, ";", ...keys), undefined, keys.join(""));
+});
+
 test("the yank keys are eight plain leaves, each with a fixed action and filter", () => {
   const { compiled, warnings } = compile(DEFAULT_KEYMAP);
   assert.deepEqual(warnings, []);

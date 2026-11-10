@@ -49,7 +49,7 @@ test("a cancelled pointerdown skips mousedown, mouseup and focus and still click
 test("here sends the mouse events from the middle of the element", () => {
   const sent: { type: string; clientX?: number; clientY?: number; button?: number }[] = [];
   const element = { localName: "div", click: () => {}, focus: () => {}, remove: () => {}, dispatchEvent: (event: never) => sent.push(event), getBoundingClientRect: () => ({ left: 10, top: 20, width: 100, height: 40 }) };
-  perform("here", element as never, { open_link_: () => {}, copy: () => {}, image_action: () => Promise.resolve(), start_caret_: () => {} });
+  perform("here", element as never, { open_link_: () => {}, copy: () => {}, image_action: () => Promise.resolve(), start_caret_: () => {}, inspect_: () => Promise.resolve() });
   const down = sent.find((event) => event.type === "mousedown");
   assert.deepEqual([down?.clientX, down?.clientY, down?.button], [60, 40, 0]);
 });
@@ -197,6 +197,15 @@ test("copy_html copies the whole outer HTML and names it in the toast", () => {
   assert.deepEqual(whats, ["HTML"]);
 });
 
+test("inspect hands the element to the inspect dependency and does nothing else to it", () => {
+  const element = { localName: "div", click: () => assert.fail("click"), focus: () => assert.fail("focus") };
+  const handed: unknown[] = [];
+  const answer = Promise.resolve({ ok: false, message: "press F12" });
+  const result = perform("inspect", element as never, { inspect_: (target: unknown) => (handed.push(target), answer) } as never);
+  assert.deepEqual(handed, [element]);
+  assert.equal(result, answer);
+});
+
 // Uniqueness itself is covered in selector_of.test.ts. This only checks that the action counts matches in the root of the element and copies the result.
 test("copy_selector counts matches in the root of the element", () => {
   const root = { querySelectorAll: (selector: string) => ({ length: selector === "#main" ? 1 : 2 }) };
@@ -242,7 +251,7 @@ function box_fixture(attributes: Record<string, string>) {
 test("focus gives a box without tabindex tabindex=-1 before it focuses, and flashes an outline that then goes away", async (context) => {
   context.mock.timers.enable({ apis: ["setTimeout"] });
   const page = box_fixture({});
-  perform("focus", page.element as never, { open_link_: () => {}, copy: () => {}, image_action: () => Promise.resolve(), start_caret_: () => {} });
+  perform("focus", page.element as never, { open_link_: () => {}, copy: () => {}, image_action: () => Promise.resolve(), start_caret_: () => {}, inspect_: () => Promise.resolve() });
   assert.deepEqual(page.calls.slice(0, 3), ["set tabindex=-1", "focus", "outline 2px solid currentColor"]);
   assert.equal(page.outline.priority, "important");
   context.mock.timers.tick(5000);
@@ -253,7 +262,7 @@ test("focus keeps a tabindex the page set and restores an outline the page set",
   context.mock.timers.enable({ apis: ["setTimeout"] });
   const page = box_fixture({ tabindex: "0" });
   page.outline.value = "1px dotted red";
-  perform("focus", page.element as never, { open_link_: () => {}, copy: () => {}, image_action: () => Promise.resolve(), start_caret_: () => {} });
+  perform("focus", page.element as never, { open_link_: () => {}, copy: () => {}, image_action: () => Promise.resolve(), start_caret_: () => {}, inspect_: () => Promise.resolve() });
   assert.equal(page.attributes.tabindex, "0");
   context.mock.timers.tick(5000);
   assert.equal(page.outline.value, "1px dotted red");
@@ -262,7 +271,7 @@ test("focus keeps a tabindex the page set and restores an outline the page set",
 test("focus on a box that is focusable already leaves its tabindex alone", () => {
   const link = box_fixture({});
   Object.assign(link.element, { localName: "a", tabIndex: 0 });
-  perform("focus", link.element as never, { open_link_: () => {}, copy: () => {}, image_action: () => Promise.resolve(), start_caret_: () => {} });
+  perform("focus", link.element as never, { open_link_: () => {}, copy: () => {}, image_action: () => Promise.resolve(), start_caret_: () => {}, inspect_: () => Promise.resolve() });
   assert.equal("tabindex" in link.attributes, false);
 });
 
@@ -270,7 +279,7 @@ test("focus twice inside the flash still restores the original outline", (contex
   context.mock.timers.enable({ apis: ["setTimeout"] });
   const page = box_fixture({});
   page.outline.value = "1px dotted red";
-  const deps = { open_link_: () => {}, copy: () => {}, image_action: () => Promise.resolve(), start_caret_: () => {} };
+  const deps = { open_link_: () => {}, copy: () => {}, image_action: () => Promise.resolve(), start_caret_: () => {}, inspect_: () => Promise.resolve() };
   perform("focus", page.element as never, deps);
   context.mock.timers.tick(300);
   perform("focus", page.element as never, deps);

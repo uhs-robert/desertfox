@@ -64,3 +64,6 @@ export const SESSIONS_STORAGE_KEY = "desertfox_sessions";
 
 // Set while the user has turned DesertFox off from the toolbar or its shortcut. Absent means on, so a profile from before the switch stays on. Only the background writes it.
 export const DISABLED_STORAGE_KEY = "desertfox_disabled";
+
+// Tab id to the time (ms) of the pick that waits for its devtools page, in `storage.session`. One pick per tab: a newer one replaces it. Dropped after 60 s, on navigation and when the tab closes.
+export const INSPECT_PENDING_STORAGE_KEY = "desertfox_inspect_pending";
