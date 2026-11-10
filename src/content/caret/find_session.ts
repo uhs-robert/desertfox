@@ -1,13 +1,12 @@
 // Page search: the live search while the line is open, the match that stays after Enter or Escape, and n and N.
 // The line (the cmdline bundle) reaches it through `begin`, `update` and `end`. The keys reach it through `step` and `clear`.
 
-import type { FindScan, FindScanAnswer, Outcome } from "../../shared/messages.ts";
+import type { FindScan, FindScanAnswer, Outcome, RegisterRead, RegisterWrite } from "../../shared/messages.ts";
 import type { BundleHostApi } from "../bundle_host.ts";
 import { collect_matches, compile_query, describe_match, describe_timeout, nearest_match, opposite, step_match } from "./find_match.ts";
 import type { Direction, Fallback, Matches, ScanRegex, Search, Slicing } from "./find_match.ts";
 import { create_painter } from "./find_paint.ts";
 import type { FindColors, Painter } from "./find_paint.ts";
-import { get_register, set_register } from "./registers.ts";
 import { scroll_to_index } from "./screen_line.ts";
 import { find_colors_of, stored_theme } from "./selection_colors.ts";
 import { first_visible_index } from "./start_point.ts";
@@ -105,8 +104,11 @@ const browser_deps = (): FindDeps => ({
   painter: create_painter(),
   scroll_to_: (model, first_index, last_index_, bottom_inset_) => scroll_to_index(model, first_index, { bottom_inset_, last_index_ }),
   read_colors_: read_find_colors,
-  get_register_: get_register,
-  set_register_: set_register,
+  get_register_: async (name) => {
+    const value = await (browser.runtime.sendMessage({ type: "register_read", name } satisfies RegisterRead) as Promise<unknown>);
+    return typeof value === "string" ? value : undefined;
+  },
+  set_register_: async (name, text) => void (await browser.runtime.sendMessage({ type: "register_write", name, text } satisfies RegisterWrite)),
   slicing: (is_stale_) => ({ is_stale_, yield_to_page_: () => new Promise<void>((resume) => setTimeout(resume, 0)), now: () => performance.now(), slice_ms_: SLICE_MS }),
   scan_regex: (text, { source, flags }) => browser.runtime.sendMessage({ type: "find_scan", text, source, flags } satisfies FindScan) as Promise<FindScanAnswer>,
   selection_key_: (model) => documents_of(model).flatMap((owner) => [owner.getSelection()?.anchorNode, owner.getSelection()?.anchorOffset, owner.getSelection()?.focusNode, owner.getSelection()?.focusOffset]),

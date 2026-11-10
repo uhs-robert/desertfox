@@ -22,7 +22,7 @@ A note "(prompts)" means the binding sets a `prompt` for a param, so the command
 
 <!-- BEGIN generated -->
 
-bound: 297 (normal 162, hint 2, cmdline 18, caret 35, visual 37, visual_line 38, insert 1, ignore 1, browser 3) | later: 6 | dropped: 8
+bound: 298 (normal 163, hint 2, cmdline 18, caret 35, visual 37, visual_line 38, insert 1, ignore 1, browser 3) | later: 6 | dropped: 8
 
 ### normal
 
@@ -151,6 +151,7 @@ bound: 297 (normal 162, hint 2, cmdline 18, caret 35, visual 37, visual_line 38,
 | `qh` | bound | `help` | Help |  |
 | `qi` | bound | `mode ignore` | Set mode |  |
 | `qb` | bound | `page.blur` | Blur |  |
+| `<Space>"` | bound | `registers` (prompts) | List registers |  |
 | `o` | bound | `open` (prompts) | Open URL |  |
 | `O` | bound | `open --tab` (prompts) | Open URL |  |
 | `go` | bound | `open` (prompts) | Open URL |  |

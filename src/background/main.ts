@@ -22,6 +22,7 @@ import { repair_tabs_after_reload } from "./reload.ts";
 import { browser_tab_model_deps, create_tab_model } from "./tab_model.ts";
 import { browser_find_scan_deps, create_find_scan, is_scan_request } from "./find_scan.ts";
 import { create_router } from "./router.ts";
+import { answer_register_request, browser_register_store, forget_private_registers_without_window } from "./register_store.ts";
 import { create_repeat_memory, page_record } from "./repeat_memory.ts";
 import { wire_repeat } from "../commands/command.ts";
 import { DISABLED_STORAGE_KEY, SLOT_TABLE_STORAGE_KEY } from "./storage_keys.ts";
@@ -157,6 +158,7 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
   }
   if (request?.type === "load_bundle") return bundle_loader.answer(sender, request.name);
   if (request?.type === "find_scan" && is_scan_request(request)) return find_scan.answer(request, `${sender.tab?.id}:${sender.frameId}`);
+  if (request?.type === "register_read" || request?.type === "register_write") return answer_register_request(browser_register_store, request, sender.tab);
   if (request?.type === "issue_cmdline_ticket") return cmdline.issue_ticket(sender.tab?.id);
   if (request?.type === "open_cmdline") return get_config().then(() => cmdline.open(request.ticket, sender.tab?.id, sender.frameId, sender.tab?.windowId, sender.tab, sender.tab?.incognito === true));
   if (request?.type === "complete_items") return complete_items.answer(request.kind, asker_of(sender));
@@ -232,6 +234,11 @@ browser.tabs.onUpdated.addListener((tab_id, change) => {
   if (change.status === "loading") void inspect_relay.forget(tab_id);
   return forget_mode_on_navigation(browser.storage.local, tab_id, change);
 });
+
+// The last private window is gone once `getAll` lists none. A start with no private window also drops what a crash left.
+const has_private_window = async () => (await browser.windows.getAll()).some((window) => window.incognito);
+browser.windows.onRemoved.addListener(() => void forget_private_registers_without_window(browser_register_store, has_private_window));
+void forget_private_registers_without_window(browser_register_store, has_private_window);
 
 browser.tabs.onActivated.addListener(({ windowId, previousTabId }) => previous_tabs.activated(windowId, previousTabId));
 

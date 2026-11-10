@@ -56,8 +56,11 @@ export const WINDOW_FOCUS_STORAGE_KEY = "desertfox_window_focus";
 export const REPEAT_STORAGE_KEY = "desertfox_last_repeat";
 export const REPEAT_PRIVATE_STORAGE_KEY = "desertfox_last_repeat_private";
 
-// Prefix of one `storage.local` key per register, holding its text. Register `/` holds the last page search. Not written from a private window.
+// Prefix of one `storage.local` key per register, holding its value (text or a list of invocations). Only `register_store.ts` reads and writes it. A private window never reaches it.
 export const REGISTER_STORAGE_PREFIX = "desertfox_register_";
+
+// Prefix of one `storage.session` key per register of the private windows. Cleared when the last private window closes.
+export const REGISTER_PRIVATE_STORAGE_PREFIX = "desertfox_private_register_";
 
 // The saved tab sessions: `{ version: 1, sessions: { [name]: { saved_at, tabs } } }`. Only `session_store.ts` reads and writes it. Never read from a private window.
 export const SESSIONS_STORAGE_KEY = "desertfox_sessions";

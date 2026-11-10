@@ -222,6 +222,7 @@ export const DEFAULT_KEYMAP: KeymapConfig = {
     qh: { id: "help.open" },
     qi: { id: "mode.set", args: { mode: "ignore" } },
     qb: { id: "page.blur" },
+    "<Space>\"": { id: "register.list", prompt: { param: "name" }, label: "List registers" },
 
     o: { id: "open.url", args: { where: "here" }, prompt: { param: "url" } },
     O: { id: "open.url", args: { where: "tab" }, prompt: { param: "url" } },
