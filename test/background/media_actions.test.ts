@@ -24,6 +24,15 @@ test("media with sound acts before a muted preview that also plays, in another f
   assert.deepEqual(choose_frames([scan(0, { playing: 2, audible: 1 })], "volume"), [{ frame_id: 0, target: "audible" }]);
 });
 
+test("ap pauses every playing element on the tab when anything plays with sound, a muted preview included", () => {
+  const scans = [scan(0, { playing: 1, playing_video_area: 90_000, video_area: 90_000 }), scan(4, { playing: 1, audible: 1, playing_video_area: 400, audible_video_area: 400 })];
+  assert.deepEqual(choose_frames(scans, "play_pause"), [
+    { frame_id: 0, target: "playing" },
+    { frame_id: 4, target: "playing" },
+  ]);
+  assert.deepEqual(choose_frames([scan(0, { playing: 1 })], "play_pause"), [{ frame_id: 0, target: "playing" }]);
+});
+
 test("with nothing playing the largest visible video acts, else the first frame with media", () => {
   assert.deepEqual(choose_frames([scan(0, { video_area: 100 }), scan(2, { video_area: 400 }), scan(4, { video_area: 400 })], "play_pause"), [{ frame_id: 2, target: "largest" }]);
   assert.deepEqual(choose_frames([{ ...empty, frame_id: 0 }, scan(6, {})], "volume"), [{ frame_id: 6, target: "largest" }]);

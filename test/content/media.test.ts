@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { apply_in_frame, media_in, next_level, scan_frame, visible_area, type FrameView, type Player } from "../../src/content/media/frame_media.ts";
+import { choose_frames } from "../../src/background/media_actions.ts";
 import { SEEK_RULE, SPEED_RULE, VOLUME_RULE, type MediaRequest } from "../../src/shared/media.ts";
 
 type Apply = Extract<MediaRequest, { type: "media_apply" }>;
@@ -123,11 +124,30 @@ test("speed, volume and seek with no value write nothing, since even an equal cu
   assert.equal(video.volume, 0.333);
 });
 
-test("a play() that has not settled within the grace counts as started, and a quick refusal still refuses", async () => {
+test("a play() that has not settled within the grace counts as started", async () => {
   const pending = player({ play: function (this: Player) { this.paused = false; return new Promise<void>(() => {}); } });
   const result = await apply_in_frame(frame([{ player: pending, area: 5 }]), apply({ action: "play_pause" }));
   assert.equal(result.acted, 1);
   assert.equal(result.state?.paused, false);
+});
+
+test("ap beside a muted preview pauses then resumes the main video in two presses", async () => {
+  const main = player({ paused: false });
+  const preview = player({ paused: false, muted: true });
+  const entries = [
+    { player: main, area: 5000 },
+    { player: preview, area: 100 },
+  ];
+  const view = frame(entries);
+  const press = async () => {
+    const scan = scan_frame(view);
+    const [plan] = choose_frames([{ ...scan, frame_id: 0 }], "play_pause");
+    return apply_in_frame(view, apply({ action: "play_pause", target: plan!.target }));
+  };
+  assert.equal((await press()).state?.paused, true);
+  assert.deepEqual([main.paused, preview.paused], [true, true]);
+  assert.equal((await press()).state?.paused, false);
+  assert.deepEqual([main.calls, preview.calls], [["pause", "play"], ["pause"]]);
 });
 
 test("the largest target is found again at apply time, so a video removed since the scan is not touched", async () => {
