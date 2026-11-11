@@ -71,7 +71,8 @@ async function scan_frames(deps: MediaDeps, tab_id: number): Promise<FrameScan[]
   try {
     deps.inject_all(tab_id).then(
       (count) => ((expected = count), complete() && finish()),
-      () => finish(),
+      // One frame that throws rejects the whole call while the other frames still report, so only the timer ends the wait.
+      () => undefined,
     );
     await done;
   } finally {

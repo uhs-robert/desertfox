@@ -199,9 +199,25 @@ test("the frame id comes from the sender, and a report from another tab or with 
   assert.deepEqual(tab.applied.map(({ frame_id }) => frame_id), [5]);
 });
 
-test("a page that refuses the bundle, such as a privileged one, refuses at once with no media", async () => {
-  const tab = fake_tab({ 0: { refuses_scripts: true } }, { answer_timeout_ms: 5000 });
+test("a call that rejects because one frame threw still takes the reports of the other frames", async () => {
+  const tab = fake_tab({ 0: { scan: scan(0, { playing: 1 }), report_after_ms: 20, apply: () => acted(1) } });
+  tab.deps.inject_all = async (tab_id) => {
+    setTimeout(() => tab.reports.receive(tab_id, 0, scan(0, { playing: 1 })), 20);
+    throw new Error("a frame threw");
+  };
+  await run_media(tab.deps, ctx, { action: "speed", value: "up", times: 1 });
+  assert.deepEqual(tab.applied.map(({ frame_id }) => frame_id), [0]);
+});
+
+test("a chosen frame that hangs on the apply is cut off at the timeout and the others still act", async () => {
+  const tab = fake_tab({ 0: { scan: scan(0, { playing: 1 }), hangs: true }, 1: { scan: scan(1, { playing: 1 }), apply: () => acted(1) } });
   const started = Date.now();
+  await run_media(tab.deps, ctx, { action: "speed", value: "up", times: 1 });
+  assert.ok(Date.now() - started >= 45);
+  assert.deepEqual(tab.toasts, ["Speed 1.25x"]);
+});
+
+test("a page that refuses the bundle, such as a privileged one, refuses with no media once the wait ends", async () => {
+  const tab = fake_tab({ 0: { refuses_scripts: true } });
   await assert.rejects(run_media(tab.deps, ctx, { action: "play_pause" }), { message: "No video or audio on this page" });
-  assert.ok(Date.now() - started < 1000);
 });
