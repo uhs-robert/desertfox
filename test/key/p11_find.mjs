@@ -725,8 +725,8 @@ export async function run_cases({ rdp, extension_id, run_case, expect, expect_ab
   });
 
   // Guard: search skips field text and never focuses or selects, so no focus event can switch the mode to insert. Vimium needs PostFindMode for this. A later change that makes fields searchable must keep these asserts.
-  const READ_FIELD_STATE = `JSON.stringify({ active: document.activeElement.tagName, selection: getSelection().toString(), input: document.getElementById("f").value, textarea: document.getElementById("t").value, editable: document.getElementById("e").textContent })`;
-  const FIELD_STATE_AT_START = JSON.stringify({ active: "BODY", selection: "", input: "needle in input", textarea: "needle in textarea", editable: "needle in editable" });
+  const READ_FIELD_STATE = `JSON.stringify({ active: document.activeElement.tagName, selection: getSelection().toString(), input_collapsed: document.getElementById("f").selectionStart === document.getElementById("f").selectionEnd, textarea_collapsed: document.getElementById("t").selectionStart === document.getElementById("t").selectionEnd, input: document.getElementById("f").value, textarea: document.getElementById("t").value, editable: document.getElementById("e").textContent })`;
+  const FIELD_STATE_AT_START = JSON.stringify({ active: "BODY", selection: "", input_collapsed: true, textarea_collapsed: true, input: "needle in input", textarea: "needle in textarea", editable: "needle in editable" });
   async function expect_find_leaves_fields_alone(page_id) {
     const mark = events.length;
     await press_keys("/needle");
@@ -736,6 +736,8 @@ export async function run_cases({ rdp, extension_id, run_case, expect, expect_ab
     await press_and_wait_for_new_current("n");
     await press_and_wait_for_new_current("N");
     await press_and_wait_for_new_current("n");
+    // A hidden badge would pass the scan below, so wait for the NORMAL badge.
+    await wait_event(mark, badge_is(page_id, "NORMAL"), "the NORMAL badge after the search");
     expect(await in_active_tab(READ_FIELD_STATE) === FIELD_STATE_AT_START, `a field took focus, selection or text: ${await in_active_tab(READ_FIELD_STATE)}`);
     // An empty label is the badge hiding while the search line is open.
     const switched = events.slice(mark).find((event) => event.type === "indicator" && event.page_id === page_id && event.label !== "NORMAL" && event.label !== "");
