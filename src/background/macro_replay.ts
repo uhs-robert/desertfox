@@ -19,7 +19,8 @@ export type MacroReplayDeps = {
   // The steps stored in the register, or undefined when it holds no macro.
   read_macro: (register: string, is_private: boolean) => Promise<BoundInvocation[] | undefined>;
   // Runs one step through the router with no command line and with instant scrolls. The router shows a failure itself.
-  run_step: (step: BoundInvocation, place: StepPlace) => Promise<RunResponse>;
+  // `lost_reply` is asked when the page unloaded before it answered: true when the tab navigated, which makes the step done.
+  run_step: (step: BoundInvocation, place: StepPlace, lost_reply: () => Promise<boolean>) => Promise<RunResponse>;
   active_tab_id: () => Promise<number | undefined>;
   // The tab's status reads `loading`.
   is_loading: (tab_id: number) => Promise<boolean>;
@@ -31,12 +32,21 @@ export type MacroReplayDeps = {
   last_played: { read: (is_private: boolean) => Promise<string | undefined>; write: (register: string, is_private: boolean) => Promise<unknown> };
   // The step's args and count through the one validator, as the router checks a typed `@a`. A recorded step may have failed it when it was typed.
   check_play: (step: BoundInvocation) => { ok: true; register: string; count: number } | { ok: false; error: string };
+  // Pauses between the polls of the navigation grace window.
+  sleep?: (ms: number) => Promise<void>;
   // Lets the background answer other messages, Escape above all, between the passes of a count.
   next_turn?: () => Promise<void>;
 };
 
 // The most passes one play runs, nested plays and counts together, so nested counts cannot run for hours. A stop at the limit reads as a failed step.
 export const MAX_MACRO_PASSES = 10000;
+
+// A click's `loading` can reach the background after the page script answered, or never get an answer at all when the page unloads first. The steps that click wait this long for the tab to show a navigation.
+const NAVIGATION_GRACE_POLLS = 12;
+const NAVIGATION_POLL_MS = 25;
+// A same-document navigation (a route change, a hash) never reads loading, so the page-ready wait ends at once. This gives the page's own script time to draw the new view.
+const SAME_DOCUMENT_SETTLE_MS = 150;
+const CLICKING_STEPS = new Set(["hint.run"]);
 
 const timer_turn = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
@@ -69,13 +79,29 @@ export function create_macro_replay(deps: MacroReplayDeps) {
     return watch.done(PAGE_READY_TIMEOUT_MS);
   }
 
+  const sleep = (ms: number) => (deps.sleep ?? ((delay: number) => new Promise<void>((resolve) => setTimeout(resolve, delay))))(ms);
+
+  // Polls for the grace window. Stops early at Escape.
+  async function navigation_started(replay: Replay, tab_id: number, watch: PageWatch, was_loading: boolean): Promise<boolean> {
+    for (let poll = 0; poll <= NAVIGATION_GRACE_POLLS; poll++) {
+      if (watch.navigated() || (!was_loading && (await deps.is_loading(tab_id)))) return true;
+      if (replay.stopped || poll === NAVIGATION_GRACE_POLLS) return false;
+      await sleep(NAVIGATION_POLL_MS);
+    }
+    return false;
+  }
+
   // A tab switch waits for the new tab, a navigation for the new page. Anything else runs the next step at once.
   // `was_loading` is the tab's status before the step, so a page still loading from before the step does not count as a navigation.
-  async function settle_page(replay: Replay, before: number | undefined, watch: PageWatch | undefined, was_loading: boolean): Promise<PageReady | undefined> {
+  async function settle_page(replay: Replay, before: number | undefined, watch: PageWatch | undefined, was_loading: boolean, may_navigate: boolean): Promise<PageReady | undefined> {
     const after = await deps.active_tab_id();
     replay.tab_id = after;
-    // A link the step clicked starts loading in a later task, so its `loading` event can come after the step's answer. A change of the tab's own status catches most of those.
-    if (after === before && watch && (watch.navigated() || (!was_loading && (await deps.is_loading(after!))))) return wait_for(replay, watch);
+    // A link the step clicked starts loading in a later task, so its `loading` event can come after the step's answer. Steps that click watch for it through the grace window.
+    if (after === before && watch && (may_navigate ? await navigation_started(replay, after!, watch, was_loading) : watch.navigated() || (!was_loading && (await deps.is_loading(after!))))) {
+      const ready = await wait_for(replay, watch);
+      if (ready === "ready") await sleep(SAME_DOCUMENT_SETTLE_MS);
+      return ready;
+    }
     watch?.stop();
     if (after === before) return undefined;
     if (after === undefined) return "gone";
@@ -96,9 +122,11 @@ export function create_macro_replay(deps: MacroReplayDeps) {
     const watch = before === undefined ? undefined : deps.watch(before);
     const was_loading = before !== undefined && (await deps.is_loading(before));
     try {
-      const answer = await deps.run_step(step, { tab_id: before, frame_id: before === start.tab_id ? (start.frame_id ?? 0) : 0, mode: start.mode });
+      const may_navigate = CLICKING_STEPS.has(step.id);
+      const lost_reply = async () => before !== undefined && watch !== undefined && (await navigation_started(replay, before, watch, was_loading));
+      const answer = await deps.run_step(step, { tab_id: before, frame_id: before === start.tab_id ? (start.frame_id ?? 0) : 0, mode: start.mode }, lost_reply);
       if (!answer.ok || answer.cancelled) return false;
-      const ready = await settle_page(replay, before, watch, was_loading);
+      const ready = await settle_page(replay, before, watch, was_loading, may_navigate);
       // `gone` is Escape or a tab closed during the wait. Either way the macro has no page to go on in.
       if (replay.stopped || ready === "gone") return false;
       if (ready === "timeout") return refuse(`The page did not load within ${PAGE_READY_TIMEOUT_MS / 1000} seconds, so the macro stopped`);
