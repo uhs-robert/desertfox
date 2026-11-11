@@ -19,7 +19,7 @@ function fake_player(playing = 720) {
 
 // The clock moves only when the rule sleeps, so a test reads the time a poll took. `on_sleep` runs at each tick, where a test changes the page.
 function setup(value: string | (() => Promise<string>), player = fake_player()) {
-  const clock = { now: 0, sleeps: 0, loaded: false, on_sleep: (_sleeps: number): void => undefined };
+  const clock = { now: 0, sleeps: 0, on_sleep: (_sleeps: number): void => undefined };
   const rule = create_rule({
     read_value: typeof value === "string" ? async () => value : value,
     probe: () => player.driver,
@@ -28,7 +28,6 @@ function setup(value: string | (() => Promise<string>), player = fake_player()) 
       clock.on_sleep(++clock.sleeps);
     },
     now: () => clock.now,
-    loaded: () => clock.loaded,
   });
   return { rule, clock, player };
 }
@@ -56,7 +55,7 @@ test("min, a height between levels and auto each reach their level", async () =>
 test("off leaves the player alone and never asks for the driver", async () => {
   const player = fake_player();
   let probes = 0;
-  const rule = create_rule({ read_value: async () => "off", probe: () => (probes++, player.driver), sleep: async () => undefined, now: () => 0, loaded: () => false });
+  const rule = create_rule({ read_value: async () => "off", probe: () => (probes++, player.driver), sleep: async () => undefined, now: () => 0 });
   await rule.start(true);
   assert.equal(probes, 0);
   assert.deepEqual(player.state.picks, []);
@@ -80,7 +79,7 @@ test("a page with no player or one that never lists levels stops at the give-up 
   await rule.start(true);
   assert.equal(clock.now, RULE_GIVE_UP_MS);
   assert.deepEqual(never.state.picks, []);
-  const absent = create_rule({ read_value: async () => "max", probe: () => undefined, sleep: async (ms) => void (absent_now += ms), now: () => absent_now, loaded: () => false });
+  const absent = create_rule({ read_value: async () => "max", probe: () => undefined, sleep: async (ms) => void (absent_now += ms), now: () => absent_now });
   let absent_now = 0;
   await absent.start(true);
   assert.equal(absent_now, RULE_GIVE_UP_MS);
@@ -230,13 +229,24 @@ test("switching DesertFox off while the poll runs stops it, and an edited rule a
   assert.equal(edited.player.state.playing, 360);
 });
 
-test("a finished load with no player stops at once, while a navigation start keeps waiting for its page", async () => {
-  const none = (loaded: boolean, navigated: boolean) => {
-    const clock = { now: 0 };
-    const rule = create_rule({ read_value: async () => "max", probe: () => undefined, sleep: async (ms) => void (clock.now += ms), now: () => clock.now, loaded: () => loaded });
-    return rule.start(navigated).then(() => clock.now);
-  };
-  assert.equal(await none(true, false), 0);
-  assert.equal(await none(false, false), RULE_GIVE_UP_MS);
-  assert.equal(await none(true, true), RULE_GIVE_UP_MS);
+test("a player that scripts build after the load-finish start still gets the rule, and a frame that never gets one stops at the deadline", async () => {
+  // YouTube builds #movie_player by script after the load event, so a start with no player keeps polling.
+  const player = fake_player();
+  let present = false;
+  const clock = { now: 0, sleeps: 0 };
+  const rule = create_rule({
+    read_value: async () => "max",
+    probe: () => (present ? player.driver : undefined),
+    sleep: async (ms) => {
+      clock.now += ms;
+      if (++clock.sleeps === 20) present = true;
+    },
+    now: () => clock.now,
+  });
+  await rule.start(false);
+  assert.equal(player.state.playing, 1080);
+  const never = setup("max", fake_player());
+  never.player.state.listed = false;
+  await never.rule.start(false);
+  assert.equal(never.clock.now, RULE_GIVE_UP_MS);
 });

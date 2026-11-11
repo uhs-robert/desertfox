@@ -17,8 +17,6 @@ export type RuleDeps = {
   probe: () => Driver | undefined;
   sleep: (ms: number) => Promise<void>;
   now: () => number;
-  // Whether the frame's document finished loading.
-  loaded: () => boolean;
 };
 
 // True when the player is at the rule's level. A player that lists no levels yet (YouTube answers `unknown` until it plays) is not.
@@ -61,8 +59,6 @@ export function create_rule(deps: RuleDeps) {
         let video_is_new = true;
         try {
           const driver = deps.probe();
-          // A finished load that has no player has none to wait for. A start for a navigation may still run before its page does.
-          if (driver === undefined && !navigated && deps.loaded()) return;
           if (driver) {
             const video = driver.video_id();
             first_video ??= video;
