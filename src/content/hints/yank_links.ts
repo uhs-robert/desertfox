@@ -3,7 +3,7 @@
 import { link_text, markdown_address, org_address } from "../link_escape.ts";
 import type { Outcome } from "../../shared/messages.ts";
 import type { Yanked } from "../caret/copy_text.ts";
-import { collect, query_for } from "./candidates.ts";
+import { collect, name_candidates, query_for } from "./candidates.ts";
 import type { Found } from "./candidates.ts";
 import { rendered_text } from "./headings.ts";
 
@@ -31,12 +31,7 @@ export function web_address(raw: string, base: string, document_url: string): st
 }
 
 // The text a person sees, else the names assistive tools use, else the address.
-export function label_of(element: Element, address: string): string {
-  const image_alt = element.querySelector("img[alt]")?.getAttribute("alt") ?? "";
-  const candidates = [rendered_text(element), element.getAttribute("aria-label") ?? "", element.getAttribute("title") ?? "", image_alt];
-  const one_line = (text: string) => text.replace(/\s+/g, " ").trim();
-  return candidates.map(one_line).find((text) => text !== "") ?? address;
-}
+export const label_of = (element: Element, address: string): string => name_candidates(element, rendered_text(element))[0] ?? address;
 
 // The first link to an address wins. The list stops at the cap.
 export function links_of(found: readonly Found[]): YankedLink[] {

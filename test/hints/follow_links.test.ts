@@ -48,7 +48,7 @@ test("the rel search takes the first match in document order and ignores the oth
 });
 
 test("only an input offers its value as text, so a button's form value is no label", () => {
-  const element = (localName: string) => ({ localName, innerText: "Go", getAttribute: () => null, value: "next" }) as unknown as Element;
+  const element = (localName: string) => ({ localName, innerText: "Go", getAttribute: () => null, querySelector: () => null, value: "next" }) as unknown as Element;
   assert.deepEqual(texts_of(element("button")), ["Go"]);
   assert.deepEqual(texts_of(element("input")), ["Go", "next"]);
 });

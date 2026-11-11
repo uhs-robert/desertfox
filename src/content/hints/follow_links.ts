@@ -1,6 +1,6 @@
 // Finds the next or previous page link for `page.follow`. A `rel` link wins over any text match.
 
-import { collect, query_for } from "./candidates.ts";
+import { collect, name_candidates, query_for } from "./candidates.ts";
 import type { Found } from "./candidates.ts";
 import { keep_present_found } from "./headings.ts";
 import { has_usable_address } from "./actions.ts";
@@ -51,8 +51,7 @@ function is_better(rank: readonly number[], than: readonly number[]): boolean {
   return false;
 }
 
-// A button's `value` is the form data it sends, not a label, so only an input offers its value.
-export const texts_of = (element: Element): string[] => [(element as HTMLElement).innerText ?? element.textContent ?? "", element.getAttribute("aria-label") ?? "", element.getAttribute("title") ?? "", element.localName === "input" ? (element as HTMLInputElement).value : ""].filter((text) => typeof text === "string" && text !== "");
+export const texts_of = (element: Element): string[] => name_candidates(element, (element as HTMLElement).innerText ?? element.textContent);
 
 // Links and buttons that are on the page, including off-screen ones: the next link usually sits at the bottom.
 export function find_text_link(root: ParentNode, patterns: readonly string[]): Found | undefined {

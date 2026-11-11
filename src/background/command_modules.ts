@@ -22,6 +22,7 @@ import "../commands/url.ts";
 import "../commands/open.ts";
 import "../commands/copy.ts";
 import "../commands/hint.ts";
+import "../commands/hint_text.ts";
 import "../commands/heading.ts";
 import "../commands/cmdline.ts";
 import "../commands/caret.ts";

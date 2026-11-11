@@ -63,8 +63,9 @@ type Session = {
   lower_text_: string | undefined;
   // What a rapid copy has picked so far, in order. The clipboard holds all of it after every pick.
   collected_: string[];
-  // `text_of_found_` reads the text of every hint. It runs when text mode first needs it and keeps its answer.
-  ready?: { picker: ReturnType<typeof create_picker>; found: Found[]; view: HintView; text_of_found_: () => string[]; stop_following_: () => void };
+  ready?: { picker: ReturnType<typeof create_picker>; found: Found[]; view: HintView; stop_following_: () => void };
+  // Set while a pick that typed text waits out its grace, see `PICK_GRACE_MS`. Keys that continue the word are dropped.
+  settling_?: true;
 };
 
 function observe_intersecting(elements: Element[]): Promise<Set<Element>> {
@@ -278,11 +279,12 @@ function register(host: BundleHostApi): void {
     const view = create_view();
     const labels = make_labels(found.length, letters);
     view.show(found.map((item, index) => ({ found: item, text: labels[index]! })));
+    // Read when text mode first needs the texts, once for this build.
     let texts: string[] | undefined;
     const text_of_found_ = () => (texts ??= found.map((item) => text_of(item.element)));
     // Every build starts in label mode. `text` only filters the hints, it does not start text mode, so the labels stay typable.
     const picker = create_picker(labels, text_of_found_);
-    current.ready = { picker, found, view, text_of_found_, stop_following_: follow_windows(windows_of(found), view.reposition) };
+    current.ready = { picker, found, view, stop_following_: follow_windows(windows_of(found), view.reposition) };
     // The queue stays on the session while the loop drains it: a pick hands what is left to normal mode, a rapid pick leaves it for the next build.
     while (current.ready && !current.cancelled && current.waiting_tokens_.length > 0) handle_token(current, current.waiting_tokens_.shift()!);
   }
@@ -291,7 +293,28 @@ function register(host: BundleHostApi): void {
     if (outcome.kind === "handled") view.show_progress_(outcome.typed, new Set(outcome.still_possible_), outcome.text, outcome.active);
   }
 
+  function pick(current: Session, index: number): void {
+    const ready = current.ready!;
+    delete current.settling_;
+    const picked = ready.found[index]!.element as HTMLElement;
+    const performed = begin_pick(current);
+    if (!current.rapid) {
+      leave_with_keys(current, () => performed(() => perform_pick(current, picked)));
+      return;
+    }
+    // Rapid: the pick may delete or move elements, so drop these labels and label the page again.
+    ready.stop_following_();
+    ready.view.clear_labels_();
+    delete current.ready;
+    performed(() => perform_pick(current, picked));
+    if (!current.cancelled) void build(current, find_candidates(current.filter, current.custom_selector_, current.action), false);
+  }
+
+  // The rest of a typed word still arrives after the key that made the match unique, and it would run as normal keys or as labels of the next round. So that pick waits, with hint mode still open, and the keys are dropped.
+  const PICK_GRACE_MS = 300;
+
   function handle_token(current: Session, token: string): "handled" | "pass" {
+    if (current.settling_) return is_hint_char(token) || is_text_key(token) ? "handled" : "pass";
     const ready = current.ready!;
     const outcome = ready.picker.on_token_(token);
     if (outcome.kind === "pass") return "pass";
@@ -301,19 +324,13 @@ function register(host: BundleHostApi): void {
     }
     show_outcome(ready.view, outcome);
     if (outcome.picked !== undefined) {
-      const { element } = ready.found[outcome.picked]!;
-      const picked = element as HTMLElement;
-      const performed = begin_pick(current);
-      if (!current.rapid) {
-        leave_with_keys(current, () => performed(() => perform_pick(current, picked)));
-        return "handled";
+      const picked_index = outcome.picked;
+      // Enter is a deliberate pick. A letter that left one match is the key that may be followed by more of the word.
+      if (outcome.text === undefined || token === "<Enter>") pick(current, picked_index);
+      else {
+        current.settling_ = true;
+        setTimeout(() => !current.cancelled && pick(current, picked_index), PICK_GRACE_MS);
       }
-      // Rapid: the pick may delete or move elements, so drop these labels and label the page again.
-      ready.stop_following_();
-      ready.view.clear_labels_();
-      delete current.ready;
-      performed(() => perform_pick(current, picked));
-      if (!current.cancelled) void build(current, find_candidates(current.filter, current.custom_selector_, current.action), false);
     }
     return "handled";
   }
@@ -331,6 +348,8 @@ function register(host: BundleHostApi): void {
   });
   host.register_handler_("copy.links", (args) => yank_links(args.scope as "page" | "viewport", args.format as LinkFormat, yank_deps(args.register as string | undefined)));
   host.register_handler_("hint.unhover", () => unhover());
+  // The sink takes these keys while a session is open. A key that gets here found no session, so there is nothing to do.
+  host.register_handler_("hint.key", () => done);
 
   // The command line asks for the list and `report` hands it back, so the answer does not go through the background.
   host.register_handler_("heading.list", (args) => void (args.report as (items: HeadingItem[]) => void)(take_snapshot().rows));

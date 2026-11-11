@@ -261,13 +261,26 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, press_
     await wait_event(mark, loaded("hint_one"), "the best match to load");
   });
 
-  await run_case("Tab then text that matches one link picks it at once", async () => {
+  await run_case("Tab then text that matches one link picks it, and the rest of the word does nothing", async () => {
     await open_page("hints", "p6_text_unique", { new_tab: true });
+    const tabs_before = await tab_count();
     const mark = events.length;
-    await press_keys(";l");
-    await wait_for_labels(";l");
-    await press_keys("-k", "Tab", "t", "w");
+    await run_hint({ action: "background", filter: "links" });
+    await wait_for_labels("the hint");
+    // "t" leaves one match. The j after it is the rest of a word and must not scroll the page as a normal key.
+    await press_keys("-k", "Tab", "t", "j");
     await wait_event(mark, loaded("hint_two"), "the only match to load");
+    await expect_absent(mark, "p6_text_unique", (event) => event.type === "scroll", "j scrolled the page after the pick", { report_delay_ms: scroll_report_wait_ms });
+    expect((await tab_count()) === tabs_before + 1, "the pick did not open exactly one tab");
+    await close_tabs_with("hint_two");
+  });
+
+  await run_case("Tab typed right after the hint key on a fresh page switches to text and never reaches the page", async () => {
+    await open_page("hints", "p6_text_first", { new_tab: true });
+    const mark = events.length;
+    await press_keys(";l", "-k", "Tab", "t", "w");
+    await wait_event(mark, loaded("hint_two"), "the only match to load");
+    await expect_absent(mark, "p6_text_first", (event) => event.type === "keydown" && event.key === "Tab", "Tab reached the page while the hints bundle loaded", { report_delay_ms: scroll_report_wait_ms });
   });
 
   await run_case("Backspace on empty text returns to label mode with the labels intact", async () => {
@@ -301,10 +314,12 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, press_
     const mark = events.length;
     await run_hint({ action: "background", filter: "links", rapid: true });
     await wait_for_labels("rapid");
-    await press_keys("-k", "Tab", "t", "w");
+    // The "a" and "s" are the rest of a word. In label mode of the next round they would pick links, so only the one text pick may open a tab.
+    await press_keys("-k", "Tab", "t", "a", "s");
     await wait_event(mark, loaded("hint_two"), "the text pick to load");
     await wait_for_labels("the first pick");
     expect(!(await text_box_shown()), "the next round is still in text mode");
+    await wait_for_tab_count(tabs_before + 1, "only the text pick to open a tab");
     await press_keys("a");
     await wait_event(mark, loaded("hint_one"), "label a to pick the first link in the next round");
     await wait_for_tab_count(tabs_before + 2, "two picks to open two tabs");

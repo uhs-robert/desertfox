@@ -34,8 +34,28 @@ class FakeNode {
   getAttribute() {
     return null;
   }
-  querySelectorAll() {
-    return [];
+  querySelector() {
+    return null;
+  }
+  // Only a class selector, over the children and the shadow tree.
+  querySelectorAll(selector: string): FakeNode[] {
+    const found: FakeNode[] = [];
+    const walk = (node: FakeNode) => {
+      if (node.className === selector.slice(1)) found.push(node);
+      node.children.forEach(walk);
+      if (node.shadow) walk(node.shadow);
+    };
+    this.children.forEach(walk);
+    return found;
+  }
+  box: { left: number; top: number; right: number; bottom: number } | undefined;
+  getBoundingClientRect() {
+    return this.box ?? { left: 0, top: 0, right: 0, bottom: 0 };
+  }
+  before(node: FakeNode) {
+    node.remove();
+    node.parent = this.parent;
+    this.parent!.children.splice(this.parent!.children.indexOf(this), 0, node);
   }
   matches(_selector: string) {
     return false;
@@ -54,6 +74,9 @@ type Link = FakeNode & { localName: string; href: string; rect_top: number; on_c
 async function peek(answer: Outcome | Promise<Outcome>): Promise<Outcome | undefined> {
   return Promise.race([answer, new Promise<undefined>((resolve) => setTimeout(resolve, 20))]);
 }
+
+// A text pick waits this long, so the rest of the typed word is dropped (PICK_GRACE_MS in main.ts is 300).
+const after_grace = () => new Promise((resolve) => setTimeout(resolve, 350));
 
 const settle = async () => {
   for (let turn = 0; turn < 6; turn++) await new Promise((resolve) => setTimeout(resolve, 0));
@@ -211,6 +234,7 @@ async function page_with(texts: string[]) {
     labels: () => nodes_with_class("desertfox-hint").filter((node) => node.style.display !== "none").map((node) => node.children.map((part) => part.textContent).join("")),
     label_tops: () => nodes_with_class("desertfox-hint").map((node) => node.style.top),
     nodes_with_class,
+    labels_of: (node: FakeNode) => node.children.map((part) => part.textContent).join(""),
     messages: () => nodes_with_class("desertfox-hint-message").map((node) => node.textContent),
     host_count: () => document_root.children.length,
     caret_target: () => win as unknown as { desertfox_caret_target?: unknown },
@@ -355,9 +379,109 @@ test("Tab then text narrows the labels, and one match picks at once", async () =
   assert.equal(page.type("e"), "handled");
   assert.equal(page.links.length, 3);
   assert.equal(page.type("t"), "handled");
+  await after_grace();
   await settle();
   assert.deepEqual(page.links.map((link) => link.textContent), ["Alpha one", "Alpha two"]);
   assert.equal(page.mode(), "normal");
+});
+
+test("the rest of a word typed after the key that made one match is dropped, and the pick runs after the grace", async () => {
+  const page = await page_with(["Alpha one", "Alpha two", "Beta"]);
+  page.run({ action: "delete" });
+  await settle();
+  page.type("<Tab>");
+  page.type("b");
+  for (const key of ["e", "j", "<Space>", "<Tab>"]) assert.equal(page.type(key), "handled", key);
+  assert.equal(page.links.length, 3);
+  assert.equal(page.mode(), "hint");
+  await after_grace();
+  await settle();
+  assert.deepEqual(page.links.map((link) => link.textContent), ["Alpha one", "Alpha two"]);
+  assert.equal(page.mode(), "normal");
+  assert.deepEqual(page.held_key_batches, []);
+});
+
+test("in rapid mode the rest of the word never types a label in the next round", async () => {
+  const page = await page_with(["Alpha one", "Alpha two", "Beta"]);
+  page.run({ action: "delete", rapid: true });
+  await settle();
+  page.type("<Tab>");
+  page.type("b");
+  page.type("a");
+  page.type("s");
+  await after_grace();
+  await settle();
+  assert.equal(page.links.length, 2);
+  assert.equal(page.labels().length, 2);
+  page.escape();
+});
+
+test("Escape during the grace cancels the pick", async () => {
+  const page = await page_with(["Alpha one", "Beta"]);
+  page.run({ action: "delete" });
+  await settle();
+  page.type("<Tab>");
+  page.type("b");
+  page.escape();
+  await after_grace();
+  assert.equal(page.links.length, 2);
+});
+
+test("Space turns the stacking order of labels that overlap, reading the boxes again on each press", async () => {
+  const page = await page_with(["one", "two", "three"]);
+  page.run({ action: "delete" });
+  await settle();
+  const [first, second, third] = page.nodes_with_class("desertfox-hint");
+  const order = () => page.nodes_with_class("desertfox-hint").map((node) => page.labels_of(node));
+  const overlap = { left: 0, top: 0, right: 20, bottom: 10 };
+  first!.box = overlap;
+  second!.box = { ...overlap, left: 10 };
+  third!.box = { left: 100, top: 100, right: 120, bottom: 110 };
+  const before = order();
+  page.type("<Space>");
+  assert.deepEqual(order(), [before[1], before[0], before[2]]);
+  page.type("<Space>");
+  assert.deepEqual(order(), before);
+  // A scroll moved the third label onto the others, so all three turn together now.
+  third!.box = { ...overlap, left: 5 };
+  page.type("<Space>");
+  assert.deepEqual(order(), [before[2], before[0], before[1]]);
+  // A label hidden by typing is not part of a group.
+  first!.style.display = "none";
+  page.type("<Space>");
+  assert.deepEqual(order(), [before[1], before[2], before[0]]);
+  page.escape();
+});
+
+test("text mode swaps the colors of the active hint and shows the typed text, and label mode takes both away", async () => {
+  const page = await page_with(["Alpha one", "Alpha two", "Beta"]);
+  page.run({ action: "delete" });
+  await settle();
+  const active_nodes = () => page.nodes_with_class("desertfox-hint").filter((node) => node.style.background === "var(--label-text)");
+  assert.equal(active_nodes().length, 0);
+  page.type("<Tab>");
+  page.type("a");
+  assert.equal(active_nodes().length, 1);
+  assert.equal(page.nodes_with_class("desertfox-hint-text")[0]!.textContent, "text: a");
+  page.type("<Tab>");
+  assert.equal(active_nodes().length, 1);
+  assert.equal(active_nodes()[0]!.style.color, "var(--primary)");
+  page.type("<Backspace>");
+  page.type("<Backspace>");
+  assert.equal(active_nodes().length, 0);
+  assert.equal(page.nodes_with_class("desertfox-hint-text").length, 0);
+  page.escape();
+});
+
+test("Space and Enter typed while the hints are found wait and replay in order", async () => {
+  const page = await page_with(["Alpha one", "Alpha two", "Beta"]);
+  page.run({ action: "delete" });
+  for (const key of ["<Tab>", "a", "l", "<Space>", "t", "<Enter>"]) assert.equal(page.type(key), "handled", key);
+  await settle();
+  // "al t" matches both Alpha links ("t" is in "two" only), so "Alpha two" is the one match and picks at once, ahead of the Enter.
+  await after_grace();
+  await settle();
+  assert.deepEqual(page.links.map((link) => link.textContent), ["Alpha one", "Beta"]);
 });
 
 test("Tab and Shift-Tab move the active hint and Enter picks it", async () => {
@@ -392,6 +516,7 @@ test("a rapid rebuild after a text pick is back in label mode", async () => {
   page.run({ action: "delete", rapid: true });
   await settle();
   for (const key of ["<Tab>", "b", "e", "t"]) page.type(key);
+  await after_grace();
   await settle();
   assert.equal(page.links.length, 2);
   assert.equal(page.nodes_with_class("desertfox-hint-text").length, 0);
@@ -406,6 +531,7 @@ test("Tab and text typed while the hints are found wait, then switch and filter"
   const page = await page_with(["Alpha one", "Alpha two", "Beta"]);
   page.run({ action: "delete" });
   for (const key of ["<Tab>", "b", "e", "t"]) assert.equal(page.type(key), "handled");
+  await after_grace();
   await settle();
   assert.deepEqual(page.links.map((link) => link.textContent), ["Alpha one", "Alpha two"]);
 });
