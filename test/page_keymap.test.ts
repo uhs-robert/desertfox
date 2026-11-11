@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { rule_addresses_of, page_keymap_for, read_keymap_reply } from "../src/background/page_keymap.ts";
+import { rule_addresses_of, page_keymap_for, read_keymap_reply, site_columns_for, site_value, top_frame_address_of } from "../src/background/page_keymap.ts";
 import { create_keymap_asks } from "../src/content/ask_keymap.ts";
 import { create_key_flow } from "../src/content/key_flow.ts";
 import { create_mode_state } from "../src/content/mode_state.ts";
@@ -16,7 +16,7 @@ const KEYMAP: KeymapConfig = {
   normal: { j: { id: "a.j" }, k: { id: "a.k" }, gg: { id: "a.gg" }, ",i": { id: "a.ignore" }, "<S-Escape>": { id: "a.leave" }, "<C-v>": { id: "a.v" } },
   browser: { "<A-j>": { id: "a.tab" } },
 };
-const compile = (site_rules: { site: string; pass?: string; only?: string }[]) => compile_keymap(KEYMAP, { site_rules }, resolve).compiled;
+const compile = (site_rules: { site: string; off?: boolean; pass?: string; only?: string }[]) => compile_keymap(KEYMAP, { site_rules }, resolve).compiled;
 const storage_of = (stored: unknown) => ({ get: async () => ({ [COMPILED_KEYMAP_STORAGE_KEY]: stored }) }) as never;
 const ask = async (compiled: CompiledKeymap | undefined, ...addresses: string[]) => page_keymap_for(storage_of(compiled), addresses);
 
@@ -59,14 +59,54 @@ test("an all-off page keeps the whole normal tree, so ,i and the way out stay", 
   assert.ok((reply.keymap.modes.normal?.children[","] as { children: Record<string, unknown> }).children["i"]);
 });
 
-test("the first matching rule wins", async () => {
+test("the first matching key rule wins", async () => {
   const compiled = compile([{ site: "https://a.test/*", pass: "j" }, { site: "https://a.test/*", pass: "k" }]);
   assert.deepEqual((await ask(compiled, "https://a.test/"))!.frees?.tokens, ["j"]);
 });
 
+test("an off = false row keeps a page on under a broader off row, and a later row still gives the key rule", async () => {
+  const compiled = compile([{ site: "https://a.test/app/*", off: false }, { site: "https://a.test/*", pass: "j" }, { site: "https://a.test/*", off: true }]);
+  const kept = (await ask(compiled, "https://a.test/app/x"))!;
+  assert.equal(kept.all_off, false);
+  assert.deepEqual(kept.frees?.tokens, ["j"]);
+  const off = (await ask(compiled, "https://a.test/other"))!;
+  assert.equal(off.all_off, true);
+  assert.equal(off.frees, undefined);
+  assert.deepEqual(off.keymap.modes.normal, compiled.modes.normal);
+});
+
+test("an edit between two asks reaches the open page on the next ask", async () => {
+  let stored = compile([{ site: "https://a.test/*", pass: "j" }]);
+  const storage = { get: async () => ({ [COMPILED_KEYMAP_STORAGE_KEY]: stored }) } as never;
+  assert.equal((await page_keymap_for(storage, ["https://a.test/"]))!.all_off, false);
+  // The popup appends an off row below the file's key row: the off column was unset, so the new row decides it.
+  stored = compile([{ site: "https://a.test/*", pass: "j" }, { site: "https://a.test/*", off: true }]);
+  assert.equal((await page_keymap_for(storage, ["https://a.test/"]))!.all_off, true);
+  stored = compile([{ site: "https://a.test/*", pass: "j" }]);
+  const back = (await page_keymap_for(storage, ["https://a.test/"]))!;
+  assert.equal(back.all_off, false);
+  assert.deepEqual(back.frees?.tokens, ["j"]);
+});
+
+test("a site value beats the global value, which holds :set, and only on its sites", () => {
+  // No setting opts in yet, so the rows are cast: the compiler copies every column besides site, off, pass and only.
+  const compiled = compile([{ site: "https://a.test/*", zoom: 2 }] as unknown as Parameters<typeof compile>[0]);
+  // The name and value are cast too: `site_value` takes only per-site setting names, and there are none yet.
+  assert.equal(site_value(site_columns_for(compiled, ["https://a.test/"]), "zoom" as never, 1.25 as never), 2);
+  assert.equal(site_value(site_columns_for(compiled, ["https://b.test/"]), "zoom" as never, 1.25 as never), 1.25);
+  // A false or zero site value still wins.
+  const falsy = compile([{ site: "https://a.test/*", flag: false }] as unknown as Parameters<typeof compile>[0]);
+  assert.equal(site_value(site_columns_for(falsy, ["https://a.test/"]), "flag" as never, true as never), false);
+});
+
+test("a tab-wide value resolves against the top frame's address in every frame", () => {
+  assert.equal(top_frame_address_of({ frameId: 0, url: "https://top.test/", tab: { url: "https://old.test/" } }), "https://top.test/");
+  assert.equal(top_frame_address_of({ frameId: 3, url: "https://embed.test/", tab: { url: "https://top.test/" } }), "https://top.test/");
+});
+
 test("no stored keymap and an old format version both answer undefined", async () => {
   assert.equal(await ask(undefined, "https://a.test/"), undefined);
-  assert.equal(await ask({ ...compile([]), format_version: 4 } as unknown as CompiledKeymap, "https://a.test/"), undefined);
+  assert.equal(await ask({ ...compile([]), format_version: 5 } as unknown as CompiledKeymap, "https://a.test/"), undefined);
 });
 
 test("the top frame matches on its own address, never on a tab address that lags", async () => {

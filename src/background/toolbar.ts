@@ -1,11 +1,10 @@
 // The on/off switch behind the toolbar popup and its shortcut. Browser access comes in as arguments, so tests run without a browser.
 
 import type { MergedConfig, SettingEdits } from "../shared/config.ts";
-import { matches_pattern } from "../shared/match_pattern.ts";
+import { matches_pattern, resolve_site_columns, site_row_columns, type ResolvedSiteColumns, type SiteRowKeys, type SiteRuleRow } from "../shared/match_pattern.ts";
 import { COMPILED_KEYMAP_VERSION } from "../shared/prefix_tree.ts";
 import type { ToolbarAnswer, ToolbarRequest } from "../shared/messages.ts";
 import type { CompiledKeymap } from "../shared/prefix_tree.ts";
-import type { Settings } from "../shared/config.ts";
 
 // The manifest `commands` entry that toggles. It is not a slot: no keymap chord reaches it, and it runs while DesertFox is off.
 export const TOGGLE_COMMAND = "toggle_enabled";
@@ -86,11 +85,9 @@ export function site_pattern(url: string | undefined): string | undefined {
   return bare === "" ? undefined : `*://*.${bare}/*`;
 }
 
-export type SiteRuleRow = Settings["site_rules"][number];
-
-// `disabled` is the all-off row this popup wrote, which a click can remove. `config` is a rule from the config file or one with keys, so only editing the settings removes it.
-// `rule` words what the matching rule does to this page, and is absent when no rule matches.
-export type SiteState = { kind: "unavailable" } | { kind: "enabled"; pattern: string } | { kind: "disabled" | "config"; pattern: string; rule: string };
+// `disabled` is an off row this popup wrote, which a click can remove. `config` is a page whose off column another row decides, so only editing the settings changes it.
+// `rule` words what the matching rows do to this page, and is absent when no row matches.
+export type SiteState = { kind: "unavailable" } | { kind: "enabled" | "disabled" | "config"; pattern: string; rule?: string };
 
 export type SiteRuleLayers = {
   // The config file's own rules.
@@ -101,36 +98,50 @@ export type SiteRuleLayers = {
   effective: readonly SiteRuleRow[];
 };
 
-const is_all_off = (rule: SiteRuleRow): boolean => rule.pass === undefined && rule.only === undefined;
+// The row the popup writes for a pattern: off and nothing else. A bare row of an older popup counts too, since it loads as off.
+const is_popup_row = (pattern: string) => (row: SiteRuleRow): boolean => {
+  const { off, keys, values } = site_row_columns(row);
+  return row.site === pattern && off === true && keys === undefined && values === undefined;
+};
+
+const columns_at = (rows: readonly SiteRuleRow[], url: string): ResolvedSiteColumns<SiteRowKeys> =>
+  resolve_site_columns(rows.filter((row) => matches_pattern(row.site, url)).map(site_row_columns));
+
 const key_count = (keys: string): number => keys.split(/\s+/).filter((word) => word !== "").length;
 const plural = (count: number): string => `${count} ${count === 1 ? "key" : "keys"}`;
 
-export function describe_rule(rule: SiteRuleRow): string {
-  if (rule.pass !== undefined) return `pass ${plural(key_count(rule.pass))}`;
-  if (rule.only !== undefined) return `only ${plural(key_count(rule.only))}`;
-  return "all off";
+// "all off", or what is set among "on", the key rule and the per-site values, for example "on, pass 3 keys".
+export function describe_columns(columns: ResolvedSiteColumns<SiteRowKeys>): string | undefined {
+  if (columns.off === true) return "all off";
+  const keys = columns.keys === undefined ? [] : ["pass" in columns.keys ? `pass ${plural(key_count(columns.keys.pass))}` : `only ${plural(key_count(columns.keys.only))}`];
+  const parts = [...(columns.off === false ? ["on"] : []), ...keys, ...Object.entries(columns.values).map(([name, value]) => `${name} ${String(value)}`)];
+  return parts.length > 0 ? parts.join(", ") : undefined;
 }
 
+// The popup can turn a site off only while no row sets the off column: its appended row then decides it.
+// It can turn a site on again only while its own saved row decides the column and no other row would.
 export function site_state(url: string | undefined, layers: SiteRuleLayers): SiteState {
   const pattern = site_pattern(url);
   if (pattern === undefined || url === undefined) return { kind: "unavailable" };
-  const winner = layers.effective.find((rule) => matches_pattern(rule.site, url));
-  if (winner === undefined) return { kind: "enabled", pattern };
-  const file_matches = layers.file.some((rule) => matches_pattern(rule.site, url));
-  const rule = describe_rule(winner);
-  if (is_all_off(winner) && winner.site === pattern && layers.saved?.some((saved) => is_all_off(saved) && saved.site === pattern) && !file_matches) return { kind: "disabled", pattern, rule };
-  return { kind: "config", pattern, rule };
+  const columns = columns_at(layers.effective, url);
+  const rule = describe_columns(columns);
+  const state = { pattern, ...(rule === undefined ? {} : { rule }) };
+  if (columns.off === undefined) return { kind: "enabled", ...state };
+  const own = is_popup_row(pattern);
+  // A popup row the file also holds is the file's: removing it from the saved list would drop a file rule.
+  const popup_decides = columns.off && (layers.saved?.some(own) ?? false) && !layers.file.some(own) && columns_at(layers.effective.filter((row) => !own(row)), url).off === undefined;
+  return { kind: popup_decides ? "disabled" : "config", ...state };
 }
 
 // The edits after a site is disabled or enabled, or undefined when nothing changes. The saved list starts as the config file's list,
-// so the edit keeps the file's rules. Disabling appends an all-off row, and enabling removes the all-off rows for the pattern.
+// so the edit keeps the file's rules. Disabling appends an off row, and enabling removes the popup's off rows for the pattern.
 export function plan_site_edit(current: SettingEdits, file_rules: readonly SiteRuleRow[], pattern: string, action: "disable" | "enable"): SettingEdits | undefined {
   // Never the list in force: that would copy a `:set --temp` into the saved layer.
   const base = current.saved.site_rules ?? file_rules;
-  const is_row = (rule: SiteRuleRow) => is_all_off(rule) && rule.site === pattern;
-  const listed = base.some(is_row);
+  const own = is_popup_row(pattern);
+  const listed = base.some(own);
   if (action === "disable" ? listed : !listed) return undefined;
-  const next = action === "disable" ? [...base, { site: pattern }] : base.filter((rule) => !is_row(rule));
+  const next = action === "disable" ? [...base, { site: pattern, off: true }] : base.filter((row) => !own(row));
   return { ...current, saved: { ...current.saved, site_rules: next } };
 }
 

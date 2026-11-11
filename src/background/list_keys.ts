@@ -13,8 +13,7 @@ import { ANY_KEY, COMPILED_KEYMAP_STORAGE_KEY, token_label } from "../shared/pre
 import type { CompiledKeymap, TreeBranch, TreeLeaf, TreeNode } from "../shared/prefix_tree.ts";
 
 import { is_available } from "./availability.ts";
-import { prune_tree } from "../shared/keys/prune_tree.ts";
-import { site_rule_for } from "./page_keymap.ts";
+import { normal_tree_for, site_columns_for } from "./page_keymap.ts";
 
 // The modes where the matcher reads `"` as the register prefix.
 const REGISTER_PREFIX_MODES: readonly string[] = ["normal", "caret", "visual", "visual_line"];
@@ -114,9 +113,8 @@ export async function list_keys(
     return { title: ["registers"], rows: items.map(({ name, description }) => ({ keys: name, command: description, description: "", more: false })), border: keymap?.which_key_border ?? "square" };
   }
   const mode_root = keymap?.modes[request.mode as keyof CompiledKeymap["modes"]];
-  // The panel lists what the page's rule leaves, the same tree the page gets from `read_keymap`.
-  const rule = request.mode === "normal" ? site_rule_for(keymap, addresses) : undefined;
-  const root = rule === undefined || "all_off" in rule ? mode_root : prune_tree(mode_root, rule);
+  // The panel lists what the page's key rule leaves, the same tree the page gets from `read_keymap`.
+  const root = request.mode === "normal" ? normal_tree_for(mode_root, site_columns_for(keymap, addresses)).tree : mode_root;
   const shown = root && availability ? without_unavailable(root, availability) : root;
   const panel = panel_after_prefix(shown, request.prefix, find_command, keymap?.which_key_border);
   const marked = marks ? await with_page_marks(panel, shown, request.prefix, marks) : panel;

@@ -1,6 +1,8 @@
-// WebExtension match patterns: `<all_urls>` or `scheme://host/path` with `*` wildcards.
+// WebExtension match patterns: `<all_urls>` or `scheme://host/path` with `*` wildcards, and the column rules of the site table that matches rows by them.
 // Snippets use them to name the sites they run on, so a URL is parsed, never sliced with a regex:
 // "https://evil.com?x=@a.example.com/" must not pass for the host a.example.com.
+
+import type { Settings } from "./settings_table.ts";
 
 const PATTERN_PARTS = /^(\*|https?|file|ftp):\/\/([^/]*)(\/.*)$/;
 
@@ -68,4 +70,34 @@ export function matches_any_address(source: string | undefined, addresses: reado
   } catch {
     return false;
   }
+}
+
+// The site table (`site_rules`) resolves each column on its own: the first matching row that sets a column decides it.
+// `pass` and `only` form one column, the key rule. Each per-site setting is a column of its own in `values`.
+export type SiteColumns<Keys> = { off?: boolean; keys?: Keys; values?: Readonly<Record<string, unknown>> };
+export type ResolvedSiteColumns<Keys> = { off?: boolean; keys?: Keys; values: Record<string, unknown> };
+
+// `rows` are the rows that match the page, in table order.
+export function resolve_site_columns<Keys>(rows: readonly SiteColumns<Keys>[]): ResolvedSiteColumns<Keys> {
+  const resolved: ResolvedSiteColumns<Keys> = { values: {} };
+  for (const row of rows) {
+    if (resolved.off === undefined && row.off !== undefined) resolved.off = row.off;
+    if (resolved.keys === undefined && row.keys !== undefined) resolved.keys = row.keys;
+    for (const [name, value] of Object.entries(row.values ?? {})) if (!Object.hasOwn(resolved.values, name)) resolved.values[name] = value;
+  }
+  return resolved;
+}
+
+export type SiteRuleRow = Settings["site_rules"][number];
+export type SiteRowKeys = { pass: string } | { only: string };
+
+const SITE_ROW_FIELDS = new Set(["site", "off", "pass", "only"]);
+
+// A row's columns, with an unset column left out. A row that sets nothing but `site` is off: older configs and the popup wrote that shape.
+export function site_row_columns(row: SiteRuleRow): SiteColumns<SiteRowKeys> {
+  const values = Object.fromEntries(Object.entries(row).filter(([field, value]) => !SITE_ROW_FIELDS.has(field) && value !== undefined));
+  const keys: SiteRowKeys | undefined = row.pass !== undefined ? { pass: row.pass } : row.only !== undefined ? { only: row.only } : undefined;
+  const has_values = Object.keys(values).length > 0;
+  const off = row.off ?? (keys === undefined && !has_values ? true : undefined);
+  return { ...(off === undefined ? {} : { off }), ...(keys === undefined ? {} : { keys }), ...(has_values ? { values } : {}) };
 }

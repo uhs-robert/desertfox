@@ -14,7 +14,7 @@ const EXPECTATIONS: Record<string, string> = {
   which_key_border: '"square", "round" or "chamfer"',
   hint_letters: "a string of 2 or more distinct letters, without /",
   hint_key_line: "true or false",
-  site_rules: 'a list of tables with "site", an optional "pass" of key sequences and an optional "only" of key sequences',
+  site_rules: 'a list of tables with "site", an optional "off" of true or false, an optional "pass" of key sequences and an optional "only" of key sequences',
   next_patterns: "a list of link texts",
   prev_patterns: "a list of link texts",
   mode_indicator: '"always", "not_normal" or "off"',
@@ -83,7 +83,7 @@ const ACCEPTS: Record<string, unknown[]> = {
   which_key_border: ["square", "round", "chamfer"],
   hint_letters: ["ab", "asdfghjkl", "12"],
   hint_key_line: [true, false],
-  site_rules: [[], [{ site: "*://a.com/*" }, { site: "*://b.com/*", pass: "j k <C-d> gg" }, { site: "*://c.com/*", only: "<A-j>" }]],
+  site_rules: [[], [{ site: "*://a.com/*" }, { site: "*://b.com/*", pass: "j k <C-d> gg" }, { site: "*://c.com/*", only: "<A-j>" }], [{ site: "*://a.com/*", off: true, pass: "j" }, { site: "*://b.com/*", off: false }]],
   next_patterns: [[], ["next", ">"]],
   prev_patterns: [[], ["prev", "<"]],
   mode_indicator: ["always", "not_normal", "off"],
@@ -118,7 +118,7 @@ const REFUSES: Record<string, unknown[]> = {
   hint_letters: ["a", "aa", "aba", "a/b", 12],
   hint_key_line: ["true", 1],
   site_rules: [
-    "a.com", [""], [{}], [{ site: "a" , pass: "j", only: "k" }], [{ site: "a", pass: "" }], [{ site: "a", pass: "   " }], [{ site: "a", only: "<j>" }], [{ site: "a", keys: "j" }], [{ site: "a", pass: 1 }],
+    "a.com", [""], [{}], [{ site: "a" , pass: "j", only: "k" }], [{ site: "a", pass: "" }], [{ site: "a", pass: "   " }], [{ site: "a", only: "<j>" }], [{ site: "a", keys: "j" }], [{ site: "a", pass: 1 }], [{ site: "a", off: "true" }], [{ site: "a", off: 1 }], [{ site: "a", zoom: 2 }],
   ],
   next_patterns: ["next", [""], [1]],
   prev_patterns: ["prev", [""], [1]],
@@ -190,6 +190,7 @@ test("a bad site rule names its item and its fault", () => {
   assert.equal(explain([{ site: "*://a.test/*", pass: " " }]), 'item 1 has a field "pass" that lists no key');
   assert.match(explain([{ site: "*://a.test/*", only: "j <j>" }])!, /^item 1 has a field "only" that has "<j>", which /);
   assert.equal(explain([{ pass: "j" }]), 'item 1 needs a non-empty "site"');
+  assert.equal(explain([{ site: "*://a.test/*", off: "yes" }]), 'item 1 has a field "off" that is not true or false');
 });
 
 // The first ten were the defaults before #85. The rest were written at each reader, or were what an absent value read as.

@@ -1,5 +1,5 @@
 // Site rules: a pass rule frees a key, an only rule frees all but the listed keys, an all-off rule starts the page in ignore mode,
-// and a rule edit reaches an open page at once. The rows sit in config/settings.toml, one pattern per page id.
+// each column resolves on its own, and a rule edit reaches an open page at once. The rows sit in config/settings.toml, one pattern per page id.
 import { SHIFT_ESCAPE } from "./harness.mjs";
 
 export const areas = ["keys", "config", "toolbar"];
@@ -68,6 +68,14 @@ export async function run_cases({ run_case, open_page, press_keys, wait_event, w
     expect((await scroll_delta_by_press("rule_off", ["j"])) > 0, "j did not scroll after leaving ignore mode");
   });
 
+  await run_case("off = false above a bare row keeps the page on, and a pass row between them still applies", async () => {
+    await open_page("page", "rule_keep", { new_tab: true });
+    await poll_until("the NORMAL badge", async () => badge_of("rule_keep") === "NORMAL");
+    await page_sees("rule_keep", "j", "the page to see the passed j under off = false");
+    expect((await scroll_delta_by_press("rule_keep", ["G"])) > 0, "G did not scroll on a page that off = false keeps on");
+    expect(badge_of("rule_keep") === "NORMAL", "the bare row below put the page in ignore mode");
+  });
+
   // The popup page in a background tab is an extension page, so its message passes the background's sender check.
   const send_from_popup = async (request) => {
     await in_background(`(async () => { if (!browser.extension.getViews({ type: "tab" }).some((view) => view.location.pathname === "/popup.html")) await browser.tabs.create({ url: browser.runtime.getURL("popup.html"), active: false }); })()`);
@@ -85,7 +93,7 @@ export async function run_cases({ run_case, open_page, press_keys, wait_event, w
       await poll_until("IGNORE after the rule is added", async () => badge_of("rule_live") === "IGNORE");
       const answer = await site_request("rule_live", "enable");
       expect(answer.ok, `enable answered ${JSON.stringify(answer)}`);
-      await poll_until("the rule to leave", async () => (await in_background(`browser.storage.local.get("desertfox_compiled_keymap").then((got) => got.desertfox_compiled_keymap?.site_rules?.length ?? 0)`)) === 5);
+      await poll_until("the rule to leave", async () => (await in_background(`browser.storage.local.get("desertfox_compiled_keymap").then((got) => got.desertfox_compiled_keymap?.site_rules?.length ?? 0)`)) === 8);
       await poll_until("NORMAL once the rule that turned the page off is gone", async () => badge_of("rule_live") === "NORMAL");
       expect((await scroll_delta_by_press("rule_live", ["j"])) > 0, "j did not scroll after the all-off rule left");
       await site_request("rule_live", "disable");
@@ -100,6 +108,25 @@ export async function run_cases({ run_case, open_page, press_keys, wait_event, w
     } finally {
       await send_from_popup({ type: "change_setting", name: "newtab_date", action: "reset" });
       await site_request("rule_live", "enable");
+      await in_background(`(async () => { for (const tab of await browser.tabs.query({})) if (tab.url.endsWith("/popup.html")) await browser.tabs.remove(tab.id); })()`);
+    }
+  });
+
+  await run_case("the popup turns off a page under a key rule, a page loaded meanwhile starts off, and enable gives the key rule back", async () => {
+    await open_page("page", "rule_pass_live", { new_tab: true });
+    try {
+      await poll_until("NORMAL before the edit", async () => badge_of("rule_pass_live") === "NORMAL");
+      const answer = await site_request("rule_pass_live", "disable");
+      expect(answer.ok, `disable answered ${JSON.stringify(answer)}`);
+      await poll_until("IGNORE once the off row decides the column", async () => badge_of("rule_pass_live") === "IGNORE");
+      await open_page("page", "rule_pass_fresh", { new_tab: true });
+      await poll_until("IGNORE on a page loaded after the edit", async () => badge_of("rule_pass_fresh") === "IGNORE");
+      await site_request("rule_pass_fresh", "enable");
+      await poll_until("NORMAL once the off row is gone", async () => badge_of("rule_pass_fresh") === "NORMAL");
+      await page_sees("rule_pass_fresh", "j", "the page to see the passed j once the key rule applies again");
+      expect((await scroll_delta_by_press("rule_pass_fresh", ["G"])) > 0, "G did not scroll after the off row left");
+    } finally {
+      await site_request("rule_pass_live", "enable");
       await in_background(`(async () => { for (const tab of await browser.tabs.query({})) if (tab.url.endsWith("/popup.html")) await browser.tabs.remove(tab.id); })()`);
     }
   });
