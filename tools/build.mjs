@@ -23,6 +23,13 @@ const MAX_BYTES = {
   "devtools.js": 2 * 1024,
 };
 
+// The content.js guard (its MAX_BYTES entry) may rise in steps, never past this. See AGENTS.md, "Content script size".
+const CONTENT_CEILING_BYTES = 32 * 1024;
+if (MAX_BYTES["content.js"] > CONTENT_CEILING_BYTES) {
+  console.error(`the content.js guard of ${MAX_BYTES["content.js"]} bytes is over the ${CONTENT_CEILING_BYTES} byte ceiling`);
+  process.exit(1);
+}
+
 await rm("dist", { recursive: true, force: true });
 await mkdir("dist", { recursive: true });
 

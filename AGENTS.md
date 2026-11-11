@@ -34,6 +34,15 @@ If code and the design disagree, stop and ask the maintainer. Do not change the 
 - Express flags that exclude each other as one `enum` param with preset flags. `when`, the conditional `default`, `value_when` (which values of an enum a sibling's value allows) and `pattern_arms` (which text pattern a string takes per sibling value) are the only conditions; the last three reuse the syntax of `when`. Split a command that needs more.
 - Keep every static argument rule in the param schema, checked by the one validator. A command handler reports runtime failures only, never a bad argument value. Throw runtime failures as `RuntimeRefusal`. A test fails when a handler refuses args the schema accepts.
 
+## Content script size
+
+`content.js` loads in every frame of every page. Docs: [`docs/design.md`](docs/design.md), "Content script size".
+
+- Admission rule: code goes in `content.js` only if it runs before the first key or decides what happens to a key, serves a key pressed on most pages in most frames (scrolling), or is needed for the bundles to load (the bundle host and its proxies). Everything else goes in an on-demand bundle.
+- Guard: 17 KB (17408 bytes) in `MAX_BYTES["content.js"]` of `tools/build.mjs`. The build fails above it.
+- Ceiling: 32 KB (32768 bytes), `CONTENT_CEILING_BYTES`. The build fails when the guard is set above it. Size does not delay the first key below about 64 KB, so the ceiling bounds the memory cost (about 2.4 KB of heap per KB, in every frame).
+- Raise the guard only as the last step: the new code passes the admission rule (the commit names the clause), code that fails the rule has moved out first, the step is 512 bytes, and the commit names the feature. Passing the ceiling needs the maintainer's decision and a fresh run of `tools/measure/`.
+
 ## Public repo rules
 
 This repository is public.
