@@ -226,7 +226,9 @@ export function start_server() {
         if (page_id.includes("refocus_frame")) inner.defaultView.addEventListener("blur", () => setTimeout(() => frame.focus()));
         editor.focus();
       })</script>`;
-      return response.end(page(`hidden_input_frame ${id}`, tall_filler, script));
+      // With title_input in the id, the page shows a field of its own above the document, as Docs does with its title.
+      const title_input = id.includes("title_input") ? '<input id="title">' : "";
+      return response.end(page(`hidden_input_frame ${id}`, title_input + tall_filler, script));
     }
     // A frame whose whole document is the editor, as an iframe rich-text editor makes it: the body is contenteditable, or the document is in designMode. The body takes the focus and cannot be blurred.
     if (url.pathname === "/body_editor_frame" || url.pathname === "/design_mode_frame") {

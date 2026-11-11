@@ -226,6 +226,19 @@ export async function run_cases({ run_case, press_keys, open_page, expect, poll_
     expect((await frame_focus_count()) === 3, `the frame took the focus ${await frame_focus_count()} times after the second Escape, expected 3`);
   });
 
+  await run_case("gi picks the hidden frame's editor ahead of a visible field of the page", async () => {
+    const id = "p15_title_input";
+    await open_page("hidden_input_frame", id, { new_tab: false, keys_page_id: `${id}_frame` });
+    await expect_badge_and_mode("INSERT");
+    await press_keys("-k", "Escape");
+    await expect_handed_off();
+    await press_keys("gi");
+    await expect_badge_and_mode("INSERT");
+    expect((await in_active_tab(`document.activeElement.id`)) === "input_frame", `gi focused ${await in_active_tab(`document.activeElement.id`)} in the top page`);
+    expect((await in_active_tab(`document.getElementById("input_frame").contentDocument.activeElement.id`)) === "editor", "gi did not focus the editor in the hidden frame");
+    await expect_key_reaches_frame("j", id);
+  });
+
   await run_case("a visible frame with a field keeps the focus and its keys after Escape", async () => {
     const id = "p15_visible_frame";
     await open_page("frames", id, { new_tab: false });

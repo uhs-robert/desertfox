@@ -20,10 +20,10 @@ const visible_fields_in = (doc: Document) =>
 const hidden_frame_field = (): HTMLElement | undefined =>
   Array.from(document.querySelectorAll("iframe")).flatMap((frame) => (frame.contentDocument && is_hidden_frame(frame) ? visible_fields_in(frame.contentDocument) : []))[0];
 
-// A field of this document comes first, so a page with a visible field keeps its target whatever hidden frames it holds.
+// A hidden input frame's field comes first: a page that types into one is an editor, and its visible fields are side fields (Google Docs shows a title input above the document).
 export function focus_first_input(): void {
   const inputs = visible_fields_in(document);
-  const target = inputs.find(is_in_viewport) ?? inputs[0] ?? hidden_frame_field();
+  const target = hidden_frame_field() ?? inputs.find(is_in_viewport) ?? inputs[0];
   if (!target) throw new Error("No text field on this page");
   target.focus();
 }

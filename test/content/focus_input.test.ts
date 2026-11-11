@@ -76,8 +76,8 @@ test("gi focuses the field inside a hidden input frame when the page itself has 
   assert.equal(run_gi([{ name: "checkbox", tag: "input", type: "checkbox" }], [{ top: -10000, height: 1 }, { top: -10000, height: 1, fields: [] }, DOCS_LIKE_FRAME]), "frame_editor");
 });
 
-test("gi keeps the page's own field ahead of a hidden input frame's field", () => {
-  assert.equal(run_gi([{ name: "far", tag: "input", top: 3000 }], [DOCS_LIKE_FRAME]), "far");
+test("gi picks a hidden input frame's field ahead of a visible field of the page", () => {
+  assert.equal(run_gi([{ name: "title", tag: "input" }], [DOCS_LIKE_FRAME]), "frame_editor");
 });
 
 test("gi does not reach into a frame the user can see", () => {
