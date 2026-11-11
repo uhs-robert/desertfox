@@ -182,6 +182,7 @@ Measured in the key test (`test/key/p15_frame_mode.mjs`, Firefox 160) and on a p
 - `frameElement.blur()` from the frame moves the focus to the top document in one tick. It also blurs the frame's focused field, and the frame's `activeElement` becomes its body. Focusing the frame element afterwards focuses the frame's window with no field. Focusing the field itself from the top document works.
 - Docs does not take the focus back after that blur, on its own or on a key. A mouse press in the document, its grey margin or the outline focuses the field again within 30 ms.
 - A page that focuses a field in a child frame fires `focus` on the frame's window first. Inside that event the frame's `activeElement` is not the field yet.
+- When the focus moves from a field in a child frame to a field of the top document, the frame's field fires `focusout` first, with the frame's body as its `activeElement`. `frameElement.blur()` inside that event cancels the move: the top document's `activeElement` ends as its body.
 - A window that loses the focus (a hidden tab) fires `blur` and `focusout` on its focused field, which stays the `activeElement`.
 - `element instanceof HTMLElement` is false in a content script for an element of a same-origin child frame's document.
 

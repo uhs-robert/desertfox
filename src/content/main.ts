@@ -280,9 +280,10 @@ function start(): void {
   listen(document, "visibilitychange", on_visibility_change, false);
 
   // Every report says whether this frame holds the focus, so a focus event the frame missed heals on its next report.
-  // A hidden input frame in normal mode hands the focus to its parent first, so the report already says the frame does not hold it. Every change into normal mode passes here, and so does a frame that gains the focus while in normal mode.
+  // A hidden input frame in normal mode then hands the focus to its parent. Every change into normal mode passes here, and so does a frame that gains the focus while in normal mode.
+  // The hand-off waits a tick, because a report often runs inside a focus move that is not done. A focusout comes before the focus lands in a field of the parent, and blurring the frame there cancels the move. A window focus comes before a field focused from outside holds the focus.
   const report_mode = () => {
-    hand_focus_to_parent();
+    setTimeout(hand_focus_to_parent);
     void send_to_background({ type: "mode_changed", mode: page_mode.get_mode_(), focus: holds_own_focus(document) });
   };
 
@@ -295,8 +296,7 @@ function start(): void {
   // Not in capture: focus does not bubble, so only the window's own focus reaches this listener, and not that of the elements inside it.
   // Showing a tab fires focus on the top window too while a child frame holds the focus, so the report reads who holds it and does not assume this frame does.
   // No report on blur: the frame that takes the focus reports it, and a top window gets a focus event when its focused child frame is removed.
-  // A tick later, because a page that focuses a field in this frame from outside fires this event before the field holds the focus, and a hidden input frame must not hand that focus off.
-  listen(window, "focus", () => setTimeout(report_mode), false);
+  listen(window, "focus", report_mode, false);
 
   // A page shown from the back-forward cache runs no start-up, and the background's mode for the tab is stale. The report after a first load is spare, and heals a start report the background lost.
   listen(window, "pageshow", report_mode, false);

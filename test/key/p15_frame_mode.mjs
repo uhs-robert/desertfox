@@ -239,6 +239,16 @@ export async function run_cases({ run_case, press_keys, open_page, expect, poll_
     await expect_key_reaches_frame("j", id);
   });
 
+  await run_case("focus that moves from the hidden frame's editor to a field of the top page lands in that field", async () => {
+    // The page is still p15_title_input, with the editor focused. Docs moves the focus this way for its title, its find box and its comment box.
+    await expect_badge_and_mode("INSERT");
+    await in_active_tab(`document.getElementById("title").focus()`);
+    await sleep(300);
+    // On the unfixed code the hand-off ran inside the editor's focusout and cancelled the move.
+    expect((await in_active_tab(`document.activeElement.id`)) === "title", `the top page's focused element is ${await in_active_tab(`document.activeElement.tagName + "#" + document.activeElement.id`)}, expected the title field`);
+    await expect_top_frame_holds_the_tab("INSERT");
+  });
+
   await run_case("a visible frame with a field keeps the focus and its keys after Escape", async () => {
     const id = "p15_visible_frame";
     await open_page("frames", id, { new_tab: false });
@@ -252,6 +262,19 @@ export async function run_cases({ run_case, press_keys, open_page, expect, poll_
     expect((await in_active_tab(`document.activeElement.id`)) === "same", "the visible frame lost the focus");
     expect((await focused_child())?.mode === "normal", `the stored record does not name the visible frame as the focused child: ${JSON.stringify(await focused_child())}`);
     expect((await in_active_tab(`scrollY`)) === 0, "j scrolled the top page while a visible frame held the focus");
+  });
+
+  await run_case("gi picks a field in view ahead of an editor in a full-size frame that is scrolled out of view", async () => {
+    // Still on p15_visible_frame. The 300 by 200 frame holds an input and stands for an editor frame.
+    await in_active_tab(blur_frame);
+    await in_active_tab(`{ const field = document.body.appendChild(document.createElement("input")); field.id = "in_view"; field.style.cssText = "position:fixed;top:10px;left:10px"; scrollTo(0, 3000); }`);
+    await poll_until("the frame to leave the view", () => in_active_tab(`document.getElementById("same").getBoundingClientRect().bottom < 0`));
+    await wait_takes_keys("p15_visible_frame");
+    await press_keys("gi");
+    await poll_until("gi to focus the field in view", async () => (await in_active_tab(`document.activeElement.id`)) === "in_view", { timeout_ms: 3000, expected_timeout: true }).catch(async () =>
+      expect(false, `gi focused ${await in_active_tab(`document.activeElement.tagName + "#" + document.activeElement.id`)}, expected the field in view`),
+    );
+    await in_active_tab(blur_frame);
   });
 
   await run_case("a field focused in a frame of another site shows INSERT, from the script that starts on that focus", async () => {

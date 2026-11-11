@@ -11,8 +11,8 @@ export const SETTABLE_MODES = ["normal", "insert", "ignore", "caret", "visual", 
 export const mode_set: ContentHandler = {
   run: (args) => {
     const set = bundles.set_mode_(args.mode as Mode);
-    // Normal mode set over a focused field never blurs it, so a hidden input frame hands off here.
-    hand_focus_to_parent(false);
+    // Normal mode set over a focused field never blurs it, so a hidden input frame hands off here. A caret mode that waits on caret.js still reads as normal, and must keep the focus.
+    if (args.mode === "normal") hand_focus_to_parent(false);
     return set;
   },
 };

@@ -34,7 +34,6 @@ function run_gi(fakes: Fake[], frames: FakeFrame[] = []): string | undefined {
   const elements = fakes.map(to_element);
   // A frame of another site has no `contentDocument`.
   const frame_elements = frames.map((frame) => ({
-    ownerDocument: { documentElement: { clientWidth: 800, clientHeight: 600 } },
     getBoundingClientRect: () => ({ top: frame.top, bottom: frame.top + frame.height, left: 0, right: 600, width: 600, height: frame.height }),
     contentDocument: frame.fields && { querySelectorAll: () => frame.fields!.map(to_element) },
   }));
@@ -78,6 +77,11 @@ test("gi focuses the field inside a hidden input frame when the page itself has 
 
 test("gi picks a hidden input frame's field ahead of a visible field of the page", () => {
   assert.equal(run_gi([{ name: "title", tag: "input" }], [DOCS_LIKE_FRAME]), "frame_editor");
+});
+
+test("gi does not reach into a full-size frame that is scrolled out of view", () => {
+  const editor_frame: FakeFrame = { top: -3000, height: 200, fields: [{ name: "editor_frame_body", tag: "div", editable: true }] };
+  assert.equal(run_gi([{ name: "in_view", tag: "input" }], [editor_frame]), "in_view");
 });
 
 test("gi does not reach into a frame the user can see", () => {
