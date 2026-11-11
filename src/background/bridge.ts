@@ -2,7 +2,6 @@
 // The wire format is the hand-off contract with the host: one verb, `mode`. The in-page badge stays on whatever the port does.
 // A private window sends its mode and `private: true` and nothing else, so no id of it reaches the host.
 
-import type { ModeIndicator } from "../shared/config.ts";
 import type { Mode } from "../shared/command.ts";
 import { mode_label } from "../content/ui/mode_label.ts";
 
@@ -15,11 +14,11 @@ export type BridgePort = {
   onDisconnect: { addListener: (listener: () => void) => void };
 };
 
-export type BridgeWindow = { id: number; focused: boolean; fullscreen: boolean; private: boolean };
+export type BridgeWindow = { id: number; focused: boolean; private: boolean };
 
 export type BridgeDeps = {
   connect: () => BridgePort;
-  read_settings: () => Promise<{ bridge: boolean; mode_indicator: ModeIndicator }>;
+  read_settings: () => Promise<{ bridge: boolean }>;
   // The optional `nativeMessaging` permission, which Firefox grants only from a click.
   permission_granted: () => Promise<boolean>;
   window_of: (window_id: number) => Promise<BridgeWindow | undefined>;
@@ -40,7 +39,6 @@ type Snapshot = { mode: Mode; tab_id: number; window: BridgeWindow };
 
 export function create_bridge(deps: BridgeDeps) {
   let bridge_on = false;
-  let mode_indicator: ModeIndicator = "always";
   let port: BridgePort | undefined;
   // The host sends one message when it has the lock, and only then is the port trusted: a second host waits for the lock and a missing host drops the port at once.
   let ready = false;
@@ -71,10 +69,11 @@ export function create_bridge(deps: BridgeDeps) {
   }
 
   function mode_message({ mode, tab_id, window }: Snapshot): object {
-    const label = mode_label(mode, false, mode_indicator) ?? "";
+    // The chip always carries the mode, whatever `mode_indicator` says about the in-page badge.
+    const label = mode_label(mode, false, "always") ?? "";
     // The private filter: the ids of a private window are dropped here, before the port.
     if (window.private) return { verb: "mode", id: mode, label, private: true };
-    return { verb: "mode", id: mode, label, private: false, tab_id, window_id: window.id, fullscreen: window.fullscreen };
+    return { verb: "mode", id: mode, label, private: false, tab_id, window_id: window.id };
   }
 
   async function publish_now(window: BridgeWindow | undefined): Promise<void> {
@@ -122,7 +121,7 @@ export function create_bridge(deps: BridgeDeps) {
   async function connect(): Promise<void> {
     if (!bridge_on || port) return;
     if (!(await deps.permission_granted().catch(() => false))) return schedule_retry();
-    // The setting or the port may have changed while the permission was read.
+    // Calls overlap across the await above. `connect` and the `port` assignment below run with no await between them, so the first call to get here wins and the others return on this check.
     if (!bridge_on || port) return;
     let opened: BridgePort;
     try {
@@ -151,12 +150,7 @@ export function create_bridge(deps: BridgeDeps) {
     const settings = await deps.read_settings();
     const bridge_before = bridge_on;
     bridge_on = settings.bridge;
-    mode_indicator = settings.mode_indicator;
-    if (bridge_on === bridge_before) {
-      // The label text follows `mode_indicator`.
-      if (ready) await enqueue(async () => publish_now(await deps.last_focused_window()));
-      return;
-    }
+    if (bridge_on === bridge_before) return;
     failures = 0;
     if (bridge_on) await connect();
     else disconnect();

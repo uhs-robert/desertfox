@@ -2,20 +2,19 @@
 
 import { COMPILED_KEYMAP_STORAGE_KEY, current_keymap } from "../shared/prefix_tree.ts";
 import type { CompiledKeymap } from "../shared/prefix_tree.ts";
-import { DEFAULT_SETTINGS } from "../shared/config.ts";
 import type { Mode } from "../shared/command.ts";
 import { BRIDGE_HOST_NAME, create_bridge } from "./bridge.ts";
 import type { BridgeDeps, BridgeWindow } from "./bridge.ts";
 import { recall_tab_mode } from "./tab_modes.ts";
 
 const as_bridge_window = (window: browser.windows.Window): BridgeWindow | undefined =>
-  window.id === undefined ? undefined : { id: window.id, focused: window.focused === true, fullscreen: window.state === "fullscreen", private: window.incognito === true };
+  window.id === undefined ? undefined : { id: window.id, focused: window.focused === true, private: window.incognito === true };
 
 export const browser_bridge_deps = (): BridgeDeps => ({
   connect: () => browser.runtime.connectNative(BRIDGE_HOST_NAME),
   read_settings: async () => {
     const keymap = current_keymap((await browser.storage.local.get(COMPILED_KEYMAP_STORAGE_KEY))[COMPILED_KEYMAP_STORAGE_KEY] as CompiledKeymap | undefined);
-    return { bridge: keymap?.bridge === true, mode_indicator: keymap?.mode_indicator ?? DEFAULT_SETTINGS.mode_indicator };
+    return { bridge: keymap?.bridge === true };
   },
   permission_granted: () => browser.permissions.contains({ permissions: ["nativeMessaging"] }),
   last_focused_window: async () => {

@@ -5,7 +5,7 @@ Firefox starts it over `connectNative` and keeps it alive while the extension ho
 native-endian length and UTF-8 JSON, both ways. The host takes the lock first, then says {"ready": true,
 "host_version": 1} once. It takes one verb from the extension and no others:
 
-  {"verb": "mode", "id", "label", "private", "tab_id", "window_id", "fullscreen"}
+  {"verb": "mode", "id", "label", "private", "tab_id", "window_id"}
 
 A private window sends no ids. The host drops them anyway, so a private window leaves only its mode and private:true.
 
@@ -82,10 +82,10 @@ def checked_mode(message):
     mode = {"id": message["id"], "label": message["label"]}
     if message["private"]:
         return {"private": True}, mode
-    if not all(is_int(message.get(name)) for name in ("tab_id", "window_id")) or not isinstance(message.get("fullscreen"), bool):
+    if not all(is_int(message.get(name)) for name in ("tab_id", "window_id")):
         return None
     mode["tab_id"] = message["tab_id"]
-    return {"window_id": message["window_id"], "fullscreen": message["fullscreen"], "private": False}, mode
+    return {"window_id": message["window_id"], "private": False}, mode
 
 
 class BridgeState:

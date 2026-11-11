@@ -2,7 +2,7 @@
 
 DesertFox is a keyboard-first Firefox extension. It has a small scope and one command registry. Every command is defined once. Keys, the command line, completion, help, the palette and which-key all read that definition.
 
-The extension works on its own. Oasis Dots adds an optional native host. Through it, Hyprland, Quickshell and the shell list and run the same commands, and which-key can show in the Quickshell HUD.
+The extension works on its own. Oasis Dots adds an optional native host. Through it, a desktop shell can show the mode, and later list and run the same commands.
 
 Status: phase 1 is built on the `feat/phase-1-core` branch. [firefox-behavior.md](firefox-behavior.md) holds the measurements this design rests on, and [keymap.md](keymap.md) maps every binding in the current browser config to a command here.
 
@@ -448,7 +448,6 @@ The label of a key comes from one rule, applied to the args the binding sets (ne
 Two keys in one group may share a label only when they run the same binding (`zi` and `z+`). The unit tests check this for every group of the default keymap and of a copy of the user config, and print each group's labels.
 
 - In the browser it draws in a closed shadow root, styled through the CSS variables in [Styles](#styles). It appears after a delay that is a setting.
-- With the native host, it can show in the Quickshell which-key HUD instead. The host writes the rows as `{ "items": [...] }` and calls the `hyprvim_whichkey` IPC target (`open <path>` and `close`). The HUD then uses the current Oasis style. Mouse hover works only in the browser version.
 
 ### Caret and visual
 
@@ -516,7 +515,7 @@ The host writes no other file. `nativeMessaging` is an optional permission, requ
 
 ### Bridge host (in progress)
 
-One long-lived host, `desertfox_bridge` (`host/desertfox-bridge`), serves everything on the desktop that needs to talk to DesertFox. It is generic: it assumes no particular shell, bar or window manager. It replaces the display host and does not change the one-shot config host.
+One long-lived host, `desertfox_bridge` (`host/desertfox-bridge`), serves everything on the desktop that needs to talk to DesertFox. It is generic: it assumes no particular shell, bar or window manager. It sits beside the one-shot config host and does not change it.
 
 The extension opens one `connectNative` port to it when the `bridge` setting is on and the optional `nativeMessaging` permission is granted. With either missing there is no port and no socket. A host that is missing or exits before its first message leaves nothing changed, and the extension reconnects with a growing pause (1 s up to 60 s). The host says `ready` once it holds its lock, and the extension trusts the port only after that. Firefox keeps the background awake while the port is open, which also helps a later move to MV3.
 
@@ -575,7 +574,7 @@ The extension is the trust boundary. It drops everything from a private window b
 8. Macros, with `.` repeat first. `.` repeats the last command or inserted text. Recording and replay follow: `q<reg>` records into a register, `@<reg>` replays it, a count (`5@q`) or `@@` repeats it. A macro records commands and the text typed in insert mode. Replay inserts text like a paste, not as key events, and stops at the first failed step.
 9. Base16 theme importer, after macros.
 10. Toolbar popup and icon. Done. The toolbar button opens a popup (`src/popup/`) with the on/off switch, Settings, Help, Disable on this site, Reload config, the warnings count and the version. Off is one global switch kept in `storage.local` (`desertfox_disabled`, absent means on). While off, the background stores an empty keymap, so the content script matches no key and hides its badge, and sends every open tab to normal mode, which ends hints, the command line and insert mode. The router and the Firefox shortcut slots refuse every command. The manifest shortcut `toggle_enabled` (default `Ctrl+Alt+D`, rebindable in `about:addons`) and the popup stay live while off. The icon turns grey and the title reads "DesertFox (off)". Off differs from an all-off site rule: that rule is a start mode per matching page that a binding can leave, while off stops every key and command on every site until it is turned on. Off wins over a disabled site. "Disable on this site" appends the all-off row `{ site = "*://*.host/*" }` (host without `www.`) to the saved `site_rules` through the same edits as `:set`, and open tabs follow at once. The popup shows the rule that covers the page ("pass 3 keys", "only 2 keys" or "all off") with a link to the settings page. The saved list starts as the config file's list and then replaces it, so later edits to the file's `site_rules` do not apply until `:unset site_rules` clears the saved list. The grey icon is a generated copy of the placeholder, so a real logo with an off state is still owner work.
-11. Phase 4, Oasis. The native host merged with voxcmd's, `desertfox list` and `run`, the Quickshell which-key, and the Oasis theme file written on theme change.
+11. Phase 4, Oasis. The native bridge host, the mode chip, `desertfox list` and `run`, and the Oasis theme file written on theme change.
 12. Phase 4, saved edits on disk. Done: the native host writes the saved edits to a generated `autoconfig.toml` beside the user's files. It never edits the user's own files.
 13. Release path. The maintainer installs through `just release` (signed, unlisted) now. A listed addons.mozilla.org release is a later piece: the listing, a source upload, Mozilla review, permission justifications and a privacy note.
 

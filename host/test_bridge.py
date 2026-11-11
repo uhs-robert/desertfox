@@ -17,7 +17,7 @@ from host_under_test import load_host
 
 HOST_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "desertfox-bridge")
 
-MODE = {"verb": "mode", "id": "insert", "label": "INSERT", "tab_id": 17, "window_id": 3, "fullscreen": False, "private": False}
+MODE = {"verb": "mode", "id": "insert", "label": "INSERT", "tab_id": 17, "window_id": 3, "private": False}
 PRIVATE_MODE = {"verb": "mode", "id": "normal", "label": "NORMAL", "private": True}
 
 
@@ -136,13 +136,13 @@ class PortAndStateTest(BridgeTestCase):
         self.assertEqual(state["seq"], 1)
         self.assertEqual(state["host"], {"pid": host.process.pid, "start": state["host"]["start"]})
         self.assertIsInstance(state["host"]["start"], str)
-        self.assertEqual(state["firefox"], {"window_id": 3, "fullscreen": False, "private": False})
+        self.assertEqual(state["firefox"], {"window_id": 3, "private": False})
         self.assertEqual(state["mode"], {"id": "insert", "label": "INSERT", "tab_id": 17})
         self.assertNotIn("whichkey", state)
 
     def test_a_private_window_leaves_only_its_mode_and_the_private_flag(self):
         host = self.start()
-        host.send(dict(PRIVATE_MODE, tab_id=9, window_id=4, fullscreen=True, url="https://secret.example/", title="secret"))
+        host.send(dict(PRIVATE_MODE, tab_id=9, window_id=4, url="https://secret.example/", title="secret"))
         state = self.wait_for(lambda s: True)
         self.assertEqual(state["firefox"], {"private": True})
         self.assertEqual(state["mode"], {"id": "normal", "label": "NORMAL"})
@@ -218,7 +218,6 @@ class PortAndStateTest(BridgeTestCase):
             host.send({"verb": verb, "cmd": "touch /tmp/x"})
         host.send({"verb": "mode"})
         host.send(dict(MODE, tab_id="17"))
-        host.send(dict(MODE, fullscreen=1))
         host.send(dict(MODE, id="x" * 1000))
         host.send(dict(MODE, tab_id=True))
         host.send(dict(MODE, private="yes"))

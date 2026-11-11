@@ -4,10 +4,10 @@ import { create_bridge, FIRST_RETRY_MS, MAX_RETRY_MS, STABLE_MS } from "../../sr
 import type { BridgeDeps, BridgePort, BridgeWindow } from "../../src/background/bridge.ts";
 import type { Mode } from "../../src/shared/command.ts";
 
-function make(options: { bridge?: boolean; mode_indicator?: "always" | "not_normal" | "off"; missing_host?: boolean; permission?: boolean } = {}) {
-  const settings = { bridge: options.bridge ?? true, mode_indicator: options.mode_indicator ?? "always" };
-  const state = { permission: options.permission ?? true };
-  const windows = new Map<number, BridgeWindow>([[1, { id: 1, focused: true, fullscreen: false, private: false }], [2, { id: 2, focused: false, fullscreen: false, private: false }]]);
+function make(options: { bridge?: boolean; missing_host?: boolean; permission?: boolean } = {}) {
+  const settings = { bridge: options.bridge ?? true };
+  const state = { permission: options.permission ?? true, gate: undefined as Promise<void> | undefined };
+  const windows = new Map<number, BridgeWindow>([[1, { id: 1, focused: true, private: false }], [2, { id: 2, focused: false, private: false }]]);
   const active_tab = new Map<number, number>([[1, 11], [2, 22]]);
   const modes = new Map<number, Mode>();
   const ports: (BridgePort & { posted: Record<string, unknown>[]; disconnected: boolean; say: () => void; drop: () => void; throw_on_post: boolean })[] = [];
@@ -40,7 +40,10 @@ function make(options: { bridge?: boolean; mode_indicator?: "always" | "not_norm
       return port;
     },
     read_settings: async () => ({ ...settings }),
-    permission_granted: async () => state.permission,
+    permission_granted: async () => {
+      await state.gate;
+      return state.permission;
+    },
     last_focused_window: async () => [...windows.values()].find((window) => window.focused),
     window_of: async (id) => windows.get(id),
     active_tab_of: async (id) => active_tab.get(id),
@@ -76,7 +79,7 @@ function make(options: { bridge?: boolean; mode_indicator?: "always" | "not_norm
   };
 }
 
-const NORMAL_MESSAGE = { verb: "mode", id: "normal", label: "NORMAL", private: false, tab_id: 11, window_id: 1, fullscreen: false };
+const NORMAL_MESSAGE = { verb: "mode", id: "normal", label: "NORMAL", private: false, tab_id: 11, window_id: 1 };
 
 test("with bridge off nothing connects", async () => {
   const test_case = make({ bridge: false });
@@ -108,8 +111,8 @@ test("a private window sends its mode and the private flag and no id", async () 
   await test_case.connect_and_ready();
   const port = test_case.port();
   port.posted.length = 0;
-  test_case.windows.set(2, { id: 2, focused: true, fullscreen: true, private: true });
-  test_case.windows.set(1, { id: 1, focused: false, fullscreen: false, private: false });
+  test_case.windows.set(2, { id: 2, focused: true, private: true });
+  test_case.windows.set(1, { id: 1, focused: false, private: false });
   test_case.modes.set(22, "insert");
   await test_case.bridge.window_focused(2);
   await test_case.bridge.mode_changed({ id: 22, windowId: 2, active: true }, "visual");
@@ -122,19 +125,16 @@ test("a private window sends its mode and the private flag and no id", async () 
   ]);
 });
 
-test("the label follows mode_indicator and is empty for modes with no label", async () => {
-  const hidden_normal = make({ mode_indicator: "not_normal" });
-  await hidden_normal.connect_and_ready();
-  assert.equal(hidden_normal.port().posted[0]!.label, "");
-  const off = make({ mode_indicator: "off" });
-  off.modes.set(11, "insert");
-  await off.connect_and_ready();
-  assert.equal(off.port().posted[0]!.label, "");
+test("the label is empty only for modes with no label, whatever mode_indicator says", async () => {
   const hint = make();
   hint.modes.set(11, "hint");
   await hint.connect_and_ready();
   assert.equal(hint.port().posted[0]!.label, "");
   assert.equal(hint.port().posted[0]!.id, "hint");
+  const visual = make();
+  visual.modes.set(11, "visual");
+  await visual.connect_and_ready();
+  assert.equal(visual.port().posted[0]!.label, "VISUAL");
 });
 
 test("publish points: mode change of the active tab, window focus, tab activation", async () => {
@@ -145,8 +145,8 @@ test("publish points: mode change of the active tab, window focus, tab activatio
   await test_case.bridge.mode_changed({ id: 11, windowId: 1, active: true }, "visual");
   assert.deepEqual(port.posted, [{ ...NORMAL_MESSAGE, id: "visual", label: "VISUAL" }]);
   port.posted.length = 0;
-  test_case.windows.set(2, { id: 2, focused: true, fullscreen: false, private: false });
-  test_case.windows.set(1, { id: 1, focused: false, fullscreen: false, private: false });
+  test_case.windows.set(2, { id: 2, focused: true, private: false });
+  test_case.windows.set(1, { id: 1, focused: false, private: false });
   test_case.modes.set(22, "insert");
   await test_case.bridge.window_focused(2);
   assert.deepEqual(port.posted, [{ ...NORMAL_MESSAGE, id: "insert", label: "INSERT", tab_id: 22, window_id: 2 }]);
@@ -292,11 +292,16 @@ test("without the permission no port opens, and granting it connects at once", a
   assert.deepEqual(test_case.pending_delays(), []);
 });
 
-test("a mode_indicator change while up publishes the new label", async () => {
+test("overlapping connects open one port, not two", async () => {
   const test_case = make();
-  test_case.modes.set(11, "insert");
-  await test_case.connect_and_ready();
-  test_case.settings.mode_indicator = "off";
-  await test_case.bridge.settings_changed();
-  assert.equal(test_case.port().posted.at(-1)!.label, "");
+  let release: () => void = () => {};
+  test_case.state.gate = new Promise<void>((resolve) => void (release = resolve));
+  const starting = test_case.bridge.start();
+  test_case.bridge.permission_added();
+  test_case.bridge.permission_added();
+  release();
+  await starting;
+  await test_case.settle();
+  assert.equal(test_case.counts.connects, 1);
+  assert.equal(test_case.ports.length, 1);
 });
