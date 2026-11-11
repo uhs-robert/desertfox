@@ -19,6 +19,12 @@ export async function run_cases({ run_case, open_page, poll_until, press_keys, h
   const pending = new Set();
   const slow_server = createServer((request, response) => {
     if (request.url.startsWith("/hang")) return void pending.add(response);
+    // The /chain pages hold real links, so a hint pick on one loads the next, and /chain2 answers late so its `loading` starts well after the pick's reply.
+    const chain = /^\/chain(\d)/.exec(request.url);
+    if (chain) {
+      const page = () => (response.writeHead(200, { "content-type": "text/html" }), response.end(`<!doctype html><title>chain${chain[1]}</title><p><a href="/chain${Number(chain[1]) + 1}">next</a></p>`));
+      return void setTimeout(page, chain[1] === "2" ? 1200 : 0);
+    }
     setTimeout(() => (response.writeHead(204), response.end()), 1500);
   });
   await new Promise((resolve) => slow_server.listen(0, "127.0.0.1", resolve));
@@ -195,5 +201,22 @@ export async function run_cases({ run_case, open_page, poll_until, press_keys, h
     const stored = JSON.parse(await in_background(`browser.storage.local.get("desertfox_register_e").then((items) => JSON.stringify(items.desertfox_register_e))`));
     expect(stored.length === 1 && stored[0].id === "macro.play" && stored[0].count === 5 && stored[0].args.reg === "d", `5@d was stored as ${JSON.stringify(stored)}`);
     await close_tabs_with("mr_count");
+  });
+
+  await run_case("a replayed pick that loads a slow page waits for it, so the next pick shows its labels on the new page", async () => {
+    await open_page("aligned", "mr_chain", { new_tab: true });
+    await store_macro("m", [{ id: "hint.run" }, { id: "hint.run" }]);
+    const path_of_tab = () => in_background(`browser.tabs.query({ active: true, currentWindow: true }).then(([tab]) => new URL(tab.url).pathname)`);
+    const script_ready = () => in_active_tab(`document.documentElement.hasAttribute("data-desertfox-tree-read-ms")`).catch(() => false);
+    await in_background(`browser.tabs.query({ active: true, currentWindow: true }).then(([tab]) => browser.tabs.update(tab.id, { url: ${JSON.stringify(slow_url("/chain1"))} }))`);
+    await poll_until("the first chain page", async () => (await path_of_tab()) === "/chain1" && (await script_ready()));
+    await sleep(500);
+    await press_keys("@", "m");
+    await poll_until("the replayed pick to show its labels", async () => (await hint_label_count()) > 0);
+    await press_keys("a");
+    await poll_until("the second replayed pick to show labels on the slow page", async () => (await path_of_tab()) === "/chain2" && (await hint_label_count().catch(() => 0)) > 0);
+    await press_keys("a");
+    await poll_until("the second pick to load the last page", async () => (await path_of_tab()) === "/chain3");
+    await close_tabs_with("mr_chain");
   });
 }
