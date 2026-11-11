@@ -43,7 +43,7 @@ new MutationObserver(() => {
     last_whichkey_shape = panel_shape;
     send("whichkey_shape", { dropped: Number(panel_host?.getAttribute("data-desertfox-whichkey-dropped")), width: Number(panel_host?.getAttribute("data-desertfox-whichkey-width") ?? 0), viewport: window.innerWidth });
   }
-  const css = root.querySelector(":scope > style")?.textContent ?? "";
+  const css = root.querySelector(":scope > style:not([data-desertfox-backdrop-reset])")?.textContent ?? "";
   if (css !== last_css) send("selection_style", { css: (last_css = css) });
   const toast_now = Boolean(toast_host());
   if (toast_now !== toast_shown) send(toast_now ? "toast" : "toast_gone");
