@@ -727,6 +727,19 @@ test("a page that arrives after Escape gets no hold", async () => {
   await played;
 });
 
+test("a hold send that never answers does not hold the keymap reply for ever", async () => {
+  const { replay, start, effects } = make({ a: [{ id: "scroll.lines" }] });
+  let open_gate!: () => void;
+  const gate = { promise: new Promise<void>((resolve) => (open_gate = resolve)), resolve: () => open_gate() };
+  effects["scroll.lines"] = () => gate.promise.then(() => ({ ok: true }));
+  const played = replay.play(start);
+  await settle();
+  const reply = await reply_after_hold(replay, () => new Promise(() => undefined), 1, 0, async () => "keymap");
+  assert.equal(reply, "keymap");
+  gate.resolve();
+  await played;
+});
+
 test("a hold send that fails does not block the keymap reply", async () => {
   const { replay, log, start, effects } = make({ a: [{ id: "scroll.lines" }] });
   let open_gate!: () => void;
@@ -743,7 +756,7 @@ test("a hold sent on arrival is released by Escape and by the end like any other
   for (const how of ["end", "escape"] as const) {
     const { replay, log, start, effects } = make({ a: [{ id: "scroll.lines" }] });
     let open_gate!: () => void;
-  const gate = { promise: new Promise<void>((resolve) => (open_gate = resolve)), resolve: () => open_gate() };
+    const gate = { promise: new Promise<void>((resolve) => (open_gate = resolve)), resolve: () => open_gate() };
     effects["scroll.lines"] = () => gate.promise.then(() => ({ ok: true }));
     const played = replay.play(start);
     await settle();
@@ -757,7 +770,7 @@ test("a hold sent on arrival is released by Escape and by the end like any other
   }
 });
 
-test("a step refused in a replay names its number", async () => {
+test("a replay passes each step its number, counting from 1", async () => {
   const { replay, steps_run, deps } = make({ a: [{ id: "tab.next" }, { id: "scroll.lines" }, { id: "scroll.lines" }] });
   const numbers: Array<number | undefined> = [];
   const run_step = deps.run_step;
