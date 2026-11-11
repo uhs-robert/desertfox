@@ -118,7 +118,7 @@ class UpdateCase(unittest.TestCase):
         """Every file under HOME by path, with its bytes, mode and inode. A rename gives a new inode even for equal bytes."""
         found = {}
         for base, _, names in os.walk(self.home):
-            for name in names:
+            for name in (n for n in names if n != "update.lock"):
                 path = os.path.join(base, name)
                 info = os.lstat(path)
                 found[path] = (self.read(path), stat.S_IMODE(info.st_mode), info.st_ino)
@@ -277,8 +277,7 @@ class VerifyTest(UpdateCase):
 
 class LockTest(UpdateCase):
     def test_a_second_updater_gets_update_running(self):
-        lock_path = os.path.join(self.runtime, "desertfox", "update.lock")
-        os.makedirs(os.path.dirname(lock_path), mode=0o700)
+        lock_path = os.path.join(self.data_dir, "update.lock")
         holder = os.open(lock_path, os.O_RDWR | os.O_CREAT, 0o600)
         self.addCleanup(os.close, holder)
         fcntl.flock(holder, fcntl.LOCK_EX)
@@ -291,11 +290,12 @@ class LockTest(UpdateCase):
             self.update()
         self.release.publish(NEW, self.new_scripts)
         self.assertTrue(self.update()["updated"])
-        os.close(host.take_update_lock())
+        os.close(host.take_update_lock(self.data_dir))
 
-    def test_no_runtime_dir_refuses(self):
-        with mock.patch.dict(os.environ, {"XDG_RUNTIME_DIR": "relative"}):
-            self.assert_refused("XDG_RUNTIME_DIR")
+    def test_the_update_needs_no_runtime_dir(self):
+        with mock.patch.dict(os.environ):
+            os.environ.pop("XDG_RUNTIME_DIR")
+            self.assertTrue(self.update()["updated"])
 
 
 class ReplaceTest(UpdateCase):
