@@ -73,6 +73,7 @@ try {
       const med = (a) => a.sort((x, y) => x - y)[Math.floor(a.length / 2)];
       const principal = Services.scriptSecurityManager.createContentPrincipalFromOrigin("http://example.com");
       const compile = [], exec = [], sandbox = [];
+      let err = null;
       let script;
       const runs = 15;
       for (let i = 0; i < runs; i++) {
@@ -80,9 +81,13 @@ try {
       }
       for (let i = 0; i < runs; i++) {
         const t1 = ChromeUtils.now(); const sb = Cu.Sandbox(principal, { wantXrays: true }); const t2 = ChromeUtils.now();
-        try { script.executeInGlobal(sb); } catch (e) {}
-        exec.push(ChromeUtils.now() - t2); sandbox.push(t2 - t1); Cu.nukeSandbox(sb);
+        let threw = false;
+        try { script.executeInGlobal(sb); } catch (e) { threw = true; err = String(e).slice(0, 80); }
+        if (!threw) exec.push(ChromeUtils.now() - t2);
+        sandbox.push(t2 - t1); Cu.nukeSandbox(sb);
       }
+      // A script that throws in a bare sandbox (real.js needs a content window) is compile-only: it gets the error and no exec time.
+      if (err) return { compile_ms: med(compile), compile_min: Math.min(...compile), sandbox_ms: med(sandbox), exec_error: err };
       return { compile_ms: med(compile), compile_min: Math.min(...compile), exec_ms: med(exec), exec_first: exec[0], sandbox_ms: med(sandbox) };
     })()`);
     out.micro.push({ file, bytes: readFileSync(`${root}/files/${file}.js`).length, ...r });

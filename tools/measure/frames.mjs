@@ -44,6 +44,7 @@ try {
       if (ext === "desertfox") await evaluate_in_background(rdp, ID, `(() => { for (const k in __n) delete __n[k]; return 1; })()`);
       await navigate(`${base}/?kind=${kind}`);
       let t = ""; for (let i = 0; i < 100 && !t.startsWith("loaded"); i++) { await sleep(100); t = await title(); }
+      if (!t.startsWith("loaded")) throw new Error(`page did not load: ${kind}`);
       await sleep(1500);
       const mem = await memory();
       const msgs = ext === "desertfox" ? await evaluate_in_background(rdp, ID, `__n`) : {};

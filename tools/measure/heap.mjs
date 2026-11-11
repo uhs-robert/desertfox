@@ -43,6 +43,7 @@ try {
     await navigate("about:blank"); await sleep(800);
     await navigate(`${base}/?kind=${kind}`);
     let t = ""; for (let i = 0; i < 100 && !t.startsWith("loaded"); i++) { await sleep(100); t = await title(); }
+    if (!t.startsWith("loaded")) throw new Error(`page did not load: ${kind}`);
     await sleep(2000);
     await chrome(`(Services.obs.notifyObservers(null, "child-mmu-request"), 1)`); await sleep(2500);
     const heap = await ext_heap();
