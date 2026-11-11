@@ -61,6 +61,7 @@ define("macro.record", {
   label: "Record macro",
   intent: "Record commands and typed text into a register. A lowercase letter replaces the macro, an uppercase letter adds to it. Press q again to stop.",
   params: [{ name: "reg", type: "key", pattern: MACRO_REGISTER_PATTERN, description: "Record into this register, a-z or A-Z." }],
+  bridge: false,
   runs_in: "background",
   repeatable: false,
   run: (ctx, args) => handlers.record(ctx, args as { reg: string }),
@@ -69,6 +70,7 @@ define("macro.record", {
 define("macro.stop", {
   label: "Stop recording",
   intent: "Stop recording the macro and store it in its register.",
+  bridge: false,
   runs_in: "background",
   repeatable: false,
   run: (ctx) => handlers.stop(ctx),
@@ -82,6 +84,7 @@ define("macro.play", {
     { name: "reg", type: "key", pattern: MACRO_PLAY_PATTERN, description: "Play this register, a-z or A-Z, or @ for the last." },
     { name: "count", type: "int", min: 1, default: 1, description: "Play the whole macro this many times." },
   ],
+  bridge: false,
   runs_in: "background",
   count: { param: "count" },
   repeatable: false,

@@ -24,6 +24,7 @@ define("open.url", {
   label: "Open URL",
   intent: "Open a URL. It opens here, in a new tab, in a background tab or in a new window. With no URL, a new tab, background tab or window opens the new tab page, and opening here needs a URL.",
   params: [{ name: "url", type: "string", rest: true, main: true, default: [{ value: "", when: { where: ["tab", "window", "background"] } }], values: { from: "open" } }, WHERE_PARAM, CONTAINER_PARAM],
+  bridge: true,
   runs_in: "background",
   run: async (ctx, args) => open_in(ctx, await open_url_target(args.url as string), args.where as Where, container_of(args)),
 });
@@ -48,6 +49,7 @@ define("open.search", {
     WHERE_PARAM,
     CONTAINER_PARAM,
   ],
+  bridge: false,
   runs_in: "background",
   run: async (ctx, args) => open_in(ctx, await search_target(ctx, args.engine, args.query as string), args.where as Where, container_of(args)),
 });
@@ -105,6 +107,7 @@ define("open.anything", {
   label: "Find anything",
   intent: "Find a page in one list. The list holds open tabs, quickmarks, bookmarks, history, recently closed tabs and search engines. Enter switches to an open tab and restores a closed one. Any other row opens here, or where the flag says. Shift+Enter opens in a new tab. A first word that is an engine's keyword searches that engine.",
   params: [{ name: "query", type: "string", rest: true, main: true, values: { from: "anything" } }, WHERE_PARAM],
+  bridge: false,
   runs_in: "background",
   repeatable: false,
   run: (ctx, args) => anything_handlers.run(ctx, args as { query: string; where: Where }),
@@ -125,6 +128,7 @@ define("open.clipboard", {
   label: "Open clipboard",
   intent: "Open the URL on the clipboard or in a register. Text that is not a URL is searched with the default_engine setting.",
   params: [WHERE_PARAM, CONTAINER_PARAM, OPEN_REGISTER_PARAM],
+  bridge: false,
   runs_in: "background",
   run: async (ctx, args) => {
     const target = await typed_url_target(await text_to_open(ctx, args.register as string));

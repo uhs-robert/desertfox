@@ -8,6 +8,7 @@ define("url.parent", {
   label: "Parent URL",
   intent: "Go up one level in the URL path. A count prefix goes up that many levels.",
   params: [{ name: "levels", type: "int", default: 1 }],
+  bridge: false,
   runs_in: "background",
   count: { param: "levels" },
   run: async (ctx, args) => {
@@ -20,6 +21,7 @@ define("url.parent", {
 define("url.root", {
   label: "Root URL",
   intent: "Go to the top of the site.",
+  bridge: false,
   runs_in: "background",
   run: async (ctx) => {
     const root = root_url(await current_tab_url(ctx));
@@ -36,6 +38,7 @@ define("url.increment", {
     { name: "direction", type: "enum", values: ["up", "down"], value_labels: { up: "add to the number", down: "subtract from the number" }, description: { up: "Add the amount to the number.", down: "Subtract the amount from the number." } },
     { name: "amount", type: "int", min: 1, default: 1 },
   ],
+  bridge: false,
   runs_in: "background",
   count: { param: "amount" },
   run: async (ctx, args) => {

@@ -45,6 +45,7 @@ define("register.list", {
   label: "List registers",
   intent: "List registers, or show one in full. A macro shows its step count.",
   params: [{ name: "name", type: "string", rest: true, main: true, optional: true, values: { from: "registers" }, pattern: REGISTER_NAME_PATTERN, description: "Show this register in full." }],
+  bridge: false,
   runs_in: "background",
   repeatable: false,
   run: (ctx, args) => handlers.list(ctx, args as { name?: string }),

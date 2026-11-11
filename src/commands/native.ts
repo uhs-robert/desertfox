@@ -12,6 +12,7 @@ async function open_grant_panel(ctx: Parameters<typeof open_help_url>[0], permis
 define("native.install", {
   label: "Install native host",
   intent: "Open the page that installs the native host. It has the permission button and the install command.",
+  bridge: false,
   runs_in: "background",
   repeatable: false,
   run: (ctx) => open_grant_panel(ctx, "nativeMessaging"),
@@ -22,6 +23,7 @@ define("permissions.grant", {
   label: "Grant a permission",
   intent: "Open the page that grants an optional permission. The nativeMessaging permission reaches the native host. The browsingData permission lets the clear-and-reload keys clear site data.",
   params: [{ name: "permission", type: "string", main: true, values: [...GRANTABLE_PERMISSIONS], strict: true, description: "Name the permission to grant." }],
+  bridge: false,
   runs_in: "background",
   repeatable: false,
   run: (ctx, args) => open_grant_panel(ctx, args.permission as GrantablePermission),

@@ -121,6 +121,8 @@ type CommandCommon = {
   // Absent means true. `.` replays only a repeatable background command, so false keeps a command out of the memory.
   // A function decides per call from the checked args, for one command whose args differ in danger (`page.reload --all` must never replay).
   repeatable?: boolean | ((args: CheckedArgs) => boolean);
+  // True lets a program outside the browser run the command through the bridge socket. Absent means false. Built-in commands must say it: `define` in `registry/builtin.ts` requires it. A hard-coded never-list in `background/bridge_run.ts` wins over a true here.
+  bridge?: boolean;
 };
 
 export type BackgroundCommandDef = CommandCommon & { runs_in: "background"; run: CommandRun; bundle?: undefined };

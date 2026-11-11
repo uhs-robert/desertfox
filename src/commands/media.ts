@@ -30,6 +30,7 @@ define("media.act", {
   ],
   count: { param: "times" },
   needs: ["content"],
+  bridge: true,
   runs_in: "background",
   run: (ctx, args) => run_media(browser_media_deps, ctx, args as MediaArgs),
 });
