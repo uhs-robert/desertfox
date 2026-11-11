@@ -13,7 +13,8 @@ import { PAGE_READY_TIMEOUT_MS, type PageReady, type PageWatch } from "./page_re
 export const MAX_MACRO_DEPTH = 10;
 
 // Where a step runs: the sender frame while the replay is still in the tab it started in, the top frame of any other tab.
-export type StepPlace = { tab_id: number | undefined; frame_id: number; mode: Mode };
+// `step_number` counts from 1 in the macro being played, so a refusal can name the step.
+export type StepPlace = { tab_id: number | undefined; frame_id: number; mode: Mode; step_number: number };
 
 export type MacroReplayDeps = {
   // The steps stored in the register, or undefined when it holds no macro.
@@ -114,7 +115,7 @@ export function create_macro_replay(deps: MacroReplayDeps) {
     return wait_for(replay, deps.watch(after));
   }
 
-  async function play_step(replay: Replay, step: BoundInvocation, start: ReplayStart): Promise<boolean> {
+  async function play_step(replay: Replay, step: BoundInvocation, step_number: number, start: ReplayStart): Promise<boolean> {
     const before = await deps.active_tab_id();
     // The user can switch tabs during a wait. The replay follows, so a pick there opens its link at once and the tab holds its keys.
     if (before !== replay.tab_id) {
@@ -127,12 +128,13 @@ export function create_macro_replay(deps: MacroReplayDeps) {
     try {
       const may_navigate = may_navigate_tab(step);
       const lost_reply = async () => before !== undefined && watch !== undefined && (await navigation_started(replay, before, watch, was_loading));
-      const answer = await deps.run_step(step, { tab_id: before, frame_id: before === start.tab_id ? (start.frame_id ?? 0) : 0, mode: start.mode }, lost_reply);
+      const answer = await deps.run_step(step, { tab_id: before, frame_id: before === start.tab_id ? (start.frame_id ?? 0) : 0, mode: start.mode, step_number }, lost_reply);
       if (!answer.ok || answer.cancelled) return false;
       const ready = await settle_page(replay, before, watch, was_loading, may_navigate);
       // `gone` is Escape or a tab closed during the wait. Either way the macro has no page to go on in.
       if (replay.stopped || ready === "gone") return false;
       if (ready === "timeout") return refuse(`The page did not load within ${PAGE_READY_TIMEOUT_MS / 1000} seconds, so the macro stopped`);
+      // `no_script` falls through on purpose: a macro may pass through a page DesertFox does not run on, such as about:blank, to a step that needs no page script. A later content step is refused there and names its number.
       if (ready === "ready") await deps.hold_keys(replay.tab_id!).catch(() => undefined);
       return true;
     } finally {
@@ -179,14 +181,14 @@ export function create_macro_replay(deps: MacroReplayDeps) {
 
   // False at the first step that failed, was cancelled or was stopped. A failure the router saw is shown already, and so is one refused here.
   async function play_steps(replay: Replay, steps: readonly BoundInvocation[], depth: number, start: ReplayStart): Promise<boolean> {
-    for (const step of steps) {
+    for (const [index, step] of steps.entries()) {
       if (replay.stopped) return false;
       // A nested macro plays inside this replay, so it shares the one hold and the one end.
       if (step.id === "macro.play") {
         if (!(await play_nested(replay, step, depth, start))) return false;
         continue;
       }
-      if (!(await play_step(replay, step, start))) return false;
+      if (!(await play_step(replay, step, index + 1, start))) return false;
     }
     return true;
   }
@@ -219,6 +221,8 @@ export function create_macro_replay(deps: MacroReplayDeps) {
       current.end_wait();
     },
     is_playing: (): boolean => current !== undefined,
+    // The replay is in this tab and Escape has not stopped it, so a page that loads there holds its keys.
+    holds_tab: (tab_id: number): boolean => current !== undefined && !current.stopped && current.tab_id === tab_id,
     // The answer to `replay_end`.
     ended: async (): Promise<{ ok: boolean }> => ({ ok: (await current?.ended) ?? true }),
     // A run from a tab the replay is not in waits for the end, so a key typed in a tab the replay left cannot act on the replay's tab between its steps.
