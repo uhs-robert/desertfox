@@ -354,6 +354,7 @@ test("keys handed back by the command line are replayed to the keymap but not to
 test("a held key replayed to the page clears its cancelled code, and the real keyup then reaches the page", () => {
   const keys = create_cancelled_keys();
   const press = { keyup_seen: false };
+  keys.saw_keydown_("Space");
   keys.record_keydown_("Space", "cancel", press);
   assert.equal(keys.release_for_replay_("Space", press), false);
   assert.equal(keys.cancels_keypress_("Space"), false);
@@ -375,6 +376,7 @@ test("replaying an early press does not clear the code of a later press of the s
   const second = { keyup_seen: false };
   keys.record_keydown_("Space", "cancel", first);
   keys.take_keyup_("Space");
+  keys.saw_keydown_("Space");
   keys.record_keydown_("Space", "cancel", second);
   assert.equal(keys.release_for_replay_("Space", first), true);
   assert.equal(keys.cancels_keypress_("Space"), true);
@@ -456,6 +458,35 @@ test("a stale cancelled code does not eat a later typed letter", () => {
   keys.record_keydown_("KeyK", "cancel");
   assert.equal(keys.cancels_keypress_("KeyK"), true);
   assert.equal(keys.take_keyup_("KeyK"), true);
+});
+
+test("a keyup whose keydown this frame never saw is cancelled, and never when the keydown was seen", () => {
+  const keys = create_cancelled_keys();
+  // The keydown went to another frame, which moved the focus here.
+  assert.equal(cancels_keyup({ isTrusted: true, code: "Escape" }, keys), true);
+  // A modifier makes no key token, so its keydown is never recorded as passed or cancelled. The page got it, and gets its keyup.
+  keys.saw_keydown_("ShiftLeft");
+  assert.equal(cancels_keyup({ isTrusted: true, code: "ShiftLeft" }, keys), false);
+  keys.saw_keydown_("KeyA");
+  keys.record_keydown_("KeyA", "pass");
+  assert.equal(cancels_keyup({ isTrusted: true, code: "KeyA" }, keys), false);
+  // Auto-repeat sends many keydowns and one keyup.
+  for (let repeat = 0; repeat < 3; repeat++) keys.saw_keydown_("ArrowDown");
+  assert.equal(cancels_keyup({ isTrusted: true, code: "ArrowDown" }, keys), false);
+  assert.equal(cancels_keyup({ isTrusted: true, code: "ArrowDown" }, keys), true);
+});
+
+test("a keydown whose keyup went to another frame lets the next keyup of that key through", () => {
+  const keys = create_cancelled_keys();
+  // Shift went down here and came up in another frame. The stale code errs towards the page: the next Shift keyup here passes, even one whose keydown was elsewhere.
+  keys.saw_keydown_("ShiftLeft");
+  keys.saw_keydown_("ShiftLeft");
+  assert.equal(cancels_keyup({ isTrusted: true, code: "ShiftLeft" }, keys), false);
+});
+
+test("a keyup that a page or an extension made is never cancelled for a missing keydown", () => {
+  const keys = create_cancelled_keys();
+  assert.equal(cancels_keyup({ isTrusted: false, code: "Escape" }, keys), false);
 });
 
 test("match patterns", () => {

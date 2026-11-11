@@ -199,6 +199,9 @@ export function start_server() {
       // The frame is made the way Docs makes it, with `src="javascript:undefined"`, so its content script starts in the written document.
       // A frame with no src gets its script in the first about:blank document, and `document.open` then removes that script's listeners.
       // The frame's box is the one measured on Docs (625 by 1 at top -10000), and its document is taller than the frame, so a scroll key that lands in the frame shows as a scroll of it.
+      // With keyup_refocus in the id, the page focuses the editor again on an Escape keyup in the top document, as Docs does (measured on a real document).
+      // With shift_moves_focus in the id, a Shift keydown in the frame moves the focus to the title field, so the keydown and the keyup of one press land in two frames.
+      // The top page and the frame report each keyup they get, so a case can tell which half of a press a page saw.
       // With refocus_field in the id, the page puts the focus back in the editor whenever the frame loses it, as an editor that insists on the focus does. With refocus_frame it focuses the frame element, which leaves the frame in normal mode.
       const script = `<script>addEventListener("load", () => {
         const frame = document.createElement("iframe");
@@ -217,6 +220,11 @@ export function start_server() {
           method: "POST", headers: { "content-type": "application/json" },
           body: JSON.stringify({ page_id: page_id + "_frame", type: "keydown", key: event.key, code: event.code }),
         }));
+        inner.defaultView.addEventListener("keyup", (event) => fetch("/report", {
+          method: "POST", headers: { "content-type": "application/json" },
+          body: JSON.stringify({ page_id: page_id + "_frame", type: "keyup", key: event.key, code: event.code }),
+        }));
+        addEventListener("keyup", (event) => send("keyup", { key: event.key, code: event.code }));
         // How often the frame's window took the focus, on the body so an extension script can read it. A hand-off loop shows as a count that keeps growing.
         let frame_focuses = 0;
         inner.defaultView.addEventListener("focus", () => (document.body.dataset.frameFocuses = ++frame_focuses));
@@ -224,6 +232,12 @@ export function start_server() {
         addEventListener("mousedown", () => editor.focus());
         if (page_id.includes("refocus_field")) inner.defaultView.addEventListener("blur", () => setTimeout(() => editor.focus()));
         if (page_id.includes("refocus_frame")) inner.defaultView.addEventListener("blur", () => setTimeout(() => frame.focus()));
+        if (page_id.includes("keyup_refocus")) addEventListener("keyup", (event) => {
+          if (event.key === "Escape") { inner.defaultView.focus(); editor.focus(); }
+        });
+        if (page_id.includes("shift_moves_focus")) inner.defaultView.addEventListener("keydown", (event) => {
+          if (event.key === "Shift") document.getElementById("title").focus();
+        });
         editor.focus();
       })</script>`;
       // With title_input in the id, the page shows a field of its own above the document, as Docs does with its title.

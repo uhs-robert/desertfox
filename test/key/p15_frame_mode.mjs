@@ -226,6 +226,52 @@ export async function run_cases({ run_case, press_keys, open_page, expect, poll_
     expect((await frame_focus_count()) === 3, `the frame took the focus ${await frame_focus_count()} times after the second Escape, expected 3`);
   });
 
+  await run_case("a page that focuses its editor again on the Escape keyup, as Docs does, stays in NORMAL after Escape", async () => {
+    const id = "p15_keyup_refocus";
+    await open_page("hidden_input_frame", id, { new_tab: false, keys_page_id: `${id}_frame` });
+    await expect_badge_and_mode("INSERT");
+    const focuses_before = await frame_focus_count();
+    const mark = events.length;
+    // The keydown hands the focus to the top page, so the keyup of the same press lands there.
+    await press_keys("-k", "Escape");
+    await expect_handed_off();
+    await sleep(500);
+    expect(!events.slice(mark).some((event) => event.page_id === id && event.type === "keyup" && event.key === "Escape"), "the top page got the keyup of an Escape whose keydown went to the hidden frame");
+    expect((await frame_focus_count()) === focuses_before, `the hidden frame took the focus ${(await frame_focus_count()) - focuses_before} more times after Escape`);
+    expect(await top_document_has_focus(), "the top document lost the focus after Escape");
+    await expect_badge_and_mode("NORMAL");
+    await expect_key_scrolls_top_page(["j"], id);
+    // An Escape typed whole in the top page is DesertFox's own key there, and the page gets neither half.
+    await press_keys("-k", "Escape");
+    await sleep(300);
+    expect(await top_document_has_focus(), "an Escape in the top page gave the focus back to the hidden frame");
+  });
+
+  await run_case("a Shift press split between the hidden frame and a field of the top page leaves that field's keys whole", async () => {
+    const id = "p15_title_input_shift_moves_focus";
+    const top_got = (type, key) => (event) => event.page_id === id && event.type === type && event.key === key;
+    await open_page("hidden_input_frame", id, { new_tab: false, keys_page_id: `${id}_frame` });
+    await expect_badge_and_mode("INSERT");
+    const split = events.length;
+    // The frame moves the focus to the title field on the Shift keydown, so the Shift keyup lands in the top page.
+    await press_keys("-M", "shift", "-m", "shift");
+    await wait_event(split, (event) => event.page_id === `${id}_frame` && event.type === "keydown" && event.key === "Shift", "the hidden frame to get the Shift keydown");
+    await poll_until("the title field to take the focus", async () => (await in_active_tab(`document.activeElement.id`)) === "title");
+    await expect_top_frame_holds_the_tab("INSERT");
+    // The next letter is not shifted, and the page gets both halves of it.
+    const letter = events.length;
+    await press_keys("a");
+    await wait_event(letter, (event) => event.page_id === id && event.type === "input" && event.value === "a", "the title field to hold a lower-case a");
+    await wait_event(letter, top_got("keyup", "a"), "the top page to get the keyup of the a");
+    expect(!events.slice(split).some(top_got("keyup", "Shift")), "the top page got the keyup of a Shift whose keydown went to the hidden frame");
+    // A Shift press that starts and ends in the top page reaches the page whole, so the page never holds a Shift it saw go down.
+    const whole = events.length;
+    await press_keys("-M", "shift", "a", "-m", "shift");
+    await wait_event(whole, top_got("keydown", "Shift"), "the top page to get the Shift keydown");
+    await wait_event(whole, top_got("keyup", "Shift"), "the top page to get the Shift keyup");
+    await wait_event(whole, (event) => event.page_id === id && event.type === "input" && event.value === "aA", "the title field to hold aA");
+  });
+
   await run_case("gi picks the hidden frame's editor ahead of a visible field of the page", async () => {
     const id = "p15_title_input";
     await open_page("hidden_input_frame", id, { new_tab: false, keys_page_id: `${id}_frame` });
