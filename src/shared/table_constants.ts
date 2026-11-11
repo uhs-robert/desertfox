@@ -4,3 +4,6 @@
 export const BUILT_IN_PAGE = "desertfox";
 
 export const FALLBACK_ENGINE_NAME = "duck";
+
+// The names of the site rows that ship with DesertFox. `default_site_rows.ts` types each row's name from this list, and a test keeps both in step.
+export const DEFAULT_SITE_ROW_NAMES = ["sheets"] as const;

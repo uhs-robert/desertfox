@@ -67,12 +67,18 @@ function keymap_schema(commands: CommandMeta[]): Schema {
 
 const non_empty_text: Schema = { type: "string", minLength: 1 };
 
+const BINDINGS_SCHEMA: Schema = {
+  type: "object",
+  minProperties: 1,
+  additionalProperties: { type: "object", properties: { id: non_empty_text, args: { type: "object" } }, required: ["id"], additionalProperties: false },
+};
+
 type TableFields = Extract<SettingRow, { kind: "table_list" }>["fields"];
 
 // `columns` holds the schema of each extra column a row may set: the per-site settings of a site table.
 function table_list_schema(fields: TableFields, exclusive: readonly string[] | undefined, columns: Record<string, Schema>): Schema {
   // A JSON Schema `pattern` has no case flag, so it refuses an upper-case scheme that the check takes.
-  const field_schema = (value: TableFields[string]["value"]): Schema => (value === "web_url" ? { type: "string", pattern: "^https?://\\S+$" } : value === "boolean" ? { type: "boolean" } : non_empty_text);
+  const field_schema = (value: TableFields[string]["value"]): Schema => (value === "web_url" ? { type: "string", pattern: "^https?://\\S+$" } : value === "boolean" ? { type: "boolean" } : value === "bindings" ? BINDINGS_SCHEMA : non_empty_text);
   return {
     type: "array",
     items: {

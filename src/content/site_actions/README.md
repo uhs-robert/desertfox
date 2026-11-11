@@ -1,0 +1,6 @@
+# site_actions
+
+The `site_actions` bundle (`site_actions.js`, 4 KB limit). The content script loads it on the first press of a command that site rows bind to keys, so these handlers stay out of `content.js`.
+
+- `send_key.ts`: the `page.send_key` handler. It sends a `keydown` and a `keyup` with a key name and a legacy key code to the element the selector finds, or to the focused element. It refuses when the selector matches nothing or does not parse. `send_key_queued` sends through one queue per page that keeps at least `KEY_PAIR_GAP_MS` (10 ms) between pairs, because Sheets applies only the first of several pairs that arrive in the same millisecond. The count arrives as the `times` param, and a call is one queue entry, so its steps all go out before the next call starts. The events are untrusted, so the content script ignores them and the key does not loop. The document and the event maker are parameters, so a test passes fakes. It holds the queue state of the page (the queue tail and the time of the last send) and is otherwise pure.
+- `main.ts`: registers the handler with the host. Not unit tested, it needs a DOM.

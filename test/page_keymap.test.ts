@@ -1,6 +1,13 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { hint_selectors_reply, rule_addresses_of, page_keymap_for, read_keymap_reply, site_columns_for, site_value, top_frame_address_of } from "../src/background/page_keymap.ts";
+import { compile_config } from "../src/background/compile.ts";
+import { empty_config } from "../src/background/config_load.ts";
+import "../src/background/command_modules.ts";
+import { DEFAULT_KEYMAP } from "../src/background/default_keymap.ts";
+import { DEFAULT_SITE_ROWS } from "../src/background/default_site_rows.ts";
+import { DEFAULT_SITE_ROW_NAMES } from "../src/shared/table_constants.ts";
+import { registry } from "../src/shared/registry/builtin.ts";
 import { create_keymap_asks } from "../src/content/ask_keymap.ts";
 import { create_key_flow } from "../src/content/key_flow.ts";
 import { create_mode_state } from "../src/content/mode_state.ts";
@@ -289,4 +296,59 @@ test("the reply crosses as a JSON string that parses back to the page's keymap",
   assert.equal(typeof sent, "string");
   assert.deepEqual(JSON.parse(sent!), await ask(compiled, "https://a.test/"));
   assert.equal(await read_keymap_reply(storage_of(undefined), ["https://a.test/"]), undefined);
+});
+
+// The shipped rows, compiled with the real registry and default keymap, and the tree a page then gets.
+const SHEETS = "https://docs.google.com/spreadsheets/d/abc/edit";
+const SHEETS_DOMAIN = "https://docs.google.com/a/example.org/spreadsheets/d/abc/edit";
+function with_defaults(settings: Record<string, unknown>) {
+  const { compiled, warnings } = compile_config({ config: { ...empty_config(), settings: settings as never }, default_keymap: DEFAULT_KEYMAP, default_site_rows: DEFAULT_SITE_ROWS, get_command: (id) => registry.get(id), enum_sources: {} });
+  assert.deepEqual(warnings, []);
+  return compiled;
+}
+const key_at = async (compiled: CompiledKeymap, url: string, key: string) => {
+  const leaf = (await ask(compiled, url))!.keymap.modes.normal?.children[key];
+  return leaf?.kind === "leaf" ? (leaf.steps[0]?.invocation.args as Record<string, unknown> | undefined)?.key ?? leaf.steps[0]?.invocation.id : undefined;
+};
+
+test("the shipped sheets rows bind hjkl to the arrow keys on both address forms and on no other page", async () => {
+  const compiled = with_defaults({});
+  for (const url of [SHEETS, SHEETS_DOMAIN]) {
+    assert.deepEqual(await Promise.all(["h", "j", "k", "l"].map((key) => key_at(compiled, url, key))), ["ArrowLeft", "ArrowDown", "ArrowUp", "ArrowRight"], url);
+  }
+  for (const url of ["https://docs.google.com/document/d/abc/edit", "https://sheets.google.com/spreadsheets/d/abc", "https://example.org/spreadsheets/d/abc"]) {
+    assert.notEqual(await key_at(compiled, url, "j"), "ArrowDown", url);
+  }
+});
+
+test("default_site_rows_off turns off both sheets rows", async () => {
+  const compiled = with_defaults({ default_site_rows_off: ["sheets"] });
+  assert.equal(compiled.site_rules, undefined);
+  for (const url of [SHEETS, SHEETS_DOMAIN]) assert.notEqual(await key_at(compiled, url, "j"), "ArrowDown");
+  assert.equal(with_defaults({ default_site_rows_off: ["other"] }).site_rules?.length, 2);
+});
+
+test("a user bind for one key beats the shipped key and the other shipped keys stay", async () => {
+  const user = { site: "https://docs.google.com/spreadsheets/*", bind: { j: { id: "page.send_key", args: { key: "PageDown", key_code: 34 } } } };
+  const compiled = with_defaults({ site_rules: [user] });
+  assert.deepEqual(await Promise.all(["h", "j", "k", "l"].map((key) => key_at(compiled, SHEETS, key))), ["ArrowLeft", "PageDown", "ArrowUp", "ArrowRight"]);
+  assert.equal(await key_at(compiled, SHEETS_DOMAIN, "j"), "ArrowDown");
+});
+
+test("a user row that sets only pass leaves the shipped bind, and pass of a bound key frees it", async () => {
+  const compiled = with_defaults({ site_rules: [{ site: "https://docs.google.com/spreadsheets/*", pass: "h" }] });
+  assert.equal(await key_at(compiled, SHEETS, "j"), "ArrowDown");
+  assert.equal(await key_at(compiled, SHEETS, "h"), undefined);
+  assert.equal((await ask(compiled, SHEETS))!.frees?.tokens.includes("h"), true);
+});
+
+test("a user off row beats the shipped bind", async () => {
+  const compiled = with_defaults({ site_rules: [{ site: "https://docs.google.com/*", off: true }] });
+  const reply = (await ask(compiled, SHEETS))!;
+  assert.equal(reply.all_off, true);
+  assert.notEqual(await key_at(compiled, SHEETS, "j"), "ArrowDown");
+});
+
+test("the names constant lists exactly the names of the shipped rows", () => {
+  assert.deepEqual([...new Set(DEFAULT_SITE_ROWS.map(({ name }) => name))], [...DEFAULT_SITE_ROW_NAMES]);
 });

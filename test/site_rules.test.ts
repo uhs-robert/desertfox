@@ -3,10 +3,14 @@ import { test } from "node:test";
 import { compile_keymap, create_matcher } from "../src/shared/keys/index.ts";
 import type { KeymapConfig } from "../src/shared/index.ts";
 import { prune_tree } from "../src/shared/keys/prune_tree.ts";
-import type { CompiledKeymap } from "../src/shared/prefix_tree.ts";
+import type { CompiledKeymap, TreeNode } from "../src/shared/prefix_tree.ts";
 import { all_off_step } from "../src/content/site_rule.ts";
 import { list_keys } from "../src/background/list_keys.ts";
 import { normal_tree_for, site_columns_for } from "../src/background/page_keymap.ts";
+import { compile_config } from "../src/background/compile.ts";
+import { empty_config } from "../src/background/config_load.ts";
+import "../src/background/command_modules.ts";
+import { registry } from "../src/shared/registry/builtin.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY, is_freed } from "../src/shared/prefix_tree.ts";
 
 const resolve = () => ({ runs_in: "content" as const, label: "x", count: "ignore" as const });
@@ -16,14 +20,17 @@ const KEYMAP: KeymapConfig = {
   browser: { "<A-j>": { id: "a.tab" } },
 };
 
-const compile = (site_rules: { site: string; off?: boolean; pass?: string; only?: string }[]) => compile_keymap(KEYMAP, { site_rules }, resolve);
+type BindTable = Record<string, { id: string; args?: Record<string, unknown> }>;
+const compile = (site_rules: { site: string; off?: boolean; pass?: string; only?: string; bind?: BindTable }[]) => compile_keymap(KEYMAP, { site_rules }, resolve);
 
 // What a key does on a page, the way the background resolves the columns and trims the tree, and the content script builds the matcher.
 function matcher_for(compiled: CompiledKeymap, url: string) {
   const page_tree = normal_tree_for(compiled.modes.normal, site_columns_for(compiled, [url]));
-  if (!("frees" in page_tree)) return create_matcher(compiled);
-  const { tree, frees } = page_tree;
-  return create_matcher({ ...compiled, modes: { ...compiled.modes, normal: tree } }, (token) => is_freed(frees, token));
+  const { tree } = page_tree;
+  const page_keymap = tree === undefined ? compiled : { ...compiled, modes: { ...compiled.modes, normal: tree } };
+  if (!("frees" in page_tree)) return create_matcher(page_keymap);
+  const { frees } = page_tree;
+  return create_matcher(page_keymap, (token) => is_freed(frees, token));
 }
 
 const all_off_at = (compiled: CompiledKeymap, url: string): boolean => normal_tree_for(compiled.modes.normal, site_columns_for(compiled, [url])).all_off;
@@ -180,4 +187,77 @@ test("a subtree no listed sequence names is shared, not copied", () => {
   assert.equal(pruned.children["k"], root.children["k"]);
   assert.equal(pruned.children["g"], root.children["g"]);
   assert.equal(pruned.children["j"], undefined);
+});
+
+const step_id = (compiled: CompiledKeymap, url: string, keys: string[]): string | undefined => {
+  let node: TreeNode | undefined = normal_tree_for(compiled.modes.normal, site_columns_for(compiled, [url])).tree;
+  for (const key of keys) node = node?.kind === "branch" ? node.children[key] : undefined;
+  return node?.kind === "leaf" ? `${node.steps[0]?.invocation.id}:${JSON.stringify(node.steps[0]?.invocation.args ?? {})}` : undefined;
+};
+
+test("bind replaces the tree's key on a matching page only, and a longer bind makes a branch", () => {
+  const { compiled } = compile([{ site: "https://a.test/*", bind: { j: { id: "b.j" }, "gx": { id: "b.gx", args: { n: 1 } } } }]);
+  assert.equal(step_id(compiled, "https://a.test/", ["j"]), "b.j:{}");
+  assert.equal(step_id(compiled, "https://a.test/", ["g", "x"]), 'b.gx:{"n":1}');
+  assert.equal(step_id(compiled, "https://a.test/", ["g", "g"]), "a.gg:{}");
+  assert.equal(step_id(compiled, "https://b.test/", ["j"]), "a.j:{}");
+  assert.equal(compiled.site_rules?.[0]?.off, undefined);
+});
+
+test("bind merges key by key: the first row that binds a key decides it, the other keys stay", () => {
+  const { compiled } = compile([
+    { site: "https://a.test/*", bind: { j: { id: "user.j" } } },
+    { site: "https://a.test/*", bind: { j: { id: "default.j" }, k: { id: "default.k" }, l: { id: "default.l" } } },
+  ]);
+  const url = "https://a.test/";
+  assert.deepEqual(["j", "k", "l"].map((key) => step_id(compiled, url, [key])), ["user.j:{}", "default.k:{}", "default.l:{}"]);
+});
+
+test("a row that sets only pass leaves another row's bind standing", () => {
+  const { compiled } = compile([{ site: "https://a.test/*", pass: "k" }, { site: "https://a.test/*", bind: { j: { id: "b.j" } } }]);
+  assert.equal(step_id(compiled, "https://a.test/", ["j"]), "b.j:{}");
+  assert.equal(step_id(compiled, "https://a.test/", ["k"]), undefined);
+});
+
+test("pass frees a bound key and only keeps it", () => {
+  const bind = { j: { id: "b.j" } };
+  const passed = compile([{ site: "https://a.test/*", pass: "j", bind }]).compiled;
+  assert.equal(feed_keys(passed, "https://a.test/", ["j"]), "no_match");
+  assert.equal(step_id(passed, "https://a.test/", ["j"]), undefined);
+  const only = compile([{ site: "https://a.test/*", only: "j", bind }]).compiled;
+  assert.equal(step_id(only, "https://a.test/", ["j"]), "b.j:{}");
+  assert.equal(step_id(only, "https://a.test/", ["k"]), undefined);
+});
+
+test("off wins over bind", () => {
+  const { compiled } = compile([{ site: "https://a.test/*", off: true, bind: { j: { id: "b.j" } } }]);
+  assert.equal(all_off_at(compiled, "https://a.test/"), true);
+  assert.equal(step_id(compiled, "https://a.test/", ["j"]), "a.j:{}");
+});
+
+test("bind skips a bad key sequence and an unknown command, with a warning, and keeps the rest", () => {
+  const unknown_resolve = (id: string) => (id === "nope" ? undefined : resolve());
+  const { compiled, warnings } = compile_keymap(KEYMAP, { site_rules: [{ site: "https://a.test/*", bind: { "<a>": { id: "b.x" }, q: { id: "nope" }, j: { id: "b.j" } } }] }, unknown_resolve);
+  assert.deepEqual(Object.keys(compiled.site_rules?.[0]?.bind ?? {}), ["j"]);
+  assert.equal(warnings.length, 2);
+});
+
+test("compile_config checks bind args with the registry validator", () => {
+  const send = (args: Record<string, unknown>) => ({ id: "page.send_key", args });
+  const config = {
+    ...empty_config(),
+    settings: { site_rules: [{ site: "https://a.test/*", bind: { h: send({ key: "ArrowLeft", key_code: 37, target: "#e" }), j: send({ key: "ArrowDown" }), k: { id: "no.such" } } }] },
+  };
+  const { compiled, warnings } = compile_config({ config, default_keymap: {}, get_command: (id) => registry.get(id), enum_sources: {} });
+  assert.deepEqual(Object.keys(compiled.site_rules?.[0]?.bind ?? {}), ["h"]);
+  assert.equal(warnings.length, 2);
+  assert.ok(warnings.some((warning) => warning.startsWith('site_rules: skipped bind "j" of "https://a.test/*": ')), warnings.join("\n"));
+  assert.deepEqual(compiled.site_rules?.[0]?.bind?.h?.leaf.steps[0]?.bundle, "site_actions");
+});
+
+test("a bind under another bind of the same site warns, and only the shorter bind is grafted", () => {
+  const { compiled, warnings } = compile([{ site: "https://a.test/*", bind: { g: { id: "b.g" } } }, { site: "https://a.test/*", bind: { gx: { id: "b.gx" } } }]);
+  assert.deepEqual(warnings, ['site_rules: skipped bind "gx": "g" is already a complete bind for the same site']);
+  assert.equal(step_id(compiled, "https://a.test/", ["g"]), "b.g:{}");
+  assert.equal(step_id(compiled, "https://a.test/", ["g", "x"]), undefined);
 });

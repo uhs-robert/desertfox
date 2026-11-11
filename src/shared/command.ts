@@ -61,6 +61,8 @@ export type ParamDef = {
   optional?: boolean;
   // Smallest value of an `int` param.
   min?: number;
+  // Largest value of an `int` param.
+  max?: number;
   // A `string` or `key` param whose text must match this regular expression (source text, so it travels in `commands.json`). An optional param may still be empty.
   pattern?: string;
   // A `string` param with a static `values` list accepts only those values, compared exactly like an enum value. Without it the list is for completion only.

@@ -173,6 +173,9 @@ test("disabling a site appends an off row to the list in force, enabling removes
   assert.equal(plan_site_edit(disabled!, [], pattern, "disable"), undefined);
   assert.equal(plan_site_edit(NO_EDITS, [], pattern, "enable"), undefined);
   // Enabling also removes the bare row an older popup wrote, and keeps a row for the pattern that sets keys.
+  // A user row that is off and also binds keys is no popup row, so enabling the site keeps it.
+  const with_bind = { site: pattern, off: true, bind: { j: { id: "page.send_key", args: { key: "ArrowDown", key_code: 40 } } } };
+  assert.equal(plan_site_edit({ saved: { site_rules: [with_bind] }, temp: {} }, [], pattern, "enable"), undefined);
   const older = { saved: { site_rules: [{ site: pattern }, { site: pattern, pass: "j" }] }, temp: {} };
   assert.deepEqual(plan_site_edit(older, [], pattern, "enable")?.saved.site_rules, [{ site: pattern, pass: "j" }]);
 });

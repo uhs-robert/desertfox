@@ -74,15 +74,20 @@ export function matches_any_address(source: string | undefined, addresses: reado
 
 // The site table (`site_rules`) resolves each column on its own: the first matching row that sets a column decides it.
 // `pass` and `only` form one column, the key rule. Each per-site setting is a column of its own in `values`.
-export type SiteColumns<Keys> = { off?: boolean; keys?: Keys; values?: Readonly<Record<string, unknown>> };
-export type ResolvedSiteColumns<Keys> = { off?: boolean; keys?: Keys; values: Record<string, unknown> };
+// `bind` is the one column that merges key by key: for each key, the first matching row that binds it decides. Its keys are the written sequences in a row, and the normalized sequences once compiled.
+export type SiteColumns<Keys, Bind = unknown> = { off?: boolean; keys?: Keys; bind?: Readonly<Record<string, Bind>>; values?: Readonly<Record<string, unknown>> };
+export type ResolvedSiteColumns<Keys, Bind = unknown> = { off?: boolean; keys?: Keys; bind?: Record<string, Bind>; values: Record<string, unknown> };
 
 // `rows` are the rows that match the page, in table order.
-export function resolve_site_columns<Keys>(rows: readonly SiteColumns<Keys>[]): ResolvedSiteColumns<Keys> {
-  const resolved: ResolvedSiteColumns<Keys> = { values: {} };
+export function resolve_site_columns<Keys, Bind = unknown>(rows: readonly SiteColumns<Keys, Bind>[]): ResolvedSiteColumns<Keys, Bind> {
+  const resolved: ResolvedSiteColumns<Keys, Bind> = { values: {} };
   for (const row of rows) {
     if (resolved.off === undefined && row.off !== undefined) resolved.off = row.off;
     if (resolved.keys === undefined && row.keys !== undefined) resolved.keys = row.keys;
+    for (const [key, binding] of Object.entries(row.bind ?? {})) {
+      resolved.bind ??= {};
+      if (!Object.hasOwn(resolved.bind, key)) resolved.bind[key] = binding;
+    }
     for (const [name, value] of Object.entries(row.values ?? {})) if (!Object.hasOwn(resolved.values, name)) resolved.values[name] = value;
   }
   return resolved;
@@ -91,13 +96,13 @@ export function resolve_site_columns<Keys>(rows: readonly SiteColumns<Keys>[]): 
 export type SiteRuleRow = Settings["site_rules"][number];
 export type SiteRowKeys = { pass: string } | { only: string };
 
-const SITE_ROW_FIELDS = new Set(["site", "off", "pass", "only"]);
+const SITE_ROW_FIELDS = new Set(["site", "off", "pass", "only", "bind"]);
 
 // A row's columns, with an unset column left out. A row that sets nothing but `site` is off: older configs and the popup wrote that shape.
 export function site_row_columns(row: SiteRuleRow): SiteColumns<SiteRowKeys> {
   const values = Object.fromEntries(Object.entries(row).filter(([field, value]) => !SITE_ROW_FIELDS.has(field) && value !== undefined));
   const keys: SiteRowKeys | undefined = row.pass !== undefined ? { pass: row.pass } : row.only !== undefined ? { only: row.only } : undefined;
   const has_values = Object.keys(values).length > 0;
-  const off = row.off ?? (keys === undefined && !has_values ? true : undefined);
-  return { ...(off === undefined ? {} : { off }), ...(keys === undefined ? {} : { keys }), ...(has_values ? { values } : {}) };
+  const off = row.off ?? (keys === undefined && !has_values && row.bind === undefined ? true : undefined);
+  return { ...(off === undefined ? {} : { off }), ...(keys === undefined ? {} : { keys }), ...(row.bind === undefined ? {} : { bind: row.bind }), ...(has_values ? { values } : {}) };
 }

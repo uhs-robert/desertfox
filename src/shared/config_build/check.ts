@@ -224,6 +224,19 @@ export function check_config(merged: MergedData, registry: Registry, problems: s
     if (name.startsWith("-")) warnings.push(`${where("search_engines", name)}: engine "${name}" starts with "-", so a command line can name it only as --engine=${name}`);
   }
 
+  // The settings check covers the shape of each bind. The command and its args get the checks of a keymap entry.
+  for (const row of merged.settings.site_rules ?? []) {
+    for (const [sequence, binding] of Object.entries(row.bind ?? {})) {
+      if (typeof binding?.id !== "string") continue;
+      const command = registry.get(binding.id);
+      if (command && captured_key_param(command, binding.args)) {
+        problems.push(`${where("settings", "site_rules")}: bind "${sequence}" of "${row.site}": a bind cannot wait for a key press`);
+        continue;
+      }
+      for (const message of check_invocation(binding, registry, engine_names, "normal")) problems.push(`${where("settings", "site_rules")}: bind "${sequence}" of "${row.site}": ${message}`);
+    }
+  }
+
   const default_engine = merged.settings.default_engine;
   if (default_engine !== undefined && !engine_names.includes(default_engine)) {
     const file = merged.origins.get(origin_key("settings", "default_engine")) ?? "config";

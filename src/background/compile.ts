@@ -11,16 +11,21 @@ import type { Prompt } from "../shared/invocation.ts";
 import { captured_key_param, find_param, is_context_source, without_param } from "../shared/registry/params.ts";
 import { check_args } from "../shared/registry/check_args.ts";
 import type { EnumSources } from "../shared/registry/check_args.ts";
-import { DEFAULT_LIGHT_INTENSITY, DEFAULT_PALETTE } from "../shared/config.ts";
+import { DEFAULT_LIGHT_INTENSITY, DEFAULT_PALETTE, DEFAULT_SETTINGS } from "../shared/config.ts";
 import { LIGHT_INTENSITIES } from "../shared/theme/roles.ts";
 import { load_theme, local_theme_problem } from "../shared/theme/load.ts";
 import type { StoredTheme } from "../shared/theme/apply.ts";
+import { match_regex_source } from "../shared/match_pattern.ts";
 import { compile_keymap } from "../shared/keys/compiler.ts";
+import { default_rows_left_on } from "./default_site_rows.ts";
+import type { DefaultSiteRow } from "./default_site_rows.ts";
 import { default_layer_of, merge_keymaps } from "./keymap_merge.ts";
 
 export type CompileInput = {
   config: MergedConfig;
   default_keymap: KeymapConfig;
+  // The site rows that ship with DesertFox, after the user's rows. Absent means none.
+  default_site_rows?: readonly DefaultSiteRow[];
   get_command: (command_id: string) => Pick<CommandDef, "id" | "label" | "params" | "runs_in" | "count" | "modes" | "bundle"> | undefined;
   enum_sources: EnumSources;
 };
@@ -29,7 +34,9 @@ export type CompileOutput = { compiled: CompiledKeymap; theme: StoredTheme; warn
 
 export function compile_config(input: CompileInput): CompileOutput {
   const keymap = merge_keymaps(input.default_keymap, input.config.keymap);
-  const { compiled, warnings } = compile_keymap(keymap, input.config.settings, (command_id) => {
+  // The shipped rows rank after the user's, so a user row decides each column first.
+  const settings = { ...input.config.settings, site_rules: [...(input.config.settings.site_rules ?? DEFAULT_SETTINGS.site_rules), ...default_rows_left_on(input.default_site_rows ?? [], input.config.settings.default_site_rows_off ?? DEFAULT_SETTINGS.default_site_rows_off)] };
+  const { compiled, warnings } = compile_keymap(keymap, settings, (command_id) => {
     const command = input.get_command(command_id);
     return command && { runs_in: command.runs_in, ...(command.bundle && { bundle: command.bundle }), label: command.label, count: command.count ?? "ignore", params: command.params ?? [], accepts_args: (args, prompt) => {
       // A captured key is filled when the key runs, so the rest of the args are checked without it.
@@ -56,6 +63,18 @@ export function compile_config(input: CompileInput): CompileOutput {
   for (const [mode, root] of Object.entries(compiled.modes) as [string, TreeBranch][]) {
     check_branch(root, [], mode, input, warnings);
     if (Object.keys(root.children).length === 0) delete compiled.modes[mode as keyof CompiledKeymap["modes"]];
+  }
+  for (const rule of compiled.site_rules ?? []) {
+    const site = (settings.site_rules as { site: string }[]).find((row) => match_regex_source([row.site]) === rule.regex)?.site ?? rule.regex;
+    for (const [key, { tokens, leaf }] of Object.entries(rule.bind ?? {})) {
+      const waits_for_key = leaf.steps.some((step) => captured_key_param(input.get_command(step.invocation.id) ?? {}, step.invocation.args));
+      if (waits_for_key) warnings.push(`site_rules: skipped bind "${tokens.join("")}" of "${site}": a bind cannot wait for a key press`);
+      // keep_node words its warnings for a keymap entry, so they are renamed to name the site row.
+      const node_warnings: string[] = [];
+      const kept = !waits_for_key && keep_node(leaf, tokens, "normal", input, node_warnings);
+      warnings.push(...node_warnings.map((warning) => warning.replace(/^normal: skipped "[^"]*"/, `site_rules: skipped bind "${tokens.join("")}" of "${site}"`)));
+      if (waits_for_key || !kept) delete rule.bind![key];
+    }
   }
   return { compiled, theme: { dark: theme.dark, light: theme.light }, warnings };
 }

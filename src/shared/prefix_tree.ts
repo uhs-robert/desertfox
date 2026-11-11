@@ -10,7 +10,7 @@ import type { PerSiteName, Settings } from "./settings_table.ts";
 
 export const COMPILED_KEYMAP_STORAGE_KEY = "desertfox_compiled_keymap";
 
-export const COMPILED_KEYMAP_VERSION = 6;
+export const COMPILED_KEYMAP_VERSION = 7;
 
 // One step of a binding. The side that runs it and the count rule are resolved at compile time.
 export type LeafStep = {
@@ -53,7 +53,9 @@ export type TreeNode = TreeLeaf | TreeBranch;
 
 // One `site_rules` row with its columns (see `SiteColumns` in `match_pattern.ts`). `keys` holds parsed key sequences, one token array each. The background prunes the normal tree with them for each page, so the stored keymap does not grow a tree per rule.
 // `off` is set from `off` or a row with nothing but `site`. The background also treats a page as all off when its key rule leaves no normal binding.
-export type SiteRule = { regex: string; off?: boolean; keys?: { pass: string[][] } | { only: string[][] }; values?: Readonly<Record<string, unknown>> };
+// `bind` maps a normalized key sequence to its tokens and compiled leaf. The background grafts the merged binds onto the normal tree before it prunes.
+export type SiteBind = { tokens: string[]; leaf: TreeLeaf };
+export type SiteRule = { regex: string; off?: boolean; keys?: { pass: string[][] } | { only: string[][] }; bind?: Record<string, SiteBind>; values?: Readonly<Record<string, unknown>> };
 
 export type CompiledKeymap = {
   format_version: typeof COMPILED_KEYMAP_VERSION;
