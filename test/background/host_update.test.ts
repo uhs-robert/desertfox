@@ -12,7 +12,7 @@ function make(options: { consent?: boolean; development?: boolean; hashes?: Host
   const toasts: { message: string; kind: string }[] = [];
   const warnings: string[] = [];
   const reconnects: number[] = [];
-  const state = { stored: {} as HostUpdateState, now: 1_000_000, consent: options.consent ?? true };
+  const state = { stored: {} as HostUpdateState, now: 1_000_000, consent: options.consent ?? true, toast_fails: false };
   const extension_version = options.extension_version ?? EXTENSION;
   const updater = create_host_update({
     extension_version,
@@ -26,7 +26,10 @@ function make(options: { consent?: boolean; development?: boolean; hashes?: Host
     load_state: async () => structuredClone(state.stored),
     save_state: async (next) => void (state.stored = structuredClone(next)),
     now_ms: () => state.now,
-    toast: async (message, kind) => void toasts.push({ message, kind }),
+    toast: async (message, kind) => {
+      if (state.toast_fails) throw new Error("no tab");
+      toasts.push({ message, kind });
+    },
     warn: (text) => void warnings.push(text),
   });
   updater.on_updated(() => reconnects.push(state.now));
@@ -288,67 +291,66 @@ test("a second :native.update while one runs is refused", async () => {
 });
 
 test("a toast that could not be shown is not recorded, so it shows again", async () => {
-  let shown = false;
-  const toast_deps = { fail: true };
-  // A notice that throws leaves no `noticed` mark.
-  const test_case = (() => {
-    const calls: string[] = [];
-    const state = { stored: {} as HostUpdateState };
-    const updater = create_host_update({
-      extension_version: EXTENSION,
-      is_development: async () => false,
-      read_hashes: async () => HASHES,
-      auto_update_consented: async () => false,
-      update: async (request) => ({ updated: true, version: request.version }),
-      load_state: async () => structuredClone(state.stored),
-      save_state: async (next) => void (state.stored = structuredClone(next)),
-      now_ms: () => 0,
-      toast: async (message) => {
-        if (toast_deps.fail) throw new Error("no tab");
-        calls.push(message);
-        shown = true;
-      },
-      warn: () => undefined,
-    });
-    return { updater, state, calls };
-  })();
+  const test_case = make({ consent: false });
+  test_case.state.toast_fails = true;
   test_case.updater.watch.seen("0.1.22");
-  await new Promise<void>((resolve) => setTimeout(resolve, 5));
+  await test_case.settle();
   assert.equal(test_case.state.stored.noticed, undefined);
-  toast_deps.fail = false;
+  test_case.state.toast_fails = false;
   test_case.updater.watch.seen("0.1.22");
-  await new Promise<void>((resolve) => setTimeout(resolve, 5));
-  assert.equal(shown, true);
+  await test_case.settle();
+  assert.equal(test_case.toasts.length, 1);
   assert.equal(test_case.state.stored.noticed, EXTENSION);
 });
 
 test("a failure toast that could not be shown is not recorded, so the next failure shows it", async () => {
-  const toast_deps = { fail: true, shown: 0 };
-  const state = { stored: {} as HostUpdateState, now: 0 };
-  const updater = create_host_update({
-    extension_version: EXTENSION,
-    is_development: async () => false,
-    read_hashes: async () => HASHES,
-    auto_update_consented: async () => true,
-    update: refusing("offline"),
-    load_state: async () => structuredClone(state.stored),
-    save_state: async (next) => void (state.stored = structuredClone(next)),
-    now_ms: () => state.now,
-    toast: async () => {
-      if (toast_deps.fail) throw new Error("no tab");
-      toast_deps.shown++;
-    },
-    warn: () => undefined,
-  });
-  const settle = () => new Promise<void>((resolve) => setTimeout(resolve, 5));
-  updater.watch.seen("0.1.22");
-  await settle();
-  assert.equal(state.stored.failure_toasted, undefined);
-  assert.equal(state.stored.attempted?.version, EXTENSION);
-  toast_deps.fail = false;
-  state.now += RETRY_AFTER_MS;
-  updater.watch.seen("0.1.22");
-  await settle();
-  assert.equal(toast_deps.shown, 1);
-  assert.equal(state.stored.failure_toasted, EXTENSION);
+  const test_case = make({ update: refusing("offline") });
+  test_case.state.toast_fails = true;
+  test_case.updater.watch.seen("0.1.22");
+  await test_case.settle();
+  assert.equal(test_case.state.stored.failure_toasted, undefined);
+  assert.equal(test_case.state.stored.attempted?.version, EXTENSION);
+  test_case.state.toast_fails = false;
+  test_case.state.now += RETRY_AFTER_MS;
+  test_case.updater.watch.seen("0.1.22");
+  await test_case.settle();
+  assert.equal(test_case.toasts.length, 1);
+  assert.equal(test_case.state.stored.failure_toasted, EXTENSION);
+});
+
+test("a success toast that fails does not turn an ok update into a failed one", async () => {
+  const test_case = make();
+  test_case.state.toast_fails = true;
+  test_case.updater.watch.seen("0.1.22");
+  await test_case.settle();
+  assert.equal(test_case.reconnects.length, 1);
+  assert.equal(test_case.state.stored.blocked, undefined);
+  assert.equal(test_case.state.stored.failure_toasted, undefined);
+  assert.equal(test_case.updater.watch.outdated_note(), undefined);
+});
+
+test("a clock that moved back counts as an expired interval", async () => {
+  const test_case = make({ update: refusing("offline") });
+  test_case.updater.watch.seen("0.1.22");
+  await test_case.settle();
+  test_case.state.now -= 3_600_000;
+  test_case.updater.watch.seen("0.1.22");
+  await test_case.settle();
+  assert.equal(test_case.calls.length, 2);
+});
+
+test("an old bridge with no version does not raise the install notice, the config host does", async () => {
+  const test_case = make();
+  test_case.updater.bridge_ready(undefined);
+  await test_case.settle();
+  assert.equal(test_case.calls.length, 1);
+  assert.deepEqual(test_case.toasts.map((toast) => toast.kind), ["success"]);
+});
+
+test("the manual command on a host with no release_version says to run :native.install and sends nothing", async () => {
+  const test_case = make();
+  test_case.updater.watch.seen(undefined);
+  await test_case.settle();
+  await assert.rejects(test_case.updater.update_now(), /:native\.install/);
+  assert.deepEqual(test_case.calls, []);
 });

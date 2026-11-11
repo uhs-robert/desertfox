@@ -86,3 +86,23 @@ test("the real host reports its release_version, which is dev in the repo", { sk
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("the startup probe sends one request and reports the version, and sends nothing without the permission", async () => {
+  for (const permitted of [true, false]) {
+    const seen: unknown[] = [];
+    const sent: object[] = [];
+    const client = create_native_client(
+      {
+        has_permission: async () => permitted,
+        send: async (message) => {
+          sent.push(message);
+          return { ok: true, release_version: "0.1.22", files: {} };
+        },
+      },
+      { seen: (release_version) => void seen.push(release_version), outdated_note: () => undefined },
+    );
+    await client.probe().catch(() => undefined);
+    assert.equal(sent.length, permitted ? 1 : 0);
+    assert.deepEqual(seen, permitted ? ["0.1.22"] : []);
+  }
+});

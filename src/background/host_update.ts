@@ -77,10 +77,10 @@ export function create_host_update(deps: HostUpdateDeps) {
     // Stored before the call, so a crash or a reply that never comes still counts as this day's attempt.
     state = { ...state, attempted: { version: hashes.version, at_ms: deps.now_ms() } };
     await deps.save_state(state);
+    let reply: SelfUpdateReply;
     try {
-      const reply = await send(hashes);
+      reply = await send(hashes);
       updated();
-      if (reply.updated) await deps.toast(`Native host updated to ${reply.version}`, "success");
     } catch (error) {
       const reason = reason_of(error);
       deps.warn(`desertfox: the native host update to ${hashes.version} failed: ${reason}`);
@@ -92,7 +92,10 @@ export function create_host_update(deps: HostUpdateDeps) {
         // After the toast, so one that found no tab or notification shows again on the next failure.
         await deps.save_state({ ...next, failure_toasted: hashes.version });
       }
+      return;
     }
+    // Outside the try, so a toast that fails is not reported as a failed update.
+    if (reply.updated) await deps.toast(`Native host updated to ${reply.version}`, "success");
   }
 
   // A host with no release_version predates the updater and has no `self_update` verb, so only a manual install can help it.
@@ -112,7 +115,9 @@ export function create_host_update(deps: HostUpdateDeps) {
     }
     if (state.blocked === hashes.version) return;
     const last = state.attempted;
-    if (last?.version === hashes.version && deps.now_ms() - last.at_ms < RETRY_AFTER_MS) return;
+    // A negative age means the clock moved back, which counts as an expired interval.
+    const age_ms = last ? deps.now_ms() - last.at_ms : 0;
+    if (last?.version === hashes.version && age_ms >= 0 && age_ms < RETRY_AFTER_MS) return;
     await attempt(hashes, state);
   }
 
@@ -124,7 +129,8 @@ export function create_host_update(deps: HostUpdateDeps) {
       config_predates_updater = typeof release_version !== "string";
     }
     if (standing !== "outdated" || running) return;
-    running = check(typeof release_version !== "string")
+    // Only the config host can be too old to have the verb. An old bridge says nothing about the config host.
+    running = check(source === "config" && typeof release_version !== "string")
       .catch((error: unknown) => deps.warn(`desertfox: the native host update check failed: ${reason_of(error)}`))
       .finally(() => {
         running = undefined;
@@ -151,6 +157,7 @@ export function create_host_update(deps: HostUpdateDeps) {
     // `:native.update`. Skips consent, the daily limit and a checksum block, because the user asked. Throws with the reason on failure.
     update_now: (): Promise<ManualOutcome> => {
       if (running || phase.kind === "updating") return Promise.reject(new Error("An update is already running."));
+      if (config_predates_updater) return Promise.reject(new Error("The native host is too old to update itself, so run :native.install"));
       // Set before the first await, so an automatic check that starts meanwhile sees it and sends no second self_update.
       const work = manual_update();
       running = work.then(

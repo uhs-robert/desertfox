@@ -8,8 +8,8 @@
 # for beta and development builds. `--channel main` overrides a version.
 # Installs two hosts, the config host and the bridge host, and the `desertfox` command line for the bridge. Writes only
 # $XDG_DATA_HOME/desertfox/desertfox-host, desertfox-bridge and desertfox (default ~/.local/share/desertfox),
-# ~/.mozilla/native-messaging-hosts/desertfox_host.json and desertfox_bridge.json, and the symlink ~/.local/bin/desertfox.
-# While it writes, it holds the lock the host's self_update takes, update.lock in the data folder, so an install
+# ~/.mozilla/native-messaging-hosts/desertfox_host.json and desertfox_bridge.json, the symlink ~/.local/bin/desertfox,
+# and the lock file update.lock in the data folder. While it writes, it holds that lock, which the host's self_update takes too, so an install
 # and an update never stage the same .new files at once. A second one fails with "update running".
 set -eu
 
@@ -95,7 +95,6 @@ main() {
 take_update_lock() {
     command -v flock >/dev/null 2>&1 || fail "flock (util-linux) is required."
     lock_path="$data_dir/update.lock"
-    : >>"$lock_path" 2>/dev/null || fail "cannot open the update lock $lock_path"
     exec 9>>"$lock_path"
     flock -n 9 || fail "update running: a DesertFox host is updating now. Run this again in a minute."
 }
