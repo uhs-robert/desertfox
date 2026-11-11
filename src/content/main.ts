@@ -99,10 +99,6 @@ bundles.connect({
   show_toast_: show_toast,
   // The toast needs the ui bundle, so without it an error has nowhere to show.
   show_error_: (message) => (bundles.has_handler_("ui.toast") ? show_toast(message) : console.error(message)),
-  on_sink_missing_: (mode) => {
-    page_mode.set_mode_("normal");
-    show_toast(`${mode} mode is not available yet`);
-  },
 });
 
 const cancelled_keys = create_cancelled_keys();
@@ -196,9 +192,7 @@ function follow_focus(entered: boolean, event: Event): void {
   const target = event.composedPath()[0] ?? null;
   watch_roots_around_focus();
   if (target instanceof Element && shadow_root_of(target)) return void setTimeout(sync_mode_to_focus);
-  if (!is_editable_element(target)) return;
-  if (entered) page_mode.focus_entered_editable_();
-  else page_mode.focus_left_editable_();
+  if (is_editable_element(target)) bundles.in_mode_order_(entered ? page_mode.focus_entered_editable_ : page_mode.focus_left_editable_);
 }
 
 // A focus move between two nodes of one root retargets both ends to the host, so the window never sees it. A listener on the root itself does. Roots are watched lazily, once focus sits in them. The shared handlers make a repeat add a no-op.
@@ -213,8 +207,7 @@ function watch_roots_around_focus(): void {
 
 function sync_mode_to_focus(): void {
   watch_roots_around_focus();
-  if (is_editable_element(deepest_focused_element())) page_mode.focus_entered_editable_();
-  else page_mode.focus_left_editable_();
+  bundles.in_mode_order_(is_editable_element(deepest_focused_element()) ? page_mode.focus_entered_editable_ : page_mode.focus_left_editable_);
 }
 
 let matcher_installed = false;
@@ -233,11 +226,11 @@ function install_matcher(reply: PageKeymap | undefined): void {
   matcher_installed = true;
   // The rule's own ignore mode ends with the rule, so removing or rewriting it takes effect on the open page.
   const step = all_off_step(keymap !== undefined, all_off, was_all_off, page_mode.get_mode_());
-  if (step === "enter") page_mode.set_mode_("ignore");
-  else if (first_install && reply?.insert) page_mode.set_mode_("insert");
+  if (step === "enter") bundles.set_mode_("ignore");
+  else if (first_install && reply?.insert) bundles.set_mode_("insert");
   else {
-    if (step === "leave") page_mode.set_mode_("normal");
-    if ((first_install || step === "leave") && is_editable_element(deepest_focused_element())) page_mode.focus_entered_editable_();
+    if (step === "leave") bundles.set_mode_("normal");
+    if ((first_install || step === "leave") && is_editable_element(deepest_focused_element())) bundles.in_mode_order_(page_mode.focus_entered_editable_);
   }
   if (keymap) was_all_off = all_off;
   refresh_mode_indicator();
@@ -303,8 +296,8 @@ function start(): void {
       bundles.api.hold_keys_until_(send_to_background({ type: "replay_end" }).then((ended) => ((replaying = false), ended.ok || key_flow.drop_held_(), [])), true);
     } else if (message.type === "refusal") show_toast(message.refusal.message, message.kind);
     else if (message.type === "set_mode" && !(message.held && was_all_off)) {
-      page_mode.set_mode_(message.mode);
-      if (is_editable_element(deepest_focused_element())) page_mode.focus_entered_editable_();
+      bundles.set_mode_(message.mode);
+      sync_mode_to_focus();
     }
     else if (message.type === "tree_updated") void ask_keymap();
   });

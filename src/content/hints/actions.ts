@@ -20,7 +20,7 @@ export type ActionDeps = {
   copy: (text: string, what?: string) => void | Promise<unknown>;
   // The background fetches the address. The content script never does, because the page's rules would block a picture from another site.
   image_action: (action: "copy_image" | "download", address: string) => Promise<unknown>;
-  start_caret_: (target: Element, mode: CaretMode) => void;
+  start_caret_: (target: Element, mode: CaretMode) => void | Promise<unknown>;
   // Sends the element to the Inspector through the devtools page. A failed outcome carries the toast text.
   inspect_: (target: Element) => Promise<unknown>;
 };
