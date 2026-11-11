@@ -723,3 +723,23 @@ test("the limit gates a param-rule count prefix but not a typed param", async ()
   assert.equal((await router.run({ invocations: [{ id: "tab.unload", args: { count: 100 } }], mode: "normal" })).ok, true);
   assert.deepEqual(seen, [100]);
 });
+
+test("a prompt step that may prompt drops its count and is not gated, but is refused when it may not prompt", async () => {
+  const seen: number[] = [];
+  const commands = { "tab.close": { ...closer(seen), name: "close", params: [{ name: "q", type: "string" as const, main: true }] } };
+  const step = { id: "tab.close", count: 100, prompt: { param: "q" } };
+  const prompting = make_fake(commands);
+  assert.deepEqual(await create_router(prompting.deps).run({ invocations: [step], mode: "normal", may_prompt: true }), { ok: true });
+  assert.ok(prompting.log.some((line) => line.startsWith("cmdline")));
+  const silent = make_fake(commands);
+  assert.equal((await create_router(silent.deps).run({ invocations: [step], mode: "normal" })).ok, false);
+  assert.deepEqual(seen, []);
+});
+
+test("a replayed step over the limit is refused with instant set", async () => {
+  const seen: number[] = [];
+  const { deps } = make_fake({ "tab.close": closer(seen) });
+  const response = await create_router(deps).run({ invocations: [{ id: "tab.close", count: 50 }], mode: "normal", instant: true });
+  assert.equal(response.ok, false);
+  assert.deepEqual(seen, []);
+});

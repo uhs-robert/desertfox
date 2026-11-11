@@ -335,7 +335,7 @@ const count_param = { name: "count", type: "int", min: 1, default: 1, when: { si
 
 define("tab.next", {
   label: "Next tab",
-  intent: "Switch to the next tab. It wraps from the last tab to the first. A count prefix repeats it, and a count over 20 is refused.",
+  intent: "Switch to the next tab. It wraps from the last tab to the first. A count prefix repeats it.",
   runs_in: "background",
   count: "repeat",
   run: (ctx) => handlers.next(ctx),
