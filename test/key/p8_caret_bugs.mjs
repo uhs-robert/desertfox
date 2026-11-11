@@ -3,7 +3,7 @@ import { evaluate_in_background } from "./rdp.mjs";
 // Repro cases for two caret mode bugs: j/k getting stuck, and the caret not starting at a find match.
 export const areas = ["caret", "find"];
 
-export async function run_cases({ run_case, expect, open_page, press_keys, poll_until, barrier, wait_cmdline, events, wait_event, rdp, extension_id, in_active_tab, badge_is, is_selection_of, press_and_wait_for_move, escape_to_normal, settle_focus }) {
+export async function run_cases({ run_case, expect, open_page, press_keys, poll_until, barrier, wait_cmdline, events, wait_event, rdp, extension_id, in_active_tab, badge_is, is_selection_of, press_and_wait_for_move, escape_to_normal }) {
   const last_selection_text = (page_id) => events.filter((event) => event.type === "selection" && event.page_id === page_id && event.text !== "").at(-1)?.text;
 
   async function press_and_wait_for_badge(page_id, keys, label) {
@@ -29,8 +29,6 @@ export async function run_cases({ run_case, expect, open_page, press_keys, poll_
     await wait_cmdline((line) => line.open && line.value === text, `the search line to hold ${text}`);
     await press_keys("-k", "Return");
     await wait_cmdline((line) => !line.open, "the search line to close");
-    // The line goes before the page has the focus back, and a key in between is lost.
-    await settle_focus();
   }
 
   // V starts on the title. Press a key n times and read the character under the caret ("" on an empty line, where no caret is drawn).
@@ -82,7 +80,8 @@ export async function run_cases({ run_case, expect, open_page, press_keys, poll_
     await press_and_wait_for_move("find_c", "gV", "the caret on the title");
     const mark_search = events.length;
     await search_with_line("needle");
-    await wait_event(mark_search, is_selection_of("find_c"), "the caret at the match");
+    // The caret rests on the first letter of the match. An intermediate report before the find lands is another text.
+    await wait_for_last_selection("find_c", mark_search, (last) => last.text === "n", "the caret at the match");
     const mark = events.length;
     await press_keys("w");
     await wait_for_last_selection("find_c", mark, (last) => last.text === "s", 'w to put the caret on "s" (the word after needle)');
@@ -112,11 +111,13 @@ export async function run_cases({ run_case, expect, open_page, press_keys, poll_
     await press_and_wait_for_badge("find_d", "v", "VISUAL");
     const mark_search = events.length;
     await search_with_line("needle");
-    await wait_event(mark_search, is_selection_of("find_d"), "the selection to follow the match");
+    // The first report can be an intermediate selection, so wait for the finished one.
+    const reaches_match_start = (last) => last.text.startsWith("caret_bug_find") && last.text.trimEnd().endsWith("n") && !last.text.trimEnd().endsWith("needle");
+    await wait_for_last_selection("find_d", mark_search, reaches_match_start, 'the selection to run from the title to the "n" of needle');
     // o swaps the ends, which makes the session adopt the find first. The selected text is the same either way, so o reports nothing and a barrier orders it before the read.
     await press_keys("o");
     await barrier("find_d");
-    const text = events.filter(is_selection_of("find_d")).at(-1)?.text ?? "";
+    const text = events.slice(mark_search).filter(is_selection_of("find_d")).at(-1)?.text ?? "";
     expect(text.startsWith("caret_bug_find") && text.trimEnd().endsWith("n") && !text.trimEnd().endsWith("needle"), `the selection is ${JSON.stringify(text.slice(0, 20))}...${JSON.stringify(text.slice(-12))}, expected from the title to the "n" of "needle"`);
     await escape_to_normal("find_d");
   });

@@ -5,8 +5,8 @@ A search engine is a named URL template. You type `search arch pacman mirrors` o
 ### Start with the example
 
 - Copy `examples/engines.toml` from the DesertFox repository to `~/.config/desertfox/search_engines.toml`. It holds 66 engines, including GitHub and YouTube trees.
-- Run `just build-config`. The tool checks the file and stores the resolved engines for Firefox.
-- Run `config.reload` (`qr` by default) in Firefox, or restart it.
+- Run `just build-config`. The tool only checks the file and prints problems.
+- Run `config.reload` (`,r` by default) in Firefox. That loads the file through the native host.
 - Check the table below this guide. Your engines show there with the file that set each field.
 
 An entry named `duck` in your file replaces the built-in one. A `search_engines.d/` directory next to the file can hold later files. A later file replaces the table at the same dotted path.
@@ -50,6 +50,14 @@ fallback = "reddit"
 
 Here `search reddit.sub rust` searches the current subreddit, or all of Reddit on any other page.
 
+### Keywords
+
+Add `keyword = "g"` to an engine to give it a short word. A keyword is one to eight lower case letters or digits and is unique across engines. A child does not inherit it, so each engine that wants one sets its own. `just build-config` rejects a bad or repeated keyword. The `,,` finder uses the keyword: when the first word of the query is a keyword and a space and more text follow, that engine's search row goes first in the list and is highlighted. Enter searches that engine with the rest, so `g rust` searches Google for `rust`. The match is case-sensitive, and an engine the page cannot fill (see the page slots above) gets no keyword row. `search g rust` still searches the default engine, because the keyword works in the finder only.
+
+```toml
+google = { url = "https://www.google.com/search?q=%s", label = "Google", keyword = "g" }
+```
+
 ### Trees
 
 A table inside an engine is a child, named with a dot. `search github.repo.issues foo` runs the `issues` child of `github.repo`.
@@ -58,7 +66,7 @@ A table inside an engine is a child, named with a dot. `search github.repo.issue
 - A label is the chain of labels on the path, such as "GitHub: this repo: issues".
 - A param declared on the parent with `children = true` makes one child per value. The example builds `github.issues`, `github.prs` and the rest from one `type` param.
 - A value can name a slot with `{name}`, so a scope can say `repo:{repo} `.
-- A child cannot be named `url`, `label`, `params` or `fallback`, or like a field or param of its parent.
+- A child cannot be named `url`, `label`, `params`, `fallback`, `hosts` or `keyword`, or like a field or param of its parent.
 
 ```toml
 [github]
@@ -79,7 +87,7 @@ scope = "repo:{repo} "
 ### Tips
 
 - Put the one-line engines first in the file. TOML puts a plain key under the table above it.
-- Run `just build-config` after each edit. It rejects an unknown slot, a param no URL uses, a fallback to a missing engine and a fallback loop.
+- Run `just build-config` after each edit to lint it. It rejects an unknown slot, a param no URL uses, a fallback to a missing engine and a fallback loop.
 - Prefer an engine over a snippet when the result is a URL. Use a snippet when you need the page DOM or several steps.
 - Run `engine.show <name>` to open this page at one engine.
 - See [a fuller real example](https://github.com/uhs-robert/oasis-dots/blob/main/home/desertfox/.config/desertfox/search_engines.toml).

@@ -14,7 +14,7 @@ import { is_dynamic_values, static_values } from "../../src/shared/registry/para
 const CANNOT_RUN_ON_STUB: Record<string, string> = {};
 
 // One text each setting accepts. A name missing here gets "x", which the validator may drop.
-const VALID_SETTING_TEXT: Record<string, string> = { which_key_delay_ms: "500", hint_letters: "asdf", ignore_sites: "a.com b.com", light_intensity: "4", home_page: "https://example.org", default_engine: "stub", palette: "stub", cmdline_prompt: ">", history_completion_max: "5", history_list_max: "5", newtab_bookmarks_max: "5", newtab_recent_tabs_max: "5", newtab_clock: "digital", newtab_clock_format: "24", open_completion: "bookmarks", which_key_border: "round", mode_indicator: "off", new_tab_page: "desertfox" };
+const VALID_SETTING_TEXT: Record<string, string> = { which_key_delay_ms: "500", hint_letters: "asdf", next_patterns: "a.com b.com", light_intensity: "4", home_page: "https://example.org", default_engine: "stub", palette: "stub", cmdline_prompt: ">", history_completion_max: "5", history_list_max: "5", newtab_bookmarks_max: "5", newtab_recent_tabs_max: "5", newtab_clock: "digital", newtab_clock_format: "24", open_completion: "bookmarks", which_key_border: "round", mode_indicator: "off", new_tab_page: "desertfox" };
 
 // Refusals a handler may give on the stub, from its state or the config and not from an argument value: no sound playing, no
 // container, bookmark or home page, a tab that cannot unload, nothing to repeat. A refusal that matches no entry fails, so a
@@ -22,19 +22,38 @@ const VALID_SETTING_TEXT: Record<string, string> = { which_key_delay_ms: "500", 
 const EXPECTED_REFUSALS: Record<string, RegExp[]> = {
   "tab.goto_audible": [/no tab is playing sound/],
   "tab.switch": [/matches .* equally, use a number/],
+  "tab.move": [/matches .* equally/],
   "tab.unload": [/matches .* equally/, /unloaded 0 tabs/],
   "tab.load": [/matches .* equally/, /loaded 0 tabs/],
   "tab.reopen_in_container": [/No container named/],
   "tab.attach": [/already in that window/],
-  "bookmark.open": [/no bookmark matches/],
+  "bookmark.open": [/no bookmark matches/, /no folder matches/],
   "history.open": [/no history entry matches/],
-  "bookmark.remove": [/no bookmark matches/, /No bookmark for this page/],
+  "bookmark.remove": [/no bookmark matches/, /No bookmark for this page/, /no folder matches/],
+  "bookmark.add": [/Already bookmarked/, /no folder matches/],
+  "bookmark.move": [/no folder matches/],
+  "bookmark.open_folder": [/no folder matches/],
+  "bookmark.rename": [/no bookmark matches/, /No bookmark for this page/],
+  "bookmark.edit_url": [/no bookmark matches/, /No bookmark for this page/],
   "page.home": [/set home_page in settings.toml/],
   "open.url": [/No container named/],
   "open.search": [/No search engine named/],
   "open.clipboard": [/No container named/],
+  "session.open": [/No session named/],
+  "session.delete": [/No session named/],
+  "session.rename": [/No session named/],
   "command.repeat": [/Nothing to repeat/],
   "url.increment": [/has no number/],
+  "register.list": [/is empty/],
+  "macro.stop": [/Not recording a macro/],
+  // The background wires the replay after it builds the router, which this test does not.
+  "macro.play": [/Macro replay is not ready yet/],
+  "quickmark.open": [/No quickmark/],
+  "quickmark.list": [/No quickmark/],
+  "quickmark.delete": [/is not saved/],
+  "mark.list": [/No marks?/],
+  "mark.delete": [/No mark/],
+  "media.act": [/No video or audio on this page/, /needs Firefox 153 or newer/],
 };
 
 const SOURCES: EnumSources = { search_engines: ["stub_engine"], containers: ["stub_container"] };
@@ -58,7 +77,8 @@ const STUB_ANSWERS: Record<string, unknown> = {
   "tabs.duplicate": STUB_TAB,
   "tabs.move": [STUB_TAB],
   "tabs.getZoom": 1,
-  "tabs.executeScript": [null],
+  "tabs.executeScript": [],
+  "cookies.getAll": [],
   "windows.getAll": STUB_WINDOWS,
   "windows.get": STUB_WINDOWS[0],
   "windows.create": STUB_WINDOWS[0],
@@ -72,7 +92,6 @@ const STUB_ANSWERS: Record<string, unknown> = {
   "permissions.contains": true,
   "storage.session.get": {},
   "storage.local.get": {},
-  "storage.managed.get": {},
   "runtime.getURL": "moz-extension://stub/home.html",
   "runtime.sendNativeMessage": { ok: true, config_dir: "/stub/desertfox", config_dir_exists: true, files: {} },
 };
@@ -97,8 +116,13 @@ function candidates(param: ParamDef): readonly unknown[] {
       return [false, true];
     case "enum":
       return static_values(param) ?? (is_dynamic_values(param.values) ? (SOURCES[param.values.from] ?? ["x"]) : ["x"]);
+    case "key":
+      return ["", "a", "Z", "1", "x"];
     case "string":
-      return ["", " ", "1", "x", "1 x", ...(static_values(param) ?? []).slice(0, 2), ...(static_values(param) ?? []).slice(-1)];
+      // A named register is empty on the stub, which is a runtime refusal of its own and would hide what the other params do.
+      if (param.name === "register") return [""];
+      // An address param refuses the other texts in the schema, so it needs one address to reach the handler.
+      return ["", " ", "1", "x", "1 x", ...(param.format === "url" ? ["https://example.org/m"] : []), ...(static_values(param) ?? []).slice(0, 2), ...(static_values(param) ?? []).slice(-1)];
   }
 }
 

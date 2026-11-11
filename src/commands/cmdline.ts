@@ -1,4 +1,5 @@
 import { define } from "../shared/registry/builtin.ts";
+import { WHERE, WHERE_SHORT } from "./open_target.ts";
 
 define("cmdline.open", {
   completion: "hidden",
@@ -6,6 +7,7 @@ define("cmdline.open", {
   intent: "Open the command line, with text already typed if given.",
   params: [{ name: "text", type: "string", optional: true, description: "Put this text in the line." }],
   runs_in: "content",
+  repeatable: false,
   bundle: "cmdline",
 });
 
@@ -14,6 +16,7 @@ define("cmdline.next_completion", {
   label: "Next completion",
   intent: "Select the next completion in the command line.",
   runs_in: "content",
+  repeatable: false,
   modes: ["cmdline"],
   bundle: "cmdline",
 });
@@ -23,6 +26,7 @@ define("cmdline.prev_completion", {
   label: "Previous completion",
   intent: "Select the previous completion in the command line.",
   runs_in: "content",
+  repeatable: false,
   modes: ["cmdline"],
   bundle: "cmdline",
 });
@@ -30,8 +34,10 @@ define("cmdline.prev_completion", {
 define("cmdline.submit", {
   completion: "hidden",
   label: "Submit",
-  intent: "Run the text typed in the command line.",
+  intent: "Run the text typed in the command line. With where, a command that opens a page opens it there instead of where the text says.",
+  params: [{ name: "where", type: "enum", values: WHERE, optional: true, short: WHERE_SHORT, description: { here: "Open here.", tab: "Open in a new tab.", background: "Open in a background tab.", window: "Open in a new window." } }],
   runs_in: "content",
+  repeatable: false,
   modes: ["cmdline"],
   bundle: "cmdline",
 });
@@ -42,6 +48,7 @@ define("cmdline.history", {
   intent: "Recall a command from history. It puts an earlier or later command into the command line.",
   params: [{ name: "direction", type: "enum", values: ["prev", "next"], value_labels: { prev: "to older entry", next: "to newer entry" } }],
   runs_in: "content",
+  repeatable: false,
   modes: ["cmdline"],
   bundle: "cmdline",
 });
@@ -51,6 +58,7 @@ define("cmdline.clear", {
   label: "Clear line",
   intent: "Delete the text typed in the command line.",
   runs_in: "content",
+  repeatable: false,
   modes: ["cmdline"],
   bundle: "cmdline",
 });
@@ -60,6 +68,7 @@ define("cmdline.help", {
   label: "Command help",
   intent: "Open help for the selected or typed command.",
   runs_in: "content",
+  repeatable: false,
   modes: ["cmdline"],
   bundle: "cmdline",
 });
@@ -83,6 +92,7 @@ define("list.act", {
     },
   ],
   runs_in: "content",
+  repeatable: false,
   modes: ["cmdline"],
   bundle: "cmdline",
 });
@@ -93,6 +103,7 @@ define("list.select", {
   intent: "Mark or unmark the highlighted tab. Or clear every mark.",
   params: [{ name: "action", type: "enum", values: ["toggle", "clear"], description: { toggle: "Mark or unmark the highlighted tab, then move down.", clear: "Unmark every tab." } }],
   runs_in: "content",
+  repeatable: false,
   modes: ["cmdline"],
   bundle: "cmdline",
 });

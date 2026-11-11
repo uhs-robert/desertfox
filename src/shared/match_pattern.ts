@@ -36,7 +36,7 @@ export function matches_pattern(pattern: string, url: string): boolean {
 // A pattern that does not parse is dropped, as there. So is one that `matches_pattern` can never match:
 // a `*` inside a host label, a port in the host, or a `#` in the path, since it compares the bare host and never sees a fragment.
 // `[^#]` stands where the path wildcard sits, for the same reason.
-export function ignore_regex_source(patterns: readonly string[]): string | undefined {
+export function match_regex_source(patterns: readonly string[]): string | undefined {
   const alternatives: string[] = [];
   for (const pattern of patterns) {
     if (pattern === "<all_urls>") {
@@ -59,12 +59,12 @@ export function ignore_regex_source(patterns: readonly string[]): string | undef
   return alternatives.length > 0 ? `^(?:${alternatives.join("|")})$` : undefined;
 }
 
-// A frame passes its own address and the tab's, so an embed on an ignored page stays ignored too. A stored regex that does not compile ignores nothing, so keys keep working.
-export function ignores_any_address(source: string | undefined, addresses: readonly (string | undefined)[]): boolean {
+// A frame passes its own address and the tab's, so an embed on a ruled page follows the rule too. A stored regex that does not compile matches nothing, so keys keep working.
+export function matches_any_address(source: string | undefined, addresses: readonly (string | undefined)[]): boolean {
   if (source === undefined) return false;
   try {
-    const ignored = new RegExp(source);
-    return addresses.some((address) => address !== undefined && ignored.test(address));
+    const pattern = new RegExp(source);
+    return addresses.some((address) => address !== undefined && pattern.test(address));
   } catch {
     return false;
   }

@@ -2,8 +2,10 @@
 // (Taplo reads them for TOML) completes command names and setting names.
 
 import type { CommandMeta } from "../command.ts";
+import { MAX_QUICKMARK_URL_CHARS, QUICKMARK_KEY } from "../quickmark_names.ts";
 import { SETTING_DOCS } from "../settings_docs.ts";
 import { SETTINGS_TABLE, type SettingName, type SettingRow } from "../settings_table.ts";
+import { ENGINE_KEYWORD } from "../engines/resolve.ts";
 import { KEYMAP_MODES } from "./merge.ts";
 import type { DataKind } from "./source_files.ts";
 
@@ -84,7 +86,7 @@ function value_schema(row: SettingRow): Schema {
       return { type: "object", properties: Object.fromEntries(row.keys.map((key) => [key, non_empty_text])), required: [...row.keys], additionalProperties: false };
     case "table_list": {
       // A JSON Schema `pattern` has no case flag, so it refuses an upper-case scheme that the check takes.
-      const field_schema = (value: "text" | "web_url"): Schema => (value === "web_url" ? { type: "string", pattern: "^https?://\\S+$" } : non_empty_text);
+      const field_schema = (value: "text" | "web_url" | "keys"): Schema => (value === "web_url" ? { type: "string", pattern: "^https?://\\S+$" } : non_empty_text);
       return {
         type: "array",
         items: {
@@ -92,6 +94,8 @@ function value_schema(row: SettingRow): Schema {
           properties: Object.fromEntries(Object.entries(row.fields).map(([field, rule]) => [field, field_schema(rule.value)])),
           required: Object.entries(row.fields).filter(([, rule]) => !rule.optional).map(([field]) => field),
           additionalProperties: false,
+          // Exactly two exclusive fields: `not` with `required` refuses a table that sets both.
+          ...(row.exclusive?.length === 2 ? { not: { required: [...row.exclusive] } } : {}),
         },
       };
     }
@@ -124,6 +128,7 @@ function search_engines_schema(): Schema {
       url: { type: "string", minLength: 1, description: "URL template. {query} is the typed or selected text, %s is the same. Page slots: {url}, {host}, {title}, {repo}, {subreddit}, {channel}. {a|b} takes the first that has a value, {name:raw} skips escaping" },
       label: { type: "string", minLength: 1 },
       fallback: { type: "string", minLength: 1, description: "Engine to use when the page cannot fill the slots" },
+      keyword: { type: "string", pattern: ENGINE_KEYWORD.source, description: "Short word, unique across engines. The open-anything finder will use it. Until then it is only checked. Children do not inherit it" },
       params: { type: "object", description: "Params declared here, each { default, values, children }" },
     },
     additionalProperties: true,
@@ -140,6 +145,13 @@ export function build_schemas(commands: CommandMeta[]): Record<DataKind, Schema>
       title: "DesertFox command aliases",
       type: "object",
       additionalProperties: { type: "string", examples: commands.map((command) => command.id) },
+    },
+    quickmarks: {
+      $schema: DRAFT,
+      title: "DesertFox quickmarks",
+      type: "object",
+      patternProperties: { [QUICKMARK_KEY.source]: { type: "string", minLength: 1, maxLength: MAX_QUICKMARK_URL_CHARS, description: "The address `go<key>` and `gn<key>` open" } },
+      additionalProperties: false,
     },
     settings: settings_schema(),
   };

@@ -4,7 +4,7 @@ import { create_live_source } from "../../src/cmdline/completion/live.ts";
 import { create_completer } from "../../src/cmdline/completion/sources.ts";
 import { create_session } from "../../src/cmdline/session.ts";
 import type { CommandMeta } from "../../src/shared/command.ts";
-import type { BookmarkItem, EngineItem, HeadingItem, HistoryItems, OpenItems, WindowItem, TabItem } from "../../src/shared/messages.ts";
+import type { BookmarkItem, BookmarkRows, EngineItem, HeadingItem, HistoryItems, OpenItems, SessionItem, WindowItem, TabItem } from "../../src/shared/messages.ts";
 import { parse_command_line } from "../../src/shared/registry/index.ts";
 import { create_word_lookup } from "../../src/cmdline/word_lookup.ts";
 
@@ -18,6 +18,7 @@ const COMMANDS: CommandMeta[] = [
     intent: "Open bookmark.",
     params: [
       { name: "bookmark", type: "string", rest: true, main: true, values: { from: "bookmarks" } },
+      { name: "folder", type: "string", optional: true, values: { from: "folders" } },
       { name: "where", type: "enum", values: ["here", "tab"], default: "here", short: { tab: "t" }, description: { tab: "Open in a new tab." } },
     ],
   },
@@ -34,8 +35,13 @@ const COMMANDS: CommandMeta[] = [
   { id: "engine.show", name: "engine.show", label: "Show engine", intent: "Show an engine.", params: [{ name: "engine", type: "enum", values: { from: "search_engines" } }] },
 ];
 COMMANDS.push({ id: "heading.go", name: "heading", label: "Go to heading", intent: "Go to a heading.", params: [{ name: "heading", type: "string", rest: true, main: true, values: { from: "headings" } }] });
+COMMANDS.push({ id: "session.open", name: "session.open", label: "Open tab session", intent: "Open a session.", params: [{ name: "name", type: "string", rest: true, main: true, values: { from: "sessions" } }] });
+COMMANDS.push({ id: "mark.list", name: "marks", label: "List marks", intent: "List marks.", params: [{ name: "mark", type: "string", rest: true, main: true, values: { from: "marks" } }] });
+COMMANDS.push({ id: "quickmark.list", name: "quickmarks", label: "List quickmarks", intent: "List quickmarks.", params: [{ name: "quickmark", type: "string", rest: true, main: true, values: { from: "quickmarks" } }] });
+COMMANDS.push({ id: "register.list", name: "registers", label: "List registers", intent: "List registers.", params: [{ name: "name", type: "string", rest: true, main: true, optional: true, values: { from: "registers" } }] });
+COMMANDS.push({ id: "bookmark.move", name: "bookmark.move", label: "Move bookmark", intent: "Move.", params: [{ name: "folder", type: "string", rest: true, main: true, values: { from: "folders" } }, { name: "bookmark", type: "string", optional: true, values: { from: "bookmarks" } }] });
 COMMANDS.push({ id: "history.open", name: "history", label: "Open history entry", intent: "Open history.", params: [{ name: "entry", type: "string", rest: true, main: true, values: { from: "history" } }] });
-COMMANDS.push({ id: "open.url", name: "open", label: "Open URL", intent: "Open a URL.", params: [{ name: "url", type: "string", main: true, values: { from: "open" } }] });
+COMMANDS.push({ id: "open.url", name: "open", label: "Open URL", intent: "Open a URL.", params: [{ name: "url", type: "string", rest: true, main: true, values: { from: "open" } }] });
 const ENGINES: EngineItem[] = [
   { name: "duck", label: "DuckDuckGo", available: true },
   { name: "github.repo", label: "GitHub: this repo", available: false },
@@ -59,11 +65,14 @@ const TABS: TabItem[] = [
   { id: 13, number: 3, title: "GitHub Gist", url: "https://gist.github.com/" },
   { id: 14, number: 4, title: "Bob's \"page\"", url: "https://bob.test/" },
 ];
-const BOOKMARKS: BookmarkItem[] = Array.from({ length: 30 }, (_, index) => ({ title: `Mark ${index}`, url: `https://m${index}.test/` }));
+const BOOKMARKS: BookmarkRows = {
+  rows: Array.from({ length: 30 }, (_, index) => ({ title: `Mark ${index}`, url: `https://m${index}.test/`, folders: [index % 3 === 0 ? 1 : 0] })),
+  folders: ["Bookmarks Toolbar", "Bookmarks Toolbar / Work", "Other Bookmarks / Work"],
+};
 
 // The background answers when the test says so.
 function make(containers: { name: string; cookie_store_id: string }[] = STORES, history: string[] = []) {
-  const asks: { kind: string; answer: (items: TabItem[] | BookmarkItem[] | EngineItem[] | HistoryItems | OpenItems | WindowItem[] | HeadingItem[]) => void }[] = [];
+  const asks: { kind: string; answer: (items: TabItem[] | BookmarkRows | BookmarkItem[] | EngineItem[] | HistoryItems | OpenItems | WindowItem[] | HeadingItem[] | SessionItem[]) => void }[] = [];
   // The tab model has no reply to await. The first read is its cue to connect, and `answer` is the snapshot arriving.
   let tab_items: TabItem[] | undefined;
   let tabs_asked = false;
@@ -82,6 +91,7 @@ function make(containers: { name: string; cookie_store_id: string }[] = STORES, 
       }
       return tab_items;
     },
+    all_tabs: () => tab_items,
     on_ready: () => session.source_ready(),
   });
   const session = create_session({
@@ -146,6 +156,48 @@ test("bookmarks show the 20 newest on an empty word, rank every bookmark for a t
   assert.deepEqual(names(session), ["Mark 27"]);
   tab_key(session);
   assert.equal(session.get_text(), "bookmark -t https://m27.test/ ");
+});
+
+const tag_of = (session: ReturnType<typeof make>["session"], name: string) => session.get_rows().find((row) => row.name === name)?.tag;
+
+test("bookmark --folder= keeps the rows in that folder and below, and a row shows its newest folder with +N for more", async () => {
+  const { session, asks, settle } = make();
+  session.edit("bookmark --folder=\"Bookmarks Toolbar\" ");
+  asks[0]!.answer({
+    rows: [
+      { title: "Both", url: "https://both.test/", folders: [2, 1] },
+      { title: "Work", url: "https://work.test/", folders: [1] },
+      { title: "Plain", url: "https://plain.test/", folders: [0] },
+      { title: "Elsewhere", url: "https://else.test/", folders: [2] },
+    ],
+    folders: BOOKMARKS.folders,
+  });
+  await settle();
+  // The exact path picks "Bookmarks Toolbar", which holds "Bookmarks Toolbar / Work" too.
+  assert.deepEqual(names(session), ["Both", "Work", "Plain"]);
+  // Under the filter the tag names the newest folder inside it, so "Both" shows Work, not the newer Other Bookmarks / Work.
+  assert.equal(tag_of(session, "Both"), "Work +1");
+  assert.equal(tag_of(session, "Work"), "Work");
+  assert.equal(tag_of(session, "Plain"), "Bookmarks Toolbar");
+  session.edit("bookmark --folder=zzzz ");
+  assert.deepEqual(names(session), []);
+  session.edit("bookmark --folder=work ");
+  assert.deepEqual(names(session), [], "a tie lists no row");
+  session.edit("bookmark --folder=\"Other Bookmarks / Work\" Both");
+  assert.deepEqual(names(session), ["Both"]);
+});
+
+test("bookmark --folder= with text that matches a folder and its subfolder keeps the folder, and its tag skips copies outside it", async () => {
+  const { session, asks, settle } = make();
+  session.edit("bookmark --folder=toolbar ");
+  asks[0]!.answer({
+    rows: [{ title: "Both", url: "https://both.test/", folders: [2, 0, 1] }, { title: "Sub", url: "https://sub.test/", folders: [1] }],
+    folders: BOOKMARKS.folders,
+  });
+  await settle();
+  assert.deepEqual(names(session), ["Both", "Sub"]);
+  assert.equal(tag_of(session, "Both"), "Bookmarks Toolbar +2");
+  assert.equal(tag_of(session, "Sub"), "Work");
 });
 
 test("Escape while the fetch is pending closes the line, and the reply that lands after the close changes nothing", async () => {
@@ -287,6 +339,19 @@ test("a window pick puts its number and title in the line, and the list is fetch
   assert.equal(asks.length, 1);
 });
 
+test("a session pick puts the name in the line, and the rows show the tab count and age", async () => {
+  const { session, asks, settle } = make();
+  session.edit("session.open ");
+  assert.deepEqual(asks.map((ask) => ask.kind), ["sessions"]);
+  asks[0]!.answer([{ name: "work day", description: "12 tabs, 3d ago" }, { name: "one", description: "1 tab, just now" }]);
+  await settle();
+  assert.deepEqual(names(session), ["work day", "one"]);
+  assert.deepEqual(session.get_rows().map((row) => row.description), ["12 tabs, 3d ago", "1 tab, just now"]);
+  session.edit("session.open wor");
+  tab_key(session);
+  assert.equal(session.get_text(), 'session.open "work day" ');
+});
+
 const OPEN: OpenItems = {
   history_max: 2,
   rows: [
@@ -305,6 +370,17 @@ test("open shows 20 bookmarks and the history cap on an empty word, in the order
   const rows = session.get_rows();
   assert.equal(rows.length, 22);
   assert.deepEqual([rows[0]!.tag, rows[19]!.tag, rows[20]!.tag, rows[21]!.name], ["bm", "bm", "hist", "Visit 1"]);
+});
+
+test("open keeps its list and its matches after a space, as the words after the first are more search terms", async () => {
+  for (const text of ["open patient ", "open patient c"]) {
+    const { session, asks, settle } = make();
+    session.edit(text);
+    assert.equal(asks.length, 1, text);
+    asks[0]!.answer({ history_max: 5, rows: [{ title: "Patient chart", url: "https://chart.test/", tag: "bm" }, { title: "Patient list", url: "https://list.test/", tag: "bm" }, { title: "Unrelated", url: "https://x.test/", tag: "bm" }] });
+    await settle();
+    assert.deepEqual(session.get_rows().map((row) => row.name).sort(), text.endsWith("c") ? ["Patient chart"] : ["Patient chart", "Patient list"], text);
+  }
 });
 
 test("a typed word ranks every row, keeps the groups in the order given, and a pick inserts the address", async () => {
@@ -955,4 +1031,44 @@ test("a private line's empty history lists no rows and the line stays usable", a
   await settle();
   assert.deepEqual(names(session), []);
   assert.notEqual(session.get_hint(), "loading");
+});
+
+test("a register pick puts the name in the line, with the preview in the row", async () => {
+  const { session, asks, settle } = make();
+  session.edit("registers ");
+  assert.deepEqual(asks.map((ask) => ask.kind), ["registers"]);
+  asks[0]!.answer([{ name: '"', description: "last yank" }, { name: "a", description: "3 steps" }]);
+  await settle();
+  assert.deepEqual(names(session), ['"', "a"]);
+  assert.deepEqual(session.get_rows().map((row) => row.description), ["last yank", "3 steps"]);
+  session.edit("registers a");
+  tab_key(session);
+  assert.equal(session.get_text(), "registers a ");
+});
+
+test("the marks and quickmarks lists show the key with the same text as the which-key rows", async () => {
+  const { session, asks, settle } = make();
+  session.edit("marks ");
+  assert.deepEqual(asks.map((ask) => ask.kind), ["marks"]);
+  asks[0]!.answer([{ name: "a", description: "y 40" }, { name: "G", description: "github.com  y 7" }]);
+  await settle();
+  assert.deepEqual(names(session), ["a", "G"]);
+  assert.deepEqual(session.get_rows().map((row) => row.description), ["y 40", "github.com  y 7"]);
+  session.edit("quickmarks ");
+  assert.equal(asks.at(-1)!.kind, "quickmarks");
+  asks.at(-1)!.answer([{ name: "g", description: "github.com" }]);
+  await settle();
+  assert.deepEqual(names(session), ["g"]);
+});
+
+test("a folder pick quotes its path, in the main word and in a flag value", async () => {
+  const { session, asks, settle } = make();
+  session.edit("bookmark.move ");
+  assert.deepEqual(asks.map((ask) => ask.kind), ["folders"]);
+  asks[0]!.answer([{ name: "Bookmarks Toolbar / Work", description: "2 bookmarks" }, { name: "Other Bookmarks", description: "0 bookmarks" }]);
+  await settle();
+  assert.deepEqual(names(session), ["Bookmarks Toolbar / Work", "Other Bookmarks"]);
+  session.edit("bookmark.move toolbar work");
+  tab_key(session);
+  assert.equal(session.get_text(), 'bookmark.move "Bookmarks Toolbar / Work" ');
 });

@@ -3,7 +3,7 @@ import { evaluate_in_background } from "./rdp.mjs";
 
 export const areas = ["whichkey", "help"];
 
-export async function run_cases({ rdp, extension_id, take_shot, run_case, send_keys, press_keys, poll_until, open_page, wait_event, events, expect, sleep, settle_focus, which_key_delay_ms, scroll_delta_by_press, scroll_of, run_line }) {
+export async function run_cases({ rdp, extension_id, take_shot, run_case, send_keys, press_keys, poll_until, open_page, wait_event, events, expect, sleep, settle_focus, close_tabs_with, in_active_tab, which_key_delay_ms, scroll_delta_by_press, scroll_of, run_line }) {
   const whichkey_events = (mark, page_id) => events.slice(mark).filter((event) => event.type === "whichkey" && event.page_id === page_id);
 
   await open_page("page", "wk", { new_tab: true });
@@ -92,6 +92,12 @@ export async function run_cases({ rdp, extension_id, take_shot, run_case, send_k
     await close_panel();
   });
 
+  // The redraw timing is held by the timer unit test, with a controlled clock. Here the child panel must appear.
+  await run_case("gx shows the child panel after the g panel", async () => {
+    await open_gx_panel();
+    await close_panel();
+  });
+
   await run_case("g then Backspace closes the panel", async () => {
     let mark = events.length;
     await press_keys("g");
@@ -111,6 +117,18 @@ export async function run_cases({ rdp, extension_id, take_shot, run_case, send_k
     await panel_value(mark, (value) => value === "", "the panel to close");
     await sleep(which_key_delay_ms + 200);
     expect(whichkey_events(mark, "wk").every((event) => event.value === ""), "the panel came back after Escape");
+  });
+
+  await run_case("a comma then a pause shows the DesertFox panel, and comma then j still scrolls", async () => {
+    let mark = events.length;
+    await press_keys(",");
+    await panel_value(mark, (value) => value !== "", "the comma panel");
+    await close_panel();
+    expect(await scroll_delta_by_press("wk", [",j"]) > 0, ",j did not scroll the page");
+  });
+
+  await run_case("Space reaches the page in normal mode and scrolls it", async () => {
+    expect(await scroll_delta_by_press("wk", [" "]) > 0, "Space did not scroll the page");
   });
 
   // keymap.d binds ,w to help.whichkey in normal mode and _w in caret and visual mode, because caret and visual mode already use , to repeat a character find. It sits there so the keymap that config.reload writes keeps it. Each mode lists its own keys.

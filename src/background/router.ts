@@ -8,7 +8,8 @@ import type { EnumSources } from "../shared/registry/check_args.ts";
 import { is_context_source } from "../shared/registry/params.ts";
 import { print_command } from "../shared/registry/print_command.ts";
 import { apply_count } from "./count.ts";
-import { as_stored, type RepeatMemory } from "./repeat_memory.ts";
+import type { RepeatMemory } from "./repeat_memory.ts";
+import { create_step_recorder, type RecordStep } from "./record_step.ts";
 
 export type ActiveTab = { tab_id: number; window_id: number; url: string | undefined; incognito?: boolean };
 
@@ -24,6 +25,8 @@ export type RouterDeps = {
   // True when the command runs with the param empty on this tab, so an empty selection runs it instead of opening the command line.
   runs_with_empty: (command_id: string, args: CheckedArgs, param: string, context: CommandContext) => Promise<boolean>;
   read_clipboard: () => Promise<string>;
+  // The title of the bookmark at this address, undefined when there is none.
+  bookmark_title: (url: string | undefined) => Promise<string | undefined>;
   has_permission: (permission: string) => Promise<boolean>;
   send_to_tab: (tab_id: number, message: BackgroundToContent, frame_id?: number) => Promise<unknown>;
   // Opens the command line in the frame with the text typed in. Rejects when the tab has no content script.
@@ -33,6 +36,8 @@ export type RouterDeps = {
   is_disabled: () => Promise<boolean>;
   // What `.` replays. A nested snippet router gets a no-op, so only the outermost request counts.
   repeat_memory: RepeatMemory;
+  // Replaces the `.` recorder, for a caller that records every step.
+  record_step?: RecordStep;
 };
 
 export type RouteRequest = {
@@ -46,6 +51,8 @@ export type RouteRequest = {
   may_prompt?: boolean;
   // The request runs but does not replace what `.` repeats.
   skip_repeat?: boolean;
+  // Set by a macro replay: page steps run as a held key's repeats do, so a scroll jumps and a mark after it saves where it ended.
+  instant?: boolean;
 };
 
 export type Router = { run: (request: RouteRequest) => Promise<RunResponse> };
@@ -64,6 +71,8 @@ function outcome_of_reply(reply: unknown): Outcome {
 }
 
 export function create_router(deps: RouterDeps): Router {
+  const record_step = deps.record_step ?? create_step_recorder(deps);
+
   // Read at run time: an earlier step or repeat can change which tab is active. The first step is pinned to the sender, because
   // the active tab can change between the key press and this read. A sender that is gone falls back to the active tab.
   async function read_now(request: RouteRequest, pin_to_sender: boolean): Promise<Now> {
@@ -87,27 +96,20 @@ export function create_router(deps: RouterDeps): Router {
       const is_first = index === 0;
       const outcome = await run_one(invocation, request, prompted, is_first).catch((error: unknown) => refuse(error instanceof Error ? error.message : String(error)));
       // The user left a waiting step: the rest of the sequence does not run, and nothing is repeated.
-      if (outcome.ok && outcome.cancelled) return { ok: true, cancelled: true };
+      if (outcome.ok && outcome.cancelled) {
+        await record_step(request.invocations, { ...outcome, failed_step: index }, { is_private });
+        return { ok: true, cancelled: true };
+      }
       if (outcome.ok) continue;
+      await record_step(request.invocations, { ...outcome, failed_step: index }, { is_private });
       const refusal: Refusal = { id: invocation.id, message: outcome.message };
       const { context } = await read_now(request, is_first);
       await deps.show_refusal(context.tab_id, refusal, context.frame_id);
       return { ok: false, refusal };
     }
-    // A line the user filled in stores itself when it runs, and this request still holds the missing param.
-    if (prompted.size === 0) await remember(request, is_private);
+    // Before the reply, so a `.` typed next finds the slot written.
+    await record_step(request.invocations, done, { is_private, prompted: prompted.size > 0, skip_repeat: request.skip_repeat === true });
     return { ok: true };
-  }
-
-  // Only a request that ran to the end counts. Content commands do not repeat here: the hint start records itself.
-  async function remember(request: RouteRequest, is_private: boolean): Promise<void> {
-    if (request.skip_repeat) return;
-    const repeatable = request.invocations.filter((invocation) => {
-      const command = deps.get_command(invocation.id);
-      return command?.runs_in === "background" && command.repeatable !== false;
-    });
-    if (repeatable.length === 0) return;
-    await deps.repeat_memory.save(repeatable.map(as_stored), is_private).catch(() => undefined);
   }
 
   async function run_one(invocation: BoundInvocation, request: RouteRequest, prompted: Set<BoundInvocation>, is_first: boolean): Promise<Outcome> {
@@ -149,7 +151,7 @@ export function create_router(deps: RouterDeps): Router {
     // The handler gets the rechecked args, with a kept marker back as its empty text.
     const final_args = Object.fromEntries(Object.entries(rechecked.args).map(([name, value]) => [name, is_context_source(value) ? filled.args[name] : value]));
 
-    if (command.runs_in === "content") return run_in_content(command, final_args, counted.times, context);
+    if (command.runs_in === "content") return run_in_content(command, final_args, counted.times, context, request.instant === true);
     for (let time = 0; time < counted.times; time++) {
       const result = outcome_of_reply(await command.run!(time === 0 ? context : (await read_now(request, false)).context, final_args));
       if (!result.ok) return result;
@@ -168,12 +170,12 @@ export function create_router(deps: RouterDeps): Router {
     return undefined;
   }
 
-  async function run_in_content(command: CommandDef, args: CheckedArgs, times: number, context: CommandContext): Promise<Outcome> {
+  async function run_in_content(command: CommandDef, args: CheckedArgs, times: number, context: CommandContext, instant: boolean): Promise<Outcome> {
     const { tab_id, frame_id } = context;
     if (tab_id === undefined) return refuse(`${command.label} needs a tab`);
     const invocations = Array.from({ length: times }, () => ({ id: command.id, args, ...(command.bundle && { bundle: command.bundle }) }));
     try {
-      return outcome_of_reply(await deps.send_to_tab(tab_id, { type: "run_in_content", invocations }, frame_id));
+      return outcome_of_reply(await deps.send_to_tab(tab_id, { type: "run_in_content", invocations, ...(instant && { repeat: true as const }) }, frame_id));
     } catch {
       return refuse(`${command.label} needs a page DesertFox runs on`);
     }
@@ -236,6 +238,7 @@ export function create_router(deps: RouterDeps): Router {
   async function read_source(source: ContextSourceName, context: CommandContext, active: ActiveTab | undefined) {
     if (source === "current_url") return active?.url;
     if (source === "clipboard") return deps.read_clipboard();
+    if (source === "bookmark_title") return deps.bookmark_title(active?.url);
     const selection = context.tab_id === undefined ? undefined : await deps.ask_selection(context.tab_id, context.frame_id ?? 0);
     return selection === "" ? undefined : selection;
   }

@@ -4,13 +4,16 @@
 
 import type { SearchEngine } from "../shared/config.ts";
 import type { PageInfo } from "../shared/engines/index.ts";
-import type { BookmarkItem, CompleteItemsAnswer, EngineItem, HistoryItem, HistoryItems, OpenRow, TabContainer, TabItem, TabRowsAction, TabRowsActionAnswer, WindowItem } from "../shared/messages.ts";
+import type { AnythingItems, BookmarkItem, BookmarkRows, ClosedTabRow, CompleteItemsAnswer, EngineItem, FolderItem, HistoryItem, HistoryItems, OpenRow, RegisterItem, SessionItem, TabContainer, TabItem, TabRowsAction, TabRowsActionAnswer, WindowItem } from "../shared/messages.ts";
 import { available_engine_names } from "./availability.ts";
+import { FOLDER_PATH_SEPARATOR } from "../shared/folder_pick.ts";
 import { DEFAULT_COOKIE_STORE_ID } from "../shared/container_store.ts";
 import { close_tabs, reopen_tabs_in_container, set_muted, set_pinned } from "./tab_actions.ts";
 import type { TabActionDeps } from "./tab_actions.ts";
 import { describe_result, set_unloaded } from "./tab_discard.ts";
 import type { DiscardDeps } from "./tab_discard.ts";
+import { browser_register_store } from "./register_store.ts";
+import { browser_session_storage, make_session_store } from "./session_store.ts";
 
 export type TabLike = {
   id?: number | undefined;
@@ -26,6 +29,7 @@ export type TabLike = {
   audible?: boolean | undefined;
   mutedInfo?: { muted?: boolean | undefined } | undefined;
   discarded?: boolean | undefined;
+  lastAccessed?: number | undefined;
 };
 
 // The containers by cookie store id, as `contextualIdentities` names them.
@@ -58,7 +62,7 @@ export type WindowLike = {
 // A window the line can offer. The page gets `WindowItem` only.
 export type NumberedWindow = WindowItem & { id: number; incognito: boolean; last_used: number };
 
-export type BookmarkNode = { type?: string | undefined; title?: string | undefined; url?: string | undefined; dateAdded?: number | undefined; children?: BookmarkNode[] | undefined };
+export type BookmarkNode = { id?: string | undefined; unmodifiable?: string | undefined; type?: string | undefined; title?: string | undefined; url?: string | undefined; dateAdded?: number | undefined; children?: BookmarkNode[] | undefined };
 
 const one_line = (text: string) => text.replace(/\s+/g, " ").trim();
 
@@ -118,16 +122,62 @@ export function flatten_bookmarks(roots: readonly BookmarkNode[]): BookmarkNode[
   return flat.sort((a, b) => (b.dateAdded ?? 0) - (a.dateAdded ?? 0));
 }
 
+// A folder of the tree with its path from the root, and the bookmarks directly inside it (no subfolders). The titles are display text Firefox localizes, so two folders can share a path.
+export type FolderNode = { id: string; path: string; managed: boolean; bookmarks: BookmarkNode[] };
+
+// Every folder below the tree's own root, in tree order. The root has no title and holds the four toolbar, menu, other and mobile folders, which are folders too.
+export function folder_nodes(roots: readonly BookmarkNode[]): FolderNode[] {
+  const folders: FolderNode[] = [];
+  const walk = (nodes: readonly BookmarkNode[], parent_path: string) => {
+    for (const node of nodes) {
+      if (!node.children || node.id === undefined) continue;
+      const title = one_line(node.title ?? "");
+      const path = parent_path === "" ? title : `${parent_path}${FOLDER_PATH_SEPARATOR}${title}`;
+      folders.push({ id: node.id, path, managed: node.unmodifiable !== undefined, bookmarks: node.children.filter(is_bookmark_node) });
+      walk(node.children, path);
+    }
+  };
+  for (const root of roots) walk(root.children ?? [], "");
+  return folders;
+}
+
+export const folder_items = (folders: readonly FolderNode[]): FolderItem[] =>
+  folders.map((folder) => ({ name: folder.path, description: `${folder.bookmarks.length} ${folder.bookmarks.length === 1 ? "bookmark" : "bookmarks"}` }));
+
+// A bookmark proper: not a folder or a separator, and it has an address.
+export const is_bookmark_node = (node: BookmarkNode): node is BookmarkNode & { url: string } => (node.type === undefined || node.type === "bookmark") && !!node.url;
+
 // Newest first, as `flatten_bookmarks` gives them. Folders, separators and a repeated address drop out.
 export function bookmark_items(nodes: readonly BookmarkNode[]): BookmarkItem[] {
   const seen = new Set<string>();
   const items: BookmarkItem[] = [];
   for (const node of nodes) {
-    if ((node.type !== undefined && node.type !== "bookmark") || !node.url || seen.has(node.url)) continue;
+    if (!is_bookmark_node(node) || seen.has(node.url)) continue;
     seen.add(node.url);
     items.push({ title: one_line(node.title || node.url), url: node.url });
   }
   return items;
+}
+
+// The `bookmark` list: `bookmark_items` rows, each with the folders that hold a copy of its address, newest copy first. Every folder is listed, so a row's index is its place in `folders`.
+export function bookmark_rows(nodes: readonly BookmarkNode[], folders: readonly FolderNode[]): BookmarkRows {
+  const copies = new Map<string, { added: number; folder: number }[]>();
+  folders.forEach((folder, index) => {
+    for (const node of folder.bookmarks) copies.set(node.url as string, [...(copies.get(node.url as string) ?? []), { added: node.dateAdded ?? 0, folder: index }]);
+  });
+  const rows = bookmark_items(nodes).map((item) => ({
+    ...item,
+    folders: [...new Set((copies.get(item.url) ?? []).sort((a, b) => b.added - a.added).map((copy) => copy.folder))],
+  }));
+  return { rows, folders: folders.map((folder) => folder.path) };
+}
+
+// What a `bookmark` command and the list both read from one `getTree`: the rows with their folder indexes, and the folder nodes (ids included) those indexes point into.
+export type BookmarkView = { rows: BookmarkRows; folders: FolderNode[] };
+
+export function bookmark_view(roots: readonly BookmarkNode[]): BookmarkView {
+  const folders = folder_nodes(roots);
+  return { rows: bookmark_rows(flatten_bookmarks(roots), folders), folders };
 }
 
 // A visit to these is no page the user would open from the line.
@@ -141,6 +191,17 @@ export function history_items(nodes: readonly HistoryNode[]): HistoryItem[] {
     .filter((node): node is HistoryNode & { url: string } => !!node.url && !SKIPPED_SCHEMES.test(node.url))
     .map((node) => ({ title: one_line(node.title || node.url), url: node.url }));
 }
+
+// A tab of a closed-tab session with an address worth opening again. Newest first, as `getRecentlyClosed` gives them. Windows and tabs with no session id drop out.
+export type ClosedSession = { tab?: { sessionId?: string | undefined; title?: string | undefined; url?: string | undefined } | undefined };
+
+export function closed_tab_rows(sessions: readonly ClosedSession[]): ClosedTabRow[] {
+  return sessions.flatMap(({ tab }) => (tab?.sessionId && tab.url && !SKIPPED_SCHEMES.test(tab.url) ? [{ session_id: tab.sessionId, title: one_line(tab.title || tab.url), url: tab.url }] : []));
+}
+
+// Each tab of the privacy asked for, with the time it was last active.
+export const tab_use_times = (tabs: readonly TabLike[], incognito: boolean): Record<number, number> =>
+  Object.fromEntries(tabs.filter((tab) => tab.id !== undefined && tab.incognito === incognito).map((tab) => [tab.id as number, tab.lastAccessed ?? 0]));
 
 export type OpenSource = "bookmarks" | "history";
 
@@ -159,7 +220,7 @@ export function open_rows(sources: readonly OpenSource[], bookmarks: readonly Bo
 // Every engine in config order. The flag says whether the page can fill it, so the list can mark the rest. The page URL is read here and goes no further.
 export function engine_items(engines: Record<string, SearchEngine>, page: PageInfo | undefined): EngineItem[] {
   const available = new Set(available_engine_names(engines, page));
-  return Object.entries(engines).map(([name, engine]) => ({ name, label: engine.label, available: available.has(name) }));
+  return Object.entries(engines).map(([name, engine]) => ({ name, label: engine.label, available: available.has(name), ...(engine.keyword === undefined ? {} : { keyword: engine.keyword }) }));
 }
 
 export type TabQuery = (window_id: number | undefined) => Promise<TabLike[]>;
@@ -187,9 +248,14 @@ export const browser_complete_items_deps = {
   query_tabs: ((window_id) => browser.tabs.query(window_id === undefined ? {} : { windowId: window_id })) as TabQuery,
   query_windows: (async () => browser.windows.getAll({ populate: true })) as () => Promise<WindowLike[]>,
   all_bookmarks: async (): Promise<BookmarkNode[]> => flatten_bookmarks(await browser.bookmarks.getTree()),
+  folders: async (): Promise<FolderNode[]> => folder_nodes(await browser.bookmarks.getTree()),
+  bookmark_view: async (): Promise<BookmarkView> => bookmark_view(await browser.bookmarks.getTree()),
   // `startTime: 0` reaches all history, since the default is the last day. The page ranks, so it needs more than it shows.
   search_history: async (): Promise<HistoryNode[]> => browser.history.search({ text: "", startTime: 0, maxResults: 1000 }),
   containers: (): Promise<ContainerMarks> => read_containers(() => browser.contextualIdentities.query({})),
+  sessions: (): Promise<SessionItem[]> => make_session_store(browser_session_storage).items(),
+  registers: (is_private: boolean): Promise<RegisterItem[]> => browser_register_store.items(is_private),
+  closed_tabs: async (): Promise<ClosedTabRow[]> => closed_tab_rows(await browser.sessions.getRecentlyClosed()),
 };
 
 export type CompleteItemsDeps = typeof browser_complete_items_deps & {
@@ -200,6 +266,13 @@ export type CompleteItemsDeps = typeof browser_complete_items_deps & {
   search_engines: () => Promise<Record<string, SearchEngine>>;
   // The page of the line's tab, undefined when it has none.
   page_of: (tab_id: number) => Promise<PageInfo | undefined>;
+  // The marks of the page at `url` then the global ones, and the quickmarks, as list rows: the key and the text the which-key rows show.
+  marks: (url: string | undefined, is_private: boolean) => Promise<RegisterItem[]>;
+  quickmarks: (is_private: boolean) => Promise<RegisterItem[]>;
+  // Only the quickmarks this window may delete.
+  saved_quickmarks: (is_private: boolean) => Promise<RegisterItem[]>;
+  // The quickmarks this window opens, key to full address.
+  quickmark_table: (is_private: boolean) => Promise<Record<string, string>>;
   open_settings: () => Promise<OpenSettings>;
   history_list_max: () => Promise<number>;
   read_tab: (tab_id: number) => Promise<TabLike | undefined>;
@@ -229,13 +302,42 @@ export function create_complete_items(deps: CompleteItemsDeps) {
     max: await deps.history_list_max(),
   });
 
-  const fetch_items = async (kind: "bookmarks" | "engines" | "history" | "open" | "windows", asker: Asker): Promise<CompleteItemsAnswer["items"]> => {
+  // Everything the finder lists but the open tabs, which the page takes from the tab model. Each source that fails leaves the others.
+  // A private line gets quickmarks and bookmarks only: Firefox records no private visit, and the closed tabs and sessions are hidden there as in `session`.
+  const anything_items = async (asker: Asker): Promise<AnythingItems> => {
+    const [quickmarks, bookmarks, history, closed, tabs, history_max] = await Promise.all([
+      deps.quickmark_table(asker.incognito).catch((): Record<string, string> => ({})),
+      deps.all_bookmarks().then(bookmark_items, () => []),
+      asker.incognito ? [] : deps.search_history().then(history_items, () => []),
+      asker.incognito ? [] : deps.closed_tabs().catch((): ClosedTabRow[] => []),
+      deps.query_tabs(undefined).catch((): TabLike[] => []),
+      deps.open_settings().then(({ history_max }) => history_max, () => 0),
+    ]);
+    return {
+      tab_used: tab_use_times(tabs, asker.incognito),
+      quickmarks: Object.entries(quickmarks).sort(([left], [right]) => (left < right ? -1 : 1)).map(([key, url]) => ({ key, url })),
+      bookmarks,
+      history,
+      closed,
+      history_max,
+    };
+  };
+
+  const fetch_items = async (kind: "bookmarks" | "engines" | "history" | "open" | "windows" | "sessions" | "registers" | "folders" | "marks" | "quickmarks" | "saved_quickmarks" | "anything", asker: Asker): Promise<CompleteItemsAnswer["items"]> => {
     // The set is read once per line. The line is modal over one tab, so the page cannot change under it.
     if (kind === "engines") return engine_items(await deps.search_engines(), await deps.page_of(asker.tab_id));
     if (kind === "open") return open_items(asker);
+    if (kind === "anything") return anything_items(asker);
     if (kind === "history") return history_list(asker);
+    // A private line lists no sessions, as the commands refuse there.
+    if (kind === "sessions") return asker.incognito ? [] : deps.sessions();
+    if (kind === "registers") return deps.registers(asker.incognito);
+    if (kind === "marks") return deps.marks((await deps.page_of(asker.tab_id))?.url, asker.incognito);
+    if (kind === "quickmarks") return deps.quickmarks(asker.incognito);
+    if (kind === "saved_quickmarks") return deps.saved_quickmarks(asker.incognito);
+    if (kind === "folders") return folder_items(await deps.folders());
     if (kind === "windows") return listed_windows(await deps.query_windows(), asker).map(({ number, title }) => ({ number, title }));
-    return bookmark_items(await deps.all_bookmarks());
+    return (await deps.bookmark_view()).rows;
   };
 
   return {
@@ -279,8 +381,8 @@ export function create_complete_items(deps: CompleteItemsDeps) {
     // Undefined for a sender that is not a tab, for a tab that opened no line and for a tab that closed or navigated
     // while the lookup ran. A failed browser call gives an empty list.
     answer: async (kind: unknown, asker: Asker | undefined): Promise<CompleteItemsAnswer | undefined> => {
-      if ((kind !== "bookmarks" && kind !== "engines" && kind !== "history" && kind !== "open" && kind !== "windows") || !asker || !(await deps.is_opener(asker.tab_id, asker.frame_id))) return undefined;
-      const items = await fetch_items(kind, asker).catch(() => (kind === "open" ? { rows: [], history_max: 0 } : kind === "history" ? { rows: [], max: 0 } : []));
+      if ((kind !== "bookmarks" && kind !== "engines" && kind !== "history" && kind !== "open" && kind !== "windows" && kind !== "sessions" && kind !== "registers" && kind !== "folders" && kind !== "marks" && kind !== "quickmarks" && kind !== "saved_quickmarks" && kind !== "anything") || !asker || !(await deps.is_opener(asker.tab_id, asker.frame_id))) return undefined;
+      const items = await fetch_items(kind, asker).catch(() => (kind === "open" ? { rows: [], history_max: 0 } : kind === "history" ? { rows: [], max: 0 } : kind === "bookmarks" ? { rows: [], folders: [] } : kind === "anything" ? { tab_used: {}, quickmarks: [], bookmarks: [], history: [], closed: [], history_max: 0 } : []));
       return (await deps.is_opener(asker.tab_id, asker.frame_id)) ? { items } : undefined;
     },
   };

@@ -7,11 +7,11 @@
 # Array bindings: one key, several steps run in order.
 [normal]
 # A prompt in the binding: the command line opens with `open ` typed in (p2_prompts).
-"go" = ":open"
+"ge" = ":open"
 # The second step scrolls the tab that tab.next made active.
 ",n" = ["tab.next", "scroll.to --percent=0"]
 # A waiting step: the pick resumes the sequence, so the scroll runs after the pick, and Escape cancels the rest.
-",h" = ["hint.run --action=background", "scroll.pixels --dy=300"]
+"\\h" = ["hint.run --action=background", "scroll.pixels --dy=300"]
 # find.next with no earlier search fails and stops the sequence.
 ",f" = ["find.next", "scroll.pixels --dy=300"]
 # The command line opens and the scroll waits for Enter or Escape.
@@ -20,4 +20,4 @@
 # A prompt step: the line opens for a scroll distance and the scroll waits for Enter or Escape.
 ",p" = [":scroll.pixels", "scroll.pixels --dy=300"]
 # A waiting step then a background step: the tab switch waits for the pick.
-",t" = ["hint.run --action=background", "tab.next"]
+"\\t" = ["hint.run --action=background", "tab.next"]

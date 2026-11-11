@@ -1,5 +1,6 @@
 import { COPY_FORMATS } from "../content/handlers/copy.ts";
 import { define } from "../shared/registry/builtin.ts";
+import { YANK_REGISTER_PARAM } from "./register_param.ts";
 
 define("copy.url", {
   name: "copy",
@@ -21,6 +22,7 @@ define("copy.url", {
         org: "Copy an Org link.",
       },
     },
+    YANK_REGISTER_PARAM,
   ],
   runs_in: "content",
   bundle: "page",
@@ -49,6 +51,7 @@ define("copy.links", {
       value_labels: { plain: "as plain addresses", org: "as an Org list" },
       description: { plain: "Copy the addresses, one per line.", org: "Copy an Org list." },
     },
+    YANK_REGISTER_PARAM,
   ],
   runs_in: "content",
   bundle: "hints",

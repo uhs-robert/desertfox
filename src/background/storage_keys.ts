@@ -1,7 +1,11 @@
 // Every `storage.local` key the background owns. The compiled keymap key lives in `shared/prefix_tree.ts`, the theme and user CSS keys in `shared/theme/apply.ts`.
 
-// The config `config.reload` last built from the files. An import will land here too. `FILES_CONFIG_STORAGE_KEY`, defined in `shared/storage_watch.ts` because a reload ends with a write of it.
+// The raw files and the config the last `config.reload` or import built from them. `FILES_CONFIG_STORAGE_KEY`, defined in `shared/storage_watch.ts` because a reload ends with a write of it.
 export { FILES_CONFIG_STORAGE_KEY } from "../shared/storage_watch.ts";
+
+// The raw file text that config was built from, with its folder label, so an import can rebuild it with its own files on top.
+// A key of its own, written in the same `set` as the config: the pages read the config at every redraw and need none of the text.
+export const FILES_SOURCE_STORAGE_KEY = "desertfox_files_source";
 
 // Strings for the help page: config, keymap and shortcut slot problems from the last load.
 export const WARNINGS_STORAGE_KEY = "desertfox_warnings";
@@ -52,8 +56,36 @@ export const WINDOW_FOCUS_STORAGE_KEY = "desertfox_window_focus";
 export const REPEAT_STORAGE_KEY = "desertfox_last_repeat";
 export const REPEAT_PRIVATE_STORAGE_KEY = "desertfox_last_repeat_private";
 
-// Prefix of one `storage.local` key per register, holding its text. Register `/` holds the last page search. Not written from a private window.
+// Prefix of one `storage.local` key per register, holding its value (text or a list of invocations). Only `register_store.ts` reads and writes it. A private window never reaches it.
 export const REGISTER_STORAGE_PREFIX = "desertfox_register_";
+
+// Prefix of one `storage.session` key per register of the private windows. Cleared when the last private window closes.
+export const REGISTER_PRIVATE_STORAGE_PREFIX = "desertfox_private_register_";
+
+// The saved tab sessions: `{ version: 1, sessions: { [name]: { saved_at, tabs } } }`. Only `session_store.ts` reads and writes it. Never read from a private window.
+export const SESSIONS_STORAGE_KEY = "desertfox_sessions";
 
 // Set while the user has turned DesertFox off from the toolbar or its shortcut. Absent means on, so a profile from before the switch stays on. Only the background writes it.
 export const DISABLED_STORAGE_KEY = "desertfox_disabled";
+
+// Tab id to the time (ms) of the pick that waits for its devtools page, in `storage.session`. One pick per tab: a newer one replaces it. Dropped after 60 s, on navigation and when the tab closes.
+export const INSPECT_PENDING_STORAGE_KEY = "desertfox_inspect_pending";
+
+// The local marks: `{ v: 1, pages: { [url without hash]: { at, marks: { [key]: [x, y] } } } }`. Only `mark_store.ts` reads and writes it. A private window never reaches it.
+export const MARK_STORAGE_KEY = "desertfox_marks";
+
+// The same shape for the private windows, in `storage.session`. Cleared when the last private window closes.
+export const MARK_PRIVATE_STORAGE_KEY = "desertfox_private_marks";
+
+// The macro being recorded, `{ register, steps }`, in `storage.session`. Absent means no recording. A private window has a key of its own, so a private recording never shows in or reaches a normal window. Only `macro_recorder.ts` reads and writes them.
+export const MACRO_RECORDING_STORAGE_KEY = "desertfox_macro_recording";
+export const MACRO_RECORDING_PRIVATE_STORAGE_KEY = "desertfox_private_macro_recording";
+
+// The register `@@` plays, a one-letter string in `storage.session`, with a key of its own for the private windows. Only `macro_last_played.ts` reads and writes them.
+export const MACRO_LAST_PLAYED_STORAGE_KEY = "desertfox_macro_last_played";
+export const MACRO_LAST_PLAYED_PRIVATE_STORAGE_KEY = "desertfox_private_macro_last_played";
+// The quickmarks added with `M`: `{ [key]: url }`, laid over the config table. Only `quickmark_store.ts` reads and writes it. A private window reads it but never writes it.
+export const QUICKMARK_STORAGE_KEY = "desertfox_quickmarks";
+
+// The same shape for the private windows, in `storage.session`. Cleared when the last private window closes.
+export const QUICKMARK_PRIVATE_STORAGE_KEY = "desertfox_private_quickmarks";

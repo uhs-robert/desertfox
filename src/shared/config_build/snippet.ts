@@ -6,14 +6,14 @@
 // `main` marks the one free-text param a bare word fills, as in the command grammar.
 // `short=p` gives a bool or valued param the flag `-p`. An enum maps values to letters: `short=tab:t,window:w`.
 // A bare `default=` word that names a context source (current_url, selection,
-// clipboard) is that source. A double-quoted default is always a literal string.
+// clipboard, bookmark_title) is that source. A double-quoted default is always a literal string.
 
 import type { ContextSourceName, Mode, ParamDef, ParamType, ParamValue } from "../command.ts";
 import { SLOTS } from "../engines/index.ts";
 import type { SnippetEntry } from "../config.ts";
 
 const PARAM_TYPES: readonly string[] = ["int", "float", "string", "bool", "enum"];
-const CONTEXT_SOURCES: readonly string[] = ["current_url", "selection", "clipboard"];
+const CONTEXT_SOURCES: readonly string[] = ["current_url", "selection", "clipboard", "bookmark_title"];
 const SINGLE_KEYS = ["id", "label", "intent", "name", "modes", "requires"] as const;
 // Only the modes where a key press reaches a page command. Insert, ignore, hint and cmdline take typed text.
 const SNIPPET_MODES: readonly string[] = ["normal", "caret", "visual", "visual_line"];

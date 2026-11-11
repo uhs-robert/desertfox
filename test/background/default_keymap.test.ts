@@ -62,13 +62,23 @@ test("the approved keys are all bound", () => {
   assert.deepEqual(DEFAULT_KEYMAP.ignore?.["<S-Escape>"], { id: "mode.set", args: { mode: "normal" } });
 });
 
-test("the q group holds the DesertFox commands", () => {
+test("i enters insert mode with no field and I focuses the first field", () => {
+  assert.deepEqual(DEFAULT_KEYMAP.normal?.i, { id: "mode.insert" });
+  assert.deepEqual(DEFAULT_KEYMAP.normal?.I, DEFAULT_KEYMAP.normal?.gi);
+  assert.deepEqual(DEFAULT_KEYMAP.insert?.["<Escape>"], { id: "mode.escape" });
+});
+
+test("the , group holds the DesertFox commands", () => {
   const { warnings, compiled } = compile(DEFAULT_KEYMAP);
   assert.deepEqual(warnings, []);
-  assert.deepEqual(DEFAULT_KEYMAP.normal?.qr, { id: "config.reload" });
-  assert.deepEqual(DEFAULT_KEYMAP.normal?.qh, { id: "help.open" });
-  assert.deepEqual(DEFAULT_KEYMAP.normal?.qi, { id: "mode.set", args: { mode: "ignore" } });
-  assert.deepEqual(DEFAULT_KEYMAP.normal?.qb, { id: "page.blur" });
+  assert.deepEqual(DEFAULT_KEYMAP.normal?.[",r"], { id: "config.reload" });
+  assert.deepEqual(DEFAULT_KEYMAP.normal?.[",h"], { id: "help.open" });
+  assert.deepEqual(DEFAULT_KEYMAP.normal?.[",i"], { id: "mode.set", args: { mode: "ignore" } });
+  assert.deepEqual(DEFAULT_KEYMAP.normal?.[",b"], { id: "page.blur" });
+  assert.deepEqual(DEFAULT_KEYMAP.normal?.[",s"], { id: "help.open", args: { name: "settings" }, label: "Settings page" });
+  assert.deepEqual(DEFAULT_KEYMAP.normal?.[",t"], { id: "settings.toggle", prompt: { param: "name" } });
+  assert.deepEqual(DEFAULT_KEYMAP.normal?.[",?"], { id: "help.whichkey" });
+  assert.equal(DEFAULT_KEYMAP.normal?.[","], undefined);
   assert.ok(compiled.modes.normal);
 });
 
@@ -96,18 +106,22 @@ test("the keys of the new modes compile and resolve to their commands", () => {
   assert.equal(leaf_id("normal", "g", "V"), 'mode.set {"mode":"caret"}');
   assert.equal(leaf_id("normal", "v"), 'mode.set {"mode":"caret"}');
   assert.equal(leaf_id("normal", "V"), 'mode.set {"mode":"visual"}');
-  assert.equal(leaf_id("normal", ";", "v"), 'hint.run {"action":"caret","filter":"prose","text":"","rapid":false}');
-  assert.equal(leaf_id("normal", ";", "B"), 'hint.run {"filter":"buttons","action":"here","text":"","rapid":false}');
-  assert.equal(leaf_id("normal", ";", "V"), 'hint.run {"action":"visual","filter":"prose","text":"","rapid":false}');
-  assert.equal(leaf_id("normal", ";", "#"), 'cmdline.open {"text":"heading "}');
+  assert.equal(leaf_id("normal", ";", "v"), 'hint.run {"action":"caret","filter":"prose","text":"","rapid":false,"register":""}');
+  assert.equal(leaf_id("normal", ";", "b"), 'hint.run {"filter":"buttons","action":"here","text":"","rapid":false,"register":""}');
+  assert.equal(leaf_id("normal", ";", "V"), 'hint.run {"action":"visual","filter":"prose","text":"","rapid":false,"register":""}');
+  assert.equal(leaf_id("normal", "s", "h"), 'cmdline.open {"text":"heading "}');
+  assert.equal(leaf_id("normal", ";", "#"), undefined);
+  assert.equal(leaf_id("normal", "]", "h"), 'page.heading {"direction":"next","steps":1}');
+  assert.equal(leaf_id("normal", "[", "h"), 'page.heading {"direction":"prev","steps":1}');
   assert.equal(leaf_id("normal", ";", ";"), 'cmdline.open {"text":"hint "}');
+  assert.equal(leaf_id("normal", ";", "u"), 'cmdline.open {"text":"hint --custom "}');
   assert.equal(leaf_id("caret", "v"), 'mode.set {"mode":"visual"}');
   assert.equal(leaf_id("caret", "V"), 'mode.set {"mode":"visual_line"}');
   assert.equal(leaf_id("visual", "V"), 'mode.set {"mode":"visual_line"}');
   assert.equal(leaf_id("visual_line", "v"), 'mode.set {"mode":"visual"}');
   assert.equal(leaf_id("visual_line", "V"), 'mode.set {"mode":"caret"}');
-  assert.equal(leaf_id("visual_line", "y"), 'visual.act {"action":"yank"}');
-  assert.equal(leaf_id("visual_line", "o"), 'visual.act {"action":"swap"}');
+  assert.equal(leaf_id("visual_line", "y"), 'visual.act {"action":"yank","register":""}');
+  assert.equal(leaf_id("visual_line", "o"), 'visual.act {"action":"swap","register":""}');
   assert.equal(leaf_id("visual_line", "/"), leaf_id("visual", "/"));
   assert.equal(leaf_id("visual_line", "n"), "find.next {}");
   assert.equal(leaf_id("visual_line", "j"), leaf_id("visual", "j"));
@@ -162,9 +176,9 @@ test("every default group name labels a real group, so a typo cannot go quiet", 
   assert.ok(!compiled.modes.normal?.children.g || (compiled.modes.normal.children.g as TreeBranch).label === "Go");
 });
 
-test("no default key searches: search keys come from the user's engines", () => {
+test("no default key searches the web: search keys come from the user's engines, and `sh` is the one page search", () => {
   const normal = Object.keys(DEFAULT_KEYMAP.normal ?? {});
-  assert.deepEqual(normal.filter((key) => key.startsWith("s") || key === "ri"), []);
+  assert.deepEqual(normal.filter((key) => key.startsWith("s") || key === "ri"), ["sh"]);
   assert.equal(DEFAULT_KEYMAP.group_names?.sG, undefined);
 });
 
@@ -181,6 +195,7 @@ test("a search binding on the selection opens the command line when nothing is s
     ask_selection: async () => "",
     runs_with_empty: async () => false,
     read_clipboard: async () => "",
+    bookmark_title: async () => undefined,
     has_permission: async () => true,
     send_to_tab: async () => undefined,
     open_cmdline: async (_tab, _frame, text) => void log.push(text),
@@ -235,8 +250,8 @@ test("hint modifier variants whose action needs another filter are not bound", (
     for (const key of keys) node = node?.children?.[key] as TreeBranch | undefined;
     return node !== undefined;
   };
-  const hidden = [";bB", ";bp", ";bi", ";wB", ";wp", ";wi", ";yB", ";yp", ";yi", ";YI", ";Yf", ";Ym", ";Yi"];
-  const valid = [";bl", ";bI", ";bf", ";bm", ";wl", ";yl", ";yI", ";yf", ";ym", ";Yl", ";Yp", ";YB", ";Ya", ";rB", ";hB", ";xi"];
+  const hidden = [";Bb", ";Bp", ";Bi", ";Wb", ";Wp", ";Wi", ";yB", ";yp", ";YI", ";Yf", ";Ym", ";Yi", ";Yl", ";Yp", ";Ya"];
+  const valid = [";Bl", ";BI", ";Bf", ";Bm", ";Wl", ";yl", ";yI", ";yi", ";yf", ";ym", ";yt", ";yc", ";yh", ";rb", ";hb", ";xi"];
   for (const keys of hidden) assert.equal(is_bound(keys), false, `${keys} is bound`);
   for (const keys of valid) assert.equal(is_bound(keys), true, `${keys} is missing`);
 });

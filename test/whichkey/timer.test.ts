@@ -31,18 +31,19 @@ function make_page(delay_ms: number | undefined) {
   let panel_up = false;
   const follow_prefix = create_which_key_timer(
     () => delay_ms,
-    (prefix: PendingPrefix | undefined, is_current) => {
+    (prefix: PendingPrefix | undefined, is_current, drawn) => {
       if (!prefix) return void (panel_up && (hidden.push(true), (panel_up = false)));
       // The bundle answers later, like the background does.
       void Promise.resolve().then(() => {
         if (!is_current()) return;
         shown.push(`${prefix.mode}:${prefix.typed.join("")}`);
         panel_up = true;
+        drawn();
       });
     },
   );
   const flow = create_key_flow({
-    get_mode: state.get_mode,
+    get_mode_: state.get_mode_,
     take_pass_next_: state.take_pass_next_,
     in_editable_field_: () => false,
     is_loading_: () => false,
@@ -74,15 +75,36 @@ test("the next key cancels the timer before it fires", async () => {
   assert.deepEqual(page.shown, []);
 });
 
-test("the next key hides a panel that is up, and a longer prefix shows again after a new pause", async () => {
+test("the next key hides a panel that is up, and the longer prefix redraws it without the delay", async () => {
   const page = make_page(DELAY_MS);
   page.flow.handle_token_("g");
   await sleep(DELAY_MS + 40);
   assert.equal(page.is_up(), true);
   page.flow.handle_token_("x");
   assert.equal(page.is_up(), false);
-  await sleep(DELAY_MS + 40);
+  await sleep(DELAY_MS / 3);
   assert.deepEqual(page.shown, ["normal:g", "normal:gx"]);
+});
+
+test("a prefix typed after the panel closed waits the full delay again", async () => {
+  const page = make_page(DELAY_MS);
+  page.flow.handle_token_("g");
+  await sleep(DELAY_MS + 40);
+  page.flow.handle_token_("<Escape>");
+  page.flow.handle_token_("g");
+  await sleep(DELAY_MS / 3);
+  assert.deepEqual(page.shown, ["normal:g"]);
+});
+
+test("a panel that never showed leaves the next prefix key on the full delay", async () => {
+  const page = make_page(DELAY_MS);
+  page.flow.handle_token_("g");
+  await sleep(DELAY_MS / 3);
+  page.flow.handle_token_("x");
+  await sleep(DELAY_MS / 3);
+  assert.deepEqual(page.shown, []);
+  await sleep(DELAY_MS + 40);
+  assert.deepEqual(page.shown, ["normal:gx"]);
 });
 
 test("a mode change cancels the timer", async () => {
@@ -200,4 +222,26 @@ test("a new keymap cancels a pending panel and hides one that is up", async () =
   assert.equal(up.is_up(), true);
   up.flow.set_matcher_(create_matcher(keymap));
   assert.equal(up.is_up(), false);
+});
+
+test("a prefix whose answer is pending or draws nothing leaves the next prefix on the full delay", async () => {
+  const drawn_of: (() => void)[] = [];
+  const asked: string[] = [];
+  const follow = create_which_key_timer(() => DELAY_MS, (prefix, _is_current, drawn) => {
+    if (!prefix) return;
+    asked.push(prefix.typed.join(""));
+    drawn_of.push(drawn);
+  });
+  follow({ mode: "normal", typed: ["g"] });
+  await sleep(DELAY_MS + 40);
+  // The answer never drew, so the ask is still pending or came back empty.
+  follow({ mode: "normal", typed: ["g", "x"] });
+  await sleep(DELAY_MS / 3);
+  assert.deepEqual(asked, ["g"]);
+  await sleep(DELAY_MS + 40);
+  assert.deepEqual(asked, ["g", "gx"]);
+  drawn_of[1]?.();
+  follow({ mode: "normal", typed: ["g", "x", "x"] });
+  await sleep(DELAY_MS / 3);
+  assert.deepEqual(asked, ["g", "gx", "gxx"]);
 });

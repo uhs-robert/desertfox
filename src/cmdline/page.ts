@@ -133,6 +133,7 @@ async function open_line(start: Start, port: MessagePort): Promise<void> {
   const live = create_live_source({
     ask: (kind) => (kind === "headings" ? ask_headings() : ask_background<CompleteItemsAnswer | undefined>({ type: "complete_items", kind })),
     tabs: () => (model ??= connect_model()).items() ?? (model_lost ? [] : undefined),
+    all_tabs: () => (model ??= connect_model()).all_items() ?? (model_lost ? [] : undefined),
     on_ready: () => {
       session.source_ready();
       render();
@@ -148,7 +149,8 @@ async function open_line(start: Start, port: MessagePort): Promise<void> {
     parse: (text) => parse_command_line(lookup, text, opened.sources),
     has_help,
     command_id_of: (word) => lookup.find(word)?.id,
-    tabs: () => model?.items(),
+    has_param: (command_id, name) => lookup.find(command_id)?.params?.some((param) => param.name === name) === true,
+    tabs: () => model?.items(true),
     containers: opened.container_stores,
     complete: start.search ? undefined : create_completer(lookup, opened.commands, opened.command_aliases, opened.sources, opened_from, live),
     // Only a missing value is caught here. The router still checks everything else when it runs the command.
@@ -184,11 +186,27 @@ async function open_line(start: Start, port: MessagePort): Promise<void> {
     if (panel.offsetHeight !== told_height) tell_host({ kind: "resize", height: (told_height = panel.offsetHeight) });
   };
 
+  // Keys typed here before `focused` wait behind the ones the host forwarded, which may still be on the port.
+  // Without this, an Enter typed here can run before the last forwarded characters land.
+  let typed_before_focused: string[] | undefined = [];
+  // Set once the line ended. Keys that still reach this page wait here for the host's `drain`, which replays them in its frame.
+  let late_keys: string[] | undefined;
+  // Keys still waiting for `focused` came after the forwarded key that ended the line, so they are late too.
+  const take_late_keys = () => {
+    late_keys ??= typed_before_focused ?? [];
+    typed_before_focused = undefined;
+    return late_keys;
+  };
+  const end_line = (message: PageToHost) => {
+    take_late_keys();
+    tell_host(message);
+  };
+
   // The help opens in a new tab, which takes the focus, so the line on this tab closes.
   const show_help = (command_id: string) => {
     void ask_background({ type: "open_help", command_id });
     close_sources();
-    tell_host({ kind: "close" });
+    end_line({ kind: "close" });
   };
 
   // The rows change only when the model's patch arrives, so the answer carries just the refusal.
@@ -204,20 +222,24 @@ async function open_line(start: Start, port: MessagePort): Promise<void> {
   const carry_out = (effect: Effect) => {
     if (effect.kind === "close") {
       close_sources();
-      tell_host({ kind: "close" });
+      end_line({ kind: "close" });
     }
-    else if (effect.kind === "find_commit") tell_host({ kind: "find_commit" });
+    else if (effect.kind === "find_commit") end_line({ kind: "find_commit" });
     else if (effect.kind === "help") show_help(effect.command_id);
     else if (effect.kind === "tab_rows_action") run_tab_rows_action(effect);
     else if (effect.kind === "submit") {
       close_sources();
       void ask_background({ type: "record_cmdline", text: effect.text });
-      tell_host({ kind: "submit", invocation: effect.invocation });
+      end_line({ kind: "submit", invocation: effect.invocation });
     } else render();
   };
 
-  // Returns true when the keymap took the token.
+  // Returns true when the keymap took the token, or the line has ended and keeps it for the host.
   const press = (token: string): boolean => {
+    if (late_keys) {
+      late_keys.push(token);
+      return true;
+    }
     // An arrow key or a click moves the caret with no input event, so the list would rank the old word.
     if (input.value === session.get_text()) session.set_caret(input.selectionStart ?? input.value.length);
     const outcome = matcher ? run_token(matcher, session, token) : run_token_without_keymap(session, token);
@@ -237,14 +259,12 @@ async function open_line(start: Start, port: MessagePort): Promise<void> {
     render();
   };
 
-  // Keys typed here before `focused` wait behind the ones the host forwarded, which may still be on the port.
-  // Without this, an Enter typed here can run before the last forwarded characters land.
-  let typed_before_focused: string[] | undefined = [];
   // On the document, not the input: while focus moves into the frame, a key can land before the input has it.
   document.addEventListener("keydown", (event) => {
     const token = event.isTrusted && !event.isComposing ? event_to_token(event) : null;
-    if (typed_before_focused) {
-      if (token !== null) typed_before_focused.push(token);
+    const waiting = late_keys ?? typed_before_focused;
+    if (waiting) {
+      if (token !== null) waiting.push(token);
       event.preventDefault();
     } else if (token !== null && press(token)) event.preventDefault();
   });
@@ -288,6 +308,14 @@ async function open_line(start: Start, port: MessagePort): Promise<void> {
     } else if (message?.kind === "find_status") {
       session.set_status(message.text);
       render();
+    }
+    else if (message?.kind === "drain") {
+      // Firefox sends this page its keys and its loss of focus in order. Every key that left for this page before the
+      // focus moved has arrived by the blur, so the answer waits for it.
+      const late = take_late_keys();
+      const answer = () => tell_host({ kind: "drained", tokens: late });
+      if (document.hasFocus()) window.addEventListener("blur", answer, { once: true });
+      else answer();
     }
     else if (message?.kind === "focused" && typed_before_focused) {
       // Again now that the frame has focus. The first call ran while the host still held it.

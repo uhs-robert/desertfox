@@ -71,9 +71,10 @@ Each piece exports `export const areas = ["hints", ...]`, the feature areas it e
 | `keys` | the keymap compiler and merge, prefix tree, layers, repeat memory |
 | `ui` | `content/ui`, toast, surface, mode indicator |
 | `toolbar` | `popup/`, `background/toolbar.ts`, the on/off switch and the toolbar shortcut |
+| `media` | `content/media`, the media command and its frame fan-out |
 
 - The table in `areas.mjs` is `area_rules`. The first matching rule wins, so order matters.
-- A rule with no areas (README files, icons) selects nothing. `managed_schema.json` maps to `help` and `config`.
+- A rule with no areas (README files, icons) selects nothing.
 - The shared rule lists the key path and the command contract (for example `background/main.ts`, `shared/messages.ts`, `content/editable.ts`, and `manifest.json`). A change to one of these files selects every area, so every piece runs.
 - A src file that matches no rule fails `test/key/areas.test.ts`. Add its glob to `area_rules`. The same test fails when a piece has no `areas` or names an unknown area.
 - A new piece needs its `areas` line. A new feature needs a name in `area_names`, a rule and the pieces that list it.
@@ -159,7 +160,7 @@ The key tests reach into five Firefox internals: `ExtensionPageChild.sys.mjs`, t
 
 ## Native host
 
-`config.reload` reads the config through the native host, so each run installs it. `harness.mjs` runs `host/install.sh main` with `HOME` set to the session's throwaway HOME and a `curl` stand-in that copies the host from this checkout. It refuses the real HOME. It grants `nativeMessaging` from chrome code, because Firefox grants it only from a click. `launch_firefox.sh` sets `DESERTFOX_CONFIG_DIR` to a link in the run folder, and `load_config_dir` points that link at another folder before it presses `qr`. Managed storage still gives the config at startup.
+`config.reload` reads the config through the native host, so each run installs it. `harness.mjs` runs `host/install.sh main` with `HOME` set to the session's throwaway HOME and a `curl` stand-in that copies the host from this checkout. It refuses the real HOME. It grants `nativeMessaging` from chrome code, because Firefox grants it only from a click. `launch_firefox.sh` sets `DESERTFOX_CONFIG_DIR` to a link in the run folder, and `load_config_dir` points that link at another folder before it presses `,r`. The harness writes no managed storage file, so a new profile starts on the defaults (`source: defaults`). Setup waits up to 5 s for the first-install Quick Start tab, which the defaults open, and closes it. The first piece reset calls `load_config_dir(config_dir)` once, after the home tab passes the key probe, and waits for `source: files`. Setup code that runs before that reset sees no snippets, engines or test config.
 
 ## Traps
 
@@ -167,7 +168,7 @@ The key tests reach into five Firefox internals: `ExtensionPageChild.sys.mjs`, t
 - Do not wrap `just key-test` in `timeout`. The recipe already runs in a systemd scope with a memory cap of 16 GB (throttled from 14 GB), no swap and CPU limited to 14 cores, and a time limit of the deadline plus 70 seconds (300 by default). Without a systemd user session it runs uncapped and says so.
 - On the first run after a build, an early setup case can fail. Rerun once before you debug.
 - Add-ons force-installed through the Firefox policy file can eat modifier chords in the nested session. Disable them before you trust a chord result.
-- The first-install Quick Start tab opens beside the first tab and shifts the tab order. That was the cause of #123: Alt+J wrapped to an empty tab instead of page a. The test config now sets `open_quick_start_on_install = false`, and `expect_exactly_one_visible` also checks the active tab URL, so an empty tab fails the case (#155).
+- The first-install Quick Start tab opens beside the first tab and shifts the tab order. That was the cause of #123: Alt+J wrapped to an empty tab instead of page a. The harness now closes that tab during setup, and `expect_exactly_one_visible` also checks the active tab URL, so an empty tab fails the case (#155).
 - The sweep of leftover sessions stops only a session whose `owner` file names a dead run. A session dir with no owner file is skipped, so cleanup never stops another tool's session. Keep that rule when you change cleanup code.
 
 ## Flake rate

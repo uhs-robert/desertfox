@@ -30,6 +30,7 @@ function fake_element() {
       element.focused = true;
       element.focus_count++;
     },
+    blur: () => void (element.focused = false),
     setAttribute: (name: string, value: string) => void (element.attributes[name] = value),
     showPopover: () => void (element.shown = true),
     remove: () => {
@@ -47,7 +48,7 @@ async function until(condition: () => boolean): Promise<void> {
 // For a message that must not arrive: long enough for one that would.
 const settle = () => new Promise((resolve) => setTimeout(resolve, 50));
 
-async function load_host(t: TestContext, tag: string, { ticket_fails = false, run_answer = undefined as (() => Promise<unknown>) | undefined, search = undefined as ((finish: (outcome: unknown) => void) => void) | undefined, scrolling_element = undefined as unknown, command = undefined as ((id: string, args: Record<string, unknown>) => Promise<unknown>) | undefined } = {}) {
+async function load_host(t: TestContext, tag: string, { ticket_fails = false, run_answer = undefined as (() => Promise<unknown>) | undefined, search = undefined as ((finish: (outcome: unknown) => void) => void) | undefined, scrolling_element = undefined as unknown, command = undefined as ((id: string, args: Record<string, unknown>) => Promise<unknown>) | undefined, active_element = null as unknown } = {}) {
   const modes: string[] = [];
   const handlers = new Map<string, (args: Record<string, unknown>) => unknown>();
   const sinks = new Map<string, Sink>();
@@ -56,6 +57,8 @@ async function load_host(t: TestContext, tag: string, { ticket_fails = false, ru
   const sent: unknown[] = [];
   const calls: { id: string; args: Record<string, unknown> }[] = [];
   const observers: (() => void)[] = [];
+  // What the host hands back to the page's key flow, in order, one entry per line that ended.
+  const handed_back: (readonly string[])[] = [];
   Object.assign(globalThis, {
     MutationObserver: class {
       constructor(callback: () => void) {
@@ -78,7 +81,7 @@ async function load_host(t: TestContext, tag: string, { ticket_fails = false, ru
         },
       },
     },
-    document: { scrollingElement: scrolling_element, documentElement: { append: (child: { isConnected: boolean }) => void (child.isConnected = true) }, createElement: () => { const element = fake_element(); elements.push(element); return element; } },
+    document: { activeElement: active_element, scrollingElement: scrolling_element, documentElement: { append: (child: { isConnected: boolean }) => void (child.isConnected = true) }, createElement: () => { const element = fake_element(); elements.push(element); return element; } },
     window: {
       innerHeight: 600,
       desertfox_host: {
@@ -91,6 +94,7 @@ async function load_host(t: TestContext, tag: string, { ticket_fails = false, ru
         },
         register_sink_: (mode: string, sink: Sink) => void sinks.set(mode, sink),
         register_handler_: (id: string, handler: (args: Record<string, unknown>) => unknown) => void handlers.set(id, handler),
+        hold_keys_until_: (promise: Promise<readonly string[]>) => void promise.then((tokens) => handed_back.push(tokens)),
       },
       addEventListener: (type: string, listener: (event: unknown) => void) => void (window_listeners[type] = listener),
     },
@@ -115,7 +119,7 @@ async function load_host(t: TestContext, tag: string, { ticket_fails = false, ru
     await until(() => frame.focused);
   };
   const page_mutated = () => observers.forEach((callback) => callback());
-  return { modes, sent, calls, elements, window_listeners, handlers, holder, frame, sink: sinks.get("cmdline")!, on_window, ready, page_opened_, page_mutated, answer, opened_again };
+  return { handed_back, modes, sent, calls, elements, window_listeners, handlers, holder, frame, sink: sinks.get("cmdline")!, on_window, ready, page_opened_, page_mutated, answer, opened_again };
 }
 
 test("opening mounts the line, hands over the kept keys with a port, and a close over the port leaves it", async (t) => {
@@ -219,14 +223,57 @@ test("a page that sends the frame to another address closes the line", async (t)
   assert.deepEqual(modes, ["cmdline", "normal"]);
 });
 
-test("Escape typed on the page closes the line even when the frame's port is dead", async (t) => {
-  const { modes, holder, frame, sink, ready, page_opened_ } = await load_host(t, "dead_port");
+test("Escape typed on the page closes the line even when the frame's port is dead, and the frame goes after the hand-back timeout", async (t) => {
+  const { modes, holder, frame, sink, ready, page_opened_, handed_back } = await load_host(t, "dead_port");
   await ready();
   await page_opened_();
   frame.posted[0]!.transfer[0]!.close();
   assert.equal(sink.on_token_("<Escape>"), "handled");
   assert.deepEqual(modes, ["cmdline", "normal"]);
+  // Race: the page never answers `drain`, so the page's keys wait no longer than the timeout.
+  await until(() => holder.removed);
   assert.equal(holder.removed, true);
+  assert.deepEqual(handed_back, [[]]);
+});
+
+test("a line that ended moves the focus to the page first, and removes the frame only once the page handed back its late keys", async (t) => {
+  const { modes, holder, frame, ready, page_opened_, handed_back } = await load_host(t, "hand_back");
+  await ready();
+  await page_opened_();
+  const page_port = frame.posted[0]!.transfer[0]!;
+  const received: string[] = [];
+  page_port.onmessage = (event) => void received.push(event.data.desertfox_cmdline.kind);
+  page_port.postMessage({ desertfox_cmdline: { kind: "submit", invocation: { id: "scroll.down" } } });
+  await until(() => received.includes("drain"));
+  // Race: keys typed after Enter still reach the frame until the focus has moved, so the frame stays and the page's keys wait.
+  assert.deepEqual([modes, frame.focused, holder.removed, handed_back], [["cmdline", "normal"], false, false, []]);
+  page_port.postMessage({ desertfox_cmdline: { kind: "drained", tokens: ["/", "f"] } });
+  await until(() => holder.removed);
+  await settle();
+  assert.deepEqual(handed_back, [["/", "f"]]);
+});
+
+test("a line that ended leaves the focus on the page, not on the link that had it before the line opened", async (t) => {
+  const link = fake_element();
+  link.focused = true;
+  const { frame, ready, page_opened_ } = await load_host(t, "focus_target", { active_element: link });
+  await ready();
+  await page_opened_();
+  frame.posted[0]!.transfer[0]!.postMessage({ desertfox_cmdline: { kind: "close" } });
+  await until(() => !frame.focused);
+  assert.deepEqual([frame.focused, link.focus_count], [false, 0]);
+});
+
+test("a line that ends before its page opened hands back nothing and goes at once, and a drained while the line is open does nothing", async (t) => {
+  const { holder, frame, sink, ready, handed_back } = await load_host(t, "hand_back_early");
+  await ready();
+  frame.posted[0]!.transfer[0]!.postMessage({ desertfox_cmdline: { kind: "drained", tokens: ["j"] } });
+  await settle();
+  assert.deepEqual([holder.removed, handed_back], [false, []]);
+  sink.on_token_("<Escape>");
+  assert.equal(holder.removed, true);
+  await settle();
+  assert.deepEqual(handed_back, [[]]);
 });
 
 test("the ready timer runs until the page has redeemed its ticket", async (t) => {
@@ -434,7 +481,7 @@ test("a restack before the page opened, or after the line closed, moves no focus
   // A refocus that was in flight when the line closed.
   assert.doesNotThrow(() => restacked(holder));
   await settle();
-  assert.deepEqual([received, frame.focus_count, modes], [["focused"], 1, ["cmdline", "normal"]]);
+  assert.deepEqual([received, frame.focus_count, modes], [["focused", "drain"], 1, ["cmdline", "normal"]]);
 });
 
 // The headings list: the page asks over the port, the host script answers from the hints bundle and drops the snapshot when the line is done.

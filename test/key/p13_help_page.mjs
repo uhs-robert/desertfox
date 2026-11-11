@@ -10,7 +10,7 @@ export async function run_cases({ run_case, setup, expect, press_keys, poll_unti
   const wait_badge = (accepted, what) => poll_until(`the help page badge to be ${what}`, async () => accepted.includes(await help_badge()));
 
   await setup("open the help page on Commands", async () => {
-    await press_keys("qh");
+    await press_keys(",h");
     await poll_until("the help page to render and take focus", async () => await evaluate(`(() => { const view = ${extension_view("home.html")}; return !!view && !!view.document.querySelector("h1") && view.document.hasFocus(); })()`).catch(() => false), { timeout_ms: 10000 });
     // Home is too short to scroll, so move to the long Commands page.
     await evaluate(`(() => { ${extension_view("home.html")}.location.hash = "#/commands"; })()`);

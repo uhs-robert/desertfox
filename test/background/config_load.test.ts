@@ -5,26 +5,23 @@ import { empty_config, pick_config } from "../../src/background/config_load.ts";
 
 const file = (marker: string) => ({ format_version: CONFIG_FORMAT_VERSION, css: marker });
 
-test("the files config config.reload stored wins over managed storage", () => {
-  const picked = pick_config(file("files"), file("managed"));
+test("the files config config.reload stored is used", () => {
+  const picked = pick_config(file("files"));
   assert.equal(picked.source, "files");
   assert.equal(picked.config.css, "files");
   assert.deepEqual(picked.config.keymap, {});
 });
-test("managed storage is used until a reload stores the files", () => {
-  assert.equal(pick_config(undefined, file("managed")).source, "managed");
-  assert.equal(pick_config({}, file("managed")).source, "managed");
+test("no files, or an empty slot, runs on defaults", () => {
+  assert.deepEqual(pick_config(undefined), { config: empty_config(), source: "defaults", warnings: [] });
+  assert.deepEqual(pick_config({}), { config: empty_config(), source: "defaults", warnings: [] });
 });
-test("neither runs on defaults", () => {
-  assert.deepEqual(pick_config(undefined, undefined), { config: empty_config(), source: "defaults", warnings: [] });
-});
-test("a wrong format version warns and falls through", () => {
-  const picked = pick_config({ format_version: 9 }, file("managed"));
-  assert.equal(picked.source, "managed");
+test("a wrong format version warns and runs on defaults", () => {
+  const picked = pick_config({ format_version: 9 });
+  assert.equal(picked.source, "defaults");
   assert.equal(picked.warnings.length, 1);
 });
 test("a version 1 file, written before the open_target rename, is rejected", () => {
-  const picked = pick_config({ format_version: 1, css: "old" }, undefined);
+  const picked = pick_config({ format_version: 1, css: "old" });
   assert.equal(picked.source, "defaults");
   assert.equal(picked.warnings.length, 1);
 });
@@ -32,7 +29,13 @@ test("a snippet that cannot be run safely is dropped with a warning", () => {
   const good = { id: "app.ok", label: "Ok", intent: "Does it.", matches: ["https://a.test/*"], code: "1" };
   const no_matches = { ...good, id: "app.none", matches: [] };
   const no_code = { id: "app.nocode", label: "x", intent: "x", matches: ["https://a.test/*"] };
-  const picked = pick_config({ format_version: CONFIG_FORMAT_VERSION, snippets: [good, no_matches, no_code, "text"] }, undefined);
+  const picked = pick_config({ format_version: CONFIG_FORMAT_VERSION, snippets: [good, no_matches, no_code, "text"] });
   assert.deepEqual(picked.config.snippets, [good]);
   assert.equal(picked.warnings.length, 3);
+});
+
+test("a config stored before quickmarks has none, and a damaged entry is dropped", () => {
+  assert.deepEqual(pick_config({ format_version: CONFIG_FORMAT_VERSION, settings: {} }).config.quickmarks, {});
+  const picked = pick_config({ format_version: CONFIG_FORMAT_VERSION, quickmarks: { g: "https://github.com", gh: "https://x.test", e: "", n: 3 } });
+  assert.deepEqual(picked.config.quickmarks, { g: "https://github.com" });
 });

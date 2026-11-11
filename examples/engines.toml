@@ -12,7 +12,7 @@
 # A table inside an engine is a child, named with a dot: `search github.repo.issues foo`. A child inherits every field
 # and overrides by name. A param is declared on the parent with its values, and children = true makes one child per
 # value. A value names a slot with `{name}`, so a scope can say "repo:{repo} ".
-# A child cannot be named url, label, params, fallback or hosts, or like a field or param of its parent.
+# A child cannot be named url, label, params, fallback, hosts or keyword, or like a field or param of its parent.
 #
 # hosts = ["github.com"] ties an engine, and the children that inherit it, to a site. It gates only the generated s/ and S/ keys,
 # which list the engines of the page you are on. A host matches itself only: list www. and other subdomains you want.
@@ -20,6 +20,7 @@
 #   [site_keys]
 #   i = ["github.issues", "gitlab.issues"]     # s/i searches issues on GitHub or GitLab
 #   I = ["github.repo.issues"]                 # s/I searches the issues of this repo
+# keyword = "g" gives an engine a short word, one to eight lower case letters or digits, unique across engines. A child does not inherit it.
 # s// searches the current site with the built-in "site" engine (the default engine plus site:<host>). It needs no entry.
 
 # Flat engines: one line each, "%s" stands for the query.
@@ -29,11 +30,11 @@ brave = { url = "https://search.brave.com/search?q=%s", label = "Brave Search" }
 gpt = { url = "https://chatgpt.com/?q=%s", label = "ChatGPT" }
 commons = { url = "https://openverse.org/search/?q=%s", label = "Creative Commons search" }
 crates = { url = "https://crates.io/search?q=%s", label = "Rust crates" }
-duck = { url = "https://duckduckgo.com/?q=%s", label = "DuckDuckGo" }
+duck = { url = "https://duckduckgo.com/?q=%s", label = "DuckDuckGo", keyword = "d" }
 define = { url = "https://www.merriam-webster.com/dictionary/%s", label = "Merriam-Webster dictionary" }
 fedora = { url = "https://packages.fedoraproject.org/search?query=%s", label = "Fedora packages" }
 flathub = { url = "https://flathub.org/apps/search?q=%s", label = "Flathub apps" }
-google = { url = "https://www.google.com/search?q=%s", label = "Google" }
+google = { url = "https://www.google.com/search?q=%s", label = "Google", keyword = "g" }
 greasyfork = { url = "https://greasyfork.org/en/scripts?q=%s", label = "Greasy Fork user scripts" }
 image = { url = "https://www.google.com/search?tbm=isch&q=%s", label = "Google Images" }
 lastyear = { url = "https://www.google.com/search?hl=en&tbo=1&tbs=qdr:y&q=%s", label = "Google, past year" }
@@ -41,14 +42,14 @@ lastmonth = { url = "https://www.google.com/search?hl=en&tbo=1&tbs=qdr:m&q=%s", 
 lastweek = { url = "https://www.google.com/search?hl=en&tbo=1&tbs=qdr:w&q=%s", label = "Google, past week" }
 lastday = { url = "https://www.google.com/search?hl=en&tbo=1&tbs=qdr:d&q=%s", label = "Google, past day" }
 lasthour = { url = "https://www.google.com/search?hl=en&tbo=1&tbs=qdr:h&q=%s", label = "Google, past hour" }
-maps = { url = "https://www.google.com/maps/search/%s", label = "Google Maps" }
+maps = { url = "https://www.google.com/maps/search/%s", label = "Google Maps", keyword = "m" }
 nexusmods = { url = "https://www.nexusmods.com/games?keyword=%s&sort=approved", label = "Nexus Mods" }
 gamebanana = { url = "https://gamebanana.com/search?_sModelName=Game&_sOrder=best_match&_sSearchString=%s", label = "GameBanana" }
 hackernews = { url = "https://hn.algolia.com/?q=%s", label = "Hacker News" }
 imdb = { url = "https://www.imdb.com/find?s=all&q=%s", label = "IMDb" }
 # Fixed to the en-US locale.
-mdn = { url = "https://developer.mozilla.org/en-US/search?q=%s", label = "MDN Web Docs" }
-npm = { url = "https://www.npmjs.com/search?q=%s", label = "npm packages" }
+mdn = { url = "https://developer.mozilla.org/en-US/search?q=%s", label = "MDN Web Docs", keyword = "mdn" }
+npm = { url = "https://www.npmjs.com/search?q=%s", label = "npm packages", keyword = "npm" }
 proton = { url = "https://www.protondb.com/search?q=%s", label = "ProtonDB" }
 redditgoogle = { url = "https://www.google.com/search?q=site:reddit.com+%s", label = "Reddit, through Google" }
 rubygems = { url = "https://rubygems.org/search?query=%s", label = "RubyGems" }
@@ -57,7 +58,7 @@ steam = { url = "https://store.steampowered.com/search?term=%s", label = "Steam 
 synonym = { url = "https://www.thesaurus.com/browse/%s", label = "Thesaurus" }
 # Results can include adult content.
 urbandictionary = { url = "https://www.urbandictionary.com/define.php?term=%s", label = "Urban Dictionary" }
-wikipedia = { url = "https://en.wikipedia.org/w/index.php?search=%s", label = "Wikipedia" }
+wikipedia = { url = "https://en.wikipedia.org/w/index.php?search=%s", label = "Wikipedia", keyword = "w" }
 wolframalpha = { url = "https://www.wolframalpha.com/input?i=%s", label = "Wolfram Alpha" }
 
 # Tables must come after the one-line engines: TOML puts a plain key under the table above it.

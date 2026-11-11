@@ -3,15 +3,16 @@ import { test } from "node:test";
 import { takes_typing } from "../src/content/editable.ts";
 import { args_for_count } from "../src/content/invocation_args.ts";
 import { create_cancelled_keys } from "../src/content/cancelled_keys.ts";
+import { cancels_keypress, cancels_keyup, press_target, replay_key_to_page } from "../src/content/replay_key.ts";
 import { cancels_unbound_key, create_key_flow } from "../src/content/key_flow.ts";
-import { ignore_regex_source, ignores_any_address, matches_pattern } from "../src/shared/match_pattern.ts";
-import { mode_label } from "../src/content/mode_label.ts";
-import { holds_own_focus, wire_focus_reports, wire_mode_reports } from "../src/content/mode_report.ts";
+import { match_regex_source, matches_any_address, matches_pattern } from "../src/shared/match_pattern.ts";
+import { holds_own_focus, wire_mode_reports } from "../src/content/mode_report.ts";
 import { create_mode_state } from "../src/content/mode_state.ts";
 import { percent_to_offset, pick_scroll_target } from "../src/content/scroll_target.ts";
 import { create_matcher } from "../src/shared/keys/index.ts";
-import { COMPILED_KEYMAP_VERSION, current_keymap } from "../src/shared/index.ts";
+import { COMPILED_KEYMAP_VERSION, current_keymap, is_freed } from "../src/shared/index.ts";
 import { compile_keymap } from "../src/shared/keys/index.ts";
+import { frees_of, prune_tree } from "../src/shared/keys/prune_tree.ts";
 import type { CompiledKeymap, TreeLeaf } from "../src/shared/index.ts";
 
 const leaf = (id: string): TreeLeaf => ({ kind: "leaf", steps: [{ invocation: { id }, runs_in: "content", count_rule: "ignore" }] });
@@ -35,7 +36,7 @@ function make_flow(in_field = false) {
   const ran: string[] = [];
   const flow = create_key_flow({
     in_editable_field_: () => in_field,
-    get_mode: state.get_mode,
+    get_mode_: state.get_mode_,
     take_pass_next_: state.take_pass_next_,
     run_leaf_: (matched, count, repeat) => ran.push(`${matched.steps[0]?.invocation.id}${count ?? ""}${repeat ? "!" : ""}`),
     leave_insert_: () => state.escape(),
@@ -62,14 +63,33 @@ test("mode state follows focus into a field from normal, caret and visual only",
   assert.deepEqual(seen, ["insert", "normal", "ignore"]);
 });
 
+test("insert set by a mode set outlasts focus leaving a field, and Escape ends it", () => {
+  const state = create_mode_state();
+  state.set_mode_("insert");
+  assert.equal(state.is_manual_insert_(), true);
+  state.focus_entered_editable_();
+  state.focus_left_editable_();
+  assert.equal(state.get_mode_(), "insert");
+  state.escape();
+  assert.deepEqual([state.get_mode_(), state.is_manual_insert_()], ["normal", false]);
+});
+
+test("insert from focus is not manual, so leaving the field ends it", () => {
+  const state = create_mode_state();
+  state.focus_entered_editable_();
+  assert.equal(state.is_manual_insert_(), false);
+  state.focus_left_editable_();
+  assert.equal(state.get_mode_(), "normal");
+});
+
 for (const mode of ["caret", "visual"] as const) {
   test(`focus in a field leaves ${mode} mode for insert, and leaving the field returns to normal`, () => {
     const state = create_mode_state();
     state.set_mode_(mode);
     state.focus_entered_editable_();
-    assert.equal(state.get_mode(), "insert");
+    assert.equal(state.get_mode_(), "insert");
     state.focus_left_editable_();
-    assert.equal(state.get_mode(), "normal");
+    assert.equal(state.get_mode_(), "normal");
   });
 }
 
@@ -78,7 +98,7 @@ for (const mode of ["ignore", "hint", "cmdline"] as const) {
     const state = create_mode_state();
     state.set_mode_(mode);
     state.focus_entered_editable_();
-    assert.equal(state.get_mode(), mode);
+    assert.equal(state.get_mode_(), mode);
   });
 }
 
@@ -94,10 +114,10 @@ test("typing in a field after focus from caret mode passes through the key flow"
 test("escape leaves insert but not ignore", () => {
   const state = create_mode_state("insert");
   state.escape();
-  assert.equal(state.get_mode(), "normal");
+  assert.equal(state.get_mode_(), "normal");
   state.set_mode_("ignore");
   state.escape();
-  assert.equal(state.get_mode(), "ignore");
+  assert.equal(state.get_mode_(), "ignore");
 });
 
 test("pass_next fires once", () => {
@@ -130,6 +150,38 @@ test("key flow cancels matches and half-typed sequences, passes unbound keys", (
   assert.deepEqual(ran, ["down", "down3"]);
 });
 
+test("a tree swap mid-sequence drops the sequence, and keys held at load replay against the new tree", () => {
+  const { ran, flow } = make_flow();
+  flow.set_matcher_(create_matcher(keymap));
+  assert.equal(flow.handle_token_("g"), "cancel");
+  const pruned = { ...keymap, modes: { ...keymap.modes, normal: prune_tree(keymap.modes.normal, { pass: [["g"]] }) } };
+  flow.set_matcher_(create_matcher(pruned));
+  assert.equal(flow.handle_token_("g"), "pass");
+  const held = make_flow();
+  assert.equal(held.flow.handle_token_("g"), "cancel");
+  assert.equal(held.flow.handle_token_("j"), "cancel");
+  held.flow.set_matcher_(create_matcher(pruned));
+  assert.deepEqual([ran, held.ran], [[], ["down"]]);
+});
+
+test("a rule hands Quick Find keys and digits to the page", () => {
+  const { ran, flow } = make_flow();
+  const rule = { pass: [["/"], ["j"]] };
+  const ruled = { ...keymap, modes: { ...keymap.modes, normal: prune_tree(keymap.modes.normal, rule) } };
+  flow.set_matcher_(create_matcher(ruled, (token) => is_freed(frees_of(rule), token)));
+  assert.equal(flow.handle_token_("/"), "pass");
+  assert.equal(flow.handle_token_("j"), "pass");
+  assert.equal(flow.handle_token_("'"), "cancel");
+  const only = { only: [["g", "g"]] };
+  const only_flow = make_flow();
+  only_flow.flow.set_matcher_(create_matcher({ ...keymap, modes: { ...keymap.modes, normal: prune_tree(keymap.modes.normal, only) } }, (token) => is_freed(frees_of(only), token)));
+  assert.equal(only_flow.flow.handle_token_("'"), "pass");
+  assert.equal(only_flow.flow.handle_token_("4"), "pass");
+  assert.equal(only_flow.flow.handle_token_("g"), "cancel");
+  assert.equal(only_flow.flow.handle_token_("g"), "cancel");
+  assert.deepEqual([ran, only_flow.ran], [[], ["top"]]);
+});
+
 test("key flow in ignore mode passes everything but the leaving binding", () => {
   const { state, ran, flow } = make_flow();
   flow.set_matcher_(create_matcher(keymap));
@@ -145,7 +197,7 @@ test("key flow in insert mode leaves on Escape and passes letters", () => {
   state.set_mode_("insert");
   assert.equal(flow.handle_token_("j"), "pass");
   assert.equal(flow.handle_token_("<Escape>"), "pass");
-  assert.equal(state.get_mode(), "normal");
+  assert.equal(state.get_mode_(), "normal");
 });
 
 test("pass_next passes one key that would match", () => {
@@ -179,19 +231,28 @@ test("a mode change drops a pending sequence and count", () => {
   assert.deepEqual(ran, ["down"]);
 });
 
+test("an insert chord runs while a field is focused", () => {
+  const { state, ran, flow } = make_flow(true);
+  flow.set_matcher_(create_matcher(keymap), browser_chords);
+  state.set_mode_("insert");
+  assert.equal(flow.handle_token_("<C-x>"), "cancel");
+  assert.deepEqual(ran, ["insert_chord"]);
+});
+
 test("browser chords run in normal and insert mode and are cancelled", () => {
   const { state, ran, flow } = make_flow();
   flow.set_matcher_(create_matcher(keymap), browser_chords);
   assert.equal(flow.handle_token_("<A-j>"), "cancel");
   state.set_mode_("insert");
   assert.equal(flow.handle_token_("<A-j>"), "cancel");
-  assert.equal(flow.handle_token_("<C-x>"), "cancel");
+  // With no field focused, an insert chord is the browser's.
+  assert.equal(flow.handle_token_("<C-x>"), "pass");
   state.set_mode_("ignore");
   assert.equal(flow.handle_token_("<A-j>"), "pass");
-  assert.deepEqual(ran, ["next_tab", "next_tab", "insert_chord"]);
+  assert.deepEqual(ran, ["next_tab", "next_tab"]);
 });
 
-test("startup holds plain keys outside fields and drops what matches nothing", () => {
+test("startup holds plain keys outside fields and, with no page callback, lets what matches nothing go", () => {
   const { ran, flow } = make_flow();
   assert.equal(flow.handle_token_("<A-j>"), "pass");
   assert.equal(flow.handle_token_("x"), "cancel");
@@ -200,6 +261,13 @@ test("startup holds plain keys outside fields and drops what matches nothing", (
   assert.deepEqual(ran, ["down"]);
   const in_field = make_flow(true);
   assert.equal(in_field.flow.handle_token_("j"), "pass");
+});
+
+test("Space reaches the page when nothing binds it", () => {
+  const { ran, flow } = make_flow();
+  flow.set_matcher_(create_matcher(keymap));
+  assert.equal(flow.handle_token_("<Space>"), "pass");
+  assert.deepEqual(ran, []);
 });
 
 test("startup replay uses the mode set before the keymap", () => {
@@ -258,6 +326,127 @@ test("a bound Quick Find key runs its command", () => {
   assert.deepEqual(ran, ["find2"]);
 });
 
+test("a held key the keymap does not bind goes back to the page on replay, and a bound one stays swallowed", () => {
+  const { ran, flow } = make_flow();
+  const to_page: string[] = [];
+  for (const token of ["<Space>", "j", "x", "g", "<Tab>"]) assert.equal(flow.handle_token_(token, false, () => to_page.push(token)), "cancel");
+  flow.set_matcher_(create_matcher(keymap));
+  // g waits for a second key and is lost with the sequence that Tab breaks. Space, x and Tab reach the page in order.
+  assert.deepEqual([to_page, ran], [["<Space>", "x", "<Tab>"], ["down"]]);
+});
+
+test("a held Quick Find key stays swallowed on replay while a plain key goes to the page", () => {
+  const { flow } = make_flow();
+  const to_page: string[] = [];
+  flow.handle_token_("/", false, () => to_page.push("/"));
+  flow.handle_token_("e", false, () => to_page.push("e"));
+  flow.set_matcher_(create_matcher(keymap));
+  assert.deepEqual(to_page, ["e"]);
+});
+
+test("keys handed back by the command line are replayed to the keymap but not to the page", () => {
+  const { ran, flow } = make_flow();
+  flow.hold_first_(["j", "x"]);
+  flow.set_matcher_(create_matcher(keymap));
+  assert.deepEqual(ran, ["down"]);
+});
+
+test("a held key replayed to the page clears its cancelled code, and the real keyup then reaches the page", () => {
+  const keys = create_cancelled_keys();
+  const press = { keyup_seen: false };
+  keys.record_keydown_("Space", "cancel", press);
+  assert.equal(keys.release_for_replay_("Space", press), false);
+  assert.equal(keys.cancels_keypress_("Space"), false);
+  assert.equal(keys.take_keyup_("Space"), false);
+});
+
+test("a keyup that came before the replay was swallowed, so replay reports it and leaves no state", () => {
+  const keys = create_cancelled_keys();
+  const press = { keyup_seen: false };
+  keys.record_keydown_("Space", "cancel", press);
+  assert.equal(keys.take_keyup_("Space"), true);
+  assert.equal(keys.release_for_replay_("Space", press), true);
+  assert.equal(keys.cancels_keypress_("Space"), false);
+});
+
+test("replaying an early press does not clear the code of a later press of the same key that is still down", () => {
+  const keys = create_cancelled_keys();
+  const first = { keyup_seen: false };
+  const second = { keyup_seen: false };
+  keys.record_keydown_("Space", "cancel", first);
+  keys.take_keyup_("Space");
+  keys.record_keydown_("Space", "cancel", second);
+  assert.equal(keys.release_for_replay_("Space", first), true);
+  assert.equal(keys.cancels_keypress_("Space"), true);
+  assert.equal(keys.release_for_replay_("Space", second), false);
+  assert.equal(keys.take_keyup_("Space"), false);
+});
+
+const key_fields = { key: " ", code: "Space", location: 0, repeat: false, keyCode: 32, ctrlKey: false, shiftKey: true, altKey: false, metaKey: false };
+
+function make_target(isConnected = true) {
+  const seen: { type: string; init: KeyboardEventInit }[] = [];
+  return { seen, target: { isConnected, dispatchEvent: (event: Event) => (seen.push(event as unknown as { type: string; init: KeyboardEventInit }), true) } };
+}
+const make_event = (type: string, init: KeyboardEventInit) => ({ type, init }) as unknown as Event;
+
+test("a replayed key goes to the target as a keydown with every field of the press", () => {
+  const keys = create_cancelled_keys();
+  const press = { keyup_seen: false };
+  keys.record_keydown_("Space", "cancel", press);
+  const { seen, target } = make_target();
+  replay_key_to_page(key_fields, target, press, keys, make_event);
+  assert.deepEqual(seen.map((event) => event.type), ["keydown"]);
+  assert.deepEqual(seen[0]!.init, { ...key_fields, bubbles: true, cancelable: true, composed: true });
+});
+
+test("a replayed key also gets a keyup when the real keyup was swallowed", () => {
+  const keys = create_cancelled_keys();
+  const press = { keyup_seen: false };
+  keys.record_keydown_("Space", "cancel", press);
+  keys.take_keyup_("Space");
+  const { seen, target } = make_target();
+  replay_key_to_page(key_fields, target, press, keys, make_event);
+  assert.deepEqual(seen.map((event) => event.type), ["keydown", "keyup"]);
+});
+
+test("a replayed key to an element that left the page sends nothing and still clears the cancelled code", () => {
+  const keys = create_cancelled_keys();
+  const press = { keyup_seen: false };
+  keys.record_keydown_("Space", "cancel", press);
+  const { seen, target } = make_target(false);
+  replay_key_to_page(key_fields, target, press, keys, make_event);
+  assert.deepEqual(seen, []);
+  assert.equal(keys.cancels_keypress_("Space"), false);
+});
+
+test("auto-repeat during the hold gives one keydown per press and a single keyup", () => {
+  const keys = create_cancelled_keys();
+  const presses = [{ keyup_seen: false }, { keyup_seen: false }, { keyup_seen: false }];
+  for (const press of presses) keys.record_keydown_("Space", "cancel", press);
+  keys.take_keyup_("Space");
+  const { seen, target } = make_target();
+  for (const press of presses) replay_key_to_page(key_fields, target, press, keys, make_event);
+  assert.deepEqual(seen.map((event) => event.type), ["keydown", "keydown", "keydown", "keyup"]);
+});
+
+test("the press target is the first element of the composed path, else the event target", () => {
+  const host = {} as EventTarget;
+  const inner = {} as EventTarget;
+  assert.equal(press_target({ target: host, composedPath: () => [inner, host] }), inner);
+  assert.equal(press_target({ target: host, composedPath: () => [] }), host);
+});
+
+test("keypress and keyup guards ignore untrusted events and leave the cancelled code alone", () => {
+  const keys = create_cancelled_keys();
+  keys.record_keydown_("Space", "cancel", { keyup_seen: false });
+  assert.equal(cancels_keypress({ isTrusted: false, code: "Space" }, keys), false);
+  assert.equal(cancels_keyup({ isTrusted: false, code: "Space" }, keys), false);
+  assert.equal(cancels_keypress({ isTrusted: true, code: "Space" }, keys), true);
+  assert.equal(cancels_keyup({ isTrusted: true, code: "Space" }, keys), true);
+  assert.equal(cancels_keypress({ isTrusted: true, code: "Space" }, keys), false);
+});
+
 test("a stale cancelled code does not eat a later typed letter", () => {
   const keys = create_cancelled_keys();
   keys.record_keydown_("KeyJ", "cancel");
@@ -283,7 +472,7 @@ test("match patterns", () => {
 
 // What the content script does with the compiled keymap: one regex against the page URL.
 const is_ignored_site = (patterns: string[], url: string): boolean => {
-  const source = ignore_regex_source(patterns);
+  const source = match_regex_source(patterns);
   return source !== undefined && new RegExp(source).test(url);
 };
 
@@ -306,29 +495,29 @@ test("the precompiled ignore regex agrees with matches_pattern on every pattern 
   }
   assert.equal(is_ignored_site(patterns, "https://a.test/x"), true);
   for (const bad of ["https://*foo.com/*", "https://a*.test/*", "https://a.test:8080/*", "https://a.test/a#b"]) {
-    assert.equal(ignore_regex_source([bad]), undefined, bad);
+    assert.equal(match_regex_source([bad]), undefined, bad);
   }
-  assert.equal(ignore_regex_source([]), undefined);
-  assert.equal(ignore_regex_source(["not a pattern"]), undefined);
+  assert.equal(match_regex_source([]), undefined);
+  assert.equal(match_regex_source(["not a pattern"]), undefined);
 });
 
 test("a frame on an ignored page is ignored by the tab address, and a broken regex ignores nothing", () => {
-  const source = ignore_regex_source(["https://ignored.test/*"]);
-  assert.equal(ignores_any_address(source, ["https://embed.test/video", "https://ignored.test/page"]), true);
-  assert.equal(ignores_any_address(source, ["https://ignored.test/frame", undefined]), true);
-  assert.equal(ignores_any_address(source, ["https://embed.test/video", "https://other.test/"]), false);
-  assert.equal(ignores_any_address(undefined, ["https://ignored.test/page"]), false);
-  assert.equal(ignores_any_address("(", ["https://ignored.test/page"]), false);
+  const source = match_regex_source(["https://ignored.test/*"]);
+  assert.equal(matches_any_address(source, ["https://embed.test/video", "https://ignored.test/page"]), true);
+  assert.equal(matches_any_address(source, ["https://ignored.test/frame", undefined]), true);
+  assert.equal(matches_any_address(source, ["https://embed.test/video", "https://other.test/"]), false);
+  assert.equal(matches_any_address(undefined, ["https://ignored.test/page"]), false);
+  assert.equal(matches_any_address("(", ["https://ignored.test/page"]), false);
 });
 
 test("a keymap stored in the old format is treated as absent until the background recompiles it", () => {
-  const old_format = { format_version: 1, modes: {}, ignore_sites: ["*://*/*"], mode_indicator: "always", which_key_delay_ms: 0 } as unknown as CompiledKeymap;
+  const old_format = { format_version: 3, modes: {}, ignore_regex: "^https://a\\.test/$", mode_indicator: "always", which_key_delay_ms: 0 } as unknown as CompiledKeymap;
   assert.equal(current_keymap(old_format), undefined);
   assert.equal(current_keymap(undefined), undefined);
-  const compiled = compile_keymap({}, { ignore_sites: ["https://a.test/*"] }, () => undefined as never).compiled;
+  const compiled = compile_keymap({}, { site_rules: [{ site: "https://a.test/*" }] }, () => undefined as never).compiled;
   assert.equal(current_keymap(compiled), compiled);
   assert.equal(compiled.format_version, COMPILED_KEYMAP_VERSION);
-  assert.ok(new RegExp(compiled.ignore_regex ?? "").test("https://a.test/z"));
+  assert.ok(new RegExp(compiled.site_rules?.[0]?.regex ?? "").test("https://a.test/z"));
 });
 
 test("editable kinds", () => {
@@ -369,23 +558,6 @@ test("percent offsets clamp", () => {
   assert.equal(percent_to_offset(100, 300, 400), 0);
 });
 
-test("mode label follows the mode_indicator setting", () => {
-  assert.equal(mode_label("normal", false, "always"), "NORMAL");
-  assert.equal(mode_label("normal", false, "not_normal"), undefined);
-  assert.equal(mode_label("insert", false, "always"), "INSERT");
-  assert.equal(mode_label("insert", false, "not_normal"), "INSERT");
-  assert.equal(mode_label("ignore", false, "not_normal"), "IGNORE");
-  assert.equal(mode_label("normal", true, "always"), "PASS");
-  assert.equal(mode_label("normal", true, "not_normal"), "PASS");
-  assert.equal(mode_label("hint", false, "always"), undefined);
-  assert.equal(mode_label("cmdline", false, "always"), undefined);
-  assert.equal(mode_label("caret", false, "always"), "CARET");
-  assert.equal(mode_label("visual", false, "not_normal"), "VISUAL");
-  assert.equal(mode_label("visual_line", false, "not_normal"), "V-LINE");
-  assert.equal(mode_label("insert", false, "off"), undefined);
-  assert.equal(mode_label("normal", true, "off"), undefined);
-});
-
 test("display listener fires on mode changes and on pass-next arming and use", () => {
   const state = create_mode_state();
   let fired = 0;
@@ -407,43 +579,13 @@ test("the mode is reported at start and on every change", () => {
   assert.deepEqual(reports, ["normal", "ignore"]);
 });
 
-function fake_window() {
-  type FakeWindow = { addEventListener: (type: string, listener: (event: { target: unknown }) => void) => void; fire: (type: string, target?: unknown) => void };
-  const listeners = new Map<string, ((event: { target: unknown }) => void)[]>();
-  const win: FakeWindow = {
-    addEventListener: (type: string, listener: (event: { target: unknown }) => void) => void listeners.set(type, [...(listeners.get(type) ?? []), listener]),
-    fire: (type: string, target: unknown = win) => listeners.get(type)?.forEach((listener) => listener({ target })),
-  };
-  return win;
-}
-
-test("a frame reports when its window gains and loses focus, and when its page goes away", () => {
-  const win = fake_window();
-  const reports: string[] = [];
-  wire_focus_reports(win as unknown as Window, (focus) => reports.push(focus ?? "check own focus"));
-  win.fire("focus");
-  win.fire("blur");
-  win.fire("focus");
-  win.fire("pagehide");
-  assert.deepEqual(reports, ["check own focus", "lost", "check own focus", "lost"]);
-});
-
-test("focus and blur of an element inside the frame are not a frame focus change", () => {
-  const win = fake_window();
-  const reports: string[] = [];
-  wire_focus_reports(win as unknown as Window, (focus) => reports.push(focus ?? "check own focus"));
-  win.fire("focus", { localName: "input" });
-  win.fire("blur", { localName: "input" });
-  assert.deepEqual(reports, []);
-});
-
 test("a document holds its own focus unless a child frame has it", () => {
-  const doc = (has_focus: boolean, local_name: string) => ({ hasFocus: () => has_focus, activeElement: { localName: local_name } }) as unknown as Document;
-  assert.equal(holds_own_focus(doc(true, "body")), true);
-  assert.equal(holds_own_focus(doc(true, "div")), true);
-  assert.equal(holds_own_focus(doc(true, "iframe")), false);
-  assert.equal(holds_own_focus(doc(true, "frame")), false);
-  assert.equal(holds_own_focus(doc(false, "body")), false);
+  const doc = (has_focus: boolean, active: object | null) => ({ hasFocus: () => has_focus, activeElement: active }) as unknown as Document;
+  assert.equal(holds_own_focus(doc(true, { localName: "body" })), true);
+  assert.equal(holds_own_focus(doc(true, { localName: "div" })), true);
+  assert.equal(holds_own_focus(doc(true, null)), true);
+  assert.equal(holds_own_focus(doc(true, { localName: "iframe", contentWindow: {} })), false);
+  assert.equal(holds_own_focus(doc(false, { localName: "body" })), false);
 });
 
 test("a key repeat reaches run_leaf_ as true, and a first press, a replayed key and a browser chord as false", () => {

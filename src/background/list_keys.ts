@@ -1,14 +1,23 @@
-// Answers which-key: the keys that can follow a typed prefix, read from the compiled keymap the content script also uses.
+// Answers which-key: the keys that can follow a typed prefix, read from the compiled keymap.
 
 import type { CommandMeta } from "../shared/command.ts";
 import type { PageInfo } from "../shared/engines/index.ts";
 import type { BoundInvocation } from "../shared/invocation.ts";
 import type { WhichKeyBorder } from "../shared/config.ts";
-import type { ListKeys, WhichKeyPanel, WhichKeyRow } from "../shared/messages.ts";
-import { COMPILED_KEYMAP_STORAGE_KEY } from "../shared/prefix_tree.ts";
+import type { ListKeys, MarkItem, RegisterItem, WhichKeyPanel, WhichKeyRow } from "../shared/messages.ts";
+import { PREVIOUS_MARK } from "../shared/mark_names.ts";
+import { mark_text, shorten_address } from "../shared/mark_text.ts";
+import type { QuickmarkTable } from "../shared/quickmark_names.ts";
+import { UNNAMED_REGISTER } from "../shared/register_names.ts";
+import { ANY_KEY, COMPILED_KEYMAP_STORAGE_KEY, token_label } from "../shared/prefix_tree.ts";
 import type { CompiledKeymap, TreeBranch, TreeLeaf, TreeNode } from "../shared/prefix_tree.ts";
 
 import { is_available } from "./availability.ts";
+import { prune_tree } from "../shared/keys/prune_tree.ts";
+import { site_rule_for } from "./page_keymap.ts";
+
+// The modes where the matcher reads `"` as the register prefix.
+const REGISTER_PREFIX_MODES: readonly string[] = ["normal", "caret", "visual", "visual_line"];
 
 type KeymapStorage = Pick<typeof browser.storage.local, "get">;
 
@@ -16,7 +25,7 @@ function row_of(token: string, node: TreeNode, find_command: (id: string) => Com
   if (node.kind === "branch") return { keys: token, command: `+${node.label ?? token}`, description: "", more: true };
   const first = node.steps[0];
   const command = first && find_command(first.invocation.id);
-  return { keys: token, command: node.label ?? command?.label ?? first?.invocation.id ?? "", description: node.intent ?? command?.intent ?? "", more: false };
+  return { keys: token_label(token), command: node.label ?? command?.label ?? first?.invocation.id ?? "", description: node.intent ?? command?.intent ?? "", more: false };
 }
 
 // Display order: letters (case-blind, so `t` before `T`), other plain keys, keys with a modifier, groups, Escape last.
@@ -81,15 +90,74 @@ export function without_unavailable(node: TreeBranch, availability: PageAvailabi
   return Object.keys(children).length === 0 ? undefined : { ...node, children };
 }
 
+// Everything beyond the request is optional: the page the keys are for, and one reader per stored list that fills a capture row.
+export type ListKeysOptions = {
+  availability?: PageAvailability;
+  addresses?: readonly (string | undefined)[];
+  registers?: () => Promise<RegisterItem[]>;
+  marks?: () => Promise<MarkItem[]>;
+  quickmarks?: () => Promise<QuickmarkTable>;
+  macros?: () => Promise<RegisterItem[]>;
+};
+
 export async function list_keys(
   storage: KeymapStorage,
   find_command: (id: string) => CommandMeta | undefined,
   request: Pick<ListKeys, "mode" | "prefix">,
-  availability?: PageAvailability,
+  { availability, addresses = [], registers, marks, quickmarks, macros }: ListKeysOptions = {},
 ): Promise<WhichKeyPanel> {
   const stored = await storage.get(COMPILED_KEYMAP_STORAGE_KEY);
   const keymap = stored[COMPILED_KEYMAP_STORAGE_KEY] as CompiledKeymap | undefined;
-  const root = keymap?.modes[request.mode as keyof CompiledKeymap["modes"]];
+  // The register prefix is no key of the tree: it waits for a register name, so the panel lists the registers that hold something. A user binding of `"` keeps its own tree.
+  if (registers && request.prefix.length === 1 && request.prefix[0] === UNNAMED_REGISTER && REGISTER_PREFIX_MODES.includes(request.mode) && !keymap?.modes[request.mode as keyof CompiledKeymap["modes"]]?.children[UNNAMED_REGISTER]) {
+    const items = await registers().catch((): RegisterItem[] => []);
+    return { title: ["registers"], rows: items.map(({ name, description }) => ({ keys: name, command: description, description: "", more: false })), border: keymap?.which_key_border ?? "square" };
+  }
+  const mode_root = keymap?.modes[request.mode as keyof CompiledKeymap["modes"]];
+  // The panel lists what the page's rule leaves, the same tree the page gets from `read_keymap`.
+  const rule = request.mode === "normal" ? site_rule_for(keymap, addresses) : undefined;
+  const root = rule === undefined || "all_off" in rule ? mode_root : prune_tree(mode_root, rule);
   const shown = root && availability ? without_unavailable(root, availability) : root;
-  return panel_after_prefix(shown, request.prefix, find_command, keymap?.which_key_border);
+  const panel = panel_after_prefix(shown, request.prefix, find_command, keymap?.which_key_border);
+  const marked = marks ? await with_page_marks(panel, shown, request.prefix, marks) : panel;
+  const quickmarked = quickmarks ? await with_quickmarks(marked, shown, request.prefix, quickmarks) : marked;
+  return macros ? with_stored_macros(quickmarked, shown, request.prefix, macros) : quickmarked;
+}
+
+// The capture row `<key>` under `go` and `gn` says a key is expected. Once a quickmark exists the rows name the keys with their addresses.
+async function with_quickmarks(panel: WhichKeyPanel, root: TreeBranch | undefined, prefix: string[], quickmarks: () => Promise<QuickmarkTable>): Promise<WhichKeyPanel> {
+  let node: TreeNode | undefined = root;
+  for (const token of prefix) node = node?.kind === "branch" ? node.children[token] : undefined;
+  const capture = node?.kind === "branch" && Object.keys(node.children).length === 1 ? node.children[ANY_KEY] : undefined;
+  if (capture?.kind !== "leaf" || !capture.steps.every((step) => step.invocation.id === "quickmark.open" || step.invocation.id === "quickmark.add")) return panel;
+  const rows = Object.entries(await quickmarks().catch((): QuickmarkTable => ({}))).map(([key, url]) => ({ keys: key, command: shorten_address(url), description: "", more: false })).sort(compare_rows);
+  return rows.length === 0 ? panel : { ...panel, rows };
+}
+
+// The capture row under `q` or `@` says a register key is expected. Once a macro is stored the rows name the macros, with their step counts.
+async function with_stored_macros(panel: WhichKeyPanel, root: TreeBranch | undefined, prefix: string[], macros: () => Promise<RegisterItem[]>): Promise<WhichKeyPanel> {
+  let node: TreeNode | undefined = root;
+  for (const token of prefix) node = node?.kind === "branch" ? node.children[token] : undefined;
+  const capture = node?.kind === "branch" && Object.keys(node.children).length === 1 ? node.children[ANY_KEY] : undefined;
+  if (capture?.kind !== "leaf" || !capture.steps.every((step) => step.invocation.id === "macro.record" || step.invocation.id === "macro.play")) return panel;
+  const items = await macros().catch((): RegisterItem[] => []);
+  return items.length === 0 ? panel : { ...panel, rows: items.map(({ name, description }) => ({ keys: name, command: description, description: "", more: false })) };
+}
+
+// The capture row `<key>` under a mark key says a key is expected. Once the page has marks the rows name them instead, with the scroll offset. Global marks follow with their address.
+async function with_page_marks(panel: WhichKeyPanel, root: TreeBranch | undefined, prefix: string[], marks: () => Promise<MarkItem[]>): Promise<WhichKeyPanel> {
+  let node: TreeNode | undefined = root;
+  for (const token of prefix) node = node?.kind === "branch" ? node.children[token] : undefined;
+  const capture = node?.kind === "branch" && Object.keys(node.children).length === 1 ? node.children[ANY_KEY] : undefined;
+  if (capture?.kind !== "leaf" || !capture.steps.every((step) => step.invocation.id === "mark.add" || step.invocation.id === "mark.jump")) return panel;
+  const stored = await marks().catch((): MarkItem[] => []);
+  const shown_items = capture.steps[0]?.invocation.id === "mark.add" ? stored.filter((item) => item.key !== PREVIOUS_MARK) : stored;
+  if (shown_items.length === 0) return panel;
+  const rows_of = (items: MarkItem[]) => items.map(mark_row).sort(compare_rows);
+  // The page's own marks first, then the global ones, each in key order.
+  return { ...panel, rows: [...rows_of(shown_items.filter((item) => item.url === undefined)), ...rows_of(shown_items.filter((item) => item.url !== undefined))] };
+}
+
+function mark_row({ key, ...position }: MarkItem): WhichKeyRow {
+  return { keys: key, command: mark_text(position), description: "", more: false };
 }

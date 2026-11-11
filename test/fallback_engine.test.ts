@@ -25,18 +25,18 @@ test("default_engine names the fallback engine", () => {
 });
 
 test("with no config the fallback is the only engine", () => {
-  assert.deepEqual(pick_config(undefined, undefined).config.search_engines, { duck: FALLBACK_ENGINE, site: SITE_OVER_DUCK });
+  assert.deepEqual(pick_config(undefined).config.search_engines, { duck: FALLBACK_ENGINE, site: SITE_OVER_DUCK });
   assert.deepEqual(empty_config().search_engines, { duck: FALLBACK_ENGINE, site: SITE_OVER_DUCK });
 });
 
 test("a config with engines keeps the fallback beside them", () => {
   const raw = { format_version: CONFIG_FORMAT_VERSION, search_engines: { arch: { url: "https://a.example/?q=%s", label: "Arch" } } };
-  const engines = pick_config(raw, undefined).config.search_engines;
+  const engines = pick_config(raw).config.search_engines;
   assert.deepEqual(Object.keys(engines).sort(), ["arch", "duck", "site"]);
 });
 
 test("a config without a search_engines section still gets the fallback", () => {
-  assert.deepEqual(pick_config({ format_version: CONFIG_FORMAT_VERSION, keymap: {} }, undefined).config.search_engines, { duck: FALLBACK_ENGINE, site: SITE_OVER_DUCK });
+  assert.deepEqual(pick_config({ format_version: CONFIG_FORMAT_VERSION, keymap: {} }).config.search_engines, { duck: FALLBACK_ENGINE, site: SITE_OVER_DUCK });
 });
 
 test("a user duck replaces the fallback whole", () => {

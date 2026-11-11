@@ -83,6 +83,126 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, sleep,
     await close_tabs_with("id=p9e_mark");
   });
 
+  await run_case("br opens the line filled with the page's bookmark title, and Enter renames it", async () => {
+    await open_page("page", "p9e_rename", { new_tab: true });
+    const url = url_of("page", "p9e_rename");
+    await background(`browser.bookmarks.create({ title: "P9e Old title", url: ${JSON.stringify(url)} })`);
+    try {
+      await settle_focus();
+      await press_keys("br");
+      await wait_cmdline((line) => line.open && line.value === "bookmark.rename P9e Old title", "the line to open with the bookmark title");
+      await press_keys(...CTRL("u"));
+      await type_in_line("bookmark.rename P9e New title");
+      await press_keys("-k", "Return");
+      await poll_until("the bookmark to take the new title", async () => (await background(`browser.bookmarks.search({ url: ${JSON.stringify(url)} })`))[0]?.title === "P9e New title");
+    } finally {
+      await background(`browser.bookmarks.search({ url: ${JSON.stringify(url)} }).then((nodes) => Promise.all(nodes.map((node) => browser.bookmarks.remove(node.id))))`);
+      await close_tabs_with("id=p9e_rename");
+    }
+  });
+
+  // The folder cases make their own folder, so the lists hold one row with "P9f" in it. A folder the case made goes at its end.
+  const make_folder = (title) => background(`browser.bookmarks.create({ title: ${JSON.stringify(title)} }).then((node) => node.id)`);
+  const parent_of = (url) => background(`browser.bookmarks.search({ url: ${JSON.stringify(url)} }).then((nodes) => nodes[0]?.parentId)`);
+  const remove_tree = (folder_id) => background(`browser.bookmarks.removeTree(${JSON.stringify(folder_id)}).catch(() => {})`);
+  const remove_at = (url) => background(`browser.bookmarks.search({ url: ${JSON.stringify(url)} }).then((nodes) => Promise.all(nodes.map((node) => browser.bookmarks.remove(node.id))))`);
+
+  await run_case("bA opens the line on the folder flag, and a pick files the new bookmark in that folder", async () => {
+    await open_page("page", "p9f_add", { new_tab: true });
+    const url = url_of("page", "p9f_add");
+    const folder_id = await make_folder("P9f Add folder");
+    try {
+      await settle_focus();
+      await press_keys("b", "A");
+      await wait_cmdline((line) => line.open && line.value === "bookmark.add --folder=", "bA to open the line with the folder flag and the caret after it");
+      await wait_cmdline(shows_row("P9f Add folder"), "the folder in the list");
+      await type_in_line("p9f");
+      await complete_in_line();
+      await press_keys("-k", "Return");
+      await poll_until("the bookmark to sit in the folder", async () => (await parent_of(url)) === folder_id);
+    } finally {
+      await remove_at(url);
+      await remove_tree(folder_id);
+      await close_tabs_with("id=p9f_add");
+    }
+  });
+
+  await run_case("bm moves the page's bookmark to the picked folder", async () => {
+    await open_page("page", "p9f_move", { new_tab: true });
+    const url = url_of("page", "p9f_move");
+    const folder_id = await make_folder("P9f Move folder");
+    await background(`browser.bookmarks.create({ title: "P9f moving", url: ${JSON.stringify(url)} })`);
+    try {
+      await settle_focus();
+      await press_keys("b", "m");
+      await wait_cmdline((line) => line.open && line.value === "bookmark.move ", "bm to open the line with bookmark.move");
+      await wait_cmdline(shows_row("P9f Move folder"), "the folder in the list");
+      await type_in_line("p9f move");
+      await complete_in_line();
+      await press_keys("-k", "Return");
+      await poll_until("the bookmark to sit in the folder", async () => (await parent_of(url)) === folder_id);
+    } finally {
+      await remove_at(url);
+      await remove_tree(folder_id);
+      await close_tabs_with("id=p9f_move");
+    }
+  });
+
+  await run_case("bookmark --folder= lists only the bookmarks in that folder and its subfolder, and labels each with its folder", async () => {
+    const folder_id = await make_folder("P9g Filter folder");
+    const sub_id = await background(`browser.bookmarks.create({ title: "P9g Sub folder", parentId: ${JSON.stringify(folder_id)} }).then((node) => node.id)`);
+    const file = (title, page_id, parent_id) => background(`browser.bookmarks.create({ title: ${JSON.stringify(title)}, url: ${JSON.stringify(url_of("page", page_id))}, parentId: ${JSON.stringify(parent_id)} })`);
+    await file("P9g top mark", "p9g_top", folder_id);
+    await file("P9g sub mark", "p9g_sub", sub_id);
+    await file("P9g out mark", "p9g_out", await make_folder("P9g Other folder"));
+    try {
+      await open_line();
+      const mark = events.length;
+      await type_in_line('bookmark -t --folder="Other Bookmarks / P9g Filter folder" P9g', { until: shows_row("P9g sub mark") });
+      await wait_cmdline(shows_row("P9g top mark"), "the folder's own bookmark in the list");
+      const rows = (await wait_cmdline(shows_row("P9g sub mark"), "the subfolder bookmark in the list")).row_texts;
+      expect(!rows.some((row) => row.includes("P9g out mark")), `a bookmark outside the folder is listed: ${JSON.stringify(rows)}`);
+      expect(rows.some((row) => row.includes("P9g sub mark") && row.includes("P9g Sub folder")), `the subfolder row lacks its folder: ${JSON.stringify(rows)}`);
+      await type_in_line(" sub");
+      await complete_in_line();
+      await press_keys("-k", "Return");
+      await wait_event(mark, (event) => event.type === "tree_read" && event.page_id === "p9g_sub", "the subfolder bookmark in a new tab");
+    } finally {
+      for (const url of ["p9g_top", "p9g_sub", "p9g_out"]) await remove_at(url_of("page", url));
+      await background(`browser.bookmarks.search({ title: "P9g Other folder" }).then((nodes) => Promise.all(nodes.map((node) => browser.bookmarks.removeTree(node.id))))`);
+      await remove_tree(folder_id);
+      await close_tabs_with("id=p9g_sub");
+      await close_cmdline().catch(() => {});
+    }
+  });
+
+  await run_case("bf opens the folder's bookmarks in tabs, the first one active", async () => {
+    const folder_id = await make_folder("P9f Open folder");
+    const urls = ["p9f_first", "p9f_second"].map((page_id) => url_of("page", page_id));
+    for (const url of urls) await background(`browser.bookmarks.create({ title: "P9f open", url: ${JSON.stringify(url)}, parentId: ${JSON.stringify(folder_id)} })`);
+    try {
+      await settle_focus();
+      const mark = events.length;
+      await press_keys("b", "f");
+      await wait_cmdline((line) => line.open && line.value === "bookmark.open_folder -t ", "bf to open the line with bookmark.open_folder");
+      await wait_cmdline(shows_row("P9f Open folder"), "the folder in the list");
+      await type_in_line("p9f open");
+      await complete_in_line();
+      await press_keys("-k", "Return");
+      await wait_event(mark, (event) => event.type === "tree_read" && event.page_id === "p9f_first", "the first bookmark in a tab");
+      await wait_event(mark, (event) => event.type === "tree_read" && event.page_id === "p9f_second", "the second bookmark in a tab");
+      await wait_active_tab("p9f_first", "the first bookmark of the folder");
+      // The strip must read in folder order right after the tab that pressed the key.
+      const strip = await background(`browser.tabs.query({ currentWindow: true }).then((tabs) => tabs.sort((a, b) => a.index - b.index).map((tab) => tab.url))`);
+      const place = (page_id) => strip.findIndex((url) => url.includes(page_id));
+      expect(place("p9f_second") === place("p9f_first") + 1, `the folder tabs are out of order in the strip: ${JSON.stringify(strip)}`);
+    } finally {
+      await remove_tree(folder_id);
+      await close_tabs_with("id=p9f_first");
+      await close_tabs_with("id=p9f_second");
+    }
+  });
+
   // Set DESERTFOX_SHOT_DIR to also save a screenshot of the tab list: a pinned tab with a favicon, a container tab, a muted tab and a discarded tab.
   const shot_dir = process.env.DESERTFOX_SHOT_DIR;
   if (shot_dir) {
@@ -267,5 +387,50 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, sleep,
     })()`);
     expect(moved.in_other_window, "the tab did not reach the other window");
     expect(moved.pinned, "the moved tab lost its pin");
+  });
+
+  const open_finder = async () => {
+    await settle_focus();
+    await press_keys(",", ",");
+    await wait_cmdline((line) => line.ready, "the finder to open");
+  };
+
+  await run_case("the finder: ,, opens it, the first row is highlighted as the user types, and Enter switches to that tab", async () => {
+    await open_finder();
+    await type_in_line("p9e_two", { until: shows_row("p9e_two") });
+    await wait_cmdline((line) => line.selected !== null && shows_row("p9e_two")(line), "the first finder row to be highlighted");
+    await press_keys("-k", "Return");
+    await wait_active_tab("p9e_two", "the p9e_two tab after Enter in the finder");
+  });
+
+  await run_case("the finder: Shift+Enter on a bookmark row opens it in a new tab, Enter on the same row would open it here", async () => {
+    const url = url_of("page", "p9z_finder");
+    await background(`browser.bookmarks.create({ title: "P9z Finder mark", url: ${JSON.stringify(url)} })`);
+    try {
+      await open_finder();
+      const mark = events.length;
+      await type_in_line("p9z finder mark", { until: shows_row("P9z Finder mark") });
+      await press_keys("-M", "shift", "-k", "Return", "-m", "shift");
+      await wait_event(mark, (event) => event.type === "tree_read" && event.page_id === "p9z_finder", "the bookmarked page in a new tab");
+      await wait_active_tab("p9z_finder", "the new tab of Shift+Enter");
+    } finally {
+      await close_tabs_with("id=p9z_finder");
+      await background(`browser.bookmarks.search({ url: ${JSON.stringify(url)} }).then((nodes) => Promise.all(nodes.map((node) => browser.bookmarks.remove(node.id))))`);
+    }
+  });
+
+  await run_case("the finder: A-x closes the highlighted tab row", async () => {
+    const ids = await create_tabs(["p9y_one"]);
+    const open_count = () => background(`browser.tabs.query({}).then((tabs) => tabs.filter((tab) => ${JSON.stringify(ids)}.includes(tab.id)).length)`);
+    try {
+      await open_finder();
+      await type_in_line("p9y_one", { until: shows_row("p9y_one") });
+      await wait_cmdline((line) => line.selected !== null && shows_row("p9y_one")(line), "the p9y_one row to be highlighted");
+      await press_keys(...ALT("x"));
+      await poll_until("A-x to close the highlighted finder tab", async () => (await open_count()) === 0);
+    } finally {
+      await background(`browser.tabs.remove(${JSON.stringify(ids)}).catch(() => {})`);
+      await close_cmdline().catch((error) => console.log(`cleanup: the command line stayed open: ${error.message}`));
+    }
   });
 }

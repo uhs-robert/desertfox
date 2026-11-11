@@ -7,18 +7,19 @@ const old_model = { text: "old" };
 const new_model = { text: "new" };
 
 test("retarget keeps the session object and resets what a new model invalidates", () => {
-  const open = { model: old_model, cursor: { anchor: 1, caret: 2 }, mode: "visual", goal_x_: 40, painted_: [{ ends: [] }] };
+  const open = { model_: old_model, cursor: { anchor: 1, caret: 2 }, mode: "visual", goal_x_: 40, painted_: [{ ends: [] }] };
   const same = retarget(open, new_model, { anchor: 0, caret: 3 });
   assert.equal(same, open);
-  assert.deepEqual(open, { model: new_model, cursor: { anchor: 0, caret: 3 }, mode: "visual", goal_x_: undefined, painted_: [] });
+  assert.deepEqual(open, { model_: new_model, cursor: { anchor: 0, caret: 3 }, mode: "visual", goal_x_: undefined, painted_: [] });
 });
 
 test("a pending yank still counts as the same session after a rebuild, so visual mode ends", async () => {
-  const open = { model: old_model, cursor: { anchor: 0, caret: 2 }, mode: "visual", goal_x_: undefined, painted_: [] };
+  const open = { model_: old_model, cursor: { anchor: 0, caret: 2 }, mode: "visual", goal_x_: undefined, painted_: [] };
   const session: { current: object } = { current: open };
   let left_visual = false;
+  Object.defineProperty(globalThis, "browser", { value: { runtime: { sendMessage: async () => ({ ok: true }) } }, configurable: true });
   const clipboard = { writeText: () => new Promise<void>((done) => setTimeout(done, 5)) };
-  const pending = yank_text(clipboard as unknown as Clipboard, "old", {
+  const pending = yank_text(clipboard as unknown as Clipboard, "old", undefined, {
     is_same_session_: () => session.current === open,
     toast: () => {},
     leave_visual_: () => (left_visual = true),

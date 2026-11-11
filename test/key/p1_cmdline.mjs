@@ -6,7 +6,7 @@ const CTRL = (key) => ["-M", "ctrl", key, "-m", "ctrl"];
 
 export const areas = ["cmdline"];
 
-export async function run_cases({ run_case, setup, expect, send_keys, press_keys, settle_focus, open_page, events, wait_event, wait_cmdline, close_cmdline, poll_until, expect_absent, scroll_report_wait_ms, scroll_of, last_scroll_y, in_background, open_cmdline, type_in_line, run_line, type_in_address_bar }) {
+export async function run_cases({ run_case, setup, expect, send_keys, press_keys, settle_focus, wait_tab_quiet, open_page, events, wait_event, wait_cmdline, close_cmdline, poll_until, expect_absent, scroll_report_wait_ms, scroll_of, last_scroll_y, in_background, clear_notices, open_cmdline, type_in_line, run_line, type_in_address_bar }) {
   await setup("open the page the command line cases use", () => open_page("page", "cmd", { new_tab: false }));
 
   const open_line = async () => {
@@ -43,6 +43,31 @@ export async function run_cases({ run_case, setup, expect, send_keys, press_keys
     const before = last_scroll_y("cmd");
     await scroll_down_and_wait("j to scroll after Escape");
     expect(last_scroll_y("cmd") > before, "j did not scroll after Escape");
+  });
+
+  // Race: the key after Enter reaches the frame while the focus moves back to the page, so the frame hands it back before it goes.
+  await run_case("Enter and the next key in one press: the key acts on the page once the line has run", async () => {
+    await open_cmdline();
+    await type_in_line("scroll.pixels --dy=300");
+    const before = last_scroll_y("cmd");
+    const mark = events.length;
+    await press_keys("-k", "Return", "j");
+    // The command and j each scroll, in either order, so only both together pass the line's 300 pixels.
+    await wait_event(mark, (event) => scroll_of("cmd")(event) && event.y > before + 300, "j after Enter to scroll past the command's 300 pixels").catch((error) => {
+      throw new Error(`${error.message}, last scroll ${last_scroll_y("cmd")} from ${before}`);
+    });
+    await wait_cmdline((line) => !line.open, "the line to close after Enter");
+  });
+
+  // Race: as above, after the Escape the frame takes as its own key.
+  await run_case("Escape and the next key in one press: the key acts on the page", async () => {
+    await open_cmdline();
+    const before = last_scroll_y("cmd");
+    const mark = events.length;
+    // The list is open on an empty line, so the first Escape closes it and the second closes the line.
+    await press_keys("-k", "Escape", "-k", "Escape", "j");
+    await wait_event(mark, (event) => scroll_of("cmd")(event) && event.y > before, "j after Escape to scroll");
+    await wait_cmdline((line) => !line.open, "the line to close after Escape");
   });
 
   await run_case("a failed parse keeps the line open, fixing the line runs it, and Up brings back that command", async () => {
@@ -84,17 +109,29 @@ export async function run_cases({ run_case, setup, expect, send_keys, press_keys
     expect(!stored.includes("nohistorycommand"), "a failed parse was stored");
   });
 
+  // Race: the keys after the first colon of a page wait for cmdline.js, and that wait once dropped every key past the 32nd.
+  // Last but one, because it leaves its own tab active.
+  await run_case("40 keys typed at once after the first colon of a page all reach the line", async () => {
+    await open_page("page", "cmd_first_colon", { new_tab: true });
+    const typed = "abcdefghij".repeat(4);
+    await press_keys(`:${typed}`);
+    await wait_cmdline((line) => line.value === typed, `the line to hold all ${typed.length} keys`, 8000);
+    await close_cmdline();
+  });
+
   await run_case("a page with no content script refuses the command line with a notice", async () => {
     // The address bar sends no report when it opens or takes the focus, so these two keep the settle of send_keys.
     await settle_focus();
     await send_keys(...CTRL("t"));
     // Text typed in the same run as Ctrl+L can lose its first character before the address bar has the focus.
     await send_keys(...CTRL("l"));
-    await type_in_address_bar("about:support");
+    await type_in_address_bar("about:license");
     await press_keys("-k", "Return");
     let tab_state;
-    await poll_until("about:support to load", async () => (tab_state = await in_background(`browser.tabs.query({ active: true, currentWindow: true }).then(([tab]) => ({ url: tab.url, status: tab.status }))`))?.url === "about:support" && tab_state.status === "complete", { timeout_ms: 8000 }).catch((error) => { throw new Error(`${error.message} (tab: ${JSON.stringify(tab_state)})`); });
-    await in_background(`(async () => { for (const id of Object.keys(await browser.notifications.getAll())) await browser.notifications.clear(id); })()`);
+    await poll_until("about:license to load", async () => (tab_state = await in_background(`browser.tabs.query({ active: true, currentWindow: true }).then(([tab]) => ({ id: tab.id, url: tab.url, status: tab.status }))`))?.url === "about:license" && tab_state.status === "complete", { timeout_ms: 8000 }).catch((error) => { throw new Error(`${error.message} (tab: ${JSON.stringify(tab_state)})`); });
+    // The page reports nothing, so the tab age is the only sign that Alt+. will reach Firefox and not the address bar that is giving up the focus.
+    await wait_tab_quiet(tab_state.id);
+    await clear_notices();
     try {
       await press_keys(...ALT("."));
       let notices = {};
@@ -102,7 +139,7 @@ export async function run_cases({ run_case, setup, expect, send_keys, press_keys
       expect(Object.values(notices).some((notice) => /needs a page DesertFox runs on/.test(notice.message)), `notices: ${JSON.stringify(notices)}`);
     } finally {
       // Firefox shows the notice in a window of its own (user.js), which holds the focus until it closes, so a failed case clears it too.
-      await in_background(`(async () => { for (const id of Object.keys(await browser.notifications.getAll())) await browser.notifications.clear(id); })()`);
+      await clear_notices();
     }
   });
 }

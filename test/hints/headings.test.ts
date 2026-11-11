@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { heading_level, is_heading, jump_in, keep_present, pick_heading, row_of, scroll_to_top } from "../../src/content/hints/headings.ts";
+import { heading_level, is_heading, jump_in, keep_present, pick_heading, pick_heading_step, row_of, scroll_to_top } from "../../src/content/hints/headings.ts";
 
 type FakeHeading = { localName: string; text?: string; rendered?: string; role?: string; level?: string };
 const heading = (fake: FakeHeading) => ({ localName: fake.localName, textContent: fake.text ?? "Title", innerText: fake.rendered ?? fake.text ?? "Title", getAttribute: (name: string) => (name === "role" ? (fake.role ?? null) : name === "aria-level" ? (fake.level ?? null) : null) }) as unknown as Element;
@@ -101,4 +101,46 @@ test("a heading that left the page, or whose frame did, gives That heading is go
   assert.deepEqual(scrolls, []);
   jump_in(snapshot(element(true), [element(true)]), "1 Intro");
   assert.deepEqual(scrolls, ["scrolled", "scrolled"]);
+});
+
+// Tops are counted from the view top, so a heading the last jump put there is at 0.
+const tops = [-300, -40, 0, 120, 900];
+
+test("next starts below the view top and passes the heading the jump left there", () => {
+  assert.equal(pick_heading_step(tops, "next", 1), 3);
+  assert.equal(pick_heading_step([-300, -40, 0.5, 120], "next", 1), 3);
+});
+
+test("prev starts above the view top and passes the heading at it", () => {
+  assert.equal(pick_heading_step(tops, "prev", 1), 1);
+  assert.equal(pick_heading_step(tops, "prev", 2), 0);
+});
+
+test("a count moves that many headings and stops on the last or first", () => {
+  assert.equal(pick_heading_step(tops, "next", 2), 4);
+  assert.equal(pick_heading_step(tops, "next", 9), 4);
+  assert.equal(pick_heading_step(tops, "prev", 9), 0);
+});
+
+test("there is no wrap: past the last or before the first is undefined", () => {
+  assert.equal(pick_heading_step([-5, 0, 1], "next", 1), undefined);
+  assert.equal(pick_heading_step([-1, 0, 50], "prev", 1), undefined);
+  assert.equal(pick_heading_step([], "next", 1), undefined);
+});
+
+test("from a remembered heading the move steps by index, so a heading that cannot reach the top is passed", () => {
+  // The page ends: the heading at index 2 sits 300px down and cannot scroll to the top. The view-top rule alone picks it again.
+  const near_end = [-900, -400, 300, 700];
+  assert.equal(pick_heading_step(near_end, "next", 1), 2);
+  assert.equal(pick_heading_step(near_end, "next", 1, 2), 3);
+  assert.equal(pick_heading_step(near_end, "prev", 1, 2), 1);
+});
+
+test("a count from the remembered heading moves that many and clamps, and the ends have no wrap", () => {
+  const five = [-500, -200, 0, 200, 500];
+  assert.equal(pick_heading_step(five, "next", 2, 1), 3);
+  assert.equal(pick_heading_step(five, "next", 9, 1), 4);
+  assert.equal(pick_heading_step(five, "prev", 9, 3), 0);
+  assert.equal(pick_heading_step(five, "next", 1, 4), undefined);
+  assert.equal(pick_heading_step(five, "prev", 1, 0), undefined);
 });

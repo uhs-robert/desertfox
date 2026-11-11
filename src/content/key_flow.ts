@@ -1,6 +1,6 @@
 // Decides, for one key token, whether the page keeps the key. Holds keys that
-// arrive before the compiled keymap is read or while a bundle loads, and replays them in order once they can run.
-// During a load only keys that can bind wait. Every other key reaches the page at once, because a replayed key arrives after its keydown was cancelled.
+// arrive before the compiled keymap is read, while a bundle loads or while the command line hands focus back, and replays them in order once they can run.
+// A replayed key the keymap does not take goes back to the page through its `on_replay_pass_`, as a synthetic event that loses its default action. During a load only keys that can bind wait, so every other key keeps its default action.
 
 import type { Mode, TreeBranch, TreeLeaf } from "../shared/index.ts";
 import type { MatchResult } from "../shared/keys/index.ts";
@@ -12,6 +12,12 @@ import { is_chord } from "../shared/keys/token.ts";
 
 export type KeyDecision = "cancel" | "pass";
 
+// Runs when a held key is replayed and the keymap does not take it, so the page can still get the key.
+export type OnReplayPass = () => void;
+
+// A key waiting for replay. Keys handed back by the command line have no way to reach the page again.
+type HeldKey = { token: string; on_replay_pass_?: OnReplayPass | undefined };
+
 // The keys typed so far in a half-typed sequence. Which-key reads it.
 export type PendingPrefix = { mode: Mode; typed: string[] };
 
@@ -19,25 +25,26 @@ export type Matcher = {
   feed: (mode: string, token: string) => MatchResult;
   reset: () => void;
   binds_after_: (mode: string, ahead: readonly string[], token: string) => boolean;
+  // A site rule hands this key to the page.
+  passes_: (mode: string, token: string) => boolean;
 };
 
 export type KeyFlowDeps = {
-  get_mode: () => Mode;
+  get_mode_: () => Mode;
   take_pass_next_: () => boolean;
   // `repeat` is true for an auto-repeat keydown of a held key.
   run_leaf_: (leaf: TreeLeaf, count: number | undefined, repeat: boolean) => void;
   leave_insert_: () => void;
   in_editable_field_: () => boolean;
-  // A bundle is loading, and the mode its keys replay in is not known yet.
-  is_loading_: () => boolean;
+  // A bundle is loading or the command line is handing focus back, and the mode the keys replay in is not known yet.
+  // `taking` is true for a key just typed, false for a held key about to replay.
+  is_loading_: (taking?: boolean) => boolean;
   // The loading bundles that register a sink. Their mode may take keys on replay.
   loading_sink_bundles_: () => readonly BundleName[];
   sink_of_: (mode: Mode) => Sink | undefined;
   // Called with the prefix after each key that leaves a sequence half-typed, and with nothing when the sequence ends or resets. `at_once` skips the pause before the panel.
   on_prefix_: (prefix: PendingPrefix | undefined, at_once?: boolean) => void;
 };
-
-const MAX_HELD_KEYS = 32;
 
 // Stands in the held keys for a key the page got while a sequence waited. It ends that sequence on replay, as the key would have. No binding uses it, so reading ahead through it ends the sequence too.
 const SEQUENCE_BREAK = "";
@@ -70,20 +77,26 @@ export const cancels_unbound_key = (mode: Mode, token: string, in_field: boolean
 export function create_key_flow(deps: KeyFlowDeps) {
   let matcher: Matcher | undefined;
   let browser_chords: TreeBranch | undefined;
-  const held_tokens: string[] = [];
+  const held_keys: HeldKey[] = [];
   let sequence_in_progress = false;
   let typed: string[] = [];
-  let count: number | undefined;
+  let keys: string[] = [];
+  let register: string | undefined;
+
+  // What which-key lists: the keys typed in the tree, or `"` while the register name is awaited.
+  const listed = (keys: string[]) => (register === '"' ? [register] : keys);
 
   const reset_sequence_ = () => {
     matcher?.reset();
+    typed = [];
+    register = undefined;
     sequence_in_progress = false;
     deps.on_prefix_(undefined);
   };
 
   // The `browser` chords also have a Firefox shortcut. Cancelling the key stops the shortcut from firing too.
   const run_browser_chord = (token: string): boolean => {
-    const mode = deps.get_mode();
+    const mode = deps.get_mode_();
     const node = browser_chords?.children[token];
     if (node?.kind !== "leaf" || (mode !== "normal" && mode !== "insert")) return false;
     reset_sequence_();
@@ -91,49 +104,52 @@ export function create_key_flow(deps: KeyFlowDeps) {
     return true;
   };
 
-  const keep_held = (entry: string) => held_tokens.length < MAX_HELD_KEYS && held_tokens.push(entry);
+  const held_tokens = () => held_keys.map((held) => held.token);
 
   // The held keys are not fed yet, so the check reads ahead through them. It cannot read through Backspace, which edits the sequence, or an insert mode Escape, which leaves the mode on replay, so those keys and every key after them wait.
   const waits_for_replay = (active: Matcher, mode: Mode, token: string): boolean =>
-    deps.loading_sink_bundles_().some((bundle) => bundle_may_take(active, held_tokens, bundle, token)) ||
+    deps.loading_sink_bundles_().some((bundle) => bundle_may_take(active, held_tokens(), bundle, token)) ||
     !!deps.sink_of_(mode) ||
     token === "<Backspace>" ||
     (mode === "insert" && token === "<Escape>") ||
-    held_tokens.some((held) => held === "<Backspace>" || held === "<Escape>") ||
-    active.binds_after_(mode, held_tokens, token);
+    held_keys.some((held) => held.token === "<Backspace>" || held.token === "<Escape>") ||
+    active.binds_after_(mode, held_tokens(), token);
 
-  const hold = (token: string): KeyDecision => {
+  const hold = (token: string, on_replay_pass_?: OnReplayPass): KeyDecision => {
     // Chords and keys in a field never wait. A waiting key is cancelled, so the page does not act on it twice.
     if (is_chord(token) || deps.in_editable_field_()) return "pass";
-    const mode = deps.get_mode();
+    const mode = deps.get_mode_();
     // Before the keymap is read nothing is known to bind, so every plain key waits.
     if (!matcher || waits_for_replay(matcher, mode, token)) {
-      keep_held(token);
+      held_keys.push({ token, on_replay_pass_ });
       return "cancel";
     }
-    const last_held = held_tokens.at(-1);
+    const last_held = held_keys.at(-1)?.token;
     if (last_held === undefined) reset_sequence_();
-    else if (last_held !== SEQUENCE_BREAK) keep_held(SEQUENCE_BREAK);
-    return cancels_unbound_key(mode, token, false) ? "cancel" : "pass";
+    else if (last_held !== SEQUENCE_BREAK) held_keys.push({ token: SEQUENCE_BREAK });
+    return !matcher.passes_(mode, token) && cancels_unbound_key(mode, token, false) ? "cancel" : "pass";
   };
 
   const step = (active: Matcher, token: string, repeat: boolean): KeyDecision => {
-    const mode = deps.get_mode();
+    const mode = deps.get_mode_();
+    // With no field focused, insert mode is only a pass-through: the other insert keys (`<C-r>`) are the browser's.
+    if (mode === "insert" && token !== "<Escape>" && !deps.in_editable_field_()) return "pass";
     const was_in_progress = sequence_in_progress;
     // Backspace drops the last key of a half-typed sequence. The matcher cannot step back, so the shorter prefix is typed again.
     if (was_in_progress && token === "<Backspace>") {
-      const kept = typed.slice(0, -1);
+      const kept = keys.slice(0, -1);
       reset_sequence_();
-      // The count goes back in as its digits, ahead of the kept keys.
-      for (const key of [...`${count ?? ""}`, ...kept]) step(active, key, false);
-      deps.on_prefix_(kept.length > 0 ? { mode, typed: kept } : undefined, true);
+      for (const key of kept) step(active, key, false);
+      const shown = listed(typed);
+      deps.on_prefix_(shown.length > 0 ? { mode, typed: shown } : undefined, true);
       return "cancel";
     }
     const result = active.feed(mode, token);
     sequence_in_progress = result.kind === "pending";
-    if (result.kind === "pending") ({ typed, count } = result);
+    if (result.kind === "pending") ({ typed, keys, register_keys: register } = result);
     // A bare count (`3`) has typed nothing yet, so no keys can be listed.
-    deps.on_prefix_(result.kind === "pending" && result.typed.length > 0 ? { mode, typed: result.typed } : undefined);
+    const listing = listed(typed);
+    deps.on_prefix_(result.kind === "pending" && listing.length > 0 ? { mode, typed: listing } : undefined);
     if (result.kind === "match") {
       deps.run_leaf_(result.leaf, result.count, repeat);
       return "cancel";
@@ -141,12 +157,12 @@ export function create_key_flow(deps: KeyFlowDeps) {
     if (result.kind === "pending") return "cancel";
     // The page sees this Escape too, so it can close its own dialog.
     if (mode === "insert" && token === "<Escape>") deps.leave_insert_();
-    return cancels_unbound_key(mode, token, deps.in_editable_field_()) ? "cancel" : "pass";
+    return !active.passes_(mode, token) && cancels_unbound_key(mode, token, deps.in_editable_field_()) ? "cancel" : "pass";
   };
 
   const decide = (active: Matcher, token: string, repeat: boolean): KeyDecision => {
     // A sink takes the token before the keymap, and "pass" lets the keymap see it.
-    if (deps.sink_of_(deps.get_mode())?.on_token_(token) === "handled") {
+    if (deps.sink_of_(deps.get_mode_())?.on_token_(token) === "handled") {
       reset_sequence_();
       return "cancel";
     }
@@ -155,20 +171,20 @@ export function create_key_flow(deps: KeyFlowDeps) {
 
   // A replayed key can start another load, and the keys behind it wait for that load too.
   const replay = () => {
-    while (matcher && held_tokens.length > 0 && !deps.is_loading_()) {
-      const entry = held_tokens.shift()!;
-      if (entry === SEQUENCE_BREAK) reset_sequence_();
-      else decide(matcher, entry, false);
+    while (matcher && held_keys.length > 0 && !deps.is_loading_()) {
+      const { token, on_replay_pass_ } = held_keys.shift()!;
+      if (token === SEQUENCE_BREAK) reset_sequence_();
+      else if (decide(matcher, token, false) === "pass") on_replay_pass_?.();
     }
   };
 
   return {
-    handle_token_: (token: string, repeat = false): KeyDecision => {
+    handle_token_: (token: string, repeat = false, on_replay_pass_?: OnReplayPass): KeyDecision => {
       if (deps.take_pass_next_()) {
         reset_sequence_();
         return "pass";
       }
-      if (!matcher || deps.is_loading_()) return hold(token);
+      if (!matcher || deps.is_loading_(true)) return hold(token, on_replay_pass_);
       return decide(matcher, token, repeat);
     },
     reset_sequence_,
@@ -181,5 +197,9 @@ export function create_key_flow(deps: KeyFlowDeps) {
       replay();
     },
     release: replay,
+    // Keys typed before the ones held, which reached another document: the command line frame hands back the keys it got after the line ended.
+    hold_first_: (tokens: readonly string[]) => void held_keys.unshift(...tokens.map((token) => ({ token }))),
+    // A macro replay failed or was stopped, so the keys typed during it never run, as vim flushes typeahead.
+    drop_held_: () => void (held_keys.length = 0),
   };
 }

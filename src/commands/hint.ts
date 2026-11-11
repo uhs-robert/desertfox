@@ -1,5 +1,6 @@
 import { define } from "../shared/registry/builtin.ts";
 import { WHERE, WHERE_SHORT } from "./open_target.ts";
+import { YANK_REGISTER_PARAM } from "./register_param.ts";
 
 // Filters whose elements have an address to open or copy. The mixed filters stay because some of their elements have one.
 const HAS_ADDRESS = ["all", "clickable", "links", "images", "frames", "media", "custom"];
@@ -7,27 +8,27 @@ const HAS_ADDRESS = ["all", "clickable", "links", "images", "frames", "media", "
 define("hint.run", {
   name: "hint",
   label: "Hint",
-  intent: "Pick a page element by key and act on it. It labels the elements on the page with keys, then acts on the one you pick: open it here, in a tab, in a background tab or in a window, copy its address, its text or its picture, download it, delete it, focus it, hover it or double-click it. Hover sends the pointer events a mouse sends on entering, so menus, tooltips and previews that a script opens appear. A menu that only a CSS :hover rule opens does not. Escape or the next hover ends it. Caret and visual start caret mode or visual mode at the element. Rapid keeps hint mode open for more picks, and opens links in background tabs unless the action says otherwise. Text keeps only the links whose text holds it.",
+  intent: "Pick a page element by key and act on it. It labels the elements on the page with keys, then acts on the one you pick: open it here, in a tab, in a background tab or in a window, copy its address, its text, its picture, its CSS selector or its HTML, select it in the DevTools Inspector, download it, delete it, focus it, hover it or double-click it. Hover sends the pointer events a mouse sends on entering, so menus, tooltips and previews that a script opens appear. A menu that only a CSS :hover rule opens does not. Escape or the next hover ends it. Caret and visual start caret mode or visual mode at the element. Rapid keeps hint mode open for more picks, and opens links in background tabs unless the action says otherwise. Text keeps only the links whose text holds it.",
   params: [
     {
       name: "action",
       type: "enum",
-      values: [...WHERE, "caret", "visual", "copy", "copy_text", "copy_image", "download", "delete", "focus", "hover", "double_click", "play_pause", "mute", "fullscreen"],
+      values: [...WHERE, "caret", "visual", "copy", "copy_text", "copy_image", "copy_selector", "copy_html", "inspect", "download", "delete", "focus", "hover", "double_click", "play_pause", "mute", "fullscreen"],
       default: [{ value: "play_pause", when: { filter: ["media"] } }, { value: "background", when: { filter: ["links"], rapid: [true] } }, { value: "tab", when: { filter: ["images"] } }, { value: "focus", when: { filter: ["frames"] } }, "here"],
       value_when: {
         tab: { filter: HAS_ADDRESS },
         background: { filter: HAS_ADDRESS },
         window: { filter: HAS_ADDRESS },
         copy: { filter: HAS_ADDRESS },
-        copy_text: { filter: ["all", "clickable", "links", "buttons", "prose", "scrollable", "custom"] },
+        copy_text: { filter: ["all", "every", "clickable", "links", "buttons", "prose", "scrollable", "custom"] },
         copy_image: { filter: ["images"] },
         download: { filter: ["images", "links", "media", "all"] },
         play_pause: { filter: ["media"] },
         mute: { filter: ["media"] },
         fullscreen: { filter: ["media"] },
-        double_click: { filter: ["all", "clickable", "buttons", "inputs", "prose", "scrollable", "media", "images", "frames", "custom"] },
+        double_click: { filter: ["all", "every", "clickable", "buttons", "inputs", "prose", "scrollable", "media", "images", "frames", "custom"] },
       },
-      short: { ...WHERE_SHORT, caret: "c", visual: "v", copy: "y", copy_text: "Y", copy_image: "C", download: "D", delete: "d", focus: "f", double_click: "k", play_pause: "P", mute: "M", fullscreen: "F" },
+      short: { ...WHERE_SHORT, caret: "c", visual: "v", copy: "y", copy_text: "Y", copy_image: "C", copy_selector: "S", copy_html: "H", inspect: "o", download: "D", delete: "d", focus: "f", double_click: "k", play_pause: "P", mute: "M", fullscreen: "F" },
       value_labels: {
         here: "to click",
         tab: "in new tab",
@@ -38,6 +39,9 @@ define("hint.run", {
         copy: "to copy",
         copy_text: "to copy text",
         copy_image: "to copy the picture",
+        copy_selector: "to copy the selector",
+        copy_html: "to copy the HTML",
+        inspect: "to inspect",
         download: "to download",
         delete: "to delete",
         focus: "to focus",
@@ -57,6 +61,9 @@ define("hint.run", {
         copy: "Copy the address of the element.",
         copy_text: "Copy the text of the element.",
         copy_image: "Copy the picture itself to the clipboard, as PNG or JPEG.",
+        copy_selector: "Copy the shortest CSS selector that matches the element.",
+        copy_html: "Copy the whole outer HTML of the element.",
+        inspect: "Select the element in the DevTools Inspector.",
         download: "Save the file at the address of the element.",
         delete: "Delete the element from the page.",
         focus: "Focus the element.",
@@ -70,12 +77,13 @@ define("hint.run", {
     {
       name: "filter",
       type: "enum",
-      values: ["all", "clickable", "buttons", "inputs", "links", "prose", "scrollable", "media", "images", "frames", "custom"],
+      values: ["all", "every", "clickable", "buttons", "inputs", "links", "prose", "scrollable", "media", "images", "frames", "custom"],
       default: "clickable",
-      short: { all: "a", buttons: "B", inputs: "i", links: "l", prose: "p", scrollable: "s", media: "m", images: "I", frames: "E", custom: "u" },
-      value_labels: { all: "for all elements", buttons: "for buttons", inputs: "for inputs", links: "for links", prose: "for text", scrollable: "for scroll boxes", media: "for video and audio", images: "for images", frames: "for frames", custom: "for a selector" },
+      short: { all: "a", every: "e", buttons: "B", inputs: "i", links: "l", prose: "p", scrollable: "s", media: "m", images: "I", frames: "E", custom: "u" },
+      value_labels: { all: "for all elements", every: "for every visible element", buttons: "for buttons", inputs: "for inputs", links: "for links", prose: "for text", scrollable: "for scroll boxes", media: "for video and audio", images: "for images", frames: "for frames", custom: "for a selector" },
       description: {
         all: "Label every element.",
+        every: "Label visible elements, not empty or one-child wrappers.",
         buttons: "Label only the buttons.",
         inputs: "Label only the inputs.",
         links: "Label only the links.",
@@ -87,9 +95,10 @@ define("hint.run", {
         custom: "Label the elements that match a selector.",
       },
     },
-    { name: "selector", type: "string", when: { filter: ["custom"] }, description: "Label the elements that match this CSS selector." },
+    { name: "selector", type: "string", main: true, rest: true, verbatim: true, when: { filter: ["custom"] }, description: "Label the elements that match this CSS selector." },
     { name: "text", type: "string", optional: true, description: "Keep only the links whose text holds this." },
     { name: "rapid", type: "bool", default: false, short: "r", description: "Keep hint mode open for more picks." },
+    YANK_REGISTER_PARAM,
   ],
   runs_in: "content",
   bundle: "hints",

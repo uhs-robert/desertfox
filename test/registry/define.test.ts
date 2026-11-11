@@ -228,7 +228,8 @@ test("the rule kinds are rejected on a param that cannot carry them", () => {
   const with_param = (param: object): CommandInput => ({ ...base, params: [param as never] });
   rejects("a.b", with_param({ name: "n", type: "string", min: 1 }), /params\[0\]\.min: only an int param takes a minimum/);
   rejects("a.b", with_param({ name: "n", type: "int", min: 1.5 }), /params\[0\]\.min: must be a whole number/);
-  rejects("a.b", with_param({ name: "n", type: "int", pattern: "x" }), /params\[0\]\.pattern: only a string param takes a pattern/);
+  rejects("a.b", with_param({ name: "n", type: "int", pattern: "x" }), /params\[0\]\.pattern: only a string or key param takes a pattern/);
+  rejects("a.b", with_param({ name: "n", type: "int", format: "url" }), /params\[0\]\.format: only a string param/);
   rejects("a.b", with_param({ name: "n", type: "string", pattern: "(" }), /params\[0\]\.pattern: .* is not a regular expression/);
   rejects("a.b", with_param({ name: "n", type: "string", strict: true }), /params\[0\]\.strict: only a string param with a fixed value list/);
   rejects("a.b", with_param({ name: "n", type: "int", optional: true }), /params\[0\]\.optional: only a string or enum param/);
@@ -265,4 +266,12 @@ test("a background command has a run, and a content command has none", () => {
   rejects("t.content_run", { ...base, runs_in: "content" } as never, /run/);
   assert.equal(create_registry().define("t.lazy", { ...no_run, runs_in: "content", bundle: "hints" }).bundle, "hints");
   assert.equal(create_registry().define("t.in_page", { ...no_run, runs_in: "content" } as never).run, undefined);
+});
+
+test("verbatim is for the main string param, and not with value_of", () => {
+  const verbatim = (param: Record<string, unknown>) => ({ ...base, params: [param as never] }) as CommandInput;
+  rejects("x.a", verbatim({ name: "q", type: "string", main: true, verbatim: true, value_of: "k" }), /verbatim|value_of/);
+  rejects("x.b", verbatim({ name: "q", type: "int", main: true, verbatim: true }), /verbatim|string/);
+  rejects("x.c", verbatim({ name: "q", type: "string", verbatim: true }), /only the main param can be verbatim/);
+  create_registry().define("x.d", verbatim({ name: "q", type: "string", main: true, rest: true, verbatim: true }));
 });

@@ -1,5 +1,5 @@
 import { show_toast_on_tab } from "../background/browser_deps.ts";
-import { ConfigReloadError, KEPT_CURRENT } from "../background/config_reload.ts";
+import { ConfigRefusal, KEPT_CURRENT } from "../background/config_reload.ts";
 import { mark_reload_pending } from "../background/reload.ts";
 import { reload_config } from "../background/startup.ts";
 import { RuntimeRefusal } from "../shared/command.ts";
@@ -15,10 +15,10 @@ define("config.reload", {
     try {
       reloaded = await reload_config();
     } catch (error) {
-      if (error instanceof ConfigReloadError) throw new RuntimeRefusal(error.message);
+      if (error instanceof ConfigRefusal) throw new RuntimeRefusal(error.message);
       // Any other failure: a browser call, the host or the build. A failed swap already put the old config back.
       const reason = error instanceof Error ? error.message : String(error);
-      throw new RuntimeRefusal(`${KEPT_CURRENT.replace(/\.$/, "")}: ${reason}. Run config.reload again, and debug.restart if it keeps failing.`);
+      throw new RuntimeRefusal(`${KEPT_CURRENT.reload.replace(/\.$/, "")}: ${reason}. Run config.reload again, and debug.restart if it keeps failing.`);
     }
     const warned = reloaded.warnings === 0 ? "" : `, with ${reloaded.warnings} warning(s) on the Help page`;
     await show_toast_on_tab(ctx, "config", `Config reloaded from ${reloaded.config_dir}${warned}`, reloaded.warnings === 0 ? "success" : "warning");

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-// `gi` stays in the content bundle and does not use the field list of `]i`. These cases fix which fields it picks.
+// `gi` runs from the page bundle and does not use the field list of `]i`. These cases fix which fields it picks.
 class FakeHTMLElement {}
 class FakeHTMLInputElement extends FakeHTMLElement {}
 const globals = globalThis as Record<string, unknown>;
@@ -10,7 +10,7 @@ globals.HTMLInputElement = FakeHTMLInputElement;
 globals.innerHeight = 600;
 globals.innerWidth = 800;
 globals.getComputedStyle = (element: { visibility?: string }) => ({ visibility: element.visibility ?? "visible" });
-const { page_focus_input } = await import("../../src/content/handlers/page.ts");
+const { focus_first_input } = await import("../../src/content/handlers/focus_input.ts");
 
 type Fake = { name: string; tag: "input" | "textarea" | "div" | "select" | "button"; type?: string; editable?: boolean; disabled?: boolean; top?: number; height?: number; visibility?: string };
 
@@ -30,7 +30,7 @@ function run_gi(fakes: Fake[]): string | undefined {
     return element;
   });
   globals.document = { querySelectorAll: () => elements };
-  page_focus_input.run({}, false);
+  focus_first_input();
   return focused;
 }
 

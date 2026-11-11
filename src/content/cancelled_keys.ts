@@ -1,15 +1,38 @@
 // Physical keys whose keydown was cancelled: their keypress and keyup are cancelled too.
 
+// One cancelled keydown that may reach the page later, on replay.
+export type HeldPress = { keyup_seen: boolean };
+
 export function create_cancelled_keys() {
   const codes = new Set<string>();
+  const presses = new Map<string, HeldPress>();
   return {
     // A passed keydown clears the code. The keyup of an earlier cancelled press can land in
     // another tab (a tab switch), and a stale code would eat the next typed letter.
-    record_keydown_: (code: string, decision: "cancel" | "pass") => {
-      if (decision === "cancel") codes.add(code);
-      else codes.delete(code);
+    record_keydown_: (code: string, decision: "cancel" | "pass", press?: HeldPress) => {
+      if (decision === "cancel") {
+        codes.add(code);
+        if (press) presses.set(code, press);
+      } else {
+        codes.delete(code);
+        presses.delete(code);
+      }
     },
     cancels_keypress_: (code: string) => codes.has(code),
-    take_keyup_: (code: string) => codes.delete(code),
+    take_keyup_: (code: string) => {
+      const press = presses.get(code);
+      if (press) press.keyup_seen = true;
+      presses.delete(code);
+      return codes.delete(code);
+    },
+    // The press goes back to the page. Returns whether its keyup was already swallowed, so the caller sends one. Otherwise the key is still down, and its real keyup must reach the page.
+    release_for_replay_: (code: string, press: HeldPress): boolean => {
+      if (press.keyup_seen) return true;
+      if (presses.get(code) === press) {
+        presses.delete(code);
+        codes.delete(code);
+      }
+      return false;
+    },
   };
 }

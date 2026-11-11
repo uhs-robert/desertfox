@@ -68,7 +68,7 @@ function problems_of(files: Record<string, string>): string {
 
 const built = () => {
   const stored = build_config(config_dir({ "search_engines.toml": ENGINES, "keymap.toml": KEYMAP }), commands);
-  return pick_config(stored, undefined).config;
+  return pick_config(stored).config;
 };
 
 const REPO_PAGE = { url: "https://github.com/uhs-robert/desertfox/issues" };
@@ -169,9 +169,9 @@ test("a letter runs the engine of the page's site", () => {
 
 test("the site engine is the default engine with the site term, and a user entry replaces it", () => {
   assert.equal(built().search_engines.site?.url, "https://duckduckgo.com/?q=site:{host}+{query}");
-  const google = pick_config(build_config(config_dir({ "search_engines.toml": 'google = { url = "https://www.google.com/search?q=%s", label = "Google" }', "settings.toml": 'default_engine = "google"' }), commands), undefined).config;
+  const google = pick_config(build_config(config_dir({ "search_engines.toml": 'google = { url = "https://www.google.com/search?q=%s", label = "Google" }', "settings.toml": 'default_engine = "google"' }), commands)).config;
   assert.equal(google.search_engines.site?.url, "https://www.google.com/search?q=site:{host}+{query}");
-  const own = pick_config(build_config(config_dir({ "search_engines.toml": 'site = { url = "https://x.example/?q={host}+{query}", label = "Mine" }' }), commands), undefined).config;
+  const own = pick_config(build_config(config_dir({ "search_engines.toml": 'site = { url = "https://x.example/?q={host}+{query}", label = "Mine" }' }), commands)).config;
   assert.equal(own.search_engines.site?.label, "Mine");
 });
 
@@ -180,7 +180,7 @@ test("which-key lists the stored tree through list_keys with the page fit", asyn
   const { compiled } = compile_config({ config, default_keymap: DEFAULT_KEYMAP, get_command: (id) => registry.get(id), enum_sources: { search_engines: Object.keys(config.search_engines), containers: [] } });
   const storage = { get: async () => ({ [COMPILED_KEYMAP_STORAGE_KEY]: compiled }) } as never;
   const availability = { page: OTHER_PAGE, requirement_of: requirement_lookup(config), site_engine_label_of: () => "Site" };
-  const panel = await list_keys(storage, (id) => registry.get(id), { mode: "normal", prefix: ["s", "/"] }, availability);
+  const panel = await list_keys(storage, (id) => registry.get(id), { mode: "normal", prefix: ["s", "/"] }, { availability });
   assert.deepEqual(panel.title, ["+Search here", "+Site search"]);
 });
 
@@ -215,7 +215,7 @@ test("the build refuses a search_keys letter / that s// would shadow, unless bot
 test("a default engine that needs a page slot makes the site engine use DuckDuckGo, and the load warns", () => {
   const needs_page = { url: "https://x.example/?q={query}&r={repo}", label: "X", slots: ["repo"] };
   const raw = { format_version: 2, settings: { default_engine: "x" }, search_engines: { x: needs_page } };
-  const loaded = pick_config(raw, undefined);
+  const loaded = pick_config(raw);
   assert.equal(loaded.config.search_engines.site?.url, "https://duckduckgo.com/?q=site:{host}+{query}");
   assert.ok(loaded.warnings.some((warning) => /default_engine "x" needs a page slot/.test(warning)));
 });

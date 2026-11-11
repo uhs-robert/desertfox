@@ -6,7 +6,7 @@ import type { CompleteItemsAnswer } from "../../../src/shared/messages.ts";
 
 const TABS = [{ number: 1, title: "One", url: "https://one.test/" }];
 const TAB_ITEMS = [{ id: 1, number: 1, title: "One", url: "https://one.test/" }];
-const BOOKMARKS = [{ title: "Mark", url: "https://mark.test/" }];
+const BOOKMARKS = { rows: [{ title: "Mark", url: "https://mark.test/", folders: [0] }], folders: ["Toolbar"] };
 
 // Each ask waits until the test answers it, so replies can come in any order.
 function make() {
@@ -16,6 +16,7 @@ function make() {
   const live = create_live_source({
     ask: (kind) => new Promise((resolve, reject) => void asks.push({ kind, answer: resolve, fail: () => reject(new Error("gone")) })),
     tabs: () => tab_items,
+    all_tabs: () => tab_items,
     on_ready: () => void ready++,
   });
   const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
@@ -80,7 +81,7 @@ test("a refused or failed fetch caches an empty list", async () => {
   live.read("bookmarks");
   asks[1]!.fail();
   await settle();
-  assert.deepEqual(live.read("bookmarks"), { loading: false, items: [] });
+  assert.deepEqual(live.read("bookmarks"), { loading: false, items: { rows: [], folders: [] } });
   assert.equal(ready(), 2);
 });
 

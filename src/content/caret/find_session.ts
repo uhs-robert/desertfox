@@ -1,13 +1,12 @@
 // Page search: the live search while the line is open, the match that stays after Enter or Escape, and n and N.
 // The line (the cmdline bundle) reaches it through `begin`, `update` and `end`. The keys reach it through `step` and `clear`.
 
-import type { FindScan, FindScanAnswer, Outcome } from "../../shared/messages.ts";
+import type { FindScan, FindScanAnswer, Outcome, RegisterRead, RegisterWrite } from "../../shared/messages.ts";
 import type { BundleHostApi } from "../bundle_host.ts";
 import { collect_matches, compile_query, describe_match, describe_timeout, nearest_match, opposite, step_match } from "./find_match.ts";
 import type { Direction, Fallback, Matches, ScanRegex, Search, Slicing } from "./find_match.ts";
 import { create_painter } from "./find_paint.ts";
 import type { FindColors, Painter } from "./find_paint.ts";
-import { get_register, set_register } from "./registers.ts";
 import { scroll_to_index } from "./screen_line.ts";
 import { find_colors_of, stored_theme } from "./selection_colors.ts";
 import { first_visible_index } from "./start_point.ts";
@@ -17,11 +16,11 @@ import type { DomPoint, TextModel } from "./text_model.ts";
 // What the engine needs of the host script. A bundle reaches it through `window.desertfox_host`.
 type Host = Pick<BundleHostApi, "show_toast_">;
 
-type Found = { model: TextModel; query: string; fallback: Fallback | undefined; direction: Direction; matches: Matches; current: number };
+type Found = { model_: TextModel; query: string; fallback: Fallback | undefined; direction: Direction; matches: Matches; current: number };
 
 // While the line is open. `start` is where the search began, so each keystroke looks from the same place.
 type Live = {
-  model: TextModel;
+  model_: TextModel;
   direction: Direction;
   start: number;
   // `start` as a point in the page, so a rebuilt model keeps the same origin.
@@ -105,8 +104,11 @@ const browser_deps = (): FindDeps => ({
   painter: create_painter(),
   scroll_to_: (model, first_index, last_index_, bottom_inset_) => scroll_to_index(model, first_index, { bottom_inset_, last_index_ }),
   read_colors_: read_find_colors,
-  get_register_: get_register,
-  set_register_: set_register,
+  get_register_: async (name) => {
+    const value = await (browser.runtime.sendMessage({ type: "register_read", name } satisfies RegisterRead) as Promise<unknown>);
+    return typeof value === "string" ? value : undefined;
+  },
+  set_register_: async (name, text) => void (await browser.runtime.sendMessage({ type: "register_write", name, text } satisfies RegisterWrite)),
   slicing: (is_stale_) => ({ is_stale_, yield_to_page_: () => new Promise<void>((resume) => setTimeout(resume, 0)), now: () => performance.now(), slice_ms_: SLICE_MS }),
   scan_regex: (text, { source, flags }) => browser.runtime.sendMessage({ type: "find_scan", text, source, flags } satisfies FindScan) as Promise<FindScanAnswer>,
   selection_key_: (model) => documents_of(model).flatMap((owner) => [owner.getSelection()?.anchorNode, owner.getSelection()?.anchorOffset, owner.getSelection()?.focusNode, owner.getSelection()?.focusOffset]),
@@ -119,7 +121,7 @@ const cut_note = (model: TextModel, message: string) => (model.truncated ? `${me
 // Where the current match of `old` sits in a rebuilt model. Undefined when its text has left the page: a node of a removed frame throws on any read.
 function carry_index(old: Found, model: TextModel): number | undefined {
   try {
-    const { node, offset } = old.model.point_at_(old.matches.from[old.current]!);
+    const { node, offset } = old.model_.point_at_(old.matches.from[old.current]!);
     return model.index_of_(node, offset);
   } catch {
     return undefined;
@@ -148,7 +150,7 @@ export function create_find(host: Host, deps: FindDeps = browser_deps()) {
   let origin: DomPoint | undefined;
 
   const paint = (found: Found, colors: FindColors) => {
-    painter.paint(found.model, found.matches, found.current, colors);
+    painter.paint(found.model_, found.matches, found.current, colors);
     highlighted = true;
   };
 
@@ -159,7 +161,7 @@ export function create_find(host: Host, deps: FindDeps = browser_deps()) {
 
   const scroll_to = (found: Found, inset: number) => {
     try {
-      deps.scroll_to_(found.model, found.matches.from[found.current]!, found.matches.to[found.current]! - 1, inset);
+      deps.scroll_to_(found.model_, found.matches.from[found.current]!, found.matches.to[found.current]! - 1, inset);
     } catch {}
   };
 
@@ -184,7 +186,7 @@ export function create_find(host: Host, deps: FindDeps = browser_deps()) {
 
   const stand_on = (found: Found) => {
     shown = found;
-    shown_selection = deps.selection_key_(found.model);
+    shown_selection = deps.selection_key_(found.model_);
   };
 
   // A frame or shadow host that left the page takes its text with it, and a host that gained a root has text the model lacks. Either way the model is read again.
@@ -200,15 +202,15 @@ export function create_find(host: Host, deps: FindDeps = browser_deps()) {
       drop_highlights();
       return report("");
     }
-    if (!is_current(open.model)) {
-      open.model = read_model();
-      open.start = locate(open.model, open.start_point_) ?? deps.start_index_(open.model);
+    if (!is_current(open.model_)) {
+      open.model_ = read_model();
+      open.start = locate(open.model_, open.start_point_) ?? deps.start_index_(open.model_);
     }
     // A pattern typed one key at a time passes through costly shapes such as `(a+)+`. It is not searched, and the results of the last keystroke stay on the page.
     if (query.fallback === "costly" && !as_text) return report(`Pattern too slow as a regex: ${text}`);
     const [search, fallback] = as_text ? [query.as_text_, "costly" as const] : [query.search, query.fallback];
     open.timed_out_ = undefined;
-    const matches = await collect_matches(open.model.text, search, deps.slicing(is_stale), deps.scan_regex);
+    const matches = await collect_matches(open.model_.text, search, deps.slicing(is_stale), deps.scan_regex);
     if (!matches || is_stale()) return;
     // As with a costly shape, the results of the last keystroke stay on the page.
     if (matches === "timeout") {
@@ -219,18 +221,18 @@ export function create_find(host: Host, deps: FindDeps = browser_deps()) {
     const colors = await open.colors;
     if (is_stale()) return;
     // The page can lose a frame while the scan runs. Then the match positions no longer fit the text, so the scan starts over.
-    if (!trees_alive(open.model)) return run_update(open, text, run, report, as_text);
+    if (!trees_alive(open.model_)) return run_update(open, text, run, report, as_text);
     const first = nearest_match(matches.from, open.start, open.direction);
     if (!first) {
       open.found = undefined;
       drop_highlights();
-      return report(cut_note(open.model, describe_match(text, 0, 0, fallback)));
+      return report(cut_note(open.model_, describe_match(text, 0, 0, fallback)));
     }
-    const found: Found = { model: open.model, query: text, fallback, direction: open.direction, matches, current: first.index };
+    const found: Found = { model_: open.model_, query: text, fallback, direction: open.direction, matches, current: first.index };
     open.found = found;
     paint(found, colors);
     scroll_to(found, LINE_HEIGHT_PX);
-    report(cut_note(open.model, describe_match(text, matches.from.length, first.index, fallback, first.wrapped)));
+    report(cut_note(open.model_, describe_match(text, matches.from.length, first.index, fallback, first.wrapped)));
   }
 
   const locate = (model: TextModel, point: DomPoint | undefined): number | undefined => {
@@ -269,7 +271,7 @@ export function create_find(host: Host, deps: FindDeps = browser_deps()) {
     const direction = reverse ? opposite(previous.direction) : previous.direction;
     const colors = await deps.read_colors_();
     const kept = shown?.query === previous.query ? shown : undefined;
-    let found = kept && is_current(kept.model) ? kept : undefined;
+    let found = kept && is_current(kept.model_) ? kept : undefined;
     let wrapped = false;
     // A step from a caret (visual mode) looks from the caret, as the search line does, and not from the last match.
     if (found && !origin) {
@@ -279,7 +281,7 @@ export function create_find(host: Host, deps: FindDeps = browser_deps()) {
     } else {
       const query = found ? undefined : compile_query(previous.query);
       if (!found && !query) return { ok: false, message: "No previous search" };
-      const model = found?.model ?? (kept ? fresh_model(kept.model) : read_model());
+      const model = found?.model_ ?? (kept ? fresh_model(kept.model_) : read_model());
       const scan = (search: Search) => collect_matches(model.text, search, deps.slicing(() => run !== step_generation), deps.scan_regex);
       let fallback = found ? found.fallback : query!.fallback;
       const known_too_slow = !found && timed_out_query === previous.query;
@@ -296,13 +298,13 @@ export function create_find(host: Host, deps: FindDeps = browser_deps()) {
       const start = from_origin(model, direction) ?? (carried === undefined ? deps.start_index_(model) : direction === "forward" ? carried + 1 : carried);
       const first = nearest_match(matches.from, start, direction);
       if (!first) return { ok: false, message: describe_match(previous.query, 0, 0, fallback) };
-      found = { model, query: previous.query, fallback, direction: previous.direction, matches, current: first.index };
+      found = { model_: model, query: previous.query, fallback, direction: previous.direction, matches, current: first.index };
       wrapped = first.wrapped;
     }
     stand_on(found);
     paint(found, colors);
     scroll_to(found, 0);
-    host.show_toast_(cut_note(found.model, describe_match(found.query, found.matches.from.length, found.current, found.fallback, wrapped)));
+    host.show_toast_(cut_note(found.model_, describe_match(found.query, found.matches.from.length, found.current, found.fallback, wrapped)));
     return { ok: true };
   }
 
@@ -318,7 +320,7 @@ export function create_find(host: Host, deps: FindDeps = browser_deps()) {
       origin = from;
       const start = from_origin(model, direction) ?? deps.start_index_(model);
       origin = undefined;
-      live = { model, direction, start, start_point_: point_of(model, start), generation_: 0, text: "", timed_out_: undefined, found: undefined, pending: Promise.resolve(), colors: deps.read_colors_(), finished: undefined };
+      live = { model_: model, direction, start, start_point_: point_of(model, start), generation_: 0, text: "", timed_out_: undefined, found: undefined, pending: Promise.resolve(), colors: deps.read_colors_(), finished: undefined };
     },
 
     // The text of the line changed. `report` gets the line to show under it.
@@ -398,7 +400,7 @@ export function create_find(host: Host, deps: FindDeps = browser_deps()) {
     // Where the search stands in `model`, for a caret or visual session that starts at it. A later click or selection takes the position, so nothing then.
     position(model: TextModel): number | undefined {
       if (!shown) return undefined;
-      const now = deps.selection_key_(shown.model);
+      const now = deps.selection_key_(shown.model_);
       if (now.length !== shown_selection.length || now.some((entry, at) => entry !== shown_selection[at])) return undefined;
       return carry_index(shown, model);
     },

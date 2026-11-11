@@ -6,14 +6,19 @@ import { copyFile, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises
 // Minified size limits. content.js loads on every page, so its limit is the tightest. The rest load on first use.
 const MAX_BYTES = {
   "content.js": 16 * 1024,
-  "hints.js": 32 * 1024,
+  // 40 KB: hints.js loads on the first hint command, not on every page, and the filters keep growing it.
+  "hints.js": 40 * 1024,
   "caret.js": 32 * 1024,
   "whichkey.js": 8 * 1024,
   "cmdline.js": 4 * 1024,
   "ui.js": 8 * 1024,
   "page.js": 4 * 1024,
-  "cmdline_page.js": 44 * 1024,
+  "text.js": 4 * 1024,
+  "media.js": 4 * 1024,
+  // 52 KB: the verbatim subject needs a lazy tokenizer and its completion path. The key-capture matcher and the registry validator ship in this lazy bundle, and the registers and macros pieces add to them.
+  "cmdline_page.js": 52 * 1024,
   "find_worker.js": 2 * 1024,
+  "devtools.js": 2 * 1024,
 };
 
 await rm("dist", { recursive: true, force: true });
@@ -27,27 +32,34 @@ async function build_with_cache(options) {
   mangle_cache = result.mangleCache;
 }
 
+// content.js builds first, on the empty cache: esbuild gives the shortest names to the first build's most used names, so content.js then depends on its own source alone. Any build before it makes a bundle's edit move content.js's size.
+const content_options = { entryPoints: { content: "src/content/main.ts" }, outdir: "dist", minify: true };
+await build_with_cache(content_options);
 await build_with_cache({ entryPoints: { background: "src/background/main.ts" }, outdir: "dist", sourcemap: true });
 await build_with_cache({ entryPoints: { help: "src/help/main.ts" }, outdir: "dist", sourcemap: true });
 await build_with_cache({ entryPoints: { newtab: "src/newtab/main.ts" }, outdir: "dist", sourcemap: true });
 await build_with_cache({ entryPoints: { popup: "src/popup/main.ts" }, outdir: "dist", sourcemap: true });
 const minified_entries = {
-  content: "src/content/main.ts",
   hints: "src/content/hints/main.ts",
   caret: "src/content/caret/main.ts",
   whichkey: "src/content/whichkey/main.ts",
   cmdline: "src/cmdline/host.ts",
   ui: "src/content/ui/main.ts",
   page: "src/content/page/main.ts",
+  text: "src/content/text/main.ts",
+  // Not loaded by the content script: the background injects it into every frame for each media command (background/media_actions.ts).
+  media: "src/content/media/main.ts",
   cmdline_page: "src/cmdline/page.ts",
   // Not an injected bundle: the background starts it as a Worker for each regex page search (find_scan.ts).
   find_worker: "src/background/find_worker.ts",
+  // The page that DevTools loads in each toolbox (the manifest's `devtools_page`).
+  devtools: "src/devtools/main.ts",
 };
 for (const [name, entry] of Object.entries(minified_entries)) {
   await build_with_cache({ entryPoints: { [name]: entry }, outdir: "dist", minify: true });
 }
 
-for (const file of ["manifest.json", "managed_schema.json", "help/home.html", "newtab/newtab.html", "popup/popup.html", "cmdline/cmdline.html"]) {
+for (const file of ["manifest.json", "help/home.html", "newtab/newtab.html", "popup/popup.html", "cmdline/cmdline.html", "devtools/devtools.html"]) {
   await copyFile(`src/${file}`, `dist/${file.split("/").pop()}`);
 }
 
@@ -64,6 +76,13 @@ await copyFile("docs/images/desertfox-keycap.svg", "dist/icons/desertfox-keycap.
 const { parse_markdown } = await import("./render_docs.ts");
 const guide_blocks = parse_markdown("docs/search_engines.md", await readFile("docs/search_engines.md", "utf8"));
 await writeFile("dist/search_engines_guide.json", `${JSON.stringify(guide_blocks)}\n`);
+
+// Rebuild content.js on an empty cache. A different result means something built before it.
+const content_alone = await build({ ...common, ...content_options, write: false, mangleCache: {} });
+if (!Buffer.from(content_alone.outputFiles[0].contents).equals(await readFile("dist/content.js"))) {
+  console.error("dist/content.js differs from a build on an empty mangle cache: content.js must be the first build in tools/build.mjs");
+  process.exit(1);
+}
 
 const command_count = await write_commands_json("dist");
 

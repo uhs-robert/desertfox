@@ -59,6 +59,9 @@ const settle = async () => {
   for (let turn = 0; turn < 6; turn++) await new Promise((resolve) => setTimeout(resolve, 0));
 };
 
+class FakeHtmlElement {}
+class FakeHtmlInputElement extends FakeHtmlElement {}
+
 let import_count = 0;
 
 // Builds a page of links with the given texts and loads the hints bundle against it.
@@ -68,8 +71,11 @@ async function page_with(texts: string[]) {
   const active_listeners = new Set<string>();
   const sent: unknown[] = [];
   const repeat_records: unknown[] = [];
+  const yanked: unknown[] = [];
   const copied: string[] = [];
   const modes: string[] = [];
+  const held_key_batches: string[][] = [];
+  let intersecting = true;
   const handlers = new Map<string, (args: Record<string, unknown>) => unknown>();
   let sink: { on_token_: (token: string) => string; exit: () => void } | undefined;
   let mode = "normal";
@@ -91,7 +97,9 @@ async function page_with(texts: string[]) {
         mode = next;
         if (left_hint) sink?.exit();
       },
+      get_mode: () => mode,
       show_toast_: () => {},
+      hold_keys_until_: (handed_back: Promise<string[]>) => void handed_back.then((tokens) => held_key_batches.push(tokens)),
     },
   };
   const doc = {
@@ -127,6 +135,9 @@ async function page_with(texts: string[]) {
   const globals = globalThis as Record<string, unknown>;
   globals.window = win;
   globals.document = doc;
+  // The one-match path asks whether a field has focus, which tests `instanceof HTMLElement` and `HTMLInputElement`.
+  globals.HTMLElement = FakeHtmlElement;
+  globals.HTMLInputElement = FakeHtmlInputElement;
   globals.requestAnimationFrame = (callback: () => void) => setTimeout(callback, 0);
   globals.IntersectionObserver = class {
     callback: (entries: unknown[]) => void;
@@ -136,12 +147,13 @@ async function page_with(texts: string[]) {
     targets: unknown[] = [];
     // One callback with every target, as the browser delivers the first observation.
     observe = (target: unknown) => {
-      if (this.targets.push(target) === 1) queueMicrotask(() => this.callback(this.targets.map((each) => ({ isIntersecting: true, target: each }))));
+      if (this.targets.push(target) === 1) queueMicrotask(() => this.callback(this.targets.map((each) => ({ isIntersecting: intersecting, target: each }))));
     };
     disconnect = () => {};
   };
   globals.browser = { storage: { local: { get: async () => ({}) }, onChanged: { addListener: () => {} } }, runtime: { sendMessage: async (message: unknown) => {
-    const is_record = (message as { type?: string }).type === "record_repeat";
+    if ((message as { type?: string }).type === "register_yank") return void yanked.push(message), { ok: true };
+    const is_record = (message as { type?: string }).type === "record_step";
     (is_record ? repeat_records : sent).push(message);
     return is_record ? undefined : sends_held?.();
   } } };
@@ -162,8 +174,13 @@ async function page_with(texts: string[]) {
     links,
     sent,
     repeat_records,
+    yanked,
     copied,
     modes,
+    // Each batch of keys that hint mode handed back to the keymap, in order.
+    held_key_batches,
+    // The next build finds no candidate in view.
+    hide_all: () => void (intersecting = false),
     // The next opened link answers when this promise settles.
     refuse_clipboard: () => Object.defineProperty(globalThis, "navigator", { value: { clipboard: { writeText: () => Promise.reject(new Error("denied")) } }, configurable: true }),
     hold_sends: (held: () => Promise<unknown>) => void (sends_held = held),
@@ -173,6 +190,8 @@ async function page_with(texts: string[]) {
     run: (args: Record<string, unknown>) => handlers.get("hint.run")!({ action: "here", filter: "links", rapid: false, ...args }) as Outcome | Promise<Outcome>,
     type: (token: string) => sink!.on_token_(token),
     escape: () => win.desertfox_host.set_mode_("normal"),
+    // The focus event of a field that takes focus.
+    enter_insert: () => win.desertfox_host.set_mode_("insert"),
     // The label text of each label that is not hidden by typing.
     labels: () => nodes_with_class("desertfox-hint").filter((node) => node.style.display !== "none").map((node) => node.children.map((part) => part.textContent).join("")),
     label_tops: () => nodes_with_class("desertfox-hint").map((node) => node.style.top),
@@ -340,7 +359,7 @@ test("an invalid custom selector shows a notice instead of throwing", async () =
 
 test("hint.run needs no text: it defaults to empty, which filters nothing", () => {
   const checked = check_args(registry.get("hint.run")!, { action: "here" });
-  assert.deepEqual(checked, { ok: true, args: { action: "here", filter: "clickable", text: "", rapid: false } });
+  assert.deepEqual(checked, { ok: true, args: { action: "here", filter: "clickable", text: "", rapid: false, register: "" } });
   assert.equal(check_args(registry.get("hint.run")!, { action: "copy_text", text: "x", rapid: true }).ok, true);
 });
 
@@ -380,6 +399,83 @@ test("keys typed while rapid mode builds again wait and replay, also when the fi
   page.escape();
 });
 
+test("keys typed behind a non-rapid label pick reach normal mode", async () => {
+  const page = await page_with(["one", "two"]);
+  page.run({ action: "background" });
+  page.type("a");
+  page.type("j");
+  await settle();
+  assert.equal(page.sent.length, 1);
+  assert.equal(page.mode(), "normal");
+  assert.deepEqual(page.held_key_batches, [["j"]]);
+});
+
+test("Escape during the build drops the queued keys", async () => {
+  const page = await page_with(["one", "two"]);
+  page.run({ action: "background" });
+  page.type("j");
+  page.escape();
+  await settle();
+  assert.equal(page.sent.length, 0);
+  assert.deepEqual(page.held_key_batches, []);
+});
+
+// A click that focuses a textarea, as a "Search" link does. `inserted` is what `execCommand("insertText")` received.
+async function page_whose_link_focuses_a_field(focuses_field: boolean, field_focused_before = false) {
+  const page = await page_with(["Search"]);
+  const doc = document as unknown as { activeElement?: unknown; execCommand?: unknown };
+  const textarea = Object.assign(new FakeHtmlElement(), { tagName: "TEXTAREA", isContentEditable: false });
+  const inserted: string[] = [];
+  doc.activeElement = field_focused_before ? textarea : null;
+  doc.execCommand = (command: string, _ui: boolean, text: string) => command === "insertText" && inserted.push(text) > 0;
+  page.links[0]!.on_click = () => {
+    if (!focuses_field) return;
+    doc.activeElement = textarea;
+    page.enter_insert();
+  };
+  return { page, inserted };
+}
+
+test("a text pick that focuses a field types the keys queued during the build into it", async () => {
+  const { page, inserted } = await page_whose_link_focuses_a_field(true);
+  page.run({ text: "sear" });
+  page.type("a");
+  page.type("b");
+  await settle();
+  assert.deepEqual(inserted, ["a", "b"]);
+  assert.deepEqual(page.held_key_batches, []);
+});
+
+test("a label pick that focuses a field types the keys queued behind it into it", async () => {
+  const { page, inserted } = await page_whose_link_focuses_a_field(true);
+  page.run({ action: "here" });
+  page.type("a");
+  page.type("b");
+  await settle();
+  assert.deepEqual(inserted, ["b"]);
+  assert.deepEqual(page.held_key_batches, []);
+});
+
+test("a text pick that focuses no field hands the queued keys back to the keymap", async () => {
+  const { page, inserted } = await page_whose_link_focuses_a_field(false);
+  page.run({ text: "sear" });
+  page.type("a");
+  page.type("b");
+  await settle();
+  assert.deepEqual(inserted, []);
+  assert.deepEqual(page.held_key_batches, [["a", "b"]]);
+});
+
+test("a text pick that leaves an earlier focused field alone hands the keys back instead of typing into it", async () => {
+  const { page, inserted } = await page_whose_link_focuses_a_field(false, true);
+  page.run({ text: "sear" });
+  page.type("a");
+  page.type("b");
+  await settle();
+  assert.deepEqual(inserted, []);
+  assert.deepEqual(page.held_key_batches, [["a", "b"]]);
+});
+
 test("caret and visual hand the picked element to the caret bundle and enter that mode, also with rapid", async () => {
   for (const action of ["caret", "visual"]) {
     const page = await page_with(["one", "two"]);
@@ -401,14 +497,14 @@ test("caret with one text match starts at once at that link", async () => {
   assert.equal(page.mode(), "caret");
 });
 
-test("a hint start tells the background what `.` shows again, and a pick that opens a link is marked from_hints", async () => {
+test("a hint pick tells the background what `.` shows again and a macro keeps, and a pick that opens a link is marked from_hints", async () => {
   const page = await page_with(["one", "two"]);
   const args = { action: "tab", filter: "links", text: "", rapid: true };
   page.run(args);
   await settle();
   page.type(page.labels()[0]!.toLowerCase());
   await settle();
-  const record = { type: "record_repeat", invocation: { id: "hint.run", args } };
+  const record = { type: "record_step", invocations: [{ id: "hint.run", args }], outcome: { ok: true }, pick: true };
   assert.deepEqual(page.repeat_records, [record]);
   assert.equal((page.sent.at(-1) as { from_hints?: boolean }).from_hints, true);
 });
@@ -501,6 +597,30 @@ test("hint.run answers done only after the picked link has been opened", async (
   assert.deepEqual(await answer, { ok: true });
 });
 
+test("a hint copy leaves the text in the unnamed register, and in the named one a register arg names", async () => {
+  const page = await page_with(["one", "two"]);
+  const plain = page.run({ action: "copy" });
+  await settle();
+  page.type(page.labels()[0]!.toLowerCase());
+  await plain;
+  const named = await page_with(["one", "two"]);
+  const answer = named.run({ action: "copy_text", register: "b" });
+  await settle();
+  named.type(named.labels()[1]!.toLowerCase());
+  assert.deepEqual(await answer, { ok: true });
+  assert.deepEqual(page.yanked, [{ type: "register_yank", name: "", text: "https://example.com/one" }]);
+  assert.deepEqual(named.yanked, [{ type: "register_yank", name: "b", text: "two" }]);
+});
+
+test("a hint copy into the black hole copies nothing and shows no message", async () => {
+  const page = await page_with(["one", "two"]);
+  const answer = page.run({ action: "copy", register: "_" });
+  await settle();
+  page.type(page.labels()[0]!.toLowerCase());
+  assert.deepEqual(await answer, { ok: true });
+  assert.deepEqual([page.copied, page.yanked, page.messages()], [[], [], []]);
+});
+
 test("a refused hint copy answers failed with one message, and a good copy answers done", async () => {
   const page = await page_with(["one", "two"]);
   page.refuse_clipboard();
@@ -549,4 +669,55 @@ test("a pick whose action throws answers failed, and one whose open reply is los
   await settle();
   lost.type(lost.labels()[0]!.toLowerCase());
   assert.deepEqual(await cancelled, { ok: true, cancelled: true });
+});
+
+test("rapid delete: a key typed in the last rebuild gap runs in normal mode", async () => {
+  const page = await page_with(["one", "two"]);
+  page.run({ action: "delete", rapid: true });
+  await settle();
+  page.type(page.labels()[0]!.toLowerCase());
+  await settle();
+  page.type(page.labels()[0]!.toLowerCase());
+  assert.equal(page.type("j"), "handled");
+  await settle();
+  assert.equal(page.mode(), "normal");
+  assert.deepEqual(page.held_key_batches, [["j"]]);
+});
+
+test("a first build with nothing in view hands the keys typed meanwhile back", async () => {
+  const page = await page_with(["one", "two"]);
+  page.hide_all();
+  const outcome = page.run({});
+  assert.equal(page.type("j"), "handled");
+  await settle();
+  assert.deepEqual(await outcome, { ok: false, message: "No hints on this page" });
+  assert.equal(page.mode(), "normal");
+  assert.deepEqual(page.held_key_batches, [["j"]]);
+});
+
+test("text with one match hands the keys typed meanwhile back", async () => {
+  const page = await page_with(["Alpha", "Beta"]);
+  page.run({ text: "bet", action: "background" });
+  assert.equal(page.type("j"), "handled");
+  await settle();
+  assert.equal(page.sent.length, 1);
+  assert.equal(page.mode(), "normal");
+  assert.deepEqual(page.held_key_batches, [["j"]]);
+});
+
+test("keys handed back keep the order they were typed in", async () => {
+  const page = await page_with(["one"]);
+  page.hide_all();
+  page.run({});
+  for (const key of ["j", "k", "a", "j"]) page.type(key);
+  await settle();
+  assert.deepEqual(page.held_key_batches, [["j", "k", "a", "j"]]);
+});
+
+test("no keys typed during a failed build hand nothing back", async () => {
+  const page = await page_with(["one"]);
+  page.hide_all();
+  page.run({});
+  await settle();
+  assert.deepEqual(page.held_key_batches, []);
 });

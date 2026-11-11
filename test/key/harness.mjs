@@ -68,11 +68,6 @@ function install_native_host(work_dir, session_home) {
   if (result.status !== 0) throw new Error(`host install failed: ${result.stderr}${result.stdout}`);
 }
 
-function build_test_config(config_dir, out_file) {
-  const result = spawnSync("node", ["tools/build-config/cli.ts", config_dir, "--out", out_file], { cwd: repo_dir, encoding: "utf8" });
-  if (result.status !== 0) throw new Error(`build-config failed: ${result.stderr}${result.stdout}`);
-}
-
 // Valid script text of about PADDED_BUNDLE_BYTES, so the bundle timings include a real parse and run.
 function padded_bundle_text() {
   const lines = [];
@@ -156,12 +151,10 @@ export async function create_session({ name: session_name, timings, sweep = true
   }
   const work_dir = mkdtempSync(join(tmpdir(), "desertfox-key-"));
   const profile_dir = join(work_dir, "profile");
-  const managed_dir = join(work_dir, "managed");
   const config_dir = join(work_dir, "config");
   cpSync(join(key_test_dir, "config"), config_dir, { recursive: true });
   mkdirSync(profile_dir);
   cpSync(join(key_test_dir, "user.js"), join(profile_dir, "user.js"), { recursive: true });
-  const managed_file = join(managed_dir, `${EXTENSION_ID}.json`);
   // DESERTFOX_CONFIG_DIR points the native host here (launch_firefox.sh). load_config_dir moves the link.
   const active_config = join(work_dir, "active_config");
   symlinkSync(config_dir, active_config);
@@ -186,7 +179,6 @@ export async function create_session({ name: session_name, timings, sweep = true
   );
   // Written here, not kept in config/, because a copy of config/ has no engines and a site key must name real ones. h picks keyhere on the test host, n has an engine for another host only.
   writeFileSync(join(config_dir, "keymap.d", "80-site.toml"), '[site_keys]\nh = ["keyother", "keyhere"]\nn = ["keyother"]\n');
-  build_test_config(config_dir, managed_file);
   const events = server.events;
   const debug_port = given_debug_port ?? (await free_port());
   let rdp;
@@ -442,7 +434,7 @@ export async function create_session({ name: session_name, timings, sweep = true
   try {
     if (sweep) await sweep_dead_sessions();
     session = await timings.time("driver", () => start_session({ name: session_name, session_dir: join(work_dir, "session") }));
-    const firefox = session.spawn([join(key_test_dir, "launch_firefox.sh"), work_dir, profile_dir, String(debug_port), managed_file, launch_mode]);
+    const firefox = session.spawn([join(key_test_dir, "launch_firefox.sh"), work_dir, profile_dir, String(debug_port), launch_mode]);
     let firefox_exit;
     firefox.on("exit", (code, signal) => { firefox_exit = signal ? `signal ${signal}` : `exit ${code}`; });
     for (let attempt = 0; ; attempt++) {
@@ -485,9 +477,21 @@ export async function create_session({ name: session_name, timings, sweep = true
     const native_api = await evaluate_in_background(rdp, EXTENSION_ID, `typeof browser.runtime.sendNativeMessage`);
     if (native_api !== "function") throw new Error(`the background has no sendNativeMessage after the grant: ${native_api}`);
     // The background publishes its config status once it has loaded the config.
-    for (let attempt = 0; (await evaluate_in_background(rdp, EXTENSION_ID, `(async () => (await browser.storage.local.get("desertfox_config_status")).desertfox_config_status ?? null)()`)) == null; attempt++) {
+    let first_status;
+    for (let attempt = 0; (first_status = await evaluate_in_background(rdp, EXTENSION_ID, `(async () => (await browser.storage.local.get("desertfox_config_status")).desertfox_config_status ?? null)()`)) == null; attempt++) {
       if (attempt >= 300) throw new Error("the background published no config status within 15 s of the nativeMessaging grant");
       await sleep(50);
+    }
+    if (first_status.source !== "defaults") throw new Error(`a new profile must start on the defaults, got source "${first_status.source}"`);
+    // The defaults open Quick Start on a first install, and the install handler opens it after the config status is out. Wait up to 5 s for it and close it, so it cannot take focus later. A profile that opens none is fine.
+    const quick_start_tab = `browser.tabs.query({}).then((tabs) => tabs.find((tab) => tab.url.includes("/home.html"))?.id ?? null)`;
+    for (let attempt = 0; attempt < 100; attempt++) {
+      await sleep(50);
+      const quick_start_id = await evaluate_in_background(rdp, EXTENSION_ID, quick_start_tab);
+      if (quick_start_id != null) {
+        await evaluate_in_background(rdp, EXTENSION_ID, `browser.tabs.remove(${quick_start_id})`);
+        break;
+      }
     }
   } catch (error) {
     await close({ keep_diagnostics: true });
@@ -517,19 +521,21 @@ export async function create_session({ name: session_name, timings, sweep = true
   // The debugger answers null for undefined, so the checks below compare with == null.
   const in_background = (code) => evaluate_in_background(rdp, EXTENSION_ID, code).catch(() => undefined);
   const read_local = (key) => in_background(`(async () => (await browser.storage.local.get("${key}"))["${key}"])()`);
-  // Presses qr and waits until the reload stores the files config. The key is removed first, so an earlier reload does not count.
+  // Whether the key holds a value. The test runs in the background, so a large value (a built config) never crosses the debugger.
+  const has_local = (key) => in_background(`browser.storage.local.get("${key}").then((stored) => stored["${key}"] != null)`);
+  // Presses ,r and waits until the reload stores the files config. The key is removed first, so an earlier reload does not count.
   async function reload_in_place() {
     await in_background(`browser.storage.local.remove(["desertfox_files_config", "desertfox_config_status"])`);
-    await send_keys("qr");
-    waiting_for = "qr to store the files config and publish the config status";
+    await send_keys(",r");
+    waiting_for = ",r to store the files config and publish the config status";
     for (let attempt = 0; attempt < 200; attempt++) {
       await sleep(50);
       // The background writes the status before the files config, so only the pair shows that this reload finished.
-      if ((await read_local("desertfox_files_config")) != null && (await read_local("desertfox_config_status")) != null) return;
+      if ((await has_local("desertfox_files_config")) && (await has_local("desertfox_config_status"))) return;
     }
     // The host call made by hand tells a missing permission or host from a refused build.
     const probe = await in_background(`(async () => ({ granted: await browser.permissions.contains({ permissions: ["nativeMessaging"] }), host: await browser.runtime.sendNativeMessage("desertfox_host", { cmd: "read_config" }).then((reply) => ({ ok: reply.ok, error: reply.error, files: Object.keys(reply.files ?? {}).length }), (error) => String(error)) }))()`);
-    throw new Error(`qr stored no files config after 10 s: ${JSON.stringify(probe)}`);
+    throw new Error(`,r stored no files config after 10 s: ${JSON.stringify(probe)}`);
   }
   // Waits for the restart that debug.restart starts: the new background writes its tab repair report.
   async function wait_reinject_report() {
@@ -547,12 +553,13 @@ export async function create_session({ name: session_name, timings, sweep = true
   // The pages are extension pages, so the test reads them through the background's view list.
   const extension_view = (name) => `(browser.extension.getViews({ type: "tab" }).find((view) => view.location.pathname === "/${name}"))`;
 
-  // Points the native host at a config folder and reloads it in place with qr. The which-key shots use it to show a copy of the user config.
-  let linked_config_dir = config_dir;
+  // Points the native host at a config folder and reloads it in place with ,r. The which-key shots use it to show a copy of the user config.
+  // Null until the first reset loads config_dir: a new profile starts on defaults, and the files config reaches the extension only through the host.
+  let linked_config_dir = null;
   const load_config_dir = async (dir) => {
     rmSync(active_config);
     symlinkSync(dir, active_config);
-    // Moving away is recorded at once, so a failed reload still gets restored. Moving back counts only once the reload worked, so a lost qr is retried by the next reset.
+    // Moving away is recorded at once, so a failed reload still gets restored. Moving back counts only once the reload worked, so a lost ,r is retried by the next reset.
     if (dir !== config_dir) linked_config_dir = dir;
     await reload_in_place();
     linked_config_dir = dir;
@@ -570,6 +577,8 @@ export async function create_session({ name: session_name, timings, sweep = true
     if (value?.error) throw new Error(`background call failed: ${value.error}`);
     return value;
   };
+  // Firefox shows a notice in a window of its own (user.js), which holds the keyboard focus until it closes.
+  const clear_notices = () => in_background(`(async () => { for (const id of Object.keys(await browser.notifications.getAll())) await browser.notifications.clear(id); })()`);
   const close_tabs_with = (text) => in_background(`(async () => { for (const tab of await browser.tabs.query({})) if (tab.url.includes(${JSON.stringify(text)})) await browser.tabs.remove(tab.id); })()`);
 
   // Polls until the check holds. `what` names the wait in the error. A probe whose timeout is the normal path and that the caller absorbs passes `expected_timeout`, so the timeout is not counted as a lost-key suspect.
@@ -587,17 +596,32 @@ export async function create_session({ name: session_name, timings, sweep = true
 
   // The page itself says it holds focus, so a focus that landed in the address bar or another window is caught. document.hasFocus() is false for both.
   const page_has_focus = (tab_id) => in_background(`browser.tabs.executeScript(${tab_id}, { code: "document.hasFocus()" }).then((answers) => answers[0] === true)`);
-  // Focus lands in browser chrome after tabs close, and a closed window can leave compositor focus on it. Ask for the window and tab, then use the focus_page chord, until the page reports focus.
+  // What each side says about the focus, for the error of confirm_page_focus: the page, the tab and window as Firefox has them, and the window the compositor has focused.
+  async function focus_state(tab_id, window_id) {
+    const firefox = await in_background(`(async () => {
+      const tab = await browser.tabs.get(${tab_id});
+      const window = await browser.windows.get(${window_id}).catch(() => null);
+      const page = await browser.tabs.executeScript(${tab_id}, { code: "[document.hasFocus(), document.visibilityState]" }).then((answers) => answers[0], (error) => String(error.message));
+      return { page, tab_active: tab.active, window_focused: window?.focused ?? "window gone" };
+    })()`);
+    return `firefox ${JSON.stringify(firefox)}, compositor focus ${await session.focused_window()}, clients ${await session.window_list()}`;
+  }
+  // Focus lands in browser chrome after tabs close, and a closed window leaves compositor focus on a Firefox window that is not the page's (measured), which no extension call can restore on Wayland. Each round starts with a hyprctl focus of the page's window by title, then asks for the window and tab, then uses the focus_page chord, until the page reports focus.
   async function confirm_page_focus(tab_id, window_id) {
     const focused = (timeout_ms) => poll_until("page focus", () => page_has_focus(tab_id), { timeout_ms, expected_timeout: true }).then(() => true, () => false);
     if (await focused(300)) return;
+    const rounds = [];
     for (let attempt = 0; attempt < 3; attempt++) {
+      const title = await in_background(`browser.tabs.get(${tab_id}).then((tab) => tab.title)`);
+      // A failed hyprctl call must not end the round: the extension calls and the chord below worked before it.
+      const hyprctl_error = await session.focus_firefox_window(typeof title === "string" ? title : "").then(() => "", (error) => ` (hyprctl focus failed: ${error.message.split("\n")[0]})`);
       await in_background(`(async () => { await browser.windows.update(${window_id}, { focused: true }); await browser.tabs.update(${tab_id}, { active: true }); })()`);
       if (await focused(1500)) return;
       await send_keys(...ALT(","));
       if (await focused(1500)) return;
+      rounds.push(`round ${attempt + 1}: ${await focus_state(tab_id, window_id)}${hyprctl_error}`);
     }
-    throw new Error(`tab ${tab_id} never reported focus`);
+    throw new Error(`tab ${tab_id} never reported focus (${rounds.join("; ")})`);
   }
 
   // Keys and visibility reports of a page are unreliable until NEW_PAGE_QUIET_MS after the browser activated its tab.
@@ -668,14 +692,15 @@ export async function create_session({ name: session_name, timings, sweep = true
     let target = await background_call(`(async () => {
       const test_pages = { url: "*://127.0.0.1/*" };
       const tab = (await browser.tabs.query({ ...test_pages, active: true, lastFocusedWindow: true }))[0] ?? (await browser.tabs.query(test_pages))[0];
-      return tab ? { id: tab.id, window_id: tab.windowId } : null;
+      return tab ? { id: tab.id, window_id: tab.windowId, url: tab.url } : null;
     })()`);
     if (!target) {
       const mark = events.length;
-      target = await background_call(`browser.tabs.create({ url: ${JSON.stringify(url_of("page", "home_cleanup"))}, active: true }).then((tab) => ({ id: tab.id, window_id: tab.windowId }))`);
+      target = await background_call(`browser.tabs.create({ url: ${JSON.stringify(url_of("page", "home_cleanup"))}, active: true }).then((tab) => ({ id: tab.id, window_id: tab.windowId, url: tab.url }))`);
       await wait_event(mark, (event) => event.type === "tree_read" && event.page_id === "home_cleanup", "content script ready on home_cleanup", 10000);
     }
     await confirm_page_focus(target.id, target.window_id);
+    return new URL(target.url).searchParams.get("id");
   }
 
   const temp_settings_pending = async () => (await read_config_status())?.temp?.length > 0;
@@ -690,7 +715,7 @@ export async function create_session({ name: session_name, timings, sweep = true
 
   const config_restore_pending = () => linked_config_dir !== config_dir;
 
-  // Puts the config link back on config_dir and reloads it in place. A debug.restart may still be starting the new background, and a qr sent to it is lost, so the status key comes first.
+  // Puts the config link on config_dir and reloads it in place. The first reset calls it for the initial load. A debug.restart may still be starting the new background, and a ,r sent to it is lost, so the status key comes first.
   // Returns whether it typed keys.
   async function restore_config() {
     if (!config_restore_pending()) return false;
@@ -713,8 +738,12 @@ export async function create_session({ name: session_name, timings, sweep = true
     })()`);
     await wait_for_tabs("one tab to be left", `browser.tabs.query({}).then((tabs) => tabs.length)`, 1);
     await wait_for_tabs("one window to be left", `browser.windows.getAll().then((windows) => windows.length)`, 1);
+    // The count settles before Firefox picks the new active tab, and a late close of the old active tab can move it.
+    await wait_for_tabs("the home tab to be the active tab", `browser.tabs.query({ active: true, lastFocusedWindow: true }).then(([tab]) => tab?.id)`, home.tab_id);
     await wait_event(mark, (event) => event.type === "tree_read" && event.page_id === home_id, `content script ready on ${home_id}`, 10000);
     await confirm_page_focus(home.tab_id, home.window_id);
+    // A page drops the keys of its first moments, and restore_config types ,r, so a pending load waits for the key probe first.
+    if (config_restore_pending()) await wait_takes_keys(home_id);
     const restored = await restore_config();
     const unset = await clear_temp_settings();
     // Their keys can leave the focus elsewhere, so the page is asked once more only when they typed.
@@ -749,7 +778,8 @@ export async function create_session({ name: session_name, timings, sweep = true
     // Only these two steps type keys, so a piece that left no config or temp edits skips the refocus.
     const restore_pending = config_restore_pending();
     const unset_pending = await temp_settings_pending();
-    if (restore_pending || unset_pending) await attempt("cleanup focus", refocus_any_tab);
+    // The page must take keys before ,r and :unset, as in the reset. A lost ,r after this probe is a real fault of the page, not a young page.
+    if (restore_pending || unset_pending) await attempt("cleanup focus", async () => wait_takes_keys(await refocus_any_tab()));
     if (restore_pending) await attempt("cleanup config restore", restore_config);
     if (unset_pending) await attempt("cleanup temp unset", clear_temp_settings);
   }
@@ -890,7 +920,7 @@ export async function create_session({ name: session_name, timings, sweep = true
     // The cases of a piece file in test/key/p<number>_*.mjs get these helpers.
     const context = { config_dir, config_copy, load_config_dir, take_shot: (path) => timings.time("driver", () => session.shot(path)), run_case: run_piece_case, setup, on_teardown, expect, open_page, open_page_by_keys, send_keys, press_keys, settle_focus, wait_takes_keys, poll_until, wait_tab_quiet, barrier, expect_absent, read_cmdline_state, wait_cmdline, close_cmdline, open_cmdline, type_in_line, complete_in_line, run_line, type_in_address_bar, scroll_report_wait_ms: SCROLL_REPORT_DELAY_MS + 100, which_key_delay_ms: WHICH_KEY_DELAY_MS, sleep, events, wait_event, since, find_event, url_of, rdp, extension_id: EXTENSION_ID, scroll_delta_after, scroll_delta_by_press, wait_active_tab, tab_switch_mark, tabs_shown_since, expect_no_tab_shown, scroll_of, last_scroll_y,
       // Moved out of the run.mjs cases. Pieces may use them too.
-      in_background, read_local, reload_in_place, wait_reinject_report, injections_of, settled_injection_count, expect_no_scroll, expect_exactly_one_visible, hint_label_count, in_active_tab, badge_is, is_selection_of, press_and_wait_for_move, escape_to_normal, extension_view, close_tabs_with, record };
+      in_background, clear_notices, read_local, reload_in_place, wait_reinject_report, injections_of, settled_injection_count, expect_no_scroll, expect_exactly_one_visible, hint_label_count, in_active_tab, badge_is, is_selection_of, press_and_wait_for_move, escape_to_normal, extension_view, close_tabs_with, record };
     return { context, state, piece_file };
   }
 

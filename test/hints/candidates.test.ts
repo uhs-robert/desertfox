@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { Found } from "../../src/content/hints/candidates.ts";
-import { keep_text_matches, collect, drop_redundant_weak, keep_visible_deduplicated, has_click_sign, has_own_text, NO_OWN_TEXT, has_text, is_image, is_pickable_frame, make_weak_test, query_for } from "../../src/content/hints/candidates.ts";
+import { keep_text_matches, collect, drop_redundant_weak, keep_visible_deduplicated, has_click_sign, has_own_text, is_every_target, KEEPS_ONE_CHILD, NO_OWN_TEXT, has_text, is_image, is_pickable_frame, make_weak_test, query_for } from "../../src/content/hints/candidates.ts";
 
 type Fake = { name: string; local: string; shadow?: Fake[]; frame?: Fake[] | "cross_origin"; href?: boolean; side?: number };
 
@@ -219,6 +219,44 @@ test("buttons matches button-like elements and skips disabled ones", () => {
   for (const part of ["button:not([disabled])", '[role="button"]:not([disabled])', 'input[type="submit"]:not([disabled])', 'input[type="reset"]:not([disabled])', 'input[type="image"]:not([disabled])', 'input[type="button"]:not([disabled])'])
     assert.ok(selector.split(", ").includes(part), part);
   assert.ok(!selector.includes("a[href]") && !selector.includes("textarea"));
+});
+
+// A fake element for the every filter: its child count, its own text, its tag and whether it is a link, button or label.
+const every_fake = (children: number, options: { text?: string; local?: string; width?: number; height?: number } = {}) =>
+  ({
+    localName: options.local ?? "div",
+    hidden: false,
+    children: { length: children },
+    childNodes: options.text ? [text_node(options.text)] : [],
+    matches: (selector: string) => selector.split(", ").some((part) => part === (options.local ?? "div") || (part === "[role=link]" && options.local === "role_link")),
+    getBoundingClientRect: () => ({ width: options.width ?? 100, height: options.height ?? 20 }),
+  }) as unknown as Element;
+
+test("every keeps a box with a size and several children, or none", () => {
+  assert.equal(query_for("every", undefined).selector, "*");
+  assert.equal(is_every_target(every_fake(2)), true);
+  assert.equal(is_every_target(every_fake(0)), true);
+});
+
+test("every skips a box with no width or no height", () => {
+  assert.equal(is_every_target(every_fake(2, { width: 0 })), false);
+  assert.equal(is_every_target(every_fake(0, { height: 0 })), false);
+});
+
+test("every skips a wrapper of one element and no text of its own, but keeps one with text", () => {
+  assert.equal(is_every_target(every_fake(1)), false);
+  assert.equal(is_every_target(every_fake(1, { text: "caption" })), true);
+});
+
+test("every keeps a link, button or label that wraps one child", () => {
+  for (const local of ["a", "button", "label", "role_link"]) assert.equal(is_every_target(every_fake(1, { local })), true, local);
+  assert.equal(is_every_target(every_fake(1, { local: "a", width: 0 })), false);
+});
+
+test("every keeps the exemptions the clickable selector lists, and skips the page root and body", () => {
+  for (const part of ["a", "button", "label", "[role=link]", "[onclick]"]) assert.ok(KEEPS_ONE_CHILD.split(", ").includes(part), part);
+  assert.equal(is_every_target(every_fake(2, { local: "html" })), false);
+  assert.equal(is_every_target(every_fake(2, { local: "body" })), false);
 });
 
 test("the prose filter carries its test and the others carry none", () => {

@@ -4,27 +4,6 @@
 
 [[row]]
 mode = "normal"
-key = "m"
-status = "later"
-command = "mark.add"
-note = "phase 3, key param"
-
-[[row]]
-mode = "normal"
-key = "M"
-status = "later"
-command = "quickmark.add"
-note = "phase 3, key param"
-
-[[row]]
-mode = "normal"
-key = "`"
-status = "later"
-command = "mark.jump"
-note = "phase 3, key param"
-
-[[row]]
-mode = "normal"
 key = "wi"
 status = "dropped"
 note = "needs a shell"
@@ -85,9 +64,3 @@ mode = "normal"
 key = ";:"
 status = "dropped"
 note = "needs a shell"
-
-[[row]]
-mode = "normal"
-key = ",r"
-status = "dropped"
-note = "no config file to reload"

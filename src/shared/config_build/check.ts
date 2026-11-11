@@ -6,7 +6,7 @@
 import type { CommandMeta, Mode } from "../command.ts";
 import { DEFAULT_SETTINGS, with_fallback_engines, type SnippetEntry } from "../config.ts";
 import { intent_problem, label_problem, to_firefox_shortcut, parse_sequence } from "../keys/index.ts";
-import { find_param } from "../registry/params.ts";
+import { captured_key_param, find_param, without_param } from "../registry/params.ts";
 import { check_args, create_registry, DefineError, type Registry } from "../registry/index.ts";
 import { parse_binding } from "../registry/parse_binding.ts";
 import type { BoundInvocation, Prompt } from "../invocation.ts";
@@ -53,7 +53,9 @@ function check_invocation(invocation: BoundInvocation, registry: Registry, engin
   const allowed = command.modes ?? ["normal"];
   if (!allowed.includes(runtime_mode as Mode)) errors.push(`${command.id} runs in ${allowed.join(", ")} mode, not ${runtime_mode}`);
 
-  const result = check_args(command, invocation.args, { search_engines: engine_names });
+  // A key param the binding leaves out is captured from the key press, so the rest is checked without it.
+  const captured = captured_key_param(command, invocation.args);
+  const result = check_args(captured ? without_param(command, captured.name) : command, invocation.args, { search_engines: engine_names });
   // With a prompt, the prompted param may be left out.
   if (!result.ok && !(invocation.prompt !== undefined && result.missing_param !== undefined)) errors.push(result.error);
   if (invocation.prompt !== undefined) errors.push(...check_prompt(invocation.prompt, command));
@@ -156,6 +158,17 @@ function check_engine_fallbacks(merged: MergedData, where: (section: string, key
   }
 }
 
+// A keyword picks one engine, so two engines cannot share it. The format is checked where the engine resolves.
+function check_engine_keywords(merged: MergedData, where: (section: string, key: string) => string, problems: string[]) {
+  const owner_of = new Map<string, string>();
+  for (const [name, engine] of Object.entries(merged.search_engines)) {
+    if (engine.keyword === undefined) continue;
+    const owner = owner_of.get(engine.keyword);
+    if (owner === undefined) owner_of.set(engine.keyword, name);
+    else problems.push(`${where("search_engines", name)}: keyword "${engine.keyword}" is already the keyword of engine "${owner}"`);
+  }
+}
+
 const hosts_overlap = (left: string[] | undefined, right: string[] | undefined): boolean =>
   left === undefined || right === undefined || left.some((host) => right.includes(host));
 
@@ -224,6 +237,7 @@ export function check_config(merged: MergedData, registry: Registry, problems: s
   }
 
   check_engine_fallbacks(merged, where, problems);
+  check_engine_keywords(merged, where, problems);
 
   for (const [mode, entries] of Object.entries(merged.keymap)) {
     if (mode === "group_names") {

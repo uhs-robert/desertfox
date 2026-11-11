@@ -1,16 +1,18 @@
-// Picks the config the extension runs on: the files `config.reload` last built, kept in `storage.local`,
-// then managed storage, then defaults.
+// Picks the config the extension runs on: the files the last `config.reload` or import built, kept in `storage.local`,
+// then defaults.
 
 import { apply_edits, CONFIG_FORMAT_VERSION, effective_settings, NO_EDITS, with_fallback_engines } from "../shared/config.ts";
 import type { MergedConfig, SettingEdits, SettingOverrides, Settings, SnippetEntry } from "../shared/config.ts";
+import { valid_quickmark_entries } from "../shared/quickmark_names.ts";
 import { is_setting_name, SETTING_SPECS } from "../shared/settings_schema.ts";
-import { FILES_CONFIG_STORAGE_KEY, SAVED_SETTINGS_STORAGE_KEY, TEMP_SETTINGS_STORAGE_KEY } from "./storage_keys.ts";
+import type { ConfigFiles } from "../shared/config_build/source_files.ts";
+import { FILES_CONFIG_STORAGE_KEY, FILES_SOURCE_STORAGE_KEY, SAVED_SETTINGS_STORAGE_KEY, TEMP_SETTINGS_STORAGE_KEY } from "./storage_keys.ts";
 
-export type ConfigSource = "files" | "managed" | "defaults";
+export type ConfigSource = "files" | "defaults";
 
 // The value the background stores under CONFIG_STATUS_STORAGE_KEY.
 // `saved` and `temp` name the settings each layer of browser edits sets. `configured` names the ones the config file sets.
-export type ConfigStatus = { source: ConfigSource; settings: Settings; managed_file_hint: string; saved: string[]; temp: string[]; configured: string[] };
+export type ConfigStatus = { source: ConfigSource; settings: Settings; saved: string[]; temp: string[]; configured: string[] };
 
 export type LoadedConfig = {
   config: MergedConfig;
@@ -24,6 +26,7 @@ export function empty_config(): MergedConfig {
     keymap: {},
     search_engines: with_fallback_engines({}),
     command_aliases: {},
+    quickmarks: {},
     settings: {},
     snippets: [],
     css: "",
@@ -50,7 +53,7 @@ function is_usable_snippet(candidate: unknown): candidate is SnippetEntry {
   );
 }
 
-// `build-config` refuses a bad setting, but a hand-edited or older managed file can still hold one. Dropping it lets the default apply.
+// `build-config` refuses a bad setting, but a hand-edited or older stored files config can still hold one. Dropping it lets the default apply.
 function checked_file_settings(stored: unknown, source: ConfigSource, warnings: string[]): Partial<Settings> {
   if (typeof stored !== "object" || stored === null || Array.isArray(stored)) return {};
   const kept = Object.entries(stored).filter(([name, value]) => {
@@ -71,6 +74,7 @@ function checked_file_settings(stored: unknown, source: ConfigSource, warnings: 
 function with_all_sections(raw: Record<string, unknown>, source: ConfigSource, warnings: string[]): MergedConfig {
   const merged = { ...empty_config(), ...raw, format_version: CONFIG_FORMAT_VERSION } as MergedConfig;
   merged.settings = checked_file_settings(raw.settings, source, warnings);
+  merged.quickmarks = valid_quickmark_entries(raw.quickmarks);
   const default_engine = merged.settings?.default_engine;
   merged.search_engines = with_fallback_engines(merged.search_engines ?? {}, default_engine);
   const default_needs_page = default_engine !== undefined && (merged.search_engines[default_engine]?.slots ?? []).length > 0;
@@ -84,35 +88,36 @@ function with_all_sections(raw: Record<string, unknown>, source: ConfigSource, w
   return merged;
 }
 
-// The files win: a `config.reload` cannot clear the managed file, and Firefox serves it until the extension restarts.
-export function pick_config(files: unknown, managed: unknown): LoadedConfig {
+export function pick_config(files: unknown): LoadedConfig {
   const warnings: string[] = [];
-  const candidates: [ConfigSource, unknown][] = [
-    ["files", files],
-    ["managed", managed],
-  ];
-  for (const [source, candidate] of candidates) {
-    if (!is_config_object(candidate)) continue;
-    if (candidate.format_version !== CONFIG_FORMAT_VERSION) {
-      warnings.push(`config (${source}): skipped, format_version ${String(candidate.format_version)} is not ${CONFIG_FORMAT_VERSION}`);
-      continue;
-    }
-    return { config: with_all_sections(candidate, source, warnings), source, warnings };
+  if (is_config_object(files)) {
+    if (files.format_version === CONFIG_FORMAT_VERSION) return { config: with_all_sections(files, "files", warnings), source: "files", warnings };
+    warnings.push(`config (files): skipped, format_version ${String(files.format_version)} is not ${CONFIG_FORMAT_VERSION}`);
   }
   return { config: empty_config(), source: "defaults", warnings };
 }
 
-// What the files slot holds. The build warnings go with the config, because a later load has no files to build them again.
+// What the files slot holds. The build warnings go with the config, because a start runs on the stored build and builds nothing.
 export type FilesSlot = { config: MergedConfig; warnings: string[] };
 
+// The raw files the slot's config was built from. `dir_label` prefixes the paths in problem messages.
+export type FilesSource = { files: ConfigFiles; dir_label: string };
+
 export async function load_config(): Promise<LoadedConfig> {
-  // Firefox rejects the read when no managed file exists, which is the normal case without a config.
-  const managed = await browser.storage.managed.get().catch(() => undefined);
   const stored = await browser.storage.local.get(FILES_CONFIG_STORAGE_KEY);
   const slot = stored[FILES_CONFIG_STORAGE_KEY] as Partial<FilesSlot> | undefined;
-  const loaded = pick_config(slot?.config, managed);
+  const loaded = pick_config(slot?.config);
   const build_warnings = Array.isArray(slot?.warnings) ? slot.warnings.filter((warning) => typeof warning === "string") : [];
   return loaded.source === "files" ? { ...loaded, warnings: [...build_warnings, ...loaded.warnings] } : loaded;
+}
+
+// The raw files of the slot's config, which an import builds on. Empty when nothing was reloaded or imported yet.
+export async function load_files_source(): Promise<FilesSource> {
+  const stored = await browser.storage.local.get(FILES_SOURCE_STORAGE_KEY);
+  const source = stored[FILES_SOURCE_STORAGE_KEY] as Partial<FilesSource> | undefined;
+  const raw = source?.files;
+  const is_file_map = typeof raw === "object" && raw !== null && !Array.isArray(raw) && Object.values(raw).every((text) => typeof text === "string");
+  return { files: is_file_map ? raw : {}, dir_label: typeof source?.dir_label === "string" ? source.dir_label : "" };
 }
 
 // Keeps what the schema accepts. A stored value that no longer passes, from an older version, is dropped rather than trusted.
@@ -140,11 +145,10 @@ export async function load_effective_config(): Promise<{ config: MergedConfig; s
 }
 
 // `config_settings` is the config before the edits, so the status can tell which differing value came from where.
-export function build_config_status(source: ConfigSource, config_settings: MergedConfig["settings"], edits: SettingEdits, managed_file_hint: string): ConfigStatus {
+export function build_config_status(source: ConfigSource, config_settings: MergedConfig["settings"], edits: SettingEdits): ConfigStatus {
   return {
     source,
     settings: effective_settings(apply_edits(config_settings, edits)),
-    managed_file_hint,
     saved: Object.keys(edits.saved),
     temp: Object.keys(edits.temp),
     configured: Object.keys(config_settings),

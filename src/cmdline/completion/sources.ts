@@ -8,12 +8,14 @@ import type { CommandLookup } from "../../shared/registry/command_line.ts";
 import { first_sentence } from "../../shared/registry/summary.ts";
 import { flag_alternatives, usage_line } from "../../shared/registry/usage.ts";
 import { always_default, bare_word_param, default_of, flag_params, is_dynamic_values, positional_params, static_values, subject_param } from "../../shared/registry/params.ts";
+import { FOLDER_PATH_SEPARATOR, in_folder, pick_filter_folder, rows_in_folder } from "../../shared/folder_pick.ts";
 import { rank } from "../../shared/score.ts";
 import { completion_of, is_setting_name, SETTING_COMPLETION, type SettingCompletion } from "../../shared/setting_completion.ts";
 import type { Ranked } from "../../shared/score.ts";
-import type { BookmarkItem, EngineItem, HeadingItem, HistoryItems, OpenItems, OpenRow, TabContainer, TabItem, WindowItem } from "../../shared/messages.ts";
+import type { BookmarkItem, BookmarkRows, EngineItem, HeadingItem, HistoryItems, OpenItems, OpenRow, SessionItem, TabContainer, TabItem, WindowItem } from "../../shared/messages.ts";
 import type { LiveKind, LiveSource } from "./live.ts";
-import { cursor_context } from "./tokenize.ts";
+import { anything_ranked } from "./anything.ts";
+import { cursor_context, quote_word } from "./tokenize.ts";
 import type { CursorContext } from "./tokenize.ts";
 
 export type TabFlag = "pinned" | "audible" | "muted" | "discarded";
@@ -43,6 +45,8 @@ export type Row = {
   tag?: string;
   // Set on a tab row only. The list draws the cells before the name from it.
   tab?: TabMarks;
+  // Set on a finder row only: the reference the `anything` command acts on, see `shared/anything_ref.ts`.
+  ref?: string;
   // Set on a heading row only: how many levels it sits below the shallowest heading of the page. The list pads the name by it.
   indent?: number;
 };
@@ -58,6 +62,8 @@ export type Completion = {
   listing: boolean;
   // The rows wait for tabs or bookmarks that are still on their way.
   loading?: boolean;
+  // The finder with a query typed: the first row is the highlighted one before any key moves the selection, and Enter opens it.
+  highlight_first?: boolean;
 };
 
 const NO_COMPLETION: Completion = { rows: [], start: 0, end: 0, listing: false };
@@ -149,9 +155,6 @@ function flag_rows(command: Command, typed: Record<string, unknown>): Row[] {
     };
   });
 }
-
-// A value with a space or a quote would split into two words, so it goes in double quotes.
-const quote_word = (value: string) => (/[\s"'\\]/.test(value) ? `"${value.replace(/(["\\$`])/g, "\\$1")}"` : value);
 
 function value_rows(command: Command, param: ParamDef, sources: EnumSources): Row[] {
   const values = is_dynamic_values(param.values) ? (param.values.from === "containers" ? (sources.containers ?? []) : []) : (static_values(param) ?? []);
@@ -248,6 +251,19 @@ function window_rows(windows: readonly WindowItem[], usage: string): Row[] {
   }));
 }
 
+// The name is the whole subject, so the handler matches it as typed. Newest first is the order the background sends, and an empty word keeps it.
+function name_rows(sessions: readonly SessionItem[], usage: string): Row[] {
+  return sessions.map((session) => ({
+    name: session.name,
+    insert: `${quote_word(session.name)} `,
+    description: session.description,
+    args: "",
+    also_named: [],
+    keywords: [],
+    usage,
+  }));
+}
+
 // The place first, as in a tab row, so the handler reads the leading number and the pick still finds the heading after the page changed its text.
 // The name is the plain text, because the highlight positions count its letters. Indent counts from the shallowest level on the page, so a page without an h1 loses no width.
 function heading_rows(headings: readonly HeadingItem[], usage: string): Row[] {
@@ -264,8 +280,30 @@ function heading_rows(headings: readonly HeadingItem[], usage: string): Row[] {
   }));
 }
 
-function bookmark_rows(bookmarks: readonly BookmarkItem[], usage: string): Row[] {
-  return bookmarks.map((bookmark) => ({ name: bookmark.title, insert: `${quote_word(bookmark.url)} `, description: bookmark.url, args: "", also_named: [], keywords: [], usage }));
+const bookmark_row = (bookmark: BookmarkItem, usage: string): Row => ({ name: bookmark.title, insert: `${quote_word(bookmark.url)} `, description: bookmark.url, args: "", also_named: [], keywords: [], usage });
+
+const bookmark_rows = (bookmarks: readonly BookmarkItem[], usage: string): Row[] => bookmarks.map((bookmark) => bookmark_row(bookmark, usage));
+
+// The dim cell of a bookmark row: the last part of its newest folder, and how many more folders hold the address. Under a filter the newest folder inside it is the one named.
+function folder_tag(answer: BookmarkRows, folders: readonly number[], root_path: string | undefined): string {
+  const shown = root_path === undefined ? folders[0] : folders.find((index) => in_folder(answer.folders[index] ?? "", root_path));
+  const name = shown === undefined ? undefined : answer.folders[shown]?.split(FOLDER_PATH_SEPARATOR).at(-1);
+  return name === undefined ? "" : folders.length > 1 ? `${name} +${folders.length - 1}` : name;
+}
+
+// A typed `--folder=` keeps the rows in that folder or below. Text that picks no folder lists no row, so a typo never looks like a filter that worked. The handler refuses it the same way.
+function bookmark_folder_rows(answer: BookmarkRows, folder_text: unknown, usage: string): Row[] {
+  const root_path = (() => {
+    if (typeof folder_text !== "string" || folder_text.trim() === "") return undefined;
+    try {
+      return pick_filter_folder(answer.folders.map((path) => ({ path })), folder_text).path;
+    } catch {
+      return null;
+    }
+  })();
+  if (root_path === null) return [];
+  const kept = root_path === undefined ? answer.rows : rows_in_folder(answer, root_path);
+  return kept.map((row) => ({ ...bookmark_row(row, usage), tag: folder_tag(answer, row.folders, root_path) }));
 }
 
 // `engine.show` works on any engine, so only a search marks the ones the page cannot fill.
@@ -290,7 +328,7 @@ function engine_rows(engines: readonly EngineItem[], usage: string, marks_unavai
 const live_kind_of = (param: ParamDef | undefined): LiveKind | undefined => {
   if (!param || !is_dynamic_values(param.values)) return undefined;
   const from = param.values.from;
-  return from === "tabs" || from === "bookmarks" || from === "history" || from === "open" || from === "windows" || from === "headings" ? from : from === "search_engines" ? "engines" : undefined;
+  return from === "tabs" || from === "bookmarks" || from === "history" || from === "open" || from === "windows" || from === "headings" || from === "sessions" || from === "registers" || from === "folders" || from === "marks" || from === "quickmarks" || from === "saved_quickmarks" || from === "anything" ? from : from === "search_engines" ? "engines" : undefined;
 };
 
 // The engine takes the first word of `search`, ahead of the query that follows it.
@@ -307,7 +345,7 @@ export function create_completer(
   command_aliases: Readonly<Record<string, string>>,
   sources: EnumSources,
   opened_from = "normal",
-  live?: Pick<LiveSource, "read">,
+  live?: Pick<LiveSource, "read"> & Partial<Pick<LiveSource, "read_all_tabs">>,
 ) {
   const all_commands = command_rows(commands, command_aliases, opened_from);
   return (text: string, caret: number): Completion => {
@@ -321,6 +359,14 @@ export function create_completer(
     if (settings) return { ...span, usage, rows: rank(context.word, settings), listing: settings.length > 0 };
     const param = context.kind === "flag_value" ? context.param : context.position === 0 ? first_word_param(context.command, context.engine_settled) : undefined;
     const kind = live_kind_of(param);
+    if (kind === "anything" && live) {
+      const read = live.read("anything");
+      const engines = live.read("engines");
+      const tabs = live.read_all_tabs?.();
+      if (read.loading || engines.loading || !tabs) return { ...span, usage, rows: [], listing: true, loading: true };
+      const finder_tabs = tab_rows(tabs, usage).map((row, index) => ({ row, url: tabs[index]!.url, id: tabs[index]!.id, last_used: read.items.tab_used[tabs[index]!.id] ?? 0, current: tabs[index]!.active === true }));
+      return { ...span, usage, rows: anything_ranked({ word: context.word, usage, tabs: finder_tabs, items: read.items, engines: engines.items }), listing: true, highlight_first: context.word.trim() !== "" };
+    }
     if (kind && live) {
       const read = live.read(kind);
       if (read.loading) return { ...span, usage, rows: [], listing: true, loading: true };
@@ -342,7 +388,9 @@ export function create_completer(
               ? window_rows(read.items as WindowItem[], usage)
               : kind === "headings"
                 ? heading_rows(read.items as HeadingItem[], usage)
-                : bookmark_rows(read.items as BookmarkItem[], usage);
+                : kind === "sessions" || kind === "registers" || kind === "folders" || kind === "marks" || kind === "quickmarks" || kind === "saved_quickmarks"
+                  ? name_rows(read.items as SessionItem[], usage)
+                  : bookmark_folder_rows(read.items as BookmarkRows, context.kind === "subject" ? context.typed.folder : undefined, usage);
       const ranked = rank(context.word, rows);
       return { ...span, usage, rows: kind === "bookmarks" && context.word.trim() === "" ? ranked.slice(0, RECENT_BOOKMARKS) : ranked, listing: true };
     }

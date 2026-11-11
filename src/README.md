@@ -11,7 +11,10 @@ The code map. Read a folder's README before you change or research code in it.
   - [`content/whichkey/`](content/whichkey/README.md): the which-key panel.
   - [`content/handlers/`](content/handlers/README.md): the content-side handler for each command group.
   - [`content/ui/`](content/ui/README.md): the `ui` bundle, the mode badge and the toast.
-  - [`content/page/`](content/page/README.md): the `page` bundle, `scroll.align` and `copy.url`.
+  - [`content/page/`](content/page/README.md): the `page` bundle: `scroll.align`, `copy.url`, and `page.focus_input`.
+  - [`content/media/`](content/media/README.md): the `media` bundle, which the background injects into every frame for the `media` command.
+  - [`content/text/`](content/text/README.md): the `text` bundle: the typed-text recorder for `.`, the shared field writer and `is_secret_field`.
+- [`devtools/`](devtools/README.md): the devtools page, which selects a hint pick in the Inspector.
 - [`help/`](help/README.md): the help page.
 - [`newtab/`](newtab/README.md): the new tab page.
 - [`popup/`](popup/README.md): the toolbar popup.
@@ -21,4 +24,4 @@ The code map. Read a folder's README before you change or research code in it.
   - [`shared/config_build/`](shared/config_build/README.md): the pure config build from raw file text.
   - [`shared/registry/`](shared/registry/README.md): the command registry, its args check and the command line parser.
 
-`manifest.json` and `managed_schema.json` sit at this level.
+`manifest.json` sits at this level.

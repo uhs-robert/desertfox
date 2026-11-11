@@ -6,14 +6,14 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 const key_test_dir = dirname(fileURLToPath(import.meta.url));
 
-export const area_names = ["hints", "caret", "find", "whichkey", "cmdline", "help", "newtab", "tabs", "scroll", "config", "engines", "bundles", "keys", "ui", "toolbar"];
+export const area_names = ["hints", "caret", "find", "whichkey", "cmdline", "help", "newtab", "tabs", "scroll", "config", "engines", "bundles", "keys", "ui", "toolbar", "media"];
 
 // Key path and command contract: any change here can break any piece.
 const shared_files = [
   "src/manifest.json",
-  "src/background/{availability,browser_deps,main,refusal,router,slots,startup}.ts",
+  "src/background/{availability,browser_deps,main,page_keymap,refusal,router,slots,startup}.ts",
   "src/commands/{command,copy,mode}.ts",
-  "src/content/{cancelled_keys,context,editable,handler_map,invocation_args,key_flow,link_escape,main,mode_state,page_mode,run_content,shadow}.ts",
+  "src/content/{ask_keymap,cancelled_keys,context,editable,handler_map,invocation_args,key_flow,link_escape,main,mode_state,page_mode,replay_key,run_content,run_leaf,shadow,site_rule}.ts",
   "src/content/handlers/{copy,focus,mode,stop,types}.ts",
   "src/shared/{command,index,load_commands,messages}.ts",
   "src/shared/registry/{builtin,define,index}.ts",
@@ -24,15 +24,19 @@ export const area_rules = [
   // Docs and icons carry no behavior a key test reads.
   { globs: ["src/**/README.md", "src/icons/**"], areas: [] },
   // The schema validates the settings the help page edits and the config reads.
-  { globs: ["src/managed_schema.json"], areas: ["help", "config"] },
   { globs: shared_files, areas: area_names },
-  { globs: ["src/content/hints/**", "src/commands/{hint,heading,page}.ts", "src/background/image_actions.ts", "src/content/handlers/page.ts"], areas: ["hints"] },
-  { globs: ["src/content/run_content.ts", "src/commands/{caret,cmdline,copy,find,heading,help,hint,page,visual}.ts", "src/background/{bundle_loader,command_modules}.ts", "src/content/{bundle_host,bundles}.ts", "src/content/page/**", "src/shared/bundles.ts"], areas: ["bundles"] },
+  // page.ts holds the reload-clear command, which p22 tests, so it also selects the keys and cmdline pieces.
+  { globs: ["src/commands/{page,reload_clear}.ts"], areas: ["keys", "cmdline", "hints"] },
+  { globs: ["src/content/hints/**", "src/commands/{hint,heading,page}.ts", "src/background/image_actions.ts", "src/content/handlers/{page,focus_input}.ts", "src/background/inspect_relay.ts", "src/devtools/**", "src/shared/inspect.ts"], areas: ["hints"] },
+  { globs: ["src/content/run_content.ts", "src/commands/{caret,cmdline,copy,find,heading,help,hint,page,visual}.ts", "src/background/{bundle_loader,command_modules}.ts", "src/content/{bundle_host,bundles}.ts", "src/content/page/**", "src/content/text/**", "src/commands/text.ts", "src/shared/bundles.ts"], areas: ["bundles"] },
   { globs: ["src/content/caret/find_*.ts", "src/commands/find.ts", "src/background/{find_scan,find_worker,regex_scan}.ts"], areas: ["find"] },
   { globs: ["src/content/caret/**", "src/commands/{caret,visual}.ts"], areas: ["caret"] },
   { globs: ["src/content/whichkey/**", "src/background/list_keys.ts", "src/content/which_key_timer.ts"], areas: ["whichkey"] },
+  // The last search sits in register `/`, and `:registers` completes through the command line.
+  { globs: ["src/commands/register.ts", "src/commands/register_param.ts", "src/background/register_store.ts", "src/shared/register_names.ts"], areas: ["find", "cmdline"] },
+  { globs: ["src/commands/session.ts", "src/background/session_store.ts", "src/background/sessions_transfer.ts"], areas: ["cmdline", "tabs"] },
   {
-    globs: ["src/cmdline/**", "src/commands/{cmdline,history,bookmark,open_target}.ts", "src/background/{cmdline_service,complete_items}.ts", "src/shared/{setting_completion,score}.ts"],
+    globs: ["src/cmdline/**", "src/commands/{cmdline,history,bookmark,open_target}.ts", "src/background/{cmdline_service,complete_items,bookmark_title}.ts", "src/shared/{anything_ref,setting_completion,score,folder_pick}.ts"],
     areas: ["cmdline"],
   },
   {
@@ -51,20 +55,24 @@ export const area_rules = [
     globs: ["src/background/{tab_*,previous_tab,window_focus,count}.ts", "src/commands/{tab,window,url,url_build,browser,open}.ts", "src/shared/{tab_model_port,container_store}.ts"],
     areas: ["tabs"],
   },
+  { globs: ["src/background/{mark_store,store_turns,global_mark_jump,page_ready}.ts", "src/commands/mark.ts", "src/shared/mark_names.ts", "src/background/quickmark_store.ts", "src/commands/quickmark.ts", "src/commands/mark_list.ts", "src/shared/mark_text.ts", "src/shared/quickmark_names.ts"], areas: ["scroll", "keys", "whichkey", "tabs"] },
+  { globs: ["src/background/macro_recorder.ts", "src/background/macro_last_played.ts", "src/commands/macro.ts"], areas: ["keys", "whichkey"] },
+  { globs: ["src/background/macro_replay.ts"], areas: ["keys", "hints", "tabs"] },
   { globs: ["src/content/{scroll_*,align_target}.ts", "src/content/handlers/{scroll,align}.ts", "src/commands/{scroll,zoom}.ts"], areas: ["scroll"] },
   {
     globs: [
       "src/background/{config_*,autoconfig_mirror,snippets,storage_keys,first_install,load_log,settings_message,reload}.ts",
       "src/commands/config.ts",
-      "src/shared/{config_build/**,theme/**,themes,theme_names,default_settings,config,match_pattern,site_key}.ts",
+      "src/shared/{config_build/**,theme/**,themes,theme_names,default_settings,config,match_pattern,site_key,zip}.ts",
       "src/shared/registry/{check_args,check_shape,params,parse_binding,commands_file,print_command,summary,usage,command_line}.ts",
     ],
     areas: ["config"],
   },
   { globs: ["src/shared/engines/**", "src/commands/engine.ts"], areas: ["engines"] },
-  { globs: ["src/background/{default_keymap,keymap_merge,compile,repeat_memory}.ts", "src/shared/{keys/**,keymap,prefix_tree,layers,invocation}.ts"], areas: ["keys"] },
+  { globs: ["src/background/{default_keymap,keymap_merge,compile,repeat_memory,record_step}.ts", "src/shared/{keys/**,keymap,prefix_tree,layers,invocation}.ts"], areas: ["keys"] },
   { globs: ["src/popup/**", "src/background/toolbar.ts"], areas: ["toolbar"] },
-  { globs: ["src/content/{ui/**,toast,ui_proxy,surface,mode_indicator,mode_label,mode_report,badge_hosts}.ts"], areas: ["ui"] },
+  { globs: ["src/content/media/**", "src/commands/media.ts", "src/background/media_actions.ts", "src/shared/media.ts"], areas: ["media"] },
+  { globs: ["src/content/{ui/**,toast,ui_proxy,surface,mode_indicator,badge_state,mode_report,badge_hosts}.ts"], areas: ["ui"] },
 ];
 
 // Supports ** (any depth), * (within one path part) and {a,b}. Nothing else is special.

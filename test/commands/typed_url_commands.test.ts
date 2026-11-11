@@ -3,6 +3,7 @@ import { test } from "node:test";
 import "../../src/background/command_modules.ts";
 import { CONFIG_FORMAT_VERSION } from "../../src/shared/config.ts";
 import { compile_config } from "../../src/background/compile.ts";
+import { FILES_CONFIG_STORAGE_KEY } from "../../src/background/storage_keys.ts";
 import { empty_config } from "../../src/background/config_load.ts";
 import { create_router } from "../../src/background/router.ts";
 import type { TreeLeaf } from "../../src/shared/prefix_tree.ts";
@@ -19,8 +20,9 @@ const SETTINGS = { home_page: "example.com" };
 function install_browser(opened: Opened[]): void {
   const empty = async () => ({});
   const storage_area = { get: async () => ({}), set: empty, remove: empty };
+  const local_area = { ...storage_area, get: async (key: string) => (key === FILES_CONFIG_STORAGE_KEY ? { [key]: { config: { format_version: CONFIG_FORMAT_VERSION, settings: SETTINGS }, warnings: [] } } : {}) };
   (globalThis as unknown as { browser: unknown }).browser = {
-    storage: { managed: { get: async () => ({ format_version: CONFIG_FORMAT_VERSION, settings: SETTINGS }) }, local: storage_area, session: storage_area, onChanged: { addListener() {} } },
+    storage: { local: local_area, session: storage_area, onChanged: { addListener() {} } },
     tabs: {
       query: async () => [],
       update: async (_id: number, props: { url: string }) => opened.push({ via: "update", url: props.url }),

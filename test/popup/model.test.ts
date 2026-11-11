@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { disabled_after_click, HOME_HASH, SETTINGS_HASH, WARNINGS_HASH, build_rows } from "../../src/popup/model.ts";
+import { disabled_after_click, HOME_HASH, SETTINGS_HASH, SITE_RULES_HASH, WARNINGS_HASH, build_rows } from "../../src/popup/model.ts";
 import type { PopupInputs } from "../../src/popup/model.ts";
 import { parse_route } from "../../src/help/route.ts";
 
-const base: PopupInputs = { disabled: false, site: { kind: "enabled", pattern: "*://*.a.test/*" }, warning_count: 2, version: "1.2.3", has_native_host: true, site_changed: false };
+const base: PopupInputs = { disabled: false, site: { kind: "enabled", pattern: "*://*.a.test/*" }, warning_count: 2, version: "1.2.3", has_native_host: true };
 const ids = (inputs: PopupInputs) => build_rows(inputs).map((row) => row.id);
 const row = (inputs: PopupInputs, id: string) => build_rows(inputs).find((candidate) => candidate.id === id)!;
 
@@ -18,21 +18,25 @@ test("the first row is the switch and the rows follow the owner's order", () => 
 test("the site row flips with the state and greys out while off or where a file sets it", () => {
   assert.equal(row(base, "site").label, "Disable on this site");
   assert.equal(row(base, "site").enabled, true);
-  const disabled = { ...base, site: { kind: "disabled", pattern: "p" } } as const;
+  const disabled = { ...base, site: { kind: "disabled", pattern: "p", rule: "all off" } } as const;
   assert.equal(row(disabled, "site").label, "Enable on this site");
   assert.equal(row(disabled, "site").site_action, "enable");
   assert.equal(row({ ...disabled, disabled: true }, "site").enabled, false);
   assert.equal(row({ ...base, disabled: true }, "site").detail, "DesertFox is off");
-  const config = { ...base, site: { kind: "config", pattern: "p" } } as const;
-  assert.deepEqual([row(config, "site").enabled, row(config, "site").detail], [false, "set in config"]);
+  const config = { ...base, site: { kind: "config", pattern: "p", rule: "pass 3 keys" } } as const;
+  assert.deepEqual([row(config, "site").enabled, row(config, "site").detail], [false, "a rule covers it"]);
   assert.equal(row({ ...base, site: { kind: "unavailable" } }, "site").enabled, false);
 });
 
-test("reload config greys out without the native host, a site change offers a tab reload", () => {
+test("a rule on the page shows its summary and links to the settings page", () => {
+  assert.ok(!ids(base).includes("rule"));
+  const config = { ...base, site: { kind: "config", pattern: "p", rule: "pass 3 keys" } } as const;
+  assert.deepEqual(row(config, "rule"), { id: "rule", kind: "link", label: "Rule on this page", detail: "pass 3 keys", enabled: true });
+});
+
+test("reload config greys out without the native host", () => {
   assert.equal(row({ ...base, has_native_host: false }, "reload_config").enabled, false);
   assert.equal(row({ ...base, has_native_host: false }, "reload_config").detail, "needs the native host");
-  assert.ok(!ids(base).includes("reload_tab"));
-  assert.ok(ids({ ...base, site_changed: true }).includes("reload_tab"));
 });
 
 test("the warnings row counts and the version row shows the manifest version", () => {
@@ -49,4 +53,11 @@ test("the links land on Home, Settings and the Warnings heading", () => {
 test("a click on the switch asks for the opposite of what it shows", () => {
   assert.equal(disabled_after_click(row(base, "power")), true);
   assert.equal(disabled_after_click(row({ ...base, disabled: true }, "power")), false);
+});
+
+test("the rule link lands on the settings group that holds site_rules", async () => {
+  const { page_sections } = await import("../../src/help/render.ts");
+  const route = parse_route(SITE_RULES_HASH);
+  assert.equal(route.page, "settings");
+  assert.ok(page_sections("settings", []).some((section) => section.slug === route.section));
 });

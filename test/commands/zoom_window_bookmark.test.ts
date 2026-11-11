@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { make_bookmark_handlers, pick_bookmark } from "../../src/commands/bookmark.ts";
+import type { FolderNode } from "../../src/background/complete_items.ts";
+import { make_bookmark_handlers, pick_bookmark, pick_folder } from "../../src/commands/bookmark.ts";
+import { pick_filter_folder } from "../../src/shared/folder_pick.ts";
+import { open_many } from "../../src/commands/open_target.ts";
 import { make_browser_handlers } from "../../src/commands/browser.ts";
 import { clamp_zoom, make_zoom_handlers } from "../../src/commands/zoom.ts";
 import { check_args } from "../../src/shared/registry/check_args.ts";
@@ -74,6 +77,10 @@ const UNUSED_REMOVE = {
   nodes_for_url: async () => [],
   tab_url: async () => undefined,
   remove: async () => {},
+  update: async () => {},
+  move: async () => {},
+  folders: async () => [],
+  open_many: async () => {},
   toast: async () => {},
 };
 
@@ -82,12 +89,12 @@ test("bookmark.add uses the tab title only when the tab shows that url", async (
   const handlers = make_bookmark_handlers({
     tab_title_for_url: async (_id, url) => (url === "https://a.test/" ? "A" : undefined),
     create: async (bookmark) => void created.push(bookmark),
-    bookmarks: async () => [],
+    bookmarks: async () => ({ rows: { rows: [], folders: [] }, folders: [] }),
     open: async () => {},
     ...UNUSED_REMOVE,
   });
-  await handlers.add(ctx, { url: "https://a.test/" });
-  await handlers.add(ctx, { url: "https://b.test/" });
+  await handlers.add(ctx, { url: "https://a.test/", folder: "" });
+  await handlers.add(ctx, { url: "https://b.test/", folder: "" });
   assert.deepEqual(created, [
     { url: "https://a.test/", title: "A" },
     { url: "https://b.test/", title: "https://b.test/" },
@@ -117,16 +124,33 @@ test("bookmark.open opens the picked address where the flag says, and opens noth
   const handlers = make_bookmark_handlers({
     tab_title_for_url: async () => undefined,
     create: async () => {},
-    bookmarks: async () => BOOKMARKS,
+    bookmarks: async () => ({ rows: BOOKMARK_ROWS, folders: FOLDERS }),
     open: async (_ctx, url, where) => void opened.push(`${where} ${url}`),
     ...UNUSED_REMOVE,
   });
-  await handlers.open(ctx, { bookmark: "arch", where: "tab" });
-  await assert.rejects(handlers.open(ctx, { bookmark: "zzzz", where: "tab" }));
+  await handlers.open(ctx, { bookmark: "arch", folder: "", where: "tab" });
+  await assert.rejects(handlers.open(ctx, { bookmark: "zzzz", folder: "", where: "tab" }));
   assert.deepEqual(opened, ["tab https://wiki.archlinux.org/"]);
 });
 
-type FakeNode = { id: string; url?: string; type?: string; unmodifiable?: string };
+const FOLDERS: FolderNode[] = [
+  { id: "f1", path: "Bookmarks Toolbar", managed: false, bookmarks: [] },
+  { id: "f2", path: "Bookmarks Toolbar / Work", managed: false, bookmarks: [{ url: "https://w1.test/" }, { url: "place:sort=8" }, { url: "javascript:void(0)" }, { url: "https://w2.test/" }] },
+  { id: "f3", path: "Other Bookmarks / Work", managed: false, bookmarks: [] },
+  { id: "f4", path: "Managed", managed: true, bookmarks: [{ url: "https://m.test/" }, { url: "about:config" }, { url: "about:blank" }] },
+];
+
+// Rust reference is filed twice, newest in "Other Bookmarks / Work", so it has two folders. Arch wiki sits in the toolbar folder, which holds Work as a subfolder.
+const BOOKMARK_ROWS = {
+  rows: [
+    { ...BOOKMARKS[0]!, folders: [1] },
+    { ...BOOKMARKS[1]!, folders: [2, 1] },
+    { ...BOOKMARKS[2]!, folders: [0] },
+  ],
+  folders: FOLDERS.map((folder) => folder.path),
+};
+
+type FakeNode = { id: string; parentId?: string; url?: string; type?: string; unmodifiable?: string };
 
 function remove_fixture(nodes: FakeNode[], tab_url: string | null = "https://a.test/") {
   const log: string[] = [];
@@ -135,10 +159,17 @@ function remove_fixture(nodes: FakeNode[], tab_url: string | null = "https://a.t
     tab_title_for_url: async () => undefined,
     create: async () => {},
     open: async () => {},
-    bookmarks: async () => BOOKMARKS,
+    bookmarks: async () => ({ rows: BOOKMARK_ROWS, folders: FOLDERS }),
     tab_url: async () => tab_url ?? undefined,
     nodes_for_url: async (url) => (asked.push(url), nodes.map((node) => ({ url, ...node }))),
     remove: async (id) => void log.push(`remove ${id}`),
+    update: async (id, changes) => void log.push(`update ${id} ${JSON.stringify(changes)}`),
+    move: async (id, parent_id) => void log.push(`move ${id} ${parent_id}`),
+    folders: async () => FOLDERS,
+    open_many: async (_ctx, urls, where, report) => {
+      await report(0);
+      log.push(`open ${where} ${urls.join(" ")}`);
+    },
     toast: async (_ctx, kind, message) => void log.push(`${kind} ${message}`),
   });
   return { handlers, log, asked };
@@ -146,36 +177,36 @@ function remove_fixture(nodes: FakeNode[], tab_url: string | null = "https://a.t
 
 test("bookmark.remove with no argument removes every bookmark for the current page", async () => {
   const one = remove_fixture([{ id: "a", type: "bookmark" }]);
-  await one.handlers.remove(ctx, { bookmark: "" });
+  await one.handlers.remove(ctx, { bookmark: "", folder: "" });
   assert.deepEqual([one.asked, one.log], [["https://a.test/"], ["remove a", "success Removed 1 bookmark"]]);
   const two = remove_fixture([{ id: "a", type: "bookmark" }, { id: "b", type: "bookmark" }]);
-  await two.handlers.remove(ctx, { bookmark: "" });
+  await two.handlers.remove(ctx, { bookmark: "", folder: "" });
   assert.deepEqual(two.log, ["remove a", "remove b", "success Removed 2 bookmarks"]);
 });
 
 test("bookmark.remove refuses when the page has no bookmark, and when the tab has no address", async () => {
   const none = remove_fixture([]);
-  await assert.rejects(none.handlers.remove(ctx, { bookmark: "" }), /No bookmark for this page/);
+  await assert.rejects(none.handlers.remove(ctx, { bookmark: "", folder: "" }), /No bookmark for this page/);
   const no_url = remove_fixture([{ id: "a", type: "bookmark" }], null);
-  await assert.rejects(no_url.handlers.remove(ctx, { bookmark: "" }), /No bookmark for this page/);
+  await assert.rejects(no_url.handlers.remove(ctx, { bookmark: "", folder: "" }), /No bookmark for this page/);
   assert.deepEqual([none.log, no_url.log], [[], []]);
 });
 
 test("bookmark.remove with an argument removes the bookmarks at the picked address, and refuses no match", async () => {
   const picked = remove_fixture([{ id: "x", type: "bookmark" }, { id: "y", type: "bookmark" }]);
-  await picked.handlers.remove(ctx, { bookmark: "arch" });
+  await picked.handlers.remove(ctx, { bookmark: "arch", folder: "" });
   assert.deepEqual([picked.asked, picked.log], [["https://wiki.archlinux.org/"], ["remove x", "remove y", "success Removed 2 bookmarks"]]);
   const missed = remove_fixture([{ id: "x", type: "bookmark" }]);
-  await assert.rejects(missed.handlers.remove(ctx, { bookmark: "zzzz" }), /no bookmark matches/);
+  await assert.rejects(missed.handlers.remove(ctx, { bookmark: "zzzz", folder: "" }), /no bookmark matches/);
   assert.deepEqual(missed.log, []);
 });
 
 test("bookmark.remove never removes a folder", async () => {
   const mixed = remove_fixture([{ id: "dir", type: "folder" }, { id: "a", type: "bookmark" }]);
-  await mixed.handlers.remove(ctx, { bookmark: "" });
+  await mixed.handlers.remove(ctx, { bookmark: "", folder: "" });
   assert.deepEqual(mixed.log, ["remove a", "success Removed 1 bookmark"]);
   const only_folder = remove_fixture([{ id: "dir", type: "folder" }]);
-  await assert.rejects(only_folder.handlers.remove(ctx, { bookmark: "" }), /No bookmark/);
+  await assert.rejects(only_folder.handlers.remove(ctx, { bookmark: "", folder: "" }), /No bookmark/);
   assert.deepEqual(only_folder.log, []);
 });
 
@@ -186,13 +217,13 @@ test("bookmark.remove keeps only the exact address, and skips managed and typele
     { id: "managed", unmodifiable: "managed" },
     { id: "sep", type: "separator" },
   ]);
-  await fixture.handlers.remove(ctx, { bookmark: "" });
+  await fixture.handlers.remove(ctx, { bookmark: "", folder: "" });
   assert.deepEqual(fixture.log, ["remove plain", "success Removed 1 bookmark"]);
 });
 
 test("bookmark.remove refuses before removing anything when every match is managed", async () => {
   const fixture = remove_fixture([{ id: "managed", unmodifiable: "managed" }]);
-  await assert.rejects(fixture.handlers.remove(ctx, { bookmark: "" }), /managed and cannot be removed/);
+  await assert.rejects(fixture.handlers.remove(ctx, { bookmark: "", folder: "" }), /managed and cannot be removed/);
   assert.deepEqual(fixture.log, []);
 });
 
@@ -285,4 +316,298 @@ test("the schema refuses a tab.attach pick with no leading number, and lets an e
   assert.equal(check_args(attach, { window: "Old" }, {}).ok, false);
   for (const window of ["", "  ", "2", "2 GitHub", " 2 GitHub"]) assert.equal(check_args(attach, { window }, {}).ok, true, window);
   assert.deepEqual(check_args(attach, undefined, {}), { ok: true, args: { window: "" } });
+});
+
+test("bookmark.add refuses an address that already has a bookmark, and creates nothing", async () => {
+  const created: unknown[] = [];
+  const handlers = make_bookmark_handlers({
+    ...UNUSED_REMOVE,
+    tab_title_for_url: async () => "A",
+    create: async (bookmark) => void created.push(bookmark),
+    bookmarks: async () => ({ rows: { rows: [], folders: [] }, folders: [] }),
+    open: async () => {},
+    nodes_for_url: async (url) => [{ id: "a", url, type: "bookmark" }],
+  });
+  await assert.rejects(handlers.add(ctx, { url: "https://a.test/", folder: "" }), /Already bookmarked/);
+  assert.deepEqual(created, []);
+});
+
+test("bookmark.rename renames every bookmark with the page's address and toasts the count", async () => {
+  const fixture = remove_fixture([{ id: "a", type: "bookmark" }, { id: "b", type: "bookmark" }, { id: "m", type: "bookmark", unmodifiable: "managed" }]);
+  await fixture.handlers.rename(ctx, { bookmark: "", title: "New name" });
+  assert.deepEqual(fixture.log, ['update a {"title":"New name"}', 'update b {"title":"New name"}', "success Renamed 2 bookmarks"]);
+});
+
+test("bookmark.rename with a picked bookmark renames the ones at its address, and refuses managed-only and none", async () => {
+  const picked = remove_fixture([{ id: "x", type: "bookmark" }]);
+  await picked.handlers.rename(ctx, { bookmark: "arch", title: "Wiki" });
+  assert.deepEqual([picked.asked, picked.log], [["https://wiki.archlinux.org/"], ['update x {"title":"Wiki"}', "success Renamed 1 bookmark"]]);
+  const managed = remove_fixture([{ id: "m", type: "bookmark", unmodifiable: "managed" }]);
+  await assert.rejects(managed.handlers.rename(ctx, { bookmark: "", title: "x" }), /managed and cannot be renamed/);
+  await assert.rejects(remove_fixture([]).handlers.rename(ctx, { bookmark: "", title: "x" }), /No bookmark for this page/);
+  assert.deepEqual(managed.log, []);
+});
+
+test("bookmark.edit_url changes the address of every bookmark at the page's address", async () => {
+  const fixture = remove_fixture([{ id: "a", type: "bookmark" }, { id: "b", type: "bookmark" }]);
+  await fixture.handlers.edit_url(ctx, { bookmark: "", url: "https://c.test/" });
+  assert.deepEqual(fixture.log, ['update a {"url":"https://c.test/"}', 'update b {"url":"https://c.test/"}', "success Changed the address of 2 bookmarks"]);
+});
+
+test("bookmark.edit_url refuses an address another bookmark has, and managed bookmarks", async () => {
+  const log: string[] = [];
+  const handlers = make_bookmark_handlers({
+    ...UNUSED_REMOVE,
+    tab_title_for_url: async () => undefined,
+    create: async () => {},
+    bookmarks: async () => ({ rows: { rows: [], folders: [] }, folders: [] }),
+    open: async () => {},
+    tab_url: async () => "https://a.test/",
+    nodes_for_url: async (url) => [{ id: url === "https://a.test/" ? "a" : "other", url, type: "bookmark" }],
+    update: async (id) => void log.push(id),
+  });
+  await assert.rejects(handlers.edit_url(ctx, { bookmark: "", url: "https://b.test/" }), /Already bookmarked/);
+  assert.deepEqual(log, []);
+  const managed = remove_fixture([{ id: "m", type: "bookmark", unmodifiable: "managed" }]);
+  await assert.rejects(managed.handlers.edit_url(ctx, { bookmark: "", url: "https://c.test/" }), /managed and cannot be changed/);
+});
+
+test("bookmark.add with a folder files the bookmark there, and an exact path wins over a fuzzy one", async () => {
+  const created: unknown[] = [];
+  const handlers = make_bookmark_handlers({
+    ...UNUSED_REMOVE,
+    folders: async () => FOLDERS,
+    tab_title_for_url: async () => "A",
+    create: async (bookmark) => void created.push(bookmark),
+    bookmarks: async () => ({ rows: { rows: [], folders: [] }, folders: [] }),
+    open: async () => {},
+  });
+  await handlers.add(ctx, { url: "https://a.test/", folder: "Bookmarks Toolbar" });
+  await handlers.add(ctx, { url: "https://a.test/", folder: "Other Bookmarks / Work" });
+  await handlers.add(ctx, { url: "https://a.test/", folder: "" });
+  assert.deepEqual(created, [
+    { url: "https://a.test/", title: "A", parent_id: "f1" },
+    { url: "https://a.test/", title: "A", parent_id: "f3" },
+    { url: "https://a.test/", title: "A" },
+  ]);
+});
+
+test("bookmark.add with a folder on a bookmarked page points to bm, and an unknown folder creates nothing", async () => {
+  const created: unknown[] = [];
+  const base = { ...UNUSED_REMOVE, folders: async () => FOLDERS, tab_title_for_url: async () => "A", create: async (bookmark: unknown) => void created.push(bookmark), bookmarks: async () => ({ rows: { rows: [], folders: [] }, folders: [] }), open: async () => {} };
+  const bookmarked = make_bookmark_handlers({ ...base, nodes_for_url: async (url) => [{ id: "a", url, type: "bookmark" }] });
+  await assert.rejects(bookmarked.add(ctx, { url: "https://a.test/", folder: "Bookmarks Toolbar" }), /Already bookmarked, use bm to move/);
+  const fresh = make_bookmark_handlers(base);
+  await assert.rejects(fresh.add(ctx, { url: "https://a.test/", folder: "zzzz" }), /no folder matches "zzzz"/);
+  assert.deepEqual(created, []);
+});
+
+test("a folder path that two folders share, and a fuzzy tie, are refused naming the folders", async () => {
+  const twins: FolderNode[] = [{ id: "x", path: "Docs", managed: false, bookmarks: [] }, { id: "y", path: "Docs", managed: false, bookmarks: [] }];
+  assert.throws(() => pick_folder(twins, "Docs"), /Two folders match "Docs"/);
+  assert.throws(() => pick_folder(FOLDERS, "work"), /"work" matches "Bookmarks Toolbar \/ Work" and "Other Bookmarks \/ Work" equally/);
+  assert.equal(pick_folder(FOLDERS, "toolbar work").id, "f2");
+});
+
+test("bookmark.move moves every unmanaged bookmark at the address and toasts the count", async () => {
+  const fixture = remove_fixture([{ id: "a", type: "bookmark" }, { id: "b", type: "bookmark" }, { id: "m", type: "bookmark", unmodifiable: "managed" }]);
+  await fixture.handlers.move(ctx, { folder: "Other Bookmarks / Work", bookmark: "" });
+  assert.deepEqual(fixture.log, ["move a f3", "move b f3", "success Moved 2 bookmarks to Other Bookmarks / Work"]);
+});
+
+test("bookmark.move with a picked bookmark moves the ones at its address, and refuses managed-only, none and an unknown folder", async () => {
+  const picked = remove_fixture([{ id: "x", type: "bookmark" }]);
+  await picked.handlers.move(ctx, { folder: "Bookmarks Toolbar", bookmark: "arch" });
+  assert.deepEqual([picked.asked, picked.log], [["https://wiki.archlinux.org/"], ["move x f1", "success Moved 1 bookmark to Bookmarks Toolbar"]]);
+  const managed = remove_fixture([{ id: "m", type: "bookmark", unmodifiable: "managed" }]);
+  await assert.rejects(managed.handlers.move(ctx, { folder: "Bookmarks Toolbar", bookmark: "" }), /managed and cannot be moved/);
+  await assert.rejects(remove_fixture([]).handlers.move(ctx, { folder: "Bookmarks Toolbar", bookmark: "" }), /No bookmark for this page/);
+  const unknown = remove_fixture([{ id: "x", type: "bookmark" }]);
+  await assert.rejects(unknown.handlers.move(ctx, { folder: "zzzz", bookmark: "" }), /no folder matches/);
+  assert.deepEqual(unknown.log, []);
+});
+
+test("bookmark.open_folder opens the folder's own bookmarks, skipping smart queries and script addresses", async () => {
+  const fixture = remove_fixture([]);
+  await fixture.handlers.open_folder(ctx, { folder: "Bookmarks Toolbar / Work", where: "window" });
+  assert.deepEqual(fixture.log, ["warning Opened 2 of 4 bookmarks: 2 cannot be opened", "open window https://w1.test/ https://w2.test/"]);
+});
+
+test("bookmark.open_folder refuses an empty folder and an unknown one", async () => {
+  const fixture = remove_fixture([]);
+  await assert.rejects(fixture.handlers.open_folder(ctx, { folder: "Bookmarks Toolbar", where: "tab" }), /No bookmarks to open in Bookmarks Toolbar/);
+  await assert.rejects(fixture.handlers.open_folder(ctx, { folder: "zzzz", where: "tab" }), /no folder matches/);
+  assert.deepEqual(fixture.log, []);
+});
+
+test("bookmark.open_folder opens the first 25 and the toast says the cap cut the list", async () => {
+  const many: FolderNode = { id: "big", path: "Big", managed: false, bookmarks: Array.from({ length: 30 }, (_, index) => ({ url: `https://p${index}.test/` })) };
+  const log: string[] = [];
+  const handlers = make_bookmark_handlers({
+    ...UNUSED_REMOVE,
+    folders: async () => [many],
+    tab_title_for_url: async () => undefined,
+    create: async () => {},
+    bookmarks: async () => ({ rows: { rows: [], folders: [] }, folders: [] }),
+    open: async () => {},
+    open_many: async (_ctx, urls, where, report) => {
+      await report(0);
+      log.push(`open ${where} ${urls.length} ${urls[24]} ${urls[25]}`);
+    },
+    toast: async (_ctx, kind, message) => void log.push(`${kind} ${message}`),
+  });
+  await handlers.open_folder(ctx, { folder: "Big", where: "tab" });
+  // The toast comes before the open, since the open moves the focus off the asking tab.
+  assert.deepEqual(log, ["warning Opened 25 of 30 bookmarks: the cap is 25", "open tab 25 https://p24.test/ undefined"]);
+});
+
+test("bookmark.open_folder skips browser pages that would stop the rest, and the toast counts them", async () => {
+  const fixture = remove_fixture([]);
+  await fixture.handlers.open_folder(ctx, { folder: "Managed", where: "tab" });
+  assert.deepEqual(fixture.log, ["warning Opened 2 of 3 bookmarks: 1 cannot be opened", "open tab https://m.test/ about:blank"]);
+});
+
+test("a managed folder is refused as a target for add and move, and still opens", async () => {
+  const fixture = remove_fixture([{ id: "x", type: "bookmark" }]);
+  await assert.rejects(fixture.handlers.move(ctx, { folder: "Managed", bookmark: "" }), /Managed is managed and cannot be changed/);
+  await assert.rejects(remove_fixture([]).handlers.add(ctx, { url: "https://n.test/", folder: "Managed" }), /Managed is managed and cannot be changed/);
+});
+
+const ASKER: CommandContext = { tab_id: 5, window_id: 2, frame_id: 0, mode: "normal" };
+
+// A fake browser that numbers the tabs it makes and refuses the addresses in `refused`.
+function fake_browser(refused: string[], calls: string[]) {
+  let next_id = 10;
+  const refuse = (url: string) => {
+    if (refused.includes(url)) throw new Error("Illegal URL");
+  };
+  (globalThis as unknown as { browser: unknown }).browser = {
+    tabs: {
+      create: async (props: { url: string; active: boolean; openerTabId?: number; windowId?: number }) => {
+        refuse(props.url);
+        calls.push(`tab ${props.url} active=${props.active} opener=${props.openerTabId ?? "-"} window=${props.windowId}`);
+        return { id: next_id++ };
+      },
+      update: async (id: number, props: object) => void calls.push(`update ${id} ${JSON.stringify(props)}`),
+    },
+    windows: {
+      create: async (props: { url: string }) => {
+        refuse(props.url);
+        calls.push(`window ${props.url}`);
+        return { id: 99 };
+      },
+    },
+  };
+}
+
+test("open_many opens every tab in the background in order, then activates the first, so the strip keeps folder order", async () => {
+  const calls: string[] = [];
+  fake_browser([], calls);
+  try {
+    await open_many(ASKER, ["https://a.test/", "https://b.test/", "https://c.test/"], "tab", async (failed) => void calls.push(`report ${failed}`));
+  } finally {
+    delete (globalThis as unknown as { browser?: unknown }).browser;
+  }
+  assert.deepEqual(calls, ["tab https://a.test/ active=false opener=5 window=2", "tab https://b.test/ active=false opener=5 window=2", "tab https://c.test/ active=false opener=5 window=2", "report 0", 'update 10 {"active":true}']);
+});
+
+test("open_many in the background never activates a tab, and a window holds the tabs that open", async () => {
+  const calls: string[] = [];
+  fake_browser([], calls);
+  try {
+    await open_many(ASKER, ["https://a.test/", "https://b.test/"], "background", async () => {});
+    await open_many(ASKER, ["https://a.test/", "https://b.test/"], "window", async () => {});
+  } finally {
+    delete (globalThis as unknown as { browser?: unknown }).browser;
+  }
+  assert.deepEqual(calls, ["tab https://a.test/ active=false opener=5 window=2", "tab https://b.test/ active=false opener=5 window=2", "window https://a.test/", "tab https://b.test/ active=false opener=- window=99"]);
+});
+
+test("open_many skips an address the browser refuses, counts it, and still opens the window and the later tabs", async () => {
+  const tabs: string[] = [];
+  fake_browser(["file:///x.html"], tabs);
+  const reports: number[] = [];
+  try {
+    await open_many(ASKER, ["file:///x.html", "https://b.test/", "https://c.test/"], "tab", async (failed) => void reports.push(failed));
+    await open_many(ASKER, ["file:///x.html", "https://b.test/", "file:///x.html", "https://c.test/"], "window", async (failed) => void reports.push(failed));
+  } finally {
+    delete (globalThis as unknown as { browser?: unknown }).browser;
+  }
+  assert.deepEqual(reports, [1, 2]);
+  assert.deepEqual(tabs.filter((call) => call.startsWith("window")), ["window https://b.test/"]);
+  assert.ok(tabs.includes('update 10 {"active":true}'));
+});
+
+test("bookmark.open_folder refuses when the browser refuses every address", async () => {
+  const handlers = make_bookmark_handlers({
+    ...UNUSED_REMOVE,
+    folders: async () => [{ id: "z", path: "Z", managed: false, bookmarks: [{ url: "https://z.test/" }] }],
+    tab_title_for_url: async () => undefined,
+    create: async () => {},
+    bookmarks: async () => ({ rows: { rows: [], folders: [] }, folders: [] }),
+    open: async () => {},
+    open_many: async (_ctx, urls, _where, report) => report(urls.length),
+  });
+  await assert.rejects(handlers.open_folder(ctx, { folder: "Z", where: "tab" }), /None of the bookmarks in Z could be opened/);
+});
+
+test("bookmark.open with a folder picks among the rows filed there or in a subfolder, and refuses an unknown folder", async () => {
+  const opened: string[] = [];
+  const handlers = make_bookmark_handlers({
+    ...UNUSED_REMOVE,
+    folders: async () => FOLDERS,
+    tab_title_for_url: async () => undefined,
+    create: async () => {},
+    bookmarks: async () => ({ rows: BOOKMARK_ROWS, folders: FOLDERS }),
+    open: async (_ctx, url) => void opened.push(url),
+  });
+  await handlers.open(ctx, { bookmark: "rust", folder: "Other Bookmarks / Work", where: "here" });
+  await handlers.open(ctx, { bookmark: "arch", folder: "Bookmarks Toolbar", where: "here" });
+  await assert.rejects(handlers.open(ctx, { bookmark: "arch", folder: "Other Bookmarks / Work", where: "here" }), /no bookmark matches "arch"/);
+  await assert.rejects(handlers.open(ctx, { bookmark: "arch", folder: "zzzz", where: "here" }), /no folder matches "zzzz"/);
+  await assert.rejects(handlers.open(ctx, { bookmark: "arch", folder: "work", where: "here" }), /equally/);
+  assert.deepEqual(opened, ["https://doc.rust-lang.org/reference/", "https://wiki.archlinux.org/"]);
+});
+
+test("bookmark.remove with a folder removes only the copies in it and below it", async () => {
+  const nodes = [{ id: "in_work", parentId: "f2", type: "bookmark" }, { id: "in_other", parentId: "f3", type: "bookmark" }];
+  const exact = remove_fixture(nodes);
+  await exact.handlers.remove(ctx, { bookmark: "reference", folder: "Other Bookmarks / Work" });
+  assert.deepEqual(exact.log, ["remove in_other", "success Removed 1 bookmark"]);
+  const subtree = remove_fixture(nodes);
+  await subtree.handlers.remove(ctx, { bookmark: "", folder: "Bookmarks Toolbar" });
+  assert.deepEqual(subtree.log, ["remove in_work", "success Removed 1 bookmark"]);
+  const outside = remove_fixture([{ id: "elsewhere", parentId: "f4", type: "bookmark" }]);
+  await assert.rejects(outside.handlers.remove(ctx, { bookmark: "", folder: "Bookmarks Toolbar" }), /No bookmark for this page in Bookmarks Toolbar/);
+  await assert.rejects(outside.handlers.remove(ctx, { bookmark: "", folder: "zzzz" }), /no folder matches "zzzz"/);
+  assert.deepEqual(outside.log, []);
+});
+
+test("the filter prefers a folder over its own subfolders on a fuzzy tie, and filing still refuses the tie", () => {
+  const tree: FolderNode[] = [
+    { id: "r", path: "Other Bookmarks", managed: false, bookmarks: [] },
+    { id: "w", path: "Other Bookmarks / Work", managed: false, bookmarks: [] },
+    { id: "x", path: "Other Bookmarks / Work / Reports", managed: false, bookmarks: [] },
+  ];
+  assert.equal(pick_filter_folder(tree, "work").id, "w");
+  assert.equal(pick_filter_folder(tree, "other").id, "r");
+  assert.throws(() => pick_folder(tree, "work"), /equally/);
+  // Siblings of one name stay a tie, since neither holds the other.
+  assert.throws(() => pick_filter_folder(FOLDERS, "work"), /equally/);
+});
+
+test("bookmark.remove with a folder refuses when the copy inside it is managed, and never touches the unmanaged copy outside", async () => {
+  const fixture = remove_fixture([{ id: "managed_in", parentId: "f2", type: "bookmark", unmodifiable: "managed" }, { id: "plain_out", parentId: "f3", type: "bookmark" }]);
+  await assert.rejects(fixture.handlers.remove(ctx, { bookmark: "", folder: "Bookmarks Toolbar / Work" }), /managed and cannot be removed/);
+  assert.deepEqual(fixture.log, []);
+});
+
+test("the filter tie rule takes a folder over several child siblings, and refuses when the tie has no single ancestor", () => {
+  const folder = (id: string, path: string): FolderNode => ({ id, path, managed: false, bookmarks: [] });
+  const with_siblings = [folder("w", "Work"), folder("a", "Work / A"), folder("b", "Work / B")];
+  assert.equal(pick_filter_folder(with_siblings, "work").id, "w");
+  // A / Work is no ancestor of B / Work, so the tie has no single ancestor.
+  assert.throws(() => pick_filter_folder([folder("a", "A / Work"), folder("b", "B / Work"), folder("c", "B / Work / C")], "work"), /equally/);
+  // Two folders that share the ancestor's path are refused, because the text cannot say which one is meant.
+  assert.throws(() => pick_filter_folder([folder("w1", "Work"), folder("w2", "Work"), folder("a", "Work / A")], "work"), /equally/);
 });

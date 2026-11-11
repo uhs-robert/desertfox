@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "DesertFox",
-  "version": "0.1.8",
+  "version": "0.1.16",
   "description": "Keyboard-first Firefox extension built around one command registry.",
   "browser_specific_settings": {
     "gecko": {
@@ -33,6 +33,7 @@
       "match_about_blank": true
     }
   ],
+  "devtools_page": "devtools.html",
   "web_accessible_resources": [
     "cmdline.html"
   ],
@@ -48,6 +49,7 @@
     "contextualIdentities",
     "cookies",
     "sessions",
+    "browsingData",
     "<all_urls>"
   ],
   "optional_permissions": [
@@ -64,9 +66,6 @@
   },
   "chrome_url_overrides": {
     "newtab": "newtab.html"
-  },
-  "storage": {
-    "managed_schema": "managed_schema.json"
   },
   "commands": {
     "toggle_enabled": {

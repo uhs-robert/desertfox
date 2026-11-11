@@ -14,7 +14,9 @@ Which-key shows a group as `+Name`, for example `g` as `+Go`. A `group_names` se
 
 A key shows the command label plus a phrase for each arg its binding sets, for example `gO` as "Open URL in new tab". Keys that set numbers carry a `label` in the default keymap, such as `h` as "Scroll left". The Label column shows that `label` or the command label. The rule is in [design.md](design.md#which-key).
 
-The hint keys `;r ;b ;w ;y ;Y ;h ;x ;2` are modifiers, so no row lists their variants. A `[modifiers]` section in `keymap.toml` holds them. Each adds its args to a variant of every key in the `;` group: `;bl` opens a link in a background tab, `;Yp` copies the text of an element, `;ha` hovers any element, `;2a` double-clicks any element but a link, `;rl` opens links in background tabs and keeps picking. A variant exists only when the `hint` param schema accepts the combination. Keys that set their own `action` (`;s`, `;v`, `;V`) get none, and modifiers do not stack.
+The hint keys `;r ;B ;W ;d ;o ;h ;x ;2` are modifiers, so no row lists their variants. A `[modifiers]` section in `keymap.toml` holds them. Each adds its args to a variant of every key in the `;` group: `;Bl` opens a link in a background tab, `;oa` selects any visible element in the DevTools Inspector, `;ha` hovers any element, `;2a` double-clicks any element but a link, `;xa` deletes any element, `;rl` opens links in background tabs and keeps picking. A variant exists only when the `hint` param schema accepts the combination. Keys that set their own `action` (`;s`, `;v`, `;V` and the `;y` yank keys) get none, and modifiers do not stack.
+
+A register prefix `"<reg>` and a count go before any command in normal, caret, visual and visual line mode, so `"ay` yanks into register `a` and `"app` opens it. The prefix is no row below, because it is no key of the tree. In insert mode `<C-r><reg>` pastes a register.
 
 The `caret`, `visual` and `cmdline` rows bind placeholder commands that refuse until their piece builds them.
 
@@ -22,7 +24,7 @@ A note "(prompts)" means the binding sets a `prompt` for a param, so the command
 
 <!-- BEGIN generated -->
 
-bound: 287 (normal 152, hint 2, cmdline 18, caret 35, visual 37, visual_line 38, insert 1, ignore 1, browser 3) | later: 6 | dropped: 8
+bound: 338 (normal 201, hint 2, cmdline 19, caret 35, visual 37, visual_line 38, insert 2, ignore 1, browser 3) | later: 3 | dropped: 7
 
 ### normal
 
@@ -45,6 +47,8 @@ bound: 287 (normal 152, hint 2, cmdline 18, caret 35, visual 37, visual_line 38,
 | `rr` | bound | `page.reload` | Reload |  |
 | `rh` | bound | `page.reload --hard` | Hard reload |  |
 | `R` | bound | `page.reload --hard` | Hard reload |  |
+| `rc` | bound | `page.reload --site` | Clear site data, reload |  |
+| `rC` | bound | `page.reload --all` (prompts) | Clear all data, reload |  |
 | `xp` | bound | `page.stop` | Stop loading |  |
 | `gh` | bound | `page.home` | Home page |  |
 | `gH` | bound | `page.home --tab` | Home page |  |
@@ -52,6 +56,9 @@ bound: 287 (normal 152, hint 2, cmdline 18, caret 35, visual 37, visual_line 38,
 | `[[` | bound | `page.follow --prev` | Previous page |  |
 | `]i` | bound | `page.focus_field --next` | Next form control |  |
 | `[i` | bound | `page.focus_field --prev` | Previous form control |  |
+| `]h` | bound | `page.heading --next` | Next heading |  |
+| `[h` | bound | `page.heading --prev` | Previous heading |  |
+| `sh` | bound | `cmdline.open --text='heading '` | Search headings |  |
 | `.` | bound | `repeat` | Repeat |  |
 | `J` | bound | `tab.next` | Next tab |  |
 | `K` | bound | `tab.prev` | Previous tab |  |
@@ -63,8 +70,8 @@ bound: 287 (normal 152, hint 2, cmdline 18, caret 35, visual 37, visual_line 38,
 | `g^` | bound | `tab.goto 1` | First tab |  |
 | `g$` | bound | `tab.goto -1` | Last tab |  |
 | `T` | bound | `tab` (prompts) | Switch tab |  |
-| `<<` | bound | `tab.move -1` | Move tab left |  |
-| `>>` | bound | `tab.move 1` | Move tab right |  |
+| `<<` | bound | `tab.move --offset=-1` | Move tab left |  |
+| `>>` | bound | `tab.move --offset=1` | Move tab right |  |
 | `xx` | bound | `tab.close` | Close tab |  |
 | `dd` | bound | `tab.close` | Close tab |  |
 | `D` | bound | `tab.close --focus-previous` | Close tab |  |
@@ -75,8 +82,21 @@ bound: 287 (normal 152, hint 2, cmdline 18, caret 35, visual 37, visual_line 38,
 | `u` | bound | `tab.undo_close` | Reopen closed tab |  |
 | `<A-p>` | bound | `tab.pin` | Toggle pin |  |
 | `<A-m>` | bound | `tab.mute` | Toggle mute |  |
+| `am` | bound | `tab.mute` | Toggle mute |  |
+| `ap` | bound | `media play_pause` | Play or pause |  |
+| `as` | bound | `media speed up` | Speed up |  |
+| `aS` | bound | `media speed down` | Slow down |  |
+| `ar` | bound | `media speed reset` | Reset speed |  |
+| `av` | bound | `media volume up` | Volume up |  |
+| `aV` | bound | `media volume down` | Volume down |  |
+| `al` | bound | `media seek up` | Seek forward |  |
+| `ah` | bound | `media seek down` | Seek back |  |
+| `aP` | bound | `media pip` | Toggle picture-in-picture |  |
+| `A` | bound | `cmdline.open --text='media '` | Media command |  |
 | `tt` | bound | `open --tab` (prompts) | Open URL |  |
 | `tT` | bound | `tab` (prompts) | Switch tab |  |
+| `ts` | bound | `session.save` (prompts) | Save tab session |  |
+| `tS` | bound | `session.open` (prompts) | Open tab session |  |
 | `td` | bound | `tab.duplicate` | Duplicate tab |  |
 | `tm` | bound | `tab.move` (prompts) | Move tab |  |
 | `tn` | bound | `tab.next` | Next tab |  |
@@ -115,13 +135,24 @@ bound: 287 (normal 152, hint 2, cmdline 18, caret 35, visual 37, visual_line 38,
 | `]c` | bound | `url.increment --up` | Change URL number |  |
 | `[c` | bound | `url.increment --down` | Change URL number |  |
 | `gi` | bound | `page.focus_input` | Focus input |  |
-| `p` | bound | `paste` | Open clipboard |  |
+| `I` | bound | `page.focus_input` | Focus input |  |
+| `i` | bound | `mode.insert` | Insert mode |  |
+| `pp` | bound | `paste` | Open clipboard |  |
+| `pt` | bound | `paste --tab` | Open clipboard |  |
+| `pw` | bound | `paste --window` | Open clipboard |  |
 | `P` | bound | `paste --tab` | Open clipboard |  |
-| `aa` | bound | `bookmark.add` | Add bookmark |  |
-| `ab` | bound | `bookmark.add` (prompts) | Add bookmark, edit URL |  |
-| `ad` | bound | `bookmark.remove` | Remove bookmark |  |
-| `aD` | bound | `bookmark.remove` (prompts) | Remove bookmark, pick from list |  |
-| `b` | bound | `bookmark` (prompts) | Open bookmark |  |
+| `pr` | bound | `page.print` | Print |  |
+| `ps` | bound | `page.save_pdf` | Save as PDF |  |
+| `ba` | bound | `bookmark.add` (prompts) | Add bookmark, edit URL |  |
+| `bA` | bound | `bookmark.add` (prompts) | Add bookmark, pick folder |  |
+| `be` | bound | `bookmark.edit_url` (prompts) | Edit bookmark address |  |
+| `br` | bound | `bookmark.rename` (prompts) | Rename bookmark |  |
+| `bm` | bound | `bookmark.move` (prompts) | Move bookmark to folder |  |
+| `bf` | bound | `bookmark.open_folder --tab` (prompts) | Open folder in tabs |  |
+| `bF` | bound | `bookmark.open_folder --window` (prompts) | Open folder in a new window |  |
+| `bd` | bound | `bookmark.remove` | Remove bookmark |  |
+| `bD` | bound | `bookmark.remove` (prompts) | Remove bookmark, pick from list |  |
+| `bb` | bound | `bookmark` (prompts) | Open bookmark |  |
 | `B` | bound | `bookmark --tab` (prompts) | Open bookmark |  |
 | `zi` | bound | `zoom.by 0.1` | Zoom in |  |
 | `z+` | bound | `zoom.by 0.1` | Zoom in |  |
@@ -145,30 +176,50 @@ bound: 287 (normal 152, hint 2, cmdline 18, caret 35, visual 37, visual_line 38,
 | `<C-[>` | bound | `mode.escape` | Escape |  |
 | `<C-v>` | bound | `mode.pass_next` | Pass next key |  |
 | `<F1>` | bound | `help` | Help |  |
-| `qr` | bound | `config.reload` | Reload config |  |
-| `qh` | bound | `help` | Help |  |
-| `qi` | bound | `mode ignore` | Set mode |  |
-| `qb` | bound | `page.blur` | Blur |  |
+| `,r` | bound | `config.reload` | Reload config |  |
+| `,h` | bound | `help` | Help |  |
+| `,s` | bound | `help settings` | Settings page |  |
+| `,t` | bound | `toggle` (prompts) | Toggle a setting |  |
+| `,i` | bound | `mode ignore` | Set mode |  |
+| `,,` | bound | `anything` (prompts) | Find anything |  |
+| `,b` | bound | `page.blur` | Blur |  |
+| `,?` | bound | `help.whichkey` | Which key |  |
+| `,"` | bound | `registers` (prompts) | List registers |  |
+| `m` | bound | `mark.add` | Set mark |  |
+| `q` | bound | `macro.record` | Record macro |  |
+| `@` | bound | `macro.play` | Play macro |  |
+| `'` | bound | `mark.jump` | Jump to mark |  |
+| `` ` `` | bound | `mark.jump` | Jump to mark |  |
 | `o` | bound | `open` (prompts) | Open URL |  |
 | `O` | bound | `open --tab` (prompts) | Open URL |  |
-| `go` | bound | `open` (prompts) | Open URL |  |
-| `gO` | bound | `open --tab` (prompts) | Open URL |  |
+| `ge` | bound | `open` (prompts) | Open URL |  |
+| `gE` | bound | `open --tab` (prompts) | Open URL |  |
+| `M` | bound | `quickmark.add` | Add quickmark |  |
+| `go` | bound | `quickmark.open` | Open quickmark |  |
+| `gn` | bound | `quickmark.open --tab` | Open quickmark |  |
 | `f` | bound | `hint` | Click element |  |
 | `F` | bound | `hint --background` | Click element in background tab |  |
 | `v` | bound | `mode caret` | Start caret mode |  |
 | `V` | bound | `mode visual` | Start visual mode |  |
 | `;v` | bound | `hint --caret --prose` | Start caret mode at text |  |
 | `;V` | bound | `hint --visual --prose` | Start visual mode at text |  |
-| `;#` | bound | `cmdline.open --text='heading '` | Jump to heading |  |
+| `;u` | bound | `cmdline.open --text='hint --custom '` | Hint a CSS selector |  |
 | `;;` | bound | `cmdline.open --text='hint '` | Open the command line with hint |  |
-| `;B` | bound | `hint --buttons` | Click button |  |
-| `;a` | bound | `hint --all` | Click any element |  |
+| `;b` | bound | `hint --buttons` | Click button |  |
+| `;a` | bound | `hint --every` | Click every element |  |
 | `;p` | bound | `hint --prose` | Click text |  |
 | `;s` | bound | `hint --focus --scrollable` | Focus scroll box |  |
 | `;i` | bound | `hint --inputs` | Click input |  |
 | `;l` | bound | `hint --links` | Click link |  |
 | `;I` | bound | `hint --images` | Open image in new tab |  |
-| `;yI` | bound | `hint --copy-image --images` | Copy image |  |
+| `;yl` | bound | `hint --copy --links` | Copy link URL |  |
+| `;yi` | bound | `hint --copy-image --images` | Copy picture |  |
+| `;yI` | bound | `hint --copy --images` | Copy image URL |  |
+| `;ym` | bound | `hint --copy --media` | Copy media URL |  |
+| `;yf` | bound | `hint --copy --frames` | Copy frame URL |  |
+| `;yt` | bound | `hint --copy-text --all` | Copy text |  |
+| `;yc` | bound | `hint --copy-selector --every` | Copy CSS selector |  |
+| `;yh` | bound | `hint --copy-html --every` | Copy outer HTML |  |
 | `;f` | bound | `hint --frames` | Focus frame |  |
 | `;m` | bound | `hint --media` | Play or pause media |  |
 | `:` | bound | `cmdline.open` | Command line |  |
@@ -180,9 +231,6 @@ bound: 287 (normal 152, hint 2, cmdline 18, caret 35, visual 37, visual_line 38,
 | `N` | bound | `find.prev` | Previous match |  |
 | `g?` | bound | `help` | Help |  |
 | `gV` | bound | `mode caret` | Set mode |  |
-| `m` | later | `mark.add` |  | phase 3, key param |
-| `M` | later | `quickmark.add` |  | phase 3, key param |
-| `` ` `` | later | `mark.jump` |  | phase 3, key param |
 | `wi` | dropped |  |  | needs a shell |
 | `<C-o>` | later | `page.jump --step=-1` |  | phase 3 |
 | `<C-i>` | later | `page.jump --step=1` |  | phase 3 |
@@ -193,29 +241,35 @@ bound: 287 (normal 152, hint 2, cmdline 18, caret 35, visual 37, visual_line 38,
 | `;c` | dropped |  |  | needs a shell |
 | `;x` | dropped |  |  | needs a shell |
 | `;:` | dropped |  |  | needs a shell |
-| `,r` | dropped |  |  | no config file to reload |
 
 Which-key group names:
 
 - `g`: Go
+- `go`: Open quickmark
+- `gn`: Open quickmark in new tab
 - `gx`: Close tabs
 - `d`: Close
 - `x`: Stop or close
 - `r`: Reload
+- `p`: Page
 - `>`: Move tab
 - `t`: Tabs
 - `w`: Windows
 - `y`: Copy
-- `a`: Bookmark
+- `b`: Bookmark
 - `z`: Zoom and scroll
-- `q`: DesertFox
+- `,`: DesertFox
+- `q`: Record macro
+- `@`: Play macro
 - `;`: Hints
+- `;y`: Yank
 - `s`: Search here
 - `S`: Search in new tab
 - `s/`: Site search
 - `S/`: Site search in new tab
 - `c`: Reopen in container
 - `C`: Open in container
+- `a`: Media
 
 ### hint
 
@@ -236,6 +290,7 @@ Which-key group names:
 | `<C-p>` | bound | `cmdline.prev_completion` | Previous completion |  |
 | `<A-ArrowUp>` | bound | `cmdline.prev_completion` | Previous completion |  |
 | `<Enter>` | bound | `cmdline.submit` | Submit |  |
+| `<S-Enter>` | bound | `cmdline.submit --tab` | Run and open in a new tab |  |
 | `<ArrowUp>` | bound | `cmdline.history prev` | History |  |
 | `<ArrowDown>` | bound | `cmdline.history next` | History |  |
 | `<C-u>` | bound | `cmdline.clear` | Clear line |  |
@@ -377,6 +432,7 @@ Which-key group names:
 | Key | Status | Command | Label | Note |
 | --- | --- | --- | --- | --- |
 | `<Escape>` | bound | `mode.escape` | Escape |  |
+| `<C-r>` | bound | `register.paste` | Paste register |  |
 
 ### ignore
 

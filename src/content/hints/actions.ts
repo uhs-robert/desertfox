@@ -1,8 +1,9 @@
 // What a picked hint does to its element.
 
 import { enter_for_click, hover, leave_toward } from "./hover.ts";
+import { selector_of } from "./selector_of.ts";
 
-export type HintAction = "here" | "tab" | "background" | "window" | "caret" | "visual" | "copy" | "copy_text" | "copy_image" | "download" | "delete" | "focus" | "hover" | "double_click" | "play_pause" | "mute" | "fullscreen";
+export type HintAction = "here" | "tab" | "background" | "window" | "caret" | "visual" | "copy" | "copy_text" | "copy_image" | "copy_selector" | "copy_html" | "inspect" | "download" | "delete" | "focus" | "hover" | "double_click" | "play_pause" | "mute" | "fullscreen";
 
 export type Place = "here" | "tab" | "background" | "window";
 
@@ -15,10 +16,13 @@ export const starts_caret = (action: HintAction): action is CaretMode => action 
 export type ActionDeps = {
   // A promise settles when the action is finished, so the sequence that started the hints goes on after it.
   open_link_: (url: string, place: Place) => void | Promise<unknown>;
-  copy: (text: string) => void | Promise<unknown>;
+  // The toast says `Copied <what>` where `what` is given, and quotes the text otherwise.
+  copy: (text: string, what?: string) => void | Promise<unknown>;
   // The background fetches the address. The content script never does, because the page's rules would block a picture from another site.
   image_action: (action: "copy_image" | "download", address: string) => Promise<unknown>;
   start_caret_: (target: Element, mode: CaretMode) => void;
+  // Sends the element to the Inspector through the devtools page. A failed outcome carries the toast text.
+  inspect_: (target: Element) => Promise<unknown>;
 };
 
 type Target = Pick<HTMLElement, "click" | "focus" | "remove"> & { dispatchEvent?: (event: Event) => boolean; getBoundingClientRect?: () => { left: number; top: number; width: number; height: number } } & { tabIndex?: number; setAttribute?: (name: string, value: string) => void; style?: CSSStyleDeclaration } & { textContent?: string | null; href?: unknown; localName: string; type?: unknown; isContentEditable?: boolean } & { currentSrc?: string; src?: string; getAttribute?: (name: string) => string | null; ownerDocument?: Document; baseURI?: string };
@@ -109,6 +113,9 @@ export function dispatch_mouse_event(target: Target, type: MouseEventName, relat
   if (!target.dispatchEvent) return true;
   const stays_inside = /(enter|leave)$/.test(type);
   const init = { bubbles: !stays_inside, cancelable: true, composed: !stays_inside, button: 0, buttons: type.endsWith("down") ? 1 : 0, relatedTarget: related_target, clientX: at.x, clientY: at.y };
+  // A browser sends `click` as a PointerEvent too, so the synthetic one is built the same way.
+  // The other pointer events carry no click count, so only the click gets `detail`.
+  if (type === "click") return target.dispatchEvent(new PointerEvent(type, { ...init, detail, pointerType: "mouse", isPrimary: true }));
   return target.dispatchEvent(type.startsWith("pointer") ? new PointerEvent(type, { ...init, pointerType: "mouse", isPrimary: true }) : new MouseEvent(type, { ...init, detail }));
 }
 
@@ -120,11 +127,12 @@ function press_and_release(target: Target, detail: number): void {
   if (pointer_pressed) dispatch_mouse_event(target, "mouseup", null, undefined, detail);
 }
 
-// The events a real click gives, so a widget that opens on mousedown or pointerdown opens. The click comes last, from click(), so a link or button acts once.
+// The events a real click gives, so a widget that opens on mousedown or pointerdown opens. The click comes last, from click(), so a link or button acts once. An SVG element has no click(), so it gets a click event.
 function click_like_a_mouse(target: Target, pointer_from: Target | undefined): void {
   enter_for_click(target, pointer_from);
   press_and_release(target, 1);
-  target.click();
+  if (typeof target.click === "function") target.click();
+  else dispatch_mouse_event(target, "click", null, undefined, 1);
 }
 
 // A link is no target: its first click would navigate away before the second press. The climb covers the children of a link, across shadow roots, because their click bubbles to it.
@@ -251,6 +259,12 @@ export function perform(action: HintAction, target: Target, deps: ActionDeps, wi
   if (action === "copy") return address === undefined && (is_image_element(target) || is_media(target) || is_frame_element(target)) ? NO_WEB_ADDRESS : deps.copy(address ?? (target.textContent ?? "").trim());
   if (action === "copy_image" || action === "download") return address === undefined ? NO_WEB_ADDRESS : deps.image_action(action, address);
   if (action === "copy_text") return is_frame_element(target) ? { ok: false, message: "A frame has no text" } : deps.copy((target.textContent ?? "").trim());
+  if (action === "copy_selector") {
+    const element = target as unknown as Element;
+    return deps.copy(selector_of(element, (selector) => (element.getRootNode() as ParentNode).querySelectorAll(selector).length), "selector");
+  }
+  if (action === "inspect") return deps.inspect_(target as unknown as Element);
+  if (action === "copy_html") return deps.copy((target as unknown as Element).outerHTML, "HTML");
   if (action === "tab" || action === "background" || action === "window") {
     // A click on a frame does nothing, so it must not stand in for an open.
     if (address === undefined) return is_frame_element(target) ? NO_WEB_ADDRESS : click_like_a_mouse(target, pointer_from);

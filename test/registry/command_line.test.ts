@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { check_args, parse_command_line, tokenize, usage_line } from "../../src/shared/registry/index.ts";
-import type { EnumSources } from "../../src/shared/registry/index.ts";
+import { check_args, create_registry, parse_command_line, tokenize, usage_line } from "../../src/shared/registry/index.ts";
+import type { EnumSources, Token } from "../../src/shared/registry/index.ts";
 import "../../src/commands/hint.ts";
+import "../../src/background/command_modules.ts";
 import { registry as real_registry } from "../../src/shared/registry/builtin.ts";
 import { grammar_registry, search_sources } from "./grammar_registry.ts";
 
@@ -65,7 +66,7 @@ test("--name=value works for any param, with the first = as the split", () => {
   assert.deepEqual(parsed("open --where=tab --url=https://a.example/?x=1").args, { where: "tab", url: "https://a.example/?x=1" });
   assert.deepEqual(parsed(`hint --selector=".post a"`).args, { selector: ".post a" });
   assert.deepEqual(parsed(`hint --selector='a[href="x"]'`).args, { selector: 'a[href="x"]' });
-  assert.deepEqual(parsed("tab.move --offset=-1").args, { offset: "-1" });
+  assert.deepEqual(parsed("tab.slide --offset=-1").args, { offset: "-1" });
   assert.deepEqual(parsed("hint --rapid=false").args, { rapid: "false" });
   assert.equal(check_args(registry.get("hint.run")!, parsed("hint --rapid=false").args).ok, true);
   assert.equal(error_of("open --nope=1"), 'unknown param "nope" for open');
@@ -164,11 +165,11 @@ test("a command whose only argument is a required value takes it as the bare sub
 
 test("a command with one number param takes a bare number, negative included", () => {
   assert.deepEqual(parsed("tab.goto 1").args, { index: "1" });
-  assert.deepEqual(parsed("tab.move -1").args, { offset: "-1" });
+  assert.deepEqual(parsed("tab.slide -1").args, { offset: "-1" });
   assert.deepEqual(parsed("zoom.set 1.5").args, { level: "1.5" });
   assert.deepEqual(parsed("zoom.set -0.5").args, { level: "-0.5" });
-  assert.deepEqual(parsed("tab.move -5").args, { offset: "-5" });
-  assert.deepEqual(check_args(registry.get("tab.move")!, parsed("tab.move -1").args), { ok: true, args: { offset: -1 } });
+  assert.deepEqual(parsed("tab.slide -5").args, { offset: "-5" });
+  assert.deepEqual(check_args(registry.get("tab.slide")!, parsed("tab.slide -1").args), { ok: true, args: { offset: -1 } });
 });
 
 test("a negative number is a value even next to a switch", () => {
@@ -179,17 +180,18 @@ test("a negative number is a value even next to a switch", () => {
 test("bare number edge cases", () => {
   assert.match(error_of("scroll.by 5"), /"5" is not a flag or subject of scroll\.by, a bare number needs a command with one number param/);
   assert.deepEqual(parsed("scroll.by --dx=5 --dy=-5").args, { dx: "5", dy: "-5" });
-  assert.equal(error_of("tab.move 1 2"), '"2" is not a flag or subject of tab.move');
-  assert.equal(error_of("tab.move --offset=1 2"), '"2" is not a flag or subject of tab.move');
-  assert.equal(error_of(`tab.move "1"`), '"1" is not a flag or subject of tab.move');
-  assert.match(error_of("tab.move -x"), /unknown flag "-x"/);
-  assert.match(error_of("tab.move 1.2.3"), /"1.2.3" is not a flag or subject/);
-  assert.equal(check_args(registry.get("tab.move")!, parsed("tab.move 1.5").args).ok, false);
+  assert.equal(error_of("tab.slide 1 2"), '"2" is not a flag or subject of tab.slide');
+  assert.equal(error_of("tab.slide --offset=1 2"), '"2" is not a flag or subject of tab.slide');
+  assert.equal(error_of(`tab.slide "1"`), '"1" is not a flag or subject of tab.slide');
+  assert.match(error_of("tab.slide -x"), /unknown flag "-x"/);
+  assert.match(error_of("tab.slide 1.2.3"), /"1.2.3" is not a flag or subject/);
+  assert.equal(check_args(registry.get("tab.slide")!, parsed("tab.slide 1.5").args).ok, false);
 });
 
 test("a number goes to the main value when the command has no number param", () => {
   assert.deepEqual(parsed("open 5 text").args, { url: "5 text" });
-  assert.match(error_of("open -5"), /unknown flag "-5"/);
+  assert.deepEqual(parsed("open -5").args, { url: "-5" });
+  assert.match(error_of("open -5x"), /unknown flag "-5x"/);
   assert.deepEqual(parsed("open -- -5").args, { url: "-5" });
 });
 
@@ -217,20 +219,30 @@ test("@source words are context sources, unquoted only", () => {
   assert.deepEqual(parsed(`open "@selection"`).args, { url: "@selection" });
   assert.deepEqual(parsed(`open --url="@selection"`).args, { url: "@selection" });
   assert.deepEqual(parsed(`open a@b.example`).args, { url: "a@b.example" });
-  assert.match(error_of("open @nope"), /unknown source "@nope" \(known: @current_url, @selection, @clipboard\), quote text that starts with @/);
+  assert.match(error_of("open @nope"), /unknown source "@nope" \(known: @current_url, @selection, @clipboard, @bookmark_title\), quote text that starts with @/);
 });
 
 test("shell quoting", () => {
-  assert.deepEqual(tokenize(`a "b c" 'd e' f\\ g "h\\"i" 'j\\k' l"m n"o x="y z"`), [
-    { text: "a", quoted_from: null },
-    { text: "b c", quoted_from: 0 },
-    { text: "d e", quoted_from: 0 },
-    { text: "f g", quoted_from: 1 },
-    { text: 'h"i', quoted_from: 0 },
-    { text: "j\\k", quoted_from: 0 },
-    { text: "lm no", quoted_from: 1 },
-    { text: "x=y z", quoted_from: 2 },
-  ]);
+  const line = `a "b c" 'd e' f\\ g "h\\"i" 'j\\k' l"m n"o x="y z"`;
+  const tokens = tokenize(line) as Token[];
+  assert.deepEqual(
+    tokens.map(({ text, quoted_from }) => ({ text, quoted_from })),
+    [
+      { text: "a", quoted_from: null },
+      { text: "b c", quoted_from: 0 },
+      { text: "d e", quoted_from: 0 },
+      { text: "f g", quoted_from: 1 },
+      { text: 'h"i', quoted_from: 0 },
+      { text: "j\\k", quoted_from: 0 },
+      { text: "lm no", quoted_from: 1 },
+      { text: "x=y z", quoted_from: 2 },
+    ],
+  );
+  // `start` is where the raw word begins in the line, so the raw text of a word is `line.slice(start)` up to its end.
+  assert.deepEqual(
+    tokens.map(({ start }) => line.slice(start).split(" ")[0]),
+    ["a", '"b', "'d", "f\\", '"h\\"i"', "'j\\k'", 'l"m', 'x="y'],
+  );
   assert.deepEqual(parsed(`open --where=tab "two words"`).args, { where: "tab", url: "two words" });
   assert.deepEqual(parsed(`open --url="my page" --where=tab`).args, { url: "my page", where: "tab" });
   assert.deepEqual(parsed(`open --url=""`).args, { url: "" });
@@ -329,4 +341,105 @@ test("bare words fill the required strict params in schema order, then the subje
   assert.deepEqual(parse("pos.set typo"), { name: "typo" });
   assert.equal(check_args(positional.get("pos.set")!, parse("pos.set typo")).ok, false);
   assert.equal(usage_line(positional.get("pos.set")!), "pos.set <name> [value...]");
+});
+
+test("hint refuses a selector unless the filter is custom", () => {
+  for (const text of ["hint --links foo", "hint --copy x", "hint foo"]) {
+    const result = parse_command_line(real_registry, text, search_sources);
+    const refused = result.kind === "error" || !check_args(real_registry.get("hint.run")!, result.kind === "invocation" ? result.invocation.args : {}, search_sources).ok;
+    assert.equal(refused, true, text);
+  }
+});
+
+// A verbatim main param takes the typed text as is, from its first word to the end of the line.
+const verbatim_registry = create_registry();
+verbatim_registry.define("pick.run", {
+  name: "pick",
+  label: "L",
+  intent: "I.",
+  runs_in: "background",
+  run: () => {},
+  params: [
+    { name: "rapid", type: "bool", default: false, short: "r" },
+    { name: "where", type: "enum", values: ["here", "tab"], default: "here", short: { tab: "t" } },
+    { name: "selector", type: "string", main: true, rest: true, verbatim: true },
+  ],
+});
+
+function verbatim_args(text: string) {
+  const result = parse_command_line(verbatim_registry, text);
+  assert.equal(result.kind, "invocation", JSON.stringify(result));
+  return result.kind === "invocation" ? result.invocation.args : never();
+}
+
+test("a verbatim param keeps quotes, backslashes and inner spacing, and drops the end spacing", () => {
+  assert.deepEqual(verbatim_args(`pick a[href="/x"]`), { selector: 'a[href="/x"]' });
+  assert.deepEqual(verbatim_args(`pick   a[title='it']  .b   `), { selector: "a[title='it']  .b" });
+  assert.deepEqual(verbatim_args(`pick .a\\:b   c`), { selector: ".a\\:b   c" });
+  assert.deepEqual(verbatim_args(`pick "a b"`), { selector: '"a b"' });
+  assert.deepEqual(verbatim_args(`pick @selection`), { selector: "@selection" });
+  assert.deepEqual(verbatim_args(`pick @selection x`), { selector: "@selection x" });
+});
+
+test("flags come before a verbatim param, and later flag-like words are text", () => {
+  assert.deepEqual(verbatim_args(`pick -r --tab a[href="x"] -r`), { rapid: true, where: "tab", selector: 'a[href="x"] -r' });
+  assert.deepEqual(verbatim_args(`pick -- -x[a="b"]`), { selector: '-x[a="b"]' });
+  assert.deepEqual(verbatim_args(`pick -r -- --a   b`), { rapid: true, selector: "--a   b" });
+  assert.match(error_of_verbatim(`pick -x[a="b"]`), /unknown flag/);
+});
+
+function error_of_verbatim(text: string): string {
+  const result = parse_command_line(verbatim_registry, text);
+  assert.equal(result.kind, "error", JSON.stringify(result));
+  return result.kind === "error" ? result.error : "";
+}
+
+test("the real hint command reads a selector with double quotes verbatim", () => {
+  const result = parse_command_line(real_registry, `hint --custom a[href="x y"] > b`, search_sources);
+  assert.deepEqual(result.kind === "invocation" ? result.invocation.args : result, { filter: "custom", selector: 'a[href="x y"] > b' });
+});
+
+test("a verbatim subject is never tokenized, so an open quote or a trailing backslash passes through", () => {
+  assert.deepEqual(verbatim_args(`pick a[title=it's]`), { selector: "a[title=it's]" });
+  assert.deepEqual(verbatim_args(`pick -r "x`), { rapid: true, selector: '"x' });
+  assert.deepEqual(verbatim_args(`pick .a\\`), { selector: ".a\\" });
+  assert.deepEqual(verbatim_args(`pick -- -x[a="b`), { selector: '-x[a="b' });
+  assert.equal(error_of_verbatim(`pick -r='x`), "unterminated ' quote");
+  assert.equal(error_of(`open "oops`), 'unterminated " quote');
+});
+
+test("a verbatim subject starts at a UTF-16 offset, so wide characters before and inside it are kept", () => {
+  assert.deepEqual(verbatim_args(`pick -r 🦊 a[title="日本 🦊"]  b`), { rapid: true, selector: '🦊 a[title="日本 🦊"]  b' });
+  assert.deepEqual(verbatim_args(`pick   日本[x="é"]`), { selector: '日本[x="é"]' });
+});
+
+test("positional words come before a verbatim subject", () => {
+  const positional = create_registry();
+  positional.define("set.run", {
+    name: "set",
+    label: "L",
+    intent: "I.",
+    runs_in: "background",
+    run: () => {},
+    params: [
+      { name: "name", type: "string", values: ["a", "b"], strict: true },
+      { name: "value", type: "string", main: true, rest: true, verbatim: true },
+    ],
+  });
+  const result = parse_command_line(positional, `set a x "y  z`);
+  assert.deepEqual(result.kind === "invocation" ? result.invocation.args : result, { name: "a", value: 'x "y  z' });
+});
+
+test("a leading number belongs to the main value when the command has one", () => {
+  const unload = (text: string) => {
+    const result = parse_command_line(real_registry, text, {});
+    assert.equal(result.kind, "invocation", JSON.stringify(result));
+    return result.kind === "invocation" ? result.invocation.args : never();
+  };
+  assert.deepEqual(unload("tab.unload 3 GitHub"), { tab: "3 GitHub" });
+  assert.deepEqual(unload("tab.unload 3"), { tab: "3" });
+  assert.deepEqual(unload("tab.unload -1"), { tab: "-1" });
+  assert.deepEqual(unload("tab.load 3 GitHub"), { tab: "3 GitHub" });
+  assert.deepEqual(unload("tab.unload --count=2 3 GitHub"), { count: "2", tab: "3 GitHub" });
+  assert.deepEqual(unload("tab.unload --count=2"), { count: "2" });
 });

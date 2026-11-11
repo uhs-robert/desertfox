@@ -4,11 +4,11 @@ import { test } from "node:test";
 import { load_effective_config } from "../../src/background/config_load.ts";
 import { create_settings_messages, is_extension_page } from "../../src/background/settings_message.ts";
 import { CONFIG_FORMAT_VERSION } from "../../src/shared/config.ts";
-import { SAVED_SETTINGS_STORAGE_KEY, TEMP_SETTINGS_STORAGE_KEY } from "../../src/background/storage_keys.ts";
+import { FILES_CONFIG_STORAGE_KEY, SAVED_SETTINGS_STORAGE_KEY, TEMP_SETTINGS_STORAGE_KEY } from "../../src/background/storage_keys.ts";
 
 // A browser that keeps storage in memory. `fail_session_writes` makes the temp layer's writes throw, after the saved layer's write has landed.
 function install_fake_browser(file_settings: Record<string, unknown>) {
-  const local: Record<string, unknown> = {};
+  const local: Record<string, unknown> = { [FILES_CONFIG_STORAGE_KEY]: { config: { format_version: CONFIG_FORMAT_VERSION, settings: file_settings }, warnings: [] } };
   const session: Record<string, unknown> = {};
   const state = { fail_session_writes: 0 };
   const area = (store: Record<string, unknown>, before_set?: () => void | Promise<void>) => ({
@@ -25,9 +25,10 @@ function install_fake_browser(file_settings: Record<string, unknown>) {
   Object.assign(globalThis, {
     browser: {
       runtime: { id: "test@desertfox" },
+      // No native permission, so the autoconfig mirror stays quiet and writes nothing.
+      permissions: { contains: async () => false },
       storage: {
         local: area(local),
-        managed: { get: async () => ({ format_version: CONFIG_FORMAT_VERSION, settings: file_settings }) },
         session: area(session, async () => {
           if (state.fail_session_writes > 0) {
             state.fail_session_writes--;
@@ -96,7 +97,7 @@ test("reset drops the saved and the temp edit and shows the file value", async (
 
 test("a value that fails the setting's check stores nothing", async () => {
   const { messages, local, session } = await make();
-  for (const [name, value] of [["light_intensity", 9], ["newtab_clock", "sundial"], ["which_key_delay_ms", "5"], ["ignore_sites", ["a.com", ""]]] as const) {
+  for (const [name, value] of [["light_intensity", 9], ["newtab_clock", "sundial"], ["which_key_delay_ms", "5"], ["next_patterns", ["a.com", ""]]] as const) {
     const answer = await messages.change({ type: "change_setting", name, action: "set", value });
     assert.equal(answer.ok, false, name);
   }

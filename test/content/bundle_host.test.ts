@@ -45,7 +45,7 @@ function make_page() {
   let in_field = false;
 
   const flow = create_key_flow({
-    get_mode: state.get_mode,
+    get_mode_: state.get_mode_,
     take_pass_next_: state.take_pass_next_,
     in_editable_field_: () => in_field,
     is_loading_: host.is_loading_,
@@ -71,6 +71,7 @@ function make_page() {
   host.connect({
     request_bundle_: (name) => new Promise<boolean>((resolve) => loads.push({ name, finish: (loaded, register) => (register?.(), resolve(loaded)) })),
     on_idle_: flow.release,
+    hold_first_: flow.hold_first_,
     set_mode_: state.set_mode_,
     show_error_: (message) => errors.push(message),
     show_toast_: (message) => toasts.push(message),
@@ -112,7 +113,7 @@ test("keys typed while a bundle loads are held and replay in order once its sink
   await page.settle();
   // The handler put the page in hint mode before the held keys replayed, so the sink saw a, s and d. The sink passed j to the keymap, which has no j in hint mode.
   assert.deepEqual(page.events, ["hint sink enter", "hint sink a", "hint sink s", "hint sink d", "hint sink j"]);
-  assert.equal(page.state.get_mode(), "hint");
+  assert.equal(page.state.get_mode_(), "hint");
   assert.equal(page.host.is_loading_(), false);
 });
 
@@ -160,11 +161,11 @@ test("a bundle that registers no handler refuses with the reason and the held ke
 test("entering a sink mode loads its bundle, and a bundle without the sink returns the page to normal mode", async () => {
   const page = make_page();
   page.press("V", "x", "j");
-  assert.equal(page.state.get_mode(), "caret");
+  assert.equal(page.state.get_mode_(), "caret");
   assert.equal(page.loads[0]!.name, "caret");
   page.loads[0]!.finish(true);
   await page.settle();
-  assert.equal(page.state.get_mode(), "normal");
+  assert.equal(page.state.get_mode_(), "normal");
   assert.deepEqual(page.events, ["sink missing for caret", "run log_x", "run log_j"]);
   assert.equal(page.host.is_loading_(), false);
 });
@@ -174,9 +175,9 @@ test("entering a sink mode with the sink in place loads nothing, and leaving it 
   page.host.api.register_sink_("caret", page.recording_sink("caret", []));
   page.press("V");
   assert.equal(page.loads.length, 0);
-  assert.equal(page.state.get_mode(), "caret");
+  assert.equal(page.state.get_mode_(), "caret");
   page.press("<Escape>");
-  assert.equal(page.state.get_mode(), "normal");
+  assert.equal(page.state.get_mode_(), "normal");
   assert.deepEqual(page.events, ["caret sink enter", "caret sink <Escape>", "caret sink exit to normal"]);
 });
 
@@ -190,7 +191,7 @@ test("mode caret and visual share one bundle load", async () => {
     page.host.api.register_sink_("visual", page.recording_sink("visual", []));
   });
   await page.settle();
-  assert.equal(page.state.get_mode(), "visual");
+  assert.equal(page.state.get_mode_(), "visual");
   // Caret mode was left before its sink existed, so only visual mode is entered.
   assert.deepEqual(page.events, ["visual sink enter"]);
 });
@@ -206,15 +207,75 @@ test("a leaving page mid-load strands nothing: the held keys are gone with the p
   assert.equal(old_page.host.is_loading_(), true);
 });
 
-test("held keys beyond 32 are dropped, the first 32 replay in order", async () => {
+test("40 keys held during a load all replay in order", async () => {
   const page = make_page();
   page.press("f");
   const typed = Array.from({ length: 40 }, (_, index) => (index % 2 === 0 ? "x" : "j"));
   page.press(...typed);
+  assert.ok(page.decisions.every((decision) => decision.endsWith(":cancel")));
   page.loads[0]!.finish(true);
   await page.settle();
-  assert.equal(page.events.filter((event) => event.startsWith("run")).length, 32);
-  assert.deepEqual(page.events.slice(0, 4), ["run log_x", "run log_j", "run log_x", "run log_j"]);
+  assert.deepEqual(page.events, typed.map((key) => `run log_${key}`));
+});
+
+test("keys the command line hands back replay ahead of the keys the page held meanwhile, and an unbound key passes at once", async () => {
+  const page = make_page();
+  let hand_back!: (tokens: readonly string[]) => void;
+  page.host.api.hold_keys_until_(new Promise((resolve) => (hand_back = resolve)));
+  page.press("q", "x");
+  assert.deepEqual(page.decisions, ["q:pass", "x:cancel"]);
+  assert.deepEqual(page.events, []);
+  hand_back(["j", "g", "g"]);
+  await page.settle();
+  assert.deepEqual(page.events, ["run log_j", "run log_gg", "run log_x"]);
+  assert.equal(page.host.is_loading_(), false);
+});
+
+test("a hand-back that fails still releases the keys the page held", async () => {
+  const page = make_page();
+  page.host.api.hold_keys_until_(Promise.reject(new Error("frame gone")));
+  page.press("x");
+  await page.settle();
+  assert.deepEqual(page.events, ["run log_x"]);
+});
+
+test("a hold that drops on hide ends with its reply, with a failure, or when the page goes away, and only once", async () => {
+  const succeeded = make_page();
+  let reply!: (tokens: readonly string[]) => void;
+  succeeded.host.api.hold_keys_until_(new Promise((resolve) => (reply = resolve)), true);
+  succeeded.press("x");
+  assert.deepEqual(succeeded.events, []);
+  reply([]);
+  await succeeded.settle();
+  assert.deepEqual(succeeded.events, ["run log_x"]);
+  assert.equal(succeeded.host.is_loading_(), false);
+
+  const refused = make_page();
+  refused.host.api.hold_keys_until_(Promise.reject(new Error("refused")), true);
+  refused.press("x");
+  await refused.settle();
+  assert.deepEqual(refused.events, ["run log_x"]);
+
+  const hidden = make_page();
+  let late!: (tokens: readonly string[]) => void;
+  hidden.host.api.hold_keys_until_(new Promise((resolve) => (late = resolve)), true);
+  hidden.press("x");
+  hidden.host.page_hidden_();
+  await hidden.settle();
+  assert.deepEqual(hidden.events, ["run log_x"]);
+  assert.equal(hidden.host.is_loading_(), false);
+  // The lost reply arrives after the page returns: it neither replays keys nor releases a second time.
+  late(["j"]);
+  await hidden.settle();
+  assert.deepEqual(hidden.events, ["run log_x"]);
+  assert.equal(hidden.host.is_loading_(), false);
+});
+
+test("a hold without drop on hide survives the page going away, as the command line hand-back does", async () => {
+  const page = make_page();
+  page.host.api.hold_keys_until_(new Promise(() => {}));
+  page.host.page_hidden_();
+  assert.equal(page.host.is_loading_(), true);
 });
 
 test("chords and keys typed in a field pass through while a bundle loads", async () => {
@@ -239,7 +300,7 @@ test("a replayed key that starts another load keeps the keys behind it waiting f
   page.loads[1]!.finish(true, () => page.host.api.register_sink_("caret", page.recording_sink("caret", ["j"])));
   await page.settle();
   assert.deepEqual(page.events, ["hint.run", "run log_x", "caret sink enter", "caret sink j"]);
-  assert.equal(page.state.get_mode(), "caret");
+  assert.equal(page.state.get_mode_(), "caret");
 });
 
 test("a sink that handles a token keeps it from the keymap", () => {
@@ -248,7 +309,7 @@ test("a sink that handles a token keeps it from the keymap", () => {
   page.state.set_mode_("hint");
   page.press("a", "<Escape>");
   assert.deepEqual(page.decisions, ["a:cancel", "<Escape>:cancel"]);
-  assert.equal(page.state.get_mode(), "normal");
+  assert.equal(page.state.get_mode_(), "normal");
 });
 
 test("toasts and badge updates requested before the ui bundle loads are kept and run in order, without holding keys", async () => {
@@ -286,11 +347,11 @@ test("a bundle enters hint mode with set_mode_, its sink gets the keys, and set_
   const page = make_page();
   page.host.api.register_sink_("hint", page.recording_sink("hint", ["a"]));
   page.host.api.set_mode_("hint");
-  assert.equal(page.state.get_mode(), "hint");
+  assert.equal(page.state.get_mode_(), "hint");
   page.press("a");
   assert.deepEqual(page.events, ["hint sink enter", "hint sink a"]);
   page.host.api.set_mode_("normal");
-  assert.equal(page.state.get_mode(), "normal");
+  assert.equal(page.state.get_mode_(), "normal");
   assert.deepEqual(page.events, ["hint sink enter", "hint sink a", "hint sink exit to normal"]);
 });
 
@@ -331,7 +392,7 @@ test("a page that hides leaves the mode with exit page_hidden_, once, and return
   page.press("V");
   page.host.page_hidden_();
   page.host.page_hidden_();
-  assert.equal(page.state.get_mode(), "normal");
+  assert.equal(page.state.get_mode_(), "normal");
   assert.deepEqual(page.events, ["caret sink enter", "caret sink exit to page_hidden"]);
   page.press("V");
   assert.deepEqual(page.events.slice(2), ["caret sink enter"]);
@@ -341,7 +402,7 @@ test("a page that hides in a mode without a sink is left alone", () => {
   const page = make_page();
   page.state.set_mode_("insert");
   page.host.page_hidden_();
-  assert.equal(page.state.get_mode(), "insert");
+  assert.equal(page.state.get_mode_(), "insert");
 });
 
 test("a bundle shows a toast through the host, and the error path takes it when the page gave no toast", () => {
@@ -350,7 +411,7 @@ test("a bundle shows a toast through the host, and the error path takes it when 
   assert.deepEqual(page.toasts, ["Copied x"]);
   const bare = create_bundle_host();
   const shown: string[] = [];
-  bare.connect({ request_bundle_: async () => true, on_idle_: () => {}, show_error_: (message) => shown.push(message), set_mode_: () => {}, on_sink_missing_: () => {} });
+  bare.connect({ request_bundle_: async () => true, on_idle_: () => {}, hold_first_: () => {}, show_error_: (message) => shown.push(message), set_mode_: () => {}, on_sink_missing_: () => {} });
   bare.api.show_toast_("hello");
   assert.deepEqual(shown, ["hello"]);
 });
@@ -401,6 +462,48 @@ test("a registered handler runs in the caller's turn, and a pending handler does
   assert.deepEqual(await waiting, { ok: true });
 });
 
+// The bundle script registers its handlers as it runs, and the load's answer comes a little later. A call in that gap must not overtake the calls queued on the load.
+test("a call made after the bundle registered but before its load answered runs after the calls queued on the load", async () => {
+  const page = make_page();
+  const ran: string[] = [];
+  const first = page.host.run_command_("text.input", "text", {}, "", false);
+  page.host.api.register_handler_("text.input", () => void ran.push("input"));
+  page.host.api.register_handler_("text.flush", () => void ran.push("flush"));
+  const second = page.host.run_command_("text.flush", "text", {}, "");
+  assert.deepEqual(ran, []);
+  assert.equal(page.host.is_loading_(), true);
+  page.loads[0]!.finish(true);
+  assert.deepEqual([await first, await second], [{ ok: true }, { ok: true }]);
+  assert.deepEqual(ran, ["input", "flush"]);
+  assert.equal(page.loads.length, 1);
+  assert.equal(page.host.is_loading_(), false);
+  // Once the load answered, a call runs in the caller's turn again.
+  void page.host.run_command_("text.flush", "text", {}, "");
+  assert.deepEqual(ran, ["input", "flush", "flush"]);
+});
+
+test("a load that never answers keeps the calls made in the gap waiting, and once it fails the next call runs at once", async () => {
+  const page = make_page();
+  const ran: string[] = [];
+  const queued = page.host.run_command_("text.input", "text", {}, "");
+  page.host.api.register_handler_("text.input", () => void ran.push("input"));
+  const in_gap = page.host.run_command_("text.input", "text", {}, "");
+  page.press("x");
+  await page.settle();
+  assert.deepEqual(ran, []);
+  assert.deepEqual(page.events, []);
+  assert.equal(page.host.is_loading_(), true);
+  // The script ran, so the handlers it registered answer even though the load reports a failure.
+  page.loads[0]!.finish(false);
+  assert.deepEqual([await queued, await in_gap], [{ ok: true }, { ok: true }]);
+  await page.settle();
+  assert.deepEqual(page.events, ["run log_x"]);
+  void page.host.run_command_("text.input", "text", {}, "");
+  assert.deepEqual(ran, ["input", "input", "input"]);
+  assert.equal(page.loads.length, 1);
+  assert.equal(page.host.is_loading_(), false);
+});
+
 test("keys are held for the load only, not while the loaded handler still waits", async () => {
   const page = make_page();
   let release!: () => void;
@@ -424,11 +527,11 @@ test("a waiting handler is cancelled by Escape, which the sink passes to the key
       return new Promise((resolve) => (finish = resolve));
     });
     const waiting = page.host.api.run_command_("hint.run", "hints", {});
-    assert.equal(page.state.get_mode(), "hint");
+    assert.equal(page.state.get_mode_(), "hint");
     if (leave === "page_hidden") page.host.page_hidden_();
     else page.press(leave);
     assert.deepEqual(await waiting, { ok: true, cancelled: true }, leave);
-    assert.equal(page.state.get_mode(), "normal");
+    assert.equal(page.state.get_mode_(), "normal");
   }
 });
 
@@ -562,9 +665,9 @@ test("during a load, insert mode outside a field passes unbound keys and holds E
   void page.host.run_command_("page.align", "whichkey", {}, "needs page");
   page.press("q", "<Escape>", "j");
   assert.deepEqual(page.decisions, ["q:pass", "<Escape>:cancel", "j:cancel"]);
-  assert.equal(page.state.get_mode(), "insert");
+  assert.equal(page.state.get_mode_(), "insert");
   await finish_page_load(page);
-  assert.equal(page.state.get_mode(), "normal");
+  assert.equal(page.state.get_mode_(), "normal");
   assert.deepEqual(page.events, ["align", "run log_j"]);
   page.set_in_field(true);
   page.state.set_mode_("insert");

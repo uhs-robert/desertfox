@@ -8,6 +8,7 @@ import { CONFIG_FORMAT_VERSION } from "../../src/shared/config.ts";
 import { runs_with_empty } from "../../src/background/availability.ts";
 import { compile_config } from "../../src/background/compile.ts";
 import { empty_config } from "../../src/background/config_load.ts";
+import { FILES_CONFIG_STORAGE_KEY } from "../../src/background/storage_keys.ts";
 import { create_router } from "../../src/background/router.ts";
 import { no_repeat_memory } from "../../src/background/repeat_memory.ts";
 import { get_config } from "../../src/background/startup.ts";
@@ -65,8 +66,7 @@ const opened: Opened[] = [];
 
 (globalThis as unknown as { browser: unknown }).browser = {
   storage: {
-    managed: { get: async () => ({ format_version: CONFIG_FORMAT_VERSION, search_engines: stored_engines(), settings: { default_engine: "duck" } }) },
-    local: { get: async () => ({}), set: async () => ({}), remove: async () => ({}) },
+    local: { get: async (key: string) => (key === FILES_CONFIG_STORAGE_KEY ? { [key]: { config: { format_version: CONFIG_FORMAT_VERSION, search_engines: stored_engines(), settings: { default_engine: "duck" } }, warnings: [] } } : {}), set: async () => ({}), remove: async () => ({}) },
     session: { get: async () => ({}), set: async () => ({}) },
     onChanged: { addListener() {} },
   },
@@ -151,6 +151,7 @@ async function press(text: string, selection: string): Promise<{ lines: string[]
     ask_selection: async () => selection,
     runs_with_empty: async (id, args, param) => runs_with_empty(await get_config(), id, args, param, page),
     read_clipboard: async () => "",
+    bookmark_title: async () => undefined,
     has_permission: async () => true,
     send_to_tab: async () => undefined,
     open_cmdline: async (_tab, _frame, line) => void lines.push(line),

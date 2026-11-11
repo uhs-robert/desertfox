@@ -3,7 +3,12 @@ import { NEW_TAB_PAGE_FILE } from "../shared/config.ts";
 import { define } from "../shared/registry/builtin.ts";
 import { open_in, require_tab_id, typed_url_target, WHERE_PARAM } from "./open_target.ts";
 import type { Where } from "./open_target.ts";
+import { RuntimeRefusal } from "../shared/command.ts";
 import { home_page_url } from "./url_build.ts";
+import { browser_reload_clear_deps, make_reload_clear } from "./reload_clear.ts";
+import type { ClearScope } from "./reload_clear.ts";
+
+const reload_clear = make_reload_clear(browser_reload_clear_deps);
 
 define("page.back", {
   label: "Back",
@@ -23,10 +28,48 @@ define("page.forward", {
 
 define("page.reload", {
   label: "Reload",
-  intent: "Reload the page. With hard on, skip the cache.",
-  params: [{ name: "hard", type: "bool", default: false, description: "Skip the cache." }],
+  intent: "Reload the page. With hard on, skip the cache. With clear set to site, first clear the cookies of this page's host in its container, plus the cookies a parent domain sets for it, the page's own storage and service workers, and the whole cache. With clear set to all, first clear them for every site and container.",
+  params: [
+    { name: "hard", type: "bool", default: false, description: "Skip the cache." },
+    {
+      name: "clear",
+      type: "enum",
+      values: ["site", "all"],
+      optional: true,
+      value_labels: { site: "after clearing this site", all: "after clearing every site" },
+      description: { site: "Clear this host first.", all: "Clear every site and container first." },
+    },
+  ],
   runs_in: "background",
-  run: async (ctx, args) => browser.tabs.reload(require_tab_id(ctx), { bypassCache: args.hard === true }),
+  // `page.reload --all` logs you out everywhere, so `.` and a macro never replay it.
+  repeatable: (args) => args.clear !== "all",
+  run: async (ctx, args) => {
+    const tab_id = require_tab_id(ctx);
+    if (args.clear === "site" || args.clear === "all") return reload_clear.run(tab_id, args.clear as ClearScope);
+    return browser.tabs.reload(tab_id, { bypassCache: args.hard === true });
+  },
+});
+
+// Firefox gives tabs.print no tab id and no result: it opens the print window on the active tab, which a key press always targets. `.` skips it, but a macro records and replays it like any command.
+define("page.print", {
+  label: "Print",
+  intent: "Open the Firefox print window for the active tab.",
+  runs_in: "background",
+  repeatable: false,
+  run: async () => {
+    browser.tabs.print();
+  },
+});
+
+define("page.save_pdf", {
+  label: "Save as PDF",
+  intent: "Ask for a file name and save the active tab as a PDF. Cancelling the file picker does nothing.",
+  runs_in: "background",
+  repeatable: false,
+  run: async () => {
+    const status = await browser.tabs.saveAsPDF({});
+    if (status === "not_saved" || status === "not_replaced") throw new RuntimeRefusal("Could not save the page as PDF");
+  },
 });
 
 // Firefox has no stop call for the tabs API, so the page itself stops.
@@ -63,6 +106,19 @@ define("page.focus_field", {
   params: [
     { name: "direction", type: "enum", values: ["next", "prev"], value_labels: { next: "to next control", prev: "to previous control" }, description: { next: "Focus the next form control.", prev: "Focus the previous form control." } },
     { name: "steps", type: "int", default: 1, min: 1, description: "Move this many controls." },
+  ],
+  runs_in: "content",
+  count: { param: "steps" },
+  bundle: "hints",
+});
+
+// Both keys start from the last heading they jumped to while it is on screen, else from the top of the view. They stop at the ends and do not wrap.
+define("page.heading", {
+  label: "Go to heading",
+  intent: "Scroll the next or previous heading to the top of the view. It counts h1 to h6 and role=heading, in page order, from the last heading it jumped to while that is on screen, else from the top of the view. A count prefix moves that many headings. It stops with a notice past the last or before the first heading.",
+  params: [
+    { name: "direction", type: "enum", values: ["next", "prev"], value_labels: { next: "to next heading", prev: "to previous heading" }, description: { next: "Scroll the next heading to the top.", prev: "Scroll the previous heading to the top." } },
+    { name: "steps", type: "int", default: 1, min: 1, description: "Move this many headings." },
   ],
   runs_in: "content",
   count: { param: "steps" },

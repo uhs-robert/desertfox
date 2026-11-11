@@ -69,3 +69,10 @@ test("the GitHub, GitLab, Reddit and YouTube trees carry hosts, the children inh
   assert.ok(engines["youtube.channel"]?.hosts?.includes("m.youtube.com"));
   assert.equal(engines["google"]?.hosts, undefined);
 });
+
+test("the sample engines give a few engines a keyword, all unique", () => {
+  const keywords = Object.values(engines).flatMap((engine) => (engine.keyword === undefined ? [] : [engine.keyword]));
+  assert.equal(engines["google"]?.keyword, "g");
+  assert.ok(keywords.length >= 3);
+  assert.equal(new Set(keywords).size, keywords.length);
+});

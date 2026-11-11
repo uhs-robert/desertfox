@@ -1,55 +1,16 @@
 import assert from "node:assert/strict";
 import "../../src/background/command_modules.ts";
+import { empty_config } from "../../src/background/config_load.ts";
 import { test } from "node:test";
 import { registry } from "../../src/shared/registry/builtin.ts";
 import { CONFIG_FORMAT_VERSION } from "../../src/shared/config.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY } from "../../src/shared/prefix_tree.ts";
 import { CONFIG_STATUS_STORAGE_KEY, FILES_CONFIG_STORAGE_KEY, SAVED_SETTINGS_STORAGE_KEY, TEMP_SETTINGS_STORAGE_KEY, WARNINGS_STORAGE_KEY } from "../../src/background/storage_keys.ts";
-import { ConfigReloadError } from "../../src/background/config_reload.ts";
+import { ConfigRefusal } from "../../src/background/config_reload.ts";
 import { create_autoconfig_mirror } from "../../src/background/autoconfig_mirror.ts";
 import { NativeHostError } from "../../src/background/native_client.ts";
 import { RuntimeRefusal } from "../../src/shared/command.ts";
-
-type Files = Record<string, string>;
-
-// A browser that keeps storage in memory and answers the native host from `host`. A test rewrites `host.files` between reloads.
-function install_fake_browser(host: { files: Files; reply?: () => Promise<unknown>; granted?: boolean }) {
-  const local: Record<string, unknown> = {};
-  const session: Record<string, unknown> = {};
-  const area = (store: Record<string, unknown>) => ({
-    get: async (key?: string | string[]) => {
-      const keys = key === undefined ? Object.keys(store) : [key].flat();
-      return Object.fromEntries(keys.filter((name) => name in store).map((name) => [name, structuredClone(store[name])]));
-    },
-    set: async (values: Record<string, unknown>) => {
-      Object.assign(store, structuredClone(values));
-    },
-  });
-  const tabs: { id: number }[] = [];
-  const told: number[] = [];
-  const sent: { cmd: string; toml?: string }[] = [];
-  const fake = {
-    runtime: {
-      id: "test@desertfox",
-      sendNativeMessage: async (_name: string, message: { cmd: string; toml?: string }) => {
-        sent.push(message);
-        if (host.reply) return host.reply();
-        if (message.cmd === "write_autoconfig") return { ok: true };
-        return { ok: true, config_dir: "/home/u/.config/desertfox", config_dir_exists: true, files: host.files };
-      },
-    },
-    permissions: { contains: async () => host.granted !== false },
-    storage: { local: area(local), managed: { get: async () => undefined }, session: area(session) },
-    tabs: {
-      query: async () => tabs.map((tab) => ({ ...tab })),
-      sendMessage: async (tab_id: number) => void told.push(tab_id),
-    },
-    contextualIdentities: { query: async () => [] },
-    commands: { update: async () => undefined, reset: async () => undefined },
-  };
-  Object.assign(globalThis, { browser: fake });
-  return { local, session, tabs, told, sent, fake };
-}
+import { install_fake_browser, type Files } from "./config_fake_browser.ts";
 
 type Startup = typeof import("../../src/background/startup.ts");
 const fresh_startup = async (tag: string) => (await import(`../../src/background/startup.ts?reload_${tag}`)) as Startup;
@@ -112,15 +73,34 @@ test("a :set started while a reload publishes waits for it, so the reload cannot
   assert.deepEqual(status_of(local).temp, ["which_key_delay_ms"]);
 });
 
-test("after a reload, a restart picks the stored files over the managed storage file", async () => {
+test("a start on defaults, then a reload and a restart, ends on the stored files", async () => {
   const host = { files: settings_file('hint_letters = "ab"\n') };
-  const { fake } = install_fake_browser(host);
-  fake.storage.managed.get = async () => ({ format_version: CONFIG_FORMAT_VERSION, settings: { hint_letters: "mn" } }) as never;
-  const before = await fresh_startup("files_over_managed");
-  assert.equal((await before.get_config()).settings.hint_letters, "mn");
+  const { local } = install_fake_browser(host);
+  const before = await fresh_startup("files_slot");
+  await before.get_config();
+  assert.equal(status_of(local).source, "defaults");
   await before.reload_config();
-  const after = await fresh_startup("files_over_managed_restart");
+  const after = await fresh_startup("files_slot_restart");
   assert.equal((await after.get_config()).settings.hint_letters, "ab");
+  assert.equal(status_of(local).source, "files");
+});
+
+test("a first start with no files slot runs on defaults, with no snippets or engines of its own", async () => {
+  const { local } = install_fake_browser({ files: {} });
+  const startup = await fresh_startup("neither");
+  const config = await startup.get_config();
+  assert.equal(status_of(local).source, "defaults");
+  assert.deepEqual(config.snippets, []);
+  assert.deepEqual(Object.keys(config.search_engines), Object.keys(empty_config().search_engines));
+});
+
+test("a stale managed source in storage.local is replaced by the first publish", async () => {
+  const { local } = install_fake_browser({ files: {} });
+  local[CONFIG_STATUS_STORAGE_KEY] = { source: "managed", settings: {}, managed_file_hint: "x", saved: [], temp: [], configured: [] };
+  const startup = await fresh_startup("stale_managed");
+  await startup.get_config();
+  assert.equal(status_of(local).source, "defaults");
+  assert.equal("managed_file_hint" in status_of(local), false);
 });
 
 test("two reloads at once run one after the other and the second one's files win", async () => {
@@ -239,7 +219,7 @@ for (const [name, host_setup, expected] of [
       () => assert.fail("the reload did not refuse"),
       (error: unknown) => error,
     );
-    assert.ok(refusal instanceof ConfigReloadError, String(refusal));
+    assert.ok(refusal instanceof ConfigRefusal, String(refusal));
     assert.match(refusal.message, /^Config not reloaded, the current one stays\./);
     assert.match(refusal.message, expected);
     assert.equal(local[FILES_CONFIG_STORAGE_KEY], undefined);
@@ -255,7 +235,7 @@ test("a reload with problems in the files keeps the current config and names the
   await startup.reload_config();
   host.files = { "settings.toml": "hint_letters = \n", "notes.txt": "" };
   await assert.rejects(startup.reload_config(), (error: Error) => {
-    assert.ok(error instanceof ConfigReloadError);
+    assert.ok(error instanceof ConfigRefusal);
     assert.match(error.message, /Fix the files and reload again\. 2 problem\(s\)/);
     assert.match(error.message, /settings\.toml:1/);
     assert.match(error.message, /notes\.txt: unknown file/);
@@ -414,8 +394,8 @@ test("the build warnings of a reload survive a restart", async () => {
 test("a saved value TOML cannot hold only warns, and the edit stays", async () => {
   const warned: string[] = [];
   const mirror = create_autoconfig_mirror({ write_autoconfig: async () => undefined, warn: (message) => void warned.push(message) });
-  assert.doesNotThrow(() => mirror.mirror({ ignore_sites: [, "a.com"] as unknown as string[] }));
-  await mirror.mirror({ ignore_sites: [, "a.com"] as unknown as string[] });
+  assert.doesNotThrow(() => mirror.mirror({ next_patterns: [, "a.com"] as unknown as string[] }));
+  await mirror.mirror({ next_patterns: [, "a.com"] as unknown as string[] });
   assert.equal(warned.length, 1);
 });
 

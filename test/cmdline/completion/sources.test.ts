@@ -130,7 +130,7 @@ const WHOLE_TEXT_COMMANDS: CommandMeta[] = [
 ];
 const LIVE_ITEMS = {
   tabs: [{ number: 1, title: "Mail", url: "https://mail.test/" }, { number: 2, title: "Some Page Title", url: "https://p.test/" }],
-  bookmarks: [{ title: "Arch Wiki Home", url: "https://wiki.test/" }, { title: "Other", url: "https://o.test/" }],
+  bookmarks: { rows: [{ title: "Arch Wiki Home", url: "https://wiki.test/", folders: [0] }, { title: "Other", url: "https://o.test/", folders: [] }], folders: ["Toolbar"] },
   windows: [{ number: 1, title: "Work Window" }, { number: 2, title: "Home" }],
 };
 const whole_text = create_completer(

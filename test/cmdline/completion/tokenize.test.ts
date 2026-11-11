@@ -96,3 +96,28 @@ test("search keeps one word per position, with the engine first", () => {
   const context = at_end("search duck two");
   assert.deepEqual(context.kind === "subject" && [context.position, context.word, context.start, context.end], [1, "two", 12, 15]);
 });
+
+test("a verbatim subject takes quotes inside it as plain text", () => {
+  const verbatim_lookup = create_word_lookup(
+    [{ id: "hint.run", name: "hint", label: "Hint", intent: "Hint.", params: [{ name: "filter", type: "enum", values: ["links", "custom"], short: { custom: "u" }, default: "links" }, { name: "selector", type: "string", main: true, rest: true, verbatim: true }] }],
+    {},
+  );
+  const at = (text: string) => {
+    const context = cursor_context(text, text.length, verbatim_lookup.find);
+    return context.kind === "none" ? "none" : `${context.kind}:${context.word}:${context.start}-${context.end}`;
+  };
+  assert.equal(at('hint -u a[href="x'), 'subject:a[href="x:8-17');
+  assert.equal(at(`hint -u a[title='x y`), `subject:a[title='x y:8-20`);
+  assert.equal(at('hint -u -- a[href="x"] b'), 'subject:a[href="x"] b:11-24');
+  assert.equal(at("hint -u "), "subject::8-8");
+  assert.equal(at("hint -"), "flag:-:5-6");
+  // An open quote in a flag value is still no completion, as for any command.
+  assert.equal(at("hint --text='a"), "none");
+  assert.equal(at('hint -u -- -x[a="b'), 'subject:-x[a="b:11-18');
+  assert.equal(at("hint -u 🦊 a[x=\"日本"), 'subject:🦊 a[x="日本:8-' + 'hint -u 🦊 a[x="日本'.length);
+});
+
+test("a subject carries the flags typed before it", () => {
+  const context = at_end("tab.close -l foo");
+  assert.deepEqual(context.kind === "subject" && context.typed, { left: true });
+});

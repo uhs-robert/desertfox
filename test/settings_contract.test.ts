@@ -13,7 +13,7 @@ const EXPECTATIONS: Record<string, string> = {
   which_key_delay_ms: "a number of milliseconds, 0 or more",
   which_key_border: '"square", "round" or "chamfer"',
   hint_letters: "a string of 2 or more distinct letters",
-  ignore_sites: "a list of match pattern strings",
+  site_rules: 'a list of tables with "site", an optional "pass" of key sequences and an optional "only" of key sequences',
   next_patterns: "a list of link texts",
   prev_patterns: "a list of link texts",
   mode_indicator: '"always", "not_normal" or "off"',
@@ -38,7 +38,6 @@ const EXPECTATIONS: Record<string, string> = {
   newtab_recent_tabs: "true or false",
   newtab_recent_tabs_max: "a whole number, 0 or more",
   newtab_links: 'a list of tables with "label", an http or https "url" and an optional "group"',
-  open_quick_start_on_install: "true or false",
 };
 
 test("every setting keeps its expectation text, in the declared order", () => {
@@ -64,23 +63,22 @@ test("every setting keeps its listed values", () => {
     newtab_clock_format: ["12", "24"],
     newtab_bookmarks: ["true", "false"],
     newtab_recent_tabs: ["true", "false"],
-    open_quick_start_on_install: ["true", "false"],
   });
 });
 
 test("the list, unsettable and toggle sets stay the same", () => {
-  assert.deepEqual(SETTING_NAMES.filter((name) => SETTING_SPECS[name].is_list), ["ignore_sites", "next_patterns", "prev_patterns", "open_completion", "statusbar_widgets"]);
+  assert.deepEqual(SETTING_NAMES.filter((name) => SETTING_SPECS[name].is_list), ["next_patterns", "prev_patterns", "open_completion", "statusbar_widgets"]);
   assert.deepEqual(SETTING_NAMES.filter((name) => !SETTING_SPECS[name].settable), ["search_prefixes", "container_prefixes", "newtab_links"]);
   // A toggle flips the value in force, so an absent one flips from its default.
   const toggles = Object.fromEntries(SETTING_NAMES.filter((name) => SETTING_SPECS[name].is_toggle).map((name) => [name, DEFAULT_SETTINGS[name]]));
-  assert.deepEqual(toggles, { completion_all_windows: false, newtab_date: true, newtab_bookmarks: false, newtab_recent_tabs: false, open_quick_start_on_install: true });
+  assert.deepEqual(toggles, { completion_all_windows: false, newtab_date: true, newtab_bookmarks: false, newtab_recent_tabs: false });
 });
 
 const ACCEPTS: Record<string, unknown[]> = {
   which_key_delay_ms: [0, 0.5, 300],
   which_key_border: ["square", "round", "chamfer"],
   hint_letters: ["ab", "asdfghjkl", "12"],
-  ignore_sites: [[], ["*://a.com/*", "x"]],
+  site_rules: [[], [{ site: "*://a.com/*" }, { site: "*://b.com/*", pass: "j k <C-d> gg" }, { site: "*://c.com/*", only: "<A-j>" }]],
   next_patterns: [[], ["next", ">"]],
   prev_patterns: [[], ["prev", "<"]],
   mode_indicator: ["always", "not_normal", "off"],
@@ -106,14 +104,15 @@ const ACCEPTS: Record<string, unknown[]> = {
   newtab_recent_tabs: [false],
   newtab_recent_tabs_max: [3],
   newtab_links: [[], [{ label: "A", url: "https://a.example/", group: "G" }, { label: "B", url: "http://b.example/" }]],
-  open_quick_start_on_install: [true, false],
 };
 
 const REFUSES: Record<string, unknown[]> = {
   which_key_delay_ms: [-1, Number.POSITIVE_INFINITY, Number.NaN, "300"],
   which_key_border: ["Square", "", 1],
   hint_letters: ["a", "aa", "aba", 12],
-  ignore_sites: ["a.com", [""], [1]],
+  site_rules: [
+    "a.com", [""], [{}], [{ site: "a" , pass: "j", only: "k" }], [{ site: "a", pass: "" }], [{ site: "a", pass: "   " }], [{ site: "a", only: "<j>" }], [{ site: "a", keys: "j" }], [{ site: "a", pass: 1 }],
+  ],
   next_patterns: ["next", [""], [1]],
   prev_patterns: ["prev", [""], [1]],
   mode_indicator: ["normal", true],
@@ -138,7 +137,6 @@ const REFUSES: Record<string, unknown[]> = {
   newtab_recent_tabs: ["yes"],
   newtab_recent_tabs_max: [Number.NaN],
   newtab_links: ["x", [{ label: "A", url: "javascript:alert(1)" }], [{ label: "A", url: "https://a.example/", group: "" }], [{ url: "https://a.example/" }]],
-  open_quick_start_on_install: [null],
 };
 
 test("every setting accepts and refuses the same values", () => {
@@ -178,13 +176,21 @@ test("a bad link names its item and its fault", () => {
   assert.equal(explain([{ label: "A", url: "https://a.example/", group: 2 }]), 'item 1 ("A") has an empty or non-text "group"');
 });
 
+test("a bad site rule names its item and its fault", () => {
+  const explain = SETTING_SPECS.site_rules.explain!;
+  assert.equal(explain([{ site: "*://a.test/*" }, { site: "*://b.test/*", pass: "j", only: "k" }]), 'item 2 sets both "pass" and "only", and only one may be set');
+  assert.equal(explain([{ site: "*://a.test/*", pass: " " }]), 'item 1 has a field "pass" that lists no key');
+  assert.match(explain([{ site: "*://a.test/*", only: "j <j>" }])!, /^item 1 has a field "only" that has "<j>", which /);
+  assert.equal(explain([{ pass: "j" }]), 'item 1 needs a non-empty "site"');
+});
+
 // The first ten were the defaults before #85. The rest were written at each reader, or were what an absent value read as.
 test("the defaults stay the same", () => {
   assert.deepEqual(DEFAULT_SETTINGS, {
     which_key_delay_ms: 300,
     which_key_border: "square",
     hint_letters: "asdfghjkl",
-    ignore_sites: [],
+    site_rules: [],
     next_patterns: ["next", "more", "newer", ">", "\u203a", "\u2192", "\u00bb", "\u226b", ">>"],
     prev_patterns: ["prev", "previous", "older", "<", "\u2039", "\u2190", "\u00ab", "\u226a", "<<"],
     mode_indicator: "always",
@@ -208,7 +214,6 @@ test("the defaults stay the same", () => {
     newtab_recent_tabs: false,
     newtab_recent_tabs_max: 8,
     newtab_links: [],
-    open_quick_start_on_install: true,
   });
   assert.equal("home_page" in DEFAULT_SETTINGS, false, "page.home refuses without one");
 });
@@ -229,9 +234,10 @@ test("the editor schema matches its output before #85, apart from the listed cha
   // One enum of the four values, the same values as the old boolean-or-word form.
   properties.newtab_clock = { ...properties.newtab_clock, oneOf: undefined, enum: [true, false, "analog", "digital"] };
   // The check refuses an empty pattern, and now the editor does too.
-  properties.ignore_sites.items.minLength = 1;
+  // `ignore_sites` became `site_rules`.
+  delete properties.ignore_sites;
+  properties.site_rules = (settings_schema().properties as Record<string, unknown>).site_rules;
   // Defaults that were written at the readers.
-  properties.ignore_sites.default = [];
   properties.new_tab_page.default = "desertfox";
   properties.open_completion.default = ["bookmarks", "history"];
   properties.newtab_links.default = [];
@@ -243,6 +249,8 @@ test("the editor schema matches its output before #85, apart from the listed cha
     assert.equal(properties[name].description, undefined, name);
     properties[name].description = described_now[name]!.description;
   }
+  // Removed: no setting can turn the first-install Quick Start page off.
+  delete properties.open_quick_start_on_install;
   // Settings added since the fixture was taken.
   for (const name of ["statusbar_widgets", "next_patterns", "prev_patterns"]) properties[name] = JSON.parse(JSON.stringify((settings_schema().properties as Record<string, unknown>)[name]));
   assert.deepEqual(JSON.parse(JSON.stringify(settings_schema())), JSON.parse(JSON.stringify(before)));

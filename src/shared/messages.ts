@@ -2,6 +2,7 @@
 // and `tabs.sendMessage`. The `type` field selects the shape.
 
 import type { BundleName } from "./bundles.ts";
+import type { MediaScan } from "./media.ts";
 import type { CommandMeta, Mode } from "./command.ts";
 import type { WhichKeyBorder } from "./config.ts";
 import type { SettingTag } from "./setting_list.ts";
@@ -26,13 +27,16 @@ export type RunRequest = {
   from_hints?: true;
 };
 
-// "gained" when the frame's own window holds focus, "lost" when it gives it up. A report without it changes no focus.
-export type FrameFocus = "gained" | "lost";
-
+// `focus` says whether the frame's own document holds the keyboard focus. The tab shows the mode of the frame that does.
 export type ModeChanged = {
   type: "mode_changed";
   mode: Mode;
-  focus?: FrameFocus;
+  focus: boolean;
+};
+
+// Escape in a frame that holds insert mode from `i`: the background returns the tab's switched frames to normal.
+export type LeaveTabInsert = {
+  type: "leave_tab_insert";
 };
 
 // Asks the background to inject a bundle into the sender's frame. The answer is a RunResponse: ok once the script has run.
@@ -107,7 +111,7 @@ export type RecordCmdline = {
 // sender is a tab whose line redeemed a ticket, and it holds only tabs and windows of the sender's own privacy (private or not).
 export type CompleteItems = {
   type: "complete_items";
-  kind: "bookmarks" | "engines" | "history" | "open" | "windows";
+  kind: "bookmarks" | "engines" | "history" | "open" | "windows" | "sessions" | "registers" | "folders" | "marks" | "quickmarks" | "saved_quickmarks" | "anything";
 };
 
 // From the command line page when a row key acts on tabs of the list. `tab_ids` were captured at the key press, so a later change of the list does not change them. The answer is undefined unless the sender is a tab whose line
@@ -151,8 +155,14 @@ export type TabItem = {
 // Newest first.
 export type BookmarkItem = { title: string; url: string };
 
+// A bookmark row of the `bookmark` list. `folders` indexes `BookmarkRows.folders`, the newest copy's folder first.
+export type BookmarkRow = BookmarkItem & { folders: number[] };
+
+// The `bookmark` list: one row per address, and the folder paths sent once for the rows to point at.
+export type BookmarkRows = { rows: BookmarkRow[]; folders: string[] };
+
 // `label` is the config's resolved chain. `available` is whether the line's page can fill the engine's slots. The page URL itself never leaves the background.
-export type EngineItem = { name: string; label: string; available: boolean };
+export type EngineItem = { name: string; label: string; available: boolean; keyword?: string };
 
 // A history entry as the background reads it. It never goes to the page on its own: `open` answers with `OpenRow`.
 export type HistoryItem = { title: string; url: string };
@@ -174,12 +184,48 @@ export type WindowItem = { number: number; title: string };
 // A heading of the page, from the host script. `level` is 1 to 6, `text` is the rendered text, trimmed.
 export type HeadingItem = { level: number; text: string };
 
-export type CompleteItemsAnswer = { items: BookmarkItem[] | EngineItem[] | HistoryItems | OpenItems | WindowItem[] | HeadingItem[] };
+// A saved tab session: its name and the text of the description column (tab count and age), which the background writes.
+export type SessionItem = { name: string; description: string };
 
-// From the `hints` bundle at the start of a pick: what `.` shows again. The background checks it like any page message, because the sender is a page script.
-export type RecordRepeat = {
-  type: "record_repeat";
-  invocation: BoundInvocation;
+// A register that holds something: its name and a short preview of the value.
+export type RegisterItem = { name: string; description: string };
+
+// A bookmark folder: its path from the root ("Bookmarks Toolbar / Work") and a short count of the bookmarks directly inside.
+export type FolderItem = SessionItem;
+
+// What the finder lists besides the open tabs, which come from the tab model. `quickmarks` hold the full address, in key order. Bookmarks, history and closed tabs are newest first.
+// A private line gets quickmarks and bookmarks only: the history and the closed tabs of a normal window stay out of it.
+export type ClosedTabRow = { session_id: string; title: string; url: string };
+// `tab_used` maps a tab id to its `lastAccessed` (ms), read once when the line opens, for the empty-query order. The tab model's rows hold no such time.
+export type AnythingItems = { tab_used: Record<number, number>; quickmarks: { key: string; url: string }[]; bookmarks: BookmarkItem[]; history: HistoryItem[]; closed: ClosedTabRow[]; history_max: number };
+
+export type CompleteItemsAnswer = { items: AnythingItems | BookmarkRows | BookmarkItem[] | EngineItem[] | HistoryItems | OpenItems | WindowItem[] | HeadingItem[] | SessionItem[] | RegisterItem[] | FolderItem[] };
+
+// A mark that a which-key row lists: its key and the scroll offset it keeps, in px. A global mark also carries its address.
+export type MarkItem = { key: string; x: number; y: number; url?: string };
+
+// From the `page` bundle. `x` and `y` are the scroll offset now. A set stores them under `key`. A jump answers the offset stored under `key` and stores the offset now as the previous position (`'`), unless the mark is missing. The page's privacy is the sender tab's.
+export type MarkSet = { type: "mark_set"; key: string; url: string; x: number; y: number };
+export type MarkJump = { type: "mark_jump"; key: string; url: string; x: number; y: number };
+export type MarkRequest = MarkSet | MarkJump;
+// Without `x` the background does the scroll itself, after it switched to or opened the tab of a global mark.
+export type MarkAnswer = { ok: true; x: number; y: number } | { ok: true; x?: undefined; y?: undefined } | { ok: false; message: string };
+
+// From the `caret` bundle: one register read or write. The background answers by the sender tab's privacy. A read answers the value, or nothing for an empty register and a refused name. A write answers an `Outcome`. A content script writes text only.
+export type RegisterRead = { type: "register_read"; name: string };
+export type RegisterWrite = { type: "register_write"; name: string; text: string };
+// A yank: the text goes to the named register, if any (`""` names none), and to the unnamed one. A black hole name drops it.
+export type RegisterYank = { type: "register_yank"; name: string; text: string };
+export type RegisterRequest = RegisterRead | RegisterWrite | RegisterYank;
+
+// From the content script when a leaf of content commands ends: the steps and how they ended. The background checks it like any page message,
+// because the sender is a page script, then hands it to `record_step`. A held key sends the first press only.
+export type RecordStep = {
+  type: "record_step";
+  invocations: Invocation[];
+  outcome: Outcome;
+  // Sent by the hints bundle when a pick begins, ahead of the leaf's own message.
+  pick?: true;
 };
 
 // From the command line page when the user asks for help on a command, by link or by key. The background opens the help page
@@ -189,9 +235,19 @@ export type OpenHelp = {
   command_id: string;
 };
 
-// The tab's address, for the ignore sites check in a frame of another site. The answer is a string, or undefined when the sender has no tab.
-export type ReadTabAddress = {
-  type: "read_tab_address";
+// A page asks for its keymap at start and again on `tree_updated`. The answer is a PageKeymap as a JSON string, or undefined when no usable keymap is stored.
+export type ReadKeymap = {
+  type: "read_keymap";
+};
+
+// Sent by a page held for a macro replay. Answered when the outermost replay ends: ok when it finished, not ok when a step failed, a pick was cancelled or Escape stopped it. Answered at once when no replay runs.
+export type ReplayEnd = {
+  type: "replay_end";
+};
+
+// Escape while a macro replays: the replay stops before its next step and drops the keys typed during it.
+export type ReplayStop = {
+  type: "replay_stop";
 };
 
 // From the `caret` bundle: one regex page search, run in the background where it can be stopped. `source` and `flags` are of a regex the page already compiled.
@@ -210,6 +266,22 @@ export type ImageAction = {
   type: "image_action";
   action: "copy_image" | "download";
   address: string;
+};
+
+// From the `hints` bundle once it has set `window.__desertfox_pick` to the picked element. The background hands the pick to the devtools page of the sender's tab, which selects it in the Inspector. The answer is an `InspectAnswer`: ok once a devtools page took it, ok with `waiting` when the pick waits for DevTools to open.
+export type InspectPick = {
+  type: "inspect_pick";
+};
+
+// From the devtools page, as the first message on its port: which tab its toolbox inspects.
+export type DevtoolsHello = {
+  type: "devtools_hello";
+  tab_id: number;
+};
+
+// From the background to a devtools page, on its port: select the pick now on the page.
+export type DevtoolsPick = {
+  type: "devtools_pick";
 };
 
 // From an extension page (the settings page): sets or resets one setting. `value` is the typed value, checked by the setting's own check. `layer` defaults to `saved`. A reset drops the saved and the temp edit.
@@ -252,9 +324,64 @@ export type ToolbarRequest =
 
 export type ToolbarAnswer = { ok: true; message: string } | { ok: false; message: string };
 
-export type PageToBackground = ChangeSetting | ListSettings | ToolbarRequest;
+// The user's pick for an import: a zip's bytes, or the files of a `webkitdirectory` folder as read by the page, with paths relative to the picked folder's parent.
+export type ImportSource = { kind: "zip"; bytes: Uint8Array | ArrayBuffer } | { kind: "folder"; entries: { path: string; text: string }[] };
 
-export type ContentToBackground = RunRequest | ModeChanged | LoadBundle | ListKeys | IssueCmdlineTicket | OpenCmdline | RecordCmdline | CompleteItems | TabRowsActionRequest | OpenHelp | RecordRepeat | ReadTabAddress | FindScan | ImageAction;
+// From an extension page: reads an import and says what it would change. Nothing is stored and no snippet runs. The answer is a ConfigImportPreview.
+export type PreviewConfigImport = { type: "preview_config_import"; source: ImportSource };
+
+// From an extension page: applies an import. `accepted` maps each snippet path the user accepted to the code the preview showed. Any other snippet is left out. The answer is a ConfigImportAnswer.
+export type CommitConfigImport = { type: "commit_config_import"; source: ImportSource; accepted: Record<string, string> };
+
+// One snippet of an import as the consent screen shows it. The header fields are absent when the header does not parse.
+export type SnippetPreview = {
+  path: string;
+  code: string;
+  // A snippet with this path is installed, and accepting replaces it.
+  replaces: boolean;
+  problems: string[];
+  id?: string;
+  label?: string;
+  intent?: string;
+  matches?: string[];
+  requires?: string[];
+};
+
+// `replaces_config` says the import holds config files, which replace every config file in force. `problems` come from a build with every snippet accepted: the commit refuses while any remain.
+export type ConfigImportPreview =
+  | { ok: true; replaces_config: boolean; config_files: string[]; snippets: SnippetPreview[]; problems: string[]; warnings: string[] }
+  | { ok: false; message: string };
+
+export type ConfigImportAnswer = { ok: true; message: string } | { ok: false; message: string };
+
+// From an extension page: the files an export writes, raw. The page builds the two zips. `config_files` holds the config files and the saved browser edits as TOML, `snippet_files` the installed snippets, both keyed by their path in the zip.
+export type ExportConfig = { type: "export_config" };
+export type ExportConfigAnswer = { ok: true; config_files: Record<string, string>; snippet_files: Record<string, string> } | { ok: false; message: string };
+
+// From an extension page: the installed snippets for the list on the settings page. The header fields are absent when the header does not parse.
+export type ListSnippets = { type: "list_snippets" };
+export type InstalledSnippet = { path: string; problems: string[]; id?: string; label?: string; intent?: string; matches?: string[]; requires?: string[] };
+export type ListSnippetsAnswer = { ok: true; snippets: InstalledSnippet[] } | { ok: false; message: string };
+
+// From an extension page: removes one installed snippet and rebuilds the config without it. The answer is a ConfigImportAnswer.
+export type RemoveSnippet = { type: "remove_snippet"; path: string };
+
+// From an extension page: the saved tab sessions as the text of `desertfox-sessions.json`. `count` is 0 when none is saved.
+export type ExportSessions = { type: "export_sessions" };
+export type ExportSessionsAnswer = { ok: true; json: string; count: number } | { ok: false; message: string };
+
+// From an extension page: adds the sessions of an export file. A name that is taken keeps both, and the import gets a suffix. The answer is a ConfigImportAnswer.
+export type ImportSessions = { type: "import_sessions"; text: string };
+
+export type PageToBackground = ChangeSetting | ListSettings | ToolbarRequest | PreviewConfigImport | CommitConfigImport | ExportConfig | ListSnippets | RemoveSnippet | ExportSessions | ImportSessions;
+
+// From the `media` bundle in each frame the background injected it into, with that frame's media. The frame comes from the message sender.
+export type MediaReport = {
+  type: "media_report";
+  scan: MediaScan;
+};
+
+export type ContentToBackground = MediaReport | RunRequest | ModeChanged | LeaveTabInsert | LoadBundle | ListKeys | IssueCmdlineTicket | OpenCmdline | RecordCmdline | CompleteItems | TabRowsActionRequest | OpenHelp | RecordStep | ReadKeymap | ReplayEnd | ReplayStop | FindScan | ImageAction | InspectPick | RegisterRequest | MarkRequest;
 
 // How a command ended. Done is `{ ok: true }`. A handler that returns nothing is done, and one that throws is failed.
 // Cancelled means the user left a waiting step (Escape, an unrelated key, a page change), so the rest of a sequence does not run and nothing is shown.
@@ -267,6 +394,13 @@ export type RunResponse = { ok: true; cancelled?: true } | { ok: false; refusal:
 export type RunInContent = {
   type: "run_in_content";
   invocations: Invocation[];
+  // Set for a macro replay: the steps run as a held key's repeats do, so a scroll jumps and the next step reads where it ended.
+  repeat?: true;
+};
+
+// A macro replay reached this page: hold its keys until the replay ends. The page asks when with `replay_end`.
+export type ReplayHold = {
+  type: "replay_hold";
 };
 
 // One toast on the page. A refusal leaves `kind` out and shows as an error.
@@ -281,11 +415,13 @@ export type ShowRefusal = {
 export type SetMode = {
   type: "set_mode";
   mode: Mode;
+  // Sent by the insert hold to every frame of the tab. A frame under an all-off rule ignores it.
+  held?: true;
 };
 
 // To the top frame: the mode of the child frame that holds focus, which the badge shows in place of the top frame's own. Absent when no child frame holds focus.
 export type FocusedFrameMode = {
-  type: "focused_frame_mode";
+  type: "frame_mode";
   mode?: Mode;
 };
 
@@ -309,7 +445,7 @@ export type Ping = {
   type: "ping";
 };
 
-export type BackgroundToContent = RunInContent | ShowRefusal | SetMode | FocusedFrameMode | TreeUpdated | GetSelection | FocusPage | Ping;
+export type BackgroundToContent = RunInContent | ReplayHold | ShowRefusal | SetMode | FocusedFrameMode | TreeUpdated | GetSelection | FocusPage | Ping;
 
 // Background to tab-model clients, over the port `desertfox_tab_model`
 

@@ -4,7 +4,8 @@
 import type { BundleName } from "./bundles.ts";
 import type { Outcome } from "./messages.ts";
 
-export type ParamType = "int" | "float" | "string" | "bool" | "enum";
+// `key` is one key press. A key binding that leaves a required `key` param out captures the next key into it.
+export type ParamType = "int" | "float" | "string" | "bool" | "enum" | "key";
 
 // Runtime modes. `browser` is not here: it is a keymap section, see KeymapMode.
 export const MODES = ["normal", "insert", "ignore", "hint", "cmdline", "caret", "visual", "visual_line"] as const;
@@ -16,7 +17,7 @@ export const is_caret_mode = (mode: Mode): boolean => CARET_MODES.includes(mode)
 
 export type RunsIn = "background" | "content";
 
-export type ContextSourceName = "current_url" | "selection" | "clipboard";
+export type ContextSourceName = "current_url" | "selection" | "clipboard" | "bookmark_title";
 
 export type ContextSource = { from: ContextSourceName };
 
@@ -31,9 +32,9 @@ export type DefaultArm = { value: ParamValue; when: ParamWhen };
 // A plain value, a context source, or an ordered list of arms with an optional plain value last. The first arm that holds wins, else the last value applies, else the param has no default and is required.
 export type ParamDefault = ParamValue | ContextSource | readonly (DefaultArm | ParamValue)[];
 
-// Value lists filled at run time from the user's config or from Firefox. `tabs`, `bookmarks`, `history`, `windows` and `headings` go on a string param and
+// Value lists filled at run time from the user's config or from Firefox. `tabs`, `bookmarks`, `history`, `windows`, `headings`, `sessions`, `registers`, `folders`, `marks`, `quickmarks` and `saved_quickmarks` go on a string param and
 // only feed the completion list. The page asks the background for the first three (`complete_items`) and the host script for the headings, nobody checks a typed value against them.
-export type DynamicValues = { from: "search_engines" | "containers" | "tabs" | "bookmarks" | "history" | "open" | "windows" | "headings" };
+export type DynamicValues = { from: "search_engines" | "containers" | "tabs" | "bookmarks" | "history" | "open" | "windows" | "headings" | "sessions" | "registers" | "folders" | "marks" | "quickmarks" | "saved_quickmarks" | "anything" };
 
 export type ParamDef = {
   name: string;
@@ -52,16 +53,20 @@ export type ParamDef = {
   rest?: boolean;
   // The one free-text param that config and the command line take as a bare word. At most one per command, `string` only.
   main?: boolean;
+  // On the `main` param: it takes the raw typed text from its first word to the end of the line, end-trimmed, with quotes and backslashes kept. Flags must come before it, and a value that starts with `-` needs `--` first. For text the shell rules would mangle, such as a CSS selector.
+  verbatim?: boolean;
   // A param with no default that applies, no `optional` and no `when` is required.
   default?: ParamDefault;
   // A `string` or `enum` param that may be left out or empty: it then reads as "". Stands for `default: ""`.
   optional?: boolean;
   // Smallest value of an `int` param.
   min?: number;
-  // A `string` param whose text must match this regular expression (source text, so it travels in `commands.json`). An optional param may still be empty.
+  // A `string` or `key` param whose text must match this regular expression (source text, so it travels in `commands.json`). An optional param may still be empty.
   pattern?: string;
   // A `string` param with a static `values` list accepts only those values, compared exactly like an enum value. Without it the list is for completion only.
   strict?: boolean;
+  // A `string` param whose text must be an absolute address, as `URL.canParse` reads it. An optional param may still be empty.
+  format?: "url";
   // A `string` param that holds the value of the setting named by the sibling param of this name. `check_args` checks it with that setting's entry in `SETTING_SPECS`. An empty value passes.
   value_of?: string;
   // Exactly one key, so `{ param: [values] }`.
@@ -112,7 +117,8 @@ type CommandCommon = {
   // makes no sense typed. A list of modes means only when the line was opened from one of them. Typing the name still runs it.
   completion?: "hidden" | readonly Mode[];
   // Absent means true. `.` replays only a repeatable background command, so false keeps a command out of the memory.
-  repeatable?: boolean;
+  // A function decides per call from the checked args, for one command whose args differ in danger (`page.reload --all` must never replay).
+  repeatable?: boolean | ((args: CheckedArgs) => boolean);
 };
 
 export type BackgroundCommandDef = CommandCommon & { runs_in: "background"; run: CommandRun; bundle?: undefined };

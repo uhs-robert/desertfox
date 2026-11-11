@@ -5,9 +5,10 @@
 import type { CommandDef, Mode } from "../shared/command.ts";
 import type { MergedConfig } from "../shared/config.ts";
 import type { KeymapConfig } from "../shared/keymap.ts";
+import { ANY_KEY } from "../shared/prefix_tree.ts";
 import type { CompiledKeymap, TreeBranch, TreeNode } from "../shared/prefix_tree.ts";
 import type { Prompt } from "../shared/invocation.ts";
-import { find_param, is_context_source } from "../shared/registry/params.ts";
+import { captured_key_param, find_param, is_context_source, without_param } from "../shared/registry/params.ts";
 import { check_args } from "../shared/registry/check_args.ts";
 import type { EnumSources } from "../shared/registry/check_args.ts";
 import { DEFAULT_LIGHT_INTENSITY, DEFAULT_PALETTE } from "../shared/config.ts";
@@ -31,7 +32,9 @@ export function compile_config(input: CompileInput): CompileOutput {
   const { compiled, warnings } = compile_keymap(keymap, input.config.settings, (command_id) => {
     const command = input.get_command(command_id);
     return command && { runs_in: command.runs_in, ...(command.bundle && { bundle: command.bundle }), label: command.label, count: command.count ?? "ignore", params: command.params ?? [], accepts_args: (args, prompt) => {
-      const result = check_args(command, args, input.enum_sources);
+      // A captured key is filled when the key runs, so the rest of the args are checked without it.
+      const captured = captured_key_param(command, args);
+      const result = check_args(captured ? without_param(command, captured.name) : command, args, input.enum_sources);
       // The prompted param is filled when the key runs, as in keep_node.
       return result.ok || (prompt !== undefined && result.missing_param === prompt.param);
     } };
@@ -60,8 +63,9 @@ export function compile_config(input: CompileInput): CompileOutput {
 // Checks and prunes in place.
 function check_branch(branch: TreeBranch, path: string[], mode: string, input: CompileInput, warnings: string[]): void {
   for (const [token, node] of Object.entries(branch.children)) {
-    if (keep_node(node, [...path, token], mode, input, warnings)) continue;
-    delete branch.children[token];
+    if (!keep_node(node, [...path, token], mode, input, warnings)) delete branch.children[token];
+    // A leaf that waits for a key press moves under a branch of its own, so the matcher reaches it through one more key.
+    else if (node.kind === "leaf" && node.steps.some((step) => step.capture)) branch.children[token] = { kind: "branch", ...(node.label === undefined ? {} : { label: node.label }), children: { [ANY_KEY]: node } };
   }
 }
 
@@ -73,6 +77,7 @@ function keep_node(node: TreeNode, path: string[], mode: string, input: CompileI
   for (const step of node.steps) {
     const command = input.get_command(step.invocation.id);
     if (!command) continue;
+    if (find_param(command, "register")?.type === "string") step.register = true;
     const mode_error = mode_problem(mode, command);
     if (mode_error) {
       warnings.push(`${mode}: skipped "${path.join("")}": ${mode_error}`);
@@ -91,6 +96,22 @@ function keep_node(node: TreeNode, path: string[], mode: string, input: CompileI
         return false;
       }
       // Only the router can open the command line with the typed text, so the step goes to the background.
+      step.runs_in = "background";
+      continue;
+    }
+    const captured = captured_key_param(command, step.invocation.args);
+    if (captured) {
+      if (mode === "browser") {
+        warnings.push(`browser: skipped "${path.join("")}": a Firefox shortcut cannot wait for a key press`);
+        return false;
+      }
+      const rest = check_args(without_param(command, captured.name), step.invocation.args, input.enum_sources);
+      if (!rest.ok) {
+        warnings.push(`${mode}: skipped "${path.join("")}": ${rest.error}`);
+        return false;
+      }
+      // The key press fills the param once the key flow has it. Only the router can check and fill defaults then, so the step goes to the background.
+      step.capture = captured.name;
       step.runs_in = "background";
       continue;
     }

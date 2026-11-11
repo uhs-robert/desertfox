@@ -7,7 +7,8 @@ import { DEFAULT_SETTINGS } from "../shared/config.ts";
 import type { CommandContext, ParamDef } from "../shared/index.ts";
 import type { PageInfo } from "../shared/engines/slots.ts";
 import { url_target } from "./url_build.ts";
-import { best_match } from "../shared/score.ts";
+import { pick_by } from "../shared/folder_pick.ts";
+import type { Pickable } from "../shared/folder_pick.ts";
 
 export const WHERE = ["here", "tab", "background", "window"] as const;
 export type Where = (typeof WHERE)[number];
@@ -86,38 +87,68 @@ const ABOUT_URL = /^about:/i;
 const PRIVILEGED_URL_REFUSAL = /illegal url|privileged/i;
 
 export async function open_in(ctx: CommandContext, url: string, where: Where, container?: string): Promise<void> {
+  await open_in_with_id(ctx, url, where, container);
+}
+
+// The id of the tab it made, for a caller that must place or activate it later. A window and `here` give none.
+async function open_in_with_id(ctx: CommandContext, url: string, where: Where, container?: string): Promise<number | undefined> {
   try {
-    await open_in_unchecked(ctx, url, where, container);
+    return await open_in_unchecked(ctx, url, where, container);
   } catch (error) {
     if (!ABOUT_URL.test(url) || !PRIVILEGED_URL_REFUSAL.test(String(error))) throw error;
     throw new RuntimeRefusal(`Firefox does not let extensions open ${url}`);
   }
 }
 
-async function open_in_unchecked(ctx: CommandContext, url: string, where: Where, container?: string): Promise<void> {
+async function open_in_unchecked(ctx: CommandContext, url: string, where: Where, container?: string): Promise<number | undefined> {
   if (where === "here") {
     await browser.tabs.update(require_tab_id(ctx), { url });
-    return;
+    return undefined;
   }
   const cookie_store_id = await resolve_container_store_id(container);
   const store = cookie_store_id === undefined ? {} : { cookieStoreId: cookie_store_id };
   if (where === "window") {
     await browser.windows.create({ url, ...store });
-    return;
+    return undefined;
   }
   // Firefox rejects an openerTabId from another window, and the sender tab can sit in a window that is not focused.
   const opener = ctx.tab_id === undefined ? {} : { openerTabId: ctx.tab_id, ...(ctx.window_id === undefined || ctx.window_id < 0 ? {} : { windowId: ctx.window_id }) };
-  await browser.tabs.create({ url, active: where === "tab", ...opener, ...store });
+  return (await browser.tabs.create({ url, active: where === "tab", ...opener, ...store })).id;
 }
 
-// An exact address wins, since a completion pick puts the address in the line. Other text is a fuzzy match on title and address, and an equal tie is refused.
-// `noun` names the list in the refusals ("bookmark", "history entry").
+// Opens several addresses at once. A tab opens them all in the background in order, then makes the first one active: a tab that opens active changes the selected tab, and Firefox then stops placing the next tabs after it.
+// An address the browser refuses is skipped and counted. `report` gets that count once, after the tabs exist and before the focus moves, so a toast still lands on the tab the user is looking at.
+// A window gets its toast after it opens, because the window takes the focus when it is created.
+export async function open_many(ctx: CommandContext, urls: readonly string[], where: Exclude<Where, "here">, report: (failed: number) => Promise<void>): Promise<void> {
+  let failed = 0;
+  if (where === "window") {
+    let window_id: number | undefined;
+    for (const url of urls) {
+      try {
+        if (window_id === undefined) window_id = (await browser.windows.create({ url })).id;
+        else await browser.tabs.create({ url, active: false, windowId: window_id });
+      } catch {
+        failed++;
+      }
+    }
+    await report(failed);
+    return;
+  }
+  const opened: number[] = [];
+  for (const url of urls) {
+    try {
+      opened.push((await open_in_with_id(ctx, url, "background")) as number);
+    } catch {
+      failed++;
+    }
+  }
+  await report(failed);
+  if (where === "tab" && opened[0] !== undefined) await browser.tabs.update(opened[0], { active: true });
+}
+
+export { pick_by };
+export type { Pickable };
+
 export function pick_entry<Entry extends { title: string; url: string }>(entries: readonly Entry[], text: string, noun: string): Entry {
-  const typed = text.trim();
-  const exact = entries.find((entry) => entry.url === typed);
-  if (exact) return exact;
-  const match = best_match(typed, entries, (entry) => ({ name: entry.title, description: entry.url }));
-  if (match.found === "none") throw new RuntimeRefusal(`no ${noun} matches "${typed}"`);
-  if (match.found === "tie") throw new RuntimeRefusal(`"${typed}" matches "${match.first.title}" (${match.first.url}) and "${match.second.title}" (${match.second.url}) equally, use the address`);
-  return match.item;
+  return pick_by(entries, text, noun, (entry) => ({ key: entry.url, name: entry.title, description: entry.url }), (entry) => `"${entry.title}" (${entry.url})`, "the address");
 }

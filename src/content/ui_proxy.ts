@@ -4,18 +4,15 @@
 import { remove_badge_hosts } from "./badge_hosts.ts";
 import { bundles } from "./bundles.ts";
 import type { ToastKind } from "../shared/messages.ts";
+import type { BadgeState } from "./ui/mode_label.ts";
 
 const MISSING = "DesertFox could not load ui";
 
 export const show_toast = (message: string, kind?: ToastKind): void => void bundles.run_command_("ui.toast", "ui", { message, kind }, MISSING, false);
 
-// Every draw passes this one object. A draw queued while ui.js loads can run after a later draw that found the handler registered, so each draw reads the newest label.
-const badge_args: { label: string | undefined; mode: string | undefined } = { label: undefined, mode: undefined };
-
-// Hiding first removes hosts an earlier instance left, which needs no bundle. Only the top frame draws the badge. A frame with no badge to remove does not load the bundle.
-export function show_mode_label(label: string | undefined, mode?: string): void {
-  if (label === undefined) remove_badge_hosts();
-  if (window !== window.top || (label === undefined && !bundles.has_handler_("ui.badge"))) return;
-  Object.assign(badge_args, { label, mode });
-  void bundles.run_command_("ui.badge", "ui", badge_args, MISSING, false);
+// Content passes the state and the ui bundle words the label. A state of `undefined` hides the badge: that removes hosts an earlier instance left, which needs no bundle. Only the top frame draws the badge. A frame with no badge to remove does not load the bundle.
+export function show_mode_label(state?: BadgeState): void {
+  if (state === undefined) remove_badge_hosts();
+  if (window !== window.top || (state === undefined && !bundles.has_handler_("ui.badge"))) return;
+  void bundles.run_command_("ui.badge", "ui", { ...state }, MISSING, false);
 }

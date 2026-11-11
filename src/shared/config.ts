@@ -1,6 +1,5 @@
-// The merged config file `tools/build-config` writes to
-// `~/.mozilla/managed-storage/<extension id>.json`. Firefox hands its `data`
-// to the extension through `storage.managed`.
+// The merged config the extension runs on: the shape `config.reload` builds from the config files
+// and keeps in `storage.local`.
 
 import type { CommandMeta } from "./command.ts";
 import type { KeymapConfig } from "./keymap.ts";
@@ -24,6 +23,8 @@ export type SearchEngine = {
   fallback?: string;
   // Host names of the sites the engine belongs to. Only the generated `s/` and `S/` keys read it: they offer the engine on these sites alone. Absent means every site.
   hosts?: string[];
+  // One to eight lower case letters or digits, unique across engines. When the first word of a query equals it, that engine is the one to search. Never inherited by a child engine.
+  keyword?: string;
   // Where each field came from, for `engine.show`: field name to "file [level]".
   origins?: Record<string, string>;
 };
@@ -88,6 +89,8 @@ export type MergedConfig = {
   search_engines: Record<string, SearchEngine>;
   // Extra command line name to command id.
   command_aliases: Record<string, string>;
+  // Quickmark key to address. `M` adds entries in storage on top of these.
+  quickmarks: Record<string, string>;
   // Absent keys take the value in DEFAULT_SETTINGS.
   settings: Partial<Settings>;
   snippets: SnippetEntry[];

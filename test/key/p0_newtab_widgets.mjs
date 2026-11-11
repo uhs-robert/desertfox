@@ -38,7 +38,7 @@ export async function run_cases({ config_dir, load_config_dir, take_shot, run_ca
     cpSync(test_config_dir, hidden_config, { recursive: true });
     writeFileSync(join(hidden_config, "settings.toml"), "newtab_clock = false\n");
     await close_new_tabs();
-    // load_config_dir types qr, so a normal page must hold the keys.
+    // load_config_dir types ,r, so a normal page must hold the keys.
     await open_page("page", "widgets_config", { new_tab: true });
     await load_config_dir(hidden_config);
 

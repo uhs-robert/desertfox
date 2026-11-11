@@ -6,12 +6,12 @@ import { BUILT_IN_PAGE } from "./config.ts";
 import type { SettingName } from "./settings_table.ts";
 
 export const SETTING_DOCS: Record<SettingName, string> = {
-  which_key_delay_ms: "Milliseconds after a prefix key before the which-key panel shows",
+  which_key_delay_ms: "Milliseconds after a prefix key before the which-key panel first shows, later keys redraw it at once",
   which_key_border: "Corner style of the which-key panel border",
   next_patterns: "Link texts that \`page.follow\` takes for the next page, best first",
   prev_patterns: "Link texts that \`page.follow\` takes for the previous page, best first",
   hint_letters: "The letters hint labels use, each once, at least two",
-  ignore_sites: "Match patterns where DesertFox starts in ignore mode",
+  site_rules: "Per-site key rules. The first row whose site (a match pattern) fits the page wins. pass lists keys that go to the page, only lists the only keys that stay on besides <C-v> and <S-Escape>, and a row with neither turns every normal-mode key off and starts the page in ignore mode. A row may not set both pass and only",
   mode_indicator: "When the mode badge shows: always (NORMAL too), not_normal, or off",
   palette: "Theme name: themes/<name>.toml in the config directory first, then a built-in theme. Light or dark follows the system theme",
   light_intensity: "Which of the five light sets of an Oasis theme the light variant uses, 1 (lightest) to 5",
@@ -34,5 +34,4 @@ export const SETTING_DOCS: Record<SettingName, string> = {
   newtab_recent_tabs: "Whether the new tab page lists your open tabs, last used first. Private tabs never show",
   newtab_recent_tabs_max: "Recent tab rows on the new tab page",
   newtab_links: "Links on the new tab page, one [[newtab_links]] table each. Links with the same group share a list",
-  open_quick_start_on_install: "Whether the first install opens the Quick Start page. A first install has no config yet, so this helps managed setups, which carry the config from the start",
 };

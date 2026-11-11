@@ -3,6 +3,7 @@
 // main.ts puts all three on `window.desertfox_host`. The host counts every wait on a load, and key_flow holds keys until none is left.
 
 import { last_blurred_element } from "./handlers/page.ts";
+import { end_flight, scroll_target } from "./handlers/scroll.ts";
 import { BUNDLE_FOR_MODE } from "../shared/bundles.ts";
 import type { BundleName } from "../shared/bundles.ts";
 import type { Mode } from "../shared/command.ts";
@@ -32,6 +33,11 @@ export type BundleHostApi = {
   show_toast_: (message: string) => void;
   // The field the last Escape left, which a bundle cannot see.
   last_blurred_: () => Element | undefined;
+  // The box the vertical scroll keys move now. Ends a smooth scroll in flight first, because the flight state lives in content.js and a copy in a bundle could not cancel it.
+  scroll_box_: () => Element;
+  // Holds the keys that can bind until `handed_back` settles, then replays its keys ahead of them. The command line hands back this way the keys its frame got after the line ended.
+  // `drop_on_hide` ends the hold, with no keys handed back, when the page goes away, so a reply lost to the page cache cannot leave the keys held.
+  hold_keys_until_: (handed_back: Promise<readonly string[]>, drop_on_hide?: boolean) => void;
 };
 
 export type BundleHostDeps = {
@@ -39,6 +45,8 @@ export type BundleHostDeps = {
   request_bundle_: (name: BundleName) => Promise<boolean>;
   // Runs after a load and everything that waited on it is done, so held keys can replay.
   on_idle_: () => void;
+  // Puts keys typed in another document ahead of the held ones, for the next `on_idle_` to replay.
+  hold_first_: (tokens: readonly string[]) => void;
   show_error_: (message: string) => void;
   // Without it a bundle's toast goes to show_error_.
   show_toast_?: (message: string) => void;
@@ -61,10 +69,14 @@ export function create_bundle_host() {
   const sinks = new Map<Mode, Sink>();
   const handlers = new Map<string, BundleHandler>();
   const loads = new Map<BundleName, Promise<boolean>>();
+  // A bundle registers its handlers as its script runs, a little before its load answers. Calls queued on the load run when it answers, so until then a new call queues behind them.
+  const unanswered = new Set<BundleName>();
   let deps: BundleHostDeps;
   let waiting = 0;
   const waiting_on_sink_bundle = new Map<BundleName, number>();
   let current_mode: Mode = "normal";
+  // The holds that `page_hidden_` ends: a lost reply must not leave the keys held after the page returns from the page cache.
+  const ending_on_hide = new Set<(tokens: readonly string[]) => void>();
 
   // A second call joins the first load. A failed load is forgotten, so the next call tries again.
   // Keys stay held until `after` has run, because `after` may change the mode they replay in.
@@ -74,7 +86,9 @@ export function create_bundle_host() {
     if (!started) {
       started = deps.request_bundle_(name);
       loads.set(name, started);
-      void started.then((loaded) => loaded || loads.delete(name));
+      unanswered.add(name);
+      // Registered ahead of every `after`, so the calls queued on the load run before a new call can take the fast path.
+      void started.then((loaded) => (unanswered.delete(name), loaded || loads.delete(name)));
     }
     const sink_bundle = hold && Object.values(BUNDLE_FOR_MODE).includes(name);
     if (hold) waiting++;
@@ -92,11 +106,11 @@ export function create_bundle_host() {
   }
 
   // Runs a command whose code sits in a bundle, loading the bundle first if needed. `missing` is the failure for a bundle that registers nothing.
-  // Keys are held for the load only, never while the handler's promise is pending.
+  // This call holds keys for the load only, never while the handler's promise is pending. A captured-key leaf holds them itself, through `hold_keys_until_`.
   // `args` reaches the handler as given. Nothing validates it, so it holds whatever the caller and the handler agree on, functions included. Take it only from bundle code, never from keymap or command-line input, which the registry validates first.
   // `hold` false is for drawing, which nobody awaits, so a failure there goes to `show_error_`.
   function run_command_(command_id: string, name: BundleName, args: Record<string, unknown>, missing: string, hold = true): Promise<Outcome> {
-    const run = handlers.get(command_id);
+    const run = !unanswered.has(name) && handlers.get(command_id);
     const answer = run
       ? settle(() => run(args))
       : new Promise<Outcome>((resolve) =>
@@ -121,7 +135,8 @@ export function create_bundle_host() {
     connect: (next: BundleHostDeps) => {
       deps = next;
     },
-    is_loading_: () => waiting > 0,
+    // A new key in a hint pick skips the captured-key holds, because a macro replay holds keys while its pick waits for its labels. Held keys still wait, so none drains into the pick.
+    is_loading_: (taking?: boolean) => waiting > (taking && current_mode == "hint" ? ending_on_hide.size : 0),
     // The bundles loading now that register a sink, so their mode may take keys once the load is done.
     loading_sink_bundles_: (): BundleName[] => [...waiting_on_sink_bundle].filter(([, count]) => count > 0).map(([name]) => name),
     sink_of_: (mode: Mode) => sinks.get(mode),
@@ -145,6 +160,7 @@ export function create_bundle_host() {
     },
     // The tab or page went away. A mode with a sink ends and the page returns to normal mode.
     page_hidden_: (): void => {
+      for (const release of [...ending_on_hide]) release([]);
       const sink = sinks.get(current_mode);
       if (!sink) return;
       current_mode = "normal";
@@ -160,6 +176,19 @@ export function create_bundle_host() {
       run_command_: (command_id, name, args) => run_command_(command_id, name, args, `${name} has no ${command_id}`),
       show_toast_: (message) => (deps.show_toast_ ?? deps.show_error_)(message),
       last_blurred_: last_blurred_element,
+      scroll_box_: () => (end_flight(), scroll_target("y")),
+      hold_keys_until_: (handed_back, drop_on_hide?: boolean) => {
+        waiting++;
+        const release = (tokens: readonly string[]) => {
+          // A hold ends once, by its reply or by the page going away, whichever comes first.
+          if (!ending_on_hide.delete(release) && drop_on_hide) return;
+          deps.hold_first_(tokens);
+          waiting--;
+          deps.on_idle_();
+        };
+        if (drop_on_hide) ending_on_hide.add(release);
+        void handed_back.catch(() => []).then(release);
+      },
     } satisfies BundleHostApi,
   };
 }

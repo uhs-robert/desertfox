@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { bookmark_items, create_complete_items, engine_items, flatten_bookmarks, history_items, listed_favicon, listed_tabs, listed_windows, read_container_identities, read_containers } from "../../src/background/complete_items.ts";
+import { bookmark_items, bookmark_rows, create_complete_items, engine_items, flatten_bookmarks, folder_items, folder_nodes, history_items, listed_favicon, listed_tabs, listed_windows, read_container_identities, read_containers } from "../../src/background/complete_items.ts";
 import type { TabActionDeps } from "../../src/background/tab_actions.ts";
+import type { AnythingItems, SessionItem } from "../../src/shared/messages.ts";
 import type { DiscardDeps } from "../../src/background/tab_discard.ts";
-import type { BookmarkNode, ContainerMarks, HistoryNode, LineScope, OpenSettings, TabLike, WindowLike } from "../../src/background/complete_items.ts";
+import type { BookmarkNode, ContainerMarks, FolderNode, HistoryNode, LineScope, OpenSettings, TabLike, WindowLike } from "../../src/background/complete_items.ts";
 
 type TabActions = Pick<TabActionDeps, "set_muted" | "set_pinned" | "remove" | "open_tab">;
 const NO_ACTIONS: TabActions = { set_muted: async () => {}, set_pinned: async () => {}, remove: async () => {}, open_tab: async () => {} };
@@ -31,7 +32,7 @@ const window_of = (id: number, incognito: boolean, title: string, type = "normal
 // Two normal windows and one private window, in `windows.getAll` order.
 const WINDOWS = [window_of(10, false, "Mail"), window_of(20, true, "Secret"), window_of(11, false, "Docs\n tab")];
 
-function make({ openers = [1, 2], tabs = ALL_TABS, bookmarks = [] as BookmarkNode[], fail = false, page = undefined as { url: string } | undefined, history = [] as HistoryNode[], open = { sources: ["bookmarks", "history"], history_max: 10 } as OpenSettings, read_tab = (async () => undefined) as (id: number) => Promise<TabLike | undefined>, discard = {} as DiscardDeps, tab_actions = NO_ACTIONS as TabActions, containers = new Map() as ContainerMarks, on_containers = () => {}, list_max = 20 } = {}) {
+function make({ openers = [1, 2], tabs = ALL_TABS, bookmarks = [] as BookmarkNode[], fail = false, page = undefined as { url: string } | undefined, history = [] as HistoryNode[], open = { sources: ["bookmarks", "history"], history_max: 10 } as OpenSettings, read_tab = (async () => undefined) as (id: number) => Promise<TabLike | undefined>, discard = {} as DiscardDeps, tab_actions = NO_ACTIONS as TabActions, sessions = [] as SessionItem[], folders = [] as FolderNode[], registers = { normal: [], private: [] } as { normal: SessionItem[]; private: SessionItem[] }, containers = new Map() as ContainerMarks, on_containers = () => {}, list_max = 20, closed = [] as { session_id: string; title: string; url: string }[], quickmark_urls = {} as Record<string, string> } = {}) {
   const history_reads: number[] = [];
   const asked: (number | undefined)[] = [];
   const opened = new Set(openers);
@@ -45,6 +46,25 @@ function make({ openers = [1, 2], tabs = ALL_TABS, bookmarks = [] as BookmarkNod
       if (fail) throw new Error("no windows");
       return WINDOWS;
     },
+    sessions: async () => {
+      if (fail) throw new Error("no sessions");
+      return sessions;
+    },
+    folders: async () => folders,
+    bookmark_view: async () => {
+      if (fail) throw new Error("no bookmarks");
+      return { rows: bookmark_rows(bookmarks, folders), folders };
+    },
+    registers: async (is_private) => {
+      if (fail) throw new Error("no registers");
+      return is_private ? registers.private : registers.normal;
+    },
+    marks: async (url, is_private) => {
+      if (fail) throw new Error("no marks");
+      return [{ name: is_private ? "p" : "m", description: String(url) }];
+    },
+    quickmarks: async (is_private) => (is_private ? [{ name: "p", description: "private.test" }] : [{ name: "g", description: "github.com" }]),
+    saved_quickmarks: async (is_private) => (is_private ? [{ name: "p", description: "private.test" }] : [{ name: "s", description: "saved.test" }]),
     all_bookmarks: async () => {
       if (fail) throw new Error("no bookmarks");
       return bookmarks;
@@ -67,6 +87,8 @@ function make({ openers = [1, 2], tabs = ALL_TABS, bookmarks = [] as BookmarkNod
     },
     open_settings: async () => open,
     history_list_max: async () => list_max,
+    closed_tabs: async () => closed,
+    quickmark_table: async () => quickmark_urls,
   });
   return { service, asked, opened, history_reads };
 }
@@ -125,12 +147,12 @@ test("bookmarks drop folders and separators, merge equal addresses and keep the 
     { title: "https://b.test/", url: "https://b.test/" },
   ]);
   const { service } = make({ bookmarks });
-  assert.deepEqual(((await service.answer("bookmarks", PRIVATE_LINE))?.items as unknown[]).length, 2);
+  assert.deepEqual(((await service.answer("bookmarks", PRIVATE_LINE))?.items as { rows: unknown[] }).rows.length, 2);
 });
 
 test("a failed browser call gives an empty list, not an error", async () => {
   const { service } = make({ fail: true });
-  assert.deepEqual(await service.answer("bookmarks", NORMAL_LINE), { items: [] });
+  assert.deepEqual(await service.answer("bookmarks", NORMAL_LINE), { items: { rows: [], folders: [] } });
 });
 
 test("a tab that navigates or closes while the lookup runs gets nothing", async () => {
@@ -138,10 +160,17 @@ test("a tab that navigates or closes while the lookup runs gets nothing", async 
   const service = create_complete_items({
     query_tabs: async () => ALL_TABS,
     query_windows: async () => WINDOWS,
-    all_bookmarks: async () => {
+    sessions: async () => [],
+    registers: async () => [],
+    marks: async () => [],
+    quickmarks: async () => [],
+    saved_quickmarks: async () => [],
+    folders: async () => [],
+    bookmark_view: async () => {
       opened.delete(1);
-      return [];
+      return { rows: { rows: [], folders: [] }, folders: [] };
     },
+    all_bookmarks: async () => [],
     is_opener: async (tab_id) => opened.has(tab_id),
     containers: async () => new Map(),
     previous_tab: async () => undefined,
@@ -153,6 +182,8 @@ test("a tab that navigates or closes while the lookup runs gets nothing", async 
     search_history: async () => [],
     open_settings: async () => ({ sources: ["bookmarks", "history"], history_max: 10 }),
     history_list_max: async () => 20,
+    closed_tabs: async () => [],
+    quickmark_table: async () => ({}),
   });
   assert.equal(await service.answer("bookmarks", NORMAL_LINE), undefined);
 });
@@ -184,6 +215,13 @@ test("a page that cannot fill a slot marks the engine, a fallback engine stays a
   const items = (await service.answer("engines", NORMAL_LINE))!.items as { name: string; available: boolean }[];
   assert.deepEqual(items.map((item) => [item.name, item.available]), [["duck", true], ["github.repo", false], ["github.repo.issues", false], ["github.repo.fb", true]]);
   assert.ok(!JSON.stringify(items).includes("example.com"));
+});
+
+test("an engine row carries the keyword only when the engine has one", () => {
+  const keyed = { ...ENGINES, duck: { ...ENGINES.duck!, keyword: "d" } };
+  const items = engine_items(keyed, undefined);
+  assert.equal(items.find((item) => item.name === "duck")?.keyword, "d");
+  assert.ok(!("keyword" in items.find((item) => item.name === "github.repo")!));
 });
 
 test("a line with no page offers only the engines that need no slot or have a fallback", () => {
@@ -275,6 +313,13 @@ test("the opener is checked before and after the history fetch", async () => {
   const service = create_complete_items({
     query_tabs: async () => [],
     query_windows: async () => [],
+    sessions: async () => [],
+    registers: async () => [],
+    marks: async () => [],
+    quickmarks: async () => [],
+    saved_quickmarks: async () => [],
+    folders: async () => [],
+    bookmark_view: async () => ({ rows: { rows: [], folders: [] }, folders: [] }),
     all_bookmarks: async () => [],
     is_opener: async (tab_id) => opened.has(tab_id),
     containers: async () => new Map(),
@@ -290,6 +335,8 @@ test("the opener is checked before and after the history fetch", async () => {
     },
     open_settings: async () => ({ sources: ["history"], history_max: 10 }),
     history_list_max: async () => 20,
+    closed_tabs: async () => [],
+    quickmark_table: async () => ({}),
   });
   assert.equal(await service.answer("open", NORMAL_LINE), undefined);
 });
@@ -299,6 +346,13 @@ test("a failed history read leaves the bookmarks, and a failed bookmark read lea
     create_complete_items({
       query_tabs: async () => [],
       query_windows: async () => [],
+      sessions: async () => [],
+      registers: async () => [],
+      marks: async () => [],
+      quickmarks: async () => [],
+      saved_quickmarks: async () => [],
+      folders: async () => [],
+      bookmark_view: async () => ({ rows: { rows: [], folders: [] }, folders: [] }),
       all_bookmarks: async () => {
         if (failing === "bookmarks") throw new Error("no bookmarks");
         return MARKS;
@@ -317,6 +371,8 @@ test("a failed history read leaves the bookmarks, and a failed bookmark read lea
       },
       open_settings: async () => ({ sources: ["bookmarks", "history"], history_max: 10 }),
       history_list_max: async () => 20,
+      closed_tabs: async () => [],
+      quickmark_table: async () => ({}),
     });
   const tags = async (failing: "history" | "bookmarks") => ((await service(failing).answer("open", NORMAL_LINE))?.items as { rows: { tag: string }[] }).rows.map((row) => row.tag);
   assert.deepEqual(await tags("history"), ["bm", "bm"]);
@@ -355,6 +411,13 @@ test("a history read that finishes after the line closed gives nothing", async (
   const service = create_complete_items({
     query_tabs: async () => [],
     query_windows: async () => [],
+    sessions: async () => [],
+    registers: async () => [],
+    marks: async () => [],
+    quickmarks: async () => [],
+    saved_quickmarks: async () => [],
+    folders: async () => [],
+    bookmark_view: async () => ({ rows: { rows: [], folders: [] }, folders: [] }),
     all_bookmarks: async () => [],
     is_opener: async (tab_id) => opened.has(tab_id),
     containers: async () => new Map(),
@@ -370,6 +433,8 @@ test("a history read that finishes after the line closed gives nothing", async (
     },
     open_settings: async () => ({ sources: ["history"], history_max: 10 }),
     history_list_max: async () => 20,
+    closed_tabs: async () => [],
+    quickmark_table: async () => ({}),
   });
   assert.equal(await service.answer("history", NORMAL_LINE), undefined);
 });
@@ -678,4 +743,119 @@ test("tab_rows_action refuses a reopen when the line loses its ticket during the
   close_line = () => opened.delete(NORMAL_LINE.tab_id);
   assert.equal(await service.tab_rows_action("reopen", [2], NORMAL_LINE, "firefox-container-1"), undefined);
   assert.deepEqual(fake.log, []);
+});
+
+test("the sessions list goes to a normal line only, and a failed read gives an empty list", async () => {
+  const sessions = [{ name: "work", description: "3 tabs, 1d ago" }];
+  const { service } = make({ sessions });
+  assert.deepEqual(await service.answer("sessions", NORMAL_LINE), { items: sessions });
+  assert.deepEqual(await service.answer("sessions", PRIVATE_LINE), { items: [] });
+  assert.deepEqual(await make({ sessions, fail: true }).service.answer("sessions", NORMAL_LINE), { items: [] });
+  assert.equal(await make({ sessions, openers: [] }).service.answer("sessions", NORMAL_LINE), undefined);
+});
+
+test("the registers list follows the privacy of the line, and a failed read gives an empty list", async () => {
+  const registers = { normal: [{ name: "a", description: "hello" }], private: [{ name: "b", description: "secret" }] };
+  const { service } = make({ registers });
+  assert.deepEqual(await service.answer("registers", NORMAL_LINE), { items: registers.normal });
+  assert.deepEqual(await service.answer("registers", PRIVATE_LINE), { items: registers.private });
+  assert.deepEqual(await make({ registers, fail: true }).service.answer("registers", NORMAL_LINE), { items: [] });
+  assert.equal(await make({ registers, openers: [] }).service.answer("registers", NORMAL_LINE), undefined);
+});
+
+const TREE: BookmarkNode[] = [
+  {
+    id: "root",
+    title: "",
+    children: [
+      { id: "toolbar", title: "Bookmarks Toolbar", children: [{ id: "work", title: "Work", children: [{ id: "docs", title: "Docs", children: [{ id: "d1", type: "bookmark", url: "https://d.test/" }] }, { id: "w1", type: "bookmark", url: "https://w.test/", title: "W" }, { id: "sep", type: "separator" }] }] },
+      { id: "other", title: "Other Bookmarks", children: [{ id: "o1", type: "bookmark", url: "https://o.test/" }] },
+    ],
+  },
+];
+
+test("folder_nodes lists every folder below the tree root with its path and its own bookmarks only", () => {
+  assert.deepEqual(
+    folder_nodes(TREE).map((folder) => [folder.id, folder.path, folder.bookmarks.map((node) => node.id)]),
+    [
+      ["toolbar", "Bookmarks Toolbar", []],
+      ["work", "Bookmarks Toolbar / Work", ["w1"]],
+      ["docs", "Bookmarks Toolbar / Work / Docs", ["d1"]],
+      ["other", "Other Bookmarks", ["o1"]],
+    ],
+  );
+  assert.deepEqual(folder_items(folder_nodes(TREE)).map((item) => [item.name, item.description]).slice(1, 3), [["Bookmarks Toolbar / Work", "1 bookmark"], ["Bookmarks Toolbar / Work / Docs", "1 bookmark"]]);
+});
+
+test("the folders kind answers the folder rows for an opener, and nothing for a stranger", async () => {
+  const folders = folder_nodes(TREE);
+  assert.deepEqual((await make({ folders }).service.answer("folders", NORMAL_LINE))?.items, folder_items(folders));
+  assert.equal(await make({ folders, openers: [] }).service.answer("folders", NORMAL_LINE), undefined);
+});
+
+test("the marks list reads the page of the line's tab and follows its privacy", async () => {
+  const { service } = make({ page: { url: "https://w.test/" } });
+  assert.deepEqual(await service.answer("marks", NORMAL_LINE), { items: [{ name: "m", description: "https://w.test/" }] });
+  assert.deepEqual(await service.answer("marks", PRIVATE_LINE), { items: [{ name: "p", description: "https://w.test/" }] });
+  assert.deepEqual(await service.answer("quickmarks", NORMAL_LINE), { items: [{ name: "g", description: "github.com" }] });
+  assert.deepEqual(await service.answer("quickmarks", PRIVATE_LINE), { items: [{ name: "p", description: "private.test" }] });
+  assert.deepEqual(await service.answer("saved_quickmarks", NORMAL_LINE), { items: [{ name: "s", description: "saved.test" }] });
+  assert.deepEqual(await service.answer("saved_quickmarks", PRIVATE_LINE), { items: [{ name: "p", description: "private.test" }] });
+  assert.deepEqual(await make({ fail: true }).service.answer("marks", NORMAL_LINE), { items: [] });
+  assert.equal(await make({ openers: [] }).service.answer("quickmarks", NORMAL_LINE), undefined);
+});
+
+test("bookmark_rows lists each address once with its folders newest copy first, and the folder paths once", () => {
+  const folders: FolderNode[] = [
+    { id: "a", path: "A", managed: false, bookmarks: [{ url: "https://x.test/", dateAdded: 1 }, { url: "https://y.test/", dateAdded: 5 }] },
+    { id: "b", path: "A / B", managed: false, bookmarks: [{ url: "https://x.test/", dateAdded: 9, title: "X" }] },
+  ];
+  const nodes: BookmarkNode[] = [{ url: "https://x.test/", dateAdded: 9, title: "X" }, { url: "https://y.test/", dateAdded: 5, title: "Y" }, { url: "https://x.test/", dateAdded: 1 }];
+  assert.deepEqual(bookmark_rows(nodes, folders), {
+    rows: [{ title: "X", url: "https://x.test/", folders: [1, 0] }, { title: "Y", url: "https://y.test/", folders: [0] }],
+    folders: ["A", "A / B"],
+  });
+});
+
+test("the bookmarks kind answers rows with folder indexes", async () => {
+  const folders: FolderNode[] = [{ id: "a", path: "A", managed: false, bookmarks: [{ url: "https://x.test/", dateAdded: 1 }] }];
+  const { service } = make({ bookmarks: [{ type: "bookmark", url: "https://x.test/", title: "X", dateAdded: 1 }], folders });
+  assert.deepEqual((await service.answer("bookmarks", NORMAL_LINE))?.items, { rows: [{ title: "X", url: "https://x.test/", folders: [0] }], folders: ["A"] });
+});
+
+test("bookmark_rows orders each row's folders newest copy first and lists a folder once", () => {
+  const folders: FolderNode[] = [
+    { id: "a", path: "A", managed: false, bookmarks: [{ url: "https://x.test/", dateAdded: 5 }] },
+    { id: "b", path: "B", managed: false, bookmarks: [{ url: "https://x.test/", dateAdded: 9 }, { url: "https://x.test/", dateAdded: 1 }] },
+    { id: "c", path: "C", managed: false, bookmarks: [{ url: "https://x.test/", dateAdded: 7 }] },
+  ];
+  const { rows } = bookmark_rows([{ type: "bookmark", url: "https://x.test/", title: "X", dateAdded: 9 }], folders);
+  assert.deepEqual(rows, [{ title: "X", url: "https://x.test/", folders: [1, 2, 0] }]);
+});
+
+test("the finder list holds quickmarks, bookmarks, history, closed tabs and the tab use times, and a private line gets quickmarks and bookmarks only", async () => {
+  const closed = [{ session_id: "s1", title: "Closed", url: "https://closed.test/" }];
+  const used_tabs = [
+    { id: 1, index: 0, windowId: 10, incognito: false, lastAccessed: 500 },
+    { id: 2, index: 0, windowId: 20, incognito: true, lastAccessed: 700 },
+  ];
+  const { service } = make({
+    tabs: used_tabs,
+    closed,
+    quickmark_urls: { b: "https://b.test/", a: "https://a.test/" },
+    bookmarks: [{ type: "bookmark", title: "Mark", url: "https://mark.test/" }],
+    history: [{ title: "Seen", url: "https://seen.test/" }],
+  });
+  const normal = (await service.answer("anything", NORMAL_LINE))?.items as AnythingItems;
+  assert.deepEqual(normal.quickmarks, [{ key: "a", url: "https://a.test/" }, { key: "b", url: "https://b.test/" }]);
+  assert.deepEqual(normal.bookmarks, [{ title: "Mark", url: "https://mark.test/" }]);
+  assert.deepEqual(normal.history, [{ title: "Seen", url: "https://seen.test/" }]);
+  assert.deepEqual(normal.closed, closed);
+  assert.deepEqual(normal.tab_used, { 1: 500 });
+  assert.equal(normal.history_max, 10);
+  const private_items = (await service.answer("anything", { ...NORMAL_LINE, incognito: true }))?.items as AnythingItems;
+  assert.equal(private_items.quickmarks.length, 2);
+  assert.equal(private_items.bookmarks.length, 1);
+  assert.deepEqual([private_items.history, private_items.closed], [[], []]);
+  assert.deepEqual(private_items.tab_used, { 2: 700 });
 });

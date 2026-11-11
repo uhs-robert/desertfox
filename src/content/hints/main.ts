@@ -7,18 +7,22 @@ import type { BundleHostApi } from "../bundle_host.ts";
 import { unhover } from "./hover.ts";
 import { has_usable_address, is_inside_link, is_media, OPEN_PLACES, perform, starts_caret } from "./actions.ts";
 import type { CaretMode, HintAction, Place } from "./actions.ts";
-import { copy_text } from "../caret/copy_text.ts";
+import { hand_to_devtools } from "./inspect.ts";
+import { copy_yank } from "../caret/copy_text.ts";
 import { collect, keep_text_matches, keep_visible_deduplicated, query_for, scroll_clips_in_page, weak_test_for, window_of } from "./candidates.ts";
 import type { Found, HintFilter } from "./candidates.ts";
 import { clean_letters, make_labels } from "./labels.ts";
 import { create_picker } from "./pick.ts";
 import { is_hint_char } from "./hint_keys.ts";
+import { insert_into_focused_field } from "./insert_text.ts";
+import { mark_text_entry } from "../text/entry.ts";
 import { create_view } from "./view.ts";
 import type { HintView } from "./view.ts";
 import { follow_windows } from "./follow.ts";
 import { box_owners, boxes_with_fallback, uncovered_through_frames, viewport_size } from "./visible.ts";
 import type { PageProbe } from "./visible.ts";
-import { clear_snapshot, go_to_heading, keep_present_found, take_snapshot } from "./headings.ts";
+import { clear_snapshot, go_to_heading, keep_present_found, step_heading, take_snapshot } from "./headings.ts";
+import type { HeadingDirection } from "./headings.ts";
 import { all_links, yank_links } from "./yank_links.ts";
 import type { LinkFormat, YankDeps } from "./yank_links.ts";
 import { can_open_elsewhere, find_follow_link } from "./follow_links.ts";
@@ -85,7 +89,7 @@ function find_candidates(filter: HintFilter, custom_selector: string | undefined
 
 const none_message = (text: string | undefined): string => (text === undefined ? "No hints on this page" : `No link matches ${text}`);
 
-async function keep_visible_ones(candidates: Found[], filter: HintFilter): Promise<Found[]> {
+async function keep_visible_ones(candidates: Found[], filter: HintFilter, skips_cover_test = false): Promise<Found[]> {
   const own_rects = (element: Element) => Array.from(element.getClientRects());
   const children = (element: Element) => Array.from(element.children);
   const owners = new Map(candidates.map((found) => [found.element, box_owners(found.element, own_rects, children)]));
@@ -97,16 +101,16 @@ async function keep_visible_ones(candidates: Found[], filter: HintFilter): Promi
     viewport_of_: (found) => viewport_size(found.element.ownerDocument, window_of(found.element)),
     is_hidden_by_style_: (found) => window_of(found.element).getComputedStyle(found.element).visibility === "hidden",
     // Site players lay click-catching controls over the video, and a card lays a stretched link over its picture, so a cover test would drop them.
-    is_reachable_at_: (found, x, y) => uncovered_through_frames(found, x, y, filter === "images" || (filter === "media" && is_media(found.element))),
+    is_reachable_at_: (found, x, y) => uncovered_through_frames(found, x, y, skips_cover_test || filter === "images" || (filter === "media" && is_media(found.element))),
   };
   return keep_visible_deduplicated(candidates, probe);
 }
 
-const yank_deps = (): YankDeps => ({
+const yank_deps = (register: string | undefined): YankDeps => ({
   find: all_links,
   keep_present_: keep_present_found,
   keep_in_view_: (found) => keep_visible_ones(found, "links"),
-  copy: (text) => copy_text(navigator.clipboard, text),
+  copy: (text) => copy_yank(navigator.clipboard, text, register),
   show_message_: (message) => create_view().show_message_(message),
 });
 
@@ -142,11 +146,12 @@ async function follow_page_link(direction: FollowDirection, place: Place): Promi
 }
 
 // A refused copy answers failed and shows nothing here: the pick's answer carries it to the caller, which shows it once.
-function copy_to_clipboard(text: string): Promise<Outcome | undefined> {
-  return copy_text(navigator.clipboard, text).then((copied) => {
-    if (!copied) return { ok: false, message: "Could not copy to the clipboard" };
+function copy_to_clipboard(text: string, register: string | undefined, what?: string): Promise<Outcome | undefined> {
+  return copy_yank(navigator.clipboard, text, register).then((copied) => {
+    if (!copied.ok) return copied;
+    if ("dropped" in copied) return;
     // A view of its own, so the notice does not wipe the labels that rapid mode shows.
-    create_view().show_message_(`Copied ${text.length > 40 ? text.slice(0, 40) + "..." : text}`);
+    create_view().show_message_(`Copied ${what ?? (text.length > 40 ? text.slice(0, 40) + "..." : text)}`);
   });
 }
 
@@ -170,7 +175,11 @@ function start_caret_(target: Element, mode: CaretMode): void {
   page.desertfox_host.set_mode_(mode);
 }
 
-const deps = { open_link_, copy: copy_to_clipboard, image_action, start_caret_ };
+const inspect_ = (target: Element): Promise<Outcome> => hand_to_devtools(window as never, target, () => browser.runtime.sendMessage({ type: "inspect_pick" }), setTimeout, (message) => create_view().show_message_(message));
+
+// A pick copies into the register its own `hint.run` was typed with.
+const pick_deps = (current: { args: Record<string, unknown> }) => ({ ...deps, copy: (text: string, what?: string) => copy_to_clipboard(text, current.args.register as string | undefined, what) });
+const deps = { open_link_, copy: (text: string, what?: string) => copy_to_clipboard(text, undefined, what), image_action, start_caret_, inspect_ };
 
 function register(host: BundleHostApi): void {
   let session: Session | undefined;
@@ -183,14 +192,14 @@ function register(host: BundleHostApi): void {
     session = undefined;
   }
 
-  // A pick records what `.` repeats, so Escape or a failed filter stores nothing. The wait ends when the returned function gets the
+  // A pick records what `.` repeats at its start, not at the end of the leaf, because a pick that opens the link in this tab can end the page first. Escape or a failed filter stores nothing. The wait ends when the returned function gets the
   // action's result, so a later step sees the opened tab or the copied text. Call it before `set_mode_`, which ends the session as cancelled.
   function begin_pick(current: Session): (run: () => unknown) => void {
     let answer!: (outcome: Outcome) => void;
     const first = !current.picked;
     current.picked = true;
     current.finish(new Promise<Outcome>((resolve) => (answer = resolve)));
-    void browser.runtime.sendMessage({ type: "record_repeat", invocation: { id: "hint.run", args: current.args } });
+    void browser.runtime.sendMessage({ type: "record_step", invocations: [{ id: "hint.run", args: current.args }], outcome: done, pick: true });
     const ended = (result: unknown) => {
       let outcome = (result as Outcome | undefined) ?? done;
       // A refused open comes back as a RunResponse with no message. The background already showed it, so it only stops the sequence.
@@ -210,15 +219,28 @@ function register(host: BundleHostApi): void {
     };
   }
 
+  // Keys typed while the build ran never reached a mode. They run in normal mode, in order, once the mode change has ended the session.
+  // `after_leaving` runs the pick. A pick that focuses a field gets the keys as text, which a replay in insert mode would drop.
+  // Insert mode after the pick means the pick focused the field: Escape leaves insert mode without a blur, so a field focused earlier is not a target.
+  function leave_with_keys(current: Session, after_leaving?: () => void): void {
+    const keys = current.waiting_tokens_.splice(0);
+    host.set_mode_("normal");
+    after_leaving?.();
+    const focused_a_field = after_leaving && host.get_mode() === "insert";
+    if (focused_a_field) mark_text_entry({ id: "hint.run", args: current.args });
+    const left = focused_a_field ? insert_into_focused_field(keys) : keys;
+    if (left.length > 0) host.hold_keys_until_(Promise.resolve(left));
+  }
+
   // Finds, labels and shows the hints. Keys typed meanwhile wait and replay. Rapid mode calls it again after each pick.
   async function build(current: Session, candidates: Found[], first_build: boolean): Promise<void> {
-    const [letters, visible] = await Promise.all([read_letters(), keep_visible_ones(candidates, current.filter)]);
+    const [letters, visible] = await Promise.all([read_letters(), keep_visible_ones(candidates, current.filter, current.action === "inspect")]);
     if (current.cancelled) return;
     const found = current.lower_text_ === undefined ? visible : keep_text_matches(visible, current.lower_text_);
     if (found.length === 0) {
       const message = none_message(current.text);
       current.finish({ ok: false, message });
-      host.set_mode_("normal");
+      leave_with_keys(current);
       // Only a rapid rebuild gets here with its promise already settled, so nobody else shows the message.
       if (!first_build) create_view().show_message_(message);
       return;
@@ -226,24 +248,15 @@ function register(host: BundleHostApi): void {
     // One match needs no label. Only the first build does this, so rapid mode cannot repeat the same pick.
     if (first_build && current.lower_text_ !== undefined && found.length === 1) {
       const performed = begin_pick(current);
-      host.set_mode_("normal");
-      performed(() => perform(current.action, found[0]!.element as HTMLElement, deps, current.with_background_));
+      leave_with_keys(current, () => performed(() => perform(current.action, found[0]!.element as HTMLElement, pick_deps(current), current.with_background_)));
       return;
     }
     const view = create_view();
     const labels = make_labels(found.length, letters);
     view.show(found.map((item, index) => ({ found: item, text: labels[index]! })));
     current.ready = { picker: create_picker(labels), found, view, stop_following_: follow_windows(windows_of(found), view.reposition) };
-    const queued = current.waiting_tokens_.splice(0);
-    for (const [index, token] of queued.entries()) {
-      if (current.cancelled) break;
-      // A rapid pick starts the next build, which replays the keys that are left.
-      if (!current.ready) {
-        current.waiting_tokens_.unshift(...queued.slice(index));
-        break;
-      }
-      handle_token(current, token);
-    }
+    // The queue stays on the session while the loop drains it: a pick hands what is left to normal mode, a rapid pick leaves it for the next build.
+    while (current.ready && !current.cancelled && current.waiting_tokens_.length > 0) handle_token(current, current.waiting_tokens_.shift()!);
   }
 
   function handle_token(current: Session, token: string): "handled" | "pass" {
@@ -256,16 +269,14 @@ function register(host: BundleHostApi): void {
       const picked = element as HTMLElement;
       const performed = begin_pick(current);
       if (!current.rapid) {
-        // Leave hint mode first: a picked field then raises insert mode through its own focus event.
-        host.set_mode_("normal");
-        performed(() => perform(current.action, picked, deps, current.with_background_));
+        leave_with_keys(current, () => performed(() => perform(current.action, picked, pick_deps(current), current.with_background_)));
         return "handled";
       }
       // Rapid: the pick may delete or move elements, so drop these labels and label the page again.
       ready.stop_following_();
       ready.view.clear_labels_();
       delete current.ready;
-      performed(() => perform(current.action, picked, deps, current.with_background_));
+      performed(() => perform(current.action, picked, pick_deps(current), current.with_background_));
       if (!current.cancelled) void build(current, find_candidates(current.filter, current.custom_selector_, current.action), false);
     }
     return "handled";
@@ -274,9 +285,15 @@ function register(host: BundleHostApi): void {
   host.register_handler_("page.follow", (args) => follow_page_link(args.direction as FollowDirection, args.where as Place));
   host.register_handler_("page.focus_field", (args): Outcome => {
     const message = focus_field(document, host.last_blurred_(), args.direction as FieldDirection, args.steps as number);
+    if (message !== undefined) return { ok: false, message };
+    mark_text_entry({ id: "page.focus_field", args: { direction: args.direction, steps: args.steps } });
+    return done;
+  });
+  host.register_handler_("page.heading", (args): Outcome => {
+    const message = step_heading(args.direction as HeadingDirection, args.steps as number);
     return message === undefined ? done : { ok: false, message };
   });
-  host.register_handler_("copy.links", (args) => yank_links(args.scope as "page" | "viewport", args.format as LinkFormat, yank_deps()));
+  host.register_handler_("copy.links", (args) => yank_links(args.scope as "page" | "viewport", args.format as LinkFormat, yank_deps(args.register as string | undefined)));
   host.register_handler_("hint.unhover", () => unhover());
 
   // The command line asks for the list and `report` hands it back, so the answer does not go through the background.

@@ -10,35 +10,32 @@ import { usage_line } from "./usage.ts";
 
 export type Token = {
   text: string;
+  // Index in the tokenized text where the raw word begins, so a verbatim param can take the raw text from here.
+  start: number;
   // Index in `text` of the first quoted or escaped character, or null when none was.
   // A quoted word is always free text, never a param name, switch, value word or @source.
   quoted_from: number | null;
 };
 
+type Read = { token: Token; end: number } | { error: string; start: number } | undefined;
+
+// Reads the word that starts at or after `from`, or nothing at the end of the text.
 // Shell rules: single quotes are literal, double quotes allow \" \\ \$ and \`,
 // a backslash outside quotes escapes the next character.
-export function tokenize(text: string): Token[] | { error: string } {
-  const tokens: Token[] = [];
-  let current: Token | null = null;
+function read_token(text: string, from: number): Read {
+  let index = from;
+  while (index < text.length && /\s/.test(text[index] as string)) index += 1;
+  if (index >= text.length) return undefined;
+  const token: Token = { text: "", quoted_from: null, start: index };
   const start_quote = (): Token => {
-    current ??= { text: "", quoted_from: null };
-    current.quoted_from ??= current.text.length;
-    return current;
+    token.quoted_from ??= token.text.length;
+    return token;
   };
-  const add = (char: string): void => {
-    current ??= { text: "", quoted_from: null };
-    current.text += char;
-  };
-  let index = 0;
-  while (index < text.length) {
+  while (index < text.length && !/\s/.test(text[index] as string)) {
     const char = text[index] as string;
-    if (/\s/.test(char)) {
-      if (current) tokens.push(current);
-      current = null;
-      index += 1;
-    } else if (char === "'") {
+    if (char === "'") {
       const close = text.indexOf("'", index + 1);
-      if (close < 0) return { error: "unterminated ' quote" };
+      if (close < 0) return { error: "unterminated ' quote", start: token.start };
       start_quote().text += text.slice(index + 1, close);
       index = close + 1;
     } else if (char === '"') {
@@ -46,7 +43,7 @@ export function tokenize(text: string): Token[] | { error: string } {
       index += 1;
       for (;;) {
         const inner = text[index];
-        if (inner === undefined) return { error: 'unterminated " quote' };
+        if (inner === undefined) return { error: 'unterminated " quote', start: token.start };
         if (inner === '"') break;
         if (inner === "\\" && '"\\$`'.includes(text[index + 1] ?? "")) index += 1;
         quoted.text += text[index];
@@ -54,15 +51,23 @@ export function tokenize(text: string): Token[] | { error: string } {
       }
       index += 1;
     } else if (char === "\\") {
-      if (index + 1 >= text.length) return { error: "backslash at the end of the line" };
+      if (index + 1 >= text.length) return { error: "backslash at the end of the line", start: token.start };
       start_quote().text += text[index + 1];
       index += 2;
     } else {
-      add(char);
+      token.text += char;
       index += 1;
     }
   }
-  if (current) tokens.push(current);
+  return { token, end: index };
+}
+
+export function tokenize(text: string): Token[] | { error: string } {
+  const tokens: Token[] = [];
+  for (let read = read_token(text, 0); read; read = read_token(text, read.end)) {
+    if ("error" in read) return read;
+    tokens.push(read.token);
+  }
   return tokens;
 }
 
@@ -81,31 +86,58 @@ export type CommandLookup = { find: (word: string) => ParsedCommand | undefined 
 type ParsedCommand = Pick<CommandDef, "id" | "name" | "params">;
 
 export function parse_command_line(registry: CommandLookup, text: string, sources: EnumSources = {}): ParseResult {
-  const tokens = tokenize(text);
-  if (!Array.isArray(tokens)) return { kind: "error", error: tokens.error };
-  const [first, ...words] = tokens;
-  if (!first) return { kind: "error", error: "empty command line" };
-  const command = registry.find(first.text);
-  if (!command) return { kind: "error", error: `unknown command "${first.text}"` };
-  return parse_words(command, words, sources);
+  return parse_line(registry, text, sources).result;
 }
 
-// Flags come first, then the subject, which runs to the end of the line.
-function parse_words(command: ParsedCommand, words: Token[], sources: EnumSources): ParseResult {
+// `subject_start` is where the verbatim subject begins in `text`, for completion to hand the raw rest to.
+// A command with a verbatim param reads its words lazily, so text after the subject never needs to tokenize.
+// Any other command tokenizes the whole line first, so a quote error comes before a flag error.
+export function parse_line(registry: CommandLookup, text: string, sources: EnumSources = {}): { result: ParseResult; command?: ParsedCommand; subject_start?: number } {
+  const fail = (error: string) => ({ result: { kind: "error", error } as const });
+  const first = read_token(text, 0);
+  if (!first) return fail("empty command line");
+  if ("error" in first) return fail(first.error);
+  const command = registry.find(first.token.text);
+  if (!command) return fail(`unknown command "${first.token.text}"`);
+  if (!(command.params ?? []).some((param) => param.verbatim)) {
+    const all = tokenize(text);
+    if (!Array.isArray(all)) return fail(all.error);
+  }
+  let end = first.end;
+  const pull = (): Read => {
+    const read = read_token(text, end);
+    if (read && "token" in read) end = read.end;
+    return read;
+  };
+  const found: { subject_start?: number } = {};
+  return { result: parse_words(command, pull, text, sources, found), command, ...found };
+}
+
+// Flags come first, then the subject, which runs to the end of the line. `pull` reads the next word of `text`.
+function parse_words(command: ParsedCommand, pull: () => Read, text: string, sources: EnumSources, found: { subject_start?: number }): ParseResult {
   const params = command.params ?? [];
   const command_word = command.name ?? command.id;
   const args: Record<string, unknown> = {};
   const error = (message: string): ParseResult => ({ kind: "error", error: message });
   const main = params.find((param) => param.main);
   const number_params = params.filter((param) => param.type === "int" || param.type === "float");
-  const only_number = number_params.length === 1 ? number_params[0] : undefined;
+  // A main param owns a leading number: `tab.unload 3 GitHub` is one picker text, not a count.
+  const only_number = number_params.length === 1 && !main ? number_params[0] : undefined;
   const bare_param = bare_word_param(command);
   const positional = positional_params(command);
   let options_ended = false;
   // Only the first unmarked word can be the engine or the one required value.
   let bare_open = true;
 
-  for (const [index, word] of words.entries()) {
+  for (let read = pull(); read; read = pull()) {
+    if ("error" in read) {
+      // The first word of a verbatim subject may hold an open quote or a trailing backslash, which is plain text there. A dash word is a flag attempt and keeps the error.
+      if (!main?.verbatim || (!options_ended && text[read.start] === "-") || positional.some((param) => !Object.hasOwn(args, param.name))) return error(read.error);
+      found.subject_start = read.start;
+      args[main.name] = text.slice(read.start).trimEnd();
+      break;
+    }
+    const word = read.token;
     const unquoted = word.quoted_from === null;
     if (unquoted && !options_ended) {
       if (word.text === "-h" || word.text === "--help") return { kind: "help", usage: usage_line(command) };
@@ -116,7 +148,8 @@ function parse_words(command: ParsedCommand, words: Token[], sources: EnumSource
     }
 
     const number_param = only_number !== undefined && NUMBER_WORD.test(word.text) ? only_number : undefined;
-    if (!options_ended && !number_param && looks_like_flag(word)) {
+    const main_number = main !== undefined && unquoted && NUMBER_WORD.test(word.text);
+    if (!options_ended && !number_param && !main_number && looks_like_flag(word)) {
       const flag = read_flag(command_word, params, word);
       if ("error" in flag) return error(flag.error);
       if (Object.hasOwn(args, flag.param.name)) return error(`${flag.param.name} is set twice`);
@@ -150,7 +183,14 @@ function parse_words(command: ParsedCommand, words: Token[], sources: EnumSource
       return error(`"${word.text}" is not a flag or subject of ${command_word}${hint}`);
     }
     if (Object.hasOwn(args, main.name)) return error(`${main.name} is set twice, quote text that has spaces`);
-    const rest = words.slice(index);
+    if (main.verbatim) {
+      // The raw text keeps quotes, backslashes and inner spacing. A leading `@name` stays text too.
+      found.subject_start = word.start;
+      args[main.name] = text.slice(word.start).trimEnd();
+      break;
+    }
+    const rest = [word];
+    for (let more = pull(); more && "token" in more; more = pull()) rest.push(more.token);
     if (rest.length === 1) {
       const value = value_of(word.text, unquoted);
       if (typeof value === "object" && "error" in value) return error(value.error);

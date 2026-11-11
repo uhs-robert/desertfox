@@ -33,7 +33,7 @@ const PARAM_NAME_PATTERN = /^[a-z][a-z0-9_]*$/;
 const COMMAND_WORD_PATTERN = /^[^\s'"\\-][^\s'"\\]*$/;
 const FLAG_WORD_PATTERN = /^[a-z][a-z0-9_]*$/;
 const SHORT_FLAG_PATTERN = /^[A-Za-z]$/;
-const PARAM_TYPES = ["int", "float", "string", "bool", "enum"];
+const PARAM_TYPES = ["int", "float", "string", "bool", "enum", "key"];
 
 export function create_registry(): Registry {
   const commands_by_id = new Map<string, CommandDef>();
@@ -152,6 +152,11 @@ function check_params(input: CommandInput, fail: Fail): void {
   params.forEach((param, index) => {
     const at = `params[${index}]`;
     if (param.rest && param.type !== "string") fail(`${at}.rest`, "only a string param can take the rest");
+    if (param.verbatim) {
+      if (param.type !== "string") fail(`${at}.verbatim`, "only a string param can be verbatim");
+      if (!param.main) fail(`${at}.verbatim`, "only the main param can be verbatim");
+      if (param.value_of !== undefined) fail(`${at}.verbatim`, "a verbatim param cannot hold a setting value (value_of)");
+    }
     if (param.value_of !== undefined) {
       const sibling = find_param(input, param.value_of);
       if (sibling?.strict !== true) fail(`${at}.value_of`, `names "${param.value_of}", which is not a strict string param`);
@@ -163,6 +168,8 @@ function check_params(input: CommandInput, fail: Fail): void {
   });
   check_default_cycles(input, fail);
 
+  const keys = params.filter((param) => param.type === "key");
+  if (keys.length > 1) fail("params.key", `only one param can be a key, found ${keys.map((param) => param.name).join(", ")}, because a binding captures one key press`);
   const mains = params.filter((param) => param.main);
   if (mains.length > 1) fail("params.main", `only one param can be main, found ${mains.map((param) => param.name).join(", ")}`);
   const main = mains[0];
@@ -244,7 +251,7 @@ function check_param_shape(param: ParamDef, at: string, fail: Fail): void {
     if (new Set(list).size !== list.length) fail(`${at}.values`, "has a repeated value");
   } else if (is_dynamic_values(param.values)) {
     const from = (param.values as { from: unknown }).from;
-    if (from !== "search_engines" && from !== "containers" && from !== "tabs" && from !== "bookmarks" && from !== "history" && from !== "open" && from !== "windows" && from !== "headings") fail(`${at}.values`, `unknown source "${String(from)}"`);
+    if (from !== "search_engines" && from !== "containers" && from !== "tabs" && from !== "bookmarks" && from !== "history" && from !== "open" && from !== "windows" && from !== "headings" && from !== "sessions" && from !== "registers" && from !== "folders" && from !== "marks" && from !== "quickmarks" && from !== "saved_quickmarks" && from !== "anything") fail(`${at}.values`, `unknown source "${String(from)}"`);
   }
   check_rules(param, at, fail);
   check_value_labels(param, at, fail);
@@ -276,13 +283,14 @@ function check_rules(param: ParamDef, at: string, fail: Fail): void {
     else if (!Number.isInteger(param.min)) fail(`${at}.min`, "must be a whole number");
   }
   if (param.pattern !== undefined) {
-    if (param.type !== "string") fail(`${at}.pattern`, "only a string param takes a pattern");
+    if (param.type !== "string" && param.type !== "key") fail(`${at}.pattern`, "only a string or key param takes a pattern");
     try {
       new RegExp(param.pattern);
     } catch {
       fail(`${at}.pattern`, `${JSON.stringify(param.pattern)} is not a regular expression`);
     }
   }
+  if (param.format !== undefined && (param.type !== "string" || param.format !== "url")) fail(`${at}.format`, 'only a string param takes the format "url"');
   if (param.value_of !== undefined && param.type !== "string") fail(`${at}.value_of`, "only a string param can hold a setting value");
   if (param.strict !== undefined && (param.type !== "string" || !static_values(param))) {
     fail(`${at}.strict`, "only a string param with a fixed value list can be strict");
@@ -326,14 +334,16 @@ function value_problem(param: ParamDef, value: unknown): string | null {
     (param.type === "int" && Number.isInteger(value)) ||
     (param.type === "float" && typeof value === "number" && Number.isFinite(value)) ||
     (param.type === "bool" && typeof value === "boolean") ||
-    ((param.type === "string" || param.type === "enum") && typeof value === "string");
+    ((param.type === "string" || param.type === "enum") && typeof value === "string") ||
+    (param.type === "key" && typeof value === "string" && [...value].length === 1);
   if (!type_ok) return `${JSON.stringify(value)} is not a ${param.type}`;
   const list = static_values(param);
   if (param.type === "enum" && list && !list.includes(value as string)) {
     return `${JSON.stringify(value)} is not one of ${list.join(", ")}`;
   }
   if (param.type === "int" && param.min !== undefined && (value as number) < param.min) return `${JSON.stringify(value)} is below the minimum ${param.min}`;
-  if (param.type === "string" && param.pattern !== undefined && !new RegExp(param.pattern).test(value as string)) return `${JSON.stringify(value)} does not match ${param.pattern}`;
+  if ((param.type === "string" || param.type === "key") && param.pattern !== undefined && !new RegExp(param.pattern).test(value as string)) return `${JSON.stringify(value)} does not match ${param.pattern}`;
+  if (param.type === "string" && param.format === "url" && !URL.canParse(value as string)) return `${JSON.stringify(value)} is not an address`;
   if (param.type === "string" && param.strict && list && !list.includes(value as string)) return `${JSON.stringify(value)} is not one of ${list.join(", ")}`;
   return null;
 }

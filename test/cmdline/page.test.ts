@@ -58,6 +58,9 @@ type PageSetup = { keymap?: unknown; with_tab_command?: boolean; without_prompt?
 
 async function load_page(t: TestContext, tag: string, { keymap = KEYMAP, with_tab_command = false, without_prompt = false, prompt: configured, widgets }: PageSetup = {}) {
   const window_listeners: ((event: unknown) => void)[] = [];
+  // The page window's other listeners, such as `blur`, by type.
+  const other_window_listeners: Record<string, () => void> = {};
+  let has_focus = false;
   const input_listeners: Record<string, (event: unknown) => void> = {};
   const to_parent: unknown[] = [];
   const opened_answer = { ...(without_prompt ? { ...OPENED, prompt: undefined } : { ...OPENED, ...(configured !== undefined && { prompt: configured }) }), ...(widgets && { statusbar_widgets: widgets }) };
@@ -102,7 +105,7 @@ async function load_page(t: TestContext, tag: string, { keymap = KEYMAP, with_ta
   const prompt = Object.assign(fake_element(), { textContent: "> " });
   const page_window = {
     parent: { postMessage: (message: unknown) => void to_parent.push(message) },
-    addEventListener: (type: string, listener: (event: unknown) => void) => void (type === "message" && window_listeners.push(listener)),
+    addEventListener: (type: string, listener: (event: unknown) => void) => void (type === "message" ? window_listeners.push(listener) : (other_window_listeners[type] = listener as () => void)),
   };
   Object.assign(globalThis, {
     window: page_window,
@@ -111,6 +114,7 @@ async function load_page(t: TestContext, tag: string, { keymap = KEYMAP, with_ta
       // The page listens for keys on the document. The fake sends them through the input's table.
       addEventListener: (type: string, listener: (event: unknown) => void) => void (input_listeners[type] = listener),
       body: { classList: { toggle: () => {} } },
+      hasFocus: () => has_focus,
       documentElement: { style: { visibility: "" } },
       head: { append: (element: { textContent: string }) => void head.push(element) },
       createElement: fake_element,
@@ -168,7 +172,11 @@ async function load_page(t: TestContext, tag: string, { keymap = KEYMAP, with_ta
   };
   const press_enter = () => input_listeners.keydown!({ isTrusted: true, isComposing: false, key: "Enter", code: "Enter", preventDefault: () => {} });
   const press = (key: string) => input_listeners.keydown!({ isTrusted: true, isComposing: false, key, code: key, preventDefault: () => {} });
-  return { input, list, panel, note, prompt, status, to_parent, to_background, sent, item_asks, model_ports, head, storage_listeners, post_start, press_enter, press };
+  const set_focus = (focused: boolean) => {
+    has_focus = focused;
+    if (!focused) other_window_listeners.blur?.();
+  };
+  return { set_focus, input, list, panel, note, prompt, status, to_parent, to_background, sent, item_asks, model_ports, head, storage_listeners, post_start, press_enter, press };
 }
 
 // Port messages arrive on a later turn, and later still on a busy machine.
@@ -305,6 +313,40 @@ test("an Enter typed in the frame waits for the keys the host forwarded before i
   host.port.postMessage({ desertfox_cmdline: { kind: "focused" } });
   await until(() => host.submits().length === 1);
   assert.deepEqual(host.submits(), submit_of("my.jira"));
+});
+
+const late_keys_of = (received: unknown[]) => received.map((data) => (data as { desertfox_cmdline: { kind: string; tokens?: string[] } }).desertfox_cmdline).find((message) => message.kind === "drained")?.tokens;
+
+test("keys that reach the frame after Enter are typed nowhere and go back to the host once the frame lost the focus", async (t) => {
+  const { input, post_start, press_enter, press, set_focus } = await load_page(t, "late_keys");
+  const host = post_start(TICKET, "jira");
+  await host.opened();
+  host.port.postMessage({ desertfox_cmdline: { kind: "focused" } });
+  set_focus(true);
+  await settle();
+  press_enter();
+  // Race: the user typed on while the host moved the focus back to the page.
+  press("j");
+  press("x");
+  host.port.postMessage({ desertfox_cmdline: { kind: "drain" } });
+  await settle();
+  assert.equal(input.value, "jira");
+  // Race: a key already on its way to the frame arrives before the blur, so the answer waits for it.
+  assert.equal(late_keys_of(host.received), undefined);
+  press("k");
+  set_focus(false);
+  await until(() => late_keys_of(host.received) !== undefined);
+  assert.deepEqual([host.submits(), late_keys_of(host.received)], [submit_of("my.jira"), ["j", "x", "k"]]);
+});
+
+test("a forwarded Enter ends the line, so keys typed in the frame before the host said focused go back as late keys", async (t) => {
+  const { post_start, press } = await load_page(t, "late_keys_before_focused");
+  const host = post_start(TICKET, "jira", ["<Enter>"]);
+  await host.opened();
+  press("j");
+  host.port.postMessage({ desertfox_cmdline: { kind: "drain" } });
+  await until(() => late_keys_of(host.received) !== undefined);
+  assert.deepEqual([host.submits(), late_keys_of(host.received)], [submit_of("my.jira"), ["j"]]);
 });
 
 test("Enter on a command that lacks a value shows the error, keeps the line open and sends nothing", async (t) => {

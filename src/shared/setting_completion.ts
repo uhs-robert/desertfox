@@ -42,11 +42,11 @@ export const SETTING_COMPLETION: readonly SettingCompletion[] = [
     "values": []
   },
   {
-    "name": "ignore_sites",
+    "name": "site_rules",
     "settable": true,
     "is_toggle": false,
-    "is_list": true,
-    "expectation": "a list of match pattern strings",
+    "is_list": false,
+    "expectation": "a list of tables with \"site\", an optional \"pass\" of key sequences and an optional \"only\" of key sequences",
     "values": []
   },
   {
@@ -299,17 +299,6 @@ export const SETTING_COMPLETION: readonly SettingCompletion[] = [
     "is_list": false,
     "expectation": "a list of tables with \"label\", an http or https \"url\" and an optional \"group\"",
     "values": []
-  },
-  {
-    "name": "open_quick_start_on_install",
-    "settable": true,
-    "is_toggle": true,
-    "is_list": false,
-    "expectation": "true or false",
-    "values": [
-      "true",
-      "false"
-    ]
   }
 ];
 
