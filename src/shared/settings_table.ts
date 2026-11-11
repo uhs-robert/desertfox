@@ -8,6 +8,9 @@ import { BUILT_IN_PAGE, DEFAULT_SITE_ROW_NAMES, FALLBACK_ENGINE_NAME } from "./t
 import { BUILT_IN_THEME_NAMES } from "./theme_names.ts";
 import { DESKTOP_PALETTE, LIGHT_INTENSITIES } from "./theme/roles.ts";
 
+// The cap on `tab_preload_unload_ms`. A delay that long still fits the 32-bit timers of the browser.
+const ONE_DAY_MS = 86_400_000;
+
 type EnumValue = string | number | boolean;
 
 // A table from a key sequence to a command, in the shape of a keymap entry. The compiler checks the command and its args with the registry validator.
@@ -81,9 +84,9 @@ export const SETTINGS_TABLE = {
   bridge: { kind: "boolean", default: false },
   // Lets bridge programs list tabs (titles and addresses of normal windows), activate, close and capture them, and run a command on a chosen tab. Needs `bridge`.
   bridge_share_tabs: { kind: "boolean", default: false },
-  // After a tab switch, load or warm the next tab in the direction of travel. A tab loaded this way and never visited unloads after the delay, and a delay of 0 keeps it loaded.
+  // After a tab switch, load or warm the next tab in the direction of travel. A tab loaded this way unloads after the delay once the user has left the place next to it and never visited it. A delay of 0 keeps it loaded.
   tab_preload: { kind: "boolean", default: true },
-  tab_preload_unload_ms: { kind: "number", whole: true, min: 0, unit: "milliseconds", default: 60000 },
+  tab_preload_unload_ms: { kind: "number", whole: true, min: 0, max: ONE_DAY_MS, unit: "milliseconds", default: 60000 },
   completion_all_windows: { kind: "boolean", default: false },
   cmdline_prompt: { kind: "line", min_length: 1, max_length: 8, suggestions: ["caret", "colon"], default: "caret" },
   open_completion: { kind: "enum_list", values: ["bookmarks", "history"], default: ["bookmarks", "history"] },

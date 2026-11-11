@@ -227,4 +227,4 @@ Question: does `tabs.reload` on a discarded tab keep the scroll position and for
 
 Setup: Firefox headless, the key-test profile, a 150-paragraph page with a textarea and an input. Typed in both, scrolled to 2500 px, switched away, `tabs.discard`, then either `tabs.reload` or `tabs.update(active)`.
 
-Result: yes. Both paths ended with `scrollY` 2500 and both field values back. After `tabs.reload` the tab stayed inactive. One run each, so this is not a fuzz of timing.
+Result: yes. Both paths ended with `scrollY` 2500 and both field values back. After `tabs.reload` the tab stayed inactive. One run each, so this is not a fuzz of timing. `node test/key/reload_restore_probe.mjs` repeats the check (it starts its own headless Firefox and needs `just build`), so run it after a Firefox update.

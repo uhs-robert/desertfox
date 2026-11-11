@@ -253,7 +253,7 @@ export const SETTING_COMPLETION: readonly SettingCompletion[] = [
     "settable": true,
     "is_toggle": false,
     "is_list": false,
-    "expectation": "a whole number of milliseconds, 0 or more",
+    "expectation": "a whole number of milliseconds, from 0 to 86400000",
     "values": []
   },
   {
