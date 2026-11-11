@@ -7,7 +7,7 @@ export type SendKeyArgs = { key: string; key_code: number; target?: string; time
 export type KeyTargetDocument = { querySelector(selector: string): EventTarget | null; activeElement: EventTarget | null };
 
 // The validator hands an omitted optional string over as "", so "" means no target.
-function key_target(doc: KeyTargetDocument, selector: string | undefined): EventTarget {
+export function key_target(doc: KeyTargetDocument, selector: string | undefined): EventTarget {
   if (selector === undefined || selector === "") return doc.activeElement ?? refuse("No focused element to send the key to");
   let found: EventTarget | null;
   try {

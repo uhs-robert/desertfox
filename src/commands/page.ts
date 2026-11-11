@@ -158,3 +158,17 @@ define("page.send_key", {
   count: { param: "times" },
   bundle: "site_actions",
 });
+
+// Meant for site rows, where a synthetic Ctrl+X or Ctrl+V keydown does not cut or paste: the browser runs a clipboard action only from `execCommand`, so a row binds a key to this command instead.
+define("page.clipboard", {
+  label: "Cut, copy or paste in the page",
+  intent: "Run cut, copy or paste as Ctrl+X, C or V would. The page's own clipboard handling runs. It focuses the element the CSS selector finds, or acts on the focused element when there is no selector. It refuses when the selector matches nothing, or when the page or the clipboard refuses the action.",
+  params: [
+    { name: "action", type: "enum", values: ["cut", "copy", "paste"], value_labels: { cut: "cut", copy: "copy", paste: "paste" }, description: { cut: "Cut the selection to the clipboard.", copy: "Copy the selection to the clipboard.", paste: "Paste the clipboard at the selection." } },
+    { name: "target", type: "string", optional: true, description: "Focus the element this CSS selector finds and act on it." },
+  ],
+  bridge: false,
+  runs_in: "content",
+  modes: ["normal"],
+  bundle: "site_actions",
+});

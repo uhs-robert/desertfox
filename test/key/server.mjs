@@ -170,6 +170,19 @@ export function start_server() {
       const controls = '<input id="first"><input type="checkbox" id="box"><fieldset disabled><input id="off"></fieldset>' + tall_filler + '<input id="last">';
       return response.end(page(`controls ${id}`, controls, "<script>addEventListener('focusin', (event) => send('focused', { id: event.target.id }))</script>"));
     }
+    if (url.pathname === "/clipboard") {
+      // A stand-in for the Sheets grid editor: a parked, empty, focused box that records the clipboard events it gets (and cancels them when the id has "cancel", as Sheets does, and stops their propagation when it has "stop") (type, whether the browser sent it, and the text it carries) in a data attribute.
+      const editor = '<div style="position:absolute;top:-10000px;left:0"><div id="waffle-rich-text-editor" contenteditable="true" style="outline:0"></div></div>';
+      const record = `<script>
+        const editor = document.getElementById("waffle-rich-text-editor");
+        document.documentElement.dataset.clip = "";
+        const cancels = location.search.includes("cancel");
+        const stops = location.search.includes("stop");
+        for (const type of ["cut", "copy", "paste"]) editor.addEventListener(type, (event) => { if (cancels) event.preventDefault(); if (stops) event.stopImmediatePropagation(); document.documentElement.dataset.clip += type + ":" + event.isTrusted + ":" + (event.clipboardData?.getData("text/plain") ?? "") + ","; });
+        editor.focus();
+      </script>`;
+      return response.end(page(`clipboard ${id}`, editor + record));
+    }
     if (url.pathname === "/closed_field") {
       // A field inside a closed root and a plain button outside. F9 focuses the inner field and F2 the outer one (not F10, whose key-up moves Firefox focus to the menu bar), because the test cannot reach into a closed root. With autofocus in the id, the inner field takes the focus at load. A button sits after the field in the root, so Tab moves focus inside it; "open" in the id makes the root open.
       const build = `<div id="host"></div><button id="outside">outside</button><script>

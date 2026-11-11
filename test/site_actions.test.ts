@@ -158,3 +158,61 @@ test("a count over the limit is refused by the handler after args_for_count fill
   assert.equal(page.log.length, 0);
   assert.equal(SEND_KEY_MAX_TIMES, 99);
 });
+
+import { clipboard_action } from "../src/content/site_actions/clipboard.ts";
+
+// A page whose `execCommand` fires its event only when `fires` is set, as a browser that runs the action does. `takes_focus` false is a target that cannot be focused. The listener is the document's capture listener, so `listeners` holds what is attached after the call.
+function clipboard_page(fires: boolean, accepts = fires, takes_focus = true) {
+  const calls: string[] = [];
+  const listeners: Record<string, () => void> = {};
+  const target = {} as EventTarget & { focus: () => void };
+  const doc = {
+    querySelector: (selector: string) => (selector === "#e" ? target : null),
+    activeElement: null as EventTarget | null,
+    addEventListener: (type: string, listener: () => void) => (listeners[type] = listener),
+    removeEventListener: (type: string) => delete listeners[type],
+    execCommand: (command: string) => (calls.push(command), fires && listeners[command]?.(), accepts),
+  };
+  target.focus = () => (calls.push("focus"), takes_focus && (doc.activeElement = target));
+  return { doc, calls, listeners };
+}
+
+test("page.clipboard takes cut, copy and paste with an optional target and refuses anything else", () => {
+  const command = registry.get("page.clipboard")!;
+  for (const action of ["cut", "copy", "paste"]) assert.ok(check_args(command, { action, target: "#e" }, {}).ok);
+  assert.ok(check_args(command, { action: "paste" }, {}).ok);
+  assert.equal(check_args(command, { action: "undo" }, {}).ok, false);
+  assert.equal(check_args(command, {}, {}).ok, false);
+});
+
+test("clipboard_action focuses the target, then runs the command, and skips the fallback when the event fired", async () => {
+  const page = clipboard_page(true);
+  let fell_back = false;
+  await clipboard_action(page.doc, { action: "paste", target: "#e" }, async () => void (fell_back = true));
+  assert.deepEqual(page.calls, ["focus", "paste"]);
+  assert.equal(fell_back, false);
+});
+
+test("clipboard_action falls back to the clipboard API for a paste that fired no event, and refuses a cut that did", async () => {
+  const page = clipboard_page(false);
+  let fell_back = false;
+  await clipboard_action(page.doc, { action: "paste", target: "#e" }, async () => void (fell_back = true));
+  assert.equal(fell_back, true);
+  await assert.rejects(clipboard_action(page.doc, { action: "cut", target: "#e" }, async () => undefined), RuntimeRefusal);
+  await assert.rejects(clipboard_action(page.doc, { action: "copy", target: "#gone" }, async () => undefined), RuntimeRefusal);
+});
+
+test("clipboard_action counts a fired event as taken even when execCommand returns false, so a handled paste is not pasted twice", async () => {
+  const page = clipboard_page(true, false);
+  let fell_back = false;
+  await clipboard_action(page.doc, { action: "paste", target: "#e" }, async () => void (fell_back = true));
+  await clipboard_action(page.doc, { action: "cut", target: "#e" }, async () => undefined);
+  assert.equal(fell_back, false);
+  assert.deepEqual(page.listeners, {});
+});
+
+test("clipboard_action refuses a target that did not take focus, without running the command", async () => {
+  const page = clipboard_page(true, true, false);
+  await assert.rejects(clipboard_action(page.doc, { action: "paste", target: "#e" }, async () => undefined), /did not take focus/);
+  assert.deepEqual(page.calls, ["focus"]);
+});

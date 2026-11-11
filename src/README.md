@@ -11,7 +11,7 @@ The code map. Read a folder's README before you change or research code in it.
   - [`content/whichkey/`](content/whichkey/README.md): the which-key panel.
   - [`content/handlers/`](content/handlers/README.md): the content-side handler for each command group.
   - [`content/ui/`](content/ui/README.md): the `ui` bundle, the mode badge and the toast.
-  - [`content/page/`](content/page/README.md): the `page` bundle: `scroll.align`, `copy.url`, and `page.focus_input`. [`content/site_actions/`](content/site_actions/README.md): the `site_actions` bundle: `page.send_key`.
+  - [`content/page/`](content/page/README.md): the `page` bundle: `scroll.align`, `copy.url`, and `page.focus_input`. [`content/site_actions/`](content/site_actions/README.md): the `site_actions` bundle: `page.send_key` and `page.clipboard`.
   - [`content/media/`](content/media/README.md): the `media` bundle, which the background injects into every frame for the `media` command.
   - [`content/quality/`](content/quality/README.md): the `quality` bundle, which the background injects into every frame for `media quality` and `media skip` and for the `media_quality` rule.
   - [`content/text/`](content/text/README.md): the `text` bundle: the typed-text recorder for `.`, the shared field writer and `is_secret_field`.
