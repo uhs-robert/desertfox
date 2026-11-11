@@ -265,7 +265,8 @@ export function start_server() {
       return response.end(page(`body_editor_frame ${id}`, frame + focus_body));
     }
     if (url.pathname === "/body_editor") return response.end(page(`body_editor ${id}`, `${tall_filler}<script>${url.searchParams.get("turn_on")}</script>`));
-    if (url.pathname === "/cell_editor") {
+    if (url.pathname === "/cell_editor" || url.pathname === "/grid") {
+      // /grid is the same page that also records, in `data-grid`, the key code of each arrow keydown the editor gets, with an s after it when Shift was held, so a test sees what a site mode sent.
       // A stand-in for the Google Sheets cell editor: one contenteditable that holds the focus from load on. While a cell is only selected it is parked off screen, empty and with no width.
       // Enter starts an edit, which moves the box over a cell and gives it a width, and Enter again or Escape ends it. A plain input sits below, for the sites that turn escape_to_page on. A double-click on the cell starts an edit with no key, and a click on it ends one.
       const editor = '<div id="cell" style="position:fixed;top:100px;left:100px;width:114px;height:20px"></div><div id="box" style="position:absolute;top:-10000px;left:0"><div id="waffle-rich-text-editor" contenteditable="true" style="outline:0"></div></div><input id="plain" style="position:fixed;top:200px;left:100px">';
@@ -285,6 +286,8 @@ export function start_server() {
         const cell = document.getElementById("cell");
         cell.addEventListener("dblclick", start_edit);
         cell.addEventListener("click", end_edit);
+        document.documentElement.dataset.grid = "";
+        editor.addEventListener("keydown", (event) => { if (event.keyCode >= 37 && event.keyCode <= 40) document.documentElement.dataset.grid += event.keyCode + (event.shiftKey ? "s" : "") + ","; });
         editor.focus();
       </script>`;
       return response.end(page(`cell_editor ${id}`, editor + tall_filler + script));

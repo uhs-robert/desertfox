@@ -29,7 +29,8 @@ the extension just listed. Stdout carries only protocol bytes. The host never ru
 `theme {palette}` pushes a DesertFox palette name. The host checks only its shape, keeps the last one in $XDG_RUNTIME_DIR/desertfox/theme.json
 (which outlives the host, so the next host has it) and sends it to the extension. It sends the kept name again right after each `ready`, in the
 same step that opens the link, so a push never overtakes the replay and a name is never sent twice for one connection. The extension decides
-whether the name is a theme it knows.
+whether the name is a theme it knows, and the host drops the kept name when the extension refuses it. With no host running, the CLI writes theme.json itself
+under the lock, so this host replays it.
 
 `subscribe` turns a connection into a one-way stream: one {"ok": true} line, then one line per event, each with a
 `seq`. The host makes a `mode` event of each mode it takes, and passes on the extension's tab events. A subscriber
@@ -79,7 +80,9 @@ REQUEST_TIMEOUT_S = 10
 DRAIN_S = 1.0
 MAX_COMMAND_CHARS = 4096
 MAX_REPLY_MESSAGE_CHARS = 500
-PALETTE_PATTERN = re.compile(r"[A-Za-z0-9_-]{1,64}")
+# The text src/background/bridge.ts sends for a name that is no built-in theme.
+UNKNOWN_PALETTE_MESSAGE = "no built-in theme has that name"
+PALETTE_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}")
 PREFACE_PATTERN = re.compile(r"[A-Za-z0-9]{1,32}")
 # Rendering one tab, a background one included, takes longer than answering from the tab list.
 CAPTURE_TIMEOUT_S = 5
@@ -199,7 +202,20 @@ class ThemeKeeper:
             if not link.open:
                 return {"ok": True, "message": "kept for when the extension connects"}
             waiting = link.start("theme", {"palette": palette})
-        return run_result(link.wait(waiting, REQUEST_TIMEOUT_S))
+        reply = link.wait(waiting, REQUEST_TIMEOUT_S)
+        self.drop_if_refused(palette, reply)
+        return run_result(reply)
+
+    def drop_if_refused(self, palette, reply):
+        """Forgets `palette` when the extension itself refused it. The host cannot tell a built-in name from a typo, so the refusal is the check.
+        Only the extension's unknown-name refusal counts: a timeout, a closed link or a generic failure says nothing about the name."""
+        if reply.get("ok") is not False or "request_id" not in reply or reply.get("message") != UNKNOWN_PALETTE_MESSAGE:
+            return
+        with self.guard:
+            if self.palette != palette:
+                return
+            self.palette = None
+            remove_quietly(self.path)
 
     def say_ready(self, link):
         """Opens the link and sends the kept palette in one step under the lock, so a push either comes before and is the one replayed or comes after and is sent once."""
@@ -207,9 +223,9 @@ class ThemeKeeper:
             link.say_ready()
             if self.palette is None:
                 return
-            waiting = link.start("theme", {"palette": self.palette})
-        # Only to free the pending slot: the extension's answer to a replay has nobody to go to.
-        threading.Thread(target=link.wait, args=(waiting, REQUEST_TIMEOUT_S), daemon=True).start()
+            palette = self.palette
+            waiting = link.start("theme", {"palette": palette})
+        threading.Thread(target=lambda: self.drop_if_refused(palette, link.wait(waiting, REQUEST_TIMEOUT_S)), daemon=True).start()
 
 
 class BridgeState:

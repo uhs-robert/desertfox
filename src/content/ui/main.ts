@@ -15,7 +15,7 @@ if (!page.desertfox_ui_ready) {
   page.desertfox_ui_ready = true;
   page.desertfox_host.register_handler_("ui.toast", (args) => show_toast(args.message as string, args.kind as ToastKind | undefined));
   page.desertfox_host.register_handler_("ui.badge", (args) => {
-    const { mode, pass_next, setting, recording } = args as unknown as BadgeState;
-    show_mode_label(mode_label(mode, pass_next, setting, recording), pass_next ? undefined : mode);
+    const { mode, pass_next, setting, recording, site_label } = args as unknown as BadgeState;
+    show_mode_label(mode_label(mode, pass_next, setting, recording, site_label), pass_next ? undefined : site_label === undefined ? mode : "site");
   });
 }

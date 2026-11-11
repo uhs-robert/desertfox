@@ -11,6 +11,7 @@ import { check_args, create_registry, DefineError, type Registry } from "../regi
 import { parse_binding } from "../registry/parse_binding.ts";
 import type { BoundInvocation, Prompt } from "../invocation.ts";
 import type { Modifier } from "../keymap.ts";
+import { bind_tables_of } from "../match_pattern.ts";
 import { origin_key, type MergedData } from "./merge.ts";
 import { is_labeled_binding, make_entry_resolver } from "./resolve_binding.ts";
 
@@ -116,9 +117,11 @@ export function resolve_bindings(merged: MergedData, registry: Registry, problem
   // Site binds take the same formats. Row by row, the settings check already vouched for the shape.
   const site_where = location_of(merged, "settings", "site_rules");
   for (const row of merged.settings.site_rules ?? []) {
-    for (const [sequence, entry] of Object.entries(row.bind ?? {})) {
-      const binding = resolve_entry(entry, `${site_where}: bind "${sequence}" of "${row.site}"`);
-      if (binding) (row.bind as Record<string, unknown>)[sequence] = binding;
+    for (const { scope, table } of bind_tables_of(row)) {
+      for (const [sequence, entry] of Object.entries(table)) {
+        const binding = resolve_entry(entry, `${site_where}: ${scope}bind "${sequence}" of "${row.site}"`);
+        if (binding) (table as Record<string, unknown>)[sequence] = binding;
+      }
     }
   }
 }
@@ -211,21 +214,23 @@ export function check_config(merged: MergedData, registry: Registry, problems: s
 
   // The settings check covers the shape of each bind. Each step gets the checks of a keymap entry.
   for (const row of merged.settings.site_rules ?? []) {
-    for (const [sequence, entry] of Object.entries(row.bind ?? {})) {
-      for (const step of [entry].flat() as unknown[]) {
-        // Text here failed to parse, and resolve_bindings already reported it.
-        if (typeof step !== "object" || step === null || is_labeled_binding(step)) continue;
-        const binding = step as BoundInvocation;
-        const prefix = `${where("settings", "site_rules")}: bind "${sequence}" of "${row.site}"`;
-        for (const message of [binding.label === undefined ? null : label_problem(binding.label), binding.intent === undefined ? null : intent_problem(binding.intent)]) {
-          if (message) problems.push(`${prefix}: ${message}`);
+    for (const { scope, table } of bind_tables_of(row)) {
+      for (const [sequence, entry] of Object.entries(table)) {
+        for (const step of [entry].flat() as unknown[]) {
+          // Text here failed to parse, and resolve_bindings already reported it.
+          if (typeof step !== "object" || step === null || is_labeled_binding(step)) continue;
+          const binding = step as BoundInvocation;
+          const prefix = `${where("settings", "site_rules")}: ${scope}bind "${sequence}" of "${row.site}"`;
+          for (const message of [binding.label === undefined ? null : label_problem(binding.label), binding.intent === undefined ? null : intent_problem(binding.intent)]) {
+            if (message) problems.push(`${prefix}: ${message}`);
+          }
+          const command = registry.get(binding.id);
+          if (command && captured_key_param(command, binding.args)) {
+            problems.push(`${prefix}: a bind cannot wait for a key press`);
+            continue;
+          }
+          for (const message of check_invocation(binding, registry, engine_names, "normal")) problems.push(`${prefix}: ${message}`);
         }
-        const command = registry.get(binding.id);
-        if (command && captured_key_param(command, binding.args)) {
-          problems.push(`${prefix}: a bind cannot wait for a key press`);
-          continue;
-        }
-        for (const message of check_invocation(binding, registry, engine_names, "normal")) problems.push(`${prefix}: ${message}`);
       }
     }
   }

@@ -3,7 +3,7 @@
 import type { MergedConfig, SettingEdits } from "../shared/config.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY } from "../shared/prefix_tree.ts";
 import { registry } from "../shared/registry/builtin.ts";
-import { container_names, make_router_deps, snippet_deps } from "./browser_deps.ts";
+import { container_names, make_router_deps, show_toast_on_tab, snippet_deps } from "./browser_deps.ts";
 import { compile_config } from "./compile.ts";
 import { build_config_status, load_config, load_edits, load_files_source, store_edits, with_edits } from "./config_load.ts";
 import type { FilesSource, LoadedConfig } from "./config_load.ts";
@@ -18,6 +18,8 @@ import type { SlotPlan } from "./slots.ts";
 import { no_repeat_memory } from "./repeat_memory.ts";
 import { create_snippets } from "./snippets.ts";
 import { browser_native_deps, create_native_client, NativeHostError } from "./native_client.ts";
+import { create_host_update } from "./host_update.ts";
+import { browser_host_update_deps } from "./host_update_browser.ts";
 import { build_files_config, ConfigRefusal, KEPT_CURRENT } from "./config_reload.ts";
 import type { ApplyAction } from "./config_reload.ts";
 import { checked_consent, IMPORT_DIR_LABEL, imports_nothing, plan_import_files, preview_import, read_import_source } from "./config_import.ts";
@@ -28,7 +30,9 @@ import { commands_of_registry } from "../shared/config_build/build_config.ts";
 import { FILES_CONFIG_STORAGE_KEY, FILES_SOURCE_STORAGE_KEY } from "./storage_keys.ts";
 
 export const snippets = create_snippets(registry, snippet_deps, make_router_deps(get_config, no_repeat_memory));
-const native_host = create_native_client(browser_native_deps());
+// The updater needs the client to send `self_update`, and the client reports each reply to the updater, so the updater reads `native_host` late.
+export const host_update = create_host_update(browser_host_update_deps(() => get_config(), (request) => native_host.self_update(request), () => native_host.read_config().then(() => undefined)));
+const native_host = create_native_client(browser_native_deps(), host_update.watch);
 const autoconfig = create_autoconfig_mirror({ write_autoconfig: native_host.write_autoconfig, warn: console.warn });
 
 // Everything a load (the first one, or a `config.reload`) works out and `publish` reuses. Browser edits are not part of it: they change while this stays.
@@ -118,6 +122,8 @@ export function set_desktop_palette(name: string): Promise<void> {
 
 // `:set` and `:unset` change the edits one at a time, so two of them in a row never read the same stored value.
 let change_queue: Promise<unknown> = Promise.resolve();
+// Counts committed swaps, so the start read can tell that a newer reload or import landed while it waited on the host.
+let swap_count = 0;
 
 // `decide` gets the edits now in force and the config under them. It returns the edits to keep, or nothing to change nothing.
 export function change_edits(decide: (current: SettingEdits, config: MergedConfig) => SettingEdits | undefined): Promise<void> {
@@ -181,6 +187,7 @@ async function apply_files(files: ConfigFiles, dir_label: string, action: ApplyA
     await browser.storage.local.set({ [FILES_CONFIG_STORAGE_KEY]: stored, [FILES_SOURCE_STORAGE_KEY]: { files, dir_label } satisfies FilesSource });
     load_step = Promise.resolve(step);
     commit(published.config);
+    swap_count += 1;
     return { warnings: published.warnings.length };
   } catch (error) {
     // The failed publish may have written the new keymap and status already.
@@ -210,11 +217,53 @@ export function reload_config(): Promise<{ config_dir: string; warnings: number 
     });
     // An empty build here would replace the user's config with the defaults, most likely because the host reads the wrong folder.
     if (!reply.config_dir_exists) {
-      throw new ConfigRefusal(`${KEPT_CURRENT.reload} The native host found no config folder at ${reply.config_dir}. Create it, or set DESERTFOX_CONFIG_DIR for the host.`);
+      throw new ConfigRefusal(missing_folder_message(reply.config_dir));
     }
     const { warnings } = await apply_files(reply.files, reply.config_dir, "reload");
     return { config_dir: reply.config_dir, warnings };
   });
+}
+
+// Runs once per start. Edits made to the files while the browser was closed reach the stored build here, without a `config.reload`.
+// No permission, no host, a host error or a missing config folder keep the stored config and only warn on the console. Most users have no host, and the installer never creates the folder.
+// A broken file keeps it too, and a toast names the problem so the user learns the edit failed.
+// The host read runs outside the queue so it never blocks a `:set` while the host starts. A swap that commits during the read is newer than the reply, so the reply is dropped.
+export async function reload_config_at_start(): Promise<void> {
+  const swaps_before = swap_count;
+  let reply;
+  try {
+    reply = await native_host.read_config();
+  } catch (error) {
+    console.warn(`Config not reread at start: ${error instanceof Error ? error.message : String(error)}`);
+    return;
+  }
+  await in_change_queue(async () => {
+    await get_config();
+    if (swap_count !== swaps_before) return;
+    // An empty build here would replace the stored config with the defaults, as it would on a reload.
+    if (!reply.config_dir_exists) return console.warn(missing_folder_message(reply.config_dir));
+    const stored = await load_files_source();
+    if (stored.dir_label === reply.config_dir && same_files(stored.files, reply.files)) return;
+    try {
+      await apply_files(reply.files, reply.config_dir, "reload");
+    } catch (error) {
+      if (!(error instanceof ConfigRefusal)) throw error;
+      await toast_start_refusal(error.message);
+    }
+  }).catch((error: unknown) => console.warn(`Config not reread at start: ${error instanceof Error ? error.message : String(error)}`));
+}
+
+async function toast_start_refusal(message: string): Promise<void> {
+  console.warn(message);
+  const [tab] = await browser.tabs.query({ active: true, lastFocusedWindow: true });
+  await show_toast_on_tab({ tab_id: tab?.id }, "config_start", message, "error");
+}
+
+const missing_folder_message = (config_dir: string) => `${KEPT_CURRENT.reload} The native host found no config folder at ${config_dir}. Create it, or set DESERTFOX_CONFIG_DIR for the host.`;
+
+function same_files(left: Record<string, string>, right: Record<string, string>): boolean {
+  const names = Object.keys(left);
+  return names.length === Object.keys(right).length && names.every((name) => Object.hasOwn(right, name) && left[name] === right[name]);
 }
 
 // What an import would change, for the consent screen. It stores nothing and runs no snippet.

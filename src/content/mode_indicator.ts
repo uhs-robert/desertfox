@@ -19,7 +19,8 @@ export const STYLE = `
 .desertfox-mode:where([data-mode="ignore"]) { background: var(--desertfox-mode-ignore, #717a84); }
 .desertfox-mode:where([data-mode="caret"]) { background: var(--desertfox-mode-caret, #f0e68c); }
 .desertfox-mode:where([data-mode="visual"]) { background: var(--desertfox-mode-visual, #ffba75); }
-.desertfox-mode:where([data-mode="visual_line"]) { background: var(--desertfox-mode-visual, #ffba75); }`;
+.desertfox-mode:where([data-mode="visual_line"]) { background: var(--desertfox-mode-visual, #ffba75); }
+.desertfox-mode:where([data-mode="site"]) { background: var(--desertfox-mode-visual, #ffba75); }`;
 
 let surface: ReturnType<typeof create_surface> | undefined;
 

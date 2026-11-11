@@ -1,5 +1,5 @@
 // config.reload and debug.restart on open tabs. The reduced keymap lives in a config copy, and the harness links the base config back and unsets the temp edit when the piece ends.
-import { writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 export const areas = ["config", "keys"];
@@ -70,6 +70,18 @@ export async function run_cases({ config_copy, load_config_dir, run_case, setup,
     await press_keys("m");
     const halfway = await wait_event(mark, scroll_of("reload_b"), "scroll to 50 percent after the restart");
     expect(Math.abs(halfway.y - halfway.max_y / 2) <= 2, `m stopped at ${halfway.y} of ${halfway.max_y}`);
+  }, { setup: true });
+
+  await run_case("a restart rereads settings.toml that changed on disk, with no config.reload", async () => {
+    const edited_config = config_copy();
+    await load_config_dir(edited_config);
+    const settings_path = join(edited_config, "settings.toml");
+    writeFileSync(settings_path, `hint_letters = "qwer"\n${readFileSync(settings_path, "utf8")}`);
+    await in_background(`browser.storage.local.remove("desertfox_reinject_report")`);
+    await run_line(":debug.restart");
+    await wait_reinject_report();
+    await poll_until("the edited setting to apply after the restart", async () => (await read_local("desertfox_config_status"))?.settings?.hint_letters === "qwer", { timeout_ms: 8000 });
+    await settle_focus();
   }, { setup: true });
 
   await run_case("keys work on a fresh load after the reload", async () => {

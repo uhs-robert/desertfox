@@ -318,28 +318,28 @@ const key_sequences = (text: string, warnings: string[]): string[][] =>
 export const is_default_value = (name: FrameSiteName, value: unknown): boolean => JSON.stringify(value) === JSON.stringify(DEFAULT_SETTINGS[name]);
 
 // A bind with a bad key, an unknown command or too many steps is skipped with a warning, and the row's other binds stay. The label comes from the first step, as for a keymap entry. The args are checked later, in `compile.ts`, where the registry validator is. A bind still in text form never went through the build, so it is skipped.
-function compile_binds(table: BindingTable, resolve: ResolveCommand, settings: Partial<Settings>, sources: LabelSources, warnings: string[]): Record<string, SiteBind> {
+function compile_binds(table: BindingTable, resolve: ResolveCommand, settings: Partial<Settings>, sources: LabelSources, warnings: string[], scope = ""): Record<string, SiteBind> {
   const binds: Record<string, SiteBind> = {};
   for (const [sequence, written] of Object.entries(table)) {
     const parsed = parse_sequence(sequence);
     if (parsed.error !== undefined) {
-      warnings.push(`site_rules: skipped bind "${sequence}": ${parsed.error}`);
+      warnings.push(`site_rules: ${scope}skipped bind "${sequence}": ${parsed.error}`);
       continue;
     }
     const steps = [written].flat() as unknown[];
     if (steps.length > MAX_BIND_STEPS) {
-      warnings.push(`site_rules: skipped bind "${sequence}": more than ${MAX_BIND_STEPS} steps`);
+      warnings.push(`site_rules: ${scope}skipped bind "${sequence}": more than ${MAX_BIND_STEPS} steps`);
       continue;
     }
     if (steps.some((step) => typeof step !== "object" || step === null || "run" in step)) {
-      warnings.push(`site_rules: skipped bind "${sequence}": the binding was not resolved by the config build`);
+      warnings.push(`site_rules: ${scope}skipped bind "${sequence}": the binding was not resolved by the config build`);
       continue;
     }
     const binding = steps.map((step) => ({ ...(step as BoundInvocation) }));
     const step_warnings: string[] = [];
     const resolved = to_steps("normal", { sequence, tokens: parsed.tokens, binding, source_index: 0, layer: "user" }, resolve, settings, sources, [], step_warnings);
     if (resolved === undefined) {
-      warnings.push(...step_warnings.map((warning) => `site_rules: bind ${warning.replace(/^normal: /, "")}`));
+      warnings.push(...step_warnings.map((warning) => `site_rules: ${scope}bind ${warning.replace(/^normal: /, "")}`));
       continue;
     }
     binds[parsed.tokens.join("")] = { tokens: parsed.tokens, leaf: { kind: "leaf", ...(resolved.label === undefined ? {} : { label: resolved.label }), ...(resolved.intent === undefined ? {} : { intent: resolved.intent }), steps: resolved.steps } };
@@ -350,7 +350,12 @@ function compile_binds(table: BindingTable, resolve: ResolveCommand, settings: P
 // Rows of one site that bind a key and a longer key under it. The shorter bind wins and the longer is dropped when the binds are grafted, as in a keymap, where a complete binding hides the keys under it.
 function warn_prefix_binds(rules: readonly SiteRule[], warnings: string[]) {
   const by_site = new Map<string, SiteBind[]>();
-  for (const rule of rules) by_site.set(rule.regex, [...(by_site.get(rule.regex) ?? []), ...Object.values(rule.bind ?? {})]);
+  // A mode has binds of its own, so its keys are checked against each other and not against the row's.
+  const add = (key: string, binds: Record<string, SiteBind> | undefined) => by_site.set(key, [...(by_site.get(key) ?? []), ...Object.values(binds ?? {})]);
+  for (const rule of rules) {
+    add(rule.regex, rule.bind);
+    for (const [name, mode] of Object.entries(rule.modes ?? {})) add(`${rule.regex} mode ${name}`, mode.bind);
+  }
   for (const binds of by_site.values()) {
     for (const longer of binds) {
       const shorter = binds.find((other) => other.tokens.length < longer.tokens.length && other.tokens.every((token, index) => longer.tokens[index] === token));
@@ -369,9 +374,10 @@ function compile_rows(rules: Settings["site_rules"], resolve: ResolveCommand, se
   return rules.flatMap((row): SiteRule[] => {
     const regex = match_regex_source([row.site]);
     if (regex === undefined) return [];
-    const { keys, bind, ...columns } = site_row_columns(row);
+    const { keys, bind, modes, ...columns } = site_row_columns(row);
     const compiled_bind = bind === undefined ? {} : { bind: compile_binds(bind as BindingTable, resolve, settings, sources, warnings) };
-    const rule = { regex, ...columns, ...compiled_bind };
+    const compiled_modes = modes === undefined ? {} : { modes: Object.fromEntries(Object.entries(modes).map(([name, mode]) => [name, { label: mode.label, bind: compile_binds(mode.bind as BindingTable, resolve, settings, sources, warnings, `mode "${name}" `) }])) };
+    const rule = { regex, ...columns, ...compiled_bind, ...compiled_modes };
     if (keys === undefined) return [rule];
     return [{ ...rule, keys: "pass" in keys ? { pass: key_sequences(keys.pass, warnings) } : { only: key_sequences(keys.only, warnings) } }];
   });

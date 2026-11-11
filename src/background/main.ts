@@ -50,7 +50,7 @@ import type { CompiledKeymap } from "../shared/prefix_tree.ts";
 import { has_content_script, send_to_tab } from "./browser_deps.ts";
 import { create_global_mark_jump } from "./global_mark_jump.ts";
 import { watch_page_ready } from "./page_ready.ts";
-import { change_edits, get_config, get_search_engine_names, import_config, preview_config_import, reload_config, remove_snippet, republish, set_desktop_palette, snippets } from "./startup.ts";
+import { change_edits, get_config, get_search_engine_names, import_config, preview_config_import, host_update, reload_config_at_start, reload_config, remove_snippet, republish, set_desktop_palette, snippets } from "./startup.ts";
 import { answer_config_import } from "./config_import.ts";
 import { answer_toolbar_request, create_toolbar, TOGGLE_COMMAND } from "./toolbar.ts";
 import { load_edits, load_effective_config, load_files_source } from "./config_load.ts";
@@ -192,7 +192,10 @@ const toolbar = create_toolbar({
   set_tab_mode: (tab_id, mode) => send_to_tab(tab_id, { type: "set_mode", mode }),
 });
 void toolbar.sync_look();
-const bridge = start_bridge(tab_modes.recall, router_deps, snippets.is_snippet, set_desktop_palette);
+const bridge = start_bridge(tab_modes.recall, router_deps, snippets.is_snippet, set_desktop_palette, host_update.bridge_ready);
+host_update.on_updated(() => bridge.reconnect());
+// The one host read of a start: it also reports the host's version, which the bridge does not when it is off. Without the permission the client sends nothing.
+void reload_config_at_start();
 const settings_messages = create_settings_messages({ change_edits, read_layers: load_effective_config });
 
 // Listeners register in the first turn, so no event is missed while the config loads.
