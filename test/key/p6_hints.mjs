@@ -245,43 +245,43 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, press_
     expect((await scroll_delta_by_press("p6_no_match", ["j"])) > 0, "keys did not work after a text with no match");
   });
 
-  // Tab inside hint mode switches from typing a label to typing the link text. The fixture links are "one" (label a) and "two" (label s).
+  // / inside hint mode switches from typing a label to typing the link text. The fixture links are "one" (label a) and "two" (label s).
   const hint_labels_in_order = () => in_active_tab(`[...document.documentElement.children].map((child) => [...(child.openOrClosedShadowRoot?.querySelectorAll(".desertfox-hint") ?? [])].map((node) => node.textContent).join(",")).join("")`);
   const text_box_shown = () => in_active_tab(`[...document.documentElement.children].some((child) => child.openOrClosedShadowRoot?.querySelector(".desertfox-hint-text"))`);
 
-  await run_case("Tab then text then Enter picks the best match", async () => {
+  await run_case("/ then text then Enter picks the best match", async () => {
     await open_page("hints", "p6_text_enter", { new_tab: true });
     const mark = events.length;
     await press_keys(";l");
     await wait_for_labels(";l");
-    await press_keys("-k", "Tab", "o");
+    await press_keys("/", "o");
     // "o" is a word start in "one" and only inside "two", so "one" ranks first.
     await poll_until("the text box", text_box_shown);
     await press_keys("-k", "Return");
     await wait_event(mark, loaded("hint_one"), "the best match to load");
   });
 
-  await run_case("Tab then text that matches one link picks it, and the rest of the word does nothing", async () => {
+  await run_case("/ then text that matches one link picks it, and the rest of the word does nothing", async () => {
     await open_page("hints", "p6_text_unique", { new_tab: true });
     const tabs_before = await tab_count();
     const mark = events.length;
     await run_hint({ action: "background", filter: "links" });
     await wait_for_labels("the hint");
     // "t" leaves one match. The j after it is the rest of a word and must not scroll the page as a normal key.
-    await press_keys("-k", "Tab", "t", "j");
+    await press_keys("/", "t", "j");
     await wait_event(mark, loaded("hint_two"), "the only match to load");
     await expect_absent(mark, "p6_text_unique", (event) => event.type === "scroll", "j scrolled the page after the pick", { report_delay_ms: scroll_report_wait_ms });
     expect((await tab_count()) === tabs_before + 1, "the pick did not open exactly one tab");
     await close_tabs_with("hint_two");
   });
 
-  await run_case("Tab typed right after the hint key on a fresh page switches to text and never reaches the page", async () => {
+  await run_case("/ typed right after the hint key on a fresh page switches to text and never reaches the page", async () => {
     await open_page("hints", "p6_text_first", { new_tab: true });
     const mark = events.length;
     // F opens the pick in a background tab, so this page stays to report what it saw.
-    await press_keys("F", "-k", "Tab", "t", "w");
+    await press_keys("F", "/", "t", "w");
     await wait_event(mark, loaded("hint_two"), "the only match to load");
-    await expect_absent(mark, "p6_text_first", (event) => event.type === "keydown" && event.key === "Tab", "Tab reached the page while the hints bundle loaded", { report_delay_ms: scroll_report_wait_ms });
+    await expect_absent(mark, "p6_text_first", (event) => event.type === "keydown" && event.key === "/", "/ reached the page while the hints bundle loaded", { report_delay_ms: scroll_report_wait_ms });
     await close_tabs_with("hint_two");
   });
 
@@ -290,7 +290,7 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, press_
     const mark = events.length;
     await press_keys(";l");
     await wait_for_labels(";l");
-    await press_keys("-k", "Tab", "o", "-k", "BackSpace", "-k", "BackSpace");
+    await press_keys("/", "o", "-k", "BackSpace", "-k", "BackSpace");
     await poll_until("the text box to go", async () => !(await text_box_shown()));
     expect((await hint_label_count()) === 2, "the labels are not both shown");
     await press_keys("s");
@@ -317,7 +317,7 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, press_
     await run_hint({ action: "background", filter: "links", rapid: true });
     await wait_for_labels("rapid");
     // The "a" and "s" are the rest of a word. In label mode of the next round they would pick links, so only the one text pick may open a tab.
-    await press_keys("-k", "Tab", "t", "a", "s");
+    await press_keys("/", "t", "a", "s");
     await wait_event(mark, loaded("hint_two"), "the text pick to load");
     await wait_for_labels("the first pick");
     expect(!(await text_box_shown()), "the next round is still in text mode");
@@ -606,6 +606,23 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, press_
     expect(lines.length === 2 && lines[0].endsWith("/page?id=hint_one") && lines[1].endsWith("/page?id=hint_two"), `;Y copied ${JSON.stringify(pasted)}`);
   });
 
+  // The line reads the top page's closed shadow roots, as the other hint probes do. Its box is measured in the page's own pixels.
+  const key_line_state = () => in_active_tab(`(() => { const node = [...document.documentElement.children].map((child) => child.openOrClosedShadowRoot?.querySelector(".desertfox-hint-keys")).find(Boolean); if (!node) return null; const box = node.getBoundingClientRect(); return { text: node.textContent, right_gap: innerWidth - box.right, bottom_gap: innerHeight - box.bottom, top_gap: innerHeight - box.top }; })()`);
+
+  await run_case("the key line shows bottom right, below the toast and which-key spots, and its words follow the mode", async () => {
+    await open_page("hints", "p6_key_line", { new_tab: true });
+    await press_keys(";l");
+    await wait_for_labels(";l");
+    await poll_until("the label mode line", async () => (await key_line_state())?.text?.startsWith("/: type text"));
+    const state = await key_line_state();
+    // The toast and the which-key panel start 48 and 44 px above the bottom edge, and the line must end below both.
+    expect(state.right_gap >= 0 && state.right_gap <= 32 && state.top_gap < 44, `the key line sits at ${JSON.stringify(state)}`);
+    await press_keys("/", "o");
+    await poll_until("the text mode line", async () => (await key_line_state())?.text?.startsWith("Enter: pick"));
+    await press_keys("-k", "Escape");
+    await poll_until("the line to go", async () => (await key_line_state()) === null);
+  });
+
   // Set DESERTFOX_SHOT_DIR to also save the two screenshots.
   const shot_dir = process.env.DESERTFOX_SHOT_DIR;
   if (shot_dir) {
@@ -617,6 +634,30 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, press_
       await take_shot(`${shot_dir}/p6_rapid_after_pick.png`);
       await send_keys("-k", "Escape");
       await close_tabs_with("hint_one");
+      await sleep(300);
+    });
+
+    await run_case("screenshot of the key line in label mode and text mode", async () => {
+      await open_page("hints", "p6_shot_key_line", { new_tab: true });
+      await press_keys(";l");
+      await wait_for_labels(";l");
+      await sleep(400);
+      await take_shot(`${shot_dir}/p6_key_line_labels.png`);
+      await press_keys("/", "o");
+      await sleep(400);
+      await take_shot(`${shot_dir}/p6_key_line_text.png`);
+      await press_keys("-k", "Escape");
+      await sleep(300);
+    });
+
+    await run_case("screenshot of a label in the bottom right corner over the key line", async () => {
+      await open_page("hints", "p6_shot_corner", { new_tab: true });
+      await in_active_tab(`Object.assign(document.querySelector("a[href*=hint_]").style, { position: "fixed", right: "60px", bottom: "12px", display: "block" }); 0`);
+      await press_keys(";l");
+      await wait_for_labels(";l");
+      await sleep(400);
+      await take_shot(`${shot_dir}/p6_key_line_corner.png`);
+      await press_keys("-k", "Escape");
       await sleep(300);
     });
 

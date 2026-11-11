@@ -6,6 +6,7 @@ import type { Settings } from "./settings_table.ts";
 export const DEFAULT_WHICH_KEY_DELAY_MS: Settings["which_key_delay_ms"] = 300;
 export const DEFAULT_WHICH_KEY_BORDER: Settings["which_key_border"] = "square";
 export const DEFAULT_HINT_LETTERS: Settings["hint_letters"] = "asdfghjkl";
+export const DEFAULT_HINT_KEY_LINE: Settings["hint_key_line"] = true;
 export const DEFAULT_SITE_RULES: Settings["site_rules"] = [];
 export const DEFAULT_NEXT_PATTERNS: Settings["next_patterns"] = ["next","more","newer",">","›","→","»","≫",">>"];
 export const DEFAULT_PREV_PATTERNS: Settings["prev_patterns"] = ["prev","previous","older","<","‹","←","«","≪","<<"];
@@ -36,6 +37,7 @@ export const DEFAULT_SETTINGS: Settings = {
   which_key_delay_ms: DEFAULT_WHICH_KEY_DELAY_MS,
   which_key_border: DEFAULT_WHICH_KEY_BORDER,
   hint_letters: DEFAULT_HINT_LETTERS,
+  hint_key_line: DEFAULT_HINT_KEY_LINE,
   site_rules: DEFAULT_SITE_RULES,
   next_patterns: DEFAULT_NEXT_PATTERNS,
   prev_patterns: DEFAULT_PREV_PATTERNS,
