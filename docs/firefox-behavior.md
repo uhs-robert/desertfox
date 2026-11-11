@@ -178,6 +178,13 @@ Measured in the key test (`test/key/p15_frame_mode.mjs`, Firefox 160) and on a p
 - A document whose child frame holds the focus still answers true to `document.hasFocus()`, and its `activeElement` is the frame element.
 - `tabs.onUpdated` sends `{ status: "loading" }` with no `url` when a load starts. It sends `{ status: "loading", url }` when the new page takes over, and again for each `history.replaceState` the page runs while it still loads. The second kind comes after the content script's first message. Google Docs does this on every load.
 - The page a load leaves keeps sending messages between the two events: its window gets a `focus` event when the load starts from the address bar.
+- The Docs text frame's box is left 0, top -10000, 625 by 1 CSS pixels, with opacity 0. `window.frameElement` reads the same box from inside the frame.
+- `frameElement.blur()` from the frame moves the focus to the top document in one tick. It also blurs the frame's focused field, and the frame's `activeElement` becomes its body. Focusing the frame element afterwards focuses the frame's window with no field. Focusing the field itself from the top document works.
+- Docs does not take the focus back after that blur, on its own or on a key. A mouse press in the document, its grey margin or the outline focuses the field again within 30 ms.
+- A page that focuses a field in a child frame fires `focus` on the frame's window first. Inside that event the frame's `activeElement` is not the field yet.
+- When the focus moves from a field in a child frame to a field of the top document, the frame's field fires `focusout` first, with the frame's body as its `activeElement`. `frameElement.blur()` inside that event cancels the move: the top document's `activeElement` ends as its body.
+- A window that loses the focus (a hidden tab) fires `blur` and `focusout` on its focused field, which stays the `activeElement`.
+- `element instanceof HTMLElement` is false in a content script for an element of a same-origin child frame's document.
 
 ## The Google Sheets cell editor (sheets-cell-editor)
 

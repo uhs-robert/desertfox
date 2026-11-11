@@ -14,9 +14,11 @@ const { focus_first_input } = await import("../../src/content/handlers/focus_inp
 
 type Fake = { name: string; tag: "input" | "textarea" | "div" | "select" | "button"; type?: string; editable?: boolean; disabled?: boolean; top?: number; height?: number; visibility?: string };
 
-function run_gi(fakes: Fake[]): string | undefined {
+type FakeFrame = { top: number; height: number; fields?: Fake[] };
+
+function run_gi(fakes: Fake[], frames: FakeFrame[] = []): string | undefined {
   let focused: string | undefined;
-  const elements = fakes.map((fake) => {
+  const to_element = (fake: Fake) => {
     const element = Object.create(fake.tag === "input" ? FakeHTMLInputElement.prototype : FakeHTMLElement.prototype);
     Object.assign(element, {
       tagName: fake.tag.toUpperCase(),
@@ -28,8 +30,14 @@ function run_gi(fakes: Fake[]): string | undefined {
       focus: () => void (focused = fake.name),
     });
     return element;
-  });
-  globals.document = { querySelectorAll: () => elements };
+  };
+  const elements = fakes.map(to_element);
+  // A frame of another site has no `contentDocument`.
+  const frame_elements = frames.map((frame) => ({
+    getBoundingClientRect: () => ({ top: frame.top, bottom: frame.top + frame.height, left: 0, right: 600, width: 600, height: frame.height }),
+    contentDocument: frame.fields && { querySelectorAll: () => frame.fields!.map(to_element) },
+  }));
+  globals.document = { querySelectorAll: (selector: string) => (selector === "iframe" ? frame_elements : elements) };
   focus_first_input();
   return focused;
 }
@@ -59,4 +67,24 @@ test("gi takes text inputs and contenteditable, and passes over every other cont
 
 test("gi refuses on a page with no text field", () => {
   assert.throws(() => run_gi([{ name: "checkbox", tag: "input", type: "checkbox" }]), /No text field on this page/);
+});
+
+const DOCS_LIKE_FRAME: FakeFrame = { top: -10000, height: 1, fields: [{ name: "frame_editor", tag: "div", editable: true }] };
+
+test("gi focuses the field inside a hidden input frame when the page itself has no field", () => {
+  assert.equal(run_gi([{ name: "checkbox", tag: "input", type: "checkbox" }], [{ top: -10000, height: 1 }, { top: -10000, height: 1, fields: [] }, DOCS_LIKE_FRAME]), "frame_editor");
+});
+
+test("gi picks a hidden input frame's field ahead of a visible field of the page", () => {
+  assert.equal(run_gi([{ name: "title", tag: "input" }], [DOCS_LIKE_FRAME]), "frame_editor");
+});
+
+test("gi does not reach into a full-size frame that is scrolled out of view", () => {
+  const editor_frame: FakeFrame = { top: -3000, height: 200, fields: [{ name: "editor_frame_body", tag: "div", editable: true }] };
+  assert.equal(run_gi([{ name: "in_view", tag: "input" }], [editor_frame]), "in_view");
+});
+
+test("gi does not reach into a frame the user can see", () => {
+  const shown_frame: FakeFrame = { top: 100, height: 200, fields: [{ name: "shown_frame_field", tag: "input" }] };
+  assert.throws(() => run_gi([], [shown_frame]), /No text field on this page/);
 });

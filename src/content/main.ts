@@ -23,7 +23,7 @@ import { run_content_steps, run_in_order } from "./run_content.ts";
 import { holds_keys_after, run_leaf } from "./run_leaf.ts";
 import { focus_page_content, start_content_once } from "./handlers/focus.ts";
 import { read_field_text } from "./text/field_text.ts";
-import { blur_focused_element } from "./handlers/page.ts";
+import { blur_focused_element, hand_focus_to_parent } from "./handlers/page.ts";
 
 // Until the tree is read the setting is unknown, and the default applies.
 let mode_indicator: ModeIndicator = DEFAULT_MODE_INDICATOR;
@@ -280,7 +280,12 @@ function start(): void {
   listen(document, "visibilitychange", on_visibility_change, false);
 
   // Every report says whether this frame holds the focus, so a focus event the frame missed heals on its next report.
-  const report_mode = () => void send_to_background({ type: "mode_changed", mode: page_mode.get_mode_(), focus: holds_own_focus(document) });
+  // A hidden input frame in normal mode then hands the focus to its parent. Every change into normal mode passes here, and so does a frame that gains the focus while in normal mode.
+  // The hand-off waits a tick, because a report often runs inside a focus move that is not done. A focusout comes before the focus lands in a field of the parent, and blurring the frame there cancels the move. A window focus comes before a field focused from outside holds the focus.
+  const report_mode = () => {
+    setTimeout(hand_focus_to_parent);
+    void send_to_background({ type: "mode_changed", mode: page_mode.get_mode_(), focus: holds_own_focus(document) });
+  };
 
   wire_mode_reports(page_mode, (mode) => {
     if (!extension_context_alive()) return stop_listening();

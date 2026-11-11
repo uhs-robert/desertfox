@@ -27,6 +27,8 @@ export const area_rules = [
   { globs: shared_files, areas: area_names },
   // page.ts holds the reload-clear command, which p22 tests, so it also selects the keys and cmdline pieces.
   { globs: ["src/commands/{page,reload_clear}.ts", "src/shared/permission_grant.ts"], areas: ["keys", "cmdline", "hints"] },
+  // The hand-off of a hidden input frame, which p15_frame_mode tests, and the `gi` search that returns into it.
+  { globs: ["src/content/hidden_frame.ts"], areas: ["ui", "keys", "hints"] },
   { globs: ["src/content/hints/**", "src/commands/{hint,hint_text,heading,page}.ts", "src/background/image_actions.ts", "src/content/handlers/{page,focus_input}.ts", "src/background/inspect_relay.ts", "src/devtools/**", "src/shared/inspect.ts"], areas: ["hints"] },
   // The page bundle answers the selection ask that the engine keys read.
   { globs: ["src/background/selection_ask.ts", "src/content/page/**"], areas: ["engines", "bundles"] },
