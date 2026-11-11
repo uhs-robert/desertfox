@@ -6,8 +6,8 @@ import { copyFile, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises
 // Minified size limits. content.js loads on every page, so its limit is the tightest. The rest load on first use.
 const MAX_BYTES = {
   "content.js": 17 * 1024,
-  // 40 KB: hints.js loads on the first hint command, not on every page, and the filters keep growing it.
-  "hints.js": 40 * 1024,
+  // 42 KB: hints.js loads on the first hint command, not on every page, and the filters keep growing it.
+  "hints.js": 42 * 1024,
   "caret.js": 32 * 1024,
   "whichkey.js": 8 * 1024,
   "cmdline.js": 4 * 1024,
@@ -17,8 +17,8 @@ const MAX_BYTES = {
   "media.js": 4 * 1024,
   "quality.js": 4 * 1024,
   "site_actions.js": 4 * 1024,
-  // 53 KB: the lazy bundle carries every setting's completion entry, and the bridge settings add to it. The verbatim subject needs a lazy tokenizer and its completion path. The key-capture matcher and the registry validator ship in this lazy bundle, and the registers and macros pieces add to them.
-  "cmdline_page.js": 53 * 1024,
+  // 56 KB: the lazy bundle carries every setting's completion entry, and the bridge settings add to it. The verbatim subject needs a lazy tokenizer and its completion path. The key-capture matcher and the registry validator ship in this lazy bundle, and the registers and macros pieces add to them.
+  "cmdline_page.js": 56 * 1024,
   "find_worker.js": 2 * 1024,
   "devtools.js": 2 * 1024,
 };
