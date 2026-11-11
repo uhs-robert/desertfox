@@ -81,6 +81,25 @@ export function create_surface(class_name: string, style: string, layer: number)
   return { host, text };
 }
 
+// A popover in the top layer gets a ::backdrop, and a page rule on ::backdrop (a blur, a dim) styles it too. A `:host::backdrop`
+// rule in the shadow style does not reach it, so one document-level rule resets the backdrops of our hosts only. It is a style
+// element on the root element, one per document, shared by every bundle and kept by `ensure_backdrop_reset` at every mount. Rejected: an adopted stylesheet, which Firefox
+// does not let a content script add to a page document and which a page replaces with one assignment; and a user-origin sheet,
+// which needs the scripting permission. A style element outside <head> survives a page that rewrites <head>, and a removed
+// one comes back at the next mount.
+export const BACKDROP_RESET_CSS = `[popover][${LAYER_ATTRIBUTE}]::backdrop { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; filter: none !important; background: transparent !important; opacity: 1 !important; }`;
+// Not the layer attribute: the restack in `mount_surface` selects every child that carries that one.
+const BACKDROP_RESET_ATTRIBUTE = "data-desertfox-backdrop-reset";
+
+// Found by its attribute, not by module state: each lazy bundle holds its own copy of this file, and all share one element.
+function ensure_backdrop_reset(): void {
+  if (document.documentElement.querySelector(`:scope > [${BACKDROP_RESET_ATTRIBUTE}]`)) return;
+  const style_element = document.createElement("style");
+  style_element.setAttribute(BACKDROP_RESET_ATTRIBUTE, "");
+  style_element.textContent = BACKDROP_RESET_CSS;
+  document.documentElement.append(style_element);
+}
+
 // Mounts a surface in the top layer, above any modal dialog or popover. Top-layer order follows show order and ignores
 // z-index, so the mounted host and every open host of a higher layer are shown again, lowest first: the order of LAYERS
 // holds whichever surface mounts last. Hosts of other bundles are found by their layer attribute. A host already on the page
@@ -94,6 +113,7 @@ export function mount_surface(host: HTMLElement): void {
     sheets.user.textContent = user_css;
     if (!waiting_for_reads) reveal(host);
   }
+  ensure_backdrop_reset();
   if (host.parentElement !== document.documentElement) document.documentElement.append(host);
   const layer_of = (element: Element) => Number(element.getAttribute(LAYER_ATTRIBUTE));
   const restack = Array.from(document.documentElement.querySelectorAll<HTMLElement>(`:scope > [${LAYER_ATTRIBUTE}]`))

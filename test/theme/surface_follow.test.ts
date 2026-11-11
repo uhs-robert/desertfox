@@ -20,7 +20,7 @@ test("a surface whose host left the page stops following storage until it is mou
     const node = { tag, textContent: "", style: {}, setAttribute: () => {}, getAttribute: () => "1", matches: () => false, isConnected: false, parentElement: null as unknown, attachShadow: () => ({ append: (...nodes: { textContent: string }[]) => void children.push(...nodes) }) };
     return node;
   };
-  const root = { append: (host: { isConnected: boolean; parentElement: unknown }) => ((host.isConnected = true), (host.parentElement = root)), querySelectorAll: () => [] };
+  const root = { append: (host: { isConnected: boolean; parentElement: unknown }) => ((host.isConnected = true), (host.parentElement = root)), querySelectorAll: () => [], querySelector: () => null };
   Object.assign(globalThis, { document: { createElement: element, documentElement: root } });
   const first = create_surface("desertfox-a", "", 1).host as unknown as { isConnected: boolean; parentElement: unknown };
   await new Promise((resolve) => setTimeout(resolve, 0));

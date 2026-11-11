@@ -17,6 +17,7 @@ type FakeRoot = {
   children: FakeNode[];
   append: (node: FakeNode) => void;
   querySelectorAll: (selector: string) => FakeNode[];
+  querySelector: (selector: string) => FakeNode | undefined;
 };
 
 function fake_node(): FakeNode {
@@ -44,6 +45,7 @@ function fake_root(): FakeRoot {
       node.parent = root;
       root.children.push(node);
     },
+    querySelector: (selector: string) => root.children.find((node) => node.attributes.has(selector.slice(selector.indexOf("[") + 1, -1))),
     querySelectorAll: (selector: string) => {
       // The surface mount also looks up layered hosts to restack them, and the fake page has none.
       if (selector !== ":scope > [data-desertfox-badge]") return [];
@@ -84,7 +86,8 @@ test("a page element that carries the mode attribute survives the cleanup", asyn
   show_mode_label("normal");
 
   assert.ok(root.children.includes(page_owned));
-  assert.equal(root.children.length, 2);
+  // Besides the page element and the new badge, the root holds the backdrop reset style.
+  assert.equal(root.children.filter((node) => !node.textContent.includes("::backdrop")).length, 2);
 });
 
 test("a new instance with no badge to show still removes the orphan, without loading the ui bundle", async () => {

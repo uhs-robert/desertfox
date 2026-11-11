@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { create_surface, mount_surface } from "../../src/content/surface.ts";
+import { BACKDROP_RESET_CSS, create_surface, mount_surface } from "../../src/content/surface.ts";
 import { LAYERS } from "../../src/shared/layers.ts";
 
 type FakeHost = HTMLElement & { is_open: boolean; attached: boolean };
@@ -21,14 +21,29 @@ function fake_page(layers: number[]) {
     } as unknown as FakeHost;
     return host;
   });
+  const styles: { textContent: string; attributes: Set<string>; setAttribute: (name: string) => void }[] = [];
   const root = {
-    append: (host: { parentElement: unknown }) => (calls.push("append"), (host.parentElement = root)),
+    children: [] as unknown[],
+    append: (node: { parentElement?: unknown; attributes?: Set<string> }) => {
+      if (node.attributes) root.children.push(node);
+      else (calls.push("append"), (node.parentElement = root));
+    },
+    // Finds a style element by its attribute, as the real root does.
+    querySelector: (selector: string) => root.children.find((node) => selector.includes([...(node as { attributes: Set<string> }).attributes][0] ?? "\0")),
     querySelectorAll: () => hosts,
   };
   Object.assign(globalThis, {
-    document: { documentElement: root },
+    document: {
+      documentElement: root,
+      createElement: () => {
+        const attributes = new Set<string>();
+        const style = { textContent: "", attributes, setAttribute: (name: string) => attributes.add(name) };
+        styles.push(style);
+        return style;
+      },
+    },
   });
-  return { calls, hosts };
+  return { calls, hosts, styles, root };
 }
 
 test("mount_surface attaches the host, then shows it as a popover", () => {
@@ -113,4 +128,36 @@ test("create_surface makes a manual popover host that carries its layer", () => 
   create_surface("x", "", LAYERS.toast);
   assert.equal(attributes.popover, "manual");
   assert.equal(attributes["data-desertfox-layer"], String(LAYERS.toast));
+});
+
+// The unit environment has no style engine, so it cannot compute ::backdrop. It pins what makes the reset work instead: the rule
+// text clears each property with !important, it targets only our hosts, and it is installed once and again after a removal.
+test("mount_surface installs one backdrop reset that clears the page's backdrop styles on our hosts only", () => {
+  const { hosts, styles } = fake_page([LAYERS.toast, LAYERS.which_key]);
+  mount_surface(hosts[0]!);
+  mount_surface(hosts[1]!);
+  assert.equal(styles.length, 1);
+  assert.equal(styles[0]!.textContent, BACKDROP_RESET_CSS);
+  assert.match(BACKDROP_RESET_CSS, /^\[popover\]\[data-desertfox-layer\]::backdrop \{/);
+  for (const property of ["backdrop-filter: none", "-webkit-backdrop-filter: none", "filter: none", "background: transparent", "opacity: 1"]) {
+    assert.ok(BACKDROP_RESET_CSS.includes(`${property} !important`), property);
+  }
+});
+
+test("mount_surface puts the backdrop reset back after a page removes it", () => {
+  const { hosts, styles, root } = fake_page([LAYERS.toast]);
+  mount_surface(hosts[0]!);
+  root.children.length = 0;
+  mount_surface(hosts[0]!);
+  assert.equal(styles.length, 2);
+  assert.equal(root.children.length, 1);
+});
+
+test("two bundles, each with its own copy of the module, share one backdrop reset", async () => {
+  const other = (await import(`../../src/content/surface.ts?${"second_bundle"}`)) as typeof import("../../src/content/surface.ts");
+  const { hosts, styles, root } = fake_page([LAYERS.toast, LAYERS.which_key]);
+  mount_surface(hosts[0]!);
+  other.mount_surface(hosts[1]!);
+  assert.equal(styles.length, 1);
+  assert.equal(root.children.length, 1);
 });

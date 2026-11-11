@@ -275,7 +275,8 @@ async function page_with(texts: string[], settings: Record<string, unknown> = {}
     nodes_with_class,
     labels_of: (node: FakeNode) => node.children.map((part) => part.textContent).join(""),
     messages: () => nodes_with_class("desertfox-hint-message").map((node) => node.textContent),
-    host_count: () => document_root.children.length,
+    // The backdrop reset style is a child too; only a surface host has a shadow root.
+    host_count: () => document_root.children.filter((child) => child.shadow).length,
     caret_target: () => win as unknown as { desertfox_caret_target?: unknown },
   };
 }
