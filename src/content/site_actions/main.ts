@@ -1,7 +1,7 @@
 // The `site_actions` bundle: handlers for commands that site rows bind to keys. Loaded on the first press, so content.js does not carry them.
 
 import type { BundleHostApi } from "../bundle_host.ts";
-import { send_key_queued } from "./send_key.ts";
+import { queued_in_page, send_key_queued } from "./send_key.ts";
 import type { SendKeyArgs } from "./send_key.ts";
 import { clipboard_action, paste_through_clipboard_api } from "./clipboard.ts";
 import type { ClipboardArgs } from "./clipboard.ts";
@@ -14,5 +14,5 @@ const host = site_actions.desertfox_host;
 if (!site_actions.desertfox_site_actions_ready && host) {
   site_actions.desertfox_site_actions_ready = true;
   host.register_handler_("page.send_key", (args) => send_key_queued(document, args as unknown as SendKeyArgs, (type, init) => new KeyboardEvent(type, init)));
-  host.register_handler_("page.clipboard", (args) => clipboard_action(document, args as unknown as ClipboardArgs, paste_through_clipboard_api));
+  host.register_handler_("page.clipboard", (args) => queued_in_page(() => clipboard_action(document, args as unknown as ClipboardArgs, paste_through_clipboard_api)));
 }

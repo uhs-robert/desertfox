@@ -3,13 +3,16 @@
 import type { SiteRuleRow } from "../shared/match_pattern.ts";
 import type { DEFAULT_SITE_ROW_NAMES } from "../shared/table_constants.ts";
 import type { BoundInvocation } from "../shared/invocation.ts";
-import type { BindingTable } from "../shared/settings_table.ts";
+import type { BindingTable, SiteModeTable } from "../shared/settings_table.ts";
 
 export type DefaultSiteRow = { name: (typeof DEFAULT_SITE_ROW_NAMES)[number]; row: SiteRuleRow };
 
 // Sheets reads the key code of a keydown and ignores the rest, so hjkl send the arrow keys to its grid editor.
 const SHEETS_TARGET = "#waffle-rich-text-editor";
-const arrow = (key: string, key_code: number, ctrl = false): BoundInvocation => ({ id: "page.send_key", args: { key, key_code, target: SHEETS_TARGET, ...(ctrl ? { ctrl } : {}) } });
+const arrow = (key: string, key_code: number, ctrl = false, shift = false): BoundInvocation => ({ id: "page.send_key", args: { key, key_code, target: SHEETS_TARGET, ...(ctrl ? { ctrl } : {}), ...(shift ? { shift } : {}) } });
+const clipboard = (action: "cut" | "copy" | "paste"): BoundInvocation => ({ id: "page.clipboard", args: { action, target: SHEETS_TARGET } });
+const VISUAL_OFF: BoundInvocation = { id: "mode.site", args: { name: "off" } };
+const VISUAL_ON: BoundInvocation = { id: "mode.site", args: { name: "visual" } };
 const SHEETS_BIND: BindingTable = {
   h: arrow("ArrowLeft", 37),
   j: arrow("ArrowDown", 40),
@@ -22,10 +25,33 @@ const SHEETS_BIND: BindingTable = {
   "<C-k>": arrow("ArrowUp", 38, true),
   "<C-l>": arrow("ArrowRight", 39, true),
   // A synthetic Ctrl+X or Ctrl+V does not cut or paste, so these keys run the page's clipboard action instead.
-  x: { id: "page.clipboard", args: { action: "cut", target: SHEETS_TARGET } },
-  p: { id: "page.clipboard", args: { action: "paste", target: SHEETS_TARGET } },
+  x: clipboard("cut"),
+  p: clipboard("paste"),
+  // `y` copies the cell at all times, so it replaces the yank group on Sheets.
+  y: clipboard("copy"),
+  v: VISUAL_ON,
+  V: VISUAL_ON,
   // Ctrl+End goes to the last cell of the data, and Home from there to column A of that row.
   G: [{ ...arrow("End", 35, true), label: "Bottom of column A", intent: "Go to column A of the last row with data." }, arrow("Home", 36)],
+};
+// VISUAL extends the selection: the same keys with Shift held, and the clipboard keys act on the range. Each clipboard key leaves the mode first, so a refused clipboard step cannot leave it stuck. Escape ends the mode through the site-mode exit policy and collapses nothing.
+const SHEETS_VISUAL: SiteModeTable[string] = {
+  label: "VISUAL",
+  bind: {
+    h: arrow("ArrowLeft", 37, false, true),
+    j: arrow("ArrowDown", 40, false, true),
+    k: arrow("ArrowUp", 38, false, true),
+    l: arrow("ArrowRight", 39, false, true),
+    gg: arrow("Home", 36, true, true),
+    "<C-h>": arrow("ArrowLeft", 37, true, true),
+    "<C-j>": arrow("ArrowDown", 40, true, true),
+    "<C-k>": arrow("ArrowUp", 38, true, true),
+    "<C-l>": arrow("ArrowRight", 39, true, true),
+    G: [{ ...arrow("End", 35, true, true), label: "Extend to the last row", intent: "Extend the selection to the last row with data." }, arrow("Home", 36, false, true)],
+    x: [VISUAL_OFF, clipboard("cut")],
+    y: [VISUAL_OFF, clipboard("copy")],
+    p: [VISUAL_OFF, clipboard("paste")],
+  },
 };
 // Select all, Cut and Paste are Sheets' own, so url.increment must not take <C-a> and <C-x> and mode.pass_next must not take <C-v> on Sheets. A user Sheets row that sets `pass` replaces this column, so it must list all three keys to keep them. A row that sets `only` replaces it too, and there a key left out of `only` goes to the page, so it must leave `<C-a>` and `<C-x>` out. `only` always keeps `<C-v>` for the one-shot pass, so an `only` row cannot free it.
 const SHEETS_PASS = "<C-a> <C-x> <C-v>";
@@ -33,8 +59,8 @@ const SHEETS_PASS = "<C-a> <C-x> <C-v>";
 // Sheets cancels a cell edit on Escape, so `escape_to_page` lets its own handler see the key.
 // The second pattern is the address form of a Google Workspace domain.
 export const DEFAULT_SITE_ROWS: readonly DefaultSiteRow[] = [
-  { name: "sheets", row: { site: "https://docs.google.com/spreadsheets/*", bind: SHEETS_BIND, pass: SHEETS_PASS, escape_to_page: true } },
-  { name: "sheets", row: { site: "https://docs.google.com/a/*/spreadsheets/*", bind: SHEETS_BIND, pass: SHEETS_PASS, escape_to_page: true } },
+  { name: "sheets", row: { site: "https://docs.google.com/spreadsheets/*", bind: SHEETS_BIND, modes: { visual: SHEETS_VISUAL }, pass: SHEETS_PASS, escape_to_page: true } },
+  { name: "sheets", row: { site: "https://docs.google.com/a/*/spreadsheets/*", bind: SHEETS_BIND, modes: { visual: SHEETS_VISUAL }, pass: SHEETS_PASS, escape_to_page: true } },
 ];
 
 export const default_rows_left_on = (rows: readonly DefaultSiteRow[], off_names: readonly string[]): SiteRuleRow[] => rows.filter(({ name }) => !off_names.includes(name)).map(({ row }) => row);

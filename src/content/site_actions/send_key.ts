@@ -35,23 +35,31 @@ export function send_key(doc: KeyTargetDocument, args: SendKeyArgs, make_event: 
 // Sheets applies only the first of several key pairs that arrive in the same millisecond. Pairs 4 ms apart all land, and 10 ms leaves margin.
 export const KEY_PAIR_GAP_MS = 10;
 
-// One queue per page. A call is one entry, so all its pairs go out before the next call starts: a count never has another key land between its steps. A refusal rejects its own call and leaves the queue running.
+// One queue per page, shared by key sends and clipboard actions, so `l l x` cuts the range after both arrows. A call is one entry, so all its pairs go out before the next call starts: a count never has another key land between its steps. A refusal rejects its own call and leaves the queue running.
 let queue_tail: Promise<unknown> = Promise.resolve();
 let last_sent_at = Number.NEGATIVE_INFINITY;
+
+// Waits out the rest of the gap since the last send, then stamps now as the last send.
+async function wait_for_gap(): Promise<void> {
+  // Capped at one gap, so a clock that jumps back cannot stall the queue.
+  const wait_ms = Math.min(last_sent_at + KEY_PAIR_GAP_MS - Date.now(), KEY_PAIR_GAP_MS);
+  if (wait_ms > 0) await new Promise((resolve) => setTimeout(resolve, wait_ms));
+  last_sent_at = Date.now();
+}
+
+export function queued_in_page<T>(task: () => Promise<T>): Promise<T> {
+  const result = queue_tail.then(async () => (await wait_for_gap(), task()));
+  queue_tail = result.catch(() => undefined);
+  return result;
+}
 
 export function send_key_queued(doc: KeyTargetDocument, args: SendKeyArgs, make_event: (type: string, init: KeyboardEventInit) => Event): Promise<void> {
   const times = args.times ?? 1;
   if (times > SEND_KEY_MAX_TIMES) return Promise.reject(new RuntimeRefusal(`A count of ${times} is over the limit of ${SEND_KEY_MAX_TIMES} for page.send_key`));
-  const run = async () => {
+  return queued_in_page(async () => {
     for (let sent = 0; sent < times; sent++) {
-      // Capped at one gap, so a clock that jumps back cannot stall the queue.
-      const wait_ms = Math.min(last_sent_at + KEY_PAIR_GAP_MS - Date.now(), KEY_PAIR_GAP_MS);
-      if (wait_ms > 0) await new Promise((resolve) => setTimeout(resolve, wait_ms));
-      last_sent_at = Date.now();
+      if (sent > 0) await wait_for_gap();
       send_key(doc, args, make_event);
     }
-  };
-  const result = queue_tail.then(run);
-  queue_tail = result.catch(() => undefined);
-  return result;
+  });
 }
