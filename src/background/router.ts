@@ -73,9 +73,10 @@ function outcome_of_reply(reply: unknown): Outcome {
 }
 
 // The refusal text when the count prefix is over the command's `repeat_limit`.
-function over_repeat_limit(command: CommandDef | undefined, invocation: BoundInvocation): string | undefined {
+// A prompt step that may prompt opens the line and drops its count, so it is never over.
+function over_repeat_limit(command: CommandDef | undefined, invocation: BoundInvocation, may_prompt: boolean | undefined): string | undefined {
   const limit = command?.repeat_limit;
-  if (limit === undefined || invocation.count === undefined || invocation.count <= limit) return undefined;
+  if (limit === undefined || (invocation.prompt && may_prompt) || invocation.count === undefined || invocation.count <= limit) return undefined;
   return `A count of ${invocation.count} is over the limit of ${limit} for ${invocation.id}`;
 }
 
@@ -110,7 +111,7 @@ export function create_router(deps: RouterDeps): Router {
     };
     // Over every step before the first runs, so a sequence never runs half.
     for (const [index, invocation] of request.invocations.entries()) {
-      const over = over_repeat_limit(deps.get_command(invocation.id), invocation);
+      const over = over_repeat_limit(deps.get_command(invocation.id), invocation, request.may_prompt);
       if (over) return fail_at(index, over);
     }
     for (const [index, invocation] of request.invocations.entries()) {

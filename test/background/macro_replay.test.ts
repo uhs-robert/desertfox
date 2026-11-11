@@ -1,6 +1,8 @@
 // The background side of a macro replay: the loop, the holds it sends, the end it answers, the page-ready waits, Escape, nesting and the wait of runs from other tabs.
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { create_router } from "../../src/background/router.ts";
+import { make_fake } from "./fakes.ts";
 import { create_macro_replay, MAX_MACRO_DEPTH, MAX_MACRO_PASSES } from "../../src/background/macro_replay.ts";
 import type { MacroReplayDeps, ReplayStart, StepPlace } from "../../src/background/macro_replay.ts";
 import type { PageReady, PageWatch } from "../../src/background/page_ready.ts";
@@ -120,6 +122,20 @@ test("a failed step, a cancelled pick and the depth refusal each end the replay 
     assert.deepEqual(log, expected, name);
     assert.equal(replay.is_playing(), false, name);
   }
+});
+
+test("a recorded step over a repeat limit is refused by the router, so the replay ends not ok and runs nothing after", async () => {
+  const closed: number[] = [];
+  const fake = make_fake({ "tab.close": { label: "Close", intent: "x", runs_in: "background", count: "repeat", repeat_limit: 20, run: () => void closed.push(1) }, "tab.next": { label: "Next", intent: "x", runs_in: "background", run: () => void closed.push(0) } });
+  const router = create_router(fake.deps);
+  const { replay, effects, steps_run, start } = make({ a: [{ id: "tab.close", count: 100 }, { id: "tab.next" }] });
+  effects["tab.close"] = () => router.run({ invocations: [steps_run.at(-1)!], mode: "normal", instant: true });
+  const played = replay.play(start);
+  const ended = replay.ended();
+  assert.equal(await played, false);
+  assert.deepEqual(await ended, { ok: false });
+  assert.deepEqual(closed, []);
+  assert.deepEqual(steps_run.map((step) => step.id), ["tab.close"]);
 });
 
 test("a nested macro plays inside the replay: no second hold, its steps in order, one end", async () => {
