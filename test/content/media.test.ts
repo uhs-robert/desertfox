@@ -12,6 +12,7 @@ function player(fields: Partial<Player> = {}): Player & { calls: string[] } {
   return {
     localName: "video",
     paused: true,
+    loop: false,
     ended: false,
     playbackRate: 1,
     volume: 1,
@@ -31,11 +32,13 @@ function player(fields: Partial<Player> = {}): Player & { calls: string[] } {
   };
 }
 
-function frame(entries: { player: Player; area: number }[], pip: { element: unknown } = { element: null }): FrameView {
+function frame(entries: { player: Player; area: number }[], pip: { element: unknown } = { element: null }, full: { element: unknown } = { element: null }): FrameView {
   return {
     players: () => entries,
     pip_element: () => pip.element,
     exit_pip: async () => void (pip.element = null),
+    fullscreen_element: () => full.element,
+    toggle_fullscreen: async (target) => void (full.element = full.element ? null : target),
   };
 }
 
@@ -73,7 +76,7 @@ test("the scan counts playing media and the largest video areas, audio aside", (
     { player: ended_video, area: 2000 },
     { player: playing_audio, area: 0 },
   ]);
-  assert.deepEqual(scan_frame(view), { count: 4, playing: 2, audible: 2, video_area: 2000, playing_video_area: 100, audible_video_area: 100, pip_open: false });
+  assert.deepEqual(scan_frame(view), { count: 4, playing: 2, audible: 2, video_area: 2000, playing_video_area: 100, audible_video_area: 100, pip_open: false, fullscreen_open: false });
 });
 
 test("a playing target changes every playing element and leaves the paused ones", async () => {
@@ -108,7 +111,7 @@ test("a muted preview that plays beside a paused main video takes the playing ta
     { player: preview, area: 100 },
     { player: main, area: 5000 },
   ]);
-  assert.deepEqual(scan_frame(view), { count: 2, playing: 1, audible: 0, video_area: 5000, playing_video_area: 100, audible_video_area: 0, pip_open: false });
+  assert.deepEqual(scan_frame(view), { count: 2, playing: 1, audible: 0, video_area: 5000, playing_video_area: 100, audible_video_area: 0, pip_open: false, fullscreen_open: false });
 });
 
 test("speed, volume and seek with no value write nothing, since even an equal currentTime seeks", async () => {
@@ -246,4 +249,44 @@ test("a second injection into the same frame adds no second listener but reports
     delete globals.innerHeight;
     delete globals.browser;
   }
+});
+
+test("seek end and percent go to the media end and to the count as a percent, and a live stream stays", () => {
+  const seek = { ...SEEK_RULE, max: 200 };
+  assert.equal(next_level(5, "end", 1, seek), 200);
+  assert.equal(next_level(5, "percent", 50, seek), 100);
+  assert.equal(next_level(5, "percent", 250, seek), 200);
+  assert.equal(next_level(5, "end", 1, SEEK_RULE), 5);
+  assert.equal(next_level(5, "percent", 50, SEEK_RULE), 5);
+  assert.equal(next_level(40, "percent", 30, VOLUME_RULE), 30);
+});
+
+test("mute and loop toggle on the chosen element, and info changes nothing", async () => {
+  const video = player({ paused: false });
+  const view = frame([{ player: video, area: 10 }]);
+  const muted = await apply_in_frame(view, apply({ target: "playing", action: "mute" }));
+  assert.equal(video.muted, true);
+  assert.equal(muted.state?.muted, true);
+  await apply_in_frame(view, apply({ target: "playing", action: "mute" }));
+  assert.equal(video.muted, false);
+  const looped = await apply_in_frame(view, apply({ action: "loop" }));
+  assert.equal(video.loop, true);
+  assert.equal(looped.state?.loop, true);
+  const info = await apply_in_frame(view, apply({ action: "info" }));
+  assert.deepEqual([info.acted, video.loop, video.muted, video.currentTime], [1, true, false, 0]);
+});
+
+test("fullscreen takes the largest video once, never audio, and the next press leaves it", async () => {
+  const small = player();
+  const big = player();
+  const sound = player({ localName: "audio" });
+  const full = { element: null as unknown };
+  const view = frame([{ player: small, area: 10 }, { player: big, area: 90 }, { player: sound, area: 0 }], { element: null }, full);
+  const first = await apply_in_frame(view, apply({ action: "fullscreen" }));
+  assert.equal(full.element, big);
+  assert.deepEqual([first.acted, first.state?.fullscreen], [1, true]);
+  const second = await apply_in_frame(view, apply({ action: "fullscreen" }));
+  assert.equal(full.element, null);
+  assert.equal(second.state?.fullscreen, false);
+  assert.equal((await apply_in_frame(frame([{ player: sound, area: 0 }]), apply({ action: "fullscreen" }))).acted, 0);
 });

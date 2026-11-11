@@ -29,7 +29,7 @@ test("the line reads an action word and then a value, as the A prompt leaves the
 test("the schema refuses a value an action cannot take, an unknown action and a bad value", () => {
   assert.equal(typed("media pip 3").ok, false);
   assert.equal(typed("media play_pause up").ok, false);
-  assert.match((typed("media rewind") as { error: string }).error, /action expects one of play_pause, speed, volume, seek, pip/);
+  assert.match((typed("media rewind") as { error: string }).error, /action expects one of play_pause, speed, volume, seek, fullscreen, mute, loop, info, pip/);
   assert.match((typed("media speed fast") as { error: string }).error, /value expects text matching/);
   assert.equal((typed("media") as { missing_param?: string }).missing_param, "action");
 });
@@ -45,11 +45,23 @@ test("a count multiplies an up or down step and is refused on every other key of
 
 test("every key of the a group passes the schema, and A opens the line on the media command", () => {
   const group = Object.entries(DEFAULT_KEYMAP.normal ?? {}).filter(([key]) => /^a.$/.test(key));
-  assert.deepEqual(group.map(([key]) => key).sort(), ["aP", "aS", "aV", "ah", "al", "am", "ap", "ar", "as", "av"].sort());
+  assert.deepEqual(group.map(([key]) => key).sort(), ["aP", "af", "aS", "aV", "ah", "al", "am", "ap", "ar", "as", "av"].sort());
   for (const [key, binding] of group) {
     const step = binding as BoundInvocation;
     assert.equal(check_args(registry.get(step.id)!, step.args).ok, true, key);
   }
   assert.deepEqual(DEFAULT_KEYMAP.normal?.A, { id: "cmdline.open", args: { text: "media " }, label: "Media command" });
   assert.equal(DEFAULT_KEYMAP.group_names?.a, "Media");
+});
+
+test("seek end and percent pass the schema, percent reads the count, and the new actions take no value", () => {
+  assert.deepEqual(typed("media seek end"), { ok: true, args: { action: "seek", value: "end" } });
+  assert.deepEqual(typed("media seek percent"), { ok: true, args: { action: "seek", value: "percent", times: 1 } });
+  const counted = check_args(media, apply_count(media, { id: "media.act", args: { action: "seek", value: "percent" }, count: 50 }).args);
+  assert.deepEqual(counted, { ok: true, args: { action: "seek", value: "percent", times: 50 } });
+  for (const action of ["fullscreen", "mute", "loop", "info"]) {
+    assert.deepEqual(typed(`media ${action}`), { ok: true, args: { action } });
+    assert.equal(typed(`media ${action} up`).ok, false, action);
+  }
+  assert.deepEqual(DEFAULT_KEYMAP.normal?.af, { id: "media.act", args: { action: "fullscreen" }, label: "Toggle fullscreen" });
 });

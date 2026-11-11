@@ -2,6 +2,7 @@
 
 import type { MediaRequest } from "../../shared/media.ts";
 import type { MediaReport } from "../../shared/messages.ts";
+import { player_box } from "../player_box.ts";
 import { apply_in_frame, media_in, scan_frame, visible_area } from "./frame_media.ts";
 import type { FrameView, Player } from "./frame_media.ts";
 
@@ -12,6 +13,8 @@ const view: FrameView = {
   players: () => media_in(document).map((element) => ({ player: element as unknown as Player, area: element.localName === "video" ? visible_area(element, innerWidth, innerHeight) : 0 })),
   pip_element: () => document.pictureInPictureElement,
   exit_pip: () => document.exitPictureInPicture(),
+  fullscreen_element: () => document.fullscreenElement,
+  toggle_fullscreen: (player) => (document.fullscreenElement ? document.exitFullscreen() : player_box(player as unknown as Element).requestFullscreen()),
 };
 
 // Each command injects the file again, so a second run must not add a second listener, but it reports again.

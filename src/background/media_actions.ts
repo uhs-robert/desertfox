@@ -89,10 +89,10 @@ function largest_by(scans: FrameScan[], measure: (scan: FrameScan) => number): F
   return best;
 }
 
-// Media that plays with sound acts first, then any playing media, so a muted autoplay preview yields to the video the user hears. Play or pause is the exception: with sound playing anywhere, it pauses everything that plays. Every frame with such media acts on all of it, so two players that play together move together. With nothing playing, the largest visible video acts, else the first frame with any media. Picture-in-picture takes one video: the open one, else the largest audible, else the largest playing, else the largest visible.
+// Media that plays with sound acts first, then any playing media, so a muted autoplay preview yields to the video the user hears. Play or pause is the exception: with sound playing anywhere, it pauses everything that plays. Every frame with such media acts on all of it, so two players that play together move together. With nothing playing, the largest visible video acts, else the first frame with any media. Picture-in-picture and fullscreen take one video: the open one, else the largest audible, else the largest playing, else the largest visible.
 export function choose_frames(scans: FrameScan[], action: MediaAction): FramePlan[] {
-  if (action === "pip") {
-    const open = scans.find((scan) => scan.pip_open);
+  if (action === "pip" || action === "fullscreen") {
+    const open = scans.find((scan) => (action === "pip" ? scan.pip_open : scan.fullscreen_open));
     if (open) return [{ frame_id: open.frame_id, target: "largest" }];
     const audible = largest_by(scans, (scan) => scan.audible_video_area);
     if (audible) return [{ frame_id: audible.frame_id, target: "audible" }];
@@ -120,11 +120,18 @@ export function clock(seconds: number): string {
   return hours > 0 ? `${hours}:${two(minutes)}:${two(rest)}` : `${minutes}:${two(rest)}`;
 }
 
+const info_line = (state: MediaState): string =>
+  [state.duration === null ? clock(state.position) : `${clock(state.position)} of ${clock(state.duration)}`, `${rounded(state.rate, 2)}x`, `volume ${Math.round(state.volume * 100)}%${state.muted ? ", muted" : ""}`, ...(state.loop ? ["loop"] : []), ...(state.paused ? ["paused"] : [])].join(", ");
+
 export function describe_change(action: MediaAction, state: MediaState, acted: number): string {
   const text =
     action === "speed" ? `Speed ${rounded(state.rate, 2)}x`
     : action === "volume" ? `Volume ${Math.round(state.volume * 100)}%${state.muted ? ", muted" : ""}`
     : action === "seek" ? (state.duration === null ? clock(state.position) : `${clock(state.position)} of ${clock(state.duration)}`)
+    : action === "mute" ? (state.muted ? "Muted" : "Unmuted")
+    : action === "loop" ? `Loop ${state.loop ? "on" : "off"}`
+    : action === "fullscreen" ? `Fullscreen ${state.fullscreen ? "on" : "off"}`
+    : action === "info" ? info_line(state)
     : action === "pip" ? `Picture-in-picture ${state.pip ? "on" : "off"}`
     : state.paused ? "Paused" : "Playing";
   return acted > 1 ? `${text}, ${acted} players` : text;
@@ -137,6 +144,7 @@ export function refusal_for(action: MediaAction, error_name: string, error_messa
     if (error_name === "InvalidStateError") return "This video cannot go to picture-in-picture";
     if (error_name === "NotSupportedError") return "Picture-in-picture is turned off in Firefox";
   }
+  if (action === "fullscreen" && (error_name === "NotAllowedError" || error_name === "TypeError")) return "Firefox allows fullscreen only from a key press in the page";
   if (error_name === "NotAllowedError") return "The page blocked play until you click it";
   return error_message;
 }
@@ -145,7 +153,7 @@ export async function run_media(deps: MediaDeps, ctx: CommandContext, args: Medi
   const tab_id = ctx.tab_id;
   if (tab_id === undefined) throw new RuntimeRefusal("Media needs a tab");
   if (args.action === "pip" && !deps.can_picture_in_picture()) throw new RuntimeRefusal("Picture-in-picture needs Firefox 153 or newer");
-  const no_media = new RuntimeRefusal(args.action === "pip" ? "No video on this page" : "No video or audio on this page");
+  const no_media = new RuntimeRefusal(args.action === "pip" || args.action === "fullscreen" ? "No video on this page" : "No video or audio on this page");
   const plan = choose_frames(await scan_frames(deps, tab_id), args.action);
   if (plan.length === 0) throw no_media;
   const answers = await Promise.all(

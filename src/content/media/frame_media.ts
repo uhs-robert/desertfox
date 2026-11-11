@@ -8,6 +8,7 @@ import type { LevelRule, MediaRequest, MediaResult, MediaScan, MediaState, Media
 export type Player = {
   localName: string;
   paused: boolean;
+  loop: boolean;
   ended: boolean;
   playbackRate: number;
   volume: number;
@@ -24,14 +25,21 @@ export type FrameView = {
   players: () => { player: Player; area: number }[];
   pip_element: () => unknown;
   exit_pip: () => Promise<void>;
+  fullscreen_element: () => unknown;
+  // Runs in the task of the key message, which is what keeps the key press as the user gesture that requestFullscreen needs.
+  toggle_fullscreen: (player: Player) => Promise<unknown>;
 };
 
 export function next_level(current: number, value: string | undefined, times: number, rule: LevelRule): number {
   if (value === undefined) return current;
+  // A live stream has no end to jump to.
+  if ((value === "end" || value === "percent") && !Number.isFinite(rule.max)) return current;
   const wanted =
     value === "up" ? current + rule.step * times
     : value === "down" ? current - rule.step * times
     : value === "reset" ? rule.reset
+    : value === "end" ? rule.max
+    : value === "percent" ? rule.min + ((rule.max - rule.min) * times) / 100
     : value.startsWith("+") || value.startsWith("-") ? current + Number(value)
     : Number(value);
   return Math.min(Math.max(wanted, rule.min), rule.max);
@@ -76,6 +84,7 @@ export function scan_frame(view: FrameView): MediaScan {
     playing_video_area: video_areas(playing),
     audible_video_area: video_areas(audible),
     pip_open: Boolean(view.pip_element()),
+    fullscreen_open: Boolean(view.fullscreen_element()),
   };
 }
 
@@ -92,9 +101,9 @@ function in_target(player: Player, target: MediaTarget): boolean {
 // The elements are found again here, not kept from the scan: the page may have changed them in between.
 function targets_of(view: FrameView, request: Extract<MediaRequest, { type: "media_apply" }>): Player[] {
   const found = view.players();
-  if (request.action === "pip") {
-    // A frame holds one picture-in-picture window at most, and the key closes it whatever the target.
-    const open = view.pip_element();
+  if (request.action === "pip" || request.action === "fullscreen") {
+    // A frame holds one picture-in-picture window or fullscreen element at most, and the key closes it whatever the target.
+    const open = request.action === "pip" ? view.pip_element() : view.fullscreen_element() && found.find(({ player }) => is_video(player))?.player;
     if (open) return [open as Player];
     const videos = found.filter(({ player }) => is_video(player) && in_target(player, request.target));
     const video = largest(videos);
@@ -115,6 +124,8 @@ function state_of(player: Player, view: FrameView): MediaState {
     paused: player.paused,
     // The document retargets the open element to the shadow host of a video inside a shadow root, so a comparison with the player fails there.
     pip: Boolean(view.pip_element()),
+    loop: player.loop,
+    fullscreen: Boolean(view.fullscreen_element()),
   };
 }
 
@@ -127,6 +138,10 @@ function change(player: Player, request: Extract<MediaRequest, { type: "media_ap
   else if (action === "seek") player.currentTime = next_level(player.currentTime, value, times, { ...SEEK_RULE, max: Number.isFinite(player.duration) ? player.duration : SEEK_RULE.max });
   // With any element playing, the key pauses. Else it plays the one chosen element.
   else if (action === "play_pause") return request.target !== "largest" || is_playing(player) ? player.pause() : within_grace(player.play());
+  else if (action === "mute") player.muted = !player.muted;
+  else if (action === "loop") player.loop = !player.loop;
+  else if (action === "fullscreen") return view.toggle_fullscreen(player);
+  else if (action === "info") return;
   else if (view.pip_element()) return view.exit_pip();
   else return player.requestPictureInPicture?.();
 }

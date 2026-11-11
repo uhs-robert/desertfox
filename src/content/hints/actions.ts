@@ -2,6 +2,7 @@
 
 import { enter_for_click, hover, leave_toward } from "./hover.ts";
 import { selector_of } from "./selector_of.ts";
+import { parent_across_shadow, player_box } from "../player_box.ts";
 
 export type HintAction = "here" | "tab" | "background" | "window" | "caret" | "visual" | "copy" | "copy_text" | "copy_image" | "copy_selector" | "copy_html" | "inspect" | "download" | "delete" | "focus" | "hover" | "double_click" | "play_pause" | "mute" | "fullscreen" | "prompt";
 
@@ -204,25 +205,6 @@ function focus_target(target: Target): void {
     flashes.delete(target);
   }, FLASH_MS);
   flashes.set(target, { previous, timer });
-}
-
-const SAME_SIZE_PX = 1;
-
-type Climbable = { parentElement: Element | null; parentNode: unknown };
-
-// A custom player keeps its video in a shadow root, so the climb steps from the root to its host.
-const parent_across_shadow = (element: Climbable): Element | null => element.parentElement ?? (element.parentNode as { host?: Element } | null)?.host ?? null;
-
-// The outermost ancestor that is as big as the media element, so a site player keeps its controls and subtitles in fullscreen. The page body is never a player box.
-export function player_box(media: Element): Element {
-  const size = media.getBoundingClientRect();
-  let box = media;
-  for (let up = parent_across_shadow(media); up && up !== up.ownerDocument.body && up !== up.ownerDocument.documentElement; up = parent_across_shadow(up)) {
-    const outer = up.getBoundingClientRect();
-    if (Math.abs(outer.width - size.width) > SAME_SIZE_PX || Math.abs(outer.height - size.height) > SAME_SIZE_PX) break;
-    box = up;
-  }
-  return box;
 }
 
 // play() and requestFullscreen() need the user activation of the pick keydown. A refusal becomes a failed outcome, because a rejected promise from an action reads as a page that went away and cancels silently.

@@ -167,6 +167,7 @@ export const DEFAULT_KEYMAP: KeymapConfig = {
     al: { id: "media.act", args: { action: "seek", value: "up" }, label: "Seek forward" },
     ah: { id: "media.act", args: { action: "seek", value: "down" }, label: "Seek back" },
     aP: { id: "media.act", args: { action: "pip" }, label: "Toggle picture-in-picture" },
+    af: { id: "media.act", args: { action: "fullscreen" }, label: "Toggle fullscreen" },
     A: { id: "cmdline.open", args: { text: "media " }, label: "Media command" },
 
     // The t group works on tabs. Plain `t` is only a prefix.

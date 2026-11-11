@@ -77,6 +77,36 @@ export async function run_cases({ run_case, setup, open_page, press_keys, wait_e
     await wait_event(mark, report(top, "ratechange", (event) => event.rate === 2), "the top video at 2x");
   });
 
+  const run_line = async (text) => {
+    await press_keys("A");
+    await wait_cmdline((line) => line.open && line.value === "media ", 'the line to open with "media "');
+    await type_in_line(text);
+    await press_keys("-k", "Return");
+  };
+
+  await run_case("media mute toggles the video, not the tab, and media loop toggles loop", async () => {
+    let mark = events.length;
+    await run_line("mute");
+    await wait_event(mark, report(top, "volumechange", (event) => event.muted === true), "the top video muted");
+    await wait_toast("Muted");
+    mark = events.length;
+    await run_line("mute");
+    await wait_event(mark, report(top, "volumechange", (event) => event.muted === false), "the top video unmuted");
+    await run_line("loop");
+    await wait_toast("Loop off");
+    await run_line("info");
+    await poll_until("the info line", async () => /^0:\d\d of 0:30, 2x, volume 90%, paused$/.test(await read_toast()));
+  });
+
+  await run_case("media seek end and percent move the video, percent reading the count", async () => {
+    let mark = events.length;
+    await run_line("seek percent");
+    await wait_event(mark, report(top, "seeked", (event) => event.time > 0.2 && event.time < 0.4), "the top video at 1 percent");
+    mark = events.length;
+    await run_line("seek end");
+    await wait_event(mark, report(top, "seeked", (event) => event.time > 29 || event.time < 1), "the top video at the end");
+  });
+
   await run_case("ap plays the largest video when none plays", async () => {
     const mark = events.length;
     await press_keys("a", "p");
@@ -112,6 +142,20 @@ export async function run_cases({ run_case, setup, open_page, press_keys, wait_e
     await press_keys("a", "P");
     await wait_toast("This frame allows picture-in-picture only from a click in it");
     await expect_absent(mark, "p23_clip", report("p23_clip_inner", "enterpictureinpicture"), "picture-in-picture opened");
+  });
+
+  // The page's own fullscreenchange report is the proof that a key press through the background round trip still counts as the user gesture.
+  await run_case("af fullscreens the player box with its overlay, and a second af leaves", async () => {
+    await open_page("media", "p23_full", { new_tab: true });
+    const on_page = (type) => (event) => event.page_id === "p23_full" && event.type === type;
+    let mark = events.length;
+    await press_keys("a", "f");
+    const entered = await wait_event(mark, on_page("media_fullscreen"), "fullscreen to start");
+    expect(entered.element === "player", `the fullscreen element is "${entered.element}"`);
+    mark = events.length;
+    await press_keys("a", "f");
+    const left = await wait_event(mark, on_page("media_fullscreen"), "fullscreen to end");
+    expect(left.element === "", `the fullscreen element is "${left.element}"`);
   });
 
   await run_case("a page with no media refuses with a notice", async () => {
