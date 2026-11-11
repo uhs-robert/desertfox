@@ -102,7 +102,7 @@ export function create_view() {
     text_box.textContent = `text: ${text}`;
   }
 
-  // The key line sits where the mode badge is, which is hidden in hint mode. It is its own node, because show_message_ wipes the container.
+  // The key line sits where the mode badge is, which is hidden in hint mode. It outlives text mode, so it is not part of the text box. It goes first in the container so labels paint over it.
   let key_line: HTMLElement | undefined;
   function show_key_line(text: string | undefined): void {
     if (key_line === undefined) return;
@@ -134,7 +134,7 @@ export function create_view() {
     add_key_line_: (): void => {
       key_line = document.createElement("div");
       key_line.className = "desertfox-hint-keys";
-      surface.text.append(key_line);
+      surface.text.prepend(key_line);
       show_key_line(undefined);
     },
     // Labels that no longer start with the typed text hide. The typed part of the others dims.

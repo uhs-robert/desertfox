@@ -8,7 +8,8 @@ import { rank_items } from "./rank.ts";
 export type Typed = { typed: string; still_possible_: number[] };
 
 // The keys that switch, cycle, pick or rotate. Hint mode takes them besides the label characters.
-const NAMED_KEYS = ["/", "<Tab>", "<S-Tab>", "<Enter>", "<Space>"];
+const NAMED_KEYS = ["<Tab>", "<S-Tab>", "<Enter>", "<Space>"];
+// "/" is a one-character key, so `is_hint_char` already takes it. Labels never use it, because `hint_letters` refuses it.
 export const is_text_key = (token: string): boolean => NAMED_KEYS.includes(token);
 
 export type KeyOutcome =
