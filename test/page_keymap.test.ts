@@ -334,6 +334,7 @@ test("the shipped sheets rows bind gg and Ctrl+hjkl to Ctrl keys and free Ctrl+A
     const g = tree.keymap.modes.normal?.children["g"];
     const gg = g?.kind === "branch" ? g.children["g"] : undefined;
     assert.deepEqual(gg?.kind === "leaf" ? [gg.steps[0]?.invocation.args?.key, gg.steps[0]?.invocation.args?.ctrl] : undefined, ["Home", true], url);
+    assert.deepEqual(g?.kind === "branch" ? ["u", "i"].map((key) => key in g.children) : undefined, [true, true], url);
     assert.equal(tree.keymap.modes.normal?.children["<C-a>"], undefined, url);
     assert.equal(tree.keymap.modes.normal?.children["<C-x>"], undefined, url);
     assert.equal(tree.frees?.tokens.includes("<C-a>"), true, url);

@@ -21,7 +21,7 @@ const SHEETS_BIND: BindingTable = {
   "<C-k>": arrow("ArrowUp", 38, true),
   "<C-l>": arrow("ArrowRight", 39, true),
 };
-// Select all and Cut are Sheets' own, so url.increment must not take <C-a> and <C-x> on Sheets.
+// Select all and Cut are Sheets' own, so url.increment must not take <C-a> and <C-x> on Sheets. A user Sheets row that sets `pass` or `only` replaces this column, so it must list both keys to keep Select all and Cut.
 const SHEETS_PASS = "<C-a> <C-x>";
 
 // The second pattern is the address form of a Google Workspace domain.
