@@ -142,8 +142,8 @@ function on_keydown(event: KeyboardEvent): void {
   if (!event.isTrusted || event.isComposing) return;
   const token = event_to_token(event);
   if (token === null) return;
-  // A page can start or end typing in the focused element with no focus event (see `is_editable_element`), so the mode is read again before this key is decided. The keyup read shows a change this key made itself.
-  sync_mode_to_focus();
+  // Before the key is decided, so the first key of an edit that began with no key goes to the field. The keyup call shows a change this key made itself.
+  follow_field_change();
   if (replaying && token == "<Escape>") void send_to_background({ type: "replay_stop" });
   const target = press_target(event);
   const press: HeldPress = { keyup_seen: false };
@@ -157,7 +157,7 @@ function on_keypress(event: KeyboardEvent): void {
 }
 
 function on_keyup(event: KeyboardEvent): void {
-  sync_mode_to_focus();
+  follow_field_change();
   if (cancels_keyup(event, cancelled_keys)) cancel(event);
 }
 
@@ -212,6 +212,18 @@ function watch_roots_around_focus(): void {
 function sync_mode_to_focus(): void {
   watch_roots_around_focus();
   bundles.in_mode_order_(is_editable_element(deepest_focused_element()) ? page_mode.focus_entered_editable_ : page_mode.focus_left_editable_);
+}
+
+// The field that held the focus at the last key, or null when the focused element took no typing.
+let field_at_last_key: Element | null | undefined;
+
+// A page can start or end typing in the focused element with no focus event (see `is_editable_element`), so each key looks again.
+// The mode follows only a change, as it does for a focus event. A frame whose body is the editor keeps that body focused after Escape, and a key that forced the mode to match the focus would undo the Escape.
+function follow_field_change(): void {
+  const focused = deepest_focused_element();
+  const field = is_editable_element(focused) ? focused : null;
+  if (field !== field_at_last_key) sync_mode_to_focus();
+  field_at_last_key = field;
 }
 
 let matcher_installed = false;

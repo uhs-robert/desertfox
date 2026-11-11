@@ -2,7 +2,7 @@
 // /cell_editor stands in for Google Sheets. Its editor is parked off screen with no width until an edit starts, and no focus event marks the start or the end of an edit.
 export const areas = ["keys"];
 
-export async function run_cases({ run_case, press_keys, open_page, expect, poll_until, in_active_tab, events, wait_event, expect_no_scroll, scroll_delta_by_press }) {
+export async function run_cases({ run_case, press_keys, open_page, expect, poll_until, in_active_tab, events, wait_event, expect_no_scroll, scroll_delta_by_press, scroll_of }) {
   const page_id = "p15_cell_editor";
   const badge = () => in_active_tab(`document.querySelector("[data-desertfox-mode]")?.getAttribute("data-desertfox-mode") ?? null`);
   const editor_text = () => in_active_tab(`document.getElementById("waffle-rich-text-editor").textContent`);
@@ -61,4 +61,23 @@ export async function run_cases({ run_case, press_keys, open_page, expect, poll_
     await expect_j_scrolls("after the edit ended with no key");
     await expect_badge("NORMAL");
   });
+
+  // The body of such a frame keeps the focus through Escape, so a key re-check that forced the mode to match the focus would undo the Escape.
+  for (const [kind, what] of [["body_editor_frame", "a contenteditable body"], ["design_mode_frame", "a designMode document"]]) {
+    await run_case(`Escape leaves insert mode in a frame with ${what}, and the next key stays a normal mode key`, async () => {
+      const top_id = `p15_${kind}`;
+      const frame_id = `${top_id}_frame`;
+      const frame_text = () => in_active_tab(`document.getElementById("inner").contentDocument.body.textContent`);
+      await open_page(kind, top_id, { new_tab: true, keys_page_id: frame_id });
+      await expect_badge("INSERT");
+      const text_before = await frame_text();
+      await press_keys("-k", "Escape");
+      await expect_badge("NORMAL");
+      const mark = events.length;
+      await press_keys("j");
+      await wait_event(mark, scroll_of(frame_id), `j to scroll the frame with ${what}`);
+      await expect_badge("NORMAL");
+      expect((await frame_text()) === text_before, `j was typed into the frame with ${what}`);
+    });
+  }
 }
