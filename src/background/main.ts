@@ -319,7 +319,7 @@ browser.tabs.onUpdated.addListener((tab_id, change) => {
 browser.windows.onRemoved.addListener(() => void repeat_memory.clear_private_without_window().catch(() => undefined));
 wire_private_cleanup([browser_register_store, browser_mark_store, browser_quickmark_store, browser_macro_recorder, browser_last_played], browser.windows);
 
-// Top level, so an event-page wake delivers the events. The fill reads the browser history again after each wake.
+// Top level, so a future event page gets the events on wake. Each start of the background refills the cache from the browser history.
 browser.history.onVisited.addListener(history_cache.visited);
 browser.history.onTitleChanged.addListener(history_cache.title_changed);
 browser.history.onVisitRemoved.addListener(history_cache.visit_removed);

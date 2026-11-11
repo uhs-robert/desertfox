@@ -1,5 +1,5 @@
 // The newest history rows, kept in the background so history completion reaches pages older than one `history.search` answer holds.
-// Derived state: the browser's history is the truth, so every start of the background refills it with one search.
+// Derived state: the browser's history is the truth, so every start of the background refills it with one search. A future event page refills on each wake, and a line that asks before the fill ends gets the plain search.
 
 export const HISTORY_CACHE_MAX = 8000;
 
@@ -9,6 +9,8 @@ type Change = { kind: "visited"; visit: Visit } | { kind: "title"; url: string; 
 
 export type HistoryCacheDeps = {
   search: (max: number) => Promise<readonly Visit[]>;
+  // Whether `history.search` lists the address. `onVisited` also fires for hidden pages (redirect sources, framed links) that the search leaves out.
+  listed: (url: string) => Promise<boolean>;
   max: number;
 };
 
@@ -21,6 +23,8 @@ export function create_history_cache(deps: HistoryCacheDeps) {
   let state: "empty" | "filling" | "ready" = "empty";
   // Events that arrive while the fill runs. The fill result is older than they are, so they apply after it, in arrival order.
   let pending: Change[] = [];
+  // True while `drain` runs. Events that arrive then queue behind it, so the order holds across the awaits.
+  let draining: Promise<void> | undefined;
 
   const drop = (url: string) => {
     const old = by_url.get(url);
@@ -70,7 +74,7 @@ export function create_history_cache(deps: HistoryCacheDeps) {
         }
       }
       rows.sort((left, right) => right.last_visit - left.last_visit);
-      pending.splice(0).forEach(apply);
+      await drain();
       state = "ready";
     } catch {
       // A failed search leaves the next read to try again. The events held are lost with it, and the new search sees their pages.
@@ -79,10 +83,26 @@ export function create_history_cache(deps: HistoryCacheDeps) {
     }
   };
 
+  // An address the cache has not seen waits for the search to list it. A search that fails leaves the page out until the next start.
+  const needs_check = (change: Change) => change.kind === "visited" && !!change.visit.url && !by_url.has(change.visit.url);
+
+  const drain = (): Promise<void> => {
+    draining ??= (async () => {
+      while (pending.length > 0) {
+        const change = pending.shift()!;
+        if (needs_check(change) && !(await deps.listed((change as { visit: { url: string } }).visit.url).catch(() => false))) continue;
+        apply(change);
+      }
+    })().finally(() => (draining = undefined));
+    return draining;
+  };
+
   const on = (change: Change) => {
-    if (state === "filling") pending.push(change);
-    else if (state === "ready") apply(change);
-    // Empty: the fill that comes next reads the browser after this event.
+    if (state === "empty") return; // The fill that comes next reads the browser after this event.
+    if (state === "filling" || draining || needs_check(change)) {
+      pending.push(change);
+      if (state === "ready") void drain();
+    } else apply(change);
   };
 
   return {
@@ -95,13 +115,19 @@ export function create_history_cache(deps: HistoryCacheDeps) {
       if (state === "empty") void fill();
       return state === "ready" ? rows : undefined;
     },
+    // Resolves when the events held so far have applied.
+    idle: async (): Promise<void> => {
+      await draining;
+    },
     visited: (visit: Visit) => on({ kind: "visited", visit }),
     title_changed: ({ url, title }: { url: string; title: string }) => on({ kind: "title", url, title }),
     visit_removed: ({ allHistory, urls }: { allHistory: boolean; urls: readonly string[] }) => on(allHistory ? { kind: "cleared" } : { kind: "removed", urls }),
   };
 }
 
-export const history_cache = create_history_cache({
+// Marked pure so a bundle that never reads the cache (the new tab page) drops it.
+export const history_cache = /* @__PURE__ */ create_history_cache({
   search: (max) => browser.history.search({ text: "", startTime: 0, maxResults: max }),
   max: HISTORY_CACHE_MAX,
+  listed: async (url) => (await browser.history.search({ text: url, startTime: 0, maxResults: 20 })).some((item) => item.url === url),
 });
