@@ -154,7 +154,7 @@ function rule_of(row: Exclude<SettingRow, { kind: "custom" }>): Rule {
 type CustomName = { [K in SettingName]: (typeof SETTINGS_TABLE)[K] extends { kind: "custom" } ? K : never }[SettingName];
 
 const CUSTOM_RULES: Record<CustomName, Rule> = {
-  hint_letters: { check: (value) => typeof value === "string" && new Set(value).size === value.length && value.length >= 2, expectation: "a string of 2 or more distinct letters" },
+  hint_letters: { check: (value) => typeof value === "string" && new Set(value).size === value.length && value.length >= 2 && !value.includes("/"), expectation: "a string of 2 or more distinct letters, without /" },
   palette: { check: is_text, expectation: "a theme name", listed_values: () => BUILT_IN_THEME_NAMES },
   new_tab_page: { check: (value) => is_text(value) && (value === BUILT_IN_PAGE || is_web_url(value)), expectation: `"${BUILT_IN_PAGE}" or an http or https URL`, listed_values: () => [BUILT_IN_PAGE] },
 };

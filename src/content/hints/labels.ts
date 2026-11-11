@@ -2,9 +2,9 @@
 
 export const DEFAULT_HINT_LETTERS = "asdfghjkl";
 
-// Lowercase, no repeats, no blanks. Fewer than two usable letters fall back to the default, because one letter cannot split.
+// Lowercase, no repeats, no blanks, no "/" (it enters text mode). Fewer than two usable letters fall back to the default, because one letter cannot split.
 export function clean_letters(letters: unknown): string[] {
-  const unique = typeof letters === "string" ? [...new Set(letters.toLowerCase().replace(/\s/g, ""))] : [];
+  const unique = typeof letters === "string" ? [...new Set(letters.toLowerCase().replace(/[\s/]/g, ""))] : [];
   return unique.length >= 2 ? unique : [...DEFAULT_HINT_LETTERS];
 }
 
