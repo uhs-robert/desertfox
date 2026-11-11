@@ -2,6 +2,7 @@
 
 import { RuntimeRefusal, type CommandContext } from "../shared/command.ts";
 import type { MediaAction, MediaRequest, MediaResult, MediaScan, MediaState, MediaTarget } from "../shared/media.ts";
+import type { TabMedia } from "./tab_media.ts";
 import type { QualityAnswer, QualityRequest } from "../shared/quality.ts";
 
 // The scans that frames push in answer to an injection. A command listens for its tab while it waits, so a report that arrives with no command waiting is dropped.
@@ -32,8 +33,11 @@ export type MediaDeps = {
   inject_all: (tab_id: number) => Promise<number>;
   ask: (tab_id: number, frame_id: number, request: MediaRequest) => Promise<unknown>;
   // Runs the `quality` bundle in every frame of the tab and sends the request to the one frame with a site player. Resolves with its answer, else undefined. The call holds its own deadline, so the caller adds no second timer. Rejects where scripts are refused: a privileged page.
-  quality: (tab_id: number, request: QualityRequest) => Promise<QualityAnswer | undefined>;
+  // `prefer_frame` is the frame of the pinned video, whose player acts when it has one.
+  quality: (tab_id: number, request: QualityRequest, prefer_frame?: number) => Promise<QualityAnswer | undefined>;
   can_picture_in_picture: () => boolean;
+  // The media mode of the tab: `enter` starts it on a frame, `pin_of` is the frame whose video `;M` pinned while the mode holds.
+  tab_media: Pick<TabMedia, "enter" | "pin_of">;
   toast: (ctx: CommandContext, message: string) => Promise<void>;
   // A frame that has not answered by then counts as one with no media, so a hung frame cannot hold the key.
   answer_timeout_ms: number;
@@ -93,7 +97,12 @@ function largest_by(scans: FrameScan[], measure: (scan: FrameScan) => number): F
 }
 
 // Media that plays with sound acts first, then any playing media, so a muted autoplay preview yields to the video the user hears. Play or pause is the exception: with sound playing anywhere, it pauses everything that plays. Every frame with such media acts on all of it, so two players that play together move together. With nothing playing, the largest visible video acts, else the first frame with any media. Picture-in-picture and fullscreen take one video: the open one, else the largest audible, else the largest playing, else the largest visible.
-export function choose_frames(scans: FrameScan[], action: MediaAction): FramePlan[] {
+export function choose_frames(scans: FrameScan[], action: MediaAction, pin_frame?: number): FramePlan[] {
+  // An open picture-in-picture window goes first, even from an unpinned video, so `p` closes it. Firefox has one window at a time.
+  const pip_window = action === "pip" ? scans.find((scan) => scan.pip_open) : undefined;
+  if (pip_window) return [{ frame_id: pip_window.frame_id, target: "largest" }];
+  // The pinned video acts for every key of the mode, until it leaves the page. Then the rule below picks again.
+  if (scans.some((scan) => scan.frame_id === pin_frame && scan.pinned)) return [{ frame_id: pin_frame!, target: "pinned" }];
   if (action === "pip" || action === "fullscreen") {
     const is_open = (scan: FrameScan) => (action === "pip" ? scan.pip_open : scan.fullscreen_open);
     // A fullscreen video in a child frame leaves the top document fullscreen too, so the frame that holds media is the one to ask.
@@ -155,10 +164,13 @@ export function refusal_for(action: MediaAction, error_name: string, error_messa
   return error_message;
 }
 
-// The quality bundle needs no scan: each frame reports its player, and the request goes to the one chosen frame. `deps.quality` holds the only deadline, so a skip that was sent is never reported as refused by a second timer.
+// The quality bundle needs no scan unless a video is pinned: each frame reports its player, and the request goes to the one chosen frame. `deps.quality` holds the only deadline, so a skip that was sent is never reported as refused by a second timer.
 async function run_quality(deps: MediaDeps, ctx: CommandContext, tab_id: number, args: MediaArgs): Promise<void> {
   const times = args.times ?? 1;
-  const ask = (request: Omit<QualityRequest, "type" | "times">) => deps.quality(tab_id, { type: "quality_apply", times, ...request }).catch(() => undefined);
+  const pinned_frame = await deps.tab_media.pin_of(tab_id);
+  // As for the other keys, a pinned video that left the page no longer counts. Only a pin costs the scan.
+  const pin_frame = pinned_frame !== undefined && (await scan_frames(deps, tab_id)).some((scan) => scan.frame_id === pinned_frame && scan.pinned) ? pinned_frame : undefined;
+  const ask = (request: Omit<QualityRequest, "type" | "times">) => deps.quality(tab_id, { type: "quality_apply", times, ...request }, pin_frame).catch(() => undefined);
   if (args.action === "skip") {
     const direction = args.value === "previous" ? "previous" : "next";
     if (!(await ask({ op: "skip", value: direction }))?.skipped) throw new RuntimeRefusal(`No ${direction} video`);
@@ -176,9 +188,13 @@ export async function run_media(deps: MediaDeps, ctx: CommandContext, args: Medi
   if (tab_id === undefined) throw new RuntimeRefusal("Media needs a tab");
   if (args.action === "quality" || args.action === "skip") return run_quality(deps, ctx, tab_id, args);
   if (args.action === "pip" && !deps.can_picture_in_picture()) throw new RuntimeRefusal("Picture-in-picture needs Firefox 153 or newer");
-  const no_media = new RuntimeRefusal(args.action === "pip" || args.action === "fullscreen" ? "No video on this page" : "No video or audio on this page");
-  const plan = choose_frames(await scan_frames(deps, tab_id), args.action);
+  const no_media = new RuntimeRefusal(args.action === "pip" || args.action === "fullscreen" || args.action === "enter" ? "No video on this page" : "No video or audio on this page");
+  const scans = await scan_frames(deps, tab_id);
+  // Audio alone has no picture to watch, so the mode needs a video.
+  if (args.action === "enter" && !scans.some((scan) => scan.has_video)) throw no_media;
+  const plan = choose_frames(scans, args.action, args.action === "enter" ? undefined : await deps.tab_media.pin_of(tab_id));
   if (plan.length === 0) throw no_media;
+  if (args.action === "enter") return deps.tab_media.enter(tab_id, ctx.frame_id);
   const answers = await Promise.all(
     plan.map(({ frame_id, target }) => within(deps.ask(tab_id, frame_id, { type: "media_apply", target, action: args.action, value: args.value, times: args.times ?? 1 }), deps.answer_timeout_ms)),
   );

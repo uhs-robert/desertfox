@@ -32,9 +32,9 @@ function player(fields: Partial<Player> = {}): Player & { calls: string[] } {
   };
 }
 
-function frame(entries: { player: Player; area: number }[], pip: { element: unknown } = { element: null }, full: { element: unknown } = { element: null }): FrameView {
+function frame(entries: { player: Player; area: number }[], pip: { element: unknown } = { element: null }, full: { element: unknown } = { element: null }, pin: { player?: Player } = {}): FrameView {
   return {
-    players: () => entries,
+    players: () => entries.map((entry) => ({ ...entry, pinned_: entry.player === pin.player })),
     pip_element: () => pip.element,
     exit_pip: async () => void (pip.element = null),
     fullscreen_element: () => full.element,
@@ -76,7 +76,7 @@ test("the scan counts playing media and the largest video areas, audio aside", (
     { player: ended_video, area: 2000 },
     { player: playing_audio, area: 0 },
   ]);
-  assert.deepEqual(scan_frame(view), { count: 4, playing: 2, audible: 2, video_area: 2000, playing_video_area: 100, audible_video_area: 100, pip_open: false, fullscreen_open: false });
+  assert.deepEqual(scan_frame(view), { count: 4, playing: 2, audible: 2, video_area: 2000, playing_video_area: 100, audible_video_area: 100, pip_open: false, fullscreen_open: false, pinned: false, has_video: true });
 });
 
 test("a playing target changes every playing element and leaves the paused ones", async () => {
@@ -111,7 +111,7 @@ test("a muted preview that plays beside a paused main video takes the playing ta
     { player: preview, area: 100 },
     { player: main, area: 5000 },
   ]);
-  assert.deepEqual(scan_frame(view), { count: 2, playing: 1, audible: 0, video_area: 5000, playing_video_area: 100, audible_video_area: 0, pip_open: false, fullscreen_open: false });
+  assert.deepEqual(scan_frame(view), { count: 2, playing: 1, audible: 0, video_area: 5000, playing_video_area: 100, audible_video_area: 0, pip_open: false, fullscreen_open: false, pinned: false, has_video: true });
 });
 
 test("speed, volume and seek with no value write nothing, since even an equal currentTime seeks", async () => {
@@ -289,4 +289,28 @@ test("fullscreen takes the largest video once, never audio, and the next press l
   assert.equal(full.element, null);
   assert.equal(second.state?.fullscreen, false);
   assert.equal((await apply_in_frame(frame([{ player: sound, area: 0 }]), apply({ action: "fullscreen" }))).acted, 0);
+});
+
+test("a pinned target acts on the pinned video only, and a pin that left the page acts on nothing", async () => {
+  const big = player({ localName: "video" });
+  const small = player({ localName: "video" });
+  const pin: { player?: Player } = { player: small };
+  const view = frame([{ player: big, area: 9000 }, { player: small, area: 10 }], { element: null }, { element: null }, pin);
+  const request = { type: "media_apply", target: "pinned", action: "mute", value: undefined, times: 1 } as const;
+  const result = await apply_in_frame(view, request);
+  assert.equal(result.acted, 1);
+  assert.equal(small.muted, true);
+  assert.equal(big.muted, false);
+  delete pin.player;
+  assert.equal((await apply_in_frame(view, request)).acted, 0);
+  assert.equal(scan_frame(view).pinned, false);
+});
+
+test("play_pause on the pinned video toggles it even when another video plays", async () => {
+  const other = player({ localName: "video", paused: false });
+  const pinned = player({ localName: "video", paused: true });
+  const view = frame([{ player: other, area: 9000 }, { player: pinned, area: 10 }], { element: null }, { element: null }, { player: pinned });
+  await apply_in_frame(view, { type: "media_apply", target: "pinned", action: "play_pause", value: undefined, times: 1 });
+  assert.equal(pinned.paused, false);
+  assert.equal(other.paused, false);
 });

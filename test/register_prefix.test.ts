@@ -343,3 +343,12 @@ test("the background answers a yank by the sender tab's privacy", async () => {
   assert.equal(await answer_register_request(store, { type: "register_yank", name: "a", text: "x" }, undefined), undefined);
   assert.deepEqual(await answer_register_request(store, { type: "register_yank", name: "!", text: "x" }, { incognito: false }), { ok: false, message: "No register named !" });
 });
+
+test("an unbound quote in the media mode is no register prefix, so it reaches the page, while a count still counts", () => {
+  const keymap = tree();
+  const media_keymap = { ...keymap, modes: { ...keymap.modes, media: keymap.modes.normal } } as CompiledKeymap;
+  const matcher = create_matcher(media_keymap);
+  assert.equal(matcher.feed("media", '"').kind, "no_match");
+  assert.equal(matcher.feed("media", "3").kind, "pending");
+  assert.equal(matcher.feed("media", "j").kind, "match");
+});

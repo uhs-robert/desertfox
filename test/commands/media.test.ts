@@ -45,7 +45,7 @@ test("a count multiplies an up or down step and is refused on every other key of
 
 test("every key of the a group passes the schema, and A opens the line on the media command", () => {
   const group = Object.entries(DEFAULT_KEYMAP.normal ?? {}).filter(([key]) => /^a.$/.test(key));
-  assert.deepEqual(group.map(([key]) => key).sort(), ["aP", "af", "aS", "aV", "ah", "al", "am", "ap", "ar", "as", "av"].sort());
+  assert.deepEqual(group.map(([key]) => key).sort(), ["aP", "aa", "af", "aS", "aV", "ah", "al", "am", "ap", "ar", "as", "av"].sort());
   for (const [key, binding] of group) {
     const step = binding as BoundInvocation;
     assert.equal(check_args(registry.get(step.id)!, step.args).ok, true, key);

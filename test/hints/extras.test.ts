@@ -145,6 +145,7 @@ async function page_with(texts: string[], settings: Record<string, unknown> = {}
         if (left_hint) sink?.exit();
       },
       get_mode: () => mode,
+      escape_: () => win.desertfox_host.set_mode_("normal"),
       // The caret bundle's `caret.mode` sets the caret mode it is asked for.
       run_command_: async (id: string, _name: string, args: Record<string, unknown>) => {
         if (id === "caret.mode") win.desertfox_host.set_mode_(args.mode as string);

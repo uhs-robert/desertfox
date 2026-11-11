@@ -6,8 +6,8 @@ import type { QualityAnswer, QualityRequest } from "../../src/shared/quality.ts"
 import type { MediaRequest, MediaResult, MediaScan, MediaState } from "../../src/shared/media.ts";
 
 const ctx: CommandContext = { tab_id: 4, window_id: 1, frame_id: 0, mode: "normal" };
-const empty: MediaScan = { count: 0, playing: 0, audible: 0, video_area: 0, playing_video_area: 0, audible_video_area: 0, pip_open: false, fullscreen_open: false };
-const scan = (frame_id: number, fields: Partial<MediaScan>): FrameScan => ({ ...empty, count: 1, ...fields, frame_id });
+const empty: MediaScan = { count: 0, playing: 0, audible: 0, video_area: 0, playing_video_area: 0, audible_video_area: 0, pip_open: false, fullscreen_open: false, pinned: false, has_video: false };
+const scan = (frame_id: number, fields: Partial<MediaScan>): FrameScan => ({ ...empty, count: 1, has_video: true, ...fields, frame_id });
 const state: MediaState = { rate: 1.25, volume: 0.6, muted: false, position: 85, duration: 220, paused: false, pip: false, loop: false, fullscreen: false };
 
 test("every frame with playing media acts, even beside a larger idle video", () => {
@@ -61,14 +61,17 @@ test("the notice names the new value, the player count and a live stream's posit
 // `scan` is what the frame pushes after it runs the bundle (nothing when undefined). `report_after_ms` delays the push, `reports_twice` pushes it again, and `hangs` swallows the apply.
 type Frame = { refuses_scripts?: boolean; scan?: unknown; report_after_ms?: number; reports_twice?: boolean; apply?: (request: MediaRequest) => unknown; hangs?: boolean };
 
-function fake_tab(frames: Record<number, Frame>, { pip = true, inject_delay_ms = 0, answer_timeout_ms = 50, quality = (() => undefined) as (request: QualityRequest) => QualityAnswer | undefined } = {}) {
+function fake_tab(frames: Record<number, Frame>, { pip = true, inject_delay_ms = 0, answer_timeout_ms = 50, quality = (() => undefined) as (request: QualityRequest) => QualityAnswer | undefined, pin_frame = undefined as number | undefined } = {}) {
   const asked: QualityRequest[] = [];
   const injected: number[] = [];
   const applied: { frame_id: number; request: MediaRequest }[] = [];
   const toasts: string[] = [];
   const reports = create_media_reports();
+  const preferred: (number | undefined)[] = [];
+  const entered: { tab_id: number; frame_id: number }[] = [];
   const deps: MediaDeps = {
     reports,
+    tab_media: { enter: async (tab_id, frame_id) => void entered.push({ tab_id, frame_id }), pin_of: async () => pin_frame },
     inject_all: async (tab_id) => {
       const running = Object.keys(frames).map(Number).reverse().filter((frame_id) => !frames[frame_id]!.refuses_scripts);
       if (running.length === 0) throw new Error("Missing host permission for the tab or frames");
@@ -88,12 +91,12 @@ function fake_tab(frames: Record<number, Frame>, { pip = true, inject_delay_ms =
       applied.push({ frame_id, request });
       return frame.apply?.(request);
     },
-    quality: async (_tab_id, request) => (asked.push(request), quality(request)),
+    quality: async (_tab_id, request, prefer_frame) => (asked.push(request), preferred.push(prefer_frame), quality(request)),
     can_picture_in_picture: () => pip,
     toast: async (_ctx, message) => void toasts.push(message),
     answer_timeout_ms,
   };
-  return { deps, injected, applied, toasts, reports, asked };
+  return { deps, injected, applied, toasts, reports, asked, entered, preferred };
 }
 
 const acted = (count: number, fields: Partial<MediaState> = {}): MediaResult => ({ acted: count, state: { ...state, ...fields } });
@@ -309,4 +312,62 @@ test("quality and skip need no media element and scan no frame", async () => {
   const tab = fake_tab({ 0: {} }, { quality: () => ({ levels }) });
   await run_media(tab.deps, ctx, { action: "quality" });
   assert.deepEqual(tab.injected, []);
+});
+
+test("media enter starts the mode on the frame that took the key, with no change to any video", async () => {
+  const tab = fake_tab({ 0: { scan: empty }, 3: { scan: scan(3, { video_area: 500 }) } });
+  await run_media(tab.deps, { ...ctx, frame_id: 0 }, { action: "enter" });
+  assert.deepEqual(tab.entered, [{ tab_id: 4, frame_id: 0 }]);
+  assert.deepEqual(tab.applied, []);
+  assert.deepEqual(tab.toasts, []);
+});
+
+test("media enter refuses on a page with no media and starts nothing", async () => {
+  const tab = fake_tab({ 0: { scan: empty } });
+  await assert.rejects(run_media(tab.deps, ctx, { action: "enter" }), { message: "No video on this page" });
+  assert.deepEqual(tab.entered, []);
+});
+
+test("the pinned video acts for every key, even beside a larger one that plays with sound", () => {
+  const scans = [scan(0, { playing: 1, audible: 1, audible_video_area: 90_000, playing_video_area: 90_000, video_area: 90_000 }), scan(2, { pinned: true, video_area: 100 })];
+  assert.deepEqual(choose_frames(scans, "volume", 2), [{ frame_id: 2, target: "pinned" }]);
+  assert.deepEqual(choose_frames(scans, "fullscreen", 2), [{ frame_id: 2, target: "pinned" }]);
+});
+
+test("an open picture-in-picture window is chosen before the pin, so the key closes it", () => {
+  const scans = [scan(0, { pip_open: true, count: 1, video_area: 400 }), scan(2, { pinned: true, video_area: 100 })];
+  assert.deepEqual(choose_frames(scans, "pip", 2), [{ frame_id: 0, target: "largest" }]);
+  assert.deepEqual(choose_frames(scans, "volume", 2), [{ frame_id: 2, target: "pinned" }]);
+});
+
+test("a pin whose video left the page falls back to the main video rule", () => {
+  const scans = [scan(0, { playing: 1, playing_video_area: 400, video_area: 400 }), scan(2, { pinned: false })];
+  assert.deepEqual(choose_frames(scans, "volume", 2), [{ frame_id: 0, target: "playing" }]);
+  assert.deepEqual(choose_frames(scans, "volume"), [{ frame_id: 0, target: "playing" }]);
+});
+
+test("a key of the mode asks the pinned frame with the pinned target", async () => {
+  const tab = fake_tab({ 0: { scan: scan(0, { audible: 1, audible_video_area: 900, video_area: 900 }) }, 2: { scan: scan(2, { pinned: true, video_area: 50 }), apply: () => acted(1, { muted: true }) } }, { pin_frame: 2 });
+  await run_media(tab.deps, ctx, { action: "mute" });
+  assert.deepEqual(tab.applied.map(({ frame_id, request }) => [frame_id, request.target]), [[2, "pinned"]]);
+});
+
+test("media enter refuses a page with audio only", async () => {
+  const tab = fake_tab({ 0: { scan: scan(0, { has_video: false }) } });
+  await assert.rejects(run_media(tab.deps, ctx, { action: "enter" }), { message: "No video on this page" });
+  assert.deepEqual(tab.entered, []);
+});
+
+test("quality and skip ask for the player in the pinned frame", async () => {
+  const tab = fake_tab({ 0: { scan: scan(0, {}) }, 2: { scan: scan(2, { pinned: true }) } }, { pin_frame: 2, quality: () => ({ levels: [], chosen: "auto" }) });
+  await run_media(tab.deps, ctx, { action: "quality", value: "max" });
+  await run_media(tab.deps, ctx, { action: "skip" }).catch(() => undefined);
+  assert.deepEqual(tab.preferred, [2, 2]);
+});
+
+test("quality and skip prefer no frame once the pinned video left the page", async () => {
+  const tab = fake_tab({ 0: { scan: scan(0, {}) }, 2: { scan: scan(2, { pinned: false }) } }, { pin_frame: 2, quality: () => ({ levels: [], chosen: "auto" }) });
+  await run_media(tab.deps, ctx, { action: "quality", value: "max" });
+  await run_media(tab.deps, ctx, { action: "skip" }).catch(() => undefined);
+  assert.deepEqual(tab.preferred, [undefined, undefined]);
 });

@@ -28,6 +28,8 @@ export type BundleHostApi = {
   // Any mode, the same path as a key that changes mode. A bundle uses it to enter its own mode.
   set_mode_: (mode: Mode) => void;
   get_mode: () => Mode;
+  // Leaves hint or command line mode for the mode it was opened from, and any other mode for normal.
+  escape_: () => void;
   // Runs a handler of another bundle, loading that bundle first if needed. The id need not be a registry command: a bundle may offer handlers only its sibling calls. The args are bundle-internal and unchecked by the validator, and may hold functions.
   // The answer is the handler's real outcome, and stays pending while the handler waits on the user. A missing handler or a failed load answers failed.
   run_command_: (command_id: string, name: BundleName, args: Record<string, unknown>) => Promise<Outcome>;
@@ -52,6 +54,8 @@ export type BundleHostDeps = {
   // Without it a bundle's toast goes to show_error_.
   show_toast_?: (message: string) => void;
   set_mode_: (mode: Mode) => void;
+  // The frame's own Escape: hint and command line mode return to where they began. Content passes it, a test host may not.
+  escape_?: () => void;
 };
 
 export const message_of = (error: unknown) => String((error as Error)?.message ?? error);
@@ -177,6 +181,7 @@ export function create_bundle_host() {
       register_handler_: (command_id, handler) => void handlers.set(command_id, handler),
       set_mode_,
       get_mode: () => current_mode,
+      escape_: () => in_mode_order_(() => deps.escape_?.()),
       run_command_: (command_id, name, args) => run_command_(command_id, name, args, `${name} has no ${command_id}`),
       show_toast_: (message) => (deps.show_toast_ ?? deps.show_error_)(message),
       last_blurred_: last_blurred_element,

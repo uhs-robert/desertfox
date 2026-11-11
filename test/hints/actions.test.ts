@@ -831,3 +831,16 @@ test("after a click pick, Escape and the next pick each leave the clicked target
   assert.deepEqual(clicked.calls.filter((type) => LEAVE.includes(type)), LEAVE);
   unhover();
 });
+
+test("enter_media refuses a video of another frame, audio and a non-video, and pins nothing", () => {
+  const document = { id: "this frame" };
+  (globalThis as Record<string, unknown>).document = document;
+  const window_stub: Record<string, unknown> = {};
+  (globalThis as Record<string, unknown>).window = window_stub;
+  const in_frame = { localName: "video", ownerDocument: { id: "child frame" } };
+  assert.deepEqual(perform("enter_media", in_frame as never, {} as never), { ok: false, message: "Start media mode in that frame first" });
+  for (const localName of ["div", "audio"]) assert.deepEqual(perform("enter_media", { localName, ownerDocument: document } as never, {} as never), { ok: false, message: "Not a video" }, localName);
+  assert.equal(window_stub.desertfox_pin, undefined);
+  delete (globalThis as Record<string, unknown>).document;
+  delete (globalThis as Record<string, unknown>).window;
+});

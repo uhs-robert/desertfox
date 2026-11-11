@@ -9,6 +9,7 @@ import { intent_problem, label_problem, to_firefox_shortcut, parse_sequence } fr
 import { captured_key_param, find_param, without_param } from "../registry/params.ts";
 import { check_args, create_registry, DefineError, type Registry } from "../registry/index.ts";
 import { parse_binding } from "../registry/parse_binding.ts";
+import { COUNT_MODES } from "../keys/matcher.ts";
 import type { BoundInvocation, Prompt } from "../invocation.ts";
 import type { Modifier } from "../keymap.ts";
 import { bind_tables_of } from "../match_pattern.ts";
@@ -59,7 +60,11 @@ function check_invocation(invocation: BoundInvocation, registry: Registry, engin
   const captured = captured_key_param(command, invocation.args);
   const result = check_args(captured ? without_param(command, captured.name) : command, invocation.args, { search_engines: engine_names });
   // With a prompt, the prompted param may be left out.
-  if (!result.ok && !(invocation.prompt !== undefined && result.missing_param !== undefined)) errors.push(result.error);
+  // The typed count fills the count param when the key runs, so a binding in a mode with counts may leave it out. A stand-in count lets every other arg get its check.
+  const count_param = typeof command.count === "object" ? command.count.param : undefined;
+  const typed_count = COUNT_MODES.includes(mode) && !result.ok && result.missing_param !== undefined && result.missing_param === count_param;
+  const checked = typed_count ? check_args(command, { ...invocation.args, [count_param!]: 1 }, { search_engines: engine_names }) : result;
+  if (!checked.ok && !(invocation.prompt !== undefined && checked.missing_param !== undefined)) errors.push(checked.error);
   if (invocation.prompt !== undefined) errors.push(...check_prompt(invocation.prompt, command));
   return errors;
 }

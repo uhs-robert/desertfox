@@ -398,7 +398,10 @@ export type MediaReport = {
   scan: MediaScan;
 };
 
-export type ContentToBackground = MediaReport | QualityReport | RunRequest | ModeChanged | LeaveTabInsert | LoadBundle | ListKeys | IssueCmdlineTicket | OpenCmdline | RecordCmdline | CompleteItems | TabRowsActionRequest | OpenHelp | RecordStep | ReadKeymap | ReplayEnd | ReplayStop | FindScan | ImageAction | InspectPick | ReadHintSelectors | ReadMediaQuality | RegisterRequest | MarkRequest;
+// From `;M`: the frame that sent it holds the pinned video. See `src/background/tab_media.ts`.
+export type MediaPin = { type: "media_pin" };
+
+export type ContentToBackground = MediaPin | MediaReport | QualityReport | RunRequest | ModeChanged | LeaveTabInsert | LoadBundle | ListKeys | IssueCmdlineTicket | OpenCmdline | RecordCmdline | CompleteItems | TabRowsActionRequest | OpenHelp | RecordStep | ReadKeymap | ReplayEnd | ReplayStop | FindScan | ImageAction | InspectPick | ReadHintSelectors | ReadMediaQuality | RegisterRequest | MarkRequest;
 
 // How a command ended. Done is `{ ok: true }`. A handler that returns nothing is done, and one that throws is failed.
 // Cancelled means the user left a waiting step (Escape, an unrelated key, a page change), so the rest of a sequence does not run and nothing is shown.
@@ -436,6 +439,13 @@ export type SetMode = {
   held?: true;
 };
 
+// The tab's media mode started or ended in another frame. The frame takes the step a fullscreen change takes (`fullscreen_step`), so a frame in another mode keeps it, and an open hint or line only changes where it returns to.
+// The type string is short because content.js holds it.
+export type MediaStep = {
+  type: "media";
+  on: boolean;
+};
+
 // To the top frame: the mode of the child frame that holds focus, which the badge shows in place of the top frame's own. Absent when no child frame holds focus.
 // The type string is short because content.js holds it.
 export type FocusedFrameMode = {
@@ -463,7 +473,7 @@ export type Ping = {
   type: "ping";
 };
 
-export type BackgroundToContent = RunInContent | ReplayHold | ShowRefusal | SetMode | FocusedFrameMode | TreeUpdated | GetSelection | FocusPage | Ping;
+export type BackgroundToContent = RunInContent | ReplayHold | ShowRefusal | SetMode | MediaStep | FocusedFrameMode | TreeUpdated | GetSelection | FocusPage | Ping;
 
 // Background to tab-model clients, over the port `desertfox_tab_model`
 

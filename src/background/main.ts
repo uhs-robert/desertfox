@@ -42,7 +42,7 @@ import { wire_repeat } from "../commands/command.ts";
 import { wire_tab_insert } from "../commands/mode.ts";
 import { create_media_quality } from "./media_quality.ts";
 import { ask_quality_in_tab, inject_quality_for_rule, quality_reports, quality_rows } from "./quality_levels.ts";
-import { media_reports } from "../commands/media.ts";
+import { media_reports, tab_media } from "../commands/media.ts";
 import { create_tab_insert } from "./tab_insert.ts";
 import { DISABLED_STORAGE_KEY, SLOT_TABLE_STORAGE_KEY } from "./storage_keys.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY } from "../shared/prefix_tree.ts";
@@ -227,6 +227,7 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
     const tab_id = sender.tab.id;
     // The top frame leaving insert by any route ends the hold.
     if (sender.frameId === 0 && request.mode !== "insert") void tab_insert.top_frame_left_insert(tab_id, request.mode).catch(() => undefined);
+    void tab_media.reported(tab_id, sender.frameId, request.mode).catch(() => undefined);
     const report = { frame_id: sender.frameId, mode: request.mode, focus: request.focus === true };
     // The top frame may still be loading and miss the message. Its own start report brings a fresh one.
     return tab_modes.report(tab_id, report).then(({ child_mode, tell_top }) => {
@@ -236,6 +237,7 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
     });
   }
   if (request?.type === "quality_report") return void quality_reports.receive(sender.tab?.id, sender.frameId, request);
+  if (request?.type === "media_pin" && sender.tab?.id !== undefined && sender.frameId !== undefined) return tab_media.pin(sender.tab.id, sender.frameId);
   if (request?.type === "media_report") return void media_reports.receive(sender.tab?.id, sender.frameId, request.scan);
   if (request?.type === "replay_end") return macro_replay.ended();
   if (request?.type === "replay_stop") return void macro_replay.stop();
@@ -347,6 +349,8 @@ const media_quality = create_media_quality({
 
 browser.tabs.onUpdated.addListener((tab_id, change, tab) => {
   void media_quality.tab_updated(tab_id, change, tab.url);
+  // A load ends the media mode. An address change the page makes itself keeps it and drops the pin.
+  if (change.url !== undefined || change.status === "loading") void tab_media.navigated(tab_id, change).catch(() => undefined);
   // A new tab's first load reports only `status`, with the address already on the tab.
   if ((change.url !== undefined || change.status === "loading") && tab.url !== undefined) void site_zoom.navigated(tab_id, tab.url, tab.incognito);
   void cmdline.forget_opener_on_navigation(tab_id, change);
@@ -369,6 +373,7 @@ browser.tabs.onRemoved.addListener((tab_id, { windowId, isWindowClosing }) => {
   void previous_tabs.removed(tab_id, windowId, isWindowClosing);
   void cmdline.forget_opener(tab_id);
   void inspect_relay.forget(tab_id);
+  void tab_media.forget(tab_id).catch(() => undefined);
   return tab_modes.forget(tab_id);
 });
 

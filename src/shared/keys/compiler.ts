@@ -157,8 +157,9 @@ function entries_for_mode(
   }
   const drops: Drop[] = [];
   drop_default_leaves_under_user_keys(by_normalized_sequence, removed, resolve, drops);
-  if (mode === "normal") {
-    for (const variant of modifier_variants(keymap.modifiers ?? {}, by_normalized_sequence, removed, resolve, warnings)) {
+  if (mode === "normal" || mode === "media") {
+    // Normal mode already warned about a modifier that matches no key, so the media mode, which holds only the hint group, stays quiet.
+    for (const variant of modifier_variants(keymap.modifiers ?? {}, by_normalized_sequence, removed, resolve, mode === "media" ? [] : warnings)) {
       by_normalized_sequence.set(variant.tokens.join(""), variant);
     }
     // A generated variant is a default key too: a user key may extend it.

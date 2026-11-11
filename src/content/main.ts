@@ -19,6 +19,7 @@ import { badge_state } from "./badge_state.ts";
 import { show_mode_label, show_toast } from "./ui_proxy.ts";
 import { holds_own_focus, wire_mode_reports } from "./mode_report.ts";
 import { page_mode } from "./page_mode.ts";
+import { fullscreen_step } from "./mode_state.ts";
 import { site_mode } from "./site_mode.ts";
 import { run_content_steps, run_in_order } from "./run_content.ts";
 import { holds_keys_after, run_leaf } from "./run_leaf.ts";
@@ -94,6 +95,7 @@ bundles.connect({
   on_idle_: key_flow.release,
   hold_first_: key_flow.hold_first_,
   set_mode_: page_mode.set_mode_,
+  escape_: page_mode.escape,
   show_toast_: show_toast,
   // The toast needs the ui bundle, so without it an error has nowhere to show.
   show_error_: (message) => (bundles.has_handler_("ui.toast") ? show_toast(message) : console.error(message)),
@@ -334,6 +336,15 @@ function start(): void {
   // A page shown from the back-forward cache runs no start-up, and the background's mode for the tab is stale. The report after a first load is spare, and heals a start report the background lost.
   listen("pageshow", report_mode, false);
 
+  // A fullscreen change in this frame and the media mode of another frame take the same step.
+  const media_step = (on: boolean) => {
+    const next = fullscreen_step(page_mode.get_mode_(), on);
+    if (!on) page_mode.back_to_normal_();
+    if (next) bundles.set_mode_(next);
+  };
+  // On the document, where the event bubbles to. A site's own fullscreen button fires it as much as a key does.
+  listen("fullscreenchange", () => media_step(!!document.fullscreenElement), false, document);
+
   page_mode.listen_display_(refresh_mode_indicator);
 
   const ask_keymap = create_keymap_asks(read_page_keymap, install_matcher);
@@ -355,6 +366,7 @@ function start(): void {
       replaying = true;
       bundles.api.hold_keys_until_(send_to_background({ type: "replay_end" }).then((ended) => ((replaying = false), ended.ok || key_flow.drop_held_(), [])), true);
     } else if (message.type === "refusal") show_toast(message.refusal.message, message.kind);
+    else if (message.type === "media") media_step(message.on);
     else if (message.type === "set_mode" && !(message.held && was_all_off)) {
       bundles.set_mode_(message.mode);
       sync_mode_to_focus();

@@ -56,6 +56,7 @@ export const area_rules = [
   { globs: ["src/newtab/**"], areas: ["newtab"] },
   // The storage watcher feeds the new tab and help redraws and the theme sheet of every content surface.
   { globs: ["src/shared/storage_watch.ts"], areas: ["help", "newtab", "ui"] },
+  { globs: ["src/background/tab_media.ts"], areas: ["media", "tabs"] },
   {
     globs: ["src/background/{tab_*,previous_tab,window_focus,count}.ts", "src/commands/{tab,window,url,url_build,browser,open}.ts", "src/shared/{tab_model_port,container_store}.ts"],
     areas: ["tabs"],

@@ -20,6 +20,7 @@ import type { Registry } from "../shared/registry/index.ts";
 import { make_entry_resolver } from "../shared/config_build/resolve_binding.ts";
 import { match_regex_source } from "../shared/match_pattern.ts";
 import { compile_keymap } from "../shared/keys/compiler.ts";
+import { COUNT_MODES } from "../shared/keys/matcher.ts";
 import { default_rows_left_on } from "./default_site_rows.ts";
 import type { DefaultSiteRow } from "./default_site_rows.ts";
 import { default_layer_of, merge_keymaps } from "./keymap_merge.ts";
@@ -196,6 +197,14 @@ function keep_node(node: TreeNode, path: string[], mode: string, input: CompileI
     if (result.ok) {
       // Defaults filled in, so a content-side leaf runs without the registry.
       step.invocation = { ...step.invocation, args: result.args };
+    } else if (COUNT_MODES.includes(mode) && result.missing_param !== undefined && typeof command.count === "object" && result.missing_param === command.count.param) {
+      // The typed count fills this param when the key runs (`50%`), and a key with no count is refused then. A stand-in count lets every other arg get its check. A Firefox shortcut takes no count, so it gets no such pass.
+      const stand_in = check_args(command, { ...step.invocation.args, [result.missing_param]: 1 }, input.enum_sources);
+      if (!stand_in.ok) {
+        warnings.push(`${mode}: skipped "${path.join("")}": ${stand_in.error}`);
+        return false;
+      }
+      step.runs_in = "background";
     } else {
       warnings.push(`${mode}: skipped "${path.join("")}": ${result.error}`);
       return false;

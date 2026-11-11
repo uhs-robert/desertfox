@@ -13,6 +13,7 @@ test("the hints bundle registers a hint sink and hint.run, and registers once", 
       handlers.set(id, handler);
     },
     set_mode_: (mode: string) => void modes.push(mode),
+    escape_: () => void modes.push("normal"),
   };
   (globalThis as Record<string, unknown>).window = { desertfox_host: host };
   const bundle_url = new URL("../../src/content/hints/main.ts", import.meta.url).href;

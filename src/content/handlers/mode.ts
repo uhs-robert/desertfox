@@ -30,6 +30,8 @@ export const mode_escape: ContentHandler = {
     if (bundles.has_handler_("find.clear")) bundles.run_command_("find.clear", "caret", {}, "", false);
     if (bundles.has_handler_("hint.unhover")) bundles.run_command_("hint.unhover", "hints", {}, "", false);
     if (page_mode.is_manual_insert_()) void browser.runtime.sendMessage({ type: "leave_tab_insert" } satisfies LeaveTabInsert).catch(() => undefined);
+    // The end of the fullscreen also ends the media mode, so this call and the mode change agree.
+    if (page_mode.get_mode_() === "media" && document.fullscreenElement) void document.exitFullscreen();
     page_mode.escape();
     blur_focused_element();
   },

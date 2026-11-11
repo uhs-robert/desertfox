@@ -2,9 +2,10 @@
 
 import { enter_for_click, hover, leave_toward } from "./hover.ts";
 import { selector_of } from "./selector_of.ts";
+import type { MediaPin } from "../../shared/messages.ts";
 import { parent_across_shadow, player_box } from "../player_box.ts";
 
-export type HintAction = "here" | "tab" | "background" | "window" | "caret" | "visual" | "copy" | "copy_text" | "copy_image" | "copy_selector" | "copy_html" | "inspect" | "download" | "delete" | "focus" | "hover" | "double_click" | "play_pause" | "mute" | "fullscreen" | "prompt";
+export type HintAction = "here" | "tab" | "background" | "window" | "caret" | "visual" | "copy" | "copy_text" | "copy_image" | "copy_selector" | "copy_html" | "inspect" | "download" | "delete" | "focus" | "hover" | "double_click" | "play_pause" | "mute" | "fullscreen" | "enter_media" | "prompt";
 
 export type Place = "here" | "tab" | "background" | "window";
 
@@ -228,6 +229,18 @@ function act_on_media(action: "play_pause" | "mute" | "fullscreen", target: Targ
   return refusal_as_outcome(doc.fullscreenElement ? doc.exitFullscreen() : player_box(media).requestFullscreen());
 }
 
+// The pin is a weak reference, so a video the page drops is not held. `media.js` of this frame reads it, and the background learns which frame holds it. The mode is the caller's to start.
+export type PinWindow = { desertfox_pin?: WeakRef<Element> };
+
+function pin_media(target: Target): void | Refusal {
+  // The media mode is for video, and the `media` hint filter offers audio too.
+  if (target.localName !== "video") return { ok: false, message: "Not a video" };
+  // The pin lives in the frame of the video, and only that frame's own `;M` can set it.
+  if (target.ownerDocument !== document) return { ok: false, message: "Start media mode in that frame first" };
+  (window as unknown as PinWindow).desertfox_pin = new WeakRef(target as unknown as Element);
+  void browser.runtime.sendMessage({ type: "media_pin" } satisfies MediaPin).catch(() => undefined);
+}
+
 export function perform(action: HintAction, target: Target, deps: ActionDeps, with_background = false): void | Refusal | Promise<unknown> {
   const pointer_from = action === "hover" ? undefined : leave_toward(target);
   if (action === "delete") return target.remove();
@@ -235,6 +248,7 @@ export function perform(action: HintAction, target: Target, deps: ActionDeps, wi
   if (action === "hover") return hover(target);
   if (action === "double_click") return double_click_like_a_mouse(target, pointer_from);
   if (action === "play_pause" || action === "mute" || action === "fullscreen") return act_on_media(action, target);
+  if (action === "enter_media") return pin_media(target);
   if (starts_caret(action)) return deps.start_caret_(target as unknown as Element, action);
   const address = element_address(target, with_background);
   // A copy of the address falls back to the text for an element that has none, except a picture, whose text is empty.
