@@ -15,6 +15,7 @@ const MAX_BYTES = {
   "page.js": 4 * 1024,
   "text.js": 4 * 1024,
   "media.js": 4 * 1024,
+  "quality.js": 4 * 1024,
   "site_actions.js": 4 * 1024,
   // 53 KB: the lazy bundle carries every setting's completion entry, and the bridge settings add to it. The verbatim subject needs a lazy tokenizer and its completion path. The key-capture matcher and the registry validator ship in this lazy bundle, and the registers and macros pieces add to them.
   "cmdline_page.js": 53 * 1024,
@@ -51,6 +52,8 @@ const minified_entries = {
   site_actions: "src/content/site_actions/main.ts",
   // Not loaded by the content script: the background injects it into every frame for each media command (background/media_actions.ts).
   media: "src/content/media/main.ts",
+  // Injected the same way, for each quality request (background/quality_levels.ts).
+  quality: "src/content/quality/main.ts",
   cmdline_page: "src/cmdline/page.ts",
   // Not an injected bundle: the background starts it as a Worker for each regex page search (find_scan.ts).
   find_worker: "src/background/find_worker.ts",
