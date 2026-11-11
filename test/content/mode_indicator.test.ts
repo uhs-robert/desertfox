@@ -17,6 +17,7 @@ type FakeRoot = {
   children: FakeNode[];
   append: (node: FakeNode) => void;
   querySelectorAll: (selector: string) => FakeNode[];
+  querySelector: (selector: string) => FakeNode | undefined;
 };
 
 function fake_node(): FakeNode {
@@ -44,6 +45,7 @@ function fake_root(): FakeRoot {
       node.parent = root;
       root.children.push(node);
     },
+    querySelector: (selector: string) => root.children.find((node) => node.attributes.has(selector.slice(selector.indexOf("[") + 1, -1))),
     querySelectorAll: (selector: string) => {
       // The surface mount also looks up layered hosts to restack them, and the fake page has none.
       if (selector !== ":scope > [data-desertfox-badge]") return [];

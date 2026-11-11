@@ -21,25 +21,29 @@ function fake_page(layers: number[]) {
     } as unknown as FakeHost;
     return host;
   });
-  const styles: { textContent: string; isConnected: boolean }[] = [];
+  const styles: { textContent: string; attributes: Set<string>; setAttribute: (name: string) => void }[] = [];
   const root = {
-    append: (node: { parentElement?: unknown; isConnected?: boolean }) => {
-      if ("textContent" in node) node.isConnected = true;
+    children: [] as unknown[],
+    append: (node: { parentElement?: unknown; attributes?: Set<string> }) => {
+      if (node.attributes) root.children.push(node);
       else (calls.push("append"), (node.parentElement = root));
     },
+    // Finds a style element by its attribute, as the real root does.
+    querySelector: (selector: string) => root.children.find((node) => selector.includes([...(node as { attributes: Set<string> }).attributes][0] ?? "\0")),
     querySelectorAll: () => hosts,
   };
   Object.assign(globalThis, {
     document: {
       documentElement: root,
       createElement: () => {
-        const style = { textContent: "", isConnected: false };
+        const attributes = new Set<string>();
+        const style = { textContent: "", attributes, setAttribute: (name: string) => attributes.add(name) };
         styles.push(style);
         return style;
       },
     },
   });
-  return { calls, hosts, styles };
+  return { calls, hosts, styles, root };
 }
 
 test("mount_surface attaches the host, then shows it as a popover", () => {
@@ -141,10 +145,19 @@ test("mount_surface installs one backdrop reset that clears the page's backdrop 
 });
 
 test("mount_surface puts the backdrop reset back after a page removes it", () => {
-  const { hosts, styles } = fake_page([LAYERS.toast]);
+  const { hosts, styles, root } = fake_page([LAYERS.toast]);
   mount_surface(hosts[0]!);
-  styles[0]!.isConnected = false;
+  root.children.length = 0;
   mount_surface(hosts[0]!);
+  assert.equal(styles.length, 2);
+  assert.equal(root.children.length, 1);
+});
+
+test("two bundles, each with its own copy of the module, share one backdrop reset", async () => {
+  const other = (await import(`../../src/content/surface.ts?${"second_bundle"}`)) as typeof import("../../src/content/surface.ts");
+  const { hosts, styles, root } = fake_page([LAYERS.toast, LAYERS.which_key]);
+  mount_surface(hosts[0]!);
+  other.mount_surface(hosts[1]!);
   assert.equal(styles.length, 1);
-  assert.equal(styles[0]!.isConnected, true);
+  assert.equal(root.children.length, 1);
 });
