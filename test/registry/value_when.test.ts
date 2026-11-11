@@ -91,3 +91,12 @@ test("copy_image exists only with the images filter, and download with images, l
   for (const name of ["images", "links", "media", "all"]) assert.equal(check_args(hint, { action: "download", filter: name }).ok, true, name);
   for (const name of ["buttons", "inputs", "prose", "frames", "clickable"]) assert.equal(check_args(hint, { action: "download", filter: name }).ok, false, name);
 });
+
+test("prompt needs a filter with an address, and its command takes a command name and flags only", () => {
+  assert.equal(check_args(hint, { action: "prompt", filter: "links" }).ok, true);
+  assert.equal(check_args(hint, { action: "prompt", filter: "buttons" }).ok, false);
+  assert.equal(check_args(hint, { action: "prompt", filter: "links", command: "open --tab" }).ok, true);
+  assert.equal(check_args(hint, { action: "prompt", filter: "links", command: "open -t -c" }).ok, true);
+  for (const command of ["open | x", "open; x", "open 'x'", "Open", "open $(x)", "open\nx", "open --tab=x", ""]) assert.equal(check_args(hint, { action: "prompt", filter: "links", command }).ok, false, command);
+  assert.equal(check_args(hint, { action: "copy", filter: "links", command: "open" }).ok, false);
+});

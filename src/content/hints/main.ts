@@ -8,6 +8,8 @@ import { unhover } from "./hover.ts";
 import { has_usable_address, is_inside_link, is_media, OPEN_PLACES, perform, starts_caret } from "./actions.ts";
 import type { CaretMode, HintAction, Place } from "./actions.ts";
 import { hand_to_devtools } from "./inspect.ts";
+import { prompt_pick } from "./prompt_line.ts";
+import { collect_pick } from "./collect_copy.ts";
 import { copy_yank } from "../caret/copy_text.ts";
 import { collect, keep_text_matches, keep_visible_deduplicated, query_for, scroll_clips_in_page, weak_test_for, window_of } from "./candidates.ts";
 import type { Found, HintFilter } from "./candidates.ts";
@@ -58,6 +60,8 @@ type Session = {
   // The `text` param as typed, and lower-cased for the match. Both are undefined without it.
   text: string | undefined;
   lower_text_: string | undefined;
+  // What a rapid copy has picked so far, in order. The clipboard holds all of it after every pick.
+  collected_: string[];
   ready?: { picker: ReturnType<typeof create_picker>; found: Found[]; view: HintView; stop_following_: () => void };
 };
 
@@ -178,7 +182,25 @@ function start_caret_(target: Element, mode: CaretMode): Promise<Outcome> {
 const inspect_ = (target: Element): Promise<Outcome> => hand_to_devtools(window as never, target, () => browser.runtime.sendMessage({ type: "inspect_pick" }), setTimeout, (message) => create_view().show_message_(message));
 
 // A pick copies into the register its own `hint.run` was typed with.
-const pick_deps = (current: { args: Record<string, unknown> }) => ({ ...deps, copy: (text: string, what?: string) => copy_to_clipboard(text, current.args.register as string | undefined, what) });
+const COLLECT_NOUNS = { copy: ["address", "addresses"], copy_text: ["text", "texts"] } as const;
+
+// A rapid copy rewrites the whole list on every pick, so the clipboard is right at any Escape and after a navigation.
+function copy_of_pick(current: Pick<Session, "args" | "action" | "rapid" | "collected_">) {
+  const register = current.args.register as string | undefined;
+  const nouns = current.rapid && (current.action === "copy" || current.action === "copy_text") ? COLLECT_NOUNS[current.action] : undefined;
+  return (text: string, what?: string) => {
+    const list = nouns && collect_pick(current.collected_, text, nouns);
+    return copy_to_clipboard(list ? list.text : text, register, list ? list.what : what);
+  };
+}
+
+const pick_deps = (current: Pick<Session, "args" | "action" | "rapid" | "collected_">) => ({ ...deps, copy: copy_of_pick(current) });
+
+// The line opens in this frame, as it does for a key typed here. Keys typed while cmdline.js loads stay held for it.
+const open_line_ = (text: string): Promise<Outcome> => page.desertfox_host.run_command_("cmdline.open", "cmdline", { text });
+
+const perform_pick = (current: Session, element: HTMLElement) =>
+  current.action === "prompt" ? prompt_pick(element, current.args.command as string, current.with_background_, open_line_) : perform(current.action, element, pick_deps(current), current.with_background_);
 const deps = { open_link_, copy: (text: string, what?: string) => copy_to_clipboard(text, undefined, what), image_action, start_caret_, inspect_ };
 
 function register(host: BundleHostApi): void {
@@ -248,7 +270,7 @@ function register(host: BundleHostApi): void {
     // One match needs no label. Only the first build does this, so rapid mode cannot repeat the same pick.
     if (first_build && current.lower_text_ !== undefined && found.length === 1) {
       const performed = begin_pick(current);
-      leave_with_keys(current, () => performed(() => perform(current.action, found[0]!.element as HTMLElement, pick_deps(current), current.with_background_)));
+      leave_with_keys(current, () => performed(() => perform_pick(current, found[0]!.element as HTMLElement)));
       return;
     }
     const view = create_view();
@@ -269,14 +291,14 @@ function register(host: BundleHostApi): void {
       const picked = element as HTMLElement;
       const performed = begin_pick(current);
       if (!current.rapid) {
-        leave_with_keys(current, () => performed(() => perform(current.action, picked, pick_deps(current), current.with_background_)));
+        leave_with_keys(current, () => performed(() => perform_pick(current, picked)));
         return "handled";
       }
       // Rapid: the pick may delete or move elements, so drop these labels and label the page again.
       ready.stop_following_();
       ready.view.clear_labels_();
       delete current.ready;
-      performed(() => perform(current.action, picked, pick_deps(current), current.with_background_));
+      performed(() => perform_pick(current, picked));
       if (!current.cancelled) void build(current, find_candidates(current.filter, current.custom_selector_, current.action), false);
     }
     return "handled";
@@ -329,7 +351,7 @@ function register(host: BundleHostApi): void {
     // Pending until the user picks a label or leaves hint mode.
     return new Promise<Outcome>((finish) => {
       // A caret start ends hint mode on the first pick, so rapid has nothing to repeat.
-      const current: Session = { cancelled: false, args, finish, action, waiting_tokens_: [], rapid: args.rapid === true && !starts_caret(action), filter, with_background_: filter === "images", custom_selector_, text, lower_text_: text?.toLowerCase() };
+      const current: Session = { cancelled: false, args, finish, action, waiting_tokens_: [], rapid: args.rapid === true && !starts_caret(action) && action !== "prompt", filter, with_background_: filter === "images", custom_selector_, text, lower_text_: text?.toLowerCase(), collected_: [] };
       session = current;
       host.set_mode_("hint");
       void build(current, candidates, true);

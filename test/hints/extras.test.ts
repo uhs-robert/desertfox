@@ -80,6 +80,9 @@ async function page_with(texts: string[]) {
   let sink: { on_token_: (token: string) => string; exit: () => void } | undefined;
   let mode = "normal";
   let sends_held: (() => Promise<unknown>) | undefined;
+  // The text each `cmdline.open` was asked for. The line stays open until `close_line` answers it.
+  const lines: string[] = [];
+  let close_line: (outcome: Outcome) => void = () => {};
 
   const win = {
     innerWidth: 800,
@@ -101,6 +104,11 @@ async function page_with(texts: string[]) {
       // The caret bundle's `caret.mode` sets the caret mode it is asked for.
       run_command_: async (id: string, _name: string, args: Record<string, unknown>) => {
         if (id === "caret.mode") win.desertfox_host.set_mode_(args.mode as string);
+        if (id === "cmdline.open") {
+          lines.push(args.text as string);
+          win.desertfox_host.set_mode_("cmdline");
+          return new Promise<Outcome>((resolve) => (close_line = resolve));
+        }
         return { ok: true };
       },
       show_toast_: () => {},
@@ -184,6 +192,8 @@ async function page_with(texts: string[]) {
     modes,
     // Each batch of keys that hint mode handed back to the keymap, in order.
     held_key_batches,
+    lines,
+    close_line: (outcome: Outcome = { ok: true }) => close_line(outcome),
     // The next build finds no candidate in view.
     hide_all: () => void (intersecting = false),
     // The next opened link answers when this promise settles.
@@ -349,7 +359,7 @@ test("copy writes the address and copy_text writes the text, rapid keeps the lab
   await settle();
   assert.deepEqual(rapid_page.copied, ["two"]);
   assert.equal(rapid_page.labels().length, 2);
-  assert.match(rapid_page.messages()[0]!, /^Copied two/);
+  assert.match(rapid_page.messages()[0]!, /^Copied 1 text$/);
   rapid_page.escape();
 });
 
@@ -725,4 +735,95 @@ test("no keys typed during a failed build hand nothing back", async () => {
   page.run({});
   await settle();
   assert.deepEqual(page.held_key_batches, []);
+});
+
+test("prompt opens the line with the command and the address, and stays pending until the line closes", async () => {
+  const page = await page_with(["one", "two"]);
+  const answer = page.run({ action: "prompt", command: "open" });
+  await settle();
+  page.type(page.labels()[1]!.toLowerCase());
+  await settle();
+  assert.deepEqual(page.lines, ["open https://example.com/two"]);
+  assert.equal(page.mode(), "cmdline");
+  assert.equal(await peek(answer), undefined);
+  page.close_line();
+  assert.deepEqual(await answer, { ok: true });
+});
+
+test("prompt takes the command the binding names and quotes an address the line would split", async () => {
+  const page = await page_with(["a b", "it's", "plain"]);
+  page.links[0]!.href = "https://example.com/a b";
+  page.links[1]!.href = "https://example.com/it's";
+  page.run({ action: "prompt", command: "open --tab" });
+  await settle();
+  page.type(page.labels()[0]!.toLowerCase());
+  await settle();
+  assert.deepEqual(page.lines, ["open --tab 'https://example.com/a b'"]);
+  page.close_line();
+  const second = await page_with(["it's"]);
+  second.links[0]!.href = "https://example.com/it's";
+  second.run({ action: "prompt", command: "open", text: "it" });
+  await settle();
+  assert.deepEqual(second.lines, ["open 'https://example.com/it'\\''s'"]);
+});
+
+test("prompt on an element with no address refuses and opens no line", async () => {
+  const page = await page_with(["one"]);
+  page.links[0]!.href = undefined as never;
+  const answer = page.run({ action: "prompt", command: "open", filter: "all" });
+  await settle();
+  page.type(page.labels()[0]!.toLowerCase());
+  assert.deepEqual(await answer, { ok: false, message: "This element has no web address" });
+  assert.deepEqual(page.lines, []);
+});
+
+test("prompt ignores rapid: one pick ends hint mode", async () => {
+  const page = await page_with(["one", "two"]);
+  page.run({ action: "prompt", command: "open", rapid: true });
+  await settle();
+  page.type(page.labels()[0]!.toLowerCase());
+  await settle();
+  assert.equal(page.lines.length, 1);
+  assert.equal(page.labels().length, 0);
+  assert.equal(page.mode(), "cmdline");
+});
+
+test("a key typed while the labels were built is held until the line is up, never run in normal mode", async () => {
+  const page = await page_with(["one", "two"]);
+  page.run({ action: "prompt", command: "open", text: "two" });
+  assert.equal(page.type("x"), "handled");
+  await settle();
+  assert.deepEqual(page.modes, ["hint", "normal", "cmdline"]);
+  assert.deepEqual(page.lines, ["open https://example.com/two"]);
+  assert.deepEqual(page.held_key_batches, [["x"]]);
+});
+
+test("rapid copy collects the picks into one list without a repeat and rewrites the register each time", async () => {
+  const page = await page_with(["one", "two", "three"]);
+  page.run({ action: "copy", rapid: true, register: "a" });
+  await settle();
+  const pick = async (index: number) => {
+    page.type(page.labels()[index]!.toLowerCase());
+    await settle();
+  };
+  await pick(0);
+  await pick(2);
+  await pick(0);
+  assert.deepEqual(page.copied, ["https://example.com/one", "https://example.com/one\nhttps://example.com/three", "https://example.com/one\nhttps://example.com/three"]);
+  assert.equal(page.yanked.length, 3);
+  assert.deepEqual(page.messages().slice(0, 2), ["Copied 1 address", "Copied 2 addresses"]);
+  page.escape();
+});
+
+test("rapid copy_text collects the texts and a repeat adds nothing", async () => {
+  const page = await page_with(["one", "two"]);
+  page.run({ action: "copy_text", rapid: true });
+  await settle();
+  for (const index of [1, 0, 1]) {
+    page.type(page.labels()[index]!.toLowerCase());
+    await settle();
+  }
+  assert.deepEqual(page.copied.at(-1), "two\none");
+  assert.equal(page.messages().at(-1), "Copied 2 texts");
+  page.escape();
 });
