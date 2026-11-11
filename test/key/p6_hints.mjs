@@ -245,6 +245,91 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, press_
     expect((await scroll_delta_by_press("p6_no_match", ["j"])) > 0, "keys did not work after a text with no match");
   });
 
+  // Tab inside hint mode switches from typing a label to typing the link text. The fixture links are "one" (label a) and "two" (label s).
+  const hint_labels_in_order = () => in_active_tab(`[...document.documentElement.children].map((child) => [...(child.openOrClosedShadowRoot?.querySelectorAll(".desertfox-hint") ?? [])].map((node) => node.textContent).join(",")).join("")`);
+  const text_box_shown = () => in_active_tab(`[...document.documentElement.children].some((child) => child.openOrClosedShadowRoot?.querySelector(".desertfox-hint-text"))`);
+
+  await run_case("Tab then text then Enter picks the best match", async () => {
+    await open_page("hints", "p6_text_enter", { new_tab: true });
+    const mark = events.length;
+    await press_keys(";l");
+    await wait_for_labels(";l");
+    await press_keys("-k", "Tab", "o");
+    // "o" is a word start in "one" and only inside "two", so "one" ranks first.
+    await poll_until("the text box", text_box_shown);
+    await press_keys("-k", "Return");
+    await wait_event(mark, loaded("hint_one"), "the best match to load");
+  });
+
+  await run_case("Tab then text that matches one link picks it, and the rest of the word does nothing", async () => {
+    await open_page("hints", "p6_text_unique", { new_tab: true });
+    const tabs_before = await tab_count();
+    const mark = events.length;
+    await run_hint({ action: "background", filter: "links" });
+    await wait_for_labels("the hint");
+    // "t" leaves one match. The j after it is the rest of a word and must not scroll the page as a normal key.
+    await press_keys("-k", "Tab", "t", "j");
+    await wait_event(mark, loaded("hint_two"), "the only match to load");
+    await expect_absent(mark, "p6_text_unique", (event) => event.type === "scroll", "j scrolled the page after the pick", { report_delay_ms: scroll_report_wait_ms });
+    expect((await tab_count()) === tabs_before + 1, "the pick did not open exactly one tab");
+    await close_tabs_with("hint_two");
+  });
+
+  await run_case("Tab typed right after the hint key on a fresh page switches to text and never reaches the page", async () => {
+    await open_page("hints", "p6_text_first", { new_tab: true });
+    const mark = events.length;
+    // F opens the pick in a background tab, so this page stays to report what it saw.
+    await press_keys("F", "-k", "Tab", "t", "w");
+    await wait_event(mark, loaded("hint_two"), "the only match to load");
+    await expect_absent(mark, "p6_text_first", (event) => event.type === "keydown" && event.key === "Tab", "Tab reached the page while the hints bundle loaded", { report_delay_ms: scroll_report_wait_ms });
+    await close_tabs_with("hint_two");
+  });
+
+  await run_case("Backspace on empty text returns to label mode with the labels intact", async () => {
+    await open_page("hints", "p6_text_back", { new_tab: true });
+    const mark = events.length;
+    await press_keys(";l");
+    await wait_for_labels(";l");
+    await press_keys("-k", "Tab", "o", "-k", "BackSpace", "-k", "BackSpace");
+    await poll_until("the text box to go", async () => !(await text_box_shown()));
+    expect((await hint_label_count()) === 2, "the labels are not both shown");
+    await press_keys("s");
+    await wait_event(mark, loaded("hint_two"), "label s to pick the second link");
+  });
+
+  await run_case("Space turns overlapping labels, and keeps hint mode", async () => {
+    await open_page("hints", "p6_space_rotate", { new_tab: true });
+    await in_active_tab(`for (const link of document.querySelectorAll("a[href*=hint_]")) Object.assign(link.style, { position: "fixed", left: "50px", top: "50px", display: "block" }); 0`);
+    await press_keys(";l");
+    await wait_for_labels(";l");
+    const before = await hint_labels_in_order();
+    await press_keys("-k", "space");
+    await poll_until("the label order to change", async () => (await hint_labels_in_order()) !== before);
+    expect((await hint_label_count()) === 2, "Space left hint mode or changed the labels");
+    await press_keys("-k", "Escape");
+    await wait_for_label_count(0, "gone after Escape");
+  });
+
+  await run_case("rapid mode starts each round in label mode", async () => {
+    await open_page("hints", "p6_text_rapid", { new_tab: true });
+    const tabs_before = await tab_count();
+    const mark = events.length;
+    await run_hint({ action: "background", filter: "links", rapid: true });
+    await wait_for_labels("rapid");
+    // The "a" and "s" are the rest of a word. In label mode of the next round they would pick links, so only the one text pick may open a tab.
+    await press_keys("-k", "Tab", "t", "a", "s");
+    await wait_event(mark, loaded("hint_two"), "the text pick to load");
+    await wait_for_labels("the first pick");
+    expect(!(await text_box_shown()), "the next round is still in text mode");
+    await wait_for_tab_count(tabs_before + 1, "only the text pick to open a tab");
+    await press_keys("a");
+    await wait_event(mark, loaded("hint_one"), "label a to pick the first link in the next round");
+    await wait_for_tab_count(tabs_before + 2, "two picks to open two tabs");
+    await press_keys("-k", "Escape");
+    await close_tabs_with("hint_one");
+    await close_tabs_with("hint_two");
+  });
+
   // `sh` opens the command line with `heading ` typed. The list lives in the extension's frame, which the page cannot read, so these cases check what a pick does to the page.
   const toast_layer = 2147483647 - 2;
   const toast_text = async () => await in_active_tab(`(() => { const host = [...document.documentElement.children].find((child) => child.style.zIndex === "${toast_layer}"); return host?.openOrClosedShadowRoot?.textContent ?? ""; })()`);
@@ -449,6 +534,76 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, press_
     await barrier("p6_hover_pick");
     await press_keys("-k", "Escape");
     await wait_event(mark, (event) => event.type === "hover_out" && event.box === "menu" && event.page_id === "p6_hover_pick", "mouseleave on the menu after Escape");
+  });
+
+  // The prompt action (;:) puts the address of the pick in the command line, as `open <url>`, for editing. On /hints the label a is "one" and s is "two".
+  const link_line = (id) => (line) => line.open && line.value.startsWith("open ") && line.value.endsWith(`/page?id=${id}`);
+
+  await run_case(";:l a opens the command line holding open and the address, and Enter opens it", async () => {
+    await open_page("hints", "p6_prompt_enter", { new_tab: true });
+    await press_keys(";:l");
+    await wait_for_labels(";:l");
+    await press_keys("a");
+    await wait_cmdline(link_line("hint_one"), "the line to hold the open command and the address");
+    const mark = events.length;
+    await press_keys("-k", "Return");
+    await wait_event(mark, loaded("hint_one"), "Enter to open the address in this tab");
+    await close_tabs_with("hint_one");
+  });
+
+  await run_case(";:l a then Escape leaves the page as it was and keys work again", async () => {
+    await open_page("hints", "p6_prompt_escape", { new_tab: true });
+    await press_keys(";:l");
+    await wait_for_labels(";:l");
+    await press_keys("a");
+    await wait_cmdline(link_line("hint_one"), "the line to hold the open command and the address");
+    await close_cmdline();
+    expect((await scroll_delta_by_press("p6_prompt_escape", ["j"])) > 0, "keys did not work after Escape");
+  });
+
+  // A fresh tab has no cmdline.js yet, so the line loads on this pick. The j goes out in the same press as the label, so it arrives while the line loads: it must end up in the line, never scroll the page.
+  await run_case("a key typed right after the pick lands in the line and never runs as a normal key", async () => {
+    await open_page("hints", "p6_prompt_early", { new_tab: true });
+    await press_keys(";:l");
+    await wait_for_labels(";:l");
+    const mark = events.length;
+    await press_keys("a", "j");
+    await wait_cmdline((line) => line.open && line.value.startsWith("open ") && line.value.endsWith("hint_onej"), "the j to land in the line after the address");
+    expect(!find_event(mark, (event) => event.type === "scroll" && event.page_id === "p6_prompt_early"), "j scrolled the page");
+    await close_cmdline();
+  });
+
+  await run_case(";:l with a command: a binding names the command and flags that start the line", async () => {
+    await open_page("hints", "p6_prompt_command", { new_tab: true });
+    await run_hint({ action: "prompt", filter: "links", command: "open --tab" });
+    await wait_for_labels("the prompt hint");
+    await press_keys("s");
+    await wait_cmdline((line) => line.open && line.value.startsWith("open --tab ") && line.value.endsWith("/page?id=hint_two"), "the line to hold the named command");
+    const before = await tab_count();
+    await press_keys("-k", "Return");
+    await wait_for_tab_count(before + 1, "Enter to open the address in a new tab");
+    await close_tabs_with("hint_two");
+  });
+
+  await run_case(";Y collects the addresses of two picks into one clipboard list, and a repeat adds nothing", async () => {
+    await open_page("hints", "p6_collect", { new_tab: true });
+    await press_keys(";Y");
+    await wait_for_labels(";Y");
+    await press_keys("a");
+    await wait_for_label_count(2, "again after the first pick");
+    await press_keys("s");
+    await wait_for_label_count(2, "again after the second pick");
+    await press_keys("a");
+    await wait_for_label_count(2, "again after a repeated pick");
+    await press_keys("-k", "Escape");
+    await wait_for_label_count(0, "gone after Escape");
+    await open_page("field", "p6_collect_paste", { new_tab: true });
+    const mark = events.length;
+    await press_keys(...paste_ctrl_v);
+    const pasted = (await wait_event(mark, (event) => event.type === "input" && event.page_id === "p6_collect_paste", "the pasted list")).value;
+    // A one-line field turns the newline between the entries into a space.
+    const lines = pasted.split(" ");
+    expect(lines.length === 2 && lines[0].endsWith("/page?id=hint_one") && lines[1].endsWith("/page?id=hint_two"), `;Y copied ${JSON.stringify(pasted)}`);
   });
 
   // Set DESERTFOX_SHOT_DIR to also save the two screenshots.

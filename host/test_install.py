@@ -10,6 +10,8 @@ import unittest
 
 from host_under_test import HOST_DIR, HOST_PATH
 
+BRIDGE_PATH = os.path.join(HOST_DIR, "desertfox-bridge")
+
 INSTALL = os.path.join(HOST_DIR, "install.sh")
 RELEASE_BASE = "https://github.com/uhs-robert/desertfox/releases/download/v0.1.5"
 MAIN_BASE = "https://raw.githubusercontent.com/uhs-robert/desertfox/main/host"
@@ -60,6 +62,8 @@ class InstallCase(unittest.TestCase):
         self.write_stub("curl", CURL_STUB)
         with open(HOST_PATH, "rb") as file:
             self.host_bytes = file.read()
+        with open(BRIDGE_PATH, "rb") as file:
+            self.bridge_bytes = file.read()
 
     def write_stub(self, name, text):
         path = os.path.join(self.bin, name)
@@ -73,7 +77,11 @@ class InstallCase(unittest.TestCase):
         path = os.path.join(self.served, hashlib.sha256(url.encode()).hexdigest())
         with open(path, "wb") as file:
             file.write(content)
-        with open(self.routes, "a") as file:
+        # A second serve of the same URL replaces the first.
+        with open(self.routes) as file:
+            kept = [line for line in file if not line.startswith(f"{url}\t")]
+        with open(self.routes, "w") as file:
+            file.writelines(kept)
             file.write(f"{url}\t{path}\n")
 
     def serve_release(self, host_bytes=None, checksum=None):
@@ -81,6 +89,12 @@ class InstallCase(unittest.TestCase):
         self.serve(f"{RELEASE_BASE}/desertfox-host", host_bytes)
         digest = hashlib.sha256(self.host_bytes).hexdigest() if checksum is None else checksum
         self.serve(f"{RELEASE_BASE}/desertfox-host.sha256", f"{digest}  desertfox-host\n".encode())
+        self.serve(f"{RELEASE_BASE}/desertfox-bridge", self.bridge_bytes)
+        self.serve(f"{RELEASE_BASE}/desertfox-bridge.sha256", f"{hashlib.sha256(self.bridge_bytes).hexdigest()}  desertfox-bridge\n".encode())
+
+    def serve_main(self, bridge_bytes=None):
+        self.serve(f"{MAIN_BASE}/desertfox-host", self.host_bytes)
+        self.serve(f"{MAIN_BASE}/desertfox-bridge", self.bridge_bytes if bridge_bytes is None else bridge_bytes)
 
     def run_install(self, *args):
         env = {"PATH": self.bin, "HOME": self.home, "STUB_LOG": self.log, "STUB_ROUTES": self.routes, "TMPDIR": self.tmp.name}
@@ -98,6 +112,14 @@ class InstallCase(unittest.TestCase):
     def manifest_path(self):
         return os.path.join(self.home, ".mozilla", "native-messaging-hosts", "desertfox_host.json")
 
+    @property
+    def bridge_path(self):
+        return os.path.join(self.home, ".local", "share", "desertfox", "desertfox-bridge")
+
+    @property
+    def bridge_manifest_path(self):
+        return os.path.join(self.home, ".mozilla", "native-messaging-hosts", "desertfox_bridge.json")
+
     def home_files(self):
         found = []
         for base, _, names in os.walk(self.home):
@@ -113,7 +135,7 @@ class ReleaseChannelTest(InstallCase):
         self.serve_release()
         done = self.run_install("0.1.5")
         self.assertEqual(done.returncode, 0, done.stderr)
-        self.assertEqual(self.curl_urls(), [f"{RELEASE_BASE}/desertfox-host", f"{RELEASE_BASE}/desertfox-host.sha256"])
+        self.assertEqual(self.curl_urls(), [f"{RELEASE_BASE}/{name}" for name in ("desertfox-host", "desertfox-host.sha256", "desertfox-bridge", "desertfox-bridge.sha256")])
         with open(self.host_path, "rb") as file:
             self.assertEqual(file.read(), self.host_bytes)
         self.assertTrue(os.stat(self.host_path).st_mode & stat.S_IXUSR)
@@ -123,6 +145,27 @@ class ReleaseChannelTest(InstallCase):
         self.assertEqual(manifest["path"], self.host_path)
         self.assertEqual(manifest["type"], "stdio")
         self.assertEqual(manifest["allowed_extensions"], ["desertfox@uhs-robert"])
+
+    def test_the_bridge_host_is_installed_beside_the_config_host(self):
+        self.serve_release()
+        self.assertEqual(self.run_install("0.1.5").returncode, 0)
+        with open(self.bridge_path, "rb") as file:
+            self.assertEqual(file.read(), self.bridge_bytes)
+        self.assertTrue(os.stat(self.bridge_path).st_mode & stat.S_IXUSR)
+        with open(self.bridge_manifest_path) as file:
+            manifest = json.load(file)
+        self.assertEqual(manifest["name"], "desertfox_bridge")
+        self.assertEqual(manifest["path"], self.bridge_path)
+        self.assertEqual(manifest["type"], "stdio")
+        self.assertEqual(manifest["allowed_extensions"], ["desertfox@uhs-robert"])
+
+    def test_a_bad_bridge_checksum_installs_neither_host(self):
+        self.serve_release()
+        self.serve(f"{RELEASE_BASE}/desertfox-bridge.sha256", ("0" * 64 + "  desertfox-bridge\n").encode())
+        done = self.run_install("0.1.5")
+        self.assertNotEqual(done.returncode, 0)
+        self.assertIn("checksum mismatch for desertfox-bridge", done.stderr)
+        self.assert_nothing_installed()
 
     def test_checksum_mismatch_refuses_and_installs_nothing(self):
         self.serve_release(checksum="0" * 64)
@@ -163,25 +206,26 @@ class ReleaseChannelTest(InstallCase):
         self.serve_release()
         self.assertEqual(self.run_install("0.1.5").returncode, 0)
         self.assertEqual(self.run_install("0.1.5").returncode, 0)
-        self.assertEqual(len(self.home_files()), 2)
+        self.assertEqual(len(self.home_files()), 4)
 
 
 class MainChannelTest(InstallCase):
     def test_main_fetches_from_the_main_branch_with_no_checksum(self):
-        self.serve(f"{MAIN_BASE}/desertfox-host", self.host_bytes)
+        self.serve_main()
         done = self.run_install("main")
         self.assertEqual(done.returncode, 0, done.stderr)
-        self.assertEqual(self.curl_urls(), [f"{MAIN_BASE}/desertfox-host"])
+        self.assertEqual(self.curl_urls(), [f"{MAIN_BASE}/desertfox-host", f"{MAIN_BASE}/desertfox-bridge"])
         self.assertTrue(os.path.isfile(self.manifest_path))
+        self.assertTrue(os.path.isfile(self.bridge_manifest_path))
 
     def test_channel_flag_overrides_a_version(self):
-        self.serve(f"{MAIN_BASE}/desertfox-host", self.host_bytes)
+        self.serve_main()
         done = self.run_install("0.1.5", "--channel", "main")
         self.assertEqual(done.returncode, 0, done.stderr)
-        self.assertEqual(self.curl_urls(), [f"{MAIN_BASE}/desertfox-host"])
+        self.assertEqual(self.curl_urls(), [f"{MAIN_BASE}/desertfox-host", f"{MAIN_BASE}/desertfox-bridge"])
 
     def test_a_page_that_is_not_the_host_is_refused(self):
-        self.serve(f"{MAIN_BASE}/desertfox-host", b"<html>404</html>\n")
+        self.serve_main(bridge_bytes=b"<html>404</html>\n")
         done = self.run_install("main")
         self.assertNotEqual(done.returncode, 0)
         self.assert_nothing_installed()
@@ -189,7 +233,7 @@ class MainChannelTest(InstallCase):
 
 class DataFolderTest(InstallCase):
     def run_with_xdg(self, value):
-        self.serve(f"{MAIN_BASE}/desertfox-host", self.host_bytes)
+        self.serve_main()
         env = {"PATH": self.bin, "HOME": self.home, "STUB_LOG": self.log, "STUB_ROUTES": self.routes, "TMPDIR": self.tmp.name, "XDG_DATA_HOME": value}
         return subprocess.run([os.path.join(self.bin, "sh"), INSTALL, "main"], env=env, capture_output=True, text=True, timeout=60)
 
@@ -216,7 +260,7 @@ class TruncatedScriptTest(InstallCase):
         cut = os.path.join(self.tmp.name, "cut.sh")
         with open(cut, "w") as file:
             file.write("\n".join(lines[:-1]))
-        self.serve(f"{MAIN_BASE}/desertfox-host", self.host_bytes)
+        self.serve_main()
         env = {"PATH": self.bin, "HOME": self.home, "STUB_LOG": self.log, "STUB_ROUTES": self.routes, "TMPDIR": self.tmp.name}
         done = subprocess.run([os.path.join(self.bin, "sh"), cut, "main"], env=env, capture_output=True, text=True, timeout=60)
         self.assertEqual(done.returncode, 0)
@@ -234,7 +278,7 @@ class ArgumentAndPythonTest(InstallCase):
 
     def test_without_python3_it_prints_an_error_and_stops(self):
         os.unlink(os.path.join(self.bin, "python3"))
-        self.serve(f"{MAIN_BASE}/desertfox-host", self.host_bytes)
+        self.serve_main()
         done = self.run_install("main")
         self.assertNotEqual(done.returncode, 0)
         self.assertIn("python3 3.9 or newer is required", done.stderr)
@@ -244,7 +288,7 @@ class ArgumentAndPythonTest(InstallCase):
     def test_python_3_8_is_refused(self):
         os.unlink(os.path.join(self.bin, "python3"))
         self.write_stub("python3", "#!/bin/sh\ncase \"$*\" in *'sys.version_info >='*) exit 1 ;; *) echo 3.8 ;; esac\n")
-        self.serve(f"{MAIN_BASE}/desertfox-host", self.host_bytes)
+        self.serve_main()
         done = self.run_install("main")
         self.assertNotEqual(done.returncode, 0)
         self.assertIn("3.8", done.stderr)
@@ -282,7 +326,7 @@ class ReleaseStepTest(InstallCase):
         env = dict(os.environ, PATH=self.stub_bin + os.pathsep + os.environ["PATH"], GH_LOG=self.gh_log, GH_OUT=self.gh_out, **extra_env)
         return subprocess.run(["just", "release_publish"], cwd=os.path.dirname(HOST_DIR), env=env, capture_output=True, text=True, timeout=60)
 
-    def test_publish_uploads_host_checksum_and_script_for_the_package_version(self):
+    def test_publish_uploads_both_hosts_checksums_and_script_for_the_package_version(self):
         done = self.publish()
         self.assertEqual(done.returncode, 0, done.stderr)
         with open(os.path.join(os.path.dirname(HOST_DIR), "package.json")) as file:
@@ -290,12 +334,12 @@ class ReleaseStepTest(InstallCase):
         with open(self.gh_log) as file:
             logged = file.read()
         self.assertTrue(logged.startswith(f"release create v{version} "), logged)
-        self.assertEqual(sorted(os.listdir(self.gh_out)), ["desertfox-host", "desertfox-host.sha256", "install.sh"])
+        self.assertEqual(sorted(os.listdir(self.gh_out)), ["desertfox-bridge", "desertfox-bridge.sha256", "desertfox-host", "desertfox-host.sha256", "install.sh"])
 
     def test_uploaded_assets_install_through_the_script(self):
         self.assertEqual(self.publish().returncode, 0)
         base = RELEASE_BASE
-        for name in ("desertfox-host", "desertfox-host.sha256"):
+        for name in ("desertfox-host", "desertfox-host.sha256", "desertfox-bridge", "desertfox-bridge.sha256"):
             with open(os.path.join(self.gh_out, name), "rb") as file:
                 self.serve(f"{base}/{name}", file.read())
         done = self.run_install("0.1.5")

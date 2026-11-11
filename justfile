@@ -265,12 +265,12 @@ release_publish:
     version=$(jq -r .version package.json)
     assets=$(mktemp -d)
     trap 'rm -rf "$assets"' EXIT
-    cp host/desertfox-host host/install.sh "$assets/"
-    (cd "$assets" && sha256sum desertfox-host > desertfox-host.sha256)
-    gh_command=(gh release create "v$version" "$assets/desertfox-host" "$assets/desertfox-host.sha256" "$assets/install.sh" --target "$(git rev-parse HEAD)" --title "v$version" --notes "Native host $version. The extension's :native.install page shows the command that installs it.")
+    cp host/desertfox-host host/desertfox-bridge host/install.sh "$assets/"
+    (cd "$assets" && sha256sum desertfox-host > desertfox-host.sha256 && sha256sum desertfox-bridge > desertfox-bridge.sha256)
+    gh_command=(gh release create "v$version" "$assets/desertfox-host" "$assets/desertfox-host.sha256" "$assets/desertfox-bridge" "$assets/desertfox-bridge.sha256" "$assets/install.sh" --target "$(git rev-parse HEAD)" --title "v$version" --notes "Native hosts $version. The extension's :native.install page shows the command that installs it.")
     if [ "${RELEASE_DRY_RUN:-}" = "1" ]; then
         echo "dry run: ${gh_command[*]}"
-        cat "$assets/desertfox-host.sha256"
+        cat "$assets/desertfox-host.sha256" "$assets/desertfox-bridge.sha256"
         exit 0
     fi
     "${gh_command[@]}"

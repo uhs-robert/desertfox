@@ -100,17 +100,30 @@ async function open_in_with_id(ctx: CommandContext, url: string, where: Where, c
   }
 }
 
+// Firefox opens a window with no container and not private unless told otherwise, so a window opened from a container or private tab must carry that tab's state. An unreadable sender tab gives the old plain window.
+// A private window has no containers, so naming one from a private tab is refused. `default` is a named container and still counts.
+async function new_window_context(ctx: CommandContext, container_store_id: string | undefined): Promise<{ cookieStoreId?: string; incognito?: true }> {
+  const tab = ctx.tab_id === undefined ? undefined : await browser.tabs.get(ctx.tab_id).catch(() => undefined);
+  if (tab?.incognito) {
+    if (container_store_id !== undefined) throw new RuntimeRefusal("A private window has no containers");
+    return { incognito: true };
+  }
+  if (container_store_id !== undefined) return { cookieStoreId: container_store_id };
+  if (tab?.cookieStoreId !== undefined && tab.cookieStoreId !== DEFAULT_COOKIE_STORE_ID) return { cookieStoreId: tab.cookieStoreId };
+  return {};
+}
+
 async function open_in_unchecked(ctx: CommandContext, url: string, where: Where, container?: string): Promise<number | undefined> {
   if (where === "here") {
     await browser.tabs.update(require_tab_id(ctx), { url });
     return undefined;
   }
   const cookie_store_id = await resolve_container_store_id(container);
-  const store = cookie_store_id === undefined ? {} : { cookieStoreId: cookie_store_id };
   if (where === "window") {
-    await browser.windows.create({ url, ...store });
+    await browser.windows.create({ url, ...(await new_window_context(ctx, cookie_store_id)) });
     return undefined;
   }
+  const store = cookie_store_id === undefined ? {} : { cookieStoreId: cookie_store_id };
   // Firefox rejects an openerTabId from another window, and the sender tab can sit in a window that is not focused.
   const opener = ctx.tab_id === undefined ? {} : { openerTabId: ctx.tab_id, ...(ctx.window_id === undefined || ctx.window_id < 0 ? {} : { windowId: ctx.window_id }) };
   return (await browser.tabs.create({ url, active: where === "tab", ...opener, ...store })).id;
@@ -123,9 +136,10 @@ export async function open_many(ctx: CommandContext, urls: readonly string[], wh
   let failed = 0;
   if (where === "window") {
     let window_id: number | undefined;
+    const context = await new_window_context(ctx, undefined);
     for (const url of urls) {
       try {
-        if (window_id === undefined) window_id = (await browser.windows.create({ url })).id;
+        if (window_id === undefined) window_id = (await browser.windows.create({ url, ...context })).id;
         else await browser.tabs.create({ url, active: false, windowId: window_id });
       } catch {
         failed++;

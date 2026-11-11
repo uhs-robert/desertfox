@@ -181,6 +181,20 @@ export const keep_text_matches = (found: Found[], lower_needle: string): Found[]
 export const has_text = (element: Element, lower_needle: string): boolean =>
   ((element as HTMLElement).innerText ?? element.textContent ?? "").toLowerCase().includes(lower_needle);
 
+const TEXT_CHARS = 400;
+const squeezed = (text: unknown): string => (typeof text === "string" ? text : "").replace(/\s+/g, " ").trim();
+
+// What names an element, best first: its own text (the caller says which reading of it), else aria-label, title, the alt of a picture in it, or the value of an input. A button's `value` is the form data it sends, not a name, and a password is a secret, so only other inputs offer a value.
+export function name_candidates(element: Element, own_text: unknown): string[] {
+  const is_named_input = element.localName === "input" && (element as HTMLInputElement).type !== "password";
+  const alt = element.querySelector("img[alt]")?.getAttribute("alt") ?? element.getAttribute("alt");
+  const texts = [own_text, element.getAttribute("aria-label"), element.getAttribute("title"), alt, is_named_input ? (element as HTMLInputElement).value : ""];
+  return texts.map(squeezed).filter((text) => text !== "");
+}
+
+// The text that typed hint text is matched against. A wrapper can hold a whole page of text, so only the start counts.
+export const text_of = (element: Element): string => (name_candidates(element, (element as HTMLElement).innerText ?? element.textContent)[0] ?? "").slice(0, TEXT_CHARS);
+
 export const window_of = (element: Element): Window => element.ownerDocument.defaultView ?? window;
 
 const parent_of = (element: Element): Element | null => element.parentElement ?? (element.parentNode as ShadowRoot | null)?.host ?? null;

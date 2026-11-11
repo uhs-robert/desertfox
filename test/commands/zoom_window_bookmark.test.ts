@@ -3,7 +3,7 @@ import { test } from "node:test";
 import type { FolderNode } from "../../src/background/complete_items.ts";
 import { make_bookmark_handlers, pick_bookmark, pick_folder } from "../../src/commands/bookmark.ts";
 import { pick_filter_folder } from "../../src/shared/folder_pick.ts";
-import { open_many } from "../../src/commands/open_target.ts";
+import { open_in, open_many } from "../../src/commands/open_target.ts";
 import { make_browser_handlers } from "../../src/commands/browser.ts";
 import { clamp_zoom, make_zoom_handlers } from "../../src/commands/zoom.ts";
 import { check_args } from "../../src/shared/registry/check_args.ts";
@@ -476,13 +476,17 @@ test("a managed folder is refused as a target for add and move, and still opens"
 const ASKER: CommandContext = { tab_id: 5, window_id: 2, frame_id: 0, mode: "normal" };
 
 // A fake browser that numbers the tabs it makes and refuses the addresses in `refused`.
-function fake_browser(refused: string[], calls: string[]) {
+function fake_browser(refused: string[], calls: string[], sender: object | undefined = undefined) {
   let next_id = 10;
   const refuse = (url: string) => {
     if (refused.includes(url)) throw new Error("Illegal URL");
   };
   (globalThis as unknown as { browser: unknown }).browser = {
     tabs: {
+      get: async () => {
+        if (sender === undefined) throw new Error("No tab");
+        return sender;
+      },
       create: async (props: { url: string; active: boolean; openerTabId?: number; windowId?: number }) => {
         refuse(props.url);
         calls.push(`tab ${props.url} active=${props.active} opener=${props.openerTabId ?? "-"} window=${props.windowId}`);
@@ -493,7 +497,8 @@ function fake_browser(refused: string[], calls: string[]) {
     windows: {
       create: async (props: { url: string }) => {
         refuse(props.url);
-        calls.push(`window ${props.url}`);
+        const { url: _url, ...rest } = props;
+        calls.push(`window ${props.url}${Object.keys(rest).length === 0 ? "" : ` ${JSON.stringify(rest)}`}`);
         return { id: 99 };
       },
     },
@@ -536,6 +541,47 @@ test("open_many skips an address the browser refuses, counts it, and still opens
   assert.deepEqual(reports, [1, 2]);
   assert.deepEqual(tabs.filter((call) => call.startsWith("window")), ["window https://b.test/"]);
   assert.ok(tabs.includes('update 10 {"active":true}'));
+});
+
+async function with_sender<T>(sender: object | undefined, run: () => Promise<T>): Promise<string[]> {
+  const calls: string[] = [];
+  fake_browser([], calls, sender);
+  try {
+    await run();
+  } catch (error) {
+    calls.push(`error ${(error as Error).message}`);
+  } finally {
+    delete (globalThis as unknown as { browser?: unknown }).browser;
+  }
+  return calls;
+}
+
+const IN_WORK = { cookieStoreId: "firefox-container-3", incognito: false };
+const PRIVATE = { cookieStoreId: "firefox-private", incognito: true };
+const PLAIN = { cookieStoreId: "firefox-default", incognito: false };
+
+test("a window opened by open_many keeps the sender's container and private state", async () => {
+  const urls = ["https://a.test/", "https://b.test/"];
+  const many = (sender: object | undefined, ctx_in: CommandContext = ASKER) => with_sender(sender, () => open_many(ctx_in, urls, "window", async () => {}));
+  assert.equal((await many(IN_WORK))[0], 'window https://a.test/ {"cookieStoreId":"firefox-container-3"}');
+  assert.equal((await many(PRIVATE))[0], 'window https://a.test/ {"incognito":true}');
+  assert.equal((await many(PLAIN))[0], "window https://a.test/");
+  assert.equal((await many(undefined))[0], "window https://a.test/");
+  assert.equal((await many(IN_WORK, { ...ASKER, tab_id: undefined }))[0], "window https://a.test/");
+});
+
+test("open_in a window keeps the sender's container and private state unless the command names a container", async () => {
+  const one = (sender: object | undefined, container?: string, ctx_in = ASKER) => with_sender(sender, async () => {
+    (globalThis as unknown as { browser: { contextualIdentities: unknown } }).browser.contextualIdentities = { query: async () => [{ name: "Work", cookieStoreId: "firefox-container-3" }] };
+    await open_in(ctx_in, "https://a.test/", "window", container);
+  });
+  assert.deepEqual(await one(IN_WORK), ['window https://a.test/ {"cookieStoreId":"firefox-container-3"}']);
+  assert.deepEqual(await one(IN_WORK, "default"), ['window https://a.test/ {"cookieStoreId":"firefox-default"}']);
+  assert.deepEqual(await one(PLAIN, "Work"), ['window https://a.test/ {"cookieStoreId":"firefox-container-3"}']);
+  assert.deepEqual(await one(PRIVATE), ['window https://a.test/ {"incognito":true}']);
+  assert.deepEqual(await one(PRIVATE, "Work"), ["error A private window has no containers"]);
+  assert.deepEqual(await one(PRIVATE, "default"), ["error A private window has no containers"]);
+  assert.deepEqual(await one(IN_WORK, undefined, { ...ASKER, tab_id: undefined }), ["window https://a.test/"]);
 });
 
 test("bookmark.open_folder refuses when the browser refuses every address", async () => {

@@ -24,6 +24,7 @@ const EXPECTATIONS: Record<string, string> = {
   home_page: "a non-empty URL string",
   default_engine: "the name of a search engine",
   new_tab_page: '"desertfox" or an http or https URL',
+  bridge: "true or false",
   completion_all_windows: "true or false",
   cmdline_prompt: "a string of 1 to 8 characters on one line",
   open_completion: 'a list of "bookmarks" and "history" with no repeat',
@@ -54,6 +55,7 @@ test("every setting keeps its listed values", () => {
     mode_indicator: ["always", "not_normal", "off"],
     light_intensity: ["1", "2", "3", "4", "5"],
     new_tab_page: ["desertfox"],
+    bridge: ["true", "false"],
     completion_all_windows: ["true", "false"],
     cmdline_prompt: ["caret", "colon"],
     open_completion: ["bookmarks", "history"],
@@ -71,7 +73,7 @@ test("the list, unsettable and toggle sets stay the same", () => {
   assert.deepEqual(SETTING_NAMES.filter((name) => !SETTING_SPECS[name].settable), ["search_prefixes", "container_prefixes", "newtab_links"]);
   // A toggle flips the value in force, so an absent one flips from its default.
   const toggles = Object.fromEntries(SETTING_NAMES.filter((name) => SETTING_SPECS[name].is_toggle).map((name) => [name, DEFAULT_SETTINGS[name]]));
-  assert.deepEqual(toggles, { completion_all_windows: false, newtab_date: true, newtab_bookmarks: false, newtab_recent_tabs: false });
+  assert.deepEqual(toggles, { bridge: false, completion_all_windows: false, newtab_date: true, newtab_bookmarks: false, newtab_recent_tabs: false });
 });
 
 const ACCEPTS: Record<string, unknown[]> = {
@@ -89,6 +91,7 @@ const ACCEPTS: Record<string, unknown[]> = {
   home_page: ["desertfox", "x"],
   default_engine: ["duck"],
   new_tab_page: ["desertfox", "https://a.example/", "HTTP://A.EXAMPLE"],
+  bridge: [true, false],
   completion_all_windows: [true, false],
   // Code points, not UTF-16 units: eight emoji are sixteen units.
   cmdline_prompt: ["c", "> ", "12345678", "\u{1F600}".repeat(8), "\t"],
@@ -123,6 +126,7 @@ const REFUSES: Record<string, unknown[]> = {
   home_page: ["", 1],
   default_engine: [""],
   new_tab_page: ["", "javascript:alert(1)", "ftp://a.example", "https://", "https://a.example:99999/", "about:blank"],
+  bridge: ["true", 1],
   completion_all_windows: ["true", 1],
   cmdline_prompt: ["", "123456789", "\u{1F600}".repeat(9), "a\nb", "a\rb", 1, true],
   open_completion: [["bookmarks", "bookmarks"], ["tabs"], "history"],
@@ -200,6 +204,7 @@ test("the defaults stay the same", () => {
     container_prefixes: { reopen: "c", tab: "C" },
     default_engine: "duck",
     new_tab_page: "desertfox",
+    bridge: false,
     completion_all_windows: false,
     cmdline_prompt: "caret",
     open_completion: ["bookmarks", "history"],
@@ -252,6 +257,6 @@ test("the editor schema matches its output before #85, apart from the listed cha
   // Removed: no setting can turn the first-install Quick Start page off.
   delete properties.open_quick_start_on_install;
   // Settings added since the fixture was taken.
-  for (const name of ["statusbar_widgets", "next_patterns", "prev_patterns"]) properties[name] = JSON.parse(JSON.stringify((settings_schema().properties as Record<string, unknown>)[name]));
+  for (const name of ["statusbar_widgets", "next_patterns", "prev_patterns", "bridge"]) properties[name] = JSON.parse(JSON.stringify((settings_schema().properties as Record<string, unknown>)[name]));
   assert.deepEqual(JSON.parse(JSON.stringify(settings_schema())), JSON.parse(JSON.stringify(before)));
 });

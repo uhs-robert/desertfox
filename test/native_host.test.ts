@@ -16,15 +16,18 @@ test("the install command takes the script and the channel from the same place",
   );
 });
 
-test("nativeMessaging is optional, never required", () => {
+test("nativeMessaging and browsingData are optional, cookies stays required", () => {
   const manifest = JSON.parse(readFileSync(new URL("../src/manifest.json", import.meta.url), "utf8"));
-  assert.deepEqual(manifest.optional_permissions, ["nativeMessaging"]);
-  assert.ok(!manifest.permissions.includes("nativeMessaging"));
+  assert.deepEqual(manifest.optional_permissions, ["nativeMessaging", "browsingData"]);
+  // cookies backs the cookieStoreId option of tabs.create, windows.create and downloads.download, so it cannot be optional.
+  assert.ok(manifest.permissions.includes("cookies"));
+  for (const permission of manifest.optional_permissions) assert.ok(!manifest.permissions.includes(permission), permission);
 });
 
-test("every :native.install changes the hash, and the panel route accepts each form", async () => {
-  const { is_native_install_hash, native_install_hash } = await import("../src/shared/native_host.ts");
-  assert.notEqual(native_install_hash(1), native_install_hash(2));
-  for (const hash of ["#native-install", native_install_hash(5)]) assert.ok(is_native_install_hash(hash), hash);
-  for (const hash of ["", "#/", "#native-installer"]) assert.ok(!is_native_install_hash(hash), hash);
+test("every grant changes the hash, and the panel route accepts each form", async () => {
+  const { grant_hash, permission_of_grant_hash } = await import("../src/shared/permission_grant.ts");
+  assert.notEqual(grant_hash("browsingData", 1), grant_hash("browsingData", 2));
+  assert.equal(permission_of_grant_hash(grant_hash("nativeMessaging", 5)), "nativeMessaging");
+  assert.equal(permission_of_grant_hash("#grant/browsingData"), "browsingData");
+  for (const hash of ["", "#/", "#grant/", "#grant/history", "#granted/browsingData", "#native-install"]) assert.equal(permission_of_grant_hash(hash), undefined, hash);
 });

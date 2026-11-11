@@ -434,6 +434,7 @@ define("tab.close", {
   ],
   runs_in: "background",
   count: "repeat",
+  repeat_limit: 20,
   run: (ctx, args) => handlers.close(ctx, args as { side: CloseSide }),
 });
 
@@ -456,10 +457,11 @@ define("tab.switch", {
 
 define("tab.unload", {
   label: "Unload tab",
-  intent: "Unload the tab to free its memory. It stays in the tab bar and loads again when opened. Audible tabs stay loaded. Without a tab it unloads this one and switches to a loaded tab first. With all_before or all_after it keeps the tab and unloads the unpinned tabs on that side. With site it unloads the tab and the unpinned tabs of its site in the window. A count prefix unloads that many tabs from the tab on.",
+  intent: "Unload the tab to free its memory. It stays in the tab bar and loads again when opened. Audible tabs stay loaded. Without a tab it unloads this one and switches to a loaded tab first. With all_before or all_after it keeps the tab and unloads the unpinned tabs on that side. With site it unloads the tab and the unpinned tabs of its site in the window. A count prefix unloads that many tabs from the tab on. A count prefix over 20 is refused.",
   params: [subject_param, side_param("Unload"), count_param],
   runs_in: "background",
   count: { param: "count" },
+  repeat_limit: 20,
   run: (ctx, args) => handlers.unload(ctx, args as { tab: string; side: UnloadSide; count: number }),
 });
 

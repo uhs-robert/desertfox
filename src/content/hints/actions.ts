@@ -3,7 +3,7 @@
 import { enter_for_click, hover, leave_toward } from "./hover.ts";
 import { selector_of } from "./selector_of.ts";
 
-export type HintAction = "here" | "tab" | "background" | "window" | "caret" | "visual" | "copy" | "copy_text" | "copy_image" | "copy_selector" | "copy_html" | "inspect" | "download" | "delete" | "focus" | "hover" | "double_click" | "play_pause" | "mute" | "fullscreen";
+export type HintAction = "here" | "tab" | "background" | "window" | "caret" | "visual" | "copy" | "copy_text" | "copy_image" | "copy_selector" | "copy_html" | "inspect" | "download" | "delete" | "focus" | "hover" | "double_click" | "play_pause" | "mute" | "fullscreen" | "prompt";
 
 export type Place = "here" | "tab" | "background" | "window";
 
@@ -226,9 +226,9 @@ export function player_box(media: Element): Element {
 }
 
 // play() and requestFullscreen() need the user activation of the pick keydown. A refusal becomes a failed outcome, because a rejected promise from an action reads as a page that went away and cancels silently.
-type Refusal = { ok: false; message: string };
+export type Refusal = { ok: false; message: string };
 
-const NO_WEB_ADDRESS: Refusal = { ok: false, message: "This element has no web address" };
+export const NO_WEB_ADDRESS: Refusal = { ok: false, message: "This element has no web address" };
 
 const refusal_as_outcome = (pending: Promise<unknown>): Promise<unknown> =>
   pending.then(() => undefined, (error: unknown) => ({ ok: false, message: String((error as Error)?.message ?? error) }));

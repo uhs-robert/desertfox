@@ -10,10 +10,11 @@ import { check_args } from "../../src/shared/registry/check_args.ts";
 
 const cookie = (domain: string, name: string): PageCookie => ({ name, domain, path: "/", secure: true, store_id: "firefox-container-2", first_party_domain: "", partition_key: undefined });
 
-function make_fake({ url = "https://www.example.com/a", store = "firefox-container-2", cookies = [] as PageCookie[], fail_on = "", stayed = [] as string[] } = {}) {
+function make_fake({ url = "https://www.example.com/a", store = "firefox-container-2", cookies = [] as PageCookie[], fail_on = "", stayed = [] as string[], permitted = true } = {}) {
   const log: string[] = [];
   const data_calls: { options: unknown; types: string[] }[] = [];
   const deps: ReloadClearDeps = {
+    has_clear_permissions: async () => permitted,
     tab_of: async () => ({ url, cookie_store_id: store }),
     cookies_sent_to: async (sent_url, store_id) => {
       log.push(`cookies ${sent_url} ${store_id}`);
@@ -59,6 +60,14 @@ test("all clear sends no hostnames and no store", async () => {
   await make_reload_clear(deps).run(7, "all");
   assert.deepEqual(data_calls, [{ options: {}, types: ["cookies", "localStorage", "indexedDB", "serviceWorkers", "cache"] }]);
   assert.equal(log.at(-1), "reload");
+});
+
+test("a missing permission refuses with the grant hint before anything runs, for both scopes", async () => {
+  for (const scope of ["site", "all"] as const) {
+    const { deps, log } = make_fake({ permitted: false });
+    await assert.rejects(make_reload_clear(deps).run(7, scope), (error) => error instanceof RuntimeRefusal && /:permissions\.grant browsingData/.test(error.message));
+    assert.deepEqual(log, [], scope);
+  }
 });
 
 test("a failed clear refuses and does not reload", async () => {

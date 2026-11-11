@@ -61,8 +61,8 @@ test("only these commands opt out of `.`, so a new command repeats unless someon
   const opted_out = registry.list().filter((command) => command.repeatable === false).map((command) => command.id);
   assert.deepEqual(opted_out.sort(), [
     "browser.close_all", "browser.focus_page", "caret.move", "cmdline.clear", "cmdline.help", "cmdline.history", "cmdline.next_completion", "cmdline.open", "cmdline.prev_completion", "cmdline.submit",
-    "command.repeat", "config.reload", "debug.restart", "engine.show", "find.open", "frame.exit", "help.open", "help.whichkey", "list.act", "list.select", "macro.play", "macro.record", "macro.stop", "mark.add", "mark.delete", "mark.jump", "mark.list", "mode.escape", "mode.insert", "mode.pass_next", "mode.set",
-    "native.install", "open.anything", "page.print", "page.save_pdf", "quickmark.add", "quickmark.delete", "quickmark.list", "register.list", "register.paste", "settings.set", "settings.toggle", "settings.unset", "visual.act",
+    "command.repeat", "config.reload", "debug.restart", "engine.show", "find.open", "frame.exit", "help.open", "help.whichkey", "hint.key", "list.act", "list.select", "macro.play", "macro.record", "macro.stop", "mark.add", "mark.delete", "mark.jump", "mark.list", "mode.escape", "mode.insert", "mode.pass_next", "mode.set",
+    "native.install", "open.anything", "page.print", "page.save_pdf", "permissions.grant", "quickmark.add", "quickmark.delete", "quickmark.list", "register.list", "register.paste", "settings.set", "settings.toggle", "settings.unset", "visual.act",
   ]);
 });
 

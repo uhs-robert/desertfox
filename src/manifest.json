@@ -49,11 +49,11 @@
     "contextualIdentities",
     "cookies",
     "sessions",
-    "browsingData",
     "<all_urls>"
   ],
   "optional_permissions": [
-    "nativeMessaging"
+    "nativeMessaging",
+    "browsingData"
   ],
   "browser_action": {
     "default_title": "DesertFox",

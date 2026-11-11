@@ -4,7 +4,7 @@ import { copy_text } from "../content/caret/copy_text.ts";
 import type { Block, Inline } from "./blocks.ts";
 import type { CommandRow, EngineRow, HelpModel, KeyRow } from "./model.ts";
 import { STYLE_CLASSES, STYLE_VARIABLES } from "./model.ts";
-import { native_install_hash } from "../shared/native_host.ts";
+import { grant_hash } from "../shared/permission_grant.ts";
 import { GROUPS } from "./settings_model.ts";
 import { PAGES } from "./route.ts";
 import type { PageId, Route } from "./route.ts";
@@ -205,7 +205,7 @@ function install_native_host_button(): HTMLElement {
   const button = el("button", "desertfox-settings-install", "Install native host") as HTMLButtonElement;
   button.type = "button";
   button.addEventListener("click", () => {
-    location.hash = native_install_hash(Date.now());
+    location.hash = grant_hash("nativeMessaging", Date.now());
   });
   return el("p", undefined, button);
 }

@@ -3,7 +3,7 @@
 
 export const areas = ["hints"];
 
-export async function run_cases({ run_case, press_keys, poll_until, barrier, expect_absent, hint_label_count, open_page, wait_event, find_event, events, expect, wait_takes_keys, scroll_of, last_scroll_y, in_active_tab }) {
+export async function run_cases({ wait_cmdline, close_cmdline, run_case, press_keys, poll_until, barrier, expect_absent, hint_label_count, open_page, wait_event, find_event, events, expect, wait_takes_keys, scroll_of, last_scroll_y, in_active_tab }) {
   const page_id = "p6_frames";
   const on_page = (id, type) => (event) => event.page_id === id && event.type === type;
   const script_starts = (id) => events.filter(on_page(id, "tree_read")).length;
@@ -104,5 +104,32 @@ export async function run_cases({ run_case, press_keys, poll_until, barrier, exp
     await press_keys("j");
     await wait_event(mark, scroll_of(page_id), "j to scroll the top page after the focused frame left");
     expect(last_scroll_y(page_id) > before_top, "the top page did not scroll after the frame left");
+  });
+
+  // A pick from the top page mounts the line in the top page, whichever frame holds the element. A pick made inside a focused frame mounts it in that frame. Either way the one line is open and takes the keys.
+  await run_case(";:f a from the top page opens the line with the address of the same-origin frame", async () => {
+    await open_page("frames", "p6_frames_prompt", { new_tab: true });
+    await wait_event(0, on_page("p6_frames_prompt_same", "tree_read"), "the same-origin frame to start");
+    await press_hint_start(";:f");
+    await press_keys("a");
+    await wait_cmdline((line) => line.open && line.value.startsWith("open ") && line.value.endsWith("/frame_inner?id=p6_frames_prompt_same"), "the line to hold the frame address");
+    expect(await in_active_tab(`!!document.documentElement.querySelector(":scope > [popover][data-desertfox-layer]")`), "the line holder is not in the top page");
+    await close_cmdline();
+  });
+
+  await run_case(";:l inside a focused same-origin frame opens the line there with the address of its link", async () => {
+    await open_page("frames", "p6_frames_prompt_in", { new_tab: true });
+    await wait_event(0, on_page("p6_frames_prompt_in_same", "tree_read"), "the same-origin frame to start");
+    await in_active_tab(`document.getElementById("same").contentDocument.body.insertAdjacentHTML("afterbegin", '<a href="/page?id=framed_link">framed link</a>'); 0`);
+    const mark = events.length;
+    await press_hint_start(";f");
+    await press_keys("a");
+    await wait_event(mark, on_page("p6_frames_prompt_in_same", "window_focus"), "the frame to take the focus");
+    await press_keys(";:l");
+    // The labels sit in the frame's own document, which the top-page count cannot see.
+    await poll_until("the label of the framed link", async () => await in_active_tab(`[...document.getElementById("same").contentDocument.documentElement.children].some((child) => child.openOrClosedShadowRoot?.querySelector(".desertfox-hint"))`));
+    await press_keys("a");
+    await wait_cmdline((line) => line.open && line.value.startsWith("open ") && line.value.endsWith("/page?id=framed_link"), "the line to hold the address of the framed link");
+    await close_cmdline();
   });
 }

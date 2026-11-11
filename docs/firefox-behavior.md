@@ -178,3 +178,14 @@ Measured in the key test (`test/key/p15_frame_mode.mjs`, Firefox 160) and on a p
 - A document whose child frame holds the focus still answers true to `document.hasFocus()`, and its `activeElement` is the frame element.
 - `tabs.onUpdated` sends `{ status: "loading" }` with no `url` when a load starts. It sends `{ status: "loading", url }` when the new page takes over, and again for each `history.replaceState` the page runs while it still loads. The second kind comes after the content script's first message. Google Docs does this on every load.
 - The page a load leaves keeps sending messages between the two events: its window gets a `focus` event when the load starts from the address bar.
+
+## Permissions (optional-permissions)
+
+Read from the Firefox 160 sources (`omni.ja`), plus the key test for the grant and removal paths. The user-input fact is source-read, not measured in a run.
+
+- `permissions.request` has `requireUserInput`. It rejects with "may only be called from a user input handler" unless the calling window handles user input: a trusted DOM event in that same window, or an event listener of `commands.onCommand`, `browserAction.onClicked`, `pageAction.onClicked` or `omnibox`.
+- A key pressed on a page reaches the background through `runtime.sendMessage`, which carries no such flag. So the background cannot request a permission after a key. DesertFox refuses with a hint and asks from the click on an extension page instead (`:permissions.grant`).
+- A declined request resolves `false` and does not throw. A policy block throws "Permissions are blocked by enterprise policy". An already granted permission resolves `true` with no prompt.
+- A grant persists across restarts. The running background sees it at once (`permissions.contains` is true with no reload). The key test grants and removes with `ExtensionPermissions.add` and `remove`, passing the extension as the third argument so the background learns of the change.
+- `browsingData` shows "Clear recent browsing history, cookies, and related data" at install. Moving it to `optional_permissions` removes that line.
+- `cookies` shows no install prompt line, but it stays required. Without it Firefox 160 throws "No permission for cookieStoreId" in `tabs.create`, `windows.create` and `downloads.download` when they carry a container.

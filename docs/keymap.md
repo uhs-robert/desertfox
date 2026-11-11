@@ -24,7 +24,7 @@ A note "(prompts)" means the binding sets a `prompt` for a param, so the command
 
 <!-- BEGIN generated -->
 
-bound: 338 (normal 201, hint 2, cmdline 19, caret 35, visual 37, visual_line 38, insert 2, ignore 1, browser 3) | later: 3 | dropped: 7
+bound: 343 (normal 202, hint 6, cmdline 19, caret 35, visual 37, visual_line 38, insert 2, ignore 1, browser 3) | later: 3 | dropped: 5
 
 ### normal
 
@@ -219,6 +219,7 @@ bound: 338 (normal 201, hint 2, cmdline 19, caret 35, visual 37, visual_line 38,
 | `;yf` | bound | `hint --copy --frames` | Copy frame URL |  |
 | `;yt` | bound | `hint --copy-text --all` | Copy text |  |
 | `;yc` | bound | `hint --copy-selector --every` | Copy CSS selector |  |
+| `;Y` | bound | `hint --copy --links --rapid` | Copy several link URLs |  |
 | `;yh` | bound | `hint --copy-html --every` | Copy outer HTML |  |
 | `;f` | bound | `hint --frames` | Focus frame |  |
 | `;m` | bound | `hint --media` | Play or pause media |  |
@@ -239,8 +240,6 @@ bound: 338 (normal 201, hint 2, cmdline 19, caret 35, visual 37, visual_line 38,
 | `g!` | dropped |  |  | joke binding |
 | `g;` | later | `page.change_jump` |  | phase 3 |
 | `;c` | dropped |  |  | needs a shell |
-| `;x` | dropped |  |  | needs a shell |
-| `;:` | dropped |  |  | needs a shell |
 
 Which-key group names:
 
@@ -277,6 +276,10 @@ Which-key group names:
 | --- | --- | --- | --- | --- |
 | `<Escape>` | bound | `mode.escape` | Escape |  |
 | `<C-[>` | bound | `mode.escape` | Escape |  |
+| `<Tab>` | bound | `hint.key tab` | Type link text, or next match |  |
+| `<S-Tab>` | bound | `hint.key shift_tab` | Previous match |  |
+| `<Enter>` | bound | `hint.key enter` | Pick the active match |  |
+| `<Space>` | bound | `hint.key space` | Turn overlapping labels |  |
 
 ### cmdline
 

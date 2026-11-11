@@ -26,17 +26,18 @@ export const area_rules = [
   // The schema validates the settings the help page edits and the config reads.
   { globs: shared_files, areas: area_names },
   // page.ts holds the reload-clear command, which p22 tests, so it also selects the keys and cmdline pieces.
-  { globs: ["src/commands/{page,reload_clear}.ts"], areas: ["keys", "cmdline", "hints"] },
-  { globs: ["src/content/hints/**", "src/commands/{hint,heading,page}.ts", "src/background/image_actions.ts", "src/content/handlers/{page,focus_input}.ts", "src/background/inspect_relay.ts", "src/devtools/**", "src/shared/inspect.ts"], areas: ["hints"] },
-  { globs: ["src/content/run_content.ts", "src/commands/{caret,cmdline,copy,find,heading,help,hint,page,visual}.ts", "src/background/{bundle_loader,command_modules}.ts", "src/content/{bundle_host,bundles}.ts", "src/content/page/**", "src/content/text/**", "src/commands/text.ts", "src/shared/bundles.ts"], areas: ["bundles"] },
+  { globs: ["src/commands/{page,reload_clear}.ts", "src/shared/permission_grant.ts"], areas: ["keys", "cmdline", "hints"] },
+  { globs: ["src/content/hints/**", "src/commands/{hint,hint_text,heading,page}.ts", "src/background/image_actions.ts", "src/content/handlers/{page,focus_input}.ts", "src/background/inspect_relay.ts", "src/devtools/**", "src/shared/inspect.ts"], areas: ["hints"] },
+  { globs: ["src/content/run_content.ts", "src/commands/{caret,cmdline,copy,find,heading,help,hint,hint_text,page,visual}.ts", "src/background/{bundle_loader,command_modules}.ts", "src/content/{bundle_host,bundles}.ts", "src/content/page/**", "src/content/text/**", "src/commands/text.ts", "src/shared/bundles.ts"], areas: ["bundles"] },
   { globs: ["src/content/caret/find_*.ts", "src/commands/find.ts", "src/background/{find_scan,find_worker,regex_scan}.ts"], areas: ["find"] },
   { globs: ["src/content/caret/**", "src/commands/{caret,visual}.ts"], areas: ["caret"] },
   { globs: ["src/content/whichkey/**", "src/background/list_keys.ts", "src/content/which_key_timer.ts"], areas: ["whichkey"] },
+  { globs: ["src/background/{bridge,bridge_browser}.ts"], areas: ["keys"] },
   // The last search sits in register `/`, and `:registers` completes through the command line.
   { globs: ["src/commands/register.ts", "src/commands/register_param.ts", "src/background/register_store.ts", "src/shared/register_names.ts"], areas: ["find", "cmdline"] },
   { globs: ["src/commands/session.ts", "src/background/session_store.ts", "src/background/sessions_transfer.ts"], areas: ["cmdline", "tabs"] },
   {
-    globs: ["src/cmdline/**", "src/commands/{cmdline,history,bookmark,open_target}.ts", "src/background/{cmdline_service,complete_items,bookmark_title}.ts", "src/shared/{anything_ref,setting_completion,score,folder_pick}.ts"],
+    globs: ["src/cmdline/**", "src/commands/{cmdline,history,bookmark,open_target}.ts", "src/background/{cmdline_service,complete_items,history_cache,bookmark_title}.ts", "src/shared/{anything_ref,setting_completion,score,folder_pick}.ts"],
     areas: ["cmdline"],
   },
   {
@@ -44,7 +45,7 @@ export const area_rules = [
       "src/help/**",
       "src/commands/{help,help_tab,settings,native}.ts",
       "src/background/{open_help,native_client}.ts",
-      "src/shared/{settings_docs,settings_schema,settings_table,setting_list,table_constants,native_host}.ts",
+      "src/shared/{settings_docs,settings_schema,settings_table,setting_list,table_constants,native_host,permission_grant}.ts",
     ],
     areas: ["help"],
   },
@@ -64,7 +65,7 @@ export const area_rules = [
       "src/background/{config_*,autoconfig_mirror,snippets,storage_keys,first_install,load_log,settings_message,reload}.ts",
       "src/commands/config.ts",
       "src/shared/{config_build/**,theme/**,themes,theme_names,default_settings,config,match_pattern,site_key,zip}.ts",
-      "src/shared/registry/{check_args,check_shape,params,parse_binding,commands_file,print_command,summary,usage,command_line}.ts",
+      "src/shared/registry/{check_args,check_shape,params,parse_binding,commands_file,print_command,summary,usage,command_line,single_quote}.ts",
     ],
     areas: ["config"],
   },

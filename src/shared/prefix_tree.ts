@@ -62,6 +62,8 @@ export type CompiledKeymap = {
   // In list order. The first rule whose regex fits the page or the tab wins. Absent when no rule exists.
   site_rules?: SiteRule[];
   mode_indicator: ModeIndicator;
+  // Set when the `bridge` setting is on. The background reads it to open the bridge port. Pages ignore it.
+  bridge?: true;
   which_key_delay_ms: number;
   // A tree stored before this setting has none, and the panel keeps square corners.
   which_key_border?: WhichKeyBorder;

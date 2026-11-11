@@ -18,9 +18,11 @@ test("the hints bundle registers a hint sink and hint.run, and registers once", 
   const bundle_url = new URL("../../src/content/hints/main.ts", import.meta.url).href;
   await import(`${bundle_url}?first`);
   await import(`${bundle_url}?second`);
-  assert.deepEqual(registered, ["page.follow", "page.focus_field", "page.heading", "copy.links", "hint.unhover", "heading.list", "heading.go", "heading.clear", "hint.run"]);
+  assert.deepEqual(registered, ["page.follow", "page.focus_field", "page.heading", "copy.links", "hint.unhover", "hint.key", "heading.list", "heading.go", "heading.clear", "hint.run"]);
   assert.deepEqual([...sinks.keys()], ["hint"]);
   assert.deepEqual(modes, []);
   assert.equal(sinks.get("hint")!.on_token_("a"), "pass");
+  // With no session the keys go on to the page and the keymap, whatever they mean in hint mode.
+  for (const token of ["<Tab>", "<S-Tab>", "<Enter>", "<Space>"]) assert.equal(sinks.get("hint")!.on_token_(token), "pass", token);
   sinks.get("hint")!.exit();
 });

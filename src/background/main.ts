@@ -7,6 +7,7 @@ import { run_image_action } from "./image_actions.ts";
 import { HELP_PAGE_FILE } from "../help/route.ts";
 import { open_quick_start_on_install } from "./first_install.ts";
 import { create_cmdline_service } from "./cmdline_service.ts";
+import { history_cache } from "./history_cache.ts";
 import { create_previous_tabs } from "./previous_tab.ts";
 import { browser_discard_deps } from "./tab_discard.ts";
 import { browser_complete_items_deps, create_complete_items } from "./complete_items.ts";
@@ -16,6 +17,7 @@ import { create_open_help } from "./open_help.ts";
 import { requirement_lookup, site_engine_for, with_site_engines } from "./availability.ts";
 import { mark_list_rows, quickmark_list_rows } from "../shared/mark_text.ts";
 import { list_keys } from "./list_keys.ts";
+import { start_bridge } from "./bridge_browser.ts";
 import { rule_addresses_of, read_keymap_reply } from "./page_keymap.ts";
 import { create_bundle_loader } from "./bundle_loader.ts";
 import { track_window_focus } from "./window_focus.ts";
@@ -187,6 +189,7 @@ const toolbar = create_toolbar({
   set_tab_mode: (tab_id, mode) => send_to_tab(tab_id, { type: "set_mode", mode }),
 });
 void toolbar.sync_look();
+const bridge = start_bridge(tab_modes.recall);
 const settings_messages = create_settings_messages({ change_edits, read_layers: load_effective_config });
 
 // Listeners register in the first turn, so no event is missed while the config loads.
@@ -214,12 +217,15 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
     return answer_toolbar_request(page_request, { toolbar, change_edits, read_file_site_rules: async () => (await load_effective_config()).config_settings.site_rules ?? [], reload_config });
   }
   if (request?.type === "mode_changed" && sender.tab?.id !== undefined && sender.frameId !== undefined) {
+    const tab = sender.tab;
     const tab_id = sender.tab.id;
     // The top frame leaving insert by any route ends the hold.
     if (sender.frameId === 0 && request.mode !== "insert") void tab_insert.top_frame_left_insert(tab_id, request.mode).catch(() => undefined);
     const report = { frame_id: sender.frameId, mode: request.mode, focus: request.focus === true };
     // The top frame may still be loading and miss the message. Its own start report brings a fresh one.
     return tab_modes.report(tab_id, report).then(({ child_mode, tell_top }) => {
+      // The bridge shows the tab's mode, which a focused child frame or ignore mode in the top frame decides. Every top frame report publishes, as a new page's first one must, and a child frame's report does when it changed what the tab shows.
+      if (sender.frameId === 0 || tell_top) void tab_modes.recall(tab_id).then((mode) => bridge.mode_changed(tab, mode));
       if (tell_top) void browser.tabs.sendMessage(tab_id, { type: "frame_mode", ...(child_mode === undefined ? {} : { mode: child_mode }) } satisfies FocusedFrameMode, { frameId: 0 }).catch(() => undefined);
     });
   }
@@ -322,6 +328,12 @@ browser.tabs.onUpdated.addListener((tab_id, change) => {
 
 browser.windows.onRemoved.addListener(() => void repeat_memory.clear_private_without_window().catch(() => undefined));
 wire_private_cleanup([browser_register_store, browser_mark_store, browser_quickmark_store, browser_macro_recorder, browser_last_played], browser.windows);
+
+// Top level, so a future event page gets the events on wake. Each start of the background refills the cache from the browser history.
+browser.history.onVisited.addListener(history_cache.visited);
+browser.history.onTitleChanged.addListener(history_cache.title_changed);
+browser.history.onVisitRemoved.addListener(history_cache.visit_removed);
+void history_cache.start();
 
 browser.tabs.onActivated.addListener(({ windowId, previousTabId }) => previous_tabs.activated(windowId, previousTabId));
 

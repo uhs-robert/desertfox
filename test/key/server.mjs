@@ -415,6 +415,11 @@ shadow.getElementById("panel").addEventListener("scroll", () => send("panel_scro
       const body = `<p id="one">needle one</p><iframe id="frame" srcdoc="<p>needle two</p>" style="width:300px;height:60px"></iframe><div id="open_host"></div><div id="closed_host"></div><div style="height:1800px"></div><p id="five">needle five</p>${roots}`;
       return response.end(page(`find_page ${id}`, body));
     }
+    if (url.pathname === "/find_field") {
+      // "needle" in two paragraphs and in an input, a textarea and a contenteditable. Search leaves the three fields out, so only the paragraphs match.
+      const body = '<p id="a">needle one</p><input id="f" value="needle in input"><textarea id="t">needle in textarea</textarea><div id="e" contenteditable>needle in editable</div><p id="z">needle two</p>';
+      return response.end(page(`find_field ${id}`, body));
+    }
     if (url.pathname === "/find_scroll") {
       // Four matches of "marker": one at the top, one far below, one inside a box that scrolls sideways, and one at the bottom of a frame that scrolls itself.
       const inner = "<body style='margin:0'><div style='height:1500px'></div><p>marker four</p></body>";

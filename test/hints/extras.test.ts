@@ -34,8 +34,28 @@ class FakeNode {
   getAttribute() {
     return null;
   }
-  querySelectorAll() {
-    return [];
+  querySelector() {
+    return null;
+  }
+  // Only a class selector, over the children and the shadow tree.
+  querySelectorAll(selector: string): FakeNode[] {
+    const found: FakeNode[] = [];
+    const walk = (node: FakeNode) => {
+      if (node.className === selector.slice(1)) found.push(node);
+      node.children.forEach(walk);
+      if (node.shadow) walk(node.shadow);
+    };
+    this.children.forEach(walk);
+    return found;
+  }
+  box: { left: number; top: number; right: number; bottom: number } | undefined;
+  getBoundingClientRect() {
+    return this.box ?? { left: 0, top: 0, right: 0, bottom: 0 };
+  }
+  before(node: FakeNode) {
+    node.remove();
+    node.parent = this.parent;
+    this.parent!.children.splice(this.parent!.children.indexOf(this), 0, node);
   }
   matches(_selector: string) {
     return false;
@@ -54,6 +74,9 @@ type Link = FakeNode & { localName: string; href: string; rect_top: number; on_c
 async function peek(answer: Outcome | Promise<Outcome>): Promise<Outcome | undefined> {
   return Promise.race([answer, new Promise<undefined>((resolve) => setTimeout(resolve, 20))]);
 }
+
+// A text pick waits this long, so the rest of the typed word is dropped (PICK_GRACE_MS in main.ts is 300).
+const after_grace = () => new Promise((resolve) => setTimeout(resolve, 350));
 
 const settle = async () => {
   for (let turn = 0; turn < 6; turn++) await new Promise((resolve) => setTimeout(resolve, 0));
@@ -80,6 +103,9 @@ async function page_with(texts: string[]) {
   let sink: { on_token_: (token: string) => string; exit: () => void } | undefined;
   let mode = "normal";
   let sends_held: (() => Promise<unknown>) | undefined;
+  // The text each `cmdline.open` was asked for. The line stays open until `close_line` answers it.
+  const lines: string[] = [];
+  let close_line: (outcome: Outcome) => void = () => {};
 
   const win = {
     innerWidth: 800,
@@ -101,6 +127,11 @@ async function page_with(texts: string[]) {
       // The caret bundle's `caret.mode` sets the caret mode it is asked for.
       run_command_: async (id: string, _name: string, args: Record<string, unknown>) => {
         if (id === "caret.mode") win.desertfox_host.set_mode_(args.mode as string);
+        if (id === "cmdline.open") {
+          lines.push(args.text as string);
+          win.desertfox_host.set_mode_("cmdline");
+          return new Promise<Outcome>((resolve) => (close_line = resolve));
+        }
         return { ok: true };
       },
       show_toast_: () => {},
@@ -184,6 +215,8 @@ async function page_with(texts: string[]) {
     modes,
     // Each batch of keys that hint mode handed back to the keymap, in order.
     held_key_batches,
+    lines,
+    close_line: (outcome: Outcome = { ok: true }) => close_line(outcome),
     // The next build finds no candidate in view.
     hide_all: () => void (intersecting = false),
     // The next opened link answers when this promise settles.
@@ -200,6 +233,8 @@ async function page_with(texts: string[]) {
     // The label text of each label that is not hidden by typing.
     labels: () => nodes_with_class("desertfox-hint").filter((node) => node.style.display !== "none").map((node) => node.children.map((part) => part.textContent).join("")),
     label_tops: () => nodes_with_class("desertfox-hint").map((node) => node.style.top),
+    nodes_with_class,
+    labels_of: (node: FakeNode) => node.children.map((part) => part.textContent).join(""),
     messages: () => nodes_with_class("desertfox-hint-message").map((node) => node.textContent),
     host_count: () => document_root.children.length,
     caret_target: () => win as unknown as { desertfox_caret_target?: unknown },
@@ -334,6 +369,183 @@ test("rapid with text keeps filtering after each pick", async () => {
   page.escape();
 });
 
+test("Tab then text narrows the labels, and one match picks at once", async () => {
+  const page = await page_with(["Alpha one", "Alpha two", "Beta"]);
+  page.run({ action: "delete" });
+  await settle();
+  assert.equal(page.type("<Tab>"), "handled");
+  assert.equal(page.labels().length, 3);
+  assert.equal(page.nodes_with_class("desertfox-hint-text").length, 1);
+  assert.equal(page.type("e"), "handled");
+  assert.equal(page.links.length, 3);
+  assert.equal(page.type("t"), "handled");
+  await after_grace();
+  await settle();
+  assert.deepEqual(page.links.map((link) => link.textContent), ["Alpha one", "Alpha two"]);
+  assert.equal(page.mode(), "normal");
+});
+
+test("the rest of a word typed after the key that made one match is dropped, and the pick runs after the grace", async () => {
+  const page = await page_with(["Alpha one", "Alpha two", "Beta"]);
+  page.run({ action: "delete" });
+  await settle();
+  page.type("<Tab>");
+  page.type("b");
+  for (const key of ["e", "j", "<Space>", "<Tab>"]) assert.equal(page.type(key), "handled", key);
+  assert.equal(page.links.length, 3);
+  assert.equal(page.mode(), "hint");
+  await after_grace();
+  await settle();
+  assert.deepEqual(page.links.map((link) => link.textContent), ["Alpha one", "Alpha two"]);
+  assert.equal(page.mode(), "normal");
+  assert.deepEqual(page.held_key_batches, []);
+});
+
+test("in rapid mode the rest of the word never types a label in the next round", async () => {
+  const page = await page_with(["Alpha one", "Alpha two", "Beta"]);
+  page.run({ action: "delete", rapid: true });
+  await settle();
+  page.type("<Tab>");
+  page.type("b");
+  page.type("a");
+  page.type("s");
+  await after_grace();
+  await settle();
+  assert.equal(page.links.length, 2);
+  assert.equal(page.labels().length, 2);
+  page.escape();
+});
+
+test("Escape during the grace cancels the pick", async () => {
+  const page = await page_with(["Alpha one", "Beta"]);
+  page.run({ action: "delete" });
+  await settle();
+  page.type("<Tab>");
+  page.type("b");
+  page.escape();
+  await after_grace();
+  assert.equal(page.links.length, 2);
+});
+
+test("Space turns the stacking order of labels that overlap, reading the boxes again on each press", async () => {
+  const page = await page_with(["one", "two", "three"]);
+  page.run({ action: "delete" });
+  await settle();
+  const [first, second, third] = page.nodes_with_class("desertfox-hint");
+  const order = () => page.nodes_with_class("desertfox-hint").map((node) => page.labels_of(node));
+  const overlap = { left: 0, top: 0, right: 20, bottom: 10 };
+  first!.box = overlap;
+  second!.box = { ...overlap, left: 10 };
+  third!.box = { left: 100, top: 100, right: 120, bottom: 110 };
+  const before = order();
+  page.type("<Space>");
+  assert.deepEqual(order(), [before[1], before[0], before[2]]);
+  page.type("<Space>");
+  assert.deepEqual(order(), before);
+  // A scroll moved the third label onto the others, so all three turn together now.
+  third!.box = { ...overlap, left: 5 };
+  page.type("<Space>");
+  assert.deepEqual(order(), [before[2], before[0], before[1]]);
+  // A label hidden by typing is not part of a group.
+  first!.style.display = "none";
+  page.type("<Space>");
+  assert.deepEqual(order(), [before[1], before[2], before[0]]);
+  page.escape();
+});
+
+test("text mode swaps the colors of the active hint and shows the typed text, and label mode takes both away", async () => {
+  const page = await page_with(["Alpha one", "Alpha two", "Beta"]);
+  page.run({ action: "delete" });
+  await settle();
+  const active_nodes = () => page.nodes_with_class("desertfox-hint").filter((node) => node.style.background === "var(--label-text)");
+  assert.equal(active_nodes().length, 0);
+  page.type("<Tab>");
+  page.type("a");
+  assert.equal(active_nodes().length, 1);
+  assert.equal(page.nodes_with_class("desertfox-hint-text")[0]!.textContent, "text: a");
+  page.type("<Tab>");
+  assert.equal(active_nodes().length, 1);
+  assert.equal(active_nodes()[0]!.style.color, "var(--primary)");
+  page.type("<Backspace>");
+  page.type("<Backspace>");
+  assert.equal(active_nodes().length, 0);
+  assert.equal(page.nodes_with_class("desertfox-hint-text").length, 0);
+  page.escape();
+});
+
+test("Space and Enter typed while the hints are found wait and replay in order", async () => {
+  const page = await page_with(["Alpha one", "Alpha two", "Beta"]);
+  page.run({ action: "delete" });
+  for (const key of ["<Tab>", "a", "l", "<Space>", "t", "<Enter>"]) assert.equal(page.type(key), "handled", key);
+  await settle();
+  // "al t" matches both Alpha links ("t" is in "two" only), so "Alpha two" is the one match and picks at once, ahead of the Enter.
+  await after_grace();
+  await settle();
+  assert.deepEqual(page.links.map((link) => link.textContent), ["Alpha one", "Beta"]);
+});
+
+test("Tab and Shift-Tab move the active hint and Enter picks it", async () => {
+  const page = await page_with(["Alpha one", "Alpha two", "Beta"]);
+  page.run({ action: "delete" });
+  await settle();
+  for (const key of ["<Tab>", "a", "l", "p", "<Tab>", "<Tab>", "<S-Tab>", "<Enter>"]) page.type(key);
+  await settle();
+  assert.deepEqual(page.links.map((link) => link.textContent), ["Alpha one", "Beta"]);
+});
+
+test("Backspace on empty text goes back to label mode with the labels typable", async () => {
+  const page = await page_with(["Alpha one", "Alpha two", "Beta"]);
+  page.run({ action: "delete" });
+  await settle();
+  page.type("<Tab>");
+  page.type("a");
+  page.type("l");
+  page.type("<Backspace>");
+  page.type("<Backspace>");
+  assert.equal(page.type("<Backspace>"), "handled");
+  assert.equal(page.nodes_with_class("desertfox-hint-text").length, 0);
+  assert.equal(page.labels().length, 3);
+  assert.equal(page.links.length, 3);
+  page.type(page.labels()[1]!.toLowerCase());
+  await settle();
+  assert.deepEqual(page.links.map((link) => link.textContent), ["Alpha one", "Beta"]);
+});
+
+test("a rapid rebuild after a text pick is back in label mode", async () => {
+  const page = await page_with(["Alpha one", "Alpha two", "Beta"]);
+  page.run({ action: "delete", rapid: true });
+  await settle();
+  for (const key of ["<Tab>", "b", "e", "t"]) page.type(key);
+  await after_grace();
+  await settle();
+  assert.equal(page.links.length, 2);
+  assert.equal(page.nodes_with_class("desertfox-hint-text").length, 0);
+  assert.equal(page.labels().length, 2);
+  page.type(page.labels()[0]!.toLowerCase());
+  await settle();
+  assert.equal(page.links.length, 1);
+  page.escape();
+});
+
+test("Tab and text typed while the hints are found wait, then switch and filter", async () => {
+  const page = await page_with(["Alpha one", "Alpha two", "Beta"]);
+  page.run({ action: "delete" });
+  for (const key of ["<Tab>", "b", "e", "t"]) assert.equal(page.type(key), "handled");
+  await after_grace();
+  await settle();
+  assert.deepEqual(page.links.map((link) => link.textContent), ["Alpha one", "Alpha two"]);
+});
+
+test("Space in label mode keeps the labels and does not pick", async () => {
+  const page = await page_with(["Alpha one", "Alpha two"]);
+  page.run({ action: "delete" });
+  await settle();
+  assert.equal(page.type("<Space>"), "handled");
+  assert.equal(page.labels().length, 2);
+  assert.equal(page.links.length, 2);
+  page.escape();
+});
+
 test("copy writes the address and copy_text writes the text, rapid keeps the labels", async () => {
   const page = await page_with(["one", "two"]);
   page.run({ action: "copy" });
@@ -349,7 +561,7 @@ test("copy writes the address and copy_text writes the text, rapid keeps the lab
   await settle();
   assert.deepEqual(rapid_page.copied, ["two"]);
   assert.equal(rapid_page.labels().length, 2);
-  assert.match(rapid_page.messages()[0]!, /^Copied two/);
+  assert.match(rapid_page.messages()[0]!, /^Copied 1 text$/);
   rapid_page.escape();
 });
 
@@ -725,4 +937,108 @@ test("no keys typed during a failed build hand nothing back", async () => {
   page.run({});
   await settle();
   assert.deepEqual(page.held_key_batches, []);
+});
+
+test("prompt opens the line with the command and the address, and stays pending until the line closes", async () => {
+  const page = await page_with(["one", "two"]);
+  const answer = page.run({ action: "prompt", command: "open" });
+  await settle();
+  page.type(page.labels()[1]!.toLowerCase());
+  await settle();
+  assert.deepEqual(page.lines, ["open https://example.com/two"]);
+  assert.equal(page.mode(), "cmdline");
+  assert.equal(await peek(answer), undefined);
+  page.close_line();
+  assert.deepEqual(await answer, { ok: true });
+});
+
+test("prompt takes the command the binding names and quotes an address the line would split", async () => {
+  const page = await page_with(["a b", "it's", "plain"]);
+  page.links[0]!.href = "https://example.com/a b";
+  page.links[1]!.href = "https://example.com/it's";
+  page.run({ action: "prompt", command: "open --tab" });
+  await settle();
+  page.type(page.labels()[0]!.toLowerCase());
+  await settle();
+  assert.deepEqual(page.lines, ["open --tab 'https://example.com/a b'"]);
+  page.close_line();
+  const second = await page_with(["it's"]);
+  second.links[0]!.href = "https://example.com/it's";
+  second.run({ action: "prompt", command: "open", text: "it" });
+  await settle();
+  assert.deepEqual(second.lines, ["open 'https://example.com/it'\\''s'"]);
+});
+
+test("prompt on an element with no address refuses and opens no line", async () => {
+  const page = await page_with(["one"]);
+  page.links[0]!.href = undefined as never;
+  const answer = page.run({ action: "prompt", command: "open", filter: "all" });
+  await settle();
+  page.type(page.labels()[0]!.toLowerCase());
+  assert.deepEqual(await answer, { ok: false, message: "This element has no web address" });
+  assert.deepEqual(page.lines, []);
+});
+
+test("prompt ignores rapid: one pick ends hint mode", async () => {
+  const page = await page_with(["one", "two"]);
+  page.run({ action: "prompt", command: "open", rapid: true });
+  await settle();
+  page.type(page.labels()[0]!.toLowerCase());
+  await settle();
+  assert.equal(page.lines.length, 1);
+  assert.equal(page.labels().length, 0);
+  assert.equal(page.mode(), "cmdline");
+});
+
+test("a key typed while the labels were built is held until the line is up, never run in normal mode", async () => {
+  const page = await page_with(["one", "two"]);
+  page.run({ action: "prompt", command: "open", text: "two" });
+  assert.equal(page.type("x"), "handled");
+  await settle();
+  assert.deepEqual(page.modes, ["hint", "normal", "cmdline"]);
+  assert.deepEqual(page.lines, ["open https://example.com/two"]);
+  assert.deepEqual(page.held_key_batches, [["x"]]);
+});
+
+test("rapid copy collects the picks into one list without a repeat and rewrites the register each time", async () => {
+  const page = await page_with(["one", "two", "three"]);
+  page.run({ action: "copy", rapid: true, register: "a" });
+  await settle();
+  const pick = async (index: number) => {
+    page.type(page.labels()[index]!.toLowerCase());
+    await settle();
+  };
+  await pick(0);
+  await pick(2);
+  await pick(0);
+  assert.deepEqual(page.copied, ["https://example.com/one", "https://example.com/one\nhttps://example.com/three", "https://example.com/one\nhttps://example.com/three"]);
+  assert.equal(page.yanked.length, 3);
+  assert.deepEqual(page.messages().slice(0, 2), ["Copied 1 address", "Copied 2 addresses"]);
+  page.escape();
+});
+
+test("rapid copy_text collects the texts and a repeat adds nothing", async () => {
+  const page = await page_with(["one", "two"]);
+  page.run({ action: "copy_text", rapid: true });
+  await settle();
+  for (const index of [1, 0, 1]) {
+    page.type(page.labels()[index]!.toLowerCase());
+    await settle();
+  }
+  assert.deepEqual(page.copied.at(-1), "two\none");
+  assert.equal(page.messages().at(-1), "Copied 2 texts");
+  page.escape();
+});
+
+test("rapid copy_text skips an empty pick, so the list has no blank line", async () => {
+  const page = await page_with(["one", "two"]);
+  page.links[0]!.textContent = "";
+  page.run({ action: "copy_text", rapid: true });
+  await settle();
+  for (const index of [0, 1]) {
+    page.type(page.labels()[index]!.toLowerCase());
+    await settle();
+  }
+  assert.equal(page.copied.at(-1), "two");
+  page.escape();
 });

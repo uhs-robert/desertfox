@@ -1,5 +1,6 @@
 // Key cases of page search: `/`, `?`, `n` and `N`. run.mjs calls run_cases with its helpers.
 // /find_page holds "needle" on the page (one, five), in a frame (two), in an open root (three) and in a closed root (four).
+// /find_field holds "needle" in two paragraphs and in three fields, which search skips.
 // The cases read the highlights from the content script's own world, with tabs.executeScript.
 
 import { mkdirSync } from "node:fs";
@@ -721,5 +722,42 @@ export async function run_cases({ rdp, extension_id, run_case, expect, expect_ab
     await press_and_wait_for_move(page_id, "j", "j to the next paragraph from the match");
     const state = await in_active_tab(READ_SELECTION);
     expect(state.focus?.startsWith("find_words") && state.focus_offset <= 1, `j went to column ${state.focus_offset} of ${JSON.stringify(state.focus)}, expected the match column`);
+  });
+
+  // Guard: search skips field text and never focuses or selects, so no focus event can switch the mode to insert. Vimium needs PostFindMode for this. A later change that makes fields searchable must keep these asserts.
+  const READ_FIELD_STATE = `JSON.stringify({ active: document.activeElement.tagName, selection: getSelection().toString(), input_collapsed: document.getElementById("f").selectionStart === document.getElementById("f").selectionEnd, textarea_collapsed: document.getElementById("t").selectionStart === document.getElementById("t").selectionEnd, input: document.getElementById("f").value, textarea: document.getElementById("t").value, editable: document.getElementById("e").textContent })`;
+  const FIELD_STATE_AT_START = JSON.stringify({ active: "BODY", selection: "", input_collapsed: true, textarea_collapsed: true, input: "needle in input", textarea: "needle in textarea", editable: "needle in editable" });
+  async function expect_find_leaves_fields_alone(page_id) {
+    const mark = events.length;
+    await press_keys("/needle");
+    const state = await wait_highlights((read) => total_painted(read) === 2, "the two paragraphs painted and no field");
+    expect(current_of(state) === "needle one", `the current match is ${current_of(state)}, expected needle one`);
+    await press_enter_and_wait_for_close();
+    await press_and_wait_for_new_current("n");
+    await press_and_wait_for_new_current("N");
+    await press_and_wait_for_new_current("n");
+    // A hidden badge would pass the scan below, so wait for the NORMAL badge.
+    await wait_event(mark, badge_is(page_id, "NORMAL"), "the NORMAL badge after the search");
+    expect(await in_active_tab(READ_FIELD_STATE) === FIELD_STATE_AT_START, `a field took focus, selection or text: ${await in_active_tab(READ_FIELD_STATE)}`);
+    // An empty label is the badge hiding while the search line is open.
+    const switched = events.slice(mark).find((event) => event.type === "indicator" && event.page_id === page_id && event.label !== "NORMAL" && event.label !== "");
+    expect(!switched, `the mode left normal during search: ${JSON.stringify(switched)}`);
+  }
+
+  await run_case("/, n and N never focus a field or switch to insert mode", async () => {
+    const page_id = "find_field_plain";
+    await open_page("find_field", page_id, { new_tab: true });
+    await expect_find_leaves_fields_alone(page_id);
+  });
+
+  await run_case("/, n and N after a field was focused and left leave the fields alone", async () => {
+    const page_id = "find_field_after_focus";
+    await open_page("find_field", page_id, { new_tab: true });
+    const mark = events.length;
+    await in_active_tab(`document.getElementById("f").focus()`);
+    await wait_event(mark, badge_is(page_id, "INSERT"), "the INSERT badge after the input took focus");
+    await escape_to_normal(page_id);
+    expect(await in_active_tab(READ_FIELD_STATE) === FIELD_STATE_AT_START, `Escape left the input focused: ${await in_active_tab(READ_FIELD_STATE)}`);
+    await expect_find_leaves_fields_alone(page_id);
   });
 }

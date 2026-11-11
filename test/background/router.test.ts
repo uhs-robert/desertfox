@@ -676,3 +676,70 @@ test("a lost reply is done when the caller says the tab navigated, and refuses w
     assert.deepEqual(log, is_done ? [] : ["Scroll needs a page DesertFox runs on"], name);
   }
 });
+
+const closer = (seen: number[]) => ({
+  label: "Close",
+  intent: "x",
+  runs_in: "background" as const,
+  count: "repeat" as const,
+  repeat_limit: 20,
+  run: () => void seen.push(1),
+});
+
+test("a count over the repeat limit is refused, names the count, limit and command, and runs nothing", async () => {
+  const seen: number[] = [];
+  const { deps, log } = make_fake({ "tab.close": closer(seen) });
+  const response = await create_router(deps).run({ invocations: [{ id: "tab.close", count: 100 }], mode: "normal" });
+  assert.deepEqual(response, { ok: false, refusal: { id: "tab.close", message: "A count of 100 is over the limit of 20 for tab.close" } });
+  assert.deepEqual(seen, []);
+  assert.deepEqual(log, ["refuse 7 A count of 100 is over the limit of 20 for tab.close"]);
+});
+
+test("a count at exactly the repeat limit runs, and so does no count", async () => {
+  const seen: number[] = [];
+  const { deps } = make_fake({ "tab.close": closer(seen) });
+  const router = create_router(deps);
+  assert.deepEqual(await router.run({ invocations: [{ id: "tab.close", count: 20 }], mode: "normal" }), { ok: true });
+  assert.equal(seen.length, 20);
+  await router.run({ invocations: [{ id: "tab.close" }], mode: "normal" });
+  assert.equal(seen.length, 21);
+});
+
+test("a sequence with a later step over the limit runs no step", async () => {
+  const seen: number[] = [];
+  const { deps } = make_fake({ "tab.close": closer(seen), "tab.next": { label: "Next", intent: "x", runs_in: "background", run: () => void seen.push(0) } });
+  const response = await create_router(deps).run({ invocations: [{ id: "tab.next" }, { id: "tab.close", count: 21 }], mode: "normal" });
+  assert.equal(response.ok, false);
+  assert.deepEqual(seen, []);
+});
+
+test("the limit gates a param-rule count prefix but not a typed param", async () => {
+  const seen: unknown[] = [];
+  const { deps } = make_fake({
+    "tab.unload": { label: "Unload", intent: "x", runs_in: "background", params: [{ name: "count", type: "int", default: 1 }], count: { param: "count" }, repeat_limit: 20, run: (_ctx, args) => void seen.push(args.count) },
+  });
+  const router = create_router(deps);
+  assert.equal((await router.run({ invocations: [{ id: "tab.unload", count: 21 }], mode: "normal" })).ok, false);
+  assert.equal((await router.run({ invocations: [{ id: "tab.unload", args: { count: 100 } }], mode: "normal" })).ok, true);
+  assert.deepEqual(seen, [100]);
+});
+
+test("a prompt step that may prompt drops its count and is not gated, but is refused when it may not prompt", async () => {
+  const seen: number[] = [];
+  const commands = { "tab.close": { ...closer(seen), name: "close", params: [{ name: "q", type: "string" as const, main: true }] } };
+  const step = { id: "tab.close", count: 100, prompt: { param: "q" } };
+  const prompting = make_fake(commands);
+  assert.deepEqual(await create_router(prompting.deps).run({ invocations: [step], mode: "normal", may_prompt: true }), { ok: true });
+  assert.ok(prompting.log.some((line) => line.startsWith("cmdline")));
+  const silent = make_fake(commands);
+  assert.equal((await create_router(silent.deps).run({ invocations: [step], mode: "normal" })).ok, false);
+  assert.deepEqual(seen, []);
+});
+
+test("a replayed step over the limit is refused with instant set", async () => {
+  const seen: number[] = [];
+  const { deps } = make_fake({ "tab.close": closer(seen) });
+  const response = await create_router(deps).run({ invocations: [{ id: "tab.close", count: 50 }], mode: "normal", instant: true });
+  assert.equal(response.ok, false);
+  assert.deepEqual(seen, []);
+});
