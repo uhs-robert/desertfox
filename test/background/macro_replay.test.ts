@@ -634,3 +634,22 @@ test("a step that is not a pick takes no grace wait", async () => {
   assert.equal(await replay.play(start), true);
   assert.equal(pauses.count, 0);
 });
+
+test("a pick whose action cannot navigate this tab takes no grace wait, and page.follow and a default or here pick do", async () => {
+  const cases: [BoundInvocation, boolean][] = [
+    [{ id: "hint.run", args: { action: "tab" } }, false],
+    [{ id: "hint.run", args: { action: "background" } }, false],
+    [{ id: "hint.run", args: { action: "window" } }, false],
+    [{ id: "hint.run", args: { action: "copy" } }, false],
+    [{ id: "hint.run", args: { action: "hover" } }, false],
+    [{ id: "hint.run", args: { action: "here" } }, true],
+    [{ id: "hint.run", args: { action: "double_click" } }, true],
+    [{ id: "hint.run", args: { filter: "links" } }, true],
+    [{ id: "page.follow", args: { direction: "next" } }, true],
+  ];
+  for (const [step, pays] of cases) {
+    const { replay, pauses, start } = make({ a: [step] });
+    assert.equal(await replay.play(start), true);
+    assert.equal(pauses.count > 0, pays, JSON.stringify(step));
+  }
+});

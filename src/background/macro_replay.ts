@@ -46,7 +46,10 @@ const NAVIGATION_GRACE_POLLS = 12;
 const NAVIGATION_POLL_MS = 25;
 // A same-document navigation (a route change, a hash) never reads loading, so the page-ready wait ends at once. This gives the page's own script time to draw the new view.
 const SAME_DOCUMENT_SETTLE_MS = 150;
-const CLICKING_STEPS = new Set(["hint.run"]);
+const CLICKING_STEPS = new Set(["hint.run", "page.follow"]);
+// The hint actions that can load a page in the tab the pick ran in. The others open another tab, copy, hover and the like. A pick with no action takes a default that depends on its filter, so it counts as clicking.
+const NAVIGATING_PICK_ACTIONS = new Set(["here", "double_click"]);
+const may_navigate_tab = (step: BoundInvocation) => CLICKING_STEPS.has(step.id) && (step.id !== "hint.run" || step.args?.action === undefined || NAVIGATING_PICK_ACTIONS.has(step.args.action as string));
 
 const timer_turn = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
@@ -122,7 +125,7 @@ export function create_macro_replay(deps: MacroReplayDeps) {
     const watch = before === undefined ? undefined : deps.watch(before);
     const was_loading = before !== undefined && (await deps.is_loading(before));
     try {
-      const may_navigate = CLICKING_STEPS.has(step.id);
+      const may_navigate = may_navigate_tab(step);
       const lost_reply = async () => before !== undefined && watch !== undefined && (await navigation_started(replay, before, watch, was_loading));
       const answer = await deps.run_step(step, { tab_id: before, frame_id: before === start.tab_id ? (start.frame_id ?? 0) : 0, mode: start.mode }, lost_reply);
       if (!answer.ok || answer.cancelled) return false;
