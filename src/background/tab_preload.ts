@@ -15,7 +15,7 @@ export type Direction = 1 | -1;
 export type PreloadSettings = { tab_preload: boolean; tab_preload_unload_ms: number };
 
 // `direction` is the travel that loaded the tab: the tab is next to the active one when it lies `direction` places after it. No `deadline` means it is next to the active tab now.
-export type Preloaded = { window_id: number; direction: Direction; deadline?: number };
+export type Preloaded = { window_id: number; direction: Direction; url: string; deadline?: number };
 
 export type PreloadDeps = {
   discard: DiscardDeps;
@@ -63,7 +63,7 @@ export function create_tab_preload(deps: PreloadDeps) {
       if (!tab || tab.active || work.touched) return;
       await in_turn(async () => {
         const entries = await deps.read();
-        entries[tab_id] = { window_id, direction };
+        entries[tab_id] = { window_id, direction, url: tab.url ?? "" };
         await deps.write(entries);
         // The user may have moved on while the tab loaded, so the countdown is decided now.
         const active = (await deps.discard.tabs_in_window(window_id)).find((candidate) => candidate.active);
@@ -96,7 +96,7 @@ export function create_tab_preload(deps: PreloadDeps) {
     const entry = entries[tab_id];
     if (!entry) return;
     deps.clear_alarm(tab_id);
-    entries[tab_id] = { window_id: entry.window_id, direction };
+    entries[tab_id] = { window_id: entry.window_id, direction, url: entry.url };
     await deps.write(entries);
   }
 
@@ -120,7 +120,7 @@ export function create_tab_preload(deps: PreloadDeps) {
       const next_to_active = active !== undefined && tabs[(active.index + entry.direction + tabs.length) % tabs.length]?.id === id;
       if (next_to_active) {
         deps.clear_alarm(id);
-        entries[id] = { window_id, direction: entry.direction };
+        entries[id] = { window_id, direction: entry.direction, url: entry.url };
       } else if (tab_preload_unload_ms <= 0) {
         drop(entries, id);
       } else if (entry.deadline === undefined) {
@@ -146,7 +146,7 @@ export function create_tab_preload(deps: PreloadDeps) {
       const tabs = await deps.discard.tabs_in_window(entry.window_id);
       const active = tabs.find((tab) => tab.active);
       if (active && tabs[(active.index + entry.direction + tabs.length) % tabs.length]?.id === tab_id) {
-        entries[tab_id] = { window_id: entry.window_id, direction: entry.direction };
+        entries[tab_id] = { window_id: entry.window_id, direction: entry.direction, url: entry.url };
         return void (await deps.write(entries));
       }
       drop(entries, tab_id);
@@ -181,6 +181,11 @@ export function create_tab_preload(deps: PreloadDeps) {
       touch(tab_id);
       return in_turn(() => forget(tab_id));
     },
+    // The tab's url changed. The preload's own reload reports its url too, so only a different url ends the tracking. This does not touch work under way: `load` stores the url it finds after the reload.
+    navigated: (tab_id: number, url: string): Promise<void> =>
+      in_turn(async () => {
+        if ((await deps.read())[tab_id]?.url !== url) await forget(tab_id);
+      }),
     // An alarm fired for the tab.
     alarm: (tab_id: number): Promise<void> => in_turn(() => unload_if_untouched(tab_id)),
     // At each start of the background: the alarms do not outlive an extension reload, the entries may.

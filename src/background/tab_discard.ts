@@ -3,7 +3,7 @@ import { create_previous_tabs } from "./previous_tab.ts";
 // The one place that unloads and loads tabs. Nothing else calls `tabs.discard`. Callers choose the ids: the tab
 // commands, the command line row key and, later, a sidebar selection. This file owns the rules.
 
-export type DiscardTab = { id: number; window_id: number; index: number; active: boolean; audible: boolean; discarded: boolean; pinned: boolean };
+export type DiscardTab = { id: number; window_id: number; index: number; active: boolean; audible: boolean; discarded: boolean; pinned: boolean; url?: string };
 
 export type DiscardDeps = {
   read_tab: (tab_id: number) => Promise<DiscardTab | undefined>;
@@ -100,7 +100,7 @@ export function describe_result(verb: "unloaded" | "loaded", result: SetUnloaded
 }
 
 function to_discard_tab(tab: browser.tabs.Tab): DiscardTab {
-  return { id: tab.id ?? -1, window_id: tab.windowId ?? -1, index: tab.index, active: tab.active, audible: tab.audible ?? false, discarded: tab.discarded ?? false, pinned: tab.pinned };
+  return { id: tab.id ?? -1, window_id: tab.windowId ?? -1, index: tab.index, active: tab.active, audible: tab.audible ?? false, discarded: tab.discarded ?? false, pinned: tab.pinned, url: tab.url ?? "" };
 }
 
 // The alternate tab is read through a second reader of the same storage. A write still queued in the first reader may not show yet.

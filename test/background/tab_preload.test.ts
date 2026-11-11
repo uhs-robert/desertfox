@@ -7,11 +7,13 @@ import type { DiscardTab } from "../../src/background/tab_discard.ts";
 // A small browser with a hand-driven clock, alarms and session storage. `reload` and `discard` change `discarded` as Firefox does.
 // `hold_reloads` and `hold_reads` keep a browser call open so a test can act in the middle of it.
 function make(tabs: Partial<DiscardTab>[], settings: Partial<PreloadSettings> = {}) {
-  const state: DiscardTab[] = tabs.map((tab, index) => ({ id: index + 1, window_id: 1, index, active: index === 0, audible: false, discarded: false, pinned: false, ...tab }));
+  const state: DiscardTab[] = tabs.map((tab, index) => ({ id: index + 1, window_id: 1, index, active: index === 0, audible: false, discarded: false, pinned: false, url: `https://example.test/${index + 1}`, ...tab }));
   const log: string[] = [];
   const alarms = new Map<number, number>();
   const clock = { now: 1_000_000 };
   const stored: { entries: Record<string, Preloaded> } = { entries: {} };
+  // Firefox reports the url of a reloaded tab to the url listener, as `main.ts` wires it to `navigated`. Twice, as the probe saw: while the tab loads and when it completes.
+  let url_event: (id: number, url: string) => Promise<void> = async () => undefined;
   let hold_reload: Promise<void> | undefined;
   let hold_read: Promise<void> | undefined;
   // Only the read with this number (counted from 1 after `hold("read", n)`) waits. Without it every read waits.
@@ -39,6 +41,8 @@ function make(tabs: Partial<DiscardTab>[], settings: Partial<PreloadSettings> = 
         await hold_reload;
         const tab = state.find((candidate) => candidate.id === id);
         if (tab) tab.discarded = false;
+        if (tab) void url_event(id, tab.url!);
+        if (tab) void url_event(id, tab.url!);
       },
     },
     warmup: async (id) => void log.push(`warmup ${id}`),
@@ -50,6 +54,7 @@ function make(tabs: Partial<DiscardTab>[], settings: Partial<PreloadSettings> = 
     now_ms: () => clock.now,
   };
   const real = create_tab_preload(deps);
+  url_event = real.navigated;
   // A switch lands on a tab before the preload starts, so the tab is active when it does.
   const preload = {
     ...real,
@@ -93,7 +98,7 @@ test("an unloaded next tab is loaded, stays inactive and has no countdown while 
   await preload.after_switch(1, 2, 1);
   assert.deepEqual(log, ["reload 3"]);
   assert.equal(state[2]!.active, false);
-  assert.deepEqual(stored.entries, { 3: { window_id: 1, direction: 1 } });
+  assert.deepEqual(stored.entries, { 3: { window_id: 1, direction: 1, url: "https://example.test/3" } });
   assert.equal(alarms.size, 0);
 });
 
@@ -347,17 +352,31 @@ test("an alarm that fires while the user is next to the tab again does not unloa
   state[1]!.active = true;
   await preload.alarm(3);
   assert.deepEqual(log, ["reload 3"]);
-  assert.deepEqual(stored.entries, { 3: { window_id: 1, direction: 1 } });
+  assert.deepEqual(stored.entries, { 3: { window_id: 1, direction: 1, url: "https://example.test/3" } });
 });
 
-test("a tracked tab that navigates on its own is no longer unloaded", async () => {
-  const { log, alarms, preload, visit, fire_alarm } = make([{}, {}, { discarded: true }, {}]);
+test("the url events of the preload's own reload leave the tab tracked, so it still unloads", async () => {
+  const { state, log, stored, preload, visit, fire_alarm, tick } = make([{}, {}, { discarded: true }, {}]);
+  await preload.after_switch(1, 2, 1);
+  await tick();
+  assert.equal(stored.entries[3]!.url, "https://example.test/3");
+  await visit(1);
+  await fire_alarm(3);
+  assert.deepEqual(log, ["reload 3", "discard 3"]);
+  assert.equal(state[2]!.discarded, true);
+});
+
+test("a tracked tab that shows another page is no longer unloaded", async () => {
+  const { log, alarms, stored, preload, visit, fire_alarm } = make([{}, {}, { discarded: true }, {}]);
   await preload.after_switch(1, 2, 1);
   await visit(1);
-  // `main.ts` sends the url change of a tab to `removed`.
-  await preload.removed(3);
+  // The same url again is no change.
+  await preload.navigated(3, "https://example.test/3");
+  assert.equal(alarms.size, 1);
+  await preload.navigated(3, "https://example.test/elsewhere");
   await fire_alarm(3);
   assert.equal(alarms.size, 0);
+  assert.deepEqual(stored.entries, {});
   assert.deepEqual(log, ["reload 3"]);
 });
 
