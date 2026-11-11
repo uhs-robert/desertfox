@@ -31,3 +31,8 @@ pass = "j"
 
 [[site_rules]]
 site = "*://127.0.0.1/page?id=rule_keep*"
+
+# p24_site_zoom: a site row sets the zoom once per host and browser session. Firefox remembers zoom per host, so the piece puts 127.0.0.1 back to 100 percent when it ends.
+[[site_rules]]
+site = "*://127.0.0.1/page?id=zoom_site*"
+zoom = 1.5

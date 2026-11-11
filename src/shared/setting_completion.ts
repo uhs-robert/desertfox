@@ -88,6 +88,14 @@ export const SETTING_COMPLETION: readonly SettingCompletion[] = [
     "values": []
   },
   {
+    "name": "zoom",
+    "settable": true,
+    "is_toggle": false,
+    "is_list": false,
+    "expectation": "a number, from 0.3 to 5",
+    "values": []
+  },
+  {
     "name": "mode_indicator",
     "settable": true,
     "is_toggle": false,
