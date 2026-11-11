@@ -82,11 +82,11 @@ try {
   }
   // warmup call cost only (headless has no compositor, so the paint gain cannot show here).
   out.misc.warmup = await bg(`(async () => { const [a, b] = __ids; await browser.tabs.update(a, { active: true }); const t0 = __now(); await browser.tabs.warmup(b); return { warmup_call_ms: __now() - t0 }; })()`);
-} catch (error) { out.error = String(error.stack ?? error); }
+} catch (error) { out.error = String(error.stack ?? error); process.exitCode = 1; }
 finally { try { rdp.close(); } catch {} ff.kill("SIGTERM"); server.close(); }
 writeFileSync(`${work}/tab/result.json`, JSON.stringify(out, null, 1));
 console.log(JSON.stringify(out.misc), out.error ?? "");
 for (const r of out.loaded) console.log("L", JSON.stringify(r));
 for (const r of out.discarded) console.log("D", JSON.stringify(r));
 for (const r of out.preload) console.log("P", JSON.stringify(r));
-setTimeout(() => process.exit(0), 1000);
+setTimeout(() => process.exit(process.exitCode ?? 0), 1000);

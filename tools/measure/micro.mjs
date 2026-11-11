@@ -29,7 +29,7 @@ try {
     })()`).catch((e) => ({ error: String(e) }));
     out.micro.push({ file, bytes: readFileSync(`${root}/files/${file}.js`).length, ...r });
   }
-  for (const file of []) {
+  for (const file of ["eager_0", "eager_4", "eager_16", "eager_32", "eager_64", "eager_256", "lazy_16"]) {
     const r = await evaluate_in_chrome(rdp, `(async () => {
       const url = "file://${root}/files/${file}.js";
       const mgr = Cc["@mozilla.org/memory-reporter-manager;1"].getService(Ci.nsIMemoryReporterManager);

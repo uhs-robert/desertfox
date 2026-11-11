@@ -76,12 +76,12 @@ try {
       let script;
       const runs = 15;
       for (let i = 0; i < runs; i++) {
-        const t0 = Cu.now(); script = await ChromeUtils.compileScript(url, { hasReturnValue: false }); compile.push(Cu.now() - t0);
+        const t0 = ChromeUtils.now(); script = await ChromeUtils.compileScript(url, { hasReturnValue: false }); compile.push(ChromeUtils.now() - t0);
       }
       for (let i = 0; i < runs; i++) {
-        const t1 = Cu.now(); const sb = Cu.Sandbox(principal, { wantXrays: true }); const t2 = Cu.now();
+        const t1 = ChromeUtils.now(); const sb = Cu.Sandbox(principal, { wantXrays: true }); const t2 = ChromeUtils.now();
         try { script.executeInGlobal(sb); } catch (e) {}
-        exec.push(Cu.now() - t2); sandbox.push(t2 - t1); Cu.nukeSandbox(sb);
+        exec.push(ChromeUtils.now() - t2); sandbox.push(t2 - t1); Cu.nukeSandbox(sb);
       }
       return { compile_ms: med(compile), compile_min: Math.min(...compile), exec_ms: med(exec), exec_first: exec[0], sandbox_ms: med(sandbox) };
     })()`);
@@ -129,8 +129,8 @@ try {
       ready_after_nav_med: +med(warm.map((r) => r.t1)).toFixed(2), ready_after_response_med: +med(warm.map((r) => r.t1 - r.rs)).toFixed(2),
       exec_med: +med(warm.map((r) => r.t1 - r.t0)).toFixed(3), load_event_med: +med(ld.filter((r) => r.n > 0).map((r) => r.load)).toFixed(1) });
   }
-} catch (error) { out.error = String(error.stack ?? error); }
+} catch (error) { out.error = String(error.stack ?? error); process.exitCode = 1; }
 finally { try { rdp.close(); } catch {} ff.kill("SIGTERM"); server.close(); }
 writeFileSync(`${work}/bench/result.json`, JSON.stringify(out, null, 1));
 console.log(JSON.stringify(out));
-setTimeout(() => process.exit(0), 1500);
+setTimeout(() => process.exit(process.exitCode ?? 0), 1500);
