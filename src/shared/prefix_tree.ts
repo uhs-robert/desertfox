@@ -53,9 +53,10 @@ export type TreeNode = TreeLeaf | TreeBranch;
 
 // One `site_rules` row with its columns (see `SiteColumns` in `match_pattern.ts`). `keys` holds parsed key sequences, one token array each. The background prunes the normal tree with them for each page, so the stored keymap does not grow a tree per rule.
 // `off` is set from `off` or a row with nothing but `site`. The background also treats a page as all off when its key rule leaves no normal binding.
+// `modes` holds each site mode with its own binds, compiled as `bind` is. A page grafts them on its own, never on the stored tree.
 // `bind` maps a normalized key sequence to its tokens and compiled leaf. The background grafts the merged binds onto the normal tree before it prunes.
 export type SiteBind = { tokens: string[]; leaf: TreeLeaf };
-export type SiteRule = { regex: string; off?: boolean; keys?: { pass: string[][] } | { only: string[][] }; bind?: Record<string, SiteBind>; values?: Readonly<Record<string, unknown>> };
+export type SiteRule = { regex: string; off?: boolean; keys?: { pass: string[][] } | { only: string[][] }; bind?: Record<string, SiteBind>; modes?: Record<string, { label: string; bind: Record<string, SiteBind> }>; values?: Readonly<Record<string, unknown>> };
 
 export type CompiledKeymap = {
   format_version: typeof COMPILED_KEYMAP_VERSION;
@@ -93,7 +94,10 @@ export type FrameSiteName = (typeof FRAME_SITE_SETTINGS)[number];
 export type FrameSiteValues<Name extends FrameSiteName = FrameSiteName> = Partial<Pick<Settings, Name>>;
 
 // `site_values` holds the page reply site settings resolved for the frame's own address, each only when it differs from its default.
-export type PageKeymap = { keymap: Omit<CompiledKeymap, "site_rules" | "frame_site_globals">; all_off: boolean; frees?: PageFrees; recording?: string; insert?: true; site_values?: FrameSiteValues<(typeof PAGE_REPLY_SITE_SETTINGS)[number]> };
+// What a site mode adds to the page's normal tree: its badge label and the top-level children that differ from the normal tree, which the content script lays over it.
+export type PageSiteMode = { label: string; tree: Record<string, TreeNode> };
+
+export type PageKeymap = { keymap: Omit<CompiledKeymap, "site_rules" | "frame_site_globals">; all_off: boolean; site_modes?: Record<string, PageSiteMode>; frees?: PageFrees; recording?: string; insert?: true; site_values?: FrameSiteValues<(typeof PAGE_REPLY_SITE_SETTINGS)[number]> };
 
 // A tree stored by an older build has another shape, and the page then gets no keymap until the background recompiles.
 export const current_keymap = (stored: CompiledKeymap | undefined): CompiledKeymap | undefined =>

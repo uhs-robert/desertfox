@@ -2,7 +2,7 @@
 // Snippets use them to name the sites they run on, so a URL is parsed, never sliced with a regex:
 // "https://evil.com?x=@a.example.com/" must not pass for the host a.example.com.
 
-import type { Settings } from "./settings_table.ts";
+import type { BindingTable, Settings } from "./settings_table.ts";
 
 const PATTERN_PARTS = /^(\*|https?|file|ftp):\/\/([^/]*)(\/.*)$/;
 
@@ -75,8 +75,10 @@ export function matches_any_address(source: string | undefined, addresses: reado
 // The site table (`site_rules`) resolves each column on its own: the first matching row that sets a column decides it.
 // `pass` and `only` form one column, the key rule. Each per-site setting is a column of its own in `values`.
 // `bind` is the one column that merges key by key: for each key, the first matching row that binds it decides. Its keys are the written sequences in a row, and the normalized sequences once compiled.
-export type SiteColumns<Keys, Bind = unknown> = { off?: boolean; keys?: Keys; bind?: Readonly<Record<string, Bind>>; values?: Readonly<Record<string, unknown>> };
-export type ResolvedSiteColumns<Keys, Bind = unknown> = { off?: boolean; keys?: Keys; bind?: Record<string, Bind>; values: Record<string, unknown> };
+// `modes` is the other merging column: a site mode is decided whole, by the first matching row that has its name.
+export type SiteModeColumn<Bind = unknown> = { label: string; bind: Readonly<Record<string, Bind>> };
+export type SiteColumns<Keys, Bind = unknown> = { off?: boolean; keys?: Keys; bind?: Readonly<Record<string, Bind>>; modes?: Readonly<Record<string, SiteModeColumn<Bind>>>; values?: Readonly<Record<string, unknown>> };
+export type ResolvedSiteColumns<Keys, Bind = unknown> = { off?: boolean; keys?: Keys; bind?: Record<string, Bind>; modes?: Record<string, SiteModeColumn<Bind>>; values: Record<string, unknown> };
 
 // `rows` are the rows that match the page, in table order.
 export function resolve_site_columns<Keys, Bind = unknown>(rows: readonly SiteColumns<Keys, Bind>[]): ResolvedSiteColumns<Keys, Bind> {
@@ -88,21 +90,31 @@ export function resolve_site_columns<Keys, Bind = unknown>(rows: readonly SiteCo
       resolved.bind ??= {};
       if (!Object.hasOwn(resolved.bind, key)) resolved.bind[key] = binding;
     }
+    for (const [name, mode] of Object.entries(row.modes ?? {})) {
+      resolved.modes ??= {};
+      if (!Object.hasOwn(resolved.modes, name)) resolved.modes[name] = mode;
+    }
     for (const [name, value] of Object.entries(row.values ?? {})) if (!Object.hasOwn(resolved.values, name)) resolved.values[name] = value;
   }
   return resolved;
 }
 
 export type SiteRuleRow = Settings["site_rules"][number];
+// Every bind table a row holds: its own and one per mode. `scope` is the words a problem puts before "bind".
+export const bind_tables_of = (row: SiteRuleRow): { scope: string; table: BindingTable }[] => [
+  ...(row.bind === undefined ? [] : [{ scope: "", table: row.bind }]),
+  ...Object.entries(row.modes ?? {}).map(([name, mode]) => ({ scope: `mode "${name}" `, table: mode.bind })),
+];
+
 export type SiteRowKeys = { pass: string } | { only: string };
 
-const SITE_ROW_FIELDS = new Set(["site", "off", "pass", "only", "bind"]);
+const SITE_ROW_FIELDS = new Set(["site", "off", "pass", "only", "bind", "modes"]);
 
 // A row's columns, with an unset column left out. A row that sets nothing but `site` is off: older configs and the popup wrote that shape.
 export function site_row_columns(row: SiteRuleRow): SiteColumns<SiteRowKeys> {
   const values = Object.fromEntries(Object.entries(row).filter(([field, value]) => !SITE_ROW_FIELDS.has(field) && value !== undefined));
   const keys: SiteRowKeys | undefined = row.pass !== undefined ? { pass: row.pass } : row.only !== undefined ? { only: row.only } : undefined;
   const has_values = Object.keys(values).length > 0;
-  const off = row.off ?? (keys === undefined && !has_values && row.bind === undefined ? true : undefined);
-  return { ...(off === undefined ? {} : { off }), ...(keys === undefined ? {} : { keys }), ...(row.bind === undefined ? {} : { bind: row.bind }), ...(has_values ? { values } : {}) };
+  const off = row.off ?? (keys === undefined && !has_values && row.bind === undefined && row.modes === undefined ? true : undefined);
+  return { ...(off === undefined ? {} : { off }), ...(keys === undefined ? {} : { keys }), ...(row.bind === undefined ? {} : { bind: row.bind }), ...(row.modes === undefined ? {} : { modes: row.modes }), ...(has_values ? { values } : {}) };
 }

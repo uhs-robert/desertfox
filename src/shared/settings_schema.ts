@@ -72,6 +72,11 @@ function table_problem(fields: TableFields, exclusive: readonly string[], column
       if (binding_problem === undefined) continue;
       return `has a field "${field}" that ${binding_problem}`;
     }
+    if (rule.value === "site_modes") {
+      const modes_problem = site_modes_problem(field_value);
+      if (modes_problem === undefined) continue;
+      return `has a field "${field}" that ${modes_problem}`;
+    }
     if (is_text(field_value) && (rule.value !== "web_url" || is_web_url(field_value))) continue;
     if (rule.optional) return `has an empty or non-text "${field}"`;
     return rule.value === "web_url" ? `needs an http or https "${field}"` : `needs a non-empty "${field}"`;
@@ -116,6 +121,24 @@ function bindings_problem(value: unknown): string | undefined {
   return undefined;
 }
 
+// A mode name goes in `mode.site <name>`, and `off` there ends the mode, so a mode cannot take it.
+const SITE_MODE_NAME = /^[a-z][a-z0-9_]*$/;
+
+// Each mode is a table with a `label` for the badge and a `bind` table that follows the rules of the `bind` column.
+function site_modes_problem(value: unknown): string | undefined {
+  if (!is_table(value) || Object.keys(value).length === 0) return "is not a table of mode names to modes";
+  for (const [name, mode] of Object.entries(value)) {
+    if (!SITE_MODE_NAME.test(name) || name === "off") return `names the mode "${name}", which is not a lowercase word other than "off"`;
+    if (!is_table(mode)) return `has the mode "${name}", which is not a table`;
+    const unknown_field = Object.keys(mode).find((field) => field !== "label" && field !== "bind");
+    if (unknown_field !== undefined) return `has the mode "${name}" with the unknown field "${unknown_field}"`;
+    if (!is_text(mode.label) || /[\r\n]/.test(mode.label)) return `has the mode "${name}" with no one-line "label"`;
+    const problem = bindings_problem(mode.bind);
+    if (problem !== undefined) return `has the mode "${name}" with a "bind" that ${problem}`;
+  }
+  return undefined;
+}
+
 // Key sequences split by spaces, each in keymap notation.
 function keys_problem(text: string): string | undefined {
   const words = text.split(/\s+/).filter((word) => word !== "");
@@ -139,7 +162,7 @@ export function table_list_rule(fields: TableFields, exclusive: readonly string[
     }
     return undefined;
   };
-  const optional_kind = (value: string): string => (value === "keys" ? " of key sequences" : value === "bindings" ? " of keys to commands" : value === "boolean" ? " of true or false" : "");
+  const optional_kind = (value: string): string => (value === "keys" ? " of key sequences" : value === "bindings" ? " of keys to commands" : value === "site_modes" ? " of modes, each with a label and a bind" : value === "boolean" ? " of true or false" : "");
   const field_words = Object.entries(fields).map(([field, rule]) => {
     const kind = rule.value === "web_url" ? "an http or https " : rule.value === "keys" ? "key sequences in " : "";
     return rule.optional ? `an optional "${field}"${optional_kind(rule.value)}` : `${kind}"${field}"`;

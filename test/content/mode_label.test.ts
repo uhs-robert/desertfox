@@ -31,7 +31,7 @@ test("the badge adds the register to the mode, even where the setting hides the 
 test("content keeps the badge up in hint and command line modes while a macro records", () => {
   assert.equal(badge_state("hint", false, "always", undefined), undefined);
   assert.equal(badge_state("cmdline", false, "always", undefined), undefined);
-  assert.deepEqual(badge_state("hint", false, "always", "a"), { mode: "hint", pass_next: false, setting: "always", recording: "a" });
+  assert.deepEqual(badge_state("hint", false, "always", "a"), { mode: "hint", pass_next: false, setting: "always", recording: "a", site_label: undefined });
   assert.equal(badge_state("cmdline", false, "off", "a")?.recording, "a");
   assert.equal(mode_label("hint", false, "always", "a"), "recording @a");
 });

@@ -19,6 +19,7 @@ import { badge_state } from "./badge_state.ts";
 import { show_mode_label, show_toast } from "./ui_proxy.ts";
 import { holds_own_focus, wire_mode_reports } from "./mode_report.ts";
 import { page_mode } from "./page_mode.ts";
+import { site_mode } from "./site_mode.ts";
 import { run_content_steps, run_in_order } from "./run_content.ts";
 import { holds_keys_after, run_leaf } from "./run_leaf.ts";
 import { focus_page_content, start_content_once } from "./handlers/focus.ts";
@@ -32,11 +33,14 @@ let focused_frame_mode: Mode | undefined;
 let recording: string | undefined;
 // A macro replay holds this page's keys. Escape then stops the replay.
 let replaying = false;
+// The last reply, which the site mode swaps the tree of.
+let page_reply: PageKeymap | undefined;
 
 function refresh_mode_indicator(): void {
   // A child frame's pass-next flag does not reach the top frame, so the badge shows its mode alone.
   const pass_next_armed = !focused_frame_mode && page_mode.is_pass_next_armed_();
-  show_mode_label(badge_state(focused_frame_mode ?? page_mode.get_mode_(), pass_next_armed, mode_indicator, recording));
+  const site_label = site_mode.name_ === undefined ? undefined : page_reply?.site_modes?.[site_mode.name_]?.label;
+  show_mode_label(badge_state(focused_frame_mode ?? page_mode.get_mode_(), pass_next_armed, mode_indicator, recording, site_label));
 }
 
 const script_started_ms = performance.now();
@@ -141,9 +145,14 @@ function on_keydown(event: KeyboardEvent): void {
   if (replaying && token == "<Escape>") void send_to_background({ type: "replay_stop" });
   const target = press_target(event);
   const press: HeldPress = { keyup_seen: false };
-  const decision = key_flow.handle_token_(token, event.repeat, () => target && replay_key_to_page(event, target, press, cancelled_keys, (type, init) => new KeyboardEvent(type, init)));
+  // A replayed key the keymap passes ends the site mode after the page has the key, because ending it replays the keys behind.
+  const decision = key_flow.handle_token_(token, event.repeat, () => {
+    target && replay_key_to_page(event, target, press, cancelled_keys, (type, init) => new KeyboardEvent(type, init));
+    site_mode.set_();
+  });
   cancelled_keys.record_keydown_(event.code, decision, press);
   if (decision === "cancel") cancel(event);
+  else site_mode.set_();
 }
 
 function on_keypress(event: KeyboardEvent): void {
@@ -232,6 +241,8 @@ let matcher_installed = false;
 let was_all_off = false;
 
 function install_matcher(reply: PageKeymap | undefined): void {
+  page_reply = reply;
+  site_mode.name_ = undefined;
   const keymap = reply?.keymap;
   const all_off = reply?.all_off === true;
   // A tree stored before the setting existed has no value, which means the default.
@@ -257,11 +268,19 @@ function install_matcher(reply: PageKeymap | undefined): void {
   }
   if (keymap) was_all_off = all_off;
   refresh_mode_indicator();
-  const frees = reply?.frees;
-  const tree = keymap ?? ({ modes: {} } as CompiledKeymap);
-  key_flow.set_matcher_(create_matcher(tree, frees && ((token) => is_freed(frees, token))), keymap?.modes.browser);
+  install_tree();
   // The key test's ready signal waits for the first matcher, not for a reply that a newer ask overtook.
   if (first_install) publish_timing();
+}
+
+// The matcher's tree is normal mode with the running site mode's keys laid over it, so keys the mode does not bind keep their meaning.
+function install_tree(): void {
+  const keymap = page_reply?.keymap;
+  const normal = keymap?.modes.normal;
+  const overlay = site_mode.name_ === undefined ? undefined : page_reply?.site_modes?.[site_mode.name_];
+  const tree = (keymap && overlay && normal ? { ...keymap, modes: { ...keymap.modes, normal: { ...normal, children: { ...normal.children, ...overlay.tree } } } } : keymap ?? { modes: {} }) as CompiledKeymap;
+  const frees = page_reply?.frees;
+  key_flow.set_matcher_(create_matcher(tree, frees && ((token) => is_freed(frees, token))), keymap?.modes.browser);
 }
 
 // The one test hook in src/: the key test reads this attribute as the content script's ready signal. Time is milliseconds.
@@ -285,6 +304,11 @@ function start(): void {
   watch_roots_around_focus();
   listen("pagehide", bundles.page_hidden_, false);
   listen("visibilitychange", on_visibility_change, false, document);
+  listen("mousedown", () => site_mode.set_());
+  site_mode.on_change_ = () => {
+    install_tree();
+    refresh_mode_indicator();
+  };
 
   // Every report says whether this frame holds the focus, so a focus event the frame missed heals on its next report.
   // A hidden input frame in normal mode then hands the focus to its parent. Every change into normal mode passes here, and so does a frame that gains the focus while in normal mode.
@@ -297,6 +321,7 @@ function start(): void {
   wire_mode_reports(page_mode, (mode) => {
     if (!extension_context_alive()) return stop_listening();
     key_flow.reset_sequence_();
+    site_mode.set_();
     bundles.enter_mode_(mode);
     report_mode();
   });

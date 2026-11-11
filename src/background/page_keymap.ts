@@ -4,11 +4,11 @@ import { COMPILED_KEYMAP_STORAGE_KEY, current_keymap } from "../shared/prefix_tr
 import { ANY_KEY } from "../shared/prefix_tree.ts";
 import { HINT_SITE_SETTINGS, PAGE_REPLY_SITE_SETTINGS, QUALITY_SITE_SETTINGS } from "../shared/prefix_tree.ts";
 import { is_default_value } from "../shared/keys/compiler.ts";
-import type { CompiledKeymap, FrameSiteName, FrameSiteValues, PageFrees, PageKeymap, SiteBind, TreeBranch, TreeLeaf, TreeNode } from "../shared/prefix_tree.ts";
+import type { CompiledKeymap, FrameSiteName, FrameSiteValues, PageFrees, PageKeymap, PageSiteMode, SiteBind, TreeBranch, TreeLeaf, TreeNode } from "../shared/prefix_tree.ts";
 import { DEFAULT_SETTINGS } from "../shared/default_settings.ts";
 import { frees_of, is_empty_tree, prune_tree, type KeyRule } from "../shared/keys/prune_tree.ts";
 import type { PerSiteName, Settings } from "../shared/settings_table.ts";
-import { matches_any_address, resolve_site_columns, type ResolvedSiteColumns } from "../shared/match_pattern.ts";
+import { matches_any_address, resolve_site_columns, type ResolvedSiteColumns, type SiteModeColumn } from "../shared/match_pattern.ts";
 
 type KeymapStorage = Pick<typeof browser.storage.local, "get">;
 
@@ -80,6 +80,16 @@ export function normal_tree_for(normal: TreeBranch | undefined, columns: PageSit
   return is_empty_tree(pruned) ? { tree: normal, all_off: true } : { tree: pruned, all_off: false, frees: frees_of(columns.keys) };
 }
 
+// Each site mode of the page as what it adds to the normal tree: its binds go onto the tree after `pass` and `only` prune it, so a freed key can still be a mode key. The page lays the unchanged children of the normal tree under them, so only the children the mode replaced are sent.
+function site_modes_for(tree: TreeBranch | undefined, modes: Readonly<Record<string, SiteModeColumn<SiteBind>>>): Record<string, PageSiteMode> {
+  return Object.fromEntries(
+    Object.entries(modes).map(([name, { label, bind }]) => {
+      const grafted = graft_binds(tree, bind);
+      return [name, { label, tree: Object.fromEntries(Object.entries(grafted.children).filter(([token, child]) => child !== tree?.children[token])) }];
+    }),
+  );
+}
+
 const STOP_LEAF: TreeLeaf = { kind: "leaf", label: "Stop recording", steps: [{ invocation: { id: "macro.stop" }, runs_in: "background", count_rule: "ignore" }] };
 
 // While a macro records, the key that started it stops it, as in vim. The key waits for a register name, so it is a branch whose one child is the capture leaf. Where the user put the key does not matter.
@@ -100,7 +110,9 @@ export async function page_keymap_for(storage: KeymapStorage, addresses: readonl
   const reply = trimmed && !trimmed.all_off && (await join_insert?.()) ? { ...trimmed, insert: true as const } : trimmed;
   if (!reply || recording === undefined) return reply;
   const normal = reply.keymap.modes.normal;
-  return { ...reply, keymap: normal ? { ...reply.keymap, modes: { ...reply.keymap.modes, normal: with_stop_for_record(normal) } } : reply.keymap, recording };
+  // A mode tree meets the stop key too: a mode bind under the record key would otherwise hide it.
+  const site_modes = reply.site_modes && Object.fromEntries(Object.entries(reply.site_modes).map(([name, mode]) => [name, { ...mode, tree: with_stop_for_record({ kind: "branch", children: mode.tree }).children }]));
+  return { ...reply, ...(site_modes && { site_modes }), keymap: normal ? { ...reply.keymap, modes: { ...reply.keymap.modes, normal: with_stop_for_record(normal) } } : reply.keymap, recording };
 }
 
 async function trimmed_keymap_for(storage: KeymapStorage, addresses: readonly (string | undefined)[]): Promise<PageKeymap | undefined> {
@@ -108,12 +120,14 @@ async function trimmed_keymap_for(storage: KeymapStorage, addresses: readonly (s
   const keymap = current_keymap(stored[COMPILED_KEYMAP_STORAGE_KEY] as CompiledKeymap | undefined);
   if (keymap === undefined) return undefined;
   const { site_rules: _, frame_site_globals: __, ...keymap_without_rules } = keymap;
-  const page_tree = normal_tree_for(keymap.modes.normal, site_columns_for(keymap, addresses));
+  const columns = site_columns_for(keymap, addresses);
+  const page_tree = normal_tree_for(keymap.modes.normal, columns);
   const site_values = frame_site_values_for(keymap, addresses[0], PAGE_REPLY_SITE_SETTINGS);
   const with_values = site_values ? { site_values } : {};
   const { tree } = page_tree;
+  const with_modes = columns.modes && !page_tree.all_off ? { site_modes: site_modes_for(tree, columns.modes) } : {};
   const modes = tree === undefined || tree === keymap.modes.normal ? keymap_without_rules.modes : { ...keymap_without_rules.modes, normal: tree };
-  return { keymap: { ...keymap_without_rules, modes }, all_off: page_tree.all_off, ..."frees" in page_tree && { frees: page_tree.frees }, ...with_values };
+  return { keymap: { ...keymap_without_rules, modes }, all_off: page_tree.all_off, ..."frees" in page_tree && { frees: page_tree.frees }, ...with_modes, ...with_values };
 }
 
 // A string, not the object: the structured clone of the whole tree cost the page about 11 ms, and `JSON.parse` of the string costs a few.

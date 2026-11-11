@@ -18,7 +18,7 @@ const EXPECTATIONS: Record<string, string> = {
   hint_remove: "a list of CSS selectors",
   blur_on_load: "true or false",
   escape_to_page: "true or false",
-  site_rules: 'a list of tables with "site", an optional "off" of true or false, an optional "pass" of key sequences, an optional "only" of key sequences, an optional "bind" of keys to commands and any per-site setting',
+  site_rules: 'a list of tables with "site", an optional "off" of true or false, an optional "pass" of key sequences, an optional "only" of key sequences, an optional "bind" of keys to commands, an optional "modes" of modes, each with a label and a bind and any per-site setting',
   default_site_rows_off: 'a list of "sheets" with no repeat',
   next_patterns: "a list of link texts",
   prev_patterns: "a list of link texts",
