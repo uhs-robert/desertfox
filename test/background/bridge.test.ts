@@ -9,6 +9,7 @@ import type { TabInfo } from "../../src/background/tab_switch.ts";
 function make(options: { bridge?: boolean; missing_host?: boolean; permission?: boolean; run_command?: (text: string, tab_id?: number) => Promise<BridgeAnswer>; share_tabs?: boolean; tab_verb?: BridgeDeps["tab_verb"]; set_desktop_palette?: BridgeDeps["set_desktop_palette"] } = {}) {
   const palettes: string[] = [];
   const warnings: string[] = [];
+  const host_ready_calls: unknown[] = [];
   const settings = { bridge: options.bridge ?? true, share_tabs: options.share_tabs ?? false };
   const tab_calls: { verb: string; request: Record<string, unknown> }[] = [];
   const state = { permission: options.permission ?? true, gate: undefined as Promise<void> | undefined };
@@ -17,7 +18,7 @@ function make(options: { bridge?: boolean; missing_host?: boolean; permission?: 
   const modes = new Map<number, Mode>();
   // The tabs `normal_tab` finds. Any other id stands for a private or popup tab.
   const normal_tabs = new Map<number, TabInfo>([[11, { id: 11, windowId: 1, title: "Mail", url: "https://mail.example/" }], [22, { id: 22, windowId: 2, title: "Music", url: "https://music.example/" }]]);
-  const ports: (BridgePort & { posted: Record<string, unknown>[]; disconnected: boolean; say: () => void; hear: (message: unknown) => void; drop: () => void; throw_on_post: boolean })[] = [];
+  const ports: (BridgePort & { posted: Record<string, unknown>[]; disconnected: boolean; say: (release_version?: string) => void; hear: (message: unknown) => void; drop: () => void; throw_on_post: boolean })[] = [];
   const timers: { run: () => void; delay_ms: number; cancelled: boolean }[] = [];
   const counts = { connects: 0 };
   let now = 0;
@@ -40,7 +41,7 @@ function make(options: { bridge?: boolean; missing_host?: boolean; permission?: 
         },
         onMessage: { addListener: (listener: (message: unknown) => void) => void (on_message = listener) },
         onDisconnect: { addListener: (listener: () => void) => void (on_disconnect = listener) },
-        say: () => on_message({ ready: true }),
+        say: (release_version?: string) => on_message({ ready: true, ...(release_version === undefined ? {} : { release_version }) }),
         hear: (message: unknown) => on_message(message),
         drop: () => on_disconnect(),
       };
@@ -71,12 +72,13 @@ function make(options: { bridge?: boolean; missing_host?: boolean; permission?: 
     normal_tab: async (tab_id) => normal_tabs.get(tab_id),
     set_desktop_palette: options.set_desktop_palette ?? (async (name) => void palettes.push(name)),
     warn: (text) => void warnings.push(text),
+    host_ready: (release_version) => void host_ready_calls.push(release_version),
   };
   const bridge = create_bridge(deps);
   const settle = () => new Promise<void>((resolve) => setTimeout(resolve, 5));
   const pending = () => timers.filter((timer) => !timer.cancelled);
   return {
-    bridge, palettes, warnings, settings, state, windows, active_tab, modes, normal_tabs, ports, counts, settle, tab_calls, timers,
+    bridge, host_ready_calls, palettes, warnings, settings, state, windows, active_tab, modes, normal_tabs, ports, counts, settle, tab_calls, timers,
     port: () => ports[ports.length - 1]!,
     advance: (ms: number) => void (now += ms),
     // Fires the newest pending timer, lets the connect it starts finish and returns its delay.
@@ -624,4 +626,61 @@ test("a failing store answers with the fixed failure text", async () => {
   test_case.port().hear({ verb: "theme", request_id: 1, palette: "oasis_dune" });
   await test_case.settle();
   assert.deepEqual(test_case.port().posted.filter((message) => message.verb === "reply"), [{ ok: false, message: "the command failed", verb: "reply", request_id: 1 }]);
+});
+
+test("the ready frame hands the host's release version to the updater, a missing one as undefined", async () => {
+  const test_case = make();
+  await test_case.bridge.start();
+  test_case.port().say("0.1.22");
+  await test_case.settle();
+  assert.deepEqual(test_case.host_ready_calls, ["0.1.22"]);
+  test_case.port().drop();
+  await test_case.fire_latest();
+  test_case.port().say();
+  await test_case.settle();
+  assert.deepEqual(test_case.host_ready_calls, ["0.1.22", undefined]);
+});
+
+test("reconnect closes the old port at once and opens a new one that the old one cannot speak for", async () => {
+  const test_case = make();
+  await test_case.connect_and_ready();
+  const old_port = test_case.port();
+  test_case.bridge.reconnect();
+  await test_case.settle();
+  assert.equal(old_port.disconnected, true);
+  assert.equal(test_case.counts.connects, 2);
+  const new_port = test_case.port();
+  assert.notEqual(new_port, old_port);
+  // The new port is trusted only after its own ready frame, and the old one is ignored from now on.
+  new_port.posted.length = 0;
+  await test_case.bridge.mode_changed({ id: 11, windowId: 1, active: true }, "insert");
+  assert.deepEqual(new_port.posted, []);
+  old_port.say("0.1.22");
+  await test_case.settle();
+  assert.deepEqual(test_case.host_ready_calls, [undefined]);
+  new_port.say("0.1.23");
+  await test_case.settle();
+  assert.deepEqual(test_case.host_ready_calls, [undefined, "0.1.23"]);
+  await test_case.settle();
+  assert.equal(modes_of(new_port).length, 1);
+});
+
+test("a new host that loses the lock race is retried by the backoff after a reconnect", async () => {
+  const test_case = make();
+  await test_case.connect_and_ready();
+  test_case.bridge.reconnect();
+  await test_case.settle();
+  // The old process held the lock for more than 3 s, so the new host exited without a ready frame.
+  test_case.port().drop();
+  assert.deepEqual(test_case.pending_delays(), [FIRST_RETRY_MS]);
+  await test_case.fire_latest();
+  assert.equal(test_case.counts.connects, 3);
+});
+
+test("reconnect does nothing while the bridge is off", async () => {
+  const test_case = make({ bridge: false });
+  await test_case.bridge.start();
+  test_case.bridge.reconnect();
+  await test_case.settle();
+  assert.equal(test_case.counts.connects, 0);
 });

@@ -1,4 +1,5 @@
 """Runs install.sh against a temporary HOME with a stubbed curl. Nothing touches the real home folder or the network."""
+import fcntl
 import hashlib
 import json
 import os
@@ -34,7 +35,7 @@ path=$(awk -F'\\t' -v u="$url" '$1 == u { print $2 }' "$STUB_ROUTES")
 cp "$path" "$out"
 """
 
-TOOLS = ["sh", "mktemp", "head", "grep", "cp", "chmod", "mv", "rm", "mkdir", "awk", "cat", "env", "dirname", "tr", "sed", "ln"]
+TOOLS = ["sh", "mktemp", "head", "grep", "cp", "chmod", "mv", "rm", "mkdir", "awk", "cat", "env", "dirname", "tr", "sed", "ln", "flock"]
 
 
 def real_tool(name):
@@ -130,7 +131,7 @@ class InstallCase(unittest.TestCase):
     def home_files(self):
         found = []
         for base, _, names in os.walk(self.home):
-            found.extend(os.path.join(base, name) for name in names)
+            found.extend(os.path.join(base, name) for name in names if name != "update.lock")
         return found
 
     def assert_nothing_installed(self):
@@ -340,6 +341,68 @@ for arg in "$@"; do
 done
 exit 0
 """
+
+
+class UpdateLockTest(InstallCase):
+    """install.sh and the host's self_update share update.lock in the data folder (XDG_RUNTIME_DIR is unset here), so only one stages .new files."""
+
+    @property
+    def lock_path(self):
+        return os.path.join(self.home, ".local", "share", "desertfox", "update.lock")
+
+    def hold_lock(self):
+        os.makedirs(os.path.dirname(self.lock_path), exist_ok=True)
+        descriptor = os.open(self.lock_path, os.O_RDWR | os.O_CREAT, 0o600)
+        self.addCleanup(lambda: os.path.exists("/proc/self/fd/%d" % descriptor) and os.close(descriptor))
+        fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        return descriptor
+
+    def test_install_during_an_update_fails_and_writes_nothing(self):
+        self.serve_release()
+        self.hold_lock()
+        done = self.run_install("0.1.5")
+        self.assertNotEqual(done.returncode, 0)
+        self.assertIn("update running", done.stderr)
+        self.assert_nothing_installed()
+
+    def test_install_goes_through_once_the_updater_lets_go(self):
+        self.serve_release()
+        descriptor = self.hold_lock()
+        self.assertNotEqual(self.run_install("0.1.5").returncode, 0)
+        os.close(descriptor)
+        done = self.run_install("0.1.5")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertTrue(os.path.exists(self.host_path))
+
+    def test_a_finished_install_leaves_the_lock_free(self):
+        self.serve_release()
+        done = self.run_install("0.1.5")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.hold_lock()
+
+    def test_the_lock_is_held_while_the_files_are_staged(self):
+        # A chmod stub runs on each staged .new file. It reports whether the lock was held at that moment.
+        self.serve_release()
+        probe = os.path.join(self.tmp.name, "probe.log")
+        real_chmod = real_tool("chmod")
+        self.write_stub(
+            "chmod",
+            f"""#!/bin/sh
+if python3 -I -c 'import fcntl, sys
+fd = open(sys.argv[1], "a")
+try:
+    fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+except OSError:
+    sys.exit(0)
+sys.exit(1)' "{self.lock_path}"; then echo held >> "{probe}"; else echo free >> "{probe}"; fi
+exec {real_chmod} "$@"
+""",
+        )
+        done = self.run_install("0.1.5")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        with open(probe) as file:
+            seen = file.read().split()
+        self.assertEqual(seen, ["held"] * 3)
 
 
 class ReleaseStepTest(InstallCase):

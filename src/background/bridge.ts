@@ -42,6 +42,8 @@ export type BridgeDeps = {
   // Stores the palette the desktop pushed. Called only with a built-in theme name.
   set_desktop_palette: (name: string) => Promise<void>;
   warn: (text: string) => void;
+  // Gets the `release_version` of the host in its ready frame (undefined for a host from before the updater), so an older host can be updated.
+  host_ready: (release_version: unknown) => void;
   // The tab while it is in a normal window, else undefined: the privacy gate of every tab event.
   normal_tab: (tab_id: number) => Promise<TabInfo | undefined>;
 };
@@ -175,8 +177,9 @@ export function create_bridge(deps: BridgeDeps) {
       if (window?.focused) await publish_now(window);
     });
 
-  function became_ready(): void {
+  function became_ready(release_version: unknown): void {
     ready = true;
+    deps.host_ready(release_version);
     // A tabs_off sent while the port was down never arrived, and a new host does not know the setting. Saying it on every ready lets the host delete its caches.
     if (!share_tabs) send(TABS_OFF_EVENT);
     up_since_ms = deps.now_ms();
@@ -221,7 +224,8 @@ export function create_bridge(deps: BridgeDeps) {
     opened.onMessage.addListener((message) => {
       if (opened !== port) return;
       if (!ready) {
-        if ((message as { ready?: unknown } | null)?.ready === true) became_ready();
+        const frame = message as { ready?: unknown; release_version?: unknown } | null;
+        if (frame?.ready === true) became_ready(frame.release_version);
         return;
       }
       request_from_host(opened, message);
@@ -263,6 +267,14 @@ export function create_bridge(deps: BridgeDeps) {
     permission_added: () => {
       if (!bridge_on || port) return;
       cancel_retry?.();
+      failures = 0;
+      void connect();
+    },
+    // A host update replaced the host file. The running process still runs the old code, so close its port at once: the host exits when its
+    // stdin closes, and the new process waits up to 3 s for the old one to release the lock. A drop after that goes through the usual backoff.
+    reconnect: () => {
+      if (!bridge_on) return;
+      disconnect();
       failures = 0;
       void connect();
     },

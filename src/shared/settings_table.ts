@@ -87,6 +87,8 @@ export const SETTINGS_TABLE = {
   bridge: { kind: "boolean", default: false },
   // Lets bridge programs list tabs (titles and addresses of normal windows), activate, close and capture them, and run a command on a chosen tab. Needs `bridge`.
   bridge_share_tabs: { kind: "boolean", default: false },
+  // Consent to update the native hosts to the extension's version on connect. Asked once from the :native.install page, off until then.
+  host_auto_update: { kind: "boolean", default: false },
   completion_all_windows: { kind: "boolean", default: false },
   cmdline_prompt: { kind: "line", min_length: 1, max_length: 8, suggestions: ["caret", "colon"], default: "caret" },
   open_completion: { kind: "enum_list", values: ["bookmarks", "history"], default: ["bookmarks", "history"] },

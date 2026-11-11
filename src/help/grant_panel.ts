@@ -6,11 +6,27 @@ import { copy_text } from "../content/caret/copy_text.ts";
 import { host_channel, install_command } from "../shared/native_host.ts";
 import { PERMISSIONS_OF, permission_of_grant_hash } from "../shared/permission_grant.ts";
 import type { GrantablePermission } from "../shared/permission_grant.ts";
+import type { ChangeSetting, ChangeSettingAnswer } from "../shared/messages.ts";
 
 export type PermissionDeps = {
   has: () => Promise<boolean>;
   request: () => Promise<boolean>;
 };
+
+export const AUTO_UPDATE_SETTING = "host_auto_update";
+export const AUTO_UPDATE_BUTTON = "Install and keep the host updated";
+
+// The consent button saves `host_auto_update` and installs nothing: Firefox cannot run the command, so the user runs it.
+// The page text is the disclosure of what the setting allows.
+export async function consent_to_auto_update(send: (message: ChangeSetting) => Promise<unknown>): Promise<string> {
+  try {
+    const answer = (await send({ type: "change_setting", name: AUTO_UPDATE_SETTING, action: "set", value: true })) as ChangeSettingAnswer | undefined;
+    if (answer?.ok === true) return "Saved. After you run the command, the host updates itself to match the extension, and a toast says so.";
+    return `DesertFox could not save the setting: ${answer?.message ?? "no answer"}`;
+  } catch (error) {
+    return `DesertFox could not save the setting: ${error instanceof Error ? error.message : String(error)}`;
+  }
+}
 
 export type PermissionOutcome = { granted: boolean; message: string };
 
@@ -81,6 +97,20 @@ async function append_install_steps(panel: HTMLElement): Promise<void> {
     element("p", channel === "main" ? "Step 2: run this in a terminal. It fetches the host from the main branch, with no checksum." : `Step 2: run this in a terminal. It fetches the host of version ${channel} and checks its SHA-256.`),
     code,
     copy,
+  );
+  if (channel === "main") return;
+  const consent_status = element("p", undefined, "margin:.5rem 0 0");
+  consent_status.setAttribute("role", "status");
+  const consent = element("button", AUTO_UPDATE_BUTTON, `${BUTTON_STYLE};margin-top:.5rem`);
+  consent.addEventListener("click", () => {
+    void consent_to_auto_update((message) => browser.runtime.sendMessage(message)).then((text) => {
+      consent_status.textContent = text;
+    });
+  });
+  panel.append(
+    element("p", "After this first install the host updates itself. When the extension updates, a host that is older fetches the matching release from GitHub over HTTPS and checks its SHA-256 against hashes inside the signed extension. Each update shows a toast. This button allows that. Without it, run :native.update when the extension says the host is older.", "margin:.75rem 0 0"),
+    consent,
+    consent_status,
   );
 }
 

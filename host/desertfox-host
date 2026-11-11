@@ -287,18 +287,11 @@ def install_paths(host_file=None):
     return scripts, manifests
 
 
-def update_lock_path():
-    runtime_dir = os.environ.get("XDG_RUNTIME_DIR", "")
-    if not os.path.isabs(runtime_dir):
-        raise UpdateError("XDG_RUNTIME_DIR is not set to an absolute path, so the update lock has no place")
-    return os.path.join(runtime_dir, "desertfox", "update.lock")
-
-
-def take_update_lock():
-    """The open lock file, held until it is closed. A second updater, from another profile, gets "update running"."""
-    path = update_lock_path()
+def take_update_lock(data_dir):
+    """The open lock file in the data folder, held until it is closed. install.sh locks the same file, so it and an
+    updater from any profile compute one path. A second writer gets "update running"."""
+    path = os.path.join(data_dir, "update.lock")
     try:
-        os.makedirs(os.path.dirname(path), mode=0o700, exist_ok=True)
         descriptor = os.open(path, os.O_RDWR | os.O_CREAT | os.O_CLOEXEC, 0o600)
     except OSError as error:
         raise UpdateError(f"cannot open the update lock {path}: {error.strerror or error}") from error
@@ -476,7 +469,7 @@ def self_update(request, fetch=fetch_release_file, host_file=None, current=RELEA
     version, expected = checked_request(request)
     refuse_downgrade(version, current)
     scripts, manifests = install_paths(host_file)
-    lock = take_update_lock()
+    lock = take_update_lock(os.path.dirname(scripts["desertfox-host"]))
     try:
         refuse_downgrade(version, installed_version(scripts["desertfox-host"]))
         if install_is_current(scripts, manifests, expected):
