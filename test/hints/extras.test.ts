@@ -827,3 +827,16 @@ test("rapid copy_text collects the texts and a repeat adds nothing", async () =>
   assert.equal(page.messages().at(-1), "Copied 2 texts");
   page.escape();
 });
+
+test("rapid copy_text skips an empty pick, so the list has no blank line", async () => {
+  const page = await page_with(["one", "two"]);
+  page.links[0]!.textContent = "";
+  page.run({ action: "copy_text", rapid: true });
+  await settle();
+  for (const index of [0, 1]) {
+    page.type(page.labels()[index]!.toLowerCase());
+    await settle();
+  }
+  assert.equal(page.copied.at(-1), "two");
+  page.escape();
+});
