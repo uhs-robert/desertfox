@@ -34,6 +34,7 @@ const rule = (quality_window.desertfox_quality_rule ??= create_rule({
   probe,
   sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
   now: Date.now,
+  loaded: () => document.readyState === "complete",
 }));
 
 if (!quality_window.desertfox_quality_ready) {

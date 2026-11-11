@@ -10,6 +10,8 @@ export type Driver = {
   levels: () => PlayerLevel[];
   // Hands the choice back to the site. False when the player could not take it yet.
   auto: () => boolean;
+  // The identity of the video the player holds now, or undefined when the player has none to tell. A change means a new video, so the rule starts again for it.
+  video_id: () => string | undefined;
   // Whether the player took the skip.
   skip: (forward: boolean) => boolean;
 };

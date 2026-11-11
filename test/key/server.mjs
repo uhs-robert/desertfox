@@ -332,6 +332,10 @@ document.addEventListener("fullscreenchange", () => send("media_fullscreen", { e
       </script>`;
       return response.end(page(`media_inner ${id}`, build, MEDIA_REPORTER));
     }
+    if (url.pathname === "/quality_frame") {
+      // The /quality player inside a same-origin frame, so the rule's start reaches a child frame and resolves against the frame's own address.
+      return response.end(page(`quality_frame ${id}`, `<iframe id="inner" src="/quality?id=${id}_yt_inner" style="display:block;width:320px;height:200px"></iframe>`, MEDIA_REPORTER));
+    }
     if (url.pathname === "/quality") {
       // A video beside a fake site player, defined on the page's own objects as the sites do. "yt" gives a #movie_player with the unofficial quality calls, "hls" a html5player.hlsobj with the hls.js level calls, and "slow" a YouTube player that answers "unknown" for its first two seconds. The #replace button swaps in a second player with other levels, and #navigate pushes a new address and resets the player to its start level 800 ms later, as YouTube does on in-site navigation. Each call the extension makes reports back.
       const video = '<video id="video" src="/tone.wav" loop style="display:block;width:160px;height:90px"></video><button id="replace">replace</button><button id="navigate">navigate</button>';

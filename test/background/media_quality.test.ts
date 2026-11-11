@@ -72,3 +72,21 @@ test("two tabs do not supersede each other", async () => {
   await Promise.all([quality.tab_updated(1, { url: web }, web), quality.tab_updated(2, { url: web }, web)]);
   assert.deepEqual(sent.map(([tab_id]) => tab_id).sort(), [1, 2]);
 });
+
+test("a navigation to a non-web page supersedes the pending turn, so nothing reaches the new document", async () => {
+  const release: (() => void)[] = [];
+  const { quality, sent, injected } = make({ inject: () => new Promise<unknown>((resolve) => release.push(() => resolve([1]))) });
+  const pending = quality.tab_updated(7, { url: web }, web);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  await quality.tab_updated(7, { url: "file:///tmp/page.html" }, "file:///tmp/page.html");
+  release[0]?.();
+  await pending;
+  assert.deepEqual(sent, []);
+  // A non-web navigation that lands before the injection starts blocks it too.
+  const early = make();
+  const first = early.quality.tab_updated(8, { url: web }, web);
+  await early.quality.tab_updated(8, { url: "about:blank" }, "about:blank");
+  await first;
+  assert.deepEqual([early.injected, early.sent], [[], []]);
+  assert.deepEqual(injected, [7]);
+});

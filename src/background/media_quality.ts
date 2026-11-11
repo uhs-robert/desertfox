@@ -27,11 +27,13 @@ export function create_media_quality(deps: MediaQualityDeps) {
   return {
     async tab_updated(tab_id: number, change: TabChange, address: string | undefined): Promise<void> {
       const trigger = trigger_of(change);
-      if (trigger === undefined || !is_web(address)) return;
+      if (trigger === undefined) return;
+      // A tab that left the web supersedes the work still pending for it, so nothing reaches its new document.
+      if (!is_web(address)) return void latest.delete(tab_id);
       const turn = ++turns;
       latest.set(tab_id, { turn, navigated: trigger === "navigated" || latest.get(tab_id)?.navigated === true });
       try {
-        if (await deps.is_disabled()) return;
+        if ((await deps.is_disabled()) || latest.get(tab_id)?.turn !== turn) return;
         await deps.inject_all(tab_id).catch(() => undefined);
         const state = latest.get(tab_id);
         if (state?.turn !== turn) return;

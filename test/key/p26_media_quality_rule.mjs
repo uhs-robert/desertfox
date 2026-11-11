@@ -15,6 +15,10 @@ site = "*://127.0.0.1/quality?id=p26_yt_height*"
 media_quality = 480
 
 [[site_rules]]
+site = "*://127.0.0.1/quality?id=p26_frame_yt_inner*"
+media_quality = "min"
+
+[[site_rules]]
 site = "*://127.0.0.1/quality?id=p26_yt_off*"
 media_quality = "off"
 `;
@@ -90,6 +94,13 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
     await poll_until("the refusal", async () => (await read_toast()) === "The player has no quality levels yet");
     await wait_event(mark, on_set("p26_slow", (event) => event.low === "hd1080"), "the rule at 1080p once the player plays", 8000);
     expect(!events.slice(mark).some(on_set("p26_slow", (event) => event.low === "large")), "the refused choice set a level");
+  });
+
+  await run_case("a player in a frame gets the rule of the frame's own address, not the top page's", async () => {
+    const mark = events.length;
+    await open_page("quality_frame", "p26_frame", { new_tab: true });
+    await wait_event(mark, on_set("p26_frame_yt_inner", (event) => event.low === "large"), "the framed player at the min row's 480p");
+    expect(!events.slice(mark).some(on_set("p26_frame_yt_inner", (event) => event.low === "hd1080")), "the framed player got the global max");
   });
 
   await run_case("an hls.js player is taken to its top level", async () => {

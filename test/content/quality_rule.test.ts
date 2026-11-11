@@ -1,16 +1,17 @@
 // The `media_quality` rule in one frame, driven against a fake player and a fake clock. The risks: a player that answers `unknown` until it plays, navigations that race an earlier poll, and a rule that fights a manual `media quality` choice.
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { RULE_GIVE_UP_MS, RULE_HOLD_MS, create_rule } from "../../src/content/quality/rule.ts";
+import { RULE_GIVE_UP_MS, RULE_HOLD_MS, RULE_RECHECK_MS, create_rule } from "../../src/content/quality/rule.ts";
 import type { Driver } from "../../src/content/quality/driver.ts";
 
 // A player with levels 360, 720 and 1080. `listed` is false while it answers like YouTube's `unknown`. `reset_to` models a new video that starts at the site's own level.
 function fake_player(playing = 720) {
-  const state = { listed: true, playing, picks: [] as number[], autos: 0 };
+  const state = { listed: true, playing, picks: [] as number[], autos: 0, video: "one" as string | undefined };
   const heights = [360, 720, 1080];
   const driver: Driver = {
     levels: () => (state.listed ? heights.map((height) => ({ height, label: `${height}p`, active: height === state.playing, pick: () => (state.picks.push(height), void (state.playing = height)) })) : []),
     auto: () => (state.listed ? (state.autos++, true) : false),
+    video_id: () => state.video,
     skip: () => false,
   };
   return { state, driver };
@@ -18,7 +19,7 @@ function fake_player(playing = 720) {
 
 // The clock moves only when the rule sleeps, so a test reads the time a poll took. `on_sleep` runs at each tick, where a test changes the page.
 function setup(value: string | (() => Promise<string>), player = fake_player()) {
-  const clock = { now: 0, sleeps: 0, on_sleep: (_sleeps: number): void => undefined };
+  const clock = { now: 0, sleeps: 0, loaded: false, on_sleep: (_sleeps: number): void => undefined };
   const rule = create_rule({
     read_value: typeof value === "string" ? async () => value : value,
     probe: () => player.driver,
@@ -27,13 +28,14 @@ function setup(value: string | (() => Promise<string>), player = fake_player()) 
       clock.on_sleep(++clock.sleeps);
     },
     now: () => clock.now,
+    loaded: () => clock.loaded,
   });
   return { rule, clock, player };
 }
 
 test("a fresh load takes a player at another level to the rule's level, then watches until it held", async () => {
   const { rule, clock, player } = setup("max");
-  await rule.start(true);
+  await rule.start(false);
   assert.deepEqual(player.state.picks, [1080]);
   assert.equal(clock.now, RULE_HOLD_MS);
 });
@@ -54,7 +56,7 @@ test("min, a height between levels and auto each reach their level", async () =>
 test("off leaves the player alone and never asks for the driver", async () => {
   const player = fake_player();
   let probes = 0;
-  const rule = create_rule({ read_value: async () => "off", probe: () => (probes++, player.driver), sleep: async () => undefined, now: () => 0 });
+  const rule = create_rule({ read_value: async () => "off", probe: () => (probes++, player.driver), sleep: async () => undefined, now: () => 0, loaded: () => false });
   await rule.start(true);
   assert.equal(probes, 0);
   assert.deepEqual(player.state.picks, []);
@@ -78,7 +80,7 @@ test("a page with no player or one that never lists levels stops at the give-up 
   await rule.start(true);
   assert.equal(clock.now, RULE_GIVE_UP_MS);
   assert.deepEqual(never.state.picks, []);
-  const absent = create_rule({ read_value: async () => "max", probe: () => undefined, sleep: async (ms) => void (absent_now += ms), now: () => absent_now });
+  const absent = create_rule({ read_value: async () => "max", probe: () => undefined, sleep: async (ms) => void (absent_now += ms), now: () => absent_now, loaded: () => false });
   let absent_now = 0;
   await absent.start(true);
   assert.equal(absent_now, RULE_GIVE_UP_MS);
@@ -101,7 +103,7 @@ test("a player that throws on a read counts as not ready, and the poll goes on",
 test("a new video that starts at the site's own level after the old one held is taken up again", async () => {
   const { rule, clock, player } = setup("max", fake_player(1080));
   // An in-site navigation: the address changed while the old video still sits at the rule's level. The next video loads 1.2 s later and starts low.
-  clock.on_sleep = (sleeps) => void (sleeps === 12 && (player.state.playing = 360));
+  clock.on_sleep = (sleeps) => void (sleeps === 12 && ((player.state.playing = 360), (player.state.video = "two")));
   await rule.start(true);
   assert.deepEqual(player.state.picks, [1080]);
   assert.equal(player.state.playing, 1080);
@@ -109,11 +111,11 @@ test("a new video that starts at the site's own level after the old one held is 
 
 test("a second navigation replaces the poll of the first, and the first sets nothing more", async () => {
   const { rule, clock, player } = setup("max");
-  const first = rule.start(true);
+  const first = rule.start(false);
   // The first poll is asleep at its first tick. The second start takes over before it wakes.
   clock.on_sleep = (sleeps) => {
     if (sleeps === 1) {
-      void rule.start(true);
+      void rule.start(false);
       // The player now belongs to the newest video, which starts low again.
       player.state.playing = 360;
     }
@@ -127,11 +129,13 @@ test("a second navigation replaces the poll of the first, and the first sets not
 
 test("a start whose rule read answers after a newer start never runs", async () => {
   const release: ((value: string) => void)[] = [];
-  const { rule, player } = setup(() => new Promise<string>((resolve) => release.push(resolve)));
-  const early = rule.start(true);
-  const late = rule.start(true);
+  let answered = "max";
+  const { rule, player } = setup(() => (release.length < 2 ? new Promise<string>((resolve) => release.push(resolve)) : Promise.resolve(answered)));
+  const early = rule.start(false);
+  const late = rule.start(false);
   // The newer read answers first, then the older one answers with a stale value.
   release[1]!("min");
+  answered = "min";
   await late;
   release[0]!("max");
   await early;
@@ -141,12 +145,14 @@ test("a start whose rule read answers after a newer start never runs", async () 
 
 test("a navigation while the rule is being read still applies the newest rule only", async () => {
   const release: ((value: string) => void)[] = [];
-  const { rule, player } = setup(() => new Promise<string>((resolve) => release.push(resolve)));
-  const first = rule.start(true);
+  let answered = "max";
+  const { rule, player } = setup(() => (release.length < 2 ? new Promise<string>((resolve) => release.push(resolve)) : Promise.resolve(answered)));
+  const first = rule.start(false);
   release[0]!("off");
   await first;
-  const second = rule.start(true);
+  const second = rule.start(false);
   release[1]!("max");
+  answered = "max";
   await second;
   assert.equal(player.state.playing, 1080);
 });
@@ -176,4 +182,61 @@ test("a finished load starts the rule when no manual choice was made", async () 
   const { rule, player } = setup("max");
   await rule.start(false);
   assert.equal(player.state.playing, 1080);
+});
+
+test("a navigation whose new video loads after the old one would have held is still taken to the level", async () => {
+  // The old video sits at max, so a fixed watch would end after 3 s. The new video (an ad, or a slow start) appears at 5 s, starts low and has a new identity.
+  const { rule, clock, player } = setup("max", fake_player(1080));
+  clock.on_sleep = (sleeps) => void (sleeps === 50 && ((player.state.playing = 360), (player.state.video = "two")));
+  await rule.start(true);
+  assert.equal(player.state.playing, 1080);
+  assert.deepEqual(player.state.picks, [1080]);
+});
+
+test("a navigation to the same video runs to the deadline, a hard load that holds ends after the hold", async () => {
+  const same = setup("max", fake_player(1080));
+  await same.rule.start(true);
+  assert.equal(same.clock.now, RULE_GIVE_UP_MS);
+  const load = setup("max", fake_player(1080));
+  await load.rule.start(false);
+  assert.equal(load.clock.now, RULE_HOLD_MS - 100);
+});
+
+test("a player with no video identity keeps the fixed watch", async () => {
+  const player = fake_player(1080);
+  player.state.video = undefined;
+  const { rule, clock } = setup("max", player);
+  await rule.start(true);
+  assert.equal(clock.now, RULE_HOLD_MS - 100);
+});
+
+test("switching DesertFox off while the poll runs stops it, and an edited rule applies within the recheck time", async () => {
+  const player = fake_player();
+  player.state.listed = false;
+  let value = "max";
+  const { rule, clock } = setup(async () => value, player);
+  clock.on_sleep = (sleeps) => {
+    // The background answers `off` from sleep 5 on. The first recheck comes at sleep 10, and the player lists its levels only at sleep 12.
+    if (sleeps === 5) value = "off";
+    if (sleeps === 12) player.state.listed = true;
+  };
+  await rule.start(true);
+  assert.deepEqual(player.state.picks, [], "the switch-off came before the poll could pick");
+  assert.ok(clock.now <= RULE_RECHECK_MS + 100);
+  const edited = setup(async () => value, fake_player());
+  value = "max";
+  edited.clock.on_sleep = (sleeps) => void (sleeps === 3 && (value = "min"));
+  await edited.rule.start(true);
+  assert.equal(edited.player.state.playing, 360);
+});
+
+test("a finished load with no player stops at once, while a navigation start keeps waiting for its page", async () => {
+  const none = (loaded: boolean, navigated: boolean) => {
+    const clock = { now: 0 };
+    const rule = create_rule({ read_value: async () => "max", probe: () => undefined, sleep: async (ms) => void (clock.now += ms), now: () => clock.now, loaded: () => loaded });
+    return rule.start(navigated).then(() => clock.now);
+  };
+  assert.equal(await none(true, false), 0);
+  assert.equal(await none(false, false), RULE_GIVE_UP_MS);
+  assert.equal(await none(true, true), RULE_GIVE_UP_MS);
 });
