@@ -93,7 +93,7 @@ function value_schema(row: SettingRow): Schema {
     case "enum":
       return { enum: [...row.values] };
     case "number":
-      return { type: row.whole ? "integer" : "number", minimum: row.min };
+      return { type: row.whole ? "integer" : "number", minimum: row.min, ...(row.max === undefined ? {} : { maximum: row.max }) };
     case "text":
       return non_empty_text;
     case "line":

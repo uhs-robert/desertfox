@@ -15,8 +15,8 @@ type TableFields = Readonly<Record<string, { value: "text" | "web_url" | "keys" 
 export type SettingRow = (
   | { kind: "boolean"; default: boolean }
   | { kind: "enum"; values: readonly EnumValue[]; default: EnumValue }
-  // `whole` refuses a fraction. `unit` names what the number counts, for the expectation text.
-  | { kind: "number"; whole?: true; min: number; unit?: string; default: number }
+  // `whole` refuses a fraction. `unit` names what the number counts, for the expectation text. No default means an absent setting stays absent.
+  | { kind: "number"; whole?: true; min: number; max?: number; unit?: string; default?: number }
   // A non-empty string. `expectation` says what it names. No default means an absent setting stays absent.
   | { kind: "text"; expectation: string; default?: string }
   // Text on one line, its length counted in code points. `suggestions` are what the command line offers, not a limit.
@@ -53,6 +53,8 @@ export const SETTINGS_TABLE = {
   // "back" stays out of the prev list: it would match a "Back to top" footer link on a page with no previous page.
   next_patterns: { kind: "text_list", expectation: "a list of link texts", default: ["next", "more", "newer", ">", "\u203a", "\u2192", "\u00bb", "\u226b", ">>"] },
   prev_patterns: { kind: "text_list", expectation: "a list of link texts", default: ["prev", "previous", "older", "<", "\u2039", "\u2190", "\u00ab", "\u226a", "<<"] },
+  // No default: a tab keeps the zoom Firefox remembers for the site until a site row or `:set` gives one. Firefox's own zoom range.
+  zoom: { kind: "number", min: 0.3, max: 5, per_site: true },
   mode_indicator: { kind: "enum", values: ["always", "not_normal", "off"], default: "always" },
   // The theme names are examples, not an enum: a theme file in the config directory takes any name.
   palette: { kind: "custom", schema: { type: "string", minLength: 1, examples: BUILT_IN_THEME_NAMES }, default: "oasis_moonlight" },

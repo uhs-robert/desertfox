@@ -119,7 +119,8 @@ function rule_of(row: Exclude<SettingRow, { kind: "custom" }>): Rule {
       return { check: (value) => (row.values as readonly unknown[]).includes(value), expectation: enum_expectation(row.values), listed_values: () => row.values.map(String) };
     case "number": {
       const is_number = (value: unknown): value is number => typeof value === "number" && (row.whole ? Number.isInteger(value) : Number.isFinite(value));
-      return { check: (value) => is_number(value) && value >= row.min, expectation: `a ${row.whole ? "whole number" : "number"}${row.unit ? ` of ${row.unit}` : ""}, ${row.min} or more` };
+      const range = row.max === undefined ? `${row.min} or more` : `from ${row.min} to ${row.max}`;
+      return { check: (value) => is_number(value) && value >= row.min && value <= (row.max ?? Infinity), expectation: `a ${row.whole ? "whole number" : "number"}${row.unit ? ` of ${row.unit}` : ""}, ${range}` };
     }
     case "text":
       return { check: is_text, expectation: row.expectation };

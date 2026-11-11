@@ -206,3 +206,17 @@ Read from the Firefox 160 sources (`omni.ja`), plus the key test for the grant a
 - A grant persists across restarts. The running background sees it at once (`permissions.contains` is true with no reload). The key test grants and removes with `ExtensionPermissions.add` and `remove`, passing the extension as the third argument so the background learns of the change.
 - `browsingData` shows "Clear recent browsing history, cookies, and related data" at install. Moving it to `optional_permissions` removes that line.
 - `cookies` shows no install prompt line, but it stays required. Without it Firefox 160 throws "No permission for cookieStoreId" in `tabs.create`, `windows.create` and `downloads.download` when they carry a container.
+
+## Per-site zoom memory and `tabs.setZoom` (per-site-settings)
+
+Measured in Firefox 160 in the key-test session with a throwaway piece: an extension background calling `tabs.setZoom`, `getZoom` and `getZoomSettings`, `FullZoom.enlarge` from chrome code, a real Ctrl+minus, and test hosts from `network.dns.localDomains`. `browser.zoom.siteSpecific` is true, the default.
+
+- Firefox remembers one zoom level per host. Ports share it (`127.0.0.1:A` and `127.0.0.1:B`). Subdomains do not: `a.example.test`, `b.example.test` and `example.test` each keep their own.
+- `tabs.setZoom` writes that memory, like a manual zoom does. A new tab on the host opens at the level, and so does the same tab after a reload or after it leaves the host and comes back. `setZoom(tab, 1)` stores 1. `setZoom(tab, 0)` resets to the default.
+- A level set in one tab did not change another open background tab of the same host: its `getZoom` kept the old level.
+- `getZoomSettings` reports `{ mode: "automatic", scope: "per-origin", defaultZoomFactor: 1 }`. `setZoomSettings` refuses `scope: "per-tab"` and `mode: "manual"` ("Unsupported zoom settings"), so an extension cannot keep its level out of the site's memory.
+- A `setZoom` from `tabs.onUpdated` at the update that carries the new address (status `loading`) stays after the load completes. Firefox does not put the old level back.
+- A new tab created with an address reports `{ status: "loading" }` with no `url` in the change, the address already on the tab. A navigation in an open tab reports the `url` change with `status: "loading"`. `pushState` and a hash change report the `url` change with `status: "complete"`.
+- A private window starts from the normal memory, then keeps its own: a level set there did not reach a normal tab of the host, and a level set in a normal tab did not reach the private one. A second private tab of the host opened at the private level.
+
+What it means for the `zoom` setting: setting the level writes Firefox's memory for the host, so DesertFox sets it only when a tab first reaches a site, keyed by host as Firefox keys it. A manual zoom after that sticks in the tab across reloads, pages of the site and a round trip to another site. A new tab on the site starts at the setting's level again, and that write also replaces the level Firefox remembered for the site's later tabs.
