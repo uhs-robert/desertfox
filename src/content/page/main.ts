@@ -11,7 +11,7 @@ import { selected_text } from "./selection.ts";
 import { RuntimeRefusal } from "../../shared/command.ts";
 import type { BackgroundToContent, MarkAnswer, MarkRequest } from "../../shared/messages.ts";
 
-type PageWindow = { desertfox_host: BundleHostApi; desertfox_page_ready?: true };
+type PageWindow = { desertfox_host?: BundleHostApi; desertfox_page_ready?: true };
 const page = window as unknown as PageWindow;
 
 // A set stores the scroll offset now. A jump asks the background for the stored one, which keeps the offset now as the previous position, then scrolls instantly so a smooth scroll in flight ends.
@@ -23,9 +23,10 @@ async function mark_at_scroll(host: BundleHostApi, type: MarkRequest["type"], ke
 }
 
 // A second run would register the handlers again for nothing.
-if (!page.desertfox_page_ready) {
+// With no host, content.js has not started in this frame. The run leaves the flag unset, so the load that content.js asks for later registers the handlers.
+const host = page.desertfox_host;
+if (!page.desertfox_page_ready && host) {
   page.desertfox_page_ready = true;
-  const host = page.desertfox_host;
   host.register_handler_("scroll.align", (args) => align_focus(args.position as AlignPosition, host.last_blurred_()));
   host.register_handler_("page.focus_input", () => {
     focus_first_input();

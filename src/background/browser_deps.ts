@@ -8,6 +8,7 @@ import type { BackgroundToContent, ContainerStore, Refusal, ToastKind } from "..
 import type { EnumSources } from "../shared/registry/check_args.ts";
 import { registry } from "../shared/registry/builtin.ts";
 import { runs_with_empty } from "./availability.ts";
+import { create_bundle_loader } from "./bundle_loader.ts";
 import type { BundleLoaderDeps } from "./bundle_loader.ts";
 import type { ImageDeps, ImageKind } from "./image_actions.ts";
 import { create_load_log } from "./load_log.ts";
@@ -138,10 +139,13 @@ export const bundle_loader_deps: BundleLoaderDeps = {
   timeout_ms: 10_000,
 };
 
-// Not through the bundle loader, which joins loads by a document id only a sender carries. A second run of page.js registers nothing.
+// The one loader of the background, so the content script's asks and the selection ask share its deadline.
+export const bundle_loader = create_bundle_loader(bundle_loader_deps);
+
+// The background knows no document id, so this load joins other selection loads only, never the content script's own load. A second run of page.js registers nothing.
 const selection_ask_deps: SelectionAskDeps = {
   ask: (tab_id, frame_id) => send_to_tab(tab_id, { type: "get_selection" }, frame_id),
-  load_page_bundle: (tab_id, frame_id) => bundle_loader_deps.inject({ tab_id, frame_id, document_id: "" }, "page.js"),
+  load_page_bundle: (tab_id, frame_id) => bundle_loader.load({ tab_id, frame_id, document_id: "" }, "page"),
 };
 
 // The decode runs in the background page, where the fetched bytes are same-origin, so no canvas is tainted. `createImageBitmap` rejects an SVG, which an `Image` element decodes.

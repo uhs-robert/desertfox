@@ -2,7 +2,7 @@ import "./command_modules.ts";
 import type { ContentToBackground, DevtoolsHello, FocusedFrameMode, PageToBackground } from "../shared/messages.ts";
 import type { BoundInvocation } from "../shared/invocation.ts";
 import { effective_settings } from "../shared/config.ts";
-import { bundle_loader_deps, container_names, read_disabled, container_stores, image_deps, make_router_deps, page_of, reinject_deps } from "./browser_deps.ts";
+import { bundle_loader, container_names, read_disabled, container_stores, image_deps, make_router_deps, page_of, reinject_deps } from "./browser_deps.ts";
 import { run_image_action } from "./image_actions.ts";
 import { HELP_PAGE_FILE } from "../help/route.ts";
 import { open_quick_start_on_install } from "./first_install.ts";
@@ -19,7 +19,6 @@ import { mark_list_rows, quickmark_list_rows } from "../shared/mark_text.ts";
 import { list_keys } from "./list_keys.ts";
 import { start_bridge } from "./bridge_browser.ts";
 import { rule_addresses_of, read_keymap_reply } from "./page_keymap.ts";
-import { create_bundle_loader } from "./bundle_loader.ts";
 import { track_window_focus } from "./window_focus.ts";
 import { create_inspect_relay } from "./inspect_relay.ts";
 import { repair_tabs_after_reload } from "./reload.ts";
@@ -118,7 +117,6 @@ wire_repeat({
   run_batch: (invocations, ctx) =>
     router.run({ invocations, mode: ctx.mode, frame_id: ctx.frame_id, ...(ctx.tab_id === undefined ? {} : { sender_tab_id: ctx.tab_id }) }),
 });
-const bundle_loader = create_bundle_loader(bundle_loader_deps);
 const cmdline = create_cmdline_service({
   storage: browser.storage.local,
   tickets: browser.storage.session,

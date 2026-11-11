@@ -3,7 +3,8 @@
 export type SelectionAskDeps = {
   // Sends `get_selection` to the frame. Resolves with nothing when no script in the frame answers.
   ask: (tab_id: number, frame_id: number) => Promise<unknown>;
-  load_page_bundle: (tab_id: number, frame_id: number) => Promise<void>;
+  // A failed load needs no report: the second ask then gets no answer.
+  load_page_bundle: (tab_id: number, frame_id: number) => Promise<unknown>;
 };
 
 // Asks first and loads the bundle only on no answer, so a frame that has the bundle pays no injection. Nothing when the frame cannot answer at all.
