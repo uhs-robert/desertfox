@@ -13,7 +13,7 @@ const shared_files = [
   "src/manifest.json",
   "src/background/{availability,browser_deps,main,page_keymap,refusal,router,slots,startup}.ts",
   "src/commands/{command,copy,mode}.ts",
-  "src/content/{ask_keymap,cancelled_keys,editable,handler_map,invocation_args,key_flow,link_escape,main,mode_state,page_mode,replay_key,run_content,run_leaf,shadow,site_rule}.ts",
+  "src/content/{ask_keymap,cancelled_keys,editable,handler_map,invocation_args,key_flow,link_escape,main,mode_state,page_mode,replay_key,run_content,run_leaf,shadow,site_mode,site_rule}.ts",
   "src/content/handlers/{copy,focus,mode,stop,types}.ts",
   "src/shared/{command,index,load_commands,messages}.ts",
   "src/shared/registry/{builtin,define,index}.ts",

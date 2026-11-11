@@ -80,7 +80,7 @@ export function normal_tree_for(normal: TreeBranch | undefined, columns: PageSit
   return is_empty_tree(pruned) ? { tree: normal, all_off: true } : { tree: pruned, all_off: false, frees: frees_of(columns.keys) };
 }
 
-// Each site mode of the page as what it adds to the normal tree: its binds go onto the tree after `pass` and `only` prune it, so a freed key can still be a mode key. The page lays the unchanged children of the normal tree under them, so only the children the mode replaced are sent.
+// Each site mode of the page as what it adds to the normal tree: its binds go onto the tree after `pass` and `only` prune it, so a mode bind survives a key rule. The page lays the unchanged children of the normal tree under them, so only the children the mode replaced are sent.
 function site_modes_for(tree: TreeBranch | undefined, modes: Readonly<Record<string, SiteModeColumn<SiteBind>>>): Record<string, PageSiteMode> {
   return Object.fromEntries(
     Object.entries(modes).map(([name, { label, bind }]) => {

@@ -39,7 +39,7 @@ let page_reply: PageKeymap | undefined;
 function refresh_mode_indicator(): void {
   // A child frame's pass-next flag does not reach the top frame, so the badge shows its mode alone.
   const pass_next_armed = !focused_frame_mode && page_mode.is_pass_next_armed_();
-  const site_label = site_mode.name_ === undefined ? undefined : page_reply?.site_modes?.[site_mode.name_]?.label;
+  const site_label = focused_frame_mode ? undefined : site_mode.modes_?.[site_mode.name_ ?? ""]?.label;
   show_mode_label(badge_state(focused_frame_mode ?? page_mode.get_mode_(), pass_next_armed, mode_indicator, recording, site_label));
 }
 
@@ -243,6 +243,7 @@ let was_all_off = false;
 function install_matcher(reply: PageKeymap | undefined): void {
   page_reply = reply;
   site_mode.name_ = undefined;
+  site_mode.modes_ = reply?.site_modes;
   const keymap = reply?.keymap;
   const all_off = reply?.all_off === true;
   // A tree stored before the setting existed has no value, which means the default.
@@ -277,10 +278,10 @@ function install_matcher(reply: PageKeymap | undefined): void {
 function install_tree(): void {
   const keymap = page_reply?.keymap;
   const normal = keymap?.modes.normal;
-  const overlay = site_mode.name_ === undefined ? undefined : page_reply?.site_modes?.[site_mode.name_];
+  const overlay = site_mode.modes_?.[site_mode.name_ ?? ""];
   const tree = (keymap && overlay && normal ? { ...keymap, modes: { ...keymap.modes, normal: { ...normal, children: { ...normal.children, ...overlay.tree } } } } : keymap ?? { modes: {} }) as CompiledKeymap;
   const frees = page_reply?.frees;
-  key_flow.set_matcher_(create_matcher(tree, frees && ((token) => is_freed(frees, token))), keymap?.modes.browser);
+  key_flow.set_matcher_(create_matcher(tree, frees && ((token) => !overlay?.tree[token] && is_freed(frees, token))), keymap?.modes.browser);
 }
 
 // The one test hook in src/: the key test reads this attribute as the content script's ready signal. Time is milliseconds.

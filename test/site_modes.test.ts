@@ -39,7 +39,7 @@ test("a mode reply holds its label and only the children that differ from the no
   assert.equal(reply.site_modes && (await ask(compile([MODE_ROW]).compiled, "https://b.test/"))?.site_modes, undefined);
 });
 
-test("mode binds go on after pass prunes the tree, so a freed key can still be a mode key", async () => {
+test("mode binds go on after pass prunes the tree, so the reply keeps a mode key the key rule removed", async () => {
   const reply = (await ask(compile([{ ...MODE_ROW, pass: "l" }]).compiled, "https://a.test/"))!;
   assert.equal(reply.keymap.modes.normal?.children["l"], undefined);
   assert.ok(reply.site_modes!["visual"]!.tree["l"]);
@@ -124,7 +124,7 @@ test("the badge shows a site label only in normal mode, and even where the setti
   assert.equal(mode_label("normal", false, "always", "a", "VISUAL"), "VISUAL recording @a");
 });
 
-test("mode.site takes a mode name or off, and runs in normal mode only", () => {
+test("mode.site is a content command with one main name param, and `.` does not repeat it", () => {
   const command = registry.get("mode.site")!;
   assert.equal(command.runs_in, "content");
   assert.equal(command.params?.[0]?.main, true);

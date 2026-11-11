@@ -162,7 +162,7 @@ export function table_list_rule(fields: TableFields, exclusive: readonly string[
     }
     return undefined;
   };
-  const optional_kind = (value: string): string => (value === "keys" ? " of key sequences" : value === "bindings" ? " of keys to commands" : value === "site_modes" ? " of modes, each with a label and a bind" : value === "boolean" ? " of true or false" : "");
+  const optional_kind = (value: string): string => (value === "keys" ? " of key sequences" : value === "bindings" ? " of keys to commands" : value === "site_modes" ? " of modes that each have a label plus a bind" : value === "boolean" ? " of true or false" : "");
   const field_words = Object.entries(fields).map(([field, rule]) => {
     const kind = rule.value === "web_url" ? "an http or https " : rule.value === "keys" ? "key sequences in " : "";
     return rule.optional ? `an optional "${field}"${optional_kind(rule.value)}` : `${kind}"${field}"`;

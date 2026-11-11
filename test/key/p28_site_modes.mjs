@@ -9,6 +9,12 @@ const arrow = (key, key_code, shift) => `{ id = "page.send_key", args = { key = 
 const ROW = [
   "",
   "[[site_rules]]",
+  'site = "*://127.0.0.1/*?id=grid_pass*"',
+  'pass = "l"',
+  "[[site_rules]]",
+  'site = "*://127.0.0.1/*?id=grid_only*"',
+  'only = "v"',
+  "[[site_rules]]",
   'site = "*://127.0.0.1/*?id=grid_*"',
   'bind = { v = "mode.site visual", V = "mode.site visual" }',
   `modes.visual = { label = "VISUAL", bind = { l = ${arrow("ArrowRight", 39, true)}, h = ${arrow("ArrowLeft", 37, true)}, x = [{ id = "mode.site", args = { name = "off" } }, ${arrow("ArrowDown", 40, false)}] } }`,
@@ -62,6 +68,20 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
     await open_grid("count");
     await press_keys("V3l");
     await expect_grid("39s,39s,39s,");
+  });
+
+  await run_case("a mode key that a pass row frees still runs in the mode", async () => {
+    await open_grid("pass_free");
+    await press_keys("vll");
+    await expect_grid("39s,39s,");
+    await expect_badge("VISUAL");
+  });
+
+  await run_case("a mode key that an only row leaves out still runs in the mode", async () => {
+    await open_grid("only_free");
+    await press_keys("vlh");
+    await expect_grid("39s,37s,");
+    await expect_badge("VISUAL");
   });
 
   await run_case("Escape ends the mode only", async () => {
