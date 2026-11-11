@@ -133,3 +133,16 @@ test("the palette picks the stored theme: local theme, Oasis theme with its ligh
   assert.deepEqual(broken.theme.dark, load_theme("oasis_moonlight", 3)!.dark);
   assert.deepEqual(broken.warnings, ['settings: palette "mine" is a local theme with a problem: [dark] accent is "red", not a color as #rgb, #rrggbb, rgb(), rgba() with alpha 1, or hsl(), using oasis_moonlight']);
 });
+
+test("palette desktop shows the pushed palette, else oasis_moonlight, and leaves light_intensity alone", () => {
+  const { registry } = make_fake(commands);
+  const compile = (settings: Record<string, unknown>, desktop_palette?: string) =>
+    compile_config({ config: { ...empty_config(), settings }, desktop_palette, default_keymap: {}, get_command: (id) => registry.get(id), enum_sources: { search_engines: [], containers: [] } });
+  assert.deepEqual(compile({ palette: "desktop" }).theme, compile({ palette: "oasis_moonlight" }).theme);
+  assert.deepEqual(compile({ palette: "desktop" }).warnings, []);
+  assert.deepEqual(compile({ palette: "desktop" }, "oasis_dune").theme, compile({ palette: "oasis_dune" }).theme);
+  assert.deepEqual(compile({ palette: "desktop", light_intensity: 5 }, "oasis_dune").theme, compile({ palette: "oasis_dune", light_intensity: 5 }).theme);
+  // A name set by hand stops the sync: the pushed palette is ignored.
+  assert.deepEqual(compile({ palette: "oasis_rose" }, "oasis_dune").theme, compile({ palette: "oasis_rose" }).theme);
+  assert.deepEqual(compile({}, "oasis_dune").theme, compile({ palette: "oasis_moonlight" }).theme);
+});

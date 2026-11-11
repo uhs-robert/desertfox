@@ -13,6 +13,9 @@ export const WARNINGS_STORAGE_KEY = "desertfox_warnings";
 // Where the config came from and the settings in force: `CONFIG_STATUS_STORAGE_KEY`, defined in `shared/storage_watch.ts` for the pages that follow it.
 export { CONFIG_STATUS_STORAGE_KEY } from "../shared/storage_watch.ts";
 
+// The palette name the desktop last pushed over the bridge. `palette = "desktop"` follows it. Local storage, so it stays on this machine and survives a restart.
+export const DESKTOP_PALETTE_STORAGE_KEY = "desertfox_desktop_palette";
+
 // Setting name to the value a saved browser edit gave it (`:set`). Global, private windows included.
 export const SAVED_SETTINGS_STORAGE_KEY = "desertfox_saved_settings";
 

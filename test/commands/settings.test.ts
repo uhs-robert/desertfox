@@ -52,6 +52,7 @@ test("default_engine or palette naming nothing is kept with a warning", () => {
   assert.equal(plan_set("default_engine", "duck", "saved", NO_EDITS, config()).toast.kind, "success");
   assert.equal(plan_set("palette", "nothing", "saved", NO_EDITS, config()).toast.kind, "warning");
   assert.equal(plan_set("palette", "oasis_moonlight", "saved", NO_EDITS, config()).toast.kind, "success");
+  assert.equal(plan_set("palette", "desktop", "saved", NO_EDITS, config()).toast.kind, "success");
 });
 
 test("unset removes one edit and says so for a name that is not edited", () => {

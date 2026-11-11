@@ -82,7 +82,7 @@ export const browser_tab_switch = (): TabSwitch =>
     after: (run, delay_ms) => void setTimeout(run, delay_ms),
   });
 
-export const browser_bridge_deps = (recall_mode: (tab_id: number) => Promise<Mode>, bridge_run: ReturnType<typeof browser_bridge_run>, tab_switch: TabSwitch): BridgeDeps => ({
+export const browser_bridge_deps = (recall_mode: (tab_id: number) => Promise<Mode>, bridge_run: ReturnType<typeof browser_bridge_run>, tab_switch: TabSwitch, set_desktop_palette: BridgeDeps["set_desktop_palette"]): BridgeDeps => ({
   connect: () => browser.runtime.connectNative(BRIDGE_HOST_NAME),
   read_settings: async () => {
     const keymap = current_keymap((await browser.storage.local.get(COMPILED_KEYMAP_STORAGE_KEY))[COMPILED_KEYMAP_STORAGE_KEY] as CompiledKeymap | undefined);
@@ -108,13 +108,15 @@ export const browser_bridge_deps = (recall_mode: (tab_id: number) => Promise<Mod
   list_commands: bridge_run.list,
   tab_verb: tab_switch.handle,
   normal_tab: tab_switch.normal_tab,
+  set_desktop_palette,
+  warn: (text) => console.warn(text),
 });
 
 // Registers its listeners in the first turn, like the other background listeners, then connects once the settings are read.
 // `recall_mode` answers the mode of a tab, which is the focused frame's (`tab_modes.ts`).
-export function start_bridge(recall_mode: (tab_id: number) => Promise<Mode>, router_deps: RouterDeps, is_snippet: (command_id: string) => boolean) {
+export function start_bridge(recall_mode: (tab_id: number) => Promise<Mode>, router_deps: RouterDeps, is_snippet: (command_id: string) => boolean, set_desktop_palette: BridgeDeps["set_desktop_palette"]) {
   const tab_switch = browser_tab_switch();
-  const bridge = create_bridge(browser_bridge_deps(recall_mode, browser_bridge_run(router_deps, is_snippet, tab_switch), tab_switch));
+  const bridge = create_bridge(browser_bridge_deps(recall_mode, browser_bridge_run(router_deps, is_snippet, tab_switch), tab_switch, set_desktop_palette));
   browser.windows.onFocusChanged.addListener((window_id) => void bridge.window_focused(window_id));
   browser.tabs.onActivated.addListener(({ tabId, windowId }) => void bridge.tab_activated(windowId, tabId));
   // Its own listener, filtered, so the other `onUpdated` work in main.ts stays apart from the stream.

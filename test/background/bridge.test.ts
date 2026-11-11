@@ -6,7 +6,9 @@ import type { Mode } from "../../src/shared/command.ts";
 import type { BridgeAnswer } from "../../src/background/bridge_run.ts";
 import type { TabInfo } from "../../src/background/tab_switch.ts";
 
-function make(options: { bridge?: boolean; missing_host?: boolean; permission?: boolean; run_command?: (text: string, tab_id?: number) => Promise<BridgeAnswer>; share_tabs?: boolean; tab_verb?: BridgeDeps["tab_verb"] } = {}) {
+function make(options: { bridge?: boolean; missing_host?: boolean; permission?: boolean; run_command?: (text: string, tab_id?: number) => Promise<BridgeAnswer>; share_tabs?: boolean; tab_verb?: BridgeDeps["tab_verb"]; set_desktop_palette?: BridgeDeps["set_desktop_palette"] } = {}) {
+  const palettes: string[] = [];
+  const warnings: string[] = [];
   const settings = { bridge: options.bridge ?? true, share_tabs: options.share_tabs ?? false };
   const tab_calls: { verb: string; request: Record<string, unknown> }[] = [];
   const state = { permission: options.permission ?? true, gate: undefined as Promise<void> | undefined };
@@ -67,12 +69,14 @@ function make(options: { bridge?: boolean; missing_host?: boolean; permission?: 
       return { ok: true, handled: verb };
     }),
     normal_tab: async (tab_id) => normal_tabs.get(tab_id),
+    set_desktop_palette: options.set_desktop_palette ?? (async (name) => void palettes.push(name)),
+    warn: (text) => void warnings.push(text),
   };
   const bridge = create_bridge(deps);
   const settle = () => new Promise<void>((resolve) => setTimeout(resolve, 5));
   const pending = () => timers.filter((timer) => !timer.cancelled);
   return {
-    bridge, settings, state, windows, active_tab, modes, normal_tabs, ports, counts, settle, tab_calls, timers,
+    bridge, palettes, warnings, settings, state, windows, active_tab, modes, normal_tabs, ports, counts, settle, tab_calls, timers,
     port: () => ports[ports.length - 1]!,
     advance: (ms: number) => void (now += ms),
     // Fires the newest pending timer, lets the connect it starts finish and returns its delay.
@@ -557,4 +561,67 @@ test("a tab reply asked for before sharing went off goes out as the refusal", as
   await test_case.settle();
   assert.deepEqual(replies_of(test_case.port()), [{ ok: false, message: "tab sharing is off, set bridge_share_tabs to true", sharing: "off", verb: "reply", request_id: 4 }]);
   assert.doesNotMatch(JSON.stringify(test_case.port().posted), /Mail/);
+});
+
+test("a theme request with a built-in name stores it and is answered ok", async () => {
+  const test_case = make();
+  await test_case.connect_and_ready();
+  test_case.port().hear({ verb: "theme", request_id: 4, palette: "oasis_dune" });
+  await test_case.settle();
+  assert.deepEqual(test_case.palettes, ["oasis_dune"]);
+  assert.deepEqual(test_case.port().posted.filter((message) => message.verb === "reply"), [{ ok: true, verb: "reply", request_id: 4 }]);
+});
+
+test("an unknown palette name is refused, logged and stores nothing", async () => {
+  const test_case = make();
+  await test_case.connect_and_ready();
+  // `desktop` is a palette setting value, not a theme: a push of it would only point the setting at itself.
+  for (const palette of ["moonlight", "desktop", "oasis_nothing", "__proto__", ""]) test_case.port().hear({ verb: "theme", request_id: 1, palette });
+  await test_case.settle();
+  assert.deepEqual(test_case.palettes, []);
+  assert.equal(test_case.warnings.length, 5);
+  assert.deepEqual(test_case.port().posted.filter((message) => message.verb === "reply").map((message) => message.ok), [false, false, false, false, false]);
+});
+
+test("a theme request of the wrong shape is dropped and nothing is stored", async () => {
+  const test_case = make();
+  await test_case.connect_and_ready();
+  for (const palette of [5, null, undefined, ["oasis_dune"], "x".repeat(65)]) test_case.port().hear({ verb: "theme", request_id: 1, palette });
+  await test_case.settle();
+  assert.deepEqual(test_case.palettes, []);
+  assert.deepEqual(test_case.port().posted.filter((message) => message.verb === "reply"), []);
+});
+
+test("a theme request is answered with bridge_share_tabs off, and a push carries no other setting", async () => {
+  const test_case = make({ share_tabs: false });
+  await test_case.connect_and_ready();
+  test_case.port().hear({ verb: "theme", request_id: 2, palette: "oasis_rose", bridge: false, share_tabs: true, command: "config.reload" });
+  await test_case.settle();
+  assert.deepEqual(test_case.palettes, ["oasis_rose"]);
+  assert.equal(test_case.settings.bridge, true);
+  assert.equal(test_case.settings.share_tabs, false);
+});
+
+test("a theme replay after a reconnect is applied on the new port only once ready", async () => {
+  const test_case = make();
+  await test_case.connect_and_ready();
+  test_case.port().drop();
+  await test_case.fire_latest();
+  const second = test_case.port();
+  second.hear({ verb: "theme", request_id: 1, palette: "oasis_dune" });
+  await test_case.settle();
+  // Before ready the host's words are ignored, as for every verb.
+  assert.deepEqual(test_case.palettes, []);
+  second.say();
+  second.hear({ verb: "theme", request_id: 1, palette: "oasis_dune" });
+  await test_case.settle();
+  assert.deepEqual(test_case.palettes, ["oasis_dune"]);
+});
+
+test("a failing store answers with the fixed failure text", async () => {
+  const test_case = make({ set_desktop_palette: async () => { throw new Error("storage failed for /home/x"); } });
+  await test_case.connect_and_ready();
+  test_case.port().hear({ verb: "theme", request_id: 1, palette: "oasis_dune" });
+  await test_case.settle();
+  assert.deepEqual(test_case.port().posted.filter((message) => message.verb === "reply"), [{ ok: false, message: "the command failed", verb: "reply", request_id: 1 }]);
 });

@@ -12,7 +12,7 @@ import { captured_key_param, find_param, is_context_source, without_param } from
 import { check_args } from "../shared/registry/check_args.ts";
 import type { EnumSources } from "../shared/registry/check_args.ts";
 import { DEFAULT_LIGHT_INTENSITY, DEFAULT_PALETTE, DEFAULT_SETTINGS } from "../shared/config.ts";
-import { LIGHT_INTENSITIES } from "../shared/theme/roles.ts";
+import { DESKTOP_PALETTE, LIGHT_INTENSITIES } from "../shared/theme/roles.ts";
 import { load_theme, local_theme_problem } from "../shared/theme/load.ts";
 import type { StoredTheme } from "../shared/theme/apply.ts";
 import { match_regex_source } from "../shared/match_pattern.ts";
@@ -28,6 +28,8 @@ export type CompileInput = {
   default_site_rows?: readonly DefaultSiteRow[];
   get_command: (command_id: string) => Pick<CommandDef, "id" | "label" | "params" | "runs_in" | "count" | "modes" | "bundle"> | undefined;
   enum_sources: EnumSources;
+  // The palette the desktop last pushed. `palette = "desktop"` shows it, or the default while none was pushed.
+  desktop_palette?: string | undefined;
 };
 
 export type CompileOutput = { compiled: CompiledKeymap; theme: StoredTheme; warnings: string[] };
@@ -47,7 +49,8 @@ export function compile_config(input: CompileInput): CompileOutput {
     } };
   }, { engine_labels: Object.fromEntries(Object.entries(input.config.search_engines).flatMap(([name, engine]) => (typeof engine?.label === "string" ? [[name, engine.label]] : []))) }, default_layer_of(input.default_keymap, input.config.keymap));
 
-  const requested_palette = input.config.settings.palette ?? DEFAULT_PALETTE;
+  const set_palette = input.config.settings.palette ?? DEFAULT_PALETTE;
+  const requested_palette = set_palette === DESKTOP_PALETTE ? (input.desktop_palette ?? DEFAULT_PALETTE) : set_palette;
   let light_intensity = input.config.settings.light_intensity ?? DEFAULT_LIGHT_INTENSITY;
   if (!(LIGHT_INTENSITIES as readonly unknown[]).includes(light_intensity)) {
     warnings.push(`settings: light_intensity ${JSON.stringify(light_intensity)} is not 1 to 5, using ${DEFAULT_LIGHT_INTENSITY}`);
