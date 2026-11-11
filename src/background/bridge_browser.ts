@@ -10,6 +10,8 @@ import { create_bridge_run } from "./bridge_run.ts";
 import type { BridgeRunTarget } from "./bridge_run.ts";
 import { typed_url_target } from "../commands/open_target.ts";
 import { no_repeat_memory } from "./repeat_memory.ts";
+import { create_tab_switch } from "./tab_switch.ts";
+import type { TabSwitch } from "./tab_switch.ts";
 import { create_router } from "./router.ts";
 import type { RouterDeps } from "./router.ts";
 
@@ -28,7 +30,7 @@ export async function focused_normal_target(api: TargetApi = browser): Promise<B
 
 // A run from outside has its own router: it targets the focused normal window instead of `currentWindow`, shows no toast (the answer carries the refusal),
 // and leaves `.` and the macro recorder alone, so a script cannot rewrite what the user repeats.
-export function browser_bridge_run(router_deps: RouterDeps, is_snippet: (command_id: string) => boolean) {
+export function browser_bridge_run(router_deps: RouterDeps, is_snippet: (command_id: string) => boolean, tab_switch: TabSwitch) {
   const { record_step: _recorded, ...shared_deps } = router_deps;
   const router = create_router({
     ...shared_deps,
@@ -44,16 +46,34 @@ export function browser_bridge_run(router_deps: RouterDeps, is_snippet: (command
     is_snippet,
     get_enum_sources: router_deps.get_enum_sources,
     resolve_url: typed_url_target,
-    target: focused_normal_target,
+    target: async (tab_id) => {
+      if (tab_id === undefined) return focused_normal_target();
+      const tab = await tab_switch.normal_tab(tab_id);
+      return tab && { tab_id, window_id: tab.windowId as number, url: tab.url, incognito: false };
+    },
     run: (invocation, target) => router.run({ invocations: [invocation], mode: "normal", sender_tab_id: target.tab_id, skip_repeat: true }),
   });
 }
 
-export const browser_bridge_deps = (recall_mode: (tab_id: number) => Promise<Mode>, bridge_run: ReturnType<typeof browser_bridge_run>): BridgeDeps => ({
+export const browser_tab_switch = (): TabSwitch =>
+  create_tab_switch({
+    windows: () => browser.windows.getAll(),
+    window: (window_id) => browser.windows.get(window_id),
+    tabs: () => browser.tabs.query({}),
+    tab: (tab_id) => browser.tabs.get(tab_id),
+    select: async (tab_id) => void (await browser.tabs.update(tab_id, { active: true })),
+    focus_window: async (window_id) => void (await browser.windows.update(window_id, { focused: true })),
+    set_preface: async (window_id, text) => void (await browser.windows.update(window_id, { titlePreface: text })),
+    remove: (tab_id) => browser.tabs.remove(tab_id),
+    capture: (tab_id, options) => browser.tabs.captureTab(tab_id, options),
+    after: (run, delay_ms) => void setTimeout(run, delay_ms),
+  });
+
+export const browser_bridge_deps = (recall_mode: (tab_id: number) => Promise<Mode>, bridge_run: ReturnType<typeof browser_bridge_run>, tab_switch: TabSwitch): BridgeDeps => ({
   connect: () => browser.runtime.connectNative(BRIDGE_HOST_NAME),
   read_settings: async () => {
     const keymap = current_keymap((await browser.storage.local.get(COMPILED_KEYMAP_STORAGE_KEY))[COMPILED_KEYMAP_STORAGE_KEY] as CompiledKeymap | undefined);
-    return { bridge: keymap?.bridge === true };
+    return { bridge: keymap?.bridge === true, share_tabs: keymap?.bridge === true && keymap.bridge_share_tabs === true };
   },
   permission_granted: () => browser.permissions.contains({ permissions: ["nativeMessaging"] }),
   last_focused_window: async () => {
@@ -73,12 +93,14 @@ export const browser_bridge_deps = (recall_mode: (tab_id: number) => Promise<Mod
   now_ms: () => Date.now(),
   run_command: bridge_run.run,
   list_commands: bridge_run.list,
+  tab_verb: tab_switch.handle,
 });
 
 // Registers its listeners in the first turn, like the other background listeners, then connects once the settings are read.
 // `recall_mode` answers the mode of a tab, which is the focused frame's (`tab_modes.ts`).
 export function start_bridge(recall_mode: (tab_id: number) => Promise<Mode>, router_deps: RouterDeps, is_snippet: (command_id: string) => boolean) {
-  const bridge = create_bridge(browser_bridge_deps(recall_mode, browser_bridge_run(router_deps, is_snippet)));
+  const tab_switch = browser_tab_switch();
+  const bridge = create_bridge(browser_bridge_deps(recall_mode, browser_bridge_run(router_deps, is_snippet, tab_switch), tab_switch));
   browser.windows.onFocusChanged.addListener((window_id) => void bridge.window_focused(window_id));
   browser.tabs.onActivated.addListener(({ windowId }) => void bridge.tab_activated(windowId));
   browser.permissions.onAdded.addListener(() => bridge.permission_added());

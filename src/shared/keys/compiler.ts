@@ -345,6 +345,7 @@ export function compile_keymap(keymap: KeymapConfig, settings: Partial<Settings>
     ...(site_rules.length > 0 ? { site_rules } : {}),
     mode_indicator: settings.mode_indicator ?? DEFAULT_SETTINGS.mode_indicator,
     ...(settings.bridge === true ? { bridge: true as const } : {}),
+    ...(settings.bridge === true && settings.bridge_share_tabs === true ? { bridge_share_tabs: true as const } : {}),
     which_key_border: settings.which_key_border ?? DEFAULT_SETTINGS.which_key_border,
     which_key_delay_ms: settings.which_key_delay_ms ?? DEFAULT_SETTINGS.which_key_delay_ms,
   };

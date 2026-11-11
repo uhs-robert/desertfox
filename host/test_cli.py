@@ -116,6 +116,70 @@ class CliTest(unittest.TestCase):
             self.assertIn("usage:", done.stderr + done.stdout)
         self.assertEqual(self.cli("--help").returncode, 0)
 
+    def test_run_with_a_tab_sends_the_tab_id_and_keeps_the_command_after_it(self):
+        bridge = self.serve({"ok": True}, {"ok": True}, {"ok": False, "message": "no such tab"})
+        self.assertEqual(self.cli("run", "--tab", "42", "media.act", "play_pause").returncode, 0)
+        self.assertEqual(self.cli("run", "--tab=7", "tab.next").returncode, 0)
+        done = self.cli("run", "--tab", "9", "tab.next")
+        self.assertEqual((done.returncode, done.stderr), (1, "desertfox: no such tab\n"))
+        self.assertEqual(bridge.requests, [
+            {"verb": "run", "tab_id": 42, "command": "media.act play_pause"},
+            {"verb": "run", "tab_id": 7, "command": "tab.next"},
+            {"verb": "run", "tab_id": 9, "command": "tab.next"},
+        ])
+
+    def test_a_tab_option_after_the_command_is_part_of_the_command(self):
+        bridge = self.serve({"ok": True})
+        self.cli("run", "open", "--tab", "https://example.org/")
+        self.assertEqual(bridge.requests, [{"verb": "run", "command": "open --tab https://example.org/"}])
+
+    def test_tabs_prints_one_line_per_tab_and_json_on_request(self):
+        tabs = [
+            {"tab_id": 10, "window_id": 1, "title": "Mail", "url": "https://mail.example/", "active": True, "audible": False, "discarded": False, "pinned": True},
+            {"tab_id": 11, "window_id": 1, "title": "Music", "url": "https://music.example/", "audible": True},
+        ]
+        bridge = self.serve({"ok": True, "tabs": tabs}, {"ok": True, "tabs": tabs}, {"ok": False, "message": "tab sharing is off, set bridge_share_tabs to true"})
+        self.assertEqual(self.cli("tabs").stdout.splitlines(), ["10\t1\ta--p\tMail\thttps://mail.example/", "11\t1\t-s--\tMusic\thttps://music.example/"])
+        self.assertEqual(json.loads(self.cli("tabs", "--json").stdout), tabs)
+        off = self.cli("tabs")
+        self.assertEqual((off.returncode, off.stdout), (1, ""))
+        self.assertIn("bridge_share_tabs", off.stderr)
+        self.assertEqual({request["verb"] for request in bridge.requests}, {"tabs"})
+
+    def test_activate_clear_preface_and_close_send_their_fields(self):
+        bridge = self.serve({"ok": True, "window_id": 1, "focused": True, "preface_set": True, "extra": 1}, {"ok": True, "window_id": 1, "focused": True, "preface_set": False}, {"ok": True, "cleared": True}, {"ok": True}, {"ok": False, "message": "no such tab"})
+        done = self.cli("activate", "10", "--preface", "abc123")
+        self.assertEqual(json.loads(done.stdout), {"window_id": 1, "focused": True, "preface_set": True})
+        self.assertEqual(self.cli("activate", "11").returncode, 0)
+        self.assertEqual(json.loads(self.cli("clear-preface", "1", "--preface=abc123").stdout), {"cleared": True})
+        closed = self.cli("close", "12")
+        self.assertEqual((closed.returncode, closed.stdout), (0, ""))
+        stale = self.cli("close", "999")
+        self.assertEqual((stale.returncode, stale.stderr), (1, "desertfox: no such tab\n"))
+        self.assertEqual(bridge.requests, [
+            {"verb": "activate", "tab_id": 10, "preface": "abc123"},
+            {"verb": "activate", "tab_id": 11},
+            {"verb": "clear_preface", "window_id": 1, "preface": "abc123"},
+            {"verb": "close", "tab_id": 12},
+            {"verb": "close", "tab_id": 999},
+        ])
+
+    def test_capture_prints_the_path_of_each_image_and_exits_one_when_any_failed(self):
+        results = [{"tab_id": 10, "ok": True, "thumbnail": "/cache/a.jpg", "thumbnail_at": 5}, {"tab_id": 11, "ok": False, "thumbnail": "", "thumbnail_at": 0, "error": "the tab is not loaded"}]
+        bridge = self.serve({"ok": True, "results": results[:1]}, {"ok": True, "results": results})
+        self.assertEqual(self.cli("capture").stdout, "10\t/cache/a.jpg\n")
+        done = self.cli("capture", "10", "11")
+        self.assertEqual((done.returncode, done.stdout.splitlines()), (1, ["10\t/cache/a.jpg", "11\tfailed: the tab is not loaded"]))
+        self.assertEqual(bridge.requests, [{"verb": "capture"}, {"verb": "capture", "tab_ids": [10, 11]}])
+
+    def test_tab_commands_with_bad_usage_exit_two_and_send_nothing(self):
+        bridge = self.serve()
+        for args in (["activate"], ["activate", "x"], ["activate", "1", "2"], ["close"], ["close", "a"], ["clear-preface"], ["clear-preface", "1", "--preface"], ["run", "--tab"], ["run", "--tab", "x", "tab.next"], ["run", "--tab", "5"], ["capture", "z"], ["tabs", "--wide"]):
+            done = self.cli(*args)
+            self.assertEqual(done.returncode, 2, args)
+            self.assertIn("usage:", done.stderr)
+        self.assertEqual(bridge.requests, [])
+
     def test_a_round_trip_through_the_real_host(self):
         host = test_bridge.Host(self.runtime)
         self.addCleanup(host.kill)

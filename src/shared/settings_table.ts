@@ -58,6 +58,8 @@ export const SETTINGS_TABLE = {
   new_tab_page: { kind: "custom", schema: { type: "string", pattern: `^(${BUILT_IN_PAGE}|https?://\\S+)$` }, default: BUILT_IN_PAGE },
   // Opens the native bridge port. Needs the optional `nativeMessaging` permission and the bridge host, see host/README.md.
   bridge: { kind: "boolean", default: false },
+  // Lets bridge programs list tabs (titles and addresses of normal windows), activate, close and capture them, and run a command on a chosen tab. Needs `bridge`.
+  bridge_share_tabs: { kind: "boolean", default: false },
   completion_all_windows: { kind: "boolean", default: false },
   cmdline_prompt: { kind: "line", min_length: 1, max_length: 8, suggestions: ["caret", "colon"], default: "caret" },
   open_completion: { kind: "enum_list", values: ["bookmarks", "history"], default: ["bookmarks", "history"] },

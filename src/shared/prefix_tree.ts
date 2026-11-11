@@ -64,6 +64,8 @@ export type CompiledKeymap = {
   mode_indicator: ModeIndicator;
   // Set when the `bridge` setting is on. The background reads it to open the bridge port. Pages ignore it.
   bridge?: true;
+  // Set when `bridge_share_tabs` is on as well. The bridge then answers the tab verbs. Pages ignore it.
+  bridge_share_tabs?: true;
   which_key_delay_ms: number;
   // A tree stored before this setting has none, and the panel keeps square corners.
   which_key_border?: WhichKeyBorder;

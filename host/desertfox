@@ -1,9 +1,17 @@
 #!/usr/bin/env python3
 """Command line for the DesertFox bridge host. Python 3.9+, stdlib only.
 
-  desertfox run <command> [args...]   run one command in the focused Firefox window
+  desertfox run [--tab <id>] <command> [args...]   run one command in the focused Firefox window, or in a tab
   desertfox list [--json]             the commands the bridge allows, with their params
   desertfox state [--json]            the mode the bridge last saw
+
+The tab commands need `bridge_share_tabs` on in DesertFox, and never see a private window:
+
+  desertfox tabs [--json]                      the open tabs: id, window id, flags, title and address
+  desertfox activate <id> [--preface <nonce>]  select the tab and focus its window, and put the nonce in front of the window title
+  desertfox clear-preface <window id> [--preface <nonce>]
+  desertfox close <id>
+  desertfox capture [id...] [--json]           save thumbnails of the tabs (all loaded ones without ids) and print their paths
 
 `run` joins its arguments into the one command line the `:` line takes. A single argument is used as it is, so
 `desertfox run "scroll.lines 3"` works. Several arguments are quoted for the line, so `desertfox run tab.switch "my tab"`
@@ -24,10 +32,17 @@ EXIT_USAGE = 2
 EXIT_NO_BRIDGE = 3
 # The host gives up on the extension after 10 s, so a reply always comes before this.
 TIMEOUT_S = 15
+# Capture renders one tab at a time, up to 5 s each.
+CAPTURE_TIMEOUT_S = 120
 
-USAGE = """usage: desertfox run <command> [args...]
+USAGE = """usage: desertfox run [--tab <id>] <command> [args...]
        desertfox list [--json]
-       desertfox state [--json]"""
+       desertfox state [--json]
+       desertfox tabs [--json]
+       desertfox activate <id> [--preface <nonce>]
+       desertfox clear-preface <window id> [--preface <nonce>]
+       desertfox close <id>
+       desertfox capture [id...] [--json]"""
 
 
 class BridgeDown(Exception):
@@ -41,12 +56,12 @@ def socket_path():
     return os.path.join(runtime_dir, "desertfox", "bridge.sock")
 
 
-def ask(request):
+def ask(request, timeout_s=TIMEOUT_S):
     """One request on a new connection and the decoded reply. Raises BridgeDown when nothing listens."""
     path = socket_path()
     try:
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as connection:
-            connection.settimeout(TIMEOUT_S)
+            connection.settimeout(timeout_s)
             connection.connect(path)
             connection.sendall(json.dumps(request).encode("utf-8") + b"\n")
             data = b""
@@ -94,10 +109,51 @@ def fail(message, code=EXIT_FAILED):
     return code
 
 
+class Usage(Exception):
+    pass
+
+
+def whole_number(text, what):
+    try:
+        return int(text)
+    except ValueError:
+        raise Usage("%s is a whole number, not '%s'" % (what, text))
+
+
+def take_option(words, name):
+    """(value, the other words) for `--name value` or `--name=value` anywhere in the words, with value None when it is absent."""
+    value = None
+    rest = []
+    index = 0
+    while index < len(words):
+        word = words[index]
+        if word == name:
+            if index + 1 >= len(words):
+                raise Usage("%s needs a value" % name)
+            value = words[index + 1]
+            index += 2
+            continue
+        if word.startswith(name + "="):
+            value = word[len(name) + 1:]
+        else:
+            rest.append(word)
+        index += 1
+    return value, rest
+
+
 def do_run(words):
+    # `--tab` is read only in front of the command, so a command argument that looks like it is left alone.
+    fields = {}
+    if words and (words[0] == "--tab" or words[0].startswith("--tab=")):
+        if words[0] == "--tab":
+            if len(words) < 2:
+                raise Usage("--tab needs a tab id")
+            fields["tab_id"], words = whole_number(words[1], "the tab id"), words[2:]
+        else:
+            fields["tab_id"], words = whole_number(words[0][len("--tab="):], "the tab id"), words[1:]
     if not words:
-        return fail("run needs a command\n" + USAGE, EXIT_USAGE)
-    reply = ask({"verb": "run", "command": command_line(words)})
+        raise Usage("run needs a command")
+    reply = ask(dict(fields, verb="run", command=command_line(words)))
     if reply.get("ok") is True:
         if reply.get("message"):
             print(reply["message"])
@@ -118,6 +174,74 @@ def do_list(flags):
     return EXIT_DONE
 
 
+def tab_line(tab):
+    flags = "".join(letter if tab.get(name) else "-" for letter, name in (("a", "active"), ("s", "audible"), ("d", "discarded"), ("p", "pinned")))
+    return "\t".join((str(tab.get("tab_id")), str(tab.get("window_id")), flags, tab.get("title", ""), tab.get("url", "")))
+
+
+def do_tabs(flags):
+    reply = ask({"verb": "tabs"})
+    if reply.get("ok") is not True:
+        return fail(reply.get("message") or "the bridge did not list the tabs")
+    tabs = reply.get("tabs", [])
+    if flags == ["--json"]:
+        print(json.dumps(tabs, indent=2))
+    else:
+        for tab in tabs:
+            print(tab_line(tab))
+    return EXIT_DONE
+
+
+def finished(reply, fields=()):
+    """Exit status for a tab verb: the named reply fields go to stdout as one JSON object, a refusal to stderr."""
+    if reply.get("ok") is not True:
+        return fail(reply.get("message") or "the bridge refused")
+    if fields:
+        print(json.dumps({name: reply[name] for name in fields if name in reply}))
+    return EXIT_DONE
+
+
+def do_activate(words):
+    preface, rest = take_option(words, "--preface")
+    if len(rest) != 1:
+        raise Usage("activate takes one tab id")
+    request = {"verb": "activate", "tab_id": whole_number(rest[0], "the tab id")}
+    if preface is not None:
+        request["preface"] = preface
+    return finished(ask(request), ("window_id", "focused", "preface_set"))
+
+
+def do_clear_preface(words):
+    preface, rest = take_option(words, "--preface")
+    if len(rest) != 1:
+        raise Usage("clear-preface takes one window id")
+    request = {"verb": "clear_preface", "window_id": whole_number(rest[0], "the window id")}
+    if preface is not None:
+        request["preface"] = preface
+    return finished(ask(request), ("cleared",))
+
+
+def do_close(words):
+    if len(words) != 1:
+        raise Usage("close takes one tab id")
+    return finished(ask({"verb": "close", "tab_id": whole_number(words[0], "the tab id")}))
+
+
+def do_capture(words):
+    as_json = "--json" in words
+    ids = [whole_number(word, "a tab id") for word in words if word != "--json"]
+    reply = ask({"verb": "capture", **({"tab_ids": ids} if ids else {})}, CAPTURE_TIMEOUT_S)
+    if reply.get("ok") is not True:
+        return fail(reply.get("message") or "the bridge did not capture")
+    results = reply.get("results", [])
+    if as_json:
+        print(json.dumps(results, indent=2))
+    else:
+        for result in results:
+            print("\t".join((str(result.get("tab_id")), result.get("thumbnail", "") if result.get("ok") else "failed: " + str(result.get("error", "")))))
+    return EXIT_DONE if all(result.get("ok") for result in results) else EXIT_FAILED
+
+
 def do_state(flags):
     reply = ask({"verb": "state"})
     if reply.get("ok") is not True:
@@ -134,10 +258,15 @@ def main(argv):
     try:
         if verb == "run":
             return do_run(rest)
-        if verb in ("list", "state"):
+        if verb in ("list", "state", "tabs"):
             if rest not in ([], ["--json"]):
                 return fail("%s takes only --json\n%s" % (verb, USAGE), EXIT_USAGE)
-            return do_list(rest) if verb == "list" else do_state(rest)
+            return {"list": do_list, "state": do_state, "tabs": do_tabs}[verb](rest)
+        handler = {"activate": do_activate, "clear-preface": do_clear_preface, "close": do_close, "capture": do_capture}.get(verb)
+        if handler:
+            return handler(rest)
+    except Usage as error:
+        return fail("%s\n%s" % (error, USAGE), EXIT_USAGE)
     except BridgeDown as error:
         return fail(str(error), EXIT_NO_BRIDGE)
     return fail("unknown command '%s'\n%s" % (verb, USAGE), EXIT_USAGE)
