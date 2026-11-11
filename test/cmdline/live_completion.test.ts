@@ -354,6 +354,7 @@ test("a session pick puts the name in the line, and the rows show the tab count 
 
 const OPEN: OpenItems = {
   history_max: 2,
+  sites: [],
   rows: [
     ...Array.from({ length: 25 }, (_, index) => ({ title: `Mark ${index}`, url: `https://m${index}.test/`, tag: "bm" as const })),
     ...Array.from({ length: 5 }, (_, index) => ({ title: `Visit ${index}`, url: `https://v${index}.test/`, tag: "hist" as const })),
@@ -377,17 +378,18 @@ test("open keeps its list and its matches after a space, as the words after the 
     const { session, asks, settle } = make();
     session.edit(text);
     assert.equal(asks.length, 1, text);
-    asks[0]!.answer({ history_max: 5, rows: [{ title: "Patient chart", url: "https://chart.test/", tag: "bm" }, { title: "Patient list", url: "https://list.test/", tag: "bm" }, { title: "Unrelated", url: "https://x.test/", tag: "bm" }] });
+    asks[0]!.answer({ history_max: 5, sites: [], rows: [{ title: "Patient chart", url: "https://chart.test/", tag: "bm" }, { title: "Patient list", url: "https://list.test/", tag: "bm" }, { title: "Unrelated", url: "https://x.test/", tag: "bm" }] });
     await settle();
     assert.deepEqual(session.get_rows().map((row) => row.name).sort(), text.endsWith("c") ? ["Patient chart"] : ["Patient chart", "Patient list"], text);
   }
 });
 
-test("a typed word ranks every row, keeps the groups in the order given, and a pick inserts the address", async () => {
+test("a typed word ranks every row as one list, the strongest hit first, and a pick inserts the address", async () => {
   const { session, asks, settle } = make();
   session.edit("open git");
   asks[0]!.answer({
     history_max: 1,
+    sites: [],
     rows: [
       { title: "Notes on a git hook", url: "https://notes.test/", tag: "bm" },
       { title: "git", url: "https://git.test/", tag: "hist" },
@@ -395,10 +397,27 @@ test("a typed word ranks every row, keeps the groups in the order given, and a p
     ],
   });
   await settle();
-  // The history row scores higher, yet the bookmark group stays first. Rows that do not match drop out, and the cap does not apply to a typed word.
-  assert.deepEqual(session.get_rows().map((row) => [row.name, row.tag]), [["Notes on a git hook", "bm"], ["git", "hist"]]);
+  // The history row scores higher, so it leads although bookmarks come first in the setting. Rows that do not match drop out, and the cap does not apply to a typed word.
+  assert.deepEqual(session.get_rows().map((row) => [row.name, row.tag]), [["git", "hist"], ["Notes on a git hook", "bm"]]);
   tab_key(session);
-  assert.equal(session.get_text(), "open https://notes.test/ ");
+  assert.equal(session.get_text(), "open https://git.test/ ");
+});
+
+test("in open an equal score keeps the group order given, use raises a row, and a visited host offers its site row", async () => {
+  const { session, asks, settle } = make();
+  session.edit("open git");
+  asks[0]!.answer({
+    history_max: 1,
+    sites: [{ url: "https://github.com/", boost: 0.6 }, { url: "https://digit.test/", boost: 0.5 }],
+    rows: [
+      { title: "A git page", url: "https://h1.test/", tag: "hist" },
+      { title: "B git page", url: "https://h2.test/", tag: "hist", boost: 0.2 },
+      { title: "C git page", url: "https://b1.test/", tag: "bm" },
+    ],
+  });
+  await settle();
+  // `digit.test` holds `git` but not at the start of a label, so it gets no row.
+  assert.deepEqual(session.get_rows().map((row) => [row.name, row.tag]), [["github.com", "site"], ["B git page", "hist"], ["A git page", "hist"], ["C git page", "bm"]]);
 });
 
 test("a tab row carries its status, flags, favicon and container from the tab item", async () => {

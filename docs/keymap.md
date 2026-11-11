@@ -24,7 +24,7 @@ A note "(prompts)" means the binding sets a `prompt` for a param, so the command
 
 <!-- BEGIN generated -->
 
-bound: 344 (normal 202, hint 7, cmdline 19, caret 35, visual 37, visual_line 38, insert 2, ignore 1, browser 3) | later: 3 | dropped: 5
+bound: 356 (normal 202, hint 7, cmdline 19, caret 35, visual 43, visual_line 44, insert 2, ignore 1, browser 3) | later: 3 | dropped: 5
 
 ### normal
 
@@ -384,6 +384,12 @@ Which-key group names:
 | `y` | bound | `visual.act yank` | Act on selection |  |
 | `o` | bound | `visual.act swap` | Act on selection |  |
 | `s` | bound | `visual.act search` | Act on selection |  |
+| `aw` | bound | `visual.object --word` | Select a text object |  |
+| `iw` | bound | `visual.object --word --inner` | Select a text object |  |
+| `as` | bound | `visual.object --sentence` | Select a text object |  |
+| `is` | bound | `visual.object --sentence --inner` | Select a text object |  |
+| `p` | bound | `visual.open` | Open the selection |  |
+| `P` | bound | `visual.open --tab` | Open the selection |  |
 | `<Escape>` | bound | `mode.escape` | Escape |  |
 | `<C-[>` | bound | `mode.escape` | Escape |  |
 | `V` | bound | `mode visual_line` | Switch to line visual mode |  |
@@ -426,6 +432,12 @@ Which-key group names:
 | `y` | bound | `visual.act yank` | Act on selection |  |
 | `o` | bound | `visual.act swap` | Act on selection |  |
 | `s` | bound | `visual.act search` | Act on selection |  |
+| `aw` | bound | `visual.object --word` | Select a text object |  |
+| `iw` | bound | `visual.object --word --inner` | Select a text object |  |
+| `as` | bound | `visual.object --sentence` | Select a text object |  |
+| `is` | bound | `visual.object --sentence --inner` | Select a text object |  |
+| `p` | bound | `visual.open` | Open the selection |  |
+| `P` | bound | `visual.open --tab` | Open the selection |  |
 | `<Escape>` | bound | `mode.escape` | Escape |  |
 | `<C-[>` | bound | `mode.escape` | Escape |  |
 | `v` | bound | `mode visual` | Switch to character visual mode |  |

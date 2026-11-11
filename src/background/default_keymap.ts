@@ -44,6 +44,12 @@ const VISUAL_KEYS: ModeBindings = {
   y: { id: "visual.act", args: { action: "yank" } },
   o: { id: "visual.act", args: { action: "swap" } },
   s: { id: "visual.act", args: { action: "search" } },
+  aw: { id: "visual.object", args: { object: "word" } },
+  iw: { id: "visual.object", args: { object: "word", scope: "inner" } },
+  as: { id: "visual.object", args: { object: "sentence" } },
+  is: { id: "visual.object", args: { object: "sentence", scope: "inner" } },
+  p: { id: "visual.open" },
+  P: { id: "visual.open", args: { where: "tab" } },
   "<Escape>": { id: "mode.escape" },
   "<C-[>": { id: "mode.escape" },
 };

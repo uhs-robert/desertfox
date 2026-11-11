@@ -6,7 +6,7 @@ import { best_match, score_candidate } from "./score.ts";
 
 export const FOLDER_PATH_SEPARATOR = " / ";
 
-export type Pickable = { key: string; name: string; description: string };
+export type Pickable = { key: string; name: string; description: string; boost?: number | undefined };
 
 // An exact key wins. Other text is a fuzzy match on name and description, and an equal tie is refused. `describe` writes an entry in the tie refusal and `hint` says what to type instead.
 // `noun` names the list in the refusals ("bookmark", "folder").
@@ -14,7 +14,7 @@ export function pick_by<Entry>(entries: readonly Entry[], text: string, noun: st
   const typed = text.trim();
   const exact = entries.find((entry) => parts(entry).key === typed);
   if (exact) return exact;
-  const match = best_match(typed, entries, (entry) => ({ name: parts(entry).name, description: parts(entry).description }));
+  const match = best_match(typed, entries, parts);
   if (match.found === "none") throw new RuntimeRefusal(`no ${noun} matches "${typed}"`);
   if (match.found === "tie") throw new RuntimeRefusal(`"${typed}" matches ${describe(match.first)} and ${describe(match.second)} equally, use ${hint}`);
   return match.item;

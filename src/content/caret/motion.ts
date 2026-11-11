@@ -9,7 +9,7 @@ export type Motion = { unit: MotionUnit; direction: "forward" | "back"; big: boo
 const WORD_CHAR = /[\p{L}\p{N}_]/u;
 
 // Class of a character: -1 newline, 0 blank, 1 word, 2 punctuation. A big word has only classes -1, 0 and 1.
-const char_class = (text: string, index: number, big: boolean): number => {
+export const char_class = (text: string, index: number, big: boolean): number => {
   const char = text[index]!;
   if (char === "\n") return -1;
   if (/\s/.test(char)) return 0;
