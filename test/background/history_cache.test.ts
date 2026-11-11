@@ -7,7 +7,7 @@ const visit = (n: number, extra: Partial<Visit> = {}): Visit => ({ url: `https:/
 const urls = (cache: ReturnType<typeof create_history_cache>) => cache.read()?.map((row) => row.url.replace(/\D/g, ""));
 
 // The search answer is held until the test releases it, so events can arrive mid-fill.
-function make(initial: Visit[], max = 100) {
+function make(initial: Visit[], max = 100, hidden: string[] = []) {
   let release: () => void = () => {};
   let fail = false;
   let searches = 0;
@@ -15,6 +15,7 @@ function make(initial: Visit[], max = 100) {
   let hold = false;
   const cache = create_history_cache({
     max,
+    listed: async (url) => !hidden.includes(url),
     search: async () => {
       searches++;
       if (hold) await gate();
@@ -90,6 +91,7 @@ test("a visit moves its page to the front and updates the count", async () => {
   const { cache } = make([visit(1), visit(2), visit(3)]);
   await cache.start();
   cache.visited({ url: "https://site1.test/", lastVisitTime: 10, visitCount: 2 });
+  await cache.idle();
   assert.deepEqual(urls(cache), ["1", "3", "2"]);
   assert.deepEqual(cache.read()?.[0], { url: "https://site1.test/", title: "Site 1", last_visit: 10, visit_count: 2 });
 });
@@ -99,6 +101,7 @@ test("a late older visit does not push a row back, and a new url lands in time o
   await cache.start();
   cache.visited(visit(5, { lastVisitTime: 2 }));
   cache.visited(visit(3));
+  await cache.idle();
   assert.deepEqual(urls(cache), ["5", "3", "1"]);
   assert.equal(cache.read()?.[0]?.last_visit, 5);
 });
@@ -123,7 +126,14 @@ test("the cache keeps the newest rows up to its cap", async () => {
   await cache.start();
   cache.visited(visit(4));
   cache.visited(visit(0));
+  await cache.idle();
   assert.deepEqual(urls(cache), ["4", "3", "2"]);
+
+  cache.visit_removed({ allHistory: false, urls: ["https://site4.test/"] });
+  assert.deepEqual(urls(cache), ["3", "2"]);
+  cache.visited(visit(6));
+  await cache.idle();
+  assert.deepEqual(urls(cache), ["6", "3", "2"]);
 });
 
 test("a failed fill falls back, drops the held events and the next read fills again", async () => {
@@ -132,8 +142,10 @@ test("a failed fill falls back, drops the held events and the next read fills ag
   await state.cache.start();
   state.fail(false);
   state.cache.visited(visit(2));
+  const filling = state.cache.start();
   assert.equal(state.cache.read(), undefined);
-  await new Promise((resolve) => setTimeout(resolve, 0));
+  await filling;
+  await state.cache.idle();
   assert.deepEqual(urls(state.cache), ["1"]);
 });
 
@@ -145,4 +157,34 @@ test("an event wake builds a new cache from the browser history", async () => {
   const woken = make(history);
   await woken.cache.start();
   assert.deepEqual(urls(woken.cache), ["3", "2", "1"]);
+});
+
+test("a visit to a page the search does not list stays out, and a listed new page enters", async () => {
+  const { cache } = make([visit(1)], 100, ["https://site2.test/"]);
+  await cache.start();
+  cache.visited(visit(2));
+  cache.visited(visit(3));
+  await cache.idle();
+  assert.deepEqual(urls(cache), ["3", "1"]);
+});
+
+test("events behind a pending check keep their order", async () => {
+  const { cache } = make([visit(1)], 100, ["https://site2.test/"]);
+  await cache.start();
+  cache.visited(visit(3));
+  cache.visit_removed({ allHistory: false, urls: ["https://site3.test/"] });
+  cache.visited(visit(4));
+  cache.title_changed({ url: "https://site4.test/", title: "Four" });
+  await cache.idle();
+  assert.deepEqual(cache.read()?.map((row) => `${row.url.replace(/\D/g, "")}:${row.title}`), ["4:Four", "1:Site 1"]);
+});
+
+test("a hidden page seen during the fill stays out", async () => {
+  const state = make([visit(1)], 100, ["https://site2.test/"]);
+  state.hold();
+  const started = state.cache.start();
+  state.cache.visited(visit(2));
+  state.release();
+  await started;
+  assert.deepEqual(urls(state.cache), ["1"]);
 });

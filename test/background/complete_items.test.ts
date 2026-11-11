@@ -859,3 +859,20 @@ test("the finder list holds quickmarks, bookmarks, history, closed tabs and the 
   assert.deepEqual([private_items.history, private_items.closed], [[], []]);
   assert.deepEqual(private_items.tab_used, { 2: 700 });
 });
+
+test("the browser reader answers the 1000-row search until the cache has filled, then the cache", async () => {
+  const searches: { maxResults: number }[] = [];
+  const rows = [{ url: "https://a.test/", title: "A", lastVisitTime: 2 }];
+  (globalThis as { browser?: unknown }).browser = { history: { search: async (query: { maxResults: number }) => (searches.push(query), rows) } };
+  const { browser_complete_items_deps } = await import("../../src/background/complete_items.ts");
+  try {
+    assert.deepEqual(await browser_complete_items_deps.search_history(), rows);
+    assert.ok(searches.some((query) => query.maxResults === 1000));
+    await new Promise((resolve) => setImmediate(resolve));
+    const before = searches.length;
+    assert.deepEqual((await browser_complete_items_deps.search_history()).map((row) => row.url), ["https://a.test/"]);
+    assert.equal(searches.length, before);
+  } finally {
+    delete (globalThis as { browser?: unknown }).browser;
+  }
+});
