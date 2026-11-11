@@ -1,0 +1,134 @@
+"""Tests of the `desertfox` command line script: against a fake socket server for the protocol and exit codes, and against the real bridge host for one round trip."""
+import json
+import os
+import socket
+import subprocess
+import sys
+import tempfile
+import threading
+import unittest
+
+import test_bridge
+
+CLI_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "desertfox")
+
+
+class FakeBridge:
+    """Answers each request line with the next canned reply and keeps the requests it saw."""
+
+    def __init__(self, path, replies):
+        self.requests = []
+        self.replies = list(replies)
+        self.listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        self.listener.bind(path)
+        self.listener.listen(4)
+        self.thread = threading.Thread(target=self.serve, daemon=True)
+        self.thread.start()
+
+    def serve(self):
+        while True:
+            try:
+                connection, _ = self.listener.accept()
+            except OSError:
+                return
+            with connection:
+                data = b""
+                while not data.endswith(b"\n"):
+                    chunk = connection.recv(4096)
+                    if not chunk:
+                        break
+                    data += chunk
+                self.requests.append(json.loads(data))
+                reply = self.replies.pop(0)
+                if reply is not None:
+                    connection.sendall(reply if isinstance(reply, bytes) else json.dumps(reply).encode() + b"\n")
+
+    def close(self):
+        self.listener.close()
+
+
+class CliTest(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory(prefix="dfc")
+        self.addCleanup(self.temp.cleanup)
+        self.runtime = self.temp.name
+        os.makedirs(os.path.join(self.runtime, "desertfox"))
+        self.socket_path = os.path.join(self.runtime, "desertfox", "bridge.sock")
+
+    def serve(self, *replies):
+        bridge = FakeBridge(self.socket_path, replies)
+        self.addCleanup(bridge.close)
+        return bridge
+
+    def cli(self, *args, runtime=None):
+        env = dict(os.environ, XDG_RUNTIME_DIR=self.runtime if runtime is None else runtime)
+        return subprocess.run([sys.executable, CLI_PATH, *args], capture_output=True, text=True, env=env, timeout=20)
+
+    def test_run_sends_the_words_as_one_command_line_and_exits_zero(self):
+        bridge = self.serve({"ok": True}, {"ok": True}, {"ok": True})
+        self.assertEqual(self.cli("run", "tab.next").returncode, 0)
+        self.assertEqual(self.cli("run", "scroll.lines 3").returncode, 0)
+        done = self.cli("run", "tab.switch", "my tab", "it's")
+        self.assertEqual(done.returncode, 0)
+        self.assertEqual(done.stdout, "")
+        self.assertEqual([request["command"] for request in bridge.requests], ["tab.next", "scroll.lines 3", "tab.switch 'my tab' 'it'\"'\"'s'"])
+        self.assertEqual({request["verb"] for request in bridge.requests}, {"run"})
+
+    def test_a_refusal_prints_its_message_on_stderr_and_exits_one(self):
+        self.serve({"ok": False, "message": "tab.close is not allowed through the bridge"})
+        done = self.cli("run", "tab.close")
+        self.assertEqual(done.returncode, 1)
+        self.assertEqual(done.stdout, "")
+        self.assertEqual(done.stderr, "desertfox: tab.close is not allowed through the bridge\n")
+
+    def test_list_prints_one_line_per_command_and_json_on_request(self):
+        commands = [
+            {"id": "tab.next", "name": "next", "label": "Next tab"},
+            {"id": "scroll.lines", "label": "Scroll lines", "params": [{"name": "count", "type": "int", "default": 1}, {"name": "dir", "type": "enum", "values": ["up", "down"]}]},
+        ]
+        self.serve({"ok": True, "commands": commands}, {"ok": True, "commands": commands})
+        done = self.cli("list")
+        self.assertEqual(done.returncode, 0)
+        self.assertEqual(done.stdout.splitlines(), ["next\ttab.next\tNext tab\t", "scroll.lines\tscroll.lines\tScroll lines\t[count] dir=up|down"])
+        self.assertEqual(json.loads(self.cli("list", "--json").stdout), commands)
+
+    def test_state_prints_the_snapshot_or_null(self):
+        self.serve({"ok": True, "state": {"seq": 2}}, {"ok": True, "state": None})
+        self.assertEqual(json.loads(self.cli("state").stdout), {"seq": 2})
+        self.assertEqual(self.cli("state").stdout.strip(), "null")
+
+    def test_no_bridge_exits_three_with_a_plain_message(self):
+        done = self.cli("run", "tab.next")
+        self.assertEqual(done.returncode, 3)
+        self.assertIn("the bridge is not running", done.stderr)
+        self.assertEqual(self.cli("state", runtime="").returncode, 3)
+
+    def test_a_listener_that_hangs_up_is_a_failure_not_a_hang(self):
+        self.serve(None)
+        done = self.cli("run", "tab.next")
+        self.assertEqual(done.returncode, 3)
+        self.assertIn("without an answer", done.stderr)
+
+    def test_bad_usage_exits_two(self):
+        for args in ([], ["run"], ["list", "--wide"], ["frobnicate"], ["state", "x"]):
+            done = self.cli(*args)
+            self.assertEqual(done.returncode, 2, args)
+            self.assertIn("usage:", done.stderr + done.stdout)
+        self.assertEqual(self.cli("--help").returncode, 0)
+
+    def test_a_round_trip_through_the_real_host(self):
+        host = test_bridge.Host(self.runtime)
+        self.addCleanup(host.kill)
+        done = {}
+        thread = threading.Thread(target=lambda: done.update(result=self.cli("run", "scroll.lines", "3")))
+        thread.start()
+        request = host.read_request()
+        self.assertEqual(request["command"], "scroll.lines 3")
+        host.send({"verb": "reply", "request_id": request["request_id"], "ok": False, "message": "no normal window is open"})
+        thread.join(20)
+        self.assertEqual(done["result"].returncode, 1)
+        self.assertEqual(done["result"].stderr, "desertfox: no normal window is open\n")
+
+
+if __name__ == "__main__":
+    unittest.main()

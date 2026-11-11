@@ -14,6 +14,7 @@ define("hint.key", {
       description: { tab: "Switch to text, or the next match.", shift_tab: "Move to the previous match.", enter: "Pick the active match.", space: "Turn overlapping labels, or add a space to the text." },
     },
   ],
+  bridge: false,
   runs_in: "content",
   bundle: "hints",
   repeatable: false,

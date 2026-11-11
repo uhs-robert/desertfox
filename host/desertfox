@@ -1,0 +1,147 @@
+#!/usr/bin/env python3
+"""Command line for the DesertFox bridge host. Python 3.9+, stdlib only.
+
+  desertfox run <command> [args...]   run one command in the focused Firefox window
+  desertfox list [--json]             the commands the bridge allows, with their params
+  desertfox state [--json]            the mode the bridge last saw
+
+`run` joins its arguments into the one command line the `:` line takes. A single argument is used as it is, so
+`desertfox run "scroll.lines 3"` works. Several arguments are quoted for the line, so `desertfox run tab.switch "my tab"`
+keeps the space.
+
+It speaks to $XDG_RUNTIME_DIR/desertfox/bridge.sock, one JSON line out and one line back. It prints plain text,
+errors to stderr. Exit codes: 0 done, 1 refused or failed, 2 bad usage, 3 the bridge is not running.
+"""
+import json
+import os
+import shlex
+import socket
+import sys
+
+EXIT_DONE = 0
+EXIT_FAILED = 1
+EXIT_USAGE = 2
+EXIT_NO_BRIDGE = 3
+# The host gives up on the extension after 10 s, so a reply always comes before this.
+TIMEOUT_S = 15
+
+USAGE = """usage: desertfox run <command> [args...]
+       desertfox list [--json]
+       desertfox state [--json]"""
+
+
+class BridgeDown(Exception):
+    pass
+
+
+def socket_path():
+    runtime_dir = os.environ.get("XDG_RUNTIME_DIR", "")
+    if not os.path.isabs(runtime_dir):
+        raise BridgeDown("XDG_RUNTIME_DIR is not set, so there is no bridge socket")
+    return os.path.join(runtime_dir, "desertfox", "bridge.sock")
+
+
+def ask(request):
+    """One request on a new connection and the decoded reply. Raises BridgeDown when nothing listens."""
+    path = socket_path()
+    try:
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as connection:
+            connection.settimeout(TIMEOUT_S)
+            connection.connect(path)
+            connection.sendall(json.dumps(request).encode("utf-8") + b"\n")
+            data = b""
+            while not data.endswith(b"\n"):
+                chunk = connection.recv(65536)
+                if not chunk:
+                    break
+                data += chunk
+    except (FileNotFoundError, ConnectionRefusedError):
+        raise BridgeDown("the bridge is not running (no listener at %s). Turn on the bridge setting in DesertFox." % path)
+    except socket.timeout:
+        raise BridgeDown("the bridge did not answer in time")
+    except OSError as error:
+        raise BridgeDown("cannot talk to the bridge: %s" % error)
+    try:
+        reply = json.loads(data)
+    except ValueError:
+        raise BridgeDown("the bridge closed the connection without an answer")
+    if not isinstance(reply, dict):
+        raise BridgeDown("the bridge sent an answer that is not an object")
+    return reply
+
+
+def command_line(words):
+    return words[0] if len(words) == 1 else shlex.join(words)
+
+
+def param_text(param):
+    name = param.get("name", "?")
+    values = param.get("values")
+    if isinstance(values, list):
+        name += "=" + "|".join(str(value) for value in values)
+    optional = "default" in param or param.get("optional") is True or "when" in param
+    return "[%s]" % name if optional else name
+
+
+def list_line(command):
+    word = command.get("name") or command.get("id", "")
+    params = " ".join(param_text(param) for param in command.get("params", []))
+    return "\t".join((word, command.get("id", ""), command.get("label", ""), params))
+
+
+def fail(message, code=EXIT_FAILED):
+    sys.stderr.write("desertfox: %s\n" % message)
+    return code
+
+
+def do_run(words):
+    if not words:
+        return fail("run needs a command\n" + USAGE, EXIT_USAGE)
+    reply = ask({"verb": "run", "command": command_line(words)})
+    if reply.get("ok") is True:
+        if reply.get("message"):
+            print(reply["message"])
+        return EXIT_DONE
+    return fail(reply.get("message") or "the command was refused")
+
+
+def do_list(flags):
+    reply = ask({"verb": "list"})
+    if reply.get("ok") is not True:
+        return fail(reply.get("message") or "the bridge did not list its commands")
+    commands = reply.get("commands", [])
+    if flags == ["--json"]:
+        print(json.dumps(commands, indent=2))
+    else:
+        for command in commands:
+            print(list_line(command))
+    return EXIT_DONE
+
+
+def do_state(flags):
+    reply = ask({"verb": "state"})
+    if reply.get("ok") is not True:
+        return fail(reply.get("message") or "the bridge did not give its state")
+    print(json.dumps(reply.get("state"), indent=2 if flags == ["--json"] else None))
+    return EXIT_DONE
+
+
+def main(argv):
+    if not argv or argv[0] in ("-h", "--help", "help"):
+        print(USAGE)
+        return EXIT_DONE if argv else EXIT_USAGE
+    verb, rest = argv[0], argv[1:]
+    try:
+        if verb == "run":
+            return do_run(rest)
+        if verb in ("list", "state"):
+            if rest not in ([], ["--json"]):
+                return fail("%s takes only --json\n%s" % (verb, USAGE), EXIT_USAGE)
+            return do_list(rest) if verb == "list" else do_state(rest)
+    except BridgeDown as error:
+        return fail(str(error), EXIT_NO_BRIDGE)
+    return fail("unknown command '%s'\n%s" % (verb, USAGE), EXIT_USAGE)
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

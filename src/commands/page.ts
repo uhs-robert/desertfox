@@ -13,6 +13,7 @@ const reload_clear = make_reload_clear(browser_reload_clear_deps);
 define("page.back", {
   label: "Back",
   intent: "Go back one page in the tab history. A count prefix goes back that many pages.",
+  bridge: false,
   runs_in: "background",
   count: "repeat",
   run: async (ctx) => browser.tabs.goBack(require_tab_id(ctx)),
@@ -21,6 +22,7 @@ define("page.back", {
 define("page.forward", {
   label: "Forward",
   intent: "Go forward one page in the tab history. A count prefix goes forward that many pages.",
+  bridge: false,
   runs_in: "background",
   count: "repeat",
   run: async (ctx) => browser.tabs.goForward(require_tab_id(ctx)),
@@ -40,6 +42,7 @@ define("page.reload", {
       description: { site: "Clear this host first.", all: "Clear every site and container first." },
     },
   ],
+  bridge: false,
   runs_in: "background",
   // `page.reload --all` logs you out everywhere, so `.` and a macro never replay it.
   repeatable: (args) => args.clear !== "all",
@@ -54,6 +57,7 @@ define("page.reload", {
 define("page.print", {
   label: "Print",
   intent: "Open the Firefox print window for the active tab.",
+  bridge: false,
   runs_in: "background",
   repeatable: false,
   run: async () => {
@@ -64,6 +68,7 @@ define("page.print", {
 define("page.save_pdf", {
   label: "Save as PDF",
   intent: "Ask for a file name and save the active tab as a PDF. Cancelling the file picker does nothing.",
+  bridge: false,
   runs_in: "background",
   repeatable: false,
   run: async () => {
@@ -76,6 +81,7 @@ define("page.save_pdf", {
 define("page.stop", {
   label: "Stop loading",
   intent: "Stop the page from loading.",
+  bridge: false,
   runs_in: "content",
 });
 
@@ -83,6 +89,7 @@ define("page.home", {
   label: "Home page",
   intent: "Open the home page from the settings.",
   params: [WHERE_PARAM],
+  bridge: false,
   runs_in: "background",
   run: async (ctx, args) => {
     const home_url = home_page_url((await get_config()).settings.home_page, () => browser.runtime.getURL(NEW_TAB_PAGE_FILE));
@@ -95,6 +102,7 @@ define("page.follow", {
   label: "Follow page link",
   intent: "Go to the next or previous page of a series. It takes a link marked rel next or prev first, then the link or button whose text best matches the next_patterns or prev_patterns setting: an earlier pattern wins, then a link over a button, then the shorter text.",
   params: [{ name: "direction", type: "enum", values: ["next", "prev"], value_labels: { next: "to next page", prev: "to previous page" }, description: { next: "Follow the link to the next page.", prev: "Follow the link to the previous page." } }, WHERE_PARAM],
+  bridge: false,
   runs_in: "content",
   bundle: "hints",
 });
@@ -107,6 +115,7 @@ define("page.focus_field", {
     { name: "direction", type: "enum", values: ["next", "prev"], value_labels: { next: "to next control", prev: "to previous control" }, description: { next: "Focus the next form control.", prev: "Focus the previous form control." } },
     { name: "steps", type: "int", default: 1, min: 1, description: "Move this many controls." },
   ],
+  bridge: false,
   runs_in: "content",
   count: { param: "steps" },
   bundle: "hints",
@@ -120,6 +129,7 @@ define("page.heading", {
     { name: "direction", type: "enum", values: ["next", "prev"], value_labels: { next: "to next heading", prev: "to previous heading" }, description: { next: "Scroll the next heading to the top.", prev: "Scroll the previous heading to the top." } },
     { name: "steps", type: "int", default: 1, min: 1, description: "Move this many headings." },
   ],
+  bridge: false,
   runs_in: "content",
   count: { param: "steps" },
   bundle: "hints",

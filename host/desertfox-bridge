@@ -3,9 +3,10 @@
 
 Firefox starts it over `connectNative` and keeps it alive while the extension holds the port. Frames are a 4-byte
 native-endian length and UTF-8 JSON, both ways. The host takes the lock first, then says {"ready": true,
-"host_version": 1} once. It takes one verb from the extension and no others:
+"host_version": 1} once. It takes two verbs from the extension and no others:
 
   {"verb": "mode", "id", "label", "private", "tab_id", "window_id"}
+  {"verb": "reply", "request_id", "ok", "message"?, "commands"?}    the answer to a request the host sent
 
 A private window sends no ids. The host drops them anyway, so a private window leaves only its mode and private:true.
 
@@ -15,8 +16,12 @@ file, so a reader never sees a partial file.
 
 It also owns a Unix socket, $XDG_RUNTIME_DIR/desertfox/bridge.sock, mode 0600. Whoever holds the flock on bridge.lock
 owns the socket and the state file: the first host wins, and a second one waits LOCK_WAIT_S for the lock, then exits
-without saying ready. The socket speaks one JSON object per line, one reply line per request. It answers `ping` and
-`state` only. Stdout carries only protocol bytes. The host never runs anything it is sent.
+without saying ready. The socket speaks one JSON object per line, one reply line per request. It answers `ping`,
+`state`, `run` and `list`. A `run` or `list` goes to the extension as {"verb": "run", "request_id", "command"} or
+{"verb": "list", "request_id"}, and the extension decides what runs: it holds the bridge field, the never-list and the
+argument validator. The host only forwards, limits the rate and routes each reply back to the connection that asked.
+A run reply is cut to `ok` and a short `message`, so no page data can pass through the host. Stdout carries only
+protocol bytes. The host never runs anything it is sent.
 """
 import fcntl
 import json
@@ -28,6 +33,7 @@ import sys
 import tempfile
 import threading
 import time
+from collections import deque
 
 HOST_VERSION = 1
 STATE_VERSION = 2
@@ -41,6 +47,16 @@ MAX_REQUEST_BYTES = 64 * 1024
 IDLE_TIMEOUT_S = 5
 MAX_CONNECTIONS = 16
 ACCEPT_RETRY_S = 0.1
+# Per connection, at most this many requests in any window. A looping script gets a refusal, not a flood on the extension.
+RATE_LIMIT_REQUESTS = 10
+RATE_WINDOW_S = 1.0
+# Requests waiting on the extension, over all connections.
+MAX_PENDING = 16
+REQUEST_TIMEOUT_S = 10
+# How long shutdown waits for waiting clients to receive their failure.
+DRAIN_S = 1.0
+MAX_COMMAND_CHARS = 4096
+MAX_REPLY_MESSAGE_CHARS = 500
 
 
 class StopHost(Exception):
@@ -175,21 +191,135 @@ def peer_is_me(connection):
     return uid == os.getuid()
 
 
-def answer(request, state):
+class RateLimiter:
+    """At most `limit` admitted requests in any `window_s`. A refused request is not counted, so a client that waits is served again."""
+
+    def __init__(self, limit, window_s, clock=time.monotonic):
+        self.limit = limit
+        self.window_s = window_s
+        self.clock = clock
+        self.admitted = deque()
+
+    def admit(self):
+        now = self.clock()
+        while self.admitted and now - self.admitted[0] >= self.window_s:
+            self.admitted.popleft()
+        if len(self.admitted) >= self.limit:
+            return False
+        self.admitted.append(now)
+        return True
+
+
+class Waiting:
+    def __init__(self):
+        self.done = threading.Event()
+        self.reply = None
+
+
+class ExtensionLink:
+    """The host's way to ask the extension something. Each request gets an id, and the reply that carries the id wakes the
+    one connection thread that is waiting for it, so two clients never see each other's answers."""
+
+    def __init__(self, stdout):
+        self.stdout = stdout
+        self.write_guard = threading.Lock()
+        self.pending_guard = threading.Condition()
+        self.pending = {}
+        self.next_id = 1
+        # False until the ready frame is out, so a request can never reach the extension before it.
+        self.open = False
+
+    def say_ready(self):
+        with self.write_guard:
+            send_message(self.stdout, {"ready": True, "host_version": HOST_VERSION})
+            self.open = True
+
+    def ask(self, verb, fields, timeout_s):
+        """The extension's reply dict, or {"ok": False, "message": ...} when it cannot answer."""
+        waiting = Waiting()
+        with self.pending_guard:
+            if not self.open:
+                return {"ok": False, "message": "the extension is not connected"}
+            if len(self.pending) >= MAX_PENDING:
+                return {"ok": False, "message": "too many requests are waiting"}
+            request_id = self.next_id
+            self.next_id += 1
+            self.pending[request_id] = waiting
+        try:
+            try:
+                with self.write_guard:
+                    send_message(self.stdout, dict(fields, verb=verb, request_id=request_id))
+            except (OSError, ValueError):
+                return {"ok": False, "message": "the extension is not connected"}
+            if not waiting.done.wait(timeout_s):
+                return {"ok": False, "message": "the extension did not answer in time"}
+            return waiting.reply
+        finally:
+            with self.pending_guard:
+                self.pending.pop(request_id, None)
+                self.pending_guard.notify_all()
+
+    def answered(self, message):
+        """Takes one reply from the extension. An id nobody waits for (a late reply after a timeout) is dropped."""
+        request_id = message.get("request_id")
+        with self.pending_guard:
+            waiting = self.pending.get(request_id) if is_int(request_id) else None
+        if waiting is not None and waiting.reply is None:
+            waiting.reply = message
+            waiting.done.set()
+
+    def close(self):
+        """The port is gone: every waiting client gets a failure now, and shutdown waits a moment for them to be told."""
+        with self.pending_guard:
+            self.open = False
+            for waiting in self.pending.values():
+                if waiting.reply is None:
+                    waiting.reply = {"ok": False, "message": "the extension disconnected"}
+                    waiting.done.set()
+            deadline = time.monotonic() + DRAIN_S
+            while self.pending and time.monotonic() < deadline:
+                self.pending_guard.wait(deadline - time.monotonic())
+
+
+def run_result(reply):
+    """Only success and a short message leave the host: whatever else the extension put in a run reply stops here."""
+    message = reply.get("message")
+    result = {"ok": reply.get("ok") is True}
+    if isinstance(message, str):
+        result["message"] = message[:MAX_REPLY_MESSAGE_CHARS]
+    return result
+
+
+def list_result(reply):
+    commands = reply.get("commands")
+    if reply.get("ok") is True and isinstance(commands, list):
+        return {"ok": True, "commands": commands}
+    return run_result(reply)
+
+
+def answer(request, state, link):
     verb = request.get("verb") if isinstance(request, dict) else None
     if verb == "ping":
         return {"ok": True}
     if verb == "state":
         return {"ok": True, "state": state.snapshot()}
+    if verb == "run":
+        command = request.get("command")
+        if not isinstance(command, str) or not command.strip() or len(command) > MAX_COMMAND_CHARS:
+            return {"ok": False, "message": "run needs a command text"}
+        return run_result(link.ask("run", {"command": command}, REQUEST_TIMEOUT_S))
+    if verb == "list":
+        return list_result(link.ask("list", {}, REQUEST_TIMEOUT_S))
     return {"ok": False, "message": "unknown verb"}
 
 
-def serve_connection(connection, state, release_slot):
+def serve_connection(connection, state, link, release_slot):
     try:
         if not peer_is_me(connection):
             return
         connection.settimeout(IDLE_TIMEOUT_S)
         pending = b""
+        limiter = RateLimiter(RATE_LIMIT_REQUESTS, RATE_WINDOW_S)
         while True:
             while b"\n" not in pending:
                 if len(pending) > MAX_REQUEST_BYTES:
@@ -205,7 +335,7 @@ def serve_connection(connection, state, release_slot):
             except (ValueError, RecursionError):
                 reply(connection, {"ok": False, "message": "not JSON"})
                 continue
-            reply(connection, answer(request, state))
+            reply(connection, answer(request, state, link) if limiter.admit() else {"ok": False, "message": "rate limit: too many requests, slow down"})
     except OSError:
         pass
     finally:
@@ -217,7 +347,7 @@ def reply(connection, message):
     connection.sendall(json.dumps(message, separators=(",", ":")).encode("utf-8") + b"\n")
 
 
-def accept_loop(listener, state):
+def accept_loop(listener, state, link):
     slots = threading.BoundedSemaphore(MAX_CONNECTIONS)
     while True:
         try:
@@ -232,7 +362,7 @@ def accept_loop(listener, state):
         if not slots.acquire(blocking=False):
             connection.close()
             continue
-        threading.Thread(target=serve_connection, args=(connection, state, slots.release), daemon=True).start()
+        threading.Thread(target=serve_connection, args=(connection, state, link, slots.release), daemon=True).start()
 
 
 def read_exactly(stream, count):
@@ -275,11 +405,14 @@ def send_message(stream, message):
     stream.flush()
 
 
-def serve(stdin, stdout, state):
-    send_message(stdout, {"ready": True, "host_version": HOST_VERSION})
+def serve(stdin, link, state):
+    link.say_ready()
     while True:
         message = read_message(stdin)
         if message is None:
+            continue
+        if isinstance(message, dict) and message.get("verb") == "reply":
+            link.answered(message)
             continue
         try:
             state.apply(message)
@@ -312,6 +445,7 @@ def main():
     signal.signal(signal.SIGINT, raise_stop)
     lock = None
     listener = None
+    link = None
     try:
         lock = take_lock(paths["bridge.lock"], LOCK_WAIT_S)
         if lock is None:
@@ -321,8 +455,9 @@ def main():
         remove_quietly(paths["state.json"])
         listener = bind_socket(paths["bridge.sock"])
         state = BridgeState(paths["state.json"], pid, start)
-        threading.Thread(target=accept_loop, args=(listener, state), daemon=True).start()
-        serve(sys.stdin.buffer, sys.stdout.buffer, state)
+        link = ExtensionLink(sys.stdout.buffer)
+        threading.Thread(target=accept_loop, args=(listener, state, link), daemon=True).start()
+        serve(sys.stdin.buffer, link, state)
     except StopHost:
         pass
     except BrokenPipeError:
@@ -333,6 +468,8 @@ def main():
     finally:
         # A second signal during cleanup must not skip the delete.
         signal.signal(signal.SIGTERM, signal.SIG_IGN)
+        if link is not None:
+            link.close()
         if listener is not None:
             listener.close()
             remove_quietly(paths["bridge.sock"])

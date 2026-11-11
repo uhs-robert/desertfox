@@ -336,6 +336,7 @@ const count_param = { name: "count", type: "int", min: 1, default: 1, when: { si
 define("tab.next", {
   label: "Next tab",
   intent: "Switch to the next tab. It wraps from the last tab to the first. A count prefix repeats it.",
+  bridge: true,
   runs_in: "background",
   count: "repeat",
   run: (ctx) => handlers.next(ctx),
@@ -344,6 +345,7 @@ define("tab.next", {
 define("tab.prev", {
   label: "Previous tab",
   intent: "Switch to the previous tab. It wraps from the first tab to the last. A count prefix repeats it.",
+  bridge: true,
   runs_in: "background",
   count: "repeat",
   run: (ctx) => handlers.prev(ctx),
@@ -352,6 +354,7 @@ define("tab.prev", {
 define("tab.undo_close", {
   label: "Reopen closed tab",
   intent: "Reopen the last closed tab. A count prefix restores that many.",
+  bridge: false,
   runs_in: "background",
   count: "repeat",
   run: () => handlers.undo_close(),
@@ -364,6 +367,7 @@ define("tab.move", {
     { name: "tab", type: "string", rest: true, main: true, optional: true, values: { from: "tabs" }, description: "Take this place number, or the place of this tab." },
     { name: "offset", type: "int", default: 0, description: "Move this many places, positive later and negative earlier." },
   ],
+  bridge: false,
   runs_in: "background",
   count: "repeat",
   run: (ctx, args) => handlers.move(ctx, args as { tab: string; offset: number }),
@@ -372,6 +376,7 @@ define("tab.move", {
 define("tab.duplicate", {
   label: "Duplicate tab",
   intent: "Open a copy of the tab next to it.",
+  bridge: false,
   runs_in: "background",
   run: (ctx) => handlers.duplicate(ctx),
 });
@@ -379,6 +384,7 @@ define("tab.duplicate", {
 define("tab.detach", {
   label: "Detach tab",
   intent: "Move the tab into a new window.",
+  bridge: false,
   runs_in: "background",
   run: (ctx) => handlers.detach(ctx),
 });
@@ -387,6 +393,7 @@ define("tab.goto", {
   label: "Go to tab",
   intent: "Switch to a tab by its position. Index 1 is the first tab and -1 the last. Index 0 means the next tab.",
   params: [{ name: "index", type: "int", default: NEXT_TAB_INDEX }],
+  bridge: true,
   runs_in: "background",
   count: { param: "index" },
   run: (ctx, args) => handlers.goto(ctx, args as { index: number }),
@@ -395,6 +402,7 @@ define("tab.goto", {
 define("tab.goto_audible", {
   label: "Go to audible tab",
   intent: "Switch to the next tab in this window that is playing sound.",
+  bridge: true,
   runs_in: "background",
   run: (ctx) => handlers.goto_audible(ctx),
 });
@@ -402,6 +410,7 @@ define("tab.goto_audible", {
 define("tab.pin", {
   label: "Toggle pin",
   intent: "Pin the tab, or unpin it when it is pinned.",
+  bridge: false,
   runs_in: "background",
   run: (ctx) => handlers.pin(ctx),
 });
@@ -409,6 +418,7 @@ define("tab.pin", {
 define("tab.mute", {
   label: "Toggle mute",
   intent: "Mute the tab, or unmute it when it is muted.",
+  bridge: true,
   runs_in: "background",
   run: (ctx) => handlers.mute(ctx),
 });
@@ -432,6 +442,7 @@ define("tab.close", {
       },
     },
   ],
+  bridge: false,
   runs_in: "background",
   count: "repeat",
   repeat_limit: 20,
@@ -442,6 +453,7 @@ define("tab.reopen_in_container", {
   label: "Reopen in container",
   intent: "Reopen the page in a container. It opens in the same place and closes the old tab. The container default means none.",
   params: [{ name: "container", type: "string", rest: true, main: true, values: { from: "containers" } }],
+  bridge: false,
   runs_in: "background",
   run: (ctx, args) => handlers.reopen_in_container(ctx, args as { container: string }),
 });
@@ -451,6 +463,7 @@ define("tab.switch", {
   label: "Switch tab",
   intent: "Switch to an open tab by number, title or address. The number is its place in the tab bar.",
   params: [{ name: "tab", type: "string", rest: true, main: true, values: { from: "tabs" } }],
+  bridge: true,
   runs_in: "background",
   run: (ctx, args) => handlers.switch(ctx, args as { tab: string }),
 });
@@ -459,6 +472,7 @@ define("tab.unload", {
   label: "Unload tab",
   intent: "Unload the tab to free its memory. It stays in the tab bar and loads again when opened. Audible tabs stay loaded. Without a tab it unloads this one and switches to a loaded tab first. With all_before or all_after it keeps the tab and unloads the unpinned tabs on that side. With site it unloads the tab and the unpinned tabs of its site in the window. A count prefix unloads that many tabs from the tab on. A count prefix over 20 is refused.",
   params: [subject_param, side_param("Unload"), count_param],
+  bridge: false,
   runs_in: "background",
   count: { param: "count" },
   repeat_limit: 20,
@@ -469,6 +483,7 @@ define("tab.load", {
   label: "Load tab",
   intent: "Load an unloaded tab in place, without switching to it. Without a tab it acts on this one. With all_before or all_after it keeps the tab and loads the unpinned tabs on that side. With site it loads the tab and the unpinned tabs of its site in the window. A count prefix loads that many tabs from the tab on.",
   params: [subject_param, side_param("Load"), count_param],
+  bridge: false,
   runs_in: "background",
   count: { param: "count" },
   run: (ctx, args) => handlers.load(ctx, args as { tab: string; side: UnloadSide; count: number }),

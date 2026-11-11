@@ -6,6 +6,7 @@ define("engine.show", {
   label: "Show engine",
   intent: "Show the URL and fields of a search engine. It opens the help page at the engine, with the final URL, the page slots the engine needs and the file and level that set each field.",
   params: [{ name: "engine", type: "enum", values: { from: "search_engines" } }],
+  bridge: false,
   runs_in: "background",
   repeatable: false,
   run: async (_ctx, args) => {

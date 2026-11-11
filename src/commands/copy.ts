@@ -24,6 +24,7 @@ define("copy.url", {
     },
     YANK_REGISTER_PARAM,
   ],
+  bridge: false,
   runs_in: "content",
   bundle: "page",
 });
@@ -53,6 +54,7 @@ define("copy.links", {
     },
     YANK_REGISTER_PARAM,
   ],
+  bridge: false,
   runs_in: "content",
   bundle: "hints",
 });

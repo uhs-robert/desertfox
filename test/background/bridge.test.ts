@@ -3,14 +3,15 @@ import { test } from "node:test";
 import { create_bridge, FIRST_RETRY_MS, MAX_RETRY_MS, STABLE_MS } from "../../src/background/bridge.ts";
 import type { BridgeDeps, BridgePort, BridgeWindow } from "../../src/background/bridge.ts";
 import type { Mode } from "../../src/shared/command.ts";
+import type { BridgeAnswer } from "../../src/background/bridge_run.ts";
 
-function make(options: { bridge?: boolean; missing_host?: boolean; permission?: boolean } = {}) {
+function make(options: { bridge?: boolean; missing_host?: boolean; permission?: boolean; run_command?: (text: string) => Promise<BridgeAnswer> } = {}) {
   const settings = { bridge: options.bridge ?? true };
   const state = { permission: options.permission ?? true, gate: undefined as Promise<void> | undefined };
   const windows = new Map<number, BridgeWindow>([[1, { id: 1, focused: true, private: false }], [2, { id: 2, focused: false, private: false }]]);
   const active_tab = new Map<number, number>([[1, 11], [2, 22]]);
   const modes = new Map<number, Mode>();
-  const ports: (BridgePort & { posted: Record<string, unknown>[]; disconnected: boolean; say: () => void; drop: () => void; throw_on_post: boolean })[] = [];
+  const ports: (BridgePort & { posted: Record<string, unknown>[]; disconnected: boolean; say: () => void; hear: (message: unknown) => void; drop: () => void; throw_on_post: boolean })[] = [];
   const timers: { run: () => void; delay_ms: number; cancelled: boolean }[] = [];
   const counts = { connects: 0 };
   let now = 0;
@@ -34,6 +35,7 @@ function make(options: { bridge?: boolean; missing_host?: boolean; permission?: 
         onMessage: { addListener: (listener: (message: unknown) => void) => void (on_message = listener) },
         onDisconnect: { addListener: (listener: () => void) => void (on_disconnect = listener) },
         say: () => on_message({ ready: true }),
+        hear: (message: unknown) => on_message(message),
         drop: () => on_disconnect(),
       };
       ports.push(port);
@@ -54,6 +56,8 @@ function make(options: { bridge?: boolean; missing_host?: boolean; permission?: 
       return () => void (timer.cancelled = true);
     },
     now_ms: () => now,
+    run_command: options.run_command ?? (async () => ({ ok: true })),
+    list_commands: () => [{ id: "tab.next", label: "Next tab", intent: "Go to the next tab." }],
   };
   const bridge = create_bridge(deps);
   const settle = () => new Promise<void>((resolve) => setTimeout(resolve, 5));
@@ -304,4 +308,104 @@ test("overlapping connects open one port, not two", async () => {
   await test_case.settle();
   assert.equal(test_case.counts.connects, 1);
   assert.equal(test_case.ports.length, 1);
+});
+
+const replies_of = (port: { posted: Record<string, unknown>[] }) => port.posted.filter((message) => message.verb === "reply");
+
+test("a run request from the host is answered with its own request id", async () => {
+  const seen: string[] = [];
+  const test_case = make({ run_command: async (text) => (seen.push(text), { ok: true }) });
+  await test_case.connect_and_ready();
+  test_case.port().hear({ verb: "run", request_id: 7, command: "tab.next" });
+  await test_case.settle();
+  assert.deepEqual(seen, ["tab.next"]);
+  assert.deepEqual(replies_of(test_case.port()), [{ verb: "reply", request_id: 7, ok: true }]);
+});
+
+test("a refusal comes back as ok false with its message, and a throw does too", async () => {
+  const test_case = make({
+    run_command: async (text) => {
+      if (text === "boom") throw new Error("handler broke");
+      return { ok: false, message: "refused" };
+    },
+  });
+  await test_case.connect_and_ready();
+  test_case.port().hear({ verb: "run", request_id: 1, command: "x" });
+  test_case.port().hear({ verb: "run", request_id: 2, command: "boom" });
+  await test_case.settle();
+  assert.deepEqual(replies_of(test_case.port()), [
+    { verb: "reply", request_id: 1, ok: false, message: "refused" },
+    { verb: "reply", request_id: 2, ok: false, message: "handler broke" },
+  ]);
+});
+
+test("list answers with the commands the bridge offers", async () => {
+  const test_case = make();
+  await test_case.connect_and_ready();
+  test_case.port().hear({ verb: "list", request_id: 3 });
+  await test_case.settle();
+  assert.deepEqual(replies_of(test_case.port()), [{ verb: "reply", request_id: 3, ok: true, commands: [{ id: "tab.next", label: "Next tab", intent: "Go to the next tab." }] }]);
+});
+
+test("two requests at once are answered in the order they finish, each with its own id", async () => {
+  const gates = new Map<string, () => void>();
+  const test_case = make({ run_command: (text) => new Promise((resolve) => gates.set(text, () => resolve({ ok: true }))) });
+  await test_case.connect_and_ready();
+  test_case.port().hear({ verb: "run", request_id: 1, command: "slow" });
+  test_case.port().hear({ verb: "run", request_id: 2, command: "fast" });
+  await test_case.settle();
+  gates.get("fast")!();
+  await test_case.settle();
+  gates.get("slow")!();
+  await test_case.settle();
+  assert.deepEqual(replies_of(test_case.port()).map((reply) => reply.request_id), [2, 1]);
+});
+
+test("a malformed or unknown request from the host gets no answer and does not break the port", async () => {
+  const test_case = make();
+  await test_case.connect_and_ready();
+  for (const message of [null, "x", { verb: "run", request_id: "1", command: "a" }, { verb: "run", request_id: 1 }, { verb: "shell", request_id: 1, command: "a" }, { verb: "mode", request_id: 1 }]) test_case.port().hear(message);
+  await test_case.settle();
+  assert.deepEqual(replies_of(test_case.port()), []);
+  test_case.port().hear({ verb: "list", request_id: 9 });
+  await test_case.settle();
+  assert.equal(replies_of(test_case.port()).length, 1);
+});
+
+test("a command text over the cap is refused without reaching the runner", async () => {
+  const test_case = make({ run_command: async () => assert.fail("must not run") });
+  await test_case.connect_and_ready();
+  test_case.port().hear({ verb: "run", request_id: 1, command: "x".repeat(5000) });
+  await test_case.settle();
+  assert.deepEqual(replies_of(test_case.port()), [{ verb: "reply", request_id: 1, ok: false, message: "the command text is too long" }]);
+});
+
+test("a request before the host is ready gets no answer, and a message that is not the ready one does not open the port", async () => {
+  const test_case = make();
+  await test_case.bridge.start();
+  test_case.port().hear({ verb: "run", request_id: 1, command: "tab.next" });
+  await test_case.settle();
+  assert.deepEqual(test_case.port().posted, []);
+  test_case.port().say();
+  await test_case.settle();
+  assert.deepEqual(replies_of(test_case.port()), []);
+});
+
+test("a run that finishes after the port dropped is not sent, not even to the next port", async () => {
+  let release: () => void = () => {};
+  const test_case = make({ run_command: () => new Promise((resolve) => (release = () => resolve({ ok: true }))) });
+  await test_case.connect_and_ready();
+  const first = test_case.port();
+  first.hear({ verb: "run", request_id: 1, command: "tab.next" });
+  await test_case.settle();
+  first.drop();
+  await test_case.fire_latest();
+  test_case.port().say();
+  await test_case.settle();
+  const second = test_case.port();
+  assert.notEqual(first, second);
+  release();
+  await test_case.settle();
+  assert.deepEqual(replies_of(first), []);
+  assert.deepEqual(replies_of(second), []);
 });

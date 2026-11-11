@@ -8,6 +8,7 @@ import { define } from "../shared/registry/builtin.ts";
 define("config.reload", {
   label: "Reload config",
   intent: "Read the config files again and apply them in place. The native host reads them. Browser edits and modes stay. On a problem the current config stays.",
+  bridge: false,
   runs_in: "background",
   repeatable: false,
   run: async (ctx) => {
@@ -28,6 +29,7 @@ define("config.reload", {
 define("debug.restart", {
   label: "Restart extension",
   intent: "Restart the whole extension. Temp edits and modes are lost. For debugging only: config.reload applies config changes without a restart.",
+  bridge: false,
   runs_in: "background",
   repeatable: false,
   run: async () => {

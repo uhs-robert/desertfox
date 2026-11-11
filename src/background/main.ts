@@ -188,7 +188,7 @@ const toolbar = create_toolbar({
   set_tab_mode: (tab_id, mode) => send_to_tab(tab_id, { type: "set_mode", mode }),
 });
 void toolbar.sync_look();
-const bridge = start_bridge();
+const bridge = start_bridge(router_deps, snippets.is_snippet);
 const settings_messages = create_settings_messages({ change_edits, read_layers: load_effective_config });
 
 // Listeners register in the first turn, so no event is missed while the config loads.
