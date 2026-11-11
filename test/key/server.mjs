@@ -278,9 +278,15 @@ export function start_server() {
     }
     // The head and the open body tag at once, the content after `ms`: a page whose height and width arrive late. Firefox hands no key to a document that has no body yet, so the body tag must come first.
     if (url.pathname === "/slow_body") {
-      const [head, body] = page(`slow_body ${id}`, tall_filler + '<div style="width:3000px;height:1px"></div>').split("<h1>");
+      const [head, rest] = page(`slow_body ${id}`, tall_filler + '<div style="width:3000px;height:1px"></div>').split("<h1>");
       response.write(head);
-      return void setTimeout(() => response.end("<h1>" + body), Number(url.searchParams.get("ms")));
+      // With `tail_ms` the page also holds its last script, so the content is in while the document still loads.
+      const tail_ms = Number(url.searchParams.get("tail_ms") ?? 0);
+      const script_at = tail_ms ? rest.lastIndexOf("<script>") : rest.length;
+      return void setTimeout(() => {
+        response.write("<h1>" + rest.slice(0, script_at));
+        setTimeout(() => response.end(rest.slice(script_at)), tail_ms);
+      }, Number(url.searchParams.get("ms")));
     }
     // Answers after `ms`, so a page that embeds it stays in its load that long.
     if (url.pathname === "/slow_pixel") return void setTimeout(() => response.end(), Number(url.searchParams.get("ms")));

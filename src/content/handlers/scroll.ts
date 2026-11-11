@@ -51,19 +51,20 @@ export const end_flight = () => {
 export const tapped_end = (flight_end: number | undefined, top: number, distance: number, max_top: number): number =>
   Math.min(Math.max((flight_end ?? top) + distance, 0), max_top);
 
-// A scroll pressed while the body is still on its way finds no room and would be lost. It waits in order for DOMContentLoaded. A press that repeats the last queued one adds nothing, so a burst of j is one step. A later press that finds room runs the queue first.
-const waiting: { key: string; run: () => void }[] = [];
+// A scroll pressed while the body is still on its way finds no room and would be lost. It waits in order for DOMContentLoaded. A press that repeats the last queued one adds nothing, so a burst of j is one step. A later press that finds room runs the queue first. The queue runs in one tick, so its entries run instant: a smooth scroll would be cut short by the next one. An empty key means the press moves nothing.
+const waiting: { key: string; run: (instant: boolean) => void }[] = [];
 
-const run_waiting = () => waiting.splice(0).forEach((entry) => entry.run());
+const run_waiting = () => waiting.splice(0).forEach((entry) => entry.run(true));
 
-const when_laid_out = (key: string, axis: ScrollAxis, moves: boolean, run: () => void) => {
-  const target = document.readyState === "loading" && moves ? scroll_target(axis) : undefined;
-  const no_room = target && (axis === "y" ? target.scrollHeight <= target.clientHeight : target.scrollWidth <= target.clientWidth);
-  if (!no_room) {
+const when_laid_out = (key: string, axis: ScrollAxis, run: (instant: boolean) => void) => {
+  if (!key) return;
+  const target = document.readyState === "loading" && scroll_target(axis);
+  if (!target || (axis === "y" ? target.scrollHeight > target.clientHeight : target.scrollWidth > target.clientWidth)) {
     run_waiting();
-    return run();
+    return run(false);
   }
-  if (waiting.length === 0) document.addEventListener("DOMContentLoaded", run_waiting, { once: true });
+  // The same function added twice is one listener, so no check is needed.
+  document.addEventListener("DOMContentLoaded", run_waiting);
   if (waiting.at(-1)?.key !== key) waiting.push({ key, run });
 };
 
@@ -72,7 +73,7 @@ const move_by = (dx: number, dy: number) => {
   scroll_target(dy !== 0 ? "y" : "x").scrollBy({ left: dx, top: dy, behavior: "instant" });
 };
 
-const scroll_by = (dx: number, dy: number) => when_laid_out(`by ${dx} ${dy}`, dy !== 0 ? "y" : "x", dx !== 0 || dy !== 0, () => move_by(dx, dy));
+const scroll_by = (dx: number, dy: number) => when_laid_out(dx || dy ? `by ${dx} ${dy}` : "", dy !== 0 ? "y" : "x", () => move_by(dx, dy));
 
 const smooth_page_tap = (target: Element, distance: number) => {
   const end = tapped_end(in_flight?.target === target ? in_flight.end : undefined, target.scrollTop, distance, target.scrollHeight - target.clientHeight);
@@ -91,23 +92,25 @@ export const scroll_pixels: ContentHandler = {
 };
 
 export const scroll_pages: ContentHandler = {
-  run: (args, repeat) =>
-    when_laid_out(`pages ${args.fraction} ${args.count}`, "y", Number(args.fraction) * Number(args.count) !== 0, () => {
+  run: (args, repeat) => {
+    const pages = Number(args.fraction) * Number(args.count);
+    when_laid_out(pages ? `pages ${pages}` : "", "y", (instant) => {
       const target = scroll_target("y");
-      const distance = Number(args.fraction) * Number(args.count) * target.clientHeight;
-      if (repeat) move_by(0, distance);
+      const distance = pages * target.clientHeight;
+      if (repeat || instant) move_by(0, distance);
       else smooth_page_tap(target, distance);
-    }),
+    });
+  },
 };
 
 export const scroll_to: ContentHandler = {
   run: (args, repeat) => {
     const axis = args.axis as ScrollAxis;
-    when_laid_out(`to ${axis} ${args.percent}`, axis, true, () => {
+    when_laid_out(`to ${axis} ${args.percent}`, axis, (instant) => {
       end_flight();
       const target = scroll_target(axis);
       const percent = Number(args.percent);
-      const behavior = smooth_unless(repeat);
+      const behavior = smooth_unless(repeat || instant);
       if (axis === "x") {
         target.scrollTo({ left: percent_to_offset(percent, target.scrollWidth, target.clientWidth), behavior });
       } else {
