@@ -24,6 +24,7 @@ function install_browser(opened: Opened[]): void {
   (globalThis as unknown as { browser: unknown }).browser = {
     storage: { local: local_area, session: storage_area, onChanged: { addListener() {} } },
     tabs: {
+      get: async () => { throw new Error("No tab"); },
       query: async () => [],
       update: async (_id: number, props: { url: string }) => opened.push({ via: "update", url: props.url }),
       create: async (props: { url?: string; active?: boolean }) => opened.push({ via: `tab_${props.active ? "active" : "background"}`, url: props.url }),

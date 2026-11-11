@@ -559,7 +559,6 @@ async function with_sender<T>(sender: object | undefined, run: () => Promise<T>)
 const IN_WORK = { cookieStoreId: "firefox-container-3", incognito: false };
 const PRIVATE = { cookieStoreId: "firefox-private", incognito: true };
 const PLAIN = { cookieStoreId: "firefox-default", incognito: false };
-const find_work = async () => [{ name: "Work", cookieStoreId: "firefox-container-3" }];
 
 test("a window opened by open_many keeps the sender's container and private state", async () => {
   const urls = ["https://a.test/", "https://b.test/"];
@@ -573,7 +572,7 @@ test("a window opened by open_many keeps the sender's container and private stat
 
 test("open_in a window keeps the sender's container and private state unless the command names a container", async () => {
   const one = (sender: object | undefined, container?: string, ctx_in = ASKER) => with_sender(sender, async () => {
-    (globalThis as unknown as { browser: { contextualIdentities: unknown } }).browser.contextualIdentities = { query: async () => (await find_work()) };
+    (globalThis as unknown as { browser: { contextualIdentities: unknown } }).browser.contextualIdentities = { query: async () => [{ name: "Work", cookieStoreId: "firefox-container-3" }] };
     await open_in(ctx_in, "https://a.test/", "window", container);
   });
   assert.deepEqual(await one(IN_WORK), ['window https://a.test/ {"cookieStoreId":"firefox-container-3"}']);
