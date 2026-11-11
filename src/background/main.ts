@@ -1,8 +1,8 @@
 import "./command_modules.ts";
-import type { ContentToBackground, DevtoolsHello, PageToBackground } from "../shared/messages.ts";
+import type { ContentToBackground, DevtoolsHello, FocusedFrameMode, PageToBackground } from "../shared/messages.ts";
 import type { BoundInvocation } from "../shared/invocation.ts";
 import { effective_settings } from "../shared/config.ts";
-import { bundle_loader_deps, container_names, read_disabled, container_stores, image_deps, make_router_deps, page_of, reinject_deps } from "./browser_deps.ts";
+import { bundle_loader, container_names, read_disabled, container_stores, image_deps, make_router_deps, page_of, reinject_deps } from "./browser_deps.ts";
 import { run_image_action } from "./image_actions.ts";
 import { HELP_PAGE_FILE } from "../help/route.ts";
 import { open_quick_start_on_install } from "./first_install.ts";
@@ -19,7 +19,6 @@ import { mark_list_rows, quickmark_list_rows } from "../shared/mark_text.ts";
 import { list_keys } from "./list_keys.ts";
 import { start_bridge } from "./bridge_browser.ts";
 import { rule_addresses_of, read_keymap_reply } from "./page_keymap.ts";
-import { create_bundle_loader } from "./bundle_loader.ts";
 import { track_window_focus } from "./window_focus.ts";
 import { create_inspect_relay } from "./inspect_relay.ts";
 import { repair_tabs_after_reload } from "./reload.ts";
@@ -36,6 +35,7 @@ import type { RecordStep } from "./record_step.ts";
 import { browser_macro_recorder } from "./macro_recorder.ts";
 import { browser_last_played } from "./macro_last_played.ts";
 import { create_macro_replay, wire_macro_replay } from "./macro_replay.ts";
+import { reply_after_hold } from "./hold_on_arrival.ts";
 import { check_play_step } from "../commands/macro.ts";
 import { wire_repeat } from "../commands/command.ts";
 import { wire_tab_insert } from "../commands/mode.ts";
@@ -57,12 +57,13 @@ import { answer_sessions_transfer } from "./sessions_transfer.ts";
 import { create_settings_messages, is_extension_page } from "./settings_message.ts";
 import { command_meta } from "../shared/registry/index.ts";
 import { registry } from "../shared/registry/builtin.ts";
-import { forget_all_tab_modes, forget_mode_on_navigation, forget_tab_mode, recall_tab_mode, remember_reported_mode, shortcut_allowed } from "./tab_modes.ts";
+import { create_tab_modes, shortcut_allowed } from "./tab_modes.ts";
 import type { SlotTable } from "./slots.ts";
 import type { SnippetCall } from "./snippets.ts";
 
-// Mode reports wait for this, so the clear never removes a fresh report.
-const modes_cleared = forget_all_tab_modes(browser.storage.local);
+const tab_modes = create_tab_modes(browser.storage.local);
+// Queued first, so the clear never removes a fresh report.
+const modes_cleared = tab_modes.forget_all();
 const tab_insert = create_tab_insert({
   storage: browser.storage.local,
   modes_cleared,
@@ -90,7 +91,7 @@ const macro_replay = create_macro_replay({
     return Array.isArray(value) ? value : undefined;
   },
   // No command line opens: the recorder stored each prompted step with its value.
-  run_step: (step, { tab_id, frame_id, mode }, lost_reply_is_done) => router.run({ invocations: [step], mode, frame_id, instant: true, lost_reply_is_done, ...(tab_id === undefined ? {} : { sender_tab_id: tab_id }) }),
+  run_step: (step, { tab_id, frame_id, mode, step_number }, lost_reply_is_done) => router.run({ invocations: [step], mode, frame_id, instant: true, lost_reply_is_done, macro_step: step_number, ...(tab_id === undefined ? {} : { sender_tab_id: tab_id }) }),
   active_tab_id: async () => (await router_deps.active_tab())?.tab_id,
   is_loading: async (tab_id) => (await browser.tabs.get(tab_id).catch(() => undefined))?.status === "loading",
   watch: watch_tab,
@@ -117,7 +118,6 @@ wire_repeat({
   run_batch: (invocations, ctx) =>
     router.run({ invocations, mode: ctx.mode, frame_id: ctx.frame_id, ...(ctx.tab_id === undefined ? {} : { sender_tab_id: ctx.tab_id }) }),
 });
-const bundle_loader = create_bundle_loader(bundle_loader_deps);
 const cmdline = create_cmdline_service({
   storage: browser.storage.local,
   tickets: browser.storage.session,
@@ -188,7 +188,7 @@ const toolbar = create_toolbar({
   set_tab_mode: (tab_id, mode) => send_to_tab(tab_id, { type: "set_mode", mode }),
 });
 void toolbar.sync_look();
-const bridge = start_bridge(router_deps, snippets.is_snippet);
+const bridge = start_bridge(tab_modes.recall, router_deps, snippets.is_snippet);
 const settings_messages = create_settings_messages({ change_edits, read_layers: load_effective_config });
 
 // Listeners register in the first turn, so no event is missed while the config loads.
@@ -215,12 +215,18 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
     if (!is_extension_page(sender, browser.runtime.id, browser.runtime.getURL(""))) return Promise.resolve({ ok: false, message: "only the extension's own pages may use the toolbar" });
     return answer_toolbar_request(page_request, { toolbar, change_edits, read_file_site_rules: async () => (await load_effective_config()).config_settings.site_rules ?? [], reload_config });
   }
-  if (request?.type === "mode_changed" && sender.tab?.id !== undefined) {
+  if (request?.type === "mode_changed" && sender.tab?.id !== undefined && sender.frameId !== undefined) {
+    const tab = sender.tab;
     const tab_id = sender.tab.id;
     // The top frame leaving insert by any route ends the hold.
     if (sender.frameId === 0 && request.mode !== "insert") void tab_insert.top_frame_left_insert(tab_id, request.mode).catch(() => undefined);
-    if (sender.frameId === 0) void bridge.mode_changed(sender.tab, request.mode);
-    return modes_cleared.then(() => remember_reported_mode(browser.storage.local, tab_id, sender.frameId, request.mode));
+    const report = { frame_id: sender.frameId, mode: request.mode, focus: request.focus === true };
+    // The top frame may still be loading and miss the message. Its own start report brings a fresh one.
+    return tab_modes.report(tab_id, report).then(({ child_mode, tell_top }) => {
+      // The bridge shows the tab's mode, which a focused child frame or ignore mode in the top frame decides. Every top frame report publishes, as a new page's first one must, and a child frame's report does when it changed what the tab shows.
+      if (sender.frameId === 0 || tell_top) void tab_modes.recall(tab_id).then((mode) => bridge.mode_changed(tab, mode));
+      if (tell_top) void browser.tabs.sendMessage(tab_id, { type: "frame_mode", ...(child_mode === undefined ? {} : { mode: child_mode }) } satisfies FocusedFrameMode, { frameId: 0 }).catch(() => undefined);
+    });
   }
   if (request?.type === "media_report") return void media_reports.receive(sender.tab?.id, sender.frameId, request.scan);
   if (request?.type === "replay_end") return macro_replay.ended();
@@ -236,7 +242,10 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
   if (request?.type === "tab_rows_action") return complete_items.tab_rows_action(request.action, request.tab_ids, asker_of(sender), request.cookie_store_id);
   if (request?.type === "image_action") return run_image_action(image_deps, request, { incognito: sender.tab?.incognito === true, cookie_store_id: sender.tab?.cookieStoreId });
   if (request?.type === "inspect_pick") return sender.tab?.id === undefined ? Promise.resolve({ ok: false, message: "No tab to inspect" }) : inspect_relay.pick(sender.tab.id);
-  if (request?.type === "read_keymap") return browser_macro_recorder.register_of(sender.tab?.incognito === true).catch(() => undefined).then((recording) => read_keymap_reply(browser.storage.local, rule_addresses_of(sender), recording, sender.tab?.id === undefined || sender.frameId === undefined ? undefined : () => tab_insert.join(sender.tab!.id!, sender.frameId!)));
+  if (request?.type === "read_keymap") {
+    const reply = () => browser_macro_recorder.register_of(sender.tab?.incognito === true).catch(() => undefined).then((recording) => read_keymap_reply(browser.storage.local, rule_addresses_of(sender), recording, sender.tab?.id === undefined || sender.frameId === undefined ? undefined : () => tab_insert.join(sender.tab!.id!, sender.frameId!)));
+    return reply_after_hold(macro_replay, (tab_id, frame_id) => send_to_tab(tab_id, { type: "replay_hold" }, frame_id), sender.tab?.id, sender.frameId, reply);
+  }
   if (request?.type === "open_help") return open_help.open(request.command_id, sender.tab?.id, sender.frameId);
   if (request?.type === "record_cmdline") return cmdline.record(request.text, sender.tab?.incognito === true);
   if (request?.type === "record_step") {
@@ -309,14 +318,14 @@ browser.commands.onCommand.addListener(async (slot_name: string) => {
   const invocations: BoundInvocation[] | undefined = (stored[SLOT_TABLE_STORAGE_KEY] as SlotTable | undefined)?.[slot_name];
   if (!invocations) return;
   const [active] = await browser.tabs.query({ active: true, currentWindow: true });
-  const mode = active?.id === undefined ? "normal" : await recall_tab_mode(browser.storage.local, active.id);
+  const mode = active?.id === undefined ? "normal" : await tab_modes.recall(active.id);
   if (shortcut_allowed(mode, invocations, (id) => registry.get(id), await read_disabled())) await router.run({ invocations, mode, may_prompt: true });
 });
 
 browser.tabs.onUpdated.addListener((tab_id, change) => {
   void cmdline.forget_opener_on_navigation(tab_id, change);
   if (change.status === "loading") void inspect_relay.forget(tab_id);
-  return forget_mode_on_navigation(browser.storage.local, tab_id, change);
+  return tab_modes.forget_on_navigation(tab_id, change);
 });
 
 browser.windows.onRemoved.addListener(() => void repeat_memory.clear_private_without_window().catch(() => undefined));
@@ -334,7 +343,7 @@ browser.tabs.onRemoved.addListener((tab_id, { windowId, isWindowClosing }) => {
   void previous_tabs.removed(tab_id, windowId, isWindowClosing);
   void cmdline.forget_opener(tab_id);
   void inspect_relay.forget(tab_id);
-  return forget_tab_mode(browser.storage.local, tab_id);
+  return tab_modes.forget(tab_id);
 });
 
 void get_config().then(() => repair_tabs_after_reload(reinject_deps));

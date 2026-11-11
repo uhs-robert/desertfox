@@ -677,6 +677,24 @@ test("a lost reply is done when the caller says the tab navigated, and refuses w
   }
 });
 
+test("a content step with no page to run on names its step only during a replay", async () => {
+  const cases: [string, number | undefined, string][] = [
+    ["a typed key", undefined, "Scroll needs a page DesertFox runs on"],
+    ["a replay step", 3, "Macro stopped at step 3: needs a page DesertFox runs on"],
+  ];
+  for (const [name, macro_step, message] of cases) {
+    for (const lost of [false, true]) {
+      const log: string[] = [];
+      const { deps } = make_fake(
+        { "scroll.lines": { label: "Scroll", intent: "x", runs_in: "content", needs: lost ? [] : ["content"] } },
+        { has_content_script: async () => false, send_to_tab: async () => { throw new Error("no receiver"); }, show_refusal: async (_tab_id, refusal) => void log.push(refusal.message) },
+      );
+      await create_router(deps).run({ invocations: [{ id: "scroll.lines" }], mode: "normal", sender_tab_id: 1, ...(macro_step === undefined ? {} : { macro_step }) });
+      assert.deepEqual(log, [message], `${name}, ${lost ? "send fails" : "unmet need"}`);
+    }
+  }
+});
+
 const closer = (seen: number[]) => ({
   label: "Close",
   intent: "x",

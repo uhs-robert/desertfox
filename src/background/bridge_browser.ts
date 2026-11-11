@@ -5,7 +5,6 @@ import type { CompiledKeymap } from "../shared/prefix_tree.ts";
 import type { Mode } from "../shared/command.ts";
 import { BRIDGE_HOST_NAME, create_bridge } from "./bridge.ts";
 import type { BridgeDeps, BridgeWindow } from "./bridge.ts";
-import { recall_tab_mode } from "./tab_modes.ts";
 import { registry } from "../shared/registry/builtin.ts";
 import { create_bridge_run } from "./bridge_run.ts";
 import type { BridgeRunTarget } from "./bridge_run.ts";
@@ -50,7 +49,7 @@ export function browser_bridge_run(router_deps: RouterDeps, is_snippet: (command
   });
 }
 
-export const browser_bridge_deps = (bridge_run: ReturnType<typeof browser_bridge_run>): BridgeDeps => ({
+export const browser_bridge_deps = (recall_mode: (tab_id: number) => Promise<Mode>, bridge_run: ReturnType<typeof browser_bridge_run>): BridgeDeps => ({
   connect: () => browser.runtime.connectNative(BRIDGE_HOST_NAME),
   read_settings: async () => {
     const keymap = current_keymap((await browser.storage.local.get(COMPILED_KEYMAP_STORAGE_KEY))[COMPILED_KEYMAP_STORAGE_KEY] as CompiledKeymap | undefined);
@@ -66,7 +65,7 @@ export const browser_bridge_deps = (bridge_run: ReturnType<typeof browser_bridge
     return window && as_bridge_window(window);
   },
   active_tab_of: async (window_id) => (await browser.tabs.query({ active: true, windowId: window_id }))[0]?.id,
-  recall_mode: (tab_id): Promise<Mode> => recall_tab_mode(browser.storage.local, tab_id),
+  recall_mode,
   after: (run, delay_ms) => {
     const timer = setTimeout(run, delay_ms);
     return () => clearTimeout(timer);
@@ -77,8 +76,9 @@ export const browser_bridge_deps = (bridge_run: ReturnType<typeof browser_bridge
 });
 
 // Registers its listeners in the first turn, like the other background listeners, then connects once the settings are read.
-export function start_bridge(router_deps: RouterDeps, is_snippet: (command_id: string) => boolean) {
-  const bridge = create_bridge(browser_bridge_deps(browser_bridge_run(router_deps, is_snippet)));
+// `recall_mode` answers the mode of a tab, which is the focused frame's (`tab_modes.ts`).
+export function start_bridge(recall_mode: (tab_id: number) => Promise<Mode>, router_deps: RouterDeps, is_snippet: (command_id: string) => boolean) {
+  const bridge = create_bridge(browser_bridge_deps(recall_mode, browser_bridge_run(router_deps, is_snippet)));
   browser.windows.onFocusChanged.addListener((window_id) => void bridge.window_focused(window_id));
   browser.tabs.onActivated.addListener(({ windowId }) => void bridge.tab_activated(windowId));
   browser.permissions.onAdded.addListener(() => bridge.permission_added());

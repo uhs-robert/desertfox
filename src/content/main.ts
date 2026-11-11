@@ -17,25 +17,26 @@ import { cancels_keypress, cancels_keyup, press_target, replay_key_to_page } fro
 import { create_which_key_timer } from "./which_key_timer.ts";
 import { badge_state } from "./badge_state.ts";
 import { show_mode_label, show_toast } from "./ui_proxy.ts";
-import { wire_mode_reports } from "./mode_report.ts";
+import { holds_own_focus, wire_mode_reports } from "./mode_report.ts";
 import { page_mode } from "./page_mode.ts";
 import { run_content_steps, run_in_order } from "./run_content.ts";
 import { holds_keys_after, run_leaf } from "./run_leaf.ts";
-import { read_context_source } from "./context.ts";
 import { focus_page_content, start_content_once } from "./handlers/focus.ts";
 import { read_field_text } from "./text/field_text.ts";
 import { blur_focused_element } from "./handlers/page.ts";
 
 // Until the tree is read the setting is unknown, and the default applies.
 let mode_indicator: ModeIndicator = DEFAULT_MODE_INDICATOR;
+// Set in the top frame only, from the background, while a child frame holds focus.
+let focused_frame_mode: Mode | undefined;
 let recording: string | undefined;
 // A macro replay holds this page's keys. Escape then stops the replay.
 let replaying = false;
 
 function refresh_mode_indicator(): void {
-  const mode = page_mode.get_mode_();
-  const pass_next_armed = page_mode.is_pass_next_armed_();
-  show_mode_label(badge_state(mode, pass_next_armed, mode_indicator, recording));
+  // A child frame's pass-next flag does not reach the top frame, so the badge shows its mode alone.
+  const pass_next_armed = !focused_frame_mode && page_mode.is_pass_next_armed_();
+  show_mode_label(badge_state(focused_frame_mode ?? page_mode.get_mode_(), pass_next_armed, mode_indicator, recording));
 }
 
 const script_started_ms = performance.now();
@@ -263,17 +264,22 @@ function start(): void {
   listen(window, "pagehide", bundles.page_hidden_, false);
   listen(document, "visibilitychange", on_visibility_change, false);
 
+  // Every report says whether this frame holds the focus, so a focus event the frame missed heals on its next report.
+  const report_mode = () => void send_to_background({ type: "mode_changed", mode: page_mode.get_mode_(), focus: holds_own_focus(document) });
+
   wire_mode_reports(page_mode, (mode) => {
     if (!extension_context_alive()) return stop_listening();
     key_flow.reset_sequence_();
     bundles.enter_mode_(mode);
-    void send_to_background({ type: "mode_changed", mode });
+    report_mode();
   });
+  // Not in capture: focus does not bubble, so only the window's own focus reaches this listener, and not that of the elements inside it.
+  // Showing a tab fires focus on the top window too while a child frame holds the focus, so the report reads who holds it and does not assume this frame does.
+  // No report on blur: the frame that takes the focus reports it, and a top window gets a focus event when its focused child frame is removed.
+  listen(window, "focus", report_mode, false);
 
-  // Coming back from the back-forward cache runs no start-up, and the background's per-tab mode is stale.
-  window.addEventListener("pageshow", (event) => {
-    if (event.persisted) void send_to_background({ type: "mode_changed", mode: page_mode.get_mode_() });
-  });
+  // A page shown from the back-forward cache runs no start-up, and the background's mode for the tab is stale. The report after a first load is spare, and heals a start report the background lost.
+  listen(window, "pageshow", report_mode, false);
 
   page_mode.listen_display_(refresh_mode_indicator);
 
@@ -282,7 +288,6 @@ function start(): void {
   browser.runtime.onMessage.addListener((raw: unknown) => {
     const message = raw as BackgroundToContent;
     if (message.type === "ping") return Promise.resolve(true);
-    if (message.type === "get_selection") return Promise.resolve(read_context_source("selection"));
     if (message.type === "focus_page") {
       focus_page_content();
       return Promise.resolve(true);
@@ -298,6 +303,9 @@ function start(): void {
     else if (message.type === "set_mode" && !(message.held && was_all_off)) {
       bundles.set_mode_(message.mode);
       sync_mode_to_focus();
+    } else if (message.type === "frame_mode") {
+      focused_frame_mode = message.mode;
+      refresh_mode_indicator();
     }
     else if (message.type === "tree_updated") void ask_keymap();
   });

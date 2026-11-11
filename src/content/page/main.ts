@@ -1,4 +1,4 @@
-// The `page` bundle: registers `scroll.align`, `copy.url`, `page.focus_input`, `mark.add` and `mark.jump`, which are rare enough to stay out of content.js.
+// The `page` bundle: registers `scroll.align`, `copy.url`, `page.focus_input`, `mark.add` and `mark.jump`, which are rare enough to stay out of content.js. It also answers the background's `get_selection`.
 
 import type { BundleHostApi } from "../bundle_host.ts";
 import type { AlignPosition } from "../align_target.ts";
@@ -7,10 +7,11 @@ import { focus_first_input } from "../handlers/focus_input.ts";
 import { mark_text_entry } from "../text/entry.ts";
 import { copy_page_url } from "../handlers/copy.ts";
 import type { CopyFormat } from "../handlers/copy.ts";
+import { selected_text } from "./selection.ts";
 import { RuntimeRefusal } from "../../shared/command.ts";
-import type { MarkAnswer, MarkRequest } from "../../shared/messages.ts";
+import type { BackgroundToContent, MarkAnswer, MarkRequest } from "../../shared/messages.ts";
 
-type PageWindow = { desertfox_host: BundleHostApi; desertfox_page_ready?: true };
+type PageWindow = { desertfox_host?: BundleHostApi; desertfox_page_ready?: true };
 const page = window as unknown as PageWindow;
 
 // A set stores the scroll offset now. A jump asks the background for the stored one, which keeps the offset now as the previous position, then scrolls instantly so a smooth scroll in flight ends.
@@ -22,9 +23,10 @@ async function mark_at_scroll(host: BundleHostApi, type: MarkRequest["type"], ke
 }
 
 // A second run would register the handlers again for nothing.
-if (!page.desertfox_page_ready) {
+// With no host, content.js has not started in this frame. The run leaves the flag unset, so the load that content.js asks for later registers the handlers.
+const host = page.desertfox_host;
+if (!page.desertfox_page_ready && host) {
   page.desertfox_page_ready = true;
-  const host = page.desertfox_host;
   host.register_handler_("scroll.align", (args) => align_focus(args.position as AlignPosition, host.last_blurred_()));
   host.register_handler_("page.focus_input", () => {
     focus_first_input();
@@ -33,4 +35,6 @@ if (!page.desertfox_page_ready) {
   host.register_handler_("mark.add", (args) => mark_at_scroll(host, "mark_set", args.key));
   host.register_handler_("mark.jump", (args) => mark_at_scroll(host, "mark_jump", args.key));
   host.register_handler_("copy.url", (args) => copy_page_url(args.format as CopyFormat, args.register as string | undefined, host.show_toast_));
+  // Returns nothing for every other message, so the listener in content.js answers those.
+  browser.runtime.onMessage.addListener((message: BackgroundToContent) => (message.type === "get_selection" ? Promise.resolve(selected_text()) : undefined));
 }

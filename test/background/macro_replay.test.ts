@@ -4,6 +4,7 @@ import { test } from "node:test";
 import { create_router } from "../../src/background/router.ts";
 import { make_fake } from "./fakes.ts";
 import { create_macro_replay, MAX_MACRO_DEPTH, MAX_MACRO_PASSES } from "../../src/background/macro_replay.ts";
+import { reply_after_hold } from "../../src/background/hold_on_arrival.ts";
 import type { MacroReplayDeps, ReplayStart, StepPlace } from "../../src/background/macro_replay.ts";
 import type { PageReady, PageWatch } from "../../src/background/page_ready.ts";
 import type { BoundInvocation } from "../../src/shared/invocation.ts";
@@ -668,4 +669,113 @@ test("a pick whose action cannot navigate this tab takes no grace wait, and page
     assert.equal(await replay.play(start), true);
     assert.equal(pauses.count > 0, pays, JSON.stringify(step));
   }
+});
+
+// A page the replay's tab loads asks `read_keymap` before its matcher installs. The reply waits for the hold, so no key runs before it.
+const arrival = (replay: ReturnType<typeof make>["replay"], log: string[], options: { fail_send?: boolean } = {}) => {
+  const send = async (tab_id: number, frame_id: number | undefined) => {
+    log.push(`arrival hold ${tab_id}:${frame_id}`);
+    if (options.fail_send) throw new Error("frame gone");
+  };
+  return (tab_id: number, frame_id: number) =>
+    reply_after_hold(replay, send, tab_id, frame_id, async () => {
+      log.push("keymap reply");
+      return "keymap";
+    });
+};
+
+test("a page in the replay's tab is held before its keymap reply", async () => {
+  const { replay, log, start, effects } = make({ a: [{ id: "scroll.lines" }] });
+  let open_gate!: () => void;
+  const gate = { promise: new Promise<void>((resolve) => (open_gate = resolve)), resolve: () => open_gate() };
+  effects["scroll.lines"] = () => gate.promise.then(() => ({ ok: true }));
+  const played = replay.play(start);
+  await settle();
+  log.length = 0;
+  assert.equal(await arrival(replay, log)(1, 4), "keymap");
+  assert.deepEqual(log, ["arrival hold 1:4", "keymap reply"]);
+  gate.resolve();
+  assert.equal(await played, true);
+});
+
+test("a page that is not in the replay's tab, or comes when no replay plays, gets no hold", async () => {
+  const { replay, log, start, effects } = make({ a: [{ id: "scroll.lines" }] });
+  assert.equal(await arrival(replay, log)(1, 0), "keymap");
+  let open_gate!: () => void;
+  const gate = { promise: new Promise<void>((resolve) => (open_gate = resolve)), resolve: () => open_gate() };
+  effects["scroll.lines"] = () => gate.promise.then(() => ({ ok: true }));
+  const played = replay.play(start);
+  await settle();
+  assert.equal(await arrival(replay, log)(9, 0), "keymap");
+  gate.resolve();
+  await played;
+  assert.equal(await arrival(replay, log)(1, 0), "keymap");
+  assert.deepEqual(log.filter((line) => line.startsWith("arrival")), []);
+});
+
+test("a page that arrives after Escape gets no hold", async () => {
+  const { replay, log, start, effects } = make({ a: [{ id: "scroll.lines" }] });
+  let open_gate!: () => void;
+  const gate = { promise: new Promise<void>((resolve) => (open_gate = resolve)), resolve: () => open_gate() };
+  effects["scroll.lines"] = () => gate.promise.then(() => ({ ok: true }));
+  const played = replay.play(start);
+  await settle();
+  replay.stop();
+  assert.equal(await arrival(replay, log)(1, 0), "keymap");
+  assert.deepEqual(log.filter((line) => line.startsWith("arrival")), []);
+  gate.resolve();
+  await played;
+});
+
+test("a hold send that never answers does not hold the keymap reply for ever", async () => {
+  const { replay, start, effects } = make({ a: [{ id: "scroll.lines" }] });
+  let open_gate!: () => void;
+  const gate = { promise: new Promise<void>((resolve) => (open_gate = resolve)), resolve: () => open_gate() };
+  effects["scroll.lines"] = () => gate.promise.then(() => ({ ok: true }));
+  const played = replay.play(start);
+  await settle();
+  const reply = await reply_after_hold(replay, () => new Promise(() => undefined), 1, 0, async () => "keymap");
+  assert.equal(reply, "keymap");
+  gate.resolve();
+  await played;
+});
+
+test("a hold send that fails does not block the keymap reply", async () => {
+  const { replay, log, start, effects } = make({ a: [{ id: "scroll.lines" }] });
+  let open_gate!: () => void;
+  const gate = { promise: new Promise<void>((resolve) => (open_gate = resolve)), resolve: () => open_gate() };
+  effects["scroll.lines"] = () => gate.promise.then(() => ({ ok: true }));
+  const played = replay.play(start);
+  await settle();
+  assert.equal(await arrival(replay, log, { fail_send: true })(1, 2), "keymap");
+  gate.resolve();
+  await played;
+});
+
+test("a hold sent on arrival is released by Escape and by the end like any other", async () => {
+  for (const how of ["end", "escape"] as const) {
+    const { replay, log, start, effects } = make({ a: [{ id: "scroll.lines" }] });
+    let open_gate!: () => void;
+    const gate = { promise: new Promise<void>((resolve) => (open_gate = resolve)), resolve: () => open_gate() };
+    effects["scroll.lines"] = () => gate.promise.then(() => ({ ok: true }));
+    const played = replay.play(start);
+    await settle();
+    await arrival(replay, log)(1, 0);
+    const released = replay.ended();
+    if (how === "escape") replay.stop();
+    gate.resolve();
+    assert.deepEqual(await released, { ok: how === "end" }, how);
+    await played;
+    assert.deepEqual(await replay.ended(), { ok: true }, `${how}: a hold asking after the end is released at once`);
+  }
+});
+
+test("a replay passes each step its number, counting from 1", async () => {
+  const { replay, steps_run, deps } = make({ a: [{ id: "tab.next" }, { id: "scroll.lines" }, { id: "scroll.lines" }] });
+  const numbers: Array<number | undefined> = [];
+  const run_step = deps.run_step;
+  deps.run_step = (step, place, lost) => (numbers.push(place.step_number), run_step(step, place, lost));
+  await replay.play({ register: "a", tab_id: 1, frame_id: 0, mode: "normal", is_private: false });
+  assert.deepEqual(numbers, [1, 2, 3]);
+  assert.equal(steps_run.length, 3);
 });

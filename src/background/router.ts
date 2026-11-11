@@ -55,6 +55,8 @@ export type RouteRequest = {
   instant?: boolean;
   // Asked when a content step gets no reply because the page unloaded. True means the step did its work and the page left, so it is done.
   lost_reply_is_done?: () => Promise<boolean>;
+  // Set by a macro replay: the step's number, which a refusal for a missing page names.
+  macro_step?: number;
 };
 
 export type Router = { run: (request: RouteRequest) => Promise<RunResponse> };
@@ -64,6 +66,7 @@ type Now = { active: ActiveTab | undefined; context: CommandContext };
 const done: Outcome = { ok: true };
 const cancelled: Outcome = { ok: true, cancelled: true };
 const refuse = (message: string): Outcome => ({ ok: false, message });
+const NO_PAGE = "a page DesertFox runs on";
 
 // What a content script answers to a request that waits on the user. No answer is done: an older script answers nothing.
 function outcome_of_reply(reply: unknown): Outcome {
@@ -136,7 +139,7 @@ export function create_router(deps: RouterDeps): Router {
     if (!command) return refuse(`unknown command "${invocation.id}"`);
 
     const missing_need = await first_unmet_need(command, context.tab_id);
-    if (missing_need) return refuse(`${command.label} needs ${missing_need}`);
+    if (missing_need) return refuse(needs_message(command, missing_need, request));
 
     const open = (args: Record<string, unknown>, param: string, prefill?: ContextSource) => {
       prompted.add(invocation);
@@ -169,7 +172,7 @@ export function create_router(deps: RouterDeps): Router {
     // The handler gets the rechecked args, with a kept marker back as its empty text.
     const final_args = Object.fromEntries(Object.entries(rechecked.args).map(([name, value]) => [name, is_context_source(value) ? filled.args[name] : value]));
 
-    if (command.runs_in === "content") return run_in_content(command, final_args, counted.times, context, request.instant === true, request.lost_reply_is_done);
+    if (command.runs_in === "content") return run_in_content(command, final_args, counted.times, context, request);
     for (let time = 0; time < counted.times; time++) {
       const result = outcome_of_reply(await command.run!(time === 0 ? context : (await read_now(request, false)).context, final_args));
       if (!result.ok) return result;
@@ -177,10 +180,13 @@ export function create_router(deps: RouterDeps): Router {
     return done;
   }
 
+  // A replay step names its number, because the user did not type the step.
+  const needs_message = (command: CommandDef, need: string, request: RouteRequest) => (request.macro_step === undefined ? `${command.label} needs ${need}` : `Macro stopped at step ${request.macro_step}: needs ${need}`);
+
   async function first_unmet_need(command: CommandDef, tab_id: number | undefined): Promise<string | undefined> {
     for (const need of command.needs ?? []) {
       if (need === "content") {
-        if (tab_id === undefined || !(await deps.has_content_script(tab_id))) return "a page DesertFox runs on";
+        if (tab_id === undefined || !(await deps.has_content_script(tab_id))) return NO_PAGE;
       } else if (!(await deps.has_permission(need))) {
         return `the "${need}" permission`;
       }
@@ -188,15 +194,15 @@ export function create_router(deps: RouterDeps): Router {
     return undefined;
   }
 
-  async function run_in_content(command: CommandDef, args: CheckedArgs, times: number, context: CommandContext, instant: boolean, lost_reply_is_done?: () => Promise<boolean>): Promise<Outcome> {
+  async function run_in_content(command: CommandDef, args: CheckedArgs, times: number, context: CommandContext, request: RouteRequest): Promise<Outcome> {
     const { tab_id, frame_id } = context;
     if (tab_id === undefined) return refuse(`${command.label} needs a tab`);
     const invocations = Array.from({ length: times }, () => ({ id: command.id, args, ...(command.bundle && { bundle: command.bundle }) }));
     try {
-      return outcome_of_reply(await deps.send_to_tab(tab_id, { type: "run_in_content", invocations, ...(instant && { repeat: true as const }) }, frame_id));
+      return outcome_of_reply(await deps.send_to_tab(tab_id, { type: "run_in_content", invocations, ...(request.instant && { repeat: true as const }) }, frame_id));
     } catch {
-      if (await lost_reply_is_done?.().catch(() => false)) return done;
-      return refuse(`${command.label} needs a page DesertFox runs on`);
+      if (await request.lost_reply_is_done?.().catch(() => false)) return done;
+      return refuse(needs_message(command, NO_PAGE, request));
     }
   }
 

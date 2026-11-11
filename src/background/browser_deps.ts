@@ -8,6 +8,7 @@ import type { BackgroundToContent, ContainerStore, Refusal, ToastKind } from "..
 import type { EnumSources } from "../shared/registry/check_args.ts";
 import { registry } from "../shared/registry/builtin.ts";
 import { runs_with_empty } from "./availability.ts";
+import { create_bundle_loader } from "./bundle_loader.ts";
 import type { BundleLoaderDeps } from "./bundle_loader.ts";
 import type { ImageDeps, ImageKind } from "./image_actions.ts";
 import { create_load_log } from "./load_log.ts";
@@ -16,6 +17,8 @@ import type { ReinjectDeps } from "./reload.ts";
 import { BUNDLE_LOADS_STORAGE_KEY, DISABLED_STORAGE_KEY } from "./storage_keys.ts";
 import { deliver_refusal, deliver_toast } from "./refusal.ts";
 import type { RouterDeps } from "./router.ts";
+import { ask_selection } from "./selection_ask.ts";
+import type { SelectionAskDeps } from "./selection_ask.ts";
 import type { SnippetDeps } from "./snippets.ts";
 
 // Without a frame id the message reaches every frame, which shows a toast in each.
@@ -83,10 +86,7 @@ export function make_router_deps(get_config: () => Promise<MergedConfig>, repeat
       return tab?.id === undefined ? undefined : { tab_id: tab.id, window_id: tab.windowId ?? -1, url: tab.url, incognito: tab.incognito };
     },
     has_content_script,
-    ask_selection: async (tab_id, frame_id) => {
-      const answer: unknown = await send_to_tab(tab_id, { type: "get_selection" }, frame_id).catch(() => undefined);
-      return typeof answer === "string" ? answer : undefined;
-    },
+    ask_selection: (tab_id, frame_id) => ask_selection(selection_ask_deps, tab_id, frame_id),
     runs_with_empty: async (command_id, args, param, context) => runs_with_empty(await get_config(), command_id, args, param, await page_of(context.tab_id)),
     read_clipboard: () => navigator.clipboard.readText(),
     bookmark_title: async (url) => (url === undefined ? undefined : title_for_address(await browser.bookmarks.search({ url }), url)),
@@ -137,6 +137,15 @@ export const bundle_loader_deps: BundleLoaderDeps = {
     }
   },
   timeout_ms: 10_000,
+};
+
+// The one loader of the background, so the content script's asks and the selection ask share its deadline.
+export const bundle_loader = create_bundle_loader(bundle_loader_deps);
+
+// The background knows no document id, so this load joins other selection loads only, never the content script's own load. A second run of page.js registers nothing.
+const selection_ask_deps: SelectionAskDeps = {
+  ask: (tab_id, frame_id) => send_to_tab(tab_id, { type: "get_selection" }, frame_id),
+  load_page_bundle: (tab_id, frame_id) => bundle_loader.load({ tab_id, frame_id, document_id: "" }, "page"),
 };
 
 // The decode runs in the background page, where the fetched bytes are same-origin, so no canvas is tainted. `createImageBitmap` rejects an SVG, which an `Image` element decodes.
