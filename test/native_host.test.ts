@@ -16,9 +16,11 @@ test("the install command takes the script and the channel from the same place",
   );
 });
 
-test("nativeMessaging, browsingData and cookies are optional, never required", () => {
+test("nativeMessaging and browsingData are optional, cookies stays required", () => {
   const manifest = JSON.parse(readFileSync(new URL("../src/manifest.json", import.meta.url), "utf8"));
-  assert.deepEqual(manifest.optional_permissions, ["nativeMessaging", "browsingData", "cookies"]);
+  assert.deepEqual(manifest.optional_permissions, ["nativeMessaging", "browsingData"]);
+  // cookies backs the cookieStoreId option of tabs.create, windows.create and downloads.download, so it cannot be optional.
+  assert.ok(manifest.permissions.includes("cookies"));
   for (const permission of manifest.optional_permissions) assert.ok(!manifest.permissions.includes(permission), permission);
 });
 

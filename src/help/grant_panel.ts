@@ -26,7 +26,7 @@ const COPY: Record<GrantablePermission, GrantCopy> = {
   },
   browsingData: {
     title: "Allow clearing site data",
-    ask: "The clear-and-reload keys (rc, rC) need the browsingData and cookies permissions. Firefox asks once, and the keys work at once after you allow it.",
+    ask: "The clear-and-reload keys (rc, rC) need the browsingData permission. Firefox asks once, and the keys work at once after you allow it.",
     button: "Allow clearing site data",
     granted: "Permission granted. The clear-and-reload keys work now.",
     declined: "Firefox did not grant the permission. Press the button again and choose Allow. The clear-and-reload keys stay off without it.",
@@ -106,7 +106,8 @@ async function build_panel(permission: GrantablePermission, on_close: () => void
 }
 
 export type PanelControllerDeps<Panel> = {
-  is_wanted: () => boolean;
+  // The key of the panel the route wants, or undefined for none. A new key replaces the shown panel.
+  wanted: () => string | undefined;
   build: () => Promise<Panel>;
   show: (panel: Panel) => void;
   hide: (panel: Panel) => void;
@@ -117,24 +118,28 @@ export type PanelController = { sync: () => Promise<void>; close: () => void };
 // so two quick changes never leave two panels.
 export function create_panel_controller<Panel>(deps: PanelControllerDeps<Panel>): PanelController {
   let shown: Panel | undefined;
+  let shown_key: string | undefined;
   let latest_sync = 0;
   return {
     // The user closed the panel. Forget it, so the next wanted sync builds a new one.
     close: () => {
       if (shown !== undefined) deps.hide(shown);
       shown = undefined;
+      shown_key = undefined;
     },
     sync: async () => {
       const this_sync = ++latest_sync;
-      if (!deps.is_wanted()) {
+      const key = deps.wanted();
+      if (key === undefined || key !== shown_key) {
         if (shown !== undefined) deps.hide(shown);
         shown = undefined;
-        return;
+        shown_key = undefined;
       }
-      if (shown !== undefined) return;
+      if (key === undefined || shown !== undefined) return;
       const built = await deps.build();
-      if (this_sync !== latest_sync || shown !== undefined || !deps.is_wanted()) return;
+      if (this_sync !== latest_sync || shown !== undefined || deps.wanted() !== key) return;
       shown = built;
+      shown_key = key;
       deps.show(built);
     },
   };
@@ -143,7 +148,7 @@ export function create_panel_controller<Panel>(deps: PanelControllerDeps<Panel>)
 // The panel sits outside the body because the help router rebuilds the body on every route change.
 export function mount_grant_panel(): void {
   const controller: PanelController = create_panel_controller<HTMLElement>({
-    is_wanted: () => permission_of_grant_hash(location.hash) !== undefined,
+    wanted: () => permission_of_grant_hash(location.hash),
     build: () => build_panel(permission_of_grant_hash(location.hash)!, () => controller.close()),
     show: (panel) => document.documentElement.append(panel),
     hide: (panel) => panel.remove(),

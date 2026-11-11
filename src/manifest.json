@@ -47,13 +47,13 @@
     "bookmarks",
     "history",
     "contextualIdentities",
+    "cookies",
     "sessions",
     "<all_urls>"
   ],
   "optional_permissions": [
     "nativeMessaging",
-    "browsingData",
-    "cookies"
+    "browsingData"
   ],
   "browser_action": {
     "default_title": "DesertFox",
