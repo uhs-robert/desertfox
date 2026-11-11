@@ -4,7 +4,7 @@
   desertfox run [--tab <id>] <command> [args...]   run one command in the focused Firefox window, or in a tab
   desertfox list [--json]             the commands the bridge allows, with their params
   desertfox state [--json]            the mode the bridge last saw
-  desertfox theme <palette>           tell DesertFox which palette the desktop uses
+  desertfox theme <palette>           tell DesertFox which palette the desktop uses, or keep it for the next start while the bridge is down
   desertfox events                    print each event of the bridge as one JSON line until the bridge ends
 
 The tab commands need `bridge_share_tabs` on in DesertFox, and never see a private window:
@@ -23,14 +23,19 @@ keeps the space.
 
 It speaks to $XDG_RUNTIME_DIR/desertfox/bridge.sock, one JSON line out and one line back, or for `events` the lines
 of the stream. It prints plain text, errors to stderr. Exit codes: 0 done, 1 refused or failed, 2 bad usage, 3 the
-bridge is not running. `events` exits 0 when the bridge ends the stream, which it also does to a reader that falls
+bridge is not running (`theme` instead keeps the name in theme.json and exits 0).
+`-h` or `--help` after a verb prints the usage and sends nothing. `events` exits 0 when the bridge ends the stream, which it also does to a reader that falls
 behind, so a caller that wants the stream for good runs it again.
 """
+import fcntl
 import json
 import os
+import re
 import shlex
 import socket
 import sys
+import tempfile
+import time
 
 EXIT_DONE = 0
 EXIT_FAILED = 1
@@ -40,6 +45,10 @@ EXIT_NO_BRIDGE = 3
 TIMEOUT_S = 15
 # The host waits 10 s for the tab list, then up to 5 s for each of 64 tabs.
 CAPTURE_TIMEOUT_S = 345
+# Longer than the 3 s a starting host waits for the lock, so a host that is starting has bound its socket before this gives up.
+LOCK_RETRY_S = 5
+# The same shape as PALETTE_PATTERN in desertfox-bridge: the two scripts are standalone, and a test compares them.
+PALETTE_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}")
 
 USAGE = """usage: desertfox run [--tab <id>] <command> [args...]
        desertfox list [--json]
@@ -57,11 +66,19 @@ class BridgeDown(Exception):
     pass
 
 
-def socket_path():
+class NoListener(BridgeDown):
+    """Nothing listens at the socket: the host is not running, or is about to start."""
+
+
+def bridge_folder():
     runtime_dir = os.environ.get("XDG_RUNTIME_DIR", "")
     if not os.path.isabs(runtime_dir):
         raise BridgeDown("XDG_RUNTIME_DIR is not set, so there is no bridge socket")
-    return os.path.join(runtime_dir, "desertfox", "bridge.sock")
+    return os.path.join(runtime_dir, "desertfox")
+
+
+def socket_path():
+    return os.path.join(bridge_folder(), "bridge.sock")
 
 
 def connected(request, timeout_s):
@@ -75,7 +92,7 @@ def connected(request, timeout_s):
         return connection
     except (FileNotFoundError, ConnectionRefusedError):
         connection.close()
-        raise BridgeDown("the bridge is not running (no listener at %s). Turn on the bridge setting in DesertFox." % path)
+        raise NoListener("the bridge is not running (no listener at %s). Turn on the bridge setting in DesertFox." % path)
     except OSError as error:
         connection.close()
         raise BridgeDown("cannot talk to the bridge: %s" % error)
@@ -274,10 +291,58 @@ def do_capture(words):
     return EXIT_DONE if all(result.get("ok") for result in results) else EXIT_FAILED
 
 
+def write_atomically(path, content):
+    descriptor, temp_path = tempfile.mkstemp(prefix=".state.", suffix=".tmp", dir=os.path.dirname(path))
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as temp_file:
+            json.dump(content, temp_file, separators=(",", ":"))
+        os.replace(temp_path, path)
+    except BaseException:
+        try:
+            os.unlink(temp_path)
+        except OSError:
+            pass
+        raise
+
+
+def keep_palette_if_no_host(palette):
+    """True after writing theme.json, False when a host holds bridge.lock. The host loads theme.json only after it takes
+    the lock, so a write under the lock is never lost to a host that starts at the same moment."""
+    folder = bridge_folder()
+    os.makedirs(folder, mode=0o700, exist_ok=True)
+    lock = os.open(os.path.join(folder, "bridge.lock"), os.O_RDWR | os.O_CREAT | os.O_CLOEXEC, 0o600)
+    try:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            return False
+        write_atomically(os.path.join(folder, "theme.json"), {"palette": palette})
+        return True
+    finally:
+        os.close(lock)
+
+
 def do_theme(words):
     if len(words) != 1:
         raise Usage("theme takes one palette name")
-    return finished(ask({"verb": "theme", "palette": words[0]}))
+    palette = words[0]
+    if not PALETTE_PATTERN.fullmatch(palette):
+        raise Usage("a palette name starts with a letter or digit, then letters, digits, _ and -, at most 64 characters in all")
+    request = {"verb": "theme", "palette": palette}
+    deadline = time.monotonic() + LOCK_RETRY_S
+    while True:
+        try:
+            return finished(ask(request))
+        except NoListener:
+            # No host: keep the name for the one the browser starts next. A held lock means a host is starting, so ask again.
+            try:
+                if keep_palette_if_no_host(palette):
+                    return EXIT_DONE
+            except OSError as error:
+                raise BridgeDown("the bridge is not running and the palette could not be kept: %s" % error)
+            if time.monotonic() >= deadline:
+                raise BridgeDown("a bridge host holds the lock but does not answer")
+            time.sleep(0.05)
 
 
 def do_state(flags):
@@ -323,6 +388,9 @@ def main(argv):
         print(USAGE)
         return EXIT_DONE if argv else EXIT_USAGE
     verb, rest = argv[0], argv[1:]
+    if rest[:1] in (["-h"], ["--help"]):
+        print(USAGE)
+        return EXIT_DONE
     try:
         if verb == "run":
             return do_run(rest)
