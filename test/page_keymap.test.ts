@@ -347,8 +347,26 @@ test("the shipped sheets rows bind gg and Ctrl+hjkl to Ctrl keys and free Ctrl+A
     assert.equal(tree.keymap.modes.normal?.children["<C-a>"], undefined, url);
     assert.equal(tree.keymap.modes.normal?.children["<C-x>"], undefined, url);
     assert.equal(tree.frees?.tokens.includes("<C-a>"), true, url);
+    assert.equal(tree.keymap.modes.normal?.children["<C-v>"], undefined, url);
+    assert.equal(tree.frees?.tokens.includes("<C-v>"), true, url);
   }
   assert.equal(await key_at(compiled, "https://example.org/", "<C-a>"), "url.increment");
+});
+
+test("the shipped sheets rows bind x and p to cut and paste on the grid editor, and other pages keep their x and p keys", async () => {
+  const compiled = with_defaults({});
+  for (const url of [SHEETS, SHEETS_DOMAIN]) {
+    const tree = (await ask(compiled, url))!;
+    const leaf = (key: string) => {
+      const node = tree.keymap.modes.normal?.children[key];
+      return node?.kind === "leaf" ? node.steps[0]?.invocation : undefined;
+    };
+    assert.deepEqual([leaf("x")?.id, leaf("x")?.args], ["page.clipboard", { action: "cut", target: "#waffle-rich-text-editor" }], url);
+    assert.deepEqual([leaf("p")?.id, leaf("p")?.args], ["page.clipboard", { action: "paste", target: "#waffle-rich-text-editor" }], url);
+  }
+  const plain = (await ask(compiled, "https://example.org/"))?.keymap ?? compiled;
+  assert.equal(plain.modes.normal?.children["x"]?.kind, "branch");
+  assert.equal(plain.modes.normal?.children["p"]?.kind, "branch");
 });
 
 test("the shipped sheets rows turn escape_to_page on, a user row beats it, and no other page gets it", async () => {

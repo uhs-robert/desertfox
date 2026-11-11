@@ -374,7 +374,7 @@ The content script must have the keymap before the first key. At start it sends 
 - `background.js`: the registry, the handlers, keymap validation and the shortcut slots.
 - `content.js`: the key listener, the prefix tree, the modes and scrolling. Kept under a guard of 17 KB minified (see "Content script size" below).
 - Hints, which-key, caret and visual mode are separate files. Snippets run as their own code. The background injects one with `tabs.executeScript` on first use in a tab.
-- `site_actions.js` holds the handler of `page.send_key`, which site rows bind to keys. The content script loads it on the first press, with the other bundles.
+- `site_actions.js` holds the handlers of `page.send_key` and `page.clipboard`, which site rows bind to keys. `page.clipboard` focuses its target and calls `document.execCommand` for cut, copy or paste, so the page gets the browser's own trusted event (a synthetic Ctrl+X or Ctrl+V keydown does nothing). A paste that fires no event falls back to reading `navigator.clipboard` and dispatching an untrusted `paste` event with that data. The shipped Sheets rows bind `x` and `p` to it and pass `<C-a>`, `<C-x>` and `<C-v>` to the page. A site bind of `x` or `p` replaces the default `xx`, `xp` and `pp`, `pt`, `pw` sequences on that site. The content script loads it on the first press, with the other bundles.
 - `media.js` and `quality.js` are the bundles the content script does not load. The background injects them into every frame of the tab for each `media` command (see the `a` group below).
 - `cmdline.html`: an extension page in an iframe. It has its own bundle with completion and fuzzy matching.
 
