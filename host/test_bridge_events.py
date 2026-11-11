@@ -1,7 +1,10 @@
 """Tests of the bridge host's event stream: `subscribe`, the events it carries, its caps and how a subscriber ends. Real processes for the protocol, the hub in process for the races."""
+import base64
+import hashlib
 import json
 import os
 import socket
+import tempfile
 import threading
 import time
 import unittest
@@ -257,7 +260,7 @@ class HubTest(unittest.TestCase):
         fast = self.hub.add(self.pair()[0])
         fast.next_batch()
         for count in range(self.module.SUBSCRIBER_QUEUE_EVENTS + 5):
-            self.hub.publish({"event": "tab_removed", "tab_id": count})
+            self.hub.publish({"event": "tab_activated", "tab_id": count, "window_id": 1})
             self.assertTrue(fast.next_batch())
         self.assertEqual(self.hub.subscribers, {fast})
         self.assertTrue(slow.ended)
@@ -324,7 +327,7 @@ class HubTest(unittest.TestCase):
         steady.settimeout(5)
         received = b""
         for count in range(300):
-            self.hub.publish({"event": "tab_removed", "tab_id": count})
+            self.hub.publish({"event": "tab_activated", "tab_id": count, "window_id": 1})
             if count % 20 == 0:
                 while received.count(b"\n") < count + 2:
                     received += steady.recv(1 << 16)
@@ -334,6 +337,78 @@ class HubTest(unittest.TestCase):
             received += steady.recv(1 << 16)
         events = [json.loads(line) for line in received.splitlines()[1:]]
         self.assertEqual([event["tab_id"] for event in events], list(range(300)))
+
+    def test_a_removal_goes_only_to_a_subscriber_told_of_that_tab(self):
+        early = self.hub.add(self.pair()[0])
+        self.hub.publish({"event": "tab_updated", "tab_id": 5, "window_id": 1, "title": "", "url": ""})
+        late = self.hub.add(self.pair()[0])
+        early.next_batch()
+        late.next_batch()
+        self.hub.publish({"event": "tab_removed", "tab_id": 5})
+        self.assertEqual([line["event"] for line in early.next_batch()], ["tab_removed"])
+        self.assertEqual(late.next_batch(), [])
+        self.hub.publish({"event": "tab_removed", "tab_id": 5})
+        self.assertEqual(early.next_batch(), [], "a second removal of the same tab is not passed on")
+
+    def test_tabs_off_and_the_cap_make_a_subscriber_forget_tabs(self):
+        self.module.MAX_NAMED_TABS = 2
+        subscriber = self.hub.add(self.pair()[0])
+        for tab_id in (1, 2, 3):
+            self.hub.publish({"event": "tab_activated", "tab_id": tab_id, "window_id": 1})
+        self.assertEqual(list(subscriber.named_tabs), [2, 3])
+        self.hub.publish({"event": "tabs_off"})
+        subscriber.next_batch()
+        self.hub.publish({"event": "tab_removed", "tab_id": 3})
+        self.assertEqual(subscriber.next_batch(), [])
+
+    def test_the_current_mode_given_on_subscribe_names_its_tab(self):
+        self.hub.publish({"event": "mode", "id": "normal", "label": "NORMAL", "private": False, "tab_id": 7, "window_id": 1})
+        subscriber = self.hub.add(self.pair()[0])
+        subscriber.next_batch()
+        self.hub.publish({"event": "tab_removed", "tab_id": 7})
+        self.assertEqual([line["event"] for line in subscriber.next_batch()], ["tab_removed"])
+
+
+class CacheGateTest(unittest.TestCase):
+    """An image the extension sends while sharing goes off must not bring a deleted cache back."""
+
+    def setUp(self):
+        self.module = load_host("desertfox-bridge")
+        temp = tempfile.TemporaryDirectory(prefix="dfg")
+        self.addCleanup(temp.cleanup)
+        old_cache = os.environ.get("XDG_CACHE_HOME")
+        os.environ["XDG_CACHE_HOME"] = temp.name
+        self.addCleanup(lambda: os.environ.pop("XDG_CACHE_HOME") if old_cache is None else os.environ.__setitem__("XDG_CACHE_HOME", old_cache))
+
+    def link_that_turns_sharing_off(self, reply):
+        module = self.module
+
+        class Link:
+            def ask(self, verb, fields, timeout_s):
+                module.forget_tab_caches()
+                return reply
+
+        return Link()
+
+    def test_an_icon_answered_across_tabs_off_is_dropped(self):
+        data_url = "data:image/png;base64," + base64.b64encode(b"icon").decode()
+        key = hashlib.sha256(data_url.encode()).hexdigest()
+        stored = {}
+        self.module.fill_favicons(self.link_that_turns_sharing_off({"ok": True, "data_url": data_url}), [{"tab_id": 1, "fav_icon_key": key}], stored)
+        self.assertEqual(stored, {})
+        self.assertFalse(os.path.exists(self.module.favicon_dir()))
+
+    def test_a_thumbnail_answered_across_tabs_off_is_dropped(self):
+        jpeg = "data:image/jpeg;base64," + base64.b64encode(b"\xff\xd8 image").decode()
+        result = self.module.capture_one(self.link_that_turns_sharing_off({"ok": True, "url": "https://a.example/", "data_url": jpeg}), 1)
+        self.assertEqual(result["ok"], False)
+        self.assertFalse(os.path.exists(self.module.thumbnail_dir()))
+
+    def test_a_write_in_the_same_generation_lands(self):
+        generation = self.module.TAB_CACHES.generation
+        path = os.path.join(self.module.favicon_dir(), "a.png")
+        self.assertTrue(self.module.TAB_CACHES.write(path, b"x", generation))
+        self.assertTrue(os.path.exists(path))
 
 
 if __name__ == "__main__":

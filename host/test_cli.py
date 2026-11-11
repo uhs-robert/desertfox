@@ -162,15 +162,15 @@ class CliTest(unittest.TestCase):
         env = dict(os.environ, XDG_RUNTIME_DIR=self.runtime)
         events = subprocess.Popen([sys.executable, CLI_PATH, "events"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env)
         self.addCleanup(lambda: events.poll() is None and events.kill())
-        host.send({"verb": "event", "event": "tab_removed", "tab_id": 4})
+        host.send({"verb": "event", "event": "tab_activated", "tab_id": 4, "window_id": 1})
         # The CLI may subscribe after that event, so the test sends events until one arrives.
         line = ""
         deadline = time.monotonic() + 10
         while not line and time.monotonic() < deadline:
-            host.send({"verb": "event", "event": "tab_removed", "tab_id": 5})
+            host.send({"verb": "event", "event": "tab_activated", "tab_id": 5, "window_id": 1})
             if select.select([events.stdout], [], [], 0.2)[0]:
                 line = events.stdout.readline()
-        self.assertEqual({name: value for name, value in json.loads(line).items() if name != "seq"}, {"event": "tab_removed", "tab_id": 5})
+        self.assertEqual({name: value for name, value in json.loads(line).items() if name != "seq"}, {"event": "tab_activated", "tab_id": 5, "window_id": 1})
         host.close_stdin()
         self.assertEqual(events.wait(10), 0)
         events.stdout.close()

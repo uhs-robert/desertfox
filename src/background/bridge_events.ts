@@ -9,6 +9,8 @@ import type { TabInfo } from "./tab_switch.ts";
 // changes inside this window go out as one event that carries the values at its end.
 export const TAB_UPDATE_SETTLE_MS = 250;
 
+export const TABS_OFF_EVENT = { verb: "event", event: "tabs_off" } as const;
+
 export type TabChange = { title?: string | undefined; url?: string | undefined; audible?: boolean | undefined };
 
 export type BridgeEventsDeps = {
@@ -22,8 +24,8 @@ export type BridgeEventsDeps = {
 export function create_bridge_events(deps: BridgeEventsDeps) {
   // Tab id to the cancel of its pending update.
   const settling = new Map<number, () => void>();
-  // The tabs a subscriber has heard of. A closed tab can no longer be looked up, so only one of these sends `tab_removed`,
-  // which keeps a private tab's id off the port.
+  // The tabs an event already named to the host. A closed tab can no longer be looked up, so only one of these sends
+  // `tab_removed`, which keeps a private tab's id off the port. The host passes a removal only to a subscriber that heard of the tab.
   const announced = new Set<number>();
   // Events go out one after another, so a slow lookup cannot let an update land after the tab's removal.
   let turns: Promise<void> = Promise.resolve();
@@ -69,7 +71,7 @@ export function create_bridge_events(deps: BridgeEventsDeps) {
     for (const cancel of settling.values()) cancel();
     settling.clear();
     announced.clear();
-    deps.send({ verb: "event", event: "tabs_off" });
+    deps.send(TABS_OFF_EVENT);
   }
 
   return {

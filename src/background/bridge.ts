@@ -7,7 +7,7 @@ import type { CommandMeta, Mode } from "../shared/command.ts";
 import type { BridgeAnswer } from "./bridge_run.ts";
 import { TAB_VERBS } from "./tab_switch.ts";
 import type { TabAnswer, TabInfo, TabVerb } from "./tab_switch.ts";
-import { create_bridge_events } from "./bridge_events.ts";
+import { create_bridge_events, TABS_OFF_EVENT } from "./bridge_events.ts";
 import type { TabChange } from "./bridge_events.ts";
 import { mode_label } from "../content/ui/mode_label.ts";
 
@@ -62,6 +62,9 @@ export function create_bridge(deps: BridgeDeps) {
   let port: BridgePort | undefined;
   // The host sends one message when it has the lock, and only then is the port trusted: a second host waits for the lock and a missing host drops the port at once.
   let ready = false;
+  // Goes up each time sharing goes off. A tab reply whose request started under an older count goes out as the refusal,
+  // so tab data asked for before the switch never leaves after it.
+  let sharing_turns_off = 0;
   let up_since_ms = 0;
   let failures = 0;
   let cancel_retry: (() => void) | undefined;
@@ -121,7 +124,11 @@ export function create_bridge(deps: BridgeDeps) {
     const request_id = request.request_id as number;
     const asked = asked_by(request);
     if (!asked) return;
-    void answer_of(asked).then((answer) => send_on(which, { ...answer, verb: "reply", request_id }));
+    const turns_off_at_ask = sharing_turns_off;
+    void answer_of(asked).then((answer) => {
+      const sharing_went_off = asked.verb !== "run" && asked.verb !== "list" && sharing_turns_off !== turns_off_at_ask;
+      send_on(which, { ...(sharing_went_off ? TABS_OFF : answer), verb: "reply", request_id });
+    });
   }
 
   async function snapshot_of(window: BridgeWindow | undefined): Promise<Snapshot | undefined> {
@@ -153,6 +160,8 @@ export function create_bridge(deps: BridgeDeps) {
 
   function became_ready(): void {
     ready = true;
+    // A tabs_off sent while the port was down never arrived, and a new host does not know the setting. Saying it on every ready lets the host delete its caches.
+    if (!share_tabs) send(TABS_OFF_EVENT);
     up_since_ms = deps.now_ms();
     // Every message sent while the port was down is gone, so the host gets the full state now.
     void enqueue(async () => {
@@ -220,7 +229,10 @@ export function create_bridge(deps: BridgeDeps) {
     share_tabs = settings.share_tabs;
     bridge_on = settings.bridge;
     // Before a disconnect below, so the host still hears it and deletes its caches.
-    if (sharing_before && !share_tabs) events.sharing_off();
+    if (sharing_before && !share_tabs) {
+      sharing_turns_off++;
+      events.sharing_off();
+    }
     if (bridge_on === bridge_before) return;
     failures = 0;
     if (bridge_on) await connect();

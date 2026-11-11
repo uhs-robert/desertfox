@@ -98,6 +98,8 @@ MAX_SUBSCRIBERS = 4
 # Events waiting for one subscriber. A subscriber that falls this far behind is dropped and can reconnect.
 SUBSCRIBER_QUEUE_EVENTS = 64
 WRITE_TIMEOUT_S = 2
+# The tab ids each subscriber remembers for `tab_removed`. The one named longest ago is forgotten first.
+MAX_NAMED_TABS = 1024
 # How often an idle subscriber's socket is checked for a client that left.
 PEER_CHECK_S = 0.5
 # The fields of each event type the extension may send, with their types. A tab event needs bridge_share_tabs, which the extension checks.
@@ -218,15 +220,36 @@ class Subscriber:
         self.queue = deque()
         self.wake = threading.Condition()
         self.ended = False
+        # The tab ids this subscriber was told about, oldest first. A `tab_removed` reaches it only for one of these.
+        self.named_tabs = {}
 
     def offer(self, line):
-        """False when the subscriber has ended or its queue is full."""
+        """False when the subscriber has ended or its queue is full. A line it has no use for counts as taken."""
         with self.wake:
-            if self.ended or len(self.queue) >= SUBSCRIBER_QUEUE_EVENTS:
+            if self.ended:
+                return False
+            if not self.wants(line):
+                return True
+            if len(self.queue) >= SUBSCRIBER_QUEUE_EVENTS:
                 return False
             self.queue.append(line)
             self.wake.notify()
             return True
+
+    def wants(self, line):
+        """Keeps `named_tabs` up to date and says whether the line goes to this subscriber."""
+        event = line.get("event")
+        tab_id = line.get("tab_id")
+        if event == "tabs_off":
+            self.named_tabs.clear()
+        elif event == "tab_removed":
+            return self.named_tabs.pop(tab_id, None) is not None
+        elif tab_id is not None:
+            self.named_tabs.pop(tab_id, None)
+            self.named_tabs[tab_id] = True
+            if len(self.named_tabs) > MAX_NAMED_TABS:
+                del self.named_tabs[next(iter(self.named_tabs))]
+        return True
 
     def end(self):
         """Callable from any thread. Shutdown, not close, wakes a write blocked on a full socket without freeing a descriptor the connection thread still uses."""
@@ -296,12 +319,12 @@ class EventHub:
         subscriber.end()
 
     def close(self):
+        # Under the guard: a writer that finishes now waits in `remove` and has not closed its socket, so `end` never shuts down a reused descriptor.
         with self.guard:
             self.closed = True
-            ending = list(self.subscribers)
+            for subscriber in self.subscribers:
+                subscriber.end()
             self.subscribers.clear()
-        for subscriber in ending:
-            subscriber.end()
 
     def stream(self, subscriber):
         """Runs on the subscriber's connection thread until the client leaves, falls behind, stops reading or the host ends."""
@@ -535,6 +558,33 @@ def thumbnail_fields(url):
         return {"thumbnail": "", "thumbnail_at": 0}
 
 
+class CacheGate:
+    """Orders the cache writes against the deletes. A connection thread can wait on the extension for an image while the
+    port thread deletes the caches because sharing went off. Each delete bumps `generation` under the same lock as the
+    writes, and a write that started under an older generation is dropped, so a deleted cache cannot come back."""
+
+    def __init__(self):
+        self.guard = threading.Lock()
+        self.generation = 0
+
+    def forget(self):
+        with self.guard:
+            self.generation += 1
+            shutil.rmtree(thumbnail_dir(), ignore_errors=True)
+            shutil.rmtree(favicon_dir(), ignore_errors=True)
+
+    def write(self, path, data, generation):
+        """False, and nothing written, when the caches were deleted since `generation` was read."""
+        with self.guard:
+            if generation != self.generation:
+                return False
+            write_cache_file(path, data)
+            return True
+
+
+TAB_CACHES = CacheGate()
+
+
 def write_cache_file(path, data):
     """Writes under a temporary name and renames, so a reader never sees half of a file."""
     os.makedirs(os.path.dirname(path), mode=0o700, exist_ok=True)
@@ -548,13 +598,14 @@ def write_cache_file(path, data):
         raise
 
 
-def write_thumbnail(url, data_url):
+def write_thumbnail(url, data_url, generation):
     if not isinstance(data_url, str) or not data_url.startswith(JPEG_DATA_URL_PREFIX):
         raise ValueError("the extension sent no JPEG")
     image = base64.b64decode(data_url[len(JPEG_DATA_URL_PREFIX):], validate=True)
     if not image.startswith(b"\xff\xd8"):
         raise ValueError("the extension sent no JPEG")
-    write_cache_file(thumbnail_path(url), image)
+    if not TAB_CACHES.write(thumbnail_path(url), image, generation):
+        raise ValueError("tab sharing went off")
     return thumbnail_fields(url)
 
 
@@ -624,6 +675,7 @@ def fill_favicons(link, tabs, stored_icons):
         remaining_s = deadline - time.monotonic()
         if remaining_s <= 0:
             return
+        generation = TAB_CACHES.generation
         reply = link.ask("favicon", {"tab_id": tab["tab_id"]}, remaining_s)
         if reply.get("ok") is not True:
             continue
@@ -632,16 +684,15 @@ def fill_favicons(link, tabs, stored_icons):
             suffix, image = favicon_image(data_url)
             written_key = hashlib.sha256(data_url.encode("utf-8")).hexdigest()
             path = os.path.join(favicon_dir(), written_key + suffix)
-            write_cache_file(path, image)
-            stored_icons[written_key] = path
+            if TAB_CACHES.write(path, image, generation):
+                stored_icons[written_key] = path
         except (ValueError, OSError):
             pass
 
 
 def forget_tab_caches():
     """The images are page content the owner no longer shares, so they go at once."""
-    shutil.rmtree(thumbnail_dir(), ignore_errors=True)
-    shutil.rmtree(favicon_dir(), ignore_errors=True)
+    TAB_CACHES.forget()
 
 
 def forget_caches_if_sharing_off(reply):
@@ -695,6 +746,7 @@ def capture_failure(tab_id, error):
 
 
 def capture_one(link, tab_id):
+    generation = TAB_CACHES.generation
     reply = link.ask("capture", {"tab_id": tab_id}, CAPTURE_TIMEOUT_S)
     if reply.get("ok") is not True:
         return capture_failure(tab_id, run_result(reply).get("message", "the capture failed"))
@@ -702,7 +754,7 @@ def capture_one(link, tab_id):
     if not isinstance(url, str) or not url:
         return capture_failure(tab_id, "the extension sent no address")
     try:
-        return {"tab_id": tab_id, "ok": True, **write_thumbnail(url, reply.get("data_url"))}
+        return {"tab_id": tab_id, "ok": True, **write_thumbnail(url, reply.get("data_url"), generation)}
     except (ValueError, OSError):
         return {**capture_failure(tab_id, "the image could not be saved"), **thumbnail_fields(url)}
 
