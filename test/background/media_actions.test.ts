@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { choose_frames, clock, create_media_reports, describe_change, run_media, type FrameScan, type MediaDeps } from "../../src/background/media_actions.ts";
 import type { CommandContext } from "../../src/shared/command.ts";
+import type { QualityAnswer, QualityRequest } from "../../src/shared/quality.ts";
 import type { MediaRequest, MediaResult, MediaScan, MediaState } from "../../src/shared/media.ts";
 
 const ctx: CommandContext = { tab_id: 4, window_id: 1, frame_id: 0, mode: "normal" };
@@ -60,7 +61,8 @@ test("the notice names the new value, the player count and a live stream's posit
 // `scan` is what the frame pushes after it runs the bundle (nothing when undefined). `report_after_ms` delays the push, `reports_twice` pushes it again, and `hangs` swallows the apply.
 type Frame = { refuses_scripts?: boolean; scan?: unknown; report_after_ms?: number; reports_twice?: boolean; apply?: (request: MediaRequest) => unknown; hangs?: boolean };
 
-function fake_tab(frames: Record<number, Frame>, { pip = true, inject_delay_ms = 0, answer_timeout_ms = 50 } = {}) {
+function fake_tab(frames: Record<number, Frame>, { pip = true, inject_delay_ms = 0, answer_timeout_ms = 50, quality = (() => undefined) as (request: QualityRequest) => QualityAnswer | undefined } = {}) {
+  const asked: QualityRequest[] = [];
   const injected: number[] = [];
   const applied: { frame_id: number; request: MediaRequest }[] = [];
   const toasts: string[] = [];
@@ -86,11 +88,12 @@ function fake_tab(frames: Record<number, Frame>, { pip = true, inject_delay_ms =
       applied.push({ frame_id, request });
       return frame.apply?.(request);
     },
+    quality: async (_tab_id, request) => (asked.push(request), quality(request)),
     can_picture_in_picture: () => pip,
     toast: async (_ctx, message) => void toasts.push(message),
     answer_timeout_ms,
   };
-  return { deps, injected, applied, toasts, reports };
+  return { deps, injected, applied, toasts, reports, asked };
 }
 
 const acted = (count: number, fields: Partial<MediaState> = {}): MediaResult => ({ acted: count, state: { ...state, ...fields } });
@@ -239,4 +242,77 @@ test("the notice names mute, loop, fullscreen and the info line", () => {
 test("fullscreen asks the frame that holds the video when the top document is fullscreen too", () => {
   const scans = [scan(0, { count: 0, fullscreen_open: true }), scan(3, { video_area: 900, fullscreen_open: true })];
   assert.deepEqual(choose_frames(scans, "fullscreen"), [{ frame_id: 3, target: "largest" }]);
+});
+
+const levels = [
+  { label: "720p", height: 720, active: false },
+  { label: "1080p", height: 1080, active: true },
+  { label: "1440p", height: 1440, active: false },
+];
+
+test("media quality without a value lists the levels best first with the playing one marked", async () => {
+  const tab = fake_tab({ 0: {} }, { quality: () => ({ levels }) });
+  await run_media(tab.deps, ctx, { action: "quality" });
+  assert.deepEqual(tab.asked, [{ type: "quality_apply", op: "list", value: undefined, times: 1 }]);
+  assert.deepEqual(tab.toasts, ["Quality: 1440p, 1080p (now), 720p"]);
+});
+
+test("media quality with a value asks the player to set it and names the level it chose", async () => {
+  const tab = fake_tab({ 0: {} }, { quality: () => ({ levels, chosen: "1440p" }) });
+  await run_media(tab.deps, ctx, { action: "quality", value: "max" });
+  assert.deepEqual(tab.asked, [{ type: "quality_apply", op: "set", value: "max", times: 1 }]);
+  assert.deepEqual(tab.toasts, ["Quality 1440p"]);
+  const stepped = fake_tab({ 0: {} }, { quality: () => ({ levels, chosen: "720p" }) });
+  await run_media(stepped.deps, ctx, { action: "quality", value: "down", times: 2 });
+  assert.deepEqual(stepped.asked, [{ type: "quality_apply", op: "set", value: "down", times: 2 }]);
+});
+
+test("auto goes through while the player has no levels yet, a level pick refuses", async () => {
+  const tab = fake_tab({ 0: {} }, { quality: () => ({ levels: [], chosen: "auto" }) });
+  await run_media(tab.deps, ctx, { action: "quality", value: "auto" });
+  assert.deepEqual(tab.toasts, ["Quality auto"]);
+  const not_ready = fake_tab({ 0: {} }, { quality: () => ({ levels: [] }) });
+  await assert.rejects(run_media(not_ready.deps, ctx, { action: "quality", value: "max" }), { name: "RuntimeRefusal", message: "The player has no quality levels yet" });
+});
+
+test("a page with no site player refuses quality in words, and so does a privileged page", async () => {
+  const none = fake_tab({ 0: {} });
+  await assert.rejects(run_media(none.deps, ctx, { action: "quality", value: "max" }), { name: "RuntimeRefusal", message: "No quality control on this page" });
+  const refused = fake_tab({ 0: {} });
+  refused.deps.quality = () => Promise.reject(new Error("Missing host permission"));
+  await assert.rejects(run_media(refused.deps, ctx, { action: "quality" }), { message: "No quality control on this page" });
+});
+
+test("a player that never answers refuses at the timeout, not never", async () => {
+  const tab = fake_tab({ 0: {} });
+  tab.deps.quality = () => new Promise(() => {});
+  await assert.rejects(run_media(tab.deps, ctx, { action: "quality" }), { message: "No quality control on this page" });
+});
+
+test("media skip goes next by default and refuses where the player has no skip", async () => {
+  const tab = fake_tab({ 0: {} }, { quality: () => ({ levels: [], skipped: true }) });
+  await run_media(tab.deps, ctx, { action: "skip" });
+  await run_media(tab.deps, ctx, { action: "skip", value: "previous" });
+  assert.deepEqual(tab.asked.map(({ op, value }) => [op, value]), [["skip", "next"], ["skip", "previous"]]);
+  assert.deepEqual(tab.toasts, ["Next video", "Previous video"]);
+  const hls = fake_tab({ 0: {} }, { quality: () => ({ levels: [], skipped: false }) });
+  await assert.rejects(run_media(hls.deps, ctx, { action: "skip", value: "next" }), { message: "No next video" });
+  const none = fake_tab({ 0: {} });
+  await assert.rejects(run_media(none.deps, ctx, { action: "skip", value: "previous" }), { message: "No previous video" });
+});
+
+test("info adds the playing level of the site player, and leaves it out when no player answers", async () => {
+  const frames = { 0: { scan: scan(0, { playing: 1 }), apply: () => acted(1) } };
+  const with_player = fake_tab(frames, { quality: () => ({ levels }) });
+  await run_media(with_player.deps, ctx, { action: "info" });
+  assert.equal(with_player.toasts[0], "1:25 of 3:40, 1.25x, 1080p, volume 60%");
+  const without = fake_tab(frames);
+  await run_media(without.deps, ctx, { action: "info" });
+  assert.equal(without.toasts[0], "1:25 of 3:40, 1.25x, volume 60%");
+});
+
+test("quality and skip need no media element and scan no frame", async () => {
+  const tab = fake_tab({ 0: {} }, { quality: () => ({ levels }) });
+  await run_media(tab.deps, ctx, { action: "quality" });
+  assert.deepEqual(tab.injected, []);
 });

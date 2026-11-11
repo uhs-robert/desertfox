@@ -332,6 +332,8 @@ export type CompleteItemsDeps = typeof browser_complete_items_deps & {
   // The marks of the page at `url` then the global ones, and the quickmarks, as list rows: the key and the text the which-key rows show.
   marks: (url: string | undefined, is_private: boolean) => Promise<RegisterItem[]>;
   quickmarks: (is_private: boolean) => Promise<RegisterItem[]>;
+  // The levels the site player of the line's tab offers now, behind the fixed words.
+  quality_levels: (tab_id: number) => Promise<RegisterItem[]>;
   // Only the quickmarks this window may delete.
   saved_quickmarks: (is_private: boolean) => Promise<RegisterItem[]>;
   // The quickmarks this window opens, key to full address.
@@ -397,7 +399,7 @@ export function create_complete_items(deps: CompleteItemsDeps) {
     };
   };
 
-  const fetch_items = async (kind: "bookmarks" | "engines" | "history" | "open" | "windows" | "sessions" | "registers" | "folders" | "marks" | "quickmarks" | "saved_quickmarks" | "anything", asker: Asker): Promise<CompleteItemsAnswer["items"]> => {
+  const fetch_items = async (kind: "bookmarks" | "engines" | "history" | "open" | "windows" | "sessions" | "registers" | "folders" | "marks" | "quickmarks" | "saved_quickmarks" | "quality_levels" | "anything", asker: Asker): Promise<CompleteItemsAnswer["items"]> => {
     // The set is read once per line. The line is modal over one tab, so the page cannot change under it.
     if (kind === "engines") return engine_items(await deps.search_engines(), await deps.page_of(asker.tab_id));
     if (kind === "open") return open_items(asker);
@@ -407,6 +409,7 @@ export function create_complete_items(deps: CompleteItemsDeps) {
     if (kind === "sessions") return asker.incognito ? [] : deps.sessions();
     if (kind === "registers") return deps.registers(asker.incognito);
     if (kind === "marks") return deps.marks((await deps.page_of(asker.tab_id))?.url, asker.incognito);
+    if (kind === "quality_levels") return deps.quality_levels(asker.tab_id);
     if (kind === "quickmarks") return deps.quickmarks(asker.incognito);
     if (kind === "saved_quickmarks") return deps.saved_quickmarks(asker.incognito);
     if (kind === "folders") return folder_items(await deps.folders());
@@ -455,7 +458,7 @@ export function create_complete_items(deps: CompleteItemsDeps) {
     // Undefined for a sender that is not a tab, for a tab that opened no line and for a tab that closed or navigated
     // while the lookup ran. A failed browser call gives an empty list.
     answer: async (kind: unknown, asker: Asker | undefined): Promise<CompleteItemsAnswer | undefined> => {
-      if ((kind !== "bookmarks" && kind !== "engines" && kind !== "history" && kind !== "open" && kind !== "windows" && kind !== "sessions" && kind !== "registers" && kind !== "folders" && kind !== "marks" && kind !== "quickmarks" && kind !== "saved_quickmarks" && kind !== "anything") || !asker || !(await deps.is_opener(asker.tab_id, asker.frame_id))) return undefined;
+      if ((kind !== "bookmarks" && kind !== "engines" && kind !== "history" && kind !== "open" && kind !== "windows" && kind !== "sessions" && kind !== "registers" && kind !== "folders" && kind !== "marks" && kind !== "quickmarks" && kind !== "saved_quickmarks" && kind !== "quality_levels" && kind !== "anything") || !asker || !(await deps.is_opener(asker.tab_id, asker.frame_id))) return undefined;
       const items = await fetch_items(kind, asker).catch(() => (kind === "open" ? { rows: [], history_max: 0, sites: [] } : kind === "history" ? { rows: [], max: 0 } : kind === "bookmarks" ? { rows: [], folders: [] } : kind === "anything" ? { tab_used: {}, tab_boost: {}, sites: [], quickmarks: [], bookmarks: [], history: [], closed: [], history_max: 0 } : []));
       return (await deps.is_opener(asker.tab_id, asker.frame_id)) ? { items } : undefined;
     },

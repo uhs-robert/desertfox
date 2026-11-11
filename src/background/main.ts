@@ -40,6 +40,7 @@ import { reply_after_hold } from "./hold_on_arrival.ts";
 import { check_play_step } from "../commands/macro.ts";
 import { wire_repeat } from "../commands/command.ts";
 import { wire_tab_insert } from "../commands/mode.ts";
+import { ask_quality_in_tab, quality_reports, quality_rows } from "./quality_levels.ts";
 import { media_reports } from "../commands/media.ts";
 import { create_tab_insert } from "./tab_insert.ts";
 import { DISABLED_STORAGE_KEY, SLOT_TABLE_STORAGE_KEY } from "./storage_keys.ts";
@@ -150,6 +151,7 @@ const complete_items = create_complete_items({
   search_engines: async () => (await get_config()).search_engines,
   page_of,
   marks: async (url, is_private) => (url === undefined ? [] : mark_list_rows(await browser_mark_store.items(url, is_private))),
+  quality_levels: async (tab_id) => quality_rows(await ask_quality_in_tab(tab_id, { type: "quality_apply", op: "list", value: undefined, times: 1 }).catch(() => undefined)),
   quickmarks: async (is_private) => quickmark_list_rows(await browser_quickmark_store.table((await get_config()).quickmarks, is_private)),
   saved_quickmarks: async (is_private) => quickmark_list_rows(await browser_quickmark_store.saved(is_private)),
   quickmark_table: async (is_private) => browser_quickmark_store.table((await get_config()).quickmarks, is_private),
@@ -229,6 +231,7 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
       if (tell_top) void browser.tabs.sendMessage(tab_id, { type: "frame_mode", ...(child_mode === undefined ? {} : { mode: child_mode }) } satisfies FocusedFrameMode, { frameId: 0 }).catch(() => undefined);
     });
   }
+  if (request?.type === "quality_report") return void quality_reports.receive(sender.tab?.id, sender.frameId, request);
   if (request?.type === "media_report") return void media_reports.receive(sender.tab?.id, sender.frameId, request.scan);
   if (request?.type === "replay_end") return macro_replay.ended();
   if (request?.type === "replay_stop") return void macro_replay.stop();

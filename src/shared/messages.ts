@@ -3,6 +3,7 @@
 
 import type { BundleName } from "./bundles.ts";
 import type { MediaScan } from "./media.ts";
+import type { QualityReport } from "./quality.ts";
 import type { CommandMeta, Mode } from "./command.ts";
 import type { WhichKeyBorder } from "./config.ts";
 import type { SettingTag } from "./setting_list.ts";
@@ -111,7 +112,7 @@ export type RecordCmdline = {
 // sender is a tab whose line redeemed a ticket, and it holds only tabs and windows of the sender's own privacy (private or not).
 export type CompleteItems = {
   type: "complete_items";
-  kind: "bookmarks" | "engines" | "history" | "open" | "windows" | "sessions" | "registers" | "folders" | "marks" | "quickmarks" | "saved_quickmarks" | "anything";
+  kind: "bookmarks" | "engines" | "history" | "open" | "windows" | "sessions" | "registers" | "folders" | "marks" | "quickmarks" | "saved_quickmarks" | "quality_levels" | "anything";
 };
 
 // From the command line page when a row key acts on tabs of the list. `tab_ids` were captured at the key press, so a later change of the list does not change them. The answer is undefined unless the sender is a tab whose line
@@ -392,7 +393,7 @@ export type MediaReport = {
   scan: MediaScan;
 };
 
-export type ContentToBackground = MediaReport | RunRequest | ModeChanged | LeaveTabInsert | LoadBundle | ListKeys | IssueCmdlineTicket | OpenCmdline | RecordCmdline | CompleteItems | TabRowsActionRequest | OpenHelp | RecordStep | ReadKeymap | ReplayEnd | ReplayStop | FindScan | ImageAction | InspectPick | ReadHintSelectors | RegisterRequest | MarkRequest;
+export type ContentToBackground = MediaReport | QualityReport | RunRequest | ModeChanged | LeaveTabInsert | LoadBundle | ListKeys | IssueCmdlineTicket | OpenCmdline | RecordCmdline | CompleteItems | TabRowsActionRequest | OpenHelp | RecordStep | ReadKeymap | ReplayEnd | ReplayStop | FindScan | ImageAction | InspectPick | ReadHintSelectors | RegisterRequest | MarkRequest;
 
 // How a command ended. Done is `{ ok: true }`. A handler that returns nothing is done, and one that throws is failed.
 // Cancelled means the user left a waiting step (Escape, an unrelated key, a page change), so the rest of a sequence does not run and nothing is shown.
