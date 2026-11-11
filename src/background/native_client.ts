@@ -68,20 +68,18 @@ export function create_native_client(deps: NativeDeps, watch?: HostWatch) {
     return checked;
   }
 
+  async function read_config(): Promise<ConfigFilesReply> {
+    const reply = await call({ cmd: "read_config" });
+    const files = reply.files;
+    if (typeof files !== "object" || files === null || Object.values(files).some((text) => typeof text !== "string")) {
+      throw new NativeHostError("bad_reply", "The DesertFox native host sent no file list. Reinstall it with :native.install.");
+    }
+    return { config_dir: String(reply.config_dir ?? ""), config_dir_exists: reply.config_dir_exists !== false, files: files as Record<string, string> };
+  }
+
   return {
-    // Raw text of every config file, keyed by path relative to the config folder. The extension's config build parses it.
-    read_config: async (): Promise<ConfigFilesReply> => {
-      const reply = await call({ cmd: "read_config" });
-      const files = reply.files;
-      if (typeof files !== "object" || files === null || Object.values(files).some((text) => typeof text !== "string")) {
-        throw new NativeHostError("bad_reply", "The DesertFox native host sent no file list. Reinstall it with :native.install.");
-      }
-      return { config_dir: String(reply.config_dir ?? ""), config_dir_exists: reply.config_dir_exists !== false, files: files as Record<string, string> };
-    },
-    // One request whose reply carries `release_version`, so the watcher sees the host's version at startup. Sends nothing without the permission.
-    probe: async (): Promise<void> => {
-      await call({ cmd: "read_config" });
-    },
+    // Raw text of every config file, keyed by path relative to the config folder. The extension's config build parses it. Sends nothing without the permission.
+    read_config,
     // Asks the config host to replace itself, the bridge and the command line with release `version`. The hashes come from the signed build.
     self_update: async (request: SelfUpdateRequest): Promise<SelfUpdateReply> => {
       const reply = await call({ cmd: "self_update", ...request }, false);
