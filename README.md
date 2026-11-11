@@ -41,24 +41,24 @@ Power without a manual to memorize, a new browser to learn, or your Firefox add-
 
 Sources: each project's code and shipped add-on, November 2026.
 
-| Feature | DesertFox | Vimium | Tridactyl | qutebrowser |
-| --- | --- | --- | --- | --- |
-| Hints with modifiers | yes | partial | yes | yes |
-| Hint filters | yes | partial | yes | yes |
-| Key popup (which-key) | yes | no | no | yes |
-| Generated help | yes | partial | yes | yes |
-| Command line with completion | yes | partial | yes | yes |
-| Caret mode | yes | partial | no | yes |
-| Visual mode | yes | yes | partial | yes |
-| Page search | yes | yes | yes | yes |
-| Containers | yes | no | yes | no |
-| Config file | yes | no | yes | yes |
-| Works with other Firefox add-ons | yes | yes | yes | no |
-| Script loaded on every page | 15 KB | 254 KB | 1.1 MB | n/a |
+| Feature | DesertFox | Vimium | Vimium C | Tridactyl | qutebrowser |
+| --- | --- | --- | --- | --- | --- |
+| Hints with modifiers | yes | partial | yes | yes | yes |
+| Hint filters | yes | partial | yes | yes | yes |
+| Key popup (which-key) | yes | no | no | no | yes |
+| Generated help | yes | partial | partial | yes | yes |
+| Command line with completion | yes | partial | partial | yes | yes |
+| Caret mode | yes | partial | partial | no | yes |
+| Visual mode | yes | yes | yes | partial | yes |
+| Page search | yes | yes | yes | yes | yes |
+| Containers | yes | no | partial | yes | no |
+| Config file | yes | no | no | yes | yes |
+| Works with other Firefox add-ons | yes | yes | yes | yes | no |
+| Script loaded on every page | 15 KB | 254 KB | 94 KB | 1.1 MB | n/a |
 
 > [!NOTE]
 > The table shows size, not page speed. The sizes are as shipped.
-> DesertFox is minified and the other two are not, and we defer loading hint and caret code to first use.
+> DesertFox and Vimium C are minified, and Vimium and Tridactyl are not. DesertFox defers loading hint and caret code to first use.
 
 ## 📦 Install
 
@@ -80,7 +80,7 @@ The Quick Start page opens on first install and sits in the help sidebar. It tea
 
 - Plain keys never work on pages where Firefox blocks extensions: `about:` pages, the PDF viewer, reader view and addons.mozilla.org.
 - A plain key such as `J` is lost when it lands on a tab that has not started loading. `Alt+j` and `Alt+k` switch tabs at once, but not on pages that cancel keys. Details are in [docs/firefox-behavior.md](docs/firefox-behavior.md).
-- Planned and not built: a native host (a helper program outside Firefox) for optional desktop integration.
+- Reloading the config files needs the native host (a helper program outside Firefox). Desktop integration through the host is planned and not built.
 
 ## 🧭 Docs
 
