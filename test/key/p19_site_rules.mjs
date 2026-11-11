@@ -108,6 +108,8 @@ export async function run_cases({ run_case, open_page, press_keys, wait_event, w
     } finally {
       await send_from_popup({ type: "change_setting", name: "newtab_date", action: "reset" });
       await site_request("rule_live", "enable");
+      // The popup's edits save a whole site_rules list, which would hide the file rows from later pieces on this shard.
+      await send_from_popup({ type: "change_setting", name: "site_rules", action: "reset" });
       await in_background(`(async () => { for (const tab of await browser.tabs.query({})) if (tab.url.endsWith("/popup.html")) await browser.tabs.remove(tab.id); })()`);
     }
   });
@@ -127,6 +129,7 @@ export async function run_cases({ run_case, open_page, press_keys, wait_event, w
       expect((await scroll_delta_by_press("rule_pass_fresh", ["G"])) > 0, "G did not scroll after the off row left");
     } finally {
       await site_request("rule_pass_live", "enable");
+      await send_from_popup({ type: "change_setting", name: "site_rules", action: "reset" });
       await in_background(`(async () => { for (const tab of await browser.tabs.query({})) if (tab.url.endsWith("/popup.html")) await browser.tabs.remove(tab.id); })()`);
     }
   });

@@ -140,7 +140,6 @@ function cancel(event: Event): void {
 function on_keydown(event: KeyboardEvent): void {
   if (!extension_context_alive()) return stop_listening();
   if (!event.isTrusted || event.isComposing) return;
-  load_blur_ends_ms = -1;
   const token = event_to_token(event);
   if (token === null) return;
   // Before the key is decided, so the first key of an edit that began with no key goes to the field. The keyup call shows a change this key made itself.
@@ -181,7 +180,7 @@ function extension_context_alive(): boolean {
 const page_listeners = new AbortController();
 
 // Listens until `stop_listening`. Capture is the default because the key and focus listeners must run before the page's own.
-const listen = (target: EventTarget, type: string, handler: (event: never) => void, capture = true) =>
+const listen = (type: string, handler: (event: never) => void, capture = true, target: EventTarget = window) =>
   target.addEventListener(type, handler as EventListener, { capture, signal: page_listeners.signal });
 
 function stop_listening(): void {
@@ -205,8 +204,8 @@ function follow_focus(entered: boolean, event: Event): void {
 function watch_roots_around_focus(): void {
   let element = document.activeElement;
   for (let root = element && shadow_root_of(element); root; root = element && shadow_root_of(element)) {
-    listen(root, "focusin", on_focusin);
-    listen(root, "focusout", on_focusout);
+    listen("focusin", on_focusin, true, root);
+    listen("focusout", on_focusout, true, root);
     element = root.activeElement;
   }
 }
@@ -228,11 +227,11 @@ function follow_field_change(): void {
   field_at_last_key = field;
 }
 
-// `blur_on_load`: 0 until the first install opens the window of about 1 s, -1 once trusted input came, else the time the window ends.
-// Trusted input before the install keeps the window shut, so a field the user chose during the load keeps the focus.
+// `blur_on_load`: the time the window of about 1 s ends, opened at the first install.
+// A key or click gives the page user activation, which ends the window. It also counts input from before this script started, as in a frame from another site that starts on its first focus.
 let load_blur_ends_ms = 0;
-const blur_load_focus = (target: EventTarget | null) => Date.now() < load_blur_ends_ms && is_editable_element(target) && ((target as HTMLElement).blur(), 1);
-const end_load_blur = (event: Event) => event.isTrusted && (load_blur_ends_ms = -1);
+// True when it blurred. `blur()` returns undefined, so `!` of it is true: the shortest form for the byte cap.
+const blur_load_focus = (target: EventTarget | null) => Date.now() < load_blur_ends_ms && !navigator.userActivation.isActive && is_editable_element(target) && !((target as HTMLElement).blur() as unknown);
 
 let matcher_installed = false;
 // Whether the last install matched an all-off rule. An install enters ignore mode only on the change into all-off, so a manual `,i` or `<S-Escape>` survives an unrelated edit.
@@ -249,7 +248,7 @@ function install_matcher(reply: PageKeymap | undefined): void {
   const first_install = !matcher_installed;
   matcher_installed = true;
   // A field the page focused before the reply came already put the frame in insert mode, and the blur's focusout takes it back.
-  if (first_install && reply?.site_values?.blur_on_load && !load_blur_ends_ms) {
+  if (first_install && reply?.site_values?.blur_on_load) {
     load_blur_ends_ms = Date.now() + 1e3;
     blur_load_focus(deepest_focused_element());
   }
@@ -282,16 +281,15 @@ function read_page_keymap(): Promise<PageKeymap | undefined> {
 
 function start(): void {
   (window as unknown as { desertfox_host: BundleHostApi }).desertfox_host = bundles.api;
-  listen(window, "pointerdown", end_load_blur);
-  listen(window, "keydown", on_keydown);
-  listen(window, "keypress", on_keypress);
-  listen(window, "keyup", on_keyup);
-  listen(window, "beforeinput", on_beforeinput);
-  listen(window, "focusin", on_focusin);
-  listen(window, "focusout", on_focusout);
+  listen("keydown", on_keydown);
+  listen("keypress", on_keypress);
+  listen("keyup", on_keyup);
+  listen("beforeinput", on_beforeinput);
+  listen("focusin", on_focusin);
+  listen("focusout", on_focusout);
   watch_roots_around_focus();
-  listen(window, "pagehide", bundles.page_hidden_, false);
-  listen(document, "visibilitychange", on_visibility_change, false);
+  listen("pagehide", bundles.page_hidden_, false);
+  listen("visibilitychange", on_visibility_change, false, document);
 
   // Every report says whether this frame holds the focus, so a focus event the frame missed heals on its next report.
   // A hidden input frame in normal mode then hands the focus to its parent. Every change into normal mode passes here, and so does a frame that gains the focus while in normal mode.
@@ -310,10 +308,10 @@ function start(): void {
   // Not in capture: focus does not bubble, so only the window's own focus reaches this listener, and not that of the elements inside it.
   // Showing a tab fires focus on the top window too while a child frame holds the focus, so the report reads who holds it and does not assume this frame does.
   // No report on blur: the frame that takes the focus reports it, and a top window gets a focus event when its focused child frame is removed.
-  listen(window, "focus", report_mode, false);
+  listen("focus", report_mode, false);
 
   // A page shown from the back-forward cache runs no start-up, and the background's mode for the tab is stale. The report after a first load is spare, and heals a start report the background lost.
-  listen(window, "pageshow", report_mode, false);
+  listen("pageshow", report_mode, false);
 
   page_mode.listen_display_(refresh_mode_indicator);
 
@@ -327,6 +325,8 @@ function start(): void {
       return Promise.resolve(true);
     }
     if (message.type === "run_in_content") {
+      // A command's own focus, such as `gi` in a macro replay right after the load, is no page focus.
+      load_blur_ends_ms = 0;
       // The router already applied the count, so each invocation runs once. The router shows a failure.
       return run_in_order(message.invocations, message.repeat);
     } else if (message.type === "replay_hold") {
