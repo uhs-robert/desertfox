@@ -137,10 +137,14 @@ const parses_as_selector = (selector: string): boolean => {
   }
 };
 
+// Past this, hints start with no site selectors, so a background that never answers cannot keep the keys held.
+const SITE_SELECTORS_WAIT_MS = 2000;
+
 // Asked at every `hint.run`, so a settings edit or a new address applies from the next run on. A rapid session keeps what its run read.
 // A selector that does not parse drops out with one notice for the run, and the rest still apply.
 async function read_site_selectors(show_toast: (message: string) => void): Promise<SiteSelectors> {
-  const reply = (await browser.runtime.sendMessage({ type: "read_hint_selectors" }).catch(() => undefined)) as { hint_add?: string[]; hint_remove?: string[] } | undefined;
+  const asked = browser.runtime.sendMessage({ type: "read_hint_selectors" }).catch(() => undefined);
+  const reply = (await Promise.race([asked, new Promise((resolve) => setTimeout(resolve, SITE_SELECTORS_WAIT_MS))])) as { hint_add?: string[]; hint_remove?: string[] } | undefined;
   const bad: string[] = [];
   const parsed = (selectors: string[] | undefined) => (selectors ?? []).filter((selector) => parses_as_selector(selector) || (bad.push(selector), false));
   const site_selectors = { add: parsed(reply?.hint_add), remove: parsed(reply?.hint_remove) };
@@ -423,8 +427,8 @@ function register(host: BundleHostApi): void {
   host.register_handler_("hint.run", (args): Promise<Outcome> => {
     end_session();
     const started = start_hints(args);
-    // Keys typed while the background answers wait, so they reach hint mode and not normal mode.
-    host.hold_keys_until_(started.then(() => []));
+    // Keys typed while the background answers wait, so they reach hint mode and not normal mode. A page hidden before the answer ends the hold, as the answer is then lost.
+    host.hold_keys_until_(started.then(() => []), true);
     return started.then((outcome) => ("picked" in outcome ? outcome.picked : outcome));
   });
 }

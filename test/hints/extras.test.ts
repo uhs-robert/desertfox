@@ -111,7 +111,7 @@ async function page_with(texts: string[], settings: Record<string, unknown> = {}
   let holds = 0;
   // Keys and Escapes that arrived during a hold, in order.
   const held_input: (string | (() => void))[] = [];
-  let hint_selectors: Record<string, unknown> = {};
+  let hint_selectors: Record<string, unknown> | (() => Promise<unknown>) = {};
   let selector_asks = 0;
   const toasts: string[] = [];
   const set_mode = (next: string) => win.desertfox_host.set_mode_(next);
@@ -222,7 +222,7 @@ async function page_with(texts: string[], settings: Record<string, unknown> = {}
   };
   globals.browser = { storage: { local: { get: async () => ({ desertfox_config_status: { settings } }) }, onChanged: { addListener: () => {} } }, runtime: { sendMessage: async (message: unknown) => {
     if ((message as { type?: string }).type === "register_yank") return void yanked.push(message), { ok: true };
-    if ((message as { type?: string }).type === "read_hint_selectors") return selector_asks++, hint_selectors;
+    if ((message as { type?: string }).type === "read_hint_selectors") return selector_asks++, typeof hint_selectors === "function" ? hint_selectors() : hint_selectors;
     const is_record = (message as { type?: string }).type === "record_step";
     (is_record ? repeat_records : sent).push(message);
     return is_record ? undefined : sends_held?.();
@@ -263,7 +263,8 @@ async function page_with(texts: string[], settings: Record<string, unknown> = {}
     type: (token: string) => (holds > 0 ? (held_input.push(token), "handled") : sink!.on_token_(token)),
     escape: () => (holds > 0 ? void held_input.push(() => set_mode("normal")) : set_mode("normal")),
     // What the background answers to `read_hint_selectors`.
-    set_hint_selectors: (selectors: Record<string, unknown>) => void (hint_selectors = selectors),
+    // An object answers at once. A function gives the answer as a promise, so a test can reject it or leave it pending.
+    set_hint_selectors: (selectors: Record<string, unknown> | (() => Promise<unknown>)) => void (hint_selectors = selectors),
     selector_asks: () => selector_asks,
     toasts,
     // The focus event of a field that takes focus.
@@ -1140,5 +1141,39 @@ test("a hint selector that does not parse is skipped with one notice, and the ot
   await settle();
   assert.equal(page.labels().length, 2);
   assert.deepEqual(page.toasts, ["Skipped hint selectors that do not parse: a[, div["]);
+  page.escape();
+});
+
+test("a second hint.run while the first waits for its selectors cancels the first, and one set of labels shows", async () => {
+  const page = await page_with(["one", "two"]);
+  const first = page.run({ action: "background" });
+  const second = page.run({ action: "background" });
+  assert.deepEqual(await first, { ok: true, cancelled: true });
+  await settle();
+  assert.equal(page.labels().length, 2);
+  assert.equal(await peek(second), undefined);
+  page.escape();
+  assert.deepEqual(await second, { ok: true, cancelled: true });
+});
+
+test("hints start with no site selectors when the ask fails", async () => {
+  const page = await page_with(["one", "two"]);
+  page.set_hint_selectors(() => Promise.reject(new Error("no background")));
+  page.run({ filter: "links" });
+  await settle();
+  assert.equal(page.labels().length, 2);
+  page.escape();
+});
+
+test("hints start with no site selectors when the background never answers, and keys typed meanwhile reach hint mode", async () => {
+  const page = await page_with(["one", "two"]);
+  page.set_hint_selectors(() => new Promise(() => {}));
+  page.run({ filter: "links" });
+  page.type("j");
+  await new Promise((resolve) => setTimeout(resolve, 2100));
+  await settle();
+  assert.equal(page.mode(), "hint");
+  assert.equal(page.labels().length, 2);
+  assert.deepEqual(page.held_key_batches, []);
   page.escape();
 });
