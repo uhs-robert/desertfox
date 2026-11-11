@@ -103,7 +103,7 @@ test("a failed open fetch caches no rows", async () => {
   live.read("open");
   asks[0]!.fail();
   await settle();
-  assert.deepEqual(live.read("open"), { loading: false, items: { rows: [], history_max: 0 } });
+  assert.deepEqual(live.read("open"), { loading: false, items: { rows: [], history_max: 0, sites: [] } });
 });
 
 test("the tabs are read from the model, not asked for, and read as loading until its snapshot", () => {
