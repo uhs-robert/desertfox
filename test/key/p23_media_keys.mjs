@@ -151,7 +151,7 @@ export async function run_cases({ run_case, setup, open_page, press_keys, wait_e
   });
 
   // The page's own fullscreenchange report is the proof that a key press through the background round trip still counts as the user gesture.
-  await run_case("af fullscreens the player box with its overlay, and a second af leaves", async () => {
+  await run_case("af fullscreens the player box with its overlay, and F in the media mode it starts leaves", async () => {
     await open_page("media", "p23_full", { new_tab: true });
     const on_page = (type) => (event) => event.page_id === "p23_full" && event.type === type;
     let mark = events.length;
@@ -159,12 +159,13 @@ export async function run_cases({ run_case, setup, open_page, press_keys, wait_e
     const entered = await wait_event(mark, on_page("media_fullscreen"), "fullscreen to start");
     expect(entered.element === "player", `the fullscreen element is "${entered.element}"`);
     mark = events.length;
-    await press_keys("a", "f");
+    // The fullscreen started the media mode, where F toggles it and a is a plain key.
+    await press_keys("F");
     const left = await wait_event(mark, on_page("media_fullscreen"), "fullscreen to end");
     expect(left.element === "", `the fullscreen element is "${left.element}"`);
   });
 
-  await run_case("af on a video in a frame fullscreens it, and a second af leaves although the top page is fullscreen too", async () => {
+  await run_case("af on a video in a frame fullscreens it, and F leaves although the top page is fullscreen too", async () => {
     await open_page("media_host", "p23_host", { new_tab: true });
     const on_frame = (event) => event.page_id === "p23_host_inner" && event.type === "media_fullscreen";
     let mark = events.length;
@@ -172,7 +173,7 @@ export async function run_cases({ run_case, setup, open_page, press_keys, wait_e
     const entered = await wait_event(mark, on_frame, "fullscreen to start in the frame");
     expect(entered.element === "player", `the fullscreen element is "${entered.element}"`);
     mark = events.length;
-    await press_keys("a", "f");
+    await press_keys("F");
     const left = await wait_event(mark, on_frame, "fullscreen to end in the frame");
     expect(left.element === "", `the fullscreen element is "${left.element}"`);
   });
