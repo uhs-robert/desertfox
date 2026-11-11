@@ -153,6 +153,7 @@ define("page.send_key", {
   ],
   bridge: false,
   runs_in: "content",
+  modes: ["normal", "insert"],
   // The handler sends the repeats itself, so a quick second key cannot land between them.
   count: { param: "times" },
   bundle: "site_actions",

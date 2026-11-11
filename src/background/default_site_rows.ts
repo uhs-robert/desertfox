@@ -6,6 +6,7 @@ import type { BindingTable } from "../shared/settings_table.ts";
 
 export type DefaultSiteRow = { name: (typeof DEFAULT_SITE_ROW_NAMES)[number]; row: SiteRuleRow };
 
+// Sheets cancels a cell edit on Escape, so `escape_to_page` lets its own handler see the key.
 // Sheets reads the key code of a keydown and ignores the rest, so hjkl send the arrow keys to its grid editor.
 const SHEETS_TARGET = "#waffle-rich-text-editor";
 const arrow = (key: string, key_code: number, ctrl = false): BindingTable[string] => ({ id: "page.send_key", args: { key, key_code, target: SHEETS_TARGET, ...(ctrl ? { ctrl } : {}) } });
@@ -26,8 +27,8 @@ const SHEETS_PASS = "<C-a> <C-x>";
 
 // The second pattern is the address form of a Google Workspace domain.
 export const DEFAULT_SITE_ROWS: readonly DefaultSiteRow[] = [
-  { name: "sheets", row: { site: "https://docs.google.com/spreadsheets/*", bind: SHEETS_BIND, pass: SHEETS_PASS } },
-  { name: "sheets", row: { site: "https://docs.google.com/a/*/spreadsheets/*", bind: SHEETS_BIND, pass: SHEETS_PASS } },
+  { name: "sheets", row: { site: "https://docs.google.com/spreadsheets/*", bind: SHEETS_BIND, pass: SHEETS_PASS, escape_to_page: true } },
+  { name: "sheets", row: { site: "https://docs.google.com/a/*/spreadsheets/*", bind: SHEETS_BIND, pass: SHEETS_PASS, escape_to_page: true } },
 ];
 
 export const default_rows_left_on = (rows: readonly DefaultSiteRow[], off_names: readonly string[]): SiteRuleRow[] => rows.filter(({ name }) => !off_names.includes(name)).map(({ row }) => row);

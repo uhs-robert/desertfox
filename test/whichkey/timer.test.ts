@@ -46,6 +46,7 @@ function make_page(delay_ms: number | undefined) {
     get_mode_: state.get_mode_,
     take_pass_next_: state.take_pass_next_,
     in_editable_field_: () => false,
+    escape_to_page_: () => false,
     is_loading_: () => false,
     loading_sink_bundles_: () => [],
     sink_of_: () => undefined,

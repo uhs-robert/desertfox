@@ -24,7 +24,7 @@ A note "(prompts)" means the binding sets a `prompt` for a param, so the command
 
 <!-- BEGIN generated -->
 
-bound: 357 (normal 203, hint 7, cmdline 19, caret 35, visual 43, visual_line 44, insert 2, ignore 1, browser 3) | later: 3 | dropped: 5
+bound: 358 (normal 203, hint 7, cmdline 19, caret 35, visual 43, visual_line 44, insert 3, ignore 1, browser 3) | later: 3 | dropped: 5
 
 ### normal
 
@@ -450,6 +450,7 @@ Which-key group names:
 | --- | --- | --- | --- | --- |
 | `<Escape>` | bound | `mode.escape` | Escape |  |
 | `<C-r>` | bound | `register.paste` | Paste register |  |
+| `<A-Escape>` | bound | `page.send_key --key=Escape --key_code=27` | Send Escape to the page |  |
 
 ### ignore
 

@@ -36,6 +36,8 @@ export type KeyFlowDeps = {
   run_leaf_: (leaf: TreeLeaf, count: number | undefined, repeat: boolean) => void;
   leave_insert_: () => void;
   in_editable_field_: () => boolean;
+  // True when the site row lets the page keep Escape while a field is focused.
+  escape_to_page_: () => boolean | undefined;
   // A bundle is loading or the command line is handing focus back, and the mode the keys replay in is not known yet.
   // `taking` is true for a key just typed, false for a held key about to replay.
   is_loading_: (taking?: boolean) => boolean;
@@ -134,6 +136,8 @@ export function create_key_flow(deps: KeyFlowDeps) {
     const mode = deps.get_mode_();
     // With no field focused, insert mode is only a pass-through: the other insert keys (`<C-r>`) are the browser's.
     if (mode === "insert" && token !== "<Escape>" && !deps.in_editable_field_()) return "pass";
+    // The page ends its own edit on this Escape. The mode follows the field when the page drops it.
+    if (mode === "insert" && token === "<Escape>" && deps.escape_to_page_() && deps.in_editable_field_()) return "pass";
     const was_in_progress = sequence_in_progress;
     // Backspace drops the last key of a half-typed sequence. The matcher cannot step back, so the shorter prefix is typed again.
     if (was_in_progress && token === "<Backspace>") {

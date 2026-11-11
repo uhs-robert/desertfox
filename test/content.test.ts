@@ -31,11 +31,12 @@ const keymap: CompiledKeymap = {
   },
 };
 
-function make_flow(in_field = false) {
+function make_flow(in_field = false, escape_to_page = false) {
   const state = create_mode_state();
   const ran: string[] = [];
   const flow = create_key_flow({
     in_editable_field_: () => in_field,
+    escape_to_page_: () => escape_to_page,
     get_mode_: state.get_mode_,
     take_pass_next_: state.take_pass_next_,
     run_leaf_: (matched, count, repeat) => ran.push(`${matched.steps[0]?.invocation.id}${count ?? ""}${repeat ? "!" : ""}`),
@@ -197,6 +198,32 @@ test("key flow in insert mode leaves on Escape and passes letters", () => {
   state.set_mode_("insert");
   assert.equal(flow.handle_token_("j"), "pass");
   assert.equal(flow.handle_token_("<Escape>"), "pass");
+  assert.equal(state.get_mode_(), "normal");
+});
+
+test("with escape_to_page, Escape in a field passes to the page and insert mode stays", () => {
+  const { state, flow } = make_flow(true, true);
+  flow.set_matcher_(create_matcher(keymap));
+  state.focus_entered_editable_();
+  assert.equal(flow.handle_token_("<Escape>"), "pass");
+  assert.equal(state.get_mode_(), "insert");
+  state.focus_left_editable_();
+  assert.equal(state.get_mode_(), "normal");
+});
+
+test("with escape_to_page, Escape in a manual insert with no field still leaves", () => {
+  const { state, flow } = make_flow(false, true);
+  flow.set_matcher_(create_matcher(keymap));
+  state.set_mode_("insert");
+  assert.equal(flow.handle_token_("<Escape>"), "pass");
+  assert.equal(state.get_mode_(), "normal");
+});
+
+test("without escape_to_page, Escape in a field leaves insert mode", () => {
+  const { state, flow } = make_flow(true, false);
+  flow.set_matcher_(create_matcher(keymap));
+  state.focus_entered_editable_();
+  flow.handle_token_("<Escape>");
   assert.equal(state.get_mode_(), "normal");
 });
 

@@ -70,6 +70,8 @@ const follow_prefix = create_which_key_timer(
 // While a macro records, a leaf starts after the one before it has ended and sent its step, so a stop key cannot overtake a step still running. A hint pick waits on the user and sends its step when it begins, so the next leaf, which may be the Escape that ends the pick, never waits for it. A replay can wait on a pick too, and its own hold keeps a later stop key behind it.
 let last_leaf: Promise<unknown> = Promise.resolve();
 
+let escape_to_page: boolean | undefined;
+
 const key_flow = create_key_flow({
   on_prefix_: follow_prefix,
   get_mode_: page_mode.get_mode_,
@@ -87,6 +89,7 @@ const key_flow = create_key_flow({
     blur_focused_element();
   },
   in_editable_field_: () => is_editable_element(deepest_focused_element()),
+  escape_to_page_: () => escape_to_page,
   is_loading_: bundles.is_loading_,
   loading_sink_bundles_: bundles.loading_sink_bundles_,
   sink_of_: bundles.sink_of_,
@@ -245,6 +248,7 @@ function install_matcher(reply: PageKeymap | undefined): void {
   mode_indicator = keymap?.mode_indicator ?? DEFAULT_MODE_INDICATOR;
   which_key_delay_ms = keymap?.which_key_delay_ms;
   recording = reply?.recording;
+  escape_to_page = reply?.site_values?.escape_to_page;
   // The mode comes first, so keys held during the load replay in the right mode.
   const first_install = !matcher_installed;
   matcher_installed = true;

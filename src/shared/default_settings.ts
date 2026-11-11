@@ -10,6 +10,7 @@ export const DEFAULT_HINT_KEY_LINE: Settings["hint_key_line"] = true;
 export const DEFAULT_HINT_ADD: Settings["hint_add"] = [];
 export const DEFAULT_HINT_REMOVE: Settings["hint_remove"] = [];
 export const DEFAULT_BLUR_ON_LOAD: Settings["blur_on_load"] = false;
+export const DEFAULT_ESCAPE_TO_PAGE: Settings["escape_to_page"] = false;
 export const DEFAULT_SITE_RULES: Settings["site_rules"] = [];
 export const DEFAULT_DEFAULT_SITE_ROWS_OFF: Settings["default_site_rows_off"] = [];
 export const DEFAULT_NEXT_PATTERNS: Settings["next_patterns"] = ["next","more","newer",">","›","→","»","≫",">>"];
@@ -48,6 +49,7 @@ export const DEFAULT_SETTINGS: Settings = {
   hint_add: DEFAULT_HINT_ADD,
   hint_remove: DEFAULT_HINT_REMOVE,
   blur_on_load: DEFAULT_BLUR_ON_LOAD,
+  escape_to_page: DEFAULT_ESCAPE_TO_PAGE,
   site_rules: DEFAULT_SITE_RULES,
   default_site_rows_off: DEFAULT_DEFAULT_SITE_ROWS_OFF,
   next_patterns: DEFAULT_NEXT_PATTERNS,
