@@ -37,6 +37,7 @@ define("history.open", {
   label: "Open history entry",
   intent: "Open a history entry chosen by title or address.",
   params: [{ name: "entry", type: "string", rest: true, main: true, values: { from: "history" } }, WHERE_PARAM],
+  bridge: false,
   runs_in: "background",
   run: (ctx, args) => handlers.open(ctx, args as { entry: string; where: Where }),
 });

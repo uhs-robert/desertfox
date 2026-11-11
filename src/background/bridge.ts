@@ -1,8 +1,9 @@
-// Publishes the mode to the bridge host over one `connectNative` port, so a desktop shell can draw it.
-// The wire format is the hand-off contract with the host: one verb, `mode`. The in-page badge stays on whatever the port does.
+// Talks to the bridge host over one `connectNative` port. It publishes the mode so a desktop shell can draw it, and it answers the host's
+// `run` and `list` requests. The wire format is the hand-off contract with the host. The in-page badge stays on whatever the port does.
 // A private window sends its mode and `private: true` and nothing else, so no id of it reaches the host.
 
-import type { Mode } from "../shared/command.ts";
+import type { CommandMeta, Mode } from "../shared/command.ts";
+import type { BridgeAnswer } from "./bridge_run.ts";
 import { mode_label } from "../content/ui/mode_label.ts";
 
 export const BRIDGE_HOST_NAME = "desertfox_bridge";
@@ -28,7 +29,13 @@ export type BridgeDeps = {
   // Runs `run` once after `delay_ms` and returns a cancel function.
   after: (run: () => void, delay_ms: number) => () => void;
   now_ms: () => number;
+  // The two things the host may ask for. Both check their own rules and answer with a refusal text, so a throw here is a bug.
+  run_command: (command_text: string) => Promise<BridgeAnswer>;
+  list_commands: () => CommandMeta[];
 };
+
+// A request over this is refused before it is parsed.
+export const MAX_COMMAND_CHARS = 4096;
 
 export const FIRST_RETRY_MS = 1000;
 export const MAX_RETRY_MS = 60_000;
@@ -54,12 +61,38 @@ export function create_bridge(deps: BridgeDeps) {
   };
 
   function send(message: object): void {
-    if (!port || !ready) return;
+    if (port) send_on(port, message);
+  }
+
+  // A reply goes back on the port that asked. After a reconnect the new host numbers requests from 1 again, so an old answer must not reach it.
+  function send_on(which: BridgePort, message: object): void {
+    if (which !== port || !ready) return;
     try {
-      port.postMessage(message);
+      which.postMessage(message);
     } catch {
-      dropped(port);
+      dropped(which);
     }
+  }
+
+  async function answer_of(request: { verb: "run"; command: string } | { verb: "list" }): Promise<object> {
+    try {
+      if (request.verb === "list") return { ok: true, commands: deps.list_commands() };
+      if (request.command.length > MAX_COMMAND_CHARS) return { ok: false, message: "the command text is too long" };
+      return await deps.run_command(request.command);
+    } catch {
+      // Fixed text: an unexpected throw can carry a tab title from a browser call.
+      return { ok: false, message: "the command failed" };
+    }
+  }
+
+  // The host sends only these two verbs. Anything else is dropped, and a request without an integer id has nobody to answer.
+  function request_from_host(which: BridgePort, message: unknown): void {
+    const request = message as { verb?: unknown; request_id?: unknown; command?: unknown } | null;
+    if (typeof request !== "object" || request === null || !Number.isInteger(request.request_id)) return;
+    const request_id = request.request_id as number;
+    const asked = request.verb === "list" ? ({ verb: "list" } as const) : request.verb === "run" && typeof request.command === "string" ? ({ verb: "run", command: request.command } as const) : undefined;
+    if (!asked) return;
+    void answer_of(asked).then((answer) => send_on(which, { verb: "reply", request_id, ...answer }));
   }
 
   async function snapshot_of(window: BridgeWindow | undefined): Promise<Snapshot | undefined> {
@@ -130,8 +163,13 @@ export function create_bridge(deps: BridgeDeps) {
       return schedule_retry();
     }
     port = opened;
-    opened.onMessage.addListener(() => {
-      if (opened === port && !ready) became_ready();
+    opened.onMessage.addListener((message) => {
+      if (opened !== port) return;
+      if (!ready) {
+        if ((message as { ready?: unknown } | null)?.ready === true) became_ready();
+        return;
+      }
+      request_from_host(opened, message);
     });
     opened.onDisconnect.addListener(() => dropped(opened));
   }

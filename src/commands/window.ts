@@ -94,6 +94,7 @@ define("window.new", {
     { name: "url", type: "string", main: true, optional: true },
     { name: "private", type: "bool", default: false, short: "p", description: "Open a private window." },
   ],
+  bridge: false,
   runs_in: "background",
   run: async (_ctx, args) => {
     const { url, private: private_window } = args as { url: string; private: boolean };
@@ -104,6 +105,7 @@ define("window.new", {
 define("window.close", {
   label: "Close window",
   intent: "Close the current window with all its tabs.",
+  bridge: false,
   runs_in: "background",
   run: (ctx) => handlers.close(ctx),
 });
@@ -111,6 +113,7 @@ define("window.close", {
 define("window.undo_close", {
   label: "Reopen closed window",
   intent: "Reopen the last closed window. A count prefix restores that many.",
+  bridge: false,
   runs_in: "background",
   count: "repeat",
   run: () => handlers.undo_close(),
@@ -120,6 +123,7 @@ define("tab.attach", {
   label: "Attach tab to window",
   intent: "Move the current tab to another window of the same privacy. Without a window it goes to the one used last.",
   params: [{ name: "window", type: "string", rest: true, main: true, optional: true, values: { from: "windows" }, pattern: "^\\s*\\d+(\\s|$)" }],
+  bridge: false,
   runs_in: "background",
   run: (ctx, args) => handlers.attach(ctx, args as { window: string }),
 });

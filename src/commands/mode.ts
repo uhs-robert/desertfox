@@ -16,6 +16,7 @@ define("mode.set", {
       value_labels: Object.fromEntries(SETTABLE_MODES.map((mode) => [mode, `to ${mode_in_words(mode)}`])),
     },
   ],
+  bridge: true,
   runs_in: "content",
   repeatable: false,
   modes: ["normal", "insert", "ignore", "caret", "visual", "visual_line"],
@@ -28,6 +29,7 @@ export const wire_tab_insert = (enter: (tab_id: number) => Promise<void>) => voi
 define("mode.insert", {
   label: "Insert mode",
   intent: "Give every key to the page in all frames. No field is needed. Escape leaves it. A frame under an all-off site rule stays in ignore mode.",
+  bridge: true,
   runs_in: "background",
   repeatable: false,
   modes: ["normal", "caret", "visual", "visual_line"],
@@ -38,6 +40,7 @@ define("mode.escape", {
   completion: "hidden",
   label: "Escape",
   intent: "Return to normal mode. It works from insert, hint, command line, caret and both visual modes, and drops the focus from the field.",
+  bridge: true,
   runs_in: "content",
   repeatable: false,
   modes: ["normal", "insert", "hint", "cmdline", "caret", "visual", "visual_line"],
@@ -47,6 +50,7 @@ define("mode.pass_next", {
   completion: "hidden",
   label: "Pass next key",
   intent: "Give the next key to the page instead of DesertFox.",
+  bridge: false,
   runs_in: "content",
   repeatable: false,
 });
@@ -56,6 +60,7 @@ define("page.focus_input", {
   completion: "hidden",
   label: "Focus input",
   intent: "Focus the first text field on the page. It takes the first visible field and prefers one in view.",
+  bridge: false,
   runs_in: "content",
   bundle: "page",
 });
@@ -64,5 +69,6 @@ define("page.blur", {
   completion: "hidden",
   label: "Blur",
   intent: "Drop the focus from the focused element.",
+  bridge: false,
   runs_in: "content",
 });

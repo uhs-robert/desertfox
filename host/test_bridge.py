@@ -43,6 +43,14 @@ class Host:
         (length,) = struct.unpack("=I", self.process.stdout.read(4))
         return json.loads(self.process.stdout.read(length))
 
+    def read_request(self, timeout=5):
+        """The next frame the host sends to the extension after ready: a run or list request."""
+        waiting, _, _ = select.select([self.process.stdout], [], [], timeout)
+        if not waiting:
+            raise AssertionError("the host sent no request within %s s" % timeout)
+        (length,) = struct.unpack("=I", self.process.stdout.read(4))
+        return json.loads(self.process.stdout.read(length))
+
     def send(self, message):
         self.process.stdin.write(frame(message))
         self.process.stdin.flush()
@@ -385,7 +393,7 @@ class SocketTest(BridgeTestCase):
 
     def test_other_verbs_and_bad_requests_are_refused_and_the_host_lives(self):
         host = self.start()
-        for verb in ("run", "list", "tabs", "activate", "whichkey_show", "shell", None, 5):
+        for verb in ("tabs", "activate", "whichkey_show", "shell", "eval", None, 5):
             self.assertEqual(self.ask({"verb": verb, "command": "touch /tmp/x"}), {"ok": False, "message": "unknown verb"})
         self.assertEqual(self.ask([1, 2]), {"ok": False, "message": "unknown verb"})
         self.assertEqual(self.ask(None, raw=b"not json\n"), {"ok": False, "message": "not JSON"})
@@ -440,6 +448,247 @@ class SocketTest(BridgeTestCase):
                 time.sleep(0.05)
 
 
+class Client:
+    """A socket client that sends one request line and reads its reply on its own thread, so many can wait at once."""
+
+    def __init__(self, socket_path, request):
+        self.connection = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        self.connection.settimeout(15)
+        self.connection.connect(socket_path)
+        self.reply = None
+        self.thread = threading.Thread(target=self.exchange, args=(request,), daemon=True)
+        self.thread.start()
+
+    def exchange(self, request):
+        try:
+            self.connection.sendall(json.dumps(request).encode() + b"\n")
+            data = b""
+            while not data.endswith(b"\n"):
+                chunk = self.connection.recv(4096)
+                if not chunk:
+                    break
+                data += chunk
+            self.reply = json.loads(data) if data else None
+        except OSError:
+            pass
+
+    def result(self):
+        self.thread.join(15)
+        self.connection.close()
+        return self.reply
+
+
+class RunAndListTest(BridgeTestCase):
+    def test_run_goes_to_the_extension_and_the_reply_comes_back(self):
+        host = self.start()
+        client = Client(self.socket_path, {"verb": "run", "command": "tab.next"})
+        request = host.read_request()
+        self.assertEqual(request, {"verb": "run", "request_id": request["request_id"], "command": "tab.next"})
+        host.send({"verb": "reply", "request_id": request["request_id"], "ok": True})
+        self.assertEqual(client.result(), {"ok": True})
+
+    def test_a_refusal_keeps_its_message(self):
+        host = self.start()
+        client = Client(self.socket_path, {"verb": "run", "command": "config.reload"})
+        host.send({"verb": "reply", "request_id": host.read_request()["request_id"], "ok": False, "message": "config.reload never runs through the bridge"})
+        self.assertEqual(client.result(), {"ok": False, "message": "config.reload never runs through the bridge"})
+
+    def test_a_run_reply_carries_no_page_data(self):
+        host = self.start()
+        client = Client(self.socket_path, {"verb": "run", "command": "tab.next"})
+        host.send({"verb": "reply", "request_id": host.read_request()["request_id"], "ok": True, "message": "m" * 2000, "text": "page text", "url": "https://x", "commands": [1]})
+        reply = client.result()
+        self.assertEqual(set(reply), {"ok", "message"})
+        self.assertEqual(len(reply["message"]), 500)
+
+    def test_list_returns_the_commands(self):
+        host = self.start()
+        client = Client(self.socket_path, {"verb": "list"})
+        request = host.read_request()
+        self.assertEqual(request, {"verb": "list", "request_id": request["request_id"]})
+        commands = [{"id": "tab.next", "label": "Next tab", "params": []}]
+        host.send({"verb": "reply", "request_id": request["request_id"], "ok": True, "commands": commands})
+        self.assertEqual(client.result(), {"ok": True, "commands": commands})
+
+    def test_a_run_without_a_command_is_refused_and_never_reaches_the_extension(self):
+        host = self.start()
+        for request in ({"verb": "run"}, {"verb": "run", "command": ""}, {"verb": "run", "command": "   "}, {"verb": "run", "command": 5}, {"verb": "run", "command": "x" * 5000}):
+            self.assertEqual(self.ask(request), {"ok": False, "message": "run needs a command text"})
+        self.assertEqual(self.ask({"verb": "ping"}), {"ok": True})
+        with self.assertRaises(AssertionError):
+            host.read_request(timeout=0.3)
+
+    def test_two_clients_at_once_each_get_their_own_reply_when_the_answers_come_in_reverse(self):
+        host = self.start()
+        first = Client(self.socket_path, {"verb": "run", "command": "first"})
+        asked_first = host.read_request()
+        second = Client(self.socket_path, {"verb": "run", "command": "second"})
+        asked_second = host.read_request()
+        self.assertNotEqual(asked_first["request_id"], asked_second["request_id"])
+        host.send({"verb": "reply", "request_id": asked_second["request_id"], "ok": True, "message": "answer to second"})
+        host.send({"verb": "reply", "request_id": asked_first["request_id"], "ok": False, "message": "answer to first"})
+        self.assertEqual(first.result(), {"ok": False, "message": "answer to first"})
+        self.assertEqual(second.result(), {"ok": True, "message": "answer to second"})
+
+    def test_many_clients_against_the_cap_all_get_their_own_answer_and_the_host_lives(self):
+        host = self.start()
+        clients = [Client(self.socket_path, {"verb": "run", "command": "cmd%d" % number}) for number in range(10)]
+        requests = [host.read_request() for _ in clients]
+        self.assertEqual(len({request["request_id"] for request in requests}), 10)
+        for request in reversed(requests):
+            host.send({"verb": "reply", "request_id": request["request_id"], "ok": True, "message": request["command"]})
+        for number, client in enumerate(clients):
+            self.assertEqual(client.result(), {"ok": True, "message": "cmd%d" % number})
+        self.assertIsNone(host.process.poll())
+        self.assertEqual(self.ask({"verb": "ping"}), {"ok": True})
+
+    def test_a_client_that_leaves_mid_request_does_not_hurt_the_next_one(self):
+        host = self.start()
+        leaver = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        leaver.connect(self.socket_path)
+        leaver.sendall(b'{"verb":"run","command":"gone"}\n')
+        gone = host.read_request()
+        leaver.close()
+        stayer = Client(self.socket_path, {"verb": "run", "command": "stays"})
+        stays = host.read_request()
+        # The late reply to the client that left finds a closed socket, and the stayer's reply is untouched.
+        host.send({"verb": "reply", "request_id": gone["request_id"], "ok": True, "message": "late"})
+        host.send({"verb": "reply", "request_id": stays["request_id"], "ok": True, "message": "mine"})
+        self.assertEqual(stayer.result(), {"ok": True, "message": "mine"})
+        self.assertIsNone(host.process.poll())
+        again = Client(self.socket_path, {"verb": "run", "command": "after"})
+        host.send({"verb": "reply", "request_id": host.read_request()["request_id"], "ok": True})
+        self.assertEqual(again.result(), {"ok": True})
+
+    def test_a_reply_nobody_waits_for_is_dropped(self):
+        host = self.start()
+        for stray in ({"verb": "reply", "request_id": 999, "ok": True}, {"verb": "reply", "ok": True}, {"verb": "reply", "request_id": "1", "ok": True}, {"verb": "reply", "request_id": True, "ok": True}):
+            host.send(stray)
+        client = Client(self.socket_path, {"verb": "run", "command": "x"})
+        host.send({"verb": "reply", "request_id": host.read_request()["request_id"], "ok": True})
+        self.assertEqual(client.result(), {"ok": True})
+
+    def test_the_extension_going_away_fails_the_waiting_run_and_does_not_hang_it(self):
+        host = self.start()
+        client = Client(self.socket_path, {"verb": "run", "command": "tab.next"})
+        host.read_request()
+        started = time.monotonic()
+        host.close_stdin()
+        self.assertEqual(client.result(), {"ok": False, "message": "the extension disconnected"})
+        self.assertLess(time.monotonic() - started, 5)
+        self.assertEqual(host.wait(), 0)
+
+    def test_a_run_after_the_host_is_gone_cannot_connect(self):
+        host = self.start()
+        host.close_stdin()
+        host.wait()
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client, self.assertRaises(OSError):
+            client.connect(self.socket_path)
+
+    def test_the_rate_limit_is_for_the_host_so_a_new_connection_per_call_is_limited_too(self):
+        host = self.start()
+        clients = []
+        for number in range(10):
+            clients.append(Client(self.socket_path, {"verb": "list"}))
+            host.send({"verb": "reply", "request_id": host.read_request()["request_id"], "ok": True, "commands": []})
+        for client in clients:
+            self.assertEqual(client.result(), {"ok": True, "commands": []})
+        self.assertEqual(self.ask({"verb": "list"}), {"ok": False, "message": "rate limit: too many requests, slow down"})
+        self.assertEqual(self.ask({"verb": "run", "command": "tab.next"}), {"ok": False, "message": "rate limit: too many requests, slow down"})
+        self.assertEqual(self.ask({"verb": "ping"}), {"ok": True})
+        with self.assertRaises(AssertionError):
+            host.read_request(timeout=0.3)
+        time.sleep(1.1)
+        again = Client(self.socket_path, {"verb": "list"})
+        host.send({"verb": "reply", "request_id": host.read_request()["request_id"], "ok": True, "commands": []})
+        self.assertEqual(again.result(), {"ok": True, "commands": []})
+
+    def test_a_refused_run_over_the_rate_limit_never_reaches_the_extension(self):
+        host = self.start()
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
+            client.settimeout(5)
+            client.connect(self.socket_path)
+            client.sendall(b'{"verb":"run","command":"tab.next"}\n' * 12)
+            for _ in range(10):
+                host.send({"verb": "reply", "request_id": host.read_request()["request_id"], "ok": True})
+            data = b""
+            while data.count(b"\n") < 12:
+                data += client.recv(4096)
+        replies = [json.loads(line) for line in data.splitlines()]
+        self.assertEqual(replies[:10], [{"ok": True}] * 10)
+        self.assertEqual([reply["ok"] for reply in replies[10:]], [False, False])
+        with self.assertRaises(AssertionError):
+            host.read_request(timeout=0.3)
+
+
+class LinkTest(unittest.TestCase):
+    """The pieces that need a clock or a count, driven in process."""
+
+    def setUp(self):
+        self.module = load_host("desertfox-bridge")
+
+    def test_the_limiter_admits_the_limit_per_window_and_a_refusal_is_not_counted(self):
+        now = [0.0]
+        limiter = self.module.RateLimiter(3, 1.0, clock=lambda: now[0])
+        self.assertEqual([limiter.admit() for _ in range(5)], [True, True, True, False, False])
+        now[0] = 0.99
+        self.assertFalse(limiter.admit())
+        now[0] = 1.0
+        self.assertEqual([limiter.admit() for _ in range(4)], [True, True, True, False])
+
+    def test_a_request_before_ready_is_refused_and_writes_nothing(self):
+        import io
+
+        out = io.BytesIO()
+        link = self.module.ExtensionLink(out)
+        self.assertEqual(link.ask("run", {"command": "x"}, 1), {"ok": False, "message": "the extension is not connected"})
+        self.assertEqual(out.getvalue(), b"")
+
+    def test_requests_over_the_pending_cap_are_refused_at_once(self):
+        import io
+
+        link = self.module.ExtensionLink(io.BytesIO())
+        link.say_ready()
+        results = []
+        threads = [threading.Thread(target=lambda: results.append(link.ask("run", {"command": "x"}, 5))) for _ in range(self.module.MAX_PENDING)]
+        for thread in threads:
+            thread.start()
+        deadline = time.monotonic() + 5
+        while len(link.pending) < self.module.MAX_PENDING and time.monotonic() < deadline:
+            time.sleep(0.01)
+        self.assertEqual(link.ask("run", {"command": "x"}, 5), {"ok": False, "message": "too many requests are waiting"})
+        link.close()
+        for thread in threads:
+            thread.join(5)
+        self.assertEqual(len(results), self.module.MAX_PENDING)
+        self.assertEqual({result["message"] for result in results}, {"the extension disconnected"})
+
+    def test_an_extension_that_never_answers_times_out_and_frees_its_slot(self):
+        import io
+
+        link = self.module.ExtensionLink(io.BytesIO())
+        link.say_ready()
+        self.assertEqual(link.ask("run", {"command": "x"}, 0.05), {"ok": False, "message": "the extension did not answer in time"})
+        self.assertEqual(link.pending, {})
+
+    def test_a_broken_stdout_fails_the_request_cleanly(self):
+        class Broken:
+            writes = 0
+
+            def write(self, data):
+                Broken.writes += 1
+                if Broken.writes > 1:
+                    raise BrokenPipeError()
+
+            def flush(self):
+                pass
+
+        link = self.module.ExtensionLink(Broken())
+        link.say_ready()
+        self.assertEqual(link.ask("run", {"command": "x"}, 1), {"ok": False, "message": "the extension is not connected"})
+        self.assertEqual(link.pending, {})
+
+
 class AcceptErrorTest(BridgeTestCase):
     def test_a_transient_accept_error_does_not_end_the_server(self):
         import errno
@@ -464,7 +713,7 @@ class AcceptErrorTest(BridgeTestCase):
                 return real.fileno()
 
         state = module.BridgeState(self.state_path, os.getpid(), "1")
-        thread = threading.Thread(target=module.accept_loop, args=(Flaky(), state), daemon=True)
+        thread = threading.Thread(target=module.accept_loop, args=(Flaky(), state, module.ExtensionLink(None)), daemon=True)
         thread.start()
         self.addCleanup(real.close)
         self.assertEqual(self.ask({"verb": "ping"}), {"ok": True})

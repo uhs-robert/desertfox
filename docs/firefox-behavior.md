@@ -185,6 +185,16 @@ Measured in the key test (`test/key/p15_frame_mode.mjs`, Firefox 160) and on a p
 - A window that loses the focus (a hidden tab) fires `blur` and `focusout` on its focused field, which stays the `activeElement`.
 - `element instanceof HTMLElement` is false in a content script for an element of a same-origin child frame's document.
 
+## The Google Sheets cell editor (sheets-cell-editor)
+
+Measured on Google's public sample sheet in view mode, in headless Firefox 160, and in the key test (`test/key/p15_cell_editor.mjs`) on a stand-in page. Not measured on a sheet with edit rights.
+
+- Sheets keeps one contenteditable focused in the top document from load on: `div#waffle-rich-text-editor.cell-input`, inside `div.input-box`.
+- While a cell is only selected, the box sits at `top: -10000px` from the stylesheet, and the editor is empty with an `offsetWidth` of 0. Arrow keys move the selection and change none of this.
+- Enter or F2 starts an edit. Sheets then sets `left`, `top` and `min-width` inline on the box, so the editor sits over the cell with the cell's width. The key that ends the edit clears the inline style and the text.
+- No focus event fires at either end of an edit.
+- The class `editable` is no signal: Sheets adds it at the first edit and never removes it. In view mode `contenteditable` turns `false` at the first edit and stays so.
+
 ## Permissions (optional-permissions)
 
 Read from the Firefox 160 sources (`omni.ja`), plus the key test for the grant and removal paths. The user-input fact is source-read, not measured in a run.

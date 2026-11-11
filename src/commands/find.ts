@@ -9,6 +9,7 @@ define("find.open", {
   params: [{ name: "direction", type: "enum", values: ["forward", "backward"], default: "forward", value_labels: { backward: "backward" }, description: { backward: "Search up the page, and let n go up." } },
     { name: "source", type: "enum", values: ["typed", "word"], default: "typed", value_labels: { word: "word" }, description: { word: "Search the word or selection at the caret." } },
   ],
+  bridge: false,
   runs_in: "content",
   repeatable: false,
   bundle: "caret",
@@ -19,6 +20,7 @@ define("find.next", {
   modes: ["normal", "caret", "visual", "visual_line"],
   label: "Next match",
   intent: "Go to the next match of the last search. It goes the way the search was started. In caret mode the caret goes to the match. In visual mode the caret end goes to the match and the anchor stays.",
+  bridge: false,
   runs_in: "content",
   bundle: "caret",
 });
@@ -28,6 +30,7 @@ define("find.prev", {
   modes: ["normal", "caret", "visual", "visual_line"],
   label: "Previous match",
   intent: "Go to the previous match of the last search. It goes against the way the search was started. In caret mode the caret goes to the match. In visual mode the caret end goes to the match and the anchor stays.",
+  bridge: false,
   runs_in: "content",
   bundle: "caret",
 });

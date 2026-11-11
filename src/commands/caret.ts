@@ -40,6 +40,7 @@ define("caret.move", {
     { name: "till", type: "bool", default: false, description: "Stop before the match, or after it going backward." },
     { name: "big", type: "bool", default: false, description: "Read a word as any run of non-blank characters." },
   ],
+  bridge: false,
   runs_in: "content",
   repeatable: false,
   count: "repeat",

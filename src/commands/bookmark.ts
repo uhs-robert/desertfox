@@ -158,6 +158,7 @@ define("bookmark.add", {
     { name: "url", type: "string", main: true, format: "url", default: { from: "current_url" } },
     { name: "folder", type: "string", optional: true, values: { from: "folders" }, description: "File the bookmark in this folder." },
   ],
+  bridge: false,
   runs_in: "background",
   run: (ctx, args) => handlers.add(ctx, args as { url: string; folder: string }),
 });
@@ -171,6 +172,7 @@ define("bookmark.open", {
     { name: "folder", type: "string", optional: true, values: { from: "folders" }, description: "Only bookmarks in this folder or its subfolders." },
     WHERE_PARAM,
   ],
+  bridge: false,
   runs_in: "background",
   run: (ctx, args) => handlers.open(ctx, args as { bookmark: string; folder: string; where: Where }),
 });
@@ -182,6 +184,7 @@ define("bookmark.remove", {
     { name: "bookmark", type: "string", rest: true, main: true, optional: true, values: { from: "bookmarks" } },
     { name: "folder", type: "string", optional: true, values: { from: "folders" }, description: "Only copies in this folder or its subfolders." },
   ],
+  bridge: false,
   runs_in: "background",
   run: (ctx, args) => handlers.remove(ctx, args as { bookmark: string; folder: string }),
 });
@@ -193,6 +196,7 @@ define("bookmark.rename", {
     { name: "title", type: "string", rest: true, main: true },
     { name: "bookmark", type: "string", optional: true, values: { from: "bookmarks" }, description: "Rename this bookmark, not the current page's." },
   ],
+  bridge: false,
   runs_in: "background",
   run: (ctx, args) => handlers.rename(ctx, args as { bookmark: string; title: string }),
 });
@@ -204,6 +208,7 @@ define("bookmark.edit_url", {
     { name: "url", type: "string", main: true, format: "url" },
     { name: "bookmark", type: "string", optional: true, values: { from: "bookmarks" }, description: "Change this bookmark, not the current page's." },
   ],
+  bridge: false,
   runs_in: "background",
   run: (ctx, args) => handlers.edit_url(ctx, args as { bookmark: string; url: string }),
 });
@@ -215,6 +220,7 @@ define("bookmark.move", {
     { name: "folder", type: "string", rest: true, main: true, values: { from: "folders" } },
     { name: "bookmark", type: "string", optional: true, values: { from: "bookmarks" }, description: "Move this bookmark, not the current page's." },
   ],
+  bridge: false,
   runs_in: "background",
   run: (ctx, args) => handlers.move(ctx, args as { folder: string; bookmark: string }),
 });
@@ -236,6 +242,7 @@ define("bookmark.open_folder", {
     { name: "folder", type: "string", rest: true, main: true, values: { from: "folders" } },
     OPEN_FOLDER_WHERE_PARAM,
   ],
+  bridge: false,
   runs_in: "background",
   run: (ctx, args) => handlers.open_folder(ctx, args as { folder: string; where: Exclude<Where, "here"> }),
 });

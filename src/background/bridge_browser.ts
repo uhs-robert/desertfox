@@ -5,11 +5,51 @@ import type { CompiledKeymap } from "../shared/prefix_tree.ts";
 import type { Mode } from "../shared/command.ts";
 import { BRIDGE_HOST_NAME, create_bridge } from "./bridge.ts";
 import type { BridgeDeps, BridgeWindow } from "./bridge.ts";
+import { registry } from "../shared/registry/builtin.ts";
+import { create_bridge_run } from "./bridge_run.ts";
+import type { BridgeRunTarget } from "./bridge_run.ts";
+import { typed_url_target } from "../commands/open_target.ts";
+import { no_repeat_memory } from "./repeat_memory.ts";
+import { create_router } from "./router.ts";
+import type { RouterDeps } from "./router.ts";
 
 const as_bridge_window = (window: browser.windows.Window): BridgeWindow | undefined =>
   window.id === undefined ? undefined : { id: window.id, focused: window.focused === true, private: window.incognito === true };
 
-export const browser_bridge_deps = (recall_mode: (tab_id: number) => Promise<Mode>): BridgeDeps => ({
+type TargetApi = { windows: { getLastFocused: () => Promise<{ id?: number | undefined; type?: string | undefined; incognito?: boolean | undefined }> }; tabs: { query: (query: { active: true; windowId: number }) => Promise<{ id?: number | undefined; url?: string | undefined }[]> } };
+
+// The active tab of the last focused window, when that window is a normal one. Firefox ignores `windowTypes` here, so the type is read from the window: a popup is never a target.
+export async function focused_normal_target(api: TargetApi = browser): Promise<BridgeRunTarget | undefined> {
+  const window = await api.windows.getLastFocused().catch(() => undefined);
+  if (window?.id === undefined || window.type !== "normal") return undefined;
+  const [tab] = await api.tabs.query({ active: true, windowId: window.id });
+  return tab?.id === undefined ? undefined : { tab_id: tab.id, window_id: window.id, url: tab.url, incognito: window.incognito === true };
+}
+
+// A run from outside has its own router: it targets the focused normal window instead of `currentWindow`, shows no toast (the answer carries the refusal),
+// and leaves `.` and the macro recorder alone, so a script cannot rewrite what the user repeats.
+export function browser_bridge_run(router_deps: RouterDeps, is_snippet: (command_id: string) => boolean) {
+  const { record_step: _recorded, ...shared_deps } = router_deps;
+  const router = create_router({
+    ...shared_deps,
+    active_tab: async () => {
+      const target = await focused_normal_target();
+      return target && { tab_id: target.tab_id, window_id: target.window_id, url: target.url, incognito: target.incognito };
+    },
+    show_refusal: async () => undefined,
+    repeat_memory: no_repeat_memory,
+  });
+  return create_bridge_run({
+    registry,
+    is_snippet,
+    get_enum_sources: router_deps.get_enum_sources,
+    resolve_url: typed_url_target,
+    target: focused_normal_target,
+    run: (invocation, target) => router.run({ invocations: [invocation], mode: "normal", sender_tab_id: target.tab_id, skip_repeat: true }),
+  });
+}
+
+export const browser_bridge_deps = (recall_mode: (tab_id: number) => Promise<Mode>, bridge_run: ReturnType<typeof browser_bridge_run>): BridgeDeps => ({
   connect: () => browser.runtime.connectNative(BRIDGE_HOST_NAME),
   read_settings: async () => {
     const keymap = current_keymap((await browser.storage.local.get(COMPILED_KEYMAP_STORAGE_KEY))[COMPILED_KEYMAP_STORAGE_KEY] as CompiledKeymap | undefined);
@@ -31,12 +71,14 @@ export const browser_bridge_deps = (recall_mode: (tab_id: number) => Promise<Mod
     return () => clearTimeout(timer);
   },
   now_ms: () => Date.now(),
+  run_command: bridge_run.run,
+  list_commands: bridge_run.list,
 });
 
 // Registers its listeners in the first turn, like the other background listeners, then connects once the settings are read.
 // `recall_mode` answers the mode of a tab, which is the focused frame's (`tab_modes.ts`).
-export function start_bridge(recall_mode: (tab_id: number) => Promise<Mode>) {
-  const bridge = create_bridge(browser_bridge_deps(recall_mode));
+export function start_bridge(recall_mode: (tab_id: number) => Promise<Mode>, router_deps: RouterDeps, is_snippet: (command_id: string) => boolean) {
+  const bridge = create_bridge(browser_bridge_deps(recall_mode, browser_bridge_run(router_deps, is_snippet)));
   browser.windows.onFocusChanged.addListener((window_id) => void bridge.window_focused(window_id));
   browser.tabs.onActivated.addListener(({ windowId }) => void bridge.tab_activated(windowId));
   browser.permissions.onAdded.addListener(() => bridge.permission_added());
