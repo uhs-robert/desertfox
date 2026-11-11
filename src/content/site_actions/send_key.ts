@@ -1,7 +1,7 @@
 import { RuntimeRefusal } from "../../shared/command.ts";
 import { SEND_KEY_MAX_TIMES } from "../../shared/send_key_limit.ts";
 
-export type SendKeyArgs = { key: string; key_code: number; target?: string; times?: number };
+export type SendKeyArgs = { key: string; key_code: number; target?: string; times?: number; ctrl?: boolean; shift?: boolean; alt?: boolean; meta?: boolean; keypress?: boolean };
 
 // What the handler needs from the page, so a test can pass a fake.
 export type KeyTargetDocument = { querySelector(selector: string): EventTarget | null; activeElement: EventTarget | null };
@@ -25,8 +25,9 @@ const refuse = (message: string): never => {
 // A page script cannot tell this event from a real press except by `isTrusted`, which DesertFox itself ignores, so the key does not loop back into the keymap.
 export function send_key(doc: KeyTargetDocument, args: SendKeyArgs, make_event: (type: string, init: KeyboardEventInit) => Event): void {
   const element = key_target(doc, args.target);
-  const init = { key: args.key, keyCode: args.key_code, bubbles: true, cancelable: true };
+  const init = { key: args.key, keyCode: args.key_code, ctrlKey: args.ctrl === true, shiftKey: args.shift === true, altKey: args.alt === true, metaKey: args.meta === true, bubbles: true, cancelable: true };
   element.dispatchEvent(make_event("keydown", init));
+  if (args.keypress === true) element.dispatchEvent(make_event("keypress", init));
   element.dispatchEvent(make_event("keyup", init));
 }
 

@@ -321,6 +321,26 @@ test("the shipped sheets rows bind hjkl to the arrow keys on both address forms 
   }
 });
 
+test("the shipped sheets rows bind gg and Ctrl+hjkl to Ctrl keys and free Ctrl+A and Ctrl+X", async () => {
+  const compiled = with_defaults({});
+  for (const url of [SHEETS, SHEETS_DOMAIN]) {
+    const tree = (await ask(compiled, url))!;
+    const sent = (key: string) => {
+      const leaf = tree.keymap.modes.normal?.children[key];
+      const args = leaf?.kind === "leaf" ? (leaf.steps[0]?.invocation.args as Record<string, unknown>) : undefined;
+      return args && [args.key, args.ctrl];
+    };
+    assert.deepEqual(["<C-h>", "<C-j>", "<C-k>", "<C-l>"].map(sent), [["ArrowLeft", true], ["ArrowDown", true], ["ArrowUp", true], ["ArrowRight", true]], url);
+    const g = tree.keymap.modes.normal?.children["g"];
+    const gg = g?.kind === "branch" ? g.children["g"] : undefined;
+    assert.deepEqual(gg?.kind === "leaf" ? [gg.steps[0]?.invocation.args?.key, gg.steps[0]?.invocation.args?.ctrl] : undefined, ["Home", true], url);
+    assert.equal(tree.keymap.modes.normal?.children["<C-a>"], undefined, url);
+    assert.equal(tree.keymap.modes.normal?.children["<C-x>"], undefined, url);
+    assert.equal(tree.frees?.tokens.includes("<C-a>"), true, url);
+  }
+  assert.equal(await key_at(compiled, "https://example.org/", "<C-a>"), "url.increment");
+});
+
 test("default_site_rows_off turns off both sheets rows", async () => {
   const compiled = with_defaults({ default_site_rows_off: ["sheets"] });
   assert.equal(compiled.site_rules, undefined);
