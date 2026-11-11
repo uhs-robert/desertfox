@@ -332,14 +332,14 @@ const site_zoom = create_site_zoom({
 
 browser.tabs.onUpdated.addListener((tab_id, change, tab) => {
   // A new tab's first load reports only `status`, with the address already on the tab.
-  if ((change.url !== undefined || change.status === "loading") && tab.url !== undefined) void site_zoom.navigated(tab_id, tab.url);
+  if ((change.url !== undefined || change.status === "loading") && tab.url !== undefined) void site_zoom.navigated(tab_id, tab.url, tab.incognito);
   void cmdline.forget_opener_on_navigation(tab_id, change);
   if (change.status === "loading") void inspect_relay.forget(tab_id);
   return tab_modes.forget_on_navigation(tab_id, change);
 });
 
 browser.windows.onRemoved.addListener(() => void repeat_memory.clear_private_without_window().catch(() => undefined));
-wire_private_cleanup([browser_register_store, browser_mark_store, browser_quickmark_store, browser_macro_recorder, browser_last_played], browser.windows);
+wire_private_cleanup([browser_register_store, browser_mark_store, browser_quickmark_store, browser_macro_recorder, browser_last_played, site_zoom], browser.windows);
 
 // Top level, so a future event page gets the events on wake. Each start of the background refills the cache from the browser history.
 browser.history.onVisited.addListener(history_cache.visited);
@@ -353,7 +353,6 @@ browser.tabs.onRemoved.addListener((tab_id, { windowId, isWindowClosing }) => {
   void previous_tabs.removed(tab_id, windowId, isWindowClosing);
   void cmdline.forget_opener(tab_id);
   void inspect_relay.forget(tab_id);
-  void site_zoom.closed(tab_id);
   return tab_modes.forget(tab_id);
 });
 

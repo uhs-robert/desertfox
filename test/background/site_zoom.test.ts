@@ -16,9 +16,10 @@ function make_session() {
   };
 }
 
-// A fake browser: the tabs' addresses, the levels the setting gives and every setZoom call. `session` is shared, so a second instance stands for a restarted background.
+// A fake browser: the tabs' addresses and privacy, the levels the setting gives and every setZoom call. `session` is shared, so a second instance stands for a restarted background.
 function make({ levels = { "a.test": 1.5 } as Record<string, number>, session = make_session() } = {}) {
   const addresses = new Map<number, string>();
+  const private_tabs = new Set<number>();
   const calls: [number, number][] = [];
   let fail_next_set = false;
   const deps = {
@@ -36,9 +37,9 @@ function make({ levels = { "a.test": 1.5 } as Record<string, number>, session = 
   const zoom = create_site_zoom(deps);
   const go = (tab_id: number, address: string) => {
     addresses.set(tab_id, address);
-    return zoom.navigated(tab_id, address);
+    return zoom.navigated(tab_id, address, private_tabs.has(tab_id));
   };
-  return { zoom, go, calls, levels, session, addresses, fail_set: () => void (fail_next_set = true), restart: () => create_site_zoom(deps) };
+  return { zoom, go, calls, levels, session, addresses, private_tabs, fail_set: () => void (fail_next_set = true), restart: () => create_site_zoom(deps) };
 }
 
 test("the zoom memory key is the host: ports share it, subdomains do not", () => {
@@ -51,7 +52,7 @@ test("the zoom memory key is the host: ports share it, subdomains do not", () =>
 test("one load that fires several updates sets the zoom once", async () => {
   const { zoom, addresses, calls } = make();
   addresses.set(1, "https://a.test/");
-  await Promise.all([zoom.navigated(1, "https://a.test/"), zoom.navigated(1, "https://a.test/"), zoom.navigated(1, "https://a.test/")]);
+  await Promise.all([zoom.navigated(1, "https://a.test/", false), zoom.navigated(1, "https://a.test/", false), zoom.navigated(1, "https://a.test/", false)]);
   assert.deepEqual(calls, [[1, 1.5]]);
 });
 
@@ -73,20 +74,35 @@ test("a tab that moves to another site and back keeps the zoom it had there", as
   assert.deepEqual(calls, [[1, 1.5], [1, 2]]);
 });
 
-test("each tab sets the level once", async () => {
+test("a new tab on a site already set keeps the manual zoom Firefox remembers", async () => {
   const { go, calls } = make();
   await go(1, "https://a.test/");
-  await go(2, "https://a.test/");
-  await go(1, "https://a.test/");
-  assert.deepEqual(calls, [[1, 1.5], [2, 1.5]]);
+  await go(2, "https://a.test/other");
+  assert.deepEqual(calls, [[1, 1.5]]);
 });
 
-test("a level that changed since the tab set it is set again", async () => {
+test("the private windows keep a record apart, and lose it with the last private window", async () => {
+  const { zoom, go, calls, private_tabs } = make();
+  await go(1, "https://a.test/");
+  private_tabs.add(2).add(3);
+  await go(2, "https://a.test/");
+  await go(3, "https://a.test/");
+  await zoom.clear_private_without_window(async () => true);
+  await go(3, "https://a.test/next");
+  assert.deepEqual(calls, [[1, 1.5], [2, 1.5]]);
+  await zoom.clear_private_without_window(async () => false);
+  private_tabs.add(4);
+  await go(4, "https://a.test/");
+  await go(1, "https://a.test/");
+  assert.deepEqual(calls, [[1, 1.5], [2, 1.5], [4, 1.5]]);
+});
+
+test("a level that changed since it was set is set again", async () => {
   const { go, calls, levels } = make();
   await go(1, "https://a.test/");
   levels["a.test"] = 2;
-  await go(1, "https://a.test/next");
-  assert.deepEqual(calls, [[1, 1.5], [1, 2]]);
+  await go(2, "https://a.test/next");
+  assert.deepEqual(calls, [[1, 1.5], [2, 2]]);
 });
 
 test("a site with no level leaves the zoom alone, and a level added later applies on the next load", async () => {
@@ -99,34 +115,33 @@ test("a site with no level leaves the zoom alone, and a level added later applie
   assert.deepEqual(calls, [[1, 1.2]]);
 });
 
-test("a closed tab forgets its sites, so a reused id sets the zoom again", async () => {
-  const { zoom, go, calls, session } = make();
+test("a closed tab leaves the host's record, so the next tab keeps the remembered zoom", async () => {
+  const { go, calls, addresses } = make();
   await go(1, "https://a.test/");
-  await zoom.closed(1);
-  assert.equal(session.data.size, 0);
+  addresses.delete(1);
   await go(1, "https://a.test/");
-  assert.deepEqual(calls, [[1, 1.5], [1, 1.5]]);
+  assert.deepEqual(calls, [[1, 1.5]]);
 });
 
-test("a restarted background reads what the tabs already set from storage.session", async () => {
+test("a background that restarts with storage.session kept does not set the level again", async () => {
   const { go, calls, restart, addresses } = make();
   await go(1, "https://a.test/");
-  const again = restart();
-  await again.navigated(1, addresses.get(1)!);
+  addresses.set(2, "https://a.test/");
+  await restart().navigated(2, "https://a.test/", false);
   assert.deepEqual(calls, [[1, 1.5]]);
 });
 
 test("a tab that left the site before the level was read is not zoomed, so the other site's memory stays", async () => {
   const { zoom, addresses, calls, session } = make();
   addresses.set(1, "https://b.test/");
-  await zoom.navigated(1, "https://a.test/");
+  await zoom.navigated(1, "https://a.test/", false);
   assert.deepEqual(calls, []);
   assert.equal(session.data.size, 0);
 });
 
 test("a closed tab is not zoomed", async () => {
   const { zoom, calls } = make();
-  await zoom.navigated(7, "https://a.test/");
+  await zoom.navigated(7, "https://a.test/", false);
   assert.deepEqual(calls, []);
 });
 
