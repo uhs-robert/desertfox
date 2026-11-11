@@ -238,6 +238,25 @@ export const SETTING_COMPLETION: readonly SettingCompletion[] = [
     ]
   },
   {
+    "name": "tab_preload",
+    "settable": true,
+    "is_toggle": true,
+    "is_list": false,
+    "expectation": "true or false",
+    "values": [
+      "true",
+      "false"
+    ]
+  },
+  {
+    "name": "tab_preload_unload_ms",
+    "settable": true,
+    "is_toggle": false,
+    "is_list": false,
+    "expectation": "a whole number of milliseconds, 0 or more",
+    "values": []
+  },
+  {
     "name": "completion_all_windows",
     "settable": true,
     "is_toggle": true,

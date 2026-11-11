@@ -81,6 +81,9 @@ export const SETTINGS_TABLE = {
   bridge: { kind: "boolean", default: false },
   // Lets bridge programs list tabs (titles and addresses of normal windows), activate, close and capture them, and run a command on a chosen tab. Needs `bridge`.
   bridge_share_tabs: { kind: "boolean", default: false },
+  // After a tab switch, load or warm the next tab in the direction of travel. A tab loaded this way and never visited unloads after the delay, and a delay of 0 keeps it loaded.
+  tab_preload: { kind: "boolean", default: true },
+  tab_preload_unload_ms: { kind: "number", whole: true, min: 0, unit: "milliseconds", default: 60000 },
   completion_all_windows: { kind: "boolean", default: false },
   cmdline_prompt: { kind: "line", min_length: 1, max_length: 8, suggestions: ["caret", "colon"], default: "caret" },
   open_completion: { kind: "enum_list", values: ["bookmarks", "history"], default: ["bookmarks", "history"] },

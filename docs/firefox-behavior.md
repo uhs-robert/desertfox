@@ -220,3 +220,11 @@ Measured in Firefox 160 in the key-test session with a throwaway piece: an exten
 - A private window starts from the normal memory, then keeps its own: a level set there did not reach a normal tab of the host, and a level set in a normal tab did not reach the private one. A second private tab of the host opened at the private level.
 
 What it means for the `zoom` setting: setting the level writes Firefox's memory for the host, so DesertFox sets it only the first time a tab reaches the host in a browser session, keyed by host as Firefox keys it, with the private windows apart. A manual zoom after that sticks across reloads, pages of the site, new tabs and a round trip to another site. Because the memory is per host, a level for one path of a host acts on the whole host.
+
+## tabs.reload on a discarded tab
+
+Question: does `tabs.reload` on a discarded tab keep the scroll position and form data that session restore holds?
+
+Setup: Firefox headless, the key-test profile, a 150-paragraph page with a textarea and an input. Typed in both, scrolled to 2500 px, switched away, `tabs.discard`, then either `tabs.reload` or `tabs.update(active)`.
+
+Result: yes. Both paths ended with `scrollY` 2500 and both field values back. After `tabs.reload` the tab stayed inactive. One run each, so this is not a fuzz of timing.

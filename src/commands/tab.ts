@@ -7,6 +7,8 @@ import { browser_tab_action_deps, move_tabs, reopen_in_container, set_muted, set
 import type { TabActionDeps } from "../background/tab_actions.ts";
 import { browser_discard_deps, describe_result, set_unloaded } from "../background/tab_discard.ts";
 import type { DiscardDeps, SetUnloadedResult } from "../background/tab_discard.ts";
+import { browser_tab_preload } from "../background/tab_preload.ts";
+import type { Direction } from "../background/tab_preload.ts";
 import { browser_complete_items_deps, read_tabs } from "../background/complete_items.ts";
 import { get_config } from "../background/startup.ts";
 import { best_match } from "../shared/score.ts";
@@ -40,6 +42,8 @@ export type TabDeps = TabActionDeps & {
   focus_window: (window_id: number) => Promise<void>;
   // What `tab.unload` and `tab.load` act through.
   discard: DiscardDeps;
+  // Starts the preload of the tab after the landed one, going `direction`. It never throws and nothing waits for it.
+  preload: (window_id: number, landed_id: number, direction: Direction) => void;
   toast: (ctx: CommandContext, kind: ToastKind, message: string) => Promise<void>;
 };
 
@@ -63,6 +67,15 @@ export function make_tab_handlers(deps: TabDeps) {
     const target = tabs[index];
     if (target) await deps.activate(target.id);
   }
+
+  // `direction` is the way the user travels, which a wrap from the last tab to the first does not change.
+  async function switch_to(ctx: CommandContext, tabs: TabInfo[], index: number, direction: Direction | undefined): Promise<void> {
+    await activate_at(tabs, index);
+    const landed = tabs[index];
+    if (landed && direction && ctx.window_id !== undefined) deps.preload(ctx.window_id, landed.id, direction);
+  }
+
+  const direction_to = (current: TabInfo, index: number): Direction | undefined => (index === current.index ? undefined : index > current.index ? 1 : -1);
 
   // A whole number is a place in this window and counts from the end when negative. Other text names a tab, which takes the place of the picked tab, so the tabs between shift like a drag. No text means the offset decides.
   async function move_target(ctx: CommandContext, tabs: TabInfo[], args: { tab: string }): Promise<number | undefined> {
@@ -110,16 +123,17 @@ export function make_tab_handlers(deps: TabDeps) {
   return {
     next: async (ctx: CommandContext) => {
       const { tabs, current } = await position_of(ctx);
-      await activate_at(tabs, wrap_index(current.index + 1, tabs.length));
+      await switch_to(ctx, tabs, wrap_index(current.index + 1, tabs.length), 1);
     },
     prev: async (ctx: CommandContext) => {
       const { tabs, current } = await position_of(ctx);
-      await activate_at(tabs, wrap_index(current.index - 1, tabs.length));
+      await switch_to(ctx, tabs, wrap_index(current.index - 1, tabs.length), -1);
     },
     goto: async (ctx: CommandContext, args: { index: number }) => {
       const { tabs, current } = await position_of(ctx);
-      if (args.index === NEXT_TAB_INDEX) return activate_at(tabs, wrap_index(current.index + 1, tabs.length));
-      await activate_at(tabs, goto_target_index(args.index, tabs.length));
+      if (args.index === NEXT_TAB_INDEX) return switch_to(ctx, tabs, wrap_index(current.index + 1, tabs.length), 1);
+      const index = goto_target_index(args.index, tabs.length);
+      await switch_to(ctx, tabs, index, direction_to(current, index));
     },
     move: async (ctx: CommandContext, args: { tab: string; offset: number }) => {
       const { tabs, current } = await position_of(ctx);
@@ -309,6 +323,7 @@ export const browser_tab_deps: TabDeps = {
   },
   focus_window: async (window_id) => void (await browser.windows.update(window_id, { focused: true })),
   discard: browser_discard_deps,
+  preload: browser_tab_preload.preload,
   toast: (ctx, kind, message) => show_toast_on_tab(ctx, "tab.unload", message, kind),
 };
 
