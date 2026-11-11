@@ -1,6 +1,6 @@
 import { define } from "../shared/registry/builtin.ts";
 
-// The hints bundle takes these keys itself while hint mode is open. The binding of Tab, Enter and Space exists so the content script holds the key while the bundle loads. Slash is held as a one-character key and is bound for its which-key label. and the handler only answers a key the bundle did not take.
+// The hints bundle takes these keys itself while hint mode is open. The binding of Tab, Enter and Space exists so the content script holds the key while the bundle loads. Slash is held as a one-character key and is bound for its which-key label, and the handler only answers a key the bundle did not take.
 define("hint.key", {
   completion: "hidden",
   label: "Hint key",
