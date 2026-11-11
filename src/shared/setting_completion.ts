@@ -46,7 +46,7 @@ export const SETTING_COMPLETION: readonly SettingCompletion[] = [
     "settable": true,
     "is_toggle": false,
     "is_list": false,
-    "expectation": "a list of tables with \"site\", an optional \"pass\" of key sequences and an optional \"only\" of key sequences",
+    "expectation": "a list of tables with \"site\", an optional \"off\" of true or false, an optional \"pass\" of key sequences and an optional \"only\" of key sequences",
     "values": []
   },
   {

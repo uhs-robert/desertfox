@@ -2,10 +2,11 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { compile_keymap, create_matcher } from "../src/shared/keys/index.ts";
 import type { KeymapConfig } from "../src/shared/index.ts";
-import { frees_of, prune_tree } from "../src/shared/keys/prune_tree.ts";
+import { prune_tree } from "../src/shared/keys/prune_tree.ts";
 import type { CompiledKeymap } from "../src/shared/prefix_tree.ts";
 import { all_off_step } from "../src/content/site_rule.ts";
 import { list_keys } from "../src/background/list_keys.ts";
+import { normal_tree_for, site_columns_for } from "../src/background/page_keymap.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY, is_freed } from "../src/shared/prefix_tree.ts";
 
 const resolve = () => ({ runs_in: "content" as const, label: "x", count: "ignore" as const });
@@ -15,15 +16,16 @@ const KEYMAP: KeymapConfig = {
   browser: { "<A-j>": { id: "a.tab" } },
 };
 
-const compile = (site_rules: { site: string; pass?: string; only?: string }[]) => compile_keymap(KEYMAP, { site_rules }, resolve);
+const compile = (site_rules: { site: string; off?: boolean; pass?: string; only?: string }[]) => compile_keymap(KEYMAP, { site_rules }, resolve);
 
-// What a key does on a page, the way the content script picks the rule, prunes the tree and builds the matcher.
+// What a key does on a page, the way the background resolves the columns and trims the tree, and the content script builds the matcher.
 function matcher_for(compiled: CompiledKeymap, url: string) {
-  const rule = compiled.site_rules?.find((candidate) => new RegExp(candidate.regex).test(url));
-  if (rule === undefined || "all_off" in rule) return create_matcher(compiled);
-  const tree = { ...compiled, modes: { ...compiled.modes, normal: prune_tree(compiled.modes.normal, rule) } };
-  return create_matcher(tree, (token) => is_freed(frees_of(rule), token));
+  const { tree, frees } = normal_tree_for(compiled.modes.normal, site_columns_for(compiled, [url]));
+  const page = tree === undefined ? compiled : { ...compiled, modes: { ...compiled.modes, normal: tree } };
+  return create_matcher(page, frees && ((token) => is_freed(frees, token)));
 }
+
+const all_off_at = (compiled: CompiledKeymap, url: string): boolean => normal_tree_for(compiled.modes.normal, site_columns_for(compiled, [url])).all_off;
 
 function feed_keys(compiled: CompiledKeymap, url: string, keys: string[]): string {
   const matcher = matcher_for(compiled, url);
@@ -58,22 +60,49 @@ test("only keeps the listed keys, a listed prefix keeps its subtree, and a chord
   assert.equal(feed_keys(prefix, url, ["j"]), "no_match");
 });
 
-test("a rule with no keys, or whose keys leave nothing, is all off", () => {
-  const { compiled } = compile([{ site: "https://a.test/*" }, { site: "https://b.test/*", only: "x" }, { site: "https://c.test/*", pass: "j k gg gi <C-d>" }]);
-  assert.deepEqual(compiled.site_rules?.map((rule) => "all_off" in rule), [true, true, true]);
+test("a row with nothing but a site, off = true, or keys that leave nothing, is all off", () => {
+  const { compiled } = compile([{ site: "https://a.test/*" }, { site: "https://b.test/*", only: "x" }, { site: "https://c.test/*", pass: "j k gg gi <C-d>" }, { site: "https://d.test/*", off: true, pass: "j" }]);
+  for (const host of ["a", "b", "c", "d"]) assert.equal(all_off_at(compiled, `https://${host}.test/`), true, host);
+  assert.deepEqual(compiled.site_rules?.map((rule) => rule.off), [true, undefined, undefined, true]);
 });
 
-test("the first matching rule wins", () => {
+test("each column takes the first matching row that sets it", () => {
   const { compiled } = compile([{ site: "https://a.test/app/*", pass: "j" }, { site: "https://a.test/*" }]);
-  const first = compiled.site_rules?.find((rule) => new RegExp(rule.regex).test("https://a.test/app/x"));
-  assert.deepEqual(first && "pass" in first && first.pass, [["j"]]);
-  const second = compiled.site_rules?.find((rule) => new RegExp(rule.regex).test("https://a.test/other"));
-  assert.ok(second && "all_off" in second);
+  // The off column comes from the broad bare row, so the app page is off too.
+  assert.equal(all_off_at(compiled, "https://a.test/app/x"), true);
+  const kept = compile([{ site: "https://a.test/app/*", off: false }, { site: "https://a.test/*", pass: "j" }, { site: "https://a.test/*" }]).compiled;
+  assert.equal(all_off_at(kept, "https://a.test/app/x"), false);
+  assert.equal(feed_keys(kept, "https://a.test/app/x", ["j"]), "no_match");
+  assert.equal(feed_keys(kept, "https://a.test/app/x", ["k"]), "match");
+  assert.equal(all_off_at(kept, "https://a.test/other"), true);
+});
+
+test("pass and only are one column: an only row below a pass row does not apply", () => {
+  const { compiled } = compile([{ site: "https://a.test/*", pass: "j" }, { site: "https://a.test/*", only: "j" }]);
+  assert.equal(feed_keys(compiled, "https://a.test/", ["j"]), "no_match");
+  assert.equal(feed_keys(compiled, "https://a.test/", ["k"]), "match");
+});
+
+test("off = false alone keeps the page on and sets no key rule", () => {
+  const { compiled } = compile([{ site: "https://a.test/*", off: false }]);
+  assert.equal(all_off_at(compiled, "https://a.test/"), false);
+  assert.equal(feed_keys(compiled, "https://a.test/", ["j"]), "match");
 });
 
 test("the stored rule holds sequences, not a tree", () => {
   const { compiled } = compile([{ site: "https://a.test/*", only: "j gg" }]);
-  assert.deepEqual(compiled.site_rules?.[0] && "only" in compiled.site_rules[0] && compiled.site_rules[0].only, [["j"], ["g", "g"]]);
+  assert.deepEqual(compiled.site_rules?.[0]?.keys, { only: [["j"], ["g", "g"]] });
+});
+
+test("a per-site column reaches the stored rule as a value, and the first row that sets it wins", () => {
+  // No setting opts in yet, so the row is cast: the compiler copies every column besides site, off, pass and only.
+  const rows = [{ site: "https://a.test/app/*", zoom: 2 }, { site: "https://a.test/*", zoom: 1.5, pass: "j" }] as unknown as Parameters<typeof compile>[0];
+  const { compiled } = compile(rows);
+  assert.deepEqual(compiled.site_rules?.map((rule) => rule.values), [{ zoom: 2 }, { zoom: 1.5 }]);
+  // A row with only a value is not off.
+  assert.equal(compiled.site_rules?.[0]?.off, undefined);
+  assert.deepEqual(site_columns_for(compiled, ["https://a.test/app/x"]).values, { zoom: 2 });
+  assert.deepEqual(site_columns_for(compiled, ["https://a.test/other"]).values, { zoom: 1.5 });
 });
 
 const SLASH_KEYMAP: KeymapConfig = { normal: { "/": { id: "a.find" }, f: { id: "a.f" }, j: { id: "a.j" } } };

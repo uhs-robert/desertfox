@@ -9,7 +9,7 @@ import type { KeymapMode } from "./keymap.ts";
 
 export const COMPILED_KEYMAP_STORAGE_KEY = "desertfox_compiled_keymap";
 
-export const COMPILED_KEYMAP_VERSION = 5;
+export const COMPILED_KEYMAP_VERSION = 6;
 
 // One step of a binding. The side that runs it and the count rule are resolved at compile time.
 export type LeafStep = {
@@ -50,16 +50,16 @@ export type TreeBranch = {
 
 export type TreeNode = TreeLeaf | TreeBranch;
 
-// `pass` and `only` hold parsed key sequences, one token array each. The background prunes the normal tree with them for each page, so the stored keymap does not grow a tree per rule.
-// `all_off` is a rule with no keys, or whose keys leave no normal binding: every normal key goes to the page.
-export type SiteRule = { regex: string } & ({ pass: string[][] } | { only: string[][] } | { all_off: true });
+// One `site_rules` row with its columns (see `SiteColumns` in `match_pattern.ts`). `keys` holds parsed key sequences, one token array each. The background prunes the normal tree with them for each page, so the stored keymap does not grow a tree per rule.
+// `off` is set from `off` or a row with nothing but `site`. The background also treats a page as all off when its key rule leaves no normal binding.
+export type SiteRule = { regex: string; off?: boolean; keys?: { pass: string[][] } | { only: string[][] }; values?: Readonly<Record<string, unknown>> };
 
 export type CompiledKeymap = {
   format_version: typeof COMPILED_KEYMAP_VERSION;
   // Root branch per mode. A mode without bindings is absent.
   modes: Partial<Record<KeymapMode, TreeBranch>>;
   // Settings the content script needs before it can handle a key.
-  // In list order. The first rule whose regex fits the page or the tab wins. Absent when no rule exists.
+  // In list order. Each column takes the first rule that fits the page and sets it. Absent when no rule exists.
   site_rules?: SiteRule[];
   mode_indicator: ModeIndicator;
   // Set when the `bridge` setting is on. The background reads it to open the bridge port. Pages ignore it.

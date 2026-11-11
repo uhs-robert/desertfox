@@ -125,38 +125,56 @@ const rule_list = (...sites: string[]) => sites.map((site) => ({ site }));
 
 test("the site state tells enabled, disabled, covered by a rule and no site", () => {
   const pattern = "*://*.example.com/*";
-  const all_off = rule_list(pattern);
+  const off = [{ site: pattern, off: true }];
   assert.deepEqual(site_state(www_url, { file: [], saved: undefined, effective: [] }), { kind: "enabled", pattern });
-  assert.deepEqual(site_state(www_url, { file: [], saved: all_off, effective: all_off }), { kind: "disabled", pattern, rule: "all off" });
+  assert.deepEqual(site_state(www_url, { file: [], saved: off, effective: off }), { kind: "disabled", pattern, rule: "all off" });
+  // The bare row of an older popup loads as off, and a click still removes it.
+  assert.deepEqual(site_state(www_url, { file: [], saved: rule_list(pattern), effective: rule_list(pattern) }), { kind: "disabled", pattern, rule: "all off" });
   assert.equal(site_state(www_url, { file: rule_list("*://www.example.com/*"), saved: undefined, effective: rule_list("*://www.example.com/*") }).kind, "config");
   // The saved list copied a file rule that matches: only the file can undo it.
-  assert.equal(site_state(www_url, { file: all_off, saved: all_off, effective: all_off }).kind, "config");
+  assert.equal(site_state(www_url, { file: off, saved: off, effective: off }).kind, "config");
   assert.equal(site_state("about:blank", { file: [], saved: undefined, effective: [] }).kind, "unavailable");
 });
 
-test("a rule with keys describes itself and is never the popup's own row", () => {
+test("a key rule describes itself and leaves the site free to turn off", () => {
   const pass = [{ site: "*://*.example.com/*", pass: "j k <C-d>" }];
-  assert.deepEqual(site_state(www_url, { file: [], saved: pass, effective: pass }), { kind: "config", pattern: "*://*.example.com/*", rule: "pass 3 keys" });
+  assert.deepEqual(site_state(www_url, { file: pass, saved: undefined, effective: pass }), { kind: "enabled", pattern: "*://*.example.com/*", rule: "pass 3 keys" });
   const only = [{ site: "*://*.example.com/*", only: "gg" }];
   assert.equal((site_state(www_url, { file: only, saved: undefined, effective: only }) as { rule: string }).rule, "only 1 key");
+  // The popup's off row below the key row decides the off column, and a click removes it again.
+  const both = [...pass, { site: "*://*.example.com/*", off: true }];
+  assert.deepEqual(site_state(www_url, { file: pass, saved: both, effective: both }), { kind: "disabled", pattern: "*://*.example.com/*", rule: "all off" });
 });
 
-test("the first matching rule decides what the popup shows", () => {
+test("an off = false row covers the site, and so does a file off row behind the popup's row", () => {
+  const kept = [{ site: "*://www.example.com/*", off: false }, { site: "*://*.example.com/*", pass: "j" }];
+  assert.deepEqual(site_state(www_url, { file: kept, saved: undefined, effective: kept }), { kind: "config", pattern: "*://*.example.com/*", rule: "on, pass 1 key" });
+  const file = [{ site: "*://www.example.com/*", off: true }];
+  const effective = [{ site: "*://*.example.com/*", off: true }, ...file];
+  assert.equal(site_state(www_url, { file, saved: effective, effective }).kind, "config");
+});
+
+test("each column comes from the first matching row that sets it", () => {
   const effective = [{ site: "*://www.example.com/*", pass: "j" }, { site: "*://*.example.com/*" }];
-  assert.equal((site_state(www_url, { file: effective, saved: undefined, effective }) as { rule: string }).rule, "pass 1 key");
+  assert.equal((site_state(www_url, { file: effective, saved: undefined, effective }) as { rule: string }).rule, "all off");
+  const keys = [{ site: "*://www.example.com/*", pass: "j" }, { site: "*://*.example.com/*", only: "k" }];
+  assert.equal((site_state(www_url, { file: keys, saved: undefined, effective: keys }) as { rule: string }).rule, "pass 1 key");
 });
 
 const config_with = (site_rules: { site: string }[]) => ({ settings: { site_rules } }) as unknown as MergedConfig;
 
-test("disabling a site appends an all-off row to the list in force, enabling removes it", () => {
+test("disabling a site appends an off row to the list in force, enabling removes it", () => {
   const pattern = "*://*.example.com/*";
   const file = [{ site: "*://file.test/*", pass: "j" }];
   const disabled = plan_site_edit(NO_EDITS, file, pattern, "disable");
-  assert.deepEqual(disabled?.saved.site_rules, [...file, { site: pattern }]);
+  assert.deepEqual(disabled?.saved.site_rules, [...file, { site: pattern, off: true }]);
   const enabled = plan_site_edit(disabled!, file, pattern, "enable");
   assert.deepEqual(enabled?.saved.site_rules, file);
   assert.equal(plan_site_edit(disabled!, [], pattern, "disable"), undefined);
   assert.equal(plan_site_edit(NO_EDITS, [], pattern, "enable"), undefined);
+  // Enabling also removes the bare row an older popup wrote, and keeps a row for the pattern that sets keys.
+  const older = { saved: { site_rules: [{ site: pattern }, { site: pattern, pass: "j" }] }, temp: {} };
+  assert.deepEqual(plan_site_edit(older, [], pattern, "enable")?.saved.site_rules, [{ site: pattern, pass: "j" }]);
 });
 
 test("the popup messages go to the switch, the edits and the reload, and a bad request is refused", async () => {
@@ -175,7 +193,7 @@ test("the popup messages go to the switch, the edits and the reload, and a bad r
   assert.deepEqual(await answer_toolbar_request({ type: "toolbar_reload_config" }, deps), { ok: true, message: "Reloaded /c, 1 warning" });
   const failing = { ...deps, reload_config: async () => { throw new Error("no host"); } };
   assert.deepEqual(await answer_toolbar_request({ type: "toolbar_reload_config" }, failing), { ok: false, message: "no host" });
-  assert.deepEqual(calls, ["set true", 'edit {"saved":{"site_rules":[{"site":"*://*.example.com/*"}]},"temp":{}}']);
+  assert.deepEqual(calls, ["set true", 'edit {"saved":{"site_rules":[{"site":"*://*.example.com/*","off":true}]},"temp":{}}']);
 });
 
 test("a request for the state already in force changes nothing", async () => {
@@ -198,5 +216,5 @@ test("the start-up icon waits for a change in flight", async () => {
 test("disabling a site seeds the saved list from the file, not from a temp edit", () => {
   const current = { saved: {}, temp: { site_rules: [{ site: "*://temp.test/*" }] } };
   const next = plan_site_edit(current, rule_list("*://file.test/*"), "*://*.a.test/*", "disable");
-  assert.deepEqual(next?.saved.site_rules, rule_list("*://file.test/*", "*://*.a.test/*"));
+  assert.deepEqual(next?.saved.site_rules, [{ site: "*://file.test/*" }, { site: "*://*.a.test/*", off: true }]);
 });
