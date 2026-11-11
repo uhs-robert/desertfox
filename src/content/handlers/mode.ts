@@ -2,6 +2,7 @@ import type { Mode } from "../../shared/index.ts";
 import type { LeaveTabInsert } from "../../shared/messages.ts";
 import { bundles } from "../bundles.ts";
 import { page_mode } from "../page_mode.ts";
+import { site_mode } from "../site_mode.ts";
 import type { ContentHandler } from "./types.ts";
 import { blur_focused_element, hand_focus_to_parent } from "./page.ts";
 
@@ -17,8 +18,14 @@ export const mode_set: ContentHandler = {
   },
 };
 
+// The site mode is an overlay, not a mode, so this handler and the key listener are all that start and end it.
+export const mode_site: ContentHandler = {
+  run: (args) => site_mode.set_(args.name === "off" ? undefined : (args.name as string)),
+};
+
 export const mode_escape: ContentHandler = {
   run: () => {
+    site_mode.set_();
     // After a search, Escape takes the highlights off. Without the bundle there are none.
     if (bundles.has_handler_("find.clear")) bundles.run_command_("find.clear", "caret", {}, "", false);
     if (bundles.has_handler_("hint.unhover")) bundles.run_command_("hint.unhover", "hints", {}, "", false);

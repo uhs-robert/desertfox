@@ -4,11 +4,11 @@ import type { Mode, ModeIndicator } from "../../shared/index.ts";
 
 const MODE_LABELS: Partial<Record<Mode, string>> = { normal: "NORMAL", insert: "INSERT", ignore: "IGNORE", caret: "CARET", visual: "VISUAL", visual_line: "V-LINE" };
 
-export type BadgeState = { mode: Mode; pass_next: boolean; setting: ModeIndicator; recording: string | undefined };
+export type BadgeState = { mode: Mode; pass_next: boolean; setting: ModeIndicator; recording: string | undefined; site_label?: string | undefined };
 
 // Hint and command line modes draw their own surface, so they get no label here. Content hides the badge for them before it asks for this, so a hint press does not load the bundle.
-export function mode_label(mode: Mode, pass_next_armed: boolean, setting: ModeIndicator, recording?: string): string | undefined {
-  const label = setting === "off" ? undefined : pass_next_armed ? "PASS" : mode === "normal" && setting === "not_normal" ? undefined : MODE_LABELS[mode];
+export function mode_label(mode: Mode, pass_next_armed: boolean, setting: ModeIndicator, recording?: string, site_label?: string): string | undefined {
+  const label = setting === "off" ? undefined : pass_next_armed ? "PASS" : site_label ?? (mode === "normal" && setting === "not_normal" ? undefined : MODE_LABELS[mode]);
   // A recording shows whatever the setting says, because keys are being kept.
   return recording === undefined ? label : `${label ?? ""} recording @${recording}`.trim();
 }

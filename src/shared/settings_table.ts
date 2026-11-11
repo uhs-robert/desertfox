@@ -15,7 +15,10 @@ type EnumValue = string | number | boolean;
 export type BindStep = string | BoundInvocation;
 export type BindingTable = Readonly<Record<string, BindStep | readonly BindStep[] | { run: BindStep | readonly BindStep[]; label?: string; intent?: string }>>;
 
-type TableFields = Readonly<Record<string, { value: "text" | "web_url" | "keys" | "boolean" | "bindings"; optional?: true }>>;
+// A site mode: its badge label and its own table of binds, in the same formats as `bind`.
+export type SiteModeTable = Readonly<Record<string, { label: string; bind: BindingTable }>>;
+
+type TableFields = Readonly<Record<string, { value: "text" | "web_url" | "keys" | "boolean" | "bindings" | "site_modes"; optional?: true }>>;
 
 export type SettingRow = (
   | { kind: "boolean"; default: boolean }
@@ -59,9 +62,10 @@ export const SETTINGS_TABLE = {
   escape_to_page: { kind: "boolean", default: false, per_site: true },
   // Each column resolves on its own: the first row whose `site` matches the page and that sets the column decides it. `pass` and `only` form one column, the key rule.
   // `bind` is the one column that merges key by key: for each key, the first matching row that binds it decides. It binds normal-mode keys and runs before `pass` and `only` prune the tree.
+  // `modes.<name> = { label, bind }` is a site mode: a set of binds laid over normal mode while `mode.site <name>` has it on. The first row that has the mode decides it, whole. Escape, any key DesertFox does not cancel, a mousedown, any mode change and a keymap update end it.
   // `off = true` turns every normal-mode key off, and so does a row that sets nothing but `site`.
   // Settable, though `:set` has no typed form for a list of tables: the popup saves rows, and a saved edit of an unsettable setting is dropped when the edits load.
-  site_rules: { kind: "site_table", fields: { site: { value: "text" }, off: { value: "boolean", optional: true }, pass: { value: "keys", optional: true }, only: { value: "keys", optional: true }, bind: { value: "bindings", optional: true } }, exclusive: ["pass", "only"], default: [] },
+  site_rules: { kind: "site_table", fields: { site: { value: "text" }, off: { value: "boolean", optional: true }, pass: { value: "keys", optional: true }, only: { value: "keys", optional: true }, bind: { value: "bindings", optional: true }, modes: { value: "site_modes", optional: true } }, exclusive: ["pass", "only"], default: [] },
   // Names of the site rows that ship with DesertFox (`src/background/default_site_rows.ts`) to turn off.
   default_site_rows_off: { kind: "enum_list", values: DEFAULT_SITE_ROW_NAMES, default: [] },
   // Matched as lowercase text of a link or button, in order: an earlier entry wins. A 1 or 2 character entry must be the whole text.
@@ -113,7 +117,7 @@ export type SettingName = keyof Table;
 
 type Simplify<T> = { [K in keyof T]: T[K] };
 
-type FieldValue<F> = F extends { value: "boolean" } ? boolean : F extends { value: "bindings" } ? BindingTable : F extends { value: "text" | "web_url" | "keys" } ? string : never;
+type FieldValue<F> = F extends { value: "boolean" } ? boolean : F extends { value: "bindings" } ? BindingTable : F extends { value: "site_modes" } ? SiteModeTable : F extends { value: "text" | "web_url" | "keys" } ? string : never;
 type TableOf<Fields> = Simplify<
   { -readonly [K in keyof Fields as Fields[K] extends { optional: true } ? never : K]: FieldValue<Fields[K]> } & {
     -readonly [K in keyof Fields as Fields[K] extends { optional: true } ? K : never]?: FieldValue<Fields[K]>;

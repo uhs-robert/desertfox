@@ -95,7 +95,7 @@ export const SETTING_COMPLETION: readonly SettingCompletion[] = [
     "settable": true,
     "is_toggle": false,
     "is_list": false,
-    "expectation": "a list of tables with \"site\", an optional \"off\" of true or false, an optional \"pass\" of key sequences, an optional \"only\" of key sequences, an optional \"bind\" of keys to commands and any per-site setting",
+    "expectation": "a list of tables with \"site\", an optional \"off\" of true or false, an optional \"pass\" of key sequences, an optional \"only\" of key sequences, an optional \"bind\" of keys to commands, an optional \"modes\" of modes that each have a label plus a bind and any per-site setting",
     "values": []
   },
   {

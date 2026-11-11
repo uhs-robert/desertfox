@@ -22,6 +22,16 @@ define("mode.set", {
   modes: ["normal", "insert", "ignore", "caret", "visual", "visual_line"],
 });
 
+// The mode itself is a column of a site table row, so this command takes the mode's name and no list of values. A name the page's rows lack does nothing.
+define("mode.site", {
+  label: "Site mode",
+  intent: "Start a named mode of the site table, or end it with off. The mode adds its own keys to normal mode and shows its label in the badge. Escape, any key DesertFox leaves to the page, a mouse press and any mode change end it.",
+  params: [{ name: "name", type: "string", main: true, description: "Start this mode, or off to end the one that runs." }],
+  bridge: false,
+  runs_in: "content",
+  repeatable: false,
+});
+
 // `main.ts` wires the background half after it builds the tab state.
 let enter_tab_insert: ((tab_id: number) => Promise<void>) | undefined;
 export const wire_tab_insert = (enter: (tab_id: number) => Promise<void>) => void (enter_tab_insert = enter);

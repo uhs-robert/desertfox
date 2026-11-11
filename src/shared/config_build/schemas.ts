@@ -82,12 +82,20 @@ const BINDINGS_SCHEMA: Schema = {
   },
 };
 
+// One site mode: a badge label and a bind table.
+const SITE_MODES_SCHEMA: Schema = {
+  type: "object",
+  minProperties: 1,
+  propertyNames: { pattern: "^(?!off$)[a-z][a-z0-9_]*$" },
+  additionalProperties: { type: "object", properties: { label: ONE_LINE_TEXT, bind: BINDINGS_SCHEMA }, required: ["label", "bind"], additionalProperties: false },
+};
+
 type TableFields = Extract<SettingRow, { kind: "table_list" }>["fields"];
 
 // `columns` holds the schema of each extra column a row may set: the per-site settings of a site table.
 function table_list_schema(fields: TableFields, exclusive: readonly string[] | undefined, columns: Record<string, Schema>): Schema {
   // A JSON Schema `pattern` has no case flag, so it refuses an upper-case scheme that the check takes.
-  const field_schema = (value: TableFields[string]["value"]): Schema => (value === "web_url" ? { type: "string", pattern: "^https?://\\S+$" } : value === "boolean" ? { type: "boolean" } : value === "bindings" ? BINDINGS_SCHEMA : non_empty_text);
+  const field_schema = (value: TableFields[string]["value"]): Schema => (value === "web_url" ? { type: "string", pattern: "^https?://\\S+$" } : value === "boolean" ? { type: "boolean" } : value === "bindings" ? BINDINGS_SCHEMA : value === "site_modes" ? SITE_MODES_SCHEMA : non_empty_text);
   return {
     type: "array",
     items: {

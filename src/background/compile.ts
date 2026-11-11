@@ -4,9 +4,10 @@
 
 import type { CommandDef, Mode } from "../shared/command.ts";
 import type { MergedConfig, Settings } from "../shared/config.ts";
+import type { BindingTable } from "../shared/settings_table.ts";
 import type { KeymapConfig } from "../shared/keymap.ts";
 import { ANY_KEY } from "../shared/prefix_tree.ts";
-import type { CompiledKeymap, TreeBranch, TreeNode } from "../shared/prefix_tree.ts";
+import type { CompiledKeymap, SiteBind, SiteRule, TreeBranch, TreeLeaf, TreeNode } from "../shared/prefix_tree.ts";
 import type { Prompt } from "../shared/invocation.ts";
 import { captured_key_param, find_param, is_context_source, without_param } from "../shared/registry/params.ts";
 import { check_args } from "../shared/registry/check_args.ts";
@@ -45,14 +46,18 @@ function with_resolved_binds(rows: Settings["site_rules"], input: CompileInput, 
   const registry = input.registry;
   const aliased: Registry = { ...registry, find: (word) => registry.find(word) ?? (Object.hasOwn(command_aliases, word) && !/\s/.test(word) ? registry.get(command_aliases[word]!) : undefined) };
   const resolve_entry = make_entry_resolver(aliased, { search_engines: Object.keys(search_engines) }, warnings);
-  return rows.map((row) => {
-    if (row.bind === undefined) return row;
-    const bind: Record<string, unknown> = {};
-    for (const [sequence, entry] of Object.entries(row.bind)) {
-      const resolved = resolve_entry(entry, `site_rules: skipped bind "${sequence}" of "${row.site}"`);
-      if (resolved !== undefined) bind[sequence] = resolved;
+  const resolve_table = (table: BindingTable, scope: string, site: string): never => {
+    const resolved: Record<string, unknown> = {};
+    for (const [sequence, entry] of Object.entries(table)) {
+      const step = resolve_entry(entry, `site_rules: ${scope}skipped bind "${sequence}" of "${site}"`);
+      if (step !== undefined) resolved[sequence] = step;
     }
-    return { ...row, bind: bind as never };
+    return resolved as never;
+  };
+  return rows.map((row) => {
+    if (row.bind === undefined && row.modes === undefined) return row;
+    const modes = row.modes && Object.fromEntries(Object.entries(row.modes).map(([name, mode]) => [name, { ...mode, bind: resolve_table(mode.bind, `mode "${name}" `, row.site) }]));
+    return { ...row, ...(row.bind && { bind: resolve_table(row.bind, "", row.site) }), ...(modes && { modes }) };
   });
 }
 
@@ -93,17 +98,43 @@ export function compile_config(input: CompileInput): CompileOutput {
   }
   for (const rule of compiled.site_rules ?? []) {
     const site = (settings.site_rules as { site: string }[]).find((row) => match_regex_source([row.site]) === rule.regex)?.site ?? rule.regex;
-    for (const [key, { tokens, leaf }] of Object.entries(rule.bind ?? {})) {
-      const waits_for_key = leaf.steps.some((step) => captured_key_param(input.get_command(step.invocation.id) ?? {}, step.invocation.args));
-      if (waits_for_key) warnings.push(`site_rules: skipped bind "${tokens.join("")}" of "${site}": a bind cannot wait for a key press`);
-      // keep_node words its warnings for a keymap entry, so they are renamed to name the site row.
-      const node_warnings: string[] = [];
-      const kept = !waits_for_key && keep_node(leaf, tokens, "normal", input, node_warnings);
-      warnings.push(...node_warnings.map((warning) => warning.replace(/^normal: skipped "[^"]*"/, `site_rules: skipped bind "${tokens.join("")}" of "${site}"`)));
-      if (waits_for_key || !kept) delete rule.bind![key];
-    }
+    check_site_binds(rule.bind, "", site, input, warnings);
+    for (const [name, mode] of Object.entries(rule.modes ?? {})) check_site_binds(mode.bind, `mode "${name}" `, site, input, warnings);
   }
+  warn_unknown_modes(compiled.site_rules ?? [], compiled.modes.normal, warnings);
   return { compiled, theme: { dark: theme.dark, light: theme.light }, warnings: [...resolve_warnings, ...warnings] };
+}
+
+// Checks the binds of a site row or one of its modes, and drops the bad ones in place. A mode lays over normal mode, so its binds run in normal mode.
+function check_site_binds(binds: Record<string, SiteBind> | undefined, scope: string, site: string, input: CompileInput, warnings: string[]): void {
+  for (const [key, { tokens, leaf }] of Object.entries(binds ?? {})) {
+    const waits_for_key = leaf.steps.some((step) => captured_key_param(input.get_command(step.invocation.id) ?? {}, step.invocation.args));
+    if (waits_for_key) warnings.push(`site_rules: ${scope}skipped bind "${tokens.join("")}" of "${site}": a bind cannot wait for a key press`);
+    // keep_node words its warnings for a keymap entry, so they are renamed to name the site row.
+    const node_warnings: string[] = [];
+    const kept = !waits_for_key && keep_node(leaf, tokens, "normal", input, node_warnings);
+    warnings.push(...node_warnings.map((warning) => warning.replace(/^normal: skipped "[^"]*"/, `site_rules: ${scope}skipped bind "${tokens.join("")}" of "${site}"`)));
+    if (waits_for_key || !kept) delete binds![key];
+  }
+}
+
+// A `mode.site` bind that names a mode no site row defines does nothing on any page. Rows merge by mode name across sites, so the check is over every row, and it only warns. The keymap's normal mode is checked too, because a key there can start a mode as well.
+function warn_unknown_modes(rules: readonly SiteRule[], normal: TreeBranch | undefined, warnings: string[]): void {
+  const defined = new Set(rules.flatMap((rule) => Object.keys(rule.modes ?? {})));
+  const check = (owner: string, tokens: readonly string[], leaf: TreeLeaf) => {
+    for (const { invocation } of leaf.steps) {
+      const name = invocation.id === "mode.site" ? invocation.args?.name : undefined;
+      if (typeof name === "string" && name !== "off" && !defined.has(name)) warnings.push(`${owner}: bind "${tokens.join("")}" starts the site mode "${name}", which no site row defines`);
+    }
+  };
+  const walk = (node: TreeNode, tokens: readonly string[]) => {
+    if (node.kind === "leaf") check("normal", tokens, node);
+    else for (const [token, child] of Object.entries(node.children)) walk(child, [...tokens, token]);
+  };
+  if (normal) walk(normal, []);
+  for (const rule of rules) {
+    for (const { tokens, leaf } of [...Object.values(rule.bind ?? {}), ...Object.values(rule.modes ?? {}).flatMap((mode) => Object.values(mode.bind))]) check("site_rules", tokens, leaf);
+  }
 }
 
 // Checks and prunes in place.
