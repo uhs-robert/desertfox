@@ -20,9 +20,10 @@ const compile = (site_rules: { site: string; off?: boolean; pass?: string; only?
 
 // What a key does on a page, the way the background resolves the columns and trims the tree, and the content script builds the matcher.
 function matcher_for(compiled: CompiledKeymap, url: string) {
-  const { tree, frees } = normal_tree_for(compiled.modes.normal, site_columns_for(compiled, [url]));
-  const page = tree === undefined ? compiled : { ...compiled, modes: { ...compiled.modes, normal: tree } };
-  return create_matcher(page, frees && ((token) => is_freed(frees, token)));
+  const page_tree = normal_tree_for(compiled.modes.normal, site_columns_for(compiled, [url]));
+  if (!("frees" in page_tree)) return create_matcher(compiled);
+  const { tree, frees } = page_tree;
+  return create_matcher({ ...compiled, modes: { ...compiled.modes, normal: tree } }, (token) => is_freed(frees, token));
 }
 
 const all_off_at = (compiled: CompiledKeymap, url: string): boolean => normal_tree_for(compiled.modes.normal, site_columns_for(compiled, [url])).all_off;

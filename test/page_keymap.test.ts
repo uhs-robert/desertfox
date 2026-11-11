@@ -91,11 +91,12 @@ test("an edit between two asks reaches the open page on the next ask", async () 
 test("a site value beats the global value, which holds :set, and only on its sites", () => {
   // No setting opts in yet, so the rows are cast: the compiler copies every column besides site, off, pass and only.
   const compiled = compile([{ site: "https://a.test/*", zoom: 2 }] as unknown as Parameters<typeof compile>[0]);
-  assert.equal(site_value(site_columns_for(compiled, ["https://a.test/"]), "zoom", 1.25), 2);
-  assert.equal(site_value(site_columns_for(compiled, ["https://b.test/"]), "zoom", 1.25), 1.25);
+  // The name and value are cast too: `site_value` takes only per-site setting names, and there are none yet.
+  assert.equal(site_value(site_columns_for(compiled, ["https://a.test/"]), "zoom" as never, 1.25 as never), 2);
+  assert.equal(site_value(site_columns_for(compiled, ["https://b.test/"]), "zoom" as never, 1.25 as never), 1.25);
   // A false or zero site value still wins.
   const falsy = compile([{ site: "https://a.test/*", flag: false }] as unknown as Parameters<typeof compile>[0]);
-  assert.equal(site_value(site_columns_for(falsy, ["https://a.test/"]), "flag", true), false);
+  assert.equal(site_value(site_columns_for(falsy, ["https://a.test/"]), "flag" as never, true as never), false);
 });
 
 test("a tab-wide value resolves against the top frame's address in every frame", () => {
