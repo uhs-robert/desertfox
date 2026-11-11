@@ -22,6 +22,9 @@ export function declared_default(param: ParamDef): ParamDef["default"] {
   return param.optional ? "" : param.default;
 }
 
+// Whether the param declares a default list. Under a `when` that holds, such a param is required when no arm holds.
+export const has_default_list = (param: ParamDef): boolean => is_default_list(declared_default(param));
+
 // The arms of a default list in order, and the plain value last (undefined when the list ends on an arm).
 export function split_default(list: DefaultList): { arms: DefaultArm[]; fallback: ParamValue | undefined } {
   const is_arm = (item: unknown): item is DefaultArm => typeof item === "object" && item !== null;
@@ -158,4 +161,11 @@ export function value_rule_error(param: ParamDef, value: ParamValue, known: Reco
   if (!rule) return null;
   const failing = Object.entries(rule).find(([name, allowed]) => !is_context_source(known[name]) && !allowed.includes(known[name] as ParamValue));
   return failing ? `${param.name} ${value} needs ${failing[0]} ${join_alternatives(failing[1])}` : null;
+}
+
+// Why `value` fails the pattern of the first arm of `param` that holds next to the sibling values in `known`, or the plain pattern when no arm holds. Null when it passes. The plain pattern is not read before, so an arm is never refused by it.
+export function pattern_arm_error(param: ParamDef, value: string, known: Record<string, unknown>): string | null {
+  const arm = param.pattern_arms?.find(({ when }) => Object.entries(when).every(([name, allowed]) => allowed.includes(known[name] as ParamValue)));
+  const pattern = arm?.pattern ?? param.pattern;
+  return pattern !== undefined && !new RegExp(pattern).test(value) ? `${param.name} expects text matching ${pattern}, got ${JSON.stringify(value)}` : null;
 }

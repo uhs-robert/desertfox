@@ -53,7 +53,7 @@ const EXPECTED_REFUSALS: Record<string, RegExp[]> = {
   "quickmark.delete": [/is not saved/],
   "mark.list": [/No marks?/],
   "mark.delete": [/No mark/],
-  "media.act": [/No video or audio on this page/, /needs Firefox 153 or newer/, /No video on this page/],
+  "media.act": [/No video or audio on this page/, /No quality control on this page/, /No next video/, /needs Firefox 153 or newer/, /No video on this page/],
 };
 
 const SOURCES: EnumSources = { search_engines: ["stub_engine"], containers: ["stub_container"] };

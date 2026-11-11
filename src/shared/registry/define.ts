@@ -1,7 +1,7 @@
 // The registry and its define-time checks. Every rejection throws a
 // DefineError that names the command and the field.
 
-import type { CommandDef, DefaultArm, ParamDef, ParamValue } from "../command.ts";
+import type { CommandDef, DefaultArm, ParamDef, PatternArm, ParamValue } from "../command.ts";
 import { MODES } from "../command.ts";
 import { always_default, arm_conditions, declared_default, find_param, is_context_source, is_default_list, is_dynamic_values, split_default, static_values } from "./params.ts";
 import { is_setting_name } from "../settings_schema.ts";
@@ -165,6 +165,7 @@ function check_params(input: CommandInput, fail: Fail): void {
     if (param.when) check_when(input, param, at, fail);
     if (is_default_list(param.default)) check_default_arms(input, param, at, fail);
     if (param.value_when) check_value_when(input, param, at, fail);
+    param.pattern_arms?.forEach((arm, arm_index) => check_pattern_arm(input, param, arm, `${at}.pattern_arms[${arm_index}]`, fail));
   });
   check_default_cycles(input, fail);
 
@@ -180,7 +181,6 @@ function check_params(input: CommandInput, fail: Fail): void {
 function check_default_arms(input: CommandInput, param: ParamDef, at: string, fail: Fail): void {
   const list = param.default as readonly unknown[];
   if (list.length === 0) fail(`${at}.default`, "a default list must not be empty");
-  if (param.when) fail(`${at}.default`, "a default list cannot be combined with `when` on the same param");
   list.forEach((item, index) => {
     const here = `${at}.default[${index}]`;
     if (item === null || item === undefined) return fail(here, "an arm must be a { value, when } object or a plain value");
@@ -190,6 +190,16 @@ function check_default_arms(input: CommandInput, param: ParamDef, at: string, fa
     }
     check_when(input, { ...param, when: (item as DefaultArm).when }, here, fail, { allow_several: true });
   });
+}
+
+function check_pattern_arm(input: CommandInput, param: ParamDef, arm: PatternArm, at: string, fail: Fail): void {
+  if (param.type !== "string") fail(at, "only a string param takes pattern arms");
+  try {
+    new RegExp(arm.pattern);
+  } catch {
+    fail(`${at}.pattern`, `${JSON.stringify(arm.pattern)} is not a regular expression`);
+  }
+  check_when(input, { ...param, when: arm.when }, at, fail, { allow_several: true });
 }
 
 // A rule per enum value. Each default arm must satisfy the rule of its own value, so no default is refused at run time.
