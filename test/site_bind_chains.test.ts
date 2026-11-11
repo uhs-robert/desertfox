@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { compile_config } from "../src/background/compile.ts";
+import { plan_set_value } from "../src/commands/settings.ts";
 import { empty_config } from "../src/background/config_load.ts";
 import "../src/background/command_modules.ts";
 import { ConfigErrors } from "../src/shared/config_build/errors.ts";
@@ -85,4 +86,26 @@ test("a failing step in the compile check drops the whole chain", () => {
   const { compiled, warnings } = compile({ a: [{ id: "tab.prev" }, { id: "page.send_key", args: { key: "ArrowDown" } }], b: [{ id: "tab.prev" }] });
   assert.deepEqual(Object.keys(compiled.site_rules![0]!.bind!), ["b"]);
   assert.ok(warnings.some((warning) => warning.startsWith('site_rules: skipped bind "a" of "https://a.test/*"')), warnings.join("\n"));
+});
+
+test("a label or intent with a control character is a build error in each table form", () => {
+  const text = problems_of('a = { run = "tab.next", label = "x\\ny" }, b = { id = "tab.next", label = "x\\ny" }, c = { id = "tab.next", intent = "" }, d = { id = "tab.next", label = "Fine" }').join("\n");
+  assert.match(text, /bind "a" .*a label must not hold control characters/);
+  assert.match(text, /bind "b" .*a label must not hold control characters/);
+  assert.match(text, /bind "c" .*an intent must not be empty/);
+  assert.doesNotMatch(text, /bind "d"/);
+});
+
+test("a text bind set from the browser compiles and runs like a file bind", () => {
+  const typed = { a: "tab.next", b: ["tab.prev", "tab.next"], c: { run: "tab.next", label: "Next" }, d: "no.such.command" };
+  const config = empty_config();
+  const plan = plan_set_value("site_rules", [{ site: "https://a.test/*", bind: typed }], "saved", { saved: {}, temp: {} }, config);
+  assert.equal(plan.toast?.kind, "success");
+  const edited = { ...config, settings: { ...config.settings, ...plan.next!.saved } };
+  const { compiled, warnings } = compile_config({ config: edited, default_keymap: {}, get_command: (id) => registry.get(id), registry, enum_sources: {} });
+  const bind = compiled.site_rules![0]!.bind!;
+  assert.deepEqual(Object.keys(bind), ["a", "b", "c"]);
+  assert.deepEqual(bind.b!.leaf.steps.map((step) => step.invocation.id), ["tab.prev", "tab.next"]);
+  assert.equal(bind.c!.leaf.label, "Next");
+  assert.equal(warnings.filter((warning) => warning.includes('bind "d"')).length, 1, warnings.join("\n"));
 });

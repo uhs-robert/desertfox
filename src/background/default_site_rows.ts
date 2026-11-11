@@ -21,8 +21,8 @@ const SHEETS_BIND: BindingTable = {
   "<C-j>": arrow("ArrowDown", 40, true),
   "<C-k>": arrow("ArrowUp", 38, true),
   "<C-l>": arrow("ArrowRight", 39, true),
-  // Ctrl+End goes to the last cell of the data, and Ctrl+Left from there to column A of that row.
-  G: [{ ...arrow("End", 35, true), label: "bottom of column A" }, arrow("ArrowLeft", 37, true)],
+  // Ctrl+End goes to the last cell of the data, and Home from there to column A of that row.
+  G: [{ ...arrow("End", 35, true), label: "Bottom of column A", intent: "Go to column A of the last row with data." }, arrow("Home", 36)],
 };
 // Select all and Cut are Sheets' own, so url.increment must not take <C-a> and <C-x> on Sheets. A user Sheets row that sets `pass` replaces this column, so it must list both keys to keep them. A row that sets `only` replaces it too, and there a key left out of `only` goes to the page, so it must leave both keys out.
 const SHEETS_PASS = "<C-a> <C-x>";
