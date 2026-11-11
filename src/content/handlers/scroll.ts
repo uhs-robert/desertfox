@@ -51,22 +51,28 @@ export const end_flight = () => {
 export const tapped_end = (flight_end: number | undefined, top: number, distance: number, max_top: number): number =>
   Math.min(Math.max((flight_end ?? top) + distance, 0), max_top);
 
-// A scroll pressed while the body is still on its way finds no height and would be lost. It waits for DOMContentLoaded and runs once. Presses during the wait are dropped, so a burst makes one step instead of a jump.
-let waiting_for_layout = false;
+// A scroll pressed while the body is still on its way finds no room and would be lost. It waits in order for DOMContentLoaded. A press that repeats the last queued one adds nothing, so a burst of j is one step. A later press that finds room runs the queue first.
+const waiting: { key: string; run: () => void }[] = [];
 
-const scroll_by = (dx: number, dy: number) => {
-  end_flight();
-  const axis = dy !== 0 ? "y" : "x";
-  const target = scroll_target(axis);
-  const no_room = axis === "y" ? target.scrollHeight <= target.clientHeight : target.scrollWidth <= target.clientWidth;
-  if (no_room && document.readyState === "loading") {
-    if (waiting_for_layout) return;
-    waiting_for_layout = true;
-    document.addEventListener("DOMContentLoaded", () => ((waiting_for_layout = false), scroll_by(dx, dy)), { once: true });
-    return;
+const run_waiting = () => waiting.splice(0).forEach((entry) => entry.run());
+
+const when_laid_out = (key: string, axis: ScrollAxis, moves: boolean, run: () => void) => {
+  const target = document.readyState === "loading" && moves ? scroll_target(axis) : undefined;
+  const no_room = target && (axis === "y" ? target.scrollHeight <= target.clientHeight : target.scrollWidth <= target.clientWidth);
+  if (!no_room) {
+    run_waiting();
+    return run();
   }
-  target.scrollBy({ left: dx, top: dy, behavior: "instant" });
+  if (waiting.length === 0) document.addEventListener("DOMContentLoaded", run_waiting, { once: true });
+  if (waiting.at(-1)?.key !== key) waiting.push({ key, run });
 };
+
+const move_by = (dx: number, dy: number) => {
+  end_flight();
+  scroll_target(dy !== 0 ? "y" : "x").scrollBy({ left: dx, top: dy, behavior: "instant" });
+};
+
+const scroll_by = (dx: number, dy: number) => when_laid_out(`by ${dx} ${dy}`, dy !== 0 ? "y" : "x", dx !== 0 || dy !== 0, () => move_by(dx, dy));
 
 const smooth_page_tap = (target: Element, distance: number) => {
   const end = tapped_end(in_flight?.target === target ? in_flight.end : undefined, target.scrollTop, distance, target.scrollHeight - target.clientHeight);
@@ -85,25 +91,28 @@ export const scroll_pixels: ContentHandler = {
 };
 
 export const scroll_pages: ContentHandler = {
-  run: (args, repeat) => {
-    const target = scroll_target("y");
-    const distance = Number(args.fraction) * Number(args.count) * target.clientHeight;
-    if (repeat) scroll_by(0, distance);
-    else smooth_page_tap(target, distance);
-  },
+  run: (args, repeat) =>
+    when_laid_out(`pages ${args.fraction} ${args.count}`, "y", Number(args.fraction) * Number(args.count) !== 0, () => {
+      const target = scroll_target("y");
+      const distance = Number(args.fraction) * Number(args.count) * target.clientHeight;
+      if (repeat) move_by(0, distance);
+      else smooth_page_tap(target, distance);
+    }),
 };
 
 export const scroll_to: ContentHandler = {
   run: (args, repeat) => {
     const axis = args.axis as ScrollAxis;
-    const behavior = smooth_unless(repeat);
-    end_flight();
-    const target = scroll_target(axis);
-    const percent = Number(args.percent);
-    if (axis === "x") {
-      target.scrollTo({ left: percent_to_offset(percent, target.scrollWidth, target.clientWidth), behavior });
-    } else {
-      target.scrollTo({ top: percent_to_offset(percent, target.scrollHeight, target.clientHeight), behavior });
-    }
+    when_laid_out(`to ${axis} ${args.percent}`, axis, true, () => {
+      end_flight();
+      const target = scroll_target(axis);
+      const percent = Number(args.percent);
+      const behavior = smooth_unless(repeat);
+      if (axis === "x") {
+        target.scrollTo({ left: percent_to_offset(percent, target.scrollWidth, target.clientWidth), behavior });
+      } else {
+        target.scrollTo({ top: percent_to_offset(percent, target.scrollHeight, target.clientHeight), behavior });
+      }
+    });
   },
 };

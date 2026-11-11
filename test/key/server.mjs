@@ -274,9 +274,9 @@ export function start_server() {
       </script>`;
       return response.end(page(`cell_editor ${id}`, editor + tall_filler + script));
     }
-    // The head and the open body tag at once, the content after `ms`: a page whose height arrives late. Firefox hands no key to a document that has no body yet, so the body tag must come first.
+    // The head and the open body tag at once, the content after `ms`: a page whose height and width arrive late. Firefox hands no key to a document that has no body yet, so the body tag must come first.
     if (url.pathname === "/slow_body") {
-      const [head, body] = page(`slow_body ${id}`, tall_filler).split("<h1>");
+      const [head, body] = page(`slow_body ${id}`, tall_filler + '<div style="width:3000px;height:1px"></div>').split("<h1>");
       response.write(head);
       return void setTimeout(() => response.end("<h1>" + body), Number(url.searchParams.get("ms")));
     }

@@ -5,7 +5,7 @@ export const areas = ["keys"];
 
 const KEYMAP_DELAY_MS = 2500;
 
-export async function run_cases({ run_case, in_background, url_of, wait_event, events, expect, sleep, press_keys, scroll_report_wait_ms, last_scroll_y }) {
+export async function run_cases({ run_case, in_background, url_of, wait_event, events, expect, sleep, press_keys, in_active_tab }) {
   const delay_keymap_reads = (on) => in_background(`(() => {
     const local = browser.storage.local;
     if (!${on}) { if (local.get.original) local.get = local.get.original; return 0; }
@@ -30,20 +30,37 @@ export async function run_cases({ run_case, in_background, url_of, wait_event, e
     }
   });
 
-  await run_case("j held for the keymap while the body is still loading scrolls once the body arrives", async () => {
-    await delay_keymap_reads(true);
+  // Presses `keys` while the body is held, then reads the scroll position once the body is in. With `keymap_late` the keys are held for the keymap and replay after it lands, still before the body. A chord is never held for the keymap, so the Ctrl case leaves the keymap alone.
+  const press_on_slow_body = async (id, keys, { keymap_late = true } = {}) => {
+    await delay_keymap_reads(keymap_late);
     try {
-      const mark = events.length;
-      // The keymap lands first and the body after it, so the held j replays on a document with no height yet.
-      await in_background(`browser.tabs.create({ url: ${JSON.stringify(url_of("slow_body", "early_j") + `&ms=${KEYMAP_DELAY_MS + 1500}`)}, active: true }).then((tab) => tab.id)`);
+      await in_background(`browser.tabs.create({ url: ${JSON.stringify(url_of("slow_body", id) + `&ms=${KEYMAP_DELAY_MS + 1500}`)}, active: true }).then((tab) => tab.id)`);
       await sleep(900);
-      // Three presses must coalesce into one step, not a jump of three.
-      await press_keys("j", "j", "j");
-      const scrolled = await wait_event(mark, (event) => event.type === "scroll" && event.page_id === "early_j", "the held j to scroll once the body arrived", KEYMAP_DELAY_MS + 6000);
-      await sleep(scroll_report_wait_ms);
-      expect(scrolled?.y === 50 && last_scroll_y("early_j") === 50, `j scrolled to ${last_scroll_y("early_j")} instead of one 50 px step`);
+      for (const args of keys) await press_keys(...args);
+      await sleep(KEYMAP_DELAY_MS + 1500 + 1500);
+      return JSON.parse(await in_active_tab("JSON.stringify({ x: scrollX, y: scrollY })"));
     } finally {
       await delay_keymap_reads(false);
     }
+  };
+
+  await run_case("three j pressed while the body is still loading make one step once it arrives", async () => {
+    const at = await press_on_slow_body("early_j", [["j", "j", "j"]]);
+    expect(at.y === 50 && at.x === 0, `three j scrolled to ${JSON.stringify(at)} instead of one 50 px step`);
+  });
+
+  await run_case("j then l pressed while the body is still loading move both axes", async () => {
+    const at = await press_on_slow_body("early_jl", [["j"], ["l"]]);
+    expect(at.y === 50 && at.x === 50, `j then l scrolled to ${JSON.stringify(at)} instead of 50 down and 50 right`);
+  });
+
+  await run_case("G pressed while the body is still loading scrolls to the bottom once it arrives", async () => {
+    const at = await press_on_slow_body("early_G", [["G"]]);
+    expect(at.y > 1000, `G scrolled to ${JSON.stringify(at)}`);
+  });
+
+  await run_case("Ctrl+D pressed while the body is still loading scrolls half a page once it arrives", async () => {
+    const at = await press_on_slow_body("early_pages", [["-M", "ctrl", "d", "-m", "ctrl"]], { keymap_late: false });
+    expect(at.y > 300 && at.y < 600, `Ctrl+D scrolled to ${JSON.stringify(at)}`);
   });
 }
