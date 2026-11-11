@@ -259,7 +259,7 @@ function register(host: BundleHostApi): void {
 
   // Finds, labels and shows the hints. Keys typed meanwhile wait and replay. Rapid mode calls it again after each pick.
   async function build(current: Session, candidates: Found[], first_build: boolean): Promise<void> {
-    const [letters, visible] = await Promise.all([read_letters(), keep_visible_ones(candidates, current.filter, current.action === "inspect")]);
+    const [letters, key_line_setting, visible] = await Promise.all([read_letters(), read_setting("hint_key_line"), keep_visible_ones(candidates, current.filter, current.action === "inspect")]);
     if (current.cancelled) return;
     const found = current.lower_text_ === undefined ? visible : keep_text_matches(visible, current.lower_text_);
     if (found.length === 0) {
@@ -279,6 +279,7 @@ function register(host: BundleHostApi): void {
     const view = create_view();
     const labels = make_labels(found.length, letters);
     view.show(found.map((item, index) => ({ found: item, text: labels[index]! })));
+    if (key_line_setting !== false) view.add_key_line_();
     // Read when text mode first needs the texts, once for this build.
     let texts: string[] | undefined;
     const text_of_found_ = () => (texts ??= found.map((item) => text_of(item.element)));

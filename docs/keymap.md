@@ -24,7 +24,7 @@ A note "(prompts)" means the binding sets a `prompt` for a param, so the command
 
 <!-- BEGIN generated -->
 
-bound: 343 (normal 202, hint 6, cmdline 19, caret 35, visual 37, visual_line 38, insert 2, ignore 1, browser 3) | later: 3 | dropped: 5
+bound: 344 (normal 202, hint 7, cmdline 19, caret 35, visual 37, visual_line 38, insert 2, ignore 1, browser 3) | later: 3 | dropped: 5
 
 ### normal
 
@@ -276,7 +276,8 @@ Which-key group names:
 | --- | --- | --- | --- | --- |
 | `<Escape>` | bound | `mode.escape` | Escape |  |
 | `<C-[>` | bound | `mode.escape` | Escape |  |
-| `<Tab>` | bound | `hint.key tab` | Type link text, or next match |  |
+| `/` | bound | `hint.key slash` | Type link text |  |
+| `<Tab>` | bound | `hint.key tab` | Next match |  |
 | `<S-Tab>` | bound | `hint.key shift_tab` | Previous match |  |
 | `<Enter>` | bound | `hint.key enter` | Pick the active match |  |
 | `<Space>` | bound | `hint.key space` | Turn overlapping labels |  |

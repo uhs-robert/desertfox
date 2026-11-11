@@ -24,6 +24,7 @@ The keys follow Vim habits: modes, `hjkl` to scroll, `gg` and `G` to jump, `yy` 
 ## ✨ Features
 
 - Click anything: press `f`, then type the short label next to a link, button, input or image.
+- Narrow the labels by link text: press `/` in hint mode and type part of the text. A line at the bottom right shows these keys, and `hint_key_line` hides it.
 - Open a link in a background tab without touching the mouse: press `F`.
 - Copy from the page with the `;y` yank keys: `;yl` copies a link, `;yt` the text of any element, `;yc` its shortest CSS selector and `;yh` its outer HTML.
 - Run commands by name: `:` opens a line that completes commands, tabs, bookmarks, history and search engines as you type.
