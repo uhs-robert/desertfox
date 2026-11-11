@@ -14,7 +14,7 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
     let seen;
     await poll_until(`the ${label} badge`, async () => (seen = await badge()) === label, { timeout_ms: 3000, expected_timeout: true }).catch(() => expect(false, `the badge is ${seen}, expected ${label}`));
   }
-  const page_sees = (mark, key) => wait_event(mark, (event) => event.type === "keydown" && event.key === key && event.page_id === page_id, `the page to see ${key}`);
+  const page_sees = (mark, key, seen_page_id = page_id) => wait_event(mark, (event) => event.type === "keydown" && event.key === key && event.page_id === seen_page_id, `the page to see ${key}`);
   async function expect_j_scrolls(when) {
     expect((await scroll_delta_by_press(page_id, ["j"])) > 0, `j did not scroll ${when}`);
     expect((await editor_text()) === "", `the parked editor holds "${await editor_text()}" ${when}`);
@@ -91,10 +91,10 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
     await load_config_dir(dir);
   });
 
-  const start_edit_by_enter = async () => {
+  const start_edit_by_enter = async (seen_page_id = page_id) => {
     const mark = events.length;
     await press_keys("-k", "Return");
-    await page_sees(mark, "Enter");
+    await page_sees(mark, "Enter", seen_page_id);
     await expect_badge("INSERT");
   };
 
@@ -110,10 +110,10 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
   await run_case("with an escape_to_page row, Escape reaches the page, ends the edit and returns to normal mode", async () => {
     const row_page_id = "p15_escape_row";
     await open_page("cell_editor", row_page_id, { new_tab: true });
-    await start_edit_by_enter();
+    await start_edit_by_enter(row_page_id);
     const mark = events.length;
     await press_keys("-k", "Escape");
-    await wait_event(mark, (event) => event.type === "keydown" && event.key === "Escape" && event.page_id === row_page_id, "the page to see Escape");
+    await page_sees(mark, "Escape", row_page_id);
     await expect_badge("NORMAL");
     expect(await editor_holds_focus(), "the cell editor lost the focus when Escape ended the edit");
     expect((await in_active_tab(`document.getElementById("box").style.top`)) === "-10000px", "the edit did not end");
@@ -126,7 +126,7 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
     await expect_badge("INSERT");
     const mark = events.length;
     await press_keys("-k", "Escape");
-    await wait_event(mark, (event) => event.type === "keydown" && event.key === "Escape" && event.page_id === row_page_id, "the page to see Escape");
+    await page_sees(mark, "Escape", row_page_id);
     await expect_badge("INSERT");
   });
 
