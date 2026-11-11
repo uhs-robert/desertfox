@@ -1,6 +1,6 @@
 // Physical keys whose keydown was cancelled: their keypress and keyup are cancelled too.
 // So is the keyup of a key whose keydown this frame never saw. A press belongs to the frame that got its keydown, and the page of another frame must not act on the keyup alone. Google Docs focuses its editor again on the Escape keyup that follows a focus hand-off (`hand_focus_to_parent`), which undid the hand-off.
-// This leaves the page with no key it saw go down, because it gets a keydown only after this frame's listener does. The one gap is a key that went down before this script started.
+// A page that listens only on its own window is left with no key it saw go down, because it gets a keydown only after this frame's listener does. A same-origin page that also listens on a child frame's window is not safe: it sees the keydown in the child and loses the keyup that lands in its own frame.
 
 // One cancelled keydown that may reach the page later, on replay.
 export type HeldPress = { keyup_seen: boolean };
