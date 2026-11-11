@@ -103,7 +103,7 @@ async function open_in_with_id(ctx: CommandContext, url: string, where: Where, c
 // Firefox opens a window with no container and not private unless told otherwise, so a window opened from a container or private tab must carry that tab's state. An unreadable sender tab gives the old plain window.
 // A private window has no containers, so naming one from a private tab is refused. `default` is a named container and still counts.
 async function new_window_context(ctx: CommandContext, container_store_id: string | undefined): Promise<{ cookieStoreId?: string; incognito?: true }> {
-  const tab = ctx.tab_id === undefined ? undefined : await Promise.resolve().then(() => browser.tabs.get(ctx.tab_id as number)).catch(() => undefined);
+  const tab = ctx.tab_id === undefined ? undefined : await browser.tabs.get(ctx.tab_id).catch(() => undefined);
   if (tab?.incognito) {
     if (container_store_id !== undefined) throw new RuntimeRefusal("A private window has no containers");
     return { incognito: true };
