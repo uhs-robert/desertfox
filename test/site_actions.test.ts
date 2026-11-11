@@ -6,7 +6,7 @@ import { registry } from "../src/shared/registry/builtin.ts";
 import { args_for_count } from "../src/content/invocation_args.ts";
 import { SEND_KEY_MAX_TIMES } from "../src/shared/send_key_limit.ts";
 import { check_args } from "../src/shared/registry/check_args.ts";
-import { KEY_PAIR_GAP_MS, send_key, send_key_queued } from "../src/content/site_actions/send_key.ts";
+import { KEY_PAIR_GAP_MS, queued_in_page, send_key, send_key_queued } from "../src/content/site_actions/send_key.ts";
 
 type Sent = { type: string; init: KeyboardEventInit };
 
@@ -215,4 +215,25 @@ test("clipboard_action refuses a target that did not take focus, without running
   const page = clipboard_page(true, true, false);
   await assert.rejects(clipboard_action(page.doc, { action: "paste", target: "#e" }, async () => undefined), /did not take focus/);
   assert.deepEqual(page.calls, ["focus"]);
+});
+
+test("a clipboard action queued behind a count of key pairs runs after the last pair", async () => {
+  mock.timers.enable({ apis: ["setTimeout", "Date"] });
+  try {
+    const order: string[] = [];
+    const page = fake_page({ "#e": "editor" }, null);
+    const make_event = (type: string, init: KeyboardEventInit) => (type === "keydown" && order.push("key"), page.make_event(type, init));
+    const clip = clipboard_page(true);
+    const execute = clip.doc.execCommand;
+    clip.doc.execCommand = (command: string) => (order.push(command), execute(command));
+    const done = Promise.all([send_key_queued(page.doc, { key: "l", key_code: 39, target: "#e", times: 2 }, make_event), queued_in_page(() => clipboard_action(clip.doc, { action: "cut", target: "#e" }, async () => undefined))]);
+    for (let step = 0; step < 20; step++) {
+      mock.timers.tick(KEY_PAIR_GAP_MS / 2);
+      await new Promise((resolve) => setImmediate(resolve));
+    }
+    await done;
+    assert.deepEqual(order, ["key", "key", "cut"]);
+  } finally {
+    mock.timers.reset();
+  }
 });
