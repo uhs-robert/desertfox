@@ -5,6 +5,7 @@ import "../../src/commands/hint.ts";
 import { check_args } from "../../src/shared/registry/check_args.ts";
 import type { Outcome } from "../../src/shared/messages.ts";
 import { registry } from "../../src/shared/registry/builtin.ts";
+import { KEY_LINE_LABELS, KEY_LINE_TEXT } from "../../src/content/hints/view.ts";
 
 class FakeNode {
   children: FakeNode[] = [];
@@ -88,7 +89,7 @@ class FakeHtmlInputElement extends FakeHtmlElement {}
 let import_count = 0;
 
 // Builds a page of links with the given texts and loads the hints bundle against it.
-async function page_with(texts: string[]) {
+async function page_with(texts: string[], settings: Record<string, unknown> = {}) {
   const document_root = new FakeNode();
   const links: Link[] = [];
   const active_listeners = new Set<string>();
@@ -187,7 +188,7 @@ async function page_with(texts: string[]) {
     };
     disconnect = () => {};
   };
-  globals.browser = { storage: { local: { get: async () => ({}) }, onChanged: { addListener: () => {} } }, runtime: { sendMessage: async (message: unknown) => {
+  globals.browser = { storage: { local: { get: async () => ({ desertfox_config_status: { settings } }) }, onChanged: { addListener: () => {} } }, runtime: { sendMessage: async (message: unknown) => {
     if ((message as { type?: string }).type === "register_yank") return void yanked.push(message), { ok: true };
     const is_record = (message as { type?: string }).type === "record_step";
     (is_record ? repeat_records : sent).push(message);
@@ -373,7 +374,7 @@ test("Tab then text narrows the labels, and one match picks at once", async () =
   const page = await page_with(["Alpha one", "Alpha two", "Beta"]);
   page.run({ action: "delete" });
   await settle();
-  assert.equal(page.type("<Tab>"), "handled");
+  assert.equal(page.type("/"), "handled");
   assert.equal(page.labels().length, 3);
   assert.equal(page.nodes_with_class("desertfox-hint-text").length, 1);
   assert.equal(page.type("e"), "handled");
@@ -389,7 +390,7 @@ test("the rest of a word typed after the key that made one match is dropped, and
   const page = await page_with(["Alpha one", "Alpha two", "Beta"]);
   page.run({ action: "delete" });
   await settle();
-  page.type("<Tab>");
+  page.type("/");
   page.type("b");
   for (const key of ["e", "j", "<Space>", "<Tab>"]) assert.equal(page.type(key), "handled", key);
   assert.equal(page.links.length, 3);
@@ -405,7 +406,7 @@ test("in rapid mode the rest of the word never types a label in the next round",
   const page = await page_with(["Alpha one", "Alpha two", "Beta"]);
   page.run({ action: "delete", rapid: true });
   await settle();
-  page.type("<Tab>");
+  page.type("/");
   page.type("b");
   page.type("a");
   page.type("s");
@@ -420,7 +421,7 @@ test("Escape during the grace cancels the pick", async () => {
   const page = await page_with(["Alpha one", "Beta"]);
   page.run({ action: "delete" });
   await settle();
-  page.type("<Tab>");
+  page.type("/");
   page.type("b");
   page.escape();
   await after_grace();
@@ -459,7 +460,7 @@ test("text mode swaps the colors of the active hint and shows the typed text, an
   await settle();
   const active_nodes = () => page.nodes_with_class("desertfox-hint").filter((node) => node.style.background === "var(--label-text)");
   assert.equal(active_nodes().length, 0);
-  page.type("<Tab>");
+  page.type("/");
   page.type("a");
   assert.equal(active_nodes().length, 1);
   assert.equal(page.nodes_with_class("desertfox-hint-text")[0]!.textContent, "text: a");
@@ -473,10 +474,33 @@ test("text mode swaps the colors of the active hint and shows the typed text, an
   page.escape();
 });
 
+test("the key line shows in label mode, switches its words in text mode and goes with the labels", async () => {
+  const page = await page_with(["Alpha one", "Beta"]);
+  page.run({ action: "delete" });
+  await settle();
+  const line = () => page.nodes_with_class("desertfox-hint-keys").map((node) => node.textContent);
+  assert.deepEqual(line(), [KEY_LINE_LABELS]);
+  page.type("/");
+  assert.deepEqual(line(), [KEY_LINE_TEXT]);
+  page.type("<Backspace>");
+  assert.deepEqual(line(), [KEY_LINE_LABELS]);
+  page.escape();
+  assert.deepEqual(line(), []);
+});
+
+test("hint_key_line off draws no key line", async () => {
+  const page = await page_with(["Alpha one", "Beta"], { hint_key_line: false });
+  page.run({ action: "delete" });
+  await settle();
+  assert.equal(page.nodes_with_class("desertfox-hint-keys").length, 0);
+  assert.equal(page.labels().length, 2);
+  page.escape();
+});
+
 test("Space and Enter typed while the hints are found wait and replay in order", async () => {
   const page = await page_with(["Alpha one", "Alpha two", "Beta"]);
   page.run({ action: "delete" });
-  for (const key of ["<Tab>", "a", "l", "<Space>", "t", "<Enter>"]) assert.equal(page.type(key), "handled", key);
+  for (const key of ["/", "a", "l", "<Space>", "t", "<Enter>"]) assert.equal(page.type(key), "handled", key);
   await settle();
   // "al t" matches both Alpha links ("t" is in "two" only), so "Alpha two" is the one match and picks at once, ahead of the Enter.
   await after_grace();
@@ -488,7 +512,7 @@ test("Tab and Shift-Tab move the active hint and Enter picks it", async () => {
   const page = await page_with(["Alpha one", "Alpha two", "Beta"]);
   page.run({ action: "delete" });
   await settle();
-  for (const key of ["<Tab>", "a", "l", "p", "<Tab>", "<Tab>", "<S-Tab>", "<Enter>"]) page.type(key);
+  for (const key of ["/", "a", "l", "p", "<Tab>", "<Tab>", "<S-Tab>", "<Enter>"]) page.type(key);
   await settle();
   assert.deepEqual(page.links.map((link) => link.textContent), ["Alpha one", "Beta"]);
 });
@@ -497,7 +521,7 @@ test("Backspace on empty text goes back to label mode with the labels typable", 
   const page = await page_with(["Alpha one", "Alpha two", "Beta"]);
   page.run({ action: "delete" });
   await settle();
-  page.type("<Tab>");
+  page.type("/");
   page.type("a");
   page.type("l");
   page.type("<Backspace>");
@@ -515,7 +539,7 @@ test("a rapid rebuild after a text pick is back in label mode", async () => {
   const page = await page_with(["Alpha one", "Alpha two", "Beta"]);
   page.run({ action: "delete", rapid: true });
   await settle();
-  for (const key of ["<Tab>", "b", "e", "t"]) page.type(key);
+  for (const key of ["/", "b", "e", "t"]) page.type(key);
   await after_grace();
   await settle();
   assert.equal(page.links.length, 2);
@@ -530,7 +554,7 @@ test("a rapid rebuild after a text pick is back in label mode", async () => {
 test("Tab and text typed while the hints are found wait, then switch and filter", async () => {
   const page = await page_with(["Alpha one", "Alpha two", "Beta"]);
   page.run({ action: "delete" });
-  for (const key of ["<Tab>", "b", "e", "t"]) assert.equal(page.type(key), "handled");
+  for (const key of ["/", "b", "e", "t"]) assert.equal(page.type(key), "handled");
   await after_grace();
   await settle();
   assert.deepEqual(page.links.map((link) => link.textContent), ["Alpha one", "Alpha two"]);

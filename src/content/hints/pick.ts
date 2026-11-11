@@ -8,7 +8,7 @@ import { rank_items } from "./rank.ts";
 export type Typed = { typed: string; still_possible_: number[] };
 
 // The keys that switch, cycle, pick or rotate. Hint mode takes them besides the label characters.
-const NAMED_KEYS = ["<Tab>", "<S-Tab>", "<Enter>", "<Space>"];
+const NAMED_KEYS = ["/", "<Tab>", "<S-Tab>", "<Enter>", "<Space>"];
 export const is_text_key = (token: string): boolean => NAMED_KEYS.includes(token);
 
 export type KeyOutcome =
@@ -62,7 +62,7 @@ export function create_picker(labels: readonly string[], texts: () => readonly s
   }
 
   function on_label_token(token: string): KeyOutcome {
-    if (token === "<Tab>") {
+    if (token === "/") {
       typed = "";
       text = "";
       ranked = rank("");
@@ -70,8 +70,8 @@ export function create_picker(labels: readonly string[], texts: () => readonly s
       return text_outcome();
     }
     if (token === "<Space>") return { kind: "rotate" };
-    // These two mean nothing before text mode, and must not reach the page.
-    if (token === "<Enter>" || token === "<S-Tab>") return label_outcome();
+    // These mean nothing before text mode, and must not reach the page.
+    if (token === "<Enter>" || token === "<Tab>" || token === "<S-Tab>") return label_outcome();
     if (token === "<Backspace>") {
       typed = typed.slice(0, -1);
       return label_outcome();
