@@ -26,8 +26,9 @@ const refuse = (message: string): never => {
 export function send_key(doc: KeyTargetDocument, args: SendKeyArgs, make_event: (type: string, init: KeyboardEventInit) => Event): void {
   const element = key_target(doc, args.target);
   const init = { key: args.key, keyCode: args.key_code, ctrlKey: args.ctrl === true, shiftKey: args.shift === true, altKey: args.alt === true, metaKey: args.meta === true, bubbles: true, cancelable: true };
-  element.dispatchEvent(make_event("keydown", init));
-  if (args.keypress === true) element.dispatchEvent(make_event("keypress", init));
+  const keydown_kept = element.dispatchEvent(make_event("keydown", init));
+  // A page that cancels the keydown gets no keypress, as with a real key. A printable key carries its character code, which keypress handlers read.
+  if (args.keypress === true && keydown_kept) element.dispatchEvent(make_event("keypress", args.key.length === 1 ? { ...init, charCode: args.key.charCodeAt(0), which: args.key.charCodeAt(0) } : init));
   element.dispatchEvent(make_event("keyup", init));
 }
 

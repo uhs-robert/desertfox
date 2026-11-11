@@ -42,6 +42,21 @@ test("send_key sends a keypress between keydown and keyup only when keypress is 
   assert.deepEqual(log.map((entry) => entry.event.type), ["keydown", "keypress", "keyup", "keydown", "keyup"]);
 });
 
+test("send_key skips the keypress when the keydown was cancelled, and still sends the keyup", () => {
+  const sent: string[] = [];
+  const target = { dispatchEvent: (event: Event) => (sent.push((event as unknown as Sent).type), (event as unknown as Sent).type !== "keydown") } as unknown as EventTarget;
+  send_key({ querySelector: () => null, activeElement: target }, { key: "x", key_code: 88, keypress: true }, (type, init) => ({ type, init }) as unknown as Event);
+  assert.deepEqual(sent, ["keydown", "keyup"]);
+});
+
+test("a keypress for a one-character key carries its character code, a named key does not", () => {
+  const { doc, log, make_event } = fake_page({}, "focused");
+  send_key(doc, { key: "x", key_code: 88, keypress: true }, make_event);
+  send_key(doc, { key: "Enter", key_code: 13, keypress: true }, make_event);
+  const presses = log.filter((entry) => entry.event.type === "keypress").map((entry) => [entry.event.init.charCode, entry.event.init.which]);
+  assert.deepEqual(presses, [[120, 120], [undefined, undefined]]);
+});
+
 test("the modifier and keypress params default to off and refuse a non-boolean", () => {
   const command = registry.get("page.send_key")!;
   const checked = check_args(command, { key: "a", key_code: 65 }, {});
