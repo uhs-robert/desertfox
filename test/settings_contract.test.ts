@@ -14,9 +14,10 @@ const EXPECTATIONS: Record<string, string> = {
   which_key_border: '"square", "round" or "chamfer"',
   hint_letters: "a string of 2 or more distinct letters, without /",
   hint_key_line: "true or false",
-  site_rules: 'a list of tables with "site", an optional "off" of true or false, an optional "pass" of key sequences and an optional "only" of key sequences',
+  site_rules: 'a list of tables with "site", an optional "off" of true or false, an optional "pass" of key sequences, an optional "only" of key sequences and any per-site setting',
   next_patterns: "a list of link texts",
   prev_patterns: "a list of link texts",
+  zoom: "a number, from 0.3 to 5",
   mode_indicator: '"always", "not_normal" or "off"',
   palette: "a theme name",
   light_intensity: "a whole number from 1 to 5",
@@ -83,9 +84,10 @@ const ACCEPTS: Record<string, unknown[]> = {
   which_key_border: ["square", "round", "chamfer"],
   hint_letters: ["ab", "asdfghjkl", "12"],
   hint_key_line: [true, false],
-  site_rules: [[], [{ site: "*://a.com/*" }, { site: "*://b.com/*", pass: "j k <C-d> gg" }, { site: "*://c.com/*", only: "<A-j>" }], [{ site: "*://a.com/*", off: true, pass: "j" }, { site: "*://b.com/*", off: false }]],
+  site_rules: [[], [{ site: "*://a.com/*" }, { site: "*://b.com/*", pass: "j k <C-d> gg" }, { site: "*://c.com/*", only: "<A-j>" }], [{ site: "*://a.com/*", off: true, pass: "j" }, { site: "*://b.com/*", off: false }], [{ site: "*://a.com/*", zoom: 1.5 }]],
   next_patterns: [[], ["next", ">"]],
   prev_patterns: [[], ["prev", "<"]],
+  zoom: [0.3, 1, 1.25, 5],
   mode_indicator: ["always", "not_normal", "off"],
   palette: ["oasis_moonlight", "no_such_theme"],
   light_intensity: [1, 5],
@@ -118,10 +120,11 @@ const REFUSES: Record<string, unknown[]> = {
   hint_letters: ["a", "aa", "aba", "a/b", 12],
   hint_key_line: ["true", 1],
   site_rules: [
-    "a.com", [""], [{}], [{ site: "a" , pass: "j", only: "k" }], [{ site: "a", pass: "" }], [{ site: "a", pass: "   " }], [{ site: "a", only: "<j>" }], [{ site: "a", keys: "j" }], [{ site: "a", pass: 1 }], [{ site: "a", off: "true" }], [{ site: "a", off: 1 }], [{ site: "a", zoom: 2 }],
+    "a.com", [""], [{}], [{ site: "a" , pass: "j", only: "k" }], [{ site: "a", pass: "" }], [{ site: "a", pass: "   " }], [{ site: "a", only: "<j>" }], [{ site: "a", keys: "j" }], [{ site: "a", pass: 1 }], [{ site: "a", off: "true" }], [{ site: "a", off: 1 }], [{ site: "a", zoom: 9 }], [{ site: "a", no_such_setting: 2 }],
   ],
   next_patterns: ["next", [""], [1]],
   prev_patterns: ["prev", [""], [1]],
+  zoom: [0.2, 5.5, Number.NaN, "1.5"],
   mode_indicator: ["normal", true],
   palette: ["", 1],
   light_intensity: [0, 6, 2.5, "3"],
@@ -227,6 +230,7 @@ test("the defaults stay the same", () => {
     newtab_links: [],
   });
   assert.equal("home_page" in DEFAULT_SETTINGS, false, "page.home refuses without one");
+  assert.equal("zoom" in DEFAULT_SETTINGS, false, "a default would override Firefox's zoom memory on every site");
 });
 
 test("the new tab page reads an absent setting as before", async () => {
@@ -263,6 +267,6 @@ test("the editor schema matches its output before #85, apart from the listed cha
   // Removed: no setting can turn the first-install Quick Start page off.
   delete properties.open_quick_start_on_install;
   // Settings added since the fixture was taken.
-  for (const name of ["statusbar_widgets", "next_patterns", "prev_patterns", "bridge", "hint_key_line"]) properties[name] = JSON.parse(JSON.stringify((settings_schema().properties as Record<string, unknown>)[name]));
+  for (const name of ["statusbar_widgets", "next_patterns", "prev_patterns", "bridge", "hint_key_line", "zoom"]) properties[name] = JSON.parse(JSON.stringify((settings_schema().properties as Record<string, unknown>)[name]));
   assert.deepEqual(JSON.parse(JSON.stringify(settings_schema())), JSON.parse(JSON.stringify(before)));
 });

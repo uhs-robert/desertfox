@@ -13,6 +13,7 @@ export const SETTING_DOCS: Record<SettingName, string> = {
   hint_letters: "The letters hint labels use, each once, at least two",
   hint_key_line: "Show the line of hint keys at the bottom right while hint mode is open",
   site_rules: "The site table. Each row has a site (a match pattern) and optional columns, and each column resolves on its own: the first row that fits the page and sets the column decides it. off = true turns every normal-mode key off and starts the page in ignore mode, and a row with nothing but site does the same. off = false keeps a page on under a broader off row. pass lists keys that go to the page, only lists the only keys that stay on besides <C-v> and <S-Escape>; together they are one column, and a row may not set both. A setting marked per-site may also be a column, and its site value beats :set there",
+  zoom: "Zoom level a page starts at, 1 for 100%. Set the first time a tab reaches the host in a browser session, so a manual zoom sticks. Firefox keeps zoom per host, so a site_rules row for one path zooms the whole host. Mostly set per site in site_rules. Unset, Firefox keeps the zoom it remembers for the site",
   mode_indicator: "When the mode badge shows: always (NORMAL too), not_normal, or off",
   palette: "Theme name: themes/<name>.toml in the config directory first, then a built-in theme. Light or dark follows the system theme",
   light_intensity: "Which of the five light sets of an Oasis theme the light variant uses, 1 (lightest) to 5",

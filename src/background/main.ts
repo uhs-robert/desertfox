@@ -20,6 +20,7 @@ import { list_keys } from "./list_keys.ts";
 import { start_bridge } from "./bridge_browser.ts";
 import { rule_addresses_of, read_keymap_reply } from "./page_keymap.ts";
 import { track_window_focus } from "./window_focus.ts";
+import { create_site_zoom, make_level_for } from "./site_zoom.ts";
 import { create_inspect_relay } from "./inspect_relay.ts";
 import { repair_tabs_after_reload } from "./reload.ts";
 import { browser_tab_model_deps, create_tab_model } from "./tab_model.ts";
@@ -322,14 +323,23 @@ browser.commands.onCommand.addListener(async (slot_name: string) => {
   if (shortcut_allowed(mode, invocations, (id) => registry.get(id), await read_disabled())) await router.run({ invocations, mode, may_prompt: true });
 });
 
-browser.tabs.onUpdated.addListener((tab_id, change) => {
+const site_zoom = create_site_zoom({
+  session: browser.storage.session,
+  level_for: make_level_for(browser.storage.local, async () => effective_settings((await get_config()).settings).zoom, read_disabled),
+  address_of: (tab_id) => browser.tabs.get(tab_id).then((tab) => tab.url, () => undefined),
+  set_zoom: (tab_id, level) => browser.tabs.setZoom(tab_id, level),
+});
+
+browser.tabs.onUpdated.addListener((tab_id, change, tab) => {
+  // A new tab's first load reports only `status`, with the address already on the tab.
+  if ((change.url !== undefined || change.status === "loading") && tab.url !== undefined) void site_zoom.navigated(tab_id, tab.url, tab.incognito);
   void cmdline.forget_opener_on_navigation(tab_id, change);
   if (change.status === "loading") void inspect_relay.forget(tab_id);
   return tab_modes.forget_on_navigation(tab_id, change);
 });
 
 browser.windows.onRemoved.addListener(() => void repeat_memory.clear_private_without_window().catch(() => undefined));
-wire_private_cleanup([browser_register_store, browser_mark_store, browser_quickmark_store, browser_macro_recorder, browser_last_played], browser.windows);
+wire_private_cleanup([browser_register_store, browser_mark_store, browser_quickmark_store, browser_macro_recorder, browser_last_played, site_zoom], browser.windows);
 
 // Top level, so a future event page gets the events on wake. Each start of the background refills the cache from the browser history.
 browser.history.onVisited.addListener(history_cache.visited);
