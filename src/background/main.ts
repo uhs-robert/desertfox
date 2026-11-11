@@ -10,7 +10,6 @@ import { create_cmdline_service } from "./cmdline_service.ts";
 import { history_cache } from "./history_cache.ts";
 import { create_previous_tabs } from "./previous_tab.ts";
 import { browser_discard_deps } from "./tab_discard.ts";
-import { browser_tab_preload, PRELOAD_ALARM_PREFIX } from "./tab_preload.ts";
 import { browser_complete_items_deps, create_complete_items } from "./complete_items.ts";
 import type { Asker } from "./complete_items.ts";
 import { browser_tab_action_deps } from "./tab_actions.ts";
@@ -361,25 +360,14 @@ browser.history.onTitleChanged.addListener(history_cache.title_changed);
 browser.history.onVisitRemoved.addListener(history_cache.visit_removed);
 void history_cache.start();
 
-browser.tabs.onActivated.addListener(({ windowId, previousTabId, tabId }) => {
-  void browser_tab_preload.activated(windowId, tabId).catch(() => undefined);
-  return previous_tabs.activated(windowId, previousTabId);
-});
+browser.tabs.onActivated.addListener(({ windowId, previousTabId }) => previous_tabs.activated(windowId, previousTabId));
 
 browser.tabs.onRemoved.addListener((tab_id, { windowId, isWindowClosing }) => {
-  void browser_tab_preload.removed(tab_id).catch(() => undefined);
   void previous_tabs.removed(tab_id, windowId, isWindowClosing);
   void cmdline.forget_opener(tab_id);
   void inspect_relay.forget(tab_id);
   return tab_modes.forget(tab_id);
 });
-
-// A tracked tab that shows another page is no longer ours to unload. The preload's own reload reports the same url.
-browser.tabs.onUpdated.addListener((tab_id, { url }) => void (url !== undefined && browser_tab_preload.navigated(tab_id, url).catch(() => undefined)), { properties: ["url"] });
-browser.alarms.onAlarm.addListener(({ name }) => {
-  if (name.startsWith(PRELOAD_ALARM_PREFIX)) void browser_tab_preload.alarm(Number(name.slice(PRELOAD_ALARM_PREFIX.length))).catch(() => undefined);
-});
-void browser_tab_preload.resume().catch(() => undefined);
 
 void get_config().then(() => repair_tabs_after_reload(reinject_deps));
 

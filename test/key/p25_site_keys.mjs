@@ -7,6 +7,7 @@ export const areas = ["keys", "config", "bundles"];
 
 const arrow = (key, key_code) => `{ id = "page.send_key", args = { key = "${key}", key_code = ${key_code}, target = "#waffle-rich-text-editor" } }`;
 const ARROWS = `h = ${arrow("ArrowLeft", 37)}, j = ${arrow("ArrowDown", 40)}, k = ${arrow("ArrowUp", 38)}, l = ${arrow("ArrowRight", 39)}`;
+const ctrl_key = (key, key_code) => `{ id = "page.send_key", args = { key = "${key}", key_code = ${key_code}, ctrl = true, target = "#waffle-rich-text-editor" } }`;
 const PAGE_DOWN = arrow("PageDown", 34);
 
 export async function run_cases({ config_copy, load_config_dir, setup, run_case, open_page, press_keys, in_active_tab, poll_until, expect, sleep }) {
@@ -21,7 +22,7 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
         `bind = { j = ${PAGE_DOWN} }`,
         "[[site_rules]]",
         'site = "*://127.0.0.1/*?id=sheets_*"',
-        `bind = { ${ARROWS} }`,
+        `bind = { ${ARROWS}, gg = ${ctrl_key("Home", 36)}, G = { run = ["page.send_key --key=End --key_code=35 --ctrl --target=#waffle-rich-text-editor", "page.send_key --key=Home --key_code=36 --target=#waffle-rich-text-editor"], label = "Bottom of column A" } }`,
         "",
       ].join("\n"),
     );
@@ -34,7 +35,7 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
       editor.id = "waffle-rich-text-editor";
       editor.tabIndex = 0;
       document.documentElement.dataset.p25Keys = "";
-      editor.addEventListener("keydown", (event) => { document.documentElement.dataset.p25Keys += event.keyCode + ","; });
+      editor.addEventListener("keydown", (event) => { document.documentElement.dataset.p25Keys += event.keyCode + (event.ctrlKey ? "c" : "") + ","; });
       document.body.append(editor);
       return ${JSON.stringify(id)};
     })()`);
@@ -55,6 +56,20 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
       await expect_keys(`${before}${code},`);
     }
     expect((await in_active_tab("scrollY")) === 0, "a bound key also scrolled the page");
+  });
+
+  await run_case("a bind with ctrl on reaches the element as a keydown with ctrlKey set", async () => {
+    await open_page("controls", "sheets_ctrl", { new_tab: true });
+    await add_editor("sheets_ctrl");
+    await press_keys("gg");
+    await expect_keys("36c,");
+  });
+
+  await run_case("a chain bind runs both steps in order, with ctrl on the first only", async () => {
+    await open_page("controls", "sheets_chain", { new_tab: true });
+    await add_editor("sheets_chain");
+    await press_keys("G");
+    await expect_keys("35c,36,");
   });
 
   await run_case("a count sends the key that many times", async () => {

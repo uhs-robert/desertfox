@@ -10,6 +10,7 @@ export const DEFAULT_HINT_KEY_LINE: Settings["hint_key_line"] = true;
 export const DEFAULT_HINT_ADD: Settings["hint_add"] = [];
 export const DEFAULT_HINT_REMOVE: Settings["hint_remove"] = [];
 export const DEFAULT_BLUR_ON_LOAD: Settings["blur_on_load"] = false;
+export const DEFAULT_ESCAPE_TO_PAGE: Settings["escape_to_page"] = false;
 export const DEFAULT_SITE_RULES: Settings["site_rules"] = [];
 export const DEFAULT_DEFAULT_SITE_ROWS_OFF: Settings["default_site_rows_off"] = [];
 export const DEFAULT_NEXT_PATTERNS: Settings["next_patterns"] = ["next","more","newer",">","›","→","»","≫",">>"];
@@ -24,8 +25,6 @@ export const DEFAULT_DEFAULT_ENGINE: Settings["default_engine"] = "duck";
 export const DEFAULT_NEW_TAB_PAGE: Settings["new_tab_page"] = "desertfox";
 export const DEFAULT_BRIDGE: Settings["bridge"] = false;
 export const DEFAULT_BRIDGE_SHARE_TABS: Settings["bridge_share_tabs"] = false;
-export const DEFAULT_TAB_PRELOAD: Settings["tab_preload"] = true;
-export const DEFAULT_TAB_PRELOAD_UNLOAD_MS: Settings["tab_preload_unload_ms"] = 60000;
 export const DEFAULT_COMPLETION_ALL_WINDOWS: Settings["completion_all_windows"] = false;
 export const DEFAULT_CMDLINE_PROMPT: Settings["cmdline_prompt"] = "caret";
 export const DEFAULT_OPEN_COMPLETION: Settings["open_completion"] = ["bookmarks","history"];
@@ -49,6 +48,7 @@ export const DEFAULT_SETTINGS: Settings = {
   hint_add: DEFAULT_HINT_ADD,
   hint_remove: DEFAULT_HINT_REMOVE,
   blur_on_load: DEFAULT_BLUR_ON_LOAD,
+  escape_to_page: DEFAULT_ESCAPE_TO_PAGE,
   site_rules: DEFAULT_SITE_RULES,
   default_site_rows_off: DEFAULT_DEFAULT_SITE_ROWS_OFF,
   next_patterns: DEFAULT_NEXT_PATTERNS,
@@ -63,8 +63,6 @@ export const DEFAULT_SETTINGS: Settings = {
   new_tab_page: DEFAULT_NEW_TAB_PAGE,
   bridge: DEFAULT_BRIDGE,
   bridge_share_tabs: DEFAULT_BRIDGE_SHARE_TABS,
-  tab_preload: DEFAULT_TAB_PRELOAD,
-  tab_preload_unload_ms: DEFAULT_TAB_PRELOAD_UNLOAD_MS,
   completion_all_windows: DEFAULT_COMPLETION_ALL_WINDOWS,
   cmdline_prompt: DEFAULT_CMDLINE_PROMPT,
   open_completion: DEFAULT_OPEN_COMPLETION,

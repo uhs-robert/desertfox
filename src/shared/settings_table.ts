@@ -4,17 +4,16 @@
 // Data only, so the bundles that check settings (the command line page among them) carry no prose: the editor
 // descriptions live in `settings_docs.ts`.
 
+import type { BoundInvocation } from "./invocation.ts";
 import { BUILT_IN_PAGE, DEFAULT_SITE_ROW_NAMES, FALLBACK_ENGINE_NAME } from "./table_constants.ts";
 import { BUILT_IN_THEME_NAMES } from "./theme_names.ts";
 import { DESKTOP_PALETTE, LIGHT_INTENSITIES } from "./theme/roles.ts";
 
-// The cap on `tab_preload_unload_ms`. A delay that long still fits the 32-bit timers of the browser.
-const ONE_DAY_MS = 86_400_000;
-
 type EnumValue = string | number | boolean;
 
-// A table from a key sequence to a command, in the shape of a keymap entry. The compiler checks the command and its args with the registry validator.
-export type BindingTable = Readonly<Record<string, { id: string; args?: Readonly<Record<string, unknown>> }>>;
+// A table from a key sequence to a binding, in the formats of a keymap entry: a command string, a list of steps, a `{ run, label, intent }` table. The build resolves the text into invocations (`BoundInvocation`), which is also what the shipped rows write. The compiler checks each command and its args with the registry validator.
+export type BindStep = string | BoundInvocation;
+export type BindingTable = Readonly<Record<string, BindStep | readonly BindStep[] | { run: BindStep | readonly BindStep[]; label?: string; intent?: string }>>;
 
 type TableFields = Readonly<Record<string, { value: "text" | "web_url" | "keys" | "boolean" | "bindings"; optional?: true }>>;
 
@@ -32,7 +31,7 @@ export type SettingRow = (
   | { kind: "enum_list"; values: readonly string[]; default: readonly string[] }
   // A table of exactly these keys, each a non-empty string.
   | { kind: "text_table"; keys: readonly string[]; default: Readonly<Record<string, string>> }
-  // A list of tables with these fields. A `web_url` field takes an http or https URL. A `keys` field takes key sequences in keymap notation, split by spaces. A `bindings` field takes a table from a key sequence to `{ id, args }`.
+  // A list of tables with these fields. A `web_url` field takes an http or https URL. A `keys` field takes key sequences in keymap notation, split by spaces. A `bindings` field takes a table from a key sequence to a binding as the keymap writes it.
   // The fields in `exclusive` refuse to appear together in one table.
   | { kind: "table_list"; fields: TableFields; exclusive?: readonly string[]; default: readonly [] }
   // A table_list whose rows also take every `per_site` setting as an optional column.
@@ -56,6 +55,8 @@ export const SETTINGS_TABLE = {
   hint_remove: { kind: "text_list", expectation: "a list of CSS selectors", default: [], per_site: true },
   // Each frame resolves it against its own address, so a frame of another site follows its own rows.
   blur_on_load: { kind: "boolean", default: false, per_site: true },
+  // Each frame resolves it against its own address. Set it only for sites whose editor handles Escape itself: in a field, insert mode then keeps Escape for the page and ends when the page drops the field.
+  escape_to_page: { kind: "boolean", default: false, per_site: true },
   // Each column resolves on its own: the first row whose `site` matches the page and that sets the column decides it. `pass` and `only` form one column, the key rule.
   // `bind` is the one column that merges key by key: for each key, the first matching row that binds it decides. It binds normal-mode keys and runs before `pass` and `only` prune the tree.
   // `off = true` turns every normal-mode key off, and so does a row that sets nothing but `site`.
@@ -86,9 +87,6 @@ export const SETTINGS_TABLE = {
   bridge: { kind: "boolean", default: false },
   // Lets bridge programs list tabs (titles and addresses of normal windows), activate, close and capture them, and run a command on a chosen tab. Needs `bridge`.
   bridge_share_tabs: { kind: "boolean", default: false },
-  // After a tab switch, load or warm the next tab in the direction of travel. A tab loaded this way unloads after the delay once the user has left the place next to it and never visited it. A delay of 0 keeps it loaded.
-  tab_preload: { kind: "boolean", default: true },
-  tab_preload_unload_ms: { kind: "number", whole: true, min: 0, max: ONE_DAY_MS, unit: "milliseconds", default: 60000 },
   completion_all_windows: { kind: "boolean", default: false },
   cmdline_prompt: { kind: "line", min_length: 1, max_length: 8, suggestions: ["caret", "colon"], default: "caret" },
   open_completion: { kind: "enum_list", values: ["bookmarks", "history"], default: ["bookmarks", "history"] },

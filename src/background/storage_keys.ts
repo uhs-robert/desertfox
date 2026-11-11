@@ -52,9 +52,6 @@ export const CMDLINE_OPENER_STORAGE_PREFIX = "desertfox_cmdline_opener_";
 // Prefix of one `storage.session` key per window, holding the id of the tab the user was on before the current one. The `#` of a tab row. Removed when that tab or the window closes.
 export const PREVIOUS_TAB_STORAGE_PREFIX = "desertfox_previous_tab_";
 
-// The tabs `tab_preload.ts` loaded and has not yet unloaded, `{ [tab_id]: { window_id, direction, deadline? } }`, in `storage.session`.
-export const TAB_PRELOAD_STORAGE_KEY = "desertfox_tab_preload";
-
 // The zoom level `site_zoom.ts` set on each host this browser session, `{ [host]: level }`, in `storage.session`. The private windows have a key of their own, cleared when the last private window closes.
 export const SITE_ZOOM_STORAGE_KEY = "desertfox_site_zoom";
 export const SITE_ZOOM_PRIVATE_STORAGE_KEY = "desertfox_private_site_zoom";

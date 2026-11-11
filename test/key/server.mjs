@@ -43,7 +43,7 @@ new MutationObserver(() => {
     last_whichkey_shape = panel_shape;
     send("whichkey_shape", { dropped: Number(panel_host?.getAttribute("data-desertfox-whichkey-dropped")), width: Number(panel_host?.getAttribute("data-desertfox-whichkey-width") ?? 0), viewport: window.innerWidth });
   }
-  const css = root.querySelector(":scope > style")?.textContent ?? "";
+  const css = root.querySelector(":scope > style:not([data-desertfox-backdrop-reset])")?.textContent ?? "";
   if (css !== last_css) send("selection_style", { css: (last_css = css) });
   const toast_now = Boolean(toast_host());
   if (toast_now !== toast_shown) send(toast_now ? "toast" : "toast_gone");
@@ -254,8 +254,8 @@ export function start_server() {
     if (url.pathname === "/body_editor") return response.end(page(`body_editor ${id}`, `${tall_filler}<script>${url.searchParams.get("turn_on")}</script>`));
     if (url.pathname === "/cell_editor") {
       // A stand-in for the Google Sheets cell editor: one contenteditable that holds the focus from load on. While a cell is only selected it is parked off screen, empty and with no width.
-      // Enter starts an edit, which moves the box over a cell and gives it a width, and Enter again ends it. A double-click on the cell starts an edit with no key, and a click on it ends one.
-      const editor = '<div id="cell" style="position:fixed;top:100px;left:100px;width:114px;height:20px"></div><div id="box" style="position:absolute;top:-10000px;left:0"><div id="waffle-rich-text-editor" contenteditable="true" style="outline:0"></div></div>';
+      // Enter starts an edit, which moves the box over a cell and gives it a width, and Enter again or Escape ends it. A plain input sits below, for the sites that turn escape_to_page on. A double-click on the cell starts an edit with no key, and a click on it ends one.
+      const editor = '<div id="cell" style="position:fixed;top:100px;left:100px;width:114px;height:20px"></div><div id="box" style="position:absolute;top:-10000px;left:0"><div id="waffle-rich-text-editor" contenteditable="true" style="outline:0"></div></div><input id="plain" style="position:fixed;top:200px;left:100px">';
       const script = `<script>
         const box = document.getElementById("box");
         const editor = document.getElementById("waffle-rich-text-editor");
@@ -263,6 +263,8 @@ export function start_server() {
         function start_edit() { editing = true; box.style.cssText = "position:fixed;top:100px;left:100px;min-width:114px;background:#fff"; }
         function end_edit() { editing = false; box.style.cssText = "position:absolute;top:-10000px;left:0"; editor.textContent = ""; }
         addEventListener("keydown", (event) => {
+          // Escape cancels an edit, as Sheets does. It leaves the key alone, so a swallowed Escape shows as an edit that never ends.
+          if (event.key === "Escape") return void (editing && end_edit());
           if (event.key !== "Enter") return;
           event.preventDefault();
           if (editing) end_edit(); else start_edit();

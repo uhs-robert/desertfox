@@ -38,7 +38,11 @@ If code and the design disagree, stop and ask the maintainer. Do not change the 
 
 `content.js` loads in every frame of every page. Docs: [`docs/design.md`](docs/design.md), "Content script size".
 
-- Admission rule: code goes in `content.js` only if it runs before the first key or decides what happens to a key, serves a key pressed on most pages in most frames (scrolling), or is needed for the bundles to load (the bundle host and its proxies). Everything else goes in an on-demand bundle.
+- Admission rule: code goes in `content.js` only if one of these holds. Everything else goes in an on-demand bundle.
+  - It runs before the first key or decides what happens to a key.
+  - It serves a key pressed on most pages in most frames (scrolling).
+  - The bundles need it to load (the bundle host and its proxies).
+  - It must work while the page navigates, when a bundle injection can go unanswered: `xp` (`page.stop`) and `<A-,>` (`focus_page`) matter most on a loading page. A command that only needs a loaded page does not qualify.
 - Guard: 17 KB (17408 bytes) in `MAX_BYTES["content.js"]` of `tools/build.mjs`. The build fails above it.
 - Ceiling: 32 KB (32768 bytes), `CONTENT_CEILING_BYTES`. The build fails when the guard is set above it. Size does not delay the first key below about 64 KB, so the ceiling bounds the memory cost (about 2.4 KB of heap per KB, in every frame).
 - Raise the guard only as the last step: the new code passes the admission rule (the commit names the clause), code that fails the rule has moved out first, the step is 512 bytes, and the commit names the feature. Passing the ceiling needs the maintainer's decision and a fresh run of `tools/measure/`.

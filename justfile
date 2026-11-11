@@ -225,7 +225,7 @@ release_guard:
     fi
     # A bump left behind by a failed sign or install looks like this.
     if [ -z "$(git status --porcelain -- . ':!package.json' ':!package-lock.json' ':!src/manifest.json')" ]; then
-        echo "release found changes only in package.json, package-lock.json and src/manifest.json. That may be a bump left by a failed sign or install. Run 'git diff HEAD -- package.json package-lock.json src/manifest.json'. If it shows only the version line, run 'git checkout -- package.json package-lock.json src/manifest.json' and rerun. Otherwise commit or keep your edits. If signing succeeded, do not rerun: run 'just release_commit_push' and then 'just release_publish' instead." >&2
+        echo "release found changes only in package.json, package-lock.json and src/manifest.json. That may be a bump left by a failed sign or install. Run 'git diff HEAD -- package.json package-lock.json src/manifest.json'. If it shows only the version line, run 'git checkout -- package.json package-lock.json src/manifest.json' and rerun. Otherwise commit or keep your edits. If signing succeeded, do not rerun: run 'just release_commit_push' and then 'just release_publish' instead. They use the stamped files kept in $RELEASE_ASSETS_DIR." >&2
         exit 1
     fi
     echo "release refuses to run with uncommitted changes. Commit or stash them first." >&2
@@ -257,17 +257,65 @@ release_commit_push:
     fi
     git push -u origin "$(git branch --show-current)" || { echo "The push failed. The bump commit is local. Fix the push, then run 'just release_commit_push' and 'just release_publish'. Do not rerun 'just release': it signs a second version." >&2; exit 1; }
 
-# Create the GitHub release v<package.json version> with the hosts, the command line, their checksums and the install script, so a release build installs the host of its own version. The tag targets HEAD, so push it first (release does). RELEASE_DRY_RUN=1 prints the gh command and creates nothing.
+# Folder of the stamped release files, kept between the recipes of one release so publish uploads the bytes the build hashed.
+export RELEASE_ASSETS_DIR := env("RELEASE_ASSETS_DIR", "release-assets")
+
+# Copy the hosts, the command line and install.sh into RELEASE_ASSETS_DIR and write the package.json version into both hosts as release_version. Then hash the stamped files: a .sha256 per script for the GitHub release, and host_sha256.json, which the extension build copies into dist/ so the signed build carries the hashes. Stamping comes first, so the hashes match the shipped bytes.
+[private]
+release_stamp:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    version=$(jq -r .version package.json)
+    # The same pattern as VERSION_PATTERN in host/desertfox-host, which refuses to update to any other version.
+    if ! [[ "$version" =~ ^[0-9]{1,6}\.[0-9]{1,6}\.[0-9]{1,6}(-beta\.[0-9]{1,6})?$ ]]; then
+        echo "release_stamp: '$version' is not x.y.z or x.y.z-beta.N, so no host could update to it." >&2
+        exit 1
+    fi
+    mkdir -p "$RELEASE_ASSETS_DIR"
+    cp host/desertfox-host host/desertfox-bridge host/desertfox host/install.sh "$RELEASE_ASSETS_DIR/"
+    for script in desertfox-host desertfox-bridge; do
+        if [ "$(grep -cx 'RELEASE_VERSION = "dev"' "host/$script")" != 1 ]; then
+            echo "release_stamp: host/$script must hold the line RELEASE_VERSION = \"dev\" exactly once." >&2
+            exit 1
+        fi
+        sed -i "s/^RELEASE_VERSION = \"dev\"\$/RELEASE_VERSION = \"$version\"/" "$RELEASE_ASSETS_DIR/$script"
+    done
+    cd "$RELEASE_ASSETS_DIR"
+    for script in desertfox-host desertfox-bridge desertfox; do
+        sha256sum "$script" > "$script.sha256"
+    done
+    digest() { cut -d ' ' -f 1 "$1.sha256"; }
+    jq -n --arg version "$version" --arg host "$(digest desertfox-host)" --arg bridge "$(digest desertfox-bridge)" --arg cli "$(digest desertfox)" \
+        '{version: $version, sha256: {"desertfox-host": $host, "desertfox-bridge": $bridge, "desertfox": $cli}}' > host_sha256.json
+    echo "stamped the hosts as $version in $RELEASE_ASSETS_DIR"
+
+# Create the GitHub release v<package.json version> from the files release_stamp wrote: the stamped hosts, the command line, their checksums and the install script, so a release build installs the host of its own version. A -beta.N version is a prerelease. The tag targets HEAD, so push it first (release does). RELEASE_DRY_RUN=1 prints the gh command and creates nothing.
 [private]
 release_publish:
     #!/usr/bin/env bash
     set -euo pipefail
     version=$(jq -r .version package.json)
-    assets=$(mktemp -d)
-    trap 'rm -rf "$assets"' EXIT
-    cp host/desertfox-host host/desertfox-bridge host/desertfox host/install.sh "$assets/"
-    (cd "$assets" && sha256sum desertfox-host > desertfox-host.sha256 && sha256sum desertfox-bridge > desertfox-bridge.sha256 && sha256sum desertfox > desertfox.sha256)
+    assets="$RELEASE_ASSETS_DIR"
+    # Publish only the bytes the extension build hashed. Restamping here would upload files the signed build does not know.
+    if [ "$(jq -r .version "$assets/host_sha256.json" 2>/dev/null)" != "$version" ]; then
+        echo "release_publish found no files stamped as $version in $assets. Run 'just release_stamp' on the commit that was signed, so the files match the hashes the signed build carries. Do not sign this version again: AMO refuses a second signing." >&2
+        exit 1
+    fi
+    for script in desertfox-host desertfox-bridge; do
+        grep -qx "RELEASE_VERSION = \"$version\"" "$assets/$script" || { echo "release_publish: $assets/$script is not stamped as $version." >&2; exit 1; }
+    done
+    (cd "$assets" && sha256sum --quiet -c desertfox-host.sha256 desertfox-bridge.sha256 desertfox.sha256) || { echo "release_publish: a file in $assets no longer matches its checksum." >&2; exit 1; }
+    # The signed build carries host_sha256.json, so a file that matches only its own .sha256 would fail every update.
+    for script in desertfox-host desertfox-bridge desertfox; do
+        if [ "$(jq -r --arg name "$script" '.sha256[$name]' "$assets/host_sha256.json")" != "$(cut -d ' ' -f 1 "$assets/$script.sha256")" ]; then
+            echo "release_publish: $assets/$script does not match its hash in host_sha256.json, which the signed build carries. Run 'just release_stamp' on the commit that was signed." >&2
+            exit 1
+        fi
+    done
     gh_command=(gh release create "v$version" "$assets/desertfox-host" "$assets/desertfox-host.sha256" "$assets/desertfox-bridge" "$assets/desertfox-bridge.sha256" "$assets/desertfox" "$assets/desertfox.sha256" "$assets/install.sh" --target "$(git rev-parse HEAD)" --title "v$version" --notes "Native hosts $version. The extension's :native.install page shows the command that installs it.")
+    if [[ "$version" == *-beta.* ]]; then
+        gh_command+=(--prerelease)
+    fi
     if [ "${RELEASE_DRY_RUN:-}" = "1" ]; then
         echo "dry run: ${gh_command[*]}"
         cat "$assets/desertfox-host.sha256" "$assets/desertfox-bridge.sha256" "$assets/desertfox.sha256"
@@ -276,7 +324,7 @@ release_publish:
     "${gh_command[@]}"
     echo "created GitHub release v$version"
 
-# Bump the patch version, sign dist/, install it for every profile and create the GitHub release with the native host. Fills the AMO key from rbw when either variable is empty. Needs a clean release branch.
+# Bump the patch version, stamp and hash the hosts, sign dist/ with those hashes, install it for every profile and create the GitHub release with the same stamped hosts. Fills the AMO key from rbw when either variable is empty. Needs a clean release branch.
 release:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -304,6 +352,13 @@ release:
         export WEB_EXT_API_KEY WEB_EXT_API_SECRET
     fi
     just release_bump
+    just release_stamp
+    # Check before signing: AMO signs a version once, so a build without the hashes must never reach it.
+    just build
+    if ! cmp -s "$RELEASE_ASSETS_DIR/host_sha256.json" dist/host_sha256.json; then
+        echo "The build does not carry the host hashes in $RELEASE_ASSETS_DIR/host_sha256.json, so its hosts could not update. Nothing was signed. Fix the build, undo the bump with 'git checkout -- package.json package-lock.json src/manifest.json', then rerun 'just release'." >&2
+        exit 1
+    fi
     just sign
     just install
     just release_commit_push

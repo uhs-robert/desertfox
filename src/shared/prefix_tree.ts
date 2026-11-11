@@ -83,12 +83,12 @@ export const is_freed = ({ tokens, invert }: PageFrees, token: string): boolean 
 // `insert` is set while a manual insert mode (`i`) holds the tab, so a frame that loads late joins it. `recording` is the register a macro is being recorded into. The tree then holds `macro.stop` where the record key was, and the badge says so.
 // The per-site settings that act inside one frame, so each frame resolves them against its own address.
 // The page keymap reply carries only the ones content.js needs. The hints bundle asks for the hint selectors itself (`read_hint_selectors`), so content.js does not grow.
-export const PAGE_REPLY_SITE_SETTINGS = ["blur_on_load"] as const satisfies readonly PerSiteName[];
+export const PAGE_REPLY_SITE_SETTINGS = ["blur_on_load", "escape_to_page"] as const satisfies readonly PerSiteName[];
 export const HINT_SITE_SETTINGS = ["hint_add", "hint_remove"] as const satisfies readonly PerSiteName[];
 // The quality bundle asks for its own (`read_media_quality`).
 export const QUALITY_SITE_SETTINGS = ["media_quality"] as const satisfies readonly PerSiteName[];
 // A literal, not a spread of the lists: the bundler keeps an unused spread in content.js.
-export const FRAME_SITE_SETTINGS = ["blur_on_load", "hint_add", "hint_remove", "media_quality"] as const satisfies readonly [...typeof PAGE_REPLY_SITE_SETTINGS, ...typeof HINT_SITE_SETTINGS, ...typeof QUALITY_SITE_SETTINGS];
+export const FRAME_SITE_SETTINGS = ["blur_on_load", "escape_to_page", "hint_add", "hint_remove", "media_quality"] as const satisfies readonly [...typeof PAGE_REPLY_SITE_SETTINGS, ...typeof HINT_SITE_SETTINGS, ...typeof QUALITY_SITE_SETTINGS];
 export type FrameSiteName = (typeof FRAME_SITE_SETTINGS)[number];
 export type FrameSiteValues<Name extends FrameSiteName = FrameSiteName> = Partial<Pick<Settings, Name>>;
 

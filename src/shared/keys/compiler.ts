@@ -9,6 +9,7 @@ import type { CompiledKeymap, FrameSiteName, LeafStep, SiteBind, SiteRule, TreeB
 import { DEFAULT_SETTINGS } from "../config.ts";
 import type { Settings } from "../config.ts";
 import type { BindingTable } from "../settings_table.ts";
+import { MAX_BIND_STEPS } from "../table_constants.ts";
 import type { BoundInvocation, KeyBinding, Prompt } from "../invocation.ts";
 import type { KeymapConfig, KeymapMode, Modifier } from "../keymap.ts";
 import { default_of, is_dynamic_values } from "../registry/params.ts";
@@ -315,16 +316,25 @@ const key_sequences = (text: string, warnings: string[]): string[][] =>
 // By value, because a list setting is a new array after every load. Not in `prefix_tree.ts`, whose default settings import would reach content.js.
 export const is_default_value = (name: FrameSiteName, value: unknown): boolean => JSON.stringify(value) === JSON.stringify(DEFAULT_SETTINGS[name]);
 
-// A bind with a bad key or an unknown command is skipped with a warning, and the row's other binds stay. The label comes from the command, as for a keymap entry. The args are checked later, in `compile.ts`, where the registry validator is.
+// A bind with a bad key, an unknown command or too many steps is skipped with a warning, and the row's other binds stay. The label comes from the first step, as for a keymap entry. The args are checked later, in `compile.ts`, where the registry validator is. A bind still in text form never went through the build, so it is skipped.
 function compile_binds(table: BindingTable, resolve: ResolveCommand, settings: Partial<Settings>, sources: LabelSources, warnings: string[]): Record<string, SiteBind> {
   const binds: Record<string, SiteBind> = {};
-  for (const [sequence, { id, args }] of Object.entries(table)) {
+  for (const [sequence, written] of Object.entries(table)) {
     const parsed = parse_sequence(sequence);
     if (parsed.error !== undefined) {
       warnings.push(`site_rules: skipped bind "${sequence}": ${parsed.error}`);
       continue;
     }
-    const binding: BoundInvocation = args === undefined ? { id } : { id, args: { ...args } };
+    const steps = [written].flat() as unknown[];
+    if (steps.length > MAX_BIND_STEPS) {
+      warnings.push(`site_rules: skipped bind "${sequence}": more than ${MAX_BIND_STEPS} steps`);
+      continue;
+    }
+    if (steps.some((step) => typeof step !== "object" || step === null || "run" in step)) {
+      warnings.push(`site_rules: skipped bind "${sequence}": the binding was not resolved by the config build`);
+      continue;
+    }
+    const binding = steps.map((step) => ({ ...(step as BoundInvocation) }));
     const step_warnings: string[] = [];
     const resolved = to_steps("normal", { sequence, tokens: parsed.tokens, binding, source_index: 0, layer: "user" }, resolve, settings, sources, [], step_warnings);
     if (resolved === undefined) {

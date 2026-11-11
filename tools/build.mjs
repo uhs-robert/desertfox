@@ -98,6 +98,15 @@ if (!Buffer.from(content_alone.outputFiles[0].contents).equals(await readFile("d
 
 const command_count = await write_commands_json("dist");
 
+// `just release_stamp` hashes the stamped hosts. The signed build carries those hashes, and a host updates only to files
+// that match them. A build with no stamp of its own version carries none, so its hosts never update themselves.
+const release_assets_dir = process.env.RELEASE_ASSETS_DIR || "release-assets";
+const manifest_version = JSON.parse(await readFile("src/manifest.json", "utf8")).version;
+const host_hashes_text = await readFile(`${release_assets_dir}/host_sha256.json`, "utf8").catch(() => null);
+if (host_hashes_text !== null && JSON.parse(host_hashes_text).version === manifest_version) {
+  await writeFile("dist/host_sha256.json", host_hashes_text);
+}
+
 const sizes = [];
 let over_limit = false;
 for (const [file, limit] of Object.entries(MAX_BYTES)) {

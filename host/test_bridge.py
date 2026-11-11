@@ -153,7 +153,7 @@ class BridgeTestCase(unittest.TestCase):
 class PortAndStateTest(BridgeTestCase):
     def test_ready_then_mode_writes_the_agreed_shape(self):
         host = self.start()
-        self.assertEqual(host.ready, {"ready": True, "host_version": 1})
+        self.assertEqual(host.ready, {"ready": True, "host_version": 1, "release_version": "dev"})
         host.send(MODE)
         state = self.wait_for(lambda s: s["mode"] is not None)
         self.assertEqual(state["version"], 2)
@@ -324,7 +324,7 @@ class LifecycleTest(BridgeTestCase):
         self.assertEqual(losers[0].process.wait(timeout=5), 1)
         self.assertEqual(losers[0].process.stdout.read(), b"", "the loser must not say ready")
         self.assertIn(b"another bridge host", losers[0].process.stderr.read())
-        self.assertEqual(winners[0].read_ready(), {"ready": True, "host_version": 1})
+        self.assertEqual(winners[0].read_ready(), {"ready": True, "host_version": 1, "release_version": "dev"})
         winners[0].send(MODE)
         self.wait_for(lambda s: s["host"]["pid"] == winners[0].process.pid)
         self.assertEqual(self.ask({"verb": "state"})["state"]["host"]["pid"], winners[0].process.pid)
@@ -340,7 +340,7 @@ class LifecycleTest(BridgeTestCase):
         self.assertIsNone(second.process.poll())
         first.close_stdin()
         first.wait()
-        self.assertEqual(second.read_ready(), {"ready": True, "host_version": 1})
+        self.assertEqual(second.read_ready(), {"ready": True, "host_version": 1, "release_version": "dev"})
         second.send(dict(MODE, id="normal", label="NORMAL"))
         state = self.wait_for(lambda s: s["host"]["pid"] == second.process.pid)
         self.assertEqual(state["mode"]["id"], "normal")
@@ -378,7 +378,7 @@ class LifecycleTest(BridgeTestCase):
         started = time.monotonic()
         second = self.start()
         self.assertLess(time.monotonic() - started, 2.5, "the dead host's lock must be free at once")
-        self.assertEqual(second.ready, {"ready": True, "host_version": 1})
+        self.assertEqual(second.ready, {"ready": True, "host_version": 1, "release_version": "dev"})
 
     def test_the_folder_is_0700_and_the_socket_0600(self):
         os.makedirs(self.state_dir, mode=0o755)
